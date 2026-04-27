@@ -1,0 +1,19 @@
+{
+  "schema_version": "brain_registry_entry.v1",
+  "brain_id": "V9_Institutional_01",
+  "brain_type": "onnx_v9",
+  "brain_role": "alpha_brain",
+  "model_version": "v9.0",
+  "status": "shadow",
+  "enable_onnxruntime": true,
+  "artifact_path": "D:\\ai\\Survival_V9\\v9_institutional_brain.onnx",
+  "feature_schema_id": "v9_institutional_40",
+  "normalization_config_path": "D:\\cursor\\configs\\brains\\v9_institutional_01.normalization.json",
+  "deployment_scope": {
+    "symbols": ["XAUUSD"],
+    "sessions": ["all"],
+    "regimes": ["trend", "volatile_trend", "macro_expansion"]
+  }
+}
+
+

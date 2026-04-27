@@ -1,0 +1,191 @@
+from datetime import datetime
+
+from core.contracts.domain.dispatch_request import DispatchRequest
+from core.contracts.domain.dispatch_result import DispatchResult
+from core.contracts.enums import DispatchStatus
+from core.contracts.ids import new_dispatch_id
+from core.protocol.schema_versions import SCHEMA_DISPATCH_REQUEST, SCHEMA_DISPATCH_RESULT
+from core.protocol.services.communication_adapter_registry import CommunicationAdapterRegistry
+
+
+class CommunicationDispatcher:
+    def __init__(self, adapter=None, adapter_registry: CommunicationAdapterRegistry | None = None, clock=datetime.utcnow, idempotency_store=None):
+        self._adapter = adapter
+        self._adapter_registry = adapter_registry
+        self._clock = clock
+        self._idempotency_store = idempotency_store
+
+    def dispatch(self, envelope, *, route_policy=None, transport_hints=None, governance=None):
+        route_policy = route_policy or {}
+        transport_hints = transport_hints or {}
+        governance = governance or {}
+
+        request = DispatchRequest(
+            schema_version=SCHEMA_DISPATCH_REQUEST,
+            dispatch_id=new_dispatch_id(),
+            envelope=envelope,
+            requested_at=self._clock(),
+            route_policy=route_policy,
+            transport_hints=transport_hints,
+            governance=governance,
+        )
+        attempts = []
+
+        if self._idempotency_store is not None and envelope.idempotency_key:
+            claim = self._idempotency_store.check_and_claim(
+                idempotency_key=envelope.idempotency_key,
+                message_id=envelope.message_id,
+                date_key=request.requested_at.strftime("%Y-%m-%d"),
+            )
+            if claim.get("duplicate"):
+                return DispatchResult(
+                    schema_version=SCHEMA_DISPATCH_RESULT,
+                    dispatch_id=request.dispatch_id,
+                    message_id=envelope.message_id,
+                    status=DispatchStatus.FAILED,
+                    recorded_at=request.requested_at,
+                    target=envelope.target,
+                    adapter_name="idempotency_guard",
+                    failure_reason=f"duplicate idempotency key: {envelope.idempotency_key}",
+                    attempts=[{
+                        "adapter_name": "idempotency_guard",
+                        "status": "failed",
+                        "reason": "duplicate_idempotency_key",
+                    }],
+                    trace={
+                        "idempotency_key": envelope.idempotency_key,
+                        "original_message_id": claim.get("original_message_id"),
+                    },
+                )
+
+        if envelope.deadline_at is not None and request.requested_at > envelope.deadline_at:
+            return DispatchResult(
+                schema_version=SCHEMA_DISPATCH_RESULT,
+                dispatch_id=request.dispatch_id,
+                message_id=envelope.message_id,
+                status=DispatchStatus.FAILED,
+                recorded_at=request.requested_at,
+                target=envelope.target,
+                adapter_name="deadline_guard",
+                failure_reason="dispatch deadline exceeded before attempt",
+                attempts=[
+                    {
+                        "adapter_name": "deadline_guard",
+                        "status": "failed",
+                        "reason": "deadline_exceeded",
+                    }
+                ],
+                trace={"deadline_at": envelope.deadline_at},
+            )
+
+        primary_adapter = self._resolve_adapter(
+            envelope,
+            route_policy=route_policy,
+            transport_hints=transport_hints,
+            governance=governance,
+        )
+        primary_adapter_name = getattr(primary_adapter, "adapter_name", primary_adapter.__class__.__name__)
+
+        try:
+            result = primary_adapter.dispatch(request, envelope)
+            result.attempts = result.attempts or []
+            result.attempts.append(
+                {
+                    "adapter_name": primary_adapter_name,
+                    "status": "succeeded",
+                    "reason": None,
+                }
+            )
+            return result
+        except Exception as exc:
+            attempts.append(
+                {
+                    "adapter_name": primary_adapter_name,
+                    "status": "failed",
+                    "reason": str(exc),
+                }
+            )
+            fallback_adapter = self._resolve_fallback_adapter(route_policy)
+            if fallback_adapter is None:
+                return DispatchResult(
+                    schema_version=SCHEMA_DISPATCH_RESULT,
+                    dispatch_id=request.dispatch_id,
+                    message_id=envelope.message_id,
+                    status=DispatchStatus.FAILED,
+                    recorded_at=request.requested_at,
+                    target=envelope.target,
+                    adapter_name=primary_adapter_name,
+                    failure_reason=str(exc),
+                    attempts=attempts,
+                    trace={"failed_adapter": primary_adapter_name},
+                )
+
+            fallback_adapter_name = getattr(fallback_adapter, "adapter_name", fallback_adapter.__class__.__name__)
+            try:
+                fallback_result = fallback_adapter.dispatch(request, envelope)
+                attempts.append(
+                    {
+                        "adapter_name": fallback_adapter_name,
+                        "status": "degraded",
+                        "reason": "fallback_success",
+                    }
+                )
+                fallback_result.status = DispatchStatus.DEGRADED
+                fallback_result.degrade_reason = str(exc)
+                fallback_result.fallback_adapter_name = fallback_adapter_name
+                fallback_result.attempts = attempts
+                fallback_result.trace = {
+                    **fallback_result.trace,
+                    "failed_adapter": primary_adapter_name,
+                    "fallback_adapter": fallback_adapter_name,
+                }
+                return fallback_result
+            except Exception as fallback_exc:
+                attempts.append(
+                    {
+                        "adapter_name": fallback_adapter_name,
+                        "status": "failed",
+                        "reason": str(fallback_exc),
+                    }
+                )
+                return DispatchResult(
+                    schema_version=SCHEMA_DISPATCH_RESULT,
+                    dispatch_id=request.dispatch_id,
+                    message_id=envelope.message_id,
+                    status=DispatchStatus.FAILED,
+                    recorded_at=request.requested_at,
+                    target=envelope.target,
+                    adapter_name=primary_adapter_name,
+                    failure_reason=f"primary={exc}; fallback={fallback_exc}",
+                    fallback_adapter_name=fallback_adapter_name,
+                    attempts=attempts,
+                    trace={
+                        "failed_adapter": primary_adapter_name,
+                        "fallback_adapter": fallback_adapter_name,
+                    },
+                )
+
+    def _resolve_adapter(self, envelope, *, route_policy, transport_hints, governance):
+        if self._adapter is not None:
+            return self._adapter
+        if self._adapter_registry is not None:
+            return self._adapter_registry.resolve(
+                target=envelope.target,
+                message_type=envelope.message_type,
+                route_policy=route_policy,
+                transport_hints=transport_hints,
+                governance=governance,
+            )
+        raise ValueError("communication dispatcher requires either adapter or adapter_registry")
+
+    def _resolve_fallback_adapter(self, route_policy):
+        fallback_adapter_name = route_policy.get("fallback_adapter")
+        if not fallback_adapter_name or self._adapter_registry is None:
+            return None
+        return self._adapter_registry.resolve(
+            target="__fallback__",
+            message_type="__fallback__",
+            route_policy={"adapter": fallback_adapter_name},
+            transport_hints={},
+            governance={},
+        )

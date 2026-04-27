@@ -1,0 +1,20 @@
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+*.pyc
+*.pyo
+*.pyd
+*.log
+# Local runtime / generated data (kept out of VCS; contains large jsonl outputs)
+data/
+
+提示词.txt
+data/raw/
+data/snapshots/
+data/decisions/
+data/fills/
+data/feedback/
+data/replays/
+

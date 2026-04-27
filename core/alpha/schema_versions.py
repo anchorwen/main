@@ -1,0 +1,10 @@
+"""Schema version constants for alpha-domain payloads."""
+
+SCHEMA_ALPHA_LIFECYCLE_SUMMARY = "alpha_lifecycle_summary.v1"
+SCHEMA_ALPHA_PROMOTION_DECISION = "alpha_promotion_decision.v1"
+SCHEMA_ALPHA_PERFORMANCE_SNAPSHOT = "alpha_performance_snapshot.v1"
+SCHEMA_ALPHA_PERFORMANCE_SUMMARY = "alpha_performance_summary.v1"
+SCHEMA_ALPHA_PERFORMANCE_STORE = "alpha_performance_store.v1"
+SCHEMA_ALPHA_PORTFOLIO_ALLOCATION = "alpha_portfolio_allocation.v1"
+SCHEMA_ALPHA_RISK_BUDGET = "alpha_risk_budget.v1"
+SCHEMA_ALPHA_REGISTRY = "alpha_registry.v1"
