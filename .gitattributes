@@ -1,0 +1,10 @@
+# Normalize line endings on checkout, keep diffs reasonable across Windows/Unix.
+* text=auto
+
+# Windows scripts should keep CRLF.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Shell scripts should be LF in the repo.
+*.sh text eol=lf
