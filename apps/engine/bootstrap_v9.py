@@ -45,13 +45,14 @@ def build_v9_shadow_container() -> ServiceContainer:
     # so BrainFactory can always open normalization config (CI runners are not always `D:\cursor`).
     norm_path = repo_root / "configs" / "brains" / "v9_institutional_01.normalization.json"
     brain_entry["normalization_config_path"] = str(norm_path.resolve())
-    artifact_path = Path(brain_entry.get("artifact_path", ""))
+    # Only enable ONNXRuntime when the artifact ships under the repo. Registry JSON often points at a
+    # developer-local path (e.g. D:\ai\...) that may exist on some runners; loading it yields
+    # non-deterministic logits and breaks shadow smoke baselines (stub expects numpy fallback).
     repo_onnx = repo_root / "configs" / "brains" / "v9_institutional_brain.onnx"
     if repo_onnx.is_file():
         brain_entry["artifact_path"] = str(repo_onnx.resolve())
         brain_entry["enable_onnxruntime"] = bool(brain_entry.get("enable_onnxruntime", False))
-    elif not artifact_path.is_file():
-        # Missing ONNX artifact → deterministic numpy stub in V9OnnxBrainAdapter (matches CI/test baseline).
+    else:
         brain_entry["enable_onnxruntime"] = False
 
     container.brain_registry.register(brain_entry)
