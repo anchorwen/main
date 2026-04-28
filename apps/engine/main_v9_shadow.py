@@ -14,6 +14,30 @@ if str(ROOT) not in sys.path:
 
 from apps.engine.bootstrap_v9 import build_v9_shadow_runtime_loop
 from apps.engine.communication_summary_contract import build_summary_mirror_fields_from_operations_summary
+from core.deployment.domain_keys import (
+    PAYLOAD_KEY_ACTION,
+    PAYLOAD_KEY_BRAIN_COUNT,
+    PAYLOAD_KEY_COMMUNICATION_LEDGER_PATH,
+    PAYLOAD_KEY_COMMUNICATION_RECORD_ID,
+    PAYLOAD_KEY_CONVICTION,
+    PAYLOAD_KEY_DISPATCH_STATUS,
+    PAYLOAD_KEY_FEATURE_FILE,
+    PAYLOAD_KEY_FEATURE_SOURCE_TYPE,
+    PAYLOAD_KEY_GOVERNANCE_SOURCES,
+    PAYLOAD_KEY_LEDGER_PATH,
+    PAYLOAD_KEY_MESSAGE_ID,
+    PAYLOAD_KEY_MODE,
+    PAYLOAD_KEY_OPERATIONS_POSTURE,
+    PAYLOAD_KEY_OPERATIONS_SUMMARY,
+    PAYLOAD_KEY_POSTURE_SOURCES,
+    PAYLOAD_KEY_RECORD_ID,
+    PAYLOAD_KEY_RISK_STATUS,
+    PAYLOAD_KEY_SAMPLE_DESCRIPTION,
+    PAYLOAD_KEY_SCENARIO,
+    PAYLOAD_KEY_SIDE,
+    PAYLOAD_KEY_STATUS,
+    PAYLOAD_KEY_SYMBOL,
+)
 from apps.engine.v9_shadow_sse import (
     consume_session_sse,
     iter_sse_messages,
@@ -340,31 +364,33 @@ def build_summary_payload(
     # Other communication fields remain available as raw context or compatibility mirrors.
     operations_summary = None
     if getattr(result, "communication_operations", None) is not None:
-        operations_summary = result.communication_operations.get("operations_summary")
+        operations_summary = result.communication_operations.get(PAYLOAD_KEY_OPERATIONS_SUMMARY)
     elif getattr(result, "communication_record", None) is not None:
         operations_summary = {
-            "dispatch_status": getattr(result.dispatch_result, "status", None),
-            "message_id": getattr(result.communication_record, "message_id", None),
-            "communication_record_id": getattr(result.communication_record, "record_id", None),
-            "communication_ledger_path": None if result.communication_ledger_path is None else str(result.communication_ledger_path),
+            PAYLOAD_KEY_DISPATCH_STATUS: getattr(result.dispatch_result, "status", None),
+            PAYLOAD_KEY_MESSAGE_ID: getattr(result.communication_record, "message_id", None),
+            PAYLOAD_KEY_COMMUNICATION_RECORD_ID: getattr(result.communication_record, "record_id", None),
+            PAYLOAD_KEY_COMMUNICATION_LEDGER_PATH: None
+            if result.communication_ledger_path is None
+            else str(result.communication_ledger_path),
         }
     return {
-        "scenario": scenario,
-        "feature_source_type": feature_source_type,
-        "feature_file": feature_file,
-        "sample_description": sample_description,
+        PAYLOAD_KEY_SCENARIO: scenario,
+        PAYLOAD_KEY_FEATURE_SOURCE_TYPE: feature_source_type,
+        PAYLOAD_KEY_FEATURE_FILE: feature_file,
+        PAYLOAD_KEY_SAMPLE_DESCRIPTION: sample_description,
         "manifest": manifest,
-        "symbol": result.intent.symbol,
-        "mode": mode,
-        "action": result.intent.action.value,
-        "side": result.intent.side.value,
-        "conviction": round(result.intent.conviction, 6),
-        "risk_status": result.verdict.status.value,
-        "dispatch_status": normalize_dispatch_status(result.dispatch_result["status"]),
-        "operations_summary": operations_summary,
-        "brain_count": len(result.proposals),
-        "ledger_path": str(result.ledger_path),
-        "record_id": result.record.record_id,
+        PAYLOAD_KEY_SYMBOL: result.intent.symbol,
+        PAYLOAD_KEY_MODE: mode,
+        PAYLOAD_KEY_ACTION: result.intent.action.value,
+        PAYLOAD_KEY_SIDE: result.intent.side.value,
+        PAYLOAD_KEY_CONVICTION: round(result.intent.conviction, 6),
+        PAYLOAD_KEY_RISK_STATUS: result.verdict.status.value,
+        PAYLOAD_KEY_DISPATCH_STATUS: normalize_dispatch_status(result.dispatch_result[PAYLOAD_KEY_STATUS]),
+        PAYLOAD_KEY_OPERATIONS_SUMMARY: operations_summary,
+        PAYLOAD_KEY_BRAIN_COUNT: len(result.proposals),
+        PAYLOAD_KEY_LEDGER_PATH: str(result.ledger_path),
+        PAYLOAD_KEY_RECORD_ID: result.record.record_id,
     }
 
 
@@ -1207,9 +1233,9 @@ def build_output_extension_fields(payload: dict, result) -> dict:
         return payload
     return {
         **payload,
-        "operations_posture": communication_operations.get("operations_posture"),
-        "posture_sources": communication_operations.get("posture_sources"),
-        "governance_sources": communication_operations.get("governance_sources"),
+        PAYLOAD_KEY_OPERATIONS_POSTURE: communication_operations.get(PAYLOAD_KEY_OPERATIONS_POSTURE),
+        PAYLOAD_KEY_POSTURE_SOURCES: communication_operations.get(PAYLOAD_KEY_POSTURE_SOURCES),
+        PAYLOAD_KEY_GOVERNANCE_SOURCES: communication_operations.get(PAYLOAD_KEY_GOVERNANCE_SOURCES),
     }
 
 
@@ -1861,14 +1887,19 @@ def prepare_results(args) -> tuple[list[dict], str]:
 
 
 def build_results_from_payloads(payloads: list[dict]) -> list:
+    communication_mirror_keys = (
+        PAYLOAD_KEY_OPERATIONS_POSTURE,
+        PAYLOAD_KEY_POSTURE_SOURCES,
+        PAYLOAD_KEY_GOVERNANCE_SOURCES,
+    )
     return [
         SimpleNamespace(
             communication_operations={
-                "operations_posture": payload.get("operations_posture"),
-                "posture_sources": payload.get("posture_sources"),
-                "governance_sources": payload.get("governance_sources"),
+                PAYLOAD_KEY_OPERATIONS_POSTURE: payload.get(PAYLOAD_KEY_OPERATIONS_POSTURE),
+                PAYLOAD_KEY_POSTURE_SOURCES: payload.get(PAYLOAD_KEY_POSTURE_SOURCES),
+                PAYLOAD_KEY_GOVERNANCE_SOURCES: payload.get(PAYLOAD_KEY_GOVERNANCE_SOURCES),
             }
-            if any(key in payload for key in ["operations_posture", "posture_sources", "governance_sources"])
+            if any(key in payload for key in communication_mirror_keys)
             else None
         )
         for payload in payloads

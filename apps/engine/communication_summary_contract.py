@@ -1,5 +1,19 @@
+from core.deployment.domain_keys import (
+    PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE,
+    PAYLOAD_KEY_GOVERNANCE_SOURCES,
+    PAYLOAD_KEY_GOVERNANCE_SUMMARY_SOURCE,
+    PAYLOAD_KEY_OPERATIONS_POSTURE,
+    PAYLOAD_KEY_OPERATIONS_POSTURE_SOURCE,
+    PAYLOAD_KEY_OPERATIONS_SUMMARY,
+    PAYLOAD_KEY_POSTURE,
+    PAYLOAD_KEY_POSTURE_SOURCES,
+    PAYLOAD_KEY_POSTURE_SOURCE,
+    PAYLOAD_KEY_SUMMARY_SOURCE,
+)
+
+
 def build_summary_mirror_fields_from_operations_summary(payload: dict, *, stable_fields: tuple[str, ...] | None = None) -> dict:
-    operations_summary = payload.get("operations_summary")
+    operations_summary = payload.get(PAYLOAD_KEY_OPERATIONS_SUMMARY)
     if not isinstance(operations_summary, dict):
         if stable_fields is None:
             return payload
@@ -10,22 +24,22 @@ def build_summary_mirror_fields_from_operations_summary(payload: dict, *, stable
         }
 
     normalized_payload = {
-        "operations_summary": operations_summary,
-        "operations_posture": operations_summary.get("posture"),
-        "posture_sources": {
-            "operations_posture_source": operations_summary.get("posture_source"),
+        PAYLOAD_KEY_OPERATIONS_SUMMARY: operations_summary,
+        PAYLOAD_KEY_OPERATIONS_POSTURE: operations_summary.get(PAYLOAD_KEY_POSTURE),
+        PAYLOAD_KEY_POSTURE_SOURCES: {
+            PAYLOAD_KEY_OPERATIONS_POSTURE_SOURCE: operations_summary.get(PAYLOAD_KEY_POSTURE_SOURCE),
         },
     }
 
-    governance_summary_source = operations_summary.get("governance_summary_source")
-    execution_projection_source = operations_summary.get("execution_projection_source")
+    governance_summary_source = operations_summary.get(PAYLOAD_KEY_GOVERNANCE_SUMMARY_SOURCE)
+    execution_projection_source = operations_summary.get(PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE)
     if governance_summary_source is not None or execution_projection_source is not None:
-        normalized_payload["governance_sources"] = {
-            "summary_source": governance_summary_source,
-            "execution_projection_source": execution_projection_source,
+        normalized_payload[PAYLOAD_KEY_GOVERNANCE_SOURCES] = {
+            PAYLOAD_KEY_SUMMARY_SOURCE: governance_summary_source,
+            PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE: execution_projection_source,
         }
-    elif "governance_sources" in payload:
-        normalized_payload["governance_sources"] = payload.get("governance_sources")
+    elif PAYLOAD_KEY_GOVERNANCE_SOURCES in payload:
+        normalized_payload[PAYLOAD_KEY_GOVERNANCE_SOURCES] = payload.get(PAYLOAD_KEY_GOVERNANCE_SOURCES)
 
     if stable_fields is None:
         return {
@@ -33,4 +47,3 @@ def build_summary_mirror_fields_from_operations_summary(payload: dict, *, stable
             **normalized_payload,
         }
     return normalized_payload
-

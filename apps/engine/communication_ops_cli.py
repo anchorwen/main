@@ -1,6 +1,12 @@
 import argparse
 import json
 from apps.engine.communication_summary_contract import build_summary_mirror_fields_from_operations_summary
+from core.deployment.domain_keys import (
+    PAYLOAD_KEY_GOVERNANCE_SOURCES,
+    PAYLOAD_KEY_OPERATIONS_POSTURE,
+    PAYLOAD_KEY_OPERATIONS_SUMMARY,
+    PAYLOAD_KEY_POSTURE_SOURCES,
+)
 from core.ledger.services.communication_inspection_service import CommunicationInspectionService
 from core.ledger.services.communication_operations_service import CommunicationOperationsService
 from core.ledger.services.communication_record_reader import CommunicationRecordReader
@@ -11,10 +17,10 @@ from core.protocol.services.file_queue_receipt_reader import FileQueueReceiptRea
 
 
 STABLE_COMMUNICATION_SUMMARY_FIELDS = (
-    "operations_summary",
-    "operations_posture",
-    "posture_sources",
-    "governance_sources",
+    PAYLOAD_KEY_OPERATIONS_SUMMARY,
+    PAYLOAD_KEY_OPERATIONS_POSTURE,
+    PAYLOAD_KEY_POSTURE_SOURCES,
+    PAYLOAD_KEY_GOVERNANCE_SOURCES,
 )
 
 
