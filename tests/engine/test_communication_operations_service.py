@@ -148,7 +148,7 @@ def build_replay_operations_summary(
 
 
 
-def build_governance_summary(
+def sample_governance_summary(
     *,
     decision=ReplayGateDecision.ALLOW,
     posture: str = "auto_replay",
@@ -232,7 +232,7 @@ def test_operations_service_returns_message_view(tmp_path):
     assert view["replay_plan"]["recommended_strategy"] == "direct_replay_candidate"
     assert view["replay_gate"]["decision"] == ReplayGateDecision.ALLOW
     assert view["replay_gate"]["governance_summary"] == view["governance_summary"]
-    assert view["governance_summary"] == build_governance_summary(
+    assert view["governance_summary"] == sample_governance_summary(
         target_issue_codes=["dispatch_pending"],
         governance_tags=["auto_replay_eligible"],
     )
@@ -321,7 +321,7 @@ def test_operations_service_returns_message_view(tmp_path):
     assert view["replay_plan"]["recommended_strategy"] == "direct_replay_candidate"
     assert view["replay_gate"]["decision"] == ReplayGateDecision.ALLOW
     assert view["replay_gate"]["governance_summary"] == view["governance_summary"]
-    assert view["governance_summary"] == build_governance_summary(
+    assert view["governance_summary"] == sample_governance_summary(
         target_issue_codes=["dispatch_pending"],
         governance_tags=["auto_replay_eligible"],
     )
@@ -464,7 +464,7 @@ def test_operations_service_returns_correlation_view(tmp_path):
     assert view["replay_plan"]["recommended_strategy"] == "replay_only_timed_out_messages"
     assert view["replay_gate"]["decision"] == ReplayGateDecision.ALLOW
     assert view["replay_gate"]["governance_summary"] == view["governance_summary"]
-    assert view["governance_summary"] == build_governance_summary(
+    assert view["governance_summary"] == sample_governance_summary(
         posture="targeted_replay",
         recommended_strategy="replay_only_timed_out_messages",
         target_issue_codes=["receipt_timeout"],
@@ -754,7 +754,7 @@ def test_operations_service_replay_view_prefers_governance_posture_over_executio
         "decision": ReplayGateDecision.REVIEW,
         "posture": "review_required",
     }
-    assert view["governance_summary"] == build_governance_summary(
+    assert view["governance_summary"] == sample_governance_summary(
         decision=ReplayGateDecision.REVIEW,
         posture="review_required",
         recommended_strategy="replay_with_governance_review",
@@ -993,7 +993,7 @@ def test_operations_service_prefers_gate_governance_summary_when_extensions_miss
     )
 
     assert view is not None
-    assert view["governance_summary"] == build_governance_summary(
+    assert view["governance_summary"] == sample_governance_summary(
         target_issue_codes=["dispatch_pending"],
         governance_tags=["auto_replay_eligible"],
     )
@@ -1054,7 +1054,7 @@ def test_operations_service_derives_governance_summary_for_legacy_replay_record(
     )
 
     assert view is not None
-    assert view["governance_summary"] == build_governance_summary(
+    assert view["governance_summary"] == sample_governance_summary(
         target_issue_codes=["dispatch_pending"],
         governance_tags=["auto_replay_eligible"],
     )

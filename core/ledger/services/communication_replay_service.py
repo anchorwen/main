@@ -1,4 +1,4 @@
-from core.ledger.services.communication_replay_gate import build_governance_summary
+from core.ledger.services.communication_replay_gate import build_replay_governance_summary
 from core.ledger.services.communication_trace_refs import (
     attempt_summary as trace_attempt_summary,
     delivery_state_block as trace_delivery_state,
@@ -121,7 +121,7 @@ class CommunicationReplayService:
         }
         return {
             **plan,
-            PAYLOAD_KEY_GOVERNANCE_SUMMARY: build_governance_summary(plan, None),
+            PAYLOAD_KEY_GOVERNANCE_SUMMARY: build_replay_governance_summary(plan, None),
         }
 
     def build_correlation_replay_plan(self, *, date_key: str, target: str, correlation_id: str) -> dict:
@@ -158,7 +158,7 @@ class CommunicationReplayService:
         }
         return {
             **plan,
-            PAYLOAD_KEY_GOVERNANCE_SUMMARY: build_governance_summary(plan, None),
+            PAYLOAD_KEY_GOVERNANCE_SUMMARY: build_replay_governance_summary(plan, None),
         }
 
     def _recommend_strategy(self, trace: dict) -> str:

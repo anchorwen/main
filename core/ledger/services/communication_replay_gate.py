@@ -62,8 +62,8 @@ from core.ledger.services.replay_plan_refs import (
 from core.ledger.services.gate_decision_refs import decision as gate_decision_value
 
 
-def build_governance_summary(replay_plan: dict | None, replay_gate: dict | None) -> dict:
-    """Build the canonical governance summary shared by gate, record, and views."""
+def build_replay_governance_summary(replay_plan: dict | None, replay_gate: dict | None) -> dict:
+    """Build the canonical replay governance summary shared by gate, record, and views."""
     replay_plan = replay_plan or {}
     replay_gate = replay_gate or {}
     governance_tags = replay_gate.get(PAYLOAD_KEY_GOVERNANCE_TAGS, [])
@@ -259,5 +259,5 @@ class CommunicationReplayGate:
             PAYLOAD_KEY_REASONS: reasons,
             PAYLOAD_KEY_GOVERNANCE_TAGS: governance_tags,
         }
-        gate_decision[PAYLOAD_KEY_GOVERNANCE_SUMMARY] = build_governance_summary(replay_plan, gate_decision)
+        gate_decision[PAYLOAD_KEY_GOVERNANCE_SUMMARY] = build_replay_governance_summary(replay_plan, gate_decision)
         return gate_decision

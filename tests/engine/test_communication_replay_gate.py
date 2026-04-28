@@ -4,11 +4,10 @@ import json
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.dispatch_result import DispatchResult
 from core.contracts.enums import CommunicationMessageType, CommunicationPriority, DispatchStatus, ReplayGateDecision
-from core.ledger.services.communication_replay_gate import build_governance_summary
 from core.ledger.services.communication_inspection_service import CommunicationInspectionService
 from core.ledger.services.communication_record_reader import CommunicationRecordReader
 from core.ledger.services.communication_record_writer import CommunicationRecordWriter
-from core.ledger.services.communication_replay_gate import CommunicationReplayGate
+from core.ledger.services.communication_replay_gate import CommunicationReplayGate, build_replay_governance_summary
 from core.ledger.services.communication_replay_service import CommunicationReplayService
 from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
 from core.protocol.services.file_queue_receipt_reader import FileQueueReceiptReader
@@ -124,7 +123,7 @@ def test_replay_gate_allows_clean_message_replay_plan(tmp_path):
         "review_issue_codes": [],
         "governance_tags": ["auto_replay_eligible"],
     }
-    assert build_governance_summary(plan, decision) == {
+    assert build_replay_governance_summary(plan, decision) == {
         "decision": ReplayGateDecision.ALLOW,
         "posture": "auto_replay",
         "recommended_strategy": "direct_replay_candidate",
@@ -253,7 +252,7 @@ def test_replay_gate_supports_targeted_timeout_replay_when_next_day_receipt_is_f
         "review_issue_codes": [],
         "governance_tags": ["auto_replay_eligible", "timeout_targeted_replay"],
     }
-    assert build_governance_summary(plan, decision) == {
+    assert build_replay_governance_summary(plan, decision) == {
         "decision": ReplayGateDecision.ALLOW,
         "posture": "targeted_replay",
         "recommended_strategy": "replay_only_timed_out_messages",

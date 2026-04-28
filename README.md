@@ -2,6 +2,10 @@
 
 A greenfield build for an institution-grade adaptive quantitative trading platform.
 
+## CI
+
+Push and pull requests against `main` run GitHub Actions on **`windows-latest`** (`.github/workflows/ci-windows.yml`): editable install with dev dependencies, then `tests/engine` and `--governance-contracts`.
+
 ## Testing
 
 Run the fast communication and V9 shadow contract suite with:

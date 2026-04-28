@@ -63,7 +63,7 @@ from core.deployment.domain_keys import (
     REPLAY_TRACE_SCOPE_CORRELATION,
     REPLAY_TRACE_SCOPE_MESSAGE,
 )
-from core.ledger.services.communication_replay_gate import build_governance_summary
+from core.ledger.services.communication_replay_gate import build_replay_governance_summary
 from core.ledger.services.gate_decision_refs import governance_summary as gate_governance_summary
 from core.ledger.services.replay_plan_refs import governance_summary as plan_governance_summary
 from core.ledger.services.replay_record_refs import (
@@ -258,12 +258,12 @@ class CommunicationOperationsService:
         plan_summary = plan_governance_summary(replay_plan)
         if plan_summary is not None:
             return plan_summary
-        return build_governance_summary(replay_plan, replay_gate)
+        return build_replay_governance_summary(replay_plan, replay_gate)
 
     def _resolve_replay_governance_summary(self, replay_record: dict) -> dict:
         return replay_governance_summary(
             replay_record,
-            fallback_builder=build_governance_summary,
+            fallback_builder=build_replay_governance_summary,
         )
 
     def _resolve_operations_posture(
