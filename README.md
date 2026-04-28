@@ -4,7 +4,9 @@ A greenfield build for an institution-grade adaptive quantitative trading platfo
 
 ## CI
 
-Push and pull requests against `main` run GitHub Actions on **`windows-latest`** (`.github/workflows/ci-windows.yml`): editable install with dev dependencies, then `tests/engine` and `--governance-contracts`.
+Push and pull requests against `main` run GitHub Actions on **`windows-latest`** (`.github/workflows/ci-windows.yml`): editable install with dev dependencies, then `tests/engine` and `--governance-contracts`. The workflow links the checkout at **`D:\cursor`** and prepares `data/` fixtures for tests that rely on that path.
+
+GitHub **Re-run failed jobs** replays the **old workflow definition** from the failed run; to validate CI fixes, trigger a **new run** (push to `main` or **Actions → CI (Windows) → Run workflow**).
 
 ## Testing
 

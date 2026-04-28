@@ -12,6 +12,11 @@ from core.contracts.exceptions import (
 from core.contracts.validators import ContractValidator
 
 
+def _repo_root() -> Path:
+    """Repository root (tests/engine -> repo). Works on CI and local clones."""
+    return Path(__file__).resolve().parents[2]
+
+
 class TestExceptionHierarchy:
     def test_domain_error_base(self):
         e = DomainError("test", code="test_code", detail={"k": "v"})
@@ -131,7 +136,7 @@ class TestCodeQualityChecks:
         return stale
 
     def test_no_empty_python_files(self):
-        core_path = Path("d:/cursor/core")
+        core_path = _repo_root() / "core"
         empty = [p for p in core_path.rglob("*.py") if p.stat().st_size == 0]
         assert empty == [], f"Empty files found: {empty}"
 
@@ -209,14 +214,14 @@ class TestCodeQualityChecks:
             assert issubclass(specific, parent)
 
     def test_domain_keys_constants_are_referenced(self):
-        workspace = Path("d:/cursor")
+        workspace = _repo_root()
         domain_keys = workspace / "core/deployment/domain_keys.py"
         py_files = [p for p in workspace.rglob("*.py") if p != domain_keys]
         unused = self._unused_constants_in_file(domain_keys, py_files)
         assert unused == [], f"Unused domain key constants found: {unused}"
 
     def test_schema_version_constants_are_referenced(self):
-        workspace = Path("d:/cursor")
+        workspace = _repo_root()
         schema_files = [p for p in (workspace / "core").rglob("schema_versions.py")]
         assert schema_files, "No schema_versions.py files found under core/"
 
@@ -231,7 +236,7 @@ class TestCodeQualityChecks:
         assert stale == {}, f"Unused schema version constants found: {stale}"
 
     def test_metric_name_constants_are_referenced(self):
-        workspace = Path("d:/cursor")
+        workspace = _repo_root()
         metric_names = workspace / "core/observability/metric_names.py"
         py_files = list(workspace.rglob("*.py"))
         stale = self._stale_constants_in_file(metric_names, py_files)
