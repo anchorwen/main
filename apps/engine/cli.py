@@ -93,6 +93,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-dir", default="./data")
     parser.add_argument("--env", choices=["development", "production", "test"], default="development")
     parser.add_argument(
+        "--live-read-only",
+        action="store_true",
+        help="Enable live read-only guard: block real dispatch attempts while keeping runtime visibility.",
+    )
+    parser.add_argument(
+        "--mt5-terminal-path",
+        default=None,
+        help="Optional MT5 terminal executable path for live integration prechecks.",
+    )
+    parser.add_argument(
         "--validation-mode",
         choices=[VALIDATION_MODE_FAST, VALIDATION_MODE_DEEP],
         default=None,
@@ -388,6 +398,16 @@ def _environment_config_for_args(args) -> EnvironmentConfig:
         extra["enable_metrics"] = True
     if getattr(args, "validation_mode", None):
         extra["validation_mode"] = args.validation_mode
+    if getattr(args, "live_read_only", False):
+        extra["live_read_only"] = True
+    mt5_terminal_path = getattr(args, "mt5_terminal_path", None)
+    if mt5_terminal_path:
+        mt5_terminal = Path(mt5_terminal_path)
+        if not mt5_terminal.exists():
+            raise FileNotFoundError(mt5_terminal_path)
+        extensions = dict(extra.get("extensions", {}))
+        extensions["mt5_terminal_path"] = str(mt5_terminal)
+        extra["extensions"] = extensions
     return factory[args.env](args.base_dir, **extra)
 
 

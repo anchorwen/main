@@ -238,6 +238,7 @@ CONTRACT_ERROR_DISPATCH_ID_REQUIRED = "dispatch_id is required"
 CONTRACT_ERROR_ADAPTER_NAME_REQUIRED = "adapter_name is required"
 CONTRACT_ERROR_STATUS_REQUIRED = "status is required"
 CONTRACT_ERROR_FAILURE_REASON_REQUIRED_WHEN_STATUS_FAILED = "failure_reason is required when status is failed"
+DISPATCH_FAILURE_REASON_LIVE_READ_ONLY = "live_read_only_enabled"
 # Contract validation errors: execution/replay events.
 CONTRACT_ERROR_EVENT_ID_REQUIRED = "event_id is required"
 CONTRACT_ERROR_EVENT_TYPE_REQUIRED = "event_type is required"

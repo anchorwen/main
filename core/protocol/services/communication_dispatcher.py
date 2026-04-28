@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from core.deployment.domain_keys import DISPATCH_FAILURE_REASON_LIVE_READ_ONLY
 from core.contracts.domain.dispatch_request import DispatchRequest
 from core.contracts.domain.dispatch_result import DispatchResult
 from core.contracts.enums import DispatchStatus
@@ -9,11 +10,19 @@ from core.protocol.services.communication_adapter_registry import CommunicationA
 
 
 class CommunicationDispatcher:
-    def __init__(self, adapter=None, adapter_registry: CommunicationAdapterRegistry | None = None, clock=datetime.utcnow, idempotency_store=None):
+    def __init__(
+        self,
+        adapter=None,
+        adapter_registry: CommunicationAdapterRegistry | None = None,
+        clock=datetime.utcnow,
+        idempotency_store=None,
+        live_read_only: bool = False,
+    ):
         self._adapter = adapter
         self._adapter_registry = adapter_registry
         self._clock = clock
         self._idempotency_store = idempotency_store
+        self._live_read_only = live_read_only
 
     def dispatch(self, envelope, *, route_policy=None, transport_hints=None, governance=None):
         route_policy = route_policy or {}
@@ -30,6 +39,26 @@ class CommunicationDispatcher:
             governance=governance,
         )
         attempts = []
+
+        if self._live_read_only:
+            return DispatchResult(
+                schema_version=SCHEMA_DISPATCH_RESULT,
+                dispatch_id=request.dispatch_id,
+                message_id=envelope.message_id,
+                status=DispatchStatus.FAILED,
+                recorded_at=request.requested_at,
+                target=envelope.target,
+                adapter_name="live_read_only_guard",
+                failure_reason=DISPATCH_FAILURE_REASON_LIVE_READ_ONLY,
+                attempts=[{
+                    "adapter_name": "live_read_only_guard",
+                    "status": "failed",
+                    "reason": DISPATCH_FAILURE_REASON_LIVE_READ_ONLY,
+                }],
+                trace={
+                    "live_read_only": True,
+                },
+            )
 
         if self._idempotency_store is not None and envelope.idempotency_key:
             claim = self._idempotency_store.check_and_claim(

@@ -44,6 +44,7 @@ class EnvironmentConfig:
     enable_audit_log: bool = True
     enable_metrics: bool = True
     enable_idempotency: bool = True
+    live_read_only: bool = False
 
     risk_policy_window_size: int = 100
     feedback_window_size: int = 100

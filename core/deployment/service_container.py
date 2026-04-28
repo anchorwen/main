@@ -234,6 +234,7 @@ class ServiceContainer:
         self.dispatcher = CommunicationDispatcher(
             adapter=adapter,
             idempotency_store=self.idempotency_store,
+            live_read_only=self.config.live_read_only,
         )
 
     def _build_risk(self) -> None:

@@ -266,6 +266,17 @@ class TestBuildParser:
         assert a.no_metrics is True
         assert a.force_metrics is False
 
+    def test_parses_live_read_only_and_mt5_terminal_path_flags(self):
+        p = build_parser()
+        a = p.parse_args([
+            "--live-read-only",
+            "--mt5-terminal-path", "D:\\MetaTrader 5\\terminal64.exe",
+            "status",
+        ])
+        assert a.command == "status"
+        assert a.live_read_only is True
+        assert a.mt5_terminal_path == "D:\\MetaTrader 5\\terminal64.exe"
+
     def test_global_validation_mode_applies_when_subcommand_not_overridden(self):
         p = build_parser()
         a = p.parse_args([
@@ -361,6 +372,47 @@ class TestEnvironmentConfigForArgs:
             base_dir=str(tmp_path), env="development", no_metrics=False, force_metrics=False, validation_mode="fast",
         )
         assert _environment_config_for_args(a).validation_mode == "fast"
+
+    def test_live_read_only_flag_propagates_to_environment_config(self, tmp_path):
+        from apps.engine.cli import _environment_config_for_args
+
+        a = SimpleNamespace(
+            base_dir=str(tmp_path),
+            env="development",
+            no_metrics=False,
+            force_metrics=False,
+            live_read_only=True,
+        )
+        assert _environment_config_for_args(a).live_read_only is True
+
+    def test_mt5_terminal_path_missing_raises_file_not_found(self, tmp_path):
+        from apps.engine.cli import _environment_config_for_args
+
+        missing = tmp_path / "missing-terminal64.exe"
+        a = SimpleNamespace(
+            base_dir=str(tmp_path),
+            env="development",
+            no_metrics=False,
+            force_metrics=False,
+            mt5_terminal_path=str(missing),
+        )
+        with pytest.raises(FileNotFoundError):
+            _environment_config_for_args(a)
+
+    def test_mt5_terminal_path_populates_environment_extensions(self, tmp_path):
+        from apps.engine.cli import _environment_config_for_args
+
+        terminal = tmp_path / "terminal64.exe"
+        terminal.write_text("", encoding="utf-8")
+        a = SimpleNamespace(
+            base_dir=str(tmp_path),
+            env="development",
+            no_metrics=False,
+            force_metrics=False,
+            mt5_terminal_path=str(terminal),
+        )
+        cfg = _environment_config_for_args(a)
+        assert cfg.extensions["mt5_terminal_path"] == str(terminal)
 
 
 class TestExecutionStrictGet:

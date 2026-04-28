@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.decision_intent import DecisionIntent
 from core.contracts.enums import CommunicationMessageType, CommunicationPriority, DecisionAction, DecisionSide, DispatchStatus
+from core.deployment.domain_keys import DISPATCH_FAILURE_REASON_LIVE_READ_ONLY
 from core.protocol.services.communication_adapter_registry import CommunicationAdapterRegistry
 from core.protocol.services.communication_dispatcher import CommunicationDispatcher
 from core.protocol.services.intent_message_builder import IntentMessageBuilder
@@ -118,6 +119,28 @@ def test_communication_dispatcher_uses_direct_stub_adapter_and_returns_result():
     assert result.adapter_name == "stub_adapter"
     assert result.attempts[0]["adapter_name"] == "stub_adapter"
     assert result.attempts[0]["status"] == "succeeded"
+
+
+def test_communication_dispatcher_blocks_dispatch_when_live_read_only_enabled():
+    builder = IntentMessageBuilder(producer="decision_engine", target="exec_bridge")
+    dispatcher = CommunicationDispatcher(
+        adapter=StubCommunicationAdapter(),
+        clock=lambda: datetime(2026, 4, 24, 12, 0, 2),
+        live_read_only=True,
+    )
+    envelope = builder.build(build_intent(), correlation_id="corr_read_only")
+
+    result = dispatcher.dispatch(envelope)
+
+    assert result.status == DispatchStatus.FAILED
+    assert result.adapter_name == "live_read_only_guard"
+    assert result.failure_reason == DISPATCH_FAILURE_REASON_LIVE_READ_ONLY
+    assert result.attempts == [{
+        "adapter_name": "live_read_only_guard",
+        "status": "failed",
+        "reason": DISPATCH_FAILURE_REASON_LIVE_READ_ONLY,
+    }]
+    assert result.trace["live_read_only"] is True
 
 
 def test_communication_dispatcher_routes_by_target_via_registry():
