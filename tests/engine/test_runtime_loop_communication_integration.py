@@ -4,6 +4,14 @@ from pathlib import Path
 from apps.engine.runtime_loop import RuntimeLoop
 from core.contracts.domain.decision_intent import DecisionIntent
 from core.contracts.enums import DecisionAction, DecisionSide, DispatchStatus
+from core.ledger.services.communication_inspection_service import CommunicationInspectionService
+from core.ledger.services.communication_operations_service import CommunicationOperationsService
+from core.ledger.services.communication_record_reader import CommunicationRecordReader
+from core.ledger.services.communication_record_writer import CommunicationRecordWriter
+from core.ledger.services.communication_replay_gate import CommunicationReplayGate
+from core.ledger.services.communication_replay_service import CommunicationReplayService
+from core.ledger.services.replay_execution_reader import ReplayExecutionReader
+from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
 from core.ledger.stream_names import (
     LEDGER_STREAM_COMMUNICATIONS,
     LEDGER_STREAM_DECISIONS,
@@ -32,6 +40,27 @@ def build_runtime_intent(event_time: datetime | None = None):
         conviction=0.88,
         priority="high",
         reason_tags=["v9_shadow", "open", "long"],
+        trace={"compiler_version": SCHEMA_DECISION_COMPILER},
+    )
+
+
+def build_passive_runtime_intent(event_time: datetime | None = None):
+    event_time = event_time or datetime(2026, 4, 24, 12, 0, 0)
+    compiled_at = max(event_time, datetime(2026, 4, 24, 12, 0, 1))
+    return DecisionIntent(
+        schema_version=SCHEMA_DECISION_INTENT,
+        intent_id="intent_passive",
+        candidate_id="candidate_001",
+        snapshot_id="snapshot_001",
+        event_time=event_time,
+        compiled_at=compiled_at,
+        symbol="XAUUSD",
+        venue="MT5",
+        action=DecisionAction.OBSERVE,
+        side=DecisionSide.FLAT,
+        conviction=0.5,
+        priority="normal",
+        reason_tags=["passive"],
         trace={"compiler_version": SCHEMA_DECISION_COMPILER},
     )
 
@@ -284,4 +313,167 @@ def test_runtime_loop_falls_back_to_record_summary_when_operations_view_is_unava
     assert result.communication_operations is None
 
 
+def test_runtime_loop_skips_communication_when_intent_not_actionable(tmp_path):
+    event_time = datetime(2026, 4, 24, 12, 0, 0)
+    feature_snapshot = type("FeatureSnapshot", (), {
+        "snapshot_id": "snapshot_001",
+        "event_time": event_time,
+        "symbol": "XAUUSD",
+        "venue": "MT5",
+    })()
+    first_snapshot = type("ControlSnapshot", (), {
+        "mode_state": type("ModeState", (), {"current_mode": type("Mode", (), {"value": "normal"})()})(),
+        "active_overrides": [],
+    })()
+    second_snapshot = type("ControlSnapshot", (), {
+        "mode_state": type("ModeState", (), {"current_mode": type("Mode", (), {"value": "normal"})()})(),
+        "active_overrides": [],
+    })()
+    candidate = type("Candidate", (), {
+        "regime_state": {"primary_regime": "trend"},
+    })()
+    record = type("Record", (), {"record_id": "record_001"})()
+
+    class DecisionRecordWriterStub:
+        def seed_record(self, **kwargs):
+            return record, Path(tmp_path) / "2026-04-24" / stream_jsonl_filename("XAUUSD", LEDGER_STREAM_DECISIONS)
+
+    class CommunicationRecordWriterFailIfCalled:
+        def write_record(self, envelope, dispatch_result):
+            raise AssertionError("communication writer must not run for passive intents")
+
+    class CommunicationOperationsServiceFailIfCalled:
+        def get_message_operations_view(self, **kwargs):
+            raise AssertionError("operations service must not run for passive intents")
+
+    runtime_loop = RuntimeLoop(
+        control_snapshot_service=type("ControlSnapshotService", (), {
+            "freeze": lambda self, symbol, regime: first_snapshot if regime is None else second_snapshot,
+        })(),
+        feature_service=type("FeatureService", (), {
+            "build_snapshot": lambda self, trigger: feature_snapshot,
+        })(),
+        brain_run_service=type("BrainRunService", (), {
+            "run_active_brains": lambda self, feature_snapshot, control_snapshot, feature_source: ["proposal"],
+        })(),
+        parliament_adapter=type("ParliamentAdapter", (), {
+            "build_candidate": lambda self, feature_snapshot, proposals, control_snapshot: candidate,
+        })(),
+        override_resolver=type("OverrideResolver", (), {
+            "resolve": lambda self, symbol, regime, mode, active_overrides: [],
+        })(),
+        decision_compiler=type("DecisionCompiler", (), {
+            "compile_intent": lambda self, candidate, mode_state, active_overrides: build_passive_runtime_intent(
+                event_time=event_time,
+            ),
+        })(),
+        decision_record_writer=DecisionRecordWriterStub(),
+        intent_message_builder=IntentMessageBuilder(producer="decision_engine", target="exec_bridge"),
+        communication_dispatcher=CommunicationDispatcher(
+            adapter=StubCommunicationAdapter(),
+            clock=lambda: datetime(2026, 4, 24, 12, 0, 2),
+        ),
+        communication_record_writer=CommunicationRecordWriterFailIfCalled(),
+        communication_operations_service=CommunicationOperationsServiceFailIfCalled(),
+    )
+
+    result = runtime_loop.run_decision_cycle(trigger={"symbol": "XAUUSD"}, feature_source={"f": 1.0})
+
+    assert result.verdict.status.name == "DENY"
+    assert result.dispatch_result["status"] == "skipped"
+    assert result.communication_record is None
+    assert result.communication_ledger_path is None
+    assert result.communication_operations is None
+
+
+def test_runtime_loop_end_to_end_communication_stack_matches_operations_view(tmp_path):
+    event_time = datetime(2026, 4, 24, 12, 0, 0)
+    feature_snapshot = type("FeatureSnapshot", (), {
+        "snapshot_id": "snapshot_001",
+        "event_time": event_time,
+        "symbol": "XAUUSD",
+        "venue": "MT5",
+    })()
+    first_snapshot = type("ControlSnapshot", (), {
+        "mode_state": type("ModeState", (), {"current_mode": type("Mode", (), {"value": "normal"})()})(),
+        "active_overrides": [],
+    })()
+    second_snapshot = type("ControlSnapshot", (), {
+        "mode_state": type("ModeState", (), {"current_mode": type("Mode", (), {"value": "normal"})()})(),
+        "active_overrides": [],
+    })()
+    candidate = type("Candidate", (), {
+        "regime_state": {"primary_regime": "trend"},
+    })()
+    record = type("Record", (), {"record_id": "record_001"})()
+
+    class DecisionRecordWriterStub:
+        def seed_record(self, **kwargs):
+            return record, Path(tmp_path) / "2026-04-24" / stream_jsonl_filename("XAUUSD", LEDGER_STREAM_DECISIONS)
+
+    store = JsonlLedgerStore(str(tmp_path))
+    communication_writer = CommunicationRecordWriter(ledger_store=store)
+    communication_reader = CommunicationRecordReader(base_dir=str(tmp_path))
+    replay_reader = ReplayExecutionReader(base_dir=str(tmp_path))
+    inspection = CommunicationInspectionService(record_reader=communication_reader, receipt_reader=None)
+    replay_service = CommunicationReplayService(inspection_service=inspection)
+    replay_gate = CommunicationReplayGate()
+    operations = CommunicationOperationsService(
+        communication_reader=communication_reader,
+        inspection_service=inspection,
+        replay_service=replay_service,
+        replay_gate=replay_gate,
+        replay_reader=replay_reader,
+        receipt_reader=None,
+    )
+
+    runtime_loop = RuntimeLoop(
+        control_snapshot_service=type("ControlSnapshotService", (), {
+            "freeze": lambda self, symbol, regime: first_snapshot if regime is None else second_snapshot,
+        })(),
+        feature_service=type("FeatureService", (), {
+            "build_snapshot": lambda self, trigger: feature_snapshot,
+        })(),
+        brain_run_service=type("BrainRunService", (), {
+            "run_active_brains": lambda self, feature_snapshot, control_snapshot, feature_source: ["proposal"],
+        })(),
+        parliament_adapter=type("ParliamentAdapter", (), {
+            "build_candidate": lambda self, feature_snapshot, proposals, control_snapshot: candidate,
+        })(),
+        override_resolver=type("OverrideResolver", (), {
+            "resolve": lambda self, symbol, regime, mode, active_overrides: [],
+        })(),
+        decision_compiler=type("DecisionCompiler", (), {
+            "compile_intent": lambda self, candidate, mode_state, active_overrides: build_runtime_intent(event_time=event_time),
+        })(),
+        decision_record_writer=DecisionRecordWriterStub(),
+        intent_message_builder=IntentMessageBuilder(producer="decision_engine", target="exec_bridge"),
+        communication_dispatcher=CommunicationDispatcher(
+            adapter=StubCommunicationAdapter(),
+            clock=lambda: datetime(2026, 4, 24, 12, 0, 2),
+        ),
+        communication_record_writer=communication_writer,
+        communication_operations_service=operations,
+    )
+
+    result = runtime_loop.run_decision_cycle(trigger={"symbol": "XAUUSD"}, feature_source={"f": 1.0})
+
+    assert result.verdict.status.name == "ALLOW"
+    assert result.dispatch_result.status == DispatchStatus.PROTOCOL_VALIDATED
+    msg_id = result.communication_record.message_id
+    assert result.communication_ledger_path.exists()
+
+    roundtrip = communication_reader.find_by_message_id(
+        date_key="2026-04-24",
+        target="exec_bridge",
+        message_id=msg_id,
+    )
+    assert roundtrip is not None
+    assert roundtrip["message_id"] == msg_id
+
+    view = result.communication_operations
+    assert view is not None
+    assert view["record"]["message_id"] == msg_id
+    assert view["replay_plan"] is not None
+    assert view["replay_gate"] is not None
 
