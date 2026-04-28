@@ -344,8 +344,12 @@ def build_runtime_summary_from_execution_result(execution_result: dict) -> dict:
     executed_message_ids = grouped_message_ids(results)
     skipped_message_ids = grouped_message_ids(skipped_messages)
     blocked_message_ids = grouped_message_ids(blocked_messages)
-    skip_reasons = grouped_message_reasons(skipped_messages)
-    block_reasons = grouped_message_reasons(blocked_messages)
+    skip_reasons = execution_result.get(PAYLOAD_KEY_SKIP_REASONS)
+    if not isinstance(skip_reasons, dict):
+        skip_reasons = grouped_message_reasons(skipped_messages)
+    block_reasons = execution_result.get(PAYLOAD_KEY_BLOCK_REASONS)
+    if not isinstance(block_reasons, dict):
+        block_reasons = grouped_message_reasons(blocked_messages)
 
     dispatch_result = execution_result.get(PAYLOAD_KEY_DISPATCH_RESULT)
     dispatch_status = None if dispatch_result is None else dispatch_result.status

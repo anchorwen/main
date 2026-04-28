@@ -1,7 +1,9 @@
 from core.contracts.enums import ReplayGateDecision
 from core.deployment.domain_keys import (
+    PAYLOAD_KEY_BLOCK_REASONS,
     PAYLOAD_KEY_DISPATCH_RESULT,
     PAYLOAD_KEY_GATE_DECISION,
+    PAYLOAD_KEY_SKIP_REASONS,
     PAYLOAD_KEY_MESSAGE_ID,
     PAYLOAD_KEY_REASON,
     PAYLOAD_KEY_RESULTS,
@@ -72,6 +74,7 @@ from core.ledger.services.replay_trace_refs import (
     skipped_message_ids as trace_skipped_message_ids,
     target_message_ids as trace_target_message_ids,
 )
+from core.ledger.services.replay_record_refs import grouped_reasons as replay_grouped_reasons
 
 
 class CommunicationReplayExecutor:
@@ -95,11 +98,15 @@ class CommunicationReplayExecutor:
         decision = gate_decision_value(gate_decision)
 
         if decision != ReplayGateDecision.ALLOW:
+            blocked_messages = self._build_message_block_entries(replay_plan, gate_decision)
             result = {
                 PAYLOAD_KEY_STATUS: REPLAY_EXECUTION_STATUS_BLOCKED,
                 PAYLOAD_KEY_GATE_DECISION: gate_decision,
                 PAYLOAD_KEY_DISPATCH_RESULT: None,
-                PAYLOAD_KEY_BLOCKED_MESSAGES: self._build_message_block_entries(replay_plan, gate_decision),
+                PAYLOAD_KEY_BLOCKED_MESSAGES: blocked_messages,
+                PAYLOAD_KEY_SKIPPED_MESSAGES: [],
+                PAYLOAD_KEY_SKIP_REASONS: {},
+                PAYLOAD_KEY_BLOCK_REASONS: replay_grouped_reasons(blocked_messages),
                 PAYLOAD_KEY_REPLAY_TRACE: {
                     PAYLOAD_KEY_SCOPE: REPLAY_TRACE_SCOPE_MESSAGE,
                     PAYLOAD_KEY_MESSAGE_ID: plan_message_id(replay_plan),
@@ -130,7 +137,10 @@ class CommunicationReplayExecutor:
                     PAYLOAD_KEY_DISPATCH_RESULT: dispatch_result,
                 }
             ],
+            PAYLOAD_KEY_SKIPPED_MESSAGES: [],
             PAYLOAD_KEY_BLOCKED_MESSAGES: [],
+            PAYLOAD_KEY_SKIP_REASONS: {},
+            PAYLOAD_KEY_BLOCK_REASONS: {},
             PAYLOAD_KEY_REPLAY_TRACE: {
                 PAYLOAD_KEY_SCOPE: REPLAY_TRACE_SCOPE_MESSAGE,
                 PAYLOAD_KEY_MESSAGE_ID: plan_message_id(replay_plan),
@@ -155,12 +165,16 @@ class CommunicationReplayExecutor:
         ]
 
         if decision != ReplayGateDecision.ALLOW:
+            blocked_messages = self._build_blocked_entries(target_message_ids, gate_decision)
+            skipped_messages = self._build_skipped_entries(replay_plan, skipped_message_ids)
             result = {
                 PAYLOAD_KEY_STATUS: REPLAY_EXECUTION_STATUS_BLOCKED,
                 PAYLOAD_KEY_GATE_DECISION: gate_decision,
                 PAYLOAD_KEY_RESULTS: [],
-                PAYLOAD_KEY_BLOCKED_MESSAGES: self._build_blocked_entries(target_message_ids, gate_decision),
-                PAYLOAD_KEY_SKIPPED_MESSAGES: self._build_skipped_entries(replay_plan, skipped_message_ids),
+                PAYLOAD_KEY_BLOCKED_MESSAGES: blocked_messages,
+                PAYLOAD_KEY_SKIPPED_MESSAGES: skipped_messages,
+                PAYLOAD_KEY_SKIP_REASONS: replay_grouped_reasons(skipped_messages),
+                PAYLOAD_KEY_BLOCK_REASONS: replay_grouped_reasons(blocked_messages),
                 PAYLOAD_KEY_REPLAY_TRACE: {
                     PAYLOAD_KEY_SCOPE: REPLAY_TRACE_SCOPE_CORRELATION,
                     PAYLOAD_KEY_CORRELATION_ID: plan_correlation_id(replay_plan),
@@ -197,12 +211,15 @@ class CommunicationReplayExecutor:
                 }
             )
 
+        skipped_messages = self._build_skipped_entries(replay_plan, skipped_message_ids)
         result = {
             PAYLOAD_KEY_STATUS: REPLAY_EXECUTION_STATUS_EXECUTED,
             PAYLOAD_KEY_GATE_DECISION: gate_decision,
             PAYLOAD_KEY_RESULTS: results,
             PAYLOAD_KEY_BLOCKED_MESSAGES: [],
-            PAYLOAD_KEY_SKIPPED_MESSAGES: self._build_skipped_entries(replay_plan, skipped_message_ids),
+            PAYLOAD_KEY_SKIPPED_MESSAGES: skipped_messages,
+            PAYLOAD_KEY_SKIP_REASONS: replay_grouped_reasons(skipped_messages),
+            PAYLOAD_KEY_BLOCK_REASONS: {},
             PAYLOAD_KEY_REPLAY_TRACE: {
                 PAYLOAD_KEY_SCOPE: REPLAY_TRACE_SCOPE_CORRELATION,
                 PAYLOAD_KEY_CORRELATION_ID: plan_correlation_id(replay_plan),

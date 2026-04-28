@@ -207,6 +207,10 @@ def test_replay_executor_blocks_message_plan_under_review(tmp_path):
     assert result["gate_decision"]["decision"] == ReplayGateDecision.REVIEW
     assert result["dispatch_result"] is None
     assert result["blocked_messages"] == [{"message_id": "message_002", "reason": executor.BLOCK_REASON_REVIEW_REQUIRED}]
+    assert result["skip_reasons"] == {}
+    assert result["block_reasons"] == {
+        executor.BLOCK_REASON_REVIEW_REQUIRED: ["message_002"],
+    }
     assert result["replay_trace"]["execution_state"] == "not_executed"
     assert result["replay_record"].execution["status"] == "blocked"
     assert result["replay_record"].execution["execution_mode"] == "blocked"
@@ -392,6 +396,10 @@ def test_replay_executor_executes_only_timed_out_messages_when_next_day_receipt_
     assert result["skipped_messages"] == [
         {"message_id": "message_302", "reason": executor.SKIP_REASON_ACKNOWLEDGED}
     ]
+    assert result["skip_reasons"] == {
+        executor.SKIP_REASON_ACKNOWLEDGED: ["message_302"],
+    }
+    assert result["block_reasons"] == {}
     assert result["replay_trace"]["message_count"] == 1
     assert result["replay_trace"]["target_message_ids"] == ["message_301"]
     assert result["replay_trace"]["skipped_message_ids"] == ["message_302"]
@@ -564,6 +572,33 @@ def test_replay_executor_runtime_summary_projection_uses_replay_record_execution
         skip_reasons={"skip_acknowledged_message": ["message_302"]},
         block_reasons={},
     )
+
+
+def test_replay_executor_runtime_summary_prefers_executor_aggregated_reason_maps():
+    execution_result = {
+        "gate_decision": {
+            "governance_summary": {
+                "decision": ReplayGateDecision.REVIEW,
+                "posture": "review_required",
+                "recommended_strategy": "replay_with_governance_review",
+                "target_issue_codes": ["receipt_timeout"],
+                "review_issue_codes": ["attempt_history_requires_review"],
+                "governance_tags": ["requires_governance_review"],
+            }
+        },
+        "results": [],
+        "skipped_messages": [{"message_id": "message_from_entries", "reason": "skip_not_targeted"}],
+        "blocked_messages": [{"message_id": "message_from_entries", "reason": "block_review_required"}],
+        "skip_reasons": {"skip_from_executor": ["message_from_summary"]},
+        "block_reasons": {"block_from_executor": ["message_from_summary"]},
+        "replay_trace": {"message_id": "message_trace"},
+        "dispatch_result": None,
+    }
+
+    summary = build_runtime_summary_from_execution_result(execution_result)
+
+    assert summary["skip_reasons"] == {"skip_from_executor": ["message_from_summary"]}
+    assert summary["block_reasons"] == {"block_from_executor": ["message_from_summary"]}
 
 
 def test_replay_executor_priority_contract_matrix(tmp_path):
@@ -923,6 +958,13 @@ def test_replay_executor_blocks_correlation_plan_with_mixed_receipt_states(tmp_p
         {"message_id": "message_timeout", "reason": executor.SKIP_REASON_NOT_TARGETED},
         {"message_id": "message_acked", "reason": executor.SKIP_REASON_ACKNOWLEDGED},
     ]
+    assert result["skip_reasons"] == {
+        executor.SKIP_REASON_NOT_TARGETED: ["message_timeout"],
+        executor.SKIP_REASON_ACKNOWLEDGED: ["message_acked"],
+    }
+    assert result["block_reasons"] == {
+        executor.BLOCK_REASON_REJECTED_RECEIPT: ["message_rejected"],
+    }
     assert result["replay_trace"]["blocked_message_ids"] == ["message_rejected"]
     assert result["replay_trace"]["skipped_message_ids"] == ["message_timeout", "message_acked"]
 
