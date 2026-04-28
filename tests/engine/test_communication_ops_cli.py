@@ -10,6 +10,30 @@ from apps.engine.communication_summary_contract import build_summary_mirror_fiel
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.dispatch_result import DispatchResult
 from core.contracts.enums import CommunicationMessageType, CommunicationPriority, DispatchStatus
+from core.deployment.domain_keys import (
+    PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
+    PAYLOAD_KEY_BLOCK_REASONS,
+    PAYLOAD_KEY_EXECUTED_MESSAGE_IDS,
+    PAYLOAD_KEY_EXECUTION_MODE,
+    PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE,
+    PAYLOAD_KEY_GOVERNANCE_DECISION,
+    PAYLOAD_KEY_GOVERNANCE_POSTURE,
+    PAYLOAD_KEY_GOVERNANCE_SOURCES,
+    PAYLOAD_KEY_GOVERNANCE_SUMMARY_SOURCE,
+    PAYLOAD_KEY_GOVERNANCE_TAGS,
+    PAYLOAD_KEY_OPERATIONS_POSTURE,
+    PAYLOAD_KEY_OPERATIONS_SUMMARY,
+    PAYLOAD_KEY_POSTURE,
+    PAYLOAD_KEY_POSTURE_SOURCE,
+    PAYLOAD_KEY_POSTURE_SOURCES,
+    PAYLOAD_KEY_RECOMMENDED_STRATEGY,
+    PAYLOAD_KEY_RECONCILIATION_STATUS,
+    PAYLOAD_KEY_REVIEW_ISSUE_CODES,
+    PAYLOAD_KEY_SKIPPED_MESSAGE_IDS,
+    PAYLOAD_KEY_SKIP_REASONS,
+    PAYLOAD_KEY_SUMMARY_SOURCE,
+    PAYLOAD_KEY_TARGET_ISSUE_CODES,
+)
 from core.ledger.services.communication_record_writer import CommunicationRecordWriter
 from core.ledger.services.communication_replay_executor import CommunicationReplayExecutor
 from core.ledger.services.communication_replay_gate import CommunicationReplayGate
@@ -115,25 +139,25 @@ def build_operations_summary(
     block_reasons: dict | None = None,
 ) -> dict:
     summary = {
-        "posture": posture,
-        "posture_source": posture_source,
-        "governance_decision": governance_decision,
-        "governance_posture": governance_posture,
-        "recommended_strategy": recommended_strategy,
-        "target_issue_codes": target_issue_codes or [],
-        "review_issue_codes": review_issue_codes or [],
-        "governance_tags": governance_tags or [],
-        "governance_summary_source": governance_summary_source,
-        "execution_projection_source": execution_projection_source,
-        "reconciliation_status": None,
+        PAYLOAD_KEY_POSTURE: posture,
+        PAYLOAD_KEY_POSTURE_SOURCE: posture_source,
+        PAYLOAD_KEY_GOVERNANCE_DECISION: governance_decision,
+        PAYLOAD_KEY_GOVERNANCE_POSTURE: governance_posture,
+        PAYLOAD_KEY_RECOMMENDED_STRATEGY: recommended_strategy,
+        PAYLOAD_KEY_TARGET_ISSUE_CODES: target_issue_codes or [],
+        PAYLOAD_KEY_REVIEW_ISSUE_CODES: review_issue_codes or [],
+        PAYLOAD_KEY_GOVERNANCE_TAGS: governance_tags or [],
+        PAYLOAD_KEY_GOVERNANCE_SUMMARY_SOURCE: governance_summary_source,
+        PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE: execution_projection_source,
+        PAYLOAD_KEY_RECONCILIATION_STATUS: None,
     }
     if execution_mode is not None:
-        summary["execution_mode"] = execution_mode
-        summary["executed_message_ids"] = executed_message_ids or []
-        summary["skipped_message_ids"] = skipped_message_ids or []
-        summary["blocked_message_ids"] = blocked_message_ids or []
-        summary["skip_reasons"] = skip_reasons or {}
-        summary["block_reasons"] = block_reasons or {}
+        summary[PAYLOAD_KEY_EXECUTION_MODE] = execution_mode
+        summary[PAYLOAD_KEY_EXECUTED_MESSAGE_IDS] = executed_message_ids or []
+        summary[PAYLOAD_KEY_SKIPPED_MESSAGE_IDS] = skipped_message_ids or []
+        summary[PAYLOAD_KEY_BLOCKED_MESSAGE_IDS] = blocked_message_ids or []
+        summary[PAYLOAD_KEY_SKIP_REASONS] = skip_reasons or {}
+        summary[PAYLOAD_KEY_BLOCK_REASONS] = block_reasons or {}
     return summary
 
 
@@ -144,8 +168,8 @@ def build_stable_governance_sources(
     execution_projection_source: str | None,
 ) -> dict:
     return {
-        "summary_source": summary_source,
-        "execution_projection_source": execution_projection_source,
+        PAYLOAD_KEY_SUMMARY_SOURCE: summary_source,
+        PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE: execution_projection_source,
     }
 
 
@@ -158,16 +182,16 @@ def build_stub_operations_result(
     governance_sources: dict | None = None,
 ) -> dict:
     result = {
-        "operations_summary": operations_summary,
+        PAYLOAD_KEY_OPERATIONS_SUMMARY: operations_summary,
     }
     if operations_posture is not None:
-        result["operations_posture"] = operations_posture
+        result[PAYLOAD_KEY_OPERATIONS_POSTURE] = operations_posture
     if posture_source is not None:
-        result["posture_sources"] = {
+        result[PAYLOAD_KEY_POSTURE_SOURCES] = {
             "operations_posture_source": posture_source,
         }
     if governance_sources is not None:
-        result["governance_sources"] = governance_sources
+        result[PAYLOAD_KEY_GOVERNANCE_SOURCES] = governance_sources
     return result
 
 
@@ -193,28 +217,28 @@ def assert_stable_summary_mirror_fields(
     summary_source: str | None = None,
     execution_projection_source: str | None = None,
 ) -> None:
-    assert payload["operations_summary"] == operations_summary
-    assert payload["operations_posture"] == operations_summary.get("posture")
-    assert payload["posture_sources"] == {
-        "operations_posture_source": operations_summary.get("posture_source"),
+    assert payload[PAYLOAD_KEY_OPERATIONS_SUMMARY] == operations_summary
+    assert payload[PAYLOAD_KEY_OPERATIONS_POSTURE] == operations_summary.get(PAYLOAD_KEY_POSTURE)
+    assert payload[PAYLOAD_KEY_POSTURE_SOURCES] == {
+        "operations_posture_source": operations_summary.get(PAYLOAD_KEY_POSTURE_SOURCE),
     }
     if summary_source is None and execution_projection_source is None:
-        assert "governance_sources" not in payload or payload["governance_sources"] is None
+        assert PAYLOAD_KEY_GOVERNANCE_SOURCES not in payload or payload[PAYLOAD_KEY_GOVERNANCE_SOURCES] is None
     else:
-        assert payload["governance_sources"] == {
-            "summary_source": summary_source,
-            "execution_projection_source": execution_projection_source,
+        assert payload[PAYLOAD_KEY_GOVERNANCE_SOURCES] == {
+            PAYLOAD_KEY_SUMMARY_SOURCE: summary_source,
+            PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE: execution_projection_source,
         }
 
 
 
 def assert_execution_mirror_fields(payload: dict, *, execution_mode: str, executed_message_ids: list[str], skipped_message_ids: list[str], blocked_message_ids: list[str], skip_reasons: dict, block_reasons: dict) -> None:
-    assert payload["operations_summary"]["execution_mode"] == execution_mode
-    assert payload["operations_summary"]["executed_message_ids"] == executed_message_ids
-    assert payload["operations_summary"]["skipped_message_ids"] == skipped_message_ids
-    assert payload["operations_summary"]["blocked_message_ids"] == blocked_message_ids
-    assert payload["operations_summary"]["skip_reasons"] == skip_reasons
-    assert payload["operations_summary"]["block_reasons"] == block_reasons
+    assert payload[PAYLOAD_KEY_OPERATIONS_SUMMARY][PAYLOAD_KEY_EXECUTION_MODE] == execution_mode
+    assert payload[PAYLOAD_KEY_OPERATIONS_SUMMARY][PAYLOAD_KEY_EXECUTED_MESSAGE_IDS] == executed_message_ids
+    assert payload[PAYLOAD_KEY_OPERATIONS_SUMMARY][PAYLOAD_KEY_SKIPPED_MESSAGE_IDS] == skipped_message_ids
+    assert payload[PAYLOAD_KEY_OPERATIONS_SUMMARY][PAYLOAD_KEY_BLOCKED_MESSAGE_IDS] == blocked_message_ids
+    assert payload[PAYLOAD_KEY_OPERATIONS_SUMMARY][PAYLOAD_KEY_SKIP_REASONS] == skip_reasons
+    assert payload[PAYLOAD_KEY_OPERATIONS_SUMMARY][PAYLOAD_KEY_BLOCK_REASONS] == block_reasons
 
 
 

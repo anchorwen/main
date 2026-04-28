@@ -65,6 +65,21 @@ from apps.engine.main_v9_shadow import (
 )
 from apps.engine.v9_shadow_sse import iter_sse_messages_from_chunks
 from core.contracts.enums import DispatchStatus
+from core.deployment.domain_keys import (
+    PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
+    PAYLOAD_KEY_BLOCK_REASONS,
+    PAYLOAD_KEY_EXECUTED_MESSAGE_IDS,
+    PAYLOAD_KEY_EXECUTION_MODE,
+    PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE,
+    PAYLOAD_KEY_GOVERNANCE_SOURCES,
+    PAYLOAD_KEY_GOVERNANCE_SUMMARY_SOURCE,
+    PAYLOAD_KEY_OPERATIONS_SUMMARY,
+    PAYLOAD_KEY_POSTURE,
+    PAYLOAD_KEY_POSTURE_SOURCE,
+    PAYLOAD_KEY_SKIPPED_MESSAGE_IDS,
+    PAYLOAD_KEY_SKIP_REASONS,
+    PAYLOAD_KEY_SUMMARY_SOURCE,
+)
 from tests.engine.shadow_testkit import (
     assert_client_completed_terminal_message,
     assert_client_error_terminal_message,
@@ -165,13 +180,31 @@ def assert_runtime_stable_output_fields(
     posture_source: str | None,
     summary_source: str | None,
     execution_projection_source,
+    execution_mode: str | None = None,
+    executed_message_ids: list[str] | None = None,
+    skipped_message_ids: list[str] | None = None,
+    blocked_message_ids: list[str] | None = None,
+    skip_reasons: dict | None = None,
+    block_reasons: dict | None = None,
 ) -> None:
     assert payload["operations_posture"] == operations_posture
     assert payload["posture_sources"] == {"operations_posture_source": posture_source}
-    assert payload["governance_sources"] == {
-        "summary_source": summary_source,
-        "execution_projection_source": execution_projection_source,
+    assert payload[PAYLOAD_KEY_GOVERNANCE_SOURCES] == {
+        PAYLOAD_KEY_SUMMARY_SOURCE: summary_source,
+        PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE: execution_projection_source,
     }
+    if execution_mode is not None:
+        assert payload[PAYLOAD_KEY_EXECUTION_MODE] == execution_mode
+    if executed_message_ids is not None:
+        assert payload[PAYLOAD_KEY_EXECUTED_MESSAGE_IDS] == executed_message_ids
+    if skipped_message_ids is not None:
+        assert payload[PAYLOAD_KEY_SKIPPED_MESSAGE_IDS] == skipped_message_ids
+    if blocked_message_ids is not None:
+        assert payload[PAYLOAD_KEY_BLOCKED_MESSAGE_IDS] == blocked_message_ids
+    if skip_reasons is not None:
+        assert payload[PAYLOAD_KEY_SKIP_REASONS] == skip_reasons
+    if block_reasons is not None:
+        assert payload[PAYLOAD_KEY_BLOCK_REASONS] == block_reasons
 
 
 
@@ -753,6 +786,81 @@ def test_v9_shadow_output_extensions_prefer_operations_summary_over_stale_result
         execution_projection_source="summary.execution",
     )
 
+
+
+def test_v9_shadow_output_extensions_backfill_operations_summary_from_result_when_missing():
+    manager_payload = build_summary_payload(
+        "long_case",
+        run_scenario("long"),
+        feature_source_type="scenario",
+        feature_file=None,
+        sample_description="contract sample",
+    )
+    manager_payload = {
+        key: value
+        for key, value in manager_payload.items()
+        if key != "operations_summary"
+    }
+    result_stub = SimpleNamespace(
+        communication_operations={
+            "operations_posture": "targeted_replay",
+            "posture_sources": {"operations_posture_source": "summary.posture"},
+            PAYLOAD_KEY_GOVERNANCE_SOURCES: {
+                PAYLOAD_KEY_SUMMARY_SOURCE: "summary.source",
+                PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE: "summary.execution",
+            },
+            PAYLOAD_KEY_OPERATIONS_SUMMARY: {
+                PAYLOAD_KEY_POSTURE: "targeted_replay",
+                PAYLOAD_KEY_POSTURE_SOURCE: "summary.posture",
+                PAYLOAD_KEY_GOVERNANCE_SUMMARY_SOURCE: "summary.source",
+                PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE: "summary.execution",
+            },
+        }
+    )
+
+    extended = build_output_extension_fields(manager_payload, result_stub)
+    payload = apply_stable_output_contract(extended)
+
+    assert payload[PAYLOAD_KEY_OPERATIONS_SUMMARY][PAYLOAD_KEY_POSTURE] == "targeted_replay"
+    assert_runtime_stable_output_fields(
+        payload,
+        operations_posture="targeted_replay",
+        posture_source="summary.posture",
+        summary_source="summary.source",
+        execution_projection_source="summary.execution",
+    )
+
+
+def test_v9_shadow_apply_stable_output_contract_mirrors_replay_execution_fields():
+    payload = apply_stable_output_contract({
+        "scenario": "long_case",
+        PAYLOAD_KEY_OPERATIONS_SUMMARY: {
+            PAYLOAD_KEY_POSTURE: "targeted_replay",
+            PAYLOAD_KEY_POSTURE_SOURCE: "summary.posture",
+            PAYLOAD_KEY_GOVERNANCE_SUMMARY_SOURCE: "summary.source",
+            PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE: "summary.execution",
+            PAYLOAD_KEY_EXECUTION_MODE: "targeted",
+            PAYLOAD_KEY_EXECUTED_MESSAGE_IDS: ["message_001"],
+            PAYLOAD_KEY_SKIPPED_MESSAGE_IDS: ["message_002"],
+            PAYLOAD_KEY_BLOCKED_MESSAGE_IDS: [],
+            PAYLOAD_KEY_SKIP_REASONS: {"skip_acknowledged_message": ["message_002"]},
+            PAYLOAD_KEY_BLOCK_REASONS: {},
+        },
+    })
+
+    assert_runtime_stable_output_fields(
+        payload,
+        operations_posture="targeted_replay",
+        posture_source="summary.posture",
+        summary_source="summary.source",
+        execution_projection_source="summary.execution",
+        execution_mode="targeted",
+        executed_message_ids=["message_001"],
+        skipped_message_ids=["message_002"],
+        blocked_message_ids=[],
+        skip_reasons={"skip_acknowledged_message": ["message_002"]},
+        block_reasons={},
+    )
 
 
 def test_v9_shadow_cli_out_multi_base_writes_summary_json_stats_using_recommended_overrides(tmp_path):

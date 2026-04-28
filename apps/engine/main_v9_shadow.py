@@ -1231,8 +1231,12 @@ def build_output_extension_fields(payload: dict, result) -> dict:
     communication_operations = getattr(result, "communication_operations", None)
     if communication_operations is None:
         return payload
+    operations_summary = payload.get(PAYLOAD_KEY_OPERATIONS_SUMMARY)
+    if operations_summary is None:
+        operations_summary = communication_operations.get(PAYLOAD_KEY_OPERATIONS_SUMMARY)
     return {
         **payload,
+        PAYLOAD_KEY_OPERATIONS_SUMMARY: operations_summary,
         PAYLOAD_KEY_OPERATIONS_POSTURE: communication_operations.get(PAYLOAD_KEY_OPERATIONS_POSTURE),
         PAYLOAD_KEY_POSTURE_SOURCES: communication_operations.get(PAYLOAD_KEY_POSTURE_SOURCES),
         PAYLOAD_KEY_GOVERNANCE_SOURCES: communication_operations.get(PAYLOAD_KEY_GOVERNANCE_SOURCES),

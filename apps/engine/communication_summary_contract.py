@@ -1,4 +1,8 @@
 from core.deployment.domain_keys import (
+    PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
+    PAYLOAD_KEY_BLOCK_REASONS,
+    PAYLOAD_KEY_EXECUTED_MESSAGE_IDS,
+    PAYLOAD_KEY_EXECUTION_MODE,
     PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE,
     PAYLOAD_KEY_GOVERNANCE_SOURCES,
     PAYLOAD_KEY_GOVERNANCE_SUMMARY_SOURCE,
@@ -8,6 +12,8 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_POSTURE,
     PAYLOAD_KEY_POSTURE_SOURCES,
     PAYLOAD_KEY_POSTURE_SOURCE,
+    PAYLOAD_KEY_SKIPPED_MESSAGE_IDS,
+    PAYLOAD_KEY_SKIP_REASONS,
     PAYLOAD_KEY_SUMMARY_SOURCE,
 )
 
@@ -30,6 +36,16 @@ def build_summary_mirror_fields_from_operations_summary(payload: dict, *, stable
             PAYLOAD_KEY_OPERATIONS_POSTURE_SOURCE: operations_summary.get(PAYLOAD_KEY_POSTURE_SOURCE),
         },
     }
+    for field_name in (
+        PAYLOAD_KEY_EXECUTION_MODE,
+        PAYLOAD_KEY_EXECUTED_MESSAGE_IDS,
+        PAYLOAD_KEY_SKIPPED_MESSAGE_IDS,
+        PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
+        PAYLOAD_KEY_SKIP_REASONS,
+        PAYLOAD_KEY_BLOCK_REASONS,
+    ):
+        if field_name in operations_summary:
+            normalized_payload[field_name] = operations_summary.get(field_name)
 
     governance_summary_source = operations_summary.get(PAYLOAD_KEY_GOVERNANCE_SUMMARY_SOURCE)
     execution_projection_source = operations_summary.get(PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE)
