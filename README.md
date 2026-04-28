@@ -45,6 +45,28 @@ This entrypoint covers the current communication and V9 shadow stability surface
 - session manager / SSE / client terminal payload alignment
 - V9 shadow smoke, contracts, integration, and SSE utility coverage
 
+### Runtime Contract Baseline (DBAC)
+
+The current runtime baseline treats `operations_summary` as the stable source for replay/runtime contract fields. Top-level mirror fields are projected from `operations_summary` for compatibility consumers.
+
+Stable replay/runtime mirrors include:
+- `execution_mode`
+- `executed_message_ids`
+- `skipped_message_ids`
+- `blocked_message_ids`
+- `skip_reasons`
+- `block_reasons`
+
+For runtime paths where payloads do not already carry `operations_summary`, the engine backfills from `result.communication_operations` before stable projection.
+
+Recommended baseline guard checks:
+
+```bash
+python -m pytest tests/engine/test_runtime_contract_guard.py
+python -m pytest tests/engine/test_communication_replay_executor.py::test_replay_executor_priority_contract_matrix
+python -m pytest tests/engine/test_v9_shadow_smoke.py::test_v9_shadow_apply_stable_output_contract_mirrors_replay_execution_fields
+```
+
 ## Governance Summary Contract
 
 Deployment/governance outputs expose a unified governance summary shape:
