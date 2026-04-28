@@ -804,6 +804,74 @@ def test_replay_executor_priority_contract_matrix(tmp_path):
             "blocked_message_ids": ["message_stale"],
             "skipped_message_ids": ["message_rejected", "message_timeout"],
         },
+        {
+            "correlation_id": "corr_exec_terminal_over_stale_timeout",
+            "message_specs": [
+                {
+                    "message_id": "message_terminal",
+                    "receipt": {"ack_status": "accepted"},
+                },
+                {
+                    "message_id": "message_stale",
+                    "receipt": {
+                        "date_key": "2026-04-25",
+                        "received_at": "2026-04-24T12:00:11",
+                    },
+                },
+                {
+                    "message_id": "message_timeout",
+                    "recorded_at": datetime(2026, 4, 24, 12, 0, 20),
+                },
+            ],
+            "recommended_strategy": "review_stale_receipts_before_replay",
+            "target_issue_codes": ["stale_receipt"],
+            "target_message_ids": ["message_stale"],
+            "status": "blocked",
+            "decision": ReplayGateDecision.REVIEW,
+            "blocked_messages": [
+                {"message_id": "message_stale", "reason": CommunicationReplayExecutor.BLOCK_REASON_STALE_RECEIPT},
+            ],
+            "skipped_messages": [
+                {"message_id": "message_terminal", "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED},
+                {"message_id": "message_timeout", "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED},
+            ],
+            "blocked_message_ids": ["message_stale"],
+            "skipped_message_ids": ["message_terminal", "message_timeout"],
+        },
+        {
+            "correlation_id": "corr_exec_stale_over_cancelled_timeout",
+            "message_specs": [
+                {
+                    "message_id": "message_stale",
+                    "receipt": {
+                        "date_key": "2026-04-25",
+                        "received_at": "2026-04-24T12:00:11",
+                    },
+                },
+                {
+                    "message_id": "message_cancelled",
+                    "receipt": {"ack_status": "cancelled"},
+                },
+                {
+                    "message_id": "message_timeout",
+                    "recorded_at": datetime(2026, 4, 24, 12, 0, 20),
+                },
+            ],
+            "recommended_strategy": "review_stale_receipts_before_replay",
+            "target_issue_codes": ["stale_receipt"],
+            "target_message_ids": ["message_stale"],
+            "status": "blocked",
+            "decision": ReplayGateDecision.REVIEW,
+            "blocked_messages": [
+                {"message_id": "message_stale", "reason": CommunicationReplayExecutor.BLOCK_REASON_STALE_RECEIPT},
+            ],
+            "skipped_messages": [
+                {"message_id": "message_cancelled", "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED},
+                {"message_id": "message_timeout", "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED},
+            ],
+            "blocked_message_ids": ["message_stale"],
+            "skipped_message_ids": ["message_cancelled", "message_timeout"],
+        },
     ]
 
     for case in cases:
