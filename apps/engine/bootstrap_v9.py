@@ -37,9 +37,23 @@ def build_v9_shadow_container() -> ServiceContainer:
     )
     container = ServiceContainer(config).build()
 
-    brain_path = _repo_root() / "configs" / "brains" / "v9_institutional_01.json"
+    repo_root = _repo_root()
+    brain_path = repo_root / "configs" / "brains" / "v9_institutional_01.json"
     loader = BrainRegistryLoader()
     brain_entry = loader.load_json(str(brain_path))
+    # Registry JSON may ship with developer-local paths; resolve portable paths from repo root
+    # so BrainFactory can always open normalization config (CI runners are not always `D:\cursor`).
+    norm_path = repo_root / "configs" / "brains" / "v9_institutional_01.normalization.json"
+    brain_entry["normalization_config_path"] = str(norm_path.resolve())
+    artifact_path = Path(brain_entry.get("artifact_path", ""))
+    repo_onnx = repo_root / "configs" / "brains" / "v9_institutional_brain.onnx"
+    if repo_onnx.is_file():
+        brain_entry["artifact_path"] = str(repo_onnx.resolve())
+        brain_entry["enable_onnxruntime"] = bool(brain_entry.get("enable_onnxruntime", False))
+    elif not artifact_path.is_file():
+        # Missing ONNX artifact → deterministic numpy stub in V9OnnxBrainAdapter (matches CI/test baseline).
+        brain_entry["enable_onnxruntime"] = False
+
     container.brain_registry.register(brain_entry)
     container.governance_service.register_brain(
         brain_entry.get("brain_id", "v9_institutional_01"),
