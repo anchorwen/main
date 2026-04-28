@@ -1888,6 +1888,7 @@ def prepare_results(args) -> tuple[list[dict], str]:
 
 def build_results_from_payloads(payloads: list[dict]) -> list:
     communication_mirror_keys = (
+        PAYLOAD_KEY_OPERATIONS_SUMMARY,
         PAYLOAD_KEY_OPERATIONS_POSTURE,
         PAYLOAD_KEY_POSTURE_SOURCES,
         PAYLOAD_KEY_GOVERNANCE_SOURCES,
@@ -1895,11 +1896,12 @@ def build_results_from_payloads(payloads: list[dict]) -> list:
     return [
         SimpleNamespace(
             communication_operations={
+                PAYLOAD_KEY_OPERATIONS_SUMMARY: payload.get(PAYLOAD_KEY_OPERATIONS_SUMMARY),
                 PAYLOAD_KEY_OPERATIONS_POSTURE: payload.get(PAYLOAD_KEY_OPERATIONS_POSTURE),
                 PAYLOAD_KEY_POSTURE_SOURCES: payload.get(PAYLOAD_KEY_POSTURE_SOURCES),
                 PAYLOAD_KEY_GOVERNANCE_SOURCES: payload.get(PAYLOAD_KEY_GOVERNANCE_SOURCES),
             }
-            if any(key in payload for key in communication_mirror_keys)
+            if any(payload.get(key) is not None for key in communication_mirror_keys)
             else None
         )
         for payload in payloads

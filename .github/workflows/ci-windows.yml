@@ -26,6 +26,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Ensure D:/cursor workspace alias
+        run: |
+          if (-not (Test-Path "D:\cursor")) {
+            New-Item -ItemType Junction -Path "D:\cursor" -Target "${env:GITHUB_WORKSPACE}" | Out-Null
+          }
+          Write-Host "Workspace alias ready: D:\cursor -> ${env:GITHUB_WORKSPACE}"
+
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -36,6 +43,167 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
+
+      - name: Prepare V9 shadow fixture data
+        run: |
+          @'
+          import json
+          from pathlib import Path
+          from apps.engine.main_v9_shadow import (
+              build_stub_feature_source,
+              build_long_actionable_stub_feature_source,
+              build_short_actionable_stub_feature_source,
+              build_edge_allow_stub_feature_source,
+              build_edge_deny_stub_feature_source,
+              rebuild_formal_baseline_suites,
+          )
+
+          def write_json(path: str, payload) -> None:
+              file_path = Path(path)
+              file_path.parent.mkdir(parents=True, exist_ok=True)
+              file_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+          snapshots_dir = Path("D:/cursor/data/snapshots")
+          baselines_dir = Path("D:/cursor/data/replays/v9_shadow_baselines")
+          snapshots_dir.mkdir(parents=True, exist_ok=True)
+          baselines_dir.mkdir(parents=True, exist_ok=True)
+
+          neutral = build_stub_feature_source()
+          long_case = build_long_actionable_stub_feature_source()
+          short_case = build_short_actionable_stub_feature_source()
+          edge_allow = build_edge_allow_stub_feature_source()
+          edge_deny = build_edge_deny_stub_feature_source()
+
+          write_json(
+              "D:/cursor/data/snapshots/v9_shadow_neutral.json",
+              {
+                  "name": "v9_shadow_neutral",
+                  "description": "Default reference sample expected to remain passive and abstain.",
+                  "features": neutral,
+              },
+          )
+          write_json(
+              "D:/cursor/data/snapshots/v9_shadow_long.json",
+              {
+                  "name": "v9_shadow_long",
+                  "description": "Lower H1_Hurst to push the model into an open long decision.",
+                  "features": long_case,
+              },
+          )
+          write_json(
+              "D:/cursor/data/snapshots/v9_shadow_short.json",
+              {
+                  "name": "v9_shadow_short",
+                  "description": "Invert the M15 feature group to trigger an open short decision.",
+                  "features": short_case,
+              },
+          )
+          write_json(
+              "D:/cursor/data/snapshots/v9_shadow_edge_allow.json",
+              {
+                  "name": "edge_allow_case",
+                  "description": "Borderline long setup expected to become risk-allowed.",
+                  "features": edge_allow,
+              },
+          )
+          write_json(
+              "D:/cursor/data/snapshots/v9_shadow_edge_deny.json",
+              {
+                  "name": "edge_deny_case",
+                  "description": "Borderline long setup expected to remain risk-blocked.",
+                  "features": edge_deny,
+              },
+          )
+
+          write_json(
+              "D:/cursor/data/snapshots/v9_shadow_batch.json",
+              [
+                  {
+                      "name": "neutral_case",
+                      "description": "Default reference sample expected to remain passive and abstain.",
+                      "features": neutral,
+                  },
+                  {
+                      "name": "long_case",
+                      "description": "Lower H1_Hurst to push the model into an open long decision.",
+                      "features": long_case,
+                  },
+                  {
+                      "name": "short_case",
+                      "description": "Invert the M15 feature group to trigger an open short decision.",
+                      "features": short_case,
+                  },
+              ],
+          )
+          write_json(
+              "D:/cursor/data/snapshots/v9_shadow_actionable_batch.json",
+              [
+                  {
+                      "name": "long_case",
+                      "description": "Lower H1_Hurst to push the model into an open long decision.",
+                      "features": long_case,
+                  },
+                  {
+                      "name": "short_case",
+                      "description": "Invert the M15 feature group to trigger an open short decision.",
+                      "features": short_case,
+                  },
+              ],
+          )
+          write_json(
+              "D:/cursor/data/snapshots/v9_shadow_neutral_batch.json",
+              [
+                  {
+                      "name": "neutral_case",
+                      "description": "Default reference sample expected to remain passive and abstain.",
+                      "features": neutral,
+                  },
+              ],
+          )
+          write_json(
+              "D:/cursor/data/snapshots/v9_shadow_edge_batch.json",
+              [
+                  {
+                      "name": "edge_allow_case",
+                      "description": "Borderline long setup expected to become risk-allowed.",
+                      "features": edge_allow,
+                  },
+                  {
+                      "name": "edge_deny_case",
+                      "description": "Borderline long setup expected to remain risk-blocked.",
+                      "features": edge_deny,
+                  },
+              ],
+          )
+
+          manifest_path = "D:/cursor/data/replays/v9_shadow_baselines/manifest.json"
+          write_json(
+              manifest_path,
+              {
+                  "version": "2",
+                  "description": "Formal baseline suites for V9 shadow neutral stability, actionable decision, and risk boundary acceptance checks.",
+                  "suites": [
+                      {
+                          "key": "neutral_stability",
+                          "batch_file": "D:/cursor/data/snapshots/v9_shadow_neutral_batch.json",
+                          "baseline_dir": "D:/cursor/data/replays/v9_shadow_baselines/neutral_stability",
+                      },
+                      {
+                          "key": "actionable_decisions",
+                          "batch_file": "D:/cursor/data/snapshots/v9_shadow_actionable_batch.json",
+                          "baseline_dir": "D:/cursor/data/replays/v9_shadow_baselines/actionable_decisions",
+                      },
+                      {
+                          "key": "risk_boundary",
+                          "batch_file": "D:/cursor/data/snapshots/v9_shadow_edge_batch.json",
+                          "baseline_dir": "D:/cursor/data/replays/v9_shadow_baselines/risk_boundary",
+                      },
+                  ],
+              },
+          )
+
+          rebuild_formal_baseline_suites(manifest_path)
+          '@ | python
 
       - name: Pytest (tests/engine)
         run: python -m pytest tests/engine
