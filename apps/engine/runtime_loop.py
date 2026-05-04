@@ -50,6 +50,7 @@ class RuntimeLoop:
         communication_record_writer=None,
         communication_operations_service=None,
         risk_evaluation_service=None,
+        dynamic_brain_weighter=None,
     ):
         self._control_snapshot_service = control_snapshot_service
         self._feature_service = feature_service
@@ -63,6 +64,7 @@ class RuntimeLoop:
         self._communication_record_writer = communication_record_writer
         self._communication_operations_service = communication_operations_service
         self._risk_evaluation_service = risk_evaluation_service
+        self._dynamic_brain_weighter = dynamic_brain_weighter
 
     def run_decision_cycle(
         self, trigger, feature_source: dict | None = None
@@ -80,6 +82,9 @@ class RuntimeLoop:
             feature_vector=getattr(feature_snapshot, "feature_vector", None),
             feature_source=feature_source,
         )
+
+        if self._dynamic_brain_weighter is not None:
+            self._dynamic_brain_weighter.apply_weights(proposals)
 
         candidate = self._parliament_adapter.build_candidate(
             feature_snapshot=feature_snapshot,

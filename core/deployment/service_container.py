@@ -111,6 +111,7 @@ class ServiceContainer:
         self.market_context = None
         self.execution_manager = None
         self.governance_rule_engine = None
+        self.dynamic_brain_weighter = None
         self.orchestrator = None
         self.health_check = None
         self.feature_service = None
@@ -383,6 +384,7 @@ class ServiceContainer:
         if not self.config.enable_feedback_loop:
             self.feedback_loop = None
             self.brain_tracker = None
+            self.dynamic_brain_weighter = None
             return
         self.brain_tracker = BrainPerformanceTracker(window_size=self.config.feedback_window_size)
         self.feedback_loop = FeedbackLoop(
@@ -393,6 +395,9 @@ class ServiceContainer:
             decision_scorer=DecisionScorer(),
             brain_performance_tracker=self.brain_tracker,
         )
+        from core.brains.services.dynamic_brain_weighter import DynamicBrainWeighter
+
+        self.dynamic_brain_weighter = DynamicBrainWeighter(self.brain_tracker)
 
     def _build_diagnostics(self) -> None:
         self.diagnostics = DiagnosticsDashboard(
@@ -427,6 +432,7 @@ class ServiceContainer:
             communication_record_writer=self.communication_writer,
             communication_operations_service=self.operations_service,
             risk_evaluation_service=self.risk_service,
+            dynamic_brain_weighter=getattr(self, "dynamic_brain_weighter", None),
         )
         return self.runtime_loop
 
