@@ -36,9 +36,9 @@ DEFAULT_GOVERNANCE_PATH = "data/governance_state.json"
 
 # Default brain registrations when creating a fresh governance service
 DEFAULT_BRAIN_REGISTRATIONS = {
-    "V9": "candidate",
-    "XGB": "candidate",
-    "OU": "candidate",
+    "V9_Institutional_01": "candidate",
+    "XGBoost_V4.5_Microstructure": "candidate",
+    "OU_Params_V6_Sniper": "candidate",
 }
 
 
@@ -186,12 +186,19 @@ def _step_champion_challenger(
 def _step_retraining_check(base_dir: str) -> dict[str, Any]:
     """Run retraining trigger degradation check and return summary."""
     try:
+        from scripts.training.brain_leaderboard import build_report as build_lb
         from scripts.training.retraining_trigger import detect_degradation
 
-        result = detect_degradation(base_dir=base_dir)
+        # Build leaderboard from current decisions and labels
+        decisions_dir = Path(base_dir) / "decisions"
+        labels_path = Path(base_dir) / "reports" / "live_labels.jsonl"
+        leaderboard = build_lb(
+            decisions_dir, labels_path=labels_path if labels_path.exists() else None
+        )
+        result = detect_degradation(leaderboard)
         return {
             "step": "retraining_check",
-            "status": "ok",
+            "status": "ok" if "error" not in result else "error",
             "degraded_brains": result.get("degraded_brains", 0),
             "healthy_brains": result.get("healthy_brains", 0),
             "details": result.get("assessments", []),
@@ -205,7 +212,7 @@ def _step_daily_recap(base_dir: str) -> dict[str, Any]:
     try:
         from scripts.live_daily_recap import build_report as build_recap
 
-        report = build_recap(base_dir=Path(base_dir))
+        report = build_recap(base_dir=Path(base_dir), symbol="XAUUSD")
         run_state = report.get("run_state", "unknown")
         return {
             "step": "daily_recap",
