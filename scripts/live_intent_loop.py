@@ -129,6 +129,43 @@ def proposal_to_side(proposal: Any) -> str | None:
     return None
 
 
+def _resolve_consensus_side(consensus: dict[str, Any], min_confidence: float) -> str | None:
+    """Convert ParliamentService consensus dict to trade side.
+
+    Returns 'long', 'short', or None (neutral/insufficient consensus).
+    """
+    bias = consensus.get("aggregated_bias", "neutral")
+    score = consensus.get("consensus_score", 0.0)
+
+    if score < min_confidence or bias == "neutral":
+        return None
+    if bias in ("long", "short"):
+        return bias
+    return None
+
+
+def _load_brain_entries_from_dir(brains_dir: str) -> list[dict[str, Any]]:
+    """Load all brain registry entry JSON files from a directory."""
+    p = Path(brains_dir)
+    if not p.is_absolute():
+        p = Path.cwd() / p
+    if not p.is_dir():
+        raise FileNotFoundError(f"brains directory not found: {p}")
+    entries: list[dict[str, Any]] = []
+    for f in sorted(p.glob("*.json")):
+        if f.name.endswith(".normalization.json"):
+            continue
+        try:
+            entry = json.loads(f.read_text(encoding="utf-8"))
+            if entry.get("schema_version") == "brain_registry_entry.v1":
+                entries.append(entry)
+        except (json.JSONDecodeError, OSError):
+            pass
+    if not entries:
+        raise FileNotFoundError(f"no brain_registry_entry.v1 files found in {p}")
+    return entries
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="live_intent_loop")
     p.add_argument("--base-dir", default="data")
@@ -194,6 +231,16 @@ def build_parser() -> argparse.ArgumentParser:
         default="onnx_v9",
         choices=["onnx_v9", "xgboost_v4.5", "ou_params_v6"],
         help="Brain type for inference adapter dispatch (default: onnx_v9)",
+    )
+    p.add_argument(
+        "--multi-brain",
+        action="store_true",
+        help="Enable multi-brain joint decision via ParliamentService",
+    )
+    p.add_argument(
+        "--brains-dir",
+        default="configs/brains",
+        help="Directory of brain registry entry JSON files (multi-brain mode only)",
     )
     p.add_argument(
         "--feature-store-dir",
@@ -285,36 +332,68 @@ def main(argv: list[str] | None = None) -> int:
         store_timeframe="M1",
     )
 
-    # ── Initialize brain adapter (BrainFactory for multi-model, V9 direct for ONNX) ──
-    if args.brain_type == "onnx_v9":
-        from core.brains.adapters.v9_onnx_brain_adapter import V9OnnxBrainAdapter
+    # ── Initialize brain adapter(s) ──
+    multi_brain = args.multi_brain
+    brains: list[dict[str, Any]] = []  # list of {"brain_id": str, "adapter": brain}
+    parliament: Any = None
 
-        brain = V9OnnxBrainAdapter(brain_entry, feature_adapter=feature_adapter)
-        brain.load()
-    else:
+    if multi_brain:
+        entries = _load_brain_entries_from_dir(args.brains_dir)
         from core.brains.services.brain_factory import BrainFactory
+        from core.parliament.parliament_service import ParliamentService
 
-        brain = BrainFactory().build(brain_entry)
+        factory = BrainFactory()
+        for entry in entries:
+            try:
+                b = factory.build(entry)
+                brains.append({"brain_id": entry.get("brain_id", "unknown"), "adapter": b})
+            except Exception as exc:
+                print(
+                    json.dumps(
+                        {
+                            "event": "brain_build_skip",
+                            "brain_id": entry.get("brain_id", "unknown"),
+                            "error": str(exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+        if not brains:
+            print(json.dumps({"error": "no_brains_loaded", "dir": args.brains_dir}, indent=2))
+            mt5.shutdown()
+            return 2
+        parliament = ParliamentService()
+    else:
+        if args.brain_type == "onnx_v9":
+            from core.brains.adapters.v9_onnx_brain_adapter import V9OnnxBrainAdapter
+
+            brain = V9OnnxBrainAdapter(brain_entry, feature_adapter=feature_adapter)
+            brain.load()
+        else:
+            from core.brains.services.brain_factory import BrainFactory
+
+            brain = BrainFactory().build(brain_entry)
 
     last_fire = 0.0
     flag_notice = False
 
-    print(
-        json.dumps(
-            {
-                "event": "live_intent_loop_start",
-                "time": _utc_iso(),
-                "symbol": args.symbol,
-                "backend": brain.describe()["backend"],
-                "brain_id": brain_entry.get("brain_id", "unknown"),
-                "confidence_threshold": args.confidence_threshold,
-                "interval_seconds": args.interval_seconds,
-                "volume": args.volume,
-            },
-            ensure_ascii=False,
-        ),
-        flush=True,
-    )
+    start_event: dict[str, Any] = {
+        "event": "live_intent_loop_start",
+        "time": _utc_iso(),
+        "symbol": args.symbol,
+        "confidence_threshold": args.confidence_threshold,
+        "interval_seconds": args.interval_seconds,
+        "volume": args.volume,
+    }
+    if multi_brain:
+        start_event["mode"] = "multi_brain"
+        start_event["brain_count"] = len(brains)
+        start_event["brain_ids"] = [b["brain_id"] for b in brains]
+    else:
+        start_event["backend"] = brain.describe()["backend"]
+        start_event["brain_id"] = brain_entry.get("brain_id", "unknown")
+    print(json.dumps(start_event, ensure_ascii=False), flush=True)
 
     try:
         while True:
@@ -365,37 +444,51 @@ def main(argv: list[str] | None = None) -> int:
                         pass
 
                 # ── Run inference ──
-                raw_output = brain.infer(feature_vector)  # (40,) 1-D from FeatureService
+                raw_output: dict[str, Any] = {}
+                proposal: Any = None
 
-                # ── Get proposal ──
-                proposal = brain.get_signal(raw_output)
-
-                # ── Determine side from proposal ──
-                direction = proposal.prediction.get("direction_bias", "neutral")
-                confidence = proposal.prediction.get("confidence", 0.0)
+                if multi_brain:
+                    proposals = []
+                    consensus_extra: dict[str, Any] = {}
+                    for b_info in brains:
+                        try:
+                            raw = b_info["adapter"].infer(feature_vector)
+                            prop = b_info["adapter"].get_signal(raw)
+                            proposals.append(prop)
+                        except Exception:
+                            pass
+                    consensus = parliament._compute_consensus(proposals)
+                    direction = consensus.get("aggregated_bias", "neutral")
+                    confidence = consensus.get("consensus_score", 0.0)
+                    consensus_extra = {
+                        "voter_count": consensus.get("voter_count", 0),
+                        "majority_ratio": consensus.get("majority_ratio", 0.0),
+                        "disagreement_score": consensus.get("disagreement_score", 0.0),
+                    }
+                else:
+                    raw_output = brain.infer(feature_vector)
+                    proposal = brain.get_signal(raw_output)
+                    direction = proposal.prediction.get("direction_bias", "neutral")
+                    confidence = proposal.prediction.get("confidence", 0.0)
 
                 if confidence < args.confidence_threshold or direction == "neutral":
                     # Log low-confidence skip
-                    out_risk = raw_output.get("out_risk", 0.0)
-                    out_vol = raw_output.get("out_vol", 0.0)
-                    runtime_ms = raw_output.get("runtime_ms", 0.0)
-                    print(
-                        json.dumps(
-                            {
-                                "event": "low_confidence_skip",
-                                "time": _utc_iso(),
-                                "direction": direction,
-                                "confidence": round(confidence, 6),
-                                "out_risk": round(out_risk, 6),
-                                "out_vol": round(out_vol, 6),
-                                "runtime_ms": round(runtime_ms, 2),
-                                "threshold": args.confidence_threshold,
-                                "backend": brain.describe()["backend"],
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
+                    skip_event: dict[str, Any] = {
+                        "event": "low_confidence_skip",
+                        "time": _utc_iso(),
+                        "direction": direction,
+                        "confidence": round(confidence, 6),
+                        "threshold": args.confidence_threshold,
+                    }
+                    if multi_brain:
+                        skip_event["mode"] = "multi_brain"
+                        skip_event.update(consensus_extra)
+                    else:
+                        skip_event["out_risk"] = round(raw_output.get("out_risk", 0.0), 6)
+                        skip_event["out_vol"] = round(raw_output.get("out_vol", 0.0), 6)
+                        skip_event["runtime_ms"] = round(raw_output.get("runtime_ms", 0.0), 2)
+                        skip_event["backend"] = brain.describe()["backend"]
+                    print(json.dumps(skip_event, ensure_ascii=False), flush=True)
                     time.sleep(args.interval_seconds)
                     continue
 
@@ -436,32 +529,27 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 last_fire = now
 
-                out_risk = raw_output.get("out_risk", 0.0)
-                out_vol = raw_output.get("out_vol", 0.0)
-                runtime_ms = raw_output.get("runtime_ms", 0.0)
+                dispatch_event: dict[str, Any] = {
+                    "event": "intent_dispatched",
+                    "time": _utc_iso(),
+                    "mid": mid,
+                    "side": side,
+                    "confidence": round(confidence, 6),
+                    "reference_used": ref_for_guard,
+                    "sl": stop_loss,
+                    "tp": take_profit,
+                    "dispatch": out,
+                }
+                if multi_brain:
+                    dispatch_event["mode"] = "multi_brain"
+                    dispatch_event.update(consensus_extra)
+                else:
+                    dispatch_event["out_risk"] = round(raw_output.get("out_risk", 0.0), 6)
+                    dispatch_event["out_vol"] = round(raw_output.get("out_vol", 0.0), 6)
+                    dispatch_event["runtime_ms"] = round(raw_output.get("runtime_ms", 0.0), 2)
+                    dispatch_event["backend"] = brain.describe()["backend"]
 
-                print(
-                    json.dumps(
-                        {
-                            "event": "intent_dispatched",
-                            "time": _utc_iso(),
-                            "mid": mid,
-                            "side": side,
-                            "confidence": round(confidence, 6),
-                            "out_risk": round(out_risk, 6),
-                            "out_vol": round(out_vol, 6),
-                            "runtime_ms": round(runtime_ms, 2),
-                            "reference_used": ref_for_guard,
-                            "sl": stop_loss,
-                            "tp": take_profit,
-                            "dispatch": out,
-                            "backend": brain.describe()["backend"],
-                        },
-                        ensure_ascii=False,
-                        default=str,
-                    ),
-                    flush=True,
-                )
+                print(json.dumps(dispatch_event, ensure_ascii=False, default=str), flush=True)
 
             except Exception as exc:
                 print(

@@ -140,6 +140,7 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
                 "volatility_score": out_vol,
                 "backend": self._backend,
             },
+            vote_weight=self._brain_entry.get("vote_weight", 1.0),
             extensions={
                 "raw_outputs": {
                     "out_dir": out_dir.tolist() if hasattr(out_dir, "tolist") else list(out_dir),

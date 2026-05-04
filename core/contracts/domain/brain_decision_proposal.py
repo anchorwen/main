@@ -22,6 +22,7 @@ class BrainDecisionProposal:
     rationale: dict[str, Any] = field(default_factory=dict)
     health: dict[str, Any] = field(default_factory=dict)
     extensions: dict[str, Any] = field(default_factory=dict)
+    vote_weight: float = 1.0
 
     def __post_init__(self) -> None:
         if self.generated_at < self.event_time:
@@ -48,4 +49,5 @@ class BrainDecisionProposal:
             "rationale": self.rationale,
             "health": self.health,
             "extensions": self.extensions,
+            "vote_weight": self.vote_weight,
         }

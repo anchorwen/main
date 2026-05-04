@@ -5,6 +5,7 @@
   "brain_role": "alpha_brain",
   "model_version": "v9.0",
   "status": "shadow",
+  "vote_weight": 1.0,
   "enable_onnxruntime": true,
   "artifact_path": "D:\\ai\\Survival_V9\\v9_institutional_brain.onnx",
   "feature_schema_id": "v9_institutional_40",

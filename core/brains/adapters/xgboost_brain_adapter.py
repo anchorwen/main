@@ -138,6 +138,7 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
                 "volatility_score": 0.5,
                 "backend": self._backend,
             },
+            vote_weight=self._brain_entry.get("vote_weight", 1.0),
             extensions={
                 "raw_outputs": {
                     "raw_score": raw_score,

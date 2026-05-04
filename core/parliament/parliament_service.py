@@ -81,7 +81,8 @@ class ParliamentService:
             confidence = pred.get("confidence", 0.5)
             health = p.health or {}
             runtime_ok = not health.get("fallback_used", False)
-            weight = confidence * (1.0 if runtime_ok else 0.5)
+            vote_weight = getattr(p, "vote_weight", 1.0) or 1.0
+            weight = vote_weight * confidence * (1.0 if runtime_ok else 0.5)
             up_scores.append(up * weight)
             down_scores.append(down * weight)
             weights.append(weight)
