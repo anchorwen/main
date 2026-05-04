@@ -130,6 +130,8 @@ def _generate_evolution_block(
     eval_alignment: dict[str, Any] | None = None,
     brain_leaderboard: dict[str, Any] | None = None,
     feature_quality: dict[str, Any] | None = None,
+    governance: dict[str, Any] | None = None,
+    champion_challenger: dict[str, Any] | None = None,
 ) -> str:
     """Produce the Markdown block to append to EVOLUTION_PLAN.md."""
     counts = trade_quality.get("counts", {})
@@ -176,6 +178,20 @@ def _generate_evolution_block(
         if shifted > 0:
             feature_quality_lines = f"\n- 特征偏移: {shifted}个特征偏离基线 >2σ"
 
+    governance_lines = ""
+    if governance and governance.get("status") == "ok":
+        applied = governance.get("actions_applied", 0)
+        flagged = governance.get("actions_flagged", 0)
+        if applied > 0 or flagged > 0:
+            governance_lines = f"\n- 治理动作: 自动={applied} 待确认={flagged}"
+
+    champion_lines = ""
+    if champion_challenger and champion_challenger.get("status") == "ok":
+        promotions = champion_challenger.get("promotions", 0)
+        eligible = champion_challenger.get("eligible", 0)
+        if promotions > 0 or eligible > 0:
+            champion_lines = f"\n- 晋升评估: 已晋升={promotions} 符合条件={eligible}"
+
     return f"""
 
 ### Daily Update - {_utc_now_iso()}（自动生成）
@@ -184,7 +200,7 @@ def _generate_evolution_block(
 - 运行状态: {run_state}
 - 核心统计: 接受={counts.get('accepted', 0)} 拒绝={counts.get('rejected', 0)} 确认={counts.get('acknowledged', 0)} 其他={counts.get('other', 0)} 合计={trade_quality.get('total', 0)} 拒单率={trade_quality.get('rejection_rate', 0.0)}
 - 数据质量: 交叉校验问题={dq_issues} outbox超时={outbox_stale}
-- live_dispatch_block.flag: {"存在" if flag_present else "不存在"}{ensemble_lines}{align_lines}{leaderboard_lines}{feature_quality_lines}
+- live_dispatch_block.flag: {"存在" if flag_present else "不存在"}{ensemble_lines}{align_lines}{leaderboard_lines}{feature_quality_lines}{governance_lines}{champion_lines}
 - 关键事件: <手动最多 3 条>
 - 根因与修复: <手动最多 3 条>
 - 阶段进度: <Phase A/B/C 到达位置>
@@ -292,6 +308,26 @@ def _run_brain_leaderboard(
         return {"error": str(exc)}
 
 
+def _run_governance_snapshot(base_dir: Path, *, dry_run: bool = True) -> dict[str, Any]:
+    """Run governance cycle from persisted tracker data and return summary."""
+    try:
+        from scripts.daily_ops import _step_governance
+
+        return _step_governance(str(base_dir), dry_run=dry_run)
+    except Exception as exc:
+        return {"step": "governance", "status": "error", "error": str(exc)[:500]}
+
+
+def _run_champion_challenger_snapshot(base_dir: Path, *, dry_run: bool = True) -> dict[str, Any]:
+    """Run champion/challenger from persisted tracker data and return summary."""
+    try:
+        from scripts.daily_ops import _step_champion_challenger
+
+        return _step_champion_challenger(str(base_dir), dry_run=dry_run)
+    except Exception as exc:
+        return {"step": "champion_challenger", "status": "error", "error": str(exc)[:500]}
+
+
 def _write_evolution_plan_update(
     plan_path: Path,
     block_content: str,
@@ -344,6 +380,8 @@ def build_report(
     backtest_path: Path | None = None,
     decisions_dir: Path | None = None,
     build_dataset_flag: bool = False,
+    run_governance: bool = False,
+    run_champion: bool = False,
 ) -> dict[str, Any]:
     date = date_key or _today_utc_key()
     journal_path = base_dir / "live_trade_journal.jsonl"
@@ -387,6 +425,15 @@ def build_report(
             decisions_dir, date_filter=date, labels_path=labels_path
         )
 
+    # ── Governance & Champion/Challenger snapshots (Phase C) ──
+    governance: dict[str, Any] = {}
+    if run_governance:
+        governance = _run_governance_snapshot(base_dir, dry_run=True)
+
+    champion: dict[str, Any] = {}
+    if run_champion:
+        champion = _run_champion_challenger_snapshot(base_dir, dry_run=True)
+
     # ── Build training dataset (Phase B) ──
     training_dataset: dict[str, Any] = {}
     if build_dataset_flag:
@@ -417,6 +464,8 @@ def build_report(
             eval_alignment=eval_alignment if eval_alignment else None,
             brain_leaderboard=brain_leaderboard if brain_leaderboard else None,
             feature_quality=feature_quality if feature_quality else None,
+            governance=governance if governance else None,
+            champion_challenger=champion if champion else None,
         )
         evolution_result = _write_evolution_plan_update(
             Path(evolution_plan_path),
@@ -441,6 +490,8 @@ def build_report(
         "feature_quality": feature_quality,
         "eval_alignment": eval_alignment,
         "brain_leaderboard": brain_leaderboard,
+        "governance": governance,
+        "champion_challenger": champion,
         "evolution_plan_update": evolution_result,
         "training_dataset": training_dataset,
     }
@@ -491,6 +542,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Build training dataset from labels and feature store after recap",
     )
+    p.add_argument(
+        "--run-governance",
+        action="store_true",
+        help="Run governance snapshot (loads persisted tracker state)",
+    )
+    p.add_argument(
+        "--run-champion",
+        action="store_true",
+        help="Run champion/challenger snapshot (loads persisted tracker state)",
+    )
     return p
 
 
@@ -512,6 +573,8 @@ def main(argv: list[str] | None = None) -> int:
         backtest_path=args.backtest_path,
         decisions_dir=args.decisions_dir,
         build_dataset_flag=args.build_dataset,
+        run_governance=args.run_governance,
+        run_champion=args.run_champion,
     )
     text = json.dumps(report, indent=2, ensure_ascii=False, default=str)
     print(text)

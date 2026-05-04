@@ -715,6 +715,13 @@ def main(argv: list[str] | None = None) -> int:
 
             time.sleep(args.interval_seconds)
     finally:
+        # Persist performance tracker so daily_ops governance can see the data
+        if multi_brain:
+            try:
+                save_path = Path(args.base_dir) / "brain_performance.json"
+                tracker.save(save_path)
+            except Exception:
+                pass
         if mt5 is not None:
             mt5.shutdown()  # type: ignore[attr-defined]
 

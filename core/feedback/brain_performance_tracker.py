@@ -1,4 +1,6 @@
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 
 class BrainPerformanceTracker:
@@ -26,6 +28,34 @@ class BrainPerformanceTracker:
         self._records[brain_id].append(entry)
         if len(self._records[brain_id]) > self._window_size:
             self._records[brain_id] = self._records[brain_id][-self._window_size :]
+
+    # ── persistence ──
+
+    def save(self, path: str | Path) -> Path:
+        """Persist tracker state to a JSON file."""
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "schema_version": "brain_performance_tracker.v1",
+            "window_size": self._window_size,
+            "brain_ids": sorted(self._records.keys()),
+            "records": self._records,
+        }
+        out.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
+        )
+        return out
+
+    @classmethod
+    def load(cls, path: str | Path) -> "BrainPerformanceTracker":
+        """Load tracker state from a JSON file."""
+        src = Path(path)
+        if not src.exists():
+            raise FileNotFoundError(f"tracker state file not found: {src}")
+        data = json.loads(src.read_text(encoding="utf-8"))
+        tracker = cls(window_size=data.get("window_size", 100))
+        tracker._records = data.get("records", {})
+        return tracker
 
     def get_brain_summary(self, brain_id: str) -> dict:
         entries = self._records.get(brain_id, [])

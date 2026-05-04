@@ -31,6 +31,8 @@ SCHEMA_VERSION = "daily_ops.v1"
 THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = THIS_DIR.parent
 
+DEFAULT_TRACKER_PATH = "data/brain_performance.json"
+
 
 def _utc_now_iso() -> str:
     return (
@@ -40,6 +42,21 @@ def _utc_now_iso() -> str:
         .isoformat()
         .replace("+00:00", "Z")
     )
+
+
+def _load_or_create_tracker(base_dir: str) -> Any:
+    """Load persisted tracker state, or create a fresh one."""
+    tracker_path = Path(base_dir) / "brain_performance.json"
+    try:
+        from core.feedback.brain_performance_tracker import BrainPerformanceTracker
+
+        if tracker_path.exists():
+            return BrainPerformanceTracker.load(tracker_path)
+        return BrainPerformanceTracker(window_size=100)
+    except Exception:
+        from core.feedback.brain_performance_tracker import BrainPerformanceTracker
+
+        return BrainPerformanceTracker(window_size=100)
 
 
 def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
@@ -64,14 +81,16 @@ def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
         return {"step": "shadow_ensemble", "status": "error", "error": str(exc)[:500]}
 
 
-def _step_governance(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
+def _step_governance(
+    base_dir: str, *, dry_run: bool = False, tracker: Any = None
+) -> dict[str, Any]:
     """Run governance cycle and return summary."""
     try:
-        from core.feedback.brain_performance_tracker import BrainPerformanceTracker
         from core.governance.governance_service import GovernanceService
         from scripts.training.governance_scheduler import run_governance_cycle
 
-        tracker = BrainPerformanceTracker(window_size=100)
+        if tracker is None:
+            tracker = _load_or_create_tracker(base_dir)
         governance = GovernanceService()
         report = run_governance_cycle(tracker, governance, dry_run=dry_run)
         return {
@@ -87,14 +106,16 @@ def _step_governance(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
         return {"step": "governance", "status": "error", "error": str(exc)[:500]}
 
 
-def _step_champion_challenger(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
+def _step_champion_challenger(
+    base_dir: str, *, dry_run: bool = False, tracker: Any = None
+) -> dict[str, Any]:
     """Run champion/challenger promotion cycle and return summary."""
     try:
-        from core.feedback.brain_performance_tracker import BrainPerformanceTracker
         from core.governance.governance_service import GovernanceService
         from scripts.training.champion_challenger import run_promotion_cycle
 
-        tracker = BrainPerformanceTracker(window_size=100)
+        if tracker is None:
+            tracker = _load_or_create_tracker(base_dir)
         governance = GovernanceService()
         report = run_promotion_cycle(tracker, governance, dry_run=dry_run)
         return {
@@ -171,14 +192,30 @@ def run_daily_ops(
     """
     steps: list[dict[str, Any]] = []
 
+    # Shared tracker: load persisted state so governance and champion
+    # see performance data accumulated by live_intent_loop.
+    shared_tracker = None
+    if not skip_governance or not skip_champion:
+        shared_tracker = _load_or_create_tracker(base_dir)
+        brain_count = len(shared_tracker.get_all_summaries())
+        if brain_count > 0:
+            steps.append(
+                {
+                    "step": "tracker_loaded",
+                    "status": "ok",
+                    "brains_tracked": brain_count,
+                    "path": str(Path(base_dir) / "brain_performance.json"),
+                }
+            )
+
     if not skip_shadow:
         steps.append(_step_shadow_ensemble(base_dir))
 
     if not skip_governance:
-        steps.append(_step_governance(base_dir, dry_run=dry_run))
+        steps.append(_step_governance(base_dir, dry_run=dry_run, tracker=shared_tracker))
 
     if not skip_champion:
-        steps.append(_step_champion_challenger(base_dir, dry_run=dry_run))
+        steps.append(_step_champion_challenger(base_dir, dry_run=dry_run, tracker=shared_tracker))
 
     if not skip_retraining:
         steps.append(_step_retraining_check(base_dir))
