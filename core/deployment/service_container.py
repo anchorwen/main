@@ -338,6 +338,23 @@ class ServiceContainer:
         mode_store = SystemModeStore(initial_state=initial_mode_state)
         override_store = OverrideStore()
         self.brain_registry = FeatureBrainRegistry()
+        # Auto-register brain entries from config (e.g. live.yaml registry_entries)
+        brain_entries = self.config.extensions.get("brain_registry_entries", [])
+        for entry in brain_entries:
+            try:
+                if isinstance(entry, dict) and "path" in entry:
+                    import json
+
+                    path = entry["path"]
+                    with open(path, encoding="utf-8") as fh:
+                        brain_data = json.load(fh)
+                    self.brain_registry.register_entry(brain_data)
+                elif isinstance(entry, dict) and "brain_id" in entry:
+                    self.brain_registry.register_entry(entry)
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "Failed to auto-register brain entry: %s", entry, exc_info=True
+                )
         self.control_snapshot_service = ControlSnapshotService(
             mode_store=mode_store,
             override_store=override_store,
