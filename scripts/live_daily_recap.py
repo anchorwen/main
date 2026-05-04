@@ -127,6 +127,7 @@ def _generate_evolution_block(
     flag_present: bool,
     *,
     shadow_ensemble: dict[str, Any] | None = None,
+    eval_alignment: dict[str, Any] | None = None,
 ) -> str:
     """Produce the Markdown block to append to EVOLUTION_PLAN.md."""
     counts = trade_quality.get("counts", {})
@@ -141,6 +142,18 @@ def _generate_evolution_block(
         n_brains = comparison.get("total_brains", 0)
         ensemble_lines = f"\n- 多模型共识: {consensus} (一致性={agreement:.0%}, 参与={n_brains})"
 
+    align_lines = ""
+    if eval_alignment and "error" not in eval_alignment:
+        live_m = eval_alignment.get("live_metrics", {})
+        bt_m = eval_alignment.get("backtest_metrics", {})
+        a = eval_alignment.get("alignment", {})
+        align_lines = (
+            f"\n- 线上线下对齐: {a.get('severity', '?')}"
+            f" | 实盘胜率={live_m.get('win_rate', '?')}"
+            f" 回测胜率={bt_m.get('win_rate', '?')}"
+            f" | 问题={a.get('issues', [])}"
+        )
+
     return f"""
 
 ### Daily Update - {_utc_now_iso()}（自动生成）
@@ -149,7 +162,7 @@ def _generate_evolution_block(
 - 运行状态: {run_state}
 - 核心统计: 接受={counts.get('accepted', 0)} 拒绝={counts.get('rejected', 0)} 确认={counts.get('acknowledged', 0)} 其他={counts.get('other', 0)} 合计={trade_quality.get('total', 0)} 拒单率={trade_quality.get('rejection_rate', 0.0)}
 - 数据质量: 交叉校验问题={dq_issues} outbox超时={outbox_stale}
-- live_dispatch_block.flag: {"存在" if flag_present else "不存在"}{ensemble_lines}
+- live_dispatch_block.flag: {"存在" if flag_present else "不存在"}{ensemble_lines}{align_lines}
 - 关键事件: <手动最多 3 条>
 - 根因与修复: <手动最多 3 条>
 - 阶段进度: <Phase A/B/C 到达位置>
@@ -225,6 +238,21 @@ def _run_feature_quality(
         return {"error": str(exc)}
 
 
+def _run_eval_alignment(
+    labels_path: Path,
+    backtest_path: Path,
+) -> dict[str, Any]:
+    """Call eval_alignment.build_report in-process (live P&L vs backtest)."""
+    try:
+        from scripts.training.eval_alignment import build_report as build_align
+    except Exception:
+        return {"error": "import_eval_alignment_failed"}
+    try:
+        return build_align(labels_path, backtest_path)
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
 def _write_evolution_plan_update(
     plan_path: Path,
     block_content: str,
@@ -273,6 +301,8 @@ def build_report(
     brains_dir: Path | None = None,
     feature_store_dir: Path | None = None,
     norm_config_path: Path | None = None,
+    labels_path: Path | None = None,
+    backtest_path: Path | None = None,
 ) -> dict[str, Any]:
     date = date_key or _today_utc_key()
     journal_path = base_dir / "live_trade_journal.jsonl"
@@ -306,6 +336,10 @@ def build_report(
             feature_store_dir, norm_config_path, symbol=symbol, date_filter=date
         )
 
+    eval_alignment: dict[str, Any] = {}
+    if labels_path and backtest_path:
+        eval_alignment = _run_eval_alignment(labels_path, backtest_path)
+
     run_state = _derive_run_state(trade_quality, data_quality, flag_present)
 
     evolution_result: dict[str, Any] = {}
@@ -317,6 +351,7 @@ def build_report(
             data_quality,
             flag_present,
             shadow_ensemble=shadow_ensemble if shadow_ensemble else None,
+            eval_alignment=eval_alignment if eval_alignment else None,
         )
         evolution_result = _write_evolution_plan_update(
             Path(evolution_plan_path),
@@ -339,6 +374,7 @@ def build_report(
         "shadow_compare": shadow_compare,
         "shadow_ensemble": shadow_ensemble,
         "feature_quality": feature_quality,
+        "eval_alignment": eval_alignment,
         "evolution_plan_update": evolution_result,
     }
 
@@ -364,6 +400,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("configs/brains/v9_institutional_01.normalization.json"),
         help="Normalization config for feature quality",
     )
+    p.add_argument(
+        "--labels-path",
+        type=Path,
+        default=None,
+        help="Training labels JSONL for eval alignment",
+    )
+    p.add_argument(
+        "--backtest-path",
+        type=Path,
+        default=None,
+        help="Backtest result.json for eval alignment",
+    )
     p.add_argument("--output", default=None, help="Write JSON report to file")
     return p
 
@@ -382,6 +430,8 @@ def main(argv: list[str] | None = None) -> int:
         brains_dir=args.brains_dir,
         feature_store_dir=args.feature_store_dir,
         norm_config_path=args.norm_config,
+        labels_path=args.labels_path,
+        backtest_path=args.backtest_path,
     )
     text = json.dumps(report, indent=2, ensure_ascii=False, default=str)
     print(text)

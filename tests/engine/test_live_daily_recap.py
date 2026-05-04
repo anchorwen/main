@@ -149,6 +149,64 @@ def test_run_feature_quality_no_store(tmp_path: Path):
     assert "error" in result or result.get("sample_size", 0) == 0
 
 
+def test_evolution_block_with_alignment():
+    alignment = {
+        "live_metrics": {"win_rate": 0.55, "closed_trades": 8},
+        "backtest_metrics": {"win_rate": 0.60},
+        "alignment": {"severity": "ok", "issues": []},
+    }
+    block = _generate_evolution_block(
+        "2026-05-04",
+        "活跃（有成交）",
+        {"total": 8, "counts": {"accepted": 8}, "rejection_rate": 0.0},
+        {"summary": {"issues_count": 0}, "outbox_staleness": {"stale_count": 0}},
+        False,
+        eval_alignment=alignment,
+    )
+    assert "线上线下对齐" in block
+    assert "实盘胜率=0.55" in block
+    assert "回测胜率=0.6" in block
+
+
+def test_build_report_with_eval_alignment(tmp_path: Path):
+    (tmp_path / "live_trade_journal.jsonl").write_text("", encoding="utf-8")
+    lp = tmp_path / "labels.jsonl"
+    lp.write_text(
+        "\n".join(
+            json.dumps(r)
+            for r in [
+                {
+                    "schema_version": "training_label.v1",
+                    "label_id": "x",
+                    "is_closed": True,
+                    "pnl": 1.0,
+                    "label": "win",
+                    "side": "long",
+                },
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    bp = tmp_path / "bt.json"
+    bp.write_text(json.dumps({"model_id": "t", "lane": "arb", "metrics": {"winrate_pct": 55}}))
+    report = build_report(tmp_path, "XAUUSDc", labels_path=lp, backtest_path=bp)
+    assert "eval_alignment" in report
+    assert "error" not in report["eval_alignment"]
+    assert report["eval_alignment"]["live_metrics"]["closed_trades"] == 1
+
+
+def test_evolution_block_without_alignment():
+    block = _generate_evolution_block(
+        "2026-05-04",
+        "活跃（有成交）",
+        {"total": 3, "counts": {"accepted": 3}, "rejection_rate": 0.0},
+        {"summary": {"issues_count": 0}, "outbox_staleness": {"stale_count": 0}},
+        False,
+    )
+    assert "线上线下对齐" not in block
+
+
 def test_cli_help():
     import subprocess
     import sys
