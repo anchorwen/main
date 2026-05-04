@@ -9,7 +9,10 @@ Commands:
   status       Run health checks and print diagnostics.
   train        Trigger CRT batch training for all lanes.
   auto-recover Check gate state and attempt auto-recovery.
+  features-update  Compute and persist features from MT5.
   daily-ops    Run full daily governance + monitoring pipeline.
+  leaderboard  Show brain performance leaderboard.
+  dashboard    Show full daily system dashboard.
 
 Usage:
   python main.py run --env configs/environments/mt5.json
@@ -17,6 +20,8 @@ Usage:
   python main.py train
   python main.py auto-recover --config configs/live.yaml
   python main.py daily-ops --dry-run
+  python main.py leaderboard
+  python main.py dashboard
 """
 
 from __future__ import annotations
@@ -393,6 +398,7 @@ def cmd_daily_ops(args: argparse.Namespace) -> int:
     report = run_daily_ops(
         base_dir=args.base_dir,
         skip_shadow=args.skip_shadow,
+        skip_feedback=args.skip_feedback,
         skip_governance=args.skip_governance,
         skip_champion=args.skip_champion,
         skip_retraining=args.skip_retraining,
@@ -469,6 +475,70 @@ def cmd_auto_recover(args: argparse.Namespace) -> int:
             f"({current_pass}/{cycles} clean passes required)."
         )
         return 1
+
+
+# ---------------------------------------------------------------------------
+# Command: leaderboard
+# ---------------------------------------------------------------------------
+
+
+def cmd_leaderboard(args: argparse.Namespace) -> int:
+    """Show brain performance leaderboard."""
+    from scripts.live_dashboard import build_dashboard
+
+    report = build_dashboard(base_dir=args.base_dir, date_key=args.date)
+    lb = report.get("leaderboard", {})
+
+    if args.json:
+        output = json.dumps(lb, indent=2, ensure_ascii=False, default=str)
+    else:
+        # Render leaderboard-focused text view
+        output = _render_leaderboard_text(report)
+
+    print(output)
+
+    if args.output:
+        out = Path(args.output)
+        if not out.is_absolute():
+            out = PROJECT_ROOT / out
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(output, encoding="utf-8")
+
+    return 0
+
+
+def _render_leaderboard_text(report: dict[str, Any]) -> str:
+    """Extract and render just the leaderboard section from a dashboard report."""
+    return report.get("text", "")
+
+
+# ---------------------------------------------------------------------------
+# Command: dashboard
+# ---------------------------------------------------------------------------
+
+
+def cmd_dashboard(args: argparse.Namespace) -> int:
+    """Show full daily system dashboard."""
+    from scripts.live_dashboard import build_dashboard
+
+    report = build_dashboard(base_dir=args.base_dir, date_key=args.date)
+
+    if args.json:
+        json_report = {k: v for k, v in report.items() if k != "text"}
+        output = json.dumps(json_report, indent=2, ensure_ascii=False, default=str)
+    else:
+        output = report["text"]
+
+    print(output)
+
+    if args.output:
+        out = Path(args.output)
+        if not out.is_absolute():
+            out = PROJECT_ROOT / out
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(output, encoding="utf-8")
+
+    return 0 if len(report.get("errors", [])) == 0 else 1
 
 
 # ---------------------------------------------------------------------------
@@ -591,11 +661,26 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run", action="store_true", help="Assess without applying transitions"
     )
     daily_cmd.add_argument("--skip-shadow", action="store_true")
+    daily_cmd.add_argument("--skip-feedback", action="store_true")
     daily_cmd.add_argument("--skip-governance", action="store_true")
     daily_cmd.add_argument("--skip-champion", action="store_true")
     daily_cmd.add_argument("--skip-retraining", action="store_true")
     daily_cmd.add_argument("--skip-recap", action="store_true")
     daily_cmd.add_argument("--output", type=Path, default=None, help="Write report JSON to file")
+
+    # ---- leaderboard ----
+    lb_cmd = sub.add_parser("leaderboard", help="Show brain performance leaderboard")
+    lb_cmd.add_argument("--base-dir", default="data", help="Base data directory")
+    lb_cmd.add_argument("--date", default=None, help="UTC date key; default=today")
+    lb_cmd.add_argument("--json", action="store_true", help="Output JSON instead of text")
+    lb_cmd.add_argument("--output", type=Path, default=None, help="Write output to file")
+
+    # ---- dashboard ----
+    dash_cmd = sub.add_parser("dashboard", help="Show full daily system dashboard")
+    dash_cmd.add_argument("--base-dir", default="data", help="Base data directory")
+    dash_cmd.add_argument("--date", default=None, help="UTC date key; default=today")
+    dash_cmd.add_argument("--json", action="store_true", help="Output JSON instead of text")
+    dash_cmd.add_argument("--output", type=Path, default=None, help="Write output to file")
 
     return parser
 
@@ -612,6 +697,8 @@ def main(argv: list[str] | None = None) -> int:
         "auto-recover": cmd_auto_recover,
         "features-update": cmd_features_update,
         "daily-ops": cmd_daily_ops,
+        "leaderboard": cmd_leaderboard,
+        "dashboard": cmd_dashboard,
     }
 
     handler = commands.get(args.command)

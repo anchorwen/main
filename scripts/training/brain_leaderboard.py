@@ -80,7 +80,9 @@ def _link_decision_to_label(
         return None
 
     try:
-        dt_decision = datetime.fromisoformat(decision_time.replace("Z", "+00:00"))
+        dt_decision = datetime.fromisoformat(decision_time.replace("Z", "+00:00")).replace(
+            tzinfo=None
+        )
     except (ValueError, TypeError):
         return None
 
@@ -92,7 +94,9 @@ def _link_decision_to_label(
         if not open_time:
             continue
         try:
-            dt_label = datetime.fromisoformat(str(open_time).replace("Z", "+00:00"))
+            dt_label = datetime.fromisoformat(str(open_time).replace("Z", "+00:00")).replace(
+                tzinfo=None
+            )
         except (ValueError, TypeError):
             continue
         delta = abs((dt_decision - dt_label).total_seconds())
