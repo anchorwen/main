@@ -15,9 +15,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.brains.services.dynamic_brain_weighter import DynamicBrainWeighter
 from core.deployment.feature_update_producer import build_v9_schema, produce_from_live_computer
 from core.features.feature_service import FeatureService
 from core.features.local_feature_store import LocalFeatureStore
+from core.feedback.brain_performance_tracker import BrainPerformanceTracker
 from scripts.send_live_order import (
     _validate_sl_tp,
     dispatch_live_open_order,
@@ -201,6 +203,22 @@ def _build_minimal_control_snapshot() -> Any:
             self.active_overrides = []
 
     return _MinimalControlSnapshot(mode_state)
+
+
+def _record_brain_outcomes(proposals, direction, execution_outcome, tracker):
+    """Record each brain's performance based on consensus agreement."""
+    for p in proposals:
+        p_dir = p.prediction.get("direction_bias", "neutral")
+        matched = p_dir == direction if direction != "neutral" else p_dir == "neutral"
+        composite = (
+            round(0.55 + p.prediction.get("confidence", 0.0) * 0.3, 4)
+            if matched
+            else round(0.25 + p.prediction.get("confidence", 0.0) * 0.2, 4)
+        )
+        tracker.record_outcome(
+            p.brain_id,
+            {"composite_score": composite, "execution_outcome": execution_outcome},
+        )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -424,6 +442,8 @@ def main(argv: list[str] | None = None) -> int:
                 mt5.shutdown()
             return 2
         parliament = ParliamentService()
+        tracker = BrainPerformanceTracker(window_size=100)
+        weighter = DynamicBrainWeighter(tracker)
     else:
         if args.brain_type == "onnx_v9" and not args.no_mt5:
             from core.brains.adapters.v9_onnx_brain_adapter import V9OnnxBrainAdapter
@@ -522,6 +542,9 @@ def main(argv: list[str] | None = None) -> int:
                         except Exception:
                             pass
 
+                    # Apply dynamic vote weights from tracked performance
+                    weighter.apply_weights(proposals)
+
                     # Build a proper candidate via ParliamentService (governance
                     # filtering, regime detection, feasibility — not just raw consensus).
                     feature_snapshot = _build_feature_snapshot(args.symbol, feature_vector)
@@ -557,6 +580,7 @@ def main(argv: list[str] | None = None) -> int:
                     if multi_brain:
                         skip_event["mode"] = "multi_brain"
                         skip_event.update(consensus_extra)
+                        _record_brain_outcomes(proposals, direction, "consensus_skip", tracker)
                     else:
                         skip_event["out_risk"] = round(raw_output.get("out_risk", 0.0), 6)
                         skip_event["out_vol"] = round(raw_output.get("out_vol", 0.0), 6)
@@ -610,6 +634,8 @@ def main(argv: list[str] | None = None) -> int:
                             )
                         except Exception:
                             pass
+
+                        _record_brain_outcomes(proposals, direction, "shadow_verified", tracker)
                 else:
                     # ── Get current prices for SL/TP computation ──
                     mid, bid, ask = _mid_and_prices(mt5, args.symbol)
@@ -668,6 +694,12 @@ def main(argv: list[str] | None = None) -> int:
                         dispatch_event["backend"] = brain.describe()["backend"]
 
                     print(json.dumps(dispatch_event, ensure_ascii=False, default=str), flush=True)
+
+                    # Record live dispatch outcome for feedback tracking
+                    if multi_brain:
+                        dispatch_ok = out.get("status", "") not in ("error", "rejected", "timeout")
+                        outcome = "filled" if dispatch_ok else "rejected"
+                        _record_brain_outcomes(proposals, direction, outcome, tracker)
 
             except Exception as exc:
                 print(

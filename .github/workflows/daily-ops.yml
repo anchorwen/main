@@ -1,0 +1,125 @@
+name: Daily Ops
+
+on:
+  schedule:
+    # UTC 00:10 daily — after market close, before next day
+    - cron: "10 0 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry-run (assess only, no transitions)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: daily-ops-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  daily-ops:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUTF8: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Ensure D:/cursor workspace alias
+        shell: cmd
+        run: |
+          if exist D:\cursor rmdir D:\cursor
+          mklink /J D:\cursor "%GITHUB_WORKSPACE%"
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Prepare V9 shadow fixture data
+        run: python scripts/ci_prepare_v9_shadow_fixtures.py
+
+      - name: Daily Ops — Shadow Ensemble
+        id: shadow
+        run: >
+          python -c "
+          import json, sys
+          sys.path.insert(0, 'D:/cursor')
+          from scripts.daily_ops import _step_shadow_ensemble
+          r = _step_shadow_ensemble('D:/cursor/data')
+          print(json.dumps(r, indent=2, default=str))
+          sys.exit(0 if r['status'] == 'ok' else 0)
+          "
+
+      - name: Daily Ops — Governance Cycle
+        id: governance
+        run: >
+          python -c "
+          import json, sys
+          sys.path.insert(0, 'D:/cursor')
+          from scripts.daily_ops import _step_governance
+          dry = '${{ inputs.dry_run }}' != 'false'
+          r = _step_governance('D:/cursor/data', dry_run=dry)
+          print(json.dumps(r, indent=2, default=str))
+          sys.exit(0)
+          "
+
+      - name: Daily Ops — Champion/Challenger
+        id: champion
+        run: >
+          python -c "
+          import json, sys
+          sys.path.insert(0, 'D:/cursor')
+          from scripts.daily_ops import _step_champion_challenger
+          dry = '${{ inputs.dry_run }}' != 'false'
+          r = _step_champion_challenger('D:/cursor/data', dry_run=dry)
+          print(json.dumps(r, indent=2, default=str))
+          sys.exit(0)
+          "
+
+      - name: Daily Ops — Retraining Check
+        id: retraining
+        run: >
+          python -c "
+          import json, sys
+          sys.path.insert(0, 'D:/cursor')
+          from scripts.daily_ops import _step_retraining_check
+          r = _step_retraining_check('D:/cursor/data')
+          print(json.dumps(r, indent=2, default=str))
+          sys.exit(0)
+          "
+
+      - name: Daily Ops — Recap
+        id: recap
+        run: >
+          python -c "
+          import json, sys
+          sys.path.insert(0, 'D:/cursor')
+          from scripts.daily_ops import _step_daily_recap
+          r = _step_daily_recap('D:/cursor/data')
+          print(json.dumps(r, indent=2, default=str))
+          sys.exit(0)
+          "
+
+      - name: Daily Ops — Combined Report
+        if: always()
+        run: >
+          python -c "
+          import json, sys
+          sys.path.insert(0, 'D:/cursor')
+          from scripts.daily_ops import run_daily_ops
+          dry = '${{ inputs.dry_run }}' != 'false'
+          r = run_daily_ops('D:/cursor/data', dry_run=dry)
+          print(json.dumps(r, indent=2, default=str))
+          "

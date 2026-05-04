@@ -9,12 +9,14 @@ Commands:
   status       Run health checks and print diagnostics.
   train        Trigger CRT batch training for all lanes.
   auto-recover Check gate state and attempt auto-recovery.
+  daily-ops    Run full daily governance + monitoring pipeline.
 
 Usage:
   python main.py run --env configs/environments/mt5.json
   python main.py status --env configs/environments/mt5.json
   python main.py train
   python main.py auto-recover --config configs/live.yaml
+  python main.py daily-ops --dry-run
 """
 
 from __future__ import annotations
@@ -380,6 +382,42 @@ def cmd_features_update(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Command: daily-ops
+# ---------------------------------------------------------------------------
+
+
+def cmd_daily_ops(args: argparse.Namespace) -> int:
+    """Run the full daily operations pipeline."""
+    from scripts.daily_ops import run_daily_ops
+
+    report = run_daily_ops(
+        base_dir=args.base_dir,
+        skip_shadow=args.skip_shadow,
+        skip_governance=args.skip_governance,
+        skip_champion=args.skip_champion,
+        skip_retraining=args.skip_retraining,
+        skip_recap=args.skip_recap,
+        dry_run=args.dry_run,
+    )
+
+    text = json.dumps(report, indent=2, ensure_ascii=False, default=str)
+    print(text)
+
+    if args.output:
+        out = Path(args.output)
+        if not out.is_absolute():
+            out = PROJECT_ROOT / out
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text, encoding="utf-8")
+
+    if report["errors"] > 0:
+        return 2
+    if report["actions_total"] > 0:
+        return 1
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Command: auto-recover (preserved from legacy)
 # ---------------------------------------------------------------------------
 
@@ -546,6 +584,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to environment config JSON",
     )
 
+    # ---- daily-ops ----
+    daily_cmd = sub.add_parser("daily-ops", help="Run full daily operations pipeline")
+    daily_cmd.add_argument("--base-dir", default="data", help="Base data directory")
+    daily_cmd.add_argument(
+        "--dry-run", action="store_true", help="Assess without applying transitions"
+    )
+    daily_cmd.add_argument("--skip-shadow", action="store_true")
+    daily_cmd.add_argument("--skip-governance", action="store_true")
+    daily_cmd.add_argument("--skip-champion", action="store_true")
+    daily_cmd.add_argument("--skip-retraining", action="store_true")
+    daily_cmd.add_argument("--skip-recap", action="store_true")
+    daily_cmd.add_argument("--output", type=Path, default=None, help="Write report JSON to file")
+
     return parser
 
 
@@ -560,6 +611,7 @@ def main(argv: list[str] | None = None) -> int:
         "train": cmd_train,
         "auto-recover": cmd_auto_recover,
         "features-update": cmd_features_update,
+        "daily-ops": cmd_daily_ops,
     }
 
     handler = commands.get(args.command)
