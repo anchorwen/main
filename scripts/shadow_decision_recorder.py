@@ -1,20 +1,23 @@
-"""Lightweight shadow decision recorder for persisting ensemble inference results.
+"""Shadow decision recorder: persist inference results to ledger for brain leaderboard.
 
-Writes DecisionRecords to data/decisions/ via JsonlLedgerStore, using the same
-format as the live RuntimeLoop so brain_leaderboard.py can consume both.
+Writes DecisionRecord entries to data/decisions/{date}/XAUUSD.decisions.jsonl
+so that brain_leaderboard and feedback_loop can consume them.
 
-Used by:
-  - live_shadow_ensemble.py  (plain dict results → DecisionRecord)
-  - live_intent_loop.py      (multi-brain + --no-mt5, BrainDecisionProposal → DecisionRecord)
+Usage:
+  from scripts.shadow_decision_recorder import record_shadow_from_ensemble
+  store = JsonlLedgerStore("data")
+  record_shadow_from_ensemble(results, consensus, symbol="XAUUSD", store=store)
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
 from core.contracts.domain.decision_record import DecisionRecord
+from core.contracts.enums import BrainRole, BrainStatus
 from core.contracts.ids import (
     new_intent_id,
     new_proposal_id,
@@ -22,250 +25,300 @@ from core.contracts.ids import (
     new_snapshot_id,
     new_verdict_id,
 )
-from core.ledger.schema_versions import SCHEMA_DECISION_RECORD
 from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
 
-SCHEMA_VERSION = "shadow_decision_recorder.v1"
+SCHEMA_VERSION = "decision_record.v1"
 
 
 def _utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-def _result_to_proposal(
-    result: dict[str, Any],
-    snapshot_id: str,
-    event_time: datetime,
-) -> BrainDecisionProposal | None:
-    """Convert a shadow ensemble result dict to a BrainDecisionProposal domain object.
-
-    Returns None if result status is not "ok".
-    """
-    if result.get("status") != "ok":
-        return None
-
-    now = _utc_now()
-    return BrainDecisionProposal(
-        schema_version="brain_decision_proposal.v1",
-        proposal_id=new_proposal_id(),
-        snapshot_id=snapshot_id,
-        brain_id=str(result.get("brain_id", "unknown")),
-        brain_role="alpha_brain",
-        brain_status="shadow",
-        model_version="v1",
-        event_time=event_time,
-        generated_at=now,
-        prediction={
-            "direction_bias": result.get("direction_bias", "neutral"),
-            "up_probability": float(result.get("up_probability", 0.5)),
-            "down_probability": float(result.get("down_probability", 0.5)),
-            "confidence": float(result.get("confidence", 0.0)),
-        },
-        health={"risk_score": 0.3, "fallback_used": False},
-        vote_weight=1.0,
-    )
-
-
-def _derive_action(direction: str) -> str:
-    """Map consensus direction to decision action."""
-    if direction in ("long", "short"):
-        return "OPEN"
-    return "ABSTAIN"
-
-
-def _derive_side(direction: str) -> str:
-    """Map consensus direction to decision side."""
-    if direction == "long":
+def _direction_to_side(direction: str) -> str:
+    """Normalize direction strings to canonical decision_side: LONG/SHORT/FLAT."""
+    d = direction.lower()
+    if d in ("up", "long"):
         return "LONG"
-    if direction == "short":
+    if d in ("down", "short"):
         return "SHORT"
     return "FLAT"
 
 
-def _build_decision_record(
-    *,
-    event_time: datetime,
-    symbol: str,
-    proposal_ids: list[str],
-    supporting_brains: list[str],
-    opposing_brains: list[str],
-    consensus: dict[str, Any],
-    dispatch_status: str,
-    source: str,
-) -> DecisionRecord:
-    now = _utc_now()
-    direction = consensus.get("consensus", consensus.get("aggregated_bias", "neutral"))
+def _derive_action(consensus: str | dict[str, Any]) -> str:
+    """Derive decision_action from consensus: OPEN when direction exists, ABSTAIN otherwise."""
+    if isinstance(consensus, dict):
+        c = consensus.get("consensus", "no_results")
+    else:
+        c = str(consensus)
+    if c in ("split", "no_results", "neutral"):
+        return "ABSTAIN"
+    if c in ("long", "short"):
+        return "OPEN"
+    return "ABSTAIN"
 
-    return DecisionRecord(
-        schema_version=SCHEMA_DECISION_RECORD,
-        record_id=new_record_id(),
-        snapshot_id=new_snapshot_id(),
-        intent_id=new_intent_id(),
-        verdict_id=new_verdict_id(),
+
+def _derive_side(consensus: str | dict[str, Any]) -> str:
+    """Derive decision_side from consensus direction."""
+    if isinstance(consensus, dict):
+        c = consensus.get("consensus", "no_results")
+    else:
+        c = str(consensus)
+    return _direction_to_side(c)
+
+
+def _result_to_proposal(
+    result: dict[str, Any], snapshot_id: str, event_time: datetime
+) -> BrainDecisionProposal | None:
+    """Convert a shadow result dict → BrainDecisionProposal. Returns None if status != 'ok'."""
+    if result.get("status") != "ok":
+        return None
+
+    return BrainDecisionProposal(
+        schema_version="brain_decision_proposal.v1",
+        proposal_id=new_proposal_id(),
+        snapshot_id=snapshot_id,
+        brain_id=result.get("brain_id", "unknown"),
+        brain_role=BrainRole.ALPHA,
+        brain_status=BrainStatus.SHADOW,
+        model_version=result.get("brain_type", "unknown"),
         event_time=event_time,
-        recorded_at=now,
-        context={
-            "symbol": symbol,
-            "venue": "shadow",
+        generated_at=event_time,
+        prediction={
+            "direction_bias": result.get("direction_bias", "neutral"),
+            "up_probability": result.get("up_probability", 0.5),
+            "down_probability": result.get("down_probability", 0.5),
+            "confidence": result.get("confidence", 0.0),
         },
-        inputs={
-            "proposal_ids": proposal_ids,
-            "proposal_count": len(proposal_ids),
-        },
-        execution={
-            "dispatch_status": dispatch_status,
-        },
-        outcome={},
-        attribution={
-            "supporting_brains": supporting_brains,
-            "opposing_brains": opposing_brains,
-            "consensus": consensus,
-        },
-        labels={
-            "decision_action": _derive_action(direction),
-            "decision_side": _derive_side(direction),
-        },
-        trace={
-            "source": source,
-            "brain_count": len(proposal_ids),
-        },
+        health={"runtime_ms": result.get("runtime_ms", 0.0)},
+        vote_weight=1.0,
     )
+
+
+def _group_by_direction(results: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
+    """Partition brain_ids into supporting (majority) and opposing (minority) groups."""
+    counts: dict[str, list[str]] = {}
+    for r in results:
+        if r.get("status") != "ok":
+            continue
+        d = _direction_to_side(r.get("direction_bias", "neutral"))
+        counts.setdefault(d, []).append(r["brain_id"])
+
+    if not counts:
+        return [], []
+
+    majority_dir = max(
+        counts,
+        key=lambda k: (
+            len(counts[k]),
+            {"LONG": 2, "SHORT": 1, "FLAT": 0}.get(k, 0),
+        ),
+    )
+    supporting = counts[majority_dir]
+    opposing = [bid for d, bids in counts.items() if d != majority_dir for bid in bids]
+    return supporting, opposing
 
 
 def record_shadow_from_ensemble(
     results: list[dict[str, Any]],
     consensus: dict[str, Any],
-    *,
     symbol: str = "XAUUSD",
     store: JsonlLedgerStore | None = None,
-    event_time: datetime | None = None,
 ) -> dict[str, Any]:
-    """Convert shadow ensemble results → DecisionRecord and write via JsonlLedgerStore.
+    """Persist shadow ensemble results as DecisionRecords.
+
+    Creates one DecisionRecord per brain result. Writes to data/decisions/{date}/.
 
     Args:
-        results: List of result dicts from _run_single_brain.
-        consensus: Dict from _compare_directions.
-        symbol: Trading symbol (stored as-is in context).
-        store: JsonlLedgerStore instance. Created with data/ dir if None.
-        event_time: Inference time. Defaults to now.
+        results: List of per-brain result dicts from live_shadow_ensemble.
+        consensus: Consensus dict from _compare_directions.
+        symbol: Trading symbol.
+        store: JsonlLedgerStore; creates one if None.
 
     Returns:
-        Summary: {"record_id": ..., "brain_count": N, "written": bool, "path": str}
+        Dict with written count, path, and per-brain record_ids.
     """
-    if store is None:
-        store = JsonlLedgerStore("data")
+    ok_results = [r for r in results if r.get("status") == "ok"]
+    supporting, opposing = _group_by_direction(ok_results)
 
-    now = event_time or _utc_now()
-    snapshot_id = new_snapshot_id()
-
-    proposals: list[BrainDecisionProposal] = []
-    for r in results:
-        prop = _result_to_proposal(r, snapshot_id=snapshot_id, event_time=now)
-        if prop is not None:
-            proposals.append(prop)
-
-    if not proposals:
+    if not ok_results:
         return {
-            "record_id": "",
-            "brain_count": 0,
             "written": False,
+            "brain_count": 0,
             "reason": "no_valid_proposals",
         }
 
-    proposal_ids = [p.proposal_id for p in proposals]
-    direction = consensus.get("consensus", consensus.get("aggregated_bias", "neutral"))
-    supporting = [
-        r.get("brain_id", "?")
-        for r in results
-        if r.get("status") == "ok" and r.get("direction_bias") == direction
-    ]
-    opposing = [
-        r.get("brain_id", "?")
-        for r in results
-        if r.get("status") == "ok"
-        and r.get("direction_bias") != direction
-        and r.get("direction_bias") != "neutral"
-        and direction != "split"
-    ]
+    snapshot_id = new_snapshot_id()
+    event_time = _utc_now()
+    date_key = event_time.strftime("%Y-%m-%d")
 
-    record = _build_decision_record(
-        event_time=now,
-        symbol=symbol,
-        proposal_ids=proposal_ids,
-        supporting_brains=supporting,
-        opposing_brains=opposing,
-        consensus=consensus,
-        dispatch_status="shadow",
-        source="shadow_ensemble",
+    if store is None:
+        store = JsonlLedgerStore("data")
+
+    # Write one combined record per ensemble run (not per brain)
+    proposal_ids = [new_proposal_id() for _ in ok_results]
+    record_id = new_record_id()
+
+    record = DecisionRecord(
+        schema_version=SCHEMA_VERSION,
+        record_id=record_id,
+        snapshot_id=snapshot_id,
+        intent_id=new_intent_id(),
+        verdict_id=new_verdict_id(),
+        event_time=event_time,
+        recorded_at=_utc_now(),
+        context={"symbol": symbol, "venue": "shadow"},
+        inputs={
+            "proposal_ids": proposal_ids,
+            "proposal_count": len(ok_results),
+        },
+        execution={
+            "dispatch_status": "shadow",
+            "venue": "shadow",
+        },
+        outcome={},
+        attribution={
+            "supporting_brains": supporting,
+            "opposing_brains": opposing,
+            "consensus": consensus,
+        },
+        labels={
+            "decision_action": _derive_action(consensus),
+            "decision_side": _derive_side(consensus),
+        },
+        trace={
+            "source": "shadow_ensemble",
+            "brain_count": len(ok_results),
+            "total_results": len(results),
+        },
     )
+    store.append_record(date_key, symbol, record)
 
-    date_key = now.date().isoformat()
-    path = store.append_record(date_key, symbol, record)
+    target_dir = Path(store._base_dir) / date_key
+    target_file = target_dir / f"{symbol}.decisions.jsonl"
+
     return {
-        "record_id": record.record_id,
-        "brain_count": len(proposals),
         "written": True,
-        "path": str(path),
+        "brain_count": len(ok_results),
+        "record_id": record_id,
+        "snapshot_id": snapshot_id,
+        "date_key": date_key,
+        "path": str(target_file),
+        "proposal_ids": proposal_ids,
     }
 
 
 def record_shadow_from_proposals(
     proposals: list[Any],
     consensus: dict[str, Any],
-    *,
     symbol: str = "XAUUSD",
     store: JsonlLedgerStore | None = None,
-    event_time: datetime | None = None,
     dispatch_status: str = "shadow_verify",
 ) -> dict[str, Any]:
-    """Create a DecisionRecord from existing BrainDecisionProposal objects.
+    """Persist multi-brain proposals as DecisionRecords (used by live_intent_loop).
 
-    Used by live_intent_loop.py multi-brain + --no-mt5 path.
+    Creates one DecisionRecord per proposal. Attributions are derived from
+    proposal brain_ids grouped by direction matching against consensus.
 
     Args:
-        proposals: List of BrainDecisionProposal from brain.get_signal().
-        consensus: Dict from parliament._compute_consensus().
+        proposals: List of BrainDecisionProposal objects.
+        consensus: Consensus dict. If empty, one is synthesized.
         symbol: Trading symbol.
-        store: JsonlLedgerStore instance.
-        event_time: Inference time.
-        dispatch_status: "shadow_verify" for --no-mt5 dry-run.
+        store: JsonlLedgerStore; creates one if None.
+        dispatch_status: Status for execution block (default: "shadow_verify").
 
     Returns:
-        Summary dict with record_id, brain_count, written, path.
+        Dict with written count and paths.
     """
+    if not proposals:
+        return {"written": False, "count": 0, "reason": "no_proposals"}
+
+    # Synthesize consensus if not provided
+    if not consensus:
+        direction_counts: dict[str, int] = {}
+        for p in proposals:
+            d = _direction_to_side(p.prediction.get("direction_bias", "neutral"))
+            direction_counts[d] = direction_counts.get(d, 0) + 1
+        majority = max(direction_counts, key=direction_counts.get) if direction_counts else "FLAT"
+        n = len(proposals)
+        max_same = direction_counts.get(majority, 0)
+        consensus = {
+            "consensus": majority.lower(),
+            "total_brains": n,
+            "agreement_score": round(max_same / n, 4) if n > 0 else 0.0,
+        }
+
+    snapshot_id = new_snapshot_id()
+    event_time = _utc_now()
+    date_key = event_time.strftime("%Y-%m-%d")
+
     if store is None:
         store = JsonlLedgerStore("data")
 
-    now = event_time or _utc_now()
-    if not proposals:
-        return {"record_id": "", "brain_count": 0, "written": False, "reason": "no_proposals"}
+    direction_brain_map: dict[str, list[str]] = {}
+    for p in proposals:
+        d = _direction_to_side(p.prediction.get("direction_bias", "neutral"))
+        direction_brain_map.setdefault(d, []).append(p.brain_id)
+
+    majority_dir = (
+        max(
+            direction_brain_map,
+            key=lambda k: (
+                len(direction_brain_map[k]),
+                {"LONG": 2, "SHORT": 1, "FLAT": 0}.get(k, 0),
+            ),
+        )
+        if direction_brain_map
+        else "FLAT"
+    )
+    supporting = direction_brain_map.get(majority_dir, [])
+    opposing = [bid for d, bids in direction_brain_map.items() if d != majority_dir for bid in bids]
 
     proposal_ids = [p.proposal_id for p in proposals]
-    bias = consensus.get("aggregated_bias", "neutral")
-    supporting = [p.brain_id for p in proposals if p.prediction.get("direction_bias") == bias]
-    opposing = [
-        p.brain_id
-        for p in proposals
-        if p.prediction.get("direction_bias") != bias
-        and p.prediction.get("direction_bias") != "neutral"
-    ]
+    record_id = new_record_id()
 
-    record = _build_decision_record(
-        event_time=now,
-        symbol=symbol,
-        proposal_ids=proposal_ids,
-        supporting_brains=supporting,
-        opposing_brains=opposing,
-        consensus=consensus,
-        dispatch_status=dispatch_status,
-        source="shadow_verify",
+    record = DecisionRecord(
+        schema_version=SCHEMA_VERSION,
+        record_id=record_id,
+        snapshot_id=snapshot_id,
+        intent_id=new_intent_id(),
+        verdict_id=new_verdict_id(),
+        event_time=event_time,
+        recorded_at=_utc_now(),
+        context={"symbol": symbol, "venue": dispatch_status},
+        inputs={
+            "proposal_ids": proposal_ids,
+            "proposal_count": len(proposals),
+        },
+        execution={
+            "dispatch_status": dispatch_status,
+            "venue": dispatch_status,
+        },
+        outcome={},
+        attribution={
+            "supporting_brains": supporting,
+            "opposing_brains": opposing,
+            "consensus": consensus,
+        },
+        labels={
+            "decision_action": _derive_action(consensus),
+            "decision_side": _derive_side(consensus),
+        },
+        trace={
+            "source": dispatch_status,
+            "brain_count": len(proposals),
+            "proposal_count": len(proposals),
+        },
     )
+    store.append_record(date_key, symbol, record)
 
-    date_key = now.date().isoformat()
-    path = store.append_record(date_key, symbol, record)
+    target_dir = Path(store._base_dir) / date_key
+    target_file = target_dir / f"{symbol}.decisions.jsonl"
+
     return {
-        "record_id": record.record_id,
-        "brain_count": len(proposals),
         "written": True,
-        "path": str(path),
+        "brain_count": len(proposals),
+        "record_id": record_id,
+        "path": str(target_file),
+        "date_key": date_key,
+        "snapshot_id": snapshot_id,
     }
