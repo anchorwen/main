@@ -536,6 +536,32 @@ def main(argv: list[str] | None = None) -> int:
                     if multi_brain:
                         verify_event.update(consensus_extra)
                     print(json.dumps(verify_event, ensure_ascii=False, default=str), flush=True)
+
+                    # ── Persist shadow decision for audit trail ──
+                    if multi_brain and proposals:
+                        try:
+                            from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
+                            from scripts.shadow_decision_recorder import (
+                                record_shadow_from_proposals,
+                            )
+
+                            store = JsonlLedgerStore(args.base_dir)
+                            consensus_for_record = {
+                                "aggregated_bias": direction,
+                                "consensus_score": confidence,
+                                "voter_count": consensus.get("voter_count", 0),
+                                "majority_ratio": consensus.get("majority_ratio", 0.0),
+                                "disagreement_score": consensus.get("disagreement_score", 0.0),
+                            }
+                            record_shadow_from_proposals(
+                                proposals=proposals,
+                                consensus=consensus_for_record,
+                                symbol=args.symbol.replace("c", ""),
+                                store=store,
+                                dispatch_status="shadow_verify",
+                            )
+                        except Exception:
+                            pass
                 else:
                     # ── Get current prices for SL/TP computation ──
                     mid, bid, ask = _mid_and_prices(mt5, args.symbol)

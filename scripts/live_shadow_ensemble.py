@@ -156,6 +156,8 @@ def build_report(
     brain_ids: list[str] | None = None,
     feature_dim: int = 40,
     parallel: bool = True,
+    symbol: str = "XAUUSD",
+    write_decisions: bool = True,
 ) -> dict[str, Any]:
     brains = brains_dir or DEFAULT_BRAINS_DIR
     entries = _discover_brain_entries(brains, brain_ids=brain_ids)
@@ -204,7 +206,7 @@ def build_report(
 
     comparison = _compare_directions(results)
 
-    return {
+    report = {
         "schema_version": SCHEMA_VERSION,
         "generated_at": _utc_now_iso(),
         "brains_dir": str(brains),
@@ -214,6 +216,26 @@ def build_report(
         "comparison": comparison,
         "results": results,
     }
+
+    # ── Persist shadow decisions to ledger for brain leaderboard ──
+    shadow_write_result: dict[str, Any] = {"written": False, "reason": "disabled"}
+    if write_decisions:
+        try:
+            from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
+            from scripts.shadow_decision_recorder import record_shadow_from_ensemble
+
+            store = JsonlLedgerStore(str(PROJECT_ROOT / "data"))
+            shadow_write_result = record_shadow_from_ensemble(
+                results=results,
+                consensus=comparison,
+                symbol=symbol,
+                store=store,
+            )
+        except Exception as exc:
+            shadow_write_result = {"written": False, "error": str(exc)[:500]}
+    report["shadow_decisions_written"] = shadow_write_result
+
+    return report
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -242,6 +264,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run brains sequentially instead of in parallel",
     )
     p.add_argument("--output", default=None, help="Write JSON report to file")
+    p.add_argument(
+        "--symbol",
+        default="XAUUSD",
+        help="Trading symbol for decision ledger (default: XAUUSD)",
+    )
+    p.add_argument(
+        "--no-write-decisions",
+        action="store_true",
+        help="Skip writing shadow decisions to data/decisions ledger",
+    )
     return p
 
 
@@ -252,6 +284,8 @@ def main(argv: list[str] | None = None) -> int:
         brain_ids=args.brains,
         feature_dim=args.feature_dim,
         parallel=not args.sequential,
+        symbol=args.symbol,
+        write_decisions=not args.no_write_decisions,
     )
     text = json.dumps(report, indent=2, ensure_ascii=False, default=str)
     print(text)

@@ -343,6 +343,7 @@ def build_report(
     labels_path: Path | None = None,
     backtest_path: Path | None = None,
     decisions_dir: Path | None = None,
+    build_dataset_flag: bool = False,
 ) -> dict[str, Any]:
     date = date_key or _today_utc_key()
     journal_path = base_dir / "live_trade_journal.jsonl"
@@ -386,6 +387,22 @@ def build_report(
             decisions_dir, date_filter=date, labels_path=labels_path
         )
 
+    # ── Build training dataset (Phase B) ──
+    training_dataset: dict[str, Any] = {}
+    if build_dataset_flag:
+        try:
+            from scripts.training.dataset_builder import build_dataset
+
+            labels_path_for_dataset = base_dir / "reports" / "live_labels.jsonl"
+            training_dataset = build_dataset(
+                labels_path=labels_path_for_dataset,
+                feature_store_dir=base_dir / "feature_store",
+                output_dir=base_dir / "training",
+                symbol=symbol.rstrip("c"),
+            )
+        except Exception as exc:
+            training_dataset = {"error": str(exc)[:500]}
+
     run_state = _derive_run_state(trade_quality, data_quality, flag_present)
 
     evolution_result: dict[str, Any] = {}
@@ -425,6 +442,7 @@ def build_report(
         "eval_alignment": eval_alignment,
         "brain_leaderboard": brain_leaderboard,
         "evolution_plan_update": evolution_result,
+        "training_dataset": training_dataset,
     }
 
 
@@ -468,6 +486,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Decisions dir for brain leaderboard",
     )
     p.add_argument("--output", default=None, help="Write JSON report to file")
+    p.add_argument(
+        "--build-dataset",
+        action="store_true",
+        help="Build training dataset from labels and feature store after recap",
+    )
     return p
 
 
@@ -488,6 +511,7 @@ def main(argv: list[str] | None = None) -> int:
         labels_path=args.labels_path,
         backtest_path=args.backtest_path,
         decisions_dir=args.decisions_dir,
+        build_dataset_flag=args.build_dataset,
     )
     text = json.dumps(report, indent=2, ensure_ascii=False, default=str)
     print(text)
