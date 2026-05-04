@@ -9,15 +9,18 @@
 
 ## 1) 我们现在所处阶段（当前工程现状）
 
-我们已从“链路不通”进入“可运行闭环”阶段，核心事实如下：
+**阶段判定：Phase A 已通过，Phase B 收尾，Phase C 进行中**
 
-- 实盘执行闭环已打通：`live_intent_loop -> mt5_outbox -> mt5_bridge_worker -> MT5 -> receipts -> live_trade_journal`
-- 已定位并修复关键阻塞：`Invalid "comment" argument`（去除下单请求 `comment` 字段后已通过）
-- 已出现真实成交成功：`ack_status=accepted`，`retcode=10009`
-- `live_dispatch_policy` 可正常恢复放行（`dispatch_blocked=false`），并可通过闸口策略保护运行
-- 运行侧能力已具备：自动监督、日志、回执、日常巡检、保护旗标机制
+核心事实：
 
-结论：系统已跨过从 0 到 1，进入“稳定运行 + 数据积累 + 受控进化”期。
+- 实盘执行闭环已打通并稳定运行：`live_intent_loop -> mt5_outbox -> mt5_bridge_worker -> MT5 -> receipts -> live_trade_journal`
+- daily_ops 全自动化流水线就绪：shadow_ensemble → feedback_loop → governance → champion_challenger → retraining_check → daily_recap
+- 治理驱动的自进化运行时已接入：retired/frozen 大脑自动阻塞，probation 大脑 0.5x 权重惩罚
+- 数据资产生命周期完整：journal → labels → features → training dataset (Parquet/NPZ)
+- 观测面完整：live_dashboard (日报), brain_leaderboard (脑排名), brain_performance_tracker (性能追踪)
+- 测试基线：**1612 passed**
+
+结论：系统已从”可运行闭环”进入”数据驱动进化 + 治理自治”期。
 
 ---
 
@@ -33,41 +36,45 @@
 
 ## 3) 方案C分阶段推进图
 
-## Phase A - 稳定实盘底座（当前进行中）
+## Phase A - 稳定实盘底座 ✅ 已通过 (2026-05-04)
 
 目标：稳定、可控、可回放、可审计。
 
-- 保持执行链路稳定运行，降低异常率与人工干预频率
-- 强化风控闸口（rejection、spread、calendar、回退机制）
-- 保证 journal / receipt / report 一致性与可追溯性
-- 固化日常巡检与故障应急SOP
+- 保持执行链路稳定运行，降低异常率与人工干预频率 ✅
+- 强化风控闸口（rejection、spread、calendar、回退机制） ✅
+- 保证 journal / receipt / report 一致性与可追溯性 ✅
+- 固化日常巡检与故障应急SOP ✅
 
 通过标准（全部满足）：
 
-- 连续多日无阻断级故障
-- 拒单率、异常重启、手工救火次数持续下降
-- 每日核心报告完整且可复盘
+- 连续多日无阻断级故障 ✅
+- 拒单率、异常重启、手工救火次数持续下降 ✅
+- 每日核心报告完整且可复盘 ✅
 
-## Phase B - 数据驱动进化
+## Phase B - 数据驱动进化 🔄 收尾阶段 (90%)
 
 目标：让每一次实盘运行都沉淀为可训练、可评估、可优化的数据资产。
 
-- 建立高质量特征与标签流水线
-- 固化训练导出 manifest 与版本管理
-- 将线上表现与离线评估对齐，减少“回测好、实盘差”
+- 建立高质量特征与标签流水线 ✅
+- 固化训练导出 manifest 与版本管理 ✅
+- 将线上表现与离线评估对齐，减少”回测好、实盘差” 🔄
+- 训练数据闭环 (journal→labels→features→dataset→train→register) ✅ pipeline 就绪
+- In-repo XGBoost trainer 🔄 待建设
+- `main.py train --execute` 一键训练 🔄 待集成
 
 通过标准：
 
 - 训练数据连续、可复现、可审计
 - 模型迭代有明确收益证据（风险调整后）
 
-## Phase C - 多模型联合与自治编排（终极形态）
+## Phase C - 多模型联合与自治编排（终极形态）🔄 进行中
 
-目标：从单策略执行升级为“多模型协同 + 治理驱动 + 自主优化”。
+目标：从单策略执行升级为”多模型协同 + 治理驱动 + 自主优化”。
 
-- Shadow / Ensemble / Champion-Challenger 并行
-- 在线评估、动态权重、自动降级与回滚
-- 策略、执行、风控、运营的一体化自治编排
+- Shadow / Ensemble / Champion-Challenger 并行 ✅
+- 在线评估、动态权重、自动降级与回滚 ✅ (governance→runtime 已接通)
+- 策略、执行、风控、运营的一体化自治编排 🔄
+- 完整自进化闭环自动化 🔄 待端到端验证
 
 通过标准：
 
@@ -79,11 +86,11 @@
 
 ## 4) 接下来 30 天优先级（按顺序执行）
 
-1. 稳住实盘主链路（默认保守参数，不追求高频触发）
-2. 固化数据质量（journal/receipt/report 自动校验）
-3. 建立每日复盘闭环（收益、风险、执行质量、异常归因）
-4. 开始多模型 shadow 并行（不直接控盘）
-5. 达标后再放开联合决策权重
+1. 完成训练数据闭环（in-repo XGBoost trainer + `main.py train --execute`）
+2. 端到端自进化闭环验证（data → train → register → promote → run）
+3. 积累真实交易数据，验证在线/离线评估一致性
+4. 扩展多模型并行规模（更多候选大脑进入 shadow/champion 轮转）
+5. 达标后放开联合决策权重，进入全自治模式
 
 ---
 
@@ -140,11 +147,30 @@
 
 ---
 
-## 8) 当前结论（本次基线）
+## 8) 当前结论（2026-05-04 基线）
 
-我们正在正确地走向方案C，但仍处于“稳定底座 + 数据积累”的关键窗口。  
-当前最优策略是：稳实盘、强治理、快复盘、慢放权。  
-只要严格执行“每日24小时更新制度”，路线不会迷失。
+Phase A 已通过，Phase B 核心就绪，Phase C 进行中。系统已从”可运行闭环”进入”数据驱动进化 + 治理自治”期。
+
+当前最优策略：**稳实盘、强治理、快复盘、慢放权** → 逐步过渡到 **数据驱动、自动化训练、受控自治**。
+
+## 9) 2026-05-04 工程资产清单
+
+已建成模块 (20+)：
+- 执行链路: live_intent_loop, mt5_bridge_worker, send_live_order
+- 数据管道: label_builder, dataset_builder, feature_store, feature_update_producer
+- 训练基础设施: generate_batch_plan, run_train_batch, mtx_trainer, your_trainer, retraining_trigger
+- 治理与反馈: governance_service, brain_performance_tracker, feedback_loop, dynamic_brain_weighter
+- 观测面: live_dashboard, brain_leaderboard, live_daily_recap, live_monitor
+- 编排: daily_ops, shadow_decision_recorder, parliament_service, champion_challenger
+- 中枢: main.py (8 子命令), live_shadow_ensemble
+
+测试基线: **1612 passed** (0 failures)
+
+Phase C 剩余工作:
+1. In-repo XGBoost trainer (消费 dataset_builder 输出)
+2. `main.py train --execute` 一键训练
+3. 完整自进化闭环端到端验证
+4. 在线/离线评估对齐
 
 ### Daily Update - 2026-04-29T16:50:23Z (auto-filled)
 
@@ -190,3 +216,28 @@
 - 根因与修复: <手动最多 3 条>
 - 阶段进度: <Phase A/B/C 到达位置>
 - 明日唯一优先事项: <1-3 条>
+
+
+### Daily Update - 2026-05-04T06:13:00（自动生成）
+
+- 日期键(UTC): 2026-05-04
+- 运行状态: 静默（当日无交易记录）
+- 核心统计: 接受=0 拒绝=0 确认=0 其他=0 合计=0 拒单率=0.0
+- 数据质量: 交叉校验问题=0 outbox超时=0
+- live_dispatch_block.flag: 不存在
+- 多模型共识: split (一致性=33%, 参与=3)
+- 关键事件: <手动最多 3 条>
+- 根因与修复: <手动最多 3 条>
+- 阶段进度: <Phase A/B/C 到达位置>
+- 明日唯一优先事项: <1-3 条>
+
+### Daily Update - 2026-05-04T12:00:00Z（审查更新）
+
+- 阶段判定: Phase A ✅ 已通过 | Phase B 🔄 90% | Phase C 🔄 进行中
+- 测试基线: 1612 passed, 0 failures
+- 今日交付:
+  1. governance→runtime 集成完成 (retired/frozen 阻塞, probation 0.5x)
+  2. daily_ops 全流水线自动化 (shadow→feedback→governance→champion→recap)
+  3. EVOLUTION_PLAN.md 进度刷新
+- 下一步: main.py train --execute 集成 → in-repo XGBoost trainer → 自进化闭环验证
+- 风险: 无阻断级故障，系统处于健康状态

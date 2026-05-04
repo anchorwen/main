@@ -309,23 +309,56 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 def cmd_train(args: argparse.Namespace) -> int:
     """Trigger CRT batch training for all lanes."""
+    import subprocess
+
     plan_path = args.plan
     if plan_path is None:
         plan_path = str(PROJECT_ROOT / "scripts" / "training" / "generate_batch_plan.py")
     print(f"[hub] Triggering batch training plan: {plan_path}")
-    import subprocess
 
     plan_file = _resolve(plan_path)
     if not plan_file.exists():
         print(f"[hub] ERROR: plan generator not found: {plan_file}", file=sys.stderr)
         return 2
 
-    proc = subprocess.run(
-        [sys.executable, str(plan_file)],
-        capture_output=False,
-        check=False,
-    )
-    return proc.returncode
+    batch_parent = Path(args.batch_dir) if args.batch_dir else PROJECT_ROOT / "batch_plans"
+    batch_full = batch_parent / args.generation
+
+    # Step 1: Generate the batch plan
+    plan_cmd = [
+        sys.executable,
+        str(plan_file),
+        "--generation",
+        args.generation,
+        "--output-dir",
+        str(batch_parent),
+    ]
+    proc = subprocess.run(plan_cmd, capture_output=False, check=False)
+    if proc.returncode != 0:
+        print("[hub] ERROR: batch plan generation failed", file=sys.stderr)
+        return proc.returncode
+
+    # Step 2: Execute training (only if --execute)
+    if args.execute:
+        print(f"[hub] Executing training: {batch_full}")
+        run_cmd = [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "training" / "run_train_batch.py"),
+            "--batch-dir",
+            str(batch_full),
+            "--execute",
+        ]
+        if args.lane:
+            run_cmd.extend(["--lane", args.lane])
+        if args.limit is not None:
+            run_cmd.extend(["--limit", str(args.limit)])
+
+        proc2 = subprocess.run(run_cmd, capture_output=False, check=False)
+        if proc2.returncode != 0:
+            print("[hub] ERROR: training execution failed", file=sys.stderr)
+            return proc2.returncode
+
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -637,6 +670,23 @@ def build_parser() -> argparse.ArgumentParser:
     # ---- train ----
     train_cmd = sub.add_parser("train", help="Trigger CRT batch training for all lanes")
     train_cmd.add_argument("--plan", default=None, help="Path to batch plan JSON (optional)")
+    train_cmd.add_argument(
+        "--generation", default="g2026.1", help="Generation tag (default: g2026.1)"
+    )
+    train_cmd.add_argument(
+        "--batch-dir",
+        default=None,
+        help="Override batch plan parent directory (default: batch_plans/)",
+    )
+    train_cmd.add_argument(
+        "--execute", action="store_true", help="Execute training after plan generation"
+    )
+    train_cmd.add_argument(
+        "--lane", default=None, help="Filter to specific lane (only with --execute)"
+    )
+    train_cmd.add_argument(
+        "--limit", type=int, default=None, help="Limit to first N models (only with --execute)"
+    )
 
     # ---- auto-recover ----
     ar_cmd = sub.add_parser("auto-recover", help="Check gate state and attempt auto-recovery")
