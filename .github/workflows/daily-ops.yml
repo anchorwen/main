@@ -62,6 +62,19 @@ jobs:
           sys.exit(0 if r['status'] == 'ok' else 0)
           "
 
+      - name: Daily Ops — Feedback Loop
+        id: feedback
+        run: >
+          python -c "
+          import json, sys
+          sys.path.insert(0, 'D:/cursor')
+          from scripts.daily_ops import _step_feedback_loop
+          dry = '${{ inputs.dry_run }}' != 'false'
+          r = _step_feedback_loop('D:/cursor/data', dry_run=dry)
+          print(json.dumps(r, indent=2, default=str))
+          sys.exit(0)
+          "
+
       - name: Daily Ops — Governance Cycle
         id: governance
         run: >

@@ -110,6 +110,29 @@ def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
         return {"step": "shadow_ensemble", "status": "error", "error": str(exc)[:500]}
 
 
+def _step_feedback_loop(
+    base_dir: str, *, dry_run: bool = False, tracker: Any = None
+) -> dict[str, Any]:
+    """Run feedback loop to update tracker with real trade outcomes from journal."""
+    try:
+        from scripts.feedback_loop import ingest_journal_to_tracker
+
+        if tracker is None:
+            tracker = _load_or_create_tracker(base_dir)
+        report = ingest_journal_to_tracker(tracker, base_dir=base_dir, dry_run=dry_run)
+        return {
+            "step": "feedback_loop",
+            "status": "ok",
+            "mode": report.get("mode", "multi_brain"),
+            "journal_entries": report.get("journal_entries", 0),
+            "accepted_trades": report.get("accepted_trades", 0),
+            "updates_applied": report.get("updates_applied", 0),
+            "brains_updated": report.get("brain_ids_updated", []),
+        }
+    except Exception as exc:
+        return {"step": "feedback_loop", "status": "error", "error": str(exc)[:500]}
+
+
 def _step_governance(
     base_dir: str, *, dry_run: bool = False, tracker: Any = None, governance: Any = None
 ) -> dict[str, Any]:
@@ -199,6 +222,7 @@ def run_daily_ops(
     base_dir: str = "data",
     *,
     skip_shadow: bool = False,
+    skip_feedback: bool = False,
     skip_governance: bool = False,
     skip_champion: bool = False,
     skip_retraining: bool = False,
@@ -210,6 +234,7 @@ def run_daily_ops(
     Args:
         base_dir: Base data directory.
         skip_shadow: Skip shadow ensemble step.
+        skip_feedback: Skip feedback loop step.
         skip_governance: Skip governance cycle.
         skip_champion: Skip champion/challenger promotion.
         skip_retraining: Skip retraining degradation check.
@@ -225,7 +250,7 @@ def run_daily_ops(
     # see data accumulated by live_intent_loop, and brain registrations survive restarts.
     shared_tracker: Any = None
     shared_governance: Any = None
-    if not skip_governance or not skip_champion:
+    if not skip_feedback or not skip_governance or not skip_champion:
         shared_tracker = _load_or_create_tracker(base_dir)
         shared_governance = _load_or_create_governance(base_dir)
         brain_count = len(shared_tracker.get_all_summaries())
@@ -242,6 +267,11 @@ def run_daily_ops(
 
     if not skip_shadow:
         steps.append(_step_shadow_ensemble(base_dir))
+
+    # Feedback loop: resolve pending dispatch outcomes → real P&L scores
+    # Runs before governance/champion so they see the latest data
+    if not skip_feedback:
+        steps.append(_step_feedback_loop(base_dir, dry_run=dry_run, tracker=shared_tracker))
 
     if not skip_governance:
         steps.append(
@@ -294,6 +324,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--base-dir", default="data", help="Base data directory")
     p.add_argument("--dry-run", action="store_true", help="Assess without applying transitions")
     p.add_argument("--skip-shadow", action="store_true", help="Skip shadow ensemble")
+    p.add_argument("--skip-feedback", action="store_true", help="Skip feedback loop")
     p.add_argument("--skip-governance", action="store_true", help="Skip governance cycle")
     p.add_argument("--skip-champion", action="store_true", help="Skip champion/challenger")
     p.add_argument("--skip-retraining", action="store_true", help="Skip retraining check")
@@ -312,6 +343,7 @@ def main(argv: list[str] | None = None) -> int:
     report = run_daily_ops(
         base_dir=args.base_dir,
         skip_shadow=args.skip_shadow,
+        skip_feedback=args.skip_feedback,
         skip_governance=args.skip_governance,
         skip_champion=args.skip_champion,
         skip_retraining=args.skip_retraining,

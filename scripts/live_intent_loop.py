@@ -715,14 +715,14 @@ def main(argv: list[str] | None = None) -> int:
 
                     print(json.dumps(dispatch_event, ensure_ascii=False, default=str), flush=True)
 
-                    # Record live dispatch outcome for feedback tracking
+                    # Record dispatch outcome as "pending" — feedback_loop resolves to real P&L later
                     if multi_brain:
                         dispatch_ok = out.get("status", "") not in ("error", "rejected", "timeout")
-                        outcome = "filled" if dispatch_ok else "rejected"
+                        outcome = "pending" if dispatch_ok else "pending_rejected"
                         _record_brain_outcomes(proposals, direction, outcome, tracker)
                     else:
                         dispatch_ok = out.get("status", "") not in ("error", "rejected", "timeout")
-                        outcome = "filled" if dispatch_ok else "rejected"
+                        outcome = "pending" if dispatch_ok else "pending_rejected"
                         brain_id = brain_entry.get("brain_id", "unknown")
                         tracker.record_outcome(
                             brain_id,

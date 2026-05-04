@@ -12,6 +12,7 @@ def test_run_all_steps_skip_all():
 
     report = run_daily_ops(
         skip_shadow=True,
+        skip_feedback=True,
         skip_governance=True,
         skip_champion=True,
         skip_retraining=True,
@@ -49,6 +50,7 @@ def test_daily_ops_dry_run():
 
     report = run_daily_ops(
         skip_shadow=True,
+        skip_feedback=True,
         skip_governance=True,
         skip_champion=True,
         skip_retraining=True,
@@ -64,6 +66,7 @@ def test_daily_ops_error_count():
 
     report = run_daily_ops(
         skip_shadow=True,
+        skip_feedback=True,
         skip_governance=True,
         skip_champion=True,
         skip_retraining=True,
@@ -89,6 +92,7 @@ def test_main_dry_run(tmp_path: Path, monkeypatch):
         exit_code = main(
             [
                 "--skip-shadow",
+                "--skip-feedback",
                 "--skip-governance",
                 "--skip-champion",
                 "--skip-retraining",
@@ -109,6 +113,7 @@ def test_main_output_file(tmp_path: Path, monkeypatch):
     exit_code = main(
         [
             "--skip-shadow",
+            "--skip-feedback",
             "--skip-governance",
             "--skip-champion",
             "--skip-retraining",

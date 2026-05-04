@@ -355,3 +355,464 @@ class TestFeedbackLoop:
         sup = tracker.get_brain_summary("supporter")
         opp = tracker.get_brain_summary("opposer")
         assert sup["composite_mean"] > opp["composite_mean"]
+
+
+# ── scripts/feedback_loop: journal → tracker bridge ──
+
+import json
+from pathlib import Path
+
+from scripts.feedback_loop import (
+    _build_label_index,
+    _outcome_from_label,
+    _read_decision_records,
+    _read_journal,
+    ingest_journal_to_tracker,
+)
+
+
+class TestOutcomeFromLabel:
+    def test_win(self):
+        result = _outcome_from_label({"label": "win", "pnl": 5.0}, "accepted")
+        assert result["execution_outcome"] == "win"
+        assert 0.75 < result["composite_score"] <= 0.95
+
+    def test_loss(self):
+        result = _outcome_from_label({"label": "loss", "pnl": -3.0}, "accepted")
+        assert result["execution_outcome"] == "loss"
+        assert 0.10 <= result["composite_score"] < 0.35
+
+    def test_breakeven(self):
+        result = _outcome_from_label({"label": "breakeven", "pnl": 0.0}, "accepted")
+        assert result["execution_outcome"] == "breakeven"
+        assert result["composite_score"] == 0.50
+
+    def test_fallback_accepted(self):
+        result = _outcome_from_label(None, "accepted")
+        assert result["execution_outcome"] == "filled"
+        assert result["composite_score"] == 0.55
+
+    def test_fallback_rejected(self):
+        result = _outcome_from_label(None, "rejected")
+        assert result["execution_outcome"] == "rejected"
+        assert result["composite_score"] == 0.15
+
+    def test_fallback_unknown(self):
+        result = _outcome_from_label(None, "timeout")
+        assert result["execution_outcome"] == "timeout"
+        assert result["composite_score"] == 0.30
+
+
+class TestBuildLabelIndex:
+    def test_maps_by_ticket(self):
+        labels = [
+            {"position_ticket": 101, "label": "win", "pnl": 2.0},
+            {"position_ticket": 102, "label": "loss", "pnl": -1.0},
+        ]
+        idx = _build_label_index(labels)
+        assert idx[101]["label"] == "win"
+        assert idx[102]["label"] == "loss"
+        assert 999 not in idx
+
+    def test_empty(self):
+        assert _build_label_index([]) == {}
+
+
+class TestReadJournal:
+    def test_parses_valid_jsonl(self, tmp_path: Path):
+        journal = tmp_path / "journal.jsonl"
+        journal.write_text(
+            json.dumps(
+                {
+                    "recorded_at": "2026-05-04T10:00:00Z",
+                    "ack_status": "accepted",
+                    "position_ticket": 1,
+                }
+            )
+            + "\n"
+            + json.dumps(
+                {
+                    "recorded_at": "2026-05-04T11:00:00Z",
+                    "ack_status": "rejected",
+                    "position_ticket": 2,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        entries = _read_journal(journal)
+        assert len(entries) == 2
+
+    def test_date_filter(self, tmp_path: Path):
+        journal = tmp_path / "journal.jsonl"
+        journal.write_text(
+            json.dumps({"recorded_at": "2026-05-04T10:00:00Z", "ack_status": "accepted"})
+            + "\n"
+            + json.dumps({"recorded_at": "2026-05-03T10:00:00Z", "ack_status": "accepted"})
+            + "\n",
+            encoding="utf-8",
+        )
+        entries = _read_journal(journal, date_filter="2026-05-04")
+        assert len(entries) == 1
+
+    def test_skips_empty_lines(self, tmp_path: Path):
+        journal = tmp_path / "journal.jsonl"
+        journal.write_text(
+            "\n"
+            + json.dumps({"recorded_at": "2026-05-04T10:00:00Z", "ack_status": "accepted"})
+            + "\n\n",
+            encoding="utf-8",
+        )
+        entries = _read_journal(journal)
+        assert len(entries) == 1
+
+    def test_skips_invalid_json(self, tmp_path: Path):
+        journal = tmp_path / "journal.jsonl"
+        journal.write_text(
+            "not valid json\n"
+            + json.dumps({"recorded_at": "2026-05-04T10:00:00Z", "ack_status": "accepted"})
+            + "\n",
+            encoding="utf-8",
+        )
+        entries = _read_journal(journal)
+        assert len(entries) == 1
+
+    def test_file_not_found(self, tmp_path: Path):
+        entries = _read_journal(tmp_path / "nonexistent.jsonl")
+        assert entries == []
+
+
+class TestReadDecisionRecords:
+    def test_parses_decisions(self, tmp_path: Path):
+        date = "2026-05-04"
+        decisions_dir = tmp_path / "decisions" / date
+        decisions_dir.mkdir(parents=True)
+        record_path = decisions_dir / "XAUUSD.decisions.jsonl"
+        record_path.write_text(
+            json.dumps(
+                {
+                    "labels": {"decision_side": "LONG"},
+                    "attribution": {"supporting_brains": ["V9", "XGB"], "opposing_brains": ["OU"]},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        records = _read_decision_records(tmp_path / "decisions", date_filter=date)
+        assert len(records) == 1
+        assert "V9" in records[0]["attribution"]["supporting_brains"]
+
+    def test_no_file(self, tmp_path: Path):
+        records = _read_decision_records(tmp_path / "decisions", date_filter="2026-05-04")
+        assert records == []
+
+
+class TestIngestJournalToTracker:
+    def test_single_brain_with_labels(self, tmp_path: Path):
+        from core.feedback.brain_performance_tracker import BrainPerformanceTracker
+
+        base = tmp_path / "data"
+        base.mkdir()
+
+        journal = base / "live_trade_journal.jsonl"
+        journal.write_text(
+            json.dumps(
+                {
+                    "recorded_at": "2026-05-04T10:00:00Z",
+                    "ack_status": "accepted",
+                    "position_ticket": 1,
+                    "symbol": "XAUUSD",
+                    "side": "BUY",
+                }
+            )
+            + "\n"
+            + json.dumps(
+                {
+                    "recorded_at": "2026-05-04T10:01:00Z",
+                    "ack_status": "rejected",
+                    "position_ticket": 2,
+                    "symbol": "XAUUSD",
+                    "side": "SELL",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        reports = base / "reports"
+        reports.mkdir(parents=True)
+        labels = reports / "live_labels.jsonl"
+        labels.write_text(
+            json.dumps({"position_ticket": 1, "label": "win", "pnl": 3.0}) + "\n",
+            encoding="utf-8",
+        )
+
+        tracker = BrainPerformanceTracker(window_size=100)
+        report = ingest_journal_to_tracker(
+            tracker, base_dir=str(base), brain_id="V9", date_filter="2026-05-04"
+        )
+
+        assert report["mode"] == "single_brain"
+        assert report["journal_entries"] == 2
+        assert report["accepted_trades"] == 1
+        assert report["updates_applied"] == 2  # 1 accepted + 1 rejected
+        assert "V9" in report["brain_ids_updated"]
+
+        summary = tracker.get_brain_summary("V9")
+        assert summary["sample_count"] == 2
+
+    def test_single_brain_no_labels(self, tmp_path: Path):
+        from core.feedback.brain_performance_tracker import BrainPerformanceTracker
+
+        base = tmp_path / "data"
+        base.mkdir()
+
+        journal = base / "live_trade_journal.jsonl"
+        journal.write_text(
+            json.dumps(
+                {
+                    "recorded_at": "2026-05-04T10:00:00Z",
+                    "ack_status": "accepted",
+                    "position_ticket": 1,
+                    "symbol": "XAUUSD",
+                    "side": "BUY",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        tracker = BrainPerformanceTracker(window_size=100)
+        report = ingest_journal_to_tracker(
+            tracker, base_dir=str(base), brain_id="V9", date_filter="2026-05-04"
+        )
+
+        assert report["updates_applied"] == 1
+        summary = tracker.get_brain_summary("V9")
+        assert summary["sample_count"] == 1
+        assert summary["composite_mean"] == 0.55  # fallback to ack_status
+
+    def test_dry_run(self, tmp_path: Path):
+        from core.feedback.brain_performance_tracker import BrainPerformanceTracker
+
+        base = tmp_path / "data"
+        base.mkdir()
+
+        journal = base / "live_trade_journal.jsonl"
+        journal.write_text(
+            json.dumps(
+                {
+                    "recorded_at": "2026-05-04T10:00:00Z",
+                    "ack_status": "accepted",
+                    "position_ticket": 1,
+                    "symbol": "XAUUSD",
+                    "side": "BUY",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        tracker = BrainPerformanceTracker(window_size=100)
+        report = ingest_journal_to_tracker(
+            tracker, base_dir=str(base), brain_id="V9", date_filter="2026-05-04", dry_run=True
+        )
+
+        assert report["updates_applied"] == 0
+        assert report["updates_would_apply"] == 1
+        assert tracker.get_brain_summary("V9")["sample_count"] == 0
+
+    def test_no_journal(self, tmp_path: Path):
+        from core.feedback.brain_performance_tracker import BrainPerformanceTracker
+
+        base = tmp_path / "data"
+        base.mkdir()
+
+        tracker = BrainPerformanceTracker(window_size=100)
+        report = ingest_journal_to_tracker(
+            tracker, base_dir=str(base), brain_id="V9", date_filter="2026-05-04"
+        )
+
+        assert report["journal_entries"] == 0
+        assert report["updates_applied"] == 0
+
+    def test_multi_brain_with_decisions(self, tmp_path: Path):
+        from core.feedback.brain_performance_tracker import BrainPerformanceTracker
+
+        base = tmp_path / "data"
+        base.mkdir()
+
+        journal = base / "live_trade_journal.jsonl"
+        journal.write_text(
+            json.dumps(
+                {
+                    "recorded_at": "2026-05-04T10:00:00Z",
+                    "ack_status": "accepted",
+                    "position_ticket": 1,
+                    "symbol": "XAUUSD",
+                    "side": "BUY",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        dec_dir = base / "decisions" / "2026-05-04"
+        dec_dir.mkdir(parents=True)
+        decisions = dec_dir / "XAUUSD.decisions.jsonl"
+        decisions.write_text(
+            json.dumps(
+                {
+                    "labels": {"decision_side": "BUY"},
+                    "attribution": {"supporting_brains": ["V9", "XGB"], "opposing_brains": ["OU"]},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        tracker = BrainPerformanceTracker(window_size=100)
+        report = ingest_journal_to_tracker(tracker, base_dir=str(base), date_filter="2026-05-04")
+
+        assert report["mode"] == "multi_brain"
+        assert report["updates_applied"] == 2
+        assert set(report["brain_ids_updated"]) == {"V9", "XGB"}
+        assert tracker.get_brain_summary("V9")["sample_count"] == 1
+        assert tracker.get_brain_summary("XGB")["sample_count"] == 1
+        assert tracker.get_brain_summary("OU")["sample_count"] == 0
+
+    def test_multi_brain_no_decision_match(self, tmp_path: Path):
+        from core.feedback.brain_performance_tracker import BrainPerformanceTracker
+
+        base = tmp_path / "data"
+        base.mkdir()
+
+        journal = base / "live_trade_journal.jsonl"
+        journal.write_text(
+            json.dumps(
+                {
+                    "recorded_at": "2026-05-04T10:00:00Z",
+                    "ack_status": "accepted",
+                    "position_ticket": 1,
+                    "symbol": "XAUUSD",
+                    "side": "BUY",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        dec_dir = base / "decisions" / "2026-05-04"
+        dec_dir.mkdir(parents=True)
+        decisions = dec_dir / "XAUUSD.decisions.jsonl"
+        decisions.write_text(
+            json.dumps(
+                {
+                    "labels": {"decision_side": "SELL"},
+                    "attribution": {"supporting_brains": ["V9"]},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        tracker = BrainPerformanceTracker(window_size=100)
+        report = ingest_journal_to_tracker(tracker, base_dir=str(base), date_filter="2026-05-04")
+
+        assert report["mode"] == "multi_brain"
+        assert report["updates_applied"] == 0
+
+
+class TestFeedbackLoopCLI:
+    def test_single_brain_dry_run(self, tmp_path: Path, monkeypatch):
+        import io
+        import sys
+
+        from scripts.feedback_loop import main
+
+        base = tmp_path / "data"
+        base.mkdir()
+
+        journal = base / "live_trade_journal.jsonl"
+        journal.write_text(
+            json.dumps(
+                {
+                    "recorded_at": "2026-05-04T10:00:00Z",
+                    "ack_status": "accepted",
+                    "position_ticket": 1,
+                    "symbol": "XAUUSD",
+                    "side": "BUY",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        try:
+            exit_code = main(
+                [
+                    "--brain-id",
+                    "V9",
+                    "--base-dir",
+                    str(base),
+                    "--date",
+                    "2026-05-04",
+                    "--dry-run",
+                ]
+            )
+        finally:
+            sys.stdout = old_stdout
+
+        assert exit_code == 0
+
+    def test_output_file(self, tmp_path: Path, monkeypatch):
+        import io
+        import sys
+
+        from scripts.feedback_loop import main
+
+        base = tmp_path / "data"
+        base.mkdir()
+
+        journal = base / "live_trade_journal.jsonl"
+        journal.write_text(
+            json.dumps(
+                {
+                    "recorded_at": "2026-05-04T10:00:00Z",
+                    "ack_status": "accepted",
+                    "position_ticket": 1,
+                    "symbol": "XAUUSD",
+                    "side": "BUY",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        out = tmp_path / "feedback_report.json"
+        old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        try:
+            exit_code = main(
+                [
+                    "--brain-id",
+                    "V9",
+                    "--base-dir",
+                    str(base),
+                    "--date",
+                    "2026-05-04",
+                    "--dry-run",
+                    "--output",
+                    str(out),
+                ]
+            )
+        finally:
+            sys.stdout = old_stdout
+
+        assert exit_code == 0
+        assert out.exists()
+        data = json.loads(out.read_text(encoding="utf-8"))
+        assert data["mode"] == "single_brain"
+        assert data["brain_id"] == "V9"

@@ -188,6 +188,7 @@ def test_daily_ops_full_pipeline_with_tracker(populated_tracker_path: Path, tmp_
     report = run_daily_ops(
         base_dir=str(data_dir),
         skip_shadow=True,
+        skip_feedback=True,
         skip_retraining=True,
         skip_recap=True,
         dry_run=True,
@@ -216,6 +217,7 @@ def test_daily_ops_empty_tracker_graceful(tmp_path: Path):
     report = run_daily_ops(
         base_dir=str(tmp_path),
         skip_shadow=True,
+        skip_feedback=True,
         skip_retraining=True,
         skip_recap=True,
         dry_run=True,
