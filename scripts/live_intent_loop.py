@@ -168,6 +168,138 @@ def _load_brain_entries_from_dir(brains_dir: str) -> list[dict[str, Any]]:
     return entries
 
 
+def _apply_governance_filter(
+    entries: list[dict[str, Any]], base_dir: str
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Filter brain entries by governance status and apply weight penalties.
+
+    - retired / frozen: removed entirely
+    - probation: kept but vote_weight halved (applied as entry annotation)
+
+    Returns (filtered_entries, report).
+    """
+    report: dict[str, Any] = {
+        "governance_loaded": False,
+        "total_entries": len(entries),
+        "removed": [],
+        "penalized": [],
+        "kept": [],
+    }
+    gov_path = Path(base_dir) / "governance_state.json"
+    if not gov_path.exists():
+        report["reason"] = "no_governance_state"
+        return entries, report
+
+    try:
+        from core.governance.governance_service import GovernanceService
+
+        gov = GovernanceService.load(gov_path)
+        report["governance_loaded"] = True
+    except Exception as exc:
+        report["reason"] = f"governance_load_failed: {exc}"
+        return entries, report
+
+    filtered: list[dict[str, Any]] = []
+    for entry in entries:
+        brain_id = entry.get("brain_id", "unknown")
+        state = gov.get_brain_state(brain_id)
+
+        if state is None:
+            # Not registered yet — let through
+            filtered.append(entry)
+            report["kept"].append(brain_id)
+            continue
+
+        status = state.get("status", "candidate")
+        if status in ("retired", "frozen"):
+            report["removed"].append({"brain_id": brain_id, "status": status})
+            print(
+                json.dumps(
+                    {
+                        "event": "brain_governance_skip",
+                        "brain_id": brain_id,
+                        "status": status,
+                        "reason": f"brain is {status}",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            continue
+
+        if status == "probation":
+            # Annotate entry with reduced weight
+            entry = dict(entry)
+            original_weight = entry.get("vote_weight", 1.0)
+            entry["vote_weight"] = round(original_weight * 0.5, 4)
+            entry["_governance_status"] = "probation"
+            report["penalized"].append(
+                {
+                    "brain_id": brain_id,
+                    "original_weight": original_weight,
+                    "new_weight": entry["vote_weight"],
+                }
+            )
+            print(
+                json.dumps(
+                    {
+                        "event": "brain_governance_penalty",
+                        "brain_id": brain_id,
+                        "status": status,
+                        "vote_weight": entry["vote_weight"],
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+
+        report["kept"].append(brain_id)
+        filtered.append(entry)
+
+    return filtered, report
+
+
+def _check_single_brain_governance(brain_id: str, base_dir: str) -> dict[str, Any]:
+    """Check whether a single brain should be blocked or warned by governance.
+
+    Returns a dict with:
+      - blocked: True if status is retired/frozen
+      - warning: True if status is probation (brain may run but at reduced weight)
+    """
+    gov_path = Path(base_dir) / "governance_state.json"
+    if not gov_path.exists():
+        return {"blocked": False, "warning": False, "reason": "no_governance_state"}
+
+    try:
+        from core.governance.governance_service import GovernanceService
+
+        gov = GovernanceService.load(gov_path)
+    except Exception as exc:
+        return {"blocked": False, "warning": False, "reason": f"governance_load_failed: {exc}"}
+
+    state = gov.get_brain_state(brain_id)
+    if state is None:
+        return {"blocked": False, "warning": False, "reason": "not_registered"}
+
+    status = state.get("status", "candidate")
+    if status in ("retired", "frozen"):
+        return {
+            "blocked": True,
+            "warning": False,
+            "status": status,
+            "reason": f"brain is {status}",
+        }
+    if status == "probation":
+        return {
+            "blocked": False,
+            "warning": True,
+            "status": status,
+            "reason": "brain is on probation — run with reduced weight",
+        }
+
+    return {"blocked": False, "warning": False, "status": status}
+
+
 def _build_feature_snapshot(symbol: str, feature_vector: Any) -> Any:
     """Build a minimal feature snapshot for ParliamentService.build_candidate()."""
     from apps.engine.runtime_loop import SimpleFeatureSnapshot
@@ -420,6 +552,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if multi_brain:
         entries = _load_brain_entries_from_dir(args.brains_dir)
+
+        # Apply governance filter: skip retired/frozen, penalize probation
+        entries, gov_report = _apply_governance_filter(entries, args.base_dir)
+        start_event["governance_filter"] = gov_report
+
         from core.brains.services.brain_factory import BrainFactory
         from core.parliament.parliament_service import ParliamentService
 
@@ -448,6 +585,17 @@ def main(argv: list[str] | None = None) -> int:
         parliament = ParliamentService()
         weighter = DynamicBrainWeighter(tracker)
     else:
+        # Single-brain mode: check governance before loading
+        brain_id = brain_entry.get("brain_id", "unknown")
+        gov_check = _check_single_brain_governance(brain_id, args.base_dir)
+        if gov_check.get("blocked"):
+            print(json.dumps(gov_check, ensure_ascii=False), flush=True)
+            if mt5 is not None:
+                mt5.shutdown()
+            return 2
+        if gov_check.get("warning"):
+            print(json.dumps(gov_check, ensure_ascii=False), flush=True)
+
         if args.brain_type == "onnx_v9" and not args.no_mt5:
             from core.brains.adapters.v9_onnx_brain_adapter import V9OnnxBrainAdapter
 
