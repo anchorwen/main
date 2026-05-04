@@ -2,6 +2,10 @@
 
 A greenfield build for an institution-grade adaptive quantitative trading platform.
 
+## Live operations (MT5 / bridge)
+
+Operated from the repo root on Windows. See [**docs/LIVE_OPS.md**](docs/LIVE_OPS.md) (anchor intent loop vs V9 ONNX, gate semantics, exit codes) and [**docs/LIVE_EXECUTION_CONTRACT.md**](docs/LIVE_EXECUTION_CONTRACT.md) (generic MT5 payload: volume, close, modify SL/TP). Run **`scripts/ops_acceptance_check.ps1`** for a single diagnostic + health pass; use **`scripts/live_stack_diagnostic.py --output ...`** for UTF-8 JSON on Chinese-locale consoles.
+
 ## CI
 
 Push and pull requests against `main` run GitHub Actions on **`windows-latest`** (`.github/workflows/ci-windows.yml`): editable install with dev dependencies, then `tests/engine` and `--governance-contracts`. The workflow links the checkout at **`D:\cursor`** and prepares `data/` fixtures for tests that rely on that path.

@@ -1,0 +1,170 @@
+graph TB
+    %% ===================================================================
+    %% Quant OS System Topology — 系统拓扑总图
+    %% Last updated: 2026-05-02T07:05:00Z
+    %% Format: Mermaid graph TB (Top-to-Bottom)
+    %% ===================================================================
+
+    subgraph SCRIPTS["🔧 scripts/ — 生产入口 (Production Entry)"]
+        LIVE["live_intent_loop.py<br/>主循环"]
+        BRIDGE["mt5_bridge_worker.py<br/>MT5桥接"]
+        DISPATCH_POLICY["live_dispatch_policy.py<br/>派发闸口"]
+        HEALTHCHECK["live_auto_healthcheck.py<br/>自动巡检"]
+    end
+
+    subgraph APPS["🎮 apps/ — 编排层 (Orchestration Layer)"]
+        MAIN["main.py cmd_run<br/>中枢入口"]
+        ORCHESTRATOR["DecisionCycleOrchestrator<br/>决策周期编排"]
+        RUNTIME["RuntimeLoop<br/>运行时循环"]
+    end
+
+    subgraph CONTAINER["🧩 ServiceContainer — DI 容器"]
+        SC["ServiceContainer<br/>服务装配"]
+    end
+
+    %% ===================================================================
+    %% 核心业务层
+    %% ===================================================================
+    subgraph FEATURES["📊 core/features — 特征层"]
+        FEAT_SVC["FeatureService<br/>特征服务 (Tier1+Tier2)"]
+        FEAT_STORE["LocalFeatureStore<br/>本地特征存储 (JSONL)"]
+        FEAT_COMPUTER["V9LiveFeatureComputer<br/>实时特征计算"]
+        FEAT_ADAPTER["V9FeatureAdapter<br/>特征适配 (归一化)"]
+    end
+
+    subgraph BRAINS["🧠 core/brains — 模型层"]
+        BRAIN_FACTORY["BrainFactory<br/>模型工厂"]
+        BRAIN_REGISTRY["BrainRegistryService<br/>模型注册表"]
+        BRAIN_RUN["BrainRunService<br/>模型推理运行"]
+        BRAIN_ADAPTER_V9["V9OnnxBrainAdapter<br/>V9 ONNX 适配器"]
+        BRAIN_ADAPTER_XGB["XGBoostBrainAdapter<br/>XGBoost 适配器"]
+    end
+
+    subgraph PARLIAMENT["🏛️ core/parliament — 议会层"]
+        PARLIAMENT_SVC["ParliamentService<br/>多信号投票"]
+    end
+
+    subgraph GOVERNANCE["⚖️ core/governance — 治理层"]
+        GOV_SVC["GovernanceService<br/>治理服务"]
+        GOV_RULES["GovernanceRuleEngine<br/>规则引擎"]
+    end
+
+    subgraph DECISION["📋 core/protocol/services — 决策编译与派发"]
+        OVERRIDE["OverrideResolver<br/>覆盖解析"]
+        COMPILER["DecisionCompiler<br/>决策编译"]
+        INTENT_MSG["IntentMessageBuilder<br/>意图消息构建"]
+        DISPATCHER["CommunicationDispatcher<br/>通信派发器"]
+        ADAPTER_REG["CommunicationAdapterRegistry<br/>适配器注册表"]
+    end
+
+    subgraph COMM_ADAPTERS["📡 通信适配器"]
+        STUB_ADAPTER["StubCommunicationAdapter<br/>存根适配器"]
+        FILEQ_ADAPTER["FileQueueCommunicationAdapter<br/>文件队列适配器"]
+        MT5_ADAPTER["MT5CommunicationAdapter<br/>MT5 适配器"]
+        FIX_ADAPTER["FixCommunicationAdapter<br/>FIX 适配器"]
+    end
+
+    subgraph LEDGER["📒 core/ledger — 账本层"]
+        LEDGER_STORE["JsonlLedgerStore<br/>JSONL 账本存储"]
+        COMM_WRITER["CommunicationRecordWriter<br/>通信记录写入"]
+        COMM_READER["CommunicationRecordReader<br/>通信记录读取"]
+        EXEC_WRITER["ExecutionEventWriter<br/>执行事件写入"]
+        EXEC_READER["ExecutionEventReader<br/>执行事件读取"]
+        DECISION_WRITER["DecisionRecordWriter<br/>决策记录写入"]
+        RECONCILIATION["ExecutionReconciliationService<br/>执行对账"]
+        INSPECTION["CommunicationInspectionService<br/>通信检查"]
+    end
+
+    subgraph RISK["🛡️ core/risk — 风控层"]
+        RISK_SVC["RiskEvaluationService<br/>风控评估"]
+        RISK_POLICIES["风控策略<br/>ModePolicy/DrawdownPolicy/..."]
+    end
+
+    subgraph EXECUTION["⚡ core/execution — 执行层"]
+        EXEC_MGR["ExecutionManager<br/>执行管理器"]
+    end
+
+    subgraph MARKET["📈 core/market — 市场层"]
+        POS_TRACKER["PositionTracker<br/>持仓跟踪"]
+        MKT_CTX["MarketContextProvider<br/>市场上下文"]
+    end
+
+    subgraph FEEDBACK["🔄 core/feedback — 反馈层"]
+        FEEDBACK_LOOP["FeedbackLoop<br/>反馈闭环"]
+        OUTCOME_COLL["OutcomeCollector<br/>结果采集"]
+        DECISION_SCORER["DecisionScorer<br/>决策评分"]
+        BRAIN_TRACKER["BrainPerformanceTracker<br/>性能追踪"]
+    end
+
+    subgraph OBSERVABILITY["👁️ core/observability — 可观测性"]
+        METRICS["MetricsCollector<br/>指标采集"]
+        AUDIT_LOG["StructuredAuditLog<br/>审计日志"]
+        ALERTS["AlertService<br/>告警服务"]
+        DIAGS["DiagnosticsDashboard<br/>诊断仪表盘"]
+        SLO["SloService<br/>SLO 服务"]
+        CONFIG_RELOAD["ConfigHotReload<br/>配置热加载"]
+    end
+
+    subgraph STATE["💾 core/state — 状态层"]
+        MODE_STORE["SystemModeStore<br/>系统模式存储"]
+        OVERRIDE_STORE["OverrideStore<br/>覆盖存储"]
+        CONTROL_SNAP["ControlSnapshotService<br/>控制快照"]
+    end
+
+    subgraph DEPLOYMENT["🚀 core/deployment — 部署层"]
+        ENV_CONFIG["EnvironmentConfig<br/>环境配置"]
+        HEALTH["HealthCheckService<br/>健康检查"]
+        RUNBOOK["RunbookEngine<br/>操作手册引擎"]
+        RELEASE_GATE["ReleaseGateService<br/>发布闸口"]
+        DEPLOY_EXEC["DeploymentExecutor<br/>部署执行器"]
+    end
+
+    subgraph EXTERNAL["🌐 外部系统"]
+        MT5_TERMINAL["MetaTrader 5<br/>交易终端"]
+        MT5_BRIDGE["mt5_bridge_worker<br/>桥接进程"]
+        FILESYSTEM["文件系统<br/>outbox/ledger/receipts"]
+    end
+
+    %% ===================================================================
+    %% 核心数据流关系
+    %% ===================================================================
+    LIVE -->|1. 启动| SC
+    SC -->|"2. build()"| FEAT_SVC
+    SC -->|3. 装配| BRAIN_RUN
+    SC -->|4. 装配| DECISION_COMPILER
+    LIVE -->|5. 每周期| FEAT_SVC
+    FEAT_SVC -->|Tier1: 读缓存| FEAT_STORE
+    FEAT_SVC -->|Tier2: 实时计算| FEAT_COMPUTER
+    FEAT_COMPUTER -->|归一化| FEAT_ADAPTER
+    FEAT_SVC -->|6. 特征向量| BRAIN_RUN
+    BRAIN_RUN -->|7. 推理| BRAIN_ADAPTER_V9
+    BRAIN_RUN -->|8. BrainDecisionProposal| PARLIAMENT_SVC
+    PARLIAMENT_SVC -->|9. 投票结果| OVERRIDE
+    OVERRIDE -->|10. 最终意图| COMPILER
+    COMPILER -->|11. DecisionIntent| INTENT_MSG
+    INTENT_MSG -->|12. CommunicationEnvelope| DISPATCHER
+    DISPATCHER -->|13. 路由| ADAPTER_REG
+    ADAPTER_REG -->|14a. 存根| STUB_ADAPTER
+    ADAPTER_REG -->|14b. 文件队列| FILEQ_ADAPTER
+    ADAPTER_REG -->|14c. MT5| MT5_ADAPTER
+    ADAPTER_REG -->|14d. FIX| FIX_ADAPTER
+    MT5_ADAPTER -->|15. 下单| MT5_BRIDGE
+    MT5_BRIDGE -->|16. 执行| MT5_TERMINAL
+    DISPATCHER -->|17. 记录| COMM_WRITER
+    COMM_WRITER --> LEDGER_STORE
+    COMM_READER --> LEDGER_STORE
+    EXEC_WRITER --> LEDGER_STORE
+    EXEC_READER --> LEDGER_STORE
+    DECISION_WRITER --> LEDGER_STORE
+    EXEC_MGR --> POS_TRACKER
+    RISK_SVC -->|风控判定| COMPILER
+    RISK_POLICIES --> RISK_SVC
+    FEEDBACK_LOOP --> BRAIN_TRACKER
+    FEEDBACK_LOOP --> DECISION_SCORER
+    OUTCOME_COLL --> FEEDBACK_LOOP
+    METRICS --> SLO
+    AUDIT_LOG --> ALERTS
+    CONTROL_SNAP --> MODE_STORE
+    CONTROL_SNAP --> OVERRIDE_STORE
+    GOV_RULES --> COMPILER
+    GOV_SVC --> GOV_RULES
