@@ -190,6 +190,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--disable-onnx", action="store_true", help="Use deterministic fallback instead of ONNX"
     )
     p.add_argument(
+        "--brain-type",
+        default="onnx_v9",
+        choices=["onnx_v9", "xgboost_v4.5", "ou_params_v6"],
+        help="Brain type for inference adapter dispatch (default: onnx_v9)",
+    )
+    p.add_argument(
         "--feature-store-dir",
         default=DEFAULT_FEATURE_STORE_DIR,
         help="Directory for LocalFeatureStore persistence (relative to cwd or absolute)",
@@ -279,11 +285,16 @@ def main(argv: list[str] | None = None) -> int:
         store_timeframe="M1",
     )
 
-    # ── Initialize ONNX brain adapter ──
-    from core.brains.adapters.v9_onnx_brain_adapter import V9OnnxBrainAdapter
+    # ── Initialize brain adapter (BrainFactory for multi-model, V9 direct for ONNX) ──
+    if args.brain_type == "onnx_v9":
+        from core.brains.adapters.v9_onnx_brain_adapter import V9OnnxBrainAdapter
 
-    brain = V9OnnxBrainAdapter(brain_entry, feature_adapter=feature_adapter)
-    brain.load()
+        brain = V9OnnxBrainAdapter(brain_entry, feature_adapter=feature_adapter)
+        brain.load()
+    else:
+        from core.brains.services.brain_factory import BrainFactory
+
+        brain = BrainFactory().build(brain_entry)
 
     last_fire = 0.0
     flag_notice = False
