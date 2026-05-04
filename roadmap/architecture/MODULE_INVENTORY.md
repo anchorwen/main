@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-04T01:27:54Z
-> **扫描模块数**: 219
+> **自动生成**: 2026-05-04T06:10:07Z
+> **扫描模块数**: 228
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -10,14 +10,14 @@
 |------|------|----|------|------|------|------|
 | `backtest_runner.py` | ✅ active | BacktestRunner, BacktestResult | 6 | 153 | — | |
 | `batch_processor.py` | ✅ active | BatchProcessor | 3 | 77 | — | |
-| `bootstrap_v9.py` | ✅ active | — | 5 | 70 | — | |
-| `cli.py` | ✅ active | — | 42 | 1501 | — | |
+| `bootstrap_v9.py` | ✅ active | — | 5 | 71 | — | |
+| `cli.py` | ✅ active | — | 42 | 1519 | — | |
 | `communication_ops_cli.py` | ✅ active | — | 7 | 133 | — | |
 | `communication_summary_contract.py` | ✅ active | — | 1 | 71 | — | |
 | `diagnostics_cli.py` | ✅ active | DiagnosticsCLI | 10 | 129 | — | |
-| `main_v9_shadow.py` | ✅ active | FeatureInputError, OutputPlan, StreamEnvelopePlan, SessionStreamPlan, BaselineSuiteSpec, FormalBaselineManifest, ShadowSessionManager | 91 | 2171 | — | |
+| `main_v9_shadow.py` | ✅ active | FeatureInputError, OutputPlan, StreamEnvelopePlan, SessionStreamPlan, BaselineSuiteSpec, FormalBaselineManifest, ShadowSessionManager | 91 | 2176 | — | |
 | `orchestrator.py` | ✅ active | CycleOutcome, DecisionCycleOrchestrator | 6 | 297 | — | |
-| `runtime_loop.py` | ✅ active | SimpleFeatureSnapshot, DecisionCycleResult, RuntimeLoop | 2 | 195 | — | |
+| `runtime_loop.py` | ✅ active | SimpleFeatureSnapshot, DecisionCycleResult, RuntimeLoop | 2 | 200 | — | |
 | `system_facade.py` | ✅ active | SystemFacade, SystemSelfTest | 27 | 236 | — | |
 | `v9_shadow_sse.py` | ✅ active | SessionStreamQueryError, SessionStreamResponseStartError, SessionSSEClientBuffer, ShadowSessionSSEHandler | 22 | 314 | — | |
 | `v9_shadow_support.py` | ✅ active | StubFeatureService, V9ParliamentAdapter | 2 | 66 | — | |
@@ -46,9 +46,9 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `base_adapter.py` | ✅ active | BaseBrainAdapter | 7 | 115 | — | |
-| `params_brain_adapter.py` | ✅ active | ParamsBrainAdapter | 8 | 298 | — | |
-| `v9_onnx_brain_adapter.py` | ✅ active | V9OnnxBrainAdapter | 9 | 230 | — | |
-| `xgboost_brain_adapter.py` | ✅ active | XGBoostBrainAdapter | 6 | 175 | — | |
+| `params_brain_adapter.py` | ✅ active | ParamsBrainAdapter | 8 | 299 | — | |
+| `v9_onnx_brain_adapter.py` | ✅ active | V9OnnxBrainAdapter | 9 | 231 | — | |
+| `xgboost_brain_adapter.py` | ✅ active | XGBoostBrainAdapter | 6 | 176 | — | |
 
 ## core/brains/services
 
@@ -73,7 +73,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `brain_decision_proposal.py` | ✅ active | BrainDecisionProposal | 2 | 51 | — | |
+| `brain_decision_proposal.py` | ✅ active | BrainDecisionProposal | 2 | 53 | — | |
 | `communication_envelope.py` | ✅ active | CommunicationEnvelope | 1 | 42 | — | |
 | `communication_record.py` | ✅ active | CommunicationRecord | 2 | 85 | — | |
 | `decision_candidate.py` | ✅ active | DecisionCandidate | 1 | 27 | — | |
@@ -125,7 +125,7 @@
 | `runbook_engine.py` | ✅ active | RunbookEngine | 16 | 673 | — | |
 | `scheduler_service.py` | ✅ active | ScheduledTask, SchedulerService | 14 | 190 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 29 | — | |
-| `service_container.py` | ✅ active | ServiceContainer | 41 | 532 | — | |
+| `service_container.py` | ✅ active | ServiceContainer | 41 | 549 | — | |
 | `state_persistence.py` | ✅ active | StatePersistence | 6 | 100 | — | |
 | `validation_mode.py` | ✅ active | — | 1 | 10 | — | |
 
@@ -253,7 +253,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `parliament_service.py` | ✅ active | ParliamentService | 9 | 174 | — | |
+| `parliament_service.py` | ✅ active | ParliamentService | 9 | 175 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 
 ## core/protocol
@@ -346,30 +346,38 @@
 |------|------|----|------|------|------|------|
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `ingest_live_journal_to_alpha.py` | ✅ active | — | 4 | 96 | — | |
-| `live_auto_healthcheck.py` | ✅ active | — | 11 | 220 | — | |
-| `live_daily_recap.py` | ✅ active | — | 12 | 299 | — | |
-| `live_data_quality_report.py` | ✅ active | — | 10 | 261 | — | |
-| `live_dispatch_policy.py` | ✅ active | — | 10 | 310 | — | |
-| `live_intent_loop.py` | ✅ active | — | 11 | 467 | — | |
+| `live_auto_healthcheck.py` | ✅ active | — | 11 | 226 | — | |
+| `live_daily_recap.py` | ✅ active | — | 16 | 502 | — | |
+| `live_data_quality_report.py` | ✅ active | — | 13 | 362 | — | |
+| `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
+| `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
+| `live_intent_loop.py` | ✅ active | — | 13 | 619 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 136 | — | |
 | `live_read_only_preflight.py` | ✅ active | — | 5 | 139 | — | |
-| `live_shadow_intent_producer.py` | ✅ active | — | 7 | 256 | — | |
+| `live_shadow_ensemble.py` | ✅ active | — | 8 | 269 | — | |
+| `live_shadow_intent_producer.py` | ✅ active | — | 7 | 262 | — | |
 | `live_stack_diagnostic.py` | ✅ active | — | 5 | 204 | — | |
 | `market_calendar.py` | ✅ active | — | 3 | 69 | — | |
-| `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 149 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 17 | 457 | — | |
-| `mt5_positions_snapshot.py` | ✅ active | — | 4 | 91 | — | |
-| `mt5_spread_probe.py` | ✅ active | — | 1 | 65 | — | |
+| `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 17 | 465 | — | |
+| `mt5_positions_snapshot.py` | ✅ active | — | 4 | 97 | — | |
+| `mt5_spread_probe.py` | ✅ active | — | 1 | 67 | — | |
 | `runtime_protection_guard.py` | ✅ active | — | 1 | 22 | — | |
 | `send_live_order.py` | ✅ active | — | 8 | 249 | — | |
 | `shadow_live_compare_report.py` | ✅ active | — | 9 | 217 | — | |
-| `trade_quality_report.py` | ✅ active | — | 6 | 109 | — | |
+| `trade_quality_report.py` | ✅ active | — | 6 | 113 | — | |
 
 ## scripts/dev
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `fix_project.py` | ✅ active | — | 13 | 457 | — | |
+| `fix_project.py` | ✅ active | — | 13 | 466 | — | |
+
+## scripts/features
+
+| 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
+|------|------|----|------|------|------|------|
+| `feature_store_warmer.py` | ✅ active | — | 13 | 327 | — | |
 
 ## scripts/guards
 
@@ -382,17 +390,28 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `batch_train_skeleton.py` | ✅ active | — | 2 | 105 | — | |
-| `crt_manifest.py` | ✅ active | CRTManifestV1 | 9 | 150 | — | |
-| `generate_batch_plan.py` | ✅ active | — | 5 | 269 | — | |
+| `brain_leaderboard.py` | ✅ active | — | 8 | 256 | — | |
+| `crt_manifest.py` | ✅ active | CRTManifestV1 | 9 | 156 | — | |
+| `eval_alignment.py` | ✅ active | — | 9 | 318 | — | |
+| `generate_batch_plan.py` | ✅ active | — | 5 | 275 | — | |
+| `label_builder.py` | ✅ active | — | 10 | 288 | — | |
 | `monitor_training.py` | ✅ active | — | 18 | 421 | — | |
-| `run_train_batch.py` | ✅ active | — | 6 | 268 | — | |
+| `register_brain.py` | ✅ active | — | 5 | 142 | — | |
+| `run_train_batch.py` | ✅ active | — | 6 | 274 | — | |
 | `write_manifest_stub.py` | ✅ active | — | 2 | 60 | — | |
-| `your_trainer.py` | ✅ active | — | 7 | 198 | — | |
+| `your_trainer.py` | ✅ active | — | 7 | 204 | — | |
 
 ## scripts/training/trainers
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `arb_trainer.py` | ✅ active | — | 5 | 477 | — | |
-| `mtx_trainer.py` | ✅ active | — | 7 | 352 | — | |
-| `sur_trainer.py` | ✅ active | — | 5 | 267 | — | |
+| `arb_trainer.py` | ✅ active | — | 5 | 483 | — | |
+| `mtx_trainer.py` | ✅ active | — | 7 | 358 | — | |
+| `sur_trainer.py` | ✅ active | — | 5 | 273 | — | |
+
+## scripts/validators
+
+| 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
+|------|------|----|------|------|------|------|
+| `feature_quality_validator.py` | ✅ active | — | 5 | 204 | — | |
+| `journal_validator.py` | ✅ active | — | 4 | 166 | — | |

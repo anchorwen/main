@@ -252,27 +252,41 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip feature persistence to LocalFeatureStore (use only live computation)",
     )
+    p.add_argument(
+        "--once",
+        action="store_true",
+        help="Run a single iteration and exit (useful for one-shot testing)",
+    )
+    p.add_argument(
+        "--no-mt5",
+        action="store_true",
+        help="Skip MT5 initialization; use zero feature vector for brain inference verification",
+    )
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    # ── Import MT5 ──
-    try:
-        import MetaTrader5 as mt5  # type: ignore
-    except Exception as exc:
-        print(json.dumps({"error": "MetaTrader5 package required", "detail": str(exc)}, indent=2))
-        return 2
-
-    if not mt5.initialize(path=args.mt5_terminal_path):  # type: ignore[attr-defined]
-        print(
-            json.dumps(
-                {"error": "mt5_initialize_failed", "detail": str(mt5.last_error())},
-                indent=2,  # type: ignore[attr-defined]
+    # ── Import MT5 (skip if --no-mt5) ──
+    mt5: Any = None
+    if not args.no_mt5:
+        try:
+            import MetaTrader5 as mt5  # type: ignore
+        except Exception as exc:
+            print(
+                json.dumps({"error": "MetaTrader5 package required", "detail": str(exc)}, indent=2)
             )
-        )
-        return 2
+            return 2
+
+        if not mt5.initialize(path=args.mt5_terminal_path):  # type: ignore[attr-defined]
+            print(
+                json.dumps(
+                    {"error": "mt5_initialize_failed", "detail": str(mt5.last_error())},
+                    indent=2,  # type: ignore[attr-defined]
+                )
+            )
+            return 2
 
     # ── Load configs ──
     try:
@@ -281,14 +295,16 @@ def main(argv: list[str] | None = None) -> int:
         print(
             json.dumps({"error": "normalization_config_load_failed", "detail": str(exc)}, indent=2)
         )
-        mt5.shutdown()  # type: ignore[attr-defined]
+        if mt5 is not None:
+            mt5.shutdown()  # type: ignore[attr-defined]
         return 2
 
     try:
         brain_entry = load_brain_entry(args.brain_entry)
     except Exception as exc:
         print(json.dumps({"error": "brain_entry_load_failed", "detail": str(exc)}, indent=2))
-        mt5.shutdown()  # type: ignore[attr-defined]
+        if mt5 is not None:
+            mt5.shutdown()  # type: ignore[attr-defined]
         return 2
 
     # Apply overrides
@@ -302,35 +318,41 @@ def main(argv: list[str] | None = None) -> int:
     if str(_project_root) not in sys.path:
         sys.path.insert(0, str(_project_root))
 
-    # ── Initialize feature computer ──
-    from core.features.computers.v9_live_computer import V9LiveFeatureComputer
+    # ── Initialize feature computer (skip if --no-mt5) ──
+    feature_adapter: Any = None
+    feature_service: Any = None
 
-    feature_computer = V9LiveFeatureComputer(mt5, args.symbol)
+    if not args.no_mt5:
+        from core.features.computers.v9_live_computer import V9LiveFeatureComputer
 
-    # ── Initialize feature adapter with normalization ──
-    from core.features.adapters.v9_feature_adapter import V9FeatureAdapter
+        feature_computer = V9LiveFeatureComputer(mt5, args.symbol)
 
-    feature_adapter = V9FeatureAdapter(normalization_config=norm_config)
+        # ── Initialize feature adapter with normalization ──
+        from core.features.adapters.v9_feature_adapter import V9FeatureAdapter
 
-    # ── Initialize LocalFeatureStore (Fix 1: feature persistence) ──
-    _store_dir = Path(args.feature_store_dir)
-    if not _store_dir.is_absolute():
-        _store_dir = Path.cwd() / _store_dir
-    feature_store = LocalFeatureStore(str(_store_dir))
-    feature_schema = build_v9_schema(symbol=args.symbol)
-    feature_store.register_schema(feature_schema)
-    feature_store_disabled = args.disable_feature_store
+        feature_adapter = V9FeatureAdapter(normalization_config=norm_config)
 
-    # ── Initialize FeatureService (Fix 2: hierarchical store→live→stub resolution) ──
-    feature_service = FeatureService(
-        feature_adapter=feature_adapter,
-        feature_computer=feature_computer,
-        default_venue="MT5",
-        feature_store=feature_store,
-        default_symbol=args.symbol,
-        store_schema_name="v9_institutional",
-        store_timeframe="M1",
-    )
+        # ── Initialize LocalFeatureStore (Fix 1: feature persistence) ──
+        _store_dir = Path(args.feature_store_dir)
+        if not _store_dir.is_absolute():
+            _store_dir = Path.cwd() / _store_dir
+        feature_store = LocalFeatureStore(str(_store_dir))
+        feature_schema = build_v9_schema(symbol=args.symbol)
+        feature_store.register_schema(feature_schema)
+        feature_store_disabled = args.disable_feature_store
+
+        # ── Initialize FeatureService (Fix 2: hierarchical store→live→stub resolution) ──
+        feature_service = FeatureService(
+            feature_adapter=feature_adapter,
+            feature_computer=feature_computer,
+            default_venue="MT5",
+            feature_store=feature_store,
+            default_symbol=args.symbol,
+            store_schema_name="v9_institutional",
+            store_timeframe="M1",
+        )
+    else:
+        feature_store_disabled = True
 
     # ── Initialize brain adapter(s) ──
     multi_brain = args.multi_brain
@@ -361,11 +383,12 @@ def main(argv: list[str] | None = None) -> int:
                 )
         if not brains:
             print(json.dumps({"error": "no_brains_loaded", "dir": args.brains_dir}, indent=2))
-            mt5.shutdown()
+            if mt5 is not None:
+                mt5.shutdown()
             return 2
         parliament = ParliamentService()
     else:
-        if args.brain_type == "onnx_v9":
+        if args.brain_type == "onnx_v9" and not args.no_mt5:
             from core.brains.adapters.v9_onnx_brain_adapter import V9OnnxBrainAdapter
 
             brain = V9OnnxBrainAdapter(brain_entry, feature_adapter=feature_adapter)
@@ -424,17 +447,22 @@ def main(argv: list[str] | None = None) -> int:
                     time.sleep(args.interval_seconds)
                     continue
 
-                # ── Position limit check ──
-                if _position_count(mt5, args.symbol) >= args.max_positions:
+                # ── Position limit check (skip if --no-mt5) ──
+                if not args.no_mt5 and _position_count(mt5, args.symbol) >= args.max_positions:
                     time.sleep(args.interval_seconds)
                     continue
 
-                # ── Compute features via FeatureService (store → live → stub) ──
-                trigger = {"symbol": args.symbol, "venue": "MT5"}
-                feature_vector = feature_service.build_feature_vector(trigger)
+                # ── Compute features (zero vector if --no-mt5) ──
+                if args.no_mt5:
+                    import numpy as np
 
-                # ── Persist features to LocalFeatureStore (best-effort) ──
-                if not feature_store_disabled:
+                    feature_vector: Any = np.zeros(40, dtype=np.float64)
+                else:
+                    trigger = {"symbol": args.symbol, "venue": "MT5"}
+                    feature_vector = feature_service.build_feature_vector(trigger)
+
+                # ── Persist features to LocalFeatureStore (skip if --no-mt5) ──
+                if not feature_store_disabled and not args.no_mt5:
                     try:
                         for record in produce_from_live_computer(
                             feature_computer, feature_schema, args.symbol
@@ -489,67 +517,83 @@ def main(argv: list[str] | None = None) -> int:
                         skip_event["runtime_ms"] = round(raw_output.get("runtime_ms", 0.0), 2)
                         skip_event["backend"] = brain.describe()["backend"]
                     print(json.dumps(skip_event, ensure_ascii=False), flush=True)
+                    if args.once:
+                        break
                     time.sleep(args.interval_seconds)
                     continue
 
-                # ── Get current prices for SL/TP computation ──
-                mid, bid, ask = _mid_and_prices(mt5, args.symbol)
-                ref_long = ask
-                ref_short = bid
-
-                # ── Compute SL/TP ──
                 side = direction  # "long" or "short"
-                stop_loss, take_profit, ref_for_guard = compute_sl_tp_for_side(
-                    side,
-                    ref_long=ref_long,
-                    ref_short=ref_short,
-                    sl_distance=args.sl_distance,
-                    tp_distance=args.tp_distance,
-                )
 
-                _validate_sl_tp(
-                    side=side,
-                    stop_loss=stop_loss,
-                    take_profit=take_profit,
-                    reference_price=ref_for_guard,
-                )
-
-                # ── Dispatch order ──
-                out = dispatch_live_open_order(
-                    base_dir=args.base_dir,
-                    mt5_terminal_path=args.mt5_terminal_path,
-                    symbol=args.symbol,
-                    side=side,
-                    stop_loss=stop_loss,
-                    take_profit=take_profit,
-                    skip_price_guard=True,
-                    ignore_protection_flag=args.ignore_protection_flag,
-                    protection_flag_path=args.protection_flag_path,
-                    volume=args.volume,
-                )
-                last_fire = now
-
-                dispatch_event: dict[str, Any] = {
-                    "event": "intent_dispatched",
-                    "time": _utc_iso(),
-                    "mid": mid,
-                    "side": side,
-                    "confidence": round(confidence, 6),
-                    "reference_used": ref_for_guard,
-                    "sl": stop_loss,
-                    "tp": take_profit,
-                    "dispatch": out,
-                }
-                if multi_brain:
-                    dispatch_event["mode"] = "multi_brain"
-                    dispatch_event.update(consensus_extra)
+                if args.no_mt5:
+                    # ── Verification-only mode: report consensus, skip dispatch ──
+                    verify_event: dict[str, Any] = {
+                        "event": "inference_verified",
+                        "time": _utc_iso(),
+                        "side": side,
+                        "confidence": round(confidence, 6),
+                        "mode": "no_mt5_dry_run",
+                    }
+                    if multi_brain:
+                        verify_event.update(consensus_extra)
+                    print(json.dumps(verify_event, ensure_ascii=False, default=str), flush=True)
                 else:
-                    dispatch_event["out_risk"] = round(raw_output.get("out_risk", 0.0), 6)
-                    dispatch_event["out_vol"] = round(raw_output.get("out_vol", 0.0), 6)
-                    dispatch_event["runtime_ms"] = round(raw_output.get("runtime_ms", 0.0), 2)
-                    dispatch_event["backend"] = brain.describe()["backend"]
+                    # ── Get current prices for SL/TP computation ──
+                    mid, bid, ask = _mid_and_prices(mt5, args.symbol)
+                    ref_long = ask
+                    ref_short = bid
 
-                print(json.dumps(dispatch_event, ensure_ascii=False, default=str), flush=True)
+                    # ── Compute SL/TP ──
+                    stop_loss, take_profit, ref_for_guard = compute_sl_tp_for_side(
+                        side,
+                        ref_long=ref_long,
+                        ref_short=ref_short,
+                        sl_distance=args.sl_distance,
+                        tp_distance=args.tp_distance,
+                    )
+
+                    _validate_sl_tp(
+                        side=side,
+                        stop_loss=stop_loss,
+                        take_profit=take_profit,
+                        reference_price=ref_for_guard,
+                    )
+
+                    # ── Dispatch order ──
+                    out = dispatch_live_open_order(
+                        base_dir=args.base_dir,
+                        mt5_terminal_path=args.mt5_terminal_path,
+                        symbol=args.symbol,
+                        side=side,
+                        stop_loss=stop_loss,
+                        take_profit=take_profit,
+                        skip_price_guard=True,
+                        ignore_protection_flag=args.ignore_protection_flag,
+                        protection_flag_path=args.protection_flag_path,
+                        volume=args.volume,
+                    )
+                    last_fire = now
+
+                    dispatch_event = {
+                        "event": "intent_dispatched",
+                        "time": _utc_iso(),
+                        "mid": mid,
+                        "side": side,
+                        "confidence": round(confidence, 6),
+                        "reference_used": ref_for_guard,
+                        "sl": stop_loss,
+                        "tp": take_profit,
+                        "dispatch": out,
+                    }
+                    if multi_brain:
+                        dispatch_event["mode"] = "multi_brain"
+                        dispatch_event.update(consensus_extra)
+                    else:
+                        dispatch_event["out_risk"] = round(raw_output.get("out_risk", 0.0), 6)
+                        dispatch_event["out_vol"] = round(raw_output.get("out_vol", 0.0), 6)
+                        dispatch_event["runtime_ms"] = round(raw_output.get("runtime_ms", 0.0), 2)
+                        dispatch_event["backend"] = brain.describe()["backend"]
+
+                    print(json.dumps(dispatch_event, ensure_ascii=False, default=str), flush=True)
 
             except Exception as exc:
                 print(
@@ -560,9 +604,13 @@ def main(argv: list[str] | None = None) -> int:
                     flush=True,
                 )
 
+            if args.once:
+                break
+
             time.sleep(args.interval_seconds)
     finally:
-        mt5.shutdown()  # type: ignore[attr-defined]
+        if mt5 is not None:
+            mt5.shutdown()  # type: ignore[attr-defined]
 
     return 0
 

@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-05-04T01:27:54Z
+> **自动生成**: 2026-05-04T06:10:07Z
 
 ## Package-Level Dependencies
 
@@ -285,12 +285,14 @@
 - `ci_prepare_v9_shadow_fixtures.py` → `apps.engine.main_v9_shadow`
 - `ingest_live_journal_to_alpha.py` → `core.alpha.performance_store`, `core.runtime.schema_versions`, `scripts.trade_quality_report`
 - `live_auto_healthcheck.py` → `scripts.live_dispatch_policy`
-- `live_daily_recap.py` → `scripts.live_data_quality_report`, `scripts.shadow_live_compare_report`, `scripts.trade_quality_report`
-- `live_data_quality_report.py` → (无内部依赖)
+- `live_daily_recap.py` → `scripts.live_data_quality_report`, `scripts.live_feature_quality_report`, `scripts.live_shadow_ensemble`, `scripts.shadow_live_compare_report`, `scripts.trade_quality_report`, `scripts.training.brain_leaderboard`, `scripts.training.eval_alignment`
+- `live_data_quality_report.py` → `scripts.validators.journal_validator`
 - `live_dispatch_policy.py` → `scripts.guards.journal_quality`, `scripts.market_calendar`, `scripts.mt5_spread_probe`, `scripts.trade_quality_report`
-- `live_intent_loop.py` → `core.brains.adapters.v9_onnx_brain_adapter`, `core.deployment.feature_update_producer`, `core.features.adapters.v9_feature_adapter`, `core.features.computers.v9_live_computer`, `core.features.feature_service`, `core.features.local_feature_store`, `scripts.send_live_order`
+- `live_feature_quality_report.py` → `scripts.validators.feature_quality_validator`
+- `live_intent_loop.py` → `core.brains.adapters.v9_onnx_brain_adapter`, `core.brains.services.brain_factory`, `core.deployment.feature_update_producer`, `core.features.adapters.v9_feature_adapter`, `core.features.computers.v9_live_computer`, `core.features.feature_service`, `core.features.local_feature_store`, `core.parliament.parliament_service`, `scripts.send_live_order`
 - `live_micro_rollout_gate.py` → `core.contracts.domain.communication_envelope`, `core.contracts.enums`, `core.deployment.environment_config`, `core.deployment.service_container`, `core.protocol.schema_versions`
 - `live_read_only_preflight.py` → `apps.engine.system_facade`, `core.contracts.domain.communication_envelope`, `core.contracts.enums`, `core.deployment.environment_config`, `core.deployment.service_container`, `core.protocol.schema_versions`, `scripts.live_micro_rollout_gate`
+- `live_shadow_ensemble.py` → `core.brains.services.brain_factory`
 - `live_shadow_intent_producer.py` → `core.features.live_feature_source`
 - `live_stack_diagnostic.py` → `scripts.live_dispatch_policy`, `scripts.send_live_order`
 - `market_calendar.py` → (无内部依赖)
@@ -307,6 +309,10 @@
 
 - `fix_project.py` → (无内部依赖)
 
+### `scripts/features/`
+
+- `feature_store_warmer.py` → `core.features.local_feature_store`, `core.features.schemas.v9_institutional_schema`, `core.features.store_contracts`
+
 ### `scripts/guards/`
 
 - `journal_quality.py` → (无内部依赖)
@@ -314,9 +320,13 @@
 ### `scripts/training/`
 
 - `batch_train_skeleton.py` → `scripts.training.crt_manifest`
+- `brain_leaderboard.py` → (无内部依赖)
 - `crt_manifest.py` → (无内部依赖)
+- `eval_alignment.py` → (无内部依赖)
 - `generate_batch_plan.py` → (无内部依赖)
+- `label_builder.py` → (无内部依赖)
 - `monitor_training.py` → (无内部依赖)
+- `register_brain.py` → (无内部依赖)
 - `run_train_batch.py` → (无内部依赖)
 - `write_manifest_stub.py` → `scripts.training.crt_manifest`
 - `your_trainer.py` → `scripts.training.crt_manifest`
@@ -326,3 +336,8 @@
 - `arb_trainer.py` → (无内部依赖)
 - `mtx_trainer.py` → (无内部依赖)
 - `sur_trainer.py` → (无内部依赖)
+
+### `scripts/validators/`
+
+- `feature_quality_validator.py` → `core.features.schemas.v9_institutional_schema`
+- `journal_validator.py` → (无内部依赖)
