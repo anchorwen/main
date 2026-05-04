@@ -1,11 +1,13 @@
 """Unified CLI entry point for the decision system.
 
-Global: ``--env``; ``--validation-mode``; ``--no-metrics`` or ``--force-metrics`` (mutually exclusive) override
-per-environment ``enable_metrics`` for all ``ServiceContainer``-backed subcommands
-and ``validate``.  Subcommands that do not build a container (e.g. ``backtest``,
-``alpha`` file operations, ``runtime`` over ledger files) ignore these flags.
-Global options (``--base-dir``, ``--env``, metrics) may appear in any order as long as they
-all come before the subcommand (e.g. ``--env production --no-metrics --base-dir ./data status``,
+Global: ``--env``; ``--validation-mode``; ``--no-metrics`` or ``--force-metrics``
+(mutually exclusive) override per-environment ``enable_metrics`` for all
+``ServiceContainer``-backed subcommands and ``validate``.  Subcommands that do
+not build a container (e.g. ``backtest``, ``alpha`` file operations, ``runtime``
+over ledger files) ignore these flags.
+Global options (``--base-dir``, ``--env``, metrics) may appear in any order as
+long as they all come before the subcommand (e.g.
+``--env production --no-metrics --base-dir ./data status``,
 not ``status --base-dir``).
 
 Usage:
@@ -16,56 +18,69 @@ Usage:
     python -m apps.engine.cli diagnose metrics --base-dir ./data
     python -m apps.engine.cli backtest --scenarios scenarios.json --base-dir ./data
 """
+
 import argparse
 import json
 import sys
-from datetime import datetime
 from json import JSONDecodeError
 from pathlib import Path
 
-from core.deployment.environment_config import EnvironmentConfig
+from apps.engine.backtest_runner import BacktestRunner
+from apps.engine.diagnostics_cli import DiagnosticsCLI
+from apps.engine.system_facade import SystemFacade, SystemSelfTest
+from core.alpha import (
+    AlphaAllocationPolicy,
+    AlphaLifecycleService,
+    AlphaLifecycleState,
+    AlphaPerformanceStore,
+    AlphaPortfolioAllocator,
+    AlphaPromotionGate,
+    AlphaRecord,
+    AlphaRegistry,
+    AlphaRiskBudgetExporter,
+)
+from core.alpha.schema_versions import SCHEMA_ALPHA_RISK_BUDGET
 from core.deployment.domain_keys import (
     ENGINE_CONFIG_KEY_HOT_RELOAD,
     EVIDENCE_SECTION_ENGINE_CONFIG,
     VALIDATION_MODE_DEEP,
     VALIDATION_MODE_FAST,
 )
-from core.deployment.service_container import ServiceContainer
+from core.deployment.environment_config import EnvironmentConfig
 from core.deployment.lifecycle_manager import LifecycleManager
-from core.deployment.state_persistence import StatePersistence
+from core.deployment.operational_support import ConfigValidator
 from core.deployment.scheduler_service import SchedulerService
 from core.deployment.schema_versions import (
     SCHEMA_ENGINE_CONFIG_RELOAD_RESULT,
     SCHEMA_ENGINE_CONFIG_STATUS,
 )
-from core.deployment.operational_support import ConfigValidator
+from core.deployment.service_container import ServiceContainer
+from core.deployment.state_persistence import StatePersistence
+from core.execution import PaperExecutionGateway
+from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
 from core.observability.alert_service import AlertService, LogAlertChannel
-from apps.engine.system_facade import SystemFacade, SystemSelfTest
-from apps.engine.diagnostics_cli import DiagnosticsCLI
-from apps.engine.backtest_runner import BacktestRunner
 from core.runtime import (
-    RuntimeCycleReplay,
     AlphaBudgetContractError,
-    RuntimeEvidenceReader,
-    RuntimeEvidenceWriter,
-    ExecutionGatewayRouter,
-    RuntimeExecutionApprovalChain,
-    RuntimeGovernanceGate,
-    RuntimeRiskGate,
-    RuntimeExecutionPipeline,
-    RuntimeSummaryService,
     AlphaBudgetUsageReporter,
     AlphaBudgetUsageStore,
     AlphaRiskBudgetGate,
+    ExecutionGatewayRouter,
     OrderSizingPolicy,
+    RuntimeCycleReplay,
+    RuntimeEvidenceReader,
+    RuntimeEvidenceWriter,
+    RuntimeExecutionApprovalChain,
+    RuntimeExecutionPipeline,
+    RuntimeGovernanceGate,
+    RuntimeRiskGate,
+    RuntimeSummaryService,
     SignalOrderRequestBuilder,
 )
-from core.execution import PaperExecutionGateway
-from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
 from core.runtime.schema_versions import (
     SCHEMA_ALPHA_BATCH_EVALUATION,
     SCHEMA_ALPHA_BUDGET_USAGE,
     SCHEMA_ALPHA_BUDGET_USAGE_REPORT,
+    SCHEMA_ALPHA_LIVE_BRIDGE_INGESTION,
     SCHEMA_ALPHA_RUNTIME_INGESTION,
     SCHEMA_CLI_ERROR,
     SCHEMA_ENGINE_STATUS,
@@ -74,28 +89,21 @@ from core.runtime.schema_versions import (
 )
 from core.strategies.examples import ThresholdAlphaAgent
 from core.strategies.registry import StrategyPluginRegistry, StrategyPluginRunner
-from core.alpha import (
-    AlphaLifecycleService,
-    AlphaAllocationPolicy,
-    AlphaLifecycleState,
-    AlphaPerformanceStore,
-    AlphaPortfolioAllocator,
-    AlphaPromotionGate,
-    AlphaRiskBudgetExporter,
-    AlphaRecord,
-    AlphaRegistry,
-)
-from core.alpha.schema_versions import SCHEMA_ALPHA_RISK_BUDGET
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="engine", description="Decision Engine CLI")
     parser.add_argument("--base-dir", default="./data")
-    parser.add_argument("--env", choices=["development", "production", "test"], default="development")
+    parser.add_argument(
+        "--env", choices=["development", "production", "test"], default="development"
+    )
     parser.add_argument(
         "--live-read-only",
         action="store_true",
-        help="Enable live read-only guard: block real dispatch attempts while keeping runtime visibility.",
+        help=(
+            "Enable live read-only guard: block real dispatch attempts while keeping"
+            " runtime visibility."
+        ),
     )
     parser.add_argument(
         "--mt5-terminal-path",
@@ -103,10 +111,43 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional MT5 terminal executable path for live integration prechecks.",
     )
     parser.add_argument(
+        "--adapter-name",
+        choices=["stub", "file_queue", "mt5"],
+        default=None,
+        help="Dispatch adapter backend. Use mt5 for MT5 bridge handoff.",
+    )
+    parser.add_argument(
+        "--dispatch-outbox-dir",
+        default=None,
+        help="Outbox directory used by file_queue adapter.",
+    )
+    parser.add_argument(
+        "--mt5-outbox-dir",
+        default=None,
+        help="Outbox directory used by mt5 adapter handoff.",
+    )
+    parser.add_argument(
+        "--enable-live-dispatch",
+        action="store_true",
+        help=(
+            "Enable real dispatch path (keep disabled by default; combine with symbol"
+            " allowlist for micro rollout)."
+        ),
+    )
+    parser.add_argument(
+        "--live-allowed-symbol",
+        action="append",
+        default=[],
+        help="Symbol allowlist entry for live dispatch. Repeat for multiple symbols.",
+    )
+    parser.add_argument(
         "--validation-mode",
         choices=[VALIDATION_MODE_FAST, VALIDATION_MODE_DEEP],
         default=None,
-        help="Default validation depth for deployment/governance commands (can be overridden per subcommand)",
+        help=(
+            "Default validation depth for deployment/governance commands"
+            " (can be overridden per subcommand)"
+        ),
     )
     mgroup = parser.add_mutually_exclusive_group()
     mgroup.add_argument(
@@ -117,7 +158,10 @@ def build_parser() -> argparse.ArgumentParser:
     mgroup.add_argument(
         "--force-metrics",
         action="store_true",
-        help="Enable in-process metrics (overrides env default, e.g. test which defaults metrics off)",
+        help=(
+            "Enable in-process metrics (overrides env default, e.g. test which defaults"
+            " metrics off)"
+        ),
     )
     sub = parser.add_subparsers(dest="command")
 
@@ -129,8 +173,12 @@ def build_parser() -> argparse.ArgumentParser:
     ecfg.add_argument("action", choices=["status", "reload"])
 
     diag = sub.add_parser("diagnose", help="Diagnostics subcommands")
-    diag.add_argument("subcommand", nargs="?", default="snapshot",
-                       choices=["health", "metrics", "snapshot", "brain", "audit", "positions", "orders"])
+    diag.add_argument(
+        "subcommand",
+        nargs="?",
+        default="snapshot",
+        choices=["health", "metrics", "snapshot", "brain", "audit", "positions", "orders"],
+    )
 
     bt = sub.add_parser("backtest", help="Run backtest from scenarios file")
     bt.add_argument("--scenarios", required=True, help="Path to JSON scenarios file")
@@ -164,7 +212,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     gate = sub.add_parser("gate", help="Evaluate deployment release gate")
     gate.add_argument("--output", default=None, help="Path to save release gate report JSON")
-    gate.add_argument("--non-strict", action="store_true", help="Warn instead of block on warning-level signals")
+    gate.add_argument(
+        "--non-strict", action="store_true", help="Warn instead of block on warning-level signals"
+    )
     gate.add_argument(
         "--validation-mode",
         choices=[VALIDATION_MODE_FAST, VALIDATION_MODE_DEEP],
@@ -179,7 +229,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     ev = sub.add_parser("evidence", help="Build or verify release evidence bundle")
     ev.add_argument("action", choices=["build", "verify"])
-    ev.add_argument("--output-dir", default="reports/evidence", help="Directory for evidence bundle output")
+    ev.add_argument(
+        "--output-dir", default="reports/evidence", help="Directory for evidence bundle output"
+    )
     ev.add_argument("--label", default=None, help="Evidence bundle label")
     ev.add_argument("--manifest", default=None, help="Manifest path for verification")
     ev.add_argument(
@@ -198,7 +250,9 @@ def build_parser() -> argparse.ArgumentParser:
     dp.add_argument("--version", default="0.1.0")
     dp.add_argument("--strategy", choices=["standard", "canary", "shadow"], default="standard")
     dp.add_argument("--output", default=None, help="Path to save deployment plan JSON")
-    dp.add_argument("--evidence-dir", default=None, help="Optional evidence bundle output directory")
+    dp.add_argument(
+        "--evidence-dir", default=None, help="Optional evidence bundle output directory"
+    )
     dp.add_argument("--non-strict", action="store_true", help="Allow warning-level gate signals")
     dp.add_argument(
         "--alpha-budget-usage-report",
@@ -236,15 +290,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validation depth: fast (core checks) or deep (core + compliance checks)",
     )
 
-    ot = sub.add_parser("ops-timeline", help="Record, list, summarize, or export operations timeline")
-    ot.add_argument("action", choices=["record-gate", "record-deploy-exec", "record-rollback", "record-evidence", "list", "summary", "export", "clear"])
+    ot = sub.add_parser(
+        "ops-timeline", help="Record, list, summarize, or export operations timeline"
+    )
+    ot.add_argument(
+        "action",
+        choices=[
+            "record-gate",
+            "record-deploy-exec",
+            "record-rollback",
+            "record-evidence",
+            "list",
+            "summary",
+            "export",
+            "clear",
+        ],
+    )
     ot.add_argument("--input", default=None, help="Input JSON report for record actions")
     ot.add_argument("--event-type", default=None, help="Filter event type for list")
     ot.add_argument("--limit", type=int, default=None, help="Limit events for list")
     ot.add_argument("--output", default=None, help="Export output path")
     ot.add_argument("--actor", default="system")
 
-    pm = sub.add_parser("postmortem-report", help="Generate postmortem report from operations timeline")
+    pm = sub.add_parser(
+        "postmortem-report", help="Generate postmortem report from operations timeline"
+    )
     pm.add_argument("--incident-id", required=True)
     pm.add_argument("--title", default="Operational Postmortem")
     pm.add_argument("--severity", default="informational")
@@ -282,12 +352,18 @@ def build_parser() -> argparse.ArgumentParser:
     rc.add_argument("--approver", default="system")
     rc.add_argument("--output", default=None, help="Path to save release certificate JSON")
 
-    rr = sub.add_parser("release-registry", help="Register, list, verify, or export release certificates")
-    rr.add_argument("action", choices=["register", "list", "summary", "latest", "verify", "export", "clear"])
+    rr = sub.add_parser(
+        "release-registry", help="Register, list, verify, or export release certificates"
+    )
+    rr.add_argument(
+        "action", choices=["register", "list", "summary", "latest", "verify", "export", "clear"]
+    )
     rr.add_argument("--certificate", default=None, help="Release certificate JSON path")
     rr.add_argument("--record-id", default=None, help="Registry record id for verify")
     rr.add_argument("--version", default=None, help="Filter by version")
-    rr.add_argument("--certified", action="store_true", help="Filter only certified records for list")
+    rr.add_argument(
+        "--certified", action="store_true", help="Filter only certified records for list"
+    )
     rr.add_argument("--output", default=None, help="Export output path")
     rr.add_argument("--actor", default="system")
 
@@ -318,7 +394,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validation depth: fast (core checks) or deep (core + compliance checks)",
     )
 
-    om = sub.add_parser("ops-maturity", help="Compute operations maturity score (0–100) with Alpha budget pillar")
+    om = sub.add_parser(
+        "ops-maturity", help="Compute operations maturity score (0–100) with Alpha budget pillar"
+    )
     om.add_argument("--output", default=None, help="Path to save ops maturity report JSON")
     om.add_argument(
         "--min-score",
@@ -335,19 +413,35 @@ def build_parser() -> argparse.ArgumentParser:
 
     rt = sub.add_parser("runtime", help="Inspect runtime cycle evidence")
     rt.add_argument("action", choices=["list-cycles", "replay", "inspect", "run-paper", "summary"])
-    rt.add_argument("--cycle-id", default=None, help="Runtime cycle id for replay/inspect/run-paper")
-    rt.add_argument("--ledger-dir", default=None, help="Ledger base directory, defaults to <base-dir>/ledger")
+    rt.add_argument(
+        "--cycle-id", default=None, help="Runtime cycle id for replay/inspect/run-paper"
+    )
+    rt.add_argument(
+        "--ledger-dir", default=None, help="Ledger base directory, defaults to <base-dir>/ledger"
+    )
     rt.add_argument("--output", default=None, help="Path to save JSON output")
     rt.add_argument("--symbol", default="XAUUSD", help="Symbol for runtime run-paper")
-    rt.add_argument("--feature", action="append", default=[], help="Feature key=value for runtime run-paper")
+    rt.add_argument(
+        "--feature", action="append", default=[], help="Feature key=value for runtime run-paper"
+    )
     rt.add_argument("--price", type=float, default=None, help="Market price for runtime run-paper")
     rt.add_argument("--bid", type=float, default=None, help="Bid price for runtime run-paper")
     rt.add_argument("--ask", type=float, default=None, help="Ask price for runtime run-paper")
-    rt.add_argument("--base-quantity", type=float, default=10.0, help="Base quantity for runtime run-paper")
+    rt.add_argument(
+        "--base-quantity", type=float, default=10.0, help="Base quantity for runtime run-paper"
+    )
     rt.add_argument("--strategy-id", default="alpha1", help="Strategy id for runtime run-paper")
-    rt.add_argument("--feature-name", default="ema_bias", help="Feature name used by reference threshold strategy")
-    rt.add_argument("--buy-threshold", type=float, default=1.0, help="Buy threshold for reference strategy")
-    rt.add_argument("--sell-threshold", type=float, default=-1.0, help="Sell threshold for reference strategy")
+    rt.add_argument(
+        "--feature-name",
+        default="ema_bias",
+        help="Feature name used by reference threshold strategy",
+    )
+    rt.add_argument(
+        "--buy-threshold", type=float, default=1.0, help="Buy threshold for reference strategy"
+    )
+    rt.add_argument(
+        "--sell-threshold", type=float, default=-1.0, help="Sell threshold for reference strategy"
+    )
     rt.add_argument("--limit", type=int, default=None, help="Limit cycles for runtime summary")
     rt.add_argument(
         "--alpha-risk-budget",
@@ -361,31 +455,91 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     alpha = sub.add_parser("alpha", help="Manage Alpha Factory registry and lifecycle")
-    alpha.add_argument("action", choices=["register", "list", "transition", "performance", "evaluate", "ingest-runtime", "batch-evaluate", "allocate", "export-risk-budget", "budget-usage", "budget-usage-reset"])
+    alpha.add_argument(
+        "action",
+        choices=[
+            "register",
+            "list",
+            "transition",
+            "performance",
+            "evaluate",
+            "ingest-runtime",
+            "ingest-live-bridge",
+            "batch-evaluate",
+            "allocate",
+            "export-risk-budget",
+            "budget-usage",
+            "budget-usage-reset",
+        ],
+    )
     alpha.add_argument("--alpha-id", default=None)
     alpha.add_argument("--name", default=None)
     alpha.add_argument("--version", default="1.0")
     alpha.add_argument("--strategy-id", default=None)
-    alpha.add_argument("--state", default="candidate", choices=[state.value for state in AlphaLifecycleState])
-    alpha.add_argument("--to-state", default=None, choices=[state.value for state in AlphaLifecycleState])
+    alpha.add_argument(
+        "--state", default="candidate", choices=[state.value for state in AlphaLifecycleState]
+    )
+    alpha.add_argument(
+        "--to-state", default=None, choices=[state.value for state in AlphaLifecycleState]
+    )
     alpha.add_argument("--reason", default="manual")
-    alpha.add_argument("--metric", action="append", default=[], help="Metric key=value for alpha performance")
-    alpha.add_argument("--registry-file", default=None, help="Alpha registry JSON path, defaults to <base-dir>/alpha_registry.json")
-    alpha.add_argument("--performance-file", default=None, help="Alpha performance JSON path, defaults to <base-dir>/alpha_performance.json")
-    alpha.add_argument("--ledger-dir", default=None, help="Runtime ledger directory for alpha ingest-runtime")
-    alpha.add_argument("--limit", type=int, default=None, help="Limit runtime cycles for alpha ingest-runtime")
-    alpha.add_argument("--apply", action="store_true", help="Apply promotion gate decision to lifecycle")
-    alpha.add_argument("--total-notional", type=float, default=100000.0, help="Total notional for alpha allocate")
+    alpha.add_argument(
+        "--metric", action="append", default=[], help="Metric key=value for alpha performance"
+    )
+    alpha.add_argument(
+        "--registry-file",
+        default=None,
+        help="Alpha registry JSON path, defaults to <base-dir>/alpha_registry.json",
+    )
+    alpha.add_argument(
+        "--performance-file",
+        default=None,
+        help="Alpha performance JSON path, defaults to <base-dir>/alpha_performance.json",
+    )
+    alpha.add_argument(
+        "--ledger-dir", default=None, help="Runtime ledger directory for alpha ingest-runtime"
+    )
+    alpha.add_argument(
+        "--limit", type=int, default=None, help="Limit runtime cycles for alpha ingest-runtime"
+    )
+    alpha.add_argument(
+        "--journal-path", default=None, help="Live trade journal JSONL for alpha ingest-live-bridge"
+    )
+    alpha.add_argument(
+        "--date", default=None, help="UTC date key (YYYY-MM-DD) for alpha ingest-live-bridge"
+    )
+    alpha.add_argument(
+        "--symbol", default=None, help="Optional journal symbol filter for alpha ingest-live-bridge"
+    )
+    alpha.add_argument(
+        "--apply", action="store_true", help="Apply promotion gate decision to lifecycle"
+    )
+    alpha.add_argument(
+        "--total-notional", type=float, default=100000.0, help="Total notional for alpha allocate"
+    )
     alpha.add_argument("--output", default=None, help="Path to save JSON output")
-    alpha.add_argument("--usage-file", default=None, help="Alpha budget usage JSON path, defaults to <base-dir>/alpha_budget_usage.json")
-    alpha.add_argument("--alpha-risk-budget", default=None, help="Alpha risk budget JSON path for alpha budget-usage report")
-    alpha.add_argument("--non-strict", action="store_true", help="Return success for warning-level alpha budget-usage reports")
+    alpha.add_argument(
+        "--usage-file",
+        default=None,
+        help="Alpha budget usage JSON path, defaults to <base-dir>/alpha_budget_usage.json",
+    )
+    alpha.add_argument(
+        "--alpha-risk-budget",
+        default=None,
+        help="Alpha risk budget JSON path for alpha budget-usage report",
+    )
+    alpha.add_argument(
+        "--non-strict",
+        action="store_true",
+        help="Return success for warning-level alpha budget-usage reports",
+    )
 
     return parser
 
 
 def _environment_config_for_args(args) -> EnvironmentConfig:
-    """Build EnvironmentConfig for --env, honoring --no-metrics / --force-metrics (mutually exclusive)."""
+    """Build EnvironmentConfig for --env, honoring --no-metrics / --force-metrics
+    (mutually exclusive)."""
     factory = {
         "development": EnvironmentConfig.development,
         "production": EnvironmentConfig.production,
@@ -398,8 +552,15 @@ def _environment_config_for_args(args) -> EnvironmentConfig:
         extra["enable_metrics"] = True
     if getattr(args, "validation_mode", None):
         extra["validation_mode"] = args.validation_mode
+    if getattr(args, "adapter_name", None):
+        extra["adapter_name"] = args.adapter_name
     if getattr(args, "live_read_only", False):
         extra["live_read_only"] = True
+    if getattr(args, "enable_live_dispatch", False):
+        extra["live_dispatch_enabled"] = True
+    allowed_symbols = tuple(getattr(args, "live_allowed_symbol", []) or [])
+    if allowed_symbols:
+        extra["live_allowed_symbols"] = allowed_symbols
     mt5_terminal_path = getattr(args, "mt5_terminal_path", None)
     if mt5_terminal_path:
         mt5_terminal = Path(mt5_terminal_path)
@@ -407,6 +568,16 @@ def _environment_config_for_args(args) -> EnvironmentConfig:
             raise FileNotFoundError(mt5_terminal_path)
         extensions = dict(extra.get("extensions", {}))
         extensions["mt5_terminal_path"] = str(mt5_terminal)
+        extra["extensions"] = extensions
+    dispatch_outbox_dir = getattr(args, "dispatch_outbox_dir", None)
+    if dispatch_outbox_dir:
+        extensions = dict(extra.get("extensions", {}))
+        extensions["dispatch_outbox_dir"] = str(Path(dispatch_outbox_dir))
+        extra["extensions"] = extensions
+    mt5_outbox_dir = getattr(args, "mt5_outbox_dir", None)
+    if mt5_outbox_dir:
+        extensions = dict(extra.get("extensions", {}))
+        extensions["mt5_outbox_dir"] = str(Path(mt5_outbox_dir))
         extra["extensions"] = extensions
     return factory[args.env](args.base_dir, **extra)
 
@@ -428,18 +599,23 @@ def cmd_run(args) -> int:
     alerts = AlertService.with_default_rules(channels=channels)
     sched = SchedulerService.for_container(container, persistence=sp, alert_service=alerts)
 
-    facade = SystemFacade(container, orchestrator=orch, lifecycle=lm,
-                          scheduler=sched, alert_service=alerts)
+    SystemFacade(container, orchestrator=orch, lifecycle=lm, scheduler=sched, alert_service=alerts)
 
     startup = lm.startup(restore_state=True)
     sched.start()
 
-    print(json.dumps({
-        "status": "running",
-        "base_dir": args.base_dir,
-        "environment": args.env,
-        "startup": startup,
-    }, indent=2, default=str))
+    print(
+        json.dumps(
+            {
+                "status": "running",
+                "base_dir": args.base_dir,
+                "environment": args.env,
+                "startup": startup,
+            },
+            indent=2,
+            default=str,
+        )
+    )
 
     return 0
 
@@ -462,24 +638,30 @@ def cmd_config(args) -> int:
     container = _build_container(args)
     hr = container.config_hot_reload
     if args.action == "status":
-        print(json.dumps({
-            "schema_version": SCHEMA_ENGINE_CONFIG_STATUS,
-            ENGINE_CONFIG_KEY_HOT_RELOAD: hr.get_status(),
-            "effective": {
-                "ops_maturity_min_score": container.config.ops_maturity_min_score,
-                "max_open_positions": container.config.max_open_positions,
-                "max_drawdown_pct": container.config.max_drawdown_pct,
-                "max_notional_exposure": container.config.max_notional_exposure,
-                "system_mode": container.config.system_mode,
-            },
-        }, indent=2, default=str))
+        print(
+            json.dumps(
+                {
+                    "schema_version": SCHEMA_ENGINE_CONFIG_STATUS,
+                    ENGINE_CONFIG_KEY_HOT_RELOAD: hr.get_status(),  # type: ignore[reportOptionalMemberAccess]
+                    "effective": {
+                        "ops_maturity_min_score": container.config.ops_maturity_min_score,
+                        "max_open_positions": container.config.max_open_positions,
+                        "max_drawdown_pct": container.config.max_drawdown_pct,
+                        "max_notional_exposure": container.config.max_notional_exposure,
+                        "system_mode": container.config.system_mode,
+                    },
+                },
+                indent=2,
+                default=str,
+            )
+        )
         return 0
-    changes = hr.check_and_reload()
+    changes = hr.check_and_reload()  # type: ignore[reportOptionalMemberAccess]
     out = {
         "schema_version": SCHEMA_ENGINE_CONFIG_RELOAD_RESULT,
         "reloaded": changes is not None,
         "changes": changes,
-        ENGINE_CONFIG_KEY_HOT_RELOAD: hr.get_status(),
+        ENGINE_CONFIG_KEY_HOT_RELOAD: hr.get_status(),  # type: ignore[reportOptionalMemberAccess]
         "effective": {
             "ops_maturity_min_score": container.config.ops_maturity_min_score,
             "max_open_positions": container.config.max_open_positions,
@@ -522,26 +704,32 @@ def cmd_backtest(args) -> int:
 
 def cmd_status(args) -> int:
     container = _build_container(args)
-    health = container.health_check.readiness()
-    brains = container.governance_service.get_all_states()
+    health = container.health_check.readiness()  # type: ignore[reportOptionalMemberAccess]
+    brains = container.governance_service.get_all_states()  # type: ignore[reportOptionalMemberAccess]
     metrics_snap = container.metrics.snapshot() if container.metrics else {}
 
-    print(json.dumps({
-        "schema_version": SCHEMA_ENGINE_STATUS,
-        "health": health,
-        "brains": {"count": len(brains), "states": brains},
-        "metrics": {k: v for k, v in metrics_snap.get("counters", {}).items()},
-        EVIDENCE_SECTION_ENGINE_CONFIG: container.evidence_bundle.engine_config_snapshot(),
-    }, indent=2, default=str))
+    print(
+        json.dumps(
+            {
+                "schema_version": SCHEMA_ENGINE_STATUS,
+                "health": health,
+                "brains": {"count": len(brains), "states": brains},
+                "metrics": {k: v for k, v in metrics_snap.get("counters", {}).items()},
+                EVIDENCE_SECTION_ENGINE_CONFIG: container.evidence_bundle.engine_config_snapshot(),  # type: ignore[reportOptionalMemberAccess]
+            },
+            indent=2,
+            default=str,
+        )
+    )
     return 0
 
 
 def cmd_readiness(args) -> int:
     container = _build_container(args)
-    report = container.release_readiness.build_report(validation_mode=args.validation_mode)
+    report = container.release_readiness.build_report(validation_mode=args.validation_mode)  # type: ignore[reportOptionalMemberAccess]
     print(json.dumps(report, indent=2, default=str))
     if args.output:
-        container.release_readiness.save_report(args.output, validation_mode=args.validation_mode)
+        container.release_readiness.save_report(args.output, validation_mode=args.validation_mode)  # type: ignore[reportOptionalMemberAccess]
         print(f"\nReadiness report saved to: {args.output}")
     return 0 if report["ready"] else 1
 
@@ -551,17 +739,17 @@ def cmd_runbook(args) -> int:
     kwargs = {"validation_mode": args.validation_mode}
     if args.name == "postmortem":
         kwargs.update({"label": args.label, "output": args.output})
-    result = container.runbook_engine.run(args.name, **kwargs)
+    result = container.runbook_engine.run(args.name, **kwargs)  # type: ignore[reportOptionalMemberAccess]
     print(json.dumps(result, indent=2, default=str))
     return 0 if result.get("passed") else 1
 
 
 def cmd_slo(args) -> int:
     container = _build_container(args)
-    report = container.slo_service.evaluate()
+    report = container.slo_service.evaluate()  # type: ignore[reportOptionalMemberAccess]
     print(json.dumps(report, indent=2, default=str))
     if args.output:
-        container.slo_service.save_report(args.output)
+        container.slo_service.save_report(args.output)  # type: ignore[reportOptionalMemberAccess]
         print(f"\nSLO report saved to: {args.output}")
     return 0 if report["status"] == "healthy" else 1
 
@@ -569,8 +757,12 @@ def cmd_slo(args) -> int:
 def cmd_gate(args) -> int:
     container = _build_container(args)
     strict = not args.non_strict
-    alpha_report = json.loads(Path(args.alpha_budget_usage_report).read_text(encoding="utf-8")) if args.alpha_budget_usage_report else None
-    report = container.release_gate.evaluate(
+    alpha_report = (
+        json.loads(Path(args.alpha_budget_usage_report).read_text(encoding="utf-8"))
+        if args.alpha_budget_usage_report
+        else None
+    )
+    report = container.release_gate.evaluate(  # type: ignore[reportOptionalMemberAccess]
         strict=strict,
         alpha_budget_usage_report=alpha_report,
         validation_mode=args.validation_mode,
@@ -586,8 +778,12 @@ def cmd_gate(args) -> int:
 def cmd_evidence(args) -> int:
     container = _build_container(args)
     if args.action == "build":
-        alpha_report = json.loads(Path(args.alpha_budget_usage_report).read_text(encoding="utf-8")) if args.alpha_budget_usage_report else None
-        result = container.evidence_bundle.build_bundle(
+        alpha_report = (
+            json.loads(Path(args.alpha_budget_usage_report).read_text(encoding="utf-8"))
+            if args.alpha_budget_usage_report
+            else None
+        )
+        result = container.evidence_bundle.build_bundle(  # type: ignore[reportOptionalMemberAccess]
             args.output_dir,
             label=args.label,
             alpha_budget_usage_report=alpha_report,
@@ -597,7 +793,7 @@ def cmd_evidence(args) -> int:
         if not args.manifest:
             print(json.dumps({"error": "--manifest is required for evidence verify"}, indent=2))
             return 1
-        result = container.evidence_bundle.verify_bundle(args.manifest)
+        result = container.evidence_bundle.verify_bundle(args.manifest)  # type: ignore[reportOptionalMemberAccess]
     print(json.dumps(result, indent=2, default=str))
     if args.action == "verify":
         return 0 if result.get("verified") else 1
@@ -606,7 +802,11 @@ def cmd_evidence(args) -> int:
 
 def cmd_deploy_plan(args) -> int:
     container = _build_container(args)
-    alpha_report = json.loads(Path(args.alpha_budget_usage_report).read_text(encoding="utf-8")) if args.alpha_budget_usage_report else None
+    alpha_report = (
+        json.loads(Path(args.alpha_budget_usage_report).read_text(encoding="utf-8"))
+        if args.alpha_budget_usage_report
+        else None
+    )
     kwargs = {
         "version": args.version,
         "strategy": args.strategy,
@@ -615,10 +815,10 @@ def cmd_deploy_plan(args) -> int:
         "alpha_budget_usage_report": alpha_report,
         "validation_mode": args.validation_mode,
     }
-    plan = container.deployment_plan.build_plan(**kwargs)
+    plan = container.deployment_plan.build_plan(**kwargs)  # type: ignore[reportOptionalMemberAccess]
     print(json.dumps(plan, indent=2, default=str))
     if args.output:
-        container.deployment_plan.save_plan(args.output, **kwargs)
+        container.deployment_plan.save_plan(args.output, **kwargs)  # type: ignore[reportOptionalMemberAccess]
         print(f"\nDeployment plan saved to: {args.output}")
     return 0 if plan.get("executable") else 1
 
@@ -626,28 +826,30 @@ def cmd_deploy_plan(args) -> int:
 def cmd_deploy_exec(args) -> int:
     container = _build_container(args)
     if args.plan:
-        result = container.deployment_executor.execute_from_file(
+        result = container.deployment_executor.execute_from_file(  # type: ignore[reportOptionalMemberAccess]
             args.plan,
             dry_run=True,
             validation_mode=args.validation_mode,
         )
     else:
-        plan = container.deployment_plan.build_plan(
+        plan = container.deployment_plan.build_plan(  # type: ignore[reportOptionalMemberAccess]
             version=args.version,
             strategy=args.strategy,
             validation_mode=args.validation_mode,
         )
-        result = container.deployment_executor.execute(plan, dry_run=True, validation_mode=args.validation_mode)
+        result = container.deployment_executor.execute(  # type: ignore[reportOptionalMemberAccess]
+            plan, dry_run=True, validation_mode=args.validation_mode
+        )
     print(json.dumps(result, indent=2, default=str))
     if args.output:
-        container.deployment_executor.save_result(result, args.output)
+        container.deployment_executor.save_result(result, args.output)  # type: ignore[reportOptionalMemberAccess]
         print(f"\nDeployment execution result saved to: {args.output}")
     return 0 if result.get("passed") else 1
 
 
 def cmd_rollback_drill(args) -> int:
     container = _build_container(args)
-    result = container.rollback_drill.run(
+    result = container.rollback_drill.run(  # type: ignore[reportOptionalMemberAccess]
         version=args.version,
         reason=args.reason,
         evidence_manifest=args.evidence_manifest,
@@ -667,31 +869,31 @@ def cmd_ops_timeline(args) -> int:
             return 1
         payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
         if args.action == "record-gate":
-            result = tl.record_release_gate(payload, actor=args.actor)
+            result = tl.record_release_gate(payload, actor=args.actor)  # type: ignore[reportOptionalMemberAccess]
         elif args.action == "record-deploy-exec":
-            result = tl.record_deployment_execution(payload, actor=args.actor)
+            result = tl.record_deployment_execution(payload, actor=args.actor)  # type: ignore[reportOptionalMemberAccess]
         elif args.action == "record-rollback":
-            result = tl.record_rollback_drill(payload, actor=args.actor)
+            result = tl.record_rollback_drill(payload, actor=args.actor)  # type: ignore[reportOptionalMemberAccess]
         else:
-            result = tl.record_evidence_bundle(payload, actor=args.actor)
+            result = tl.record_evidence_bundle(payload, actor=args.actor)  # type: ignore[reportOptionalMemberAccess]
     elif args.action == "list":
-        result = {"events": tl.list_events(event_type=args.event_type, limit=args.limit)}
+        result = {"events": tl.list_events(event_type=args.event_type, limit=args.limit)}  # type: ignore[reportOptionalMemberAccess]
     elif args.action == "summary":
-        result = tl.summarize()
+        result = tl.summarize()  # type: ignore[reportOptionalMemberAccess]
     elif args.action == "export":
         if not args.output:
             print(json.dumps({"error": "--output is required for export"}, indent=2))
             return 1
-        result = {"output": tl.export(args.output)}
+        result = {"output": tl.export(args.output)}  # type: ignore[reportOptionalMemberAccess]
     else:
-        result = tl.clear()
+        result = tl.clear()  # type: ignore[reportOptionalMemberAccess]
     print(json.dumps(result, indent=2, default=str))
     return 0
 
 
 def cmd_postmortem_report(args) -> int:
     container = _build_container(args)
-    report = container.postmortem_report.generate(
+    report = container.postmortem_report.generate(  # type: ignore[reportOptionalMemberAccess]
         incident_id=args.incident_id,
         title=args.title,
         severity=args.severity,
@@ -704,8 +906,12 @@ def cmd_postmortem_report(args) -> int:
 
 def cmd_release_pipeline(args) -> int:
     container = _build_container(args)
-    alpha_report = json.loads(Path(args.alpha_budget_usage_report).read_text(encoding="utf-8")) if args.alpha_budget_usage_report else None
-    result = container.release_pipeline.run(
+    alpha_report = (
+        json.loads(Path(args.alpha_budget_usage_report).read_text(encoding="utf-8"))
+        if args.alpha_budget_usage_report
+        else None
+    )
+    result = container.release_pipeline.run(  # type: ignore[reportOptionalMemberAccess]
         version=args.version,
         strategy=args.strategy,
         output_dir=args.output_dir,
@@ -715,7 +921,7 @@ def cmd_release_pipeline(args) -> int:
         validation_mode=args.validation_mode,
     )
     if args.output:
-        container.release_pipeline.save_result(result, args.output)
+        container.release_pipeline.save_result(result, args.output)  # type: ignore[reportOptionalMemberAccess]
         result["artifacts"]["pipeline_summary_output"] = args.output
     print(json.dumps(result, indent=2, default=str))
     return 0 if result.get("passed") else 1
@@ -725,9 +931,11 @@ def cmd_release_cert(args) -> int:
     container = _build_container(args)
     if args.action == "certify":
         if not args.pipeline:
-            print(json.dumps({"error": "--pipeline is required for release-cert certify"}, indent=2))
+            print(
+                json.dumps({"error": "--pipeline is required for release-cert certify"}, indent=2)
+            )
             return 1
-        result = container.release_certification.certify(
+        result = container.release_certification.certify(  # type: ignore[reportOptionalMemberAccess]
             pipeline_summary=args.pipeline,
             approver=args.approver,
             output=args.output,
@@ -737,7 +945,7 @@ def cmd_release_cert(args) -> int:
     if not args.certificate:
         print(json.dumps({"error": "--certificate is required for release-cert verify"}, indent=2))
         return 1
-    result = container.release_certification.verify_certificate(args.certificate)
+    result = container.release_certification.verify_certificate(args.certificate)  # type: ignore[reportOptionalMemberAccess]
     print(json.dumps(result, indent=2, default=str))
     return 0 if result.get("verified") else 1
 
@@ -749,51 +957,63 @@ def cmd_release_registry(args) -> int:
         if not args.certificate:
             print(json.dumps({"error": "--certificate is required for register"}, indent=2))
             return 1
-        result = registry.register(args.certificate, actor=args.actor)
+        result = registry.register(args.certificate, actor=args.actor)  # type: ignore[reportOptionalMemberAccess]
     elif args.action == "list":
-        result = {"records": registry.list_records(version=args.version, certified=True if args.certified else None)}
+        result = {
+            "records": registry.list_records(  # type: ignore[reportOptionalMemberAccess]
+                version=args.version, certified=True if args.certified else None
+            )
+        }
     elif args.action == "summary":
-        result = registry.summarize()
+        result = registry.summarize()  # type: ignore[reportOptionalMemberAccess]
     elif args.action == "latest":
-        result = registry.latest(version=args.version) or {}
+        result = registry.latest(version=args.version) or {}  # type: ignore[reportOptionalMemberAccess]
     elif args.action == "verify":
         if not args.record_id or not args.certificate:
-            print(json.dumps({"error": "--record-id and --certificate are required for verify"}, indent=2))
+            print(
+                json.dumps(
+                    {"error": "--record-id and --certificate are required for verify"}, indent=2
+                )
+            )
             return 1
-        result = registry.verify_record(args.record_id, args.certificate)
+        result = registry.verify_record(args.record_id, args.certificate)  # type: ignore[reportOptionalMemberAccess]
         print(json.dumps(result, indent=2, default=str))
         return 0 if result.get("verified") else 1
     elif args.action == "export":
         if not args.output:
             print(json.dumps({"error": "--output is required for export"}, indent=2))
             return 1
-        result = {"output": registry.export(args.output)}
+        result = {"output": registry.export(args.output)}  # type: ignore[reportOptionalMemberAccess]
     else:
-        result = registry.clear()
+        result = registry.clear()  # type: ignore[reportOptionalMemberAccess]
     print(json.dumps(result, indent=2, default=str))
     return 0
 
 
 def cmd_compliance_audit(args) -> int:
     container = _build_container(args)
-    report = container.compliance_audit.generate(output=args.output, validation_mode=args.validation_mode)
+    report = container.compliance_audit.generate(  # type: ignore[reportOptionalMemberAccess]
+        output=args.output, validation_mode=args.validation_mode
+    )
     print(json.dumps(report, indent=2, default=str))
     return 0 if report.get("status") in {"pass", "warn"} else 1
 
 
 def cmd_compliance_matrix(args) -> int:
     container = _build_container(args)
-    report = container.compliance_control_matrix.generate(output=args.output, validation_mode=args.validation_mode)
+    report = container.compliance_control_matrix.generate(  # type: ignore[reportOptionalMemberAccess]
+        output=args.output, validation_mode=args.validation_mode
+    )
     print(json.dumps(report, indent=2, default=str))
     return 0 if report.get("status") in {"pass", "warn"} else 1
 
 
 def cmd_final_audit(args) -> int:
     container = _build_container(args)
-    report = container.final_audit.build_report(validation_mode=args.validation_mode)
+    report = container.final_audit.build_report(validation_mode=args.validation_mode)  # type: ignore[reportOptionalMemberAccess]
     print(json.dumps(report, indent=2, default=str))
     if args.output:
-        container.final_audit.save_report(args.output, report=report)
+        container.final_audit.save_report(args.output, report=report)  # type: ignore[reportOptionalMemberAccess]
         print(f"\nFinal audit report saved to: {args.output}")
     return 0 if report.get("ready_for_production") else 1
 
@@ -802,10 +1022,10 @@ def cmd_ops_maturity(args) -> int:
     container = _build_container(args)
     if getattr(args, "min_score", None) is not None:
         container.config.ops_maturity_min_score = float(args.min_score)
-    report = container.ops_maturity.evaluate(validation_mode=args.validation_mode)
+    report = container.ops_maturity.evaluate(validation_mode=args.validation_mode)  # type: ignore[reportOptionalMemberAccess]
     print(json.dumps(report, indent=2, default=str))
     if args.output:
-        container.ops_maturity.save_report(args.output, validation_mode=args.validation_mode)
+        container.ops_maturity.save_report(args.output, validation_mode=args.validation_mode)  # type: ignore[reportOptionalMemberAccess]
         print(f"\nOps maturity report saved to: {args.output}")
     min_s = float(getattr(container.config, "ops_maturity_min_score", 60.0))
     return 0 if report.get("maturity_score", 0) >= min_s else 1
@@ -831,7 +1051,12 @@ def cmd_runtime(args) -> int:
             return 1
         record = reader.latest_cycle(args.cycle_id)
         if record is None:
-            print(json.dumps({"error": "runtime cycle evidence not found", "cycle_id": args.cycle_id}, indent=2))
+            print(
+                json.dumps(
+                    {"error": "runtime cycle evidence not found", "cycle_id": args.cycle_id},
+                    indent=2,
+                )
+            )
             return 1
         result = record
     elif args.action == "summary":
@@ -852,7 +1077,11 @@ def cmd_runtime(args) -> int:
 def _run_runtime_paper(args, ledger_dir: Path) -> dict:
     market = _parse_runtime_market(args)
     if "price" not in market and not {"bid", "ask"}.issubset(market):
-        return {"schema_version": SCHEMA_RUNTIME_RUN_PAPER, "completed": False, "error": "--price or both --bid/--ask are required"}
+        return {
+            "schema_version": SCHEMA_RUNTIME_RUN_PAPER,
+            "completed": False,
+            "error": "--price or both --bid/--ask are required",
+        }
     features = _parse_runtime_features(args.feature)
     features.setdefault(args.feature_name, 0.0)
     evidence_writer = RuntimeEvidenceWriter(JsonlLedgerStore(str(ledger_dir)))
@@ -871,19 +1100,33 @@ def _run_runtime_paper(args, ledger_dir: Path) -> dict:
     router.register("PAPER", PaperExecutionGateway())
     gates = []
     if args.alpha_risk_budget:
-        usage_store = AlphaBudgetUsageStore(args.alpha_budget_usage) if args.alpha_budget_usage else None
-        gates.append(AlphaRiskBudgetGate(
-            json.loads(Path(args.alpha_risk_budget).read_text(encoding="utf-8")),
-            usage_store=usage_store,
-        ))
-    gates.extend([
-        RuntimeRiskGate(max_quantity=max(args.base_quantity, 1.0) * 2, allowed_symbols={args.symbol}, max_notional=1_000_000),
-        RuntimeGovernanceGate(allowed_strategy_ids={args.strategy_id}, allowed_venues={"PAPER"}),
-    ])
+        usage_store = (
+            AlphaBudgetUsageStore(args.alpha_budget_usage) if args.alpha_budget_usage else None
+        )
+        gates.append(
+            AlphaRiskBudgetGate(
+                json.loads(Path(args.alpha_risk_budget).read_text(encoding="utf-8")),
+                usage_store=usage_store,
+            )
+        )
+    gates.extend(
+        [
+            RuntimeRiskGate(
+                max_quantity=max(args.base_quantity, 1.0) * 2,
+                allowed_symbols={args.symbol},
+                max_notional=1_000_000,
+            ),
+            RuntimeGovernanceGate(
+                allowed_strategy_ids={args.strategy_id}, allowed_venues={"PAPER"}
+            ),
+        ]
+    )
     chain = RuntimeExecutionApprovalChain(gates)
     pipeline = RuntimeExecutionPipeline(
         strategy_runner=runner,
-        order_builder=SignalOrderRequestBuilder(OrderSizingPolicy(base_quantity=args.base_quantity), default_venue="PAPER"),
+        order_builder=SignalOrderRequestBuilder(
+            OrderSizingPolicy(base_quantity=args.base_quantity), default_venue="PAPER"
+        ),
         gateway_router=router,
         approval_chain=chain,
         evidence_writer=evidence_writer,
@@ -925,9 +1168,21 @@ def _parse_runtime_features(items: list[str]) -> dict:
 
 
 def cmd_alpha(args) -> int:
-    registry_path = Path(args.registry_file) if args.registry_file else Path(args.base_dir) / "alpha_registry.json"
-    performance_path = Path(args.performance_file) if args.performance_file else Path(args.base_dir) / "alpha_performance.json"
-    usage_path = Path(args.usage_file) if args.usage_file else Path(args.base_dir) / "alpha_budget_usage.json"
+    registry_path = (
+        Path(args.registry_file)
+        if args.registry_file
+        else Path(args.base_dir) / "alpha_registry.json"
+    )
+    performance_path = (
+        Path(args.performance_file)
+        if args.performance_file
+        else Path(args.base_dir) / "alpha_performance.json"
+    )
+    usage_path = (
+        Path(args.usage_file)
+        if args.usage_file
+        else Path(args.base_dir) / "alpha_budget_usage.json"
+    )
     registry = _load_alpha_registry(registry_path)
     store = _load_alpha_performance(performance_path)
     if args.action == "budget-usage":
@@ -945,7 +1200,11 @@ def cmd_alpha(args) -> int:
         result = usage.to_dict()
     elif args.action == "register":
         if not args.alpha_id or not args.name:
-            print(json.dumps({"error": "--alpha-id and --name are required for alpha register"}, indent=2))
+            print(
+                json.dumps(
+                    {"error": "--alpha-id and --name are required for alpha register"}, indent=2
+                )
+            )
             return 1
         record = AlphaRecord(
             alpha_id=args.alpha_id,
@@ -961,25 +1220,55 @@ def cmd_alpha(args) -> int:
         result = registry.to_dict()
     elif args.action == "transition":
         if not args.alpha_id or not args.to_state:
-            print(json.dumps({"error": "--alpha-id and --to-state are required for alpha transition"}, indent=2))
+            print(
+                json.dumps(
+                    {"error": "--alpha-id and --to-state are required for alpha transition"},
+                    indent=2,
+                )
+            )
             return 1
         lifecycle = AlphaLifecycleService(registry)
         record = lifecycle.transition(args.alpha_id, args.to_state, reason=args.reason)
         _save_alpha_registry(registry_path, registry)
-        result = {"record": record.to_dict(), "transitions": [t.to_dict() for t in lifecycle.transitions(args.alpha_id)]}
+        result = {
+            "record": record.to_dict(),
+            "transitions": [t.to_dict() for t in lifecycle.transitions(args.alpha_id)],
+        }
     elif args.action == "performance":
         if not args.alpha_id:
             print(json.dumps({"error": "--alpha-id is required for alpha performance"}, indent=2))
             return 1
         if args.metric:
-            store.record_snapshot(args.alpha_id, _parse_alpha_metrics(args.metric), source="cli", window="manual")
+            store.record_snapshot(
+                args.alpha_id, _parse_alpha_metrics(args.metric), source="cli", window="manual"
+            )
             _save_alpha_performance(performance_path, store)
         result = store.summarize(args.alpha_id)
     elif args.action == "ingest-runtime":
         if args.strategy_id and not args.alpha_id:
-            print(json.dumps({"error": "--alpha-id is required when --strategy-id is provided for alpha ingest-runtime"}, indent=2))
+            print(
+                json.dumps(
+                    {
+                        "error": (
+                            "--alpha-id is required when --strategy-id is provided"
+                            " for alpha ingest-runtime"
+                        )
+                    },
+                    indent=2,
+                )
+            )
             return 1
         result = _alpha_ingest_runtime(args, store)
+        _save_alpha_performance(performance_path, store)
+    elif args.action == "ingest-live-bridge":
+        if not args.alpha_id:
+            print(
+                json.dumps(
+                    {"error": "--alpha-id is required for alpha ingest-live-bridge"}, indent=2
+                )
+            )
+            return 1
+        result = _alpha_ingest_live_bridge(args, store)
         _save_alpha_performance(performance_path, store)
     elif args.action == "batch-evaluate":
         result = _alpha_batch_evaluate(args, registry, store)
@@ -1004,7 +1293,11 @@ def cmd_alpha(args) -> int:
             return 1
         lifecycle = AlphaLifecycleService(registry)
         record = registry.require(args.alpha_id)
-        decision = AlphaPromotionGate(store).apply(record, lifecycle) if args.apply else AlphaPromotionGate(store).evaluate(record)
+        decision = (
+            AlphaPromotionGate(store).apply(record, lifecycle)
+            if args.apply
+            else AlphaPromotionGate(store).evaluate(record)
+        )
         if args.apply and decision.approved:
             _save_alpha_registry(registry_path, registry)
         result = decision.to_dict()
@@ -1012,7 +1305,12 @@ def cmd_alpha(args) -> int:
     if args.output:
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)
         Path(args.output).write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
-    if args.action == "budget-usage" and args.alpha_risk_budget and result.get("warning_count", 0) > 0 and not args.non_strict:
+    if (
+        args.action == "budget-usage"
+        and args.alpha_risk_budget
+        and result.get("warning_count", 0) > 0
+        and not args.non_strict
+    ):
         return 1
     return 0
 
@@ -1035,9 +1333,34 @@ def _alpha_batch_evaluate(args, registry: AlphaRegistry, store: AlphaPerformance
     }
 
 
+def _alpha_ingest_live_bridge(args, store: AlphaPerformanceStore) -> dict:
+    from scripts.trade_quality_report import build_report
+
+    base = Path(args.base_dir)
+    journal_path = (
+        args.journal_path if args.journal_path else str(base / "live_trade_journal.jsonl")
+    )
+    report = build_report(journal_path=journal_path, date_key=args.date, symbol=args.symbol)
+    snapshot = store.ingest_live_bridge_report(
+        args.alpha_id,
+        report,
+        journal_source_path=str(Path(journal_path).resolve()),
+        symbol_filter=args.symbol,
+    )
+    return {
+        "schema_version": SCHEMA_ALPHA_LIVE_BRIDGE_INGESTION,
+        "journal_path": journal_path,
+        "date_key": report.get("date_key"),
+        "snapshot_count": 1,
+        "snapshots": [snapshot.to_dict()],
+    }
+
+
 def _alpha_ingest_runtime(args, store: AlphaPerformanceStore) -> dict:
     ledger_dir = Path(args.ledger_dir) if args.ledger_dir else Path(args.base_dir) / "ledger"
-    runtime_summary = RuntimeSummaryService(RuntimeEvidenceReader(str(ledger_dir))).summarize(limit=args.limit)
+    runtime_summary = RuntimeSummaryService(RuntimeEvidenceReader(str(ledger_dir))).summarize(
+        limit=args.limit
+    )
     mapping = {args.strategy_id: args.alpha_id} if args.strategy_id and args.alpha_id else None
     snapshots = store.ingest_runtime_summary(runtime_summary, mapping)
     return {
@@ -1055,17 +1378,19 @@ def _load_alpha_registry(path: Path) -> AlphaRegistry:
         return registry
     payload = json.loads(path.read_text(encoding="utf-8"))
     for item in payload.get("records", []):
-        registry.upsert(AlphaRecord(
-            alpha_id=item["alpha_id"],
-            name=item["name"],
-            version=item["version"],
-            state=item.get("state", "candidate"),
-            strategy_id=item.get("strategy_id"),
-            tags=tuple(item.get("tags", [])),
-            metadata=item.get("metadata", {}),
-            performance=item.get("performance", {}),
-            risk_profile=item.get("risk_profile", {}),
-        ))
+        registry.upsert(
+            AlphaRecord(
+                alpha_id=item["alpha_id"],
+                name=item["name"],
+                version=item["version"],
+                state=item.get("state", "candidate"),
+                strategy_id=item.get("strategy_id"),
+                tags=tuple(item.get("tags", [])),
+                metadata=item.get("metadata", {}),
+                performance=item.get("performance", {}),
+                risk_profile=item.get("risk_profile", {}),
+            )
+        )
     return registry
 
 
@@ -1094,7 +1419,10 @@ def _save_alpha_performance(path: Path, store: AlphaPerformanceStore) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = store.to_dict()
     payload["summaries"] = [
-        {**store.summarize(alpha_id), "history": [snapshot.to_dict() for snapshot in store.history(alpha_id)]}
+        {
+            **store.summarize(alpha_id),
+            "history": [snapshot.to_dict() for snapshot in store.history(alpha_id)],
+        }
         for alpha_id in sorted(store._snapshots)
     ]
     path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
@@ -1163,15 +1491,27 @@ def main(argv=None) -> int:
     try:
         return handlers[args.command](args)
     except AlphaBudgetContractError as exc:
-        path = getattr(args, "alpha_risk_budget", None) or getattr(args, "alpha_budget_usage", None) or getattr(args, "usage_file", None)
+        path = (
+            getattr(args, "alpha_risk_budget", None)
+            or getattr(args, "alpha_budget_usage", None)
+            or getattr(args, "usage_file", None)
+        )
         print(json.dumps(_cli_error("alpha_budget_contract_error", str(exc), path), indent=2))
         return 1
     except JSONDecodeError as exc:
-        path = getattr(args, "alpha_risk_budget", None) or getattr(args, "alpha_budget_usage", None) or getattr(args, "usage_file", None)
+        path = (
+            getattr(args, "alpha_risk_budget", None)
+            or getattr(args, "alpha_budget_usage", None)
+            or getattr(args, "usage_file", None)
+        )
         print(json.dumps(_cli_error("json_decode_error", str(exc), path), indent=2))
         return 1
     except FileNotFoundError as exc:
-        print(json.dumps(_cli_error("file_not_found", str(exc), getattr(exc, "filename", None)), indent=2))
+        print(
+            json.dumps(
+                _cli_error("file_not_found", str(exc), getattr(exc, "filename", None)), indent=2
+            )
+        )
         return 1
 
 

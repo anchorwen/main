@@ -1,9 +1,9 @@
-from argparse import ArgumentParser
-from dataclasses import dataclass
-from datetime import datetime
 import json
 import sys
+from argparse import ArgumentParser
 from collections import Counter
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,9 +12,20 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from apps.engine.bootstrap_v9 import build_v9_shadow_runtime_loop
-from apps.engine.communication_summary_contract import build_summary_mirror_fields_from_operations_summary
-from core.deployment.domain_keys import (
+from apps.engine.bootstrap_v9 import build_v9_shadow_runtime_loop  # noqa: E402
+from apps.engine.communication_summary_contract import (  # noqa: E402
+    build_summary_mirror_fields_from_operations_summary,
+)
+from apps.engine.v9_shadow_sse import (  # noqa: E402
+    render_sse_message,
+)
+from apps.engine.v9_shadow_sse import (  # noqa: E402
+    run_shadow_session_sse_server as run_shadow_session_sse_server_impl,
+)
+from apps.engine.v9_shadow_sse import (  # noqa: E402
+    stream_session_sse as stream_session_sse_impl,
+)
+from core.deployment.domain_keys import (  # noqa: E402
     PAYLOAD_KEY_ACTION,
     PAYLOAD_KEY_BRAIN_COUNT,
     PAYLOAD_KEY_COMMUNICATION_LEDGER_PATH,
@@ -38,16 +49,7 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_STATUS,
     PAYLOAD_KEY_SYMBOL,
 )
-from apps.engine.v9_shadow_sse import (
-    consume_session_sse,
-    iter_sse_messages,
-    parse_sse_messages,
-    render_session_sse_event,
-    render_sse_message,
-    run_shadow_session_sse_server as run_shadow_session_sse_server_impl,
-    stream_session_sse as stream_session_sse_impl,
-)
-from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES  # noqa: E402
 
 
 class FeatureInputError(ValueError):
@@ -163,15 +165,19 @@ def load_feature_batch_from_json(path: str) -> list[dict]:
         description = str(item.get("description", ""))
         features = item.get("features", {})
         if not isinstance(features, dict):
-            raise FeatureInputError(f"Feature batch item 'features' must be a JSON object: {file_path}")
+            raise FeatureInputError(
+                f"Feature batch item 'features' must be a JSON object: {file_path}"
+            )
         feature_source = {}
         for feature_name in V9_INSTITUTIONAL_40_FEATURES:
             feature_source[feature_name] = float(features.get(feature_name, 0.0))
-        batch.append({
-            "name": name,
-            "description": description,
-            "feature_source": feature_source,
-        })
+        batch.append(
+            {
+                "name": name,
+                "description": description,
+                "feature_source": feature_source,
+            }
+        )
     return batch
 
 
@@ -189,16 +195,22 @@ def load_feature_samples_from_dir(path: str) -> list[dict]:
             continue
         features = payload.get("features", payload)
         if not isinstance(features, dict):
-            raise FeatureInputError(f"Feature payload 'features' must be a JSON object: {file_path}")
+            raise FeatureInputError(
+                f"Feature payload 'features' must be a JSON object: {file_path}"
+            )
         feature_source = {}
         for feature_name in V9_INSTITUTIONAL_40_FEATURES:
             feature_source[feature_name] = float(features.get(feature_name, 0.0))
-        samples.append({
-            "name": str(payload.get("name", file_path.stem)),
-            "description": str(payload.get("description", DIR_SAMPLE_DESCRIPTIONS.get(file_path.stem, ""))),
-            "feature_file": str(file_path),
-            "feature_source": feature_source,
-        })
+        samples.append(
+            {
+                "name": str(payload.get("name", file_path.stem)),
+                "description": str(
+                    payload.get("description", DIR_SAMPLE_DESCRIPTIONS.get(file_path.stem, ""))
+                ),
+                "feature_file": str(file_path),
+                "feature_source": feature_source,
+            }
+        )
     return samples
 
 
@@ -259,6 +271,7 @@ DIR_SAMPLE_DESCRIPTIONS = {
     "v9_shadow_short": "Invert the M15 feature group to trigger an open short decision.",
 }
 
+
 @dataclass(frozen=True)
 class BaselineSuiteSpec:
     key: str
@@ -290,38 +303,56 @@ def resolve_batch_scenario_name(name: str) -> str:
     return SCENARIO_ALIAS_REGISTRY.get(name, name.removesuffix("_case"))
 
 
-def load_formal_baseline_manifest(manifest_path: str = FORMAL_BASELINE_MANIFEST_PATH) -> FormalBaselineManifest:
+def load_formal_baseline_manifest(
+    manifest_path: str = FORMAL_BASELINE_MANIFEST_PATH,
+) -> FormalBaselineManifest:
     file_path = Path(manifest_path)
     try:
         payload = json.loads(file_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise FeatureInputError(f"Invalid formal baseline manifest JSON in {file_path}: {exc.msg}") from exc
+        raise FeatureInputError(
+            f"Invalid formal baseline manifest JSON in {file_path}: {exc.msg}"
+        ) from exc
     if not isinstance(payload, dict):
         raise FeatureInputError(f"Formal baseline manifest must contain a JSON object: {file_path}")
     version = payload.get("version")
     if version is None:
-        raise FeatureInputError(f"Formal baseline manifest is missing required field 'version': {file_path}")
+        raise FeatureInputError(
+            f"Formal baseline manifest is missing required field 'version': {file_path}"
+        )
     if not isinstance(version, str):
-        raise FeatureInputError(f"Formal baseline manifest field 'version' must be a string: {file_path}")
+        raise FeatureInputError(
+            f"Formal baseline manifest field 'version' must be a string: {file_path}"
+        )
     description = payload.get("description")
     if description is not None and not isinstance(description, str):
-        raise FeatureInputError(f"Formal baseline manifest field 'description' must be a string: {file_path}")
+        raise FeatureInputError(
+            f"Formal baseline manifest field 'description' must be a string: {file_path}"
+        )
     suites_payload = payload.get("suites")
     if not isinstance(suites_payload, list):
-        raise FeatureInputError(f"Formal baseline manifest 'suites' must be a JSON array: {file_path}")
+        raise FeatureInputError(
+            f"Formal baseline manifest 'suites' must be a JSON array: {file_path}"
+        )
     suites = []
     required_fields = ["key", "batch_file", "baseline_dir"]
     for item in suites_payload:
         if not isinstance(item, dict):
-            raise FeatureInputError(f"Each formal baseline suite must be a JSON object: {file_path}")
+            raise FeatureInputError(
+                f"Each formal baseline suite must be a JSON object: {file_path}"
+            )
         for field_name in required_fields:
             if field_name not in item:
-                raise FeatureInputError(f"Formal baseline suite is missing required field '{field_name}': {file_path}")
-        suites.append(BaselineSuiteSpec(
-            key=str(item["key"]),
-            batch_file=str(item["batch_file"]),
-            baseline_dir=str(item["baseline_dir"]),
-        ))
+                raise FeatureInputError(
+                    f"Formal baseline suite is missing required field '{field_name}': {file_path}"
+                )
+        suites.append(
+            BaselineSuiteSpec(
+                key=str(item["key"]),
+                batch_file=str(item["batch_file"]),
+                baseline_dir=str(item["baseline_dir"]),
+            )
+        )
     return FormalBaselineManifest(
         path=str(file_path),
         version=version,
@@ -330,7 +361,9 @@ def load_formal_baseline_manifest(manifest_path: str = FORMAL_BASELINE_MANIFEST_
     )
 
 
-def load_formal_baseline_suites(manifest_path: str = FORMAL_BASELINE_MANIFEST_PATH) -> list[BaselineSuiteSpec]:
+def load_formal_baseline_suites(
+    manifest_path: str = FORMAL_BASELINE_MANIFEST_PATH,
+) -> list[BaselineSuiteSpec]:
     return load_formal_baseline_manifest(manifest_path).suites
 
 
@@ -359,7 +392,9 @@ def build_summary_payload(
     sample_description: str | None = None,
     manifest: dict | None = None,
 ) -> dict:
-    mode = result.verdict.mode.value if hasattr(result.verdict.mode, "value") else result.verdict.mode
+    mode = (
+        result.verdict.mode.value if hasattr(result.verdict.mode, "value") else result.verdict.mode
+    )
     # operations_summary is the stable consumer-facing communication snapshot.
     # Other communication fields remain available as raw context or compatibility mirrors.
     operations_summary = None
@@ -369,7 +404,9 @@ def build_summary_payload(
         operations_summary = {
             PAYLOAD_KEY_DISPATCH_STATUS: getattr(result.dispatch_result, "status", None),
             PAYLOAD_KEY_MESSAGE_ID: getattr(result.communication_record, "message_id", None),
-            PAYLOAD_KEY_COMMUNICATION_RECORD_ID: getattr(result.communication_record, "record_id", None),
+            PAYLOAD_KEY_COMMUNICATION_RECORD_ID: getattr(
+                result.communication_record, "record_id", None
+            ),
             PAYLOAD_KEY_COMMUNICATION_LEDGER_PATH: None
             if result.communication_ledger_path is None
             else str(result.communication_ledger_path),
@@ -386,7 +423,9 @@ def build_summary_payload(
         PAYLOAD_KEY_SIDE: result.intent.side.value,
         PAYLOAD_KEY_CONVICTION: round(result.intent.conviction, 6),
         PAYLOAD_KEY_RISK_STATUS: result.verdict.status.value,
-        PAYLOAD_KEY_DISPATCH_STATUS: normalize_dispatch_status(result.dispatch_result[PAYLOAD_KEY_STATUS]),
+        PAYLOAD_KEY_DISPATCH_STATUS: normalize_dispatch_status(
+            result.dispatch_result[PAYLOAD_KEY_STATUS]
+        ),
         PAYLOAD_KEY_OPERATIONS_SUMMARY: operations_summary,
         PAYLOAD_KEY_BRAIN_COUNT: len(result.proposals),
         PAYLOAD_KEY_LEDGER_PATH: str(result.ledger_path),
@@ -413,9 +452,14 @@ def build_stats_payload(results: list[dict]) -> dict:
     action_counts = Counter(payload["action"] for payload in results)
     side_counts = Counter(payload["side"] for payload in results)
     risk_counts = Counter(payload["risk_status"] for payload in results)
-    dispatch_counts = Counter(normalize_dispatch_status(payload["dispatch_status"]) for payload in results)
+    dispatch_counts = Counter(
+        normalize_dispatch_status(payload["dispatch_status"]) for payload in results
+    )
     side_action_counts = Counter((payload["side"], payload["action"]) for payload in results)
-    risk_dispatch_counts = Counter((payload["risk_status"], normalize_dispatch_status(payload["dispatch_status"])) for payload in results)
+    risk_dispatch_counts = Counter(
+        (payload["risk_status"], normalize_dispatch_status(payload["dispatch_status"]))
+        for payload in results
+    )
     convictions = [float(payload["conviction"]) for payload in results]
     scenario_groups = {}
     for payload in results:
@@ -439,7 +483,9 @@ def build_stats_payload(results: list[dict]) -> dict:
         group["risk_statuses"][payload["risk_status"]] += 1
         group["dispatch_statuses"][normalize_dispatch_status(payload["dispatch_status"])] += 1
         group["side_actions"][(payload["side"], payload["action"])] += 1
-        group["risk_dispatches"][(payload["risk_status"], normalize_dispatch_status(payload["dispatch_status"]))] += 1
+        group["risk_dispatches"][
+            (payload["risk_status"], normalize_dispatch_status(payload["dispatch_status"]))
+        ] += 1
         group["convictions"].append(float(payload["conviction"]))
 
     by_scenario = {}
@@ -451,7 +497,9 @@ def build_stats_payload(results: list[dict]) -> dict:
         }
         risk_dispatches = {
             f"{risk_status}.{dispatch_status}": value
-            for (risk_status, dispatch_status), value in sorted(group.pop("risk_dispatches").items())
+            for (risk_status, dispatch_status), value in sorted(
+                group.pop("risk_dispatches").items()
+            )
         }
         by_scenario[scenario_name] = {
             "total": group["total"],
@@ -495,30 +543,46 @@ def render_plain_stats_text(stats: dict) -> str:
     lines = [f"total={stats['total']}"]
     for metric_name, value in stats["conviction"].items():
         lines.append(f"conviction.{metric_name}={value}")
-    for key in ["actions", "sides", "risk_statuses", "dispatch_statuses", "side_actions", "risk_dispatches"]:
+    for key in [
+        "actions",
+        "sides",
+        "risk_statuses",
+        "dispatch_statuses",
+        "side_actions",
+        "risk_dispatches",
+    ]:
         for item_key, value in stats[key].items():
             lines.append(f"{key}.{item_key}={value}")
     for scenario_name, scenario_stats in stats["by_scenario"].items():
         lines.append(f"by_scenario.{scenario_name}.total={scenario_stats['total']}")
         for metric_name, value in scenario_stats["conviction"].items():
             lines.append(f"by_scenario.{scenario_name}.conviction.{metric_name}={value}")
-        for key in ["actions", "sides", "risk_statuses", "dispatch_statuses", "side_actions", "risk_dispatches"]:
+        for key in [
+            "actions",
+            "sides",
+            "risk_statuses",
+            "dispatch_statuses",
+            "side_actions",
+            "risk_dispatches",
+        ]:
             for item_key, value in scenario_stats[key].items():
                 lines.append(f"by_scenario.{scenario_name}.{key}.{item_key}={value}")
     return "\n".join(lines)
 
 
 def render_compact_stats_text(stats: dict) -> str:
-    return " | ".join([
-        f"total={stats['total']}",
-        f"conviction.avg={stats['conviction']['avg']}",
-        f"actions={stats['actions']}",
-        f"sides={stats['sides']}",
-        f"risk_statuses={stats['risk_statuses']}",
-        f"dispatch_statuses={stats['dispatch_statuses']}",
-        f"side_actions={stats['side_actions']}",
-        f"risk_dispatches={stats['risk_dispatches']}",
-    ])
+    return " | ".join(
+        [
+            f"total={stats['total']}",
+            f"conviction.avg={stats['conviction']['avg']}",
+            f"actions={stats['actions']}",
+            f"sides={stats['sides']}",
+            f"risk_statuses={stats['risk_statuses']}",
+            f"dispatch_statuses={stats['dispatch_statuses']}",
+            f"side_actions={stats['side_actions']}",
+            f"risk_dispatches={stats['risk_dispatches']}",
+        ]
+    )
 
 
 def render_json_stats(stats: dict) -> str:
@@ -650,17 +714,20 @@ def emit_output(content: str, output_path: str | None = None) -> None:
 
 
 def render_regression_baseline(payloads: list[dict]) -> dict:
-    preferred_order = {"neutral_case": 0, "long_case": 1, "short_case": 2, "neutral": 0, "long": 1, "short": 2}
+    preferred_order = {
+        "neutral_case": 0,
+        "long_case": 1,
+        "short_case": 2,
+        "neutral": 0,
+        "long": 1,
+        "short": 2,
+    }
     ordered_payloads = sorted(
         payloads,
         key=lambda item: (preferred_order.get(item["scenario"], 999), item["scenario"]),
     )
     normalized_payloads = [
-        {
-            key: value
-            for key, value in item.items()
-            if key not in {"record_id", "ledger_path"}
-        }
+        {key: value for key, value in item.items() if key not in {"record_id", "ledger_path"}}
         for item in ordered_payloads
     ]
     return {
@@ -678,11 +745,13 @@ def summarize_result_differences(expected: dict | None, actual: dict | None) -> 
     keys = sorted(set(expected) | set(actual))
     for key in keys:
         if expected.get(key) != actual.get(key):
-            differences.append({
-                "field": key,
-                "expected": expected.get(key),
-                "actual": actual.get(key),
-            })
+            differences.append(
+                {
+                    "field": key,
+                    "expected": expected.get(key),
+                    "actual": actual.get(key),
+                }
+            )
     return differences
 
 
@@ -690,16 +759,18 @@ def summarize_stats_differences(expected: dict | None, actual: dict | None) -> l
     if expected == actual:
         return []
     differences = []
-    keys = sorted(set((expected or {})) | set((actual or {})))
+    keys = sorted(set(expected or {}) | set(actual or {}))
     for key in keys:
         expected_value = (expected or {}).get(key)
         actual_value = (actual or {}).get(key)
         if expected_value != actual_value:
-            differences.append({
-                "field": key,
-                "expected": expected_value,
-                "actual": actual_value,
-            })
+            differences.append(
+                {
+                    "field": key,
+                    "expected": expected_value,
+                    "actual": actual_value,
+                }
+            )
     return differences
 
 
@@ -708,43 +779,55 @@ def diff_regression_baseline(expected: dict, actual: dict) -> dict:
     expected_results = expected.get("results", [])
     actual_results = actual.get("results", [])
     if expected_results != actual_results:
-        expected_by_scenario = {item.get("scenario"): item for item in expected_results if isinstance(item, dict)}
-        actual_by_scenario = {item.get("scenario"): item for item in actual_results if isinstance(item, dict)}
-        ordered_scenarios = sorted(set(expected_by_scenario) | set(actual_by_scenario))
-        if len(expected_by_scenario) == len(expected_results) and len(actual_by_scenario) == len(actual_results):
+        expected_by_scenario = {
+            item.get("scenario"): item for item in expected_results if isinstance(item, dict)
+        }
+        actual_by_scenario = {
+            item.get("scenario"): item for item in actual_results if isinstance(item, dict)
+        }
+        ordered_scenarios = sorted(set(expected_by_scenario) | set(actual_by_scenario))  # type: ignore[reportArgumentType]
+        if len(expected_by_scenario) == len(expected_results) and len(actual_by_scenario) == len(
+            actual_results
+        ):
             for scenario_name in ordered_scenarios:
                 expected_item = expected_by_scenario.get(scenario_name)
                 actual_item = actual_by_scenario.get(scenario_name)
                 if expected_item != actual_item:
-                    changes.append({
-                        "section": "results",
-                        "scenario": scenario_name,
-                        "expected": expected_item,
-                        "actual": actual_item,
-                        "fields": summarize_result_differences(expected_item, actual_item),
-                    })
+                    changes.append(
+                        {
+                            "section": "results",
+                            "scenario": scenario_name,
+                            "expected": expected_item,
+                            "actual": actual_item,
+                            "fields": summarize_result_differences(expected_item, actual_item),
+                        }
+                    )
         else:
             max_len = max(len(expected_results), len(actual_results))
             for index in range(max_len):
                 expected_item = expected_results[index] if index < len(expected_results) else None
                 actual_item = actual_results[index] if index < len(actual_results) else None
                 if expected_item != actual_item:
-                    changes.append({
-                        "section": "results",
-                        "index": index,
-                        "expected": expected_item,
-                        "actual": actual_item,
-                        "fields": summarize_result_differences(expected_item, actual_item),
-                    })
+                    changes.append(
+                        {
+                            "section": "results",
+                            "index": index,
+                            "expected": expected_item,
+                            "actual": actual_item,
+                            "fields": summarize_result_differences(expected_item, actual_item),
+                        }
+                    )
     expected_stats = expected.get("stats")
     actual_stats = actual.get("stats")
     if expected_stats != actual_stats:
-        changes.append({
-            "section": "stats",
-            "expected": expected_stats,
-            "actual": actual_stats,
-            "fields": summarize_stats_differences(expected_stats, actual_stats),
-        })
+        changes.append(
+            {
+                "section": "stats",
+                "expected": expected_stats,
+                "actual": actual_stats,
+                "fields": summarize_stats_differences(expected_stats, actual_stats),
+            }
+        )
     return {
         "matches": not changes,
         "change_count": len(changes),
@@ -763,11 +846,17 @@ def render_regression_diff_text(diff: dict) -> str:
         if "scenario" in change:
             lines.append(f"changes[{index}].scenario={change['scenario']}")
         for field_index, field_change in enumerate(change.get("fields", [])):
-            lines.append(f"changes[{index}].fields[{field_index}].field={field_change['field']}")
-            lines.append(f"changes[{index}].fields[{field_index}].expected={json.dumps(field_change['expected'], ensure_ascii=False, sort_keys=True)}")
-            lines.append(f"changes[{index}].fields[{field_index}].actual={json.dumps(field_change['actual'], ensure_ascii=False, sort_keys=True)}")
-        lines.append(f"changes[{index}].expected={json.dumps(change['expected'], ensure_ascii=False, sort_keys=True)}")
-        lines.append(f"changes[{index}].actual={json.dumps(change['actual'], ensure_ascii=False, sort_keys=True)}")
+            lines.append(
+                f"changes[{index}].fields[{field_index}].field" f"={field_change['field']}"
+            )
+            expected_json = json.dumps(field_change["expected"], ensure_ascii=False, sort_keys=True)
+            lines.append(f"changes[{index}].fields[{field_index}].expected={expected_json}")
+            actual_json = json.dumps(field_change["actual"], ensure_ascii=False, sort_keys=True)
+            lines.append(f"changes[{index}].fields[{field_index}].actual={actual_json}")
+        expected_json = json.dumps(change["expected"], ensure_ascii=False, sort_keys=True)
+        lines.append(f"changes[{index}].expected={expected_json}")
+        actual_json = json.dumps(change["actual"], ensure_ascii=False, sort_keys=True)
+        lines.append(f"changes[{index}].actual={actual_json}")
     return "\n".join(lines)
 
 
@@ -797,32 +886,38 @@ def build_formal_baseline_gate_summary(result: dict) -> dict:
         diff = suite["diff"]
         for path in diff["missing"]:
             sample_name = Path(path).name.removesuffix(".baseline.json")
-            failing_samples.append({
-                "suite": suite["key"],
-                "sample": sample_name,
-                "reason": "missing_baseline",
-                "path": path,
-            })
+            failing_samples.append(
+                {
+                    "suite": suite["key"],
+                    "sample": sample_name,
+                    "reason": "missing_baseline",
+                    "path": path,
+                }
+            )
         for item in diff["diffs"]:
             sample_name = item["name"]
-            failing_samples.append({
-                "suite": suite["key"],
-                "sample": sample_name,
-                "reason": "diff",
-                "path": item["path"],
-            })
+            failing_samples.append(
+                {
+                    "suite": suite["key"],
+                    "sample": sample_name,
+                    "reason": "diff",
+                    "path": item["path"],
+                }
+            )
             for change in item["diff"].get("changes", []):
                 change_target = change.get("scenario", change.get("index", "unknown"))
                 for field_change in change.get("fields", []):
-                    failing_fields.append({
-                        "suite": suite["key"],
-                        "sample": sample_name,
-                        "section": change["section"],
-                        "target": change_target,
-                        "field": field_change["field"],
-                        "expected": field_change["expected"],
-                        "actual": field_change["actual"],
-                    })
+                    failing_fields.append(
+                        {
+                            "suite": suite["key"],
+                            "sample": sample_name,
+                            "section": change["section"],
+                            "target": change_target,
+                            "field": field_change["field"],
+                            "expected": field_change["expected"],
+                            "actual": field_change["actual"],
+                        }
+                    )
     return {
         "suite_failure_count": len(result["summary"]["failed_suites"]),
         "sample_failure_count": len(failing_samples),
@@ -885,13 +980,15 @@ def build_formal_suite_semantic_summary(suite_results: list[dict]) -> dict:
             for field_name, expected_value in expected_fields.items():
                 actual_value = payload.get(field_name)
                 if actual_value != expected_value:
-                    failures.append({
-                        "suite": suite_key,
-                        "sample": sample_name,
-                        "field": field_name,
-                        "expected": expected_value,
-                        "actual": actual_value,
-                    })
+                    failures.append(
+                        {
+                            "suite": suite_key,
+                            "sample": sample_name,
+                            "field": field_name,
+                            "expected": expected_value,
+                            "actual": actual_value,
+                        }
+                    )
     return {
         "matches": not failures,
         "failure_count": len(failures),
@@ -909,8 +1006,10 @@ def render_formal_suite_semantic_text(result: dict) -> str:
         lines.append(f"formal_semantics.failures[{index}].suite={item['suite']}")
         lines.append(f"formal_semantics.failures[{index}].sample={item['sample']}")
         lines.append(f"formal_semantics.failures[{index}].field={item['field']}")
-        lines.append(f"formal_semantics.failures[{index}].expected={json.dumps(item['expected'], ensure_ascii=False, sort_keys=True)}")
-        lines.append(f"formal_semantics.failures[{index}].actual={json.dumps(item['actual'], ensure_ascii=False, sort_keys=True)}")
+        expected_json = json.dumps(item["expected"], ensure_ascii=False, sort_keys=True)
+        lines.append(f"formal_semantics.failures[{index}].expected={expected_json}")
+        actual_json = json.dumps(item["actual"], ensure_ascii=False, sort_keys=True)
+        lines.append(f"formal_semantics.failures[{index}].actual={actual_json}")
     return "\n".join(lines)
 
 
@@ -942,7 +1041,6 @@ def build_formal_semantic_payloads(batch: list[dict], manifest_meta: dict | None
     ]
 
 
-
 def check_formal_baseline_suites(manifest_path: str = FORMAL_BASELINE_MANIFEST_PATH) -> dict:
     manifest = load_formal_baseline_manifest(manifest_path)
     manifest_meta = build_formal_manifest_meta(manifest)
@@ -951,13 +1049,15 @@ def check_formal_baseline_suites(manifest_path: str = FORMAL_BASELINE_MANIFEST_P
         batch = load_feature_batch_from_json(suite.batch_file)
         semantic_payloads = build_formal_semantic_payloads(batch, manifest_meta)
         diff = check_batch_regression_baselines(suite.baseline_dir, batch, manifest=manifest_meta)
-        suite_results.append({
-            "key": suite.key,
-            "batch_file": suite.batch_file,
-            "baseline_dir": suite.baseline_dir,
-            "payloads": semantic_payloads,
-            "diff": diff,
-        })
+        suite_results.append(
+            {
+                "key": suite.key,
+                "batch_file": suite.batch_file,
+                "baseline_dir": suite.baseline_dir,
+                "payloads": semantic_payloads,
+                "diff": diff,
+            }
+        )
     failed_suites = [item["key"] for item in suite_results if not item["diff"]["matches"]]
     result = {
         "matches": all(item["diff"]["matches"] for item in suite_results),
@@ -995,14 +1095,18 @@ def rebuild_formal_baseline_suites(manifest_path: str = FORMAL_BASELINE_MANIFEST
     written_paths = []
     for suite in manifest.suites:
         batch = load_feature_batch_from_json(suite.batch_file)
-        suite_written_paths = write_batch_regression_baselines(suite.baseline_dir, batch, manifest=manifest_meta)
-        suite_results.append({
-            "key": suite.key,
-            "batch_file": suite.batch_file,
-            "baseline_dir": suite.baseline_dir,
-            "written_count": len(suite_written_paths),
-            "written_paths": suite_written_paths,
-        })
+        suite_written_paths = write_batch_regression_baselines(
+            suite.baseline_dir, batch, manifest=manifest_meta
+        )
+        suite_results.append(
+            {
+                "key": suite.key,
+                "batch_file": suite.batch_file,
+                "baseline_dir": suite.baseline_dir,
+                "written_count": len(suite_written_paths),
+                "written_paths": suite_written_paths,
+            }
+        )
         written_paths.extend(suite_written_paths)
     return {
         "manifest": manifest_meta,
@@ -1050,14 +1154,18 @@ def render_formal_baseline_suite_text(result: dict) -> str:
         lines.append(f"gate.failing_fields[{index}].section={item['section']}")
         lines.append(f"gate.failing_fields[{index}].target={item['target']}")
         lines.append(f"gate.failing_fields[{index}].field={item['field']}")
-        lines.append(f"gate.failing_fields[{index}].expected={json.dumps(item['expected'], ensure_ascii=False, sort_keys=True)}")
-        lines.append(f"gate.failing_fields[{index}].actual={json.dumps(item['actual'], ensure_ascii=False, sort_keys=True)}")
+        expected_json = json.dumps(item["expected"], ensure_ascii=False, sort_keys=True)
+        lines.append(f"gate.failing_fields[{index}].expected={expected_json}")
+        actual_json = json.dumps(item["actual"], ensure_ascii=False, sort_keys=True)
+        lines.append(f"gate.failing_fields[{index}].actual={actual_json}")
     for index, item in enumerate(result["semantic"]["failures"]):
         lines.append(f"formal_semantics.failures[{index}].suite={item['suite']}")
         lines.append(f"formal_semantics.failures[{index}].sample={item['sample']}")
         lines.append(f"formal_semantics.failures[{index}].field={item['field']}")
-        lines.append(f"formal_semantics.failures[{index}].expected={json.dumps(item['expected'], ensure_ascii=False, sort_keys=True)}")
-        lines.append(f"formal_semantics.failures[{index}].actual={json.dumps(item['actual'], ensure_ascii=False, sort_keys=True)}")
+        expected_json = json.dumps(item["expected"], ensure_ascii=False, sort_keys=True)
+        lines.append(f"formal_semantics.failures[{index}].expected={expected_json}")
+        actual_json = json.dumps(item["actual"], ensure_ascii=False, sort_keys=True)
+        lines.append(f"formal_semantics.failures[{index}].actual={actual_json}")
     return "\n".join(lines)
 
 
@@ -1091,7 +1199,7 @@ def render_formal_baseline_suite_json(result: dict) -> str:
 
 def render_formal_baseline_rebuild_text(result: dict) -> str:
     lines = [
-        f"formal_baselines.rebuilt=true",
+        "formal_baselines.rebuilt=true",
         f"manifest.path={result['manifest']['path']}",
         f"manifest.version={result['manifest']['version']}",
         f"manifest.description={result['manifest']['description']}",
@@ -1133,11 +1241,19 @@ def render_formal_baseline_rebuild_json(result: dict) -> str:
 def write_regression_baseline(path: str, payloads: list[dict]) -> None:
     write_output(
         path,
-        json.dumps(render_regression_baseline([strip_manifest_from_regression_baseline(payload) for payload in payloads]), ensure_ascii=False, indent=2),
+        json.dumps(
+            render_regression_baseline(
+                [strip_manifest_from_regression_baseline(payload) for payload in payloads]
+            ),
+            ensure_ascii=False,
+            indent=2,
+        ),
     )
 
 
-def write_batch_regression_baselines(output_dir: str, batch: list[dict], manifest: dict | None = None) -> list[str]:
+def write_batch_regression_baselines(
+    output_dir: str, batch: list[dict], manifest: dict | None = None
+) -> list[str]:
     directory = Path(output_dir)
     directory.mkdir(parents=True, exist_ok=True)
     written_paths = []
@@ -1157,7 +1273,9 @@ def write_batch_regression_baselines(output_dir: str, batch: list[dict], manifes
     return written_paths
 
 
-def check_batch_regression_baselines(baseline_dir: str, batch: list[dict], manifest: dict | None = None) -> dict:
+def check_batch_regression_baselines(
+    baseline_dir: str, batch: list[dict], manifest: dict | None = None
+) -> dict:
     directory = Path(baseline_dir)
     diffs = []
     missing = []
@@ -1175,13 +1293,17 @@ def check_batch_regression_baselines(baseline_dir: str, batch: list[dict], manif
             sample_description=item["description"],
             manifest=manifest,
         )
-        diff = check_regression_baseline(str(baseline_path), [strip_manifest_from_regression_baseline(payload)])
+        diff = check_regression_baseline(
+            str(baseline_path), [strip_manifest_from_regression_baseline(payload)]
+        )
         if not diff["matches"]:
-            diffs.append({
-                "name": item["name"],
-                "path": str(baseline_path),
-                "diff": diff,
-            })
+            diffs.append(
+                {
+                    "name": item["name"],
+                    "path": str(baseline_path),
+                    "diff": diff,
+                }
+            )
     return {
         "matches": not diffs and not missing,
         "missing": missing,
@@ -1212,19 +1334,22 @@ def load_formal_manifest_meta_from_batch_file(batch_file: str | None) -> dict | 
     return None
 
 
-def build_stream_meta(payloads: list[dict], output_mode: str, source_type: str | None = None) -> dict:
+def build_stream_meta(
+    payloads: list[dict], output_mode: str, source_type: str | None = None
+) -> dict:
     manifests = [payload["manifest"] for payload in payloads if payload.get("manifest") is not None]
-    manifest = manifests[0] if manifests and all(item == manifests[0] for item in manifests) else None
+    manifest = (
+        manifests[0] if manifests and all(item == manifests[0] for item in manifests) else None
+    )
     resolved_source_type = source_type or derive_source_type(payloads)
     return {
         "output_mode": output_mode,
-        "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds") + "Z",
         "source_type": resolved_source_type,
         "scenario_count": len({payload["scenario"] for payload in payloads}),
         "result_count": len(payloads),
         "manifest": manifest,
     }
-
 
 
 def build_output_extension_fields(payload: dict, result) -> dict:
@@ -1237,15 +1362,20 @@ def build_output_extension_fields(payload: dict, result) -> dict:
     return {
         **payload,
         PAYLOAD_KEY_OPERATIONS_SUMMARY: operations_summary,
-        PAYLOAD_KEY_OPERATIONS_POSTURE: communication_operations.get(PAYLOAD_KEY_OPERATIONS_POSTURE),
+        PAYLOAD_KEY_OPERATIONS_POSTURE: communication_operations.get(
+            PAYLOAD_KEY_OPERATIONS_POSTURE
+        ),
         PAYLOAD_KEY_POSTURE_SOURCES: communication_operations.get(PAYLOAD_KEY_POSTURE_SOURCES),
-        PAYLOAD_KEY_GOVERNANCE_SOURCES: communication_operations.get(PAYLOAD_KEY_GOVERNANCE_SOURCES),
+        PAYLOAD_KEY_GOVERNANCE_SOURCES: communication_operations.get(
+            PAYLOAD_KEY_GOVERNANCE_SOURCES
+        ),
     }
 
 
-
 def apply_stable_output_contract(payload: dict, result=None) -> dict:
-    normalized_payload = payload if result is None else build_output_extension_fields(payload, result)
+    normalized_payload = (
+        payload if result is None else build_output_extension_fields(payload, result)
+    )
     return build_summary_mirror_fields_from_operations_summary(normalized_payload)
 
 
@@ -1254,9 +1384,8 @@ def extend_payloads_for_output(payloads: list[dict], results: list) -> list[dict
         return [apply_stable_output_contract(payload) for payload in payloads]
     return [
         apply_stable_output_contract(payload, result)
-        for payload, result in zip(payloads, results)
+        for payload, result in zip(payloads, results, strict=False)
     ]
-
 
 
 def render_json_output(
@@ -1272,12 +1401,15 @@ def render_json_output(
 
     rendered = {}
     if include_meta:
-        rendered["meta"] = build_stream_meta(payloads, output_mode=output_mode, source_type=source_type)
+        rendered["meta"] = build_stream_meta(
+            payloads, output_mode=output_mode, source_type=source_type
+        )
     rendered["results"] = base_payload
     if include_stats:
-        rendered["stats"] = json.loads(render_stats_output(build_stats_payload(payloads), formatter="json"))
+        rendered["stats"] = json.loads(
+            render_stats_output(build_stats_payload(payloads), formatter="json")
+        )
     return json.dumps(rendered)
-
 
 
 def build_stream_envelope(
@@ -1317,7 +1449,7 @@ class ShadowSessionManager:
         self._stream_plan = stream_plan or SessionStreamPlan()
 
     def stream_run(self, args):
-        session_id = f"shadow_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+        session_id = f"shadow_{datetime.now(UTC).replace(tzinfo=None).strftime('%Y%m%d%H%M%S')}"
         yield build_session_event(
             session_id,
             f"{self._stream_plan.event_name_prefix}.progress",
@@ -1329,7 +1461,7 @@ class ShadowSessionManager:
         try:
             prepared = prepare_results(args)
             if len(prepared) == 3:
-                payloads, _, results = prepared
+                payloads, _, results = prepared  # type: ignore[reportGeneralTypeIssues]
             else:
                 payloads, _ = prepared
                 results = build_results_from_payloads(payloads)
@@ -1398,7 +1530,9 @@ def render_output_content(plan: OutputPlan, payloads: list[dict], default_text: 
             include_compact_stats=plan.include_compact_stats,
         )
     if plan.mode == "stats":
-        return render_stats_output(build_stats_payload(normalized_payloads), formatter=plan.render_strategy or "plain")
+        return render_stats_output(
+            build_stats_payload(normalized_payloads), formatter=plan.render_strategy or "plain"
+        )
     return default_text
 
 
@@ -1455,7 +1589,9 @@ def build_output_plans(args) -> list[OutputPlan]:
     modes = collect_requested_output_modes(args)
     if args.out_multi_base:
         if len(modes) == 1 and modes[0] == "default":
-            raise SystemExit("Use one or more of --summary, --json, --csv, or --stats with --out-multi-base.")
+            raise SystemExit(
+                "Use one or more of --summary, --json, --csv, or --stats with --out-multi-base."
+            )
         base_path = Path(args.out_multi_base)
         base_dir = base_path.parent
         base_name = base_path.name
@@ -1472,7 +1608,9 @@ def build_output_plans(args) -> list[OutputPlan]:
         ]
     if args.out_multi:
         if len(modes) == 1 and modes[0] == "default":
-            raise SystemExit("Use one or more of --summary, --json, --csv, or --stats with --out-multi.")
+            raise SystemExit(
+                "Use one or more of --summary, --json, --csv, or --stats with --out-multi."
+            )
         return [
             build_output_plan(
                 args,
@@ -1485,8 +1623,13 @@ def build_output_plans(args) -> list[OutputPlan]:
             if args.out_multi.get(mode) and mode in modes
         ]
     if len(modes) > 1:
-        raise SystemExit("Use only one of --summary, --json, --csv, or --stats unless using --out-multi.")
-    inferred = not any([args.summary, args.json, args.csv, args.stats]) and infer_output_format(args.out) is not None
+        raise SystemExit(
+            "Use only one of --summary, --json, --csv, or --stats unless using --out-multi."
+        )
+    inferred = (
+        not any([args.summary, args.json, args.csv, args.stats])
+        and infer_output_format(args.out) is not None
+    )
     return [
         build_output_plan(
             args,
@@ -1518,7 +1661,9 @@ def dispatch_outputs(
         emit_output(content, plan.output_path)
 
 
-def parse_mode_override_alias(value: str | None, mode: str, allowed_values: set[str], option_name: str) -> dict[str, str]:
+def parse_mode_override_alias(
+    value: str | None, mode: str, allowed_values: set[str], option_name: str
+) -> dict[str, str]:
     if value is None:
         return {}
     if value not in allowed_values:
@@ -1550,10 +1695,7 @@ def build_mode_overrides(args) -> dict[str, dict[str, object]]:
     return {
         "summary_style": summary,
         "stats_format": stats,
-        "json_include_meta": {
-            mode: value == "true"
-            for mode, value in json_meta.items()
-        },
+        "json_include_meta": {mode: value == "true" for mode, value in json_meta.items()},
     }
 
 
@@ -1564,13 +1706,18 @@ def resolve_summary_style(args, mode: str) -> str:
 
 
 def resolve_stats_format(args, mode: str) -> str:
-    return args.mode_overrides["stats_format"].get(mode, args.stats_format if mode == "stats" else "plain")
+    return args.mode_overrides["stats_format"].get(
+        mode, args.stats_format if mode == "stats" else "plain"
+    )
 
 
 def resolve_json_include_meta(args, mode: str, include_json_stats: bool) -> bool:
     if mode != "json":
         return False
-    return args.mode_overrides["json_include_meta"].get(mode, args.json_include_meta) or include_json_stats
+    return (
+        args.mode_overrides["json_include_meta"].get(mode, args.json_include_meta)
+        or include_json_stats
+    )
 
 
 def parse_out_multi(values: list[str] | None) -> dict[str, str]:
@@ -1578,7 +1725,10 @@ def parse_out_multi(values: list[str] | None) -> dict[str, str]:
     for value in values or []:
         mode, separator, path = value.partition("=")
         if separator == "" or mode not in {"summary", "json", "csv", "stats"} or not path:
-            raise SystemExit("Each --out-multi value must be one of summary=PATH, json=PATH, csv=PATH, or stats=PATH.")
+            raise SystemExit(
+                "Each --out-multi value must be one of summary=PATH, json=PATH,"
+                " csv=PATH, or stats=PATH."
+            )
         result[mode] = path
     return result
 
@@ -1634,7 +1784,10 @@ def parse_args():
     )
     parser.add_argument(
         "--feature-file",
-        help="Load one feature sample JSON file; supports flat feature maps or {name,description,features}",
+        help=(
+            "Load one feature sample JSON file; supports flat feature maps or"
+            " {name,description,features}"
+        ),
     )
     parser.add_argument(
         "--feature-batch-file",
@@ -1655,7 +1808,10 @@ def parse_args():
     )
     parser.add_argument(
         "--out-multi-base",
-        help="Write multiple formats at once using one base path, e.g. reports/replay -> replay.summary/json/csv/stats",
+        help=(
+            "Write multiple formats at once using one base path, e.g."
+            " reports/replay -> replay.summary/json/csv/stats"
+        ),
     )
     parser.add_argument(
         "--json-with-stats",
@@ -1748,7 +1904,8 @@ def parse_args():
         "  Single summary with full footer:\n"
         "    --feature-dir snapshots --summary --summary-style full\n"
         "  Multi-output with recommended shortcuts:\n"
-        "    --feature-batch-file data.json --summary --json --stats --out-multi-base reports/replay \\\n"
+        "    --feature-batch-file data.json --summary --json --stats"
+        " --out-multi-base reports/replay \\\n"
         "      --summary-style-summary full --stats-format-stats json \\\n"
         "      --json-include-meta-json true\n"
         "  Multi-output with explicit paths:\n"
@@ -1756,7 +1913,8 @@ def parse_args():
         "      --out-multi summary=reports/replay.summary \\\n"
         "      --out-multi json=reports/replay.json \\\n"
         "      --out-multi stats=reports/replay.stats\n"
-        "  Legacy-compatible by-mode overrides have been removed; use the recommended shortcuts above.\n"
+        "  Legacy-compatible by-mode overrides have been removed;"
+        " use the recommended shortcuts above.\n"
     )
     args = parser.parse_args()
     args.out_multi = parse_out_multi(args.out_multi)
@@ -1775,7 +1933,9 @@ def prepare_batch_results(
         results = [
             (
                 item["name"],
-                run_scenario(resolve_batch_scenario_name(item["name"]), feature_source=item["feature_source"]),
+                run_scenario(
+                    resolve_batch_scenario_name(item["name"]), feature_source=item["feature_source"]
+                ),
             )
             for item in batch
         ]
@@ -1788,7 +1948,7 @@ def prepare_batch_results(
                 sample_description=item["description"],
                 manifest=manifest_meta,
             )
-            for item, (_, result) in zip(batch, results)
+            for item, (_, result) in zip(batch, results, strict=False)
         ]
         default_output = "\n\n".join(
             render_result_text(f"=== V9 Shadow Batch Sample {name} ===", result)
@@ -1813,7 +1973,7 @@ def prepare_batch_results(
                 feature_file=item["feature_file"],
                 sample_description=item["description"],
             )
-            for item, (_, result) in zip(samples, results)
+            for item, (_, result) in zip(samples, results, strict=False)
         ]
         default_output = "\n\n".join(
             render_result_text(f"=== V9 Shadow Directory Sample {name} ===", result)
@@ -1824,7 +1984,9 @@ def prepare_batch_results(
     if feature_file is not None:
         feature_source = load_feature_source_from_json(feature_file)
         scenario_names = ["neutral", "long", "short"]
-        results = [(name, run_scenario(name, feature_source=feature_source)) for name in scenario_names]
+        results = [
+            (name, run_scenario(name, feature_source=feature_source)) for name in scenario_names
+        ]
         payloads = [
             build_summary_payload(
                 name,
@@ -1836,7 +1998,9 @@ def prepare_batch_results(
         ]
         default_output = "\n\n".join(
             render_result_text(
-                f"=== V9 Shadow {'Actionable ' if name in {'long', 'short'} else ''}{name.title()} Scenario ===",
+                f"=== V9 Shadow "
+                f"{'Actionable ' if name in {'long', 'short'} else ''}"
+                f"{name.title()} Scenario ===",
                 result,
             )
             for name, result in results
@@ -1846,7 +2010,9 @@ def prepare_batch_results(
     return None
 
 
-def prepare_single_results(scenario: str, feature_file: str | None = None) -> tuple[list[dict], str]:
+def prepare_single_results(
+    scenario: str, feature_file: str | None = None
+) -> tuple[list[dict], str]:
     feature_source = load_feature_source_from_json(feature_file) if feature_file else None
     feature_source_type = "file" if feature_file else "scenario"
     result = run_scenario(scenario, feature_source=feature_source)
@@ -1858,7 +2024,6 @@ def prepare_single_results(scenario: str, feature_file: str | None = None) -> tu
     )
     default_output = render_result_text(f"=== V9 Shadow {scenario.title()} Scenario ===", result)
     return [payload], default_output
-
 
 
 def prepare_results(args) -> tuple[list[dict], str]:
@@ -1879,7 +2044,9 @@ def prepare_results(args) -> tuple[list[dict], str]:
         ]
         default_output = "\n\n".join(
             render_result_text(
-                f"=== V9 Shadow {'Actionable ' if name in {'long', 'short'} else ''}{name.title()} Scenario ===",
+                f"=== V9 Shadow "
+                f"{'Actionable ' if name in {'long', 'short'} else ''}"
+                f"{name.title()} Scenario ===",
                 result,
             )
             for name, result in results
@@ -1887,7 +2054,6 @@ def prepare_results(args) -> tuple[list[dict], str]:
         return payloads, default_output
 
     return prepare_single_results(scenario, feature_file=args.feature_file)
-
 
 
 def build_results_from_payloads(payloads: list[dict]) -> list:
@@ -1912,8 +2078,9 @@ def build_results_from_payloads(payloads: list[dict]) -> list:
     ]
 
 
-
-def execute_outputs(args, payloads: list[dict], default_output: str, results: list | None = None) -> None:
+def execute_outputs(
+    args, payloads: list[dict], default_output: str, results: list | None = None
+) -> None:
     output_plans = build_output_plans(args)
     resolved_results = results if results is not None else build_results_from_payloads(payloads)
     extended_payloads = extend_payloads_for_output(payloads, resolved_results)
@@ -1923,11 +2090,19 @@ def execute_outputs(args, payloads: list[dict], default_output: str, results: li
 def execute_regression_actions(args, payloads: list[dict]) -> bool:
     if args.rebuild_formal_baselines:
         result = rebuild_formal_baseline_suites(args.formal_baseline_manifest)
-        print(render_formal_baseline_rebuild_json(result) if args.json else render_formal_baseline_rebuild_text(result))
+        print(
+            render_formal_baseline_rebuild_json(result)
+            if args.json
+            else render_formal_baseline_rebuild_text(result)
+        )
         return True
     if args.check_formal_baselines:
         result = check_formal_baseline_suites(args.formal_baseline_manifest)
-        print(render_formal_baseline_suite_json(result) if args.json else render_formal_baseline_suite_text(result))
+        print(
+            render_formal_baseline_suite_json(result)
+            if args.json
+            else render_formal_baseline_suite_text(result)
+        )
         if not result["matches"]:
             raise SystemExit(1)
         return True
@@ -1965,7 +2140,9 @@ def main():
     try:
         if args.serve_session_sse:
             server = run_shadow_session_sse_server(args.serve_host, args.serve_port)
-            print(f"shadow_session_sse_server=http://{args.serve_host}:{args.serve_port}/engine/v9-shadow/stream")
+            print(
+                f"shadow_session_sse_server=http://{args.serve_host}:{args.serve_port}/engine/v9-shadow/stream"
+            )
             server.serve_forever()
             return
 
@@ -1978,11 +2155,13 @@ def main():
 
         feature_inputs = [args.feature_file, args.feature_batch_file, args.feature_dir]
         if sum(value is not None for value in feature_inputs) > 1:
-            raise SystemExit("Use only one of --feature-file, --feature-batch-file, or --feature-dir.")
+            raise SystemExit(
+                "Use only one of --feature-file, --feature-batch-file, or --feature-dir."
+            )
 
         prepared = prepare_results(args)
         if len(prepared) == 3:
-            payloads, default_output, results = prepared
+            payloads, default_output, results = prepared  # type: ignore[reportGeneralTypeIssues]
         else:
             payloads, default_output = prepared
             results = None

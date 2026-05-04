@@ -1,6 +1,9 @@
 import argparse
 import json
-from apps.engine.communication_summary_contract import build_summary_mirror_fields_from_operations_summary
+
+from apps.engine.communication_summary_contract import (
+    build_summary_mirror_fields_from_operations_summary,
+)
 from core.deployment.domain_keys import (
     PAYLOAD_KEY_GOVERNANCE_SOURCES,
     PAYLOAD_KEY_OPERATIONS_POSTURE,
@@ -15,7 +18,6 @@ from core.ledger.services.communication_replay_service import CommunicationRepla
 from core.ledger.services.replay_execution_reader import ReplayExecutionReader
 from core.protocol.services.file_queue_receipt_reader import FileQueueReceiptReader
 
-
 STABLE_COMMUNICATION_SUMMARY_FIELDS = (
     PAYLOAD_KEY_OPERATIONS_SUMMARY,
     PAYLOAD_KEY_OPERATIONS_POSTURE,
@@ -24,18 +26,23 @@ STABLE_COMMUNICATION_SUMMARY_FIELDS = (
 )
 
 
-
 def build_stable_summary_contract(result: dict | None) -> dict | None:
     if result is None:
         return None
-    return build_summary_mirror_fields_from_operations_summary(result, stable_fields=STABLE_COMMUNICATION_SUMMARY_FIELDS)
+    return build_summary_mirror_fields_from_operations_summary(
+        result, stable_fields=STABLE_COMMUNICATION_SUMMARY_FIELDS
+    )
 
 
-def build_operations_service(base_dir: str, receipt_dir: str | None = None) -> CommunicationOperationsService:
+def build_operations_service(
+    base_dir: str, receipt_dir: str | None = None
+) -> CommunicationOperationsService:
     communication_reader = CommunicationRecordReader(base_dir=base_dir)
     replay_reader = ReplayExecutionReader(base_dir=base_dir)
     receipt_reader = FileQueueReceiptReader(receipt_dir=receipt_dir) if receipt_dir else None
-    inspection_service = CommunicationInspectionService(record_reader=communication_reader, receipt_reader=receipt_reader)
+    inspection_service = CommunicationInspectionService(
+        record_reader=communication_reader, receipt_reader=receipt_reader
+    )
     replay_service = CommunicationReplayService(inspection_service=inspection_service)
     replay_gate = CommunicationReplayGate()
     return CommunicationOperationsService(
@@ -112,7 +119,6 @@ def _prefer_operations_summary(result: dict | None) -> dict | None:
         **result,
         **stable_contract,
     }
-
 
 
 def extract_stable_summary_fields(result: dict | None) -> dict | None:

@@ -1,6 +1,6 @@
 from core.deployment.domain_keys import (
-    PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
     PAYLOAD_KEY_BLOCK_REASONS,
+    PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
     PAYLOAD_KEY_EXECUTED_MESSAGE_IDS,
     PAYLOAD_KEY_EXECUTION_MODE,
     PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE,
@@ -10,15 +10,17 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_OPERATIONS_POSTURE_SOURCE,
     PAYLOAD_KEY_OPERATIONS_SUMMARY,
     PAYLOAD_KEY_POSTURE,
-    PAYLOAD_KEY_POSTURE_SOURCES,
     PAYLOAD_KEY_POSTURE_SOURCE,
-    PAYLOAD_KEY_SKIPPED_MESSAGE_IDS,
+    PAYLOAD_KEY_POSTURE_SOURCES,
     PAYLOAD_KEY_SKIP_REASONS,
+    PAYLOAD_KEY_SKIPPED_MESSAGE_IDS,
     PAYLOAD_KEY_SUMMARY_SOURCE,
 )
 
 
-def build_summary_mirror_fields_from_operations_summary(payload: dict, *, stable_fields: tuple[str, ...] | None = None) -> dict:
+def build_summary_mirror_fields_from_operations_summary(
+    payload: dict, *, stable_fields: tuple[str, ...] | None = None
+) -> dict:
     operations_summary = payload.get(PAYLOAD_KEY_OPERATIONS_SUMMARY)
     if not isinstance(operations_summary, dict):
         if stable_fields is None:
@@ -33,7 +35,9 @@ def build_summary_mirror_fields_from_operations_summary(payload: dict, *, stable
         PAYLOAD_KEY_OPERATIONS_SUMMARY: operations_summary,
         PAYLOAD_KEY_OPERATIONS_POSTURE: operations_summary.get(PAYLOAD_KEY_POSTURE),
         PAYLOAD_KEY_POSTURE_SOURCES: {
-            PAYLOAD_KEY_OPERATIONS_POSTURE_SOURCE: operations_summary.get(PAYLOAD_KEY_POSTURE_SOURCE),
+            PAYLOAD_KEY_OPERATIONS_POSTURE_SOURCE: operations_summary.get(
+                PAYLOAD_KEY_POSTURE_SOURCE
+            ),
         },
     }
     for field_name in (
@@ -55,7 +59,9 @@ def build_summary_mirror_fields_from_operations_summary(payload: dict, *, stable
             PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE: execution_projection_source,
         }
     elif PAYLOAD_KEY_GOVERNANCE_SOURCES in payload:
-        normalized_payload[PAYLOAD_KEY_GOVERNANCE_SOURCES] = payload.get(PAYLOAD_KEY_GOVERNANCE_SOURCES)
+        normalized_payload[PAYLOAD_KEY_GOVERNANCE_SOURCES] = payload.get(
+            PAYLOAD_KEY_GOVERNANCE_SOURCES
+        )
 
     if stable_fields is None:
         return {

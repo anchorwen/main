@@ -1,7 +1,5 @@
 import argparse
 import json
-import sys
-from datetime import datetime
 
 from core.deployment.domain_keys import EVIDENCE_SECTION_ENGINE_CONFIG
 
@@ -68,7 +66,9 @@ class DiagnosticsCLI:
             snap = {}
         else:
             snap = dict(snap)
-        snap[EVIDENCE_SECTION_ENGINE_CONFIG] = self._container.evidence_bundle.engine_config_snapshot()
+        snap[EVIDENCE_SECTION_ENGINE_CONFIG] = (
+            self._container.evidence_bundle.engine_config_snapshot()
+        )
         return json.dumps(snap, indent=2, default=str)
 
     def _cmd_brain(self, args) -> str:
@@ -77,23 +77,33 @@ class DiagnosticsCLI:
             tracker_summary = None
             if self._container.brain_tracker:
                 tracker_summary = self._container.brain_tracker.get_brain_summary(args.brain_id)
-            return json.dumps({
-                "governance_state": state,
-                "performance": tracker_summary,
-            }, indent=2, default=str)
+            return json.dumps(
+                {
+                    "governance_state": state,
+                    "performance": tracker_summary,
+                },
+                indent=2,
+                default=str,
+            )
 
         states = self._container.governance_service.get_all_states()
-        summaries = self._container.brain_tracker.get_all_summaries() if self._container.brain_tracker else []
+        summaries = (
+            self._container.brain_tracker.get_all_summaries()
+            if self._container.brain_tracker
+            else []
+        )
         perf_map = {s["brain_id"]: s for s in summaries}
         result = []
         for bid, state in states.items():
-            result.append({
-                "brain_id": bid,
-                "status": state["status"],
-                "health": perf_map.get(bid, {}).get("health_signal", "unknown"),
-                "recommendation": perf_map.get(bid, {}).get("recommendation", "unknown"),
-                "composite_mean": perf_map.get(bid, {}).get("composite_mean", 0),
-            })
+            result.append(
+                {
+                    "brain_id": bid,
+                    "status": state["status"],
+                    "health": perf_map.get(bid, {}).get("health_signal", "unknown"),
+                    "recommendation": perf_map.get(bid, {}).get("recommendation", "unknown"),
+                    "composite_mean": perf_map.get(bid, {}).get("composite_mean", 0),
+                }
+            )
         return json.dumps({"brains": result, "count": len(result)}, indent=2, default=str)
 
     def _cmd_audit(self, args) -> str:
@@ -102,7 +112,7 @@ class DiagnosticsCLI:
         entries = self._container.audit_log.read_entries(date_key=args.date)
         if args.severity:
             entries = [e for e in entries if e.get("severity") == args.severity]
-        entries = entries[-args.limit:]
+        entries = entries[-args.limit :]
         return json.dumps({"entries": entries, "count": len(entries)}, indent=2, default=str)
 
     def _cmd_positions(self, args) -> str:

@@ -1,10 +1,9 @@
 import json
-from datetime import datetime
 from pathlib import Path
 
 from core.deployment.environment_config import EnvironmentConfig
-from core.deployment.service_container import ServiceContainer
 from core.deployment.replay_isolation import ReplayEnvironment
+from core.deployment.service_container import ServiceContainer
 from core.feedback.performance_analytics import PerformanceAnalytics
 
 
@@ -62,8 +61,14 @@ class BacktestRunner:
                     intent = outcome.decision_result.intent
                     verdict = outcome.decision_result.verdict
                     decision_info["verdict_allowed"] = verdict.is_allowed()
-                    decision_info["action"] = intent.action.value if hasattr(intent.action, "value") else str(intent.action)
-                    decision_info["side"] = intent.side.value if hasattr(intent.side, "value") else str(intent.side)
+                    decision_info["action"] = (
+                        intent.action.value
+                        if hasattr(intent.action, "value")
+                        else str(intent.action)
+                    )
+                    decision_info["side"] = (
+                        intent.side.value if hasattr(intent.side, "value") else str(intent.side)
+                    )
                     decision_info["conviction"] = intent.conviction
 
                     if verdict.is_allowed() and scenario.get("simulated_fill"):

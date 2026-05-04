@@ -1,6 +1,6 @@
+import json
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, HTTPServer
-import json
 from urllib.parse import parse_qs, urlparse
 
 
@@ -10,6 +10,7 @@ class SessionStreamQueryError(ValueError):
 
 class SessionStreamResponseStartError(RuntimeError):
     pass
+
 
 __all__ = [
     "render_sse_message",
@@ -76,7 +77,6 @@ def iter_sse_messages(lines) -> list[dict]:
         yield message
 
 
-
 def _split_complete_sse_messages(buffer: str) -> tuple[list[str], str]:
     normalized = buffer.replace("\r\n", "\n")
     raw_messages = []
@@ -95,11 +95,11 @@ def _split_complete_sse_messages(buffer: str) -> tuple[list[str], str]:
     return raw_messages, normalized[consumed_length:]
 
 
-
 def _can_parse_terminal_sse_buffer(buffer: str) -> bool:
     lines = buffer.splitlines()
-    return any(line.startswith("event: ") for line in lines) and any(line.startswith("data: ") for line in lines)
-
+    return any(line.startswith("event: ") for line in lines) and any(
+        line.startswith("data: ") for line in lines
+    )
 
 
 def iter_sse_messages_from_chunks(chunks) -> list[dict]:
@@ -115,7 +115,6 @@ def iter_sse_messages_from_chunks(chunks) -> list[dict]:
         yield from iter_sse_messages(buffer.splitlines())
 
 
-
 def summarize_session_sse_events(events: list[dict]) -> dict:
     progress = [event for event in events if event["event"].endswith(".progress")]
     completed = [event for event in events if event["event"].endswith(".completed")]
@@ -128,11 +127,16 @@ def summarize_session_sse_events(events: list[dict]) -> dict:
         "final_completed": completed[-1] if completed else None,
         "final_error": errors[-1] if errors else None,
         "latest_progress": progress[-1] if progress else None,
-        "status": "error" if errors else "completed" if completed else "streaming" if progress else "idle",
+        "status": "error"
+        if errors
+        else "completed"
+        if completed
+        else "streaming"
+        if progress
+        else "idle",
         "error_message": errors[-1]["data"]["data"]["message"] if errors else None,
         "ok": bool(completed) and not bool(errors),
     }
-
 
 
 @dataclass
@@ -166,7 +170,6 @@ class SessionSSEClientBuffer:
         return produced
 
 
-
 def consume_session_sse(lines) -> dict:
     return summarize_session_sse_events(list(iter_sse_messages(lines)))
 
@@ -194,7 +197,9 @@ def start_sse_response(handler) -> None:
         handler.send_header("Connection", "close")
         handler.end_headers()
     except (BrokenPipeError, ConnectionResetError):
-        raise SessionStreamResponseStartError("Client disconnected before SSE response started") from None
+        raise SessionStreamResponseStartError(
+            "Client disconnected before SSE response started"
+        ) from None
 
 
 def parse_bool_query_param(value: str | None, default: bool = False) -> bool:
@@ -214,25 +219,37 @@ def build_session_stream_args_from_query(query_params: dict[str, list[str]]):
     feature_dir = query_params.get("feature_dir", [None])[0]
     feature_inputs = [feature_file, feature_batch_file, feature_dir]
     if sum(value is not None for value in feature_inputs) > 1:
-        raise SessionStreamQueryError("Use only one of --feature-file, --feature-batch-file, or --feature-dir.")
-    return type("SessionStreamArgs", (), {
-        "scenario_flag": query_params.get("scenario", [None])[0],
-        "scenario_positional": None,
-        "feature_file": feature_file,
-        "feature_batch_file": feature_batch_file,
-        "feature_dir": feature_dir,
-    })()
+        raise SessionStreamQueryError(
+            "Use only one of --feature-file, --feature-batch-file, or --feature-dir."
+        )
+    return type(
+        "SessionStreamArgs",
+        (),
+        {
+            "scenario_flag": query_params.get("scenario", [None])[0],
+            "scenario_positional": None,
+            "feature_file": feature_file,
+            "feature_batch_file": feature_batch_file,
+            "feature_dir": feature_dir,
+        },
+    )()
 
 
-def build_session_stream_plan_from_query(query_params: dict[str, list[str]], session_stream_plan_cls):
+def build_session_stream_plan_from_query(
+    query_params: dict[str, list[str]], session_stream_plan_cls
+):
     event_name_prefix = query_params.get("event_prefix", ["session"])[0] or "session"
     if any(char.isspace() for char in event_name_prefix):
         raise SessionStreamQueryError("event_prefix must not contain whitespace")
     if "." in event_name_prefix:
         raise SessionStreamQueryError("event_prefix must not contain dots")
     return session_stream_plan_cls(
-        include_meta=parse_bool_query_param(query_params.get("include_meta", [None])[0], default=True),
-        include_stats=parse_bool_query_param(query_params.get("include_stats", [None])[0], default=False),
+        include_meta=parse_bool_query_param(
+            query_params.get("include_meta", [None])[0], default=True
+        ),
+        include_stats=parse_bool_query_param(
+            query_params.get("include_stats", [None])[0], default=False
+        ),
         event_name_prefix=event_name_prefix,
     )
 
@@ -256,10 +273,14 @@ def run_shadow_session_sse_server(
             query_params = parse_qs(parsed.query, keep_blank_values=False)
             try:
                 args = build_session_stream_args_from_query(query_params)
-                stream_plan = build_session_stream_plan_from_query(query_params, session_stream_plan_cls)
+                stream_plan = build_session_stream_plan_from_query(
+                    query_params, session_stream_plan_cls
+                )
             except SessionStreamQueryError as exc:
                 try:
-                    stream_plan = build_session_stream_plan_from_query(query_params, session_stream_plan_cls)
+                    stream_plan = build_session_stream_plan_from_query(
+                        query_params, session_stream_plan_cls
+                    )
                 except SessionStreamQueryError:
                     stream_plan = session_stream_plan_cls()
                 try:
@@ -291,4 +312,3 @@ def run_shadow_session_sse_server(
             return
 
     return HTTPServer((host, port), ShadowSessionSSEHandler)
-

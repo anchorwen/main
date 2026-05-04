@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from core.observability.metric_names import (
@@ -11,7 +11,7 @@ from core.observability.metric_names import (
     CYCLES_TOTAL,
     venue_events_metric,
 )
-from core.observability.tracing import TracingContext, set_current_context, clear_current_context
+from core.observability.tracing import TracingContext, clear_current_context, set_current_context
 
 
 @dataclass
@@ -66,6 +66,7 @@ class DecisionCycleOrchestrator:
 
     def run_cycle(self, trigger: dict, feature_source: dict) -> CycleOutcome:
         from core.contracts.ids import new_record_id
+
         cycle_id = new_record_id()
         trace = TracingContext()
         set_current_context(trace)
@@ -82,19 +83,29 @@ class DecisionCycleOrchestrator:
             if self._metrics:
                 self._metrics.inc(CYCLES_THROTTLED)
             root.add_event("throttled")
-            return _finish(CycleOutcome(
-                cycle_id=cycle_id, trigger=trigger, decision_result=None,
-                audit_entries=[{"event_type": "throttled", "reason": "rate_limit_exceeded"}],
-            ))
+            return _finish(
+                CycleOutcome(
+                    cycle_id=cycle_id,
+                    trigger=trigger,
+                    decision_result=None,
+                    audit_entries=[{"event_type": "throttled", "reason": "rate_limit_exceeded"}],
+                )
+            )
 
         if self._circuit_breaker and not self._circuit_breaker.allow_request():
             if self._metrics:
                 self._metrics.inc(CYCLES_CIRCUIT_OPEN)
             root.add_event("circuit_open")
-            return _finish(CycleOutcome(
-                cycle_id=cycle_id, trigger=trigger, decision_result=None,
-                audit_entries=[{"event_type": "circuit_open", "reason": "dispatch_circuit_open"}],
-            ))
+            return _finish(
+                CycleOutcome(
+                    cycle_id=cycle_id,
+                    trigger=trigger,
+                    decision_result=None,
+                    audit_entries=[
+                        {"event_type": "circuit_open", "reason": "dispatch_circuit_open"}
+                    ],
+                )
+            )
 
         try:
             decision_span = trace.start_span("runtime_loop")
@@ -105,16 +116,22 @@ class DecisionCycleOrchestrator:
                 self._metrics.inc(CYCLES_ERRORS)
             if self._audit:
                 self._audit.log(
-                    event_type="cycle_error", severity="error",
-                    actor="orchestrator", detail={"error": str(exc)},
+                    event_type="cycle_error",
+                    severity="error",
+                    actor="orchestrator",
+                    detail={"error": str(exc)},
                 )
             if self._circuit_breaker:
                 self._circuit_breaker.record_failure()
             root.set_error(str(exc))
-            return _finish(CycleOutcome(
-                cycle_id=cycle_id, trigger=trigger, decision_result=None,
-                audit_entries=[{"event_type": "cycle_error", "error": str(exc)}],
-            ))
+            return _finish(
+                CycleOutcome(
+                    cycle_id=cycle_id,
+                    trigger=trigger,
+                    decision_result=None,
+                    audit_entries=[{"event_type": "cycle_error", "error": str(exc)}],
+                )
+            )
 
         if self._metrics:
             self._metrics.inc(CYCLES_TOTAL)
@@ -127,26 +144,37 @@ class DecisionCycleOrchestrator:
         if self._audit:
             entry = self._audit.log_decision(
                 intent_id=result.intent.intent_id,
-                verdict_status=result.verdict.status.value if hasattr(result.verdict.status, "value") else str(result.verdict.status),
+                verdict_status=result.verdict.status.value
+                if hasattr(result.verdict.status, "value")
+                else str(result.verdict.status),
                 symbol=result.intent.symbol,
-                action=result.intent.action.value if hasattr(result.intent.action, "value") else str(result.intent.action),
+                action=result.intent.action.value
+                if hasattr(result.intent.action, "value")
+                else str(result.intent.action),
                 risk_tier=result.verdict.risk_tier,
             )
             audit_entries.append(entry)
 
             if result.verdict.blocking_reasons:
-                audit_entries.append(self._audit.log_risk_verdict(
-                    intent_id=result.intent.intent_id,
-                    status=result.verdict.status.value if hasattr(result.verdict.status, "value") else str(result.verdict.status),
-                    risk_tier=result.verdict.risk_tier,
-                    blocking_reasons=result.verdict.blocking_reasons,
-                ))
+                audit_entries.append(
+                    self._audit.log_risk_verdict(
+                        intent_id=result.intent.intent_id,
+                        status=result.verdict.status.value
+                        if hasattr(result.verdict.status, "value")
+                        else str(result.verdict.status),
+                        risk_tier=result.verdict.risk_tier,
+                        blocking_reasons=result.verdict.blocking_reasons,
+                    )
+                )
 
         execution_result = None
         if result.verdict.is_allowed() and result.communication_record and self._execution_manager:
             if self._circuit_breaker:
                 dr = result.dispatch_result
-                failed = hasattr(dr, "status") and str(getattr(dr.status, "value", dr.status)) == "failed"
+                failed = (
+                    hasattr(dr, "status")
+                    and str(getattr(dr.status, "value", dr.status)) == "failed"
+                )
                 if failed:
                     self._circuit_breaker.record_failure()
                 else:
@@ -157,7 +185,9 @@ class DecisionCycleOrchestrator:
                 message_id=msg_id,
                 correlation_id=record_id,
                 symbol=result.intent.symbol,
-                side=result.intent.side.value if hasattr(result.intent.side, "value") else str(result.intent.side),
+                side=result.intent.side.value
+                if hasattr(result.intent.side, "value")
+                else str(result.intent.side),
                 quantity=result.intent.suggested_risk_fraction or 1.0,
             )
             self._pending_cycles[msg_id] = {
@@ -168,13 +198,15 @@ class DecisionCycleOrchestrator:
                 "symbol": result.intent.symbol,
             }
 
-        return _finish(CycleOutcome(
-            cycle_id=cycle_id,
-            trigger=trigger,
-            decision_result=result,
-            execution_result=execution_result,
-            audit_entries=audit_entries,
-        ))
+        return _finish(
+            CycleOutcome(
+                cycle_id=cycle_id,
+                trigger=trigger,
+                decision_result=result,
+                execution_result=execution_result,
+                audit_entries=audit_entries,
+            )
+        )
 
     def process_execution_event(
         self,
@@ -208,16 +240,20 @@ class DecisionCycleOrchestrator:
                 severity="info" if event_type == "filled" else "warning",
                 actor="venue",
                 subject=message_id,
-                detail={"venue_event": event_type, "filled_quantity": filled_quantity, "price": price},
+                detail={
+                    "venue_event": event_type,
+                    "filled_quantity": filled_quantity,
+                    "price": price,
+                },
             )
 
         terminal_types = {"filled", "rejected", "cancelled", "expired"}
         if event_type in terminal_types:
             feedback_result = self._run_feedback(message_id)
-            results["feedback"] = feedback_result
+            results["feedback"] = feedback_result  # type: ignore[reportArgumentType]
             if feedback_result:
                 governance_actions = self._run_governance(feedback_result)
-                results["governance_actions"] = governance_actions
+                results["governance_actions"] = governance_actions  # type: ignore[reportArgumentType]
 
         return results
 
@@ -238,11 +274,13 @@ class DecisionCycleOrchestrator:
             market_ctx = self._market_context.get_context(symbol)
 
         return self._feedback_loop.process_decision_outcome(
-            date_key=datetime.utcnow().strftime("%Y-%m-%d"),
+            date_key=datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d"),
             target="exec_bridge",
             message_id=message_id,
             correlation_id=record_id,
-            intended_action=intent.action.value if hasattr(intent.action, "value") else str(intent.action),
+            intended_action=intent.action.value
+            if hasattr(intent.action, "value")
+            else str(intent.action),
             intended_side=intent.side.value if hasattr(intent.side, "value") else str(intent.side),
             intended_quantity=intent.suggested_risk_fraction or 1.0,
             supporting_brain_ids=list(candidate.supporting_brains),

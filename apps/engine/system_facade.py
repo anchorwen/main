@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from core.deployment.domain_keys import (
     ENGINE_CONFIG_KEY_HOT_RELOAD,
@@ -16,7 +16,9 @@ class SystemFacade:
     calls, designed for external callers (CLI, HTTP, scheduler).
     """
 
-    def __init__(self, container, orchestrator=None, lifecycle=None, scheduler=None, alert_service=None):
+    def __init__(
+        self, container, orchestrator=None, lifecycle=None, scheduler=None, alert_service=None
+    ):
         self._c = container
         self._orch = orchestrator or container.orchestrator
         self._lifecycle = lifecycle
@@ -31,17 +33,26 @@ class SystemFacade:
         outcome = self._orch.run_cycle({"symbol": symbol}, features or {})
         return {
             "cycle_id": outcome.cycle_id,
-            "verdict": outcome.decision_result.verdict.status.value if outcome.decision_result else None,
-            "allowed": outcome.decision_result.verdict.is_allowed() if outcome.decision_result else False,
-            "message_id": (outcome.decision_result.communication_record.message_id
-                           if outcome.decision_result and outcome.decision_result.communication_record else None),
+            "verdict": outcome.decision_result.verdict.status.value
+            if outcome.decision_result
+            else None,
+            "allowed": outcome.decision_result.verdict.is_allowed()
+            if outcome.decision_result
+            else False,
+            "message_id": (
+                outcome.decision_result.communication_record.message_id
+                if outcome.decision_result and outcome.decision_result.communication_record
+                else None
+            ),
             "execution": outcome.execution_result,
         }
 
     def process_event(self, message_id: str, event_type: str, **kwargs) -> dict:
         if self._orch is None:
             return {"error": "orchestrator not built"}
-        return self._orch.process_execution_event(message_id=message_id, event_type=event_type, **kwargs)
+        return self._orch.process_execution_event(
+            message_id=message_id, event_type=event_type, **kwargs
+        )
 
     # --- Observability ---
 
@@ -74,13 +85,15 @@ class SystemFacade:
         result = []
         for bid, state in states.items():
             perf = self._c.brain_tracker.get_brain_summary(bid) if self._c.brain_tracker else {}
-            result.append({
-                "brain_id": bid,
-                "status": state["status"],
-                "health": perf.get("health_signal", "unknown"),
-                "composite_mean": perf.get("composite_mean", 0),
-                "sample_count": perf.get("sample_count", 0),
-            })
+            result.append(
+                {
+                    "brain_id": bid,
+                    "status": state["status"],
+                    "health": perf.get("health_signal", "unknown"),
+                    "composite_mean": perf.get("composite_mean", 0),
+                    "sample_count": perf.get("sample_count", 0),
+                }
+            )
         return result
 
     def freeze_brain(self, brain_id: str, reason: str = "manual") -> dict:
@@ -94,12 +107,16 @@ class SystemFacade:
     # --- Position & Risk ---
 
     def positions(self) -> dict:
+        if self._c.position_tracker is None:
+            return {"open": [], "risk_context": {}}
         return {
             "open": self._c.position_tracker.list_open(),
             "risk_context": self._c.position_tracker.get_risk_context(),
         }
 
     def orders(self) -> dict:
+        if self._c.execution_manager is None:
+            return {"orders": [], "count": 0}
         return {
             "orders": self._c.execution_manager.list_orders(),
             "count": len(self._c.execution_manager.list_orders()),
@@ -146,7 +163,7 @@ class SystemSelfTest:
         failed = sum(1 for r in results if r["status"] == "fail")
 
         return {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             "total": len(results),
             "passed": passed,
             "failed": failed,

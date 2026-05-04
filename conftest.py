@@ -64,10 +64,13 @@ def pytest_addoption(parser):
     )
 
 
-
 def pytest_configure(config):
-    config.addinivalue_line("markers", "fast_contracts: fast communication/v9-shadow contract suite")
-    config.addinivalue_line("markers", "staged_regression: staged communication/v9-shadow regression suite")
+    config.addinivalue_line(
+        "markers", "fast_contracts: fast communication/v9-shadow contract suite"
+    )
+    config.addinivalue_line(
+        "markers", "staged_regression: staged communication/v9-shadow regression suite"
+    )
     config.addinivalue_line("markers", "governance_contracts: governance summary contract suite")
 
     if config.getoption("--governance-contracts"):
@@ -78,7 +81,6 @@ def pytest_configure(config):
         return
     if config.getoption("--communication-v9-shadow-regression"):
         config.args[:] = COMMUNICATION_V9_SHADOW_REGRESSION
-
 
 
 def pytest_collection_modifyitems(config, items):

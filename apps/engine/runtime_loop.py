@@ -1,7 +1,9 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
+
+import numpy as np
 
 from core.contracts.domain.risk_verdict import RiskVerdict
 from core.contracts.enums import RiskDecisionStatus
@@ -15,21 +17,22 @@ class SimpleFeatureSnapshot:
     event_time: datetime
     symbol: str
     venue: str
+    feature_vector: np.ndarray | None = None
 
 
 @dataclass
 class DecisionCycleResult:
     feature_snapshot: Any
-    proposals: List[Any]
+    proposals: list[Any]
     candidate: Any
     intent: Any
     verdict: Any
     record: Any
     dispatch_result: Any
     ledger_path: Path
-    communication_record: Optional[Any] = None
-    communication_ledger_path: Optional[Path] = None
-    communication_operations: Optional[dict] = None
+    communication_record: Any | None = None
+    communication_ledger_path: Path | None = None
+    communication_operations: dict | None = None
 
 
 class RuntimeLoop:
@@ -61,7 +64,9 @@ class RuntimeLoop:
         self._communication_operations_service = communication_operations_service
         self._risk_evaluation_service = risk_evaluation_service
 
-    def run_decision_cycle(self, trigger, feature_source: dict) -> DecisionCycleResult:
+    def run_decision_cycle(
+        self, trigger, feature_source: dict | None = None
+    ) -> DecisionCycleResult:
         feature_snapshot = self._feature_service.build_snapshot(trigger=trigger)
 
         control_snapshot = self._control_snapshot_service.freeze(
@@ -72,6 +77,7 @@ class RuntimeLoop:
         proposals = self._brain_run_service.run_active_brains(
             feature_snapshot=feature_snapshot,
             control_snapshot=control_snapshot,
+            feature_vector=getattr(feature_snapshot, "feature_vector", None),
             feature_source=feature_source,
         )
 
@@ -115,7 +121,7 @@ class RuntimeLoop:
                 schema_version=SCHEMA_RISK_VERDICT,
                 verdict_id=new_verdict_id(),
                 intent_id=intent.intent_id,
-                evaluated_at=datetime.utcnow(),
+                evaluated_at=datetime.now(UTC).replace(tzinfo=None),
                 status=RiskDecisionStatus.ALLOW,
                 mode=control_snapshot.mode_state.current_mode,
                 risk_tier="standard",
@@ -125,7 +131,7 @@ class RuntimeLoop:
                 schema_version=SCHEMA_RISK_VERDICT,
                 verdict_id=new_verdict_id(),
                 intent_id=intent.intent_id,
-                evaluated_at=datetime.utcnow(),
+                evaluated_at=datetime.now(UTC).replace(tzinfo=None),
                 status=RiskDecisionStatus.DENY,
                 mode=control_snapshot.mode_state.current_mode,
                 risk_tier="minimal",
@@ -148,7 +154,12 @@ class RuntimeLoop:
         communication_ledger_path = None
         communication_operations = None
 
-        if verdict.is_allowed() and self._intent_message_builder and self._communication_dispatcher:
+        if (
+            verdict.is_allowed()
+            and intent.is_actionable()
+            and self._intent_message_builder
+            and self._communication_dispatcher
+        ):
             envelope = self._intent_message_builder.build(
                 intent,
                 correlation_id=record.record_id,
@@ -159,15 +170,19 @@ class RuntimeLoop:
                 governance={"verdict_id": verdict.verdict_id},
             )
             if self._communication_record_writer:
-                communication_record, communication_ledger_path = self._communication_record_writer.write_record(
-                    envelope,
-                    dispatch_result,
+                communication_record, communication_ledger_path = (
+                    self._communication_record_writer.write_record(
+                        envelope,
+                        dispatch_result,
+                    )
                 )
             if self._communication_operations_service is not None:
-                communication_operations = self._communication_operations_service.get_message_operations_view(
-                    date_key=envelope.event_time.strftime("%Y-%m-%d"),
-                    target=envelope.target,
-                    message_id=envelope.message_id,
+                communication_operations = (
+                    self._communication_operations_service.get_message_operations_view(
+                        date_key=envelope.event_time.strftime("%Y-%m-%d"),
+                        target=envelope.target,
+                        message_id=envelope.message_id,
+                    )
                 )
 
         return DecisionCycleResult(

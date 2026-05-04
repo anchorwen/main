@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from core.observability.metric_names import BATCH_ERRORS, BATCH_TOTAL_TRIGGERS
 
 
@@ -21,27 +19,36 @@ class BatchProcessor:
         for i, trigger in enumerate(triggers):
             try:
                 outcome = self._orchestrator.run_cycle(trigger, feature_source)
-                results.append({
-                    "index": i,
-                    "trigger": trigger,
-                    "cycle_id": outcome.cycle_id,
-                    "verdict_allowed": outcome.decision_result.verdict.is_allowed() if outcome.decision_result else None,
-                    "status": "completed",
-                })
+                results.append(
+                    {
+                        "index": i,
+                        "trigger": trigger,
+                        "cycle_id": outcome.cycle_id,
+                        "verdict_allowed": outcome.decision_result.verdict.is_allowed()
+                        if outcome.decision_result
+                        else None,
+                        "status": "completed",
+                    }
+                )
             except Exception as exc:
                 errors.append({"index": i, "trigger": trigger, "error": str(exc)})
-                results.append({"index": i, "trigger": trigger, "status": "error", "error": str(exc)})
+                results.append(
+                    {"index": i, "trigger": trigger, "status": "error", "error": str(exc)}
+                )
 
         if self._metrics:
             self._metrics.inc(BATCH_TOTAL_TRIGGERS, len(triggers))
             self._metrics.inc(BATCH_ERRORS, len(errors))
 
         if self._event_bus:
-            self._event_bus.publish("batch.completed", {
-                "total": len(triggers),
-                "completed": len(triggers) - len(errors),
-                "errors": len(errors),
-            })
+            self._event_bus.publish(
+                "batch.completed",
+                {
+                    "total": len(triggers),
+                    "completed": len(triggers) - len(errors),
+                    "errors": len(errors),
+                },
+            )
 
         return {
             "total": len(triggers),
