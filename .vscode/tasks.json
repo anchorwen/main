@@ -1,0 +1,137 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Ruff: Check & Auto-fix All",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "-m",
+                "ruff",
+                "check",
+                "--fix",
+                "${workspaceFolder}"
+            ],
+            "problemMatcher": {
+                "owner": "python",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}"
+                ],
+                "pattern": {
+                    "regexp": "^(.*):(\\d+):(\\d+):\\s+(\\w+)\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Ruff: Format All",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "-m",
+                "ruff",
+                "format",
+                "${workspaceFolder}"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mypy: Type Check All",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "-m",
+                "mypy",
+                "${workspaceFolder}",
+                "--config-file=${workspaceFolder}/pyproject.toml"
+            ],
+            "problemMatcher": {
+                "owner": "python",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}"
+                ],
+                "pattern": {
+                    "regexp": "^(.*):(\\d+):(\\d+)?\\s+(error|warning):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Full Lint & Type Check",
+            "dependsOn": [
+                "Ruff: Check & Auto-fix All",
+                "Ruff: Format All",
+                "Mypy: Type Check All"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "Pre-commit: Run All Hooks",
+            "type": "shell",
+            "command": "pre-commit",
+            "args": [
+                "run",
+                "--all-files"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Project: Auto-Fix (Pylance + ruff)",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "scripts/dev/fix_project.py"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "group": "build"
+        },
+        {
+            "label": "Install Pre-commit Hooks",
+            "type": "shell",
+            "command": "pre-commit",
+            "args": [
+                "install"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        }
+    ]
+}

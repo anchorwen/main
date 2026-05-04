@@ -1,0 +1,16 @@
+{
+    "include": [
+        "core",
+        "apps",
+        "scripts",
+        "tests",
+        "main.py"
+    ],
+    "extraPaths": [
+        "d:\\future"
+    ],
+    "pythonVersion": "3.11",
+    "typeCheckingMode": "basic",
+    "reportMissingImports": true,
+    "reportMissingTypeStubs": false
+}

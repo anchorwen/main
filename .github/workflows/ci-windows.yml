@@ -61,6 +61,7 @@ jobs:
           python -m pytest tests/engine/test_runtime_contract_guard.py
           python -m pytest tests/engine/test_communication_replay_executor.py::test_replay_executor_priority_contract_matrix
           python -m pytest tests/engine/test_v9_shadow_smoke.py::test_v9_shadow_apply_stable_output_contract_mirrors_replay_execution_fields
+          python -m pytest tests/engine/test_live_read_only_preflight.py::test_live_preflight_main_supports_micro_live_mode
 
       - name: Pytest (tests/engine)
         run: python -m pytest tests/engine

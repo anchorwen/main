@@ -1,0 +1,22 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.7
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # ------------------------------------------------------------------
+  # 架构文档门禁 — 改动 core/ apps/ scripts/ configs/ main.py 时自动刷新
+  # 模式: AUTO-UPDATE (扫描 → 生成 → 自动 git add)
+  # 绕过: ARCHITECTURE_GATE_BYPASS=1
+  # ------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: enforce-architecture-docs
+        name: "[门禁] 架构文档自动刷新"
+        entry: python roadmap/scripts/architecture_gate.py
+        language: python
+        files: ^(core/|apps/|scripts/|configs/|main\.py)
+        stages: [pre-commit]
+        pass_filenames: false
