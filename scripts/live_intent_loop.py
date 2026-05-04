@@ -555,7 +555,6 @@ def main(argv: list[str] | None = None) -> int:
 
         # Apply governance filter: skip retired/frozen, penalize probation
         entries, gov_report = _apply_governance_filter(entries, args.base_dir)
-        start_event["governance_filter"] = gov_report
 
         from core.brains.services.brain_factory import BrainFactory
         from core.parliament.parliament_service import ParliamentService
@@ -621,6 +620,7 @@ def main(argv: list[str] | None = None) -> int:
         start_event["mode"] = "multi_brain"
         start_event["brain_count"] = len(brains)
         start_event["brain_ids"] = [b["brain_id"] for b in brains]
+        start_event["governance_filter"] = gov_report
     else:
         start_event["backend"] = brain.describe()["backend"]
         start_event["brain_id"] = brain_entry.get("brain_id", "unknown")

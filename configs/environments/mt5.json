@@ -1,7 +1,7 @@
 {
   "schema_version": "mt5_environment.v1",
   "terminal_path": "D:\\MetaTrader 5\\terminal64.exe",
-  "default_symbol": "XAUUSD",
+  "default_symbol": "XAUUSDc",
   "venue": "MT5"
 }
 
