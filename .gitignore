@@ -19,3 +19,13 @@ data/fills/
 data/feedback/
 data/replays/
 
+# Claude Code
+.claude/
+
+# Training artifacts
+batch_plans/
+
+# Backups
+cline_chat_backup/
+*.backup.*.md
+
