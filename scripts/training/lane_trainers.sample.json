@@ -1,0 +1,6 @@
+{
+  "sur": "python scripts/training/your_trainer.py --manifest {manifest_path}",
+  "mtx": "python scripts/training/your_trainer.py --manifest {manifest_path}",
+  "mr": "python scripts/training/your_trainer.py --manifest {manifest_path}",
+  "ens": "python scripts/training/your_trainer.py --manifest {manifest_path}"
+}

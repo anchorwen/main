@@ -1,0 +1,6 @@
+{
+  "sur": "python scripts/training/trainers/sur_trainer.py --manifest-path {manifest_path} --result-json-path {manifest_path}.result.json --artifact-path {artifact_path}",
+  "mtx": "python scripts/training/trainers/mtx_trainer.py --manifest-path {manifest_path} --result-json-path {manifest_path}.result.json --artifact-path {artifact_path} --mode transformer",
+  "mtx_xgb": "python scripts/training/trainers/mtx_trainer.py --manifest-path {manifest_path} --result-json-path {manifest_path}.result.json --artifact-path {artifact_path} --mode xgboost",
+  "arb": "python scripts/training/trainers/arb_trainer.py --manifest-path {manifest_path} --result-json-path {manifest_path}.result.json --artifact-path {artifact_path}"
+}

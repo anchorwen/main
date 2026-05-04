@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor.local/schemas/crt_model_manifest.v1.schema.json",
+  "title": "CRT Model Manifest",
+  "description": "Model Card + Bill of Materials for Cursor Release Train artifacts. See docs/MODEL_LINEAGE_AND_NAMING.md",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "model_id",
+    "lane",
+    "role",
+    "generation",
+    "feature_contract_id",
+    "iface_semver",
+    "dataset_slice_id",
+    "git_commit",
+    "train_started_at_utc",
+    "trainer_version",
+    "metrics",
+    "risk_notes"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "crt_model_manifest.v1"
+    },
+    "model_id": {
+      "type": "string",
+      "pattern": "^CRT\\.[a-z0-9]{2,16}\\.(prd|chlg|cabl|stub)\\.g\\d{4}\\.\\d+@feat-.+$",
+      "description": "CRT.<lane>.<role>.gYYYY.N@feat-<name>-<semver>"
+    },
+    "lane": {
+      "type": "string",
+      "pattern": "^[a-z]{2,16}$",
+      "description": "e.g. mtx, sur, mr, ens"
+    },
+    "role": {
+      "type": "string",
+      "enum": ["prd", "chlg", "cabl", "stub"]
+    },
+    "generation": {
+      "type": "string",
+      "pattern": "^g\\d{4}\\.\\d+$",
+      "description": "e.g. g2026.1"
+    },
+    "feature_contract_id": {
+      "type": "string",
+      "minLength": 4,
+      "description": "Must match @feat-… suffix of model_id"
+    },
+    "iface_semver": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "ONNX / TorchScript IO contract version"
+    },
+    "dataset_slice_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Training window + filter recipe version"
+    },
+    "git_commit": {
+      "type": "string",
+      "minLength": 4,
+      "description": "Short or full SHA; use \"unknown\" only for local stub"
+    },
+    "train_started_at_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC with Z suffix preferred"
+    },
+    "trainer_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "risk_notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "legacy_aliases": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "train_seed": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "artifact_primary": {
+      "type": ["string", "null"],
+      "description": "Path or URI to primary artifact (e.g. .onnx)"
+    },
+    "norm_artifact": {
+      "type": ["string", "null"],
+      "description": "Path or URI to normalization JSON / stats"
+    },
+    "training_run_id": {
+      "type": ["string", "null"],
+      "description": "Unique id per train invocation (same model_id family may have many runs)"
+    }
+  }
+}
