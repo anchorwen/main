@@ -125,11 +125,21 @@ def _generate_evolution_block(
     trade_quality: dict[str, Any],
     data_quality: dict[str, Any],
     flag_present: bool,
+    *,
+    shadow_ensemble: dict[str, Any] | None = None,
 ) -> str:
     """Produce the Markdown block to append to EVOLUTION_PLAN.md."""
     counts = trade_quality.get("counts", {})
     dq_issues = data_quality.get("summary", {}).get("issues_count", 0)
     outbox_stale = data_quality.get("outbox_staleness", {}).get("stale_count", 0)
+
+    ensemble_lines = ""
+    if shadow_ensemble and shadow_ensemble.get("total_brains", 0) > 0:
+        comparison = shadow_ensemble.get("comparison", {})
+        consensus = comparison.get("consensus", "unknown")
+        agreement = comparison.get("agreement_score", 0.0)
+        n_brains = comparison.get("total_brains", 0)
+        ensemble_lines = f"\n- 多模型共识: {consensus} (一致性={agreement:.0%}, 参与={n_brains})"
 
     return f"""
 
@@ -139,7 +149,7 @@ def _generate_evolution_block(
 - 运行状态: {run_state}
 - 核心统计: 接受={counts.get('accepted', 0)} 拒绝={counts.get('rejected', 0)} 确认={counts.get('acknowledged', 0)} 其他={counts.get('other', 0)} 合计={trade_quality.get('total', 0)} 拒单率={trade_quality.get('rejection_rate', 0.0)}
 - 数据质量: 交叉校验问题={dq_issues} outbox超时={outbox_stale}
-- live_dispatch_block.flag: {"存在" if flag_present else "不存在"}
+- live_dispatch_block.flag: {"存在" if flag_present else "不存在"}{ensemble_lines}
 - 关键事件: <手动最多 3 条>
 - 根因与修复: <手动最多 3 条>
 - 阶段进度: <Phase A/B/C 到达位置>
@@ -165,6 +175,51 @@ def _run_shadow_compare(
             journal_path=str(journal_path),
             shadow_baseline_json=None,
             base_dir=base_dir,
+        )
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def _run_shadow_ensemble(
+    brains_dir: Path,
+    *,
+    brain_ids: list[str] | None = None,
+    feature_dim: int = 40,
+) -> dict[str, Any]:
+    """Call live_shadow_ensemble.build_report in-process (parallel multi-model inference)."""
+    try:
+        from scripts.live_shadow_ensemble import build_report as build_ensemble
+    except Exception:
+        return {"error": "import_shadow_ensemble_failed"}
+    try:
+        return build_ensemble(
+            brains_dir=brains_dir,
+            brain_ids=brain_ids,
+            feature_dim=feature_dim,
+            parallel=True,
+        )
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def _run_feature_quality(
+    store_dir: Path,
+    norm_config_path: Path,
+    *,
+    symbol: str = "XAUUSD",
+    date_filter: str | None = None,
+) -> dict[str, Any]:
+    """Call live_feature_quality_report.build_report in-process."""
+    try:
+        from scripts.live_feature_quality_report import build_report as build_fq
+    except Exception:
+        return {"error": "import_feature_quality_failed"}
+    try:
+        return build_fq(
+            store_dir=store_dir,
+            norm_config_path=norm_config_path,
+            symbol=symbol,
+            date_filter=date_filter,
         )
     except Exception as exc:
         return {"error": str(exc)}
@@ -215,6 +270,9 @@ def build_report(
     repo_root: str | None = None,
     evolution_plan_path: str | None = None,
     backup_threshold_hours: int = 24,
+    brains_dir: Path | None = None,
+    feature_store_dir: Path | None = None,
+    norm_config_path: Path | None = None,
 ) -> dict[str, Any]:
     date = date_key or _today_utc_key()
     journal_path = base_dir / "live_trade_journal.jsonl"
@@ -237,12 +295,28 @@ def build_report(
         repo_root=repo_root,
     )
     shadow_compare = _run_shadow_compare(base_dir, symbol, date, journal_path)
+
+    shadow_ensemble: dict[str, Any] = {}
+    if brains_dir:
+        shadow_ensemble = _run_shadow_ensemble(brains_dir)
+
+    feature_quality: dict[str, Any] = {}
+    if feature_store_dir and norm_config_path:
+        feature_quality = _run_feature_quality(
+            feature_store_dir, norm_config_path, symbol=symbol, date_filter=date
+        )
+
     run_state = _derive_run_state(trade_quality, data_quality, flag_present)
 
     evolution_result: dict[str, Any] = {}
     if evolution_plan_path:
         block = _generate_evolution_block(
-            date, run_state, trade_quality, data_quality, flag_present
+            date,
+            run_state,
+            trade_quality,
+            data_quality,
+            flag_present,
+            shadow_ensemble=shadow_ensemble if shadow_ensemble else None,
         )
         evolution_result = _write_evolution_plan_update(
             Path(evolution_plan_path),
@@ -263,6 +337,8 @@ def build_report(
         "data_quality": data_quality,
         "pnl_snapshot": pnl,
         "shadow_compare": shadow_compare,
+        "shadow_ensemble": shadow_ensemble,
+        "feature_quality": feature_quality,
         "evolution_plan_update": evolution_result,
     }
 
@@ -276,6 +352,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--repo-root", default=None)
     p.add_argument("--evolution-plan", default=None, help="Path to EVOLUTION_PLAN.md")
     p.add_argument("--backup-threshold-hours", type=int, default=24)
+    p.add_argument(
+        "--brains-dir", type=Path, default=None, help="Brains config dir for shadow ensemble"
+    )
+    p.add_argument(
+        "--feature-store-dir", type=Path, default=None, help="Feature store dir for quality report"
+    )
+    p.add_argument(
+        "--norm-config",
+        type=Path,
+        default=Path("configs/brains/v9_institutional_01.normalization.json"),
+        help="Normalization config for feature quality",
+    )
     p.add_argument("--output", default=None, help="Write JSON report to file")
     return p
 
@@ -291,6 +379,9 @@ def main(argv: list[str] | None = None) -> int:
         repo_root=args.repo_root,
         evolution_plan_path=args.evolution_plan,
         backup_threshold_hours=args.backup_threshold_hours,
+        brains_dir=args.brains_dir,
+        feature_store_dir=args.feature_store_dir,
+        norm_config_path=args.norm_config,
     )
     text = json.dumps(report, indent=2, ensure_ascii=False, default=str)
     print(text)
