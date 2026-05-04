@@ -1,6 +1,5 @@
 import threading
-import time
-from datetime import datetime
+from datetime import UTC, datetime
 
 from core.deployment.domain_keys import (
     HEALTH_CHECK_STATUS_OK,
@@ -15,13 +14,13 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_LAST_ERROR,
     PAYLOAD_KEY_LAST_RUN,
     PAYLOAD_KEY_NAME,
+    PAYLOAD_KEY_RUN_COUNT,
     PAYLOAD_KEY_RUNNING,
     PAYLOAD_KEY_STATUS,
     PAYLOAD_KEY_TASK,
-    PAYLOAD_KEY_TASKS,
     PAYLOAD_KEY_TASK_COUNT,
+    PAYLOAD_KEY_TASKS,
     PAYLOAD_KEY_THROTTLE_RATE,
-    PAYLOAD_KEY_RUN_COUNT,
 )
 from core.observability.metric_names import (
     CYCLES_ERRORS,
@@ -80,7 +79,7 @@ class SchedulerService:
     def run_once(self) -> list[dict]:
         """Execute all due tasks once (synchronous). Useful for testing."""
         results = []
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         for task in self._tasks:
             if not task.enabled:
                 continue
@@ -109,11 +108,14 @@ class SchedulerService:
 
     def _loop(self) -> None:
         while not self._stop_event.is_set():
-            now = datetime.utcnow()
+            now = datetime.now(UTC).replace(tzinfo=None)
             for task in self._tasks:
                 if not task.enabled:
                     continue
-                if task.last_run is None or (now - task.last_run).total_seconds() >= task.interval_seconds:
+                if (
+                    task.last_run is None
+                    or (now - task.last_run).total_seconds() >= task.interval_seconds
+                ):
                     self._execute_task(task)
             self._stop_event.wait(0.1)
 
@@ -121,14 +123,18 @@ class SchedulerService:
         try:
             task.fn()
             task.run_count += 1
-            task.last_run = datetime.utcnow()
+            task.last_run = datetime.now(UTC).replace(tzinfo=None)
             task.last_error = None
             return {PAYLOAD_KEY_TASK: task.name, PAYLOAD_KEY_STATUS: HEALTH_CHECK_STATUS_OK}
         except Exception as exc:
             task.error_count += 1
-            task.last_run = datetime.utcnow()
+            task.last_run = datetime.now(UTC).replace(tzinfo=None)
             task.last_error = str(exc)
-            return {PAYLOAD_KEY_TASK: task.name, PAYLOAD_KEY_STATUS: LIFECYCLE_PHASE_STATUS_ERROR, PAYLOAD_KEY_ERROR: str(exc)}
+            return {
+                PAYLOAD_KEY_TASK: task.name,
+                PAYLOAD_KEY_STATUS: LIFECYCLE_PHASE_STATUS_ERROR,
+                PAYLOAD_KEY_ERROR: str(exc),
+            }
 
     @classmethod
     def for_container(cls, container, persistence=None, alert_service=None):
@@ -136,19 +142,24 @@ class SchedulerService:
         svc = cls()
 
         if container.governance_rule_engine and container.brain_tracker:
+
             def governance_eval():
                 summaries = container.brain_tracker.get_all_summaries()
                 summary_map = {s[PAYLOAD_KEY_BRAIN_ID]: s for s in summaries}
                 if summary_map:
                     container.governance_rule_engine.evaluate(summary_map)
+
             svc.add_task("governance_evaluation", governance_eval, interval_seconds=60)
 
         if persistence:
+
             def state_snapshot():
                 persistence.save_all(container)
+
             svc.add_task("state_snapshot", state_snapshot, interval_seconds=300)
 
         if alert_service and container.metrics:
+
             def alert_check():
                 snap = container.metrics.snapshot()
                 counters = snap.get(PAYLOAD_KEY_COUNTERS, {})
@@ -159,12 +170,18 @@ class SchedulerService:
                     PAYLOAD_KEY_THROTTLE_RATE: counters.get(CYCLES_THROTTLED, 0) / max(total, 1),
                 }
                 alert_service.evaluate(ctx)
+
             svc.add_task("alert_check", alert_check, interval_seconds=30)
 
-        poll_iv = float(getattr(
-            container.config, "engine_config_poll_interval_seconds", 60.0,
-        ))
+        poll_iv = float(
+            getattr(
+                container.config,
+                "engine_config_poll_interval_seconds",
+                60.0,
+            )
+        )
         if poll_iv > 0 and getattr(container, "config_hot_reload", None) is not None:
+
             def engine_config_poll():
                 container.config_hot_reload.check_and_reload()
 

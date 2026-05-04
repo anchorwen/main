@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from core.observability.metric_names import DISPATCH_REJECTED, RECONCILIATION_BREACHED
 
@@ -20,7 +20,7 @@ class DiagnosticsDashboard:
 
     def build_snapshot(self, *, date_key: str | None = None) -> dict:
         return {
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             "metrics": self._build_metrics_section(),
             "brain_health": self._build_brain_health_section(),
             "audit_summary": self._build_audit_summary(date_key),
@@ -51,7 +51,9 @@ class DiagnosticsDashboard:
         return {
             "brain_count": len(summaries),
             "healthy_count": sum(1 for s in summaries if s["health_signal"] == "healthy"),
-            "degraded_count": sum(1 for s in summaries if s["health_signal"] in {"degraded", "critical"}),
+            "degraded_count": sum(
+                1 for s in summaries if s["health_signal"] in {"degraded", "critical"}
+            ),
             "brains": {
                 s["brain_id"]: {
                     "health": s["health_signal"],
@@ -86,34 +88,48 @@ class DiagnosticsDashboard:
         if self._tracker:
             for s in self._tracker.get_all_summaries():
                 if s["health_signal"] == "critical":
-                    alerts.append({
-                        "level": "critical",
-                        "source": "brain_health",
-                        "brain_id": s["brain_id"],
-                        "message": f"Brain {s['brain_id']} health critical, recommendation: {s['recommendation']}",
-                    })
+                    alerts.append(
+                        {
+                            "level": "critical",
+                            "source": "brain_health",
+                            "brain_id": s["brain_id"],
+                            "message": (
+                                f"Brain {s['brain_id']} health critical,"
+                                f" recommendation: {s['recommendation']}"
+                            ),
+                        }
+                    )
                 elif s["health_signal"] == "degraded":
-                    alerts.append({
-                        "level": "warning",
-                        "source": "brain_health",
-                        "brain_id": s["brain_id"],
-                        "message": f"Brain {s['brain_id']} health degraded, recommendation: {s['recommendation']}",
-                    })
+                    alerts.append(
+                        {
+                            "level": "warning",
+                            "source": "brain_health",
+                            "brain_id": s["brain_id"],
+                            "message": (
+                                f"Brain {s['brain_id']} health degraded,"
+                                f" recommendation: {s['recommendation']}"
+                            ),
+                        }
+                    )
 
         if self._metrics:
             breach_count = self._metrics.get_counter(RECONCILIATION_BREACHED)
             if breach_count > 0:
-                alerts.append({
-                    "level": "error",
-                    "source": "reconciliation",
-                    "message": f"Reconciliation breaches detected: {int(breach_count)}",
-                })
+                alerts.append(
+                    {
+                        "level": "error",
+                        "source": "reconciliation",
+                        "message": f"Reconciliation breaches detected: {int(breach_count)}",
+                    }
+                )
             reject_count = self._metrics.get_counter(DISPATCH_REJECTED)
             if reject_count > 5:
-                alerts.append({
-                    "level": "warning",
-                    "source": "dispatch",
-                    "message": f"High dispatch rejection rate: {int(reject_count)} rejections",
-                })
+                alerts.append(
+                    {
+                        "level": "warning",
+                        "source": "dispatch",
+                        "message": f"High dispatch rejection rate: {int(reject_count)} rejections",
+                    }
+                )
 
         return alerts

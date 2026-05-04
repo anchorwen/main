@@ -55,4 +55,3 @@ def new_runtime_cycle_id() -> str:
 
 def new_runtime_evidence_id() -> str:
     return _new_id("runtime_evidence")
-

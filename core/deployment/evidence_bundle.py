@@ -3,17 +3,18 @@
 Creates a directory of machine-readable evidence files plus a manifest
 with SHA-256 checksums for traceability.
 """
-from datetime import datetime
-from pathlib import Path
+
 import hashlib
 import json
+from datetime import UTC, datetime
+from pathlib import Path
 
 from core.deployment.domain_keys import (
     ENGINE_CONFIG_KEY_HOT_RELOAD,
     ENGINE_CONFIG_KEY_RUNTIME_METRICS,
     EVIDENCE_SECTION_ALPHA_BUDGET_USAGE,
-    EVIDENCE_SECTION_DOCTOR,
     EVIDENCE_SECTION_DIAGNOSTICS,
+    EVIDENCE_SECTION_DOCTOR,
     EVIDENCE_SECTION_ENGINE_CONFIG,
     EVIDENCE_SECTION_FINAL_AUDIT,
     EVIDENCE_SECTION_GATE,
@@ -25,21 +26,20 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_ACTUAL_SHA256,
     PAYLOAD_KEY_AVAILABLE,
     PAYLOAD_KEY_BUNDLE_DIR,
-    PAYLOAD_KEY_DECISION,
-    PAYLOAD_KEY_ENGINE_CONFIG_POLL_INTERVAL_SECONDS,
-    PAYLOAD_KEY_EXPECTED_SHA256,
     PAYLOAD_KEY_CHECKSUM_MATCHES,
     PAYLOAD_KEY_CONFIG_PATH,
+    PAYLOAD_KEY_DECISION,
     PAYLOAD_KEY_EFFECTIVE,
+    PAYLOAD_KEY_ENGINE_CONFIG_POLL_INTERVAL_SECONDS,
     PAYLOAD_KEY_EXISTS,
+    PAYLOAD_KEY_EXPECTED_SHA256,
+    PAYLOAD_KEY_FAILED_COUNT,
     PAYLOAD_KEY_FILE_COUNT,
     PAYLOAD_KEY_FILE_EXISTS,
     PAYLOAD_KEY_FILES,
-    PAYLOAD_KEY_FAILED_COUNT,
     PAYLOAD_KEY_GATE_DECISION,
     PAYLOAD_KEY_GENERATED_AT,
     PAYLOAD_KEY_GOVERNANCE_FOCUS,
-    PAYLOAD_KEY_GOVERNANCE_WARNING_COUNT,
     PAYLOAD_KEY_LABEL,
     PAYLOAD_KEY_MANIFEST_CHECKSUM,
     PAYLOAD_KEY_MANIFEST_PATH,
@@ -59,17 +59,16 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_SYSTEM_MODE,
     PAYLOAD_KEY_VALIDATION_MODE,
     PAYLOAD_KEY_VERIFIED,
-    VALIDATION_MODE_DEEP,
 )
+from core.deployment.governance_summary import build_governance_summary, extract_governance_summary
 from core.deployment.schema_versions import (
     SCHEMA_ENGINE_CONFIG_EVIDENCE,
     SCHEMA_EVIDENCE_BUNDLE,
     SCHEMA_EVIDENCE_MANIFEST,
     SCHEMA_EVIDENCE_VERIFICATION,
 )
-from core.observability.metric_names import ENGINE_CONFIG_RELOAD_TOTAL
-from core.deployment.governance_summary import build_governance_summary, extract_governance_summary
 from core.deployment.validation_mode import resolve_validation_mode
+from core.observability.metric_names import ENGINE_CONFIG_RELOAD_TOTAL
 
 
 class EvidenceBundleService:
@@ -100,20 +99,32 @@ class EvidenceBundleService:
         validation_mode: str | None = None,
     ) -> dict:
         validation_mode = resolve_validation_mode(self._container, validation_mode)
-        label = label or datetime.utcnow().strftime("bundle_%Y%m%d%H%M%S")
+        label = label or datetime.now(UTC).replace(tzinfo=None).strftime("bundle_%Y%m%d%H%M%S")
         target_dir = Path(output_dir) / label
         target_dir.mkdir(parents=True, exist_ok=True)
 
         files = []
         generated = {
-            EVIDENCE_SECTION_READINESS: self._container.release_readiness.build_report(validation_mode=validation_mode),
-            EVIDENCE_SECTION_GATE: self._container.release_gate.evaluate(validation_mode=validation_mode),
+            EVIDENCE_SECTION_READINESS: self._container.release_readiness.build_report(
+                validation_mode=validation_mode
+            ),
+            EVIDENCE_SECTION_GATE: self._container.release_gate.evaluate(
+                validation_mode=validation_mode
+            ),
             EVIDENCE_SECTION_SLO: self._container.slo_service.evaluate(),
-            EVIDENCE_SECTION_PREFLIGHT: self._container.runbook_engine.preflight(validation_mode=validation_mode),
-            EVIDENCE_SECTION_DOCTOR: self._container.runbook_engine.doctor(validation_mode=validation_mode),
+            EVIDENCE_SECTION_PREFLIGHT: self._container.runbook_engine.preflight(
+                validation_mode=validation_mode
+            ),
+            EVIDENCE_SECTION_DOCTOR: self._container.runbook_engine.doctor(
+                validation_mode=validation_mode
+            ),
             EVIDENCE_SECTION_DIAGNOSTICS: self._build_diagnostics(),
-            EVIDENCE_SECTION_FINAL_AUDIT: self._container.final_audit.build_report(validation_mode=validation_mode),
-            EVIDENCE_SECTION_OPS_MATURITY: self._container.ops_maturity.evaluate(validation_mode=validation_mode),
+            EVIDENCE_SECTION_FINAL_AUDIT: self._container.final_audit.build_report(
+                validation_mode=validation_mode
+            ),
+            EVIDENCE_SECTION_OPS_MATURITY: self._container.ops_maturity.evaluate(
+                validation_mode=validation_mode
+            ),
             EVIDENCE_SECTION_ENGINE_CONFIG: self._build_engine_config(),
         }
 
@@ -164,15 +175,21 @@ class EvidenceBundleService:
             exists = path.exists()
             checksum = self._sha256(path) if exists else None
             expected = item.get(PAYLOAD_KEY_SHA256)
-            ok = exists if item.get(PAYLOAD_KEY_SECTION) == EVIDENCE_SECTION_MANIFEST else exists and checksum == expected
-            results.append({
-                PAYLOAD_KEY_SECTION: item.get(PAYLOAD_KEY_SECTION),
-                PAYLOAD_KEY_RELATIVE_PATH: item.get(PAYLOAD_KEY_RELATIVE_PATH),
-                PAYLOAD_KEY_EXISTS: exists,
-                PAYLOAD_KEY_CHECKSUM_MATCHES: ok,
-                PAYLOAD_KEY_EXPECTED_SHA256: expected,
-                PAYLOAD_KEY_ACTUAL_SHA256: checksum,
-            })
+            ok = (
+                exists
+                if item.get(PAYLOAD_KEY_SECTION) == EVIDENCE_SECTION_MANIFEST
+                else exists and checksum == expected
+            )
+            results.append(
+                {
+                    PAYLOAD_KEY_SECTION: item.get(PAYLOAD_KEY_SECTION),
+                    PAYLOAD_KEY_RELATIVE_PATH: item.get(PAYLOAD_KEY_RELATIVE_PATH),
+                    PAYLOAD_KEY_EXISTS: exists,
+                    PAYLOAD_KEY_CHECKSUM_MATCHES: ok,
+                    PAYLOAD_KEY_EXPECTED_SHA256: expected,
+                    PAYLOAD_KEY_ACTUAL_SHA256: checksum,
+                }
+            )
         failed = [r for r in results if not r[PAYLOAD_KEY_CHECKSUM_MATCHES]]
         return {
             PAYLOAD_KEY_SCHEMA_VERSION: SCHEMA_EVIDENCE_VERIFICATION,
@@ -193,7 +210,10 @@ class EvidenceBundleService:
     def _build_engine_config(self) -> dict:
         hr = getattr(self._container, "config_hot_reload", None)
         if hr is None:
-            return {PAYLOAD_KEY_SCHEMA_VERSION: SCHEMA_ENGINE_CONFIG_EVIDENCE, PAYLOAD_KEY_AVAILABLE: False}
+            return {
+                PAYLOAD_KEY_SCHEMA_VERSION: SCHEMA_ENGINE_CONFIG_EVIDENCE,
+                PAYLOAD_KEY_AVAILABLE: False,
+            }
         path = hr._path
         exists = bool(path) and path.is_file()
         m = getattr(self._container, "metrics", None)
@@ -205,9 +225,13 @@ class EvidenceBundleService:
             ENGINE_CONFIG_KEY_HOT_RELOAD: hr.get_status(),
             PAYLOAD_KEY_EFFECTIVE: {
                 PAYLOAD_KEY_OPS_MATURITY_MIN_SCORE: self._container.config.ops_maturity_min_score,
-                PAYLOAD_KEY_ENGINE_CONFIG_POLL_INTERVAL_SECONDS: float(getattr(
-                    self._container.config, "engine_config_poll_interval_seconds", 60.0,
-                )),
+                PAYLOAD_KEY_ENGINE_CONFIG_POLL_INTERVAL_SECONDS: float(
+                    getattr(
+                        self._container.config,
+                        "engine_config_poll_interval_seconds",
+                        60.0,
+                    )
+                ),
                 PAYLOAD_KEY_MAX_OPEN_POSITIONS: self._container.config.max_open_positions,
                 PAYLOAD_KEY_MAX_DRAWDOWN_PCT: self._container.config.max_drawdown_pct,
                 PAYLOAD_KEY_SYSTEM_MODE: self._container.config.system_mode,
@@ -235,12 +259,13 @@ class EvidenceBundleService:
             PAYLOAD_KEY_SCHEMA_VERSION: SCHEMA_EVIDENCE_MANIFEST,
             PAYLOAD_KEY_LABEL: label,
             PAYLOAD_KEY_VALIDATION_MODE: validation_mode,
-            PAYLOAD_KEY_GENERATED_AT: datetime.utcnow().isoformat(),
+            PAYLOAD_KEY_GENERATED_AT: datetime.now(UTC).replace(tzinfo=None).isoformat(),
             PAYLOAD_KEY_BUNDLE_DIR: str(target_dir),
             PAYLOAD_KEY_FILES: list(files),
             PAYLOAD_KEY_SUMMARY: {
                 PAYLOAD_KEY_FILE_COUNT: len(files) + 1,
-                PAYLOAD_KEY_SECTIONS: [f[PAYLOAD_KEY_SECTION] for f in files] + [EVIDENCE_SECTION_MANIFEST],
+                PAYLOAD_KEY_SECTIONS: [f[PAYLOAD_KEY_SECTION] for f in files]
+                + [EVIDENCE_SECTION_MANIFEST],
                 **normalized_governance_summary,
             },
         }

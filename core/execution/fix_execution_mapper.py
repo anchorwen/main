@@ -1,5 +1,6 @@
 """FIX inbound execution report mapper."""
-from datetime import datetime
+
+from datetime import UTC, datetime
 from typing import Any
 
 from core.contracts.ids import new_execution_event_id
@@ -62,7 +63,7 @@ class FixExecutionReportMapper:
 
     def _parse_time(self, value) -> datetime:
         if value is None:
-            return datetime.utcnow()
+            return datetime.now(UTC).replace(tzinfo=None)
         if isinstance(value, datetime):
             return value
         text = str(value)

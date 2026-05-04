@@ -3,6 +3,7 @@ from core.deployment.domain_keys import (
     MISMATCH_TYPE_QUANTITY,
     MISMATCH_TYPE_STATE,
     PAYLOAD_KEY_ACTUAL,
+    PAYLOAD_KEY_BREACHED_MESSAGE_IDS,
     PAYLOAD_KEY_CORRELATION_ID,
     PAYLOAD_KEY_DELTA,
     PAYLOAD_KEY_DETAIL,
@@ -30,7 +31,6 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_TOTAL_INTENDED_QUANTITY,
     PAYLOAD_KEY_TYPE,
     PAYLOAD_KEY_UNMATCHED_MESSAGE_IDS,
-    PAYLOAD_KEY_BREACHED_MESSAGE_IDS,
     RECONCILIATION_STATUS_BREACHED,
     RECONCILIATION_STATUS_MATCHED,
     RECONCILIATION_STATUS_PARTIAL,
@@ -63,7 +63,9 @@ class ExecutionReconciliationService:
         self._communication_reader = communication_reader
         self._execution_event_reader = execution_event_reader
 
-    def reconcile_message(self, *, date_key: str, target: str, message_id: str, correlation_id: str) -> dict:
+    def reconcile_message(
+        self, *, date_key: str, target: str, message_id: str, correlation_id: str
+    ) -> dict:
         record = self._communication_reader.find_by_message_id(
             date_key=date_key,
             target=target,
@@ -76,7 +78,9 @@ class ExecutionReconciliationService:
         )
         return self._build_reconciliation_result(record, timeline, message_id=message_id)
 
-    def reconcile_correlation(self, *, date_key: str, target: str, correlation_id: str, message_ids: list[str]) -> dict:
+    def reconcile_correlation(
+        self, *, date_key: str, target: str, correlation_id: str, message_ids: list[str]
+    ) -> dict:
         message_results = []
         for message_id in message_ids:
             msg_result = self.reconcile_message(
@@ -106,13 +110,27 @@ class ExecutionReconciliationService:
             PAYLOAD_KEY_MESSAGE_COUNT: len(message_ids),
             PAYLOAD_KEY_MESSAGE_RESULTS: message_results,
             PAYLOAD_KEY_STATUS_COUNTS: self._count_statuses(statuses),
-            PAYLOAD_KEY_TOTAL_INTENDED_QUANTITY: sum(r.get(PAYLOAD_KEY_INTENDED_QUANTITY, 0) for r in message_results),
-            PAYLOAD_KEY_TOTAL_FILLED_QUANTITY: sum(r.get(PAYLOAD_KEY_FILLED_QUANTITY, 0) for r in message_results),
-            PAYLOAD_KEY_BREACHED_MESSAGE_IDS: [r[PAYLOAD_KEY_MESSAGE_ID] for r in message_results if r[PAYLOAD_KEY_STATUS] == self.STATUS_BREACHED],
-            PAYLOAD_KEY_UNMATCHED_MESSAGE_IDS: [r[PAYLOAD_KEY_MESSAGE_ID] for r in message_results if r[PAYLOAD_KEY_STATUS] == self.STATUS_UNMATCHED],
+            PAYLOAD_KEY_TOTAL_INTENDED_QUANTITY: sum(
+                r.get(PAYLOAD_KEY_INTENDED_QUANTITY, 0) for r in message_results
+            ),
+            PAYLOAD_KEY_TOTAL_FILLED_QUANTITY: sum(
+                r.get(PAYLOAD_KEY_FILLED_QUANTITY, 0) for r in message_results
+            ),
+            PAYLOAD_KEY_BREACHED_MESSAGE_IDS: [
+                r[PAYLOAD_KEY_MESSAGE_ID]
+                for r in message_results
+                if r[PAYLOAD_KEY_STATUS] == self.STATUS_BREACHED
+            ],
+            PAYLOAD_KEY_UNMATCHED_MESSAGE_IDS: [
+                r[PAYLOAD_KEY_MESSAGE_ID]
+                for r in message_results
+                if r[PAYLOAD_KEY_STATUS] == self.STATUS_UNMATCHED
+            ],
         }
 
-    def _build_reconciliation_result(self, record: dict | None, timeline: dict, *, message_id: str) -> dict:
+    def _build_reconciliation_result(
+        self, record: dict | None, timeline: dict, *, message_id: str
+    ) -> dict:
         intended_qty = self._extract_intended_quantity(record)
         filled_qty = timeline.get(PAYLOAD_KEY_TOTAL_FILLED_QUANTITY, 0)
         terminal_type = timeline.get(PAYLOAD_KEY_TERMINAL_EVENT_TYPE)
@@ -187,22 +205,29 @@ class ExecutionReconciliationService:
     def _detect_mismatches(self, *, record, timeline, intended_qty, filled_qty) -> list[dict]:
         mismatches = []
         if intended_qty > 0 and filled_qty > 0 and filled_qty != intended_qty:
-            mismatches.append({
-                PAYLOAD_KEY_TYPE: MISMATCH_TYPE_QUANTITY,
-                PAYLOAD_KEY_INTENDED: intended_qty,
-                PAYLOAD_KEY_ACTUAL: filled_qty,
-                PAYLOAD_KEY_DELTA: filled_qty - intended_qty,
-            })
+            mismatches.append(
+                {
+                    PAYLOAD_KEY_TYPE: MISMATCH_TYPE_QUANTITY,
+                    PAYLOAD_KEY_INTENDED: intended_qty,
+                    PAYLOAD_KEY_ACTUAL: filled_qty,
+                    PAYLOAD_KEY_DELTA: filled_qty - intended_qty,
+                }
+            )
         if record is not None:
             dispatch_status = record.get(PAYLOAD_KEY_DISPATCH, {}).get(PAYLOAD_KEY_STATUS)
             terminal_type = timeline.get(PAYLOAD_KEY_TERMINAL_EVENT_TYPE)
-            if dispatch_status == DISPATCH_STATUS_TRANSPORT_DELIVERED and terminal_type == TERMINAL_EVENT_REJECTED:
-                mismatches.append({
-                    PAYLOAD_KEY_TYPE: MISMATCH_TYPE_STATE,
-                    PAYLOAD_KEY_DISPATCH_STATUS: dispatch_status,
-                    PAYLOAD_KEY_EXECUTION_TERMINAL: terminal_type,
-                    PAYLOAD_KEY_DETAIL: "dispatch delivered but execution rejected",
-                })
+            if (
+                dispatch_status == DISPATCH_STATUS_TRANSPORT_DELIVERED
+                and terminal_type == TERMINAL_EVENT_REJECTED
+            ):
+                mismatches.append(
+                    {
+                        PAYLOAD_KEY_TYPE: MISMATCH_TYPE_STATE,
+                        PAYLOAD_KEY_DISPATCH_STATUS: dispatch_status,
+                        PAYLOAD_KEY_EXECUTION_TERMINAL: terminal_type,
+                        PAYLOAD_KEY_DETAIL: "dispatch delivered but execution rejected",
+                    }
+                )
         return mismatches
 
     def _extract_intended_quantity(self, record: dict | None) -> float:

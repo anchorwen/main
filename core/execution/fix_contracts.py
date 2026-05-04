@@ -1,8 +1,8 @@
 """FIX adapter contracts and constants."""
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
-
 
 FIX_SIDE = {"buy": "1", "sell": "2"}
 FIX_ORDER_TYPE = {"market": "1", "limit": "2"}
@@ -46,7 +46,9 @@ class FixMessage:
 
     def to_readable_string(self) -> str:
         fields = self.to_tag_dict()
-        return "|".join(f"{tag}={value}" for tag, value in sorted(fields.items(), key=lambda x: int(x[0])))
+        return "|".join(
+            f"{tag}={value}" for tag, value in sorted(fields.items(), key=lambda x: int(x[0]))
+        )
 
 
 @dataclass(frozen=True)

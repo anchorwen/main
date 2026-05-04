@@ -1,5 +1,4 @@
-from datetime import datetime
-from typing import Any
+from datetime import UTC, datetime
 
 from core.contracts.domain.decision_candidate import DecisionCandidate
 from core.contracts.ids import new_candidate_id
@@ -36,7 +35,7 @@ class ParliamentService:
             candidate_id=new_candidate_id(),
             snapshot_id=feature_snapshot.snapshot_id,
             event_time=feature_snapshot.event_time,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(UTC).replace(tzinfo=None),
             regime_state=regime_state,
             consensus=consensus,
             supporting_brains=supporting,
@@ -44,7 +43,9 @@ class ParliamentService:
             execution_feasibility=feasibility,
             risk_comments=self._build_risk_comments(active_proposals),
             candidate_summary=self._build_summary(
-                feature_snapshot, consensus, active_proposals,
+                feature_snapshot,
+                consensus,
+                active_proposals,
             ),
             trace={"parliament_version": "v1", "proposal_count": len(active_proposals)},
         )
@@ -96,7 +97,10 @@ class ParliamentService:
         total = len(biases)
         majority_ratio = max(long_count, short_count) / total if total else 0
 
-        if weighted_up >= weighted_down:
+        if neutral_count > long_count and neutral_count > short_count:
+            bias = "neutral"
+            score = max(weighted_up, weighted_down)
+        elif weighted_up >= weighted_down:
             bias = "long"
             score = weighted_up
         else:
@@ -151,11 +155,20 @@ class ParliamentService:
         }
 
     def _build_summary(self, feature_snapshot, consensus: dict, proposals: list) -> dict:
+        bias = consensus["aggregated_bias"]
+        score = consensus.get("consensus_score", 0.5)
+
+        if bias == "neutral":
+            up_prob = down_prob = score
+        else:
+            up_prob = score if bias == "long" else 1 - score
+            down_prob = score if bias == "short" else 1 - score
+
         return {
             "symbol": feature_snapshot.symbol,
             "venue": getattr(feature_snapshot, "venue", "unknown"),
-            "up_probability": consensus.get("consensus_score") if consensus["aggregated_bias"] == "long" else 1 - consensus.get("consensus_score", 0.5),
-            "down_probability": consensus.get("consensus_score") if consensus["aggregated_bias"] == "short" else 1 - consensus.get("consensus_score", 0.5),
+            "up_probability": up_prob,
+            "down_probability": down_prob,
             "suggested_risk_fraction": 0.002,
             "proposal_count": len(proposals),
         }

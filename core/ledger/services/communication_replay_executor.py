@@ -1,17 +1,15 @@
 from core.contracts.enums import ReplayGateDecision
 from core.deployment.domain_keys import (
     PAYLOAD_KEY_BLOCK_REASONS,
-    PAYLOAD_KEY_DISPATCH_RESULT,
-    PAYLOAD_KEY_GATE_DECISION,
-    PAYLOAD_KEY_SKIP_REASONS,
-    PAYLOAD_KEY_MESSAGE_ID,
-    PAYLOAD_KEY_REASON,
-    PAYLOAD_KEY_RESULTS,
     PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
     PAYLOAD_KEY_BLOCKED_MESSAGES,
     PAYLOAD_KEY_CORRELATION_ID,
+    PAYLOAD_KEY_DISPATCH_RESULT,
     PAYLOAD_KEY_EXECUTION_STATE,
+    PAYLOAD_KEY_GATE_DECISION,
     PAYLOAD_KEY_MESSAGE_COUNT,
+    PAYLOAD_KEY_MESSAGE_ID,
+    PAYLOAD_KEY_REASON,
     PAYLOAD_KEY_RECOMMENDED_STRATEGY,
     PAYLOAD_KEY_REPLAY,
     PAYLOAD_KEY_REPLAY_CORRELATION_ID,
@@ -19,11 +17,25 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_REPLAY_MESSAGE_ID,
     PAYLOAD_KEY_REPLAY_RECORD,
     PAYLOAD_KEY_REPLAY_TRACE,
+    PAYLOAD_KEY_RESULTS,
     PAYLOAD_KEY_SCOPE,
-    PAYLOAD_KEY_STATUS,
+    PAYLOAD_KEY_SKIP_REASONS,
     PAYLOAD_KEY_SKIPPED_MESSAGE_IDS,
     PAYLOAD_KEY_SKIPPED_MESSAGES,
+    PAYLOAD_KEY_STATUS,
     PAYLOAD_KEY_TARGET_MESSAGE_IDS,
+    REPLAY_EXECUTION_STATE_DISPATCHED,
+    REPLAY_EXECUTION_STATE_NOT_EXECUTED,
+    REPLAY_EXECUTION_STATUS_BLOCKED,
+    REPLAY_EXECUTION_STATUS_EXECUTED,
+    REPLAY_EXECUTOR_BLOCK_REASON_CANCELLED_RECEIPT,
+    REPLAY_EXECUTOR_BLOCK_REASON_GATE_BLOCKED,
+    REPLAY_EXECUTOR_BLOCK_REASON_REJECTED_RECEIPT,
+    REPLAY_EXECUTOR_BLOCK_REASON_REVIEW_REQUIRED,
+    REPLAY_EXECUTOR_BLOCK_REASON_STALE_RECEIPT,
+    REPLAY_EXECUTOR_BLOCK_REASON_TERMINAL_RECEIPT,
+    REPLAY_EXECUTOR_SKIP_REASON_ACKNOWLEDGED_MESSAGE,
+    REPLAY_EXECUTOR_SKIP_REASON_NOT_TARGETED,
     REPLAY_GATE_REASON_CANCELLED_RECEIPT_DETECTED,
     REPLAY_GATE_REASON_CORRELATION_CONTAINS_CANCELLED_RECEIPT,
     REPLAY_GATE_REASON_CORRELATION_CONTAINS_FAILED_MESSAGE,
@@ -36,45 +48,61 @@ from core.deployment.domain_keys import (
     REPLAY_GATE_REASON_REJECTED_RECEIPT_DETECTED,
     REPLAY_GATE_REASON_STALE_RECEIPT_DETECTED,
     REPLAY_GATE_REASON_TERMINAL_RECEIPT_ALREADY_RECORDED,
-    REPLAY_EXECUTOR_BLOCK_REASON_CANCELLED_RECEIPT,
-    REPLAY_EXECUTOR_BLOCK_REASON_GATE_BLOCKED,
-    REPLAY_EXECUTOR_BLOCK_REASON_REJECTED_RECEIPT,
-    REPLAY_EXECUTOR_BLOCK_REASON_REVIEW_REQUIRED,
-    REPLAY_EXECUTOR_BLOCK_REASON_STALE_RECEIPT,
-    REPLAY_EXECUTOR_BLOCK_REASON_TERMINAL_RECEIPT,
-    REPLAY_EXECUTOR_SKIP_REASON_ACKNOWLEDGED_MESSAGE,
-    REPLAY_EXECUTOR_SKIP_REASON_NOT_TARGETED,
-    REPLAY_EXECUTION_STATE_DISPATCHED,
-    REPLAY_EXECUTION_STATE_NOT_EXECUTED,
-    REPLAY_EXECUTION_STATUS_BLOCKED,
-    REPLAY_EXECUTION_STATUS_EXECUTED,
     REPLAY_TRACE_SCOPE_CORRELATION,
     REPLAY_TRACE_SCOPE_MESSAGE,
 )
 from core.ledger.services.gate_decision_refs import (
     decision as gate_decision_value,
+)
+from core.ledger.services.gate_decision_refs import (
     reason_set as gate_reason_set,
 )
 from core.ledger.services.replay_plan_refs import (
     acknowledged_message_ids as plan_acknowledged_message_ids,
+)
+from core.ledger.services.replay_plan_refs import (
     correlation_id as plan_correlation_id,
+)
+from core.ledger.services.replay_plan_refs import (
     message_id as plan_message_id,
+)
+from core.ledger.services.replay_plan_refs import (
     message_ids as plan_message_ids,
+)
+from core.ledger.services.replay_plan_refs import (
     message_plans as plan_message_plans,
+)
+from core.ledger.services.replay_plan_refs import (
     recommended_strategy as plan_recommended_strategy,
+)
+from core.ledger.services.replay_plan_refs import (
     target_message_ids as plan_target_message_ids,
 )
+from core.ledger.services.replay_record_refs import grouped_reasons as replay_grouped_reasons
 from core.ledger.services.replay_trace_refs import (
     blocked_message_ids as trace_blocked_message_ids,
+)
+from core.ledger.services.replay_trace_refs import (
     correlation_id as trace_correlation_id,
+)
+from core.ledger.services.replay_trace_refs import (
     execution_state as trace_execution_state,
+)
+from core.ledger.services.replay_trace_refs import (
     message_count as trace_message_count,
+)
+from core.ledger.services.replay_trace_refs import (
     message_id as trace_message_id,
+)
+from core.ledger.services.replay_trace_refs import (
     scope as trace_scope,
+)
+from core.ledger.services.replay_trace_refs import (
     skipped_message_ids as trace_skipped_message_ids,
+)
+from core.ledger.services.replay_trace_refs import (
     target_message_ids as trace_target_message_ids,
 )
-from core.ledger.services.replay_record_refs import grouped_reasons as replay_grouped_reasons
 
 
 class CommunicationReplayExecutor:
@@ -93,7 +121,15 @@ class CommunicationReplayExecutor:
         self._dispatcher = dispatcher
         self._replay_execution_writer = replay_execution_writer
 
-    def execute_message_replay(self, replay_plan: dict | None, envelope, *, route_policy=None, transport_hints=None, governance=None) -> dict:
+    def execute_message_replay(
+        self,
+        replay_plan: dict | None,
+        envelope,
+        *,
+        route_policy=None,
+        transport_hints=None,
+        governance=None,
+    ) -> dict:
         gate_decision = self._replay_gate.evaluate_message_plan(replay_plan)
         decision = gate_decision_value(gate_decision)
 
@@ -152,7 +188,15 @@ class CommunicationReplayExecutor:
         result[PAYLOAD_KEY_REPLAY_TRACE] = self._trace_summary(result)
         return self._attach_replay_record(result, envelope=envelope)
 
-    def execute_correlation_replay(self, replay_plan: dict, envelopes_by_message_id: dict, *, route_policy=None, transport_hints=None, governance=None) -> dict:
+    def execute_correlation_replay(
+        self,
+        replay_plan: dict,
+        envelopes_by_message_id: dict,
+        *,
+        route_policy=None,
+        transport_hints=None,
+        governance=None,
+    ) -> dict:
         gate_decision = self._replay_gate.evaluate_correlation_plan(replay_plan)
         decision = gate_decision_value(gate_decision)
 
@@ -233,10 +277,12 @@ class CommunicationReplayExecutor:
         result[PAYLOAD_KEY_REPLAY_TRACE] = self._trace_summary(result)
         return self._attach_replay_record(result, envelope=sample_envelope)
 
-    def _build_message_block_entries(self, replay_plan: dict | None, gate_decision: dict) -> list[dict]:
+    def _build_message_block_entries(
+        self, replay_plan: dict | None, gate_decision: dict
+    ) -> list[dict]:
         if plan_message_id(replay_plan) is None:
             return []
-        return self._build_blocked_entries([plan_message_id(replay_plan)], gate_decision)
+        return self._build_blocked_entries([plan_message_id(replay_plan)], gate_decision)  # type: ignore[reportArgumentType]
 
     def _build_blocked_entries(self, message_ids: list[str], gate_decision: dict) -> list[dict]:
         return [
@@ -247,7 +293,9 @@ class CommunicationReplayExecutor:
             for message_id in message_ids
         ]
 
-    def _build_skipped_entries(self, replay_plan: dict, skipped_message_ids: list[str]) -> list[dict]:
+    def _build_skipped_entries(
+        self, replay_plan: dict, skipped_message_ids: list[str]
+    ) -> list[dict]:
         acknowledged_message_ids = set(plan_acknowledged_message_ids(replay_plan))
         entries = []
         for message_id in skipped_message_ids:
@@ -256,10 +304,12 @@ class CommunicationReplayExecutor:
                 if message_id in acknowledged_message_ids
                 else REPLAY_EXECUTOR_SKIP_REASON_NOT_TARGETED
             )
-            entries.append({
-                PAYLOAD_KEY_MESSAGE_ID: message_id,
-                PAYLOAD_KEY_REASON: reason,
-            })
+            entries.append(
+                {
+                    PAYLOAD_KEY_MESSAGE_ID: message_id,
+                    PAYLOAD_KEY_REASON: reason,
+                }
+            )
         return entries
 
     def _map_block_reason(self, gate_decision: dict) -> str:
@@ -269,7 +319,10 @@ class CommunicationReplayExecutor:
             or REPLAY_GATE_REASON_CORRELATION_CONTAINS_TERMINAL_RECEIPTS in reasons
         ):
             return REPLAY_EXECUTOR_BLOCK_REASON_TERMINAL_RECEIPT
-        if REPLAY_GATE_REASON_STALE_RECEIPT_DETECTED in reasons or REPLAY_GATE_REASON_CORRELATION_CONTAINS_STALE_RECEIPT in reasons:
+        if (
+            REPLAY_GATE_REASON_STALE_RECEIPT_DETECTED in reasons
+            or REPLAY_GATE_REASON_CORRELATION_CONTAINS_STALE_RECEIPT in reasons
+        ):
             return REPLAY_EXECUTOR_BLOCK_REASON_STALE_RECEIPT
         if (
             REPLAY_GATE_REASON_REJECTED_RECEIPT_DETECTED in reasons
@@ -281,9 +334,15 @@ class CommunicationReplayExecutor:
             or REPLAY_GATE_REASON_CORRELATION_CONTAINS_CANCELLED_RECEIPT in reasons
         ):
             return REPLAY_EXECUTOR_BLOCK_REASON_CANCELLED_RECEIPT
-        if REPLAY_GATE_REASON_MESSAGE_FAILED_PREVIOUSLY in reasons or REPLAY_GATE_REASON_CORRELATION_CONTAINS_FAILED_MESSAGE in reasons:
+        if (
+            REPLAY_GATE_REASON_MESSAGE_FAILED_PREVIOUSLY in reasons
+            or REPLAY_GATE_REASON_CORRELATION_CONTAINS_FAILED_MESSAGE in reasons
+        ):
             return REPLAY_EXECUTOR_BLOCK_REASON_REVIEW_REQUIRED
-        if REPLAY_GATE_REASON_NON_CLEAN_ATTEMPT_HISTORY in reasons or REPLAY_GATE_REASON_CORRELATION_CONTAINS_NON_CLEAN_HISTORY in reasons:
+        if (
+            REPLAY_GATE_REASON_NON_CLEAN_ATTEMPT_HISTORY in reasons
+            or REPLAY_GATE_REASON_CORRELATION_CONTAINS_NON_CLEAN_HISTORY in reasons
+        ):
             return REPLAY_EXECUTOR_BLOCK_REASON_REVIEW_REQUIRED
         return REPLAY_EXECUTOR_BLOCK_REASON_GATE_BLOCKED
 

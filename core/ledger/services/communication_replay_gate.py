@@ -4,16 +4,13 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_ATTEMPT_SUMMARY,
     PAYLOAD_KEY_CURRENT_STATUS,
     PAYLOAD_KEY_DECISION,
-    PAYLOAD_KEY_FINAL_STATUSES,
     PAYLOAD_KEY_GOVERNANCE_SUMMARY,
     PAYLOAD_KEY_GOVERNANCE_TAGS,
-    PAYLOAD_KEY_MESSAGE_COUNT,
     PAYLOAD_KEY_POSTURE,
     PAYLOAD_KEY_REASONS,
     PAYLOAD_KEY_RECOMMENDED_STRATEGY,
     PAYLOAD_KEY_REVIEW_ISSUE_CODES,
     PAYLOAD_KEY_TARGET_ISSUE_CODES,
-    REPLAY_GOVERNANCE_POSTURE_VALUE_AUTO_REPLAY,
     REPLAY_GATE_REASON_CANCELLED_RECEIPT_DETECTED,
     REPLAY_GATE_REASON_CLEAN_CORRELATION_REPLAY_CANDIDATE,
     REPLAY_GATE_REASON_CLEAN_REPLAY_CANDIDATE,
@@ -32,6 +29,7 @@ from core.deployment.domain_keys import (
     REPLAY_GATE_REASON_STALE_RECEIPT_DETECTED,
     REPLAY_GATE_REASON_TARGETED_TIMEOUT_REPLAY_CANDIDATE,
     REPLAY_GATE_REASON_TERMINAL_RECEIPT_ALREADY_RECORDED,
+    REPLAY_GOVERNANCE_POSTURE_VALUE_AUTO_REPLAY,
     REPLAY_GOVERNANCE_POSTURE_VALUE_BLOCKED,
     REPLAY_GOVERNANCE_POSTURE_VALUE_HEALTHY,
     REPLAY_GOVERNANCE_POSTURE_VALUE_REVIEW_REQUIRED,
@@ -54,12 +52,16 @@ from core.deployment.domain_keys import (
     REPLAY_TARGET_CODE_RECEIPT_PARTIALLY_FILLED,
     REPLAY_TARGET_CODE_RECEIPT_TIMEOUT,
 )
+from core.ledger.services.gate_decision_refs import decision as gate_decision_value
 from core.ledger.services.replay_plan_refs import (
     final_statuses as plan_final_statuses,
+)
+from core.ledger.services.replay_plan_refs import (
     message_count as plan_message_count,
+)
+from core.ledger.services.replay_plan_refs import (
     recommended_strategy as plan_recommended_strategy,
 )
-from core.ledger.services.gate_decision_refs import decision as gate_decision_value
 
 
 def build_replay_governance_summary(replay_plan: dict | None, replay_gate: dict | None) -> dict:
@@ -253,11 +255,19 @@ class CommunicationReplayGate:
             ["auto_replay_eligible"],
         )
 
-    def _build_decision(self, replay_plan: dict | None, decision: str, reasons: list[str], governance_tags: list[str]) -> dict:
+    def _build_decision(
+        self,
+        replay_plan: dict | None,
+        decision: str,
+        reasons: list[str],
+        governance_tags: list[str],
+    ) -> dict:
         gate_decision = {
             PAYLOAD_KEY_DECISION: decision,
             PAYLOAD_KEY_REASONS: reasons,
             PAYLOAD_KEY_GOVERNANCE_TAGS: governance_tags,
         }
-        gate_decision[PAYLOAD_KEY_GOVERNANCE_SUMMARY] = build_replay_governance_summary(replay_plan, gate_decision)
+        gate_decision[PAYLOAD_KEY_GOVERNANCE_SUMMARY] = build_replay_governance_summary(
+            replay_plan, gate_decision
+        )
         return gate_decision

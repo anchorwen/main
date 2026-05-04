@@ -1,9 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
+from core.contracts.exceptions import OrderNotFoundError
 from core.observability.metric_names import EXECUTION_FILL_QUANTITY, execution_event_metric
-
-from core.contracts.ids import new_execution_event_id
-from core.contracts.exceptions import OrderNotFoundError, DuplicateOrderError
 
 
 class ExecutionManager:
@@ -50,7 +48,7 @@ class ExecutionManager:
             "filled_quantity": 0.0,
             "average_price": 0.0,
             "venue_order_id": None,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             "events": [],
         }
         self._orders[message_id] = order
@@ -90,7 +88,7 @@ class ExecutionManager:
             "event_type": event_type,
             "filled_quantity": filled_quantity,
             "price": price,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
         }
         order["events"].append(event_record)
 
@@ -100,7 +98,7 @@ class ExecutionManager:
                 correlation_id=order["correlation_id"],
                 event_type=event_type,
                 venue=venue,
-                event_time=datetime.utcnow(),
+                event_time=datetime.now(UTC).replace(tzinfo=None),
                 venue_order_id=venue_order_id,
                 quantity={"filled": filled_quantity} if filled_quantity else {},
                 price={"average": price} if price else {},

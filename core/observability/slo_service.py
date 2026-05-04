@@ -3,15 +3,15 @@
 SloService turns runtime metrics into service-level objective status
 and error-budget burn information for operational decision making.
 """
-from datetime import datetime
-from pathlib import Path
+
 import json
+from datetime import UTC, datetime
+from pathlib import Path
 
 from core.deployment.domain_keys import (
     PAYLOAD_KEY_COUNTERS,
     PAYLOAD_KEY_DESCRIPTION,
     PAYLOAD_KEY_DIRECTION,
-    PAYLOAD_KEY_ERROR,
     PAYLOAD_KEY_ERROR_BUDGET,
     PAYLOAD_KEY_ERROR_BUDGET_REMAINING_PCT,
     PAYLOAD_KEY_EXHAUSTED_COUNT,
@@ -34,7 +34,6 @@ from core.deployment.domain_keys import (
     SLO_STATUS_BREACHING,
     SLO_STATUS_HEALTHY,
 )
-from core.observability.schema_versions import SCHEMA_SLO_REPORT
 from core.observability.metric_names import (
     CYCLES_CIRCUIT_OPEN,
     CYCLES_ERRORS,
@@ -49,6 +48,7 @@ from core.observability.metric_names import (
     RECONCILIATION_PARTIAL,
     RECONCILIATION_UNMATCHED,
 )
+from core.observability.schema_versions import SCHEMA_SLO_REPORT
 
 
 class SloService:
@@ -90,7 +90,7 @@ class SloService:
         failed = [name for name, item in objectives.items() if not item[PAYLOAD_KEY_MET]]
         return {
             PAYLOAD_KEY_SCHEMA_VERSION: SCHEMA_SLO_REPORT,
-            PAYLOAD_KEY_GENERATED_AT: datetime.utcnow().isoformat(),
+            PAYLOAD_KEY_GENERATED_AT: datetime.now(UTC).replace(tzinfo=None).isoformat(),
             PAYLOAD_KEY_STATUS: SLO_STATUS_HEALTHY if not failed else SLO_STATUS_BREACHING,
             PAYLOAD_KEY_OBJECTIVE_COUNT: len(objectives),
             PAYLOAD_KEY_FAILED_OBJECTIVES: failed,
@@ -132,7 +132,9 @@ class SloService:
         recon_total = recon_matched + recon_breached + recon_unmatched + recon_partial
 
         values = {
-            "decision_success_rate": self._safe_rate(total_cycles - errors, total_cycles, default=1.0),
+            "decision_success_rate": self._safe_rate(
+                total_cycles - errors, total_cycles, default=1.0
+            ),
             "dispatch_success_rate": self._safe_rate(dispatch_ok, dispatch_total, default=1.0),
             "reconciliation_match_rate": self._safe_rate(recon_matched, recon_total, default=1.0),
             "throttle_rate": self._safe_rate(throttled, total_cycles, default=0.0),
@@ -158,7 +160,11 @@ class SloService:
 
     def _build_error_budget(self, objectives: dict) -> dict:
         budgets = [item[PAYLOAD_KEY_ERROR_BUDGET_REMAINING_PCT] for item in objectives.values()]
-        exhausted = [name for name, item in objectives.items() if item[PAYLOAD_KEY_ERROR_BUDGET_REMAINING_PCT] <= 0]
+        exhausted = [
+            name
+            for name, item in objectives.items()
+            if item[PAYLOAD_KEY_ERROR_BUDGET_REMAINING_PCT] <= 0
+        ]
         return {
             PAYLOAD_KEY_MIN_REMAINING_PCT: min(budgets) if budgets else 100.0,
             PAYLOAD_KEY_EXHAUSTED_COUNT: len(exhausted),

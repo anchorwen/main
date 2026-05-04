@@ -1,4 +1,5 @@
 """Alpha performance store MVP."""
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from statistics import mean
@@ -42,8 +43,12 @@ class AlphaPerformanceStore:
     def __init__(self):
         self._snapshots: dict[str, list[AlphaPerformanceSnapshot]] = {}
 
-    def record_snapshot(self, alpha_id: str, metrics: dict[str, Any], source: str = "manual", window: str = "latest") -> AlphaPerformanceSnapshot:
-        snapshot = AlphaPerformanceSnapshot(alpha_id=alpha_id, metrics=metrics, source=source, window=window)
+    def record_snapshot(
+        self, alpha_id: str, metrics: dict[str, Any], source: str = "manual", window: str = "latest"
+    ) -> AlphaPerformanceSnapshot:
+        snapshot = AlphaPerformanceSnapshot(
+            alpha_id=alpha_id, metrics=metrics, source=source, window=window
+        )
         self._snapshots.setdefault(alpha_id, []).append(snapshot)
         self._snapshots[alpha_id].sort(key=lambda item: item.captured_at)
         return snapshot
@@ -72,10 +77,19 @@ class AlphaPerformanceStore:
             latest = self.latest(alpha_id)
             value = (latest.metrics or {}).get(metric) if latest else None
             if value is not None:
-                rows.append({"alpha_id": alpha_id, "metric": metric, "value": value, "snapshot": latest.to_dict()})
+                rows.append(
+                    {
+                        "alpha_id": alpha_id,
+                        "metric": metric,
+                        "value": value,
+                        "snapshot": latest.to_dict(),  # type: ignore[reportOptionalMemberAccess]
+                    }
+                )
         return sorted(rows, key=lambda item: item["value"], reverse=descending)
 
-    def ingest_runtime_summary(self, runtime_summary: dict[str, Any], alpha_id_by_strategy: dict[str, str] | None = None) -> list[AlphaPerformanceSnapshot]:
+    def ingest_runtime_summary(
+        self, runtime_summary: dict[str, Any], alpha_id_by_strategy: dict[str, str] | None = None
+    ) -> list[AlphaPerformanceSnapshot]:
         snapshots = []
         strategy_summary = runtime_summary.get("per_strategy") or {}
         averages = runtime_summary.get("averages") or {}
@@ -97,8 +111,51 @@ class AlphaPerformanceStore:
                 "paper_cycles": runtime_summary.get("cycle_count", 0),
                 "orders_per_signal": round(orders / signals, 6) if signals else None,
             }
-            snapshots.append(self.record_snapshot(alpha_id, metrics, source="runtime_summary", window="runtime_summary"))
+            snapshots.append(
+                self.record_snapshot(
+                    alpha_id,
+                    metrics,
+                    source="runtime_summary",
+                    window="runtime_summary",  # type: ignore[reportArgumentType]
+                )
+            )
         return snapshots
+
+    def ingest_live_bridge_report(
+        self,
+        alpha_id: str,
+        report: dict[str, Any],
+        *,
+        journal_source_path: str | None = None,
+        symbol_filter: str | None = None,
+    ) -> AlphaPerformanceSnapshot:
+        """Map ``trade_quality_report.build_report`` payload into a performance snapshot."""
+        counts = report.get("counts") or {}
+        accepted = int(counts.get("accepted", 0))
+        rejected = int(counts.get("rejected", 0))
+        total = int(report.get("total", 0))
+        reasons_raw = dict(report.get("rejected_reasons") or {})
+        top_reasons = dict(sorted(reasons_raw.items(), key=lambda kv: (-kv[1], kv[0]))[:10])
+        consecutive = int(report.get("live_consecutive_rejected_tail", 0))
+        metrics: dict[str, Any] = {
+            "live_bridge": True,
+            "date_key": report.get("date_key"),
+            "symbol_filter": symbol_filter,
+            "journal_source_path": journal_source_path or report.get("journal_path"),
+            "live_total": total,
+            "live_accepted": accepted,
+            "live_rejected": rejected,
+            "live_rejection_rate": report.get("rejection_rate"),
+            "live_acceptance_rate": report.get("acceptance_rate"),
+            "live_rejected_reasons_top": top_reasons,
+            "live_consecutive_rejected": consecutive,
+        }
+        return self.record_snapshot(
+            alpha_id,
+            metrics,
+            source="live_bridge_report",
+            window=str(report.get("date_key") or "live_bridge"),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {

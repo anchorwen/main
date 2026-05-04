@@ -1,4 +1,5 @@
 """Strategy plugin registry and runner."""
+
 from dataclasses import asdict
 from typing import Any
 
@@ -55,14 +56,16 @@ class StrategyPluginRunner:
         for agent in self._registry.list_agents():
             metadata: StrategyMetadata = agent.metadata()
             health: StrategyHealth = agent.health()
-            strategies.append({
-                "strategy_id": metadata.strategy_id,
-                "name": metadata.name,
-                "version": metadata.version,
-                "status": health.status,
-                "message": health.message,
-                "metrics": health.metrics,
-            })
+            strategies.append(
+                {
+                    "strategy_id": metadata.strategy_id,
+                    "name": metadata.name,
+                    "version": metadata.version,
+                    "status": health.status,
+                    "message": health.message,
+                    "metrics": health.metrics,
+                }
+            )
         return {
             "schema_version": SCHEMA_STRATEGY_HEALTH_REPORT,
             "strategy_count": len(strategies),

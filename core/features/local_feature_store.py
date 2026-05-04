@@ -1,6 +1,7 @@
 """Local JSONL feature store implementation."""
-from pathlib import Path
+
 import json
+from pathlib import Path
 
 from core.features.store_contracts import FeatureQuery, FeatureRecord, FeatureSchema
 
@@ -27,14 +28,17 @@ class LocalFeatureStore:
         self._write_schemas(schemas)
 
     def list_schemas(self) -> list[FeatureSchema]:
-        return [FeatureSchema(
-            name=item["name"],
-            version=item["version"],
-            fields=tuple(item["fields"]),
-            symbol=item["symbol"],
-            timeframe=item["timeframe"],
-            description=item.get("description", ""),
-        ) for item in self._load_schemas().values()]
+        return [
+            FeatureSchema(
+                name=item["name"],
+                version=item["version"],
+                fields=tuple(item["fields"]),
+                symbol=item["symbol"],
+                timeframe=item["timeframe"],
+                description=item.get("description", ""),
+            )
+            for item in self._load_schemas().values()
+        ]
 
     def write_records(self, records: list[FeatureRecord]) -> int:
         count = 0
@@ -61,16 +65,22 @@ class LocalFeatureStore:
                     records.append(record)
         records.sort(key=lambda r: r.event_time)
         if query.limit is not None:
-            records = records[-query.limit:]
+            records = records[-query.limit :]
         return records
 
-    def latest(self, symbol: str, timeframe: str, *, schema_name: str | None = None) -> FeatureRecord | None:
-        records = self.query(FeatureQuery(symbol=symbol, timeframe=timeframe, schema_name=schema_name, limit=1))
+    def latest(
+        self, symbol: str, timeframe: str, *, schema_name: str | None = None
+    ) -> FeatureRecord | None:
+        records = self.query(
+            FeatureQuery(symbol=symbol, timeframe=timeframe, schema_name=schema_name, limit=1)
+        )
         return records[-1] if records else None
 
     def _validate_record(self, record: FeatureRecord) -> None:
         schemas = self._load_schemas()
-        key = self._schema_key(record.schema_name, record.schema_version, record.symbol, record.timeframe)
+        key = self._schema_key(
+            record.schema_name, record.schema_version, record.symbol, record.timeframe
+        )
         if key not in schemas:
             raise ValueError(f"Feature schema not registered: {key}")
         required_fields = set(schemas[key]["fields"])

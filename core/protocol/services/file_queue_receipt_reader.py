@@ -26,5 +26,3 @@ class FileQueueReceiptReader:
 
     def _build_path(self, *, date_key: str, target: str, message_id: str) -> Path:
         return self._receipt_dir / date_key / target / f"{message_id}.ack.json"
-
-

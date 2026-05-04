@@ -4,6 +4,7 @@ Validates that data flowing through the system conforms to expected
 schemas at key boundaries. Useful as a debugging tool and for
 pre-production validation.
 """
+
 from datetime import datetime
 
 
@@ -14,11 +15,17 @@ class ContractViolation:
         self.field = field
         self.expected = expected
         self.actual = actual
-        self.message = message or f"{field}: expected {expected}, got {type(actual).__name__}={actual}"
+        self.message = (
+            message or f"{field}: expected {expected}, got {type(actual).__name__}={actual}"
+        )
 
     def to_dict(self) -> dict:
-        return {"field": self.field, "expected": self.expected,
-                "actual": str(self.actual), "message": self.message}
+        return {
+            "field": self.field,
+            "expected": self.expected,
+            "actual": str(self.actual),
+            "message": self.message,
+        }
 
 
 class ContractValidator:
@@ -80,7 +87,7 @@ class ContractValidator:
             errors.append(ContractViolation("status", "RiskDecisionStatus", None))
 
         blocking = getattr(verdict, "blocking_reasons", None)
-        if blocking is not None and not isinstance(blocking, (list, tuple)):
+        if blocking is not None and not isinstance(blocking, list | tuple):
             errors.append(ContractViolation("blocking_reasons", "list", blocking))
 
         return errors
@@ -88,8 +95,12 @@ class ContractValidator:
     @staticmethod
     def validate_risk_context(ctx: dict) -> list[ContractViolation]:
         errors = []
-        required_keys = ["open_position_count", "positions_per_symbol",
-                         "current_notional_exposure", "current_drawdown_pct"]
+        required_keys = [
+            "open_position_count",
+            "positions_per_symbol",
+            "current_notional_exposure",
+            "current_drawdown_pct",
+        ]
         for key in required_keys:
             if key not in ctx:
                 errors.append(ContractViolation(key, "present", "missing"))

@@ -1,10 +1,14 @@
 from datetime import datetime
 
-from core.deployment.domain_keys import DISPATCH_FAILURE_REASON_LIVE_READ_ONLY
 from core.contracts.domain.dispatch_request import DispatchRequest
 from core.contracts.domain.dispatch_result import DispatchResult
 from core.contracts.enums import DispatchStatus
 from core.contracts.ids import new_dispatch_id
+from core.deployment.domain_keys import (
+    DISPATCH_FAILURE_REASON_LIVE_DISPATCH_DISABLED,
+    DISPATCH_FAILURE_REASON_LIVE_READ_ONLY,
+    DISPATCH_FAILURE_REASON_SYMBOL_NOT_LIVE_ENABLED,
+)
 from core.protocol.schema_versions import SCHEMA_DISPATCH_REQUEST, SCHEMA_DISPATCH_RESULT
 from core.protocol.services.communication_adapter_registry import CommunicationAdapterRegistry
 
@@ -17,12 +21,16 @@ class CommunicationDispatcher:
         clock=datetime.utcnow,
         idempotency_store=None,
         live_read_only: bool = False,
+        live_dispatch_enabled: bool = True,
+        live_allowed_symbols: tuple[str, ...] = (),
     ):
         self._adapter = adapter
         self._adapter_registry = adapter_registry
         self._clock = clock
         self._idempotency_store = idempotency_store
         self._live_read_only = live_read_only
+        self._live_dispatch_enabled = live_dispatch_enabled
+        self._live_allowed_symbols = tuple(live_allowed_symbols)
 
     def dispatch(self, envelope, *, route_policy=None, transport_hints=None, governance=None):
         route_policy = route_policy or {}
@@ -50,13 +58,62 @@ class CommunicationDispatcher:
                 target=envelope.target,
                 adapter_name="live_read_only_guard",
                 failure_reason=DISPATCH_FAILURE_REASON_LIVE_READ_ONLY,
-                attempts=[{
-                    "adapter_name": "live_read_only_guard",
-                    "status": "failed",
-                    "reason": DISPATCH_FAILURE_REASON_LIVE_READ_ONLY,
-                }],
+                attempts=[
+                    {
+                        "adapter_name": "live_read_only_guard",
+                        "status": "failed",
+                        "reason": DISPATCH_FAILURE_REASON_LIVE_READ_ONLY,
+                    }
+                ],
                 trace={
                     "live_read_only": True,
+                },
+            )
+
+        symbol = envelope.payload.get("symbol") if isinstance(envelope.payload, dict) else None
+        if not self._live_dispatch_enabled:
+            return DispatchResult(
+                schema_version=SCHEMA_DISPATCH_RESULT,
+                dispatch_id=request.dispatch_id,
+                message_id=envelope.message_id,
+                status=DispatchStatus.FAILED,
+                recorded_at=request.requested_at,
+                target=envelope.target,
+                adapter_name="live_dispatch_gate",
+                failure_reason=DISPATCH_FAILURE_REASON_LIVE_DISPATCH_DISABLED,
+                attempts=[
+                    {
+                        "adapter_name": "live_dispatch_gate",
+                        "status": "failed",
+                        "reason": DISPATCH_FAILURE_REASON_LIVE_DISPATCH_DISABLED,
+                    }
+                ],
+                trace={
+                    "live_dispatch_enabled": False,
+                    "symbol": symbol,
+                },
+            )
+
+        if self._live_allowed_symbols and symbol not in self._live_allowed_symbols:
+            return DispatchResult(
+                schema_version=SCHEMA_DISPATCH_RESULT,
+                dispatch_id=request.dispatch_id,
+                message_id=envelope.message_id,
+                status=DispatchStatus.FAILED,
+                recorded_at=request.requested_at,
+                target=envelope.target,
+                adapter_name="live_symbol_gate",
+                failure_reason=DISPATCH_FAILURE_REASON_SYMBOL_NOT_LIVE_ENABLED,
+                attempts=[
+                    {
+                        "adapter_name": "live_symbol_gate",
+                        "status": "failed",
+                        "reason": DISPATCH_FAILURE_REASON_SYMBOL_NOT_LIVE_ENABLED,
+                    }
+                ],
+                trace={
+                    "live_allowed_symbols": list(self._live_allowed_symbols),
+                    "symbol": symbol,
                 },
             )
 
@@ -76,11 +133,13 @@ class CommunicationDispatcher:
                     target=envelope.target,
                     adapter_name="idempotency_guard",
                     failure_reason=f"duplicate idempotency key: {envelope.idempotency_key}",
-                    attempts=[{
-                        "adapter_name": "idempotency_guard",
-                        "status": "failed",
-                        "reason": "duplicate_idempotency_key",
-                    }],
+                    attempts=[
+                        {
+                            "adapter_name": "idempotency_guard",
+                            "status": "failed",
+                            "reason": "duplicate_idempotency_key",
+                        }
+                    ],
                     trace={
                         "idempotency_key": envelope.idempotency_key,
                         "original_message_id": claim.get("original_message_id"),
@@ -113,10 +172,12 @@ class CommunicationDispatcher:
             transport_hints=transport_hints,
             governance=governance,
         )
-        primary_adapter_name = getattr(primary_adapter, "adapter_name", primary_adapter.__class__.__name__)
+        primary_adapter_name = getattr(
+            primary_adapter, "adapter_name", primary_adapter.__class__.__name__
+        )
 
         try:
-            result = primary_adapter.dispatch(request, envelope)
+            result = primary_adapter.dispatch(request, envelope)  # type: ignore[reportAttributeAccessIssue]
             result.attempts = result.attempts or []
             result.attempts.append(
                 {
@@ -149,9 +210,11 @@ class CommunicationDispatcher:
                     trace={"failed_adapter": primary_adapter_name},
                 )
 
-            fallback_adapter_name = getattr(fallback_adapter, "adapter_name", fallback_adapter.__class__.__name__)
+            fallback_adapter_name = getattr(
+                fallback_adapter, "adapter_name", fallback_adapter.__class__.__name__
+            )
             try:
-                fallback_result = fallback_adapter.dispatch(request, envelope)
+                fallback_result = fallback_adapter.dispatch(request, envelope)  # type: ignore[reportAttributeAccessIssue]
                 attempts.append(
                     {
                         "adapter_name": fallback_adapter_name,

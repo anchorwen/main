@@ -1,9 +1,4 @@
-from datetime import datetime
-from typing import Any, Dict, List
-
-from core.contracts.domain.risk_verdict import RiskVerdict
 from core.contracts.enums import RiskDecisionStatus
-from core.contracts.ids import new_verdict_id
 
 
 class RiskPolicy:

@@ -1,24 +1,9 @@
-from core.ledger.services.communication_replay_gate import build_replay_governance_summary
-from core.ledger.services.communication_trace_refs import (
-    attempt_summary as trace_attempt_summary,
-    delivery_state_block as trace_delivery_state,
-    delivery_summary_block as trace_delivery_summary,
-    final_statuses as trace_final_statuses,
-    issue_code as trace_issue_code,
-    issue_counts as trace_issue_counts,
-    issue_message_ids as trace_issue_message_ids,
-    message_count as trace_message_count,
-    message_ids as trace_message_ids,
-    records as trace_records,
-    stale_receipt_message_ids as trace_stale_receipt_message_ids,
-    timed_out_message_ids as trace_timed_out_message_ids,
-    trace_message_id,
-)
 from core.deployment.domain_keys import (
     PAYLOAD_KEY_ACKNOWLEDGED_MESSAGE_IDS,
     PAYLOAD_KEY_ATTEMPT_SUMMARY,
     PAYLOAD_KEY_CORRELATION_ID,
     PAYLOAD_KEY_CURRENT_STATUS,
+    PAYLOAD_KEY_DEGRADED_COUNT,
     PAYLOAD_KEY_DELIVERY_STATE,
     PAYLOAD_KEY_DELIVERY_SUMMARY,
     PAYLOAD_KEY_FAILED_COUNT,
@@ -26,25 +11,20 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_GOVERNANCE_SUMMARY,
     PAYLOAD_KEY_ISSUE_CODE,
     PAYLOAD_KEY_ISSUE_COUNTS,
-    PAYLOAD_KEY_ISSUE_MESSAGE_IDS,
     PAYLOAD_KEY_MESSAGE_COUNT,
     PAYLOAD_KEY_MESSAGE_ID,
     PAYLOAD_KEY_MESSAGE_IDS,
     PAYLOAD_KEY_MESSAGE_PLANS,
     PAYLOAD_KEY_MESSAGE_TYPE,
-    PAYLOAD_KEY_RECORDS,
     PAYLOAD_KEY_NON_REUSABLE_FIELDS,
     PAYLOAD_KEY_RECOMMENDED_STRATEGY,
     PAYLOAD_KEY_REPLAY_PAYLOAD,
     PAYLOAD_KEY_REVIEW_ISSUE_CODES,
     PAYLOAD_KEY_SCOPE,
-    PAYLOAD_KEY_STALE_RECEIPT_MESSAGE_IDS,
     PAYLOAD_KEY_STATUS,
     PAYLOAD_KEY_TARGET,
     PAYLOAD_KEY_TARGET_ISSUE_CODES,
     PAYLOAD_KEY_TARGET_MESSAGE_IDS,
-    PAYLOAD_KEY_TIMED_OUT_MESSAGE_IDS,
-    PAYLOAD_KEY_DEGRADED_COUNT,
     REPLAY_NON_REUSABLE_FIELD_ACK_ID,
     REPLAY_NON_REUSABLE_FIELD_ATTEMPTS,
     REPLAY_NON_REUSABLE_FIELD_DEGRADE_REASON,
@@ -67,8 +47,6 @@ from core.deployment.domain_keys import (
     REPLAY_STRATEGY_REVIEW_REJECTED_RECEIPTS_BEFORE_REPLAY,
     REPLAY_STRATEGY_REVIEW_STALE_RECEIPT_BEFORE_REPLAY,
     REPLAY_STRATEGY_REVIEW_STALE_RECEIPTS_BEFORE_REPLAY,
-    REPLAY_TRACE_SCOPE_CORRELATION,
-    REPLAY_TRACE_SCOPE_MESSAGE,
     REPLAY_TARGET_CODE_RECEIPT_ACCEPTED,
     REPLAY_TARGET_CODE_RECEIPT_CANCELLED,
     REPLAY_TARGET_CODE_RECEIPT_FILLED,
@@ -76,6 +54,48 @@ from core.deployment.domain_keys import (
     REPLAY_TARGET_CODE_RECEIPT_REJECTED,
     REPLAY_TARGET_CODE_RECEIPT_TIMEOUT,
     REPLAY_TARGET_CODE_STALE_RECEIPT,
+    REPLAY_TRACE_SCOPE_CORRELATION,
+    REPLAY_TRACE_SCOPE_MESSAGE,
+)
+from core.ledger.services.communication_replay_gate import build_replay_governance_summary
+from core.ledger.services.communication_trace_refs import (
+    attempt_summary as trace_attempt_summary,
+)
+from core.ledger.services.communication_trace_refs import (
+    delivery_state_block as trace_delivery_state,
+)
+from core.ledger.services.communication_trace_refs import (
+    delivery_summary_block as trace_delivery_summary,
+)
+from core.ledger.services.communication_trace_refs import (
+    final_statuses as trace_final_statuses,
+)
+from core.ledger.services.communication_trace_refs import (
+    issue_code as trace_issue_code,
+)
+from core.ledger.services.communication_trace_refs import (
+    issue_counts as trace_issue_counts,
+)
+from core.ledger.services.communication_trace_refs import (
+    issue_message_ids as trace_issue_message_ids,
+)
+from core.ledger.services.communication_trace_refs import (
+    message_count as trace_message_count,
+)
+from core.ledger.services.communication_trace_refs import (
+    message_ids as trace_message_ids,
+)
+from core.ledger.services.communication_trace_refs import (
+    records as trace_records,
+)
+from core.ledger.services.communication_trace_refs import (
+    stale_receipt_message_ids as trace_stale_receipt_message_ids,
+)
+from core.ledger.services.communication_trace_refs import (
+    timed_out_message_ids as trace_timed_out_message_ids,
+)
+from core.ledger.services.communication_trace_refs import (
+    trace_message_id,
 )
 
 
@@ -83,7 +103,9 @@ class CommunicationReplayService:
     def __init__(self, inspection_service):
         self._inspection_service = inspection_service
 
-    def build_message_replay_plan(self, *, date_key: str, target: str, message_id: str) -> dict | None:
+    def build_message_replay_plan(
+        self, *, date_key: str, target: str, message_id: str
+    ) -> dict | None:
         trace = self._inspection_service.get_message_trace(
             date_key=date_key,
             target=target,
@@ -124,7 +146,9 @@ class CommunicationReplayService:
             PAYLOAD_KEY_GOVERNANCE_SUMMARY: build_replay_governance_summary(plan, None),
         }
 
-    def build_correlation_replay_plan(self, *, date_key: str, target: str, correlation_id: str) -> dict:
+    def build_correlation_replay_plan(
+        self, *, date_key: str, target: str, correlation_id: str
+    ) -> dict:
         trace = self._inspection_service.get_correlation_trace(
             date_key=date_key,
             target=target,
@@ -136,7 +160,7 @@ class CommunicationReplayService:
             self.build_message_replay_plan(
                 date_key=date_key,
                 target=target,
-                message_id=trace_message_id(item),
+                message_id=trace_message_id(item),  # type: ignore[reportArgumentType]
             )
             for item in records
             if trace_message_id(item) is not None
@@ -170,11 +194,18 @@ class CommunicationReplayService:
             return REPLAY_STRATEGY_REVIEW_STALE_RECEIPT_BEFORE_REPLAY
         if issue_code == REPLAY_TARGET_CODE_RECEIPT_REJECTED:
             return REPLAY_STRATEGY_REVIEW_REJECTED_RECEIPT_BEFORE_REPLAY
-        if issue_code in {REPLAY_TARGET_CODE_RECEIPT_ACCEPTED, REPLAY_TARGET_CODE_RECEIPT_PARTIALLY_FILLED, REPLAY_TARGET_CODE_RECEIPT_FILLED}:
+        if issue_code in {
+            REPLAY_TARGET_CODE_RECEIPT_ACCEPTED,
+            REPLAY_TARGET_CODE_RECEIPT_PARTIALLY_FILLED,
+            REPLAY_TARGET_CODE_RECEIPT_FILLED,
+        }:
             return REPLAY_STRATEGY_DO_NOT_REPLAY_TERMINAL_RECEIPT
         if issue_code == REPLAY_TARGET_CODE_RECEIPT_CANCELLED:
             return REPLAY_STRATEGY_REVIEW_CANCELLED_RECEIPT_BEFORE_REPLAY
-        if attempt_summary.get(PAYLOAD_KEY_FAILED_COUNT, 0) > 0 or attempt_summary.get(PAYLOAD_KEY_DEGRADED_COUNT, 0) > 0:
+        if (
+            attempt_summary.get(PAYLOAD_KEY_FAILED_COUNT, 0) > 0
+            or attempt_summary.get(PAYLOAD_KEY_DEGRADED_COUNT, 0) > 0
+        ):
             return REPLAY_STRATEGY_REPLAY_WITH_GOVERNANCE_REVIEW
         return REPLAY_STRATEGY_DIRECT_REPLAY_CANDIDATE
 
@@ -186,7 +217,9 @@ class CommunicationReplayService:
         acknowledged_message_ids = delivery_summary.get(PAYLOAD_KEY_ACKNOWLEDGED_MESSAGE_IDS, [])
         message_count = trace_message_count(trace)
 
-        if any(status in {REPLAY_STATUS_DEGRADED, REPLAY_STATUS_FAILED} for status in final_statuses):
+        if any(
+            status in {REPLAY_STATUS_DEGRADED, REPLAY_STATUS_FAILED} for status in final_statuses
+        ):
             return REPLAY_STRATEGY_REPLAY_CORRELATION_WITH_SEQUENCED_REVIEW
         if issue_counts.get(REPLAY_TARGET_CODE_STALE_RECEIPT, 0) > 0:
             return REPLAY_STRATEGY_REVIEW_STALE_RECEIPTS_BEFORE_REPLAY
@@ -194,9 +227,16 @@ class CommunicationReplayService:
             return REPLAY_STRATEGY_REVIEW_REJECTED_RECEIPTS_BEFORE_REPLAY
         if issue_counts.get(REPLAY_TARGET_CODE_RECEIPT_CANCELLED, 0) > 0:
             return REPLAY_STRATEGY_REVIEW_CANCELLED_RECEIPTS_BEFORE_REPLAY
-        if issue_counts.get(REPLAY_TARGET_CODE_RECEIPT_ACCEPTED, 0) > 0 or issue_counts.get(REPLAY_TARGET_CODE_RECEIPT_PARTIALLY_FILLED, 0) > 0 or issue_counts.get(REPLAY_TARGET_CODE_RECEIPT_FILLED, 0) > 0:
+        if (
+            issue_counts.get(REPLAY_TARGET_CODE_RECEIPT_ACCEPTED, 0) > 0
+            or issue_counts.get(REPLAY_TARGET_CODE_RECEIPT_PARTIALLY_FILLED, 0) > 0
+            or issue_counts.get(REPLAY_TARGET_CODE_RECEIPT_FILLED, 0) > 0
+        ):
             return REPLAY_STRATEGY_DO_NOT_REPLAY_TERMINAL_RECEIPTS
-        if timed_out_message_ids and len(acknowledged_message_ids) + len(timed_out_message_ids) == message_count:
+        if (
+            timed_out_message_ids
+            and len(acknowledged_message_ids) + len(timed_out_message_ids) == message_count
+        ):
             return REPLAY_STRATEGY_REPLAY_ONLY_TIMED_OUT_MESSAGES
         return REPLAY_STRATEGY_REPLAY_CORRELATION_DIRECT
 
@@ -236,10 +276,18 @@ class CommunicationReplayService:
 
     def _select_review_issue_codes_for_message(self, trace: dict) -> list[str]:
         issue_code = trace_issue_code(trace)
-        if issue_code in {REPLAY_TARGET_CODE_STALE_RECEIPT, REPLAY_TARGET_CODE_RECEIPT_REJECTED, REPLAY_TARGET_CODE_RECEIPT_CANCELLED, REPLAY_TARGET_CODE_RECEIPT_PARTIALLY_FILLED}:
+        if issue_code in {
+            REPLAY_TARGET_CODE_STALE_RECEIPT,
+            REPLAY_TARGET_CODE_RECEIPT_REJECTED,
+            REPLAY_TARGET_CODE_RECEIPT_CANCELLED,
+            REPLAY_TARGET_CODE_RECEIPT_PARTIALLY_FILLED,
+        }:
             return [issue_code]
         attempt_summary = trace_attempt_summary(trace)
-        if attempt_summary.get(PAYLOAD_KEY_FAILED_COUNT, 0) > 0 or attempt_summary.get(PAYLOAD_KEY_DEGRADED_COUNT, 0) > 0:
+        if (
+            attempt_summary.get(PAYLOAD_KEY_FAILED_COUNT, 0) > 0
+            or attempt_summary.get(PAYLOAD_KEY_DEGRADED_COUNT, 0) > 0
+        ):
             return [REPLAY_REVIEW_CODE_ATTEMPT_HISTORY_REQUIRES_REVIEW]
         return []
 
@@ -254,7 +302,9 @@ class CommunicationReplayService:
             review_issue_codes.append(REPLAY_TARGET_CODE_RECEIPT_CANCELLED)
         if issue_counts.get(REPLAY_TARGET_CODE_RECEIPT_PARTIALLY_FILLED, 0) > 0:
             review_issue_codes.append(REPLAY_TARGET_CODE_RECEIPT_PARTIALLY_FILLED)
-        if any(status in {REPLAY_STATUS_DEGRADED, REPLAY_STATUS_FAILED} for status in trace_final_statuses(trace)):
+        if any(
+            status in {REPLAY_STATUS_DEGRADED, REPLAY_STATUS_FAILED}
+            for status in trace_final_statuses(trace)
+        ):
             review_issue_codes.append(REPLAY_REVIEW_CODE_ATTEMPT_HISTORY_REQUIRES_REVIEW)
         return review_issue_codes
-

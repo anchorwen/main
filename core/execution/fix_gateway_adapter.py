@@ -1,5 +1,6 @@
 """Dry-run FIX gateway adapter skeleton."""
-from datetime import datetime
+
+from datetime import UTC, datetime
 from typing import Any
 
 from core.execution.fix_contracts import FixExecutionReport, FixSessionConfig
@@ -16,8 +17,12 @@ class FixGatewayAdapter:
     mapping. Real QuickFIX/broker transports should plug into this boundary.
     """
 
-    def __init__(self, session_config: FixSessionConfig, execution_event_writer=None,
-                 state_machine: OrderStateMachine | None = None):
+    def __init__(
+        self,
+        session_config: FixSessionConfig,
+        execution_event_writer=None,
+        state_machine: OrderStateMachine | None = None,
+    ):
         self._config = session_config
         self._writer = execution_event_writer
         self._state_machine = state_machine or OrderStateMachine()
@@ -39,7 +44,9 @@ class FixGatewayAdapter:
     def is_connected(self) -> bool:
         return self._connected
 
-    def submit_order(self, request: OrderRequest, market: dict[str, Any] | None = None) -> OrderState:
+    def submit_order(
+        self, request: OrderRequest, market: dict[str, Any] | None = None
+    ) -> OrderState:
         if not self._connected:
             raise RuntimeError("FIX adapter is not connected")
         if request.order_id in self._orders:
@@ -68,8 +75,15 @@ class FixGatewayAdapter:
         if state is None:
             raise ValueError(f"unknown order_id: {parsed.order_id}")
         self._mapper.apply(state, parsed)
-        self._emit(state.order_id, state.correlation_id, self._mapper.execution_event_type(parsed), state,
-                   quantity=parsed.last_qty, price=parsed.last_px, text=parsed.text)
+        self._emit(
+            state.order_id,
+            state.correlation_id,
+            self._mapper.execution_event_type(parsed),
+            state,
+            quantity=parsed.last_qty,
+            price=parsed.last_px,
+            text=parsed.text,
+        )
         return state
 
     def get_order(self, order_id: str) -> OrderState | None:
@@ -87,8 +101,16 @@ class FixGatewayAdapter:
     def list_events(self) -> list[dict[str, Any]]:
         return list(self._events)
 
-    def _emit(self, order_id: str, correlation_id: str, event_type: str, state: OrderState,
-              quantity: float = 0.0, price: float = 0.0, text: str | None = None) -> None:
+    def _emit(
+        self,
+        order_id: str,
+        correlation_id: str,
+        event_type: str,
+        state: OrderState,
+        quantity: float = 0.0,
+        price: float = 0.0,
+        text: str | None = None,
+    ) -> None:
         payload = {
             "event_type": event_type,
             "order_id": order_id,
@@ -97,7 +119,7 @@ class FixGatewayAdapter:
             "quantity": quantity,
             "price": price,
             "text": text,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
         }
         self._events.append(payload)
         if self._writer:
@@ -106,7 +128,7 @@ class FixGatewayAdapter:
                 correlation_id=correlation_id,
                 event_type=event_type,
                 venue=self._config.venue,
-                event_time=datetime.utcnow(),
+                event_time=datetime.now(UTC).replace(tzinfo=None),
                 venue_order_id=order_id,
                 quantity={"filled": quantity} if quantity else {},
                 price={"average": price} if price else {},

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from core.contracts.enums import SystemMode
 
@@ -13,9 +13,7 @@ class SystemModeState:
     entered_at: datetime
     previous_mode: SystemMode | str | None
     reason: str
-    constraints: Dict[str, Any] = field(default_factory=dict)
-    health_snapshot: Dict[str, Any] = field(default_factory=dict)
-    transition_policy: Dict[str, Any] = field(default_factory=dict)
-    extensions: Dict[str, Any] = field(default_factory=dict)
-
-
+    constraints: dict[str, Any] = field(default_factory=dict)
+    health_snapshot: dict[str, Any] = field(default_factory=dict)
+    transition_policy: dict[str, Any] = field(default_factory=dict)
+    extensions: dict[str, Any] = field(default_factory=dict)

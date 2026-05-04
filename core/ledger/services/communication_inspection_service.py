@@ -1,8 +1,8 @@
 from datetime import datetime
 
 from core.deployment.domain_keys import (
-    PAYLOAD_KEY_ACKNOWLEDGED_MESSAGE_IDS,
     PAYLOAD_KEY_ACK_STATUS,
+    PAYLOAD_KEY_ACKNOWLEDGED_MESSAGE_IDS,
     PAYLOAD_KEY_ADAPTER_NAME,
     PAYLOAD_KEY_ADAPTER_SEQUENCE,
     PAYLOAD_KEY_ATTEMPT_COUNT,
@@ -12,14 +12,13 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_CORRELATION_ID,
     PAYLOAD_KEY_DEADLINE_AT,
     PAYLOAD_KEY_DEADLINE_MISSED,
+    PAYLOAD_KEY_DEGRADED_COUNT,
     PAYLOAD_KEY_DELIVERY_POSTURE,
     PAYLOAD_KEY_DELIVERY_STATE,
     PAYLOAD_KEY_DELIVERY_SUMMARY,
-    PAYLOAD_KEY_DEGRADED_COUNT,
     PAYLOAD_KEY_DISPATCH,
     PAYLOAD_KEY_DISPATCH_STATUS,
     PAYLOAD_KEY_ENVELOPE,
-    PAYLOAD_KEY_EVENT_COUNT,
     PAYLOAD_KEY_EXECUTION_EVENT_COUNT,
     PAYLOAD_KEY_EXECUTION_TERMINAL_COUNT,
     PAYLOAD_KEY_EXECUTION_TIMELINE,
@@ -34,8 +33,8 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_MESSAGE_COUNT,
     PAYLOAD_KEY_MESSAGE_ID,
     PAYLOAD_KEY_MESSAGE_IDS,
-    PAYLOAD_KEY_MESSAGE_TYPE,
     PAYLOAD_KEY_MESSAGE_TRACES,
+    PAYLOAD_KEY_MESSAGE_TYPE,
     PAYLOAD_KEY_OUTCOME,
     PAYLOAD_KEY_PHASE,
     PAYLOAD_KEY_PHASE_COUNTS,
@@ -56,11 +55,6 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_WAITING_MESSAGE_IDS,
     REPLAY_STATUS_DEGRADED,
     REPLAY_STATUS_FAILED,
-    REPLAY_TARGET_CODE_RECEIPT_ACCEPTED,
-    REPLAY_TARGET_CODE_RECEIPT_CANCELLED,
-    REPLAY_TARGET_CODE_RECEIPT_FILLED,
-    REPLAY_TARGET_CODE_RECEIPT_PARTIALLY_FILLED,
-    REPLAY_TARGET_CODE_RECEIPT_REJECTED,
     REPLAY_TARGET_CODE_RECEIPT_TIMEOUT,
     REPLAY_TARGET_CODE_STALE_RECEIPT,
     REPLAY_TRACE_SCOPE_CORRELATION,
@@ -114,7 +108,9 @@ class CommunicationInspectionService:
             PAYLOAD_KEY_CORRELATION_ID: correlation_id,
             PAYLOAD_KEY_MESSAGE_COUNT: len(records),
             PAYLOAD_KEY_MESSAGE_IDS: [item[PAYLOAD_KEY_MESSAGE_ID] for item in records],
-            PAYLOAD_KEY_FINAL_STATUSES: [item.get(PAYLOAD_KEY_DISPATCH, {}).get(PAYLOAD_KEY_STATUS) for item in records],
+            PAYLOAD_KEY_FINAL_STATUSES: [
+                item.get(PAYLOAD_KEY_DISPATCH, {}).get(PAYLOAD_KEY_STATUS) for item in records
+            ],
             PAYLOAD_KEY_RECORDS: records,
             PAYLOAD_KEY_MESSAGE_TRACES: message_traces,
             PAYLOAD_KEY_DELIVERY_SUMMARY: self._summarize_correlation_delivery(message_traces),
@@ -124,14 +120,22 @@ class CommunicationInspectionService:
         attempts = record.get(PAYLOAD_KEY_DISPATCH, {}).get(PAYLOAD_KEY_ATTEMPTS, [])
         return {
             PAYLOAD_KEY_ATTEMPT_COUNT: len(attempts),
-            PAYLOAD_KEY_FAILED_COUNT: sum(1 for item in attempts if item.get(PAYLOAD_KEY_STATUS) == REPLAY_STATUS_FAILED),
-            PAYLOAD_KEY_DEGRADED_COUNT: sum(1 for item in attempts if item.get(PAYLOAD_KEY_STATUS) == REPLAY_STATUS_DEGRADED),
-            PAYLOAD_KEY_SUCCEEDED_COUNT: sum(1 for item in attempts if item.get(PAYLOAD_KEY_STATUS) == "succeeded"),
+            PAYLOAD_KEY_FAILED_COUNT: sum(
+                1 for item in attempts if item.get(PAYLOAD_KEY_STATUS) == REPLAY_STATUS_FAILED
+            ),
+            PAYLOAD_KEY_DEGRADED_COUNT: sum(
+                1 for item in attempts if item.get(PAYLOAD_KEY_STATUS) == REPLAY_STATUS_DEGRADED
+            ),
+            PAYLOAD_KEY_SUCCEEDED_COUNT: sum(
+                1 for item in attempts if item.get(PAYLOAD_KEY_STATUS) == "succeeded"
+            ),
             PAYLOAD_KEY_ADAPTER_SEQUENCE: [item.get(PAYLOAD_KEY_ADAPTER_NAME) for item in attempts],
         }
 
     def _build_message_trace(self, *, date_key: str, target: str, record: dict) -> dict:
-        receipt = self._load_receipt(date_key=date_key, target=target, message_id=record[PAYLOAD_KEY_MESSAGE_ID])
+        receipt = self._load_receipt(
+            date_key=date_key, target=target, message_id=record[PAYLOAD_KEY_MESSAGE_ID]
+        )
         execution_timeline = self._load_execution_timeline(
             date_key=date_key,
             correlation_id=record[PAYLOAD_KEY_CORRELATION_ID],
@@ -145,7 +149,9 @@ class CommunicationInspectionService:
             PAYLOAD_KEY_MESSAGE_TYPE: record[PAYLOAD_KEY_CHANNEL].get(PAYLOAD_KEY_MESSAGE_TYPE),
             PAYLOAD_KEY_STATUS: record[PAYLOAD_KEY_DISPATCH].get(PAYLOAD_KEY_STATUS),
             PAYLOAD_KEY_ADAPTER_NAME: record[PAYLOAD_KEY_DISPATCH].get(PAYLOAD_KEY_ADAPTER_NAME),
-            PAYLOAD_KEY_FALLBACK_ADAPTER_NAME: record[PAYLOAD_KEY_DISPATCH].get(PAYLOAD_KEY_FALLBACK_ADAPTER_NAME),
+            PAYLOAD_KEY_FALLBACK_ADAPTER_NAME: record[PAYLOAD_KEY_DISPATCH].get(
+                PAYLOAD_KEY_FALLBACK_ADAPTER_NAME
+            ),
             PAYLOAD_KEY_ATTEMPTS: record[PAYLOAD_KEY_DISPATCH].get(PAYLOAD_KEY_ATTEMPTS, []),
             PAYLOAD_KEY_ATTEMPT_SUMMARY: self.summarize_attempts(record),
             PAYLOAD_KEY_DELIVERY_STATE: delivery_state,
@@ -171,8 +177,11 @@ class CommunicationInspectionService:
             for item in message_traces
             if item.get(PAYLOAD_KEY_EXECUTION_TIMELINE) is not None
         ]
-        terminal_count = sum(1 for t in execution_timelines if t.get(PAYLOAD_KEY_IS_TERMINAL))
-        total_filled_qty = sum(t.get(PAYLOAD_KEY_TOTAL_FILLED_QUANTITY, 0) for t in execution_timelines)
+        terminal_count = sum(1 for t in execution_timelines if t.get(PAYLOAD_KEY_IS_TERMINAL))  # type: ignore[reportOptionalMemberAccess]
+        total_filled_qty = sum(
+            t.get(PAYLOAD_KEY_TOTAL_FILLED_QUANTITY, 0)
+            for t in execution_timelines  # type: ignore[reportOptionalMemberAccess]
+        )
 
         return {
             PAYLOAD_KEY_PHASE_COUNTS: phase_counts,
@@ -181,12 +190,14 @@ class CommunicationInspectionService:
             PAYLOAD_KEY_TIMED_OUT_MESSAGE_IDS: [
                 item[PAYLOAD_KEY_MESSAGE_ID]
                 for item in message_traces
-                if item[PAYLOAD_KEY_DELIVERY_STATE][PAYLOAD_KEY_PHASE] == REPLAY_TARGET_CODE_RECEIPT_TIMEOUT
+                if item[PAYLOAD_KEY_DELIVERY_STATE][PAYLOAD_KEY_PHASE]
+                == REPLAY_TARGET_CODE_RECEIPT_TIMEOUT
             ],
             PAYLOAD_KEY_STALE_RECEIPT_MESSAGE_IDS: [
                 item[PAYLOAD_KEY_MESSAGE_ID]
                 for item in message_traces
-                if item[PAYLOAD_KEY_DELIVERY_STATE][PAYLOAD_KEY_PHASE] == REPLAY_TARGET_CODE_STALE_RECEIPT
+                if item[PAYLOAD_KEY_DELIVERY_STATE][PAYLOAD_KEY_PHASE]
+                == REPLAY_TARGET_CODE_STALE_RECEIPT
             ],
             PAYLOAD_KEY_ACKNOWLEDGED_MESSAGE_IDS: [
                 item[PAYLOAD_KEY_MESSAGE_ID]
@@ -196,7 +207,8 @@ class CommunicationInspectionService:
             PAYLOAD_KEY_WAITING_MESSAGE_IDS: [
                 item[PAYLOAD_KEY_MESSAGE_ID]
                 for item in message_traces
-                if item[PAYLOAD_KEY_DELIVERY_STATE][PAYLOAD_KEY_PHASE] == self.ISSUE_CODE_WAITING_RECEIPT
+                if item[PAYLOAD_KEY_DELIVERY_STATE][PAYLOAD_KEY_PHASE]
+                == self.ISSUE_CODE_WAITING_RECEIPT
             ],
             PAYLOAD_KEY_DELIVERY_POSTURE: self._build_correlation_delivery_posture(issue_counts),
             PAYLOAD_KEY_EXECUTION_EVENT_COUNT: len(execution_timelines),
@@ -213,7 +225,9 @@ class CommunicationInspectionService:
             message_id=message_id,
         )
 
-    def _load_execution_timeline(self, *, date_key: str, correlation_id: str, message_id: str) -> dict | None:
+    def _load_execution_timeline(
+        self, *, date_key: str, correlation_id: str, message_id: str
+    ) -> dict | None:
         if self._execution_event_reader is None:
             return None
         return self._execution_event_reader.build_execution_timeline(
@@ -229,7 +243,9 @@ class CommunicationInspectionService:
         receipt_status = None if receipt is None else receipt.get(PAYLOAD_KEY_ACK_STATUS)
         received_at = None if receipt is None else receipt.get(PAYLOAD_KEY_RECEIVED_AT)
         recorded_at = dispatch.get(PAYLOAD_KEY_RECORDED_AT)
-        deadline_at = channel.get(PAYLOAD_KEY_DEADLINE_AT) or record.get(PAYLOAD_KEY_ENVELOPE, {}).get(PAYLOAD_KEY_DEADLINE_AT)
+        deadline_at = channel.get(PAYLOAD_KEY_DEADLINE_AT) or record.get(
+            PAYLOAD_KEY_ENVELOPE, {}
+        ).get(PAYLOAD_KEY_DEADLINE_AT)
         deadline_missed = self._is_deadline_missed(recorded_at, deadline_at)
         receipt_is_stale = self._is_receipt_stale(received_at, deadline_at)
 
@@ -290,16 +306,29 @@ class CommunicationInspectionService:
         return self.ISSUE_CODE_DISPATCH_PENDING
 
     def _map_delivery_posture(self, phase: str) -> str:
-        if phase in {"receipt_acknowledged", "receipt_accepted", "receipt_partially_filled", "receipt_filled"}:
+        if phase in {
+            "receipt_acknowledged",
+            "receipt_accepted",
+            "receipt_partially_filled",
+            "receipt_filled",
+        }:
             return self.DELIVERY_POSTURE_HEALTHY
         if phase in {"waiting_receipt", "receipt_observed"}:
             return self.DELIVERY_POSTURE_OBSERVE
         return self.DELIVERY_POSTURE_ACTION_REQUIRED
 
     def _build_correlation_delivery_posture(self, issue_counts: dict) -> str:
-        if issue_counts.get(self.ISSUE_CODE_RECEIPT_TIMEOUT, 0) > 0 or issue_counts.get(self.ISSUE_CODE_STALE_RECEIPT, 0) > 0 or issue_counts.get(self.ISSUE_CODE_RECEIPT_REJECTED, 0) > 0 or issue_counts.get(self.ISSUE_CODE_RECEIPT_CANCELLED, 0) > 0:
+        if (
+            issue_counts.get(self.ISSUE_CODE_RECEIPT_TIMEOUT, 0) > 0
+            or issue_counts.get(self.ISSUE_CODE_STALE_RECEIPT, 0) > 0
+            or issue_counts.get(self.ISSUE_CODE_RECEIPT_REJECTED, 0) > 0
+            or issue_counts.get(self.ISSUE_CODE_RECEIPT_CANCELLED, 0) > 0
+        ):
             return self.DELIVERY_POSTURE_ACTION_REQUIRED
-        if issue_counts.get(self.ISSUE_CODE_WAITING_RECEIPT, 0) > 0 or issue_counts.get(self.ISSUE_CODE_RECEIPT_OBSERVED, 0) > 0:
+        if (
+            issue_counts.get(self.ISSUE_CODE_WAITING_RECEIPT, 0) > 0
+            or issue_counts.get(self.ISSUE_CODE_RECEIPT_OBSERVED, 0) > 0
+        ):
             return self.DELIVERY_POSTURE_OBSERVE
         return self.DELIVERY_POSTURE_HEALTHY
 
@@ -315,4 +344,3 @@ class CommunicationInspectionService:
 
     def _parse_dt(self, value: str) -> datetime:
         return datetime.fromisoformat(value)
-

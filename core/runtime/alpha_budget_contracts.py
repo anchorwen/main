@@ -1,4 +1,5 @@
 """Contract validators for Alpha risk budget artifacts."""
+
 from datetime import date
 from typing import Any
 
@@ -44,12 +45,16 @@ class AlphaRiskBudgetContractValidator:
         if "max_daily_orders" in budget and budget["max_daily_orders"] is not None:
             value = budget["max_daily_orders"]
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-                raise AlphaBudgetContractError(f"budget for {alpha_id} max_daily_orders must be a non-negative integer")
+                raise AlphaBudgetContractError(
+                    f"budget for {alpha_id} max_daily_orders must be a non-negative integer"
+                )
 
     @classmethod
     def _validate_non_negative_number(cls, alpha_id: str, key: str, value: Any) -> None:
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
-            raise AlphaBudgetContractError(f"budget for {alpha_id} {key} must be a non-negative number")
+        if isinstance(value, bool) or not isinstance(value, int | float) or value < 0:
+            raise AlphaBudgetContractError(
+                f"budget for {alpha_id} {key} must be a non-negative number"
+            )
 
 
 class AlphaBudgetUsageContractValidator:
@@ -67,9 +72,13 @@ class AlphaBudgetUsageContractValidator:
             raise AlphaBudgetContractError("counts must be an object")
         for alpha_id, count in counts.items():
             if not isinstance(alpha_id, str) or not alpha_id:
-                raise AlphaBudgetContractError("usage count alpha_id keys must be non-empty strings")
+                raise AlphaBudgetContractError(
+                    "usage count alpha_id keys must be non-empty strings"
+                )
             if isinstance(count, bool) or not isinstance(count, int) or count < 0:
-                raise AlphaBudgetContractError(f"usage count for {alpha_id} must be a non-negative integer")
+                raise AlphaBudgetContractError(
+                    f"usage count for {alpha_id} must be a non-negative integer"
+                )
         return payload
 
     @classmethod

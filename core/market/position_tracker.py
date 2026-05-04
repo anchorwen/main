@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 
 class PositionTracker:
@@ -28,7 +28,7 @@ class PositionTracker:
             "side": side,
             "quantity": quantity,
             "entry_price": entry_price,
-            "opened_at": (opened_at or datetime.utcnow()).isoformat(),
+            "opened_at": (opened_at or datetime.now(UTC).replace(tzinfo=None)).isoformat(),
             "status": "open",
             "notional": quantity * entry_price,
             "realized_pnl": 0.0,
@@ -36,14 +36,16 @@ class PositionTracker:
         self._positions[position_id] = pos
         return pos
 
-    def close_position(self, position_id: str, exit_price: float, closed_at: datetime | None = None) -> dict | None:
+    def close_position(
+        self, position_id: str, exit_price: float, closed_at: datetime | None = None
+    ) -> dict | None:
         pos = self._positions.pop(position_id, None)
         if pos is None:
             return None
         pnl = self._compute_pnl(pos, exit_price)
         pos["status"] = "closed"
         pos["exit_price"] = exit_price
-        pos["closed_at"] = (closed_at or datetime.utcnow()).isoformat()
+        pos["closed_at"] = (closed_at or datetime.now(UTC).replace(tzinfo=None)).isoformat()
         pos["realized_pnl"] = round(pnl, 4)
         self._closed.append(pos)
         return pos
@@ -68,7 +70,9 @@ class PositionTracker:
 
         total_realized = sum(c.get("realized_pnl", 0) for c in self._closed)
         peak_equity = max(total_realized, 1.0)
-        current_dd = max(0.0, (peak_equity - total_realized) / peak_equity * 100) if self._closed else 0.0
+        current_dd = (
+            max(0.0, (peak_equity - total_realized) / peak_equity * 100) if self._closed else 0.0
+        )
 
         return {
             "open_position_count": len(open_positions),
@@ -93,7 +97,9 @@ class MarketContextProvider:
     def __init__(self):
         self._snapshots: dict[str, dict] = {}
 
-    def update(self, symbol: str, *, bid: float, ask: float, timestamp: datetime | None = None) -> None:
+    def update(
+        self, symbol: str, *, bid: float, ask: float, timestamp: datetime | None = None
+    ) -> None:
         prev = self._snapshots.get(symbol)
         mid = (bid + ask) / 2
         prev_mid = prev.get("mid") if prev else mid
@@ -106,7 +112,7 @@ class MarketContextProvider:
             "mid": round(mid, 6),
             "spread": round(ask - bid, 6),
             "price_move_pct": round(pct_move, 6),
-            "timestamp": (timestamp or datetime.utcnow()).isoformat(),
+            "timestamp": (timestamp or datetime.now(UTC).replace(tzinfo=None)).isoformat(),
         }
 
     def get_context(self, symbol: str) -> dict:

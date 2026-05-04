@@ -237,8 +237,12 @@ CONTRACT_ERROR_TARGET_REQUIRED = "target is required"
 CONTRACT_ERROR_DISPATCH_ID_REQUIRED = "dispatch_id is required"
 CONTRACT_ERROR_ADAPTER_NAME_REQUIRED = "adapter_name is required"
 CONTRACT_ERROR_STATUS_REQUIRED = "status is required"
-CONTRACT_ERROR_FAILURE_REASON_REQUIRED_WHEN_STATUS_FAILED = "failure_reason is required when status is failed"
+CONTRACT_ERROR_FAILURE_REASON_REQUIRED_WHEN_STATUS_FAILED = (
+    "failure_reason is required when status is failed"
+)
 DISPATCH_FAILURE_REASON_LIVE_READ_ONLY = "live_read_only_enabled"
+DISPATCH_FAILURE_REASON_LIVE_DISPATCH_DISABLED = "live_dispatch_disabled"
+DISPATCH_FAILURE_REASON_SYMBOL_NOT_LIVE_ENABLED = "symbol_not_live_enabled"
 # Contract validation errors: execution/replay events.
 CONTRACT_ERROR_EVENT_ID_REQUIRED = "event_id is required"
 CONTRACT_ERROR_EVENT_TYPE_REQUIRED = "event_type is required"
@@ -246,16 +250,34 @@ CONTRACT_ERROR_VENUE_REQUIRED = "venue is required"
 # Contract validation errors: decision/risk contracts.
 CONTRACT_ERROR_INTENT_ID_REQUIRED = "intent_id is required"
 CONTRACT_ERROR_VERDICT_ID_REQUIRED = "verdict_id is required"
-CONTRACT_ERROR_RECORDED_AT_BEFORE_EVENT_TIME = "recorded_at must be greater than or equal to event_time"
-CONTRACT_ERROR_REQUESTED_AT_BEFORE_EVENT_TIME = "requested_at must be greater than or equal to envelope.event_time"
-CONTRACT_ERROR_DEADLINE_AT_BEFORE_EVENT_TIME = "deadline_at must be greater than or equal to event_time"
-CONTRACT_ERROR_COMPILED_AT_BEFORE_EVENT_TIME = "compiled_at must be greater than or equal to event_time"
-CONTRACT_ERROR_GENERATED_AT_BEFORE_EVENT_TIME = "generated_at must be greater than or equal to event_time"
-CONTRACT_ERROR_EVENT_TYPE_INVALID_TEMPLATE = "event_type must be one of {valid_types}, got '{event_type}'"
-CONTRACT_ERROR_DENY_VERDICT_REQUIRES_BLOCKING_REASON = "deny verdict must include at least one blocking reason"
+CONTRACT_ERROR_RECORDED_AT_BEFORE_EVENT_TIME = (
+    "recorded_at must be greater than or equal to event_time"
+)
+CONTRACT_ERROR_REQUESTED_AT_BEFORE_EVENT_TIME = (
+    "requested_at must be greater than or equal to envelope.event_time"
+)
+CONTRACT_ERROR_DEADLINE_AT_BEFORE_EVENT_TIME = (
+    "deadline_at must be greater than or equal to event_time"
+)
+CONTRACT_ERROR_COMPILED_AT_BEFORE_EVENT_TIME = (
+    "compiled_at must be greater than or equal to event_time"
+)
+CONTRACT_ERROR_GENERATED_AT_BEFORE_EVENT_TIME = (
+    "generated_at must be greater than or equal to event_time"
+)
+CONTRACT_ERROR_EVENT_TYPE_INVALID_TEMPLATE = (
+    "event_type must be one of {valid_types}, got '{event_type}'"
+)
+CONTRACT_ERROR_DENY_VERDICT_REQUIRES_BLOCKING_REASON = (
+    "deny verdict must include at least one blocking reason"
+)
 CONTRACT_ERROR_ALLOW_VERDICT_HAS_BLOCKING_REASON = "allow verdict must not include blocking reasons"
-CONTRACT_ERROR_ALLOW_LIMITED_VERDICT_MISSING_CONSTRAINTS = "allow_limited verdict should include constraints"
-CONTRACT_ERROR_CONVICTION_OUT_OF_RANGE_TEMPLATE = "conviction must be within [0, 1], got {conviction}"
+CONTRACT_ERROR_ALLOW_LIMITED_VERDICT_MISSING_CONSTRAINTS = (
+    "allow_limited verdict should include constraints"
+)
+CONTRACT_ERROR_CONVICTION_OUT_OF_RANGE_TEMPLATE = (
+    "conviction must be within [0, 1], got {conviction}"
+)
 CONTRACT_ERROR_ABSTAIN_ACTION_REQUIRES_FLAT_SIDE = "abstain action must use flat side"
 CONTRACT_ERROR_OBSERVE_ACTION_REQUIRES_FLAT_SIDE = "observe action must use flat side"
 PAYLOAD_KEY_GOVERNANCE_DECISION = "governance_decision"
@@ -310,7 +332,9 @@ REPLAY_STRATEGY_REVIEW_STALE_RECEIPTS_BEFORE_REPLAY = "review_stale_receipts_bef
 REPLAY_STRATEGY_REVIEW_REJECTED_RECEIPTS_BEFORE_REPLAY = "review_rejected_receipts_before_replay"
 REPLAY_STRATEGY_REVIEW_CANCELLED_RECEIPTS_BEFORE_REPLAY = "review_cancelled_receipts_before_replay"
 REPLAY_STRATEGY_DO_NOT_REPLAY_TERMINAL_RECEIPTS = "do_not_replay_terminal_receipts"
-REPLAY_STRATEGY_REPLAY_CORRELATION_WITH_SEQUENCED_REVIEW = "replay_correlation_with_sequenced_review"
+REPLAY_STRATEGY_REPLAY_CORRELATION_WITH_SEQUENCED_REVIEW = (
+    "replay_correlation_with_sequenced_review"
+)
 REPLAY_STRATEGY_REPLAY_ONLY_TIMED_OUT_MESSAGES = "replay_only_timed_out_messages"
 REPLAY_STRATEGY_REPLAY_CORRELATION_DIRECT = "replay_correlation_direct"
 REPLAY_STRATEGY_DIRECT_REPLAY_CANDIDATE = "direct_replay_candidate"
@@ -443,7 +467,6 @@ PAYLOAD_KEY_PREREQUISITES = "prerequisites"
 PAYLOAD_KEY_STEPS = "steps"
 PAYLOAD_KEY_CHECKPOINTS = "checkpoints"
 PAYLOAD_KEY_RISKS = "risks"
-PAYLOAD_KEY_ARTIFACTS = "artifacts"
 PAYLOAD_KEY_RECORDS = "records"
 PAYLOAD_KEY_RECORD_COUNT = "record_count"
 PAYLOAD_KEY_EVIDENCE_COUNT = "evidence_count"
@@ -775,7 +798,8 @@ CIRCUIT_STATE_OPEN = "open"
 SLO_STATUS_HEALTHY = "healthy"
 SLO_DIRECTION_ABOVE = "above"
 SLO_DIRECTION_BELOW = "below"
-# SLO report payload keys (strings match public JSON; shared with other metrics reports where named).
+# SLO report payload keys (strings match public JSON;
+# shared with other metrics reports where named).
 PAYLOAD_KEY_OBJECTIVES = "objectives"
 PAYLOAD_KEY_OBJECTIVE_COUNT = "objective_count"
 PAYLOAD_KEY_RAW_COUNTERS = "raw_counters"
@@ -805,7 +829,9 @@ COMPLIANCE_CHECK_ALPHA_BUDGET_WARNINGS_CLEAR = "alpha_budget_warnings_clear"
 COMPLIANCE_CHECK_REGISTRY_FINAL_AUDIT_CLEARED = "registry_final_audit_cleared"
 COMPLIANCE_CHECK_REGISTRY_OPS_MATURITY_THRESHOLD = "registry_ops_maturity_threshold"
 COMPLIANCE_CHECK_REGISTRY_DEEP_VALIDATION_PRESENT = "registry_deep_validation_present"
-COMPLIANCE_CHECK_REGISTRY_DEEP_VALIDATION_COVERAGE_COMPLETE = "registry_deep_validation_coverage_complete"
+COMPLIANCE_CHECK_REGISTRY_DEEP_VALIDATION_COVERAGE_COMPLETE = (
+    "registry_deep_validation_coverage_complete"
+)
 RECOMMENDATION_PRIORITY_LOW = "low"
 RECOMMENDATION_PRIORITY_MEDIUM = "medium"
 RECOMMENDATION_PRIORITY_HIGH = "high"
@@ -838,8 +864,12 @@ ACTION_TEXT_TIMELINE_FAILURES = "Review failed timeline events and attach root-c
 ACTION_TEXT_RELEASE_GATE_BLOCKED = "Resolve blocking release gate signals before next deployment"
 ACTION_TEXT_SLO_BREACH = "Restore SLO compliance and document error budget burn"
 ACTION_TEXT_AUDIT_ERRORS = "Investigate audit error events and add regression coverage"
-ACTION_TEXT_ALPHA_BUDGET_EVIDENCE_MISSING = "Attach Alpha budget usage evidence to release pipeline and certificate artifacts"
-ACTION_TEXT_ALPHA_BUDGET_WARNINGS_PRESENT = "Review Alpha budget warnings and document approval or mitigation"
+ACTION_TEXT_ALPHA_BUDGET_EVIDENCE_MISSING = (
+    "Attach Alpha budget usage evidence to release pipeline and certificate artifacts"
+)
+ACTION_TEXT_ALPHA_BUDGET_WARNINGS_PRESENT = (
+    "Review Alpha budget warnings and document approval or mitigation"
+)
 ACTION_TEXT_ARCHIVE_REPORT = "Archive report with release evidence"
 
 # Operations timeline event types and actors.

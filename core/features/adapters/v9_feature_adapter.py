@@ -34,5 +34,3 @@ class V9FeatureAdapter:
         raw_vector = self.build_raw_vector(feature_source)
         normalized = self.normalize(raw_vector)
         return normalized.reshape(1, -1)
-
-

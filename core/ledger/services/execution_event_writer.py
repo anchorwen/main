@@ -1,6 +1,6 @@
 from core.contracts.domain.execution_event import ExecutionEvent
-from core.ledger.schema_versions import SCHEMA_EXECUTION_EVENT
 from core.contracts.ids import new_execution_event_id
+from core.ledger.schema_versions import SCHEMA_EXECUTION_EVENT
 from core.ledger.stream_names import LEDGER_STREAM_EXECUTION_EVENTS
 
 

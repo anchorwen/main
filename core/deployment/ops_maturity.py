@@ -3,17 +3,18 @@
 Computes a 0–100 score with per-pillar breakdown, including Alpha budget
 governance coverage from registry and readiness checks.
 """
-from datetime import datetime
+
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from core.deployment.domain_keys import (
     COMPLIANCE_LEVEL_PASS,
     COMPLIANCE_LEVEL_WARN,
     PAYLOAD_KEY_ALPHA_BUDGET_GOVERNANCE,
-    PAYLOAD_KEY_CHECKS,
     PAYLOAD_KEY_CHECK_PASSED,
     PAYLOAD_KEY_CHECK_TOTAL,
+    PAYLOAD_KEY_CHECKS,
     PAYLOAD_KEY_FROM_READINESS,
     PAYLOAD_KEY_GENERATED_AT,
     PAYLOAD_KEY_GRADE,
@@ -39,10 +40,9 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_WARNING_TOTAL,
     PAYLOAD_KEY_WEIGHT,
     SLO_STATUS_HEALTHY,
-    VALIDATION_MODE_DEEP,
 )
-from core.deployment.schema_versions import SCHEMA_OPS_MATURITY
 from core.deployment.governance_summary import extract_governance_summary
+from core.deployment.schema_versions import SCHEMA_OPS_MATURITY
 from core.deployment.validation_mode import resolve_validation_mode
 
 
@@ -94,7 +94,7 @@ class OpsMaturityService:
         min_threshold = float(getattr(self._container.config, "ops_maturity_min_score", 60.0))
         return {
             PAYLOAD_KEY_SCHEMA_VERSION: SCHEMA_OPS_MATURITY,
-            PAYLOAD_KEY_GENERATED_AT: datetime.utcnow().isoformat(),
+            PAYLOAD_KEY_GENERATED_AT: datetime.now(UTC).replace(tzinfo=None).isoformat(),
             PAYLOAD_KEY_VALIDATION_MODE: validation_mode,
             PAYLOAD_KEY_MATURITY_SCORE: score,
             PAYLOAD_KEY_MAX_SCORE: 100.0,
@@ -127,14 +127,18 @@ class OpsMaturityService:
             },
             PAYLOAD_KEY_ALPHA_BUDGET_GOVERNANCE: {
                 PAYLOAD_KEY_FROM_READINESS: {
-                    PAYLOAD_KEY_MISSING_EVIDENCE_COUNT: ab.get(PAYLOAD_KEY_MISSING_EVIDENCE_COUNT, 0),
+                    PAYLOAD_KEY_MISSING_EVIDENCE_COUNT: ab.get(
+                        PAYLOAD_KEY_MISSING_EVIDENCE_COUNT, 0
+                    ),
                     PAYLOAD_KEY_WARNING_TOTAL: ab.get(PAYLOAD_KEY_WARNING_TOTAL, 0),
                     PAYLOAD_KEY_TIMELINE_EVENT_COUNT: ab.get(PAYLOAD_KEY_TIMELINE_EVENT_COUNT, 0),
                 },
                 PAYLOAD_KEY_REGISTRY: {
                     PAYLOAD_KEY_RECORD_COUNT: registry.get(PAYLOAD_KEY_RECORD_COUNT, 0),
                     PAYLOAD_KEY_VALIDATION_MODE: registry.get(PAYLOAD_KEY_VALIDATION_MODE),
-                    PAYLOAD_KEY_VALIDATION_MODE_COUNTS: registry.get(PAYLOAD_KEY_VALIDATION_MODE_COUNTS, {}),
+                    PAYLOAD_KEY_VALIDATION_MODE_COUNTS: registry.get(
+                        PAYLOAD_KEY_VALIDATION_MODE_COUNTS, {}
+                    ),
                 },
             },
             PAYLOAD_KEY_SUMMARY: extract_governance_summary(compliance_summary),

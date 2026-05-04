@@ -1,25 +1,29 @@
 """A1 runtime integration pipeline."""
-from datetime import datetime
+
+from datetime import UTC, datetime
 
 from core.contracts.ids import new_runtime_cycle_id
 from core.execution.quality_analyzer import ExecutionQualityAnalyzer
 from core.execution.quality_contracts import ExecutionBenchmark
 from core.runtime.execution_gateway_router import ExecutionGatewayRouter
 from core.runtime.integration_contracts import RuntimePipelineResult
-from core.runtime.signal_order_builder import SignalOrderRequestBuilder
 from core.runtime.schema_versions import SCHEMA_RUNTIME_PIPELINE_RESULT
+from core.runtime.signal_order_builder import SignalOrderRequestBuilder
 from core.strategies.registry import StrategyPluginRunner
 
 
 class RuntimeExecutionPipeline:
     """Runs strategies, gates orders, routes execution, and reports quality."""
 
-    def __init__(self, strategy_runner: StrategyPluginRunner,
-                 order_builder: SignalOrderRequestBuilder,
-                 gateway_router: ExecutionGatewayRouter,
-                 quality_analyzer: ExecutionQualityAnalyzer | None = None,
-                 approval_chain=None,
-                 evidence_writer=None):
+    def __init__(
+        self,
+        strategy_runner: StrategyPluginRunner,
+        order_builder: SignalOrderRequestBuilder,
+        gateway_router: ExecutionGatewayRouter,
+        quality_analyzer: ExecutionQualityAnalyzer | None = None,
+        approval_chain=None,
+        evidence_writer=None,
+    ):
         self._strategy_runner = strategy_runner
         self._order_builder = order_builder
         self._router = gateway_router
@@ -27,7 +31,9 @@ class RuntimeExecutionPipeline:
         self._approval_chain = approval_chain
         self._evidence_writer = evidence_writer
 
-    def run(self, feature_snapshot, market: dict, context: dict | None = None) -> RuntimePipelineResult:
+    def run(
+        self, feature_snapshot, market: dict, context: dict | None = None
+    ) -> RuntimePipelineResult:
         context = context or {}
         runtime_cycle_id = context.get("runtime_cycle_id") or new_runtime_cycle_id()
         signals = self._strategy_runner.run_all(feature_snapshot, context)
@@ -38,26 +44,30 @@ class RuntimeExecutionPipeline:
         for signal in signals:
             request = self._order_builder.build(signal, market)
             if request is None:
-                skipped.append({
-                    "signal_id": signal.signal_id,
-                    "strategy_id": signal.strategy_id,
-                    "side": signal.side,
-                    "reason": "not_actionable_or_below_threshold",
-                })
+                skipped.append(
+                    {
+                        "signal_id": signal.signal_id,
+                        "strategy_id": signal.strategy_id,
+                        "side": signal.side,
+                        "reason": "not_actionable_or_below_threshold",
+                    }
+                )
                 continue
             gate_approvals = self._approve(signal, request, market)
             approvals.extend(gate_approvals)
             denied = [approval for approval in gate_approvals if not approval.approved]
             if denied:
-                skipped.append({
-                    "signal_id": signal.signal_id,
-                    "strategy_id": signal.strategy_id,
-                    "side": signal.side,
-                    "order_id": request.order_id,
-                    "reason": "execution_denied",
-                    "denied_by": denied[-1].gate,
-                    "details": denied[-1].reasons,
-                })
+                skipped.append(
+                    {
+                        "signal_id": signal.signal_id,
+                        "strategy_id": signal.strategy_id,
+                        "side": signal.side,
+                        "order_id": request.order_id,
+                        "reason": "execution_denied",
+                        "denied_by": denied[-1].gate,
+                        "details": denied[-1].reasons,
+                    }
+                )
                 continue
             order = self._router.submit_order(request, market)
             orders.append(order)
@@ -66,7 +76,7 @@ class RuntimeExecutionPipeline:
         result = RuntimePipelineResult(
             schema_version=SCHEMA_RUNTIME_PIPELINE_RESULT,
             runtime_cycle_id=runtime_cycle_id,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(UTC).replace(tzinfo=None),
             signals=signals,
             orders=orders,
             quality_report=report,

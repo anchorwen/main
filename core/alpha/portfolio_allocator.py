@@ -1,6 +1,7 @@
 """Alpha portfolio allocation MVP."""
+
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from core.alpha.contracts import AlphaLifecycleState, AlphaRecord
@@ -13,15 +14,17 @@ from core.alpha.schema_versions import SCHEMA_ALPHA_PORTFOLIO_ALLOCATION
 class AlphaAllocationPolicy:
     total_notional: float = 100_000.0
     min_score: float = 0.01
-    state_multipliers: dict[str, float] = field(default_factory=lambda: {
-        AlphaLifecycleState.ACTIVE.value: 1.0,
-        AlphaLifecycleState.PROBATION_LIVE.value: 0.35,
-        AlphaLifecycleState.PAPER_TRADING.value: 0.0,
-        AlphaLifecycleState.BACKTEST_PASSED.value: 0.0,
-        AlphaLifecycleState.CANDIDATE.value: 0.0,
-        AlphaLifecycleState.THROTTLED.value: 0.05,
-        AlphaLifecycleState.RETIRED.value: 0.0,
-    })
+    state_multipliers: dict[str, float] = field(
+        default_factory=lambda: {
+            AlphaLifecycleState.ACTIVE.value: 1.0,
+            AlphaLifecycleState.PROBATION_LIVE.value: 0.35,
+            AlphaLifecycleState.PAPER_TRADING.value: 0.0,
+            AlphaLifecycleState.BACKTEST_PASSED.value: 0.0,
+            AlphaLifecycleState.CANDIDATE.value: 0.0,
+            AlphaLifecycleState.THROTTLED.value: 0.05,
+            AlphaLifecycleState.RETIRED.value: 0.0,
+        }
+    )
 
 
 @dataclass(frozen=True)
@@ -51,7 +54,12 @@ class AlphaAllocationRecommendation:
 class AlphaPortfolioAllocator:
     """Builds deterministic portfolio allocation recommendations for Alpha assets."""
 
-    def __init__(self, registry: AlphaRegistry, performance_store: AlphaPerformanceStore, policy: AlphaAllocationPolicy | None = None):
+    def __init__(
+        self,
+        registry: AlphaRegistry,
+        performance_store: AlphaPerformanceStore,
+        policy: AlphaAllocationPolicy | None = None,
+    ):
         self._registry = registry
         self._performance = performance_store
         self._policy = policy or AlphaAllocationPolicy()
@@ -62,24 +70,31 @@ class AlphaPortfolioAllocator:
         score_total = sum(rec.score for rec in allocatable)
         normalized = []
         for rec in recommendations:
-            weight = round(rec.score / score_total, 6) if rec in allocatable and score_total > 0 else 0.0
-            normalized.append(AlphaAllocationRecommendation(
-                alpha_id=rec.alpha_id,
-                state=rec.state,
-                score=rec.score,
-                target_weight=weight,
-                max_notional=round(weight * self._policy.total_notional, 2),
-                risk_tier=rec.risk_tier,
-                reason=rec.reason,
-                metrics=rec.metrics,
-            ))
+            weight = (
+                round(rec.score / score_total, 6) if rec in allocatable and score_total > 0 else 0.0
+            )
+            normalized.append(
+                AlphaAllocationRecommendation(
+                    alpha_id=rec.alpha_id,
+                    state=rec.state,
+                    score=rec.score,
+                    target_weight=weight,
+                    max_notional=round(weight * self._policy.total_notional, 2),
+                    risk_tier=rec.risk_tier,
+                    reason=rec.reason,
+                    metrics=rec.metrics,
+                )
+            )
         return {
             "schema_version": SCHEMA_ALPHA_PORTFOLIO_ALLOCATION,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             "total_notional": self._policy.total_notional,
             "alpha_count": len(recommendations),
             "allocatable_count": len(allocatable),
-            "recommendations": [rec.to_dict() for rec in sorted(normalized, key=lambda item: (-item.target_weight, item.alpha_id))],
+            "recommendations": [
+                rec.to_dict()
+                for rec in sorted(normalized, key=lambda item: (-item.target_weight, item.alpha_id))
+            ],
         }
 
     def _recommend(self, record: AlphaRecord) -> AlphaAllocationRecommendation:
@@ -115,10 +130,18 @@ class AlphaPortfolioAllocator:
         denied_penalty = min(denied * 0.15, 0.75)
         slippage_penalty = min(max(slippage, 0.0) / 50.0, 0.5)
         conversion = min(orders_per_signal, 1.0)
-        score = (fill_ratio * 0.45) + (conversion * 0.25) + (activity * 0.30) - denied_penalty - slippage_penalty
+        score = (
+            (fill_ratio * 0.45)
+            + (conversion * 0.25)
+            + (activity * 0.30)
+            - denied_penalty
+            - slippage_penalty
+        )
         return max(0.0, min(1.0, score))
 
-    def _zero(self, record: AlphaRecord, metrics: dict[str, Any], reason: str) -> AlphaAllocationRecommendation:
+    def _zero(
+        self, record: AlphaRecord, metrics: dict[str, Any], reason: str
+    ) -> AlphaAllocationRecommendation:
         return AlphaAllocationRecommendation(
             alpha_id=record.alpha_id,
             state=record.state_value,

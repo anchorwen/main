@@ -1,4 +1,5 @@
 """Alpha budget usage reporting."""
+
 from typing import Any
 
 from core.runtime.alpha_budget_contracts import AlphaRiskBudgetContractValidator
@@ -47,36 +48,46 @@ class AlphaBudgetUsageReporter:
             "warnings": warnings,
         }
 
-    def _warnings_for(self, alpha_id: str, used: int, budget: dict[str, Any], usage_ratio: float | None) -> list[dict[str, Any]]:
+    def _warnings_for(
+        self, alpha_id: str, used: int, budget: dict[str, Any], usage_ratio: float | None
+    ) -> list[dict[str, Any]]:
         warnings = []
         if not budget:
             if used > 0:
-                warnings.append({
-                    "alpha_id": alpha_id,
-                    "type": "usage_without_budget",
-                    "used_daily_orders": used,
-                })
+                warnings.append(
+                    {
+                        "alpha_id": alpha_id,
+                        "type": "usage_without_budget",
+                        "used_daily_orders": used,
+                    }
+                )
             return warnings
         enabled = budget.get("enabled", False)
         if not enabled and used > 0:
-            warnings.append({
-                "alpha_id": alpha_id,
-                "type": "disabled_alpha_has_usage",
-                "used_daily_orders": used,
-            })
+            warnings.append(
+                {
+                    "alpha_id": alpha_id,
+                    "type": "disabled_alpha_has_usage",
+                    "used_daily_orders": used,
+                }
+            )
         if usage_ratio is not None:
             if usage_ratio >= 1.0:
-                warnings.append({
-                    "alpha_id": alpha_id,
-                    "type": "daily_usage_exhausted",
-                    "usage_ratio": usage_ratio,
-                    "threshold": 1.0,
-                })
+                warnings.append(
+                    {
+                        "alpha_id": alpha_id,
+                        "type": "daily_usage_exhausted",
+                        "usage_ratio": usage_ratio,
+                        "threshold": 1.0,
+                    }
+                )
             elif usage_ratio >= self._high_usage_threshold:
-                warnings.append({
-                    "alpha_id": alpha_id,
-                    "type": "daily_usage_high",
-                    "usage_ratio": usage_ratio,
-                    "threshold": self._high_usage_threshold,
-                })
+                warnings.append(
+                    {
+                        "alpha_id": alpha_id,
+                        "type": "daily_usage_high",
+                        "usage_ratio": usage_ratio,
+                        "threshold": self._high_usage_threshold,
+                    }
+                )
         return warnings

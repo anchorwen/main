@@ -4,9 +4,10 @@ ReleasePipelineService runs a safe dry-run release pipeline that combines
 release gate, evidence bundle, deployment plan, deployment execution,
 rollback drill, operations timeline recording, and postmortem summary.
 """
-from datetime import datetime
-from pathlib import Path
+
 import json
+from datetime import UTC, datetime
+from pathlib import Path
 
 from core.deployment.domain_keys import (
     ARTIFACT_BASE_DIR,
@@ -24,9 +25,9 @@ from core.deployment.domain_keys import (
     EVIDENCE_SECTION_ALPHA_BUDGET_USAGE,
     PAYLOAD_KEY_ALPHA_BUDGET_GOVERNANCE,
     PAYLOAD_KEY_DECISION,
+    PAYLOAD_KEY_EVENT_COUNT,
     PAYLOAD_KEY_EVIDENCE_COUNT,
     PAYLOAD_KEY_EVIDENCE_MANIFEST,
-    PAYLOAD_KEY_EVENT_COUNT,
     PAYLOAD_KEY_EXECUTABLE,
     PAYLOAD_KEY_GATE_DECISION,
     PAYLOAD_KEY_MANIFEST_PATH,
@@ -55,7 +56,6 @@ from core.deployment.domain_keys import (
     RELEASE_PIPELINE_DEFAULT_STRATEGY,
     RELEASE_PIPELINE_DEFAULT_VERSION,
     RELEASE_PIPELINE_EVIDENCE_DIR,
-    RELEASE_PIPELINE_OUTPUT_DIR,
     RELEASE_PIPELINE_FILE_DEPLOYMENT_EXECUTION,
     RELEASE_PIPELINE_FILE_DEPLOYMENT_PLAN,
     RELEASE_PIPELINE_FILE_EVIDENCE_SUMMARY,
@@ -68,17 +68,18 @@ from core.deployment.domain_keys import (
     RELEASE_PIPELINE_GATE_DECISION_ALLOW,
     RELEASE_PIPELINE_GATE_DECISION_BLOCK,
     RELEASE_PIPELINE_GATE_DECISION_WARN,
-    RELEASE_PIPELINE_INCIDENT_STATUS_CRITICAL,
     RELEASE_PIPELINE_INCIDENT_KEY_INCIDENT,
+    RELEASE_PIPELINE_INCIDENT_STATUS_CRITICAL,
     RELEASE_PIPELINE_KEY_ARTIFACTS,
     RELEASE_PIPELINE_KEY_DRY_RUN,
     RELEASE_PIPELINE_KEY_FINISHED_AT,
     RELEASE_PIPELINE_KEY_PASSED,
-    RELEASE_PIPELINE_KEY_STARTED_AT,
     RELEASE_PIPELINE_KEY_STAGES,
+    RELEASE_PIPELINE_KEY_STARTED_AT,
     RELEASE_PIPELINE_KEY_STRATEGY,
     RELEASE_PIPELINE_KEY_SUMMARY,
     RELEASE_PIPELINE_KEY_VERSION,
+    RELEASE_PIPELINE_OUTPUT_DIR,
     RELEASE_PIPELINE_POSTMORTEM_SEVERITY,
     RELEASE_PIPELINE_ROLLBACK_REASON,
     RELEASE_PIPELINE_SOURCE,
@@ -99,13 +100,12 @@ from core.deployment.domain_keys import (
     RELEASE_PIPELINE_SUMMARY_POSTMORTEM_STATUS,
     RELEASE_PIPELINE_SUMMARY_ROLLBACK_STATUS,
     RELEASE_PIPELINE_SUMMARY_TIMELINE_EVENT_COUNT,
-    VALIDATION_MODE_DEEP,
 )
+from core.deployment.governance_summary import extract_governance_summary
 from core.deployment.schema_versions import (
     SCHEMA_ALPHA_BUDGET_GOVERNANCE_EVENT,
     SCHEMA_RELEASE_PIPELINE,
 )
-from core.deployment.governance_summary import extract_governance_summary
 from core.deployment.validation_mode import resolve_validation_mode
 
 
@@ -127,8 +127,12 @@ class ReleasePipelineService:
         validation_mode: str | None = None,
     ) -> dict:
         validation_mode = resolve_validation_mode(self._container, validation_mode)
-        started_at = datetime.utcnow().isoformat()
-        base = Path(output_dir) if output_dir else Path(self._container.config.base_dir) / RELEASE_PIPELINE_OUTPUT_DIR
+        started_at = datetime.now(UTC).replace(tzinfo=None).isoformat()
+        base = (
+            Path(output_dir)
+            if output_dir
+            else Path(self._container.config.base_dir) / RELEASE_PIPELINE_OUTPUT_DIR
+        )
         base.mkdir(parents=True, exist_ok=True)
 
         gate = self._container.release_gate.evaluate(
@@ -154,7 +158,9 @@ class ReleasePipelineService:
             evidence=evidence,
             validation_mode=validation_mode,
         )
-        self._container.operations_timeline.record_alpha_budget_governance(alpha_budget_event, actor=actor)
+        self._container.operations_timeline.record_alpha_budget_governance(
+            alpha_budget_event, actor=actor
+        )
 
         plan = self._container.deployment_plan.build_plan(
             version=version,
@@ -171,7 +177,9 @@ class ReleasePipelineService:
             dry_run=True,
             validation_mode=validation_mode,
         )
-        execution_path = self._write_json(base / RELEASE_PIPELINE_FILE_DEPLOYMENT_EXECUTION, execution)
+        execution_path = self._write_json(
+            base / RELEASE_PIPELINE_FILE_DEPLOYMENT_EXECUTION, execution
+        )
         self._container.operations_timeline.record_deployment_execution(execution, actor=actor)
 
         rollback = self._container.rollback_drill.run(
@@ -189,18 +197,22 @@ class ReleasePipelineService:
             severity=RELEASE_PIPELINE_POSTMORTEM_SEVERITY,
             validation_mode=validation_mode,
         )
-        postmortem_path = self._write_json(base / RELEASE_PIPELINE_FILE_POSTMORTEM_REPORT, postmortem)
+        postmortem_path = self._write_json(
+            base / RELEASE_PIPELINE_FILE_POSTMORTEM_REPORT, postmortem
+        )
         final_audit = self._container.final_audit.build_report(validation_mode=validation_mode)
         final_audit_path = self._write_json(base / RELEASE_PIPELINE_FILE_FINAL_AUDIT, final_audit)
         ops_maturity = self._container.ops_maturity.evaluate(validation_mode=validation_mode)
-        ops_maturity_path = self._write_json(base / RELEASE_PIPELINE_FILE_OPS_MATURITY, ops_maturity)
+        ops_maturity_path = self._write_json(
+            base / RELEASE_PIPELINE_FILE_OPS_MATURITY, ops_maturity
+        )
 
         status = self._status(gate, plan, execution, rollback, postmortem)
         result = {
             PAYLOAD_KEY_SCHEMA_VERSION: SCHEMA_RELEASE_PIPELINE,
             PAYLOAD_KEY_VALIDATION_MODE: validation_mode,
             RELEASE_PIPELINE_KEY_STARTED_AT: started_at,
-            RELEASE_PIPELINE_KEY_FINISHED_AT: datetime.utcnow().isoformat(),
+            RELEASE_PIPELINE_KEY_FINISHED_AT: datetime.now(UTC).replace(tzinfo=None).isoformat(),
             RELEASE_PIPELINE_KEY_VERSION: version,
             RELEASE_PIPELINE_KEY_STRATEGY: strategy,
             RELEASE_PIPELINE_KEY_DRY_RUN: True,
@@ -211,12 +223,24 @@ class ReleasePipelineService:
                 RELEASE_PIPELINE_SUMMARY_PLAN_STATUS: plan.get(PAYLOAD_KEY_STATUS),
                 RELEASE_PIPELINE_SUMMARY_EXECUTION_STATUS: execution.get(PAYLOAD_KEY_STATUS),
                 RELEASE_PIPELINE_SUMMARY_ROLLBACK_STATUS: rollback.get(PAYLOAD_KEY_STATUS),
-                RELEASE_PIPELINE_SUMMARY_POSTMORTEM_STATUS: postmortem.get(RELEASE_PIPELINE_INCIDENT_KEY_INCIDENT, {}).get(PAYLOAD_KEY_STATUS),
-                RELEASE_PIPELINE_SUMMARY_FINAL_AUDIT_READY: final_audit.get(PAYLOAD_KEY_READY_FOR_PRODUCTION, False),
-                RELEASE_PIPELINE_SUMMARY_OPS_MATURITY_SCORE: ops_maturity.get(PAYLOAD_KEY_MATURITY_SCORE, 0),
-                RELEASE_PIPELINE_SUMMARY_TIMELINE_EVENT_COUNT: self._container.operations_timeline.summarize().get(PAYLOAD_KEY_EVENT_COUNT),
-                RELEASE_PIPELINE_SUMMARY_ALPHA_BUDGET_STATUS: alpha_budget_event.get(PAYLOAD_KEY_STATUS),
-                RELEASE_PIPELINE_SUMMARY_ALPHA_BUDGET_WARNING_TOTAL: alpha_budget_event.get(PAYLOAD_KEY_WARNING_TOTAL, 0),
+                RELEASE_PIPELINE_SUMMARY_POSTMORTEM_STATUS: postmortem.get(
+                    RELEASE_PIPELINE_INCIDENT_KEY_INCIDENT, {}
+                ).get(PAYLOAD_KEY_STATUS),
+                RELEASE_PIPELINE_SUMMARY_FINAL_AUDIT_READY: final_audit.get(
+                    PAYLOAD_KEY_READY_FOR_PRODUCTION, False
+                ),
+                RELEASE_PIPELINE_SUMMARY_OPS_MATURITY_SCORE: ops_maturity.get(
+                    PAYLOAD_KEY_MATURITY_SCORE, 0
+                ),
+                RELEASE_PIPELINE_SUMMARY_TIMELINE_EVENT_COUNT: (
+                    self._container.operations_timeline.summarize().get(PAYLOAD_KEY_EVENT_COUNT)
+                ),
+                RELEASE_PIPELINE_SUMMARY_ALPHA_BUDGET_STATUS: alpha_budget_event.get(
+                    PAYLOAD_KEY_STATUS
+                ),
+                RELEASE_PIPELINE_SUMMARY_ALPHA_BUDGET_WARNING_TOTAL: alpha_budget_event.get(
+                    PAYLOAD_KEY_WARNING_TOTAL, 0
+                ),
                 **extract_governance_summary(final_audit.get(PAYLOAD_KEY_SUMMARY, {})),
             },
             RELEASE_PIPELINE_KEY_ARTIFACTS: {
@@ -236,26 +260,56 @@ class ReleasePipelineService:
             RELEASE_PIPELINE_KEY_STAGES: [
                 self._stage(
                     PIPELINE_STAGE_GATE,
-                    gate.get(PAYLOAD_KEY_DECISION) in {RELEASE_PIPELINE_GATE_DECISION_ALLOW, RELEASE_PIPELINE_GATE_DECISION_WARN},
+                    gate.get(PAYLOAD_KEY_DECISION)
+                    in {RELEASE_PIPELINE_GATE_DECISION_ALLOW, RELEASE_PIPELINE_GATE_DECISION_WARN},
                     gate.get(PAYLOAD_KEY_DECISION),
                 ),
-                self._stage(PIPELINE_STAGE_EVIDENCE, bool(evidence.get(PAYLOAD_KEY_MANIFEST_PATH)), evidence.get(PAYLOAD_KEY_MANIFEST_PATH)),
-                self._stage(PIPELINE_STAGE_DEPLOYMENT_PLAN, plan.get(PAYLOAD_KEY_EXECUTABLE, False), plan.get(PAYLOAD_KEY_STATUS)),
-                self._stage(PIPELINE_STAGE_DEPLOYMENT_EXECUTION, execution.get(RELEASE_PIPELINE_KEY_PASSED, False), execution.get(PAYLOAD_KEY_STATUS)),
-                self._stage(PIPELINE_STAGE_ROLLBACK_DRILL, rollback.get(RELEASE_PIPELINE_KEY_PASSED, False), rollback.get(PAYLOAD_KEY_STATUS)),
+                self._stage(
+                    PIPELINE_STAGE_EVIDENCE,
+                    bool(evidence.get(PAYLOAD_KEY_MANIFEST_PATH)),
+                    evidence.get(PAYLOAD_KEY_MANIFEST_PATH),
+                ),
+                self._stage(
+                    PIPELINE_STAGE_DEPLOYMENT_PLAN,
+                    plan.get(PAYLOAD_KEY_EXECUTABLE, False),
+                    plan.get(PAYLOAD_KEY_STATUS),
+                ),
+                self._stage(
+                    PIPELINE_STAGE_DEPLOYMENT_EXECUTION,
+                    execution.get(RELEASE_PIPELINE_KEY_PASSED, False),
+                    execution.get(PAYLOAD_KEY_STATUS),
+                ),
+                self._stage(
+                    PIPELINE_STAGE_ROLLBACK_DRILL,
+                    rollback.get(RELEASE_PIPELINE_KEY_PASSED, False),
+                    rollback.get(PAYLOAD_KEY_STATUS),
+                ),
                 self._stage(
                     PIPELINE_STAGE_POSTMORTEM_REPORT,
-                    postmortem.get(RELEASE_PIPELINE_INCIDENT_KEY_INCIDENT, {}).get(PAYLOAD_KEY_STATUS) != RELEASE_PIPELINE_INCIDENT_STATUS_CRITICAL,
-                    postmortem.get(RELEASE_PIPELINE_INCIDENT_KEY_INCIDENT, {}).get(PAYLOAD_KEY_STATUS),
+                    postmortem.get(RELEASE_PIPELINE_INCIDENT_KEY_INCIDENT, {}).get(
+                        PAYLOAD_KEY_STATUS
+                    )
+                    != RELEASE_PIPELINE_INCIDENT_STATUS_CRITICAL,
+                    postmortem.get(RELEASE_PIPELINE_INCIDENT_KEY_INCIDENT, {}).get(
+                        PAYLOAD_KEY_STATUS
+                    ),
                 ),
-                self._stage(PIPELINE_STAGE_FINAL_AUDIT, final_audit.get(PAYLOAD_KEY_READY_FOR_PRODUCTION, False),
-                            final_audit.get(PAYLOAD_KEY_READY_FOR_PRODUCTION, False)),
-                self._stage(PIPELINE_STAGE_OPS_MATURITY, ops_maturity.get(PAYLOAD_KEY_MATURITY_SCORE, 0) >= 60.0,
-                            ops_maturity.get(PAYLOAD_KEY_MATURITY_SCORE, 0)),
+                self._stage(
+                    PIPELINE_STAGE_FINAL_AUDIT,
+                    final_audit.get(PAYLOAD_KEY_READY_FOR_PRODUCTION, False),
+                    final_audit.get(PAYLOAD_KEY_READY_FOR_PRODUCTION, False),
+                ),
+                self._stage(
+                    PIPELINE_STAGE_OPS_MATURITY,
+                    ops_maturity.get(PAYLOAD_KEY_MATURITY_SCORE, 0) >= 60.0,
+                    ops_maturity.get(PAYLOAD_KEY_MATURITY_SCORE, 0),
+                ),
             ],
         }
         self._write_json(base / RELEASE_PIPELINE_FILE_RESULT, result)
-        result[RELEASE_PIPELINE_KEY_ARTIFACTS][ARTIFACT_RELEASE_PIPELINE] = str(base / RELEASE_PIPELINE_FILE_RESULT)
+        result[RELEASE_PIPELINE_KEY_ARTIFACTS][ARTIFACT_RELEASE_PIPELINE] = str(
+            base / RELEASE_PIPELINE_FILE_RESULT
+        )
         return result
 
     def _alpha_budget_governance_event(
@@ -292,17 +346,30 @@ class ReleasePipelineService:
     def save_result(self, result: dict, path: str) -> str:
         return self._write_json(Path(path), result)
 
-    def _status(self, gate: dict, plan: dict, execution: dict, rollback: dict, postmortem: dict) -> str:
-        if gate.get(PAYLOAD_KEY_DECISION) == RELEASE_PIPELINE_GATE_DECISION_BLOCK or not plan.get(PAYLOAD_KEY_EXECUTABLE, False):
+    def _status(
+        self, gate: dict, plan: dict, execution: dict, rollback: dict, postmortem: dict
+    ) -> str:
+        if gate.get(PAYLOAD_KEY_DECISION) == RELEASE_PIPELINE_GATE_DECISION_BLOCK or not plan.get(
+            PAYLOAD_KEY_EXECUTABLE, False
+        ):
             return RELEASE_PIPELINE_STATUS_BLOCKED
-        if not execution.get(RELEASE_PIPELINE_KEY_PASSED, False) or not rollback.get(RELEASE_PIPELINE_KEY_PASSED, False):
+        if not execution.get(RELEASE_PIPELINE_KEY_PASSED, False) or not rollback.get(
+            RELEASE_PIPELINE_KEY_PASSED, False
+        ):
             return RELEASE_PIPELINE_STATUS_FAILED
-        if postmortem.get(RELEASE_PIPELINE_INCIDENT_KEY_INCIDENT, {}).get(PAYLOAD_KEY_STATUS) == RELEASE_PIPELINE_INCIDENT_STATUS_CRITICAL:
+        if (
+            postmortem.get(RELEASE_PIPELINE_INCIDENT_KEY_INCIDENT, {}).get(PAYLOAD_KEY_STATUS)
+            == RELEASE_PIPELINE_INCIDENT_STATUS_CRITICAL
+        ):
             return RELEASE_PIPELINE_STATUS_FAILED
         return RELEASE_PIPELINE_STATUS_PASSED
 
     def _stage(self, name: str, passed: bool, detail) -> dict:
-        return {RELEASE_PIPELINE_STAGE_KEY_NAME: name, RELEASE_PIPELINE_STAGE_KEY_PASSED: bool(passed), RELEASE_PIPELINE_STAGE_KEY_DETAIL: detail}
+        return {
+            RELEASE_PIPELINE_STAGE_KEY_NAME: name,
+            RELEASE_PIPELINE_STAGE_KEY_PASSED: bool(passed),
+            RELEASE_PIPELINE_STAGE_KEY_DETAIL: detail,
+        }
 
     def _write_json(self, path: Path, payload: dict) -> str:
         path.parent.mkdir(parents=True, exist_ok=True)

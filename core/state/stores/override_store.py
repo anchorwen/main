@@ -1,5 +1,4 @@
-from datetime import datetime
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from core.contracts.enums import OverrideStatus
 
@@ -11,17 +10,17 @@ class OverrideStore:
     def add(self, override) -> None:
         self._overrides.append(override)
 
-    def list_all(self) -> List[object]:
+    def list_all(self) -> list[object]:
         return list(self._overrides)
 
     def list_active(
         self,
-        now: Optional[datetime] = None,
-        symbol: Optional[str] = None,
-        mode: Optional[str] = None,
-        regime: Optional[str] = None,
-    ) -> List[object]:
-        now = now or datetime.utcnow()
+        now: datetime | None = None,
+        symbol: str | None = None,
+        mode: str | None = None,
+        regime: str | None = None,
+    ) -> list[object]:
+        now = now or datetime.now(UTC).replace(tzinfo=None)
         active = []
 
         for item in self._overrides:
@@ -56,5 +55,3 @@ class OverrideStore:
             active.append(item)
 
         return active
-
-

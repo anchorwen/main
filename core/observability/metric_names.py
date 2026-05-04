@@ -20,6 +20,7 @@ def venue_events_metric(event_type: str) -> str:
     """MetricsCollector name for orchestrator-scoped venue event counters."""
     return f"{VENUE_EVENTS_PREFIX}.{event_type}"
 
+
 # Dispatch (SloService, diagnostics)
 DISPATCH_FAILED = "dispatch.failed"
 DISPATCH_TRANSPORT_DELIVERED = "dispatch.transport_delivered"
@@ -41,6 +42,7 @@ EXECUTION_FILL_QUANTITY = "execution.fill_quantity"
 def execution_event_metric(event_type: str) -> str:
     """MetricsCollector name for execution-manager venue event counters."""
     return f"{EXECUTION_PREFIX}.{event_type}"
+
 
 # Paper execution gateway
 PAPER_EXECUTION_FILLED = "paper_execution.filled"

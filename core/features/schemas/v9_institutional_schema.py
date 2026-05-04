@@ -40,5 +40,3 @@ V9_INSTITUTIONAL_40_FEATURES = [
     "M30_Hurst",
     "H1_Hurst",
 ]
-
-

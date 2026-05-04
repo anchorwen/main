@@ -3,24 +3,28 @@
 Maps operational/release governance controls to concrete evidence,
 status, gaps, and remediation actions.
 """
-from datetime import datetime
-from pathlib import Path
+
 import json
+from datetime import UTC, datetime
+from pathlib import Path
 
 from core.deployment.domain_keys import (
     COMPLIANCE_LEVEL_FAIL,
     COMPLIANCE_LEVEL_PASS,
     COMPLIANCE_LEVEL_WARN,
     PAYLOAD_KEY_ALPHA_BUDGET,
+    PAYLOAD_KEY_CERTIFIED_COUNT,
     PAYLOAD_KEY_CONTROL_COUNT,
     PAYLOAD_KEY_CONTROL_ID,
     PAYLOAD_KEY_CONTROLS,
     PAYLOAD_KEY_DECISION,
     PAYLOAD_KEY_EVENT_COUNT,
     PAYLOAD_KEY_EVIDENCE,
+    PAYLOAD_KEY_EVIDENCE_COUNT,
     PAYLOAD_KEY_EVIDENCE_SOURCE,
     PAYLOAD_KEY_FAILED_CHECKS,
     PAYLOAD_KEY_FAILED_COUNT,
+    PAYLOAD_KEY_FAILED_EVENT_COUNT,
     PAYLOAD_KEY_FAILED_OBJECTIVES,
     PAYLOAD_KEY_FINAL_AUDIT,
     PAYLOAD_KEY_GAP,
@@ -37,33 +41,27 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_PATH,
     PAYLOAD_KEY_READY,
     PAYLOAD_KEY_RECORD_COUNT,
+    PAYLOAD_KEY_REGISTRY_PATH,
     PAYLOAD_KEY_REMEDIATION,
     PAYLOAD_KEY_SCHEMA_VERSION,
     PAYLOAD_KEY_SCORE_AVG,
     PAYLOAD_KEY_STATUS,
     PAYLOAD_KEY_STATUS_COUNTS,
     PAYLOAD_KEY_SUMMARY,
+    PAYLOAD_KEY_TIMELINE_PATH,
     PAYLOAD_KEY_UNKNOWN_READINESS_COUNT,
+    PAYLOAD_KEY_VALIDATION_MODE,
+    PAYLOAD_KEY_VALIDATION_MODE_COUNTS,
     PAYLOAD_KEY_WARNING_COUNT,
-    PAYLOAD_KEY_CERTIFIED_COUNT,
-    PAYLOAD_KEY_EVIDENCE_COUNT,
-    PAYLOAD_KEY_STRATEGY_COUNT_WITH_SCORE,
-    PAYLOAD_KEY_SCORE_MIN,
-    PAYLOAD_KEY_SCORE_MAX,
     PAYLOAD_KEY_WARNING_RELEASE_COUNT,
     PAYLOAD_KEY_WARNING_TOTAL,
-    PAYLOAD_KEY_VALIDATION_MODE,
-    PAYLOAD_KEY_FAILED_EVENT_COUNT,
-    PAYLOAD_KEY_REGISTRY_PATH,
-    PAYLOAD_KEY_TIMELINE_PATH,
-    PAYLOAD_KEY_VALIDATION_MODE_COUNTS,
     RELEASE_PIPELINE_GATE_DECISION_ALLOW,
     SLO_STATUS_HEALTHY,
     TIMELINE_STATUS_FAILED,
     VALIDATION_MODE_DEEP,
 )
-from core.deployment.schema_versions import SCHEMA_COMPLIANCE_CONTROL_MATRIX
 from core.deployment.governance_summary import build_governance_summary
+from core.deployment.schema_versions import SCHEMA_COMPLIANCE_CONTROL_MATRIX
 from core.deployment.validation_mode import resolve_validation_mode
 
 
@@ -89,13 +87,19 @@ class ComplianceControlMatrixService:
         controls = self._build_controls(registry, timeline, gate, slo, readiness, audit)
         report = {
             PAYLOAD_KEY_SCHEMA_VERSION: SCHEMA_COMPLIANCE_CONTROL_MATRIX,
-            PAYLOAD_KEY_GENERATED_AT: datetime.utcnow().isoformat(),
+            PAYLOAD_KEY_GENERATED_AT: datetime.now(UTC).replace(tzinfo=None).isoformat(),
             PAYLOAD_KEY_VALIDATION_MODE: validation_mode,
             PAYLOAD_KEY_STATUS: self._status(controls),
             PAYLOAD_KEY_CONTROL_COUNT: len(controls),
-            PAYLOAD_KEY_PASSED_COUNT: len([c for c in controls if c[PAYLOAD_KEY_STATUS] == COMPLIANCE_LEVEL_PASS]),
-            PAYLOAD_KEY_WARNING_COUNT: len([c for c in controls if c[PAYLOAD_KEY_STATUS] == COMPLIANCE_LEVEL_WARN]),
-            PAYLOAD_KEY_FAILED_COUNT: len([c for c in controls if c[PAYLOAD_KEY_STATUS] == COMPLIANCE_LEVEL_FAIL]),
+            PAYLOAD_KEY_PASSED_COUNT: len(
+                [c for c in controls if c[PAYLOAD_KEY_STATUS] == COMPLIANCE_LEVEL_PASS]
+            ),
+            PAYLOAD_KEY_WARNING_COUNT: len(
+                [c for c in controls if c[PAYLOAD_KEY_STATUS] == COMPLIANCE_LEVEL_WARN]
+            ),
+            PAYLOAD_KEY_FAILED_COUNT: len(
+                [c for c in controls if c[PAYLOAD_KEY_STATUS] == COMPLIANCE_LEVEL_FAIL]
+            ),
             PAYLOAD_KEY_CONTROLS: controls,
             PAYLOAD_KEY_SUMMARY: self._governance_summary(controls),
         }
@@ -124,11 +128,15 @@ class ComplianceControlMatrixService:
                 "REL-001",
                 "Release certificates are registered",
                 "Release Registry",
-                COMPLIANCE_LEVEL_PASS if registry.get(PAYLOAD_KEY_RECORD_COUNT, 0) > 0 else COMPLIANCE_LEVEL_WARN,
+                COMPLIANCE_LEVEL_PASS
+                if registry.get(PAYLOAD_KEY_RECORD_COUNT, 0) > 0
+                else COMPLIANCE_LEVEL_WARN,
                 {
                     PAYLOAD_KEY_REGISTRY_PATH: registry.get(PAYLOAD_KEY_PATH),
                     PAYLOAD_KEY_RECORD_COUNT: registry.get(PAYLOAD_KEY_RECORD_COUNT, 0),
-                    PAYLOAD_KEY_VALIDATION_MODE_COUNTS: registry.get(PAYLOAD_KEY_VALIDATION_MODE_COUNTS, {}),
+                    PAYLOAD_KEY_VALIDATION_MODE_COUNTS: registry.get(
+                        PAYLOAD_KEY_VALIDATION_MODE_COUNTS, {}
+                    ),
                 },
                 "Register release certificates after each release pipeline run",
             ),
@@ -136,67 +144,117 @@ class ComplianceControlMatrixService:
                 "REL-002",
                 "Registered releases are certified",
                 "Release Registry",
-                COMPLIANCE_LEVEL_PASS if registry.get(PAYLOAD_KEY_RECORD_COUNT, 0) == registry.get(PAYLOAD_KEY_CERTIFIED_COUNT, 0) else COMPLIANCE_LEVEL_FAIL,
-                {PAYLOAD_KEY_RECORD_COUNT: registry.get(PAYLOAD_KEY_RECORD_COUNT, 0), PAYLOAD_KEY_CERTIFIED_COUNT: registry.get(PAYLOAD_KEY_CERTIFIED_COUNT, 0)},
+                COMPLIANCE_LEVEL_PASS
+                if registry.get(PAYLOAD_KEY_RECORD_COUNT, 0)
+                == registry.get(PAYLOAD_KEY_CERTIFIED_COUNT, 0)
+                else COMPLIANCE_LEVEL_FAIL,
+                {
+                    PAYLOAD_KEY_RECORD_COUNT: registry.get(PAYLOAD_KEY_RECORD_COUNT, 0),
+                    PAYLOAD_KEY_CERTIFIED_COUNT: registry.get(PAYLOAD_KEY_CERTIFIED_COUNT, 0),
+                },
                 "Investigate rejected certificates and block promotion until resolved",
             ),
             self._control(
                 "REL-003",
                 "Release gate is not blocking",
                 "Release Gate",
-                COMPLIANCE_LEVEL_PASS if gate.get(PAYLOAD_KEY_DECISION) in {RELEASE_PIPELINE_GATE_DECISION_ALLOW, COMPLIANCE_LEVEL_WARN} else COMPLIANCE_LEVEL_FAIL,
-                {PAYLOAD_KEY_DECISION: gate.get(PAYLOAD_KEY_DECISION), PAYLOAD_KEY_SUMMARY: gate.get(PAYLOAD_KEY_SUMMARY, {})},
+                COMPLIANCE_LEVEL_PASS
+                if gate.get(PAYLOAD_KEY_DECISION)
+                in {RELEASE_PIPELINE_GATE_DECISION_ALLOW, COMPLIANCE_LEVEL_WARN}
+                else COMPLIANCE_LEVEL_FAIL,
+                {
+                    PAYLOAD_KEY_DECISION: gate.get(PAYLOAD_KEY_DECISION),
+                    PAYLOAD_KEY_SUMMARY: gate.get(PAYLOAD_KEY_SUMMARY, {}),
+                },
                 "Resolve blocking release gate signals",
             ),
             self._control(
                 "REL-004",
                 "Release readiness is clean",
                 "Release Readiness",
-                COMPLIANCE_LEVEL_PASS if readiness.get(PAYLOAD_KEY_READY) else COMPLIANCE_LEVEL_FAIL,
-                {PAYLOAD_KEY_READY: readiness.get(PAYLOAD_KEY_READY), PAYLOAD_KEY_FAILED_CHECKS: readiness.get(PAYLOAD_KEY_SUMMARY, {}).get(PAYLOAD_KEY_FAILED_CHECKS, [])},
+                COMPLIANCE_LEVEL_PASS
+                if readiness.get(PAYLOAD_KEY_READY)
+                else COMPLIANCE_LEVEL_FAIL,
+                {
+                    PAYLOAD_KEY_READY: readiness.get(PAYLOAD_KEY_READY),
+                    PAYLOAD_KEY_FAILED_CHECKS: readiness.get(PAYLOAD_KEY_SUMMARY, {}).get(
+                        PAYLOAD_KEY_FAILED_CHECKS, []
+                    ),
+                },
                 "Fix readiness failed checks before release",
             ),
             self._control(
                 "OBS-001",
                 "SLOs are healthy",
                 "SLO Report",
-                COMPLIANCE_LEVEL_PASS if slo.get(PAYLOAD_KEY_STATUS) == SLO_STATUS_HEALTHY else COMPLIANCE_LEVEL_FAIL,
-                {PAYLOAD_KEY_STATUS: slo.get(PAYLOAD_KEY_STATUS), PAYLOAD_KEY_FAILED_OBJECTIVES: slo.get(PAYLOAD_KEY_FAILED_OBJECTIVES, [])},
+                COMPLIANCE_LEVEL_PASS
+                if slo.get(PAYLOAD_KEY_STATUS) == SLO_STATUS_HEALTHY
+                else COMPLIANCE_LEVEL_FAIL,
+                {
+                    PAYLOAD_KEY_STATUS: slo.get(PAYLOAD_KEY_STATUS),
+                    PAYLOAD_KEY_FAILED_OBJECTIVES: slo.get(PAYLOAD_KEY_FAILED_OBJECTIVES, []),
+                },
                 "Restore SLO compliance and review error budget burn",
             ),
             self._control(
                 "AUD-001",
                 "Operations timeline is populated",
                 "Operations Timeline",
-                COMPLIANCE_LEVEL_PASS if timeline.get(PAYLOAD_KEY_EVENT_COUNT, 0) > 0 else COMPLIANCE_LEVEL_WARN,
-                {PAYLOAD_KEY_TIMELINE_PATH: timeline.get(PAYLOAD_KEY_PATH), PAYLOAD_KEY_EVENT_COUNT: timeline.get(PAYLOAD_KEY_EVENT_COUNT, 0)},
+                COMPLIANCE_LEVEL_PASS
+                if timeline.get(PAYLOAD_KEY_EVENT_COUNT, 0) > 0
+                else COMPLIANCE_LEVEL_WARN,
+                {
+                    PAYLOAD_KEY_TIMELINE_PATH: timeline.get(PAYLOAD_KEY_PATH),
+                    PAYLOAD_KEY_EVENT_COUNT: timeline.get(PAYLOAD_KEY_EVENT_COUNT, 0),
+                },
                 "Record release pipeline events into operations timeline",
             ),
             self._control(
                 "AUD-002",
                 "Operations timeline has no failed events",
                 "Operations Timeline",
-                COMPLIANCE_LEVEL_PASS if timeline.get(PAYLOAD_KEY_STATUS_COUNTS, {}).get(TIMELINE_STATUS_FAILED, 0) == 0 else COMPLIANCE_LEVEL_FAIL,
-                {PAYLOAD_KEY_FAILED_EVENT_COUNT: timeline.get(PAYLOAD_KEY_STATUS_COUNTS, {}).get(TIMELINE_STATUS_FAILED, 0)},
+                COMPLIANCE_LEVEL_PASS
+                if timeline.get(PAYLOAD_KEY_STATUS_COUNTS, {}).get(TIMELINE_STATUS_FAILED, 0) == 0
+                else COMPLIANCE_LEVEL_FAIL,
+                {
+                    PAYLOAD_KEY_FAILED_EVENT_COUNT: timeline.get(PAYLOAD_KEY_STATUS_COUNTS, {}).get(
+                        TIMELINE_STATUS_FAILED, 0
+                    )
+                },
                 "Review failed events and attach postmortem reports",
             ),
             self._control(
                 "AUD-003",
                 "Compliance audit is not failing",
                 "Compliance Audit",
-                COMPLIANCE_LEVEL_PASS if audit.get(PAYLOAD_KEY_STATUS) in {COMPLIANCE_LEVEL_PASS, COMPLIANCE_LEVEL_WARN} else COMPLIANCE_LEVEL_FAIL,
-                {PAYLOAD_KEY_STATUS: audit.get(PAYLOAD_KEY_STATUS), PAYLOAD_KEY_SUMMARY: audit.get(PAYLOAD_KEY_SUMMARY, {})},
+                COMPLIANCE_LEVEL_PASS
+                if audit.get(PAYLOAD_KEY_STATUS) in {COMPLIANCE_LEVEL_PASS, COMPLIANCE_LEVEL_WARN}
+                else COMPLIANCE_LEVEL_FAIL,
+                {
+                    PAYLOAD_KEY_STATUS: audit.get(PAYLOAD_KEY_STATUS),
+                    PAYLOAD_KEY_SUMMARY: audit.get(PAYLOAD_KEY_SUMMARY, {}),
+                },
                 "Resolve failing compliance audit checks",
             ),
             self._control(
                 "ALPHA-001",
                 "Alpha budget usage evidence is registered for releases",
                 "Release Registry",
-                COMPLIANCE_LEVEL_PASS if registry.get(PAYLOAD_KEY_RECORD_COUNT, 0) == 0 or registry.get(PAYLOAD_KEY_ALPHA_BUDGET, {}).get(PAYLOAD_KEY_MISSING_EVIDENCE_COUNT, 0) == 0 else COMPLIANCE_LEVEL_WARN,
+                COMPLIANCE_LEVEL_PASS
+                if registry.get(PAYLOAD_KEY_RECORD_COUNT, 0) == 0
+                or registry.get(PAYLOAD_KEY_ALPHA_BUDGET, {}).get(
+                    PAYLOAD_KEY_MISSING_EVIDENCE_COUNT, 0
+                )
+                == 0
+                else COMPLIANCE_LEVEL_WARN,
                 {
                     PAYLOAD_KEY_RECORD_COUNT: registry.get(PAYLOAD_KEY_RECORD_COUNT, 0),
-                    PAYLOAD_KEY_EVIDENCE_COUNT: registry.get(PAYLOAD_KEY_ALPHA_BUDGET, {}).get(PAYLOAD_KEY_EVIDENCE_COUNT, 0),
-                    PAYLOAD_KEY_MISSING_EVIDENCE_COUNT: registry.get(PAYLOAD_KEY_ALPHA_BUDGET, {}).get(PAYLOAD_KEY_MISSING_EVIDENCE_COUNT, 0),
+                    PAYLOAD_KEY_EVIDENCE_COUNT: registry.get(PAYLOAD_KEY_ALPHA_BUDGET, {}).get(
+                        PAYLOAD_KEY_EVIDENCE_COUNT, 0
+                    ),
+                    PAYLOAD_KEY_MISSING_EVIDENCE_COUNT: registry.get(
+                        PAYLOAD_KEY_ALPHA_BUDGET, {}
+                    ).get(PAYLOAD_KEY_MISSING_EVIDENCE_COUNT, 0),
                 },
                 "Attach Alpha budget usage evidence to every release certificate",
             ),
@@ -204,10 +262,16 @@ class ComplianceControlMatrixService:
                 "ALPHA-002",
                 "Alpha budget usage warnings are reviewed before release",
                 "Release Registry",
-                COMPLIANCE_LEVEL_PASS if registry.get(PAYLOAD_KEY_ALPHA_BUDGET, {}).get(PAYLOAD_KEY_WARNING_TOTAL, 0) == 0 else COMPLIANCE_LEVEL_WARN,
+                COMPLIANCE_LEVEL_PASS
+                if registry.get(PAYLOAD_KEY_ALPHA_BUDGET, {}).get(PAYLOAD_KEY_WARNING_TOTAL, 0) == 0
+                else COMPLIANCE_LEVEL_WARN,
                 {
-                    PAYLOAD_KEY_WARNING_RELEASE_COUNT: registry.get(PAYLOAD_KEY_ALPHA_BUDGET, {}).get(PAYLOAD_KEY_WARNING_RELEASE_COUNT, 0),
-                    PAYLOAD_KEY_WARNING_TOTAL: registry.get(PAYLOAD_KEY_ALPHA_BUDGET, {}).get(PAYLOAD_KEY_WARNING_TOTAL, 0),
+                    PAYLOAD_KEY_WARNING_RELEASE_COUNT: registry.get(
+                        PAYLOAD_KEY_ALPHA_BUDGET, {}
+                    ).get(PAYLOAD_KEY_WARNING_RELEASE_COUNT, 0),
+                    PAYLOAD_KEY_WARNING_TOTAL: registry.get(PAYLOAD_KEY_ALPHA_BUDGET, {}).get(
+                        PAYLOAD_KEY_WARNING_TOTAL, 0
+                    ),
                 },
                 "Review Alpha budget usage warnings before production promotion",
             ),
@@ -220,7 +284,10 @@ class ComplianceControlMatrixService:
                     PAYLOAD_KEY_RECORD_COUNT: registry.get(PAYLOAD_KEY_RECORD_COUNT, 0),
                     **(registry.get(PAYLOAD_KEY_FINAL_AUDIT) or {}),
                 },
-                "Re-run release pipeline, register fresh certificates, or attach final audit for each release",
+                (
+                    "Re-run release pipeline, register fresh certificates,"
+                    " or attach final audit for each release"
+                ),
             ),
             self._control(
                 "GOV-002",
@@ -232,7 +299,10 @@ class ComplianceControlMatrixService:
                     PAYLOAD_KEY_RECORD_COUNT: registry.get(PAYLOAD_KEY_RECORD_COUNT, 0),
                     **(registry.get(PAYLOAD_KEY_OPS_MATURITY) or {}),
                 },
-                "Improve runbook/observability signals and re-register with ops maturity report attached",
+                (
+                    "Improve runbook/observability signals and re-register"
+                    " with ops maturity report attached"
+                ),
             ),
             self._control(
                 "GOV-003",
@@ -241,7 +311,9 @@ class ComplianceControlMatrixService:
                 self._governance_deep_validation_presence_status(registry),
                 {
                     PAYLOAD_KEY_RECORD_COUNT: registry.get(PAYLOAD_KEY_RECORD_COUNT, 0),
-                    PAYLOAD_KEY_VALIDATION_MODE_COUNTS: registry.get(PAYLOAD_KEY_VALIDATION_MODE_COUNTS, {}),
+                    PAYLOAD_KEY_VALIDATION_MODE_COUNTS: registry.get(
+                        PAYLOAD_KEY_VALIDATION_MODE_COUNTS, {}
+                    ),
                 },
                 "Run at least one deep validation release and register its certificate",
             ),
@@ -252,14 +324,23 @@ class ComplianceControlMatrixService:
                 self._governance_deep_validation_coverage_status(registry),
                 {
                     PAYLOAD_KEY_RECORD_COUNT: registry.get(PAYLOAD_KEY_RECORD_COUNT, 0),
-                    PAYLOAD_KEY_VALIDATION_MODE_COUNTS: registry.get(PAYLOAD_KEY_VALIDATION_MODE_COUNTS, {}),
+                    PAYLOAD_KEY_VALIDATION_MODE_COUNTS: registry.get(
+                        PAYLOAD_KEY_VALIDATION_MODE_COUNTS, {}
+                    ),
                 },
                 "Increase deep validation coverage across registered releases",
             ),
         ]
 
-    def _control(self, control_id: str, objective: str, evidence_source: str,
-                 status: str, evidence: dict, remediation: str) -> dict:
+    def _control(
+        self,
+        control_id: str,
+        objective: str,
+        evidence_source: str,
+        status: str,
+        evidence: dict,
+        remediation: str,
+    ) -> dict:
         return {
             PAYLOAD_KEY_CONTROL_ID: control_id,
             PAYLOAD_KEY_OBJECTIVE: objective,
@@ -290,7 +371,7 @@ class ComplianceControlMatrixService:
             for item in controls
             if item.get(PAYLOAD_KEY_CONTROL_ID) in focus_ids
         ]
-        focus.sort(key=lambda item: item[PAYLOAD_KEY_CONTROL_ID])
+        focus.sort(key=lambda item: item[PAYLOAD_KEY_CONTROL_ID])  # type: ignore[reportArgumentType]
         return build_governance_summary(
             focus=focus,
         )

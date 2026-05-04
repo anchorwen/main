@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from core.contracts.enums import DispatchStatus
 from core.deployment.domain_keys import (
@@ -23,12 +23,12 @@ class DispatchResult:
     fallback_adapter_name: str | None = None
     ack_id: str | None = None
     attempts: list[dict[str, Any]] = field(default_factory=list)
-    transport_metadata: Dict[str, Any] = field(default_factory=dict)
-    protocol_metadata: Dict[str, Any] = field(default_factory=dict)
+    transport_metadata: dict[str, Any] = field(default_factory=dict)
+    protocol_metadata: dict[str, Any] = field(default_factory=dict)
     failure_reason: str | None = None
     degrade_reason: str | None = None
-    trace: Dict[str, Any] = field(default_factory=dict)
-    extensions: Dict[str, Any] = field(default_factory=dict)
+    trace: dict[str, Any] = field(default_factory=dict)
+    extensions: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.dispatch_id:
@@ -42,4 +42,3 @@ class DispatchResult:
 
     def __getitem__(self, key: str):
         return getattr(self, key)
-

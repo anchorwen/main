@@ -1,20 +1,23 @@
 """Execution quality analytics."""
-from datetime import datetime
+
+from datetime import UTC, datetime
 from statistics import mean
 
-from core.execution.schema_versions import SCHEMA_EXECUTION_QUALITY_REPORT
 from core.execution.gateway_contracts import OrderState
 from core.execution.quality_contracts import (
     ExecutionBenchmark,
     ExecutionQualityMetric,
     ExecutionQualityReport,
 )
+from core.execution.schema_versions import SCHEMA_EXECUTION_QUALITY_REPORT
 
 
 class ExecutionQualityAnalyzer:
     """Builds per-order execution quality metrics and aggregate reports."""
 
-    def analyze_order(self, order: OrderState, benchmark: ExecutionBenchmark | None = None) -> ExecutionQualityMetric:
+    def analyze_order(
+        self, order: OrderState, benchmark: ExecutionBenchmark | None = None
+    ) -> ExecutionQualityMetric:
         benchmark = benchmark or ExecutionBenchmark(order_id=order.order_id)
         fill_ratio = self._ratio(order.filled_quantity, order.quantity)
         latency_ms = self._latency_ms(order)
@@ -31,35 +34,50 @@ class ExecutionQualityAnalyzer:
             average_fill_price=order.average_price,
             fill_ratio=fill_ratio,
             partial_fill_ratio=round(1.0 - fill_ratio, 10),
-            decision_slippage_bps=self._slippage_bps(order.side, benchmark.decision_price, order.average_price),
-            arrival_slippage_bps=self._slippage_bps(order.side, benchmark.arrival_price, order.average_price),
-            submitted_slippage_bps=self._slippage_bps(order.side, benchmark.submitted_price, order.average_price),
+            decision_slippage_bps=self._slippage_bps(
+                order.side, benchmark.decision_price, order.average_price
+            ),
+            arrival_slippage_bps=self._slippage_bps(
+                order.side, benchmark.arrival_price, order.average_price
+            ),
+            submitted_slippage_bps=self._slippage_bps(
+                order.side, benchmark.submitted_price, order.average_price
+            ),
             latency_ms=latency_ms,
             fill_count=len(order.fills),
             reject_reason=order.rejection_reason,
             strategy_id=benchmark.strategy_id,
         )
 
-    def build_report(self, orders: list[OrderState],
-                     benchmarks: dict[str, ExecutionBenchmark] | None = None) -> ExecutionQualityReport:
+    def build_report(
+        self, orders: list[OrderState], benchmarks: dict[str, ExecutionBenchmark] | None = None
+    ) -> ExecutionQualityReport:
         benchmarks = benchmarks or {}
         metrics = [self.analyze_order(order, benchmarks.get(order.order_id)) for order in orders]
         return ExecutionQualityReport(
             schema_version=SCHEMA_EXECUTION_QUALITY_REPORT,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(UTC).replace(tzinfo=None),
             order_count=len(metrics),
             filled_order_count=len([m for m in metrics if m.status == "filled"]),
             rejected_order_count=len([m for m in metrics if m.status == "rejected"]),
             average_fill_ratio=self._average([m.fill_ratio for m in metrics]),
             average_latency_ms=self._average([m.latency_ms for m in metrics]),
-            average_decision_slippage_bps=self._nullable_average([m.decision_slippage_bps for m in metrics]),
-            average_arrival_slippage_bps=self._nullable_average([m.arrival_slippage_bps for m in metrics]),
-            average_submitted_slippage_bps=self._nullable_average([m.submitted_slippage_bps for m in metrics]),
+            average_decision_slippage_bps=self._nullable_average(
+                [m.decision_slippage_bps for m in metrics]
+            ),
+            average_arrival_slippage_bps=self._nullable_average(
+                [m.arrival_slippage_bps for m in metrics]
+            ),
+            average_submitted_slippage_bps=self._nullable_average(
+                [m.submitted_slippage_bps for m in metrics]
+            ),
             venue_summary=self._venue_summary(metrics),
             order_metrics=metrics,
         )
 
-    def _slippage_bps(self, side: str, benchmark_price: float | None, fill_price: float) -> float | None:
+    def _slippage_bps(
+        self, side: str, benchmark_price: float | None, fill_price: float
+    ) -> float | None:
         if benchmark_price is None or benchmark_price <= 0 or fill_price <= 0:
             return None
         if side == "buy":
@@ -97,8 +115,8 @@ class ExecutionQualityAnalyzer:
                 "rejected_order_count": len([m for m in scoped if m.status == "rejected"]),
                 "average_fill_ratio": self._average([m.fill_ratio for m in scoped]),
                 "average_latency_ms": self._average([m.latency_ms for m in scoped]),
-                "average_arrival_slippage_bps": self._nullable_average([
-                    m.arrival_slippage_bps for m in scoped
-                ]),
+                "average_arrival_slippage_bps": self._nullable_average(
+                    [m.arrival_slippage_bps for m in scoped]
+                ),
             }
         return summary

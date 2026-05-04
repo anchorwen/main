@@ -1,6 +1,7 @@
+import logging
 import threading
-from datetime import datetime
-from typing import Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
 
 from core.deployment.domain_keys import (
     CIRCUIT_STATE_OPEN,
@@ -31,7 +32,7 @@ class AlertRule:
     def should_fire(self, context: dict) -> bool:
         if not self.condition_fn(context):
             return False
-        now = datetime.utcnow().timestamp()
+        now = datetime.now(UTC).replace(tzinfo=None).timestamp()
         if now - self._last_fired < self.cooldown_seconds:
             return False
         self._last_fired = now
@@ -109,21 +110,22 @@ class AlertService:
                 alert = {
                     "rule_name": rule.name,
                     "severity": rule.severity,
-                    "fired_at": datetime.utcnow().isoformat(),
-                    "context_snapshot": {k: v for k, v in context.items()
-                                         if isinstance(v, (str, int, float, bool))},
+                    "fired_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                    "context_snapshot": {
+                        k: v for k, v in context.items() if isinstance(v, str | int | float | bool)
+                    },
                 }
                 for ch in channels:
                     try:
                         ch.send(alert)
                     except Exception:
-                        pass
+                        logging.exception("AlertService failed sending alert to channel=%s", ch)
                 fired.append(alert)
 
         with self._lock:
             self._fired_history.extend(fired)
             if len(self._fired_history) > self._max_history:
-                self._fired_history = self._fired_history[-self._max_history:]
+                self._fired_history = self._fired_history[-self._max_history :]
 
         return fired
 
@@ -134,34 +136,44 @@ class AlertService:
     @classmethod
     def with_default_rules(cls, metrics=None, channels: list[AlertChannel] | None = None):
         svc = cls(channels=channels)
-        svc.add_rule(AlertRule(
-            name="high_error_rate",
-            condition_fn=lambda ctx: ctx.get(PAYLOAD_KEY_ERROR_RATE, 0) > 0.1,
-            severity="critical",
-            cooldown_seconds=60,
-        ))
-        svc.add_rule(AlertRule(
-            name="circuit_breaker_open",
-            condition_fn=lambda ctx: ctx.get(PAYLOAD_KEY_CIRCUIT_STATE) == CIRCUIT_STATE_OPEN,
-            severity="critical",
-            cooldown_seconds=120,
-        ))
-        svc.add_rule(AlertRule(
-            name="high_throttle_rate",
-            condition_fn=lambda ctx: ctx.get(PAYLOAD_KEY_THROTTLE_RATE, 0) > 0.3,
-            severity="warning",
-            cooldown_seconds=300,
-        ))
-        svc.add_rule(AlertRule(
-            name="brain_frozen",
-            condition_fn=lambda ctx: ctx.get(PAYLOAD_KEY_FROZEN_BRAIN_COUNT, 0) > 0,
-            severity="warning",
-            cooldown_seconds=600,
-        ))
-        svc.add_rule(AlertRule(
-            name="position_limit_near",
-            condition_fn=lambda ctx: ctx.get(PAYLOAD_KEY_POSITION_UTILIZATION, 0) > 0.8,
-            severity="warning",
-            cooldown_seconds=300,
-        ))
+        svc.add_rule(
+            AlertRule(
+                name="high_error_rate",
+                condition_fn=lambda ctx: ctx.get(PAYLOAD_KEY_ERROR_RATE, 0) > 0.1,
+                severity="critical",
+                cooldown_seconds=60,
+            )
+        )
+        svc.add_rule(
+            AlertRule(
+                name="circuit_breaker_open",
+                condition_fn=lambda ctx: ctx.get(PAYLOAD_KEY_CIRCUIT_STATE) == CIRCUIT_STATE_OPEN,
+                severity="critical",
+                cooldown_seconds=120,
+            )
+        )
+        svc.add_rule(
+            AlertRule(
+                name="high_throttle_rate",
+                condition_fn=lambda ctx: ctx.get(PAYLOAD_KEY_THROTTLE_RATE, 0) > 0.3,
+                severity="warning",
+                cooldown_seconds=300,
+            )
+        )
+        svc.add_rule(
+            AlertRule(
+                name="brain_frozen",
+                condition_fn=lambda ctx: ctx.get(PAYLOAD_KEY_FROZEN_BRAIN_COUNT, 0) > 0,
+                severity="warning",
+                cooldown_seconds=600,
+            )
+        )
+        svc.add_rule(
+            AlertRule(
+                name="position_limit_near",
+                condition_fn=lambda ctx: ctx.get(PAYLOAD_KEY_POSITION_UTILIZATION, 0) > 0.8,
+                severity="warning",
+                cooldown_seconds=300,
+            )
+        )
         return svc

@@ -1,4 +1,5 @@
 """Runtime integration contracts for A1 execution pipeline."""
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any

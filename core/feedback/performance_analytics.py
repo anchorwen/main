@@ -115,7 +115,7 @@ class PerformanceAnalytics:
         downside = [r for r in returns if r < 0]
         if not downside:
             return 0.0 if mean_r <= 0 else float("inf")
-        down_std = math.sqrt(sum(r ** 2 for r in downside) / len(downside))
+        down_std = math.sqrt(sum(r**2 for r in downside) / len(downside))
         if down_std == 0:
             return 0.0
         excess = mean_r - self._risk_free_rate / 252
@@ -137,14 +137,26 @@ class PerformanceAnalytics:
 
     def _empty_result(self) -> dict:
         return {
-            "trade_count": 0, "win_count": 0, "loss_count": 0,
-            "win_rate": 0, "total_pnl": 0, "avg_pnl": 0,
-            "max_win": 0, "max_loss": 0, "profit_factor": 0,
-            "sharpe_ratio": 0, "sortino_ratio": 0,
-            "max_drawdown": 0, "max_drawdown_pct": 0,
-            "avg_win": 0, "avg_loss": 0, "expectancy": 0,
+            "trade_count": 0,
+            "win_count": 0,
+            "loss_count": 0,
+            "win_rate": 0,
+            "total_pnl": 0,
+            "avg_pnl": 0,
+            "max_win": 0,
+            "max_loss": 0,
+            "profit_factor": 0,
+            "sharpe_ratio": 0,
+            "sortino_ratio": 0,
+            "max_drawdown": 0,
+            "max_drawdown_pct": 0,
+            "avg_win": 0,
+            "avg_loss": 0,
+            "expectancy": 0,
             "initial_equity": self._initial_equity,
             "final_equity": self._initial_equity,
-            "total_return_pct": 0, "avg_duration_seconds": 0,
-            "equity_curve": [self._initial_equity], "pnl_series": [],
+            "total_return_pct": 0,
+            "avg_duration_seconds": 0,
+            "equity_curve": [self._initial_equity],
+            "pnl_series": [],
         }

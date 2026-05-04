@@ -1,10 +1,14 @@
 """Runtime cycle replay and reconciliation readiness reports."""
+
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from core.runtime.evidence_reader import RuntimeEvidenceReader
-from core.runtime.schema_versions import SCHEMA_RUNTIME_EVIDENCE_RECORD, SCHEMA_RUNTIME_REPLAY_REPORT
+from core.runtime.schema_versions import (
+    SCHEMA_RUNTIME_EVIDENCE_RECORD,
+    SCHEMA_RUNTIME_REPLAY_REPORT,
+)
 
 
 @dataclass(frozen=True)
@@ -55,7 +59,7 @@ class RuntimeCycleReplay:
             return RuntimeReplayReport(
                 schema_version=SCHEMA_RUNTIME_REPLAY_REPORT,
                 runtime_cycle_id=runtime_cycle_id,
-                generated_at=datetime.utcnow(),
+                generated_at=datetime.now(UTC).replace(tzinfo=None),
                 evidence_found=False,
                 replayable=False,
                 counts_match=False,
@@ -100,7 +104,7 @@ class RuntimeCycleReplay:
         return RuntimeReplayReport(
             schema_version=SCHEMA_RUNTIME_REPLAY_REPORT,
             runtime_cycle_id=record.get("runtime_cycle_id", "unknown"),
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(UTC).replace(tzinfo=None),
             evidence_found=True,
             replayable=replayable,
             counts_match=counts_match,

@@ -1,5 +1,6 @@
 """Example strategy plugins used for tests and local development."""
-from datetime import datetime
+
+from datetime import UTC, datetime
 from typing import Any
 
 from core.contracts.ids import new_candidate_id
@@ -48,7 +49,9 @@ class ThresholdAlphaAgent:
             side = "sell"
         else:
             side = "hold"
-        strength = min(1.0, abs(value) / max(abs(self._buy_threshold), abs(self._sell_threshold), 1.0))
+        strength = min(
+            1.0, abs(value) / max(abs(self._buy_threshold), abs(self._sell_threshold), 1.0)
+        )
         return Signal(
             schema_version=SCHEMA_SIGNAL,
             signal_id=new_candidate_id().replace("candidate_", "sig_", 1),
@@ -57,7 +60,7 @@ class ThresholdAlphaAgent:
             side=side,
             strength=strength,
             confidence=0.5 if side == "hold" else 0.75,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(UTC).replace(tzinfo=None),
             reason=f"{self._feature_name}={value}",
             features_used={self._feature_name: value},
             risk_hints={"warmed": self._warmed},
@@ -72,8 +75,10 @@ class ThresholdAlphaAgent:
         }
 
     def health(self) -> StrategyHealth:
-        return StrategyHealth(status="healthy" if self._warmed else "degraded",
-                              message="warmed" if self._warmed else "not warmed")
+        return StrategyHealth(
+            status="healthy" if self._warmed else "degraded",
+            message="warmed" if self._warmed else "not warmed",
+        )
 
     def _feature_value(self, feature_snapshot: Any) -> float:
         if isinstance(feature_snapshot, dict):

@@ -1,6 +1,7 @@
 """Fill simulation for paper execution."""
+
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from core.contracts.ids import new_execution_event_id
@@ -28,7 +29,9 @@ class FillSimulator:
     def __init__(self, config: FillSimulationConfig | None = None):
         self._config = config or FillSimulationConfig()
 
-    def simulate(self, request: OrderRequest, state: OrderState, market: dict[str, Any]) -> Fill | None:
+    def simulate(
+        self, request: OrderRequest, state: OrderState, market: dict[str, Any]
+    ) -> Fill | None:
         if state.is_terminal or state.remaining_quantity <= 0:
             return None
         price = self._executable_price(request, market)
@@ -42,7 +45,7 @@ class FillSimulator:
             order_id=state.order_id,
             quantity=quantity,
             price=self._apply_slippage(price, request.side),
-            filled_at=datetime.utcnow(),
+            filled_at=datetime.now(UTC).replace(tzinfo=None),
             liquidity="paper",
         )
 
@@ -54,9 +57,9 @@ class FillSimulator:
             if request.side == "buy":
                 return self._first_price(ask, last, bid)
             return self._first_price(bid, last, ask)
-        if request.side == "buy" and ask is not None and float(ask) <= float(request.limit_price):
+        if request.side == "buy" and ask is not None and float(ask) <= float(request.limit_price):  # type: ignore[reportArgumentType]
             return float(ask)
-        if request.side == "sell" and bid is not None and float(bid) >= float(request.limit_price):
+        if request.side == "sell" and bid is not None and float(bid) >= float(request.limit_price):  # type: ignore[reportArgumentType]
             return float(bid)
         return None
 
@@ -65,7 +68,10 @@ class FillSimulator:
         market_liquidity = market.get("available_quantity")
         if market_liquidity is not None:
             requested = min(requested, float(market_liquidity))
-        if self._config.min_liquidity_quantity is not None and requested < self._config.min_liquidity_quantity:
+        if (
+            self._config.min_liquidity_quantity is not None
+            and requested < self._config.min_liquidity_quantity
+        ):
             return 0.0
         return round(min(state.remaining_quantity, requested), 10)
 

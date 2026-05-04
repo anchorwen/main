@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from core.deployment.domain_keys import (
     CONTRACT_ERROR_INTENT_ID_REQUIRED,
@@ -18,14 +18,14 @@ class DecisionRecord:
     verdict_id: str
     event_time: datetime
     recorded_at: datetime
-    context: Dict[str, Any] = field(default_factory=dict)
-    inputs: Dict[str, Any] = field(default_factory=dict)
-    execution: Dict[str, Any] = field(default_factory=dict)
-    outcome: Dict[str, Any] = field(default_factory=dict)
-    attribution: Dict[str, Any] = field(default_factory=dict)
-    labels: Dict[str, Any] = field(default_factory=dict)
-    trace: Dict[str, Any] = field(default_factory=dict)
-    extensions: Dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
+    inputs: dict[str, Any] = field(default_factory=dict)
+    execution: dict[str, Any] = field(default_factory=dict)
+    outcome: dict[str, Any] = field(default_factory=dict)
+    attribution: dict[str, Any] = field(default_factory=dict)
+    labels: dict[str, Any] = field(default_factory=dict)
+    trace: dict[str, Any] = field(default_factory=dict)
+    extensions: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.recorded_at < self.event_time:
@@ -35,11 +35,11 @@ class DecisionRecord:
         if not self.verdict_id:
             raise ValueError(CONTRACT_ERROR_VERDICT_ID_REQUIRED)
 
-    def attach_execution(self, execution_payload: Dict[str, Any]) -> None:
+    def attach_execution(self, execution_payload: dict[str, Any]) -> None:
         self.execution.update(execution_payload)
 
-    def attach_outcome(self, outcome_payload: Dict[str, Any]) -> None:
+    def attach_outcome(self, outcome_payload: dict[str, Any]) -> None:
         self.outcome.update(outcome_payload)
 
-    def attach_attribution(self, attribution_payload: Dict[str, Any]) -> None:
+    def attach_attribution(self, attribution_payload: dict[str, Any]) -> None:
         self.attribution.update(attribution_payload)

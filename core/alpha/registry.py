@@ -1,6 +1,7 @@
 """In-memory Alpha Registry MVP."""
+
 from dataclasses import replace
-from datetime import datetime
+from datetime import UTC, datetime
 
 from core.alpha.contracts import AlphaRecord
 from core.alpha.schema_versions import SCHEMA_ALPHA_REGISTRY
@@ -19,7 +20,9 @@ class AlphaRegistry:
         return record
 
     def upsert(self, record: AlphaRecord) -> AlphaRecord:
-        self._records[record.alpha_id] = replace(record, updated_at=datetime.utcnow())
+        self._records[record.alpha_id] = replace(
+            record, updated_at=datetime.now(UTC).replace(tzinfo=None)
+        )
         return self._records[record.alpha_id]
 
     def get(self, alpha_id: str) -> AlphaRecord | None:

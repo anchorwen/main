@@ -1,9 +1,8 @@
-import uuid
 import threading
 import time
-from datetime import datetime
+import uuid
+from datetime import UTC, datetime
 from typing import Any
-
 
 _current_context = threading.local()
 
@@ -34,11 +33,13 @@ class Span:
         self.attributes[key] = value
 
     def add_event(self, name: str, attributes: dict | None = None) -> None:
-        self.events.append({
-            "name": name,
-            "timestamp": datetime.utcnow().isoformat(),
-            "attributes": attributes or {},
-        })
+        self.events.append(
+            {
+                "name": name,
+                "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                "attributes": attributes or {},
+            }
+        )
 
     def set_error(self, error: str) -> None:
         self.status = "error"

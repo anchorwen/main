@@ -1,10 +1,10 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
-from core.contracts.schema_versions import SCHEMA_COMMUNICATION_RECORD
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.dispatch_result import DispatchResult
+from core.contracts.schema_versions import SCHEMA_COMMUNICATION_RECORD
 from core.deployment.domain_keys import (
     CONTRACT_ERROR_CORRELATION_ID_REQUIRED,
     CONTRACT_ERROR_MESSAGE_ID_REQUIRED,
@@ -20,12 +20,12 @@ class CommunicationRecord:
     correlation_id: str
     event_time: datetime
     recorded_at: datetime
-    channel: Dict[str, Any] = field(default_factory=dict)
-    envelope: Dict[str, Any] = field(default_factory=dict)
-    dispatch: Dict[str, Any] = field(default_factory=dict)
-    outcome: Dict[str, Any] = field(default_factory=dict)
-    trace: Dict[str, Any] = field(default_factory=dict)
-    extensions: Dict[str, Any] = field(default_factory=dict)
+    channel: dict[str, Any] = field(default_factory=dict)
+    envelope: dict[str, Any] = field(default_factory=dict)
+    dispatch: dict[str, Any] = field(default_factory=dict)
+    outcome: dict[str, Any] = field(default_factory=dict)
+    trace: dict[str, Any] = field(default_factory=dict)
+    extensions: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.recorded_at < self.event_time:
@@ -36,7 +36,9 @@ class CommunicationRecord:
             raise ValueError(CONTRACT_ERROR_CORRELATION_ID_REQUIRED)
 
     @classmethod
-    def from_dispatch(cls, *, record_id: str, envelope: CommunicationEnvelope, dispatch_result: DispatchResult) -> "CommunicationRecord":
+    def from_dispatch(
+        cls, *, record_id: str, envelope: CommunicationEnvelope, dispatch_result: DispatchResult
+    ) -> "CommunicationRecord":
         return cls(
             schema_version=SCHEMA_COMMUNICATION_RECORD,
             record_id=record_id,
@@ -81,4 +83,3 @@ class CommunicationRecord:
                 "dispatch_extensions": dispatch_result.extensions,
             },
         )
-

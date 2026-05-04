@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any
 
 from core.contracts.enums import RiskDecisionStatus, SystemMode
 from core.deployment.domain_keys import (
@@ -19,11 +19,11 @@ class RiskVerdict:
     status: RiskDecisionStatus
     mode: SystemMode | str
     risk_tier: str
-    blocking_reasons: List[str] = field(default_factory=list)
-    warning_reasons: List[str] = field(default_factory=list)
-    constraints: Dict[str, Any] = field(default_factory=dict)
-    trace: Dict[str, Any] = field(default_factory=dict)
-    extensions: Dict[str, Any] = field(default_factory=dict)
+    blocking_reasons: list[str] = field(default_factory=list)
+    warning_reasons: list[str] = field(default_factory=list)
+    constraints: dict[str, Any] = field(default_factory=dict)
+    trace: dict[str, Any] = field(default_factory=dict)
+    extensions: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.status == RiskDecisionStatus.DENY and not self.blocking_reasons:
@@ -49,10 +49,7 @@ class RiskVerdict:
         return self.status == RiskDecisionStatus.ALLOW_LIMITED
 
     def requires_reduce_only(self) -> bool:
-        return (
-            self.status in {
-                RiskDecisionStatus.FORCE_REDUCE,
-                RiskDecisionStatus.LIQUIDATE_ONLY,
-            }
-            or self.constraints.get("force_reduce_only", False)
-        )
+        return self.status in {
+            RiskDecisionStatus.FORCE_REDUCE,
+            RiskDecisionStatus.LIQUIDATE_ONLY,
+        } or self.constraints.get("force_reduce_only", False)

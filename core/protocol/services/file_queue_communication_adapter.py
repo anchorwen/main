@@ -3,8 +3,8 @@ from pathlib import Path
 
 from core.contracts.domain.dispatch_result import DispatchResult
 from core.contracts.enums import DispatchStatus
-from core.protocol.schema_versions import SCHEMA_DISPATCH_RESULT
 from core.contracts.serialization.json_codec import to_dict
+from core.protocol.schema_versions import SCHEMA_DISPATCH_RESULT
 
 
 class FileQueueCommunicationAdapter:
@@ -28,7 +28,10 @@ class FileQueueCommunicationAdapter:
             },
             "envelope": envelope,
         }
-        target_file.write_text(json.dumps(to_dict(payload), ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        target_file.write_text(
+            json.dumps(to_dict(payload), ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
 
         return DispatchResult(
             schema_version=SCHEMA_DISPATCH_RESULT,
@@ -48,8 +51,3 @@ class FileQueueCommunicationAdapter:
             },
             trace={"adapter": self.adapter_name},
         )
-
-
-
-
-

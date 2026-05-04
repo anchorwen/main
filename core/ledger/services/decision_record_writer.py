@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from core.contracts.domain.decision_record import DecisionRecord
-from core.ledger.schema_versions import SCHEMA_DECISION_RECORD
 from core.contracts.ids import new_record_id
+from core.ledger.schema_versions import SCHEMA_DECISION_RECORD
 from core.ledger.stream_names import LEDGER_STREAM_DECISIONS
 
 
@@ -10,7 +10,9 @@ class DecisionRecordWriter:
     def __init__(self, ledger_store):
         self._ledger_store = ledger_store
 
-    def seed_record(self, feature_snapshot, proposals, candidate, intent, verdict) -> tuple[DecisionRecord, object]:
+    def seed_record(
+        self, feature_snapshot, proposals, candidate, intent, verdict
+    ) -> tuple[DecisionRecord, object]:
         record = DecisionRecord(
             schema_version=SCHEMA_DECISION_RECORD,
             record_id=new_record_id(),
@@ -18,7 +20,7 @@ class DecisionRecordWriter:
             intent_id=intent.intent_id,
             verdict_id=verdict.verdict_id,
             event_time=feature_snapshot.event_time,
-            recorded_at=datetime.utcnow(),
+            recorded_at=datetime.now(UTC).replace(tzinfo=None),
             context={
                 "symbol": feature_snapshot.symbol,
                 "venue": feature_snapshot.venue,

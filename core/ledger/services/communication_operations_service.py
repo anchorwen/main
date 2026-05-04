@@ -1,28 +1,7 @@
 from core.deployment.domain_keys import (
-    PAYLOAD_KEY_BLOCK_REASONS,
-    PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
-    PAYLOAD_KEY_BLOCKED_MESSAGES,
-    PAYLOAD_KEY_CORRELATION_ID,
-    PAYLOAD_KEY_DECISION,
-    PAYLOAD_KEY_EXECUTION,
-    PAYLOAD_KEY_EXECUTION_GOVERNANCE_PROJECTION,
-    PAYLOAD_KEY_EXECUTION_MODE,
-    PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE,
-    PAYLOAD_KEY_EXECUTION_SUMMARY,
-    PAYLOAD_KEY_EXECUTED_MESSAGE_IDS,
-    PAYLOAD_KEY_GATE_DECISION,
-    PAYLOAD_KEY_GOVERNANCE_DECISION,
-    PAYLOAD_KEY_GOVERNANCE_POSTURE,
-    PAYLOAD_KEY_GOVERNANCE_SOURCES,
-    PAYLOAD_KEY_GOVERNANCE_SUMMARY,
-    PAYLOAD_KEY_GOVERNANCE_TAGS,
-    PAYLOAD_KEY_GOVERNANCE_SUMMARY_SOURCE,
-    PAYLOAD_KEY_MESSAGE_ID,
-    PAYLOAD_KEY_OPERATIONS_POSTURE,
-    PAYLOAD_KEY_OPERATIONS_POSTURE_SOURCE,
-    PAYLOAD_KEY_OPERATIONS_SUMMARY,
-    PAYLOAD_KEY_POSTURE,
-    PAYLOAD_KEY_POSTURE_SOURCE,
+    OPERATIONS_POSTURE_SOURCE_GOVERNANCE_SUMMARY,
+    OPERATIONS_POSTURE_SOURCE_TRACE_DELIVERY_STATE,
+    OPERATIONS_POSTURE_SOURCE_TRACE_DELIVERY_SUMMARY,
     OPERATIONS_POSTURE_VALUE_ACTION_REQUIRED,
     OPERATIONS_POSTURE_VALUE_AUTO_REPLAY,
     OPERATIONS_POSTURE_VALUE_BLOCKED,
@@ -31,59 +10,99 @@ from core.deployment.domain_keys import (
     OPERATIONS_POSTURE_VALUE_REVIEW_REQUIRED,
     OPERATIONS_POSTURE_VALUE_TARGETED_REPLAY,
     OPERATIONS_POSTURE_VALUE_UNKNOWN,
-    OPERATIONS_POSTURE_SOURCE_GOVERNANCE_SUMMARY,
-    OPERATIONS_POSTURE_SOURCE_TRACE_DELIVERY_STATE,
-    OPERATIONS_POSTURE_SOURCE_TRACE_DELIVERY_SUMMARY,
+    PAYLOAD_KEY_BLOCK_REASONS,
+    PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
+    PAYLOAD_KEY_CORRELATION_ID,
+    PAYLOAD_KEY_DECISION,
+    PAYLOAD_KEY_EXECUTED_MESSAGE_IDS,
+    PAYLOAD_KEY_EXECUTION_GOVERNANCE_PROJECTION,
+    PAYLOAD_KEY_EXECUTION_MODE,
+    PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE,
+    PAYLOAD_KEY_EXECUTION_SUMMARY,
+    PAYLOAD_KEY_GATE_DECISION,
+    PAYLOAD_KEY_GOVERNANCE_DECISION,
+    PAYLOAD_KEY_GOVERNANCE_POSTURE,
+    PAYLOAD_KEY_GOVERNANCE_SOURCES,
+    PAYLOAD_KEY_GOVERNANCE_SUMMARY,
+    PAYLOAD_KEY_GOVERNANCE_SUMMARY_SOURCE,
+    PAYLOAD_KEY_GOVERNANCE_TAGS,
+    PAYLOAD_KEY_OPERATIONS_POSTURE,
+    PAYLOAD_KEY_OPERATIONS_POSTURE_SOURCE,
+    PAYLOAD_KEY_OPERATIONS_SUMMARY,
+    PAYLOAD_KEY_POSTURE,
+    PAYLOAD_KEY_POSTURE_SOURCE,
     PAYLOAD_KEY_POSTURE_SOURCES,
     PAYLOAD_KEY_RECEIPT,
-    PAYLOAD_KEY_RECORD,
+    PAYLOAD_KEY_RECOMMENDED_STRATEGY,
     PAYLOAD_KEY_RECONCILIATION,
     PAYLOAD_KEY_RECONCILIATION_STATUS,
-    PAYLOAD_KEY_RECOMMENDED_STRATEGY,
+    PAYLOAD_KEY_RECORD,
     PAYLOAD_KEY_REPLAY_GATE,
     PAYLOAD_KEY_REPLAY_PLAN,
     PAYLOAD_KEY_REPLAY_RECORD,
     PAYLOAD_KEY_REPLAY_STATUS,
     PAYLOAD_KEY_REPLAY_TRACE,
+    PAYLOAD_KEY_RESULTS,
     PAYLOAD_KEY_REVIEW_ISSUE_CODES,
     PAYLOAD_KEY_SKIP_REASONS,
     PAYLOAD_KEY_SKIPPED_MESSAGE_IDS,
-    PAYLOAD_KEY_SKIPPED_MESSAGES,
     PAYLOAD_KEY_STATUS,
     PAYLOAD_KEY_SUMMARY_SOURCE,
     PAYLOAD_KEY_TARGET_ISSUE_CODES,
     PAYLOAD_KEY_TARGETED_MESSAGE_IDS,
-    PAYLOAD_KEY_TARGET_MESSAGE_IDS,
     PAYLOAD_KEY_TRACE,
-    PAYLOAD_KEY_RESULTS,
-    REPLAY_GOVERNANCE_PROJECTION_SOURCE_EXECUTION as GOVERNANCE_PROJECTION_SOURCE_EXECUTION,
-    REPLAY_GOVERNANCE_SUMMARY_SOURCE_DERIVED as GOVERNANCE_SUMMARY_SOURCE_DERIVED,
-    REPLAY_GOVERNANCE_SUMMARY_SOURCE_EXTENSIONS as GOVERNANCE_SUMMARY_SOURCE_EXTENSIONS,
-    REPLAY_GOVERNANCE_SUMMARY_SOURCE_GATE as GOVERNANCE_SUMMARY_SOURCE_GATE,
     REPLAY_TRACE_SCOPE_CORRELATION,
     REPLAY_TRACE_SCOPE_MESSAGE,
 )
+from core.deployment.domain_keys import (
+    REPLAY_GOVERNANCE_PROJECTION_SOURCE_EXECUTION as GOVERNANCE_PROJECTION_SOURCE_EXECUTION,
+)
+from core.deployment.domain_keys import (
+    REPLAY_GOVERNANCE_SUMMARY_SOURCE_DERIVED as GOVERNANCE_SUMMARY_SOURCE_DERIVED,
+)
+from core.deployment.domain_keys import (
+    REPLAY_GOVERNANCE_SUMMARY_SOURCE_EXTENSIONS as GOVERNANCE_SUMMARY_SOURCE_EXTENSIONS,
+)
+from core.deployment.domain_keys import (
+    REPLAY_GOVERNANCE_SUMMARY_SOURCE_GATE as GOVERNANCE_SUMMARY_SOURCE_GATE,
+)
 from core.ledger.services.communication_replay_gate import build_replay_governance_summary
+from core.ledger.services.communication_trace_refs import delivery_posture as trace_delivery_posture
 from core.ledger.services.gate_decision_refs import governance_summary as gate_governance_summary
 from core.ledger.services.replay_plan_refs import governance_summary as plan_governance_summary
 from core.ledger.services.replay_record_refs import (
     blocked_messages as replay_blocked_messages,
-    execution_governance_projection as replay_execution_governance_projection,
-    execution_mode as replay_execution_mode,
+)
+from core.ledger.services.replay_record_refs import (
     execution_block,
-    extensions_block,
     gate_block,
-    governance_summary as replay_governance_summary,
-    governance_sources as replay_governance_sources,
-    grouped_reasons as replay_grouped_reasons,
-    message_ids as replay_message_ids,
-    plan_block,
     results_block,
-    skipped_messages as replay_skipped_messages,
-    targeted_message_ids as replay_targeted_message_ids,
     trace_block,
 )
-from core.ledger.services.communication_trace_refs import delivery_posture as trace_delivery_posture
+from core.ledger.services.replay_record_refs import (
+    execution_governance_projection as replay_execution_governance_projection,
+)
+from core.ledger.services.replay_record_refs import (
+    execution_mode as replay_execution_mode,
+)
+from core.ledger.services.replay_record_refs import (
+    governance_sources as replay_governance_sources,
+)
+from core.ledger.services.replay_record_refs import (
+    governance_summary as replay_governance_summary,
+)
+from core.ledger.services.replay_record_refs import (
+    grouped_reasons as replay_grouped_reasons,
+)
+from core.ledger.services.replay_record_refs import (
+    message_ids as replay_message_ids,
+)
+from core.ledger.services.replay_record_refs import (
+    skipped_messages as replay_skipped_messages,
+)
+from core.ledger.services.replay_record_refs import (
+    targeted_message_ids as replay_targeted_message_ids,
+)
 
 
 class CommunicationOperationsService:
@@ -170,7 +189,9 @@ class CommunicationOperationsService:
             PAYLOAD_KEY_POSTURE_SOURCES: posture_sources,
         }
 
-    def get_correlation_operations_view(self, *, date_key: str, target: str, correlation_id: str) -> dict:
+    def get_correlation_operations_view(
+        self, *, date_key: str, target: str, correlation_id: str
+    ) -> dict:
         trace = self._inspection_service.get_correlation_trace(
             date_key=date_key,
             target=target,
@@ -183,7 +204,9 @@ class CommunicationOperationsService:
         )
         replay_gate = self._replay_gate.evaluate_correlation_plan(replay_plan)
         governance_summary = self._resolve_governance_summary(replay_plan, replay_gate)
-        operations_posture, posture_sources = self._resolve_operations_posture(trace=trace, scope=REPLAY_TRACE_SCOPE_CORRELATION)
+        operations_posture, posture_sources = self._resolve_operations_posture(
+            trace=trace, scope=REPLAY_TRACE_SCOPE_CORRELATION
+        )
         return {
             PAYLOAD_KEY_TRACE: trace,
             PAYLOAD_KEY_REPLAY_PLAN: replay_plan,
@@ -199,7 +222,9 @@ class CommunicationOperationsService:
             PAYLOAD_KEY_POSTURE_SOURCES: posture_sources,
         }
 
-    def get_replay_operations_view(self, *, date_key: str, target: str, replay_id: str) -> dict | None:
+    def get_replay_operations_view(
+        self, *, date_key: str, target: str, replay_id: str
+    ) -> dict | None:
         if self._replay_reader is None:
             return None
         replay_record = self._replay_reader.find_by_replay_id(
@@ -213,7 +238,9 @@ class CommunicationOperationsService:
         governance_sources = self._build_governance_sources(replay_record)
         governance_summary = self._resolve_replay_governance_summary(replay_record)
         execution_governance_projection = self._build_execution_governance_projection(replay_record)
-        operations_posture, posture_sources = self._resolve_operations_posture(governance_summary=governance_summary)
+        operations_posture, posture_sources = self._resolve_operations_posture(
+            governance_summary=governance_summary
+        )
         return {
             PAYLOAD_KEY_REPLAY_RECORD: replay_record,
             PAYLOAD_KEY_REPLAY_STATUS: execution_block(replay_record).get(PAYLOAD_KEY_STATUS),
@@ -251,7 +278,9 @@ class CommunicationOperationsService:
             correlation_id=correlation_id,
         )
 
-    def _resolve_governance_summary(self, replay_plan: dict | None, replay_gate: dict | None) -> dict:
+    def _resolve_governance_summary(
+        self, replay_plan: dict | None, replay_gate: dict | None
+    ) -> dict:
         gate_summary = gate_governance_summary(replay_gate)
         if gate_summary is not None:
             return gate_summary
@@ -282,7 +311,9 @@ class CommunicationOperationsService:
                 self.OPERATIONS_POSTURE_BLOCKED,
             }:
                 return posture, {
-                    PAYLOAD_KEY_OPERATIONS_POSTURE_SOURCE: OPERATIONS_POSTURE_SOURCE_GOVERNANCE_SUMMARY,
+                    PAYLOAD_KEY_OPERATIONS_POSTURE_SOURCE: (
+                        OPERATIONS_POSTURE_SOURCE_GOVERNANCE_SUMMARY
+                    ),
                 }
             return self.OPERATIONS_POSTURE_UNKNOWN, {
                 PAYLOAD_KEY_OPERATIONS_POSTURE_SOURCE: None,
@@ -319,15 +350,33 @@ class CommunicationOperationsService:
         summary = {
             PAYLOAD_KEY_POSTURE: operations_posture,
             PAYLOAD_KEY_POSTURE_SOURCE: posture_sources.get(PAYLOAD_KEY_OPERATIONS_POSTURE_SOURCE),
-            PAYLOAD_KEY_GOVERNANCE_DECISION: None if governance_summary is None else governance_summary.get(PAYLOAD_KEY_DECISION),
-            PAYLOAD_KEY_GOVERNANCE_POSTURE: None if governance_summary is None else governance_summary.get(PAYLOAD_KEY_POSTURE),
-            PAYLOAD_KEY_RECOMMENDED_STRATEGY: None if governance_summary is None else governance_summary.get(PAYLOAD_KEY_RECOMMENDED_STRATEGY),
-            PAYLOAD_KEY_TARGET_ISSUE_CODES: [] if governance_summary is None else governance_summary.get(PAYLOAD_KEY_TARGET_ISSUE_CODES, []),
-            PAYLOAD_KEY_REVIEW_ISSUE_CODES: [] if governance_summary is None else governance_summary.get(PAYLOAD_KEY_REVIEW_ISSUE_CODES, []),
-            PAYLOAD_KEY_GOVERNANCE_TAGS: [] if governance_summary is None else governance_summary.get(PAYLOAD_KEY_GOVERNANCE_TAGS, []),
-            PAYLOAD_KEY_GOVERNANCE_SUMMARY_SOURCE: None if governance_sources is None else governance_sources.get(PAYLOAD_KEY_SUMMARY_SOURCE),
-            PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE: None if governance_sources is None else governance_sources.get(PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE),
-            PAYLOAD_KEY_RECONCILIATION_STATUS: None if reconciliation is None else reconciliation.get(PAYLOAD_KEY_STATUS),
+            PAYLOAD_KEY_GOVERNANCE_DECISION: None
+            if governance_summary is None
+            else governance_summary.get(PAYLOAD_KEY_DECISION),
+            PAYLOAD_KEY_GOVERNANCE_POSTURE: None
+            if governance_summary is None
+            else governance_summary.get(PAYLOAD_KEY_POSTURE),
+            PAYLOAD_KEY_RECOMMENDED_STRATEGY: None
+            if governance_summary is None
+            else governance_summary.get(PAYLOAD_KEY_RECOMMENDED_STRATEGY),
+            PAYLOAD_KEY_TARGET_ISSUE_CODES: []
+            if governance_summary is None
+            else governance_summary.get(PAYLOAD_KEY_TARGET_ISSUE_CODES, []),
+            PAYLOAD_KEY_REVIEW_ISSUE_CODES: []
+            if governance_summary is None
+            else governance_summary.get(PAYLOAD_KEY_REVIEW_ISSUE_CODES, []),
+            PAYLOAD_KEY_GOVERNANCE_TAGS: []
+            if governance_summary is None
+            else governance_summary.get(PAYLOAD_KEY_GOVERNANCE_TAGS, []),
+            PAYLOAD_KEY_GOVERNANCE_SUMMARY_SOURCE: None
+            if governance_sources is None
+            else governance_sources.get(PAYLOAD_KEY_SUMMARY_SOURCE),
+            PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE: None
+            if governance_sources is None
+            else governance_sources.get(PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE),
+            PAYLOAD_KEY_RECONCILIATION_STATUS: None
+            if reconciliation is None
+            else reconciliation.get(PAYLOAD_KEY_STATUS),
         }
         return summary
 
@@ -394,4 +443,3 @@ class CommunicationOperationsService:
             summary_source_gate=self.REPLAY_GOVERNANCE_SUMMARY_SOURCE_GATE,
             projection_source_execution=self.REPLAY_GOVERNANCE_PROJECTION_SOURCE_EXECUTION,
         )
-

@@ -1,9 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from core.contracts.domain.dispatch_result import DispatchResult
 from core.contracts.enums import DispatchStatus
-from core.protocol.schema_versions import SCHEMA_DISPATCH_RESULT
-
 from core.deployment.domain_keys import (
     PAYLOAD_KEY_ACTION,
     PAYLOAD_KEY_ACTION_COUNTS,
@@ -21,6 +19,7 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_TOTAL_DISPATCHES,
     TIMELINE_STATUS_UNKNOWN,
 )
+from core.protocol.schema_versions import SCHEMA_DISPATCH_RESULT
 
 
 class ReplayDispatchAdapter:
@@ -40,7 +39,7 @@ class ReplayDispatchAdapter:
             PAYLOAD_KEY_DISPATCH_ID: request.dispatch_id,
             PAYLOAD_KEY_MESSAGE_ID: envelope.message_id,
             PAYLOAD_KEY_TARGET: envelope.target,
-            PAYLOAD_KEY_CAPTURED_AT: datetime.utcnow().isoformat(),
+            PAYLOAD_KEY_CAPTURED_AT: datetime.now(UTC).replace(tzinfo=None).isoformat(),
             PAYLOAD_KEY_PAYLOAD_SUMMARY: {
                 PAYLOAD_KEY_ACTION: envelope.payload.get(PAYLOAD_KEY_ACTION),
                 PAYLOAD_KEY_SYMBOL: envelope.payload.get(PAYLOAD_KEY_SYMBOL),
@@ -54,7 +53,7 @@ class ReplayDispatchAdapter:
             dispatch_id=request.dispatch_id,
             message_id=envelope.message_id,
             status=DispatchStatus.PROTOCOL_VALIDATED,
-            recorded_at=datetime.utcnow(),
+            recorded_at=datetime.now(UTC).replace(tzinfo=None),
             target=envelope.target,
             adapter_name=self.adapter_name,
             trace={
@@ -84,7 +83,7 @@ class NullDispatchAdapter:
             dispatch_id=request.dispatch_id,
             message_id=envelope.message_id,
             status=DispatchStatus.PROTOCOL_VALIDATED,
-            recorded_at=datetime.utcnow(),
+            recorded_at=datetime.now(UTC).replace(tzinfo=None),
             target=envelope.target,
             adapter_name=self.adapter_name,
             trace={PAYLOAD_KEY_NULL_MODE: True},
@@ -105,6 +104,7 @@ class ReplayEnvironment:
 
     def activate(self) -> None:
         from core.protocol.services.communication_dispatcher import CommunicationDispatcher
+
         self._original_dispatcher = self._container.dispatcher
         self._container.dispatcher = CommunicationDispatcher(
             adapter=self._replay_adapter,
@@ -123,8 +123,12 @@ class ReplayEnvironment:
         action_counts: dict[str, int] = {}
         symbol_counts: dict[str, int] = {}
         for c in captured:
-            action = c.get(PAYLOAD_KEY_PAYLOAD_SUMMARY, {}).get(PAYLOAD_KEY_ACTION, TIMELINE_STATUS_UNKNOWN)
-            symbol = c.get(PAYLOAD_KEY_PAYLOAD_SUMMARY, {}).get(PAYLOAD_KEY_SYMBOL, TIMELINE_STATUS_UNKNOWN)
+            action = c.get(PAYLOAD_KEY_PAYLOAD_SUMMARY, {}).get(
+                PAYLOAD_KEY_ACTION, TIMELINE_STATUS_UNKNOWN
+            )
+            symbol = c.get(PAYLOAD_KEY_PAYLOAD_SUMMARY, {}).get(
+                PAYLOAD_KEY_SYMBOL, TIMELINE_STATUS_UNKNOWN
+            )
             action_counts[action] = action_counts.get(action, 0) + 1
             symbol_counts[symbol] = symbol_counts.get(symbol, 0) + 1
         return {

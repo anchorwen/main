@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -31,7 +31,7 @@ class StructuredAuditLog:
         span_id: str | None = None,
     ) -> dict:
         entry = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             "event_type": event_type,
             "severity": severity,
             "actor": actor,
@@ -43,8 +43,16 @@ class StructuredAuditLog:
         self._write(entry)
         return entry
 
-    def log_decision(self, *, intent_id: str, verdict_status: str, symbol: str,
-                     action: str, risk_tier: str, trace_id: str | None = None) -> dict:
+    def log_decision(
+        self,
+        *,
+        intent_id: str,
+        verdict_status: str,
+        symbol: str,
+        action: str,
+        risk_tier: str,
+        trace_id: str | None = None,
+    ) -> dict:
         return self.log(
             event_type="decision_cycle",
             actor="runtime_loop",
@@ -58,8 +66,15 @@ class StructuredAuditLog:
             trace_id=trace_id,
         )
 
-    def log_dispatch(self, *, message_id: str, target: str, status: str,
-                     adapter_name: str, trace_id: str | None = None) -> dict:
+    def log_dispatch(
+        self,
+        *,
+        message_id: str,
+        target: str,
+        status: str,
+        adapter_name: str,
+        trace_id: str | None = None,
+    ) -> dict:
         return self.log(
             event_type="communication_dispatch",
             actor="dispatcher",
@@ -72,8 +87,15 @@ class StructuredAuditLog:
             trace_id=trace_id,
         )
 
-    def log_risk_verdict(self, *, intent_id: str, status: str, risk_tier: str,
-                         blocking_reasons: list, trace_id: str | None = None) -> dict:
+    def log_risk_verdict(
+        self,
+        *,
+        intent_id: str,
+        status: str,
+        risk_tier: str,
+        blocking_reasons: list,
+        trace_id: str | None = None,
+    ) -> dict:
         severity = self.SEVERITY_WARNING if blocking_reasons else self.SEVERITY_INFO
         return self.log(
             event_type="risk_verdict",
@@ -88,9 +110,15 @@ class StructuredAuditLog:
             trace_id=trace_id,
         )
 
-    def log_governance_signal(self, *, brain_id: str, signal_type: str,
-                              recommendation: str, health_signal: str,
-                              trace_id: str | None = None) -> dict:
+    def log_governance_signal(
+        self,
+        *,
+        brain_id: str,
+        signal_type: str,
+        recommendation: str,
+        health_signal: str,
+        trace_id: str | None = None,
+    ) -> dict:
         severity = self.SEVERITY_CRITICAL if recommendation == "freeze" else self.SEVERITY_WARNING
         return self.log(
             event_type="governance_signal",
@@ -105,8 +133,9 @@ class StructuredAuditLog:
             trace_id=trace_id,
         )
 
-    def log_reconciliation(self, *, message_id: str, status: str,
-                           mismatches: list, trace_id: str | None = None) -> dict:
+    def log_reconciliation(
+        self, *, message_id: str, status: str, mismatches: list, trace_id: str | None = None
+    ) -> dict:
         severity = self.SEVERITY_ERROR if status == "breached" else self.SEVERITY_INFO
         return self.log(
             event_type="reconciliation",

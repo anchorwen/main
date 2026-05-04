@@ -21,7 +21,9 @@ class CommunicationRecordReader:
                 return item
         return None
 
-    def find_by_correlation_id(self, *, date_key: str, target: str, correlation_id: str) -> list[dict]:
+    def find_by_correlation_id(
+        self, *, date_key: str, target: str, correlation_id: str
+    ) -> list[dict]:
         return [
             item
             for item in self.list_records(date_key=date_key, target=target)
@@ -29,7 +31,9 @@ class CommunicationRecordReader:
         ]
 
     def _build_path(self, *, date_key: str, target: str) -> Path:
-        return self._base_dir / date_key / stream_jsonl_filename(target, LEDGER_STREAM_COMMUNICATIONS)
+        return (
+            self._base_dir / date_key / stream_jsonl_filename(target, LEDGER_STREAM_COMMUNICATIONS)
+        )
 
     def _read_jsonl(self, path: Path) -> list[dict]:
         records = []
@@ -40,8 +44,3 @@ class CommunicationRecordReader:
                     continue
                 records.append(json.loads(line))
         return records
-
-
-
-
-

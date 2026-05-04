@@ -34,7 +34,8 @@ class EnvironmentConfig:
     idempotency_ttl_hours: int = 48
 
     brain_registry_path: str | None = None
-    #: If set, JSON hot-reload watches this file; else `<base_dir>/engine_config.json` when it exists.
+    #: JSON hot-reload watches this file if set;
+    #: else `<base_dir>/engine_config.json` when it exists.
     hot_reload_path: str | None = None
     adapter_name: str = "stub"
     producer_name: str = "decision_engine"
@@ -45,6 +46,8 @@ class EnvironmentConfig:
     enable_metrics: bool = True
     enable_idempotency: bool = True
     live_read_only: bool = False
+    live_dispatch_enabled: bool = False
+    live_allowed_symbols: tuple[str, ...] = ()
 
     risk_policy_window_size: int = 100
     feedback_window_size: int = 100
@@ -57,6 +60,11 @@ class EnvironmentConfig:
 
     #: Default validation depth for deployment/governance services.
     validation_mode: str = VALIDATION_MODE_DEEP
+
+    # --- FIX session configuration (for live broker connectivity) ---
+    fix_sender_comp_id: str = ""
+    fix_target_comp_id: str = ""
+    fix_venue: str = "FIX_LIVE"
 
     extensions: dict[str, Any] = field(default_factory=dict)
 

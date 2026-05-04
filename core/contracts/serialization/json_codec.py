@@ -11,10 +11,10 @@ def _serialize(obj: Any) -> Any:
     if isinstance(obj, Enum):
         return obj.value
     if is_dataclass(obj):
-        return {k: _serialize(v) for k, v in asdict(obj).items()}
+        return {k: _serialize(v) for k, v in asdict(obj).items()}  # type: ignore[reportArgumentType]
     if isinstance(obj, dict):
         return {k: _serialize(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
+    if isinstance(obj, list | tuple):
         return [_serialize(v) for v in obj]
     return obj
 
@@ -25,5 +25,3 @@ def to_dict(obj: Any) -> Any:
 
 def to_json(obj: Any) -> str:
     return json.dumps(to_dict(obj), ensure_ascii=False, separators=(",", ":"))
-
-

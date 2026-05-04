@@ -1,4 +1,5 @@
 """Execution gateway router."""
+
 from core.execution.gateway_contracts import OrderRequest, OrderState
 
 

@@ -1,4 +1,5 @@
 """Runtime evidence writer."""
+
 from core.contracts.ids import new_runtime_evidence_id
 from core.ledger.stream_names import LEDGER_STREAM_RUNTIME_EVIDENCE
 from core.runtime.evidence_contracts import RuntimeEvidenceRecord
@@ -12,7 +13,9 @@ class RuntimeEvidenceWriter:
         self._ledger_store = ledger_store
         self._stream_name = stream_name
 
-    def write_result(self, *, runtime_cycle_id: str, result: RuntimePipelineResult) -> tuple[RuntimeEvidenceRecord, object]:
+    def write_result(
+        self, *, runtime_cycle_id: str, result: RuntimePipelineResult
+    ) -> tuple[RuntimeEvidenceRecord, object]:
         record = RuntimeEvidenceRecord.from_pipeline_result(
             evidence_id=new_runtime_evidence_id(),
             runtime_cycle_id=runtime_cycle_id,

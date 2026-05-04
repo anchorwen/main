@@ -1,5 +1,4 @@
-from datetime import datetime
-from typing import Any, Dict, List
+from datetime import UTC, datetime
 
 
 class BrainPerformanceTracker:
@@ -12,13 +11,13 @@ class BrainPerformanceTracker:
 
     def __init__(self, window_size: int = 100):
         self._window_size = window_size
-        self._records: Dict[str, List[dict]] = {}
+        self._records: dict[str, list[dict]] = {}
 
     def record_outcome(self, brain_id: str, scored_outcome: dict) -> None:
         if brain_id not in self._records:
             self._records[brain_id] = []
         entry = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             "composite_score": scored_outcome.get("composite_score", 0),
             "execution_outcome": scored_outcome.get("execution_outcome"),
             "fill_grade": scored_outcome.get("fill_grade"),
@@ -26,7 +25,7 @@ class BrainPerformanceTracker:
         }
         self._records[brain_id].append(entry)
         if len(self._records[brain_id]) > self._window_size:
-            self._records[brain_id] = self._records[brain_id][-self._window_size:]
+            self._records[brain_id] = self._records[brain_id][-self._window_size :]
 
     def get_brain_summary(self, brain_id: str) -> dict:
         entries = self._records.get(brain_id, [])
@@ -49,7 +48,7 @@ class BrainPerformanceTracker:
             outcome_dist[o] = outcome_dist.get(o, 0) + 1
 
         mean_score = sum(scores) / len(scores)
-        recent = scores[-min(20, len(scores)):]
+        recent = scores[-min(20, len(scores)) :]
         recent_mean = sum(recent) / len(recent)
 
         health = self._assess_health(mean_score, recent_mean, outcome_dist, len(entries))

@@ -1,7 +1,8 @@
 """Feature store incremental update jobs."""
+
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Callable, Iterable
+from datetime import UTC, datetime
 
 from core.features.store_contracts import FeatureRecord, FeatureSchema
 
@@ -31,17 +32,22 @@ class FeatureUpdateResult:
 class IncrementalFeatureUpdateJob:
     """Runs a user-provided producer and writes records into a feature store."""
 
-    def __init__(self, feature_store, schema: FeatureSchema,
-                 producer: Callable[[datetime | None], Iterable[FeatureRecord]]):
+    def __init__(
+        self,
+        feature_store,
+        schema: FeatureSchema,
+        producer: Callable[[datetime | None], Iterable[FeatureRecord]],
+    ):
         self._store = feature_store
         self._schema = schema
         self._producer = producer
 
     def run(self) -> FeatureUpdateResult:
-        started = datetime.utcnow()
+        started = datetime.now(UTC).replace(tzinfo=None)
         self._store.register_schema(self._schema)
-        latest = self._store.latest(self._schema.symbol, self._schema.timeframe,
-                                    schema_name=self._schema.name)
+        latest = self._store.latest(
+            self._schema.symbol, self._schema.timeframe, schema_name=self._schema.name
+        )
         since = latest.event_time if latest else None
         records = list(self._producer(since))
         records = [record for record in records if since is None or record.event_time > since]
@@ -53,5 +59,5 @@ class IncrementalFeatureUpdateJob:
             timeframe=self._schema.timeframe,
             records_written=written,
             started_at=started,
-            finished_at=datetime.utcnow(),
+            finished_at=datetime.now(UTC).replace(tzinfo=None),
         )

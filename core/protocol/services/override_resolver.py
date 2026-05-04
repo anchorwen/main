@@ -20,5 +20,3 @@ class OverrideResolver:
             matched.append(item)
 
         return matched
-
-

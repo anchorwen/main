@@ -1,11 +1,9 @@
-from datetime import datetime
-from typing import Any, Dict, List
+from datetime import UTC, datetime
 
 from core.contracts.domain.risk_verdict import RiskVerdict
-from core.risk.schema_versions import SCHEMA_RISK_VERDICT
-from core.contracts.enums import RiskDecisionStatus
+from core.contracts.enums import DecisionAction, RiskDecisionStatus
 from core.contracts.ids import new_verdict_id
-
+from core.risk.schema_versions import SCHEMA_RISK_VERDICT
 
 SEVERITY_ORDER = {
     RiskDecisionStatus.DENY: 0,
@@ -41,15 +39,26 @@ class RiskEvaluationService:
         context = context or {}
 
         if intent.is_passive():
+            if intent.action == DecisionAction.OBSERVE:
+                return RiskVerdict(
+                    schema_version=SCHEMA_RISK_VERDICT,
+                    verdict_id=new_verdict_id(),
+                    intent_id=intent.intent_id,
+                    evaluated_at=datetime.now(UTC).replace(tzinfo=None),
+                    status=RiskDecisionStatus.ALLOW,
+                    mode=control_snapshot.mode_state.current_mode,
+                    risk_tier="minimal",
+                    warning_reasons=["observe_intent_no_risk"],
+                )
             return RiskVerdict(
                 schema_version=SCHEMA_RISK_VERDICT,
                 verdict_id=new_verdict_id(),
                 intent_id=intent.intent_id,
-                evaluated_at=datetime.utcnow(),
+                evaluated_at=datetime.now(UTC).replace(tzinfo=None),
                 status=RiskDecisionStatus.DENY,
                 mode=control_snapshot.mode_state.current_mode,
                 risk_tier="minimal",
-                blocking_reasons=["passive_intent"],
+                blocking_reasons=["passive_intent_abstain"],
             )
 
         policy_results = []
@@ -63,13 +72,15 @@ class RiskEvaluationService:
             policy_results=policy_results,
         )
 
-    def _merge_results(self, *, intent, control_snapshot, policy_results: list[dict]) -> RiskVerdict:
+    def _merge_results(
+        self, *, intent, control_snapshot, policy_results: list[dict]
+    ) -> RiskVerdict:
         if not policy_results:
             return RiskVerdict(
                 schema_version=SCHEMA_RISK_VERDICT,
                 verdict_id=new_verdict_id(),
                 intent_id=intent.intent_id,
-                evaluated_at=datetime.utcnow(),
+                evaluated_at=datetime.now(UTC).replace(tzinfo=None),
                 status=RiskDecisionStatus.ALLOW,
                 mode=control_snapshot.mode_state.current_mode,
                 risk_tier="standard",
@@ -106,18 +117,13 @@ class RiskEvaluationService:
             elif reason:
                 warning_reasons.append(reason)
 
-        if final_status in {RiskDecisionStatus.ALLOW, RiskDecisionStatus.ALLOW_LIMITED} and blocking_reasons:
-            blocking_reasons_copy = list(blocking_reasons)
-            blocking_reasons = []
-            warning_reasons.extend(blocking_reasons_copy)
-
         risk_tier = self._determine_tier(risk_tiers, final_status)
 
         return RiskVerdict(
             schema_version=SCHEMA_RISK_VERDICT,
             verdict_id=new_verdict_id(),
             intent_id=intent.intent_id,
-            evaluated_at=datetime.utcnow(),
+            evaluated_at=datetime.now(UTC).replace(tzinfo=None),
             status=final_status,
             mode=control_snapshot.mode_state.current_mode,
             risk_tier=risk_tier,

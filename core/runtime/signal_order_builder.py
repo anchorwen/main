@@ -1,4 +1,5 @@
 """Builds execution order requests from strategy signals."""
+
 from core.contracts.ids import new_intent_id
 from core.execution.gateway_contracts import OrderRequest
 from core.runtime.integration_contracts import OrderSizingPolicy
@@ -8,7 +9,9 @@ from core.strategies.contracts import Signal
 class SignalOrderRequestBuilder:
     """Converts actionable strategy signals into execution order requests."""
 
-    def __init__(self, sizing_policy: OrderSizingPolicy | None = None, default_venue: str = "PAPER"):
+    def __init__(
+        self, sizing_policy: OrderSizingPolicy | None = None, default_venue: str = "PAPER"
+    ):
         self._sizing = sizing_policy or OrderSizingPolicy()
         self._default_venue = default_venue
 

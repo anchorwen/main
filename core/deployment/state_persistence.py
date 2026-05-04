@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from core.deployment.domain_keys import (
@@ -34,7 +34,7 @@ class StatePersistence:
         states = governance_service.get_all_states()
         log = governance_service.get_transition_log()
         payload = {
-            PAYLOAD_KEY_SAVED_AT: datetime.utcnow().isoformat(),
+            PAYLOAD_KEY_SAVED_AT: datetime.now(UTC).replace(tzinfo=None).isoformat(),
             PAYLOAD_KEY_LABEL: label,
             PAYLOAD_KEY_BRAIN_STATES: states,
             PAYLOAD_KEY_TRANSITION_LOG: log,
@@ -52,13 +52,15 @@ class StatePersistence:
         for brain_id, state in data.get(PAYLOAD_KEY_BRAIN_STATES, {}).items():
             existing = governance_service.get_brain_state(brain_id)
             if existing is None:
-                governance_service.register_brain(brain_id, state.get(PAYLOAD_KEY_STATUS, BRAIN_STATUS_CANDIDATE))
+                governance_service.register_brain(
+                    brain_id, state.get(PAYLOAD_KEY_STATUS, BRAIN_STATUS_CANDIDATE)
+                )
         return data
 
     def save_brain_tracker(self, brain_tracker, label: str = "latest") -> Path:
         summaries = brain_tracker.get_all_summaries()
         payload = {
-            PAYLOAD_KEY_SAVED_AT: datetime.utcnow().isoformat(),
+            PAYLOAD_KEY_SAVED_AT: datetime.now(UTC).replace(tzinfo=None).isoformat(),
             PAYLOAD_KEY_LABEL: label,
             PAYLOAD_KEY_SUMMARIES: summaries,
         }
@@ -69,7 +71,7 @@ class StatePersistence:
 
     def save_positions(self, position_tracker, label: str = "latest") -> Path:
         payload = {
-            PAYLOAD_KEY_SAVED_AT: datetime.utcnow().isoformat(),
+            PAYLOAD_KEY_SAVED_AT: datetime.now(UTC).replace(tzinfo=None).isoformat(),
             PAYLOAD_KEY_LABEL: label,
             PAYLOAD_KEY_OPEN_POSITIONS: position_tracker.list_open(),
             PAYLOAD_KEY_CLOSED_POSITIONS: position_tracker.list_closed(),
@@ -81,12 +83,18 @@ class StatePersistence:
         return path
 
     def save_all(self, container, label: str | None = None) -> dict:
-        label = label or datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        label = label or datetime.now(UTC).replace(tzinfo=None).strftime("%Y%m%d_%H%M%S")
         paths: dict[str, str] = {}
         if container.governance_service:
-            paths[STATE_PERSISTENCE_KEY_GOVERNANCE] = str(self.save_governance_state(container.governance_service, label))
+            paths[STATE_PERSISTENCE_KEY_GOVERNANCE] = str(
+                self.save_governance_state(container.governance_service, label)
+            )
         if container.brain_tracker:
-            paths[STATE_PERSISTENCE_KEY_TRACKER] = str(self.save_brain_tracker(container.brain_tracker, label))
+            paths[STATE_PERSISTENCE_KEY_TRACKER] = str(
+                self.save_brain_tracker(container.brain_tracker, label)
+            )
         if container.position_tracker:
-            paths[STATE_PERSISTENCE_KEY_POSITIONS] = str(self.save_positions(container.position_tracker, label))
+            paths[STATE_PERSISTENCE_KEY_POSITIONS] = str(
+                self.save_positions(container.position_tracker, label)
+            )
         return {PAYLOAD_KEY_LABEL: label, PAYLOAD_KEY_PATHS: paths}

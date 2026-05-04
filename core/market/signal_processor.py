@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 
 class SignalFilter:
@@ -23,9 +23,13 @@ class SignalFilter:
         self._max_staleness = max_staleness_seconds
         self._allowed_symbols = allowed_symbols
         self._last_seen: dict[str, datetime] = {}
-        self._stats = {"accepted": 0, "rejected_duplicate": 0,
-                       "rejected_stale": 0, "rejected_invalid": 0,
-                       "rejected_symbol": 0}
+        self._stats = {
+            "accepted": 0,
+            "rejected_duplicate": 0,
+            "rejected_stale": 0,
+            "rejected_invalid": 0,
+            "rejected_symbol": 0,
+        }
 
     def accept(self, signal: dict) -> tuple[bool, str]:
         symbol = signal.get("symbol")
@@ -39,12 +43,12 @@ class SignalFilter:
 
         ts = signal.get("timestamp")
         if ts and isinstance(ts, datetime):
-            age = (datetime.utcnow() - ts).total_seconds()
+            age = (datetime.now(UTC).replace(tzinfo=None) - ts).total_seconds()
             if age > self._max_staleness:
                 self._stats["rejected_stale"] += 1
                 return False, "stale_signal"
 
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         last = self._last_seen.get(symbol)
         if last and (now - last).total_seconds() < self._cooldown:
             self._stats["rejected_duplicate"] += 1
@@ -88,8 +92,9 @@ class MarketSignalProcessor:
                 ask=signal.get("ask", 0),
             )
 
-        features = {k: v for k, v in signal.items()
-                    if k not in {"symbol", "timestamp", "bid", "ask"}}
+        features = {
+            k: v for k, v in signal.items() if k not in {"symbol", "timestamp", "bid", "ask"}
+        }
 
         result = self._facade.decide(signal["symbol"], features)
         self._triggered += 1

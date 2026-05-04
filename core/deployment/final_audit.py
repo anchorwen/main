@@ -3,8 +3,9 @@
 Aggregates release readiness, compliance audit, control matrix, and
 Alpha budget governance signals into a single gate-style report.
 """
-from datetime import datetime
+
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from core.deployment.domain_keys import (
@@ -18,13 +19,13 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_COMPLIANCE_AUDIT,
     PAYLOAD_KEY_COMPLIANCE_MATRIX,
     PAYLOAD_KEY_CONTROL_COUNT,
+    PAYLOAD_KEY_DETAIL,
     PAYLOAD_KEY_EVIDENCE_COUNT,
     PAYLOAD_KEY_FAILED_CHECKS,
     PAYLOAD_KEY_FAILED_COUNT,
     PAYLOAD_KEY_FINAL_AUDIT,
     PAYLOAD_KEY_FINDINGS,
     PAYLOAD_KEY_GENERATED_AT,
-    PAYLOAD_KEY_DETAIL,
     PAYLOAD_KEY_LEVEL,
     PAYLOAD_KEY_MISSING_EVIDENCE_COUNT,
     PAYLOAD_KEY_NAME,
@@ -45,8 +46,8 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_WARNING_TOTAL,
     VALIDATION_MODE_DEEP,
 )
-from core.deployment.schema_versions import SCHEMA_FINAL_AUDIT
 from core.deployment.governance_summary import build_governance_summary
+from core.deployment.schema_versions import SCHEMA_FINAL_AUDIT
 from core.deployment.validation_mode import resolve_validation_mode
 
 
@@ -72,11 +73,16 @@ class FinalAuditService:
             and matrix_status != COMPLIANCE_LEVEL_FAIL
         )
         findings = self._findings(
-            readiness, compliance, matrix, registry, ab, ready_for_production,
+            readiness,
+            compliance,
+            matrix,
+            registry,
+            ab,
+            ready_for_production,
         )
         return {
             PAYLOAD_KEY_SCHEMA_VERSION: SCHEMA_FINAL_AUDIT,
-            PAYLOAD_KEY_GENERATED_AT: datetime.utcnow().isoformat(),
+            PAYLOAD_KEY_GENERATED_AT: datetime.now(UTC).replace(tzinfo=None).isoformat(),
             PAYLOAD_KEY_VALIDATION_MODE: validation_mode,
             PAYLOAD_KEY_READY_FOR_PRODUCTION: ready_for_production,
             PAYLOAD_KEY_FINDINGS: findings,
@@ -106,7 +112,9 @@ class FinalAuditService:
             PAYLOAD_KEY_REGISTRY: {
                 PAYLOAD_KEY_RECORD_COUNT: registry.get(PAYLOAD_KEY_RECORD_COUNT, 0),
                 PAYLOAD_KEY_VALIDATION_MODE: registry.get(PAYLOAD_KEY_VALIDATION_MODE),
-                PAYLOAD_KEY_VALIDATION_MODE_COUNTS: registry.get(PAYLOAD_KEY_VALIDATION_MODE_COUNTS, {}),
+                PAYLOAD_KEY_VALIDATION_MODE_COUNTS: registry.get(
+                    PAYLOAD_KEY_VALIDATION_MODE_COUNTS, {}
+                ),
                 PAYLOAD_KEY_ALPHA_BUDGET: registry.get(PAYLOAD_KEY_ALPHA_BUDGET, {}),
                 PAYLOAD_KEY_FINAL_AUDIT: registry.get(PAYLOAD_KEY_FINAL_AUDIT, {}),
                 PAYLOAD_KEY_OPS_MATURITY: registry.get(PAYLOAD_KEY_OPS_MATURITY, {}),
@@ -132,7 +140,10 @@ class FinalAuditService:
             out.append("Compliance audit status is fail")
         if (matrix.get(PAYLOAD_KEY_FAILED_COUNT) or 0) > 0:
             out.append("Compliance control matrix has failed controls")
-        if ab.get(PAYLOAD_KEY_MISSING_EVIDENCE_COUNT, 0) > 0 and registry.get(PAYLOAD_KEY_RECORD_COUNT, 0) > 0:
+        if (
+            ab.get(PAYLOAD_KEY_MISSING_EVIDENCE_COUNT, 0) > 0
+            and registry.get(PAYLOAD_KEY_RECORD_COUNT, 0) > 0
+        ):
             out.append("Alpha budget evidence missing for one or more registered releases")
         if ab.get(PAYLOAD_KEY_WARNING_TOTAL, 0) > 0:
             out.append("Alpha budget warnings present; review before production")
@@ -140,7 +151,9 @@ class FinalAuditService:
         mode_counts = registry.get(PAYLOAD_KEY_VALIDATION_MODE_COUNTS) or {}
         deep_count = int(mode_counts.get(VALIDATION_MODE_DEEP, 0) or 0)
         if record_count > 0 and deep_count == 0:
-            out.append("No deep validation-mode releases registered; run deep validation before production")
+            out.append(
+                "No deep validation-mode releases registered; run deep validation before production"
+            )
         elif 0 < deep_count < record_count:
             out.append("Deep validation coverage is partial across registered releases")
         if not out:
@@ -152,8 +165,14 @@ class FinalAuditService:
         record_count = registry.get(PAYLOAD_KEY_RECORD_COUNT, 0) or 0
         mode_counts = registry.get(PAYLOAD_KEY_VALIDATION_MODE_COUNTS) or {}
         deep_count = int(mode_counts.get(VALIDATION_MODE_DEEP, 0) or 0)
-        presence_level = COMPLIANCE_LEVEL_PASS if record_count == 0 or deep_count > 0 else COMPLIANCE_LEVEL_WARN
-        coverage_level = COMPLIANCE_LEVEL_PASS if record_count == 0 or deep_count in {0, record_count} else COMPLIANCE_LEVEL_WARN
+        presence_level = (
+            COMPLIANCE_LEVEL_PASS if record_count == 0 or deep_count > 0 else COMPLIANCE_LEVEL_WARN
+        )
+        coverage_level = (
+            COMPLIANCE_LEVEL_PASS
+            if record_count == 0 or deep_count in {0, record_count}
+            else COMPLIANCE_LEVEL_WARN
+        )
         focus = [
             {
                 PAYLOAD_KEY_NAME: COMPLIANCE_CHECK_REGISTRY_DEEP_VALIDATION_PRESENT,
@@ -183,7 +202,9 @@ class FinalAuditService:
         *,
         validation_mode: str | None = None,
     ) -> str:
-        payload = report if report is not None else self.build_report(validation_mode=validation_mode)
+        payload = (
+            report if report is not None else self.build_report(validation_mode=validation_mode)
+        )
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")

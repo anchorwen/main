@@ -4,57 +4,80 @@ Builds a machine-readable deployment evidence bundle from the current
 container: environment config, health, services, diagnostics, and
 operational capabilities.
 """
-from datetime import datetime
-from pathlib import Path
+
 import json
 import platform
 import sys
+from datetime import UTC, datetime
+from pathlib import Path
 
+from core.deployment.capability_registry import (
+    CapabilityRegistry,
+    build_default_release_capability_registry,
+)
 from core.deployment.domain_keys import (
     COMPLIANCE_CHECK_ALPHA_BUDGET_EVIDENCE_REGISTERED,
     COMPLIANCE_CHECK_ALPHA_BUDGET_WARNINGS_CLEAR,
-    PAYLOAD_KEY_ALERTS,
+    HEALTH_STATUS_ALIVE,
+    HEALTH_STATUS_MISSING,
+    HEALTH_STATUS_READY,
     PAYLOAD_KEY_ALERT_COUNT,
+    PAYLOAD_KEY_ALERTS,
     PAYLOAD_KEY_ALPHA_BUDGET,
+    PAYLOAD_KEY_ALPHA_BUDGET_EVIDENCE_COUNT,
     PAYLOAD_KEY_ALPHA_BUDGET_GOVERNANCE,
     PAYLOAD_KEY_ALPHA_BUDGET_MISSING_EVIDENCE_COUNT,
-    PAYLOAD_KEY_ALPHA_BUDGET_EVIDENCE_COUNT,
     PAYLOAD_KEY_ALPHA_BUDGET_TIMELINE_EVENT_COUNT,
     PAYLOAD_KEY_ALPHA_BUDGET_WARNING_TOTAL,
-    PAYLOAD_KEY_AUDIT_SUMMARY,
     PAYLOAD_KEY_AUDIT_ENTRY_COUNT,
+    PAYLOAD_KEY_AUDIT_SUMMARY,
     PAYLOAD_KEY_AVAILABLE,
+    PAYLOAD_KEY_BASE_DIR,
     PAYLOAD_KEY_BRAIN_COUNT,
     PAYLOAD_KEY_BRAIN_HEALTH,
     PAYLOAD_KEY_CAPABILITIES,
     PAYLOAD_KEY_CHECK_COUNT,
-    PAYLOAD_KEY_PYTHON_VERSION,
-    PAYLOAD_KEY_PLATFORM,
-    PAYLOAD_KEY_IMPLEMENTATION,
-    PAYLOAD_KEY_ENVIRONMENT,
     PAYLOAD_KEY_CHECKS,
     PAYLOAD_KEY_COUNTERS,
     PAYLOAD_KEY_DETAIL,
     PAYLOAD_KEY_DETAILS,
+    PAYLOAD_KEY_DIAGNOSTICS,
+    PAYLOAD_KEY_ENABLE_AUDIT_LOG,
+    PAYLOAD_KEY_ENABLE_FEEDBACK_LOOP,
+    PAYLOAD_KEY_ENABLE_IDEMPOTENCY,
+    PAYLOAD_KEY_ENABLE_METRICS,
+    PAYLOAD_KEY_ENGINE_CONFIG_POLL_INTERVAL_SECONDS,
     PAYLOAD_KEY_ENTRY_COUNT,
+    PAYLOAD_KEY_ENVIRONMENT,
     PAYLOAD_KEY_EVIDENCE_COUNT,
     PAYLOAD_KEY_FAILED_CHECK_COUNT,
     PAYLOAD_KEY_FAILED_CHECKS,
     PAYLOAD_KEY_GENERATED_AT,
+    PAYLOAD_KEY_HEALTH,
+    PAYLOAD_KEY_IMPLEMENTATION,
     PAYLOAD_KEY_ITEMS,
     PAYLOAD_KEY_LIVENESS,
+    PAYLOAD_KEY_MAX_DRAWDOWN_PCT,
+    PAYLOAD_KEY_MAX_NOTIONAL_EXPOSURE,
+    PAYLOAD_KEY_MAX_OPEN_POSITIONS,
+    PAYLOAD_KEY_METRIC_COUNTER_COUNT,
+    PAYLOAD_KEY_METRICS,
     PAYLOAD_KEY_MISSING,
     PAYLOAD_KEY_MISSING_COUNT,
     PAYLOAD_KEY_MISSING_EVIDENCE_COUNT,
-    PAYLOAD_KEY_METRICS,
-    PAYLOAD_KEY_METRIC_COUNTER_COUNT,
     PAYLOAD_KEY_NAME,
+    PAYLOAD_KEY_OPS_MATURITY_MIN_SCORE,
     PAYLOAD_KEY_PASSED,
+    PAYLOAD_KEY_PLATFORM,
+    PAYLOAD_KEY_PRESENT,
+    PAYLOAD_KEY_PRESENT_COUNT,
+    PAYLOAD_KEY_PYTHON_VERSION,
     PAYLOAD_KEY_READINESS,
     PAYLOAD_KEY_READINESS_CAPABILITIES_AVAILABLE,
     PAYLOAD_KEY_READINESS_CAPABILITIES_TOTAL,
     PAYLOAD_KEY_READY,
     PAYLOAD_KEY_RECORD_COUNT,
+    PAYLOAD_KEY_REQUIRED_COUNT,
     PAYLOAD_KEY_RUNTIME,
     PAYLOAD_KEY_SCHEMA_VERSION,
     PAYLOAD_KEY_SERVICES,
@@ -62,49 +85,23 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_SERVICES_REQUIRED,
     PAYLOAD_KEY_STATUS,
     PAYLOAD_KEY_SUMMARY,
-    PAYLOAD_KEY_VALIDATION_MODE,
+    PAYLOAD_KEY_SYSTEM_MODE,
     PAYLOAD_KEY_TIMELINE_EVENT_COUNT,
     PAYLOAD_KEY_TIMELINE_MISSING_EVIDENCE_COUNT,
     PAYLOAD_KEY_TIMELINE_WARNING_TOTAL,
     PAYLOAD_KEY_TOTAL,
     PAYLOAD_KEY_TYPE,
+    PAYLOAD_KEY_VALIDATION_MODE,
     PAYLOAD_KEY_VERSION,
     PAYLOAD_KEY_WARNING_RELEASE_COUNT,
     PAYLOAD_KEY_WARNING_TOTAL,
-    PAYLOAD_KEY_REQUIRED_COUNT,
-    PAYLOAD_KEY_PRESENT_COUNT,
-    PAYLOAD_KEY_PRESENT,
-    PAYLOAD_KEY_HEALTH,
-    PAYLOAD_KEY_DIAGNOSTICS,
-    PAYLOAD_KEY_BASE_DIR,
     READINESS_CHECK_BASE_DIR_CONFIGURED,
     READINESS_CHECK_LIVENESS_ALIVE,
     READINESS_CHECK_READINESS_READY,
     READINESS_CHECK_REQUIRED_SERVICES_PRESENT,
-    HEALTH_STATUS_ALIVE,
-    HEALTH_STATUS_MISSING,
-    HEALTH_STATUS_READY,
-    TIMELINE_EVENT_ALPHA_BUDGET_GOVERNANCE,
-    READINESS_CAP_ALERTS,
-    READINESS_CAP_AUDIT_LOG,
-    READINESS_CAP_BACKTESTING,
-    READINESS_CAP_CLI_OPERATIONS,
-    READINESS_CAP_CONFIG_HOT_RELOAD,
-    READINESS_CAP_DECISION_CYCLE,
-    READINESS_CAP_DIAGNOSTICS,
-    READINESS_CAP_EXECUTION_LIFECYCLE,
-    READINESS_CAP_FEEDBACK_LOOP,
-    READINESS_CAP_GOVERNANCE_RULES,
-    READINESS_CAP_LEDGER_PERSISTENCE,
-    READINESS_CAP_METRICS,
-    READINESS_CAP_RECONCILIATION,
-    READINESS_CAP_RISK_EVALUATION,
-    READINESS_CAP_TRACING,
-    READINESS_CAP_VENUE_ROUTING,
     READINESS_SVC_ALERT_SERVICE,
     READINESS_SVC_AUDIT_LOG,
     READINESS_SVC_BRAIN_REGISTRY,
-    READINESS_SVC_BRAIN_TRACKER,
     READINESS_SVC_COMMUNICATION_READER,
     READINESS_SVC_COMMUNICATION_WRITER,
     READINESS_SVC_CONFIG_HOT_RELOAD,
@@ -116,10 +113,10 @@ from core.deployment.domain_keys import (
     READINESS_SVC_EXECUTION_EVENT_WRITER,
     READINESS_SVC_EXECUTION_MANAGER,
     READINESS_SVC_FEATURE_SERVICE,
-    READINESS_SVC_FEEDBACK_LOOP,
     READINESS_SVC_GOVERNANCE_RULE_ENGINE,
     READINESS_SVC_GOVERNANCE_SERVICE,
     READINESS_SVC_HEALTH_CHECK,
+    READINESS_SVC_INSPECTION_SERVICE,
     READINESS_SVC_LEDGER_STORE,
     READINESS_SVC_MARKET_CONTEXT,
     READINESS_SVC_MESSAGE_BUILDER,
@@ -127,32 +124,18 @@ from core.deployment.domain_keys import (
     READINESS_SVC_OPERATIONS_SERVICE,
     READINESS_SVC_PARLIAMENT_SERVICE,
     READINESS_SVC_POSITION_TRACKER,
-    READINESS_SVC_INSPECTION_SERVICE,
     READINESS_SVC_RECONCILIATION_SERVICE,
     READINESS_SVC_REPLAY_GATE,
     READINESS_SVC_REPLAY_SERVICE,
     READINESS_SVC_RISK_SERVICE,
     READINESS_SVC_RUNTIME_LOOP,
     READINESS_SVC_VENUE_ROUTER,
-    PAYLOAD_KEY_ENABLE_AUDIT_LOG,
-    PAYLOAD_KEY_ENABLE_FEEDBACK_LOOP,
-    PAYLOAD_KEY_ENABLE_IDEMPOTENCY,
-    PAYLOAD_KEY_ENABLE_METRICS,
-    PAYLOAD_KEY_ENGINE_CONFIG_POLL_INTERVAL_SECONDS,
-    PAYLOAD_KEY_MAX_DRAWDOWN_PCT,
-    PAYLOAD_KEY_MAX_NOTIONAL_EXPOSURE,
-    PAYLOAD_KEY_MAX_OPEN_POSITIONS,
-    PAYLOAD_KEY_OPS_MATURITY_MIN_SCORE,
-    PAYLOAD_KEY_SYSTEM_MODE,
+    TIMELINE_EVENT_ALPHA_BUDGET_GOVERNANCE,
     VALIDATION_MODE_DEEP,
     VALIDATION_MODE_FAST,
 )
-from core.deployment.schema_versions import SCHEMA_RELEASE_READINESS
 from core.deployment.governance_summary import extract_governance_summary
-from core.deployment.capability_registry import (
-    CapabilityRegistry,
-    build_default_release_capability_registry,
-)
+from core.deployment.schema_versions import SCHEMA_RELEASE_READINESS
 from core.deployment.validation_mode import resolve_validation_mode
 
 
@@ -160,22 +143,50 @@ class ReleaseReadinessService:
     """Aggregates runtime evidence for release decisions."""
 
     REQUIRED_SERVICES = [
-        READINESS_SVC_LEDGER_STORE, READINESS_SVC_COMMUNICATION_WRITER, READINESS_SVC_COMMUNICATION_READER,
-        READINESS_SVC_EXECUTION_EVENT_WRITER, READINESS_SVC_EXECUTION_EVENT_READER,
-        READINESS_SVC_RECONCILIATION_SERVICE, READINESS_SVC_DISPATCHER, READINESS_SVC_MESSAGE_BUILDER,
-        READINESS_SVC_INSPECTION_SERVICE, READINESS_SVC_REPLAY_SERVICE, READINESS_SVC_REPLAY_GATE, READINESS_SVC_OPERATIONS_SERVICE,
-        READINESS_SVC_RISK_SERVICE, READINESS_SVC_METRICS, READINESS_SVC_AUDIT_LOG, READINESS_SVC_DIAGNOSTICS,
-        READINESS_SVC_GOVERNANCE_SERVICE, READINESS_SVC_GOVERNANCE_RULE_ENGINE, READINESS_SVC_PARLIAMENT_SERVICE,
-        READINESS_SVC_POSITION_TRACKER, READINESS_SVC_MARKET_CONTEXT, READINESS_SVC_EXECUTION_MANAGER,
-        READINESS_SVC_HEALTH_CHECK, READINESS_SVC_FEATURE_SERVICE, READINESS_SVC_BRAIN_REGISTRY,
-        READINESS_SVC_DECISION_COMPILER, READINESS_SVC_DECISION_RECORD_WRITER, READINESS_SVC_RUNTIME_LOOP,
-        READINESS_SVC_VENUE_ROUTER, READINESS_SVC_ALERT_SERVICE, READINESS_SVC_CONFIG_HOT_RELOAD,
+        READINESS_SVC_LEDGER_STORE,
+        READINESS_SVC_COMMUNICATION_WRITER,
+        READINESS_SVC_COMMUNICATION_READER,
+        READINESS_SVC_EXECUTION_EVENT_WRITER,
+        READINESS_SVC_EXECUTION_EVENT_READER,
+        READINESS_SVC_RECONCILIATION_SERVICE,
+        READINESS_SVC_DISPATCHER,
+        READINESS_SVC_MESSAGE_BUILDER,
+        READINESS_SVC_INSPECTION_SERVICE,
+        READINESS_SVC_REPLAY_SERVICE,
+        READINESS_SVC_REPLAY_GATE,
+        READINESS_SVC_OPERATIONS_SERVICE,
+        READINESS_SVC_RISK_SERVICE,
+        READINESS_SVC_METRICS,
+        READINESS_SVC_AUDIT_LOG,
+        READINESS_SVC_DIAGNOSTICS,
+        READINESS_SVC_GOVERNANCE_SERVICE,
+        READINESS_SVC_GOVERNANCE_RULE_ENGINE,
+        READINESS_SVC_PARLIAMENT_SERVICE,
+        READINESS_SVC_POSITION_TRACKER,
+        READINESS_SVC_MARKET_CONTEXT,
+        READINESS_SVC_EXECUTION_MANAGER,
+        READINESS_SVC_HEALTH_CHECK,
+        READINESS_SVC_FEATURE_SERVICE,
+        READINESS_SVC_BRAIN_REGISTRY,
+        READINESS_SVC_DECISION_COMPILER,
+        READINESS_SVC_DECISION_RECORD_WRITER,
+        READINESS_SVC_RUNTIME_LOOP,
+        READINESS_SVC_VENUE_ROUTER,
+        READINESS_SVC_ALERT_SERVICE,
+        READINESS_SVC_CONFIG_HOT_RELOAD,
     ]
 
-    def __init__(self, container, version: str = "0.1.0", capability_registry: CapabilityRegistry | None = None):
+    def __init__(
+        self,
+        container,
+        version: str = "0.1.0",
+        capability_registry: CapabilityRegistry | None = None,
+    ):
         self._container = container
         self._version = version
-        self._capability_registry = capability_registry or build_default_release_capability_registry()
+        self._capability_registry = (
+            capability_registry or build_default_release_capability_registry()
+        )
 
     def build_report(self, *, validation_mode: str | None = None) -> dict:
         validation_mode = resolve_validation_mode(self._container, validation_mode)
@@ -196,7 +207,7 @@ class ReleaseReadinessService:
         )
         return {
             PAYLOAD_KEY_SCHEMA_VERSION: SCHEMA_RELEASE_READINESS,
-            PAYLOAD_KEY_GENERATED_AT: datetime.utcnow().isoformat(),
+            PAYLOAD_KEY_GENERATED_AT: datetime.now(UTC).replace(tzinfo=None).isoformat(),
             PAYLOAD_KEY_VERSION: self._version,
             PAYLOAD_KEY_VALIDATION_MODE: validation_mode,
             PAYLOAD_KEY_RUNTIME: self._build_runtime(),
@@ -237,9 +248,13 @@ class ReleaseReadinessService:
             PAYLOAD_KEY_ENVIRONMENT,
             PAYLOAD_KEY_BASE_DIR,
             PAYLOAD_KEY_SYSTEM_MODE,
-            PAYLOAD_KEY_ENABLE_METRICS, PAYLOAD_KEY_ENABLE_AUDIT_LOG, PAYLOAD_KEY_ENABLE_FEEDBACK_LOOP,
-            PAYLOAD_KEY_ENABLE_IDEMPOTENCY, PAYLOAD_KEY_MAX_OPEN_POSITIONS,
-            PAYLOAD_KEY_MAX_NOTIONAL_EXPOSURE, PAYLOAD_KEY_MAX_DRAWDOWN_PCT,
+            PAYLOAD_KEY_ENABLE_METRICS,
+            PAYLOAD_KEY_ENABLE_AUDIT_LOG,
+            PAYLOAD_KEY_ENABLE_FEEDBACK_LOOP,
+            PAYLOAD_KEY_ENABLE_IDEMPOTENCY,
+            PAYLOAD_KEY_MAX_OPEN_POSITIONS,
+            PAYLOAD_KEY_MAX_NOTIONAL_EXPOSURE,
+            PAYLOAD_KEY_MAX_DRAWDOWN_PCT,
             PAYLOAD_KEY_OPS_MATURITY_MIN_SCORE,
             PAYLOAD_KEY_ENGINE_CONFIG_POLL_INTERVAL_SECONDS,
         ]
@@ -247,7 +262,10 @@ class ReleaseReadinessService:
 
     def _build_health(self) -> dict:
         if getattr(self._container, "health_check", None) is None:
-            return {PAYLOAD_KEY_READINESS: {PAYLOAD_KEY_STATUS: HEALTH_STATUS_MISSING}, PAYLOAD_KEY_LIVENESS: {PAYLOAD_KEY_STATUS: HEALTH_STATUS_MISSING}}
+            return {
+                PAYLOAD_KEY_READINESS: {PAYLOAD_KEY_STATUS: HEALTH_STATUS_MISSING},
+                PAYLOAD_KEY_LIVENESS: {PAYLOAD_KEY_STATUS: HEALTH_STATUS_MISSING},
+            }
         return {
             PAYLOAD_KEY_READINESS: self._container.health_check.readiness(),
             PAYLOAD_KEY_LIVENESS: self._container.health_check.liveness(),
@@ -302,8 +320,15 @@ class ReleaseReadinessService:
             PAYLOAD_KEY_ITEMS: capability_status,
         }
 
-    def _build_checks(self, health: dict, services: dict, config: dict, capabilities: dict,
-                      alpha_budget: dict | None = None, validation_mode: str = VALIDATION_MODE_DEEP) -> list[dict]:
+    def _build_checks(
+        self,
+        health: dict,
+        services: dict,
+        config: dict,
+        capabilities: dict,
+        alpha_budget: dict | None = None,
+        validation_mode: str = VALIDATION_MODE_DEEP,
+    ) -> list[dict]:
         readiness_status = (health.get(PAYLOAD_KEY_READINESS) or {}).get(PAYLOAD_KEY_STATUS)
         liveness_status = (health.get(PAYLOAD_KEY_LIVENESS) or {}).get(PAYLOAD_KEY_STATUS)
         alpha_budget = alpha_budget or {}
@@ -325,8 +350,12 @@ class ReleaseReadinessService:
             },
             {
                 PAYLOAD_KEY_NAME: PAYLOAD_KEY_READINESS_CAPABILITIES_AVAILABLE,
-                PAYLOAD_KEY_PASSED: capabilities[PAYLOAD_KEY_AVAILABLE] == capabilities[PAYLOAD_KEY_TOTAL],
-                PAYLOAD_KEY_DETAIL: {PAYLOAD_KEY_AVAILABLE: capabilities[PAYLOAD_KEY_AVAILABLE], PAYLOAD_KEY_TOTAL: capabilities[PAYLOAD_KEY_TOTAL]},
+                PAYLOAD_KEY_PASSED: capabilities[PAYLOAD_KEY_AVAILABLE]
+                == capabilities[PAYLOAD_KEY_TOTAL],
+                PAYLOAD_KEY_DETAIL: {
+                    PAYLOAD_KEY_AVAILABLE: capabilities[PAYLOAD_KEY_AVAILABLE],
+                    PAYLOAD_KEY_TOTAL: capabilities[PAYLOAD_KEY_TOTAL],
+                },
             },
             {
                 PAYLOAD_KEY_NAME: READINESS_CHECK_BASE_DIR_CONFIGURED,
@@ -359,23 +388,38 @@ class ReleaseReadinessService:
             if timeline is not None
             else []
         )
-        timeline_warning_total = sum(event.get(PAYLOAD_KEY_SUMMARY, {}).get(PAYLOAD_KEY_WARNING_TOTAL, 0) for event in timeline_events)
-        timeline_missing_evidence = sum(event.get(PAYLOAD_KEY_SUMMARY, {}).get(PAYLOAD_KEY_MISSING_EVIDENCE_COUNT, 0) for event in timeline_events)
+        timeline_warning_total = sum(
+            event.get(PAYLOAD_KEY_SUMMARY, {}).get(PAYLOAD_KEY_WARNING_TOTAL, 0)
+            for event in timeline_events
+        )
+        timeline_missing_evidence = sum(
+            event.get(PAYLOAD_KEY_SUMMARY, {}).get(PAYLOAD_KEY_MISSING_EVIDENCE_COUNT, 0)
+            for event in timeline_events
+        )
         return {
             PAYLOAD_KEY_AVAILABLE: registry is not None,
             PAYLOAD_KEY_RECORD_COUNT: registry_summary.get(PAYLOAD_KEY_RECORD_COUNT, 0),
             PAYLOAD_KEY_EVIDENCE_COUNT: alpha_budget.get(PAYLOAD_KEY_EVIDENCE_COUNT, 0),
-            PAYLOAD_KEY_MISSING_EVIDENCE_COUNT: alpha_budget.get(PAYLOAD_KEY_MISSING_EVIDENCE_COUNT, 0),
+            PAYLOAD_KEY_MISSING_EVIDENCE_COUNT: alpha_budget.get(
+                PAYLOAD_KEY_MISSING_EVIDENCE_COUNT, 0
+            ),
             PAYLOAD_KEY_WARNING_TOTAL: alpha_budget.get(PAYLOAD_KEY_WARNING_TOTAL, 0),
-            PAYLOAD_KEY_WARNING_RELEASE_COUNT: alpha_budget.get(PAYLOAD_KEY_WARNING_RELEASE_COUNT, 0),
+            PAYLOAD_KEY_WARNING_RELEASE_COUNT: alpha_budget.get(
+                PAYLOAD_KEY_WARNING_RELEASE_COUNT, 0
+            ),
             **extract_governance_summary(registry_summary),
             PAYLOAD_KEY_TIMELINE_EVENT_COUNT: len(timeline_events),
             PAYLOAD_KEY_TIMELINE_WARNING_TOTAL: timeline_warning_total,
             PAYLOAD_KEY_TIMELINE_MISSING_EVIDENCE_COUNT: timeline_missing_evidence,
         }
 
-    def _build_summary(self, checks: list[dict], services: dict, capabilities: dict,
-                       alpha_budget: dict | None = None) -> dict:
+    def _build_summary(
+        self,
+        checks: list[dict],
+        services: dict,
+        capabilities: dict,
+        alpha_budget: dict | None = None,
+    ) -> dict:
         failed = [c[PAYLOAD_KEY_NAME] for c in checks if not c[PAYLOAD_KEY_PASSED]]
         alpha_budget = alpha_budget or {}
         return {
@@ -386,9 +430,15 @@ class ReleaseReadinessService:
             PAYLOAD_KEY_SERVICES_REQUIRED: services[PAYLOAD_KEY_REQUIRED_COUNT],
             PAYLOAD_KEY_READINESS_CAPABILITIES_AVAILABLE: capabilities[PAYLOAD_KEY_AVAILABLE],
             PAYLOAD_KEY_READINESS_CAPABILITIES_TOTAL: capabilities[PAYLOAD_KEY_TOTAL],
-            PAYLOAD_KEY_ALPHA_BUDGET_EVIDENCE_COUNT: alpha_budget.get(PAYLOAD_KEY_EVIDENCE_COUNT, 0),
-            PAYLOAD_KEY_ALPHA_BUDGET_MISSING_EVIDENCE_COUNT: alpha_budget.get(PAYLOAD_KEY_MISSING_EVIDENCE_COUNT, 0),
+            PAYLOAD_KEY_ALPHA_BUDGET_EVIDENCE_COUNT: alpha_budget.get(
+                PAYLOAD_KEY_EVIDENCE_COUNT, 0
+            ),
+            PAYLOAD_KEY_ALPHA_BUDGET_MISSING_EVIDENCE_COUNT: alpha_budget.get(
+                PAYLOAD_KEY_MISSING_EVIDENCE_COUNT, 0
+            ),
             PAYLOAD_KEY_ALPHA_BUDGET_WARNING_TOTAL: alpha_budget.get(PAYLOAD_KEY_WARNING_TOTAL, 0),
-            PAYLOAD_KEY_ALPHA_BUDGET_TIMELINE_EVENT_COUNT: alpha_budget.get(PAYLOAD_KEY_TIMELINE_EVENT_COUNT, 0),
+            PAYLOAD_KEY_ALPHA_BUDGET_TIMELINE_EVENT_COUNT: alpha_budget.get(
+                PAYLOAD_KEY_TIMELINE_EVENT_COUNT, 0
+            ),
             **extract_governance_summary(alpha_budget),
         }

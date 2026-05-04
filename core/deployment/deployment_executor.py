@@ -4,9 +4,10 @@ Executes deployment plans in safe dry-run mode. It does not perform
 real infrastructure changes; instead it evaluates each phase/checkpoint
 against current services and produces an execution record.
 """
-from datetime import datetime
-from pathlib import Path
+
 import json
+from datetime import UTC, datetime
+from pathlib import Path
 
 from core.deployment.domain_keys import (
     DEPLOYMENT_EXECUTION_FAILURE_INVALID_PLAN,
@@ -68,11 +69,10 @@ from core.deployment.domain_keys import (
     ROLLBACK_RECOMMENDATION_ROLLBACK,
     SLO_STATUS_BREACHING,
     SLO_STATUS_HEALTHY,
-    VALIDATION_MODE_DEEP,
 )
 from core.deployment.schema_versions import SCHEMA_DEPLOYMENT_EXECUTION
-from core.observability.metric_names import CYCLES_CIRCUIT_OPEN
 from core.deployment.validation_mode import resolve_validation_mode
+from core.observability.metric_names import CYCLES_CIRCUIT_OPEN
 
 
 class DeploymentExecutor:
@@ -90,11 +90,23 @@ class DeploymentExecutor:
     ) -> dict:
         validation_mode = resolve_validation_mode(self._container, validation_mode)
         plan = plan or self._container.deployment_plan.build_plan(validation_mode=validation_mode)
-        started_at = datetime.utcnow().isoformat()
+        started_at = datetime.now(UTC).replace(tzinfo=None).isoformat()
         if plan.get(PAYLOAD_KEY_STATUS) == DEPLOYMENT_PLAN_STATUS_INVALID:
-            return self._result(started_at, plan, [], DEPLOYMENT_EXECUTION_STATUS_FAILED, [DEPLOYMENT_EXECUTION_FAILURE_INVALID_PLAN])
+            return self._result(
+                started_at,
+                plan,
+                [],
+                DEPLOYMENT_EXECUTION_STATUS_FAILED,
+                [DEPLOYMENT_EXECUTION_FAILURE_INVALID_PLAN],
+            )
         if not plan.get(PAYLOAD_KEY_EXECUTABLE, False):
-            return self._result(started_at, plan, [], RELEASE_PIPELINE_STATUS_BLOCKED, [DEPLOYMENT_EXECUTION_FAILURE_NOT_EXECUTABLE])
+            return self._result(
+                started_at,
+                plan,
+                [],
+                RELEASE_PIPELINE_STATUS_BLOCKED,
+                [DEPLOYMENT_EXECUTION_FAILURE_NOT_EXECUTABLE],
+            )
 
         phase_results = []
         failures: list[str] = []
@@ -119,7 +131,11 @@ class DeploymentExecutor:
         if rollback[PAYLOAD_KEY_FIRED_COUNT] > 0:
             failures.append(DEPLOYMENT_EXECUTION_FAILURE_ROLLBACK_FIRED)
 
-        status = DEPLOYMENT_EXECUTION_STATUS_SUCCEEDED if not failures else DEPLOYMENT_EXECUTION_STATUS_FAILED
+        status = (
+            DEPLOYMENT_EXECUTION_STATUS_SUCCEEDED
+            if not failures
+            else DEPLOYMENT_EXECUTION_STATUS_FAILED
+        )
         return self._result(
             started_at,
             plan,
@@ -158,7 +174,10 @@ class DeploymentExecutor:
         validation_mode = resolve_validation_mode(self._container, validation_mode)
         name = phase[PAYLOAD_KEY_NAME]
         passed = True
-        detail = {RELEASE_PIPELINE_KEY_DRY_RUN: dry_run, PAYLOAD_KEY_DESCRIPTION: phase.get(PAYLOAD_KEY_DESCRIPTION, "")}
+        detail = {
+            RELEASE_PIPELINE_KEY_DRY_RUN: dry_run,
+            PAYLOAD_KEY_DESCRIPTION: phase.get(PAYLOAD_KEY_DESCRIPTION, ""),
+        }
 
         if name == EVIDENCE_SECTION_PREFLIGHT:
             preflight = self._container.runbook_engine.preflight(validation_mode=validation_mode)
@@ -167,9 +186,18 @@ class DeploymentExecutor:
         elif name == "evidence_capture":
             passed = True
             detail[PAYLOAD_KEY_EVIDENCE] = "already_planned_or_skipped"
-        elif name in {"deploy_all", "deploy_canary_10pct", "promote_50pct", "promote_100pct", "shadow_deploy"}:
+        elif name in {
+            "deploy_all",
+            "deploy_canary_10pct",
+            "promote_50pct",
+            "promote_100pct",
+            "shadow_deploy",
+        }:
             gate = self._container.release_gate.evaluate(validation_mode=validation_mode)
-            passed = gate.get(PAYLOAD_KEY_DECISION) in {RELEASE_PIPELINE_GATE_DECISION_ALLOW, RELEASE_PIPELINE_GATE_DECISION_WARN}
+            passed = gate.get(PAYLOAD_KEY_DECISION) in {
+                RELEASE_PIPELINE_GATE_DECISION_ALLOW,
+                RELEASE_PIPELINE_GATE_DECISION_WARN,
+            }
             detail[PAYLOAD_KEY_GATE_DECISION] = gate.get(PAYLOAD_KEY_DECISION)
         elif name in {"post_deploy_verify", "shadow_compare"}:
             slo = self._container.slo_service.evaluate()
@@ -193,7 +221,10 @@ class DeploymentExecutor:
             detail[PAYLOAD_KEY_READY] = report.get(PAYLOAD_KEY_READY, False)
         elif name == EVIDENCE_SECTION_GATE:
             gate = self._container.release_gate.evaluate(validation_mode=validation_mode)
-            passed = gate.get(PAYLOAD_KEY_DECISION) in {RELEASE_PIPELINE_GATE_DECISION_ALLOW, RELEASE_PIPELINE_GATE_DECISION_WARN}
+            passed = gate.get(PAYLOAD_KEY_DECISION) in {
+                RELEASE_PIPELINE_GATE_DECISION_ALLOW,
+                RELEASE_PIPELINE_GATE_DECISION_WARN,
+            }
             detail[PAYLOAD_KEY_DECISION] = gate.get(PAYLOAD_KEY_DECISION)
         elif "slo" in name:
             slo = self._container.slo_service.evaluate()
@@ -213,12 +244,18 @@ class DeploymentExecutor:
             PAYLOAD_KEY_DETAIL: detail,
         }
 
-    def _evaluate_rollback_triggers(self, plan: dict, *, validation_mode: str | None = None) -> dict:
+    def _evaluate_rollback_triggers(
+        self, plan: dict, *, validation_mode: str | None = None
+    ) -> dict:
         validation_mode = resolve_validation_mode(self._container, validation_mode)
         gate = self._container.release_gate.evaluate(validation_mode=validation_mode)
         slo = self._container.slo_service.evaluate()
         health = self._container.health_check.readiness()
-        counters = self._container.metrics.snapshot().get(PAYLOAD_KEY_COUNTERS, {}) if self._container.metrics else {}
+        counters = (
+            self._container.metrics.snapshot().get(PAYLOAD_KEY_COUNTERS, {})
+            if self._container.metrics
+            else {}
+        )
         fired = []
         for trigger in plan.get(PAYLOAD_KEY_ROLLBACK, []):
             name = trigger[PAYLOAD_KEY_NAME]
@@ -232,13 +269,24 @@ class DeploymentExecutor:
             elif name == "circuit_open":
                 hit = counters.get(CYCLES_CIRCUIT_OPEN, 0) > 0
             elif name == "canary_error_budget_exhausted":
-                hit = (slo.get(PAYLOAD_KEY_ERROR_BUDGET) or {}).get(PAYLOAD_KEY_EXHAUSTED_COUNT, 0) > 0
+                hit = (slo.get(PAYLOAD_KEY_ERROR_BUDGET) or {}).get(
+                    PAYLOAD_KEY_EXHAUSTED_COUNT, 0
+                ) > 0
             if hit:
-                fired.append({PAYLOAD_KEY_NAME: name, PAYLOAD_KEY_SEVERITY: trigger.get(PAYLOAD_KEY_SEVERITY, DEPLOYMENT_EXECUTION_TRIGGER_SEVERITY_UNKNOWN)})
+                fired.append(
+                    {
+                        PAYLOAD_KEY_NAME: name,
+                        PAYLOAD_KEY_SEVERITY: trigger.get(
+                            PAYLOAD_KEY_SEVERITY, DEPLOYMENT_EXECUTION_TRIGGER_SEVERITY_UNKNOWN
+                        ),
+                    }
+                )
         return {
             PAYLOAD_KEY_FIRED_COUNT: len(fired),
             PAYLOAD_KEY_FIRED: fired,
-            PAYLOAD_KEY_RECOMMENDATION: ROLLBACK_RECOMMENDATION_ROLLBACK if fired else ROLLBACK_RECOMMENDATION_CONTINUE,
+            PAYLOAD_KEY_RECOMMENDATION: ROLLBACK_RECOMMENDATION_ROLLBACK
+            if fired
+            else ROLLBACK_RECOMMENDATION_CONTINUE,
         }
 
     def _result(
@@ -257,7 +305,7 @@ class DeploymentExecutor:
         return {
             PAYLOAD_KEY_SCHEMA_VERSION: SCHEMA_DEPLOYMENT_EXECUTION,
             PAYLOAD_KEY_STARTED_AT: started_at,
-            PAYLOAD_KEY_FINISHED_AT: datetime.utcnow().isoformat(),
+            PAYLOAD_KEY_FINISHED_AT: datetime.now(UTC).replace(tzinfo=None).isoformat(),
             PAYLOAD_KEY_VALIDATION_MODE: validation_mode,
             PAYLOAD_KEY_DRY_RUN: dry_run,
             PAYLOAD_KEY_STATUS: status,
@@ -272,7 +320,8 @@ class DeploymentExecutor:
             },
             PAYLOAD_KEY_PHASE_RESULTS: phase_results,
             PAYLOAD_KEY_CHECKPOINT_RESULTS: checkpoint_results or [],
-            PAYLOAD_KEY_ROLLBACK: rollback or {
+            PAYLOAD_KEY_ROLLBACK: rollback
+            or {
                 PAYLOAD_KEY_FIRED_COUNT: 0,
                 PAYLOAD_KEY_FIRED: [],
                 PAYLOAD_KEY_RECOMMENDATION: ROLLBACK_RECOMMENDATION_CONTINUE,

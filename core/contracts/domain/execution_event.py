@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from core.deployment.domain_keys import (
     CONTRACT_ERROR_CORRELATION_ID_REQUIRED,
@@ -39,29 +39,33 @@ class ExecutionEvent:
     recorded_at: datetime
     venue: str
     venue_order_id: str | None = None
-    quantity: Dict[str, Any] = field(default_factory=dict)
-    price: Dict[str, Any] = field(default_factory=dict)
-    details: Dict[str, Any] = field(default_factory=dict)
-    trace: Dict[str, Any] = field(default_factory=dict)
-    extensions: Dict[str, Any] = field(default_factory=dict)
+    quantity: dict[str, Any] = field(default_factory=dict)
+    price: dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
+    trace: dict[str, Any] = field(default_factory=dict)
+    extensions: dict[str, Any] = field(default_factory=dict)
 
-    VALID_EVENT_TYPES = frozenset({
-        "ack",
-        "rejected",
-        "accepted",
-        "partially_filled",
-        "filled",
-        "cancelled",
-        "amended",
-        "expired",
-    })
+    VALID_EVENT_TYPES = frozenset(
+        {
+            "ack",
+            "rejected",
+            "accepted",
+            "partially_filled",
+            "filled",
+            "cancelled",
+            "amended",
+            "expired",
+        }
+    )
 
-    TERMINAL_EVENT_TYPES = frozenset({
-        "rejected",
-        "filled",
-        "cancelled",
-        "expired",
-    })
+    TERMINAL_EVENT_TYPES = frozenset(
+        {
+            "rejected",
+            "filled",
+            "cancelled",
+            "expired",
+        }
+    )
 
     def __post_init__(self) -> None:
         if not self.event_id:

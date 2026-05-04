@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
-from core.contracts.exceptions import InvalidTransitionError, BrainNotFoundError
+from core.contracts.exceptions import BrainNotFoundError, InvalidTransitionError
 
 
 class GovernanceService:
@@ -34,8 +34,8 @@ class GovernanceService:
         state = {
             "brain_id": brain_id,
             "status": initial_status,
-            "registered_at": datetime.utcnow().isoformat(),
-            "last_transition_at": datetime.utcnow().isoformat(),
+            "registered_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+            "last_transition_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             "transition_count": 0,
             "freeze_count": 0,
         }
@@ -57,7 +57,9 @@ class GovernanceService:
             "maintain": lambda bid, r: {"action": "no_change", "brain_id": bid},
             "observe": lambda bid, r: {"action": "no_change", "brain_id": bid},
         }
-        handler = action_map.get(recommendation, lambda bid, r: {"action": "unknown", "brain_id": bid})
+        handler = action_map.get(
+            recommendation, lambda bid, r: {"action": "unknown", "brain_id": bid}
+        )
         return handler(brain_id, reason)
 
     def transition(self, brain_id: str, new_status: str, reason: str = "") -> dict:
@@ -78,7 +80,7 @@ class GovernanceService:
 
         old_status = current
         state["status"] = new_status
-        state["last_transition_at"] = datetime.utcnow().isoformat()
+        state["last_transition_at"] = datetime.now(UTC).replace(tzinfo=None).isoformat()
         state["transition_count"] += 1
         if new_status == self.STATUS_FROZEN:
             state["freeze_count"] += 1
@@ -88,7 +90,7 @@ class GovernanceService:
             "from_status": old_status,
             "to_status": new_status,
             "reason": reason,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
         }
         self._transition_log.append(transition_record)
 
@@ -100,7 +102,12 @@ class GovernanceService:
                 health_signal=reason,
             )
 
-        return {"action": "transitioned", "brain_id": brain_id, "from": old_status, "to": new_status}
+        return {
+            "action": "transitioned",
+            "brain_id": brain_id,
+            "from": old_status,
+            "to": new_status,
+        }
 
     def strict_transition(self, brain_id: str, new_status: str, reason: str = "") -> dict:
         """Like transition() but raises on invalid operations."""
@@ -133,7 +140,8 @@ class GovernanceService:
 
     def get_active_brain_ids(self) -> list[str]:
         return [
-            bid for bid, s in self._brain_states.items()
+            bid
+            for bid, s in self._brain_states.items()
             if s["status"] in {self.STATUS_LIVE, self.STATUS_PROBATION, self.STATUS_CANDIDATE}
         ]
 
@@ -146,6 +154,8 @@ class GovernanceService:
             brain_id = signal.get("brain_id")
             rec = signal.get("recommendation")
             if brain_id and rec:
-                result = self.apply_recommendation(brain_id, rec, reason=signal.get("health_signal", ""))
+                result = self.apply_recommendation(
+                    brain_id, rec, reason=signal.get("health_signal", "")
+                )
                 results.append(result)
         return results

@@ -1,4 +1,5 @@
 """Execution quality analytics contracts."""
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any

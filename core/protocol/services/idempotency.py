@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 
@@ -58,7 +58,7 @@ class IdempotencyStore:
         record = {
             "idempotency_key": idempotency_key,
             "message_id": message_id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             "date_key": date_key,
         }
         with path.open("a", encoding="utf-8") as f:
@@ -69,10 +69,8 @@ class IdempotencyStore:
 
     def _lookup_date_keys(self, date_key: str) -> list[str]:
         parsed = datetime.fromisoformat(date_key).date()
-        return [
-            date_key,
-            (parsed - timedelta(days=1)).isoformat(),
-        ]
+        days_back = int(self._ttl.total_seconds() / 86400) + 1
+        return [(parsed - timedelta(days=d)).isoformat() for d in range(days_back + 1)]
 
 
 class DuplicateDetector:
@@ -91,11 +89,13 @@ class DuplicateDetector:
             if not idem_key:
                 continue
             if idem_key in seen_keys:
-                duplicates.append({
-                    "idempotency_key": idem_key,
-                    "duplicate_message_id": record.get("message_id"),
-                    "original_message_id": seen_keys[idem_key],
-                })
+                duplicates.append(
+                    {
+                        "idempotency_key": idem_key,
+                        "duplicate_message_id": record.get("message_id"),
+                        "original_message_id": seen_keys[idem_key],
+                    }
+                )
             else:
                 seen_keys[idem_key] = record.get("message_id")
 
@@ -106,7 +106,6 @@ class DuplicateDetector:
             return False
         records = self._reader.list_records(date_key=date_key, target=target)
         count = sum(
-            1 for r in records
-            if r.get("envelope", {}).get("idempotency_key") == idempotency_key
+            1 for r in records if r.get("envelope", {}).get("idempotency_key") == idempotency_key
         )
         return count > 1

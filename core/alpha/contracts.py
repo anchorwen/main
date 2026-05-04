@@ -1,4 +1,5 @@
 """Alpha lifecycle contracts for B0 Alpha Factory."""
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum

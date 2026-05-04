@@ -77,19 +77,23 @@ class FeedbackLoop:
         for brain_id, summary in brain_summaries.items():
             rec = summary.get("recommendation", "maintain")
             if rec in {"freeze", "demote_to_probation", "limit_exposure"}:
-                signals.append({
-                    "brain_id": brain_id,
-                    "signal_type": "governance_action_required",
-                    "recommendation": rec,
-                    "health_signal": summary.get("health_signal"),
-                    "composite_mean": summary.get("composite_mean"),
-                })
+                signals.append(
+                    {
+                        "brain_id": brain_id,
+                        "signal_type": "governance_action_required",
+                        "recommendation": rec,
+                        "health_signal": summary.get("health_signal"),
+                        "composite_mean": summary.get("composite_mean"),
+                    }
+                )
             elif rec == "eligible_for_promotion":
-                signals.append({
-                    "brain_id": brain_id,
-                    "signal_type": "promotion_candidate",
-                    "recommendation": rec,
-                    "health_signal": summary.get("health_signal"),
-                    "composite_mean": summary.get("composite_mean"),
-                })
+                signals.append(
+                    {
+                        "brain_id": brain_id,
+                        "signal_type": "promotion_candidate",
+                        "recommendation": rec,
+                        "health_signal": summary.get("health_signal"),
+                        "composite_mean": summary.get("composite_mean"),
+                    }
+                )
         return signals

@@ -3,10 +3,11 @@
 Creates a final audit certificate from a release pipeline summary and
 verifies key artifact existence/checksums.
 """
-from datetime import datetime
-from pathlib import Path
+
 import hashlib
 import json
+from datetime import UTC, datetime
+from pathlib import Path
 
 from core.deployment.domain_keys import (
     ARTIFACT_DEPLOYMENT_EXECUTION,
@@ -27,12 +28,11 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_APPROVER,
     PAYLOAD_KEY_ARTIFACT,
     PAYLOAD_KEY_ARTIFACT_CHECKS,
-    PAYLOAD_KEY_ARTIFACTS,
     PAYLOAD_KEY_CERTIFICATE_FINGERPRINT,
     PAYLOAD_KEY_CERTIFICATE_PATH,
     PAYLOAD_KEY_CERTIFIED,
-    PAYLOAD_KEY_EVIDENCE_VERIFICATION,
     PAYLOAD_KEY_ERROR,
+    PAYLOAD_KEY_EVIDENCE_VERIFICATION,
     PAYLOAD_KEY_EXISTS,
     PAYLOAD_KEY_EXPECTED_FINGERPRINT,
     PAYLOAD_KEY_FINAL_AUDIT_EVIDENCE,
@@ -52,12 +52,10 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_RESULTS,
     PAYLOAD_KEY_SCHEMA_VERSION,
     PAYLOAD_KEY_SECTION,
-    PAYLOAD_KEY_SECTIONS,
     PAYLOAD_KEY_SHA256,
     PAYLOAD_KEY_SIZE_BYTES,
     PAYLOAD_KEY_STATUS,
     PAYLOAD_KEY_STRATEGY,
-    PAYLOAD_KEY_SUMMARY,
     PAYLOAD_KEY_USAGE_DATE,
     PAYLOAD_KEY_VALID,
     PAYLOAD_KEY_VALIDATION_MODE,
@@ -75,11 +73,11 @@ from core.deployment.domain_keys import (
     RELEASE_PIPELINE_KEY_SUMMARY,
     RELEASE_PIPELINE_KEY_VERSION,
 )
+from core.deployment.governance_summary import extract_governance_summary
 from core.deployment.schema_versions import (
     SCHEMA_RELEASE_CERTIFICATE,
     SCHEMA_RELEASE_CERTIFICATE_VERIFICATION,
 )
-from core.deployment.governance_summary import extract_governance_summary
 
 
 class ReleaseCertificationService:
@@ -122,13 +120,15 @@ class ReleaseCertificationService:
         )
         certificate = {
             PAYLOAD_KEY_SCHEMA_VERSION: SCHEMA_RELEASE_CERTIFICATE,
-            PAYLOAD_KEY_ISSUED_AT: datetime.utcnow().isoformat(),
+            PAYLOAD_KEY_ISSUED_AT: datetime.now(UTC).replace(tzinfo=None).isoformat(),
             PAYLOAD_KEY_APPROVER: approver,
             PAYLOAD_KEY_VERSION: pipeline.get(RELEASE_PIPELINE_KEY_VERSION),
             PAYLOAD_KEY_STRATEGY: pipeline.get(RELEASE_PIPELINE_KEY_STRATEGY),
             PAYLOAD_KEY_VALIDATION_MODE: pipeline.get(PAYLOAD_KEY_VALIDATION_MODE),
             PAYLOAD_KEY_CERTIFIED: approved,
-            PAYLOAD_KEY_STATUS: RELEASE_CERTIFICATION_STATUS_CERTIFIED if approved else RELEASE_CERTIFICATION_STATUS_REJECTED,
+            PAYLOAD_KEY_STATUS: RELEASE_CERTIFICATION_STATUS_CERTIFIED
+            if approved
+            else RELEASE_CERTIFICATION_STATUS_REJECTED,
             PAYLOAD_KEY_PIPELINE: {
                 PAYLOAD_KEY_STATUS: pipeline.get(PAYLOAD_KEY_STATUS),
                 RELEASE_PIPELINE_KEY_PASSED: pipeline.get(RELEASE_PIPELINE_KEY_PASSED),
@@ -185,28 +185,38 @@ class ReleaseCertificationService:
             raw_path = artifacts.get(name)
             path = Path(raw_path) if raw_path else None
             exists = bool(path and path.exists())
-            checks.append({
-                PAYLOAD_KEY_NAME: name,
-                PAYLOAD_KEY_PATH: str(path) if path else None,
-                PAYLOAD_KEY_EXISTS: exists,
-                PAYLOAD_KEY_SHA256: self._sha256(path) if exists else None,
-                PAYLOAD_KEY_SIZE_BYTES: path.stat().st_size if exists else 0,
-                PAYLOAD_KEY_VALID: exists,
-            })
+            checks.append(
+                {
+                    PAYLOAD_KEY_NAME: name,
+                    PAYLOAD_KEY_PATH: str(path) if path else None,
+                    PAYLOAD_KEY_EXISTS: exists,
+                    PAYLOAD_KEY_SHA256: self._sha256(path) if exists else None,  # type: ignore[reportArgumentType]
+                    PAYLOAD_KEY_SIZE_BYTES: path.stat().st_size if exists else 0,  # type: ignore[reportOptionalMemberAccess]
+                    PAYLOAD_KEY_VALID: exists,
+                }
+            )
         return checks
 
     def _verify_evidence_manifest(self, pipeline: dict) -> dict:
         manifest = pipeline.get(RELEASE_PIPELINE_KEY_ARTIFACTS, {}).get(ARTIFACT_EVIDENCE_MANIFEST)
         if not manifest:
-            return {PAYLOAD_KEY_VERIFIED: False, PAYLOAD_KEY_ERROR: RELEASE_CERTIFICATION_MISSING_EVIDENCE_MANIFEST}
+            return {
+                PAYLOAD_KEY_VERIFIED: False,
+                PAYLOAD_KEY_ERROR: RELEASE_CERTIFICATION_MISSING_EVIDENCE_MANIFEST,
+            }
         try:
             return self._container.evidence_bundle.verify_bundle(manifest)
         except Exception as exc:
             return {PAYLOAD_KEY_VERIFIED: False, PAYLOAD_KEY_ERROR: str(exc)}
 
     def _alpha_budget_evidence(self, pipeline: dict, evidence_verification: dict) -> dict:
-        manifest_path = pipeline.get(RELEASE_PIPELINE_KEY_ARTIFACTS, {}).get(ARTIFACT_EVIDENCE_MANIFEST)
-        sections = [item.get(PAYLOAD_KEY_SECTION) for item in evidence_verification.get(PAYLOAD_KEY_RESULTS, [])]
+        manifest_path = pipeline.get(RELEASE_PIPELINE_KEY_ARTIFACTS, {}).get(
+            ARTIFACT_EVIDENCE_MANIFEST
+        )
+        sections = [
+            item.get(PAYLOAD_KEY_SECTION)
+            for item in evidence_verification.get(PAYLOAD_KEY_RESULTS, [])
+        ]
         present = EVIDENCE_SECTION_ALPHA_BUDGET_USAGE in sections
         artifact = None
         if manifest_path and present:

@@ -1,7 +1,7 @@
 import json
+import logging
 import threading
 from pathlib import Path
-from datetime import datetime
 
 from core.deployment.domain_keys import (
     PAYLOAD_KEY_CONFIG_PATH,
@@ -64,7 +64,10 @@ class ConfigHotReload:
                 try:
                     fn(changes, new)
                 except Exception:
-                    pass
+                    logging.exception(
+                        "ConfigHotReload listener failed for config_path=%s",
+                        self._path,
+                    )
 
         return changes
 

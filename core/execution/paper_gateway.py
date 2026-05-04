@@ -3,21 +3,27 @@
 A safe simulated execution adapter that emits the same execution event
 lifecycle expected by downstream reconciliation and analytics.
 """
-from datetime import datetime
+
+from datetime import UTC, datetime
 from typing import Any
 
-from core.observability.metric_names import PAPER_EXECUTION_FILLED, PAPER_EXECUTION_FILL_QUANTITY
 from core.execution.fill_simulator import FillSimulator
 from core.execution.gateway_contracts import OrderRequest, OrderState
 from core.execution.order_state_machine import OrderStateMachine
+from core.observability.metric_names import PAPER_EXECUTION_FILL_QUANTITY, PAPER_EXECUTION_FILLED
 
 
 class PaperExecutionGateway:
     """Paper gateway backed by a canonical state machine and fill simulator."""
 
-    def __init__(self, execution_event_writer=None, metrics=None, venue: str = "PAPER",
-                 fill_simulator: FillSimulator | None = None,
-                 state_machine: OrderStateMachine | None = None):
+    def __init__(
+        self,
+        execution_event_writer=None,
+        metrics=None,
+        venue: str = "PAPER",
+        fill_simulator: FillSimulator | None = None,
+        state_machine: OrderStateMachine | None = None,
+    ):
         self._writer = execution_event_writer
         self._metrics = metrics
         self._venue = venue
@@ -85,8 +91,14 @@ class PaperExecutionGateway:
             self._metrics.observe(PAPER_EXECUTION_FILL_QUANTITY, fill.quantity)
         return state
 
-    def _emit(self, request: OrderRequest, event_type: str, state: OrderState,
-              quantity: float = 0.0, price: float = 0.0) -> None:
+    def _emit(
+        self,
+        request: OrderRequest,
+        event_type: str,
+        state: OrderState,
+        quantity: float = 0.0,
+        price: float = 0.0,
+    ) -> None:
         payload = {
             "event_type": event_type,
             "order_id": request.order_id,
@@ -94,7 +106,7 @@ class PaperExecutionGateway:
             "venue": self._venue,
             "quantity": quantity,
             "price": price,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
         }
         self._events.append(payload)
         if self._writer:
@@ -103,11 +115,16 @@ class PaperExecutionGateway:
                 correlation_id=request.correlation_id,
                 event_type=event_type,
                 venue=self._venue,
-                event_time=datetime.utcnow(),
+                event_time=datetime.now(UTC).replace(tzinfo=None),
                 venue_order_id=request.order_id,
                 quantity={"filled": quantity} if quantity else {},
                 price={"average": price} if price else {},
-                details={"paper": True, "symbol": request.symbol, "side": request.side, "status": state.status},
+                details={
+                    "paper": True,
+                    "symbol": request.symbol,
+                    "side": request.side,
+                    "status": state.status,
+                },
             )
 
     def _request_from_state(self, state: OrderState) -> OrderRequest:

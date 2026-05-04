@@ -1,6 +1,5 @@
 import threading
-from datetime import datetime
-from typing import Any
+from datetime import UTC, datetime
 
 
 class MetricsCollector:
@@ -51,7 +50,16 @@ class MetricsCollector:
         key = self._key(name, labels)
         values = self._histograms.get(key, [])
         if not values:
-            return {"count": 0, "sum": 0, "min": 0, "max": 0, "mean": 0, "p50": 0, "p95": 0, "p99": 0}
+            return {
+                "count": 0,
+                "sum": 0,
+                "min": 0,
+                "max": 0,
+                "mean": 0,
+                "p50": 0,
+                "p95": 0,
+                "p99": 0,
+            }
         sorted_v = sorted(values)
         n = len(sorted_v)
         return {
@@ -68,12 +76,10 @@ class MetricsCollector:
     def snapshot(self) -> dict:
         with self._lock:
             return {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
                 "counters": dict(self._counters),
                 "gauges": dict(self._gauges),
-                "histograms": {
-                    k: self.get_histogram(k) for k in self._histograms
-                },
+                "histograms": {k: self.get_histogram(k) for k in self._histograms},
             }
 
     def reset(self) -> None:

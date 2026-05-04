@@ -3,7 +3,15 @@ class CommunicationAdapterRegistry:
         self._adapters = dict(adapters)
         self._default_adapter_name = default_adapter_name
 
-    def resolve(self, *, target: str, message_type, route_policy: dict | None = None, transport_hints: dict | None = None, governance: dict | None = None) -> object:
+    def resolve(
+        self,
+        *,
+        target: str,
+        message_type,
+        route_policy: dict | None = None,
+        transport_hints: dict | None = None,
+        governance: dict | None = None,
+    ) -> object:
         route_policy = route_policy or {}
         transport_hints = transport_hints or {}
         governance = governance or {}
@@ -33,7 +41,9 @@ class CommunicationAdapterRegistry:
         if target in self._adapters:
             return self._adapters[target]
 
-        message_type_value = message_type.value if hasattr(message_type, "value") else str(message_type)
+        message_type_value = (
+            message_type.value if hasattr(message_type, "value") else str(message_type)
+        )
         if message_type_value in self._adapters:
             return self._adapters[message_type_value]
 
@@ -41,7 +51,8 @@ class CommunicationAdapterRegistry:
             return self._adapters[self._default_adapter_name]
 
         raise KeyError(
-            f"no communication adapter registered for target={target} or message_type={message_type_value}"
+            f"no communication adapter registered for target={target}"
+            f" or message_type={message_type_value}"
         )
 
     def _require_adapter(self, adapter_name: str) -> object:

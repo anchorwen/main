@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from core.contracts.domain.dispatch_result import DispatchResult
 from core.contracts.enums import DispatchStatus
@@ -26,17 +26,19 @@ class StubVenueAdapter(VenueAdapter):
         self._dispatches: list[dict] = []
 
     def dispatch(self, request, envelope) -> DispatchResult:
-        self._dispatches.append({
-            "dispatch_id": request.dispatch_id,
-            "message_id": envelope.message_id,
-            "venue": self.venue_id,
-        })
+        self._dispatches.append(
+            {
+                "dispatch_id": request.dispatch_id,
+                "message_id": envelope.message_id,
+                "venue": self.venue_id,
+            }
+        )
         return DispatchResult(
             schema_version=SCHEMA_DISPATCH_RESULT,
             dispatch_id=request.dispatch_id,
             message_id=envelope.message_id,
             status=DispatchStatus.PROTOCOL_VALIDATED,
-            recorded_at=datetime.utcnow(),
+            recorded_at=request.requested_at,
             target=envelope.target,
             adapter_name=f"stub_{self.venue_id}",
         )
@@ -45,8 +47,11 @@ class StubVenueAdapter(VenueAdapter):
         return list(self._dispatches)
 
     def health(self) -> dict:
-        return {"venue_id": self.venue_id, "status": "healthy",
-                "dispatch_count": len(self._dispatches)}
+        return {
+            "venue_id": self.venue_id,
+            "status": "healthy",
+            "dispatch_count": len(self._dispatches),
+        }
 
 
 class VenueRouter:
@@ -78,30 +83,32 @@ class VenueRouter:
                 dispatch_id=request.dispatch_id,
                 message_id=envelope.message_id,
                 status=DispatchStatus.FAILED,
-                recorded_at=datetime.utcnow(),
+                recorded_at=datetime.now(UTC).replace(tzinfo=None),
                 target=envelope.target,
                 adapter_name="venue_router",
                 failure_reason=f"no adapter for venue: {venue}",
                 trace={"error": f"no adapter for venue: {venue}"},
             )
 
-        self._route_log.append({
-            "venue": venue,
-            "adapter": adapter.venue_id,
-            "message_id": envelope.message_id,
-            "routed_at": datetime.utcnow().isoformat(),
-        })
+        self._route_log.append(
+            {
+                "venue": venue,
+                "adapter": adapter.venue_id,
+                "message_id": envelope.message_id,
+                "routed_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+            }
+        )
         return adapter.dispatch(request, envelope)
 
     def _resolve_venue(self, envelope) -> str:
-        venue = envelope.payload.get("venue", "") if envelope.payload else ""
+        venue = envelope.payload.get("venue", "") if envelope.payload is not None else ""
         if not venue:
             venue = getattr(envelope, "target", "default")
         return venue
 
     def list_venues(self) -> list[dict]:
         result = []
-        for vid, adapter in self._adapters.items():
+        for _vid, adapter in self._adapters.items():
             result.append(adapter.health())
         return result
 

@@ -1,9 +1,9 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from core.contracts.domain.decision_intent import DecisionIntent
-from core.protocol.schema_versions import SCHEMA_DECISION_COMPILER, SCHEMA_DECISION_INTENT
 from core.contracts.enums import DecisionAction, DecisionSide, SystemMode
 from core.contracts.ids import new_intent_id
+from core.protocol.schema_versions import SCHEMA_DECISION_COMPILER, SCHEMA_DECISION_INTENT
 
 
 class DecisionCompiler:
@@ -22,7 +22,11 @@ class DecisionCompiler:
             side=side.value,
         )
 
-        current_mode = mode_state.current_mode.value if hasattr(mode_state.current_mode, "value") else mode_state.current_mode
+        current_mode = (
+            mode_state.current_mode.value
+            if hasattr(mode_state.current_mode, "value")
+            else mode_state.current_mode
+        )
 
         return DecisionIntent(
             schema_version=SCHEMA_DECISION_INTENT,
@@ -30,7 +34,7 @@ class DecisionCompiler:
             candidate_id=candidate.candidate_id,
             snapshot_id=candidate.snapshot_id,
             event_time=candidate.event_time,
-            compiled_at=datetime.utcnow(),
+            compiled_at=datetime.now(UTC).replace(tzinfo=None),
             symbol=signal["symbol"],
             venue=signal["venue"],
             action=action,
@@ -44,7 +48,9 @@ class DecisionCompiler:
             trace={
                 "compiler_version": SCHEMA_DECISION_COMPILER,
                 "mode": current_mode,
-                "applied_overrides": [getattr(item, "override_id", "unknown") for item in active_overrides],
+                "applied_overrides": [
+                    getattr(item, "override_id", "unknown") for item in active_overrides
+                ],
                 "effective_policy": effective_policy,
             },
             extensions={},
@@ -79,7 +85,11 @@ class DecisionCompiler:
             policy["entry_long_threshold"] = max(policy["entry_long_threshold"], 0.78)
             policy["entry_short_threshold"] = max(policy["entry_short_threshold"], 0.78)
             policy["probability_scale"] = min(policy["probability_scale"], 0.90)
-        elif current_mode in {SystemMode.OBSERVE_ONLY, SystemMode.LIQUIDATION_ONLY, SystemMode.HALTED}:
+        elif current_mode in {
+            SystemMode.OBSERVE_ONLY,
+            SystemMode.LIQUIDATION_ONLY,
+            SystemMode.HALTED,
+        }:
             policy["force_passive"] = True
 
         return policy

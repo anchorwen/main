@@ -1,11 +1,12 @@
 """Runtime risk and governance approval contracts."""
+
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from core.execution.gateway_contracts import OrderRequest
-from core.strategies.contracts import Signal
 from core.runtime.schema_versions import SCHEMA_EXECUTION_APPROVAL
+from core.strategies.contracts import Signal
 
 
 @dataclass(frozen=True)
@@ -27,8 +28,14 @@ class ExecutionApproval:
             raise ValueError("denied approval must include reasons")
 
     @classmethod
-    def allow(cls, approval_id: str, signal: Signal, order: OrderRequest, gate: str,
-              constraints: dict[str, Any] | None = None) -> "ExecutionApproval":
+    def allow(
+        cls,
+        approval_id: str,
+        signal: Signal,
+        order: OrderRequest,
+        gate: str,
+        constraints: dict[str, Any] | None = None,
+    ) -> "ExecutionApproval":
         return cls(
             schema_version=SCHEMA_EXECUTION_APPROVAL,
             approval_id=approval_id,
@@ -36,13 +43,14 @@ class ExecutionApproval:
             order_id=order.order_id,
             approved=True,
             gate=gate,
-            decided_at=datetime.utcnow(),
+            decided_at=datetime.now(UTC).replace(tzinfo=None),
             constraints=constraints or {},
         )
 
     @classmethod
-    def deny(cls, approval_id: str, signal: Signal, order: OrderRequest, gate: str,
-             reasons: list[str]) -> "ExecutionApproval":
+    def deny(
+        cls, approval_id: str, signal: Signal, order: OrderRequest, gate: str, reasons: list[str]
+    ) -> "ExecutionApproval":
         return cls(
             schema_version=SCHEMA_EXECUTION_APPROVAL,
             approval_id=approval_id,
@@ -50,7 +58,7 @@ class ExecutionApproval:
             order_id=order.order_id,
             approved=False,
             gate=gate,
-            decided_at=datetime.utcnow(),
+            decided_at=datetime.now(UTC).replace(tzinfo=None),
             reasons=reasons,
         )
 

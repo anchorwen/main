@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from core.contracts.enums import DecisionAction, DecisionSide
 from core.deployment.domain_keys import (
@@ -25,12 +25,12 @@ class DecisionIntent:
     side: DecisionSide
     conviction: float
     priority: str
-    suggested_risk_fraction: Optional[float] = None
-    expected_edge_bps: Optional[float] = None
-    expected_hold_seconds: Optional[int] = None
-    reason_tags: List[str] = field(default_factory=list)
-    trace: Dict[str, Any] = field(default_factory=dict)
-    extensions: Dict[str, Any] = field(default_factory=dict)
+    suggested_risk_fraction: float | None = None
+    expected_edge_bps: float | None = None
+    expected_hold_seconds: int | None = None
+    reason_tags: list[str] = field(default_factory=list)
+    trace: dict[str, Any] = field(default_factory=dict)
+    extensions: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.conviction <= 1.0:

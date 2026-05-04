@@ -1,6 +1,7 @@
 """Alpha risk budget export from allocation recommendations."""
+
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from core.alpha.schema_versions import SCHEMA_ALPHA_RISK_BUDGET
@@ -47,7 +48,7 @@ class AlphaRiskBudgetExporter:
             }
         return {
             "schema_version": SCHEMA_ALPHA_RISK_BUDGET,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             "source_schema_version": allocation.get("schema_version"),
             "total_notional": allocation.get("total_notional", 0.0),
             "budget_count": len(budgets),

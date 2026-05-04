@@ -3,19 +3,26 @@
 ReleaseGateService combines readiness, runbook preflight, SLO status,
 and configuration validation into a deployment gate decision.
 """
-from datetime import datetime
-from pathlib import Path
+
 import json
+from datetime import UTC, datetime
+from pathlib import Path
 
 from core.deployment.domain_keys import (
     EVIDENCE_SECTION_ALPHA_BUDGET_USAGE,
     EVIDENCE_SECTION_PREFLIGHT,
+    PAYLOAD_KEY_ALLOW_COUNT,
+    PAYLOAD_KEY_ALLOWED,
     PAYLOAD_KEY_ALPHA_COUNT,
+    PAYLOAD_KEY_BLOCK_COUNT,
+    PAYLOAD_KEY_BLOCKING_SIGNALS,
+    PAYLOAD_KEY_CONFIG,
     PAYLOAD_KEY_DECISION,
     PAYLOAD_KEY_DETAIL,
-    PAYLOAD_KEY_ERRORS,
     PAYLOAD_KEY_ERROR,
     PAYLOAD_KEY_ERROR_BUDGET,
+    PAYLOAD_KEY_ERRORS,
+    PAYLOAD_KEY_EVIDENCE,
     PAYLOAD_KEY_FAILED_CHECKS,
     PAYLOAD_KEY_FAILED_OBJECTIVES,
     PAYLOAD_KEY_GENERATED_AT,
@@ -25,25 +32,19 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_READINESS,
     PAYLOAD_KEY_READY,
     PAYLOAD_KEY_SCHEMA_VERSION,
+    PAYLOAD_KEY_SIGNAL_COUNT,
+    PAYLOAD_KEY_SIGNALS,
     PAYLOAD_KEY_SLO,
     PAYLOAD_KEY_STATUS,
     PAYLOAD_KEY_STRICT,
     PAYLOAD_KEY_SUMMARY,
-    PAYLOAD_KEY_VALIDATION_MODE,
     PAYLOAD_KEY_USAGE_DATE,
     PAYLOAD_KEY_VALID,
-    PAYLOAD_KEY_WARNINGS,
-    PAYLOAD_KEY_WARNING_COUNT,
-    PAYLOAD_KEY_ALLOWED,
-    PAYLOAD_KEY_SIGNALS,
-    PAYLOAD_KEY_SIGNAL_COUNT,
-    PAYLOAD_KEY_ALLOW_COUNT,
+    PAYLOAD_KEY_VALIDATION_MODE,
     PAYLOAD_KEY_WARN_COUNT,
-    PAYLOAD_KEY_BLOCK_COUNT,
-    PAYLOAD_KEY_BLOCKING_SIGNALS,
+    PAYLOAD_KEY_WARNING_COUNT,
     PAYLOAD_KEY_WARNING_SIGNALS,
-    PAYLOAD_KEY_CONFIG,
-    PAYLOAD_KEY_EVIDENCE,
+    PAYLOAD_KEY_WARNINGS,
     RELEASE_GATE_FAILED_CHECK_PREFLIGHT_EXCEPTION,
     RELEASE_GATE_FAILED_CHECK_READINESS_EXCEPTION,
     RELEASE_GATE_FAILED_OBJECTIVE_SLO_EXCEPTION,
@@ -88,10 +89,12 @@ class ReleaseGateService:
             PAYLOAD_KEY_CONFIG: self._compact_config(config),
         }
         if alpha_budget_usage_report is not None:
-            evidence[EVIDENCE_SECTION_ALPHA_BUDGET_USAGE] = self._compact_alpha_budget(alpha_budget_usage_report)
+            evidence[EVIDENCE_SECTION_ALPHA_BUDGET_USAGE] = self._compact_alpha_budget(
+                alpha_budget_usage_report
+            )
         return {
             PAYLOAD_KEY_SCHEMA_VERSION: SCHEMA_RELEASE_GATE,
-            PAYLOAD_KEY_GENERATED_AT: datetime.utcnow().isoformat(),
+            PAYLOAD_KEY_GENERATED_AT: datetime.now(UTC).replace(tzinfo=None).isoformat(),
             PAYLOAD_KEY_VALIDATION_MODE: validation_mode,
             PAYLOAD_KEY_STRICT: strict,
             PAYLOAD_KEY_DECISION: decision,
@@ -127,7 +130,9 @@ class ReleaseGateService:
             return {
                 PAYLOAD_KEY_READY: False,
                 PAYLOAD_KEY_ERROR: str(exc),
-                PAYLOAD_KEY_SUMMARY: {PAYLOAD_KEY_FAILED_CHECKS: [RELEASE_GATE_FAILED_CHECK_READINESS_EXCEPTION]},
+                PAYLOAD_KEY_SUMMARY: {
+                    PAYLOAD_KEY_FAILED_CHECKS: [RELEASE_GATE_FAILED_CHECK_READINESS_EXCEPTION]
+                },
             }
 
     def _safe_preflight(self, *, validation_mode: str | None = None) -> dict:
@@ -138,7 +143,9 @@ class ReleaseGateService:
             return {
                 PAYLOAD_KEY_PASSED: False,
                 PAYLOAD_KEY_ERROR: str(exc),
-                PAYLOAD_KEY_SUMMARY: {PAYLOAD_KEY_FAILED_CHECKS: [RELEASE_GATE_FAILED_CHECK_PREFLIGHT_EXCEPTION]},
+                PAYLOAD_KEY_SUMMARY: {
+                    PAYLOAD_KEY_FAILED_CHECKS: [RELEASE_GATE_FAILED_CHECK_PREFLIGHT_EXCEPTION]
+                },
             }
 
     def _safe_slo(self) -> dict:
@@ -154,38 +161,72 @@ class ReleaseGateService:
     def _safe_config(self) -> dict:
         try:
             from core.deployment.operational_support import ConfigValidator
+
             return ConfigValidator().validate(self._container.config)
         except Exception as exc:
-            return {PAYLOAD_KEY_VALID: False, PAYLOAD_KEY_ERRORS: [str(exc)], PAYLOAD_KEY_WARNINGS: []}
+            return {
+                PAYLOAD_KEY_VALID: False,
+                PAYLOAD_KEY_ERRORS: [str(exc)],
+                PAYLOAD_KEY_WARNINGS: [],
+            }
 
-    def _build_signals(self, readiness: dict, preflight: dict, slo: dict, config: dict,
-                       alpha_budget_usage_report: dict | None = None) -> list[dict]:
+    def _build_signals(
+        self,
+        readiness: dict,
+        preflight: dict,
+        slo: dict,
+        config: dict,
+        alpha_budget_usage_report: dict | None = None,
+    ) -> list[dict]:
         signals = [
             {
                 PAYLOAD_KEY_NAME: PAYLOAD_KEY_READINESS,
-                PAYLOAD_KEY_LEVEL: RELEASE_PIPELINE_GATE_DECISION_BLOCK if not readiness.get(PAYLOAD_KEY_READY, False) else RELEASE_PIPELINE_GATE_DECISION_ALLOW,
+                PAYLOAD_KEY_LEVEL: RELEASE_PIPELINE_GATE_DECISION_BLOCK
+                if not readiness.get(PAYLOAD_KEY_READY, False)
+                else RELEASE_PIPELINE_GATE_DECISION_ALLOW,
                 PAYLOAD_KEY_PASSED: bool(readiness.get(PAYLOAD_KEY_READY, False)),
-                PAYLOAD_KEY_DETAIL: {PAYLOAD_KEY_FAILED_CHECKS: readiness.get(PAYLOAD_KEY_SUMMARY, {}).get(PAYLOAD_KEY_FAILED_CHECKS, [])},
+                PAYLOAD_KEY_DETAIL: {
+                    PAYLOAD_KEY_FAILED_CHECKS: readiness.get(PAYLOAD_KEY_SUMMARY, {}).get(
+                        PAYLOAD_KEY_FAILED_CHECKS, []
+                    )
+                },
             },
             {
                 PAYLOAD_KEY_NAME: EVIDENCE_SECTION_PREFLIGHT,
-                PAYLOAD_KEY_LEVEL: RELEASE_PIPELINE_GATE_DECISION_BLOCK if not preflight.get(PAYLOAD_KEY_PASSED, False) else RELEASE_PIPELINE_GATE_DECISION_ALLOW,
+                PAYLOAD_KEY_LEVEL: RELEASE_PIPELINE_GATE_DECISION_BLOCK
+                if not preflight.get(PAYLOAD_KEY_PASSED, False)
+                else RELEASE_PIPELINE_GATE_DECISION_ALLOW,
                 PAYLOAD_KEY_PASSED: bool(preflight.get(PAYLOAD_KEY_PASSED, False)),
-                PAYLOAD_KEY_DETAIL: {PAYLOAD_KEY_FAILED_CHECKS: preflight.get(PAYLOAD_KEY_SUMMARY, {}).get(PAYLOAD_KEY_FAILED_CHECKS, [])},
+                PAYLOAD_KEY_DETAIL: {
+                    PAYLOAD_KEY_FAILED_CHECKS: preflight.get(PAYLOAD_KEY_SUMMARY, {}).get(
+                        PAYLOAD_KEY_FAILED_CHECKS, []
+                    )
+                },
             },
             {
                 PAYLOAD_KEY_NAME: PAYLOAD_KEY_SLO,
-                PAYLOAD_KEY_LEVEL: RELEASE_PIPELINE_GATE_DECISION_WARN if slo.get(PAYLOAD_KEY_STATUS) != SLO_STATUS_HEALTHY else RELEASE_PIPELINE_GATE_DECISION_ALLOW,
+                PAYLOAD_KEY_LEVEL: RELEASE_PIPELINE_GATE_DECISION_WARN
+                if slo.get(PAYLOAD_KEY_STATUS) != SLO_STATUS_HEALTHY
+                else RELEASE_PIPELINE_GATE_DECISION_ALLOW,
                 PAYLOAD_KEY_PASSED: slo.get(PAYLOAD_KEY_STATUS) == SLO_STATUS_HEALTHY,
-                PAYLOAD_KEY_DETAIL: {PAYLOAD_KEY_FAILED_OBJECTIVES: slo.get(PAYLOAD_KEY_FAILED_OBJECTIVES, [])},
+                PAYLOAD_KEY_DETAIL: {
+                    PAYLOAD_KEY_FAILED_OBJECTIVES: slo.get(PAYLOAD_KEY_FAILED_OBJECTIVES, [])
+                },
             },
             {
                 PAYLOAD_KEY_NAME: PAYLOAD_KEY_CONFIG,
-                PAYLOAD_KEY_LEVEL: RELEASE_PIPELINE_GATE_DECISION_BLOCK if not config.get(PAYLOAD_KEY_VALID, False) else (
-                    RELEASE_PIPELINE_GATE_DECISION_WARN if config.get(PAYLOAD_KEY_WARNINGS) else RELEASE_PIPELINE_GATE_DECISION_ALLOW
+                PAYLOAD_KEY_LEVEL: RELEASE_PIPELINE_GATE_DECISION_BLOCK
+                if not config.get(PAYLOAD_KEY_VALID, False)
+                else (
+                    RELEASE_PIPELINE_GATE_DECISION_WARN
+                    if config.get(PAYLOAD_KEY_WARNINGS)
+                    else RELEASE_PIPELINE_GATE_DECISION_ALLOW
                 ),
                 PAYLOAD_KEY_PASSED: bool(config.get(PAYLOAD_KEY_VALID, False)),
-                PAYLOAD_KEY_DETAIL: {PAYLOAD_KEY_ERRORS: config.get(PAYLOAD_KEY_ERRORS, []), PAYLOAD_KEY_WARNINGS: config.get(PAYLOAD_KEY_WARNINGS, [])},
+                PAYLOAD_KEY_DETAIL: {
+                    PAYLOAD_KEY_ERRORS: config.get(PAYLOAD_KEY_ERRORS, []),
+                    PAYLOAD_KEY_WARNINGS: config.get(PAYLOAD_KEY_WARNINGS, []),
+                },
             },
         ]
         if alpha_budget_usage_report is not None:
@@ -196,7 +237,9 @@ class ReleaseGateService:
         warning_count = int(report.get(PAYLOAD_KEY_WARNING_COUNT, 0))
         return {
             PAYLOAD_KEY_NAME: EVIDENCE_SECTION_ALPHA_BUDGET_USAGE,
-            PAYLOAD_KEY_LEVEL: RELEASE_PIPELINE_GATE_DECISION_WARN if warning_count > 0 else RELEASE_PIPELINE_GATE_DECISION_ALLOW,
+            PAYLOAD_KEY_LEVEL: RELEASE_PIPELINE_GATE_DECISION_WARN
+            if warning_count > 0
+            else RELEASE_PIPELINE_GATE_DECISION_ALLOW,
             PAYLOAD_KEY_PASSED: warning_count == 0,
             PAYLOAD_KEY_DETAIL: {
                 PAYLOAD_KEY_WARNING_COUNT: warning_count,
@@ -225,20 +268,32 @@ class ReleaseGateService:
             PAYLOAD_KEY_ALLOW_COUNT: levels.get(RELEASE_PIPELINE_GATE_DECISION_ALLOW, 0),
             PAYLOAD_KEY_WARN_COUNT: levels.get(RELEASE_PIPELINE_GATE_DECISION_WARN, 0),
             PAYLOAD_KEY_BLOCK_COUNT: levels.get(RELEASE_PIPELINE_GATE_DECISION_BLOCK, 0),
-            PAYLOAD_KEY_BLOCKING_SIGNALS: [s[PAYLOAD_KEY_NAME] for s in signals if s[PAYLOAD_KEY_LEVEL] == RELEASE_PIPELINE_GATE_DECISION_BLOCK],
-            PAYLOAD_KEY_WARNING_SIGNALS: [s[PAYLOAD_KEY_NAME] for s in signals if s[PAYLOAD_KEY_LEVEL] == RELEASE_PIPELINE_GATE_DECISION_WARN],
+            PAYLOAD_KEY_BLOCKING_SIGNALS: [
+                s[PAYLOAD_KEY_NAME]
+                for s in signals
+                if s[PAYLOAD_KEY_LEVEL] == RELEASE_PIPELINE_GATE_DECISION_BLOCK
+            ],
+            PAYLOAD_KEY_WARNING_SIGNALS: [
+                s[PAYLOAD_KEY_NAME]
+                for s in signals
+                if s[PAYLOAD_KEY_LEVEL] == RELEASE_PIPELINE_GATE_DECISION_WARN
+            ],
         }
 
     def _compact_readiness(self, report: dict) -> dict:
         return {
             PAYLOAD_KEY_READY: report.get(PAYLOAD_KEY_READY, False),
-            PAYLOAD_KEY_FAILED_CHECKS: report.get(PAYLOAD_KEY_SUMMARY, {}).get(PAYLOAD_KEY_FAILED_CHECKS, []),
+            PAYLOAD_KEY_FAILED_CHECKS: report.get(PAYLOAD_KEY_SUMMARY, {}).get(
+                PAYLOAD_KEY_FAILED_CHECKS, []
+            ),
         }
 
     def _compact_runbook(self, result: dict) -> dict:
         return {
             PAYLOAD_KEY_PASSED: result.get(PAYLOAD_KEY_PASSED, False),
-            PAYLOAD_KEY_FAILED_CHECKS: result.get(PAYLOAD_KEY_SUMMARY, {}).get(PAYLOAD_KEY_FAILED_CHECKS, []),
+            PAYLOAD_KEY_FAILED_CHECKS: result.get(PAYLOAD_KEY_SUMMARY, {}).get(
+                PAYLOAD_KEY_FAILED_CHECKS, []
+            ),
         }
 
     def _compact_slo(self, report: dict) -> dict:

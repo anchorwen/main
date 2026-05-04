@@ -1,5 +1,6 @@
 """Runtime summary service for dashboard/operator views."""
-from datetime import datetime
+
+from datetime import UTC, datetime
 from statistics import mean
 from typing import Any
 
@@ -25,7 +26,7 @@ class RuntimeSummaryService:
             records = records[:limit]
         return {
             "schema_version": SCHEMA_RUNTIME_SUMMARY,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             "cycle_count": len(records),
             "latest_cycle_id": records[0]["runtime_cycle_id"] if records else None,
             "totals": self._totals(records),
@@ -43,17 +44,21 @@ class RuntimeSummaryService:
             "approvals": sum(r.get("approval_count", 0) for r in records),
             "skipped": sum(r.get("skipped_count", 0) for r in records),
             "denied_approvals": len([a for a in approvals if not a.get("approved", False)]),
-            "filled_orders": sum((self._quality(r).get("filled_order_count") or 0) for r in records),
-            "rejected_orders": sum((self._quality(r).get("rejected_order_count") or 0) for r in records),
+            "filled_orders": sum(
+                (self._quality(r).get("filled_order_count") or 0) for r in records
+            ),
+            "rejected_orders": sum(
+                (self._quality(r).get("rejected_order_count") or 0) for r in records
+            ),
         }
 
     def _averages(self, records: list[dict]) -> dict[str, Any]:
         return {
             "fill_ratio": self._avg([self._quality(r).get("average_fill_ratio") for r in records]),
             "latency_ms": self._avg([self._quality(r).get("average_latency_ms") for r in records]),
-            "arrival_slippage_bps": self._avg([
-                self._quality(r).get("average_arrival_slippage_bps") for r in records
-            ]),
+            "arrival_slippage_bps": self._avg(
+                [self._quality(r).get("average_arrival_slippage_bps") for r in records]
+            ),
         }
 
     def _per_strategy(self, records: list[dict]) -> dict[str, dict[str, Any]]:
@@ -78,15 +83,20 @@ class RuntimeSummaryService:
     def _per_venue(self, records: list[dict]) -> dict[str, dict[str, Any]]:
         summary: dict[str, dict[str, Any]] = {}
         for record in records:
-            venue_summary = (self._payload(record).get("quality_report") or {}).get("venue_summary") or {}
+            venue_summary = (self._payload(record).get("quality_report") or {}).get(
+                "venue_summary"
+            ) or {}
             for venue, values in venue_summary.items():
-                bucket = summary.setdefault(venue, {
-                    "orders": 0,
-                    "filled_orders": 0,
-                    "rejected_orders": 0,
-                    "fill_ratios": [],
-                    "latencies": [],
-                })
+                bucket = summary.setdefault(
+                    venue,
+                    {
+                        "orders": 0,
+                        "filled_orders": 0,
+                        "rejected_orders": 0,
+                        "fill_ratios": [],
+                        "latencies": [],
+                    },
+                )
                 bucket["orders"] += values.get("order_count", 0)
                 bucket["filled_orders"] += values.get("filled_order_count", 0)
                 bucket["rejected_orders"] += values.get("rejected_order_count", 0)

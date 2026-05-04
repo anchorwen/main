@@ -31,9 +31,7 @@ class DecisionScorer:
             self.DIMENSION_ACCURACY: 0.40,
             self.DIMENSION_RISK: 0.15,
         }
-        composite = sum(
-            dimensions[d]["score"] * weights[d] for d in dimensions
-        )
+        composite = sum(dimensions[d]["score"] * weights[d] for d in dimensions)
 
         return {
             "composite_score": round(composite, 4),
@@ -65,9 +63,7 @@ class DecisionScorer:
     def _score_timing(self, outcome: dict, market_context: dict) -> dict:
         timeline = outcome.get("timeline", {})
         event_count = timeline.get("event_count", 0)
-        partial_fills = sum(
-            1 for et in timeline.get("event_types", []) if et == "partially_filled"
-        )
+        partial_fills = sum(1 for et in timeline.get("event_types", []) if et == "partially_filled")
 
         if event_count == 0:
             return {"score": 0.0, "reason": "no_events"}

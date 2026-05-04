@@ -1,6 +1,7 @@
 """Runtime evidence record contracts."""
+
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from core.runtime.integration_contracts import RuntimePipelineResult
@@ -21,14 +22,15 @@ class RuntimeEvidenceRecord:
     payload: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_pipeline_result(cls, *, evidence_id: str, runtime_cycle_id: str,
-                             result: RuntimePipelineResult) -> "RuntimeEvidenceRecord":
+    def from_pipeline_result(
+        cls, *, evidence_id: str, runtime_cycle_id: str, result: RuntimePipelineResult
+    ) -> "RuntimeEvidenceRecord":
         quality = result.quality_report
         return cls(
             schema_version=SCHEMA_RUNTIME_EVIDENCE_RECORD,
             evidence_id=evidence_id,
             runtime_cycle_id=runtime_cycle_id,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(UTC).replace(tzinfo=None),
             signal_count=len(result.signals),
             order_count=len(result.orders),
             approval_count=len(result.approvals),

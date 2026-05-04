@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 from core.contracts.enums import CommunicationMessageType, CommunicationPriority
 from core.deployment.domain_keys import (
@@ -17,17 +17,17 @@ class CommunicationEnvelope:
     schema_version: str
     message_id: str
     correlation_id: str
-    causation_id: Optional[str]
+    causation_id: str | None
     event_time: datetime
     producer: str
     target: str
     message_type: CommunicationMessageType | str
     priority: CommunicationPriority | str
-    payload: Dict[str, Any] = field(default_factory=dict)
-    deadline_at: Optional[datetime] = None
-    idempotency_key: Optional[str] = None
-    trace: Dict[str, Any] = field(default_factory=dict)
-    extensions: Dict[str, Any] = field(default_factory=dict)
+    payload: dict[str, Any] = field(default_factory=dict)
+    deadline_at: datetime | None = None
+    idempotency_key: str | None = None
+    trace: dict[str, Any] = field(default_factory=dict)
+    extensions: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.message_id:
@@ -40,8 +40,3 @@ class CommunicationEnvelope:
             raise ValueError(CONTRACT_ERROR_TARGET_REQUIRED)
         if self.deadline_at is not None and self.deadline_at < self.event_time:
             raise ValueError(CONTRACT_ERROR_DEADLINE_AT_BEFORE_EVENT_TIME)
-
-
-
-
-

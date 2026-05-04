@@ -34,8 +34,7 @@ class CircuitBreaker:
         self._half_open_calls = 0
         self._total_trips = 0
 
-    @property
-    def state(self) -> CircuitState:
+    def _maybe_transition(self) -> CircuitState:
         with self._lock:
             if self._state == CircuitState.OPEN:
                 if time.monotonic() - self._last_failure_time >= self._cooldown_seconds:
@@ -43,8 +42,12 @@ class CircuitBreaker:
                     self._half_open_calls = 0
             return self._state
 
+    @property
+    def state(self) -> CircuitState:
+        return self._maybe_transition()
+
     def allow_request(self) -> bool:
-        current = self.state
+        current = self._maybe_transition()
         if current == CircuitState.CLOSED:
             return True
         if current == CircuitState.HALF_OPEN:

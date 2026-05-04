@@ -1,5 +1,6 @@
 """Order state machine for execution gateways."""
-from datetime import datetime
+
+from datetime import UTC, datetime
 
 from core.execution.gateway_contracts import Fill, OrderRequest, OrderState
 
@@ -31,18 +32,20 @@ class OrderStateMachine:
             order_type=request.order_type,
             venue=venue,
             created_at=request.created_at,
-            updated_at=datetime.utcnow(),
+            updated_at=datetime.now(UTC).replace(tzinfo=None),
             limit_price=request.limit_price,
         )
 
-    def transition(self, state: OrderState, new_status: str, *, reason: str | None = None) -> OrderState:
+    def transition(
+        self, state: OrderState, new_status: str, *, reason: str | None = None
+    ) -> OrderState:
         if new_status not in self.VALID_TRANSITIONS:
             raise ValueError(f"unknown order status: {new_status}")
         allowed = self.VALID_TRANSITIONS.get(state.status, set())
         if new_status not in allowed:
             raise ValueError(f"invalid order transition: {state.status} -> {new_status}")
         state.status = new_status
-        state.updated_at = datetime.utcnow()
+        state.updated_at = datetime.now(UTC).replace(tzinfo=None)
         if new_status == "rejected":
             state.rejection_reason = reason or "rejected"
         return state

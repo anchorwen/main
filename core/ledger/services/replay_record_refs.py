@@ -5,18 +5,18 @@ duplicate nested `.get()` paths across services.
 """
 
 from core.deployment.domain_keys import (
-    PAYLOAD_KEY_DECISION,
     EXECUTION_MODE_VALUE_FULL,
     EXECUTION_MODE_VALUE_TARGETED,
     PAYLOAD_KEY_BLOCKED_MESSAGES,
-    PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE,
-    PAYLOAD_KEY_EXECUTION_MODE,
+    PAYLOAD_KEY_DECISION,
     PAYLOAD_KEY_EXECUTION,
+    PAYLOAD_KEY_EXECUTION_MODE,
+    PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE,
+    PAYLOAD_KEY_EXTENSIONS,
+    PAYLOAD_KEY_GATE_DECISION,
     PAYLOAD_KEY_GOVERNANCE_DECISION,
     PAYLOAD_KEY_GOVERNANCE_POSTURE,
     PAYLOAD_KEY_GOVERNANCE_SUMMARY,
-    PAYLOAD_KEY_EXTENSIONS,
-    PAYLOAD_KEY_GATE_DECISION,
     PAYLOAD_KEY_MESSAGE_ID,
     PAYLOAD_KEY_PLAN,
     PAYLOAD_KEY_POSTURE,
@@ -89,7 +89,11 @@ def grouped_reasons(items: list[dict]) -> dict:
 
 
 def message_ids(items: list[dict]) -> list[str]:
-    return [item.get(PAYLOAD_KEY_MESSAGE_ID) for item in items if item.get(PAYLOAD_KEY_MESSAGE_ID) is not None]
+    return [
+        item.get(PAYLOAD_KEY_MESSAGE_ID)
+        for item in items
+        if item.get(PAYLOAD_KEY_MESSAGE_ID) is not None
+    ]
 
 
 def execution_mode(replay_record: dict, *, skipped_message_ids: list[str]) -> str:
@@ -118,7 +122,10 @@ def governance_sources(
 
     projection_source = None
     execution = execution_block(replay_record)
-    if execution.get(PAYLOAD_KEY_GOVERNANCE_DECISION) is not None or execution.get(PAYLOAD_KEY_GOVERNANCE_POSTURE) is not None:
+    if (
+        execution.get(PAYLOAD_KEY_GOVERNANCE_DECISION) is not None
+        or execution.get(PAYLOAD_KEY_GOVERNANCE_POSTURE) is not None
+    ):
         projection_source = projection_source_execution
 
     return {
@@ -150,4 +157,3 @@ def execution_governance_projection(replay_record: dict) -> dict:
         PAYLOAD_KEY_DECISION: execution.get(PAYLOAD_KEY_GOVERNANCE_DECISION),
         PAYLOAD_KEY_POSTURE: execution.get(PAYLOAD_KEY_GOVERNANCE_POSTURE),
     }
-

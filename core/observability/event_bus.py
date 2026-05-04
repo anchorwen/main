@@ -1,5 +1,6 @@
+import logging
 import threading
-from typing import Callable
+from collections.abc import Callable
 
 
 class EventBus:
@@ -35,7 +36,7 @@ class EventBus:
             handlers = list(self._subscribers.get(event_type, []))
             self._event_log.append({"event_type": event_type, "payload": payload})
             if len(self._event_log) > self._max_log:
-                self._event_log = self._event_log[-self._max_log:]
+                self._event_log = self._event_log[-self._max_log :]
 
         delivered = 0
         for handler in handlers:
@@ -43,7 +44,7 @@ class EventBus:
                 handler(event_type, payload)
                 delivered += 1
             except Exception:
-                pass
+                logging.exception("EventBus handler failed for event_type=%s", event_type)
         return delivered
 
     def get_event_log(self, limit: int = 50) -> list[dict]:

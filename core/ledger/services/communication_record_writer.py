@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from core.contracts.domain.communication_record import CommunicationRecord
 from core.contracts.ids import new_communication_record_id
 from core.ledger.stream_names import LEDGER_STREAM_COMMUNICATIONS
@@ -22,4 +20,3 @@ class CommunicationRecordWriter:
             stream_name=LEDGER_STREAM_COMMUNICATIONS,
         )
         return record, ledger_path
-

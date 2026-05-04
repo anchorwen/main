@@ -1,21 +1,23 @@
 from datetime import timedelta
 
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
+from core.contracts.enums import CommunicationMessageType, CommunicationPriority
+from core.contracts.ids import new_message_id
 from core.protocol.schema_versions import (
     SCHEMA_COMMUNICATION_ENVELOPE,
     SCHEMA_INTENT_MESSAGE_BUILDER,
 )
-from core.contracts.enums import CommunicationMessageType, CommunicationPriority
-from core.contracts.ids import new_message_id
 
 
 class IntentMessageBuilder:
-    def __init__(self, producer: str, target: str, default_deadline_seconds: int = 5):
+    def __init__(self, producer: str, target: str, default_deadline_seconds: int = 30):
         self._producer = producer
         self._target = target
         self._default_deadline_seconds = default_deadline_seconds
 
-    def build(self, intent, *, correlation_id: str, causation_id: str | None = None) -> CommunicationEnvelope:
+    def build(
+        self, intent, *, correlation_id: str, causation_id: str | None = None
+    ) -> CommunicationEnvelope:
         return CommunicationEnvelope(
             schema_version=SCHEMA_COMMUNICATION_ENVELOPE,
             message_id=new_message_id(),
@@ -56,8 +58,3 @@ class IntentMessageBuilder:
         if getattr(intent, "priority", "normal") == "high":
             return CommunicationPriority.HIGH
         return CommunicationPriority.NORMAL
-
-
-
-
-

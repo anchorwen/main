@@ -1,6 +1,3 @@
-from datetime import datetime
-
-
 class GovernanceRule:
     """A single declarative governance rule."""
 
@@ -54,7 +51,8 @@ class GovernanceRuleEngine:
 
                     if result.get("transition_to"):
                         self._governance.transition(
-                            brain_id, result["transition_to"],
+                            brain_id,
+                            result["transition_to"],
                             reason=f"rule:{rule.name}",
                         )
 
@@ -76,12 +74,15 @@ class GovernanceRuleEngine:
         engine = cls(governance_service, audit_log)
         gs = governance_service
 
-        engine.add_rule(GovernanceRule(
-            name="auto_freeze_critical",
-            condition_fn=lambda ctx: ctx.get("health_signal") == "critical" and ctx.get("sample_count", 0) >= 10,
-            action_fn=lambda ctx: {"transition_to": "frozen", "reason": "auto_freeze_critical"},
-            priority=100,
-        ))
+        engine.add_rule(
+            GovernanceRule(
+                name="auto_freeze_critical",
+                condition_fn=lambda ctx: ctx.get("health_signal") == "critical"
+                and ctx.get("sample_count", 0) >= 10,
+                action_fn=lambda ctx: {"transition_to": "frozen", "reason": "auto_freeze_critical"},
+                priority=100,
+            )
+        )
 
         def _demote_condition(ctx):
             if ctx.get("health_signal") != "degraded" or ctx.get("sample_count", 0) < 15:
@@ -89,33 +90,45 @@ class GovernanceRuleEngine:
             state = gs.get_brain_state(ctx["brain_id"])
             return state is not None and state.get("status") == "live"
 
-        engine.add_rule(GovernanceRule(
-            name="auto_demote_degraded",
-            condition_fn=_demote_condition,
-            action_fn=lambda ctx: {"transition_to": "probation", "reason": "auto_demote_degraded"},
-            priority=90,
-        ))
+        engine.add_rule(
+            GovernanceRule(
+                name="auto_demote_degraded",
+                condition_fn=_demote_condition,
+                action_fn=lambda ctx: {
+                    "transition_to": "probation",
+                    "reason": "auto_demote_degraded",
+                },
+                priority=90,
+            )
+        )
 
-        engine.add_rule(GovernanceRule(
-            name="auto_promote_healthy",
-            condition_fn=lambda ctx: (
-                ctx.get("health_signal") == "healthy"
-                and ctx.get("composite_mean", 0) >= 0.75
-                and ctx.get("sample_count", 0) >= 30
-            ),
-            action_fn=lambda ctx: {"transition_to": "live", "reason": "auto_promote_healthy"},
-            priority=50,
-        ))
+        engine.add_rule(
+            GovernanceRule(
+                name="auto_promote_healthy",
+                condition_fn=lambda ctx: (
+                    ctx.get("health_signal") == "healthy"
+                    and ctx.get("composite_mean", 0) >= 0.75
+                    and ctx.get("sample_count", 0) >= 30
+                ),
+                action_fn=lambda ctx: {"transition_to": "live", "reason": "auto_promote_healthy"},
+                priority=50,
+            )
+        )
 
-        engine.add_rule(GovernanceRule(
-            name="unfreeze_recovered",
-            condition_fn=lambda ctx: (
-                ctx.get("current_status") == "frozen"
-                and ctx.get("health_signal") in {"stable", "healthy"}
-                and ctx.get("recommendation") != "freeze"
-            ),
-            action_fn=lambda ctx: {"transition_to": "probation", "reason": "unfreeze_recovered"},
-            priority=40,
-        ))
+        engine.add_rule(
+            GovernanceRule(
+                name="unfreeze_recovered",
+                condition_fn=lambda ctx: (
+                    ctx.get("current_status") == "frozen"
+                    and ctx.get("health_signal") in {"stable", "healthy"}
+                    and ctx.get("recommendation") != "freeze"
+                ),
+                action_fn=lambda ctx: {
+                    "transition_to": "probation",
+                    "reason": "unfreeze_recovered",
+                },
+                priority=40,
+            )
+        )
 
         return engine

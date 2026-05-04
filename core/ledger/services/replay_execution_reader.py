@@ -33,8 +33,3 @@ class ReplayExecutionReader:
                     continue
                 records.append(json.loads(line))
         return records
-
-
-
-
-
