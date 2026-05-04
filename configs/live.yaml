@@ -121,6 +121,42 @@ training:
     dataset_csv: "D:\\ai\\Meta_ppo_v6\\Exness_XAUUSDm_2026_04.csv"
 
 # ---------------------------------------------------------------------------
+# Live Trading — production trading parameters (used by `main.py live`)
+# ---------------------------------------------------------------------------
+live_trading:
+  # MT5 terminal path (required)
+  mt5_terminal_path: "D:\\MetaTrader 5\\terminal64.exe"
+
+  # Trading parameters
+  symbol: "XAUUSDc"
+  volume: 0.01
+  interval_seconds: 60
+  confidence_threshold: 0.55
+
+  # Risk management
+  sl_distance: 15.0
+  tp_distance: 25.0
+  cooldown_seconds: 300
+  max_positions: 1
+
+  # Brain configuration
+  multi_brain: true
+  brains_dir: "configs/brains"
+  normalization_config: "configs/brains/v9_institutional_01.normalization.json"
+
+  # Feature store
+  feature_store_dir: "data/feature_store"
+
+  # Bridge worker
+  bridge:
+    poll_seconds: 3
+    deviation: 20
+    magic: 90001
+
+  # Base data directory
+  base_dir: "data"
+
+# ---------------------------------------------------------------------------
 # Shadow — shadow replay / intent producer
 # ---------------------------------------------------------------------------
 shadow:

@@ -13,8 +13,10 @@ Commands:
   daily-ops    Run full daily governance + monitoring pipeline.
   leaderboard  Show brain performance leaderboard.
   dashboard    Show full daily system dashboard.
+  live         Start full live trading pipeline (one command).
 
 Usage:
+  python main.py live                       # one-command live trading
   python main.py run --env configs/environments/mt5.json
   python main.py status --env configs/environments/mt5.json
   python main.py train
@@ -575,6 +577,32 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Command: live
+# ---------------------------------------------------------------------------
+
+
+def cmd_live(args: argparse.Namespace) -> int:
+    """Start the full live trading pipeline (intent loop + bridge worker)."""
+    import subprocess
+
+    launcher = PROJECT_ROOT / "scripts" / "live_launcher.py"
+    if not launcher.exists():
+        print(f"[hub] ERROR: launcher not found: {launcher}", file=sys.stderr)
+        return 2
+
+    print("[hub] Starting live trading pipeline...")
+    print(f"[hub] Config: {args.config}")
+    print()
+
+    proc = subprocess.run(
+        [sys.executable, str(launcher), args.config],
+        capture_output=False,
+        check=False,
+    )
+    return proc.returncode
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -732,6 +760,10 @@ def build_parser() -> argparse.ArgumentParser:
     dash_cmd.add_argument("--json", action="store_true", help="Output JSON instead of text")
     dash_cmd.add_argument("--output", type=Path, default=None, help="Write output to file")
 
+    # ---- live ----
+    live_cmd = sub.add_parser("live", help="Start full live trading pipeline (one command)")
+    live_cmd.add_argument("--config", default="configs/live.yaml", help="Path to live.yaml config")
+
     return parser
 
 
@@ -749,6 +781,7 @@ def main(argv: list[str] | None = None) -> int:
         "daily-ops": cmd_daily_ops,
         "leaderboard": cmd_leaderboard,
         "dashboard": cmd_dashboard,
+        "live": cmd_live,
     }
 
     handler = commands.get(args.command)
