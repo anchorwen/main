@@ -150,11 +150,39 @@ def _compare_directions(results: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _resolve_feature_vector(
+    feature_store_dir: Path | str | None = None,
+    feature_dim: int = 40,
+) -> tuple[np.ndarray, str]:
+    """Try to load the latest real feature vector from LocalFeatureStore.
+
+    Returns (vector, source) where source is one of "store", "stub".
+    """
+    store_dir = Path(feature_store_dir) if feature_store_dir else None
+    if store_dir is not None and store_dir.is_dir():
+        try:
+            from core.features.local_feature_store import LocalFeatureStore
+            from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+
+            store = LocalFeatureStore(str(store_dir))
+            record = store.latest("XAUUSD", "M5", schema_name="v9_institutional_40")
+            if record is not None and record.values:
+                vec = np.array(
+                    [float(record.values.get(name, 0.0)) for name in V9_INSTITUTIONAL_40_FEATURES],
+                    dtype=np.float64,
+                )
+                return vec, "store"
+        except Exception:
+            pass
+    return np.zeros(feature_dim, dtype=np.float64), "stub"
+
+
 def build_report(
     brains_dir: Path | None = None,
     *,
     brain_ids: list[str] | None = None,
     feature_dim: int = 40,
+    feature_store_dir: Path | None = None,
     parallel: bool = True,
     symbol: str = "XAUUSD",
     write_decisions: bool = True,
@@ -171,8 +199,10 @@ def build_report(
             "results": [],
         }
 
-    # Dummy feature vector (zeros — real usage would need FeatureService)
-    feature_vector = np.zeros(feature_dim, dtype=np.float64)
+    feature_vector, feature_source = _resolve_feature_vector(
+        feature_store_dir=feature_store_dir,
+        feature_dim=feature_dim,
+    )
 
     # Build adapters
     adapters: dict[str, Any] = {}
@@ -211,6 +241,7 @@ def build_report(
         "generated_at": _utc_now_iso(),
         "brains_dir": str(brains),
         "feature_dim": feature_dim,
+        "feature_source": feature_source,
         "total_brains": len(entries),
         "parallel": parallel and len(adapters) > 1,
         "comparison": comparison,
@@ -274,6 +305,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip writing shadow decisions to data/decisions ledger",
     )
+    p.add_argument(
+        "--feature-store-dir",
+        type=Path,
+        default=None,
+        help="Feature store directory for real feature vectors (default: zeros stub)",
+    )
     return p
 
 
@@ -283,6 +320,7 @@ def main(argv: list[str] | None = None) -> int:
         brains_dir=args.brains_dir,
         brain_ids=args.brains,
         feature_dim=args.feature_dim,
+        feature_store_dir=args.feature_store_dir,
         parallel=not args.sequential,
         symbol=args.symbol,
         write_decisions=not args.no_write_decisions,

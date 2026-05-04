@@ -166,6 +166,43 @@ def _load_brain_entries_from_dir(brains_dir: str) -> list[dict[str, Any]]:
     return entries
 
 
+def _build_feature_snapshot(symbol: str, feature_vector: Any) -> Any:
+    """Build a minimal feature snapshot for ParliamentService.build_candidate()."""
+    from apps.engine.runtime_loop import SimpleFeatureSnapshot
+    from core.contracts.ids import new_snapshot_id
+
+    return SimpleFeatureSnapshot(
+        snapshot_id=new_snapshot_id(),
+        event_time=datetime.now(UTC).replace(tzinfo=None),
+        symbol=symbol,
+        venue="live_intent_loop",
+        feature_vector=feature_vector,
+    )
+
+
+def _build_minimal_control_snapshot() -> Any:
+    """Build a minimal control snapshot for ParliamentService.build_candidate()."""
+    from core.contracts.domain.system_mode_state import SystemModeState
+    from core.contracts.enums import SystemMode
+    from core.state.schema_versions import SCHEMA_SYSTEM_MODE_STATE
+
+    mode_state = SystemModeState(
+        schema_version=SCHEMA_SYSTEM_MODE_STATE,
+        mode_state_id="intent_loop_default",
+        current_mode=SystemMode.NORMAL,
+        entered_at=datetime.now(UTC).replace(tzinfo=None),
+        previous_mode=None,
+        reason="live_intent_loop",
+    )
+
+    class _MinimalControlSnapshot:
+        def __init__(self, mode_state):
+            self.mode_state = mode_state
+            self.active_overrides = []
+
+    return _MinimalControlSnapshot(mode_state)
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="live_intent_loop")
     p.add_argument("--base-dir", default="data")
@@ -477,7 +514,6 @@ def main(argv: list[str] | None = None) -> int:
 
                 if multi_brain:
                     proposals = []
-                    consensus_extra: dict[str, Any] = {}
                     for b_info in brains:
                         try:
                             raw = b_info["adapter"].infer(feature_vector)
@@ -485,13 +521,23 @@ def main(argv: list[str] | None = None) -> int:
                             proposals.append(prop)
                         except Exception:
                             pass
-                    consensus = parliament._compute_consensus(proposals)
-                    direction = consensus.get("aggregated_bias", "neutral")
-                    confidence = consensus.get("consensus_score", 0.0)
+
+                    # Build a proper candidate via ParliamentService (governance
+                    # filtering, regime detection, feasibility — not just raw consensus).
+                    feature_snapshot = _build_feature_snapshot(args.symbol, feature_vector)
+                    control_snapshot = _build_minimal_control_snapshot()
+                    candidate = parliament.build_candidate(
+                        feature_snapshot, proposals, control_snapshot
+                    )
+                    direction = candidate.consensus.get("aggregated_bias", "neutral")
+                    confidence = candidate.consensus.get("consensus_score", 0.0)
                     consensus_extra = {
-                        "voter_count": consensus.get("voter_count", 0),
-                        "majority_ratio": consensus.get("majority_ratio", 0.0),
-                        "disagreement_score": consensus.get("disagreement_score", 0.0),
+                        "voter_count": candidate.consensus.get("voter_count", 0),
+                        "majority_ratio": candidate.consensus.get("majority_ratio", 0.0),
+                        "disagreement_score": candidate.consensus.get("disagreement_score", 0.0),
+                        "supporting_brains": candidate.supporting_brains,
+                        "opposing_brains": candidate.opposing_brains,
+                        "is_feasible": candidate.execution_feasibility.get("is_feasible", True),
                     }
                 else:
                     raw_output = brain.infer(feature_vector)
@@ -549,9 +595,11 @@ def main(argv: list[str] | None = None) -> int:
                             consensus_for_record = {
                                 "aggregated_bias": direction,
                                 "consensus_score": confidence,
-                                "voter_count": consensus.get("voter_count", 0),
-                                "majority_ratio": consensus.get("majority_ratio", 0.0),
-                                "disagreement_score": consensus.get("disagreement_score", 0.0),
+                                "voter_count": candidate.consensus.get("voter_count", 0),
+                                "majority_ratio": candidate.consensus.get("majority_ratio", 0.0),
+                                "disagreement_score": candidate.consensus.get(
+                                    "disagreement_score", 0.0
+                                ),
                             }
                             record_shadow_from_proposals(
                                 proposals=proposals,
