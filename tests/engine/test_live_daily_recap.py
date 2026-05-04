@@ -207,6 +207,94 @@ def test_evolution_block_without_alignment():
     assert "线上线下对齐" not in block
 
 
+def test_evolution_block_with_leaderboard():
+    lb = {
+        "total_brains": 2,
+        "leaderboard": [
+            {"brain_id": "Brain_A", "signal_count": 150},
+            {"brain_id": "Brain_B", "signal_count": 80},
+        ],
+    }
+    block = _generate_evolution_block(
+        "2026-05-04",
+        "活跃（有成交）",
+        {"total": 5, "counts": {"accepted": 5}, "rejection_rate": 0.0},
+        {"summary": {"issues_count": 0}, "outbox_staleness": {"stale_count": 0}},
+        False,
+        brain_leaderboard=lb,
+    )
+    assert "Brain 排行" in block
+    assert "Brain_A" in block
+    assert "信号=150" in block
+    assert "Brain_B" in block
+    assert "信号=80" in block
+
+
+def test_evolution_block_without_leaderboard():
+    block = _generate_evolution_block(
+        "2026-05-04",
+        "活跃（有成交）",
+        {"total": 3, "counts": {"accepted": 3}, "rejection_rate": 0.0},
+        {"summary": {"issues_count": 0}, "outbox_staleness": {"stale_count": 0}},
+        False,
+    )
+    assert "Brain 排行" not in block
+
+
+def test_evolution_block_with_leaderboard_error():
+    block = _generate_evolution_block(
+        "2026-05-04",
+        "活跃（有成交）",
+        {"total": 3, "counts": {"accepted": 3}, "rejection_rate": 0.0},
+        {"summary": {"issues_count": 0}, "outbox_staleness": {"stale_count": 0}},
+        False,
+        brain_leaderboard={"error": "no_decisions"},
+    )
+    assert "Brain 排行" not in block
+
+
+def test_evolution_block_with_feature_quality_shift():
+    fq = {
+        "distribution_shift": {"shifted_count": 5, "total_features": 40},
+    }
+    block = _generate_evolution_block(
+        "2026-05-04",
+        "活跃（有成交）",
+        {"total": 3, "counts": {"accepted": 3}, "rejection_rate": 0.0},
+        {"summary": {"issues_count": 0}, "outbox_staleness": {"stale_count": 0}},
+        False,
+        feature_quality=fq,
+    )
+    assert "特征偏移" in block
+    assert "5个特征" in block
+
+
+def test_evolution_block_with_feature_quality_no_shift():
+    fq = {
+        "distribution_shift": {"shifted_count": 0, "total_features": 40},
+    }
+    block = _generate_evolution_block(
+        "2026-05-04",
+        "活跃（有成交）",
+        {"total": 3, "counts": {"accepted": 3}, "rejection_rate": 0.0},
+        {"summary": {"issues_count": 0}, "outbox_staleness": {"stale_count": 0}},
+        False,
+        feature_quality=fq,
+    )
+    assert "特征偏移" not in block
+
+
+def test_build_report_with_decisions_dir(tmp_path: Path):
+    (tmp_path / "live_trade_journal.jsonl").write_text("", encoding="utf-8")
+    decisions_dir = tmp_path / "decisions"
+    decisions_dir.mkdir()
+    report = build_report(tmp_path, "XAUUSDc", decisions_dir=decisions_dir)
+    assert "brain_leaderboard" in report
+    # Empty decisions dir produces error or empty leaderboard
+    lb = report["brain_leaderboard"]
+    assert isinstance(lb, dict)
+
+
 def test_cli_help():
     import subprocess
     import sys

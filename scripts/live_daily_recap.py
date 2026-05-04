@@ -128,6 +128,8 @@ def _generate_evolution_block(
     *,
     shadow_ensemble: dict[str, Any] | None = None,
     eval_alignment: dict[str, Any] | None = None,
+    brain_leaderboard: dict[str, Any] | None = None,
+    feature_quality: dict[str, Any] | None = None,
 ) -> str:
     """Produce the Markdown block to append to EVOLUTION_PLAN.md."""
     counts = trade_quality.get("counts", {})
@@ -154,6 +156,26 @@ def _generate_evolution_block(
             f" | 问题={a.get('issues', [])}"
         )
 
+    leaderboard_lines = ""
+    if brain_leaderboard and "error" not in brain_leaderboard:
+        lb = brain_leaderboard.get("leaderboard", [])
+        total_brains = brain_leaderboard.get("total_brains", 0)
+        if lb:
+            top = lb[0]
+            leaderboard_lines = (
+                f"\n- Brain 排行: 共{total_brains}个 | "
+                f"Top1={top['brain_id']}(信号={top['signal_count']})"
+            )
+            if len(lb) > 1:
+                leaderboard_lines += f" | Top2={lb[1]['brain_id']}(信号={lb[1]['signal_count']})"
+
+    feature_quality_lines = ""
+    if feature_quality and "error" not in feature_quality:
+        shift = feature_quality.get("distribution_shift", {})
+        shifted = shift.get("shifted_count", 0)
+        if shifted > 0:
+            feature_quality_lines = f"\n- 特征偏移: {shifted}个特征偏离基线 >2σ"
+
     return f"""
 
 ### Daily Update - {_utc_now_iso()}（自动生成）
@@ -162,7 +184,7 @@ def _generate_evolution_block(
 - 运行状态: {run_state}
 - 核心统计: 接受={counts.get('accepted', 0)} 拒绝={counts.get('rejected', 0)} 确认={counts.get('acknowledged', 0)} 其他={counts.get('other', 0)} 合计={trade_quality.get('total', 0)} 拒单率={trade_quality.get('rejection_rate', 0.0)}
 - 数据质量: 交叉校验问题={dq_issues} outbox超时={outbox_stale}
-- live_dispatch_block.flag: {"存在" if flag_present else "不存在"}{ensemble_lines}{align_lines}
+- live_dispatch_block.flag: {"存在" if flag_present else "不存在"}{ensemble_lines}{align_lines}{leaderboard_lines}{feature_quality_lines}
 - 关键事件: <手动最多 3 条>
 - 根因与修复: <手动最多 3 条>
 - 阶段进度: <Phase A/B/C 到达位置>
@@ -253,6 +275,23 @@ def _run_eval_alignment(
         return {"error": str(exc)}
 
 
+def _run_brain_leaderboard(
+    decisions_dir: Path,
+    *,
+    date_filter: str | None = None,
+    labels_path: Path | None = None,
+) -> dict[str, Any]:
+    """Call brain_leaderboard.build_report in-process."""
+    try:
+        from scripts.training.brain_leaderboard import build_report as build_bl
+    except Exception:
+        return {"error": "import_brain_leaderboard_failed"}
+    try:
+        return build_bl(decisions_dir, date_filter=date_filter, labels_path=labels_path)
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
 def _write_evolution_plan_update(
     plan_path: Path,
     block_content: str,
@@ -303,6 +342,7 @@ def build_report(
     norm_config_path: Path | None = None,
     labels_path: Path | None = None,
     backtest_path: Path | None = None,
+    decisions_dir: Path | None = None,
 ) -> dict[str, Any]:
     date = date_key or _today_utc_key()
     journal_path = base_dir / "live_trade_journal.jsonl"
@@ -340,6 +380,12 @@ def build_report(
     if labels_path and backtest_path:
         eval_alignment = _run_eval_alignment(labels_path, backtest_path)
 
+    brain_leaderboard: dict[str, Any] = {}
+    if decisions_dir:
+        brain_leaderboard = _run_brain_leaderboard(
+            decisions_dir, date_filter=date, labels_path=labels_path
+        )
+
     run_state = _derive_run_state(trade_quality, data_quality, flag_present)
 
     evolution_result: dict[str, Any] = {}
@@ -352,6 +398,8 @@ def build_report(
             flag_present,
             shadow_ensemble=shadow_ensemble if shadow_ensemble else None,
             eval_alignment=eval_alignment if eval_alignment else None,
+            brain_leaderboard=brain_leaderboard if brain_leaderboard else None,
+            feature_quality=feature_quality if feature_quality else None,
         )
         evolution_result = _write_evolution_plan_update(
             Path(evolution_plan_path),
@@ -375,6 +423,7 @@ def build_report(
         "shadow_ensemble": shadow_ensemble,
         "feature_quality": feature_quality,
         "eval_alignment": eval_alignment,
+        "brain_leaderboard": brain_leaderboard,
         "evolution_plan_update": evolution_result,
     }
 
@@ -412,6 +461,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Backtest result.json for eval alignment",
     )
+    p.add_argument(
+        "--decisions-dir",
+        type=Path,
+        default=None,
+        help="Decisions dir for brain leaderboard",
+    )
     p.add_argument("--output", default=None, help="Write JSON report to file")
     return p
 
@@ -432,6 +487,7 @@ def main(argv: list[str] | None = None) -> int:
         norm_config_path=args.norm_config,
         labels_path=args.labels_path,
         backtest_path=args.backtest_path,
+        decisions_dir=args.decisions_dir,
     )
     text = json.dumps(report, indent=2, ensure_ascii=False, default=str)
     print(text)
