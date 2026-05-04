@@ -1,0 +1,150 @@
+# ============================================================================
+# Quant OS — Unified live/shadow configuration
+# Schema: live_config.v2
+# ============================================================================
+#
+# This file controls the central pipeline (main.py), dispatch policy,
+# brain registry inventory, health checks, and training triggers.
+#
+# Sections:
+#   adapter      — Communication adapter selection (stub / file_queue / mt5 / fix)
+#   fix          — FIX session configuration (for live broker connectivity)
+#   mt5          — MetaTrader 5 bridge configuration
+#   brains       — Brain registry entry inventory
+#   gate         — Dispatch gate policy parameters
+#   pipeline     — Staging, data directories, and pipeline behavior
+#   training     — CRT batch training defaults
+#   shadow       — Shadow replay / intent production defaults
+#   healthcheck  — Live auto health check parameters
+#
+
+schema_version: "live_config.v2"
+description: "Quant OS live & shadow unified configuration"
+
+# ---------------------------------------------------------------------------
+# Adapter — communication adapter selection
+# ---------------------------------------------------------------------------
+adapter:
+  # Which adapter to activate: stub | file_queue | mt5 | fix
+  name: "stub"
+
+# ---------------------------------------------------------------------------
+# FIX — broker session configuration (required when adapter.name == "fix")
+# ---------------------------------------------------------------------------
+fix:
+  # SenderCompID / TargetCompID as assigned by your broker
+  sender_comp_id: ""
+  target_comp_id: ""
+  venue: "FIX_LIVE"
+
+# ---------------------------------------------------------------------------
+# MT5 — MetaTrader 5 bridge configuration (required when adapter.name == "mt5")
+# ---------------------------------------------------------------------------
+mt5:
+  terminal_path: ""
+  default_symbol: "XAUUSD"
+  # Normalization config for V9 40-feature z-score normalization (mean/std)
+  normalization_config: "configs/brains/v9_institutional_01.normalization.json"
+
+# ---------------------------------------------------------------------------
+# Features — feature store and update configuration
+# ---------------------------------------------------------------------------
+features:
+  # Directory where LocalFeatureStore persists feature records
+  store_dir: "data/feature_store"
+  # Interval (seconds) between incremental feature updates
+  update_interval_seconds: 60
+
+# ---------------------------------------------------------------------------
+# Brains — multi-model inventory
+# ---------------------------------------------------------------------------
+brains:
+  # List of brain registry entries to load on every pipeline cycle.
+  # Each entry points to a <brain_id>.json file in configs/brains/.
+  registry_entries:
+    # Survival_V9 Institutional ONNX (shadow)
+    - path: "configs/brains/v9_institutional_01.json"
+      enabled: true
+    # XGBoost V4.5 Microstructure (shadow)
+    - path: "configs/brains/xgboost_v4.5.json"
+      enabled: true
+    # OU Params V6 Sniper — statistical arbitrage (shadow)
+    - path: "configs/brains/ou_params_v6.json"
+      enabled: true
+
+# ---------------------------------------------------------------------------
+# Gate — dispatch policy gates
+# ---------------------------------------------------------------------------
+gate:
+  # Path to live_gate_policy.json (used by live_dispatch_policy.py)
+  gate_policy_config: "configs/live_gate_policy.json"
+
+  # Auto-recovery: auto-clear the dispatch block flag after N consecutive
+  # clean passes (no journal quality violations, no market blackout, etc.)
+  auto_recovery:
+    enabled: false
+    consecutive_pass_cycles: 5
+
+# ---------------------------------------------------------------------------
+# Pipeline — staging, data directories, execution mode
+# ---------------------------------------------------------------------------
+pipeline:
+  # Directory where pipeline_intents.v1 JSON files are written
+  staging_dir: "data/staging"
+
+  # Root data directory for live_trade_journal.jsonl, flag files, reports, etc.
+  data_dir: "data"
+
+  # Default execution mode when running main.py without explicit mode flag
+  # (controls live_gating in _run_eval_pipeline if no --live/--shadow flag)
+  default_mode: "shadow"  # "shadow" | "trade"
+
+# ---------------------------------------------------------------------------
+# Training — CRT batch training defaults
+# ---------------------------------------------------------------------------
+training:
+  # Path to batch plan generator (default for `main.py train`)
+  plan_generator: "scripts/training/generate_batch_plan.py"
+
+  # Lanes config
+  lanes_config: "scripts/training/lane_trainers.json"
+
+  # Training data directories (if not using trainer-root defaults)
+  sur:
+    trainer_root: "D:\\ai\\Survival_V9"
+    dataset_csv: "D:\\ai\\Survival_V9\\V9_Symbiosis_Matrix.csv"
+  arb:
+    trainer_root: "D:\\ai\\Meta_ppo_v6"
+    dataset_csv: "D:\\ai\\Meta_ppo_v6\\Exness_XAUUSDm_2026_04.csv"
+  mtx:
+    trainer_root: "D:\\ai\\Meta_ppo_v6"
+    dataset_csv: "D:\\ai\\Meta_ppo_v6\\Exness_XAUUSDm_2026_04.csv"
+
+# ---------------------------------------------------------------------------
+# Shadow — shadow replay / intent producer
+# ---------------------------------------------------------------------------
+shadow:
+  # Path to live_shadow_config.json (used by live_shadow_intent_producer.py)
+  shadow_config: "configs/live_shadow_config.json"
+
+  # Compare report output directory
+  compare_report_dir: "reports/shadow_compare"
+
+# ---------------------------------------------------------------------------
+# Healthcheck — live auto health check
+# ---------------------------------------------------------------------------
+healthcheck:
+  # Path to healthcheck config (if separate; otherwise inline below)
+  enabled: true
+  check_interval_minutes: 15
+
+  # Components to probe
+  components:
+    - name: "data_freshness"
+      max_staleness_sec: 300  # 5 minutes
+    - name: "signal_heartbeat"
+      max_staleness_sec: 60   # 1 minute
+    - name: "mt5_connection"
+      symbol: "XAUUSD"
+    - name: "journal_health"
+      max_consecutive_rejects: 3

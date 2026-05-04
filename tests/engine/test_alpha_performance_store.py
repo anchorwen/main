@@ -1,4 +1,5 @@
 """Alpha performance store tests."""
+
 import pytest
 
 from apps.engine.cli import main
@@ -13,18 +14,27 @@ from core.runtime.summary_service import RuntimeSummaryService
 
 
 def _run_paper(base_dir, cycle_id, feature_value):
-    return main([
-        "--base-dir", str(base_dir),
-        "runtime", "run-paper",
-        "--cycle-id", cycle_id,
-        "--feature", f"ema_bias={feature_value}",
-        "--price", "2000",
-    ])
+    return main(
+        [
+            "--base-dir",
+            str(base_dir),
+            "runtime",
+            "run-paper",
+            "--cycle-id",
+            cycle_id,
+            "--feature",
+            f"ema_bias={feature_value}",
+            "--price",
+            "2000",
+        ]
+    )
 
 
 class TestAlphaPerformanceSnapshot:
     def test_snapshot_to_dict(self):
-        snapshot = AlphaPerformanceSnapshot("alpha1", {"fill_ratio": 1.0}, source="test", window="1d")
+        snapshot = AlphaPerformanceSnapshot(
+            "alpha1", {"fill_ratio": 1.0}, source="test", window="1d"
+        )
         payload = snapshot.to_dict()
         assert payload["schema_version"] == SCHEMA_ALPHA_PERFORMANCE_SNAPSHOT
         assert payload["alpha_id"] == "alpha1"
@@ -34,7 +44,7 @@ class TestAlphaPerformanceSnapshot:
         with pytest.raises(ValueError):
             AlphaPerformanceSnapshot("", {})
         with pytest.raises(ValueError):
-            AlphaPerformanceSnapshot("alpha1", [])
+            AlphaPerformanceSnapshot("alpha1", [])  # type: ignore[reportArgumentType]
 
 
 class TestAlphaPerformanceStore:
@@ -77,7 +87,9 @@ class TestAlphaPerformanceStore:
         assert _run_paper(tmp_path, "cycle_1", 2.0) == 0
         assert _run_paper(tmp_path, "cycle_2", -2.0) == 0
         capsys.readouterr()
-        runtime_summary = RuntimeSummaryService(RuntimeEvidenceReader(str(tmp_path / "ledger"))).summarize()
+        runtime_summary = RuntimeSummaryService(
+            RuntimeEvidenceReader(str(tmp_path / "ledger"))
+        ).summarize()
         store = AlphaPerformanceStore()
         snapshots = store.ingest_runtime_summary(runtime_summary, {"alpha1": "alpha_asset_1"})
         assert len(snapshots) == 1
@@ -91,3 +103,28 @@ class TestAlphaPerformanceStore:
         assert latest.metrics["fill_ratio"] == 1.0
         assert latest.metrics["paper_cycles"] == 2
         assert latest.metrics["orders_per_signal"] == 1.0
+
+    def test_ingest_live_bridge_report(self):
+        store = AlphaPerformanceStore()
+        report = {
+            "date_key": "2026-04-28",
+            "journal_path": "/tmp/journal.jsonl",
+            "total": 4,
+            "counts": {"accepted": 2, "acknowledged": 1, "rejected": 1, "other": 0},
+            "acceptance_rate": 0.5,
+            "rejection_rate": 0.25,
+            "rejected_reasons": {"risk": 1},
+            "live_consecutive_rejected_tail": 1,
+        }
+        snap = store.ingest_live_bridge_report(
+            "alpha_x", report, journal_source_path="/data/j.jsonl"
+        )
+        assert snap.source == "live_bridge_report"
+        m = store.latest("alpha_x").metrics  # type: ignore[reportOptionalMemberAccess]
+        assert m["live_bridge"] is True
+        assert m["live_total"] == 4
+        assert m["live_accepted"] == 2
+        assert m["live_rejected"] == 1
+        assert m["journal_source_path"] == "/data/j.jsonl"
+        assert m["live_rejected_reasons_top"]["risk"] == 1
+        assert m["live_consecutive_rejected"] == 1

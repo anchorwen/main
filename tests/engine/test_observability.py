@@ -1,10 +1,15 @@
 import time
-from core.observability.metrics_collector import MetricsCollector
-from core.observability.metric_names import DECISIONS_TOTAL, DISPATCH_REJECTED, RECONCILIATION_BREACHED
-from core.observability.audit_log import StructuredAuditLog
-from core.observability.tracing import TracingContext, Span, new_trace_id
-from core.observability.diagnostics_dashboard import DiagnosticsDashboard
+
 from core.feedback.brain_performance_tracker import BrainPerformanceTracker
+from core.observability.audit_log import StructuredAuditLog
+from core.observability.diagnostics_dashboard import DiagnosticsDashboard
+from core.observability.metric_names import (
+    DECISIONS_TOTAL,
+    DISPATCH_REJECTED,
+    RECONCILIATION_BREACHED,
+)
+from core.observability.metrics_collector import MetricsCollector
+from core.observability.tracing import TracingContext
 
 
 class TestMetricsCollector:
@@ -77,8 +82,11 @@ class TestStructuredAuditLog:
     def test_log_decision(self, tmp_path):
         log = StructuredAuditLog(str(tmp_path))
         entry = log.log_decision(
-            intent_id="i1", verdict_status="allow", symbol="XAUUSD",
-            action="open", risk_tier="standard",
+            intent_id="i1",
+            verdict_status="allow",
+            symbol="XAUUSD",
+            action="open",
+            risk_tier="standard",
         )
         assert entry["event_type"] == "decision_cycle"
         assert entry["detail"]["intent_id"] == "i1"
@@ -86,8 +94,11 @@ class TestStructuredAuditLog:
     def test_log_dispatch(self, tmp_path):
         log = StructuredAuditLog(str(tmp_path))
         entry = log.log_dispatch(
-            message_id="m1", target="exec_bridge", status="delivered",
-            adapter_name="stub", trace_id="t1",
+            message_id="m1",
+            target="exec_bridge",
+            status="delivered",
+            adapter_name="stub",
+            trace_id="t1",
         )
         assert entry["event_type"] == "communication_dispatch"
         assert entry["trace_id"] == "t1"
@@ -95,7 +106,9 @@ class TestStructuredAuditLog:
     def test_log_risk_verdict_with_blocking(self, tmp_path):
         log = StructuredAuditLog(str(tmp_path))
         entry = log.log_risk_verdict(
-            intent_id="i1", status="deny", risk_tier="critical",
+            intent_id="i1",
+            status="deny",
+            risk_tier="critical",
             blocking_reasons=["drawdown_limit"],
         )
         assert entry["severity"] == "warning"
@@ -103,15 +116,18 @@ class TestStructuredAuditLog:
     def test_log_governance_signal_freeze(self, tmp_path):
         log = StructuredAuditLog(str(tmp_path))
         entry = log.log_governance_signal(
-            brain_id="brain_bad", signal_type="governance_action_required",
-            recommendation="freeze", health_signal="critical",
+            brain_id="brain_bad",
+            signal_type="governance_action_required",
+            recommendation="freeze",
+            health_signal="critical",
         )
         assert entry["severity"] == "critical"
 
     def test_log_reconciliation_breach(self, tmp_path):
         log = StructuredAuditLog(str(tmp_path))
         entry = log.log_reconciliation(
-            message_id="m1", status="breached",
+            message_id="m1",
+            status="breached",
             mismatches=[{"type": "quantity_mismatch"}],
         )
         assert entry["severity"] == "error"
@@ -120,7 +136,9 @@ class TestStructuredAuditLog:
     def test_read_by_date(self, tmp_path):
         log = StructuredAuditLog(str(tmp_path))
         log.log(event_type="e1")
-        entries = log.read_entries(date_key=entries[0]["timestamp"][:10] if (entries := log.read_entries()) else None)
+        entries = log.read_entries(
+            date_key=entries[0]["timestamp"][:10] if (entries := log.read_entries()) else None
+        )
         assert len(entries) >= 1
 
 
@@ -172,7 +190,7 @@ class TestTracingContext:
         ctx = TracingContext()
         root = ctx.start_span("cycle")
         ctx.start_span("sub")
-        ctx.end_span(ctx.current_span)
+        ctx.end_span(ctx.current_span)  # type: ignore[reportArgumentType]
         ctx.end_span(root)
         summary = ctx.get_trace_summary()
         assert summary["span_count"] == 2
@@ -194,9 +212,13 @@ class TestDiagnosticsDashboard:
 
         tracker = BrainPerformanceTracker()
         for _ in range(15):
-            tracker.record_outcome("alpha_v1", {"composite_score": 0.85, "execution_outcome": "success"})
+            tracker.record_outcome(
+                "alpha_v1", {"composite_score": 0.85, "execution_outcome": "success"}
+            )
         for _ in range(12):
-            tracker.record_outcome("bad_brain", {"composite_score": 0.1, "execution_outcome": "breach"})
+            tracker.record_outcome(
+                "bad_brain", {"composite_score": 0.1, "execution_outcome": "breach"}
+            )
 
         dash = DiagnosticsDashboard(
             metrics_collector=metrics,

@@ -8,12 +8,18 @@
   "enable_onnxruntime": true,
   "artifact_path": "D:\\ai\\Survival_V9\\v9_institutional_brain.onnx",
   "feature_schema_id": "v9_institutional_40",
-  "normalization_config_path": "D:\\cursor\\configs\\brains\\v9_institutional_01.normalization.json",
+  "normalization_config_path": "configs/brains/v9_institutional_01.normalization.json",
   "deployment_scope": {
-    "symbols": ["XAUUSD"],
-    "sessions": ["all"],
-    "regimes": ["trend", "volatile_trend", "macro_expansion"]
+    "symbols": [
+      "XAUUSD"
+    ],
+    "sessions": [
+      "all"
+    ],
+    "regimes": [
+      "trend",
+      "volatile_trend",
+      "macro_expansion"
+    ]
   }
 }
-
-

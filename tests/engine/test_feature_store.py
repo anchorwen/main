@@ -1,5 +1,6 @@
 """Feature store MVP tests."""
-from datetime import datetime, timedelta
+
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -34,7 +35,7 @@ def _record(t, ema=1.0, adx=0.2):
 
 class TestFeatureStoreContracts:
     def test_feature_record_roundtrip(self):
-        record = _record(datetime.utcnow())
+        record = _record(datetime.now(UTC).replace(tzinfo=None))
         restored = FeatureRecord.from_dict(record.to_dict())
         assert restored.schema_name == record.schema_name
         assert restored.values == record.values
@@ -46,7 +47,7 @@ class TestFeatureStoreContracts:
                 schema_version="1",
                 symbol="XAUUSD",
                 timeframe="M1",
-                event_time=datetime.utcnow(),
+                event_time=datetime.now(UTC).replace(tzinfo=None),
                 values={},
             )
 
@@ -62,7 +63,7 @@ class TestLocalFeatureStore:
     def test_write_and_query_records(self, tmp_path):
         store = LocalFeatureStore(str(tmp_path))
         store.register_schema(_schema())
-        t0 = datetime.utcnow()
+        t0 = datetime.now(UTC).replace(tzinfo=None)
         assert store.write_records([_record(t0, 1.5, 0.3)]) == 1
         records = store.query(FeatureQuery(symbol="XAUUSD", timeframe="M1"))
         assert len(records) == 1
@@ -71,7 +72,7 @@ class TestLocalFeatureStore:
     def test_write_rejects_unregistered_schema(self, tmp_path):
         store = LocalFeatureStore(str(tmp_path))
         with pytest.raises(ValueError):
-            store.write_records([_record(datetime.utcnow())])
+            store.write_records([_record(datetime.now(UTC).replace(tzinfo=None))])
 
     def test_write_rejects_missing_fields(self, tmp_path):
         store = LocalFeatureStore(str(tmp_path))
@@ -81,7 +82,7 @@ class TestLocalFeatureStore:
             schema_version="1.0",
             symbol="XAUUSD",
             timeframe="M1",
-            event_time=datetime.utcnow(),
+            event_time=datetime.now(UTC).replace(tzinfo=None),
             values={"ema_bias": 1.0},
         )
         with pytest.raises(ValueError):
@@ -90,28 +91,34 @@ class TestLocalFeatureStore:
     def test_query_time_range_and_limit(self, tmp_path):
         store = LocalFeatureStore(str(tmp_path))
         store.register_schema(_schema())
-        base = datetime.utcnow()
-        store.write_records([
-            _record(base, 1.0, 0.1),
-            _record(base + timedelta(minutes=1), 2.0, 0.2),
-            _record(base + timedelta(minutes=2), 3.0, 0.3),
-        ])
-        records = store.query(FeatureQuery(
-            symbol="XAUUSD",
-            timeframe="M1",
-            start=base + timedelta(seconds=30),
-            limit=1,
-        ))
+        base = datetime.now(UTC).replace(tzinfo=None)
+        store.write_records(
+            [
+                _record(base, 1.0, 0.1),
+                _record(base + timedelta(minutes=1), 2.0, 0.2),
+                _record(base + timedelta(minutes=2), 3.0, 0.3),
+            ]
+        )
+        records = store.query(
+            FeatureQuery(
+                symbol="XAUUSD",
+                timeframe="M1",
+                start=base + timedelta(seconds=30),
+                limit=1,
+            )
+        )
         assert len(records) == 1
         assert records[0].values["ema_bias"] == 3.0
 
     def test_latest(self, tmp_path):
         store = LocalFeatureStore(str(tmp_path))
         store.register_schema(_schema())
-        base = datetime.utcnow()
-        store.write_records([_record(base, 1.0, 0.1), _record(base + timedelta(minutes=1), 2.0, 0.2)])
+        base = datetime.now(UTC).replace(tzinfo=None)
+        store.write_records(
+            [_record(base, 1.0, 0.1), _record(base + timedelta(minutes=1), 2.0, 0.2)]
+        )
         latest = store.latest("XAUUSD", "M1", schema_name="technical_v1")
-        assert latest.values["ema_bias"] == 2.0
+        assert latest.values["ema_bias"] == 2.0  # type: ignore[reportOptionalMemberAccess]
 
     def test_query_missing_partition_empty(self, tmp_path):
         store = LocalFeatureStore(str(tmp_path))
@@ -122,7 +129,7 @@ class TestIncrementalFeatureUpdateJob:
     def test_incremental_job_writes_only_new_records(self, tmp_path):
         store = LocalFeatureStore(str(tmp_path))
         schema = _schema()
-        base = datetime.utcnow()
+        base = datetime.now(UTC).replace(tzinfo=None)
         produced = [
             _record(base, 1.0, 0.1),
             _record(base + timedelta(minutes=1), 2.0, 0.2),
@@ -141,7 +148,7 @@ class TestIncrementalFeatureUpdateJob:
     def test_incremental_job_passes_since(self, tmp_path):
         store = LocalFeatureStore(str(tmp_path))
         schema = _schema()
-        base = datetime.utcnow()
+        base = datetime.now(UTC).replace(tzinfo=None)
         seen_since = []
 
         def producer(since):
@@ -159,7 +166,7 @@ class TestIncrementalFeatureUpdateJob:
 
 class TestStoredFeatureSnapshot:
     def test_snapshot_from_record(self):
-        record = _record(datetime.utcnow(), 1.2, 0.4)
+        record = _record(datetime.now(UTC).replace(tzinfo=None), 1.2, 0.4)
         snapshot = StoredFeatureSnapshot.from_record(new_snapshot_id(), record)
         assert snapshot.symbol == "XAUUSD"
         assert snapshot.get("ema_bias") == 1.2

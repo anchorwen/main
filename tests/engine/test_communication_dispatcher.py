@@ -2,19 +2,28 @@ from datetime import datetime, timedelta
 
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.decision_intent import DecisionIntent
-from core.contracts.enums import CommunicationMessageType, CommunicationPriority, DecisionAction, DecisionSide, DispatchStatus
-from core.deployment.domain_keys import DISPATCH_FAILURE_REASON_LIVE_READ_ONLY
-from core.protocol.services.communication_adapter_registry import CommunicationAdapterRegistry
-from core.protocol.services.communication_dispatcher import CommunicationDispatcher
-from core.protocol.services.intent_message_builder import IntentMessageBuilder
-from core.protocol.services.stub_communication_adapter import StubCommunicationAdapter
+from core.contracts.enums import (
+    CommunicationMessageType,
+    CommunicationPriority,
+    DecisionAction,
+    DecisionSide,
+    DispatchStatus,
+)
+from core.deployment.domain_keys import (
+    DISPATCH_FAILURE_REASON_LIVE_DISPATCH_DISABLED,
+    DISPATCH_FAILURE_REASON_LIVE_READ_ONLY,
+    DISPATCH_FAILURE_REASON_SYMBOL_NOT_LIVE_ENABLED,
+)
 from core.protocol.schema_versions import (
     SCHEMA_COMMUNICATION_ENVELOPE,
     SCHEMA_DECISION_COMPILER,
     SCHEMA_DECISION_INTENT,
-    SCHEMA_DISPATCH_RESULT,
     SCHEMA_INTENT_MESSAGE_BUILDER,
 )
+from core.protocol.services.communication_adapter_registry import CommunicationAdapterRegistry
+from core.protocol.services.communication_dispatcher import CommunicationDispatcher
+from core.protocol.services.intent_message_builder import IntentMessageBuilder
+from core.protocol.services.stub_communication_adapter import StubCommunicationAdapter
 
 
 class NamedStubAdapter(StubCommunicationAdapter):
@@ -22,7 +31,9 @@ class NamedStubAdapter(StubCommunicationAdapter):
 
 
 class FailingAdapter:
-    def __init__(self, adapter_name: str = "failing_adapter", error_message: str = "dispatch failed"):
+    def __init__(
+        self, adapter_name: str = "failing_adapter", error_message: str = "dispatch failed"
+    ):
         self.adapter_name = adapter_name
         self._error_message = error_message
 
@@ -135,12 +146,51 @@ def test_communication_dispatcher_blocks_dispatch_when_live_read_only_enabled():
     assert result.status == DispatchStatus.FAILED
     assert result.adapter_name == "live_read_only_guard"
     assert result.failure_reason == DISPATCH_FAILURE_REASON_LIVE_READ_ONLY
-    assert result.attempts == [{
-        "adapter_name": "live_read_only_guard",
-        "status": "failed",
-        "reason": DISPATCH_FAILURE_REASON_LIVE_READ_ONLY,
-    }]
+    assert result.attempts == [
+        {
+            "adapter_name": "live_read_only_guard",
+            "status": "failed",
+            "reason": DISPATCH_FAILURE_REASON_LIVE_READ_ONLY,
+        }
+    ]
     assert result.trace["live_read_only"] is True
+
+
+def test_communication_dispatcher_blocks_dispatch_when_live_dispatch_disabled():
+    builder = IntentMessageBuilder(producer="decision_engine", target="exec_bridge")
+    dispatcher = CommunicationDispatcher(
+        adapter=StubCommunicationAdapter(),
+        clock=lambda: datetime(2026, 4, 24, 12, 0, 2),
+        live_dispatch_enabled=False,
+    )
+    envelope = builder.build(build_intent(), correlation_id="corr_gate_disabled")
+
+    result = dispatcher.dispatch(envelope)
+
+    assert result.status == DispatchStatus.FAILED
+    assert result.adapter_name == "live_dispatch_gate"
+    assert result.failure_reason == DISPATCH_FAILURE_REASON_LIVE_DISPATCH_DISABLED
+    assert result.trace["live_dispatch_enabled"] is False
+    assert result.trace["symbol"] == "XAUUSD"
+
+
+def test_communication_dispatcher_blocks_dispatch_for_symbol_not_in_allowlist():
+    builder = IntentMessageBuilder(producer="decision_engine", target="exec_bridge")
+    dispatcher = CommunicationDispatcher(
+        adapter=StubCommunicationAdapter(),
+        clock=lambda: datetime(2026, 4, 24, 12, 0, 2),
+        live_dispatch_enabled=True,
+        live_allowed_symbols=("EURUSD",),
+    )
+    envelope = builder.build(build_intent(), correlation_id="corr_symbol_gate")
+
+    result = dispatcher.dispatch(envelope)
+
+    assert result.status == DispatchStatus.FAILED
+    assert result.adapter_name == "live_symbol_gate"
+    assert result.failure_reason == DISPATCH_FAILURE_REASON_SYMBOL_NOT_LIVE_ENABLED
+    assert result.trace["symbol"] == "XAUUSD"
+    assert result.trace["live_allowed_symbols"] == ["EURUSD"]
 
 
 def test_communication_dispatcher_routes_by_target_via_registry():
@@ -168,7 +218,9 @@ def test_communication_dispatcher_routes_by_message_type_when_target_missing():
     builder = IntentMessageBuilder(producer="decision_engine", target="unmapped_target")
     registry = CommunicationAdapterRegistry(
         adapters={
-            CommunicationMessageType.DECISION_INTENT.value: NamedStubAdapter(adapter_name="intent_adapter"),
+            CommunicationMessageType.DECISION_INTENT.value: NamedStubAdapter(
+                adapter_name="intent_adapter"
+            ),
         }
     )
     dispatcher = CommunicationDispatcher(
@@ -281,7 +333,9 @@ def test_communication_dispatcher_degrades_to_fallback_adapter_when_primary_fail
     builder = IntentMessageBuilder(producer="decision_engine", target="exec_bridge")
     registry = CommunicationAdapterRegistry(
         adapters={
-            "exec_bridge": FailingAdapter(adapter_name="exec_adapter", error_message="primary down"),
+            "exec_bridge": FailingAdapter(
+                adapter_name="exec_adapter", error_message="primary down"
+            ),
             "backup_adapter": NamedStubAdapter(adapter_name="backup_adapter"),
         }
     )
@@ -308,7 +362,9 @@ def test_communication_dispatcher_returns_failed_result_when_no_fallback_availab
     builder = IntentMessageBuilder(producer="decision_engine", target="exec_bridge")
     registry = CommunicationAdapterRegistry(
         adapters={
-            "exec_bridge": FailingAdapter(adapter_name="exec_adapter", error_message="primary down"),
+            "exec_bridge": FailingAdapter(
+                adapter_name="exec_adapter", error_message="primary down"
+            ),
         }
     )
     dispatcher = CommunicationDispatcher(
@@ -331,8 +387,12 @@ def test_communication_dispatcher_returns_failed_result_when_fallback_also_fails
     builder = IntentMessageBuilder(producer="decision_engine", target="exec_bridge")
     registry = CommunicationAdapterRegistry(
         adapters={
-            "exec_bridge": FailingAdapter(adapter_name="exec_adapter", error_message="primary down"),
-            "backup_adapter": FailingAdapter(adapter_name="backup_adapter", error_message="fallback down"),
+            "exec_bridge": FailingAdapter(
+                adapter_name="exec_adapter", error_message="primary down"
+            ),
+            "backup_adapter": FailingAdapter(
+                adapter_name="backup_adapter", error_message="fallback down"
+            ),
         }
     )
     dispatcher = CommunicationDispatcher(
@@ -372,7 +432,9 @@ def test_communication_dispatcher_fails_fast_when_deadline_exceeded_before_attem
 
 
 def test_intent_message_builder_sets_default_deadline_window():
-    builder = IntentMessageBuilder(producer="decision_engine", target="exec_bridge", default_deadline_seconds=5)
+    builder = IntentMessageBuilder(
+        producer="decision_engine", target="exec_bridge", default_deadline_seconds=5
+    )
     intent = build_intent()
 
     envelope = builder.build(intent, correlation_id="corr_014")

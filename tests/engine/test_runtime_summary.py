@@ -1,4 +1,5 @@
 """Runtime summary service and CLI tests."""
+
 import json
 
 from apps.engine.cli import main
@@ -8,13 +9,20 @@ from core.runtime.summary_service import RuntimeSummaryService
 
 
 def _run_paper(base_dir, cycle_id, feature_value):
-    return main([
-        "--base-dir", str(base_dir),
-        "runtime", "run-paper",
-        "--cycle-id", cycle_id,
-        "--feature", f"ema_bias={feature_value}",
-        "--price", "2000",
-    ])
+    return main(
+        [
+            "--base-dir",
+            str(base_dir),
+            "runtime",
+            "run-paper",
+            "--cycle-id",
+            cycle_id,
+            "--feature",
+            f"ema_bias={feature_value}",
+            "--price",
+            "2000",
+        ]
+    )
 
 
 class TestRuntimeSummaryService:
@@ -36,7 +44,9 @@ class TestRuntimeSummaryService:
     def test_summary_limit(self, tmp_path):
         assert _run_paper(tmp_path, "cycle_1", 2.0) == 0
         assert _run_paper(tmp_path, "cycle_2", 2.0) == 0
-        summary = RuntimeSummaryService(RuntimeEvidenceReader(str(tmp_path / "ledger"))).summarize(limit=1)
+        summary = RuntimeSummaryService(RuntimeEvidenceReader(str(tmp_path / "ledger"))).summarize(
+            limit=1
+        )
         assert summary["cycle_count"] == 1
         assert len(summary["cycles"]) == 1
 
@@ -64,12 +74,18 @@ class TestRuntimeSummaryCLI:
         assert _run_paper(tmp_path, "cycle_2", 2.0) == 0
         capsys.readouterr()
         output = tmp_path / "reports" / "runtime_summary.json"
-        code = main([
-            "--base-dir", str(tmp_path),
-            "runtime", "summary",
-            "--limit", "1",
-            "--output", str(output),
-        ])
+        code = main(
+            [
+                "--base-dir",
+                str(tmp_path),
+                "runtime",
+                "summary",
+                "--limit",
+                "1",
+                "--output",
+                str(output),
+            ]
+        )
         payload = json.loads(capsys.readouterr().out)
         assert code == 0
         assert payload["cycle_count"] == 1

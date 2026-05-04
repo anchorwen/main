@@ -1,9 +1,10 @@
 """Paper execution gateway tests."""
+
 import pytest
 
 from core.execution.gateway_contracts import OrderRequest
 from core.execution.paper_gateway import PaperExecutionGateway
-from core.observability.metric_names import PAPER_EXECUTION_FILLED, PAPER_EXECUTION_FILL_QUANTITY
+from core.observability.metric_names import PAPER_EXECUTION_FILL_QUANTITY, PAPER_EXECUTION_FILLED
 
 
 class FakeWriter:
@@ -66,7 +67,9 @@ class TestPaperExecutionGateway:
 
     def test_limit_order_resting_then_mark_to_market(self):
         gateway = PaperExecutionGateway()
-        state = gateway.submit_order(_request(order_type="limit", limit_price=1999.0), {"bid": 1998.0, "ask": 2000.0})
+        state = gateway.submit_order(
+            _request(order_type="limit", limit_price=1999.0), {"bid": 1998.0, "ask": 2000.0}
+        )
         assert state.status == "working"
         state = gateway.mark_to_market("ord1", {"bid": 1998.5, "ask": 1999.0})
         assert state.status == "filled"
@@ -74,7 +77,9 @@ class TestPaperExecutionGateway:
 
     def test_cancel_working_order(self):
         gateway = PaperExecutionGateway()
-        gateway.submit_order(_request(order_type="limit", limit_price=1999.0), {"bid": 1998.0, "ask": 2000.0})
+        gateway.submit_order(
+            _request(order_type="limit", limit_price=1999.0), {"bid": 1998.0, "ask": 2000.0}
+        )
         state = gateway.cancel_order("ord1")
         assert state.status == "cancelled"
         assert state.is_terminal is True
@@ -114,7 +119,10 @@ class TestPaperExecutionGateway:
     def test_list_orders_by_status(self):
         gateway = PaperExecutionGateway()
         gateway.submit_order(_request(order_id="ord1"), {"price": 2000.0})
-        gateway.submit_order(_request(order_id="ord2", order_type="limit", limit_price=1999.0), {"bid": 1998.0, "ask": 2000.0})
+        gateway.submit_order(
+            _request(order_id="ord2", order_type="limit", limit_price=1999.0),
+            {"bid": 1998.0, "ask": 2000.0},
+        )
         assert len(gateway.list_orders()) == 2
         assert len(gateway.list_orders(status="filled")) == 1
         assert len(gateway.list_orders(status="working")) == 1

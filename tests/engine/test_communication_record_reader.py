@@ -93,18 +93,19 @@ def test_communication_record_reader_returns_empty_when_stream_missing(tmp_path)
     reader = CommunicationRecordReader(base_dir=str(tmp_path))
 
     assert reader.list_records(date_key="2026-04-24", target="missing_target") == []
-    assert reader.find_by_message_id(
-        date_key="2026-04-24",
-        target="missing_target",
-        message_id="missing_message",
-    ) is None
-    assert reader.find_by_correlation_id(
-        date_key="2026-04-24",
-        target="missing_target",
-        correlation_id="missing_corr",
-    ) == []
-
-
-
-
-
+    assert (
+        reader.find_by_message_id(
+            date_key="2026-04-24",
+            target="missing_target",
+            message_id="missing_message",
+        )
+        is None
+    )
+    assert (
+        reader.find_by_correlation_id(
+            date_key="2026-04-24",
+            target="missing_target",
+            correlation_id="missing_corr",
+        )
+        == []
+    )

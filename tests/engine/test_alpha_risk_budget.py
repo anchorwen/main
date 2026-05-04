@@ -1,7 +1,6 @@
 """Alpha risk budget exporter tests."""
 
-from core.alpha.risk_budget import AlphaRiskBudgetExporter
-from core.alpha.risk_budget import AlphaRiskBudgetPolicy
+from core.alpha.risk_budget import AlphaRiskBudgetExporter, AlphaRiskBudgetPolicy
 from core.alpha.schema_versions import SCHEMA_ALPHA_PORTFOLIO_ALLOCATION, SCHEMA_ALPHA_RISK_BUDGET
 
 
@@ -48,7 +47,9 @@ class TestAlphaRiskBudgetExporter:
         assert alpha2["max_daily_orders"] == 0
 
     def test_export_with_custom_policy(self):
-        policy = AlphaRiskBudgetPolicy(max_order_fraction=0.25, tier_daily_orders={"standard": 7, "none": 0})
+        policy = AlphaRiskBudgetPolicy(
+            max_order_fraction=0.25, tier_daily_orders={"standard": 7, "none": 0}
+        )
         budget = AlphaRiskBudgetExporter(policy).export(_allocation())
         assert budget["budgets"]["alpha1"]["max_order_notional"] == 200.0
         assert budget["budgets"]["alpha1"]["max_daily_orders"] == 7

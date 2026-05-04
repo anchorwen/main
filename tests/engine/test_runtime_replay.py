@@ -1,18 +1,23 @@
 """Runtime replay readiness tests."""
+
 import json
 
-from core.ledger.stream_names import LEDGER_STREAM_RUNTIME_EVIDENCE, stream_jsonl_filename
+from core.execution.paper_gateway import PaperExecutionGateway
 from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
+from core.ledger.stream_names import LEDGER_STREAM_RUNTIME_EVIDENCE, stream_jsonl_filename
 from core.runtime.cycle_replay import RuntimeCycleReplay
 from core.runtime.evidence_reader import RuntimeEvidenceReader
 from core.runtime.evidence_writer import RuntimeEvidenceWriter
+from core.runtime.execution_gates import (
+    RuntimeExecutionApprovalChain,
+    RuntimeGovernanceGate,
+    RuntimeRiskGate,
+)
 from core.runtime.execution_gateway_router import ExecutionGatewayRouter
-from core.runtime.execution_gates import RuntimeExecutionApprovalChain, RuntimeGovernanceGate, RuntimeRiskGate
 from core.runtime.execution_pipeline import RuntimeExecutionPipeline
 from core.runtime.integration_contracts import OrderSizingPolicy
 from core.runtime.schema_versions import SCHEMA_RUNTIME_EVIDENCE_RECORD
 from core.runtime.signal_order_builder import SignalOrderRequestBuilder
-from core.execution.paper_gateway import PaperExecutionGateway
 from core.strategies.examples import ThresholdAlphaAgent
 from core.strategies.registry import StrategyPluginRegistry, StrategyPluginRunner
 
@@ -27,7 +32,9 @@ def _pipeline(writer=None, chain=None):
     router.register("PAPER", PaperExecutionGateway())
     return RuntimeExecutionPipeline(
         strategy_runner=runner,
-        order_builder=SignalOrderRequestBuilder(OrderSizingPolicy(base_quantity=10), default_venue="PAPER"),
+        order_builder=SignalOrderRequestBuilder(
+            OrderSizingPolicy(base_quantity=10), default_venue="PAPER"
+        ),
         gateway_router=router,
         approval_chain=chain,
         evidence_writer=writer,
@@ -56,10 +63,12 @@ class TestRuntimeCycleReplay:
     def test_replay_successful_cycle(self, tmp_path):
         store = JsonlLedgerStore(str(tmp_path))
         writer = RuntimeEvidenceWriter(store)
-        chain = RuntimeExecutionApprovalChain([
-            RuntimeRiskGate(max_quantity=100, allowed_symbols={"XAUUSD"}, max_notional=50_000),
-            RuntimeGovernanceGate(allowed_strategy_ids={"alpha1"}, allowed_venues={"PAPER"}),
-        ])
+        chain = RuntimeExecutionApprovalChain(
+            [
+                RuntimeRiskGate(max_quantity=100, allowed_symbols={"XAUUSD"}, max_notional=50_000),
+                RuntimeGovernanceGate(allowed_strategy_ids={"alpha1"}, allowed_venues={"PAPER"}),
+            ]
+        )
         pipeline = _pipeline(writer, chain)
         pipeline.run({"ema_bias": 2.0}, {"price": 2000.0}, {"runtime_cycle_id": "cycle_ok"})
         report = RuntimeCycleReplay(RuntimeEvidenceReader(str(tmp_path))).replay("cycle_ok")
@@ -77,7 +86,9 @@ class TestRuntimeCycleReplay:
     def test_replay_denied_cycle_is_replayable(self, tmp_path):
         store = JsonlLedgerStore(str(tmp_path))
         writer = RuntimeEvidenceWriter(store)
-        pipeline = _pipeline(writer, RuntimeExecutionApprovalChain([RuntimeRiskGate(max_quantity=1)]))
+        pipeline = _pipeline(
+            writer, RuntimeExecutionApprovalChain([RuntimeRiskGate(max_quantity=1)])
+        )
         pipeline.run({"ema_bias": 2.0}, {"price": 2000.0}, {"runtime_cycle_id": "cycle_denied"})
         report = RuntimeCycleReplay(RuntimeEvidenceReader(str(tmp_path))).replay("cycle_denied")
         assert report.replayable is True

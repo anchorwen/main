@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta
 import json
+from datetime import datetime, timedelta
 
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.dispatch_result import DispatchResult
@@ -8,8 +8,8 @@ from core.ledger.services.communication_inspection_service import CommunicationI
 from core.ledger.services.communication_record_reader import CommunicationRecordReader
 from core.ledger.services.communication_record_writer import CommunicationRecordWriter
 from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
-from core.protocol.services.file_queue_receipt_reader import FileQueueReceiptReader
 from core.protocol.schema_versions import SCHEMA_COMMUNICATION_ENVELOPE, SCHEMA_DISPATCH_RESULT
+from core.protocol.services.file_queue_receipt_reader import FileQueueReceiptReader
 
 
 def build_envelope(message_id: str, correlation_id: str, target: str = "exec_bridge"):
@@ -28,7 +28,13 @@ def build_envelope(message_id: str, correlation_id: str, target: str = "exec_bri
     )
 
 
-def build_result(message_id: str, *, status=DispatchStatus.PROTOCOL_VALIDATED, attempts=None, fallback_adapter_name=None):
+def build_result(
+    message_id: str,
+    *,
+    status=DispatchStatus.PROTOCOL_VALIDATED,
+    attempts=None,
+    fallback_adapter_name=None,
+):
     return DispatchResult(
         schema_version=SCHEMA_DISPATCH_RESULT,
         dispatch_id=f"dispatch_{message_id}",
@@ -38,12 +44,19 @@ def build_result(message_id: str, *, status=DispatchStatus.PROTOCOL_VALIDATED, a
         target="exec_bridge",
         adapter_name="stub_adapter",
         fallback_adapter_name=fallback_adapter_name,
-        attempts=attempts or [{"adapter_name": "stub_adapter", "status": "succeeded", "reason": None}],
+        attempts=attempts
+        or [{"adapter_name": "stub_adapter", "status": "succeeded", "reason": None}],
         degrade_reason="primary down" if status == DispatchStatus.DEGRADED else None,
     )
 
 
-def write_receipt(receipt_dir, *, message_id: str, ack_status: str = "acknowledged", received_at: str = "2026-04-24T12:00:03"):
+def write_receipt(
+    receipt_dir,
+    *,
+    message_id: str,
+    ack_status: str = "acknowledged",
+    received_at: str = "2026-04-24T12:00:03",
+):
     receipt_path = receipt_dir / "2026-04-24" / "exec_bridge"
     receipt_path.mkdir(parents=True, exist_ok=True)
     target_file = receipt_path / f"{message_id}.ack.json"
@@ -93,8 +106,14 @@ def test_communication_inspection_service_returns_correlation_trace(tmp_path):
     receipt_reader = FileQueueReceiptReader(receipt_dir=str(receipt_dir))
     service = CommunicationInspectionService(record_reader=reader, receipt_reader=receipt_reader)
 
-    writer.write_record(build_envelope("message_001", "corr_shared"), build_result("message_001", status=DispatchStatus.TRANSPORT_DELIVERED))
-    writer.write_record(build_envelope("message_002", "corr_shared"), build_result("message_002", status=DispatchStatus.TRANSPORT_DELIVERED))
+    writer.write_record(
+        build_envelope("message_001", "corr_shared"),
+        build_result("message_001", status=DispatchStatus.TRANSPORT_DELIVERED),
+    )
+    writer.write_record(
+        build_envelope("message_002", "corr_shared"),
+        build_result("message_002", status=DispatchStatus.TRANSPORT_DELIVERED),
+    )
     writer.write_record(
         build_envelope("message_003", "corr_shared"),
         DispatchResult(
@@ -109,7 +128,12 @@ def test_communication_inspection_service_returns_correlation_trace(tmp_path):
         ),
     )
     write_receipt(receipt_dir, message_id="message_001", ack_status="acknowledged")
-    write_receipt(receipt_dir, message_id="message_002", ack_status="acknowledged", received_at="2026-04-24T12:00:06")
+    write_receipt(
+        receipt_dir,
+        message_id="message_002",
+        ack_status="acknowledged",
+        received_at="2026-04-24T12:00:06",
+    )
 
     trace = service.get_correlation_trace(
         date_key="2026-04-24",
@@ -144,7 +168,11 @@ def test_communication_inspection_service_returns_correlation_trace(tmp_path):
     assert trace["delivery_summary"]["stale_receipt_message_ids"] == ["message_002"]
     assert trace["delivery_summary"]["timed_out_message_ids"] == ["message_003"]
     assert trace["delivery_summary"]["waiting_message_ids"] == []
-    assert [item["message_id"] for item in trace["message_traces"]] == ["message_001", "message_002", "message_003"]
+    assert [item["message_id"] for item in trace["message_traces"]] == [
+        "message_001",
+        "message_002",
+        "message_003",
+    ]
 
 
 def test_communication_inspection_service_summarizes_attempts(tmp_path):
@@ -153,13 +181,27 @@ def test_communication_inspection_service_summarizes_attempts(tmp_path):
     reader = CommunicationRecordReader(base_dir=str(tmp_path))
     service = CommunicationInspectionService(record_reader=reader)
 
-    writer.write_record(build_envelope("message_003", "corr_003"), build_result("message_003", status=DispatchStatus.DEGRADED, attempts=[
-        {"adapter_name": "exec_adapter", "status": "failed", "reason": "primary down"},
-        {"adapter_name": "backup_adapter", "status": "degraded", "reason": "fallback_success"},
-    ], fallback_adapter_name="backup_adapter"))
+    writer.write_record(
+        build_envelope("message_003", "corr_003"),
+        build_result(
+            "message_003",
+            status=DispatchStatus.DEGRADED,
+            attempts=[
+                {"adapter_name": "exec_adapter", "status": "failed", "reason": "primary down"},
+                {
+                    "adapter_name": "backup_adapter",
+                    "status": "degraded",
+                    "reason": "fallback_success",
+                },
+            ],
+            fallback_adapter_name="backup_adapter",
+        ),
+    )
 
-    record = reader.find_by_message_id(date_key="2026-04-24", target="exec_bridge", message_id="message_003")
-    summary = service.summarize_attempts(record)
+    record = reader.find_by_message_id(
+        date_key="2026-04-24", target="exec_bridge", message_id="message_003"
+    )
+    summary = service.summarize_attempts(record)  # type: ignore[reportArgumentType]
 
     assert summary["attempt_count"] == 2
     assert summary["failed_count"] == 1
@@ -172,11 +214,14 @@ def test_communication_inspection_service_returns_none_for_missing_message(tmp_p
     reader = CommunicationRecordReader(base_dir=str(tmp_path))
     service = CommunicationInspectionService(record_reader=reader)
 
-    assert service.get_message_trace(
-        date_key="2026-04-24",
-        target="exec_bridge",
-        message_id="missing_message",
-    ) is None
+    assert (
+        service.get_message_trace(
+            date_key="2026-04-24",
+            target="exec_bridge",
+            message_id="missing_message",
+        )
+        is None
+    )
 
 
 def test_communication_inspection_service_includes_receipt_aware_delivery_state(tmp_path):
@@ -265,8 +310,6 @@ def test_communication_inspection_service_marks_receipt_timeout_after_deadline(t
     assert trace["delivery_state"]["deadline_missed"] is True
 
 
-
-
 def test_communication_inspection_service_maps_extended_receipt_lifecycle_states(tmp_path):
     store = JsonlLedgerStore(str(tmp_path))
     receipt_dir = tmp_path / "receipts"
@@ -278,9 +321,21 @@ def test_communication_inspection_service_maps_extended_receipt_lifecycle_states
     cases = [
         ("message_rejected", "rejected", "receipt_rejected", "receipt_rejected", "action_required"),
         ("message_accepted", "accepted", "receipt_accepted", "receipt_accepted", "healthy"),
-        ("message_partial", "partially_filled", "receipt_partially_filled", "receipt_partially_filled", "healthy"),
+        (
+            "message_partial",
+            "partially_filled",
+            "receipt_partially_filled",
+            "receipt_partially_filled",
+            "healthy",
+        ),
         ("message_filled", "filled", "receipt_filled", "receipt_filled", "healthy"),
-        ("message_cancelled", "cancelled", "receipt_cancelled", "receipt_cancelled", "action_required"),
+        (
+            "message_cancelled",
+            "cancelled",
+            "receipt_cancelled",
+            "receipt_cancelled",
+            "action_required",
+        ),
     ]
 
     for message_id, ack_status, expected_phase, expected_issue_code, expected_posture in cases:
@@ -303,8 +358,9 @@ def test_communication_inspection_service_maps_extended_receipt_lifecycle_states
         assert trace["delivery_state"]["receipt_status"] == ack_status
 
 
-
-def test_communication_inspection_service_correlation_trace_summarizes_extended_receipt_lifecycle_states(tmp_path):
+def test_communication_inspection_service_correlation_trace_summarizes_extended_receipt_lifecycle_states(
+    tmp_path,
+):
     store = JsonlLedgerStore(str(tmp_path))
     receipt_dir = tmp_path / "receipts"
     writer = CommunicationRecordWriter(ledger_store=store)
@@ -347,4 +403,3 @@ def test_communication_inspection_service_correlation_trace_summarizes_extended_
         "receipt_rejected": ["message_rejected"],
     }
     assert trace["delivery_summary"]["delivery_posture"] == "action_required"
-

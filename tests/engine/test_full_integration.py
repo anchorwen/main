@@ -1,48 +1,69 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
+from apps.engine.batch_processor import BatchProcessor
+from apps.engine.runtime_loop import RuntimeLoop
+from core.contracts.domain.decision_intent import DecisionIntent
+from core.contracts.enums import DecisionAction, DecisionSide
 from core.deployment.environment_config import EnvironmentConfig
+from core.deployment.replay_isolation import ReplayEnvironment
 from core.deployment.service_container import ServiceContainer
 from core.deployment.state_persistence import StatePersistence
-from core.deployment.replay_isolation import ReplayEnvironment
+from core.observability.event_bus import EventBus
 from core.observability.metric_names import (
     BATCH_TOTAL_TRIGGERS,
     CYCLES_ERRORS,
     CYCLES_TOTAL,
     execution_event_metric,
 )
-from core.observability.event_bus import EventBus
-from core.protocol.services.resilience import CircuitBreaker, RateLimiter, CircuitState
-from apps.engine.batch_processor import BatchProcessor
-from apps.engine.runtime_loop import RuntimeLoop
-from core.contracts.domain.decision_intent import DecisionIntent
-from core.contracts.enums import DecisionAction, DecisionSide
 
 
 def _intent(symbol="XAUUSD"):
     return DecisionIntent(
-        schema_version="v1", intent_id="i_e2e", candidate_id="c1",
-        snapshot_id="s1", event_time=datetime(2026, 4, 24, 12, 0, 0),
+        schema_version="v1",
+        intent_id="i_e2e",
+        candidate_id="c1",
+        snapshot_id="s1",
+        event_time=datetime(2026, 4, 24, 12, 0, 0),
         compiled_at=datetime(2026, 4, 24, 12, 0, 1),
-        symbol=symbol, venue="MT5", action=DecisionAction.OPEN,
-        side=DecisionSide.LONG, conviction=0.85, priority="high",
+        symbol=symbol,
+        venue="MT5",
+        action=DecisionAction.OPEN,
+        side=DecisionSide.LONG,
+        conviction=0.85,
+        priority="high",
         suggested_risk_fraction=0.002,
     )
 
 
 def _build_loop(container, tmp_path, intent_fn=None):
-    snap = type("CS", (), {
-        "mode_state": type("MS", (), {"current_mode": type("M", (), {"value": "normal"})()})(),
-        "active_overrides": [],
-    })()
-    feature = type("FS", (), {
-        "snapshot_id": "s1", "event_time": datetime(2026, 4, 24, 12, 0, 0),
-        "symbol": "XAUUSD", "venue": "MT5",
-    })()
-    candidate = type("DC", (), {
-        "regime_state": {"primary_regime": "trend"},
-        "supporting_brains": ["alpha"], "opposing_brains": [],
-    })()
+    snap = type(
+        "CS",
+        (),
+        {
+            "mode_state": type("MS", (), {"current_mode": type("M", (), {"value": "normal"})()})(),
+            "active_overrides": [],
+        },
+    )()
+    feature = type(
+        "FS",
+        (),
+        {
+            "snapshot_id": "s1",
+            "event_time": datetime(2026, 4, 24, 12, 0, 0),
+            "symbol": "XAUUSD",
+            "venue": "MT5",
+        },
+    )()
+    type(
+        "DC",
+        (),
+        {
+            "regime_state": {"primary_regime": "trend"},
+            "supporting_brains": ["alpha"],
+            "opposing_brains": [],
+        },
+    )()
     record = type("R", (), {"record_id": "r_e2e"})()
 
     return RuntimeLoop(
@@ -51,12 +72,20 @@ def _build_loop(container, tmp_path, intent_fn=None):
         brain_run_service=type("BRS", (), {"run_active_brains": lambda self, **kw: []})(),
         parliament_adapter=container.parliament_service,
         override_resolver=type("OR", (), {"resolve": lambda self, **kw: []})(),
-        decision_compiler=type("DC", (), {
-            "compile_intent": lambda self, **kw: (intent_fn or _intent)(),
-        })(),
-        decision_record_writer=type("DRW", (), {
-            "seed_record": lambda self, **kw: (record, Path(tmp_path) / "x.jsonl"),
-        })(),
+        decision_compiler=type(
+            "DC",
+            (),
+            {
+                "compile_intent": lambda self, **kw: (intent_fn or _intent)(),
+            },
+        )(),
+        decision_record_writer=type(
+            "DRW",
+            (),
+            {
+                "seed_record": lambda self, **kw: (record, Path(tmp_path) / "x.jsonl"),
+            },
+        )(),
         intent_message_builder=container.message_builder,
         communication_dispatcher=container.dispatcher,
         communication_record_writer=container.communication_writer,
@@ -83,7 +112,10 @@ class TestEventBus:
 
     def test_unsubscribe(self):
         bus = EventBus()
-        handler = lambda t, p: None
+
+        def handler(t, p):
+            return None
+
         bus.subscribe("x", handler)
         assert bus.get_subscriber_count("x") == 1
         bus.unsubscribe("x", handler)
@@ -102,7 +134,7 @@ class TestEventBus:
 
     def test_handler_error_doesnt_crash(self):
         bus = EventBus()
-        bus.subscribe("x", lambda t, p: 1/0)
+        bus.subscribe("x", lambda t, p: 1 / 0)
         bus.subscribe("x", lambda t, p: None)
         assert bus.publish("x") == 1
 
@@ -121,7 +153,7 @@ class TestBatchProcessor:
         assert result["total"] == 5
         assert result["completed"] == 5
         assert result["errors"] == 0
-        assert c.metrics.get_counter(BATCH_TOTAL_TRIGGERS) == 5
+        assert c.metrics.get_counter(BATCH_TOTAL_TRIGGERS) == 5  # type: ignore[reportOptionalMemberAccess]
 
     def test_batch_with_event_bus(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path))
@@ -170,7 +202,13 @@ class TestBatchProcessor:
         batch = BatchProcessor(orch)
         events = [
             {"message_id": msg_id, "event_type": "ack", "venue": "v1"},
-            {"message_id": msg_id, "event_type": "filled", "filled_quantity": 0.002, "price": 2000.0, "venue": "v1"},
+            {
+                "message_id": msg_id,
+                "event_type": "filled",
+                "filled_quantity": 0.002,
+                "price": 2000.0,
+                "venue": "v1",
+            },
         ]
         result = batch.process_venue_events_batch(events)
         assert result["processed"] == 2
@@ -190,7 +228,7 @@ class TestOrchestratorErrorRecovery:
 
         assert outcome.decision_result is None
         assert any("cycle_error" in str(e) for e in outcome.audit_entries)
-        assert c.metrics.get_counter(CYCLES_ERRORS) == 1
+        assert c.metrics.get_counter(CYCLES_ERRORS) == 1  # type: ignore[reportOptionalMemberAccess]
 
 
 class TestFullSystemIntegration:
@@ -198,7 +236,7 @@ class TestFullSystemIntegration:
         """One-shot integration: build → cycle → venue events → feedback → governance → persist."""
         cfg = EnvironmentConfig.development(str(tmp_path))
         c = ServiceContainer(cfg).build()
-        c.governance_service.register_brain("alpha", "live")
+        c.governance_service.register_brain("alpha", "live")  # type: ignore[reportOptionalMemberAccess]
 
         loop = _build_loop(c, tmp_path)
         orch = c.build_orchestrator(loop)
@@ -211,24 +249,27 @@ class TestFullSystemIntegration:
 
         orch.process_execution_event(message_id=msg_id, event_type="ack", venue="exchange")
         result = orch.process_execution_event(
-            message_id=msg_id, event_type="filled",
-            filled_quantity=0.002, price=2000.5, venue="exchange",
+            message_id=msg_id,
+            event_type="filled",
+            filled_quantity=0.002,
+            price=2000.5,
+            venue="exchange",
         )
         assert result["execution"]["new_status"] == "filled"
         assert result.get("feedback") is not None
 
-        assert c.position_tracker.get_risk_context()["open_position_count"] == 1
-        assert c.metrics.get_counter(CYCLES_TOTAL) >= 1
-        assert c.metrics.get_counter(execution_event_metric("filled")) >= 1
+        assert c.position_tracker.get_risk_context()["open_position_count"] == 1  # type: ignore[reportOptionalMemberAccess]
+        assert c.metrics.get_counter(CYCLES_TOTAL) >= 1  # type: ignore[reportOptionalMemberAccess]
+        assert c.metrics.get_counter(execution_event_metric("filled")) >= 1  # type: ignore[reportOptionalMemberAccess]
 
-        snap = c.diagnostics.build_snapshot()
+        snap = c.diagnostics.build_snapshot()  # type: ignore[reportOptionalMemberAccess]
         assert snap["metrics"] is not None
 
         sp = StatePersistence(str(tmp_path / "state"))
         save_result = sp.save_all(c)
         assert len(save_result["paths"]) == 3
 
-        health = c.health_check.readiness()
+        health = c.health_check.readiness()  # type: ignore[reportOptionalMemberAccess]
         assert health["status"] == "ready"
 
     def test_replay_environment_isolation(self, tmp_path):
@@ -238,14 +279,22 @@ class TestFullSystemIntegration:
         replay = ReplayEnvironment(c)
         replay.activate()
 
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
+
         def _replay_intent():
             return DecisionIntent(
-                schema_version="v1", intent_id=f"i_{now.timestamp()}",
-                candidate_id="c1", snapshot_id="s1",
-                event_time=now, compiled_at=now,
-                symbol="XAUUSD", venue="MT5", action=DecisionAction.OPEN,
-                side=DecisionSide.LONG, conviction=0.85, priority="high",
+                schema_version="v1",
+                intent_id=f"i_{now.timestamp()}",
+                candidate_id="c1",
+                snapshot_id="s1",
+                event_time=now,
+                compiled_at=now,
+                symbol="XAUUSD",
+                venue="MT5",
+                action=DecisionAction.OPEN,
+                side=DecisionSide.LONG,
+                conviction=0.85,
+                priority="high",
                 suggested_risk_fraction=0.002,
             )
 

@@ -1,18 +1,19 @@
 """A1 runtime integration pipeline tests."""
-from datetime import datetime
+
+from datetime import UTC, datetime
 
 import pytest
 
 from core.execution.paper_gateway import PaperExecutionGateway
 from core.runtime.execution_gateway_router import ExecutionGatewayRouter
 from core.runtime.execution_pipeline import RuntimeExecutionPipeline
-from core.runtime.schema_versions import SCHEMA_RUNTIME_PIPELINE_RESULT
 from core.runtime.integration_contracts import OrderSizingPolicy
+from core.runtime.schema_versions import SCHEMA_RUNTIME_PIPELINE_RESULT
 from core.runtime.signal_order_builder import SignalOrderRequestBuilder
 from core.strategies.contracts import Signal
 from core.strategies.examples import ThresholdAlphaAgent
-from core.strategies.schema_versions import SCHEMA_SIGNAL
 from core.strategies.registry import StrategyPluginRegistry, StrategyPluginRunner
+from core.strategies.schema_versions import SCHEMA_SIGNAL
 
 
 def _signal(side="buy", strength=1.0, confidence=1.0, extensions=None):
@@ -24,23 +25,27 @@ def _signal(side="buy", strength=1.0, confidence=1.0, extensions=None):
         side=side,
         strength=strength,
         confidence=confidence,
-        generated_at=datetime.utcnow(),
+        generated_at=datetime.now(UTC).replace(tzinfo=None),
         extensions=extensions or {},
     )
 
 
 class TestSignalOrderRequestBuilder:
     def test_builds_market_order_from_signal(self):
-        builder = SignalOrderRequestBuilder(OrderSizingPolicy(base_quantity=10), default_venue="PAPER")
+        builder = SignalOrderRequestBuilder(
+            OrderSizingPolicy(base_quantity=10), default_venue="PAPER"
+        )
         request = builder.build(_signal(strength=0.5, confidence=0.8), {"price": 2000})
-        assert request.symbol == "XAUUSD"
-        assert request.side == "buy"
-        assert request.quantity == 4.0
-        assert request.venue == "PAPER"
-        assert request.metadata["strategy_id"] == "alpha1"
+        assert request.symbol == "XAUUSD"  # type: ignore[reportOptionalMemberAccess]
+        assert request.side == "buy"  # type: ignore[reportOptionalMemberAccess]
+        assert request.quantity == 4.0  # type: ignore[reportOptionalMemberAccess]
+        assert request.venue == "PAPER"  # type: ignore[reportOptionalMemberAccess]
+        assert request.metadata["strategy_id"] == "alpha1"  # type: ignore[reportOptionalMemberAccess]
 
     def test_skips_hold_flat_and_below_threshold(self):
-        builder = SignalOrderRequestBuilder(OrderSizingPolicy(base_quantity=10, min_confidence=0.6, min_strength=0.2))
+        builder = SignalOrderRequestBuilder(
+            OrderSizingPolicy(base_quantity=10, min_confidence=0.6, min_strength=0.2)
+        )
         assert builder.build(_signal(side="hold"), {}) is None
         assert builder.build(_signal(side="flat"), {}) is None
         assert builder.build(_signal(confidence=0.5), {}) is None
@@ -48,10 +53,12 @@ class TestSignalOrderRequestBuilder:
 
     def test_limit_order_uses_signal_or_market_price(self):
         builder = SignalOrderRequestBuilder()
-        explicit = builder.build(_signal(extensions={"order_type": "limit", "limit_price": 1999.0}), {})
+        explicit = builder.build(
+            _signal(extensions={"order_type": "limit", "limit_price": 1999.0}), {}
+        )
         fallback = builder.build(_signal(extensions={"order_type": "limit"}), {"price": 2000.0})
-        assert explicit.limit_price == 1999.0
-        assert fallback.limit_price == 2000.0
+        assert explicit.limit_price == 1999.0  # type: ignore[reportOptionalMemberAccess]
+        assert fallback.limit_price == 2000.0  # type: ignore[reportOptionalMemberAccess]
 
     def test_sizing_policy_validation(self):
         with pytest.raises(ValueError):
@@ -68,7 +75,7 @@ class TestExecutionGatewayRouter:
         gateway = PaperExecutionGateway()
         router.register("PAPER", gateway)
         request = SignalOrderRequestBuilder().build(_signal(), {"price": 2000})
-        order = router.submit_order(request, {"price": 2000})
+        order = router.submit_order(request, {"price": 2000})  # type: ignore[reportArgumentType]
         assert order.status == "filled"
         assert len(router.list_orders()) == 1
 
@@ -76,7 +83,7 @@ class TestExecutionGatewayRouter:
         router = ExecutionGatewayRouter()
         request = SignalOrderRequestBuilder().build(_signal(), {"price": 2000})
         with pytest.raises(ValueError):
-            router.submit_order(request, {"price": 2000})
+            router.submit_order(request, {"price": 2000})  # type: ignore[reportArgumentType]
 
 
 class TestRuntimeExecutionPipeline:
@@ -90,7 +97,9 @@ class TestRuntimeExecutionPipeline:
         router.register("PAPER", PaperExecutionGateway())
         pipeline = RuntimeExecutionPipeline(
             strategy_runner=runner,
-            order_builder=SignalOrderRequestBuilder(OrderSizingPolicy(base_quantity=10), default_venue="PAPER"),
+            order_builder=SignalOrderRequestBuilder(
+                OrderSizingPolicy(base_quantity=10), default_venue="PAPER"
+            ),
             gateway_router=router,
         )
         result = pipeline.run({"ema_bias": 2.0}, {"price": 2000.0}, {})

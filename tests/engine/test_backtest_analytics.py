@@ -1,9 +1,9 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
-from core.feedback.performance_analytics import PerformanceAnalytics
-from apps.engine.backtest_runner import BacktestRunner, BacktestResult
+from apps.engine.backtest_runner import BacktestRunner
 from core.deployment.environment_config import EnvironmentConfig
 from core.deployment.service_container import ServiceContainer
+from core.feedback.performance_analytics import PerformanceAnalytics
 
 
 def _trades(count=10, base_entry=2000.0, step=1.0, win_rate=0.7):
@@ -12,14 +12,16 @@ def _trades(count=10, base_entry=2000.0, step=1.0, win_rate=0.7):
     for i in range(count):
         is_win = (i % int(1 / win_rate if win_rate > 0 else 1)) != 0
         exit_price = base_entry + step if is_win else base_entry - step * 0.5
-        trades.append({
-            "entry_price": base_entry,
-            "exit_price": exit_price,
-            "side": "long",
-            "quantity": 1.0,
-            "entry_time": t0 + timedelta(hours=i),
-            "exit_time": t0 + timedelta(hours=i, minutes=30),
-        })
+        trades.append(
+            {
+                "entry_price": base_entry,
+                "exit_price": exit_price,
+                "side": "long",
+                "quantity": 1.0,
+                "entry_time": t0 + timedelta(hours=i),
+                "exit_time": t0 + timedelta(hours=i, minutes=30),
+            }
+        )
     return trades
 
 
@@ -102,10 +104,16 @@ class TestPerformanceAnalytics:
 
     def test_duration_tracking(self):
         pa = PerformanceAnalytics()
-        trades = [{
-            "entry_price": 100, "exit_price": 110, "side": "long", "quantity": 1,
-            "entry_time": datetime(2026, 1, 1, 9, 0), "exit_time": datetime(2026, 1, 1, 10, 30),
-        }]
+        trades = [
+            {
+                "entry_price": 100,
+                "exit_price": 110,
+                "side": "long",
+                "quantity": 1,
+                "entry_time": datetime(2026, 1, 1, 9, 0),
+                "exit_time": datetime(2026, 1, 1, 10, 30),
+            }
+        ]
         r = pa.analyze(trades)
         assert r["avg_duration_seconds"] == 5400.0
 
@@ -116,19 +124,21 @@ class TestBacktestRunner:
         c = ServiceContainer(cfg).build()
         runner = BacktestRunner(container=c, initial_equity=50000.0)
 
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         scenarios = [
             {
                 "trigger": {"symbol": "XAUUSD"},
                 "features": {"f": 1.0},
                 "simulated_fill": {"entry_price": 2000, "exit_price": 2010, "quantity": 0.1},
-                "entry_time": now, "exit_time": now + timedelta(minutes=30),
+                "entry_time": now,
+                "exit_time": now + timedelta(minutes=30),
             },
             {
                 "trigger": {"symbol": "XAUUSD"},
                 "features": {"f": 0.5},
                 "simulated_fill": {"entry_price": 2010, "exit_price": 2005, "quantity": 0.1},
-                "entry_time": now + timedelta(hours=1), "exit_time": now + timedelta(hours=1, minutes=20),
+                "entry_time": now + timedelta(hours=1),
+                "exit_time": now + timedelta(hours=1, minutes=20),
             },
             {
                 "trigger": {"symbol": "EURUSD"},
@@ -145,27 +155,31 @@ class TestBacktestRunner:
         s = result.summary()
         assert s["scenarios"] == 3
         assert s["trades_executed"] >= 0
-        assert isinstance(s["total_pnl"], (int, float))
-        assert isinstance(s["sharpe_ratio"], (int, float))
+        assert isinstance(s["total_pnl"], int | float)
+        assert isinstance(s["sharpe_ratio"], int | float)
 
     def test_backtest_save_report(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path), enable_idempotency=False)
         c = ServiceContainer(cfg).build()
         runner = BacktestRunner(container=c)
 
-        now = datetime.utcnow()
-        scenarios = [{
-            "trigger": {"symbol": "XAUUSD"},
-            "features": {"f": 1.0},
-            "simulated_fill": {"entry_price": 2000, "exit_price": 2015, "quantity": 0.5},
-            "entry_time": now, "exit_time": now + timedelta(minutes=15),
-        }]
+        now = datetime.now(UTC).replace(tzinfo=None)
+        scenarios = [
+            {
+                "trigger": {"symbol": "XAUUSD"},
+                "features": {"f": 1.0},
+                "simulated_fill": {"entry_price": 2000, "exit_price": 2015, "quantity": 0.5},
+                "entry_time": now,
+                "exit_time": now + timedelta(minutes=15),
+            }
+        ]
 
         result = runner.run(scenarios, base_dir=str(tmp_path))
         path = result.save(str(tmp_path / "reports" / "test_report.json"))
 
         import json
-        with open(path, "r") as f:
+
+        with open(path) as f:
             data = json.load(f)
         assert "summary" in data
         assert "analytics" in data
@@ -194,20 +208,22 @@ class TestBacktestRunner:
         c = ServiceContainer(cfg).build()
         runner = BacktestRunner(container=c, initial_equity=100000.0)
 
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         scenarios = []
         for i, sym in enumerate(["XAUUSD", "EURUSD", "GBPUSD", "XAUUSD", "EURUSD"]):
-            scenarios.append({
-                "trigger": {"symbol": sym},
-                "features": {"f": float(i)},
-                "simulated_fill": {
-                    "entry_price": 100 + i,
-                    "exit_price": 100 + i + (1 if i % 2 == 0 else -0.5),
-                    "quantity": 1.0,
-                },
-                "entry_time": now + timedelta(hours=i),
-                "exit_time": now + timedelta(hours=i, minutes=30),
-            })
+            scenarios.append(
+                {
+                    "trigger": {"symbol": sym},
+                    "features": {"f": float(i)},
+                    "simulated_fill": {
+                        "entry_price": 100 + i,
+                        "exit_price": 100 + i + (1 if i % 2 == 0 else -0.5),
+                        "quantity": 1.0,
+                    },
+                    "entry_time": now + timedelta(hours=i),
+                    "exit_time": now + timedelta(hours=i, minutes=30),
+                }
+            )
 
         result = runner.run(scenarios, base_dir=str(tmp_path))
         s = result.summary()

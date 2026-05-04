@@ -1,0 +1,18 @@
+{
+  "schema_version": "live_gate_policy.v1",
+  "description": "Unified live dispatch policy thresholds. Loaded by live_dispatch_policy.py unless overridden by CLI args.",
+  "journal_quality": {
+    "max_rejection_rate": 0.2,
+    "max_rejections": 3,
+    "max_consecutive_rejected": 2,
+    "min_samples": 5
+  },
+  "spread_probe": {
+    "max_spread_points": 10000.0
+  },
+  "auto_recovery": {
+    "enabled": true,
+    "consecutive_pass_cycles": 3,
+    "comment": "When enabled, the flag is automatically cleared after N consecutive --eval-only passes with zero blocking reasons. Set to false to require manual clearance."
+  }
+}

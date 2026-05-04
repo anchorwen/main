@@ -1,4 +1,5 @@
 """Order state machine and fill simulator tests."""
+
 import pytest
 
 from core.execution.fill_simulator import FillSimulationConfig, FillSimulator
@@ -84,8 +85,8 @@ class TestFillSimulator:
         sm.acknowledge(state)
         sm.accept(state)
         fill = FillSimulator().simulate(request, state, {"bid": 1999.0, "ask": 2000.0})
-        assert fill.price == 2000.0
-        assert fill.quantity == 10.0
+        assert fill.price == 2000.0  # type: ignore[reportOptionalMemberAccess]
+        assert fill.quantity == 10.0  # type: ignore[reportOptionalMemberAccess]
 
     def test_market_sell_uses_bid(self):
         sm = OrderStateMachine()
@@ -94,7 +95,7 @@ class TestFillSimulator:
         sm.acknowledge(state)
         sm.accept(state)
         fill = FillSimulator().simulate(request, state, {"bid": 1999.0, "ask": 2000.0})
-        assert fill.price == 1999.0
+        assert fill.price == 1999.0  # type: ignore[reportOptionalMemberAccess]
 
     def test_limit_order_not_executable_returns_none(self):
         sm = OrderStateMachine()
@@ -110,8 +111,10 @@ class TestFillSimulator:
         state = sm.create(request, "PAPER")
         sm.acknowledge(state)
         sm.accept(state)
-        fill = FillSimulator(FillSimulationConfig(max_fill_ratio=0.25)).simulate(request, state, {"price": 2000.0})
-        assert fill.quantity == 2.5
+        fill = FillSimulator(FillSimulationConfig(max_fill_ratio=0.25)).simulate(
+            request, state, {"price": 2000.0}
+        )
+        assert fill.quantity == 2.5  # type: ignore[reportOptionalMemberAccess]
 
     def test_partial_fill_by_available_quantity(self):
         sm = OrderStateMachine()
@@ -120,7 +123,7 @@ class TestFillSimulator:
         sm.acknowledge(state)
         sm.accept(state)
         fill = FillSimulator().simulate(request, state, {"price": 2000.0, "available_quantity": 3})
-        assert fill.quantity == 3.0
+        assert fill.quantity == 3.0  # type: ignore[reportOptionalMemberAccess]
 
     def test_slippage_buy_and_sell(self):
         sm = OrderStateMachine()
@@ -133,8 +136,8 @@ class TestFillSimulator:
         sm.acknowledge(sell_state)
         sm.accept(sell_state)
         simulator = FillSimulator(FillSimulationConfig(slippage_bps=10))
-        assert simulator.simulate(buy, buy_state, {"price": 100.0}).price == 100.1
-        assert simulator.simulate(sell, sell_state, {"price": 100.0}).price == 99.9
+        assert simulator.simulate(buy, buy_state, {"price": 100.0}).price == 100.1  # type: ignore[reportOptionalMemberAccess]
+        assert simulator.simulate(sell, sell_state, {"price": 100.0}).price == 99.9  # type: ignore[reportOptionalMemberAccess]
 
     def test_min_liquidity_quantity_blocks_small_fill(self):
         sm = OrderStateMachine()
@@ -142,7 +145,9 @@ class TestFillSimulator:
         state = sm.create(request, "PAPER")
         sm.acknowledge(state)
         sm.accept(state)
-        simulator = FillSimulator(FillSimulationConfig(max_fill_ratio=0.1, min_liquidity_quantity=2))
+        simulator = FillSimulator(
+            FillSimulationConfig(max_fill_ratio=0.1, min_liquidity_quantity=2)
+        )
         assert simulator.simulate(request, state, {"price": 2000.0}) is None
 
     def test_config_validation(self):

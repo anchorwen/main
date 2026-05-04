@@ -3,14 +3,15 @@
 from core.alpha.contracts import AlphaLifecycleState, AlphaRecord
 from core.alpha.lifecycle_service import AlphaLifecycleService
 from core.alpha.performance_store import AlphaPerformanceStore
-from core.alpha.promotion_gate import AlphaPromotionGate
-from core.alpha.promotion_gate import AlphaPromotionPolicy
-from core.alpha.schema_versions import SCHEMA_ALPHA_PROMOTION_DECISION
+from core.alpha.promotion_gate import AlphaPromotionGate, AlphaPromotionPolicy
 from core.alpha.registry import AlphaRegistry
+from core.alpha.schema_versions import SCHEMA_ALPHA_PROMOTION_DECISION
 
 
 def _record(state=AlphaLifecycleState.CANDIDATE):
-    return AlphaRecord(alpha_id="alpha1", name="Alpha One", version="1.0", state=state, strategy_id="alpha1")
+    return AlphaRecord(
+        alpha_id="alpha1", name="Alpha One", version="1.0", state=state, strategy_id="alpha1"
+    )
 
 
 def _metrics(**overrides):
@@ -109,3 +110,50 @@ class TestAlphaPromotionGate:
         decision = AlphaPromotionGate(store, policy).evaluate(_record())
         assert decision.action == "hold"
         assert "fill_ratio_below_minimum" in decision.reasons
+
+    def test_probation_live_bridge_throttle(self):
+        store = AlphaPerformanceStore()
+        store.record_snapshot(
+            "alpha1",
+            {
+                "live_bridge": True,
+                "live_rejection_rate": 0.9,
+                "live_consecutive_rejected": 0,
+                **_metrics(),
+            },
+        )
+        policy = AlphaPromotionPolicy(max_live_rejection_rate=0.5)
+        decision = AlphaPromotionGate(store, policy).evaluate(
+            _record(AlphaLifecycleState.PROBATION_LIVE)
+        )
+        assert decision.action == "throttle"
+        assert decision.reasons == ["live_bridge_throttle_threshold_breached"]
+
+    def test_active_live_bridge_retire_on_consecutive(self):
+        store = AlphaPerformanceStore()
+        store.record_snapshot(
+            "alpha1",
+            {
+                "live_bridge": True,
+                "live_rejection_rate": 0.0,
+                "live_consecutive_rejected": 5,
+                **_metrics(),
+            },
+        )
+        policy = AlphaPromotionPolicy(max_live_consecutive_rejected=4)
+        decision = AlphaPromotionGate(store, policy).evaluate(_record(AlphaLifecycleState.ACTIVE))
+        assert decision.action == "retire"
+        assert "live_bridge_retire_threshold_breached" in decision.reasons
+
+    def test_live_bridge_ignored_for_paper_trading(self):
+        store = AlphaPerformanceStore()
+        store.record_snapshot(
+            "alpha1",
+            {"live_bridge": True, "live_rejection_rate": 1.0, "live_consecutive_rejected": 99},
+        )
+        policy = AlphaPromotionPolicy(max_live_rejection_rate=0.0)
+        decision = AlphaPromotionGate(store, policy).evaluate(
+            _record(AlphaLifecycleState.PAPER_TRADING)
+        )
+        assert decision.action != "throttle"
+        assert decision.action == "hold"

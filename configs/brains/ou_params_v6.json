@@ -1,0 +1,15 @@
+{
+  "schema_version": "brain_registry_entry.v1",
+  "brain_id": "OU_Params_V6_Sniper",
+  "brain_type": "ou_params_v6",
+  "brain_role": "arb_brain",
+  "model_version": "v6.0",
+  "status": "shadow",
+  "artifact_path": "D:\\ai\\Meta_ppo_v6\\arb_params.json",
+  "feature_schema_id": "v6_price_series_1",
+  "deployment_scope": {
+    "symbols": ["XAUUSD"],
+    "sessions": ["all"],
+    "regimes": ["mean_reversion", "oscillation", "low_volatility"]
+  }
+}

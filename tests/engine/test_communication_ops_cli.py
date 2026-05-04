@@ -2,17 +2,29 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import pytest
-
-from apps.engine.communication_ops_cli import build_stable_summary_contract, extract_stable_summary_fields, run_cli
-from apps.engine.main_v9_shadow import OutputPlan, ShadowSessionManager, SessionStreamPlan, render_output_content, stream_session_sse
-from apps.engine.communication_summary_contract import build_summary_mirror_fields_from_operations_summary
+from apps.engine.communication_ops_cli import (
+    build_stable_summary_contract,
+    extract_stable_summary_fields,
+    run_cli,
+)
+from apps.engine.communication_summary_contract import (
+    build_summary_mirror_fields_from_operations_summary,
+)
+from apps.engine.main_v9_shadow import (
+    OutputPlan,
+    SessionStreamPlan,
+    ShadowSessionManager,
+    render_output_content,
+    stream_session_sse,
+)
+from apps.engine.v9_shadow_sse import iter_sse_messages_from_chunks
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.dispatch_result import DispatchResult
 from core.contracts.enums import CommunicationMessageType, CommunicationPriority, DispatchStatus
+from core.contracts.schema_versions import SCHEMA_REPLAY_EXECUTION_RECORD
 from core.deployment.domain_keys import (
-    PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
     PAYLOAD_KEY_BLOCK_REASONS,
+    PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
     PAYLOAD_KEY_EXECUTED_MESSAGE_IDS,
     PAYLOAD_KEY_EXECUTION_MODE,
     PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE,
@@ -29,27 +41,25 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_RECOMMENDED_STRATEGY,
     PAYLOAD_KEY_RECONCILIATION_STATUS,
     PAYLOAD_KEY_REVIEW_ISSUE_CODES,
-    PAYLOAD_KEY_SKIPPED_MESSAGE_IDS,
     PAYLOAD_KEY_SKIP_REASONS,
+    PAYLOAD_KEY_SKIPPED_MESSAGE_IDS,
     PAYLOAD_KEY_SUMMARY_SOURCE,
     PAYLOAD_KEY_TARGET_ISSUE_CODES,
 )
+from core.ledger.services.communication_inspection_service import CommunicationInspectionService
+from core.ledger.services.communication_operations_service import CommunicationOperationsService
+from core.ledger.services.communication_record_reader import CommunicationRecordReader
 from core.ledger.services.communication_record_writer import CommunicationRecordWriter
 from core.ledger.services.communication_replay_executor import CommunicationReplayExecutor
 from core.ledger.services.communication_replay_gate import CommunicationReplayGate
 from core.ledger.services.communication_replay_service import CommunicationReplayService
-from core.ledger.services.communication_inspection_service import CommunicationInspectionService
-from core.ledger.services.communication_operations_service import CommunicationOperationsService
-from core.ledger.services.communication_record_reader import CommunicationRecordReader
 from core.ledger.services.replay_execution_writer import ReplayExecutionWriter
-from core.ledger.stream_names import LEDGER_STREAM_REPLAYS, stream_jsonl_filename
 from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
-from core.protocol.services.file_queue_receipt_reader import FileQueueReceiptReader
-from core.protocol.services.communication_dispatcher import CommunicationDispatcher
-from core.protocol.services.stub_communication_adapter import StubCommunicationAdapter
-from apps.engine.v9_shadow_sse import iter_sse_messages_from_chunks
-from core.contracts.schema_versions import SCHEMA_REPLAY_EXECUTION_RECORD
+from core.ledger.stream_names import LEDGER_STREAM_REPLAYS, stream_jsonl_filename
 from core.protocol.schema_versions import SCHEMA_COMMUNICATION_ENVELOPE, SCHEMA_DISPATCH_RESULT
+from core.protocol.services.communication_dispatcher import CommunicationDispatcher
+from core.protocol.services.file_queue_receipt_reader import FileQueueReceiptReader
+from core.protocol.services.stub_communication_adapter import StubCommunicationAdapter
 
 STALE_SUMMARY_SOURCE = "stale_summary_source"
 STALE_LEGACY_SUMMARY_SOURCE = "stale"
@@ -85,7 +95,6 @@ def build_result(message_id: str):
     )
 
 
-
 def prepare_targeted_replay(tmp_path):
     base_dir = Path(tmp_path)
     store = JsonlLedgerStore(str(base_dir))
@@ -116,7 +125,6 @@ def prepare_targeted_replay(tmp_path):
     )
     replay_result = executor.execute_message_replay(plan, envelope)
     return replay_result["replay_record"].replay_id
-
 
 
 def build_operations_summary(
@@ -161,7 +169,6 @@ def build_operations_summary(
     return summary
 
 
-
 def build_stable_governance_sources(
     *,
     summary_source: str | None,
@@ -171,7 +178,6 @@ def build_stable_governance_sources(
         PAYLOAD_KEY_SUMMARY_SOURCE: summary_source,
         PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE: execution_projection_source,
     }
-
 
 
 def build_stub_operations_result(
@@ -185,7 +191,7 @@ def build_stub_operations_result(
         PAYLOAD_KEY_OPERATIONS_SUMMARY: operations_summary,
     }
     if operations_posture is not None:
-        result[PAYLOAD_KEY_OPERATIONS_POSTURE] = operations_posture
+        result[PAYLOAD_KEY_OPERATIONS_POSTURE] = operations_posture  # type: ignore[reportArgumentType]
     if posture_source is not None:
         result[PAYLOAD_KEY_POSTURE_SOURCES] = {
             "operations_posture_source": posture_source,
@@ -195,8 +201,9 @@ def build_stub_operations_result(
     return result
 
 
-
-def build_stub_replay_operations_result(*, operations_summary: dict, governance_sources: dict | None = None) -> dict:
+def build_stub_replay_operations_result(
+    *, operations_summary: dict, governance_sources: dict | None = None
+) -> dict:
     return {
         **build_stub_operations_result(
             operations_summary=operations_summary,
@@ -207,7 +214,6 @@ def build_stub_replay_operations_result(*, operations_summary: dict, governance_
         "execution_summary": {"ignored": True},
         "replay_record": {"ignored": True},
     }
-
 
 
 def assert_stable_summary_mirror_fields(
@@ -223,7 +229,10 @@ def assert_stable_summary_mirror_fields(
         "operations_posture_source": operations_summary.get(PAYLOAD_KEY_POSTURE_SOURCE),
     }
     if summary_source is None and execution_projection_source is None:
-        assert PAYLOAD_KEY_GOVERNANCE_SOURCES not in payload or payload[PAYLOAD_KEY_GOVERNANCE_SOURCES] is None
+        assert (
+            PAYLOAD_KEY_GOVERNANCE_SOURCES not in payload
+            or payload[PAYLOAD_KEY_GOVERNANCE_SOURCES] is None
+        )
     else:
         assert payload[PAYLOAD_KEY_GOVERNANCE_SOURCES] == {
             PAYLOAD_KEY_SUMMARY_SOURCE: summary_source,
@@ -231,20 +240,35 @@ def assert_stable_summary_mirror_fields(
         }
 
 
-
-def assert_execution_mirror_fields(payload: dict, *, execution_mode: str, executed_message_ids: list[str], skipped_message_ids: list[str], blocked_message_ids: list[str], skip_reasons: dict, block_reasons: dict) -> None:
+def assert_execution_mirror_fields(
+    payload: dict,
+    *,
+    execution_mode: str,
+    executed_message_ids: list[str],
+    skipped_message_ids: list[str],
+    blocked_message_ids: list[str],
+    skip_reasons: dict,
+    block_reasons: dict,
+) -> None:
     assert payload[PAYLOAD_KEY_OPERATIONS_SUMMARY][PAYLOAD_KEY_EXECUTION_MODE] == execution_mode
-    assert payload[PAYLOAD_KEY_OPERATIONS_SUMMARY][PAYLOAD_KEY_EXECUTED_MESSAGE_IDS] == executed_message_ids
-    assert payload[PAYLOAD_KEY_OPERATIONS_SUMMARY][PAYLOAD_KEY_SKIPPED_MESSAGE_IDS] == skipped_message_ids
-    assert payload[PAYLOAD_KEY_OPERATIONS_SUMMARY][PAYLOAD_KEY_BLOCKED_MESSAGE_IDS] == blocked_message_ids
+    assert (
+        payload[PAYLOAD_KEY_OPERATIONS_SUMMARY][PAYLOAD_KEY_EXECUTED_MESSAGE_IDS]
+        == executed_message_ids
+    )
+    assert (
+        payload[PAYLOAD_KEY_OPERATIONS_SUMMARY][PAYLOAD_KEY_SKIPPED_MESSAGE_IDS]
+        == skipped_message_ids
+    )
+    assert (
+        payload[PAYLOAD_KEY_OPERATIONS_SUMMARY][PAYLOAD_KEY_BLOCKED_MESSAGE_IDS]
+        == blocked_message_ids
+    )
     assert payload[PAYLOAD_KEY_OPERATIONS_SUMMARY][PAYLOAD_KEY_SKIP_REASONS] == skip_reasons
     assert payload[PAYLOAD_KEY_OPERATIONS_SUMMARY][PAYLOAD_KEY_BLOCK_REASONS] == block_reasons
 
 
-
 def test_extract_stable_summary_fields_returns_none_for_none_input():
     assert extract_stable_summary_fields(None) is None
-
 
 
 def test_build_summary_mirror_fields_from_operations_summary_always_projects_posture_mirrors():
@@ -265,7 +289,6 @@ def test_build_summary_mirror_fields_from_operations_summary_always_projects_pos
             "operations_posture_source": "governance_summary.posture",
         },
     }
-
 
 
 def test_build_stable_summary_contract_prefers_operations_summary_for_mirrors():
@@ -289,7 +312,7 @@ def test_build_stable_summary_contract_prefers_operations_summary_for_mirrors():
     stable = build_stable_summary_contract(result)
 
     assert_stable_summary_mirror_fields(
-        stable,
+        stable,  # type: ignore[reportArgumentType]
         operations_summary=build_operations_summary(
             posture="auto_replay",
             posture_source="governance_summary.posture",
@@ -299,7 +322,6 @@ def test_build_stable_summary_contract_prefers_operations_summary_for_mirrors():
         summary_source=CommunicationOperationsService.REPLAY_GOVERNANCE_SUMMARY_SOURCE_EXTENSIONS,
         execution_projection_source=CommunicationOperationsService.REPLAY_GOVERNANCE_PROJECTION_SOURCE_EXECUTION,
     )
-
 
 
 def test_run_cli_projects_rejected_message_governance_summary(tmp_path):
@@ -366,7 +388,6 @@ def test_run_cli_projects_rejected_message_governance_summary(tmp_path):
     )
 
 
-
 def test_build_stable_summary_contract_prefers_operations_summary_for_mirrors():
     result = {
         "operations_summary": build_operations_summary(
@@ -388,7 +409,7 @@ def test_build_stable_summary_contract_prefers_operations_summary_for_mirrors():
     stable = build_stable_summary_contract(result)
 
     assert_stable_summary_mirror_fields(
-        stable,
+        stable,  # type: ignore[reportArgumentType]
         operations_summary=build_operations_summary(
             posture="auto_replay",
             posture_source="governance_summary.posture",
@@ -398,7 +419,6 @@ def test_build_stable_summary_contract_prefers_operations_summary_for_mirrors():
         summary_source=CommunicationOperationsService.REPLAY_GOVERNANCE_SUMMARY_SOURCE_EXTENSIONS,
         execution_projection_source=CommunicationOperationsService.REPLAY_GOVERNANCE_PROJECTION_SOURCE_EXECUTION,
     )
-
 
 
 def test_extract_stable_summary_fields_returns_consistent_contract_slice():
@@ -422,7 +442,7 @@ def test_extract_stable_summary_fields_returns_consistent_contract_slice():
     stable = extract_stable_summary_fields(result)
 
     assert_stable_summary_mirror_fields(
-        stable,
+        stable,  # type: ignore[reportArgumentType]
         operations_summary=build_operations_summary(
             posture="unknown",
             posture_source=None,
@@ -430,7 +450,6 @@ def test_extract_stable_summary_fields_returns_consistent_contract_slice():
         summary_source=CommunicationOperationsService.REPLAY_GOVERNANCE_SUMMARY_SOURCE_GATE,
         execution_projection_source=CommunicationOperationsService.REPLAY_GOVERNANCE_PROJECTION_SOURCE_EXECUTION,
     )
-
 
 
 def test_extract_stable_summary_fields_omits_unstable_and_missing_fields():
@@ -446,13 +465,12 @@ def test_extract_stable_summary_fields_omits_unstable_and_missing_fields():
     stable = extract_stable_summary_fields(result)
 
     assert_stable_summary_mirror_fields(
-        stable,
+        stable,  # type: ignore[reportArgumentType]
         operations_summary=build_operations_summary(
             posture="action_required",
             posture_source="trace.delivery_state.delivery_posture",
         ),
     )
-
 
 
 def test_cli_message_view_returns_only_stable_summary_slice_when_extracted(tmp_path, monkeypatch):
@@ -479,20 +497,31 @@ def test_cli_message_view_returns_only_stable_summary_slice_when_extracted(tmp_p
         def get_message_operations_view(self, **kwargs):
             return expected_result
 
-    monkeypatch.setattr("apps.engine.communication_ops_cli.build_operations_service", lambda *args, **kwargs: StubOperationsService())
+    monkeypatch.setattr(
+        "apps.engine.communication_ops_cli.build_operations_service",
+        lambda *args, **kwargs: StubOperationsService(),
+    )
 
-    payload = json.loads(run_cli([
-        "--base-dir", str(tmp_path),
-        "message",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--message-id", "message_001",
-    ]))
+    payload = json.loads(
+        run_cli(
+            [
+                "--base-dir",
+                str(tmp_path),
+                "message",
+                "--date",
+                "2026-04-24",
+                "--target",
+                "exec_bridge",
+                "--message-id",
+                "message_001",
+            ]
+        )
+    )
 
     stable = extract_stable_summary_fields(payload)
 
     assert_stable_summary_mirror_fields(
-        stable,
+        stable,  # type: ignore[reportArgumentType]
         operations_summary=build_operations_summary(
             posture="action_required",
             posture_source="trace.delivery_state.delivery_posture",
@@ -502,7 +531,6 @@ def test_cli_message_view_returns_only_stable_summary_slice_when_extracted(tmp_p
         summary_source=CommunicationOperationsService.REPLAY_GOVERNANCE_SUMMARY_SOURCE_GATE,
         execution_projection_source=CommunicationOperationsService.REPLAY_GOVERNANCE_PROJECTION_SOURCE_EXECUTION,
     )
-
 
 
 def test_cli_replay_view_extract_stable_summary_fields_preserves_boundary(tmp_path, monkeypatch):
@@ -525,20 +553,31 @@ def test_cli_replay_view_extract_stable_summary_fields_preserves_boundary(tmp_pa
         def get_replay_operations_view(self, **kwargs):
             return expected_result
 
-    monkeypatch.setattr("apps.engine.communication_ops_cli.build_operations_service", lambda *args, **kwargs: StubOperationsService())
+    monkeypatch.setattr(
+        "apps.engine.communication_ops_cli.build_operations_service",
+        lambda *args, **kwargs: StubOperationsService(),
+    )
 
-    payload = json.loads(run_cli([
-        "--base-dir", str(tmp_path),
-        "replay",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--replay-id", "replay_001",
-    ]))
+    payload = json.loads(
+        run_cli(
+            [
+                "--base-dir",
+                str(tmp_path),
+                "replay",
+                "--date",
+                "2026-04-24",
+                "--target",
+                "exec_bridge",
+                "--replay-id",
+                "replay_001",
+            ]
+        )
+    )
 
     stable = extract_stable_summary_fields(payload)
 
     assert_stable_summary_mirror_fields(
-        stable,
+        stable,  # type: ignore[reportArgumentType]
         operations_summary=build_operations_summary(
             posture="auto_replay",
             posture_source="governance_summary.posture",
@@ -550,7 +589,6 @@ def test_cli_replay_view_extract_stable_summary_fields_preserves_boundary(tmp_pa
         summary_source=CommunicationOperationsService.REPLAY_GOVERNANCE_SUMMARY_SOURCE_EXTENSIONS,
         execution_projection_source=CommunicationOperationsService.REPLAY_GOVERNANCE_PROJECTION_SOURCE_EXECUTION,
     )
-
 
 
 def test_cli_message_view_prefers_operations_summary_for_posture_fields(tmp_path, monkeypatch):
@@ -569,21 +607,31 @@ def test_cli_message_view_prefers_operations_summary_for_posture_fields(tmp_path
         def get_message_operations_view(self, **kwargs):
             return expected_result
 
-    monkeypatch.setattr("apps.engine.communication_ops_cli.build_operations_service", lambda *args, **kwargs: StubOperationsService())
+    monkeypatch.setattr(
+        "apps.engine.communication_ops_cli.build_operations_service",
+        lambda *args, **kwargs: StubOperationsService(),
+    )
 
-    payload = json.loads(run_cli([
-        "--base-dir", str(tmp_path),
-        "message",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--message-id", "message_001",
-    ]))
+    payload = json.loads(
+        run_cli(
+            [
+                "--base-dir",
+                str(tmp_path),
+                "message",
+                "--date",
+                "2026-04-24",
+                "--target",
+                "exec_bridge",
+                "--message-id",
+                "message_001",
+            ]
+        )
+    )
 
     assert payload["operations_posture"] == "action_required"
     assert payload["posture_sources"] == {
         "operations_posture_source": "trace.delivery_state.delivery_posture",
     }
-
 
 
 def test_cli_message_view_uses_summary_governance_sources_when_present(tmp_path, monkeypatch):
@@ -604,15 +652,26 @@ def test_cli_message_view_uses_summary_governance_sources_when_present(tmp_path,
         def get_message_operations_view(self, **kwargs):
             return expected_result
 
-    monkeypatch.setattr("apps.engine.communication_ops_cli.build_operations_service", lambda *args, **kwargs: StubOperationsService())
+    monkeypatch.setattr(
+        "apps.engine.communication_ops_cli.build_operations_service",
+        lambda *args, **kwargs: StubOperationsService(),
+    )
 
-    payload = json.loads(run_cli([
-        "--base-dir", str(tmp_path),
-        "message",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--message-id", "message_001",
-    ]))
+    payload = json.loads(
+        run_cli(
+            [
+                "--base-dir",
+                str(tmp_path),
+                "message",
+                "--date",
+                "2026-04-24",
+                "--target",
+                "exec_bridge",
+                "--message-id",
+                "message_001",
+            ]
+        )
+    )
 
     assert payload["governance_sources"] == {
         "summary_source": CommunicationOperationsService.REPLAY_GOVERNANCE_SUMMARY_SOURCE_GATE,
@@ -620,8 +679,9 @@ def test_cli_message_view_uses_summary_governance_sources_when_present(tmp_path,
     }
 
 
-
-def test_cli_message_view_preserves_stable_governance_sources_when_summary_omits_them(tmp_path, monkeypatch):
+def test_cli_message_view_preserves_stable_governance_sources_when_summary_omits_them(
+    tmp_path, monkeypatch
+):
     expected_result = build_stub_operations_result(
         operations_summary=build_operations_summary(
             posture="action_required",
@@ -639,21 +699,31 @@ def test_cli_message_view_preserves_stable_governance_sources_when_summary_omits
         def get_message_operations_view(self, **kwargs):
             return expected_result
 
-    monkeypatch.setattr("apps.engine.communication_ops_cli.build_operations_service", lambda *args, **kwargs: StubOperationsService())
+    monkeypatch.setattr(
+        "apps.engine.communication_ops_cli.build_operations_service",
+        lambda *args, **kwargs: StubOperationsService(),
+    )
 
-    payload = json.loads(run_cli([
-        "--base-dir", str(tmp_path),
-        "message",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--message-id", "message_001",
-    ]))
+    payload = json.loads(
+        run_cli(
+            [
+                "--base-dir",
+                str(tmp_path),
+                "message",
+                "--date",
+                "2026-04-24",
+                "--target",
+                "exec_bridge",
+                "--message-id",
+                "message_001",
+            ]
+        )
+    )
 
     assert payload["governance_sources"] == {
         "summary_source": CommunicationOperationsService.REPLAY_GOVERNANCE_SUMMARY_SOURCE_DERIVED,
         "execution_projection_source": None,
     }
-
 
 
 def test_cli_message_view_maps_unknown_posture_from_summary(tmp_path, monkeypatch):
@@ -672,15 +742,26 @@ def test_cli_message_view_maps_unknown_posture_from_summary(tmp_path, monkeypatc
         def get_message_operations_view(self, **kwargs):
             return expected_result
 
-    monkeypatch.setattr("apps.engine.communication_ops_cli.build_operations_service", lambda *args, **kwargs: StubOperationsService())
+    monkeypatch.setattr(
+        "apps.engine.communication_ops_cli.build_operations_service",
+        lambda *args, **kwargs: StubOperationsService(),
+    )
 
-    payload = json.loads(run_cli([
-        "--base-dir", str(tmp_path),
-        "message",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--message-id", "message_001",
-    ]))
+    payload = json.loads(
+        run_cli(
+            [
+                "--base-dir",
+                str(tmp_path),
+                "message",
+                "--date",
+                "2026-04-24",
+                "--target",
+                "exec_bridge",
+                "--message-id",
+                "message_001",
+            ]
+        )
+    )
 
     assert payload["operations_posture"] == "unknown"
     assert payload["posture_sources"] == {
@@ -688,19 +769,24 @@ def test_cli_message_view_maps_unknown_posture_from_summary(tmp_path, monkeypatc
     }
 
 
-
 def test_cli_message_view(tmp_path):
     store = JsonlLedgerStore(str(tmp_path))
     writer = CommunicationRecordWriter(ledger_store=store)
     writer.write_record(build_envelope("message_001", "corr_001"), build_result("message_001"))
 
-    output = run_cli([
-        "--base-dir", str(tmp_path),
-        "message",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--message-id", "message_001",
-    ])
+    output = run_cli(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "message",
+            "--date",
+            "2026-04-24",
+            "--target",
+            "exec_bridge",
+            "--message-id",
+            "message_001",
+        ]
+    )
     payload = json.loads(output)
 
     assert payload["record"]["message_id"] == "message_001"
@@ -733,7 +819,6 @@ def test_cli_message_view(tmp_path):
     }
 
 
-
 def test_cli_correlation_view_maps_unknown_posture_from_summary(tmp_path, monkeypatch):
     expected_result = build_stub_operations_result(
         operations_summary=build_operations_summary(
@@ -752,21 +837,31 @@ def test_cli_correlation_view_maps_unknown_posture_from_summary(tmp_path, monkey
         def get_correlation_operations_view(self, **kwargs):
             return expected_result
 
-    monkeypatch.setattr("apps.engine.communication_ops_cli.build_operations_service", lambda *args, **kwargs: StubOperationsService())
+    monkeypatch.setattr(
+        "apps.engine.communication_ops_cli.build_operations_service",
+        lambda *args, **kwargs: StubOperationsService(),
+    )
 
-    payload = json.loads(run_cli([
-        "--base-dir", str(tmp_path),
-        "correlation",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--correlation-id", "corr_missing_trace",
-    ]))
+    payload = json.loads(
+        run_cli(
+            [
+                "--base-dir",
+                str(tmp_path),
+                "correlation",
+                "--date",
+                "2026-04-24",
+                "--target",
+                "exec_bridge",
+                "--correlation-id",
+                "corr_missing_trace",
+            ]
+        )
+    )
 
     assert payload["operations_posture"] == "unknown"
     assert payload["posture_sources"] == {
         "operations_posture_source": None,
     }
-
 
 
 def test_cli_correlation_view(tmp_path):
@@ -803,18 +898,31 @@ def test_cli_correlation_view(tmp_path):
         ),
     )
     (receipt_path / "message_101.ack.json").write_text(
-        json.dumps({"message_id": "message_101", "ack_status": "acknowledged", "received_at": "2026-04-24T12:00:03"}),
+        json.dumps(
+            {
+                "message_id": "message_101",
+                "ack_status": "acknowledged",
+                "received_at": "2026-04-24T12:00:03",
+            }
+        ),
         encoding="utf-8",
     )
 
-    output = run_cli([
-        "--base-dir", str(tmp_path),
-        "--receipt-dir", str(receipt_dir),
-        "correlation",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--correlation-id", "corr_shared",
-    ])
+    output = run_cli(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "--receipt-dir",
+            str(receipt_dir),
+            "correlation",
+            "--date",
+            "2026-04-24",
+            "--target",
+            "exec_bridge",
+            "--correlation-id",
+            "corr_shared",
+        ]
+    )
     payload = json.loads(output)
 
     assert payload["trace"]["correlation_id"] == "corr_shared"
@@ -859,7 +967,6 @@ def test_cli_correlation_view(tmp_path):
         "review_issue_codes": [],
         "governance_tags": ["auto_replay_eligible", "timeout_targeted_replay"],
     }
-
 
 
 def test_cli_correlation_view_projects_terminal_mixed_contract(tmp_path):
@@ -909,22 +1016,41 @@ def test_cli_correlation_view_projects_terminal_mixed_contract(tmp_path):
         ),
     )
     (receipt_path / "message_accepted.ack.json").write_text(
-        json.dumps({"message_id": "message_accepted", "ack_status": "accepted", "received_at": "2026-04-24T12:00:03"}),
+        json.dumps(
+            {
+                "message_id": "message_accepted",
+                "ack_status": "accepted",
+                "received_at": "2026-04-24T12:00:03",
+            }
+        ),
         encoding="utf-8",
     )
     (receipt_path / "message_acked.ack.json").write_text(
-        json.dumps({"message_id": "message_acked", "ack_status": "acknowledged", "received_at": "2026-04-24T12:00:03"}),
+        json.dumps(
+            {
+                "message_id": "message_acked",
+                "ack_status": "acknowledged",
+                "received_at": "2026-04-24T12:00:03",
+            }
+        ),
         encoding="utf-8",
     )
 
-    output = run_cli([
-        "--base-dir", str(tmp_path),
-        "--receipt-dir", str(receipt_dir),
-        "correlation",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--correlation-id", "corr_terminal_mix",
-    ])
+    output = run_cli(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "--receipt-dir",
+            str(receipt_dir),
+            "correlation",
+            "--date",
+            "2026-04-24",
+            "--target",
+            "exec_bridge",
+            "--correlation-id",
+            "corr_terminal_mix",
+        ]
+    )
     payload = json.loads(output)
 
     assert payload["trace"]["delivery_summary"]["issue_counts"] == {
@@ -966,23 +1092,34 @@ def test_cli_correlation_view_projects_terminal_mixed_contract(tmp_path):
     }
 
 
-
 def test_cli_replay_view_existing_end_to_end_sample(tmp_path):
     replay_id = prepare_targeted_replay(tmp_path)
 
-    output = run_cli([
-        "--base-dir", str(tmp_path),
-        "replay",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--replay-id", replay_id,
-    ])
+    output = run_cli(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "replay",
+            "--date",
+            "2026-04-24",
+            "--target",
+            "exec_bridge",
+            "--replay-id",
+            replay_id,
+        ]
+    )
     payload = json.loads(output)
 
     assert payload["replay_record"]["replay_id"] == replay_id
     assert payload["replay_status"] == "executed"
-    assert payload["replay_record"]["extensions"]["governance_summary"] == payload["governance_summary"]
-    assert payload["replay_record"]["gate_decision"]["governance_summary"] == payload["governance_summary"]
+    assert (
+        payload["replay_record"]["extensions"]["governance_summary"]
+        == payload["governance_summary"]
+    )
+    assert (
+        payload["replay_record"]["gate_decision"]["governance_summary"]
+        == payload["governance_summary"]
+    )
     assert payload["replay_record"]["execution"]["governance_posture"] == "auto_replay"
     assert payload["execution_governance_projection"] == {
         "decision": "allow",
@@ -1028,8 +1165,9 @@ def test_cli_replay_view_existing_end_to_end_sample(tmp_path):
     }
 
 
-
-def test_cli_replay_view_preserves_execution_mirror_fields_from_operations_summary(tmp_path, monkeypatch):
+def test_cli_replay_view_preserves_execution_mirror_fields_from_operations_summary(
+    tmp_path, monkeypatch
+):
     expected_result = build_stub_replay_operations_result(
         operations_summary=build_operations_summary(
             posture="targeted_replay",
@@ -1051,15 +1189,26 @@ def test_cli_replay_view_preserves_execution_mirror_fields_from_operations_summa
         def get_replay_operations_view(self, **kwargs):
             return expected_result
 
-    monkeypatch.setattr("apps.engine.communication_ops_cli.build_operations_service", lambda *args, **kwargs: StubOperationsService())
+    monkeypatch.setattr(
+        "apps.engine.communication_ops_cli.build_operations_service",
+        lambda *args, **kwargs: StubOperationsService(),
+    )
 
-    payload = json.loads(run_cli([
-        "--base-dir", str(tmp_path),
-        "replay",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--replay-id", "replay_targeted_001",
-    ]))
+    payload = json.loads(
+        run_cli(
+            [
+                "--base-dir",
+                str(tmp_path),
+                "replay",
+                "--date",
+                "2026-04-24",
+                "--target",
+                "exec_bridge",
+                "--replay-id",
+                "replay_targeted_001",
+            ]
+        )
+    )
 
     assert_execution_mirror_fields(
         payload,
@@ -1072,8 +1221,9 @@ def test_cli_replay_view_preserves_execution_mirror_fields_from_operations_summa
     )
 
 
-
-def test_cli_replay_view_preserves_blocked_execution_mirror_fields_from_operations_summary(tmp_path, monkeypatch):
+def test_cli_replay_view_preserves_blocked_execution_mirror_fields_from_operations_summary(
+    tmp_path, monkeypatch
+):
     expected_result = build_stub_replay_operations_result(
         operations_summary=build_operations_summary(
             posture="review_required",
@@ -1098,15 +1248,26 @@ def test_cli_replay_view_preserves_blocked_execution_mirror_fields_from_operatio
         def get_replay_operations_view(self, **kwargs):
             return expected_result
 
-    monkeypatch.setattr("apps.engine.communication_ops_cli.build_operations_service", lambda *args, **kwargs: StubOperationsService())
+    monkeypatch.setattr(
+        "apps.engine.communication_ops_cli.build_operations_service",
+        lambda *args, **kwargs: StubOperationsService(),
+    )
 
-    payload = json.loads(run_cli([
-        "--base-dir", str(tmp_path),
-        "replay",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--replay-id", "replay_blocked_001",
-    ]))
+    payload = json.loads(
+        run_cli(
+            [
+                "--base-dir",
+                str(tmp_path),
+                "replay",
+                "--date",
+                "2026-04-24",
+                "--target",
+                "exec_bridge",
+                "--replay-id",
+                "replay_blocked_001",
+            ]
+        )
+    )
 
     assert_execution_mirror_fields(
         payload,
@@ -1119,9 +1280,10 @@ def test_cli_replay_view_preserves_blocked_execution_mirror_fields_from_operatio
     )
 
 
-
 def test_cli_replay_view_uses_gate_governance_summary_when_extensions_missing(tmp_path):
-    replay_path = tmp_path / "2026-04-24" / stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    replay_path = (
+        tmp_path / "2026-04-24" / stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    )
     replay_path.parent.mkdir(parents=True, exist_ok=True)
     replay_path.write_text(
         json.dumps(
@@ -1161,17 +1323,24 @@ def test_cli_replay_view_uses_gate_governance_summary_when_extensions_missing(tm
                 },
                 "extensions": {},
             }
-        ) + "\n",
+        )
+        + "\n",
         encoding="utf-8",
     )
 
-    output = run_cli([
-        "--base-dir", str(tmp_path),
-        "replay",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--replay-id", "replay_gate_cli",
-    ])
+    output = run_cli(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "replay",
+            "--date",
+            "2026-04-24",
+            "--target",
+            "exec_bridge",
+            "--replay-id",
+            "replay_gate_cli",
+        ]
+    )
     payload = json.loads(output)
 
     assert payload["governance_summary"]["decision"] == "allow"
@@ -1181,9 +1350,10 @@ def test_cli_replay_view_uses_gate_governance_summary_when_extensions_missing(tm
     }
 
 
-
 def test_cli_replay_view_derives_governance_summary_for_legacy_record(tmp_path):
-    replay_path = tmp_path / "2026-04-24" / stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    replay_path = (
+        tmp_path / "2026-04-24" / stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    )
     replay_path.parent.mkdir(parents=True, exist_ok=True)
     replay_path.write_text(
         json.dumps(
@@ -1220,17 +1390,24 @@ def test_cli_replay_view_derives_governance_summary_for_legacy_record(tmp_path):
                 },
                 "extensions": {},
             }
-        ) + "\n",
+        )
+        + "\n",
         encoding="utf-8",
     )
 
-    output = run_cli([
-        "--base-dir", str(tmp_path),
-        "replay",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--replay-id", "replay_legacy_cli",
-    ])
+    output = run_cli(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "replay",
+            "--date",
+            "2026-04-24",
+            "--target",
+            "exec_bridge",
+            "--replay-id",
+            "replay_legacy_cli",
+        ]
+    )
     payload = json.loads(output)
 
     assert payload["governance_summary"] == {
@@ -1247,8 +1424,9 @@ def test_cli_replay_view_derives_governance_summary_for_legacy_record(tmp_path):
     }
 
 
-
-def test_cli_replay_view_preserves_stable_governance_sources_when_summary_omits_them(tmp_path, monkeypatch):
+def test_cli_replay_view_preserves_stable_governance_sources_when_summary_omits_them(
+    tmp_path, monkeypatch
+):
     expected_result = build_stub_replay_operations_result(
         operations_summary=build_operations_summary(
             posture="auto_replay",
@@ -1266,15 +1444,26 @@ def test_cli_replay_view_preserves_stable_governance_sources_when_summary_omits_
         def get_replay_operations_view(self, **kwargs):
             return expected_result
 
-    monkeypatch.setattr("apps.engine.communication_ops_cli.build_operations_service", lambda *args, **kwargs: StubOperationsService())
+    monkeypatch.setattr(
+        "apps.engine.communication_ops_cli.build_operations_service",
+        lambda *args, **kwargs: StubOperationsService(),
+    )
 
-    payload = json.loads(run_cli([
-        "--base-dir", str(tmp_path),
-        "replay",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--replay-id", "replay_001",
-    ]))
+    payload = json.loads(
+        run_cli(
+            [
+                "--base-dir",
+                str(tmp_path),
+                "replay",
+                "--date",
+                "2026-04-24",
+                "--target",
+                "exec_bridge",
+                "--replay-id",
+                "replay_001",
+            ]
+        )
+    )
 
     assert payload["governance_sources"] == {
         "summary_source": CommunicationOperationsService.REPLAY_GOVERNANCE_SUMMARY_SOURCE_GATE,
@@ -1282,8 +1471,9 @@ def test_cli_replay_view_preserves_stable_governance_sources_when_summary_omits_
     }
 
 
-
-def test_cli_replay_view_keeps_stable_governance_sources_when_projection_missing(tmp_path, monkeypatch):
+def test_cli_replay_view_keeps_stable_governance_sources_when_projection_missing(
+    tmp_path, monkeypatch
+):
     expected_result = build_stub_replay_operations_result(
         operations_summary=build_operations_summary(
             posture="auto_replay",
@@ -1301,28 +1491,42 @@ def test_cli_replay_view_keeps_stable_governance_sources_when_projection_missing
         def get_replay_operations_view(self, **kwargs):
             return expected_result
 
-    monkeypatch.setattr("apps.engine.communication_ops_cli.build_operations_service", lambda *args, **kwargs: StubOperationsService())
+    monkeypatch.setattr(
+        "apps.engine.communication_ops_cli.build_operations_service",
+        lambda *args, **kwargs: StubOperationsService(),
+    )
 
-    payload = json.loads(run_cli([
-        "--base-dir", str(tmp_path),
-        "replay",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--replay-id", "replay_missing_projection",
-    ]))
+    payload = json.loads(
+        run_cli(
+            [
+                "--base-dir",
+                str(tmp_path),
+                "replay",
+                "--date",
+                "2026-04-24",
+                "--target",
+                "exec_bridge",
+                "--replay-id",
+                "replay_missing_projection",
+            ]
+        )
+    )
 
     assert payload["governance_sources"] == {
         "summary_source": CommunicationOperationsService.REPLAY_GOVERNANCE_SUMMARY_SOURCE_GATE,
         "execution_projection_source": CommunicationOperationsService.REPLAY_GOVERNANCE_PROJECTION_SOURCE_EXECUTION,
     }
-
 
 
 def test_cli_and_shadow_json_and_session_and_sse_share_same_stable_contract(monkeypatch):
-    from tests.engine.shadow_testkit import build_fallback_cli_contract, build_fallback_session_payload, build_fallback_summary_result
+    from tests.engine.shadow_testkit import (
+        build_fallback_cli_contract,
+        build_fallback_session_payload,
+        build_fallback_summary_result,
+    )
 
     expected_result = build_fallback_cli_contract()
-    cli_payload = {
+    {
         **build_fallback_session_payload(),
         **expected_result,
     }
@@ -1335,20 +1539,34 @@ def test_cli_and_shadow_json_and_session_and_sse_share_same_stable_contract(monk
                 **expected_result,
             }
 
-    monkeypatch.setattr("apps.engine.communication_ops_cli.build_operations_service", lambda *args, **kwargs: StubOperationsService())
+    monkeypatch.setattr(
+        "apps.engine.communication_ops_cli.build_operations_service",
+        lambda *args, **kwargs: StubOperationsService(),
+    )
 
-    cli_output = json.loads(run_cli([
-        "--base-dir", "D:/cursor",
-        "message",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--message-id", "message_001",
-    ]))
+    cli_output = json.loads(
+        run_cli(
+            [
+                "--base-dir",
+                "D:/cursor",
+                "message",
+                "--date",
+                "2026-04-24",
+                "--target",
+                "exec_bridge",
+                "--message-id",
+                "message_001",
+            ]
+        )
+    )
 
     result = build_fallback_summary_result()
     result.communication_operations = build_fallback_cli_contract()
     shadow_payload = build_fallback_session_payload()
-    monkeypatch.setattr("apps.engine.main_v9_shadow.prepare_results", lambda _args: ([shadow_payload], "ignored", [result]))
+    monkeypatch.setattr(
+        "apps.engine.main_v9_shadow.prepare_results",
+        lambda _args: ([shadow_payload], "ignored", [result]),
+    )
 
     shadow_json = json.loads(
         render_output_content(
@@ -1359,13 +1577,16 @@ def test_cli_and_shadow_json_and_session_and_sse_share_same_stable_contract(monk
     )
     session_events = list(iter_sse_messages_from_chunks(stream_session_sse(type("Args", (), {})())))
     sse_completed = session_events[-1]["data"]["data"]["results"]
-    manager_completed = list(ShadowSessionManager(stream_plan=SessionStreamPlan(include_meta=True)).stream_run(type("Args", (), {})()))[-1]["data"]["results"]
+    manager_completed = list(
+        ShadowSessionManager(stream_plan=SessionStreamPlan(include_meta=True)).stream_run(
+            type("Args", (), {})()
+        )
+    )[-1]["data"]["results"]
 
     expected_stable = extract_stable_summary_fields(cli_output)
     assert extract_stable_summary_fields(shadow_json["results"]) == expected_stable
     assert extract_stable_summary_fields(sse_completed) == expected_stable
     assert extract_stable_summary_fields(manager_completed) == expected_stable
-
 
 
 def test_cli_targeted_replay_view(tmp_path):
@@ -1378,13 +1599,13 @@ def test_cli_targeted_replay_view(tmp_path):
         record_reader=communication_reader,
         receipt_reader=FileQueueReceiptReader(receipt_dir=str(receipt_dir)),
     )
-    replay_service = CommunicationReplayService(inspection_service=inspection)
+    CommunicationReplayService(inspection_service=inspection)
     replay_gate = CommunicationReplayGate()
     dispatcher = CommunicationDispatcher(
         adapter=StubCommunicationAdapter(),
         clock=lambda: datetime(2026, 4, 24, 12, 0, 2),
     )
-    executor = CommunicationReplayExecutor(
+    CommunicationReplayExecutor(
         replay_gate=replay_gate,
         dispatcher=dispatcher,
         replay_execution_writer=replay_writer,
@@ -1420,6 +1641,12 @@ def test_cli_targeted_replay_view(tmp_path):
     receipt_path = receipt_dir / "2026-04-24" / "exec_bridge"
     receipt_path.mkdir(parents=True, exist_ok=True)
     (receipt_path / "message_401.ack.json").write_text(
-        json.dumps({"message_id": "message_401", "ack_status": "acknowledged", "received_at": "2026-04-24T12:00:03"}),
+        json.dumps(
+            {
+                "message_id": "message_401",
+                "ack_status": "acknowledged",
+                "received_at": "2026-04-24T12:00:03",
+            }
+        ),
         encoding="utf-8",
     )

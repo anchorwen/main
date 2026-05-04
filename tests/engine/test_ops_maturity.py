@@ -1,14 +1,17 @@
 import time
 
+from core.deployment.environment_config import EnvironmentConfig
+from core.deployment.lifecycle_manager import LifecycleManager
+from core.deployment.operational_support import ConfigValidator, RetryPolicy
+from core.deployment.service_container import ServiceContainer
+from core.deployment.state_persistence import StatePersistence
 from core.observability.alert_service import (
-    AlertService, AlertRule, InMemoryAlertChannel, LogAlertChannel,
+    AlertRule,
+    AlertService,
+    InMemoryAlertChannel,
+    LogAlertChannel,
 )
 from core.observability.audit_log import StructuredAuditLog
-from core.deployment.operational_support import RetryPolicy, ConfigValidator
-from core.deployment.environment_config import EnvironmentConfig
-from core.deployment.service_container import ServiceContainer
-from core.deployment.lifecycle_manager import LifecycleManager
-from core.deployment.state_persistence import StatePersistence
 
 
 class TestAlertRule:
@@ -77,6 +80,7 @@ class TestRetryPolicy:
 
     def test_retries_then_succeeds(self):
         calls = {"count": 0}
+
         def flaky():
             calls["count"] += 1
             if calls["count"] < 3:
@@ -90,6 +94,7 @@ class TestRetryPolicy:
     def test_exhausts_retries(self):
         rp = RetryPolicy(max_retries=2, base_delay_seconds=0.001)
         import pytest
+
         with pytest.raises(ValueError):
             rp.execute(lambda: (_ for _ in ()).throw(ValueError("always fails")))
 
@@ -100,6 +105,7 @@ class TestRetryPolicy:
             retryable_exceptions=(ConnectionError,),
         )
         import pytest
+
         with pytest.raises(ValueError):
             rp.execute(lambda: (_ for _ in ()).throw(ValueError("not retryable")))
 
@@ -192,7 +198,7 @@ class TestLifecycleManager:
     def test_state_save_on_shutdown(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path / "data"))
         c = ServiceContainer(cfg).build()
-        c.governance_service.register_brain("test", "live")
+        c.governance_service.register_brain("test", "live")  # type: ignore[reportOptionalMemberAccess]
         sp = StatePersistence(str(tmp_path / "state"))
         lm = LifecycleManager(c, state_persistence=sp)
 
@@ -205,7 +211,7 @@ class TestLifecycleManager:
     def test_state_restore_on_startup(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path / "data"))
         c1 = ServiceContainer(cfg).build()
-        c1.governance_service.register_brain("alpha", "live")
+        c1.governance_service.register_brain("alpha", "live")  # type: ignore[reportOptionalMemberAccess]
         sp = StatePersistence(str(tmp_path / "state"))
         sp.save_governance_state(c1.governance_service, "restore_test")
 
@@ -215,7 +221,7 @@ class TestLifecycleManager:
 
         restore_phase = [p for p in result["phases"] if p["phase"] == "state_restore"]
         assert restore_phase[0]["restored"] is True
-        assert c2.governance_service.get_brain_state("alpha") is not None
+        assert c2.governance_service.get_brain_state("alpha") is not None  # type: ignore[reportOptionalMemberAccess]
 
     def test_shutdown_hooks(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path))

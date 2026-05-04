@@ -1,25 +1,30 @@
 """Tests for VenueRouter, ConfigHotReload, and Tracing integration."""
+
 import json
 from datetime import datetime
 
-from core.deployment.domain_keys import TIMELINE_ACTOR_HOT_RELOAD, TIMELINE_EVENT_ENGINE_CONFIG
-from core.observability.metric_names import ENGINE_CONFIG_RELOAD_TOTAL
-from core.protocol.services.venue_router import VenueRouter, StubVenueAdapter, VenueAdapter
+from core.contracts.domain.communication_envelope import CommunicationEnvelope
+from core.contracts.domain.dispatch_request import DispatchRequest
+from core.contracts.enums import CommunicationMessageType, CommunicationPriority, DispatchStatus
 from core.deployment.config_hot_reload import ConfigHotReload
+from core.deployment.domain_keys import TIMELINE_ACTOR_HOT_RELOAD, TIMELINE_EVENT_ENGINE_CONFIG
 from core.deployment.environment_config import EnvironmentConfig
 from core.deployment.scheduler_service import SchedulerService
 from core.deployment.service_container import ServiceContainer
 from core.deployment.state_persistence import StatePersistence
-from core.contracts.domain.dispatch_request import DispatchRequest
-from core.contracts.domain.communication_envelope import CommunicationEnvelope
-from core.contracts.enums import CommunicationMessageType, CommunicationPriority, DispatchStatus
+from core.observability.metric_names import ENGINE_CONFIG_RELOAD_TOTAL
+from core.protocol.services.venue_router import StubVenueAdapter, VenueRouter
 
 
 def _env(venue="MT5"):
     return CommunicationEnvelope(
-        schema_version="v1", message_id="m1", correlation_id="c1",
-        causation_id=None, event_time=datetime(2026, 4, 26, 12, 0, 0),
-        producer="test", target="exec_bridge",
+        schema_version="v1",
+        message_id="m1",
+        correlation_id="c1",
+        causation_id=None,
+        event_time=datetime(2026, 4, 26, 12, 0, 0),
+        producer="test",
+        target="exec_bridge",
         message_type=CommunicationMessageType.DECISION_INTENT,
         priority=CommunicationPriority.NORMAL,
         payload={"action": "open", "symbol": "XAUUSD", "venue": venue},
@@ -28,7 +33,9 @@ def _env(venue="MT5"):
 
 def _req(env):
     return DispatchRequest(
-        schema_version="v1", dispatch_id="d1", envelope=env,
+        schema_version="v1",
+        dispatch_id="d1",
+        envelope=env,
         requested_at=datetime(2026, 4, 26, 12, 0, 1),
     )
 
@@ -107,6 +114,7 @@ class TestConfigHotReload:
 
     def test_detect_change(self, tmp_path):
         import time
+
         cfg_path = tmp_path / "config.json"
         cfg_path.write_text(json.dumps({"a": 1}))
         hr = ConfigHotReload(str(cfg_path))
@@ -127,6 +135,7 @@ class TestConfigHotReload:
 
     def test_listener_called(self, tmp_path):
         import time
+
         cfg_path = tmp_path / "config.json"
         cfg_path.write_text(json.dumps({"k": "v1"}))
         hr = ConfigHotReload(str(cfg_path))
@@ -170,6 +179,7 @@ class TestConfigHotReload:
 
     def test_check_and_reload_applies_and_timeline(self, tmp_path):
         import time
+
         base = tmp_path / "d"
         base.mkdir()
         f = base / "engine_config.json"
@@ -177,12 +187,12 @@ class TestConfigHotReload:
         c = ServiceContainer(EnvironmentConfig.development(str(base))).build()
         time.sleep(0.05)
         f.write_text(json.dumps({"ops_maturity_min_score": 51.0}), encoding="utf-8")
-        changes = c.config_hot_reload.check_and_reload()
+        changes = c.config_hot_reload.check_and_reload()  # type: ignore[reportOptionalMemberAccess]
         assert changes is not None
         assert c.config.ops_maturity_min_score == 51.0
         assert c.metrics is not None
         assert c.metrics.get_counter(ENGINE_CONFIG_RELOAD_TOTAL) == 1.0
-        evs = c.operations_timeline.list_events(event_type=TIMELINE_EVENT_ENGINE_CONFIG)
+        evs = c.operations_timeline.list_events(event_type=TIMELINE_EVENT_ENGINE_CONFIG)  # type: ignore[reportOptionalMemberAccess]
         assert len(evs) == 1
         assert evs[0].get("actor") == TIMELINE_ACTOR_HOT_RELOAD
         assert "ops_maturity_min_score" in (evs[0].get("summary") or {}).get("changed_keys", [])
@@ -250,6 +260,7 @@ class TestTracingIntegration:
 
     def test_throttled_cycle_has_trace(self, tmp_path):
         from core.protocol.services.resilience import RateLimiter
+
         cfg = EnvironmentConfig.development(str(tmp_path), enable_idempotency=False)
         c = ServiceContainer(cfg).build()
         orch = c.build_orchestrator()

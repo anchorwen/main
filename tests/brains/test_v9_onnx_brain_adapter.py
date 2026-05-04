@@ -1,17 +1,11 @@
-from datetime import datetime
+import numpy as np
 
 from core.brains.adapters.v9_onnx_brain_adapter import V9OnnxBrainAdapter
-from core.features.adapters.v9_feature_adapter import V9FeatureAdapter
-from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
 
 
-class DummyFeatureSnapshot:
-    def __init__(self):
-        self.snapshot_id = "snapshot_001"
-        self.event_time = datetime.utcnow()
-
-
-def test_v9_onnx_brain_adapter_runs():
+def test_v9_onnx_brain_adapter_inference_fallback():
+    """V9OnnxBrainAdapter produces a BrainDecisionProposal via the
+    deterministic fallback when ONNX is available but a zero vector is fed."""
     brain_entry = {
         "brain_id": "V9_Institutional_01",
         "brain_role": "alpha_brain",
@@ -23,18 +17,14 @@ def test_v9_onnx_brain_adapter_runs():
             "symbols": ["XAUUSD"],
         },
     }
-    normalization = {
-        "mean": [0.0] * 40,
-        "std": [1.0] * 40,
-    }
-    feature_adapter = V9FeatureAdapter(normalization_config=normalization)
-    adapter = V9OnnxBrainAdapter(brain_entry=brain_entry, feature_adapter=feature_adapter)
-    feature_source = {name: 0.1 for name in V9_INSTITUTIONAL_40_FEATURES}
+    adapter = V9OnnxBrainAdapter(brain_entry=brain_entry)
+    adapter.load()
 
-    proposal = adapter.run(DummyFeatureSnapshot(), feature_source)
+    feature_vector = np.zeros(40, dtype=np.float32)
+    raw = adapter.infer(feature_vector)
+    proposal = adapter.get_signal(raw)
 
     assert proposal.brain_id == "V9_Institutional_01"
     assert "direction_bias" in proposal.prediction
     assert "raw_outputs" in proposal.extensions
-
-
+    assert isinstance(raw["runtime_ms"], float)

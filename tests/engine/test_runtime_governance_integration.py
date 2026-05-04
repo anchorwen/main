@@ -1,20 +1,25 @@
 """Runtime governance integration tests."""
-from datetime import datetime
+
+from datetime import UTC, datetime
 
 import pytest
 
 from core.execution.paper_gateway import PaperExecutionGateway
 from core.runtime.approval_contracts import ExecutionApproval
-from core.runtime.schema_versions import SCHEMA_EXECUTION_APPROVAL
+from core.runtime.execution_gates import (
+    RuntimeExecutionApprovalChain,
+    RuntimeGovernanceGate,
+    RuntimeRiskGate,
+)
 from core.runtime.execution_gateway_router import ExecutionGatewayRouter
-from core.runtime.execution_gates import RuntimeExecutionApprovalChain, RuntimeGovernanceGate, RuntimeRiskGate
 from core.runtime.execution_pipeline import RuntimeExecutionPipeline
 from core.runtime.integration_contracts import OrderSizingPolicy
+from core.runtime.schema_versions import SCHEMA_EXECUTION_APPROVAL
 from core.runtime.signal_order_builder import SignalOrderRequestBuilder
 from core.strategies.contracts import Signal
 from core.strategies.examples import ThresholdAlphaAgent
-from core.strategies.schema_versions import SCHEMA_SIGNAL
 from core.strategies.registry import StrategyPluginRegistry, StrategyPluginRunner
+from core.strategies.schema_versions import SCHEMA_SIGNAL
 
 
 def _signal(side="buy", strength=1.0, confidence=1.0, strategy_id="alpha1", symbol="XAUUSD"):
@@ -26,13 +31,15 @@ def _signal(side="buy", strength=1.0, confidence=1.0, strategy_id="alpha1", symb
         side=side,
         strength=strength,
         confidence=confidence,
-        generated_at=datetime.utcnow(),
+        generated_at=datetime.now(UTC).replace(tzinfo=None),
     )
 
 
 def _order(signal=None, quantity=1.0, venue="PAPER"):
     signal = signal or _signal()
-    return SignalOrderRequestBuilder(OrderSizingPolicy(base_quantity=quantity), default_venue=venue).build(signal, {"price": 100})
+    return SignalOrderRequestBuilder(
+        OrderSizingPolicy(base_quantity=quantity), default_venue=venue
+    ).build(signal, {"price": 100})
 
 
 def _pipeline(approval_chain=None):
@@ -46,7 +53,9 @@ def _pipeline(approval_chain=None):
     router.register("PAPER", gateway)
     return RuntimeExecutionPipeline(
         strategy_runner=runner,
-        order_builder=SignalOrderRequestBuilder(OrderSizingPolicy(base_quantity=10), default_venue="PAPER"),
+        order_builder=SignalOrderRequestBuilder(
+            OrderSizingPolicy(base_quantity=10), default_venue="PAPER"
+        ),
         gateway_router=router,
         approval_chain=approval_chain,
     ), gateway
@@ -62,13 +71,13 @@ class TestExecutionApproval:
                 order_id="o1",
                 approved=False,
                 gate="risk",
-                decided_at=datetime.utcnow(),
+                decided_at=datetime.now(UTC).replace(tzinfo=None),
             )
 
     def test_approval_to_dict(self):
         signal = _signal()
         order = _order(signal)
-        approval = ExecutionApproval.allow("a1", signal, order, "runtime_risk")
+        approval = ExecutionApproval.allow("a1", signal, order, "runtime_risk")  # type: ignore[reportArgumentType]
         assert approval.to_dict()["approved"] is True
 
 
@@ -77,7 +86,7 @@ class TestRuntimeRiskGate:
         signal = _signal(symbol="XAUUSD")
         order = _order(signal, quantity=10)
         gate = RuntimeRiskGate(max_quantity=5, allowed_symbols={"EURUSD"}, max_notional=500)
-        approval = gate.approve(signal, order, {"price": 100})
+        approval = gate.approve(signal, order, {"price": 100})  # type: ignore[reportArgumentType]
         assert approval.approved is False
         assert "quantity_limit_exceeded(10.0>5)" in approval.reasons
         assert "symbol_not_allowed(XAUUSD)" in approval.reasons
@@ -86,9 +95,9 @@ class TestRuntimeRiskGate:
     def test_risk_gate_allows_valid_order(self):
         signal = _signal()
         order = _order(signal, quantity=1)
-        approval = RuntimeRiskGate(max_quantity=5, allowed_symbols={"XAUUSD"}, max_notional=500).approve(
-            signal, order, {"price": 100}
-        )
+        approval = RuntimeRiskGate(
+            max_quantity=5, allowed_symbols={"XAUUSD"}, max_notional=500
+        ).approve(signal, order, {"price": 100})  # type: ignore[reportArgumentType]
         assert approval.approved is True
 
 
@@ -102,7 +111,7 @@ class TestRuntimeGovernanceGate:
             allowed_venues={"FIX"},
             system_halted=True,
         )
-        approval = gate.approve(signal, order, {})
+        approval = gate.approve(signal, order, {})  # type: ignore[reportArgumentType]
         assert approval.approved is False
         assert "system_halted" in approval.reasons
         assert "strategy_frozen(alpha1)" in approval.reasons
@@ -113,18 +122,20 @@ class TestRuntimeGovernanceGate:
         signal = _signal(strategy_id="alpha1")
         order = _order(signal, venue="PAPER")
         gate = RuntimeGovernanceGate(allowed_strategy_ids={"alpha1"}, allowed_venues={"PAPER"})
-        assert gate.approve(signal, order, {}).approved is True
+        assert gate.approve(signal, order, {}).approved is True  # type: ignore[reportArgumentType]
 
 
 class TestRuntimeExecutionApprovalChain:
     def test_chain_stops_after_denial(self):
         signal = _signal()
         order = _order(signal, quantity=10)
-        chain = RuntimeExecutionApprovalChain([
-            RuntimeRiskGate(max_quantity=5),
-            RuntimeGovernanceGate(system_halted=True),
-        ])
-        approvals = chain.approve(signal, order, {"price": 100})
+        chain = RuntimeExecutionApprovalChain(
+            [
+                RuntimeRiskGate(max_quantity=5),
+                RuntimeGovernanceGate(system_halted=True),
+            ]
+        )
+        approvals = chain.approve(signal, order, {"price": 100})  # type: ignore[reportArgumentType]
         assert len(approvals) == 1
         assert approvals[0].gate == "runtime_risk"
         assert approvals[0].approved is False
@@ -132,10 +143,12 @@ class TestRuntimeExecutionApprovalChain:
 
 class TestRuntimePipelineGovernanceIntegration:
     def test_pipeline_denied_by_risk_does_not_execute(self):
-        chain = RuntimeExecutionApprovalChain([
-            RuntimeRiskGate(max_quantity=1),
-            RuntimeGovernanceGate(allowed_strategy_ids={"alpha1"}, allowed_venues={"PAPER"}),
-        ])
+        chain = RuntimeExecutionApprovalChain(
+            [
+                RuntimeRiskGate(max_quantity=1),
+                RuntimeGovernanceGate(allowed_strategy_ids={"alpha1"}, allowed_venues={"PAPER"}),
+            ]
+        )
         pipeline, gateway = _pipeline(chain)
         result = pipeline.run({"ema_bias": 2.0}, {"price": 2000.0}, {})
         assert len(result.orders) == 0
@@ -145,10 +158,12 @@ class TestRuntimePipelineGovernanceIntegration:
         assert result.approvals[0].approved is False
 
     def test_pipeline_denied_by_governance_does_not_execute(self):
-        chain = RuntimeExecutionApprovalChain([
-            RuntimeRiskGate(max_quantity=100),
-            RuntimeGovernanceGate(frozen_strategy_ids={"alpha1"}),
-        ])
+        chain = RuntimeExecutionApprovalChain(
+            [
+                RuntimeRiskGate(max_quantity=100),
+                RuntimeGovernanceGate(frozen_strategy_ids={"alpha1"}),
+            ]
+        )
         pipeline, gateway = _pipeline(chain)
         result = pipeline.run({"ema_bias": 2.0}, {"price": 2000.0}, {})
         assert len(result.orders) == 0
@@ -157,14 +172,19 @@ class TestRuntimePipelineGovernanceIntegration:
         assert result.approvals[-1].approved is False
 
     def test_pipeline_approved_order_executes_and_records_approvals(self):
-        chain = RuntimeExecutionApprovalChain([
-            RuntimeRiskGate(max_quantity=100, allowed_symbols={"XAUUSD"}, max_notional=50_000),
-            RuntimeGovernanceGate(allowed_strategy_ids={"alpha1"}, allowed_venues={"PAPER"}),
-        ])
+        chain = RuntimeExecutionApprovalChain(
+            [
+                RuntimeRiskGate(max_quantity=100, allowed_symbols={"XAUUSD"}, max_notional=50_000),
+                RuntimeGovernanceGate(allowed_strategy_ids={"alpha1"}, allowed_venues={"PAPER"}),
+            ]
+        )
         pipeline, gateway = _pipeline(chain)
         result = pipeline.run({"ema_bias": 2.0}, {"price": 2000.0}, {})
         assert len(result.orders) == 1
         assert len(gateway.list_orders()) == 1
-        assert [approval.gate for approval in result.approvals] == ["runtime_risk", "runtime_governance"]
+        assert [approval.gate for approval in result.approvals] == [
+            "runtime_risk",
+            "runtime_governance",
+        ]
         assert all(approval.approved for approval in result.approvals)
         assert result.to_dict()["approvals"][0]["approved"] is True

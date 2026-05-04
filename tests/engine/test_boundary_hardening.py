@@ -1,23 +1,26 @@
 """Boundary hardening tests for core paths: risk, governance, execution, signals."""
-import time
-from datetime import datetime, timedelta
 
+from datetime import UTC, datetime, timedelta
+
+from apps.engine.system_facade import SystemFacade
+from core.contracts.enums import RiskDecisionStatus
 from core.deployment.environment_config import EnvironmentConfig
 from core.deployment.service_container import ServiceContainer
+from core.execution.execution_manager import ExecutionManager
+from core.feedback.brain_performance_tracker import BrainPerformanceTracker
+from core.governance.governance_rule_engine import GovernanceRuleEngine
+from core.governance.governance_service import GovernanceService
+from core.market.position_tracker import PositionTracker
+from core.market.signal_processor import MarketSignalProcessor, SignalFilter
+from core.observability.metrics_collector import MetricsCollector
 from core.risk.risk_evaluation_service import RiskEvaluationService
 from core.risk.risk_policies import (
-    PositionLimitPolicy, DrawdownPolicy, ExposurePolicy,
-    ConcentrationPolicy, ModePolicy,
+    ConcentrationPolicy,
+    DrawdownPolicy,
+    ExposurePolicy,
+    ModePolicy,
+    PositionLimitPolicy,
 )
-from core.contracts.enums import RiskDecisionStatus
-from core.governance.governance_service import GovernanceService
-from core.governance.governance_rule_engine import GovernanceRuleEngine
-from core.execution.execution_manager import ExecutionManager
-from core.market.position_tracker import PositionTracker
-from core.market.signal_processor import SignalFilter, MarketSignalProcessor
-from core.observability.metrics_collector import MetricsCollector
-from core.feedback.brain_performance_tracker import BrainPerformanceTracker
-from apps.engine.system_facade import SystemFacade
 
 
 def _container(tmp_path, **kw):
@@ -26,19 +29,27 @@ def _container(tmp_path, **kw):
 
 
 def _snap(mode="normal"):
-    return type("CS", (), {
-        "mode_state": type("MS", (), {"current_mode": type("CM", (), {"value": mode})()})(),
-    })()
+    return type(
+        "CS",
+        (),
+        {
+            "mode_state": type("MS", (), {"current_mode": type("CM", (), {"value": mode})()})(),
+        },
+    )()
 
 
 def _intent(action="open", symbol="XAUUSD"):
-    return type("I", (), {
-        "action": type("A", (), {"value": action})(),
-        "symbol": symbol,
-        "intent_id": "test",
-        "is_passive": lambda self: action in ("observe", "abstain"),
-        "is_open_intent": lambda self: action == "open",
-    })()
+    return type(
+        "I",
+        (),
+        {
+            "action": type("A", (), {"value": action})(),
+            "symbol": symbol,
+            "intent_id": "test",
+            "is_passive": lambda self: action in ("observe", "abstain"),
+            "is_open_intent": lambda self: action == "open",
+        },
+    )()
 
 
 class TestRiskBoundaries:
@@ -65,7 +76,8 @@ class TestRiskBoundaries:
     def test_concentration_at_limit(self):
         policy = ConcentrationPolicy(max_per_symbol=3)
         result = policy.evaluate(
-            _intent(symbol="XAUUSD"), _snap(),
+            _intent(symbol="XAUUSD"),
+            _snap(),
             {"positions_per_symbol": {"XAUUSD": 3}},
         )
         assert result["status"] != RiskDecisionStatus.ALLOW
@@ -81,12 +93,15 @@ class TestRiskBoundaries:
         assert result["status"] != RiskDecisionStatus.DENY
 
     def test_multiple_blocking_reasons(self):
-        svc = RiskEvaluationService([
-            PositionLimitPolicy(max_open_positions=0),
-            DrawdownPolicy(max_drawdown_pct=1.0),
-        ])
+        svc = RiskEvaluationService(
+            [
+                PositionLimitPolicy(max_open_positions=0),
+                DrawdownPolicy(max_drawdown_pct=1.0),
+            ]
+        )
         v = svc.evaluate(
-            _intent(), _snap(),
+            _intent(),
+            _snap(),
             context={"open_position_count": 5, "current_drawdown_pct": 10.0},
         )
         assert not v.is_allowed()
@@ -118,7 +133,7 @@ class TestGovernanceBoundaries:
         gs = GovernanceService()
         gs.register_brain("new", "live")
         engine = GovernanceRuleEngine.with_default_rules(gs)
-        fired = engine.evaluate({"new": {"health_signal": "unknown"}})
+        engine.evaluate({"new": {"health_signal": "unknown"}})
         assert gs.get_brain_state("new")["status"] == "live"
 
     def test_frozen_brain_excluded_from_active(self):
@@ -138,10 +153,12 @@ class TestExecutionBoundaries:
             position_tracker=PositionTracker(),
             metrics=MetricsCollector(),
         )
-        em.register_order(message_id="m1", correlation_id="c1",
-                          symbol="XAUUSD", side="long", quantity=1.0)
-        em.register_order(message_id="m1", correlation_id="c1",
-                          symbol="XAUUSD", side="long", quantity=1.0)
+        em.register_order(
+            message_id="m1", correlation_id="c1", symbol="XAUUSD", side="long", quantity=1.0
+        )
+        em.register_order(
+            message_id="m1", correlation_id="c1", symbol="XAUUSD", side="long", quantity=1.0
+        )
         orders = em.list_orders()
         m1_orders = [o for o in orders if o["message_id"] == "m1"]
         assert len(m1_orders) >= 1
@@ -152,8 +169,9 @@ class TestExecutionBoundaries:
             position_tracker=PositionTracker(),
             metrics=MetricsCollector(),
         )
-        result = em.process_venue_event(message_id="nonexistent", event_type="filled",
-                                        filled_quantity=1.0, price=100.0)
+        result = em.process_venue_event(
+            message_id="nonexistent", event_type="filled", filled_quantity=1.0, price=100.0
+        )
         assert result.get("status") == "unknown_order"
 
     def test_position_tracker_close_nonexistent(self):
@@ -163,10 +181,12 @@ class TestExecutionBoundaries:
 
     def test_position_tracker_multiple_open_same_symbol(self):
         pt = PositionTracker()
-        pt.open_position(position_id="p1", symbol="XAUUSD", side="long",
-                         quantity=1.0, entry_price=2000.0)
-        pt.open_position(position_id="p2", symbol="XAUUSD", side="long",
-                         quantity=2.0, entry_price=2010.0)
+        pt.open_position(
+            position_id="p1", symbol="XAUUSD", side="long", quantity=1.0, entry_price=2000.0
+        )
+        pt.open_position(
+            position_id="p2", symbol="XAUUSD", side="long", quantity=2.0, entry_price=2010.0
+        )
         ctx = pt.get_risk_context()
         assert ctx["open_position_count"] == 2
         assert ctx["positions_per_symbol"]["XAUUSD"] == 2
@@ -188,10 +208,12 @@ class TestSignalFilterBoundaries:
 
     def test_stale_signal(self):
         sf = SignalFilter(max_staleness_seconds=5.0)
-        ok, reason = sf.accept({
-            "symbol": "XAUUSD",
-            "timestamp": datetime.utcnow() - timedelta(seconds=10),
-        })
+        ok, reason = sf.accept(
+            {
+                "symbol": "XAUUSD",
+                "timestamp": datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=10),
+            }
+        )
         assert not ok
         assert reason == "stale_signal"
 
@@ -203,10 +225,12 @@ class TestSignalFilterBoundaries:
 
     def test_fresh_signal_accepted(self):
         sf = SignalFilter(cooldown_seconds=0)
-        ok, reason = sf.accept({
-            "symbol": "XAUUSD",
-            "timestamp": datetime.utcnow(),
-        })
+        ok, reason = sf.accept(
+            {
+                "symbol": "XAUUSD",
+                "timestamp": datetime.now(UTC).replace(tzinfo=None),
+            }
+        )
         assert ok
 
     def test_stats_accumulate(self):

@@ -7,9 +7,13 @@ from core.parliament.parliament_service import ParliamentService
 
 def _proposal(brain_id, direction="long", confidence=0.8, up=0.8, down=0.2):
     return BrainDecisionProposal(
-        schema_version="v1", proposal_id=f"p_{brain_id}",
-        snapshot_id="s1", brain_id=brain_id, brain_role="primary",
-        brain_status="live", model_version="v1",
+        schema_version="v1",
+        proposal_id=f"p_{brain_id}",
+        snapshot_id="s1",
+        brain_id=brain_id,
+        brain_role="primary",
+        brain_status="live",
+        model_version="v1",
         event_time=datetime(2026, 4, 24, 12, 0, 0),
         generated_at=datetime(2026, 4, 24, 12, 0, 1),
         prediction={
@@ -23,17 +27,27 @@ def _proposal(brain_id, direction="long", confidence=0.8, up=0.8, down=0.2):
 
 
 def _snapshot(mode="normal"):
-    return type("ControlSnapshot", (), {
-        "mode_state": type("MS", (), {"current_mode": type("M", (), {"value": mode})()})(),
-        "active_overrides": [],
-    })()
+    return type(
+        "ControlSnapshot",
+        (),
+        {
+            "mode_state": type("MS", (), {"current_mode": type("M", (), {"value": mode})()})(),
+            "active_overrides": [],
+        },
+    )()
 
 
 def _feature():
-    return type("FS", (), {
-        "snapshot_id": "s1", "event_time": datetime(2026, 4, 24, 12, 0, 0),
-        "symbol": "XAUUSD", "venue": "MT5",
-    })()
+    return type(
+        "FS",
+        (),
+        {
+            "snapshot_id": "s1",
+            "event_time": datetime(2026, 4, 24, 12, 0, 0),
+            "symbol": "XAUUSD",
+            "venue": "MT5",
+        },
+    )()
 
 
 class TestParliamentService:

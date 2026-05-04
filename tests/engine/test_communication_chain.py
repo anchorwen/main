@@ -4,10 +4,10 @@ from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.communication_record import CommunicationRecord
 from core.contracts.domain.dispatch_result import DispatchResult
 from core.contracts.enums import CommunicationMessageType, CommunicationPriority, DispatchStatus
-from core.ledger.services.communication_record_writer import CommunicationRecordWriter
-from core.ledger.stream_names import LEDGER_STREAM_COMMUNICATIONS, stream_jsonl_filename
-from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
 from core.contracts.schema_versions import SCHEMA_COMMUNICATION_RECORD
+from core.ledger.services.communication_record_writer import CommunicationRecordWriter
+from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
+from core.ledger.stream_names import LEDGER_STREAM_COMMUNICATIONS, stream_jsonl_filename
 from core.protocol.schema_versions import SCHEMA_COMMUNICATION_ENVELOPE, SCHEMA_DISPATCH_RESULT
 
 
@@ -42,7 +42,7 @@ def test_dispatch_result_requires_failure_reason_for_failed_status():
             target="exec_bridge",
             adapter_name="stub_adapter",
         )
-        assert False, "expected ValueError"
+        raise AssertionError("expected ValueError")
     except ValueError as exc:
         assert "failure_reason" in str(exc)
 
@@ -119,9 +119,8 @@ def test_communication_record_writer_persists_jsonl(tmp_path):
     record, ledger_path = writer.write_record(envelope, result)
 
     assert record.correlation_id == "corr_001"
-    assert ledger_path.exists()
-    assert ledger_path.name == stream_jsonl_filename("exec_bridge", LEDGER_STREAM_COMMUNICATIONS)
-    contents = ledger_path.read_text(encoding="utf-8")
+    assert ledger_path.exists()  # type: ignore[reportAttributeAccessIssue]
+    assert ledger_path.name == stream_jsonl_filename("exec_bridge", LEDGER_STREAM_COMMUNICATIONS)  # type: ignore[reportAttributeAccessIssue]
+    contents = ledger_path.read_text(encoding="utf-8")  # type: ignore[reportAttributeAccessIssue]
     assert SCHEMA_COMMUNICATION_RECORD in contents
     assert "message_001" in contents
-

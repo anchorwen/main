@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta
 import json
+from datetime import datetime, timedelta
 
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.dispatch_result import DispatchResult
@@ -9,8 +9,8 @@ from core.ledger.services.communication_record_reader import CommunicationRecord
 from core.ledger.services.communication_record_writer import CommunicationRecordWriter
 from core.ledger.services.communication_replay_service import CommunicationReplayService
 from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
-from core.protocol.services.file_queue_receipt_reader import FileQueueReceiptReader
 from core.protocol.schema_versions import SCHEMA_COMMUNICATION_ENVELOPE, SCHEMA_DISPATCH_RESULT
+from core.protocol.services.file_queue_receipt_reader import FileQueueReceiptReader
 from tests.engine.shadow_testkit import (
     assert_runtime_summary_matches_governance_contract,
     build_runtime_summary_from_execution_result,
@@ -33,7 +33,14 @@ def build_envelope(message_id: str, correlation_id: str, target: str = "exec_bri
     )
 
 
-def build_result(message_id: str, *, status=DispatchStatus.PROTOCOL_VALIDATED, attempts=None, fallback_adapter_name=None, recorded_at=None):
+def build_result(
+    message_id: str,
+    *,
+    status=DispatchStatus.PROTOCOL_VALIDATED,
+    attempts=None,
+    fallback_adapter_name=None,
+    recorded_at=None,
+):
     return DispatchResult(
         schema_version=SCHEMA_DISPATCH_RESULT,
         dispatch_id=f"dispatch_{message_id}",
@@ -43,13 +50,21 @@ def build_result(message_id: str, *, status=DispatchStatus.PROTOCOL_VALIDATED, a
         target="exec_bridge",
         adapter_name="stub_adapter",
         fallback_adapter_name=fallback_adapter_name,
-        attempts=attempts or [{"adapter_name": "stub_adapter", "status": "succeeded", "reason": None}],
+        attempts=attempts
+        or [{"adapter_name": "stub_adapter", "status": "succeeded", "reason": None}],
         degrade_reason="primary down" if status == DispatchStatus.DEGRADED else None,
         failure_reason="hard failure" if status == DispatchStatus.FAILED else None,
     )
 
 
-def write_receipt(receipt_dir, *, date_key: str = "2026-04-24", message_id: str, ack_status: str = "acknowledged", received_at: str = "2026-04-24T12:00:03"):
+def write_receipt(
+    receipt_dir,
+    *,
+    date_key: str = "2026-04-24",
+    message_id: str,
+    ack_status: str = "acknowledged",
+    received_at: str = "2026-04-24T12:00:03",
+):
     receipt_path = receipt_dir / date_key / "exec_bridge"
     receipt_path.mkdir(parents=True, exist_ok=True)
     target_file = receipt_path / f"{message_id}.ack.json"
@@ -142,7 +157,11 @@ def test_communication_replay_service_recommends_review_for_degraded_message(tmp
             status=DispatchStatus.DEGRADED,
             attempts=[
                 {"adapter_name": "exec_adapter", "status": "failed", "reason": "primary down"},
-                {"adapter_name": "backup_adapter", "status": "degraded", "reason": "fallback_success"},
+                {
+                    "adapter_name": "backup_adapter",
+                    "status": "degraded",
+                    "reason": "fallback_success",
+                },
             ],
             fallback_adapter_name="backup_adapter",
         ),
@@ -187,7 +206,6 @@ def test_communication_replay_service_message_plan_exposes_canonical_governance_
     }
 
 
-
 def test_communication_replay_service_builds_correlation_replay_plan(tmp_path):
     store = JsonlLedgerStore(str(tmp_path))
     receipt_dir = tmp_path / "receipts"
@@ -230,7 +248,9 @@ def test_communication_replay_service_builds_correlation_replay_plan(tmp_path):
     assert plan["recommended_strategy"] == "replay_only_timed_out_messages"
 
 
-def test_communication_replay_service_correlation_plan_exposes_canonical_governance_summary(tmp_path):
+def test_communication_replay_service_correlation_plan_exposes_canonical_governance_summary(
+    tmp_path,
+):
     store = JsonlLedgerStore(str(tmp_path))
     receipt_dir = tmp_path / "receipts"
     writer = CommunicationRecordWriter(ledger_store=store)
@@ -269,17 +289,19 @@ def test_communication_replay_service_correlation_plan_exposes_canonical_governa
     }
 
 
-
 def test_communication_replay_service_returns_none_for_missing_message(tmp_path):
     reader = CommunicationRecordReader(base_dir=str(tmp_path))
     inspection = CommunicationInspectionService(record_reader=reader)
     replay = CommunicationReplayService(inspection_service=inspection)
 
-    assert replay.build_message_replay_plan(
-        date_key="2026-04-24",
-        target="exec_bridge",
-        message_id="missing_message",
-    ) is None
+    assert (
+        replay.build_message_replay_plan(
+            date_key="2026-04-24",
+            target="exec_bridge",
+            message_id="missing_message",
+        )
+        is None
+    )
 
 
 def test_communication_replay_service_supports_next_day_receipt_lookup(tmp_path):
@@ -295,7 +317,12 @@ def test_communication_replay_service_supports_next_day_receipt_lookup(tmp_path)
         build_envelope("message_stale", "corr_stale"),
         build_result("message_stale", status=DispatchStatus.TRANSPORT_DELIVERED),
     )
-    write_receipt(receipt_dir, date_key="2026-04-25", message_id="message_stale", received_at="2026-04-24T12:00:11")
+    write_receipt(
+        receipt_dir,
+        date_key="2026-04-25",
+        message_id="message_stale",
+        received_at="2026-04-24T12:00:11",
+    )
 
     plan = replay.build_message_replay_plan(
         date_key="2026-04-24",
@@ -338,7 +365,6 @@ def test_communication_replay_service_marks_rejected_receipt_for_review(tmp_path
     assert plan["review_issue_codes"] == ["receipt_rejected"]
 
 
-
 def test_communication_replay_service_does_not_replay_terminal_filled_receipt(tmp_path):
     store = JsonlLedgerStore(str(tmp_path))
     receipt_dir = tmp_path / "receipts"
@@ -375,8 +401,9 @@ def test_communication_replay_service_does_not_replay_terminal_filled_receipt(tm
     }
 
 
-
-def test_communication_replay_service_marks_terminal_partially_filled_receipt_as_healthy_review(tmp_path):
+def test_communication_replay_service_marks_terminal_partially_filled_receipt_as_healthy_review(
+    tmp_path,
+):
     store = JsonlLedgerStore(str(tmp_path))
     receipt_dir = tmp_path / "receipts"
     writer = CommunicationRecordWriter(ledger_store=store)
@@ -410,7 +437,6 @@ def test_communication_replay_service_marks_terminal_partially_filled_receipt_as
         "review_issue_codes": ["receipt_partially_filled"],
         "governance_tags": [],
     }
-
 
 
 def test_communication_replay_service_does_not_replay_terminal_accepted_receipt(tmp_path):
@@ -449,7 +475,6 @@ def test_communication_replay_service_does_not_replay_terminal_accepted_receipt(
     }
 
 
-
 def test_communication_replay_service_marks_cancelled_receipt_correlation_for_review(tmp_path):
     store = JsonlLedgerStore(str(tmp_path))
     receipt_dir = tmp_path / "receipts"
@@ -475,7 +500,6 @@ def test_communication_replay_service_marks_cancelled_receipt_correlation_for_re
     assert plan["target_issue_codes"] == ["receipt_cancelled"]
     assert plan["review_issue_codes"] == ["receipt_cancelled"]
     assert plan["target_message_ids"] == ["message_cancelled"]
-
 
 
 def test_communication_replay_service_prefers_review_driven_targets_over_timeout_targets(tmp_path):
@@ -518,7 +542,6 @@ def test_communication_replay_service_prefers_review_driven_targets_over_timeout
     assert plan["target_message_ids"] == ["message_rejected"]
 
 
-
 def test_communication_replay_service_prefers_stale_targets_over_rejected_and_timeout(tmp_path):
     store = JsonlLedgerStore(str(tmp_path))
     receipt_dir = tmp_path / "receipts"
@@ -545,7 +568,12 @@ def test_communication_replay_service_prefers_stale_targets_over_rejected_and_ti
         ),
     )
 
-    write_receipt(receipt_dir, date_key="2026-04-25", message_id="message_stale", received_at="2026-04-24T12:00:11")
+    write_receipt(
+        receipt_dir,
+        date_key="2026-04-25",
+        message_id="message_stale",
+        received_at="2026-04-24T12:00:11",
+    )
     write_receipt(receipt_dir, message_id="message_rejected", ack_status="rejected")
 
     plan = replay.build_correlation_replay_plan(
@@ -558,7 +586,6 @@ def test_communication_replay_service_prefers_stale_targets_over_rejected_and_ti
     assert plan["target_issue_codes"] == ["stale_receipt"]
     assert plan["review_issue_codes"] == ["stale_receipt", "receipt_rejected"]
     assert plan["target_message_ids"] == ["message_stale"]
-
 
 
 def test_communication_replay_service_prefers_cancelled_targets_over_timeout(tmp_path):
@@ -602,7 +629,6 @@ def test_communication_replay_service_prefers_cancelled_targets_over_timeout(tmp
     assert plan["target_message_ids"] == ["message_cancelled"]
 
 
-
 def test_communication_replay_service_blocks_terminal_correlation_receipts(tmp_path):
     store = JsonlLedgerStore(str(tmp_path))
     receipt_dir = tmp_path / "receipts"
@@ -635,7 +661,6 @@ def test_communication_replay_service_blocks_terminal_correlation_receipts(tmp_p
         "review_issue_codes": [],
         "governance_tags": [],
     }
-
 
 
 def test_communication_replay_service_priority_contract_matrix(tmp_path):
@@ -788,15 +813,19 @@ def test_communication_replay_service_priority_contract_matrix(tmp_path):
         assert plan["target_message_ids"] == case["target_message_ids"]
         if "terminal_message_ids" in case:
             issue_message_ids = plan["delivery_summary"]["issue_message_ids"]
-            assert sorted(
-                issue_message_ids.get("receipt_accepted", [])
-                + issue_message_ids.get("receipt_partially_filled", [])
-                + issue_message_ids.get("receipt_filled", [])
-            ) == case["terminal_message_ids"]
+            assert (
+                sorted(
+                    issue_message_ids.get("receipt_accepted", [])
+                    + issue_message_ids.get("receipt_partially_filled", [])
+                    + issue_message_ids.get("receipt_filled", [])
+                )
+                == case["terminal_message_ids"]
+            )
 
 
-
-def test_communication_replay_service_runtime_summary_projection_matches_message_plan_contract(tmp_path):
+def test_communication_replay_service_runtime_summary_projection_matches_message_plan_contract(
+    tmp_path,
+):
     store = JsonlLedgerStore(str(tmp_path))
     writer = CommunicationRecordWriter(ledger_store=store)
     reader = CommunicationRecordReader(base_dir=str(tmp_path))

@@ -1,24 +1,30 @@
 """Tests for unified CLI and exception integration."""
+
 import json
 from types import SimpleNamespace
 
 import pytest
 
-from apps.engine.cli import main, build_parser
-from core.deployment.domain_keys import ENGINE_CONFIG_KEY_RUNTIME_METRICS, EVIDENCE_SECTION_ENGINE_CONFIG
-from core.deployment.environment_config import EnvironmentConfig
-from core.deployment.schema_versions import SCHEMA_ENGINE_CONFIG_EVIDENCE, SCHEMA_ENGINE_CONFIG_STATUS
-from core.runtime.schema_versions import SCHEMA_ENGINE_STATUS
-from core.deployment.service_container import ServiceContainer
-from core.governance.governance_service import GovernanceService
+from apps.engine.cli import build_parser, main
+from core.contracts.exceptions import (
+    BrainNotFoundError,
+    InvalidTransitionError,
+    OrderNotFoundError,
+)
+from core.deployment.domain_keys import (
+    ENGINE_CONFIG_KEY_RUNTIME_METRICS,
+    EVIDENCE_SECTION_ENGINE_CONFIG,
+)
+from core.deployment.schema_versions import (
+    SCHEMA_ENGINE_CONFIG_EVIDENCE,
+    SCHEMA_ENGINE_CONFIG_STATUS,
+)
 from core.execution.execution_manager import ExecutionManager
+from core.governance.governance_service import GovernanceService
 from core.market.position_tracker import PositionTracker
 from core.observability.metric_names import ENGINE_CONFIG_RELOAD_TOTAL
 from core.observability.metrics_collector import MetricsCollector
-from core.contracts.exceptions import (
-    InvalidTransitionError, BrainNotFoundError,
-    OrderNotFoundError,
-)
+from core.runtime.schema_versions import SCHEMA_ENGINE_STATUS
 
 
 class TestCLISelftest:
@@ -61,7 +67,9 @@ class TestCLISelftest:
         assert rc == 0
         out = json.loads(capsys.readouterr().out)
         assert out["schema_version"] == SCHEMA_ENGINE_STATUS
-        assert out[EVIDENCE_SECTION_ENGINE_CONFIG]["schema_version"] == SCHEMA_ENGINE_CONFIG_EVIDENCE
+        assert (
+            out[EVIDENCE_SECTION_ENGINE_CONFIG]["schema_version"] == SCHEMA_ENGINE_CONFIG_EVIDENCE
+        )
 
     def test_status_test_env_no_collector_omits_runtime_metrics(self, tmp_path, capsys):
         """--env test defaults enable_metrics=False; engine_config has no runtime_metrics."""
@@ -69,7 +77,9 @@ class TestCLISelftest:
         assert rc == 0
         out = json.loads(capsys.readouterr().out)
         assert out["schema_version"] == SCHEMA_ENGINE_STATUS
-        assert out[EVIDENCE_SECTION_ENGINE_CONFIG]["schema_version"] == SCHEMA_ENGINE_CONFIG_EVIDENCE
+        assert (
+            out[EVIDENCE_SECTION_ENGINE_CONFIG]["schema_version"] == SCHEMA_ENGINE_CONFIG_EVIDENCE
+        )
         assert out["metrics"] == {}
         assert ENGINE_CONFIG_KEY_RUNTIME_METRICS not in out[EVIDENCE_SECTION_ENGINE_CONFIG]
 
@@ -92,9 +102,16 @@ class TestCLISelftest:
         assert rc == 0
 
     def test_validate_production_no_metrics_emits_config_warning(self, tmp_path, capsys):
-        rc = main([
-            "--base-dir", str(tmp_path), "--env", "production", "--no-metrics", "validate",
-        ])
+        rc = main(
+            [
+                "--base-dir",
+                str(tmp_path),
+                "--env",
+                "production",
+                "--no-metrics",
+                "validate",
+            ]
+        )
         assert rc == 0
         out = json.loads(capsys.readouterr().out)
         assert out.get("valid") is True
@@ -112,7 +129,12 @@ class TestCLISelftest:
         assert rc == 0
         out = json.loads(capsys.readouterr().out)
         assert ENGINE_CONFIG_KEY_RUNTIME_METRICS in out[EVIDENCE_SECTION_ENGINE_CONFIG]
-        assert out[EVIDENCE_SECTION_ENGINE_CONFIG][ENGINE_CONFIG_KEY_RUNTIME_METRICS][ENGINE_CONFIG_RELOAD_TOTAL] >= 0.0
+        assert (
+            out[EVIDENCE_SECTION_ENGINE_CONFIG][ENGINE_CONFIG_KEY_RUNTIME_METRICS][
+                ENGINE_CONFIG_RELOAD_TOTAL
+            ]
+            >= 0.0
+        )
 
     def test_cli_rejects_both_no_metrics_and_force_metrics(self):
         with pytest.raises(SystemExit):
@@ -147,9 +169,17 @@ class TestCLISelftest:
         assert out.get("error") == "metrics not enabled"
 
     def test_diagnose_metrics_test_env_force_metrics_returns_snapshot(self, tmp_path, capsys):
-        rc = main([
-            "--base-dir", str(tmp_path), "--env", "test", "--force-metrics", "diagnose", "metrics",
-        ])
+        rc = main(
+            [
+                "--base-dir",
+                str(tmp_path),
+                "--env",
+                "test",
+                "--force-metrics",
+                "diagnose",
+                "metrics",
+            ]
+        )
         assert rc == 0
         out = json.loads(capsys.readouterr().out)
         assert "counters" in out
@@ -160,25 +190,45 @@ class TestCLISelftest:
         rc = main(["--base-dir", str(tmp_path), "diagnose", "snapshot"])
         assert rc == 0
         out = json.loads(capsys.readouterr().out)
-        assert out[EVIDENCE_SECTION_ENGINE_CONFIG]["schema_version"] == SCHEMA_ENGINE_CONFIG_EVIDENCE
+        assert (
+            out[EVIDENCE_SECTION_ENGINE_CONFIG]["schema_version"] == SCHEMA_ENGINE_CONFIG_EVIDENCE
+        )
 
     def test_diagnose_snapshot_test_env_no_runtime_metrics_in_engine_config(self, tmp_path, capsys):
         rc = main(["--base-dir", str(tmp_path), "--env", "test", "diagnose", "snapshot"])
         assert rc == 0
         out = json.loads(capsys.readouterr().out)
-        assert out[EVIDENCE_SECTION_ENGINE_CONFIG]["schema_version"] == SCHEMA_ENGINE_CONFIG_EVIDENCE
+        assert (
+            out[EVIDENCE_SECTION_ENGINE_CONFIG]["schema_version"] == SCHEMA_ENGINE_CONFIG_EVIDENCE
+        )
         assert ENGINE_CONFIG_KEY_RUNTIME_METRICS not in out[EVIDENCE_SECTION_ENGINE_CONFIG]
 
-    def test_diagnose_snapshot_test_env_force_metrics_includes_runtime_metrics(self, tmp_path, capsys):
-        rc = main([
-            "--base-dir", str(tmp_path), "--env", "test", "--force-metrics",
-            "diagnose", "snapshot",
-        ])
+    def test_diagnose_snapshot_test_env_force_metrics_includes_runtime_metrics(
+        self, tmp_path, capsys
+    ):
+        rc = main(
+            [
+                "--base-dir",
+                str(tmp_path),
+                "--env",
+                "test",
+                "--force-metrics",
+                "diagnose",
+                "snapshot",
+            ]
+        )
         assert rc == 0
         out = json.loads(capsys.readouterr().out)
-        assert out[EVIDENCE_SECTION_ENGINE_CONFIG]["schema_version"] == SCHEMA_ENGINE_CONFIG_EVIDENCE
+        assert (
+            out[EVIDENCE_SECTION_ENGINE_CONFIG]["schema_version"] == SCHEMA_ENGINE_CONFIG_EVIDENCE
+        )
         assert ENGINE_CONFIG_KEY_RUNTIME_METRICS in out[EVIDENCE_SECTION_ENGINE_CONFIG]
-        assert out[EVIDENCE_SECTION_ENGINE_CONFIG][ENGINE_CONFIG_KEY_RUNTIME_METRICS][ENGINE_CONFIG_RELOAD_TOTAL] >= 0.0
+        assert (
+            out[EVIDENCE_SECTION_ENGINE_CONFIG][ENGINE_CONFIG_KEY_RUNTIME_METRICS][
+                ENGINE_CONFIG_RELOAD_TOTAL
+            ]
+            >= 0.0
+        )
 
     def test_diagnose_positions(self, tmp_path):
         rc = main(["--base-dir", str(tmp_path), "diagnose", "positions"])
@@ -189,8 +239,9 @@ class TestCLISelftest:
         assert rc == 0
 
     def test_backtest_missing_file(self, tmp_path):
-        rc = main(["--base-dir", str(tmp_path), "backtest",
-                    "--scenarios", str(tmp_path / "nope.json")])
+        rc = main(
+            ["--base-dir", str(tmp_path), "backtest", "--scenarios", str(tmp_path / "nope.json")]
+        )
         assert rc == 1
 
     def test_backtest_with_file(self, tmp_path):
@@ -207,8 +258,9 @@ class TestCLISelftest:
         sf = tmp_path / "s.json"
         sf.write_text(json.dumps(scenarios))
         out = str(tmp_path / "report.json")
-        rc = main(["--base-dir", str(tmp_path), "backtest",
-                    "--scenarios", str(sf), "--output", out])
+        rc = main(
+            ["--base-dir", str(tmp_path), "backtest", "--scenarios", str(sf), "--output", out]
+        )
         assert rc == 0
         assert (tmp_path / "report.json").exists()
 
@@ -246,9 +298,16 @@ class TestGovernanceStrictTransition:
 class TestBuildParser:
     def test_parses_global_flags_before_subcommand(self):
         p = build_parser()
-        a = p.parse_args([
-            "--env", "test", "--force-metrics", "--base-dir", "C:\\data", "status",
-        ])
+        a = p.parse_args(
+            [
+                "--env",
+                "test",
+                "--force-metrics",
+                "--base-dir",
+                "C:\\data",
+                "status",
+            ]
+        )
         assert a.command == "status"
         assert a.env == "test"
         assert a.force_metrics is True
@@ -257,9 +316,16 @@ class TestBuildParser:
 
     def test_global_options_can_reorder_before_subcommand(self):
         p = build_parser()
-        a = p.parse_args([
-            "--env", "production", "--base-dir", "/data/run", "--no-metrics", "readiness",
-        ])
+        a = p.parse_args(
+            [
+                "--env",
+                "production",
+                "--base-dir",
+                "/data/run",
+                "--no-metrics",
+                "readiness",
+            ]
+        )
         assert a.command == "readiness"
         assert a.env == "production"
         assert a.base_dir == "/data/run"
@@ -268,28 +334,55 @@ class TestBuildParser:
 
     def test_parses_live_read_only_and_mt5_terminal_path_flags(self):
         p = build_parser()
-        a = p.parse_args([
-            "--live-read-only",
-            "--mt5-terminal-path", "D:\\MetaTrader 5\\terminal64.exe",
-            "status",
-        ])
+        a = p.parse_args(
+            [
+                "--live-read-only",
+                "--mt5-terminal-path",
+                "D:\\MetaTrader 5\\terminal64.exe",
+                "--adapter-name",
+                "mt5",
+                "--mt5-outbox-dir",
+                "D:\\cursor\\data\\mt5_outbox",
+                "--enable-live-dispatch",
+                "--live-allowed-symbol",
+                "XAUUSD",
+                "status",
+            ]
+        )
         assert a.command == "status"
         assert a.live_read_only is True
         assert a.mt5_terminal_path == "D:\\MetaTrader 5\\terminal64.exe"
+        assert a.adapter_name == "mt5"
+        assert a.mt5_outbox_dir == "D:\\cursor\\data\\mt5_outbox"
+        assert a.enable_live_dispatch is True
+        assert a.live_allowed_symbol == ["XAUUSD"]
 
     def test_global_validation_mode_applies_when_subcommand_not_overridden(self):
         p = build_parser()
-        a = p.parse_args([
-            "--validation-mode", "fast", "--base-dir", "C:\\data", "readiness",
-        ])
+        a = p.parse_args(
+            [
+                "--validation-mode",
+                "fast",
+                "--base-dir",
+                "C:\\data",
+                "readiness",
+            ]
+        )
         assert a.validation_mode == "fast"
 
     def test_subcommand_validation_mode_overrides_global(self):
         p = build_parser()
-        a = p.parse_args([
-            "--validation-mode", "fast", "--base-dir", "C:\\data",
-            "readiness", "--validation-mode", "deep",
-        ])
+        a = p.parse_args(
+            [
+                "--validation-mode",
+                "fast",
+                "--base-dir",
+                "C:\\data",
+                "readiness",
+                "--validation-mode",
+                "deep",
+            ]
+        )
         assert a.validation_mode == "deep"
 
     def test_mutually_exclusive_metrics_flags_rejected(self):
@@ -309,7 +402,10 @@ class TestEnvironmentConfigForArgs:
         from apps.engine.cli import _environment_config_for_args
 
         a = SimpleNamespace(
-            base_dir=str(tmp_path), env="test", no_metrics=False, force_metrics=True,
+            base_dir=str(tmp_path),
+            env="test",
+            no_metrics=False,
+            force_metrics=True,
         )
         assert _environment_config_for_args(a).enable_metrics is True
 
@@ -317,7 +413,10 @@ class TestEnvironmentConfigForArgs:
         from apps.engine.cli import _environment_config_for_args
 
         a = SimpleNamespace(
-            base_dir=str(tmp_path), env="production", no_metrics=True, force_metrics=False,
+            base_dir=str(tmp_path),
+            env="production",
+            no_metrics=True,
+            force_metrics=False,
         )
         assert _environment_config_for_args(a).enable_metrics is False
 
@@ -325,7 +424,10 @@ class TestEnvironmentConfigForArgs:
         from apps.engine.cli import _environment_config_for_args
 
         a = SimpleNamespace(
-            base_dir=str(tmp_path), env="development", no_metrics=False, force_metrics=False,
+            base_dir=str(tmp_path),
+            env="development",
+            no_metrics=False,
+            force_metrics=False,
         )
         assert _environment_config_for_args(a).enable_metrics is True
 
@@ -345,7 +447,10 @@ class TestEnvironmentConfigForArgs:
         from apps.engine.cli import _environment_config_for_args
 
         a = SimpleNamespace(
-            base_dir=str(tmp_path), env="development", no_metrics=True, force_metrics=False,
+            base_dir=str(tmp_path),
+            env="development",
+            no_metrics=True,
+            force_metrics=False,
         )
         assert _environment_config_for_args(a).enable_metrics is False
 
@@ -353,7 +458,10 @@ class TestEnvironmentConfigForArgs:
         from apps.engine.cli import _environment_config_for_args
 
         a = SimpleNamespace(
-            base_dir=str(tmp_path), env="production", no_metrics=False, force_metrics=True,
+            base_dir=str(tmp_path),
+            env="production",
+            no_metrics=False,
+            force_metrics=True,
         )
         assert _environment_config_for_args(a).enable_metrics is True
 
@@ -361,7 +469,10 @@ class TestEnvironmentConfigForArgs:
         from apps.engine.cli import _environment_config_for_args
 
         a = SimpleNamespace(
-            base_dir=str(tmp_path), env="test", no_metrics=True, force_metrics=True,
+            base_dir=str(tmp_path),
+            env="test",
+            no_metrics=True,
+            force_metrics=True,
         )
         assert _environment_config_for_args(a).enable_metrics is False
 
@@ -369,7 +480,11 @@ class TestEnvironmentConfigForArgs:
         from apps.engine.cli import _environment_config_for_args
 
         a = SimpleNamespace(
-            base_dir=str(tmp_path), env="development", no_metrics=False, force_metrics=False, validation_mode="fast",
+            base_dir=str(tmp_path),
+            env="development",
+            no_metrics=False,
+            force_metrics=False,
+            validation_mode="fast",
         )
         assert _environment_config_for_args(a).validation_mode == "fast"
 
@@ -414,12 +529,35 @@ class TestEnvironmentConfigForArgs:
         cfg = _environment_config_for_args(a)
         assert cfg.extensions["mt5_terminal_path"] == str(terminal)
 
+    def test_live_dispatch_flags_propagate_to_environment_config(self, tmp_path):
+        from apps.engine.cli import _environment_config_for_args
+
+        terminal = tmp_path / "terminal64.exe"
+        terminal.write_text("", encoding="utf-8")
+        a = SimpleNamespace(
+            base_dir=str(tmp_path),
+            env="production",
+            no_metrics=False,
+            force_metrics=False,
+            adapter_name="mt5",
+            enable_live_dispatch=True,
+            live_allowed_symbol=["XAUUSD"],
+            mt5_terminal_path=str(terminal),
+            mt5_outbox_dir=str(tmp_path / "mt5_outbox"),
+        )
+        cfg = _environment_config_for_args(a)
+        assert cfg.adapter_name == "mt5"
+        assert cfg.live_dispatch_enabled is True
+        assert cfg.live_allowed_symbols == ("XAUUSD",)
+        assert cfg.extensions["mt5_outbox_dir"] == str(tmp_path / "mt5_outbox")
+
 
 class TestExecutionStrictGet:
     def test_get_order_strict_success(self):
         em = ExecutionManager(position_tracker=PositionTracker(), metrics=MetricsCollector())
-        em.register_order(message_id="m1", correlation_id="c1",
-                          symbol="X", side="long", quantity=1.0)
+        em.register_order(
+            message_id="m1", correlation_id="c1", symbol="X", side="long", quantity=1.0
+        )
         order = em.get_order_strict("m1")
         assert order["symbol"] == "X"
 

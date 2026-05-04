@@ -1,13 +1,17 @@
 import time
 
-from core.protocol.services.resilience import CircuitBreaker, CircuitState, RateLimiter
-from core.deployment.state_persistence import StatePersistence
-from core.deployment.replay_isolation import ReplayDispatchAdapter, NullDispatchAdapter, ReplayEnvironment
-from core.governance.governance_service import GovernanceService
-from core.feedback.brain_performance_tracker import BrainPerformanceTracker
-from core.market.position_tracker import PositionTracker
 from core.deployment.environment_config import EnvironmentConfig
+from core.deployment.replay_isolation import (
+    NullDispatchAdapter,
+    ReplayDispatchAdapter,
+    ReplayEnvironment,
+)
 from core.deployment.service_container import ServiceContainer
+from core.deployment.state_persistence import StatePersistence
+from core.feedback.brain_performance_tracker import BrainPerformanceTracker
+from core.governance.governance_service import GovernanceService
+from core.market.position_tracker import PositionTracker
+from core.protocol.services.resilience import CircuitBreaker, CircuitState, RateLimiter
 
 
 class TestCircuitBreaker:
@@ -133,15 +137,19 @@ class TestStatePersistence:
     def test_save_positions(self, tmp_path):
         sp = StatePersistence(str(tmp_path / "state"))
         pt = PositionTracker()
-        pt.open_position(position_id="p1", symbol="XAUUSD", side="long", quantity=1.0, entry_price=2000.0)
+        pt.open_position(
+            position_id="p1", symbol="XAUUSD", side="long", quantity=1.0, entry_price=2000.0
+        )
         path = sp.save_positions(pt)
         assert path.exists()
 
     def test_save_all(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path / "data"))
         c = ServiceContainer(cfg).build()
-        c.governance_service.register_brain("test", "live")
-        c.position_tracker.open_position(position_id="p1", symbol="X", side="long", quantity=1, entry_price=100)
+        c.governance_service.register_brain("test", "live")  # type: ignore[reportOptionalMemberAccess]
+        c.position_tracker.open_position(  # type: ignore[reportOptionalMemberAccess]
+            position_id="p1", symbol="X", side="long", quantity=1, entry_price=100
+        )
 
         sp = StatePersistence(str(tmp_path / "state"))
         result = sp.save_all(c)
@@ -158,44 +166,58 @@ class TestStatePersistence:
 class TestReplayIsolation:
     def test_replay_adapter_captures(self):
         adapter = ReplayDispatchAdapter()
-        from core.contracts.domain.dispatch_request import DispatchRequest
-        from core.contracts.domain.communication_envelope import CommunicationEnvelope
-        from core.contracts.enums import CommunicationMessageType, CommunicationPriority
         from datetime import datetime
 
+        from core.contracts.domain.communication_envelope import CommunicationEnvelope
+        from core.contracts.domain.dispatch_request import DispatchRequest
+        from core.contracts.enums import CommunicationMessageType, CommunicationPriority
+
         env = CommunicationEnvelope(
-            schema_version="v1", message_id="m1", correlation_id="c1",
-            causation_id=None, event_time=datetime(2026, 4, 24, 12, 0, 0),
-            producer="t", target="exec_bridge",
+            schema_version="v1",
+            message_id="m1",
+            correlation_id="c1",
+            causation_id=None,
+            event_time=datetime(2026, 4, 24, 12, 0, 0),
+            producer="t",
+            target="exec_bridge",
             message_type=CommunicationMessageType.DECISION_INTENT,
             priority=CommunicationPriority.NORMAL,
             payload={"action": "open", "symbol": "XAUUSD", "side": "long"},
         )
         req = DispatchRequest(
-            schema_version="v1", dispatch_id="d1", envelope=env,
+            schema_version="v1",
+            dispatch_id="d1",
+            envelope=env,
             requested_at=datetime(2026, 4, 24, 12, 0, 1),
         )
         result = adapter.dispatch(req, env)
-        assert result.status.value == "protocol_validated"
+        assert result.status.value == "protocol_validated"  # type: ignore[reportAttributeAccessIssue]
         assert result.trace["replay_mode"] is True
         assert adapter.get_captured_count() == 1
 
     def test_null_adapter(self):
         adapter = NullDispatchAdapter()
-        from core.contracts.domain.dispatch_request import DispatchRequest
-        from core.contracts.domain.communication_envelope import CommunicationEnvelope
-        from core.contracts.enums import CommunicationMessageType, CommunicationPriority
         from datetime import datetime
 
+        from core.contracts.domain.communication_envelope import CommunicationEnvelope
+        from core.contracts.domain.dispatch_request import DispatchRequest
+        from core.contracts.enums import CommunicationMessageType, CommunicationPriority
+
         env = CommunicationEnvelope(
-            schema_version="v1", message_id="m1", correlation_id="c1",
-            causation_id=None, event_time=datetime(2026, 4, 24, 12, 0, 0),
-            producer="t", target="exec_bridge",
+            schema_version="v1",
+            message_id="m1",
+            correlation_id="c1",
+            causation_id=None,
+            event_time=datetime(2026, 4, 24, 12, 0, 0),
+            producer="t",
+            target="exec_bridge",
             message_type=CommunicationMessageType.DECISION_INTENT,
             priority=CommunicationPriority.NORMAL,
         )
         req = DispatchRequest(
-            schema_version="v1", dispatch_id="d1", envelope=env,
+            schema_version="v1",
+            dispatch_id="d1",
+            envelope=env,
             requested_at=datetime(2026, 4, 24, 12, 0, 1),
         )
         result = adapter.dispatch(req, env)
@@ -215,25 +237,37 @@ class TestReplayIsolation:
 
     def test_replay_summary(self):
         adapter = ReplayDispatchAdapter()
-        from core.contracts.domain.dispatch_request import DispatchRequest
-        from core.contracts.domain.communication_envelope import CommunicationEnvelope
-        from core.contracts.enums import CommunicationMessageType, CommunicationPriority
         from datetime import datetime
 
-        for i, (action, symbol) in enumerate([("open", "XAUUSD"), ("open", "EURUSD"), ("close", "XAUUSD")]):
+        from core.contracts.domain.communication_envelope import CommunicationEnvelope
+        from core.contracts.domain.dispatch_request import DispatchRequest
+        from core.contracts.enums import CommunicationMessageType, CommunicationPriority
+
+        for i, (action, symbol) in enumerate(
+            [("open", "XAUUSD"), ("open", "EURUSD"), ("close", "XAUUSD")]
+        ):
             env = CommunicationEnvelope(
-                schema_version="v1", message_id=f"m{i}", correlation_id=f"c{i}",
-                causation_id=None, event_time=datetime(2026, 4, 24, 12, 0, 0),
-                producer="t", target="x",
+                schema_version="v1",
+                message_id=f"m{i}",
+                correlation_id=f"c{i}",
+                causation_id=None,
+                event_time=datetime(2026, 4, 24, 12, 0, 0),
+                producer="t",
+                target="x",
                 message_type=CommunicationMessageType.DECISION_INTENT,
                 priority=CommunicationPriority.NORMAL,
                 payload={"action": action, "symbol": symbol},
             )
-            req = DispatchRequest(schema_version="v1", dispatch_id=f"d{i}", envelope=env,
-                                  requested_at=datetime(2026, 4, 24, 12, 0, 1))
+            req = DispatchRequest(
+                schema_version="v1",
+                dispatch_id=f"d{i}",
+                envelope=env,
+                requested_at=datetime(2026, 4, 24, 12, 0, 1),
+            )
             adapter.dispatch(req, env)
 
         from core.deployment.replay_isolation import ReplayEnvironment
+
         re = ReplayEnvironment.__new__(ReplayEnvironment)
         re._replay_adapter = adapter
         summary = re.get_replay_summary()

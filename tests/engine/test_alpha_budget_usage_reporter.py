@@ -1,7 +1,7 @@
 """Alpha budget usage reporter tests."""
 
-from core.runtime.alpha_budget_usage_reporter import AlphaBudgetUsageReporter
 from core.alpha.schema_versions import SCHEMA_ALPHA_RISK_BUDGET
+from core.runtime.alpha_budget_usage_reporter import AlphaBudgetUsageReporter
 from core.runtime.schema_versions import SCHEMA_ALPHA_BUDGET_USAGE, SCHEMA_ALPHA_BUDGET_USAGE_REPORT
 
 
@@ -41,7 +41,9 @@ def test_alpha_budget_usage_reporter_joins_usage_and_budget():
     assert report["budgets"]["orphan"]["used_daily_orders"] == 1
     assert report["budgets"]["orphan"]["enabled"] is False
     assert report["warning_count"] == 1
-    assert report["warnings"] == [{"alpha_id": "orphan", "type": "usage_without_budget", "used_daily_orders": 1}]
+    assert report["warnings"] == [
+        {"alpha_id": "orphan", "type": "usage_without_budget", "used_daily_orders": 1}
+    ]
 
 
 def test_alpha_budget_usage_reporter_warns_high_and_exhausted_usage():
@@ -60,7 +62,12 @@ def test_alpha_budget_usage_reporter_warns_high_and_exhausted_usage():
     report = AlphaBudgetUsageReporter().build(usage, risk_budget)
     assert report["warning_count"] == 2
     assert report["warnings"] == [
-        {"alpha_id": "exhausted", "type": "daily_usage_exhausted", "usage_ratio": 1.0, "threshold": 1.0},
+        {
+            "alpha_id": "exhausted",
+            "type": "daily_usage_exhausted",
+            "usage_ratio": 1.0,
+            "threshold": 1.0,
+        },
         {"alpha_id": "high", "type": "daily_usage_high", "usage_ratio": 0.8, "threshold": 0.8},
     ]
 

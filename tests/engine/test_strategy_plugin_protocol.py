@@ -1,12 +1,13 @@
 """Strategy plugin protocol tests."""
+
 from dataclasses import asdict
 
 import pytest
 
 from core.strategies.contracts import RequiredFeature, Signal, StrategyHealth, StrategyMetadata
 from core.strategies.examples import ThresholdAlphaAgent
-from core.strategies.schema_versions import SCHEMA_SIGNAL
 from core.strategies.registry import StrategyPluginRegistry, StrategyPluginRunner
+from core.strategies.schema_versions import SCHEMA_SIGNAL
 
 
 class TestStrategyContracts:
@@ -39,7 +40,7 @@ class TestStrategyContracts:
                 side="invalid",
                 strength=0.1,
                 confidence=0.1,
-                generated_at=__import__("datetime").datetime.utcnow(),
+                generated_at=__import__("datetime").datetime.now(__import__("datetime").UTC),
             )
 
     def test_signal_rejects_invalid_confidence(self):
@@ -52,7 +53,7 @@ class TestStrategyContracts:
                 side="buy",
                 strength=0.1,
                 confidence=2.0,
-                generated_at=__import__("datetime").datetime.utcnow(),
+                generated_at=__import__("datetime").datetime.now(__import__("datetime").UTC),
             )
 
     def test_health_validation(self):

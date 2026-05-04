@@ -1,10 +1,11 @@
 """Alpha registry and lifecycle tests."""
+
 import pytest
 
 from core.alpha.contracts import AlphaLifecycleState, AlphaRecord
 from core.alpha.lifecycle_service import AlphaLifecycleService
-from core.alpha.schema_versions import SCHEMA_ALPHA_LIFECYCLE_SUMMARY, SCHEMA_ALPHA_REGISTRY
 from core.alpha.registry import AlphaRegistry
+from core.alpha.schema_versions import SCHEMA_ALPHA_LIFECYCLE_SUMMARY, SCHEMA_ALPHA_REGISTRY
 
 
 def _record(alpha_id="alpha1", state=AlphaLifecycleState.CANDIDATE):

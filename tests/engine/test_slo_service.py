@@ -1,10 +1,10 @@
 """SLO service and CLI tests."""
+
 import json
 
 from apps.engine.cli import main
 from core.deployment.environment_config import EnvironmentConfig
 from core.deployment.service_container import ServiceContainer
-from core.observability.metrics_collector import MetricsCollector
 from core.observability.metric_names import (
     CYCLES_CIRCUIT_OPEN,
     CYCLES_ERRORS,
@@ -15,8 +15,9 @@ from core.observability.metric_names import (
     RECONCILIATION_BREACHED,
     RECONCILIATION_MATCHED,
 )
-from core.observability.slo_service import SloService
+from core.observability.metrics_collector import MetricsCollector
 from core.observability.schema_versions import SCHEMA_SLO_REPORT
+from core.observability.slo_service import SloService
 
 
 def _container(tmp_path):
@@ -86,9 +87,12 @@ class TestSloService:
         m = MetricsCollector()
         m.inc(CYCLES_TOTAL, 10)
         m.inc(CYCLES_ERRORS, 1)
-        service = SloService(m, objectives={
-            "decision_success_rate": {"target": 0.8},
-        })
+        service = SloService(
+            m,
+            objectives={
+                "decision_success_rate": {"target": 0.8},
+            },
+        )
         report = service.evaluate()
         assert report["status"] == "healthy"
         assert report["objective_count"] == 1
@@ -129,9 +133,16 @@ class TestSloContainerCLI:
         assert out["status"] == "healthy"
 
     def test_cli_slo_production_with_no_metrics_flag(self, tmp_path, capsys):
-        rc = main([
-            "--base-dir", str(tmp_path), "--env", "production", "--no-metrics", "slo",
-        ])
+        rc = main(
+            [
+                "--base-dir",
+                str(tmp_path),
+                "--env",
+                "production",
+                "--no-metrics",
+                "slo",
+            ]
+        )
         assert rc == 0
         out = json.loads(capsys.readouterr().out)
         assert out["raw_counters"] == {}
@@ -142,6 +153,6 @@ class TestSloContainerCLI:
         orch = c.build_orchestrator()
         for _ in range(10):
             orch.run_cycle({"symbol": "XAUUSD"}, {"f": 1.0})
-        report = c.slo_service.evaluate()
+        report = c.slo_service.evaluate()  # type: ignore[reportOptionalMemberAccess]
         assert report["raw_counters"][CYCLES_TOTAL] == 10
         assert "decision_success_rate" in report["objectives"]

@@ -1,4 +1,5 @@
 """FIX gateway adapter skeleton tests."""
+
 import pytest
 
 from core.execution.fix_contracts import FixExecutionReport, FixSessionConfig
@@ -81,7 +82,9 @@ class TestFixExecutionReportMapper:
         sm.acknowledge(state)
         sm.accept(state)
         mapper = FixExecutionReportMapper(sm)
-        report = mapper.from_tag_dict({"11": "ord1", "150": "2", "39": "2", "32": "10", "31": "2000"})
+        report = mapper.from_tag_dict(
+            {"11": "ord1", "150": "2", "39": "2", "32": "10", "31": "2000"}
+        )
         mapper.apply(state, report)
         assert state.status == "filled"
         assert state.average_price == 2000.0
@@ -92,7 +95,9 @@ class TestFixExecutionReportMapper:
         state = sm.create(_request(), "FIX_TEST")
         sm.acknowledge(state)
         mapper = FixExecutionReportMapper(sm)
-        report = FixExecutionReport(order_id="ord1", exec_type="8", ord_status="8", text="bad order")
+        report = FixExecutionReport(
+            order_id="ord1", exec_type="8", ord_status="8", text="bad order"
+        )
         mapper.apply(state, report)
         assert state.status == "rejected"
         assert state.rejection_reason == "bad order"
@@ -127,7 +132,9 @@ class TestFixGatewayAdapter:
         adapter.submit_order(_request())
         accepted = adapter.receive_execution_report({"11": "ord1", "150": "0", "39": "0"})
         assert accepted.status == "accepted"
-        filled = adapter.receive_execution_report({"11": "ord1", "150": "2", "39": "2", "32": "10", "31": "2001"})
+        filled = adapter.receive_execution_report(
+            {"11": "ord1", "150": "2", "39": "2", "32": "10", "31": "2001"}
+        )
         assert filled.status == "filled"
         assert filled.average_price == 2001.0
         assert adapter.list_events()[-1]["event_type"] == "filled"

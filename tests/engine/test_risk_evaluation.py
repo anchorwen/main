@@ -1,21 +1,24 @@
-import pytest
 from datetime import datetime
 
 from core.contracts.domain.decision_intent import DecisionIntent
-from core.protocol.schema_versions import SCHEMA_DECISION_INTENT
 from core.contracts.enums import DecisionAction, DecisionSide, RiskDecisionStatus
+from core.protocol.schema_versions import SCHEMA_DECISION_INTENT
 from core.risk.risk_evaluation_service import RiskEvaluationService
 from core.risk.risk_policies import (
-    PositionLimitPolicy,
+    ConcentrationPolicy,
     DrawdownPolicy,
     ExposurePolicy,
-    ConcentrationPolicy,
     ModePolicy,
+    PositionLimitPolicy,
 )
 
 
 def _intent(action=DecisionAction.OPEN, symbol="XAUUSD", conviction=0.8):
-    side = DecisionSide.FLAT if action in {DecisionAction.ABSTAIN, DecisionAction.OBSERVE} else DecisionSide.LONG
+    side = (
+        DecisionSide.FLAT
+        if action in {DecisionAction.ABSTAIN, DecisionAction.OBSERVE}
+        else DecisionSide.LONG
+    )
     return DecisionIntent(
         schema_version=SCHEMA_DECISION_INTENT,
         intent_id="intent_001",
@@ -33,20 +36,35 @@ def _intent(action=DecisionAction.OPEN, symbol="XAUUSD", conviction=0.8):
 
 
 def _snapshot(mode="normal"):
-    return type("ControlSnapshot", (), {
-        "mode_state": type("ModeState", (), {
-            "current_mode": type("Mode", (), {"value": mode})(),
-        })(),
-        "active_overrides": [],
-    })()
+    return type(
+        "ControlSnapshot",
+        (),
+        {
+            "mode_state": type(
+                "ModeState",
+                (),
+                {
+                    "current_mode": type("Mode", (), {"value": mode})(),
+                },
+            )(),
+            "active_overrides": [],
+        },
+    )()
 
 
 class TestRiskEvaluationServiceBasic:
-    def test_passive_intent_always_denied(self):
+    def test_passive_intent_abstain_denied(self):
         svc = RiskEvaluationService()
         v = svc.evaluate(_intent(DecisionAction.ABSTAIN), _snapshot())
         assert v.status == RiskDecisionStatus.DENY
-        assert "passive_intent" in v.blocking_reasons
+        assert "passive_intent_abstain" in v.blocking_reasons
+
+    def test_passive_intent_observe_allowed(self):
+        svc = RiskEvaluationService()
+        v = svc.evaluate(_intent(DecisionAction.OBSERVE), _snapshot())
+        assert v.status == RiskDecisionStatus.ALLOW
+        assert v.risk_tier == "minimal"
+        assert "observe_intent_no_risk" in v.warning_reasons
 
     def test_no_policies_allows(self):
         svc = RiskEvaluationService()
@@ -81,7 +99,9 @@ class TestPositionLimitPolicy:
 
     def test_allows_close_even_at_limit(self):
         svc = RiskEvaluationService([PositionLimitPolicy(max_open_positions=5)])
-        v = svc.evaluate(_intent(DecisionAction.CLOSE), _snapshot(), context={"open_position_count": 10})
+        v = svc.evaluate(
+            _intent(DecisionAction.CLOSE), _snapshot(), context={"open_position_count": 10}
+        )
         assert v.is_allowed()
 
 
@@ -104,7 +124,9 @@ class TestDrawdownPolicy:
 
     def test_force_reduce_close_at_threshold(self):
         svc = RiskEvaluationService([DrawdownPolicy(max_drawdown_pct=5.0)])
-        v = svc.evaluate(_intent(DecisionAction.CLOSE), _snapshot(), context={"current_drawdown_pct": 5.5})
+        v = svc.evaluate(
+            _intent(DecisionAction.CLOSE), _snapshot(), context={"current_drawdown_pct": 5.5}
+        )
         assert v.status == RiskDecisionStatus.FORCE_REDUCE
 
 
@@ -168,53 +190,77 @@ class TestModePolicy:
 
 class TestPolicyMerging:
     def test_most_restrictive_wins(self):
-        svc = RiskEvaluationService([
-            PositionLimitPolicy(max_open_positions=100),
-            ExposurePolicy(max_notional=1_000_000),
-        ])
-        v = svc.evaluate(_intent(), _snapshot(), context={
-            "open_position_count": 1,
-            "current_notional_exposure": 2_000_000,
-        })
+        svc = RiskEvaluationService(
+            [
+                PositionLimitPolicy(max_open_positions=100),
+                ExposurePolicy(max_notional=1_000_000),
+            ]
+        )
+        v = svc.evaluate(
+            _intent(),
+            _snapshot(),
+            context={
+                "open_position_count": 1,
+                "current_notional_exposure": 2_000_000,
+            },
+        )
         assert v.status == RiskDecisionStatus.DENY
 
     def test_limited_plus_allow_gives_limited(self):
-        svc = RiskEvaluationService([
-            DrawdownPolicy(max_drawdown_pct=5.0),
-            PositionLimitPolicy(max_open_positions=100),
-        ])
-        v = svc.evaluate(_intent(), _snapshot(), context={
-            "current_drawdown_pct": 4.5,
-            "open_position_count": 1,
-        })
+        svc = RiskEvaluationService(
+            [
+                DrawdownPolicy(max_drawdown_pct=5.0),
+                PositionLimitPolicy(max_open_positions=100),
+            ]
+        )
+        v = svc.evaluate(
+            _intent(),
+            _snapshot(),
+            context={
+                "current_drawdown_pct": 4.5,
+                "open_position_count": 1,
+            },
+        )
         assert v.status == RiskDecisionStatus.ALLOW_LIMITED
 
     def test_multiple_denies_aggregate_reasons(self):
-        svc = RiskEvaluationService([
-            PositionLimitPolicy(max_open_positions=2),
-            ExposurePolicy(max_notional=100_000),
-        ])
-        v = svc.evaluate(_intent(), _snapshot(), context={
-            "open_position_count": 5,
-            "current_notional_exposure": 200_000,
-        })
+        svc = RiskEvaluationService(
+            [
+                PositionLimitPolicy(max_open_positions=2),
+                ExposurePolicy(max_notional=100_000),
+            ]
+        )
+        v = svc.evaluate(
+            _intent(),
+            _snapshot(),
+            context={
+                "open_position_count": 5,
+                "current_notional_exposure": 200_000,
+            },
+        )
         assert v.status == RiskDecisionStatus.DENY
         assert len(v.blocking_reasons) == 2
 
     def test_all_policies_combined(self):
-        svc = RiskEvaluationService([
-            ModePolicy(),
-            PositionLimitPolicy(max_open_positions=10),
-            DrawdownPolicy(max_drawdown_pct=5.0),
-            ExposurePolicy(max_notional=1_000_000),
-            ConcentrationPolicy(max_per_symbol=3),
-        ])
-        v = svc.evaluate(_intent(), _snapshot(), context={
-            "open_position_count": 2,
-            "current_drawdown_pct": 1.0,
-            "current_notional_exposure": 100_000,
-            "positions_per_symbol": {"XAUUSD": 1},
-        })
+        svc = RiskEvaluationService(
+            [
+                ModePolicy(),
+                PositionLimitPolicy(max_open_positions=10),
+                DrawdownPolicy(max_drawdown_pct=5.0),
+                ExposurePolicy(max_notional=1_000_000),
+                ConcentrationPolicy(max_per_symbol=3),
+            ]
+        )
+        v = svc.evaluate(
+            _intent(),
+            _snapshot(),
+            context={
+                "open_position_count": 2,
+                "current_drawdown_pct": 1.0,
+                "current_notional_exposure": 100_000,
+                "positions_per_symbol": {"XAUUSD": 1},
+            },
+        )
         assert v.status == RiskDecisionStatus.ALLOW
         assert v.risk_tier == "standard"
         assert len(v.trace["policy_results"]) == 5
@@ -223,45 +269,80 @@ class TestPolicyMerging:
 class TestRuntimeLoopWithRiskService:
     def test_runtime_loop_uses_risk_service_when_provided(self, tmp_path):
         from pathlib import Path
+
         from apps.engine.runtime_loop import RuntimeLoop
-        from core.protocol.services.intent_message_builder import IntentMessageBuilder
-        from core.protocol.services.communication_dispatcher import CommunicationDispatcher
-        from core.protocol.services.stub_communication_adapter import StubCommunicationAdapter
 
         event_time = datetime(2026, 4, 24, 12, 0, 0)
-        feature_snapshot = type("FS", (), {
-            "snapshot_id": "s1", "event_time": event_time, "symbol": "XAUUSD", "venue": "MT5",
-        })()
+        feature_snapshot = type(
+            "FS",
+            (),
+            {
+                "snapshot_id": "s1",
+                "event_time": event_time,
+                "symbol": "XAUUSD",
+                "venue": "MT5",
+            },
+        )()
         snap = _snapshot()
         candidate = type("C", (), {"regime_state": {"primary_regime": "trend"}})()
         record = type("R", (), {"record_id": "r1"})()
 
-        risk_svc = RiskEvaluationService([
-            PositionLimitPolicy(max_open_positions=2),
-        ])
+        risk_svc = RiskEvaluationService(
+            [
+                PositionLimitPolicy(max_open_positions=2),
+            ]
+        )
 
         loop = RuntimeLoop(
-            control_snapshot_service=type("CSS", (), {
-                "freeze": lambda self, symbol, regime: snap,
-            })(),
-            feature_service=type("FS", (), {
-                "build_snapshot": lambda self, trigger: feature_snapshot,
-            })(),
-            brain_run_service=type("BRS", (), {
-                "run_active_brains": lambda self, **kw: ["p"],
-            })(),
-            parliament_adapter=type("PA", (), {
-                "build_candidate": lambda self, **kw: candidate,
-            })(),
-            override_resolver=type("OR", (), {
-                "resolve": lambda self, **kw: [],
-            })(),
-            decision_compiler=type("DC", (), {
-                "compile_intent": lambda self, **kw: _intent(),
-            })(),
-            decision_record_writer=type("DRW", (), {
-                "seed_record": lambda self, **kw: (record, Path(tmp_path) / "x.jsonl"),
-            })(),
+            control_snapshot_service=type(
+                "CSS",
+                (),
+                {
+                    "freeze": lambda self, symbol, regime: snap,
+                },
+            )(),
+            feature_service=type(
+                "FS",
+                (),
+                {
+                    "build_snapshot": lambda self, trigger: feature_snapshot,
+                },
+            )(),
+            brain_run_service=type(
+                "BRS",
+                (),
+                {
+                    "run_active_brains": lambda self, **kw: ["p"],
+                },
+            )(),
+            parliament_adapter=type(
+                "PA",
+                (),
+                {
+                    "build_candidate": lambda self, **kw: candidate,
+                },
+            )(),
+            override_resolver=type(
+                "OR",
+                (),
+                {
+                    "resolve": lambda self, **kw: [],
+                },
+            )(),
+            decision_compiler=type(
+                "DC",
+                (),
+                {
+                    "compile_intent": lambda self, **kw: _intent(),
+                },
+            )(),
+            decision_record_writer=type(
+                "DRW",
+                (),
+                {
+                    "seed_record": lambda self, **kw: (record, Path(tmp_path) / "x.jsonl"),
+                },
+            )(),
             risk_evaluation_service=risk_svc,
         )
 
@@ -271,30 +352,46 @@ class TestRuntimeLoopWithRiskService:
 
     def test_runtime_loop_risk_service_blocks_at_position_limit(self, tmp_path):
         from pathlib import Path
+
         from apps.engine.runtime_loop import RuntimeLoop
 
         event_time = datetime(2026, 4, 24, 12, 0, 0)
-        feature_snapshot = type("FS", (), {
-            "snapshot_id": "s1", "event_time": event_time, "symbol": "XAUUSD", "venue": "MT5",
-        })()
+        feature_snapshot = type(
+            "FS",
+            (),
+            {
+                "snapshot_id": "s1",
+                "event_time": event_time,
+                "symbol": "XAUUSD",
+                "venue": "MT5",
+            },
+        )()
         snap = _snapshot()
         candidate = type("C", (), {"regime_state": {"primary_regime": "trend"}})()
         record = type("R", (), {"record_id": "r1"})()
 
-        risk_svc = RiskEvaluationService([
-            PositionLimitPolicy(max_open_positions=0),
-        ])
+        risk_svc = RiskEvaluationService(
+            [
+                PositionLimitPolicy(max_open_positions=0),
+            ]
+        )
 
         loop = RuntimeLoop(
             control_snapshot_service=type("CSS", (), {"freeze": lambda self, **kw: snap})(),
-            feature_service=type("FS", (), {"build_snapshot": lambda self, trigger: feature_snapshot})(),
+            feature_service=type(
+                "FS", (), {"build_snapshot": lambda self, trigger: feature_snapshot}
+            )(),
             brain_run_service=type("BRS", (), {"run_active_brains": lambda self, **kw: ["p"]})(),
             parliament_adapter=type("PA", (), {"build_candidate": lambda self, **kw: candidate})(),
             override_resolver=type("OR", (), {"resolve": lambda self, **kw: []})(),
             decision_compiler=type("DC", (), {"compile_intent": lambda self, **kw: _intent()})(),
-            decision_record_writer=type("DRW", (), {
-                "seed_record": lambda self, **kw: (record, Path(tmp_path) / "x.jsonl"),
-            })(),
+            decision_record_writer=type(
+                "DRW",
+                (),
+                {
+                    "seed_record": lambda self, **kw: (record, Path(tmp_path) / "x.jsonl"),
+                },
+            )(),
             risk_evaluation_service=risk_svc,
         )
 

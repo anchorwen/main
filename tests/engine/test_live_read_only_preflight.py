@@ -26,13 +26,49 @@ def test_live_read_only_preflight_main_writes_output(tmp_path, capsys):
     terminal.write_text("", encoding="utf-8")
     output = tmp_path / "reports" / "preflight.json"
 
-    rc = main([
-        "--base-dir", str(tmp_path / "data"),
-        "--mt5-terminal-path", str(terminal),
-        "--output", str(output),
-    ])
+    rc = main(
+        [
+            "--base-dir",
+            str(tmp_path / "data"),
+            "--mt5-terminal-path",
+            str(terminal),
+            "--output",
+            str(output),
+        ]
+    )
 
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["ready_for_observation"] is True
+    assert output.exists()
+
+
+def test_live_preflight_main_supports_micro_live_mode(tmp_path, capsys):
+    terminal = tmp_path / "terminal64.exe"
+    terminal.write_text("", encoding="utf-8")
+    output = tmp_path / "reports" / "micro_live.json"
+
+    rc = main(
+        [
+            "--mode",
+            "micro_live",
+            "--base-dir",
+            str(tmp_path / "data"),
+            "--mt5-terminal-path",
+            str(terminal),
+            "--symbol",
+            "XAUUSD",
+            "--max-open-positions",
+            "1",
+            "--max-notional-exposure",
+            "5000",
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["go_for_micro_live"] is True
+    assert payload["effective"]["live_allowed_symbols"] == ["XAUUSD"]
     assert output.exists()

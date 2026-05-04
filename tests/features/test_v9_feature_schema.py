@@ -14,5 +14,3 @@ def test_v9_feature_adapter_builds_vector():
     assert raw.shape == (40,)
     assert float(raw[0]) == 0.0
     assert float(raw[-1]) == 39.0
-
-

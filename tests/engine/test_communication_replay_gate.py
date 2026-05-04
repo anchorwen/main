@@ -1,17 +1,25 @@
-from datetime import datetime, timedelta
 import json
+from datetime import datetime, timedelta
 
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.dispatch_result import DispatchResult
-from core.contracts.enums import CommunicationMessageType, CommunicationPriority, DispatchStatus, ReplayGateDecision
+from core.contracts.enums import (
+    CommunicationMessageType,
+    CommunicationPriority,
+    DispatchStatus,
+    ReplayGateDecision,
+)
 from core.ledger.services.communication_inspection_service import CommunicationInspectionService
 from core.ledger.services.communication_record_reader import CommunicationRecordReader
 from core.ledger.services.communication_record_writer import CommunicationRecordWriter
-from core.ledger.services.communication_replay_gate import CommunicationReplayGate, build_replay_governance_summary
+from core.ledger.services.communication_replay_gate import (
+    CommunicationReplayGate,
+    build_replay_governance_summary,
+)
 from core.ledger.services.communication_replay_service import CommunicationReplayService
 from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
-from core.protocol.services.file_queue_receipt_reader import FileQueueReceiptReader
 from core.protocol.schema_versions import SCHEMA_COMMUNICATION_ENVELOPE, SCHEMA_DISPATCH_RESULT
+from core.protocol.services.file_queue_receipt_reader import FileQueueReceiptReader
 
 
 def build_envelope(message_id: str, correlation_id: str, target: str = "exec_bridge"):
@@ -30,7 +38,14 @@ def build_envelope(message_id: str, correlation_id: str, target: str = "exec_bri
     )
 
 
-def build_result(message_id: str, *, status=DispatchStatus.PROTOCOL_VALIDATED, attempts=None, fallback_adapter_name=None, recorded_at=None):
+def build_result(
+    message_id: str,
+    *,
+    status=DispatchStatus.PROTOCOL_VALIDATED,
+    attempts=None,
+    fallback_adapter_name=None,
+    recorded_at=None,
+):
     return DispatchResult(
         schema_version=SCHEMA_DISPATCH_RESULT,
         dispatch_id=f"dispatch_{message_id}",
@@ -40,13 +55,21 @@ def build_result(message_id: str, *, status=DispatchStatus.PROTOCOL_VALIDATED, a
         target="exec_bridge",
         adapter_name="stub_adapter",
         fallback_adapter_name=fallback_adapter_name,
-        attempts=attempts or [{"adapter_name": "stub_adapter", "status": "succeeded", "reason": None}],
+        attempts=attempts
+        or [{"adapter_name": "stub_adapter", "status": "succeeded", "reason": None}],
         degrade_reason="primary down" if status == DispatchStatus.DEGRADED else None,
         failure_reason="hard failure" if status == DispatchStatus.FAILED else None,
     )
 
 
-def write_receipt(receipt_dir, *, date_key: str = "2026-04-24", message_id: str, ack_status: str = "acknowledged", received_at: str = "2026-04-24T12:00:03"):
+def write_receipt(
+    receipt_dir,
+    *,
+    date_key: str = "2026-04-24",
+    message_id: str,
+    ack_status: str = "acknowledged",
+    received_at: str = "2026-04-24T12:00:03",
+):
     receipt_path = receipt_dir / date_key / "exec_bridge"
     receipt_path.mkdir(parents=True, exist_ok=True)
     target_file = receipt_path / f"{message_id}.ack.json"
@@ -110,7 +133,9 @@ def test_replay_gate_allows_clean_message_replay_plan(tmp_path):
     writer, replay, gate = build_services(tmp_path)
     writer.write_record(build_envelope("message_001", "corr_001"), build_result("message_001"))
 
-    plan = replay.build_message_replay_plan(date_key="2026-04-24", target="exec_bridge", message_id="message_001")
+    plan = replay.build_message_replay_plan(
+        date_key="2026-04-24", target="exec_bridge", message_id="message_001"
+    )
     decision = gate.evaluate_message_plan(plan)
 
     assert decision["decision"] == ReplayGateDecision.ALLOW
@@ -142,13 +167,19 @@ def test_replay_gate_reviews_degraded_message_replay_plan(tmp_path):
             status=DispatchStatus.DEGRADED,
             attempts=[
                 {"adapter_name": "exec_adapter", "status": "failed", "reason": "primary down"},
-                {"adapter_name": "backup_adapter", "status": "degraded", "reason": "fallback_success"},
+                {
+                    "adapter_name": "backup_adapter",
+                    "status": "degraded",
+                    "reason": "fallback_success",
+                },
             ],
             fallback_adapter_name="backup_adapter",
         ),
     )
 
-    plan = replay.build_message_replay_plan(date_key="2026-04-24", target="exec_bridge", message_id="message_002")
+    plan = replay.build_message_replay_plan(
+        date_key="2026-04-24", target="exec_bridge", message_id="message_002"
+    )
     decision = gate.evaluate_message_plan(plan)
 
     assert decision["decision"] == ReplayGateDecision.REVIEW
@@ -162,9 +193,16 @@ def test_replay_gate_detects_stale_receipt_across_next_day_lookup_for_message_re
         build_envelope("message_stale", "corr_stale"),
         build_result("message_stale", status=DispatchStatus.TRANSPORT_DELIVERED),
     )
-    write_receipt(receipt_dir, date_key="2026-04-25", message_id="message_stale", received_at="2026-04-24T12:00:11")
+    write_receipt(
+        receipt_dir,
+        date_key="2026-04-25",
+        message_id="message_stale",
+        received_at="2026-04-24T12:00:11",
+    )
 
-    plan = replay.build_message_replay_plan(date_key="2026-04-24", target="exec_bridge", message_id="message_stale")
+    plan = replay.build_message_replay_plan(
+        date_key="2026-04-24", target="exec_bridge", message_id="message_stale"
+    )
     decision = gate.evaluate_message_plan(plan)
 
     assert plan["delivery_state"]["phase"] == "stale_receipt"
@@ -196,7 +234,9 @@ def test_replay_gate_reviews_correlation_with_failed_message(tmp_path):
         ),
     )
 
-    plan = replay.build_correlation_replay_plan(date_key="2026-04-24", target="exec_bridge", correlation_id="corr_shared")
+    plan = replay.build_correlation_replay_plan(
+        date_key="2026-04-24", target="exec_bridge", correlation_id="corr_shared"
+    )
     decision = gate.evaluate_correlation_plan(plan)
 
     assert decision["decision"] == ReplayGateDecision.REVIEW
@@ -208,7 +248,9 @@ def test_replay_gate_allows_clean_correlation_plan(tmp_path):
     writer.write_record(build_envelope("message_201", "corr_clean"), build_result("message_201"))
     writer.write_record(build_envelope("message_202", "corr_clean"), build_result("message_202"))
 
-    plan = replay.build_correlation_replay_plan(date_key="2026-04-24", target="exec_bridge", correlation_id="corr_clean")
+    plan = replay.build_correlation_replay_plan(
+        date_key="2026-04-24", target="exec_bridge", correlation_id="corr_clean"
+    )
     decision = gate.evaluate_correlation_plan(plan)
 
     assert decision["decision"] == ReplayGateDecision.ALLOW
@@ -236,7 +278,9 @@ def test_replay_gate_supports_targeted_timeout_replay_when_next_day_receipt_is_f
     )
     write_receipt(receipt_dir, date_key="2026-04-25", message_id="message_302")
 
-    plan = replay.build_correlation_replay_plan(date_key="2026-04-24", target="exec_bridge", correlation_id="corr_timeout")
+    plan = replay.build_correlation_replay_plan(
+        date_key="2026-04-24", target="exec_bridge", correlation_id="corr_timeout"
+    )
     decision = gate.evaluate_correlation_plan(plan)
 
     assert plan["recommended_strategy"] == "replay_only_timed_out_messages"
@@ -271,7 +315,9 @@ def test_replay_gate_reviews_rejected_message_receipt(tmp_path):
     )
     write_receipt(receipt_dir, message_id="message_rejected", ack_status="rejected")
 
-    plan = replay.build_message_replay_plan(date_key="2026-04-24", target="exec_bridge", message_id="message_rejected")
+    plan = replay.build_message_replay_plan(
+        date_key="2026-04-24", target="exec_bridge", message_id="message_rejected"
+    )
     decision = gate.evaluate_message_plan(plan)
 
     assert plan["recommended_strategy"] == "review_rejected_receipt_before_replay"
@@ -287,7 +333,6 @@ def test_replay_gate_reviews_rejected_message_receipt(tmp_path):
     }
 
 
-
 def test_replay_gate_denies_terminal_filled_message_receipt(tmp_path):
     receipt_dir = tmp_path / "receipts"
     writer, replay, gate = build_services(tmp_path, receipt_dir=receipt_dir)
@@ -297,7 +342,9 @@ def test_replay_gate_denies_terminal_filled_message_receipt(tmp_path):
     )
     write_receipt(receipt_dir, message_id="message_filled", ack_status="filled")
 
-    plan = replay.build_message_replay_plan(date_key="2026-04-24", target="exec_bridge", message_id="message_filled")
+    plan = replay.build_message_replay_plan(
+        date_key="2026-04-24", target="exec_bridge", message_id="message_filled"
+    )
     decision = gate.evaluate_message_plan(plan)
 
     assert plan["recommended_strategy"] == "do_not_replay_terminal_receipt"
@@ -313,7 +360,6 @@ def test_replay_gate_denies_terminal_filled_message_receipt(tmp_path):
     }
 
 
-
 def test_replay_gate_denies_terminal_accepted_message_receipt(tmp_path):
     receipt_dir = tmp_path / "receipts"
     writer, replay, gate = build_services(tmp_path, receipt_dir=receipt_dir)
@@ -323,7 +369,9 @@ def test_replay_gate_denies_terminal_accepted_message_receipt(tmp_path):
     )
     write_receipt(receipt_dir, message_id="message_accepted", ack_status="accepted")
 
-    plan = replay.build_message_replay_plan(date_key="2026-04-24", target="exec_bridge", message_id="message_accepted")
+    plan = replay.build_message_replay_plan(
+        date_key="2026-04-24", target="exec_bridge", message_id="message_accepted"
+    )
     decision = gate.evaluate_message_plan(plan)
 
     assert plan["recommended_strategy"] == "do_not_replay_terminal_receipt"
@@ -339,7 +387,6 @@ def test_replay_gate_denies_terminal_accepted_message_receipt(tmp_path):
     }
 
 
-
 def test_replay_gate_reviews_cancelled_correlation_receipt(tmp_path):
     receipt_dir = tmp_path / "receipts"
     writer, replay, gate = build_services(tmp_path, receipt_dir=receipt_dir)
@@ -349,7 +396,9 @@ def test_replay_gate_reviews_cancelled_correlation_receipt(tmp_path):
     )
     write_receipt(receipt_dir, message_id="message_cancelled", ack_status="cancelled")
 
-    plan = replay.build_correlation_replay_plan(date_key="2026-04-24", target="exec_bridge", correlation_id="corr_cancelled")
+    plan = replay.build_correlation_replay_plan(
+        date_key="2026-04-24", target="exec_bridge", correlation_id="corr_cancelled"
+    )
     decision = gate.evaluate_correlation_plan(plan)
 
     assert plan["recommended_strategy"] == "review_cancelled_receipts_before_replay"
@@ -365,7 +414,6 @@ def test_replay_gate_reviews_cancelled_correlation_receipt(tmp_path):
     }
 
 
-
 def test_replay_gate_denies_terminal_correlation_receipts(tmp_path):
     receipt_dir = tmp_path / "receipts"
     writer, replay, gate = build_services(tmp_path, receipt_dir=receipt_dir)
@@ -375,7 +423,9 @@ def test_replay_gate_denies_terminal_correlation_receipts(tmp_path):
     )
     write_receipt(receipt_dir, message_id="message_terminal", ack_status="accepted")
 
-    plan = replay.build_correlation_replay_plan(date_key="2026-04-24", target="exec_bridge", correlation_id="corr_terminal")
+    plan = replay.build_correlation_replay_plan(
+        date_key="2026-04-24", target="exec_bridge", correlation_id="corr_terminal"
+    )
     decision = gate.evaluate_correlation_plan(plan)
 
     assert plan["recommended_strategy"] == "do_not_replay_terminal_receipts"
@@ -389,7 +439,6 @@ def test_replay_gate_denies_terminal_correlation_receipts(tmp_path):
         "review_issue_codes": [],
         "governance_tags": ["replay_not_required", "terminal_receipt"],
     }
-
 
 
 def test_replay_gate_terminal_priority_contract_matrix(tmp_path):
@@ -518,11 +567,14 @@ def test_replay_gate_terminal_priority_contract_matrix(tmp_path):
         assert plan["review_issue_codes"] == case.get("review_issue_codes", [])
         if "terminal_message_ids" in case:
             issue_message_ids = plan["delivery_summary"]["issue_message_ids"]
-            assert sorted(
-                issue_message_ids.get("receipt_accepted", [])
-                + issue_message_ids.get("receipt_partially_filled", [])
-                + issue_message_ids.get("receipt_filled", [])
-            ) == case["terminal_message_ids"]
+            assert (
+                sorted(
+                    issue_message_ids.get("receipt_accepted", [])
+                    + issue_message_ids.get("receipt_partially_filled", [])
+                    + issue_message_ids.get("receipt_filled", [])
+                )
+                == case["terminal_message_ids"]
+            )
         assert decision["decision"] == case["decision"]
         assert decision["reasons"] == case["reasons"]
         assert decision["governance_summary"] == {
@@ -533,5 +585,3 @@ def test_replay_gate_terminal_priority_contract_matrix(tmp_path):
             "review_issue_codes": case.get("review_issue_codes", []),
             "governance_tags": case["governance_tags"],
         }
-
-

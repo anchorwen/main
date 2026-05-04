@@ -1,10 +1,15 @@
-from datetime import datetime, timedelta
 import json
+from datetime import datetime, timedelta
 
-from apps.engine.communication_ops_cli import run_cli
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.dispatch_result import DispatchResult
-from core.contracts.enums import CommunicationMessageType, CommunicationPriority, DispatchStatus, ReplayGateDecision
+from core.contracts.enums import (
+    CommunicationMessageType,
+    CommunicationPriority,
+    DispatchStatus,
+    ReplayGateDecision,
+)
+from core.contracts.schema_versions import SCHEMA_REPLAY_EXECUTION_RECORD
 from core.ledger.services.communication_inspection_service import CommunicationInspectionService
 from core.ledger.services.communication_operations_service import CommunicationOperationsService
 from core.ledger.services.communication_record_reader import CommunicationRecordReader
@@ -14,13 +19,12 @@ from core.ledger.services.communication_replay_gate import CommunicationReplayGa
 from core.ledger.services.communication_replay_service import CommunicationReplayService
 from core.ledger.services.replay_execution_reader import ReplayExecutionReader
 from core.ledger.services.replay_execution_writer import ReplayExecutionWriter
-from core.ledger.stream_names import LEDGER_STREAM_REPLAYS, stream_jsonl_filename
 from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
+from core.ledger.stream_names import LEDGER_STREAM_REPLAYS, stream_jsonl_filename
+from core.protocol.schema_versions import SCHEMA_COMMUNICATION_ENVELOPE, SCHEMA_DISPATCH_RESULT
 from core.protocol.services.communication_dispatcher import CommunicationDispatcher
 from core.protocol.services.file_queue_receipt_reader import FileQueueReceiptReader
 from core.protocol.services.stub_communication_adapter import StubCommunicationAdapter
-from core.contracts.schema_versions import SCHEMA_REPLAY_EXECUTION_RECORD
-from core.protocol.schema_versions import SCHEMA_COMMUNICATION_ENVELOPE, SCHEMA_DISPATCH_RESULT
 
 
 def assert_operations_view_stable_contract(
@@ -44,7 +48,6 @@ def assert_operations_view_stable_contract(
         }
 
 
-
 def build_envelope(message_id: str, correlation_id: str, target: str = "exec_bridge"):
     return CommunicationEnvelope(
         schema_version=SCHEMA_COMMUNICATION_ENVELOPE,
@@ -61,7 +64,13 @@ def build_envelope(message_id: str, correlation_id: str, target: str = "exec_bri
     )
 
 
-def build_result(message_id: str, *, status=DispatchStatus.PROTOCOL_VALIDATED, attempts=None, fallback_adapter_name=None):
+def build_result(
+    message_id: str,
+    *,
+    status=DispatchStatus.PROTOCOL_VALIDATED,
+    attempts=None,
+    fallback_adapter_name=None,
+):
     return DispatchResult(
         schema_version=SCHEMA_DISPATCH_RESULT,
         dispatch_id=f"dispatch_{message_id}",
@@ -71,12 +80,11 @@ def build_result(message_id: str, *, status=DispatchStatus.PROTOCOL_VALIDATED, a
         target="exec_bridge",
         adapter_name="stub_adapter",
         fallback_adapter_name=fallback_adapter_name,
-        attempts=attempts or [{"adapter_name": "stub_adapter", "status": "succeeded", "reason": None}],
+        attempts=attempts
+        or [{"adapter_name": "stub_adapter", "status": "succeeded", "reason": None}],
         degrade_reason="primary down" if status == DispatchStatus.DEGRADED else None,
         failure_reason="hard failure" if status == DispatchStatus.FAILED else None,
     )
-
-
 
 
 def build_operations_summary(
@@ -147,7 +155,6 @@ def build_replay_operations_summary(
     }
 
 
-
 def sample_governance_summary(
     *,
     decision=ReplayGateDecision.ALLOW,
@@ -167,7 +174,9 @@ def sample_governance_summary(
     }
 
 
-def build_governance_sources(*, summary_source: str | None, execution_projection_source: str | None) -> dict:
+def build_governance_sources(
+    *, summary_source: str | None, execution_projection_source: str | None
+) -> dict:
     return {
         "summary_source": summary_source,
         "execution_projection_source": execution_projection_source,
@@ -181,7 +190,9 @@ def build_services(tmp_path, receipt_dir=None):
     communication_reader = CommunicationRecordReader(base_dir=str(tmp_path))
     replay_reader = ReplayExecutionReader(base_dir=str(tmp_path))
     receipt_reader = FileQueueReceiptReader(receipt_dir=str(receipt_dir)) if receipt_dir else None
-    inspection = CommunicationInspectionService(record_reader=communication_reader, receipt_reader=receipt_reader)
+    inspection = CommunicationInspectionService(
+        record_reader=communication_reader, receipt_reader=receipt_reader
+    )
     replay_service = CommunicationReplayService(inspection_service=inspection)
     replay_gate = CommunicationReplayGate()
     dispatcher = CommunicationDispatcher(
@@ -238,7 +249,6 @@ def test_operations_service_returns_message_view(tmp_path):
     )
 
 
-
 def test_operations_service_returns_rejected_message_view_with_review_governance(tmp_path):
     receipt_dir = tmp_path / "receipts"
     communication_writer, _, _, operations = build_services(tmp_path, receipt_dir=receipt_dir)
@@ -290,7 +300,6 @@ def test_operations_service_returns_rejected_message_view_with_review_governance
             governance_tags=["requires_governance_review", "receipt_rejected"],
         ),
     )
-
 
 
 def test_operations_service_returns_message_view(tmp_path):
@@ -387,7 +396,7 @@ def test_operations_service_message_view_prefers_plan_governance_summary_when_ga
         operations_summary=build_operations_summary(
             posture="action_required",
             posture_source="trace.delivery_state.delivery_posture",
-            governance_decision=None,
+            governance_decision=None,  # type: ignore[reportArgumentType]
             governance_posture="unknown",
             recommended_strategy="direct_replay_candidate",
             target_issue_codes=["dispatch_pending"],
@@ -395,7 +404,6 @@ def test_operations_service_message_view_prefers_plan_governance_summary_when_ga
             governance_tags=[],
         ),
     )
-
 
 
 def test_operations_service_returns_correlation_view(tmp_path):
@@ -421,7 +429,13 @@ def test_operations_service_returns_correlation_view(tmp_path):
     receipt_path = receipt_dir / "2026-04-24" / "exec_bridge"
     receipt_path.mkdir(parents=True, exist_ok=True)
     (receipt_path / "message_101.ack.json").write_text(
-        json.dumps({"message_id": "message_101", "ack_status": "acknowledged", "received_at": "2026-04-24T12:00:03"}),
+        json.dumps(
+            {
+                "message_id": "message_101",
+                "ack_status": "acknowledged",
+                "received_at": "2026-04-24T12:00:03",
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -470,8 +484,6 @@ def test_operations_service_returns_correlation_view(tmp_path):
         target_issue_codes=["receipt_timeout"],
         governance_tags=["auto_replay_eligible", "timeout_targeted_replay"],
     )
-
-
 
 
 def test_operations_service_correlation_view_prefers_trace_posture_over_targeted_governance_posture():
@@ -537,7 +549,6 @@ def test_operations_service_correlation_view_prefers_trace_posture_over_targeted
     assert view["operations_summary"]["governance_posture"] == "targeted_replay"
 
 
-
 def test_operations_service_returns_terminal_mixed_correlation_view(tmp_path):
     receipt_dir = tmp_path / "receipts"
     communication_writer, _, _, operations = build_services(tmp_path, receipt_dir=receipt_dir)
@@ -584,11 +595,23 @@ def test_operations_service_returns_terminal_mixed_correlation_view(tmp_path):
         ),
     )
     (receipt_path / "message_accepted.ack.json").write_text(
-        json.dumps({"message_id": "message_accepted", "ack_status": "accepted", "received_at": "2026-04-24T12:00:03"}),
+        json.dumps(
+            {
+                "message_id": "message_accepted",
+                "ack_status": "accepted",
+                "received_at": "2026-04-24T12:00:03",
+            }
+        ),
         encoding="utf-8",
     )
     (receipt_path / "message_acked.ack.json").write_text(
-        json.dumps({"message_id": "message_acked", "ack_status": "acknowledged", "received_at": "2026-04-24T12:00:03"}),
+        json.dumps(
+            {
+                "message_id": "message_acked",
+                "ack_status": "acknowledged",
+                "received_at": "2026-04-24T12:00:03",
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -636,11 +659,14 @@ def test_operations_service_returns_terminal_mixed_correlation_view(tmp_path):
     )
 
 
-
-def test_operations_service_replay_view_prefers_governance_posture_over_execution_projection(tmp_path):
+def test_operations_service_replay_view_prefers_governance_posture_over_execution_projection(
+    tmp_path,
+):
     _, _, _, operations = build_services(tmp_path)
     replay_id = "replay_projection_mismatch"
-    replay_path = tmp_path / "2026-04-24" / stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    replay_path = (
+        tmp_path / "2026-04-24" / stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    )
     replay_path.parent.mkdir(parents=True, exist_ok=True)
     replay_path.write_text(
         json.dumps(
@@ -696,7 +722,8 @@ def test_operations_service_replay_view_prefers_governance_posture_over_executio
                     },
                 },
             }
-        ) + "\n",
+        )
+        + "\n",
         encoding="utf-8",
     )
 
@@ -719,7 +746,10 @@ def test_operations_service_replay_view_prefers_governance_posture_over_executio
     assert view["operations_summary"]["posture"] == "targeted_replay"
     assert view["operations_summary"]["posture_source"] == "governance_summary.posture"
     assert view["operations_summary"]["governance_posture"] == "targeted_replay"
-    assert view["operations_summary"]["execution_projection_source"] == CommunicationOperationsService.REPLAY_GOVERNANCE_PROJECTION_SOURCE_EXECUTION
+    assert (
+        view["operations_summary"]["execution_projection_source"]
+        == CommunicationOperationsService.REPLAY_GOVERNANCE_PROJECTION_SOURCE_EXECUTION
+    )
 
     communication_writer, replay_service, executor, operations = build_services(tmp_path)
     envelope = build_envelope("message_blocked", "corr_blocked")
@@ -728,7 +758,9 @@ def test_operations_service_replay_view_prefers_governance_posture_over_executio
         build_result(
             "message_blocked",
             status=DispatchStatus.FAILED,
-            attempts=[{"adapter_name": "stub_adapter", "status": "failed", "reason": "hard failure"}],
+            attempts=[
+                {"adapter_name": "stub_adapter", "status": "failed", "reason": "hard failure"}
+            ],
         ),
     )
 
@@ -792,13 +824,18 @@ def test_operations_service_replay_view_prefers_governance_posture_over_executio
     }
 
 
-
-def test_operations_service_replay_view_keeps_summary_sources_aligned_with_stable_operations_summary(tmp_path):
+def test_operations_service_replay_view_keeps_summary_sources_aligned_with_stable_operations_summary(
+    tmp_path,
+):
     receipt_dir = tmp_path / "receipts"
-    communication_writer, replay_service, executor, operations = build_services(tmp_path, receipt_dir=receipt_dir)
+    communication_writer, replay_service, executor, operations = build_services(
+        tmp_path, receipt_dir=receipt_dir
+    )
     envelope_1 = build_envelope("message_exec_1", "corr_exec")
     envelope_2 = build_envelope("message_exec_2", "corr_exec")
-    communication_writer.write_record(envelope_1, build_result("message_exec_1", status=DispatchStatus.TRANSPORT_DELIVERED))
+    communication_writer.write_record(
+        envelope_1, build_result("message_exec_1", status=DispatchStatus.TRANSPORT_DELIVERED)
+    )
     communication_writer.write_record(
         envelope_2,
         DispatchResult(
@@ -815,7 +852,13 @@ def test_operations_service_replay_view_keeps_summary_sources_aligned_with_stabl
     receipt_path = receipt_dir / "2026-04-24" / "exec_bridge"
     receipt_path.mkdir(parents=True, exist_ok=True)
     (receipt_path / "message_exec_1.ack.json").write_text(
-        json.dumps({"message_id": "message_exec_1", "ack_status": "acknowledged", "received_at": "2026-04-24T12:00:03"}),
+        json.dumps(
+            {
+                "message_id": "message_exec_1",
+                "ack_status": "acknowledged",
+                "received_at": "2026-04-24T12:00:03",
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -853,15 +896,20 @@ def test_operations_service_replay_view_keeps_summary_sources_aligned_with_stabl
     assert view["operations_summary"]["executed_message_ids"] == ["message_exec_2"]
     assert view["operations_summary"]["skipped_message_ids"] == ["message_exec_1"]
     assert view["operations_summary"]["blocked_message_ids"] == []
-    assert view["operations_summary"]["skip_reasons"] == {"skip_acknowledged_message": ["message_exec_1"]}
+    assert view["operations_summary"]["skip_reasons"] == {
+        "skip_acknowledged_message": ["message_exec_1"]
+    }
     assert view["operations_summary"]["block_reasons"] == {}
 
 
-
-def test_operations_service_replay_view_keeps_summary_sources_aligned_with_stable_operations_summary(tmp_path):
+def test_operations_service_replay_view_keeps_summary_sources_aligned_with_stable_operations_summary(
+    tmp_path,
+):
     _, _, _, operations = build_services(tmp_path)
     replay_id = "replay_summary_sources"
-    replay_path = tmp_path / "2026-04-24" / stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    replay_path = (
+        tmp_path / "2026-04-24" / stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    )
     replay_path.parent.mkdir(parents=True, exist_ok=True)
     replay_path.write_text(
         json.dumps(
@@ -917,7 +965,8 @@ def test_operations_service_replay_view_keeps_summary_sources_aligned_with_stabl
                     },
                 },
             }
-        ) + "\n",
+        )
+        + "\n",
         encoding="utf-8",
     )
 
@@ -933,16 +982,23 @@ def test_operations_service_replay_view_keeps_summary_sources_aligned_with_stabl
         summary_source=CommunicationOperationsService.REPLAY_GOVERNANCE_SUMMARY_SOURCE_EXTENSIONS,
         execution_projection_source=CommunicationOperationsService.REPLAY_GOVERNANCE_PROJECTION_SOURCE_EXECUTION,
     )
-    assert view["operations_summary"]["governance_summary_source"] == view["governance_sources"]["summary_source"]
-    assert view["operations_summary"]["execution_projection_source"] == view["governance_sources"]["execution_projection_source"]
+    assert (
+        view["operations_summary"]["governance_summary_source"]
+        == view["governance_sources"]["summary_source"]
+    )
+    assert (
+        view["operations_summary"]["execution_projection_source"]
+        == view["governance_sources"]["execution_projection_source"]
+    )
     assert view["operations_summary"]["governance_tags"] == ["extension_preferred"]
-
 
 
 def test_operations_service_prefers_gate_governance_summary_when_extensions_missing(tmp_path):
     _, _, _, operations = build_services(tmp_path)
     replay_id = "replay_gate_fallback"
-    replay_path = tmp_path / "2026-04-24" / stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    replay_path = (
+        tmp_path / "2026-04-24" / stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    )
     replay_path.parent.mkdir(parents=True, exist_ok=True)
     replay_path.write_text(
         json.dumps(
@@ -982,7 +1038,8 @@ def test_operations_service_prefers_gate_governance_summary_when_extensions_miss
                 },
                 "extensions": {},
             }
-        ) + "\n",
+        )
+        + "\n",
         encoding="utf-8",
     )
 
@@ -1006,7 +1063,9 @@ def test_operations_service_prefers_gate_governance_summary_when_extensions_miss
 def test_operations_service_derives_governance_summary_for_legacy_replay_record(tmp_path):
     _, _, _, operations = build_services(tmp_path)
     replay_id = "replay_legacy_fallback"
-    replay_path = tmp_path / "2026-04-24" / stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    replay_path = (
+        tmp_path / "2026-04-24" / stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    )
     replay_path.parent.mkdir(parents=True, exist_ok=True)
     replay_path.write_text(
         json.dumps(
@@ -1043,7 +1102,8 @@ def test_operations_service_derives_governance_summary_for_legacy_replay_record(
                 },
                 "extensions": {},
             }
-        ) + "\n",
+        )
+        + "\n",
         encoding="utf-8",
     )
 
@@ -1062,8 +1122,6 @@ def test_operations_service_derives_governance_summary_for_legacy_replay_record(
         "summary_source": CommunicationOperationsService.REPLAY_GOVERNANCE_SUMMARY_SOURCE_DERIVED,
         "execution_projection_source": None,
     }
-
-
 
 
 def test_operations_service_message_view_returns_unknown_posture_when_trace_missing():
@@ -1120,7 +1178,6 @@ def test_operations_service_message_view_returns_unknown_posture_when_trace_miss
         "governance_summary_source": None,
         "execution_projection_source": None,
     }
-
 
 
 def test_operations_service_message_view_returns_unknown_posture_when_trace_missing():
@@ -1180,11 +1237,14 @@ def test_operations_service_message_view_returns_unknown_posture_when_trace_miss
     }
 
 
-
-def test_operations_service_replay_view_returns_unknown_posture_when_governance_summary_posture_is_unrecognized(tmp_path):
+def test_operations_service_replay_view_returns_unknown_posture_when_governance_summary_posture_is_unrecognized(
+    tmp_path,
+):
     _, _, _, operations = build_services(tmp_path)
     replay_id = "replay_unknown_posture"
-    replay_path = tmp_path / "2026-04-24" / stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    replay_path = (
+        tmp_path / "2026-04-24" / stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    )
     replay_path.parent.mkdir(parents=True, exist_ok=True)
     replay_path.write_text(
         json.dumps(
@@ -1235,7 +1295,8 @@ def test_operations_service_replay_view_returns_unknown_posture_when_governance_
                     },
                 },
             }
-        ) + "\n",
+        )
+        + "\n",
         encoding="utf-8",
     )
 
@@ -1253,7 +1314,6 @@ def test_operations_service_replay_view_returns_unknown_posture_when_governance_
     assert view["operations_summary"]["posture"] == "unknown"
     assert view["operations_summary"]["posture_source"] is None
     assert view["governance_summary"]["posture"] == "healthy"
-
 
 
 def test_operations_service_correlation_view_returns_unknown_posture_when_trace_missing():
@@ -1310,11 +1370,14 @@ def test_operations_service_correlation_view_returns_unknown_posture_when_trace_
     }
 
 
-
-def test_operations_service_replay_view_keeps_stable_summary_shape_when_execution_projection_missing(tmp_path):
+def test_operations_service_replay_view_keeps_stable_summary_shape_when_execution_projection_missing(
+    tmp_path,
+):
     _, _, _, operations = build_services(tmp_path)
     replay_id = "replay_missing_projection"
-    replay_path = tmp_path / "2026-04-24" / stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    replay_path = (
+        tmp_path / "2026-04-24" / stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    )
     replay_path.parent.mkdir(parents=True, exist_ok=True)
     replay_path.write_text(
         json.dumps(
@@ -1351,7 +1414,8 @@ def test_operations_service_replay_view_keeps_stable_summary_shape_when_executio
                 },
                 "extensions": {},
             }
-        ) + "\n",
+        )
+        + "\n",
         encoding="utf-8",
     )
 
@@ -1385,13 +1449,16 @@ def test_operations_service_replay_view_keeps_stable_summary_shape_when_executio
     )
 
 
-
 def test_operations_service_returns_targeted_replay_view(tmp_path):
     receipt_dir = tmp_path / "receipts"
-    communication_writer, replay_service, executor, operations = build_services(tmp_path, receipt_dir=receipt_dir)
+    communication_writer, replay_service, executor, operations = build_services(
+        tmp_path, receipt_dir=receipt_dir
+    )
     envelope_1 = build_envelope("message_301", "corr_targeted")
     envelope_2 = build_envelope("message_302", "corr_targeted")
-    communication_writer.write_record(envelope_1, build_result("message_301", status=DispatchStatus.TRANSPORT_DELIVERED))
+    communication_writer.write_record(
+        envelope_1, build_result("message_301", status=DispatchStatus.TRANSPORT_DELIVERED)
+    )
     communication_writer.write_record(
         envelope_2,
         DispatchResult(
@@ -1408,7 +1475,13 @@ def test_operations_service_returns_targeted_replay_view(tmp_path):
     receipt_path = receipt_dir / "2026-04-24" / "exec_bridge"
     receipt_path.mkdir(parents=True, exist_ok=True)
     (receipt_path / "message_301.ack.json").write_text(
-        json.dumps({"message_id": "message_301", "ack_status": "acknowledged", "received_at": "2026-04-24T12:00:03"}),
+        json.dumps(
+            {
+                "message_id": "message_301",
+                "ack_status": "acknowledged",
+                "received_at": "2026-04-24T12:00:03",
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -1436,7 +1509,9 @@ def test_operations_service_returns_targeted_replay_view(tmp_path):
     assert view["execution_summary"]["targeted_message_ids"] == ["message_302"]
     assert view["execution_summary"]["executed_message_ids"] == ["message_302"]
     assert view["execution_summary"]["skipped_message_ids"] == ["message_301"]
-    assert view["execution_summary"]["skip_reasons"] == {"skip_acknowledged_message": ["message_301"]}
+    assert view["execution_summary"]["skip_reasons"] == {
+        "skip_acknowledged_message": ["message_301"]
+    }
     assert view["execution_summary"]["block_reasons"] == {}
     assert view["execution_summary"]["execution_mode"] == "targeted"
     assert view["governance_summary"] == {
@@ -1473,7 +1548,13 @@ def test_operations_service_returns_receipt_aware_message_view(tmp_path):
     receipt_path = receipt_dir / "2026-04-24" / "exec_bridge"
     receipt_path.mkdir(parents=True, exist_ok=True)
     (receipt_path / "message_ack.ack.json").write_text(
-        json.dumps({"message_id": "message_ack", "ack_status": "acknowledged", "received_at": "2026-04-24T12:00:03"}),
+        json.dumps(
+            {
+                "message_id": "message_ack",
+                "ack_status": "acknowledged",
+                "received_at": "2026-04-24T12:00:03",
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -1513,4 +1594,3 @@ def test_operations_service_returns_timeout_message_view(tmp_path):
 
     assert view["trace"]["delivery_state"]["phase"] == "receipt_timeout"
     assert view["trace"]["delivery_state"]["deadline_missed"] is True
-

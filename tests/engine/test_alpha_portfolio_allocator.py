@@ -8,7 +8,9 @@ from core.alpha.schema_versions import SCHEMA_ALPHA_PORTFOLIO_ALLOCATION
 
 
 def _record(alpha_id, state):
-    return AlphaRecord(alpha_id=alpha_id, name=alpha_id, version="1.0", state=state, strategy_id=alpha_id)
+    return AlphaRecord(
+        alpha_id=alpha_id, name=alpha_id, version="1.0", state=state, strategy_id=alpha_id
+    )
 
 
 def _metrics(**overrides):
@@ -32,7 +34,9 @@ class TestAlphaPortfolioAllocator:
         store = AlphaPerformanceStore()
         store.record_snapshot("alpha1", _metrics())
         store.record_snapshot("alpha2", _metrics())
-        result = AlphaPortfolioAllocator(registry, store, AlphaAllocationPolicy(total_notional=1000)).allocate()
+        result = AlphaPortfolioAllocator(
+            registry, store, AlphaAllocationPolicy(total_notional=1000)
+        ).allocate()
         assert result["schema_version"] == SCHEMA_ALPHA_PORTFOLIO_ALLOCATION
         assert result["alpha_count"] == 2
         assert result["allocatable_count"] == 2
@@ -63,7 +67,12 @@ class TestAlphaPortfolioAllocator:
         registry = AlphaRegistry()
         registry.register(_record("alpha1", AlphaLifecycleState.ACTIVE))
         store = AlphaPerformanceStore()
-        store.record_snapshot("alpha1", _metrics(fill_ratio=0.4, denied_count=2, average_slippage_bps=20, orders_per_signal=0.2))
+        store.record_snapshot(
+            "alpha1",
+            _metrics(
+                fill_ratio=0.4, denied_count=2, average_slippage_bps=20, orders_per_signal=0.2
+            ),
+        )
         result = AlphaPortfolioAllocator(registry, store).allocate()
         rec = result["recommendations"][0]
         assert rec["score"] < 0.35

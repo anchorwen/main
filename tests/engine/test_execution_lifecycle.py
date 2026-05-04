@@ -1,16 +1,18 @@
-import json
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime
 
 from core.contracts.domain.execution_event import ExecutionEvent
 from core.contracts.ids import new_execution_event_id
-from core.ledger.services.execution_event_writer import ExecutionEventWriter
-from core.ledger.services.execution_event_reader import ExecutionEventReader
-from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
 from core.ledger.schema_versions import SCHEMA_EXECUTION_EVENT
+from core.ledger.services.execution_event_reader import ExecutionEventReader
+from core.ledger.services.execution_event_writer import ExecutionEventWriter
+from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
 
 
-def make_event(message_id, correlation_id, event_type, filled_qty=0, event_time=None, venue="test_venue"):
+def make_event(
+    message_id, correlation_id, event_type, filled_qty=0, event_time=None, venue="test_venue"
+):
     event_time = event_time or datetime(2026, 4, 24, 12, 0, 5)
     qty = {"filled": filled_qty} if filled_qty else {}
     return ExecutionEvent(
@@ -28,7 +30,16 @@ def make_event(message_id, correlation_id, event_type, filled_qty=0, event_time=
 
 class TestExecutionEventDomain:
     def test_valid_event_types(self):
-        for et in ["ack", "rejected", "accepted", "partially_filled", "filled", "cancelled", "amended", "expired"]:
+        for et in [
+            "ack",
+            "rejected",
+            "accepted",
+            "partially_filled",
+            "filled",
+            "cancelled",
+            "amended",
+            "expired",
+        ]:
             event = make_event("m1", "c1", et)
             assert event.event_type == et
 
@@ -39,9 +50,14 @@ class TestExecutionEventDomain:
     def test_missing_event_id_raises(self):
         with pytest.raises(ValueError, match="event_id is required"):
             ExecutionEvent(
-                schema_version="v1", event_id="", message_id="m1",
-                correlation_id="c1", event_type="ack",
-                event_time=datetime.utcnow(), recorded_at=datetime.utcnow(), venue="v",
+                schema_version="v1",
+                event_id="",
+                message_id="m1",
+                correlation_id="c1",
+                event_type="ack",
+                event_time=datetime.now(UTC).replace(tzinfo=None),
+                recorded_at=datetime.now(UTC).replace(tzinfo=None),
+                venue="v",
             )
 
     def test_is_terminal(self):
@@ -79,7 +95,9 @@ class TestExecutionEventWriterReader:
         writer.write_event(make_event("m1", "c1", "filled", filled_qty=100))
 
         reader = ExecutionEventReader(str(tmp_path))
-        events = reader.find_by_message_id(date_key="2026-04-24", correlation_id="c1", message_id="m1")
+        events = reader.find_by_message_id(
+            date_key="2026-04-24", correlation_id="c1", message_id="m1"
+        )
         assert len(events) == 2
 
     def test_find_terminal_event(self, tmp_path):
@@ -90,7 +108,9 @@ class TestExecutionEventWriterReader:
         writer.write_event(make_event("m1", "c1", "filled", filled_qty=100))
 
         reader = ExecutionEventReader(str(tmp_path))
-        terminal = reader.find_terminal_event(date_key="2026-04-24", correlation_id="c1", message_id="m1")
+        terminal = reader.find_terminal_event(
+            date_key="2026-04-24", correlation_id="c1", message_id="m1"
+        )
         assert terminal is not None
         assert terminal["event_type"] == "filled"
 
@@ -100,7 +120,10 @@ class TestExecutionEventWriterReader:
         writer.write_event(make_event("m1", "c1", "ack"))
 
         reader = ExecutionEventReader(str(tmp_path))
-        assert reader.find_terminal_event(date_key="2026-04-24", correlation_id="c1", message_id="m1") is None
+        assert (
+            reader.find_terminal_event(date_key="2026-04-24", correlation_id="c1", message_id="m1")
+            is None
+        )
 
     def test_build_execution_timeline(self, tmp_path):
         store = JsonlLedgerStore(str(tmp_path))
@@ -111,7 +134,9 @@ class TestExecutionEventWriterReader:
         writer.write_event(make_event("m1", "c1", "filled", filled_qty=50))
 
         reader = ExecutionEventReader(str(tmp_path))
-        timeline = reader.build_execution_timeline(date_key="2026-04-24", correlation_id="c1", message_id="m1")
+        timeline = reader.build_execution_timeline(
+            date_key="2026-04-24", correlation_id="c1", message_id="m1"
+        )
 
         assert timeline["event_count"] == 4
         assert timeline["event_types"] == ["ack", "accepted", "partially_filled", "filled"]
@@ -121,7 +146,9 @@ class TestExecutionEventWriterReader:
 
     def test_empty_timeline(self, tmp_path):
         reader = ExecutionEventReader(str(tmp_path))
-        timeline = reader.build_execution_timeline(date_key="2026-04-24", correlation_id="c1", message_id="m1")
+        timeline = reader.build_execution_timeline(
+            date_key="2026-04-24", correlation_id="c1", message_id="m1"
+        )
         assert timeline["event_count"] == 0
         assert timeline["is_terminal"] is False
 
@@ -129,10 +156,14 @@ class TestExecutionEventWriterReader:
         store = JsonlLedgerStore(str(tmp_path))
         writer = ExecutionEventWriter(store)
         event, path = writer.write_from_venue_payload(
-            message_id="m1", correlation_id="c1", event_type="filled",
-            venue="exchange_a", event_time=datetime(2026, 4, 24, 12, 5, 0),
-            venue_order_id="ord_123", quantity={"filled": 100},
+            message_id="m1",
+            correlation_id="c1",
+            event_type="filled",
+            venue="exchange_a",
+            event_time=datetime(2026, 4, 24, 12, 5, 0),
+            venue_order_id="ord_123",
+            quantity={"filled": 100},
         )
         assert event.event_type == "filled"
         assert event.venue_order_id == "ord_123"
-        assert path.exists()
+        assert path.exists()  # type: ignore[reportAttributeAccessIssue]

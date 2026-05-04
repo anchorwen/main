@@ -1,14 +1,14 @@
 """Final audit tests: CLI smoke, module integrity, architecture invariants."""
-import json
+
 import importlib
+import json
 import sys
 from pathlib import Path
 
-from apps.engine.cli import main, build_parser
+from apps.engine.cli import main
 from core.deployment.environment_config import EnvironmentConfig
-from core.observability.metric_names import CYCLES_TOTAL
 from core.deployment.service_container import ServiceContainer
-
+from core.observability.metric_names import CYCLES_TOTAL
 
 ALL_CORE_MODULES = [
     "core.contracts.exceptions",
@@ -95,8 +95,10 @@ class TestCLISmoke:
         sf = tmp_path / "scenarios.json"
         sf.write_text(json.dumps(scenarios))
         out = str(tmp_path / "report.json")
-        assert main(["--base-dir", str(tmp_path), "backtest",
-                      "--scenarios", str(sf), "--output", out]) == 0
+        assert (
+            main(["--base-dir", str(tmp_path), "backtest", "--scenarios", str(sf), "--output", out])
+            == 0
+        )
         report = json.loads(Path(out).read_text())
         assert report["summary"]["scenarios"] == 2
 
@@ -106,9 +108,11 @@ class TestCLISmoke:
 
 class TestArchitectureInvariants:
     def test_container_builds_all_envs(self, tmp_path):
-        for env_factory in [EnvironmentConfig.development,
-                            EnvironmentConfig.production,
-                            EnvironmentConfig.test]:
+        for env_factory in [
+            EnvironmentConfig.development,
+            EnvironmentConfig.production,
+            EnvironmentConfig.test,
+        ]:
             cfg = env_factory(str(tmp_path / env_factory.__name__))
             c = ServiceContainer(cfg).build()
             assert c.governance_service is not None
@@ -127,7 +131,7 @@ class TestArchitectureInvariants:
         cfg = EnvironmentConfig.production(str(tmp_path))
         cfg.enable_idempotency = False
         c = ServiceContainer(cfg).build()
-        c.governance_service.register_brain("alpha", "live")
+        c.governance_service.register_brain("alpha", "live")  # type: ignore[reportOptionalMemberAccess]
 
         from apps.engine.system_facade import SystemFacade
         from core.deployment.lifecycle_manager import LifecycleManager
@@ -145,19 +149,25 @@ class TestArchitectureInvariants:
 
         for d in filled[:2]:
             facade.process_event(d["message_id"], "ack", venue="ex")
-            facade.process_event(d["message_id"], "filled", filled_quantity=0.001,
-                                 price=2000, venue="ex")
+            facade.process_event(
+                d["message_id"], "filled", filled_quantity=0.001, price=2000, venue="ex"
+            )
 
         h = facade.health()
         assert h["readiness"]["status"] == "ready"
-        assert c.metrics.get_counter(CYCLES_TOTAL) >= 5
+        assert c.metrics.get_counter(CYCLES_TOTAL) >= 5  # type: ignore[reportOptionalMemberAccess]
 
         lm.shutdown(save_state=True)
 
     def test_exception_hierarchy_depth(self):
         from core.contracts import exceptions as ex
-        for cls in [ex.RiskPolicyViolation, ex.InvalidTransitionError,
-                    ex.OrderNotFoundError, ex.DispatchError]:
+
+        for cls in [
+            ex.RiskPolicyViolation,
+            ex.InvalidTransitionError,
+            ex.OrderNotFoundError,
+            ex.DispatchError,
+        ]:
             depth = 0
             c = cls.__mro__
             for klass in c:

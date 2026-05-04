@@ -1,10 +1,12 @@
 from types import SimpleNamespace
 
-from apps.engine.communication_summary_contract import build_summary_mirror_fields_from_operations_summary
+from apps.engine.communication_summary_contract import (
+    build_summary_mirror_fields_from_operations_summary,
+)
 from apps.engine.main_v9_shadow import apply_stable_output_contract, build_output_extension_fields
 from core.deployment.domain_keys import (
-    PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
     PAYLOAD_KEY_BLOCK_REASONS,
+    PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
     PAYLOAD_KEY_EXECUTED_MESSAGE_IDS,
     PAYLOAD_KEY_EXECUTION_MODE,
     PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE,
@@ -15,8 +17,8 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_POSTURE,
     PAYLOAD_KEY_POSTURE_SOURCE,
     PAYLOAD_KEY_POSTURE_SOURCES,
-    PAYLOAD_KEY_SKIPPED_MESSAGE_IDS,
     PAYLOAD_KEY_SKIP_REASONS,
+    PAYLOAD_KEY_SKIPPED_MESSAGE_IDS,
     PAYLOAD_KEY_SUMMARY_SOURCE,
 )
 
@@ -67,4 +69,3 @@ def test_runtime_contract_guard_backfills_operations_summary_from_runtime_result
         PAYLOAD_KEY_SUMMARY_SOURCE: "summary.source",
         PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE: "summary.execution",
     }
-

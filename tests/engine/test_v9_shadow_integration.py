@@ -1,7 +1,16 @@
 import json
 
-from apps.engine.main_v9_shadow import SessionStreamPlan, ShadowSessionManager, prepare_results, render_json_output, run_shadow_session_sse_server, stream_session_sse
-from apps.engine.v9_shadow_sse import SessionSSEClientBuffer, iter_sse_messages_from_chunks, summarize_session_sse_events
+from apps.engine.main_v9_shadow import (
+    SessionStreamPlan,
+    prepare_results,
+    render_json_output,
+    run_shadow_session_sse_server,
+)
+from apps.engine.v9_shadow_sse import (
+    SessionSSEClientBuffer,
+    iter_sse_messages_from_chunks,
+    summarize_session_sse_events,
+)
 from core.ledger.services.communication_operations_service import CommunicationOperationsService
 from tests.engine.shadow_testkit import (
     assert_client_error_terminal_message,
@@ -12,7 +21,6 @@ from tests.engine.shadow_testkit import (
     build_blocked_expected_operations_summary,
     build_blocked_manager_payload,
     build_blocked_manager_result,
-    build_fallback_cli_contract,
     build_fallback_expected_operations_summary,
     build_fallback_manager_payload,
     build_fallback_manager_result,
@@ -29,7 +37,23 @@ from tests.engine.shadow_testkit import (
 )
 
 
-def assert_mirror_field_alignment(*, manager_results, sse_results, client_results, operations_posture: str, posture_source: str, summary_source: str | None, execution_projection_source, execution_mode: str, executed_message_ids: list[str] | None = None, skipped_message_ids: list[str] | None = None, blocked_message_ids: list[str] | None = None, skip_reasons: dict | None = None, block_reasons: dict | None = None, expected_operations_summary: dict | None = None) -> None:
+def assert_mirror_field_alignment(
+    *,
+    manager_results,
+    sse_results,
+    client_results,
+    operations_posture: str,
+    posture_source: str,
+    summary_source: str | None,
+    execution_projection_source,
+    execution_mode: str,
+    executed_message_ids: list[str] | None = None,
+    skipped_message_ids: list[str] | None = None,
+    blocked_message_ids: list[str] | None = None,
+    skip_reasons: dict | None = None,
+    block_reasons: dict | None = None,
+    expected_operations_summary: dict | None = None,
+) -> None:
     assert manager_results["operations_posture"] == operations_posture
     assert sse_results["operations_posture"] == operations_posture
     assert client_results["operations_posture"] == operations_posture
@@ -95,27 +119,34 @@ def assert_mirror_field_alignment(*, manager_results, sse_results, client_result
 # ---- real input integration tests ----
 
 
-
 def test_v9_shadow_real_batch_integration_completed_contract():
-    args = type("Args", (), {
-        "scenario_flag": None,
-        "scenario_positional": None,
-        "feature_file": None,
-        "feature_batch_file": "D:/cursor/data/snapshots/v9_shadow_actionable_batch.json",
-        "feature_dir": None,
-    })()
-    stream_plan = SessionStreamPlan(include_meta=True, include_stats=True, event_name_prefix="shadowexec")
+    args = type(
+        "Args",
+        (),
+        {
+            "scenario_flag": None,
+            "scenario_positional": None,
+            "feature_file": None,
+            "feature_batch_file": "D:/cursor/data/snapshots/v9_shadow_actionable_batch.json",
+            "feature_dir": None,
+        },
+    )()
+    stream_plan = SessionStreamPlan(
+        include_meta=True, include_stats=True, event_name_prefix="shadowexec"
+    )
 
     flow = collect_session_flow_triplet(args, stream_plan=stream_plan)
     manager_events = flow["manager_events"]
     sse_messages = flow["sse_messages"]
     client_completed = flow["client_state"]["final_completed"]
-    rendered_json = json.loads(render_json_output(
-        prepare_results(args)[0],
-        include_stats=True,
-        output_mode="json",
-        include_meta=True,
-    ))
+    rendered_json = json.loads(
+        render_json_output(
+            prepare_results(args)[0],
+            include_stats=True,
+            output_mode="json",
+            include_meta=True,
+        )
+    )
 
     manager_completed = manager_events[-1]
     sse_completed = sse_messages[-1]
@@ -162,23 +193,34 @@ def test_v9_shadow_real_batch_integration_completed_contract():
     assert rendered_json["stats"]["total"] == 2
 
     assert manager_completed["data"]["stats"]["side_actions"] == {"long.open": 1, "short.open": 1}
-    assert sse_completed["data"]["data"]["stats"]["side_actions"] == {"long.open": 1, "short.open": 1}
-    assert client_completed["data"]["data"]["stats"]["side_actions"] == {"long.open": 1, "short.open": 1}
+    assert sse_completed["data"]["data"]["stats"]["side_actions"] == {
+        "long.open": 1,
+        "short.open": 1,
+    }
+    assert client_completed["data"]["data"]["stats"]["side_actions"] == {
+        "long.open": 1,
+        "short.open": 1,
+    }
     assert rendered_json["stats"]["side_actions"] == {"long.open": 1, "short.open": 1}
 
 
-
 def test_v9_shadow_real_batch_json_manager_sse_blocked_mirror_fields_align(monkeypatch):
-    args = type("Args", (), {
-        "scenario_flag": "long",
-        "scenario_positional": None,
-        "feature_file": None,
-        "feature_batch_file": None,
-        "feature_dir": None,
-    })()
+    args = type(
+        "Args",
+        (),
+        {
+            "scenario_flag": "long",
+            "scenario_positional": None,
+            "feature_file": None,
+            "feature_batch_file": None,
+            "feature_dir": None,
+        },
+    )()
     payload = build_blocked_manager_payload()
     result = build_blocked_manager_result()
-    stream_plan = SessionStreamPlan(include_meta=True, include_stats=True, event_name_prefix="shadowexec")
+    stream_plan = SessionStreamPlan(
+        include_meta=True, include_stats=True, event_name_prefix="shadowexec"
+    )
 
     monkeypatch.setattr(
         "apps.engine.main_v9_shadow.prepare_results",
@@ -189,12 +231,14 @@ def test_v9_shadow_real_batch_json_manager_sse_blocked_mirror_fields_align(monke
     manager_completed = flow["manager_events"][-1]
     sse_completed = flow["sse_messages"][-1]
     client_completed = flow["client_state"]["final_completed"]
-    rendered_json = json.loads(render_json_output(
-        [payload],
-        include_stats=True,
-        output_mode="json",
-        include_meta=True,
-    ))
+    rendered_json = json.loads(
+        render_json_output(
+            [payload],
+            include_stats=True,
+            output_mode="json",
+            include_meta=True,
+        )
+    )
 
     manager_results = manager_completed["data"]["results"]
     sse_results = sse_completed["data"]["data"]["results"]
@@ -212,7 +256,9 @@ def test_v9_shadow_real_batch_json_manager_sse_blocked_mirror_fields_align(monke
         blocked_message_ids=["message_001"],
         block_reasons={"block_review_required": ["message_001"]},
         expected_operations_summary=build_blocked_expected_operations_summary(
-            communication_ledger_path=manager_results["operations_summary"]["communication_ledger_path"],
+            communication_ledger_path=manager_results["operations_summary"][
+                "communication_ledger_path"
+            ],
         ),
     )
 
@@ -222,18 +268,25 @@ def test_v9_shadow_real_batch_json_manager_sse_blocked_mirror_fields_align(monke
     assert rendered_json["results"] == payload
 
 
-
-def test_v9_shadow_real_batch_json_manager_sse_terminal_message_receipt_mirror_fields_align(monkeypatch):
-    args = type("Args", (), {
-        "scenario_flag": "long",
-        "scenario_positional": None,
-        "feature_file": None,
-        "feature_batch_file": None,
-        "feature_dir": None,
-    })()
+def test_v9_shadow_real_batch_json_manager_sse_terminal_message_receipt_mirror_fields_align(
+    monkeypatch,
+):
+    args = type(
+        "Args",
+        (),
+        {
+            "scenario_flag": "long",
+            "scenario_positional": None,
+            "feature_file": None,
+            "feature_batch_file": None,
+            "feature_dir": None,
+        },
+    )()
     payload = build_terminal_message_receipt_manager_payload()
     result = build_terminal_message_receipt_manager_result()
-    stream_plan = SessionStreamPlan(include_meta=True, include_stats=True, event_name_prefix="shadowexec")
+    stream_plan = SessionStreamPlan(
+        include_meta=True, include_stats=True, event_name_prefix="shadowexec"
+    )
 
     monkeypatch.setattr(
         "apps.engine.main_v9_shadow.prepare_results",
@@ -244,12 +297,14 @@ def test_v9_shadow_real_batch_json_manager_sse_terminal_message_receipt_mirror_f
     manager_completed = flow["manager_events"][-1]
     sse_completed = flow["sse_messages"][-1]
     client_completed = flow["client_state"]["final_completed"]
-    rendered_json = json.loads(render_json_output(
-        [payload],
-        include_stats=True,
-        output_mode="json",
-        include_meta=True,
-    ))
+    rendered_json = json.loads(
+        render_json_output(
+            [payload],
+            include_stats=True,
+            output_mode="json",
+            include_meta=True,
+        )
+    )
 
     manager_results = manager_completed["data"]["results"]
     sse_results = sse_completed["data"]["data"]["results"]
@@ -267,7 +322,9 @@ def test_v9_shadow_real_batch_json_manager_sse_terminal_message_receipt_mirror_f
         blocked_message_ids=["message_001"],
         block_reasons={"block_terminal_receipt": ["message_001"]},
         expected_operations_summary=build_terminal_message_receipt_expected_operations_summary(
-            communication_ledger_path=manager_results["operations_summary"]["communication_ledger_path"],
+            communication_ledger_path=manager_results["operations_summary"][
+                "communication_ledger_path"
+            ],
         ),
     )
 
@@ -277,18 +334,25 @@ def test_v9_shadow_real_batch_json_manager_sse_terminal_message_receipt_mirror_f
     assert rendered_json["results"] == payload
 
 
-
-def test_v9_shadow_real_batch_json_manager_sse_terminal_partially_filled_message_receipt_mirror_fields_align(monkeypatch):
-    args = type("Args", (), {
-        "scenario_flag": "long",
-        "scenario_positional": None,
-        "feature_file": None,
-        "feature_batch_file": None,
-        "feature_dir": None,
-    })()
+def test_v9_shadow_real_batch_json_manager_sse_terminal_partially_filled_message_receipt_mirror_fields_align(
+    monkeypatch,
+):
+    args = type(
+        "Args",
+        (),
+        {
+            "scenario_flag": "long",
+            "scenario_positional": None,
+            "feature_file": None,
+            "feature_batch_file": None,
+            "feature_dir": None,
+        },
+    )()
     payload = build_terminal_partially_filled_message_receipt_manager_payload()
     result = build_terminal_partially_filled_message_receipt_manager_result()
-    stream_plan = SessionStreamPlan(include_meta=True, include_stats=True, event_name_prefix="shadowexec")
+    stream_plan = SessionStreamPlan(
+        include_meta=True, include_stats=True, event_name_prefix="shadowexec"
+    )
 
     monkeypatch.setattr(
         "apps.engine.main_v9_shadow.prepare_results",
@@ -299,12 +363,14 @@ def test_v9_shadow_real_batch_json_manager_sse_terminal_partially_filled_message
     manager_completed = flow["manager_events"][-1]
     sse_completed = flow["sse_messages"][-1]
     client_completed = flow["client_state"]["final_completed"]
-    rendered_json = json.loads(render_json_output(
-        [payload],
-        include_stats=True,
-        output_mode="json",
-        include_meta=True,
-    ))
+    rendered_json = json.loads(
+        render_json_output(
+            [payload],
+            include_stats=True,
+            output_mode="json",
+            include_meta=True,
+        )
+    )
 
     manager_results = manager_completed["data"]["results"]
     sse_results = sse_completed["data"]["data"]["results"]
@@ -322,7 +388,9 @@ def test_v9_shadow_real_batch_json_manager_sse_terminal_partially_filled_message
         blocked_message_ids=["message_partial"],
         block_reasons={"block_terminal_receipt": ["message_partial"]},
         expected_operations_summary=build_terminal_partially_filled_message_receipt_expected_operations_summary(
-            communication_ledger_path=manager_results["operations_summary"]["communication_ledger_path"],
+            communication_ledger_path=manager_results["operations_summary"][
+                "communication_ledger_path"
+            ],
         ),
     )
 
@@ -332,18 +400,25 @@ def test_v9_shadow_real_batch_json_manager_sse_terminal_partially_filled_message
     assert rendered_json["results"] == payload
 
 
-
-def test_v9_shadow_real_batch_json_manager_sse_terminal_correlation_mixed_mirror_fields_align(monkeypatch):
-    args = type("Args", (), {
-        "scenario_flag": "long",
-        "scenario_positional": None,
-        "feature_file": None,
-        "feature_batch_file": None,
-        "feature_dir": None,
-    })()
+def test_v9_shadow_real_batch_json_manager_sse_terminal_correlation_mixed_mirror_fields_align(
+    monkeypatch,
+):
+    args = type(
+        "Args",
+        (),
+        {
+            "scenario_flag": "long",
+            "scenario_positional": None,
+            "feature_file": None,
+            "feature_batch_file": None,
+            "feature_dir": None,
+        },
+    )()
     payload = build_terminal_correlation_mixed_manager_payload()
     result = build_terminal_correlation_mixed_manager_result()
-    stream_plan = SessionStreamPlan(include_meta=True, include_stats=True, event_name_prefix="shadowexec")
+    stream_plan = SessionStreamPlan(
+        include_meta=True, include_stats=True, event_name_prefix="shadowexec"
+    )
 
     monkeypatch.setattr(
         "apps.engine.main_v9_shadow.prepare_results",
@@ -354,12 +429,14 @@ def test_v9_shadow_real_batch_json_manager_sse_terminal_correlation_mixed_mirror
     manager_completed = flow["manager_events"][-1]
     sse_completed = flow["sse_messages"][-1]
     client_completed = flow["client_state"]["final_completed"]
-    rendered_json = json.loads(render_json_output(
-        [payload],
-        include_stats=True,
-        output_mode="json",
-        include_meta=True,
-    ))
+    rendered_json = json.loads(
+        render_json_output(
+            [payload],
+            include_stats=True,
+            output_mode="json",
+            include_meta=True,
+        )
+    )
 
     manager_results = manager_completed["data"]["results"]
     sse_results = sse_completed["data"]["data"]["results"]
@@ -382,7 +459,9 @@ def test_v9_shadow_real_batch_json_manager_sse_terminal_correlation_mixed_mirror
         },
         block_reasons={"block_terminal_receipt": ["message_timeout"]},
         expected_operations_summary=build_terminal_correlation_mixed_expected_operations_summary(
-            communication_ledger_path=manager_results["operations_summary"]["communication_ledger_path"],
+            communication_ledger_path=manager_results["operations_summary"][
+                "communication_ledger_path"
+            ],
         ),
     )
 
@@ -392,18 +471,23 @@ def test_v9_shadow_real_batch_json_manager_sse_terminal_correlation_mixed_mirror
     assert rendered_json["results"] == payload
 
 
-
 def test_v9_shadow_real_batch_json_manager_sse_mirror_fields_align(monkeypatch):
-    args = type("Args", (), {
-        "scenario_flag": "long",
-        "scenario_positional": None,
-        "feature_file": None,
-        "feature_batch_file": None,
-        "feature_dir": None,
-    })()
+    args = type(
+        "Args",
+        (),
+        {
+            "scenario_flag": "long",
+            "scenario_positional": None,
+            "feature_file": None,
+            "feature_batch_file": None,
+            "feature_dir": None,
+        },
+    )()
     payload = build_fallback_manager_payload()
     result = build_fallback_manager_result()
-    stream_plan = SessionStreamPlan(include_meta=True, include_stats=True, event_name_prefix="shadowexec")
+    stream_plan = SessionStreamPlan(
+        include_meta=True, include_stats=True, event_name_prefix="shadowexec"
+    )
 
     monkeypatch.setattr(
         "apps.engine.main_v9_shadow.prepare_results",
@@ -414,12 +498,14 @@ def test_v9_shadow_real_batch_json_manager_sse_mirror_fields_align(monkeypatch):
     manager_completed = flow["manager_events"][-1]
     sse_completed = flow["sse_messages"][-1]
     client_completed = flow["client_state"]["final_completed"]
-    rendered_json = json.loads(render_json_output(
-        [payload],
-        include_stats=True,
-        output_mode="json",
-        include_meta=True,
-    ))
+    rendered_json = json.loads(
+        render_json_output(
+            [payload],
+            include_stats=True,
+            output_mode="json",
+            include_meta=True,
+        )
+    )
 
     manager_results = manager_completed["data"]["results"]
     sse_results = sse_completed["data"]["data"]["results"]
@@ -456,7 +542,9 @@ def test_v9_shadow_real_batch_json_manager_sse_mirror_fields_align(monkeypatch):
         skipped_message_ids=["message_002"],
         skip_reasons={"skip_acknowledged_message": ["message_002"]},
         expected_operations_summary=build_fallback_expected_operations_summary(
-            communication_ledger_path=manager_results["operations_summary"]["communication_ledger_path"],
+            communication_ledger_path=manager_results["operations_summary"][
+                "communication_ledger_path"
+            ],
         ),
     )
 
@@ -467,18 +555,25 @@ def test_v9_shadow_real_batch_json_manager_sse_mirror_fields_align(monkeypatch):
     assert json_results["operations_posture"] == "action_required"
 
 
-
-def test_v9_shadow_real_batch_json_manager_sse_terminal_message_receipt_mirror_fields_align(monkeypatch):
-    args = type("Args", (), {
-        "scenario_flag": "long",
-        "scenario_positional": None,
-        "feature_file": None,
-        "feature_batch_file": None,
-        "feature_dir": None,
-    })()
+def test_v9_shadow_real_batch_json_manager_sse_terminal_message_receipt_mirror_fields_align(
+    monkeypatch,
+):
+    args = type(
+        "Args",
+        (),
+        {
+            "scenario_flag": "long",
+            "scenario_positional": None,
+            "feature_file": None,
+            "feature_batch_file": None,
+            "feature_dir": None,
+        },
+    )()
     payload = build_terminal_message_receipt_manager_payload()
     result = build_terminal_message_receipt_manager_result()
-    stream_plan = SessionStreamPlan(include_meta=True, include_stats=True, event_name_prefix="shadowexec")
+    stream_plan = SessionStreamPlan(
+        include_meta=True, include_stats=True, event_name_prefix="shadowexec"
+    )
 
     monkeypatch.setattr(
         "apps.engine.main_v9_shadow.prepare_results",
@@ -489,12 +584,14 @@ def test_v9_shadow_real_batch_json_manager_sse_terminal_message_receipt_mirror_f
     manager_completed = flow["manager_events"][-1]
     sse_completed = flow["sse_messages"][-1]
     client_completed = flow["client_state"]["final_completed"]
-    rendered_json = json.loads(render_json_output(
-        [payload],
-        include_stats=True,
-        output_mode="json",
-        include_meta=True,
-    ))
+    rendered_json = json.loads(
+        render_json_output(
+            [payload],
+            include_stats=True,
+            output_mode="json",
+            include_meta=True,
+        )
+    )
 
     manager_results = manager_completed["data"]["results"]
     sse_results = sse_completed["data"]["data"]["results"]
@@ -513,8 +610,12 @@ def test_v9_shadow_real_batch_json_manager_sse_terminal_message_receipt_mirror_f
         block_reasons={"block_terminal_receipt": ["message_001"]},
     )
 
-    assert manager_results["operations_summary"] == build_terminal_message_receipt_expected_operations_summary(
-        communication_ledger_path=manager_results["operations_summary"]["communication_ledger_path"],
+    assert manager_results[
+        "operations_summary"
+    ] == build_terminal_message_receipt_expected_operations_summary(
+        communication_ledger_path=manager_results["operations_summary"][
+            "communication_ledger_path"
+        ],
     )
     assert sse_results["operations_summary"] == manager_results["operations_summary"]
     assert client_results["operations_summary"] == manager_results["operations_summary"]
@@ -523,7 +624,6 @@ def test_v9_shadow_real_batch_json_manager_sse_terminal_message_receipt_mirror_f
     assert "posture_sources" not in rendered_json
     assert "governance_sources" not in rendered_json
     assert rendered_json["results"] == payload
-
 
 
 def test_v9_shadow_real_input_invalid_query_error_contract():
@@ -584,16 +684,21 @@ def test_v9_shadow_real_input_invalid_query_error_contract():
     assert client.state["final_completed"] is None
 
 
-
 def test_v9_shadow_manager_query_error_alignment():
-    args = type("Args", (), {
-        "scenario_flag": "long",
-        "scenario_positional": None,
-        "feature_file": None,
-        "feature_batch_file": None,
-        "feature_dir": None,
-    })()
-    stream_plan = SessionStreamPlan(include_meta=True, include_stats=True, event_name_prefix="shadowexec")
+    args = type(
+        "Args",
+        (),
+        {
+            "scenario_flag": "long",
+            "scenario_positional": None,
+            "feature_file": None,
+            "feature_batch_file": None,
+            "feature_dir": None,
+        },
+    )()
+    stream_plan = SessionStreamPlan(
+        include_meta=True, include_stats=True, event_name_prefix="shadowexec"
+    )
     expected_message = "broken query flag"
 
     def raise_query_error(_args):
@@ -647,7 +752,6 @@ def test_v9_shadow_manager_query_error_alignment():
     }
 
 
-
 def test_v9_shadow_real_feature_file_invalid_json_error_contract(tmp_path):
     broken_path = tmp_path / "broken.json"
     broken_path.write_text("{bad json", encoding="utf-8")
@@ -656,8 +760,8 @@ def test_v9_shadow_real_feature_file_invalid_json_error_contract(tmp_path):
     host, port = server.server_address
 
     from threading import Thread
-    from urllib.request import urlopen
     from urllib.parse import quote
+    from urllib.request import urlopen
 
     worker = Thread(target=server.handle_request)
     worker.start()
@@ -683,7 +787,9 @@ def test_v9_shadow_real_feature_file_invalid_json_error_contract(tmp_path):
         client.feed(chunk)
     client.finish()
 
-    expected_message = f"Invalid feature JSON in {broken_path}: Expecting property name enclosed in double quotes"
+    expected_message = (
+        f"Invalid feature JSON in {broken_path}: Expecting property name enclosed in double quotes"
+    )
     final_error = sse_messages[-1]
     client_error = client.state["final_error"]
 
@@ -715,19 +821,26 @@ def test_v9_shadow_real_feature_file_invalid_json_error_contract(tmp_path):
     assert client.state["final_completed"] is None
 
 
-
 def test_v9_shadow_manager_feature_file_error_alignment(tmp_path):
     broken_path = tmp_path / "broken.json"
     broken_path.write_text("{bad json", encoding="utf-8")
-    args = type("Args", (), {
-        "scenario_flag": None,
-        "scenario_positional": None,
-        "feature_file": str(broken_path),
-        "feature_batch_file": None,
-        "feature_dir": None,
-    })()
-    stream_plan = SessionStreamPlan(include_meta=True, include_stats=True, event_name_prefix="shadowexec")
-    expected_message = f"Invalid feature JSON in {broken_path}: Expecting property name enclosed in double quotes"
+    args = type(
+        "Args",
+        (),
+        {
+            "scenario_flag": None,
+            "scenario_positional": None,
+            "feature_file": str(broken_path),
+            "feature_batch_file": None,
+            "feature_dir": None,
+        },
+    )()
+    stream_plan = SessionStreamPlan(
+        include_meta=True, include_stats=True, event_name_prefix="shadowexec"
+    )
+    expected_message = (
+        f"Invalid feature JSON in {broken_path}: Expecting property name enclosed in double quotes"
+    )
 
     flow = collect_session_flow_triplet(args, stream_plan=stream_plan)
     manager_error = flow["manager_events"][-1]
@@ -769,7 +882,6 @@ def test_v9_shadow_manager_feature_file_error_alignment(tmp_path):
     }
 
 
-
 def test_v9_shadow_real_feature_dir_non_object_features_error_contract(tmp_path):
     bad_feature_path = tmp_path / "bad_features.json"
     bad_feature_path.write_text(
@@ -786,8 +898,8 @@ def test_v9_shadow_real_feature_dir_non_object_features_error_contract(tmp_path)
     host, port = server.server_address
 
     from threading import Thread
-    from urllib.request import urlopen
     from urllib.parse import quote
+    from urllib.request import urlopen
 
     worker = Thread(target=server.handle_request)
     worker.start()
@@ -843,4 +955,3 @@ def test_v9_shadow_real_feature_dir_non_object_features_error_contract(tmp_path)
     assert client.state["latest_progress"]["data"]["data"]["stage"] == "started"
     assert consumed["final_completed"] is None
     assert client.state["final_completed"] is None
-

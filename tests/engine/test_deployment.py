@@ -1,6 +1,6 @@
-from core.deployment.environment_config import EnvironmentConfig, Environment
-from core.deployment.service_container import ServiceContainer
+from core.deployment.environment_config import Environment, EnvironmentConfig
 from core.deployment.health_check import HealthCheckService
+from core.deployment.service_container import ServiceContainer
 
 
 class TestEnvironmentConfig:
@@ -29,14 +29,16 @@ class TestEnvironmentConfig:
 
     def test_simulation_dispatch(self, tmp_path):
         cfg = EnvironmentConfig(
-            environment=Environment.SIMULATION, base_dir=str(tmp_path),
+            environment=Environment.SIMULATION,
+            base_dir=str(tmp_path),
         )
         assert cfg.is_simulation() is True
         assert cfg.allows_real_dispatch() is True
 
     def test_replay_no_dispatch(self, tmp_path):
         cfg = EnvironmentConfig(
-            environment=Environment.REPLAY, base_dir=str(tmp_path),
+            environment=Environment.REPLAY,
+            base_dir=str(tmp_path),
         )
         assert cfg.is_replay() is True
         assert cfg.allows_real_dispatch() is False
@@ -96,7 +98,7 @@ class TestServiceContainer:
     def test_diagnostics_snapshot(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path))
         c = ServiceContainer(cfg).build()
-        snap = c.diagnostics.build_snapshot()
+        snap = c.diagnostics.build_snapshot()  # type: ignore[reportOptionalMemberAccess]
         assert "generated_at" in snap
         assert snap["metrics"] is not None
         assert snap["brain_health"] is not None

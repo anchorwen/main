@@ -62,7 +62,10 @@ def test_extract_governance_summary_filters_non_dict_focus_items():
         PAYLOAD_KEY_GOVERNANCE_WARNING_COUNT: 2,
     }
     summary = extract_governance_summary(payload)
-    assert summary[PAYLOAD_KEY_GOVERNANCE_FOCUS] == [{"name": "ok"}, {PAYLOAD_KEY_LEVEL: COMPLIANCE_LEVEL_WARN}]
+    assert summary[PAYLOAD_KEY_GOVERNANCE_FOCUS] == [
+        {"name": "ok"},
+        {PAYLOAD_KEY_LEVEL: COMPLIANCE_LEVEL_WARN},
+    ]
     assert summary[PAYLOAD_KEY_GOVERNANCE_WARNING_COUNT] == 1
 
 
@@ -94,9 +97,21 @@ def test_extract_governance_summary_counts_mixed_warn_fields():
 def test_extract_governance_summary_treats_either_level_or_status_as_warn():
     payload = {
         PAYLOAD_KEY_GOVERNANCE_FOCUS: [
-            {"name": "a", PAYLOAD_KEY_LEVEL: COMPLIANCE_LEVEL_PASS, PAYLOAD_KEY_STATUS: COMPLIANCE_LEVEL_WARN},
-            {"name": "b", PAYLOAD_KEY_LEVEL: COMPLIANCE_LEVEL_WARN, PAYLOAD_KEY_STATUS: COMPLIANCE_LEVEL_PASS},
-            {"name": "c", PAYLOAD_KEY_LEVEL: COMPLIANCE_LEVEL_PASS, PAYLOAD_KEY_STATUS: COMPLIANCE_LEVEL_PASS},
+            {
+                "name": "a",
+                PAYLOAD_KEY_LEVEL: COMPLIANCE_LEVEL_PASS,
+                PAYLOAD_KEY_STATUS: COMPLIANCE_LEVEL_WARN,
+            },
+            {
+                "name": "b",
+                PAYLOAD_KEY_LEVEL: COMPLIANCE_LEVEL_WARN,
+                PAYLOAD_KEY_STATUS: COMPLIANCE_LEVEL_PASS,
+            },
+            {
+                "name": "c",
+                PAYLOAD_KEY_LEVEL: COMPLIANCE_LEVEL_PASS,
+                PAYLOAD_KEY_STATUS: COMPLIANCE_LEVEL_PASS,
+            },
         ],
         PAYLOAD_KEY_GOVERNANCE_WARNING_COUNT: 0,
     }
@@ -130,7 +145,9 @@ def test_build_governance_summary_normalizes_invalid_focus_and_warning_count():
 
 def test_build_governance_summary_clamps_negative_warning_count():
     summary = build_governance_summary(
-        focus=[{"name": "registry_deep_validation_present", PAYLOAD_KEY_LEVEL: COMPLIANCE_LEVEL_WARN}],
+        focus=[
+            {"name": "registry_deep_validation_present", PAYLOAD_KEY_LEVEL: COMPLIANCE_LEVEL_WARN}
+        ],
         warning_count=-9,
     )
     assert len(summary[PAYLOAD_KEY_GOVERNANCE_FOCUS]) == 1

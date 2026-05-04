@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from core.governance.governance_service import GovernanceService
 
 
@@ -65,7 +63,11 @@ class TestGovernanceService:
         gs.register_brain("brain_good", "candidate")
         signals = [
             {"brain_id": "brain_bad", "recommendation": "freeze", "health_signal": "critical"},
-            {"brain_id": "brain_good", "recommendation": "eligible_for_promotion", "health_signal": "healthy"},
+            {
+                "brain_id": "brain_good",
+                "recommendation": "eligible_for_promotion",
+                "health_signal": "healthy",
+            },
         ]
         results = gs.process_feedback_signals(signals)
         assert len(results) == 2

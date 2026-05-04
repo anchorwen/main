@@ -1,11 +1,18 @@
-from datetime import datetime, timedelta
 import json
+from datetime import datetime, timedelta
 
-from core.contracts.domain.replay_execution_record import ReplayExecutionRecord
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.dispatch_result import DispatchResult
-from core.contracts.enums import CommunicationMessageType, CommunicationPriority, DispatchStatus, ReplayGateDecision
-from core.ledger.governance_sources import REPLAY_GOVERNANCE_PROJECTION_SOURCE_REPLAY_RECORD_EXECUTION
+from core.contracts.domain.replay_execution_record import ReplayExecutionRecord
+from core.contracts.enums import (
+    CommunicationMessageType,
+    CommunicationPriority,
+    DispatchStatus,
+    ReplayGateDecision,
+)
+from core.deployment.domain_keys import (
+    REPLAY_GOVERNANCE_PROJECTION_SOURCE_REPLAY_RECORD_EXECUTION,
+)
 from core.ledger.services.communication_inspection_service import CommunicationInspectionService
 from core.ledger.services.communication_record_reader import CommunicationRecordReader
 from core.ledger.services.communication_record_writer import CommunicationRecordWriter
@@ -13,12 +20,12 @@ from core.ledger.services.communication_replay_executor import CommunicationRepl
 from core.ledger.services.communication_replay_gate import CommunicationReplayGate
 from core.ledger.services.communication_replay_service import CommunicationReplayService
 from core.ledger.services.replay_execution_writer import ReplayExecutionWriter
-from core.ledger.stream_names import LEDGER_STREAM_REPLAYS, stream_jsonl_filename
 from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
+from core.ledger.stream_names import LEDGER_STREAM_REPLAYS, stream_jsonl_filename
+from core.protocol.schema_versions import SCHEMA_COMMUNICATION_ENVELOPE, SCHEMA_DISPATCH_RESULT
 from core.protocol.services.communication_dispatcher import CommunicationDispatcher
 from core.protocol.services.file_queue_receipt_reader import FileQueueReceiptReader
 from core.protocol.services.stub_communication_adapter import StubCommunicationAdapter
-from core.protocol.schema_versions import SCHEMA_COMMUNICATION_ENVELOPE, SCHEMA_DISPATCH_RESULT
 from tests.engine.shadow_testkit import (
     assert_runtime_summary_matches_governance_contract,
     build_runtime_summary_from_execution_result,
@@ -43,7 +50,14 @@ def build_envelope(message_id: str, correlation_id: str, target: str = "exec_bri
     )
 
 
-def build_result(message_id: str, *, status=DispatchStatus.PROTOCOL_VALIDATED, attempts=None, fallback_adapter_name=None, recorded_at=None):
+def build_result(
+    message_id: str,
+    *,
+    status=DispatchStatus.PROTOCOL_VALIDATED,
+    attempts=None,
+    fallback_adapter_name=None,
+    recorded_at=None,
+):
     return DispatchResult(
         schema_version=SCHEMA_DISPATCH_RESULT,
         dispatch_id=f"dispatch_{message_id}",
@@ -53,13 +67,21 @@ def build_result(message_id: str, *, status=DispatchStatus.PROTOCOL_VALIDATED, a
         target="exec_bridge",
         adapter_name="stub_adapter",
         fallback_adapter_name=fallback_adapter_name,
-        attempts=attempts or [{"adapter_name": "stub_adapter", "status": "succeeded", "reason": None}],
+        attempts=attempts
+        or [{"adapter_name": "stub_adapter", "status": "succeeded", "reason": None}],
         degrade_reason="primary down" if status == DispatchStatus.DEGRADED else None,
         failure_reason="hard failure" if status == DispatchStatus.FAILED else None,
     )
 
 
-def write_receipt(receipt_dir, *, date_key: str = "2026-04-24", message_id: str, ack_status: str = "acknowledged", received_at: str = "2026-04-24T12:00:03"):
+def write_receipt(
+    receipt_dir,
+    *,
+    date_key: str = "2026-04-24",
+    message_id: str,
+    ack_status: str = "acknowledged",
+    received_at: str = "2026-04-24T12:00:03",
+):
     receipt_path = receipt_dir / date_key / "exec_bridge"
     receipt_path.mkdir(parents=True, exist_ok=True)
     target_file = receipt_path / f"{message_id}.ack.json"
@@ -166,7 +188,10 @@ def test_replay_executor_executes_allowed_message_plan(tmp_path):
     assert result["dispatch_result"].status == DispatchStatus.PROTOCOL_VALIDATED
     assert result["replay_trace"]["execution_state"] == "dispatched"
     assert result["replay_record"].scope == "message"
-    assert result["replay_record"].gate_decision["governance_summary"] == result["gate_decision"]["governance_summary"]
+    assert (
+        result["replay_record"].gate_decision["governance_summary"]
+        == result["gate_decision"]["governance_summary"]
+    )
     assert result["replay_record"].execution["governance_posture"] == "auto_replay"
     assert result["replay_record"].execution["governance_decision"] == ReplayGateDecision.ALLOW
     assert result["replay_record"].execution == ReplayExecutionRecord._build_execution_projection(
@@ -175,9 +200,14 @@ def test_replay_executor_executes_allowed_message_plan(tmp_path):
         result["gate_decision"]["governance_summary"],
     )
     assert result["replay_record"].execution["execution_mode"] == "full"
-    assert result["replay_record"].extensions["governance_summary"] == result["gate_decision"]["governance_summary"]
+    assert (
+        result["replay_record"].extensions["governance_summary"]
+        == result["gate_decision"]["governance_summary"]
+    )
     assert result["replay_record"].results["dispatch_result"]["message_id"] == "message_001"
-    assert result["replay_ledger_path"].name == stream_jsonl_filename("exec_bridge", LEDGER_STREAM_REPLAYS)
+    assert result["replay_ledger_path"].name == stream_jsonl_filename(
+        "exec_bridge", LEDGER_STREAM_REPLAYS
+    )
 
 
 def test_replay_executor_blocks_message_plan_under_review(tmp_path):
@@ -190,7 +220,11 @@ def test_replay_executor_blocks_message_plan_under_review(tmp_path):
             status=DispatchStatus.DEGRADED,
             attempts=[
                 {"adapter_name": "exec_adapter", "status": "failed", "reason": "primary down"},
-                {"adapter_name": "backup_adapter", "status": "degraded", "reason": "fallback_success"},
+                {
+                    "adapter_name": "backup_adapter",
+                    "status": "degraded",
+                    "reason": "fallback_success",
+                },
             ],
             fallback_adapter_name="backup_adapter",
         ),
@@ -206,7 +240,9 @@ def test_replay_executor_blocks_message_plan_under_review(tmp_path):
     assert result["status"] == "blocked"
     assert result["gate_decision"]["decision"] == ReplayGateDecision.REVIEW
     assert result["dispatch_result"] is None
-    assert result["blocked_messages"] == [{"message_id": "message_002", "reason": executor.BLOCK_REASON_REVIEW_REQUIRED}]
+    assert result["blocked_messages"] == [
+        {"message_id": "message_002", "reason": executor.BLOCK_REASON_REVIEW_REQUIRED}
+    ]
     assert result["skip_reasons"] == {}
     assert result["block_reasons"] == {
         executor.BLOCK_REASON_REVIEW_REQUIRED: ["message_002"],
@@ -216,7 +252,10 @@ def test_replay_executor_blocks_message_plan_under_review(tmp_path):
     assert result["replay_record"].execution["execution_mode"] == "blocked"
     assert result["replay_record"].execution["governance_posture"] == "review_required"
     assert result["replay_record"].blocked_messages == result["blocked_messages"]
-    assert result["replay_record"].extensions["governance_summary"] == result["gate_decision"]["governance_summary"]
+    assert (
+        result["replay_record"].extensions["governance_summary"]
+        == result["gate_decision"]["governance_summary"]
+    )
 
 
 def test_replay_executor_blocks_message_plan_under_review_for_rejected_receipt(tmp_path):
@@ -238,7 +277,9 @@ def test_replay_executor_blocks_message_plan_under_review_for_rejected_receipt(t
 
     assert result["status"] == "blocked"
     assert result["gate_decision"]["decision"] == ReplayGateDecision.REVIEW
-    assert result["blocked_messages"] == [{"message_id": "message_rejected", "reason": executor.BLOCK_REASON_REJECTED_RECEIPT}]
+    assert result["blocked_messages"] == [
+        {"message_id": "message_rejected", "reason": executor.BLOCK_REASON_REJECTED_RECEIPT}
+    ]
 
 
 def test_replay_executor_blocks_message_plan_under_review_for_cancelled_receipt(tmp_path):
@@ -260,7 +301,9 @@ def test_replay_executor_blocks_message_plan_under_review_for_cancelled_receipt(
 
     assert result["status"] == "blocked"
     assert result["gate_decision"]["decision"] == ReplayGateDecision.REVIEW
-    assert result["blocked_messages"] == [{"message_id": "message_cancelled", "reason": executor.BLOCK_REASON_CANCELLED_RECEIPT}]
+    assert result["blocked_messages"] == [
+        {"message_id": "message_cancelled", "reason": executor.BLOCK_REASON_CANCELLED_RECEIPT}
+    ]
 
 
 def test_replay_executor_denies_missing_message_plan_with_empty_block_entries(tmp_path):
@@ -288,7 +331,10 @@ def test_replay_executor_denies_missing_message_plan_with_empty_block_entries(tm
     assert result["replay_record"].execution["governance_posture"] == "blocked"
     assert result["replay_record"].execution["governance_decision"] == ReplayGateDecision.DENY
     assert result["replay_record"].blocked_messages == []
-    assert result["replay_record"].extensions["governance_summary"] == result["gate_decision"]["governance_summary"]
+    assert (
+        result["replay_record"].extensions["governance_summary"]
+        == result["gate_decision"]["governance_summary"]
+    )
 
 
 def test_replay_executor_executes_allowed_correlation_plan(tmp_path):
@@ -340,7 +386,10 @@ def test_replay_executor_executes_allowed_correlation_plan(tmp_path):
     assert result["replay_record"].execution["execution_mode"] == "full"
     assert result["replay_record"].skipped_messages == []
     assert result["replay_record"].blocked_messages == []
-    assert result["replay_record"].extensions["governance_summary"] == result["gate_decision"]["governance_summary"]
+    assert (
+        result["replay_record"].extensions["governance_summary"]
+        == result["gate_decision"]["governance_summary"]
+    )
 
 
 def test_replay_executor_executes_only_timed_out_messages_when_next_day_receipt_is_found(tmp_path):
@@ -390,7 +439,10 @@ def test_replay_executor_executes_only_timed_out_messages_when_next_day_receipt_
     assert result["gate_decision"]["decision"] == ReplayGateDecision.ALLOW
     assert result["gate_decision"]["reasons"] == ["targeted_timeout_replay_candidate"]
     assert result["gate_decision"]["governance_summary"]["posture"] == "targeted_replay"
-    assert result["gate_decision"]["governance_summary"]["recommended_strategy"] == "replay_only_timed_out_messages"
+    assert (
+        result["gate_decision"]["governance_summary"]["recommended_strategy"]
+        == "replay_only_timed_out_messages"
+    )
     assert len(result["results"]) == 1
     assert [item["message_id"] for item in result["results"]] == ["message_301"]
     assert result["skipped_messages"] == [
@@ -408,10 +460,16 @@ def test_replay_executor_executes_only_timed_out_messages_when_next_day_receipt_
     assert result["replay_record"].execution["governance_decision"] == ReplayGateDecision.ALLOW
     assert result["replay_record"].execution["execution_mode"] == "targeted"
     assert result["replay_record"].results["results"][0]["message_id"] == "message_301"
-    assert result["replay_record"].results["results"][0]["dispatch_result"]["message_id"] == "message_301"
+    assert (
+        result["replay_record"].results["results"][0]["dispatch_result"]["message_id"]
+        == "message_301"
+    )
     assert result["replay_record"].skipped_messages == result["skipped_messages"]
     assert result["replay_record"].blocked_messages == []
-    assert result["replay_record"].extensions["governance_summary"] == result["gate_decision"]["governance_summary"]
+    assert (
+        result["replay_record"].extensions["governance_summary"]
+        == result["gate_decision"]["governance_summary"]
+    )
 
 
 def test_replay_executor_blocks_terminal_message_receipt_with_terminal_block_reason(tmp_path):
@@ -433,7 +491,9 @@ def test_replay_executor_blocks_terminal_message_receipt_with_terminal_block_rea
 
     assert result["status"] == "blocked"
     assert result["gate_decision"]["decision"] == ReplayGateDecision.DENY
-    assert result["blocked_messages"] == [{"message_id": "message_filled", "reason": executor.BLOCK_REASON_TERMINAL_RECEIPT}]
+    assert result["blocked_messages"] == [
+        {"message_id": "message_filled", "reason": executor.BLOCK_REASON_TERMINAL_RECEIPT}
+    ]
     assert result["replay_record"].execution["governance_posture"] == "blocked"
     assert result["replay_record"].execution["execution_mode"] == "blocked"
     assert result["replay_record"].blocked_messages == result["blocked_messages"]
@@ -477,8 +537,9 @@ def test_replay_executor_runtime_summary_projection_blocks_terminal_message_rece
     )
 
 
-
-def test_replay_executor_runtime_summary_projection_blocks_terminal_partially_filled_message_receipt(tmp_path):
+def test_replay_executor_runtime_summary_projection_blocks_terminal_partially_filled_message_receipt(
+    tmp_path,
+):
     receipt_dir = tmp_path / "receipts"
     writer, replay_service, _, executor = build_services(tmp_path, receipt_dir=receipt_dir)
     envelope = build_envelope("message_partial", "corr_partial")
@@ -517,7 +578,9 @@ def test_replay_executor_runtime_summary_projection_blocks_terminal_partially_fi
     )
 
 
-def test_replay_executor_runtime_summary_projection_uses_replay_record_execution_for_targeted_mode(tmp_path):
+def test_replay_executor_runtime_summary_projection_uses_replay_record_execution_for_targeted_mode(
+    tmp_path,
+):
     receipt_dir = tmp_path / "receipts"
     writer, replay_service, _, executor = build_services(tmp_path, receipt_dir=receipt_dir)
     envelope_1 = build_envelope("message_301", "corr_timeout")
@@ -588,7 +651,9 @@ def test_replay_executor_runtime_summary_prefers_executor_aggregated_reason_maps
         },
         "results": [],
         "skipped_messages": [{"message_id": "message_from_entries", "reason": "skip_not_targeted"}],
-        "blocked_messages": [{"message_id": "message_from_entries", "reason": "block_review_required"}],
+        "blocked_messages": [
+            {"message_id": "message_from_entries", "reason": "block_review_required"}
+        ],
         "skip_reasons": {"skip_from_executor": ["message_from_summary"]},
         "block_reasons": {"block_from_executor": ["message_from_summary"]},
         "replay_trace": {"message_id": "message_trace"},
@@ -622,7 +687,10 @@ def test_replay_executor_priority_contract_matrix(tmp_path):
             "decision": ReplayGateDecision.ALLOW,
             "blocked_messages": [],
             "skipped_messages": [
-                {"message_id": "message_acked", "reason": CommunicationReplayExecutor.SKIP_REASON_ACKNOWLEDGED},
+                {
+                    "message_id": "message_acked",
+                    "reason": CommunicationReplayExecutor.SKIP_REASON_ACKNOWLEDGED,
+                },
             ],
             "blocked_message_ids": [],
             "skipped_message_ids": ["message_acked"],
@@ -645,10 +713,16 @@ def test_replay_executor_priority_contract_matrix(tmp_path):
             "status": "blocked",
             "decision": ReplayGateDecision.REVIEW,
             "blocked_messages": [
-                {"message_id": "message_rejected", "reason": CommunicationReplayExecutor.BLOCK_REASON_REJECTED_RECEIPT},
+                {
+                    "message_id": "message_rejected",
+                    "reason": CommunicationReplayExecutor.BLOCK_REASON_REJECTED_RECEIPT,
+                },
             ],
             "skipped_messages": [
-                {"message_id": "message_timeout", "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED},
+                {
+                    "message_id": "message_timeout",
+                    "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED,
+                },
             ],
             "blocked_message_ids": ["message_rejected"],
             "skipped_message_ids": ["message_timeout"],
@@ -675,11 +749,20 @@ def test_replay_executor_priority_contract_matrix(tmp_path):
             "status": "blocked",
             "decision": ReplayGateDecision.REVIEW,
             "blocked_messages": [
-                {"message_id": "message_cancelled", "reason": CommunicationReplayExecutor.BLOCK_REASON_CANCELLED_RECEIPT},
+                {
+                    "message_id": "message_cancelled",
+                    "reason": CommunicationReplayExecutor.BLOCK_REASON_CANCELLED_RECEIPT,
+                },
             ],
             "skipped_messages": [
-                {"message_id": "message_timeout", "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED},
-                {"message_id": "message_acked", "reason": CommunicationReplayExecutor.SKIP_REASON_ACKNOWLEDGED},
+                {
+                    "message_id": "message_timeout",
+                    "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED,
+                },
+                {
+                    "message_id": "message_acked",
+                    "reason": CommunicationReplayExecutor.SKIP_REASON_ACKNOWLEDGED,
+                },
             ],
             "blocked_message_ids": ["message_cancelled"],
             "skipped_message_ids": ["message_timeout", "message_acked"],
@@ -707,11 +790,20 @@ def test_replay_executor_priority_contract_matrix(tmp_path):
             "status": "blocked",
             "decision": ReplayGateDecision.DENY,
             "blocked_messages": [
-                {"message_id": "message_timeout", "reason": CommunicationReplayExecutor.BLOCK_REASON_TERMINAL_RECEIPT},
+                {
+                    "message_id": "message_timeout",
+                    "reason": CommunicationReplayExecutor.BLOCK_REASON_TERMINAL_RECEIPT,
+                },
             ],
             "skipped_messages": [
-                {"message_id": "message_accepted", "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED},
-                {"message_id": "message_acked", "reason": CommunicationReplayExecutor.SKIP_REASON_ACKNOWLEDGED},
+                {
+                    "message_id": "message_accepted",
+                    "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED,
+                },
+                {
+                    "message_id": "message_acked",
+                    "reason": CommunicationReplayExecutor.SKIP_REASON_ACKNOWLEDGED,
+                },
             ],
             "blocked_message_ids": ["message_timeout"],
             "skipped_message_ids": ["message_accepted", "message_acked"],
@@ -735,10 +827,16 @@ def test_replay_executor_priority_contract_matrix(tmp_path):
             "status": "blocked",
             "decision": ReplayGateDecision.DENY,
             "blocked_messages": [
-                {"message_id": "message_timeout", "reason": CommunicationReplayExecutor.BLOCK_REASON_TERMINAL_RECEIPT},
+                {
+                    "message_id": "message_timeout",
+                    "reason": CommunicationReplayExecutor.BLOCK_REASON_TERMINAL_RECEIPT,
+                },
             ],
             "skipped_messages": [
-                {"message_id": "message_partial", "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED},
+                {
+                    "message_id": "message_partial",
+                    "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED,
+                },
             ],
             "blocked_message_ids": ["message_timeout"],
             "skipped_message_ids": ["message_partial"],
@@ -762,10 +860,16 @@ def test_replay_executor_priority_contract_matrix(tmp_path):
             "status": "blocked",
             "decision": ReplayGateDecision.DENY,
             "blocked_messages": [
-                {"message_id": "message_timeout", "reason": CommunicationReplayExecutor.BLOCK_REASON_TERMINAL_RECEIPT},
+                {
+                    "message_id": "message_timeout",
+                    "reason": CommunicationReplayExecutor.BLOCK_REASON_TERMINAL_RECEIPT,
+                },
             ],
             "skipped_messages": [
-                {"message_id": "message_filled", "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED},
+                {
+                    "message_id": "message_filled",
+                    "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED,
+                },
             ],
             "blocked_message_ids": ["message_timeout"],
             "skipped_message_ids": ["message_filled"],
@@ -795,11 +899,20 @@ def test_replay_executor_priority_contract_matrix(tmp_path):
             "status": "blocked",
             "decision": ReplayGateDecision.REVIEW,
             "blocked_messages": [
-                {"message_id": "message_stale", "reason": CommunicationReplayExecutor.BLOCK_REASON_STALE_RECEIPT},
+                {
+                    "message_id": "message_stale",
+                    "reason": CommunicationReplayExecutor.BLOCK_REASON_STALE_RECEIPT,
+                },
             ],
             "skipped_messages": [
-                {"message_id": "message_rejected", "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED},
-                {"message_id": "message_timeout", "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED},
+                {
+                    "message_id": "message_rejected",
+                    "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED,
+                },
+                {
+                    "message_id": "message_timeout",
+                    "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED,
+                },
             ],
             "blocked_message_ids": ["message_stale"],
             "skipped_message_ids": ["message_rejected", "message_timeout"],
@@ -829,11 +942,20 @@ def test_replay_executor_priority_contract_matrix(tmp_path):
             "status": "blocked",
             "decision": ReplayGateDecision.REVIEW,
             "blocked_messages": [
-                {"message_id": "message_stale", "reason": CommunicationReplayExecutor.BLOCK_REASON_STALE_RECEIPT},
+                {
+                    "message_id": "message_stale",
+                    "reason": CommunicationReplayExecutor.BLOCK_REASON_STALE_RECEIPT,
+                },
             ],
             "skipped_messages": [
-                {"message_id": "message_terminal", "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED},
-                {"message_id": "message_timeout", "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED},
+                {
+                    "message_id": "message_terminal",
+                    "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED,
+                },
+                {
+                    "message_id": "message_timeout",
+                    "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED,
+                },
             ],
             "blocked_message_ids": ["message_stale"],
             "skipped_message_ids": ["message_terminal", "message_timeout"],
@@ -863,11 +985,20 @@ def test_replay_executor_priority_contract_matrix(tmp_path):
             "status": "blocked",
             "decision": ReplayGateDecision.REVIEW,
             "blocked_messages": [
-                {"message_id": "message_stale", "reason": CommunicationReplayExecutor.BLOCK_REASON_STALE_RECEIPT},
+                {
+                    "message_id": "message_stale",
+                    "reason": CommunicationReplayExecutor.BLOCK_REASON_STALE_RECEIPT,
+                },
             ],
             "skipped_messages": [
-                {"message_id": "message_cancelled", "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED},
-                {"message_id": "message_timeout", "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED},
+                {
+                    "message_id": "message_cancelled",
+                    "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED,
+                },
+                {
+                    "message_id": "message_timeout",
+                    "reason": CommunicationReplayExecutor.SKIP_REASON_NOT_TARGETED,
+                },
             ],
             "blocked_message_ids": ["message_stale"],
             "skipped_message_ids": ["message_cancelled", "message_timeout"],
@@ -886,18 +1017,20 @@ def test_replay_executor_priority_contract_matrix(tmp_path):
         assert plan["target_message_ids"] == case["target_message_ids"]
         if "terminal_message_ids" in case:
             issue_message_ids = plan["delivery_summary"]["issue_message_ids"]
-            assert sorted(
-                issue_message_ids.get("receipt_accepted", [])
-                + issue_message_ids.get("receipt_partially_filled", [])
-                + issue_message_ids.get("receipt_filled", [])
-            ) == case["terminal_message_ids"]
+            assert (
+                sorted(
+                    issue_message_ids.get("receipt_accepted", [])
+                    + issue_message_ids.get("receipt_partially_filled", [])
+                    + issue_message_ids.get("receipt_filled", [])
+                )
+                == case["terminal_message_ids"]
+            )
         assert result["status"] == case["status"]
         assert result["gate_decision"]["decision"] == case["decision"]
         assert result["blocked_messages"] == case["blocked_messages"]
         assert result["skipped_messages"] == case["skipped_messages"]
         assert result["replay_trace"]["blocked_message_ids"] == case["blocked_message_ids"]
         assert result["replay_trace"]["skipped_message_ids"] == case["skipped_message_ids"]
-
 
 
 def test_replay_executor_blocks_terminal_correlation_receipts_with_terminal_block_reason(tmp_path):
@@ -924,7 +1057,9 @@ def test_replay_executor_blocks_terminal_correlation_receipts_with_terminal_bloc
 
     assert result["status"] == "blocked"
     assert result["gate_decision"]["decision"] == ReplayGateDecision.DENY
-    assert result["blocked_messages"] == [{"message_id": "message_terminal", "reason": executor.BLOCK_REASON_TERMINAL_RECEIPT}]
+    assert result["blocked_messages"] == [
+        {"message_id": "message_terminal", "reason": executor.BLOCK_REASON_TERMINAL_RECEIPT}
+    ]
     assert result["replay_record"].execution["governance_posture"] == "blocked"
     assert result["replay_record"].execution["execution_mode"] == "blocked"
     assert result["replay_record"].blocked_messages == result["blocked_messages"]
@@ -941,7 +1076,11 @@ def test_replay_executor_blocks_correlation_plan_under_review(tmp_path):
             status=DispatchStatus.DEGRADED,
             attempts=[
                 {"adapter_name": "exec_adapter", "status": "failed", "reason": "primary down"},
-                {"adapter_name": "backup_adapter", "status": "degraded", "reason": "fallback_success"},
+                {
+                    "adapter_name": "backup_adapter",
+                    "status": "degraded",
+                    "reason": "fallback_success",
+                },
             ],
         ),
     )
@@ -965,14 +1104,19 @@ def test_replay_executor_blocks_correlation_plan_under_review(tmp_path):
     assert result["status"] == "blocked"
     assert result["gate_decision"]["decision"] == ReplayGateDecision.REVIEW
     assert result["results"] == []
-    assert result["blocked_messages"] == [{"message_id": "message_201", "reason": executor.BLOCK_REASON_REVIEW_REQUIRED}]
+    assert result["blocked_messages"] == [
+        {"message_id": "message_201", "reason": executor.BLOCK_REASON_REVIEW_REQUIRED}
+    ]
     assert result["replay_trace"]["execution_state"] == "not_executed"
     assert result["replay_trace"]["blocked_message_ids"] == ["message_201"]
     assert result["replay_record"].source_correlation_id == "corr_review"
     assert result["replay_record"].execution["governance_posture"] == "review_required"
     assert result["replay_record"].execution["execution_mode"] == "blocked"
     assert result["replay_record"].blocked_messages == result["blocked_messages"]
-    assert result["replay_record"].extensions["governance_summary"] == result["gate_decision"]["governance_summary"]
+    assert (
+        result["replay_record"].extensions["governance_summary"]
+        == result["gate_decision"]["governance_summary"]
+    )
 
 
 def test_replay_executor_blocks_correlation_plan_with_mixed_receipt_states(tmp_path):
@@ -1021,7 +1165,9 @@ def test_replay_executor_blocks_correlation_plan_with_mixed_receipt_states(tmp_p
     assert replay_plan["target_issue_codes"] == ["receipt_rejected"]
     assert result["status"] == "blocked"
     assert result["gate_decision"]["decision"] == ReplayGateDecision.REVIEW
-    assert result["blocked_messages"] == [{"message_id": "message_rejected", "reason": executor.BLOCK_REASON_REJECTED_RECEIPT}]
+    assert result["blocked_messages"] == [
+        {"message_id": "message_rejected", "reason": executor.BLOCK_REASON_REJECTED_RECEIPT}
+    ]
     assert result["skipped_messages"] == [
         {"message_id": "message_timeout", "reason": executor.SKIP_REASON_NOT_TARGETED},
         {"message_id": "message_acked", "reason": executor.SKIP_REASON_ACKNOWLEDGED},
@@ -1037,8 +1183,9 @@ def test_replay_executor_blocks_correlation_plan_with_mixed_receipt_states(tmp_p
     assert result["replay_trace"]["skipped_message_ids"] == ["message_timeout", "message_acked"]
 
 
-
-def test_replay_executor_blocks_correlation_plan_with_stale_priority_over_rejected_and_timeout(tmp_path):
+def test_replay_executor_blocks_correlation_plan_with_stale_priority_over_rejected_and_timeout(
+    tmp_path,
+):
     receipt_dir = tmp_path / "receipts"
     writer, replay_service, _, executor = build_services(tmp_path, receipt_dir=receipt_dir)
     envelope_stale = build_envelope("message_stale", "corr_priority")
@@ -1062,7 +1209,12 @@ def test_replay_executor_blocks_correlation_plan_with_stale_priority_over_reject
         ),
     )
 
-    write_receipt(receipt_dir, date_key="2026-04-25", message_id="message_stale", received_at="2026-04-24T12:00:11")
+    write_receipt(
+        receipt_dir,
+        date_key="2026-04-25",
+        message_id="message_stale",
+        received_at="2026-04-24T12:00:11",
+    )
     write_receipt(receipt_dir, message_id="message_rejected", ack_status="rejected")
 
     replay_plan = replay_service.build_correlation_replay_plan(
@@ -1084,14 +1236,15 @@ def test_replay_executor_blocks_correlation_plan_with_stale_priority_over_reject
     assert replay_plan["target_issue_codes"] == ["stale_receipt"]
     assert result["status"] == "blocked"
     assert result["gate_decision"]["decision"] == ReplayGateDecision.REVIEW
-    assert result["blocked_messages"] == [{"message_id": "message_stale", "reason": executor.BLOCK_REASON_STALE_RECEIPT}]
+    assert result["blocked_messages"] == [
+        {"message_id": "message_stale", "reason": executor.BLOCK_REASON_STALE_RECEIPT}
+    ]
     assert result["skipped_messages"] == [
         {"message_id": "message_rejected", "reason": executor.SKIP_REASON_NOT_TARGETED},
         {"message_id": "message_timeout", "reason": executor.SKIP_REASON_NOT_TARGETED},
     ]
     assert result["replay_trace"]["blocked_message_ids"] == ["message_stale"]
     assert result["replay_trace"]["skipped_message_ids"] == ["message_rejected", "message_timeout"]
-
 
 
 def test_replay_executor_blocks_correlation_plan_with_cancelled_priority_over_timeout(tmp_path):
@@ -1140,7 +1293,9 @@ def test_replay_executor_blocks_correlation_plan_with_cancelled_priority_over_ti
     assert replay_plan["target_issue_codes"] == ["receipt_cancelled"]
     assert result["status"] == "blocked"
     assert result["gate_decision"]["decision"] == ReplayGateDecision.REVIEW
-    assert result["blocked_messages"] == [{"message_id": "message_cancelled", "reason": executor.BLOCK_REASON_CANCELLED_RECEIPT}]
+    assert result["blocked_messages"] == [
+        {"message_id": "message_cancelled", "reason": executor.BLOCK_REASON_CANCELLED_RECEIPT}
+    ]
     assert result["skipped_messages"] == [
         {"message_id": "message_timeout", "reason": executor.SKIP_REASON_NOT_TARGETED},
         {"message_id": "message_acked", "reason": executor.SKIP_REASON_ACKNOWLEDGED},

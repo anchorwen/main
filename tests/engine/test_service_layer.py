@@ -1,15 +1,14 @@
 import time
-from datetime import datetime
 
-from core.deployment.environment_config import EnvironmentConfig
-from core.deployment.service_container import ServiceContainer
-from core.deployment.schema_versions import SCHEMA_ENGINE_CONFIG_EVIDENCE
-from core.deployment.scheduler_service import SchedulerService
-from core.deployment.state_persistence import StatePersistence
-from core.deployment.lifecycle_manager import LifecycleManager
-from core.observability.alert_service import AlertService, InMemoryAlertChannel
 from apps.engine.system_facade import SystemFacade, SystemSelfTest
 from core.deployment.domain_keys import EVIDENCE_SECTION_ENGINE_CONFIG
+from core.deployment.environment_config import EnvironmentConfig
+from core.deployment.lifecycle_manager import LifecycleManager
+from core.deployment.scheduler_service import SchedulerService
+from core.deployment.schema_versions import SCHEMA_ENGINE_CONFIG_EVIDENCE
+from core.deployment.service_container import ServiceContainer
+from core.deployment.state_persistence import StatePersistence
+from core.observability.alert_service import AlertService, InMemoryAlertChannel
 
 
 def _container(tmp_path, **kw):
@@ -44,14 +43,16 @@ class TestSchedulerService:
 
     def test_error_handling(self):
         sched = SchedulerService()
-        sched.add_task("bad", lambda: 1/0, interval_seconds=0)
+        sched.add_task("bad", lambda: 1 / 0, interval_seconds=0)
         results = sched.run_once()
         assert results[0]["status"] == "error"
 
     def test_start_stop(self):
         calls = {"count": 0}
         sched = SchedulerService()
-        sched.add_task("t1", lambda: calls.__setitem__("count", calls["count"] + 1), interval_seconds=0.02)
+        sched.add_task(
+            "t1", lambda: calls.__setitem__("count", calls["count"] + 1), interval_seconds=0.02
+        )
         sched.start()
         time.sleep(0.35)
         sched.stop(timeout=1.0)
@@ -74,8 +75,8 @@ class TestSchedulerService:
 
     def test_for_container_runs(self, tmp_path):
         c = _container(tmp_path)
-        c.governance_service.register_brain("t1", "live")
-        c.brain_tracker.record_outcome("t1", {"composite_score": 0.8})
+        c.governance_service.register_brain("t1", "live")  # type: ignore[reportOptionalMemberAccess]
+        c.brain_tracker.record_outcome("t1", {"composite_score": 0.8})  # type: ignore[reportOptionalMemberAccess]
         sp = StatePersistence(str(tmp_path / "state"))
         sched = SchedulerService.for_container(c, persistence=sp)
         results = sched.run_once()
@@ -100,7 +101,7 @@ class TestSystemFacade:
 
     def test_metrics(self, tmp_path):
         c = _container(tmp_path)
-        c.metrics.inc("test_x", 3)
+        c.metrics.inc("test_x", 3)  # type: ignore[reportOptionalMemberAccess]
         facade = SystemFacade(c)
         m = facade.metrics()
         assert m["counters"]["test_x"] == 3
@@ -114,15 +115,15 @@ class TestSystemFacade:
 
     def test_list_brains(self, tmp_path):
         c = _container(tmp_path)
-        c.governance_service.register_brain("a", "live")
-        c.governance_service.register_brain("b", "candidate")
+        c.governance_service.register_brain("a", "live")  # type: ignore[reportOptionalMemberAccess]
+        c.governance_service.register_brain("b", "candidate")  # type: ignore[reportOptionalMemberAccess]
         facade = SystemFacade(c)
         brains = facade.list_brains()
         assert len(brains) == 2
 
     def test_freeze_unfreeze(self, tmp_path):
         c = _container(tmp_path)
-        c.governance_service.register_brain("x", "live")
+        c.governance_service.register_brain("x", "live")  # type: ignore[reportOptionalMemberAccess]
         facade = SystemFacade(c)
         r = facade.freeze_brain("x", "test")
         assert r["status"] == "frozen"
@@ -139,7 +140,7 @@ class TestSystemFacade:
 
     def test_audit_recent(self, tmp_path):
         c = _container(tmp_path)
-        c.audit_log.log(event_type="test", severity="info")
+        c.audit_log.log(event_type="test", severity="info")  # type: ignore[reportOptionalMemberAccess]
         facade = SystemFacade(c)
         entries = facade.audit_recent()
         assert len(entries) >= 1
@@ -161,7 +162,7 @@ class TestSystemFacade:
 
     def test_full_workflow(self, tmp_path):
         c = _container(tmp_path, enable_idempotency=False)
-        c.governance_service.register_brain("alpha", "live")
+        c.governance_service.register_brain("alpha", "live")  # type: ignore[reportOptionalMemberAccess]
         orch = c.build_orchestrator()
         facade = SystemFacade(c, orchestrator=orch)
 
@@ -225,15 +226,17 @@ class TestSystemSelfTest:
 class TestFullServiceStack:
     def test_scheduler_facade_lifecycle_integration(self, tmp_path):
         c = _container(tmp_path, enable_idempotency=False)
-        c.governance_service.register_brain("alpha", "live")
-        c.brain_tracker.record_outcome("alpha", {"composite_score": 0.7})
+        c.governance_service.register_brain("alpha", "live")  # type: ignore[reportOptionalMemberAccess]
+        c.brain_tracker.record_outcome("alpha", {"composite_score": 0.7})  # type: ignore[reportOptionalMemberAccess]
 
         orch = c.build_orchestrator()
         sp = StatePersistence(str(tmp_path / "state"))
         lm = LifecycleManager(c, state_persistence=sp)
         alert_svc = AlertService.with_default_rules(channels=[InMemoryAlertChannel()])
         sched = SchedulerService.for_container(c, persistence=sp, alert_service=alert_svc)
-        facade = SystemFacade(c, orchestrator=orch, lifecycle=lm, scheduler=sched, alert_service=alert_svc)
+        facade = SystemFacade(
+            c, orchestrator=orch, lifecycle=lm, scheduler=sched, alert_service=alert_svc
+        )
 
         startup = lm.startup()
         assert startup["status"] == "started"

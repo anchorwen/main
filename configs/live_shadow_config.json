@@ -1,0 +1,18 @@
+{
+  "_schema": "v9_shadow_deployment.v1",
+  "shadow": {
+    "enabled": true,
+    "outbox_dir": "data/mt5_shadow_outbox",
+    "model_path": "models/v9_shadow.pkl",
+    "target": "shadow_bridge",
+    "default_volume": 0.01,
+    "max_shadow_positions": 1,
+    "symbols": ["XAUUSDc"],
+    "run_interval_seconds": 60,
+    "description": "Shadow model runs alongside live, writing intents to mt5_shadow_outbox for paper-trading / audit comparison only"
+  },
+  "shadow_baseline": {
+    "manifest_path": "data/replays/v9_shadow_baselines/manifest.json",
+    "comparison_suites": ["neutral_stability", "actionable_decisions", "risk_boundary"]
+  }
+}

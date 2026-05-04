@@ -1,21 +1,25 @@
-import json
 from datetime import datetime
 
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
-from core.contracts.enums import CommunicationMessageType, CommunicationPriority, DispatchStatus
-from core.protocol.services.communication_dispatcher import CommunicationDispatcher
-from core.protocol.services.stub_communication_adapter import StubCommunicationAdapter
-from core.protocol.services.idempotency import IdempotencyStore, DuplicateDetector
-from core.ledger.services.communication_record_writer import CommunicationRecordWriter
-from core.ledger.services.communication_record_reader import CommunicationRecordReader
-from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
 from core.contracts.domain.dispatch_result import DispatchResult
+from core.contracts.enums import CommunicationMessageType, CommunicationPriority, DispatchStatus
+from core.ledger.services.communication_record_reader import CommunicationRecordReader
+from core.ledger.services.communication_record_writer import CommunicationRecordWriter
+from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
+from core.protocol.services.communication_dispatcher import CommunicationDispatcher
+from core.protocol.services.idempotency import DuplicateDetector, IdempotencyStore
+from core.protocol.services.stub_communication_adapter import StubCommunicationAdapter
 
 
 def _envelope(mid, cid, idem_key=None):
     return CommunicationEnvelope(
-        schema_version="v1", message_id=mid, correlation_id=cid, causation_id=None,
-        event_time=datetime(2026, 4, 24, 12, 0, 0), producer="t", target="exec_bridge",
+        schema_version="v1",
+        message_id=mid,
+        correlation_id=cid,
+        causation_id=None,
+        event_time=datetime(2026, 4, 24, 12, 0, 0),
+        producer="t",
+        target="exec_bridge",
         message_type=CommunicationMessageType.EXECUTION_DISPATCH,
         priority=CommunicationPriority.NORMAL,
         idempotency_key=idem_key,
@@ -26,7 +30,9 @@ class TestIdempotencyStore:
     def test_first_claim_succeeds(self, tmp_path):
         store = IdempotencyStore(str(tmp_path))
         result = store.check_and_claim(
-            idempotency_key="key_001", message_id="m1", date_key="2026-04-24",
+            idempotency_key="key_001",
+            message_id="m1",
+            date_key="2026-04-24",
         )
         assert result["status"] == "claimed"
         assert result["duplicate"] is False
@@ -36,7 +42,9 @@ class TestIdempotencyStore:
         store = IdempotencyStore(str(tmp_path))
         store.check_and_claim(idempotency_key="key_001", message_id="m1", date_key="2026-04-24")
         result = store.check_and_claim(
-            idempotency_key="key_001", message_id="m2", date_key="2026-04-24",
+            idempotency_key="key_001",
+            message_id="m2",
+            date_key="2026-04-24",
         )
         assert result["status"] == "duplicate"
         assert result["duplicate"] is True
@@ -56,7 +64,9 @@ class TestIdempotencyStore:
     def test_different_keys_independent(self, tmp_path):
         store = IdempotencyStore(str(tmp_path))
         store.check_and_claim(idempotency_key="key_a", message_id="m1", date_key="2026-04-24")
-        result = store.check_and_claim(idempotency_key="key_b", message_id="m2", date_key="2026-04-24")
+        result = store.check_and_claim(
+            idempotency_key="key_b", message_id="m2", date_key="2026-04-24"
+        )
         assert result["duplicate"] is False
 
 
@@ -107,20 +117,32 @@ class TestDuplicateDetector:
         reader = CommunicationRecordReader(str(tmp_path))
 
         env1 = _envelope("m1", "c1", idem_key="dup_key")
-        writer.write_record(env1, DispatchResult(
-            schema_version="v1", dispatch_id="d1", message_id="m1",
-            status=DispatchStatus.TRANSPORT_DELIVERED,
-            recorded_at=datetime(2026, 4, 24, 12, 0, 1),
-            target="exec_bridge", adapter_name="stub",
-        ))
+        writer.write_record(
+            env1,
+            DispatchResult(
+                schema_version="v1",
+                dispatch_id="d1",
+                message_id="m1",
+                status=DispatchStatus.TRANSPORT_DELIVERED,
+                recorded_at=datetime(2026, 4, 24, 12, 0, 1),
+                target="exec_bridge",
+                adapter_name="stub",
+            ),
+        )
 
         env2 = _envelope("m2", "c1", idem_key="dup_key")
-        writer.write_record(env2, DispatchResult(
-            schema_version="v1", dispatch_id="d2", message_id="m2",
-            status=DispatchStatus.TRANSPORT_DELIVERED,
-            recorded_at=datetime(2026, 4, 24, 12, 0, 2),
-            target="exec_bridge", adapter_name="stub",
-        ))
+        writer.write_record(
+            env2,
+            DispatchResult(
+                schema_version="v1",
+                dispatch_id="d2",
+                message_id="m2",
+                status=DispatchStatus.TRANSPORT_DELIVERED,
+                recorded_at=datetime(2026, 4, 24, 12, 0, 2),
+                target="exec_bridge",
+                adapter_name="stub",
+            ),
+        )
 
         detector = DuplicateDetector(reader)
         dups = detector.find_duplicates(date_key="2026-04-24", target="exec_bridge")
@@ -137,19 +159,25 @@ class TestDuplicateDetector:
         writer.write_record(
             _envelope("m1", "c1", idem_key="key_a"),
             DispatchResult(
-                schema_version="v1", dispatch_id="d1", message_id="m1",
+                schema_version="v1",
+                dispatch_id="d1",
+                message_id="m1",
                 status=DispatchStatus.TRANSPORT_DELIVERED,
                 recorded_at=datetime(2026, 4, 24, 12, 0, 1),
-                target="exec_bridge", adapter_name="stub",
+                target="exec_bridge",
+                adapter_name="stub",
             ),
         )
         writer.write_record(
             _envelope("m2", "c1", idem_key="key_b"),
             DispatchResult(
-                schema_version="v1", dispatch_id="d2", message_id="m2",
+                schema_version="v1",
+                dispatch_id="d2",
+                message_id="m2",
                 status=DispatchStatus.TRANSPORT_DELIVERED,
                 recorded_at=datetime(2026, 4, 24, 12, 0, 2),
-                target="exec_bridge", adapter_name="stub",
+                target="exec_bridge",
+                adapter_name="stub",
             ),
         )
 

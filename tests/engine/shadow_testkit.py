@@ -23,20 +23,23 @@ from core.contracts.enums import DispatchStatus
 from core.deployment.domain_keys import (
     OPERATIONS_POSTURE_SOURCE_TRACE_DELIVERY_STATE,
     PAYLOAD_KEY_BLOCK_REASONS,
-    PAYLOAD_KEY_BLOCKED_MESSAGES,
     PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
+    PAYLOAD_KEY_BLOCKED_MESSAGES,
+    PAYLOAD_KEY_COMMUNICATION_LEDGER_PATH,
+    PAYLOAD_KEY_COMMUNICATION_RECORD_ID,
+    PAYLOAD_KEY_CONVICTION,
     PAYLOAD_KEY_DECISION,
-    PAYLOAD_KEY_DISPATCH_STATUS,
     PAYLOAD_KEY_DISPATCH_RESULT,
-    PAYLOAD_KEY_FEATURE_FILE,
-    PAYLOAD_KEY_FEATURE_SOURCE_TYPE,
+    PAYLOAD_KEY_DISPATCH_STATUS,
     PAYLOAD_KEY_EXECUTED_MESSAGE_IDS,
     PAYLOAD_KEY_EXECUTION_MODE,
     PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE,
+    PAYLOAD_KEY_FEATURE_FILE,
+    PAYLOAD_KEY_FEATURE_SOURCE_TYPE,
     PAYLOAD_KEY_GATE_DECISION,
-    PAYLOAD_KEY_GOVERNANCE_SOURCES,
     PAYLOAD_KEY_GOVERNANCE_DECISION,
     PAYLOAD_KEY_GOVERNANCE_POSTURE,
+    PAYLOAD_KEY_GOVERNANCE_SOURCES,
     PAYLOAD_KEY_GOVERNANCE_SUMMARY,
     PAYLOAD_KEY_GOVERNANCE_SUMMARY_SOURCE,
     PAYLOAD_KEY_GOVERNANCE_TAGS,
@@ -49,29 +52,24 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_POSTURE,
     PAYLOAD_KEY_POSTURE_SOURCE,
     PAYLOAD_KEY_POSTURE_SOURCES,
-    PAYLOAD_KEY_REASON,
     PAYLOAD_KEY_RECOMMENDED_STRATEGY,
+    PAYLOAD_KEY_RECORD_ID,
     PAYLOAD_KEY_REPLAY_RECORD,
     PAYLOAD_KEY_REPLAY_TRACE,
-    PAYLOAD_KEY_RECORD_ID,
-    PAYLOAD_KEY_REVIEW_ISSUE_CODES,
     PAYLOAD_KEY_RESULTS,
-    PAYLOAD_KEY_SKIP_REASONS,
-    PAYLOAD_KEY_SKIPPED_MESSAGES,
-    PAYLOAD_KEY_SKIPPED_MESSAGE_IDS,
-    PAYLOAD_KEY_SUMMARY_SOURCE,
-    PAYLOAD_KEY_SYMBOL,
-    PAYLOAD_KEY_TARGET_ISSUE_CODES,
-    PAYLOAD_KEY_CONVICTION,
-    PAYLOAD_KEY_COMMUNICATION_LEDGER_PATH,
-    PAYLOAD_KEY_COMMUNICATION_RECORD_ID,
+    PAYLOAD_KEY_REVIEW_ISSUE_CODES,
     PAYLOAD_KEY_RISK_STATUS,
     PAYLOAD_KEY_SAMPLE_DESCRIPTION,
     PAYLOAD_KEY_SCENARIO,
+    PAYLOAD_KEY_SKIP_REASONS,
+    PAYLOAD_KEY_SKIPPED_MESSAGE_IDS,
+    PAYLOAD_KEY_SKIPPED_MESSAGES,
+    PAYLOAD_KEY_SUMMARY_SOURCE,
+    PAYLOAD_KEY_SYMBOL,
+    PAYLOAD_KEY_TARGET_ISSUE_CODES,
+    REPLAY_GOVERNANCE_PROJECTION_SOURCE_REPLAY_RECORD_EXECUTION,
 )
-from core.ledger.governance_sources import REPLAY_GOVERNANCE_PROJECTION_SOURCE_REPLAY_RECORD_EXECUTION
 from core.ledger.services.communication_operations_service import CommunicationOperationsService
-from core.ledger.services.communication_replay_executor import CommunicationReplayExecutor
 from core.ledger.services.gate_decision_refs import governance_summary as gate_governance_summary
 from core.ledger.services.replay_record_refs import grouped_reasons as grouped_message_reasons
 from core.ledger.services.replay_record_refs import message_ids as grouped_message_ids
@@ -81,9 +79,6 @@ from core.ledger.stream_names import (
     LEDGER_STREAM_DECISIONS,
     stream_jsonl_filename,
 )
-from core.protocol.services.communication_dispatcher import CommunicationDispatcher
-from core.protocol.services.stub_communication_adapter import StubCommunicationAdapter
-
 
 _FAKE_LEDGER_ROOT = Path("D:/cursor/data")
 _FAKE_LEDGER_DATE = "2026-04-24"
@@ -100,11 +95,20 @@ _FAKE_RECORD_ID = "record_001"
 
 
 def _fake_communication_ledger_path() -> Path:
-    return _FAKE_LEDGER_ROOT / _FAKE_LEDGER_DATE / stream_jsonl_filename(_FAKE_TARGET, LEDGER_STREAM_COMMUNICATIONS)
+    return (
+        _FAKE_LEDGER_ROOT
+        / _FAKE_LEDGER_DATE
+        / stream_jsonl_filename(_FAKE_TARGET, LEDGER_STREAM_COMMUNICATIONS)
+    )
 
 
 def _fake_decision_ledger_path() -> Path:
-    return _FAKE_LEDGER_ROOT / "decisions" / _FAKE_LEDGER_DATE / stream_jsonl_filename(_FAKE_SYMBOL, LEDGER_STREAM_DECISIONS)
+    return (
+        _FAKE_LEDGER_ROOT
+        / "decisions"
+        / _FAKE_LEDGER_DATE
+        / stream_jsonl_filename(_FAKE_SYMBOL, LEDGER_STREAM_DECISIONS)
+    )
 
 
 # ---- cli helpers ----
@@ -117,7 +121,6 @@ def run_engine_cli(main_func, *args: str) -> str:
     return stdout.getvalue()
 
 
-
 def run_engine_cli_allow_exit(main_func, *args: str) -> tuple[str, int | None]:
     stdout = io.StringIO()
     exit_code = None
@@ -125,7 +128,8 @@ def run_engine_cli_allow_exit(main_func, *args: str) -> tuple[str, int | None]:
         try:
             main_func()
         except SystemExit as exc:
-            exit_code = exc.code
+            code = exc.code
+            exit_code = int(code) if isinstance(code, int | float) else None
     return stdout.getvalue(), exit_code
 
 
@@ -156,7 +160,6 @@ def _event_sequence(events: list[dict]) -> list[str]:
     return [event["event"] for event in events]
 
 
-
 def assert_completed_flow_alignment(
     flow: dict,
     *,
@@ -168,7 +171,6 @@ def assert_completed_flow_alignment(
     assert flow["client_state"]["status"] == "completed"
     assert flow["client_state"]["ok"] is True
     assert flow["client_state"]["final_completed"]["event"] == final_event_name
-
 
 
 def assert_error_flow_alignment(
@@ -184,7 +186,6 @@ def assert_error_flow_alignment(
     assert flow["client_state"]["ok"] is False
     assert flow["client_state"]["error_message"] == error_message
     assert flow["client_state"]["final_error"]["event"] == final_event_name
-
 
 
 def assert_client_completed_terminal_message(
@@ -205,7 +206,6 @@ def assert_client_completed_terminal_message(
     assert client.state["final_error"] is None
 
 
-
 def assert_client_error_terminal_message(
     client: SessionSSEClientBuffer,
     *,
@@ -221,7 +221,6 @@ def assert_client_error_terminal_message(
     assert client.state["error_message"] == error_message
     assert client.state["final_error"]["event"] == final_event_name
     assert client.state["final_error"]["data"]["data"]["error_type"] == error_type
-
 
 
 def assert_manager_sse_completed_terminal_payloads(
@@ -252,7 +251,6 @@ def assert_manager_sse_completed_terminal_payloads(
     else:
         assert manager_completed["data"]["stats"] == stats
         assert sse_payload["stats"] == stats
-
 
 
 def assert_manager_sse_error_terminal_payloads(
@@ -296,7 +294,6 @@ def build_fallback_operations_summary() -> dict:
     }
 
 
-
 def assert_runtime_summary_matches_governance_contract(
     summary: dict,
     *,
@@ -331,10 +328,11 @@ def assert_runtime_summary_matches_governance_contract(
     assert summary[PAYLOAD_KEY_BLOCK_REASONS] == block_reasons
 
 
-
 def build_runtime_summary_from_execution_result(execution_result: dict) -> dict:
     gate_decision = execution_result.get(PAYLOAD_KEY_GATE_DECISION, {})
-    governance_summary = gate_governance_summary(gate_decision) or execution_result.get(PAYLOAD_KEY_GOVERNANCE_SUMMARY, {})
+    governance_summary = gate_governance_summary(gate_decision) or execution_result.get(
+        PAYLOAD_KEY_GOVERNANCE_SUMMARY, {}
+    )
     skipped_messages = execution_result.get(PAYLOAD_KEY_SKIPPED_MESSAGES, [])
     blocked_messages = execution_result.get(PAYLOAD_KEY_BLOCKED_MESSAGES, [])
     results = execution_result.get(PAYLOAD_KEY_RESULTS, [])
@@ -370,7 +368,8 @@ def build_runtime_summary_from_execution_result(execution_result: dict) -> dict:
 
     return {
         PAYLOAD_KEY_DISPATCH_STATUS: dispatch_status,
-        PAYLOAD_KEY_MESSAGE_ID: trace_message_id(replay_trace) or (executed_message_ids[0] if executed_message_ids else None),
+        PAYLOAD_KEY_MESSAGE_ID: trace_message_id(replay_trace)
+        or (executed_message_ids[0] if executed_message_ids else None),
         PAYLOAD_KEY_COMMUNICATION_RECORD_ID: _FAKE_COMMUNICATION_RECORD_ID,
         PAYLOAD_KEY_COMMUNICATION_LEDGER_PATH: str(_fake_communication_ledger_path()),
         PAYLOAD_KEY_POSTURE: posture,
@@ -392,7 +391,6 @@ def build_runtime_summary_from_execution_result(execution_result: dict) -> dict:
     }
 
 
-
 def build_fallback_expected_operations_summary(*, communication_ledger_path) -> dict:
     return {
         **build_fallback_operations_summary(),
@@ -400,91 +398,94 @@ def build_fallback_expected_operations_summary(*, communication_ledger_path) -> 
     }
 
 
-
 def build_blocked_operations_summary() -> dict:
     summary = build_fallback_operations_summary()
-    summary.update({
-        PAYLOAD_KEY_POSTURE: "blocked",
-        PAYLOAD_KEY_GOVERNANCE_DECISION: "deny",
-        PAYLOAD_KEY_GOVERNANCE_POSTURE: "blocked",
-        PAYLOAD_KEY_RECOMMENDED_STRATEGY: "replay_with_governance_review",
-        PAYLOAD_KEY_REVIEW_ISSUE_CODES: ["stale_receipt"],
-        PAYLOAD_KEY_GOVERNANCE_TAGS: ["requires_governance_review"],
-        PAYLOAD_KEY_EXECUTION_MODE: "blocked",
-        PAYLOAD_KEY_EXECUTED_MESSAGE_IDS: [],
-        PAYLOAD_KEY_SKIPPED_MESSAGE_IDS: [],
-        PAYLOAD_KEY_BLOCKED_MESSAGE_IDS: ["message_001"],
-        PAYLOAD_KEY_SKIP_REASONS: {},
-        PAYLOAD_KEY_BLOCK_REASONS: {"block_review_required": ["message_001"]},
-    })
+    summary.update(
+        {
+            PAYLOAD_KEY_POSTURE: "blocked",
+            PAYLOAD_KEY_GOVERNANCE_DECISION: "deny",
+            PAYLOAD_KEY_GOVERNANCE_POSTURE: "blocked",
+            PAYLOAD_KEY_RECOMMENDED_STRATEGY: "replay_with_governance_review",
+            PAYLOAD_KEY_REVIEW_ISSUE_CODES: ["stale_receipt"],
+            PAYLOAD_KEY_GOVERNANCE_TAGS: ["requires_governance_review"],
+            PAYLOAD_KEY_EXECUTION_MODE: "blocked",
+            PAYLOAD_KEY_EXECUTED_MESSAGE_IDS: [],
+            PAYLOAD_KEY_SKIPPED_MESSAGE_IDS: [],
+            PAYLOAD_KEY_BLOCKED_MESSAGE_IDS: ["message_001"],
+            PAYLOAD_KEY_SKIP_REASONS: {},
+            PAYLOAD_KEY_BLOCK_REASONS: {"block_review_required": ["message_001"]},
+        }
+    )
     return summary
-
 
 
 def build_terminal_message_receipt_operations_summary() -> dict:
     summary = build_fallback_operations_summary()
-    summary.update({
-        PAYLOAD_KEY_POSTURE: "healthy",
-        PAYLOAD_KEY_GOVERNANCE_DECISION: "deny",
-        PAYLOAD_KEY_GOVERNANCE_POSTURE: "blocked",
-        PAYLOAD_KEY_RECOMMENDED_STRATEGY: "do_not_replay_terminal_receipt",
-        PAYLOAD_KEY_TARGET_ISSUE_CODES: ["receipt_filled"],
-        PAYLOAD_KEY_REVIEW_ISSUE_CODES: [],
-        PAYLOAD_KEY_GOVERNANCE_TAGS: ["replay_not_required", "terminal_receipt"],
-        PAYLOAD_KEY_EXECUTION_MODE: "blocked",
-        PAYLOAD_KEY_EXECUTED_MESSAGE_IDS: [],
-        PAYLOAD_KEY_SKIPPED_MESSAGE_IDS: [],
-        PAYLOAD_KEY_BLOCKED_MESSAGE_IDS: ["message_001"],
-        PAYLOAD_KEY_SKIP_REASONS: {},
-        PAYLOAD_KEY_BLOCK_REASONS: {"block_terminal_receipt": ["message_001"]},
-    })
+    summary.update(
+        {
+            PAYLOAD_KEY_POSTURE: "healthy",
+            PAYLOAD_KEY_GOVERNANCE_DECISION: "deny",
+            PAYLOAD_KEY_GOVERNANCE_POSTURE: "blocked",
+            PAYLOAD_KEY_RECOMMENDED_STRATEGY: "do_not_replay_terminal_receipt",
+            PAYLOAD_KEY_TARGET_ISSUE_CODES: ["receipt_filled"],
+            PAYLOAD_KEY_REVIEW_ISSUE_CODES: [],
+            PAYLOAD_KEY_GOVERNANCE_TAGS: ["replay_not_required", "terminal_receipt"],
+            PAYLOAD_KEY_EXECUTION_MODE: "blocked",
+            PAYLOAD_KEY_EXECUTED_MESSAGE_IDS: [],
+            PAYLOAD_KEY_SKIPPED_MESSAGE_IDS: [],
+            PAYLOAD_KEY_BLOCKED_MESSAGE_IDS: ["message_001"],
+            PAYLOAD_KEY_SKIP_REASONS: {},
+            PAYLOAD_KEY_BLOCK_REASONS: {"block_terminal_receipt": ["message_001"]},
+        }
+    )
     return summary
-
 
 
 def build_terminal_partially_filled_message_receipt_operations_summary() -> dict:
     summary = build_fallback_operations_summary()
-    summary.update({
-        PAYLOAD_KEY_POSTURE: "healthy",
-        PAYLOAD_KEY_GOVERNANCE_DECISION: "deny",
-        PAYLOAD_KEY_GOVERNANCE_POSTURE: "blocked",
-        PAYLOAD_KEY_RECOMMENDED_STRATEGY: "do_not_replay_terminal_receipt",
-        PAYLOAD_KEY_TARGET_ISSUE_CODES: ["receipt_partially_filled"],
-        PAYLOAD_KEY_REVIEW_ISSUE_CODES: ["receipt_partially_filled"],
-        PAYLOAD_KEY_GOVERNANCE_TAGS: ["replay_not_required", "terminal_receipt"],
-        PAYLOAD_KEY_EXECUTION_MODE: "blocked",
-        PAYLOAD_KEY_EXECUTED_MESSAGE_IDS: [],
-        PAYLOAD_KEY_SKIPPED_MESSAGE_IDS: [],
-        PAYLOAD_KEY_BLOCKED_MESSAGE_IDS: ["message_partial"],
-        PAYLOAD_KEY_SKIP_REASONS: {},
-        PAYLOAD_KEY_BLOCK_REASONS: {"block_terminal_receipt": ["message_partial"]},
-    })
+    summary.update(
+        {
+            PAYLOAD_KEY_POSTURE: "healthy",
+            PAYLOAD_KEY_GOVERNANCE_DECISION: "deny",
+            PAYLOAD_KEY_GOVERNANCE_POSTURE: "blocked",
+            PAYLOAD_KEY_RECOMMENDED_STRATEGY: "do_not_replay_terminal_receipt",
+            PAYLOAD_KEY_TARGET_ISSUE_CODES: ["receipt_partially_filled"],
+            PAYLOAD_KEY_REVIEW_ISSUE_CODES: ["receipt_partially_filled"],
+            PAYLOAD_KEY_GOVERNANCE_TAGS: ["replay_not_required", "terminal_receipt"],
+            PAYLOAD_KEY_EXECUTION_MODE: "blocked",
+            PAYLOAD_KEY_EXECUTED_MESSAGE_IDS: [],
+            PAYLOAD_KEY_SKIPPED_MESSAGE_IDS: [],
+            PAYLOAD_KEY_BLOCKED_MESSAGE_IDS: ["message_partial"],
+            PAYLOAD_KEY_SKIP_REASONS: {},
+            PAYLOAD_KEY_BLOCK_REASONS: {"block_terminal_receipt": ["message_partial"]},
+        }
+    )
     return summary
-
 
 
 def build_terminal_correlation_mixed_operations_summary() -> dict:
     summary = build_fallback_operations_summary()
-    summary.update({
-        PAYLOAD_KEY_POSTURE: "action_required",
-        PAYLOAD_KEY_GOVERNANCE_DECISION: "deny",
-        PAYLOAD_KEY_GOVERNANCE_POSTURE: "blocked",
-        PAYLOAD_KEY_RECOMMENDED_STRATEGY: "do_not_replay_terminal_receipts",
-        PAYLOAD_KEY_TARGET_ISSUE_CODES: ["receipt_timeout"],
-        PAYLOAD_KEY_REVIEW_ISSUE_CODES: [],
-        PAYLOAD_KEY_GOVERNANCE_TAGS: ["replay_not_required", "terminal_receipt"],
-        PAYLOAD_KEY_EXECUTION_MODE: "blocked",
-        PAYLOAD_KEY_EXECUTED_MESSAGE_IDS: [],
-        PAYLOAD_KEY_SKIPPED_MESSAGE_IDS: ["message_accepted", "message_acked"],
-        PAYLOAD_KEY_BLOCKED_MESSAGE_IDS: ["message_timeout"],
-        PAYLOAD_KEY_SKIP_REASONS: {
-            "skip_not_targeted": ["message_accepted"],
-            "skip_acknowledged_message": ["message_acked"],
-        },
-        PAYLOAD_KEY_BLOCK_REASONS: {"block_terminal_receipt": ["message_timeout"]},
-    })
+    summary.update(
+        {
+            PAYLOAD_KEY_POSTURE: "action_required",
+            PAYLOAD_KEY_GOVERNANCE_DECISION: "deny",
+            PAYLOAD_KEY_GOVERNANCE_POSTURE: "blocked",
+            PAYLOAD_KEY_RECOMMENDED_STRATEGY: "do_not_replay_terminal_receipts",
+            PAYLOAD_KEY_TARGET_ISSUE_CODES: ["receipt_timeout"],
+            PAYLOAD_KEY_REVIEW_ISSUE_CODES: [],
+            PAYLOAD_KEY_GOVERNANCE_TAGS: ["replay_not_required", "terminal_receipt"],
+            PAYLOAD_KEY_EXECUTION_MODE: "blocked",
+            PAYLOAD_KEY_EXECUTED_MESSAGE_IDS: [],
+            PAYLOAD_KEY_SKIPPED_MESSAGE_IDS: ["message_accepted", "message_acked"],
+            PAYLOAD_KEY_BLOCKED_MESSAGE_IDS: ["message_timeout"],
+            PAYLOAD_KEY_SKIP_REASONS: {
+                "skip_not_targeted": ["message_accepted"],
+                "skip_acknowledged_message": ["message_acked"],
+            },
+            PAYLOAD_KEY_BLOCK_REASONS: {"block_terminal_receipt": ["message_timeout"]},
+        }
+    )
     return summary
-
 
 
 def build_blocked_expected_operations_summary(*, communication_ledger_path) -> dict:
@@ -494,34 +495,35 @@ def build_blocked_expected_operations_summary(*, communication_ledger_path) -> d
     }
 
 
-
-def build_terminal_message_receipt_expected_operations_summary(*, communication_ledger_path) -> dict:
+def build_terminal_message_receipt_expected_operations_summary(
+    *, communication_ledger_path
+) -> dict:
     return {
         **build_terminal_message_receipt_operations_summary(),
         PAYLOAD_KEY_COMMUNICATION_LEDGER_PATH: communication_ledger_path,
     }
 
 
-
-def build_terminal_partially_filled_message_receipt_expected_operations_summary(*, communication_ledger_path) -> dict:
+def build_terminal_partially_filled_message_receipt_expected_operations_summary(
+    *, communication_ledger_path
+) -> dict:
     return {
         **build_terminal_partially_filled_message_receipt_operations_summary(),
         PAYLOAD_KEY_COMMUNICATION_LEDGER_PATH: communication_ledger_path,
     }
 
 
-
-def build_terminal_correlation_mixed_expected_operations_summary(*, communication_ledger_path) -> dict:
+def build_terminal_correlation_mixed_expected_operations_summary(
+    *, communication_ledger_path
+) -> dict:
     return {
         **build_terminal_correlation_mixed_operations_summary(),
         PAYLOAD_KEY_COMMUNICATION_LEDGER_PATH: communication_ledger_path,
     }
 
 
-
 def build_terminal_receipt_operations_summary() -> dict:
     return build_terminal_message_receipt_operations_summary()
-
 
 
 def build_fallback_cli_contract() -> dict:
@@ -536,7 +538,6 @@ def build_fallback_cli_contract() -> dict:
             PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE: None,
         },
     }
-
 
 
 def build_fallback_manager_payload() -> dict:
@@ -560,19 +561,18 @@ def build_fallback_manager_payload() -> dict:
     }
 
 
-
 def build_terminal_message_receipt_manager_payload() -> dict:
     payload = build_fallback_manager_payload()
     payload[PAYLOAD_KEY_OPERATIONS_SUMMARY] = build_terminal_message_receipt_operations_summary()
     return payload
 
 
-
 def build_terminal_partially_filled_message_receipt_manager_payload() -> dict:
     payload = build_fallback_manager_payload()
-    payload[PAYLOAD_KEY_OPERATIONS_SUMMARY] = build_terminal_partially_filled_message_receipt_operations_summary()
+    payload[PAYLOAD_KEY_OPERATIONS_SUMMARY] = (
+        build_terminal_partially_filled_message_receipt_operations_summary()
+    )
     return payload
-
 
 
 def build_terminal_correlation_mixed_manager_payload() -> dict:
@@ -581,10 +581,8 @@ def build_terminal_correlation_mixed_manager_payload() -> dict:
     return payload
 
 
-
 def build_terminal_receipt_manager_payload() -> dict:
     return build_terminal_message_receipt_manager_payload()
-
 
 
 def build_blocked_manager_payload() -> dict:
@@ -593,10 +591,8 @@ def build_blocked_manager_payload() -> dict:
     return payload
 
 
-
 def build_fallback_manager_result():
     return SimpleNamespace(communication_operations=build_fallback_cli_contract())
-
 
 
 def build_terminal_message_receipt_manager_result():
@@ -615,7 +611,6 @@ def build_terminal_message_receipt_manager_result():
     )
 
 
-
 def build_terminal_partially_filled_message_receipt_manager_result():
     return SimpleNamespace(
         communication_operations={
@@ -630,7 +625,6 @@ def build_terminal_partially_filled_message_receipt_manager_result():
             },
         }
     )
-
 
 
 def build_terminal_correlation_mixed_manager_result():
@@ -649,10 +643,8 @@ def build_terminal_correlation_mixed_manager_result():
     )
 
 
-
 def build_terminal_receipt_manager_result():
     return build_terminal_message_receipt_manager_result()
-
 
 
 def build_blocked_manager_result():
@@ -669,7 +661,6 @@ def build_blocked_manager_result():
             },
         }
     )
-
 
 
 def build_fallback_session_payload() -> dict:
@@ -691,7 +682,6 @@ def build_fallback_session_payload() -> dict:
         PAYLOAD_KEY_LEDGER_PATH: str(_fake_decision_ledger_path()),
         PAYLOAD_KEY_RECORD_ID: _FAKE_RECORD_ID,
     }
-
 
 
 def build_fallback_summary_result():
@@ -716,7 +706,6 @@ def build_fallback_summary_result():
         ledger_path=Path(str(_fake_decision_ledger_path())),
         record=SimpleNamespace(record_id=_FAKE_RECORD_ID),
     )
-
 
 
 def build_batch_session_payload(

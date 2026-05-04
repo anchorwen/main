@@ -1,11 +1,17 @@
-from datetime import datetime, timedelta
 import json
+from datetime import datetime, timedelta
 
 from apps.engine.communication_ops_cli import run_cli
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.decision_intent import DecisionIntent
 from core.contracts.domain.dispatch_result import DispatchResult
-from core.contracts.enums import CommunicationMessageType, CommunicationPriority, DecisionAction, DecisionSide, DispatchStatus, ReplayGateDecision
+from core.contracts.enums import (
+    CommunicationMessageType,
+    CommunicationPriority,
+    DecisionAction,
+    DecisionSide,
+    DispatchStatus,
+)
 from core.ledger.services.communication_inspection_service import CommunicationInspectionService
 from core.ledger.services.communication_operations_service import CommunicationOperationsService
 from core.ledger.services.communication_record_reader import CommunicationRecordReader
@@ -16,18 +22,18 @@ from core.ledger.services.communication_replay_service import CommunicationRepla
 from core.ledger.services.replay_execution_reader import ReplayExecutionReader
 from core.ledger.services.replay_execution_writer import ReplayExecutionWriter
 from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
-from core.protocol.services.communication_dispatcher import CommunicationDispatcher
-from core.protocol.services.communication_adapter_registry import CommunicationAdapterRegistry
-from core.protocol.services.file_queue_communication_adapter import FileQueueCommunicationAdapter
-from core.protocol.services.file_queue_receipt_reader import FileQueueReceiptReader
-from core.protocol.services.intent_message_builder import IntentMessageBuilder
-from core.protocol.services.stub_communication_adapter import StubCommunicationAdapter
 from core.protocol.schema_versions import (
     SCHEMA_COMMUNICATION_ENVELOPE,
     SCHEMA_DECISION_COMPILER,
     SCHEMA_DECISION_INTENT,
     SCHEMA_DISPATCH_RESULT,
 )
+from core.protocol.services.communication_adapter_registry import CommunicationAdapterRegistry
+from core.protocol.services.communication_dispatcher import CommunicationDispatcher
+from core.protocol.services.file_queue_communication_adapter import FileQueueCommunicationAdapter
+from core.protocol.services.file_queue_receipt_reader import FileQueueReceiptReader
+from core.protocol.services.intent_message_builder import IntentMessageBuilder
+from core.protocol.services.stub_communication_adapter import StubCommunicationAdapter
 
 
 class NamedStubAdapter(StubCommunicationAdapter):
@@ -86,7 +92,9 @@ def build_result(message_id: str, *, status=DispatchStatus.PROTOCOL_VALIDATED):
     )
 
 
-def write_receipt(receipt_dir, *, message_id: str, target: str = "exec_bridge", ack_status: str = "acknowledged"):
+def write_receipt(
+    receipt_dir, *, message_id: str, target: str = "exec_bridge", ack_status: str = "acknowledged"
+):
     receipt_path = receipt_dir / "2026-04-24" / target
     receipt_path.mkdir(parents=True, exist_ok=True)
     target_file = receipt_path / f"{message_id}.ack.json"
@@ -109,7 +117,9 @@ def test_file_queue_receipt_reader_reads_ack_file(tmp_path):
     write_receipt(receipt_dir, message_id="message_001")
     reader = FileQueueReceiptReader(receipt_dir=str(receipt_dir))
 
-    receipt = reader.find_by_message_id(date_key="2026-04-24", target="exec_bridge", message_id="message_001")
+    receipt = reader.find_by_message_id(
+        date_key="2026-04-24", target="exec_bridge", message_id="message_001"
+    )
 
     assert receipt is not None
     assert receipt["message_id"] == "message_001"
@@ -123,7 +133,9 @@ def test_operations_service_message_view_includes_receipt_and_receipt_aware_trac
     communication_reader = CommunicationRecordReader(base_dir=str(tmp_path))
     replay_reader = ReplayExecutionReader(base_dir=str(tmp_path))
     receipt_reader = FileQueueReceiptReader(receipt_dir=str(receipt_dir))
-    inspection = CommunicationInspectionService(record_reader=communication_reader, receipt_reader=receipt_reader)
+    inspection = CommunicationInspectionService(
+        record_reader=communication_reader, receipt_reader=receipt_reader
+    )
     replay_service = CommunicationReplayService(inspection_service=inspection)
     replay_gate = CommunicationReplayGate()
     operations = CommunicationOperationsService(
@@ -136,7 +148,9 @@ def test_operations_service_message_view_includes_receipt_and_receipt_aware_trac
     )
 
     envelope = build_envelope("message_ops", "corr_ops")
-    writer.write_record(envelope, build_result("message_ops", status=DispatchStatus.TRANSPORT_DELIVERED))
+    writer.write_record(
+        envelope, build_result("message_ops", status=DispatchStatus.TRANSPORT_DELIVERED)
+    )
     write_receipt(receipt_dir, message_id="message_ops")
 
     view = operations.get_message_operations_view(
@@ -159,14 +173,21 @@ def test_cli_message_view_includes_receipt_when_receipt_dir_provided(tmp_path):
     writer.write_record(envelope, build_result("message_cli"))
     write_receipt(receipt_dir, message_id="message_cli")
 
-    output = run_cli([
-        "--base-dir", str(tmp_path),
-        "--receipt-dir", str(receipt_dir),
-        "message",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--message-id", "message_cli",
-    ])
+    output = run_cli(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "--receipt-dir",
+            str(receipt_dir),
+            "message",
+            "--date",
+            "2026-04-24",
+            "--target",
+            "exec_bridge",
+            "--message-id",
+            "message_cli",
+        ]
+    )
     payload = json.loads(output)
 
     assert payload["receipt"] is not None
@@ -180,7 +201,9 @@ def test_file_queue_adapter_writes_outbox_message(tmp_path):
     builder = IntentMessageBuilder(producer="decision_engine", target="exec_bridge")
     intent = build_intent()
     envelope = builder.build(intent, correlation_id="corr_001")
-    dispatcher = CommunicationDispatcher(adapter=adapter, clock=lambda: datetime(2026, 4, 24, 12, 0, 2))
+    dispatcher = CommunicationDispatcher(
+        adapter=adapter, clock=lambda: datetime(2026, 4, 24, 12, 0, 2)
+    )
 
     result = dispatcher.dispatch(envelope)
 
@@ -194,7 +217,9 @@ def test_file_queue_adapter_writes_outbox_message(tmp_path):
 
 def test_dispatcher_routes_to_file_queue_adapter_via_registry(tmp_path):
     outbox_dir = tmp_path / "outbox"
-    adapter = FileQueueCommunicationAdapter(outbox_dir=str(outbox_dir), adapter_name="file_queue_primary")
+    adapter = FileQueueCommunicationAdapter(
+        outbox_dir=str(outbox_dir), adapter_name="file_queue_primary"
+    )
     registry = CommunicationAdapterRegistry(
         adapters={
             "exec_bridge": adapter,
@@ -255,20 +280,28 @@ def test_cli_message_view_still_works_with_file_queue_written_record(tmp_path):
     writer = CommunicationRecordWriter(ledger_store=store)
     outbox_dir = tmp_path / "outbox"
     adapter = FileQueueCommunicationAdapter(outbox_dir=str(outbox_dir))
-    dispatcher = CommunicationDispatcher(adapter=adapter, clock=lambda: datetime(2026, 4, 24, 12, 0, 2))
+    dispatcher = CommunicationDispatcher(
+        adapter=adapter, clock=lambda: datetime(2026, 4, 24, 12, 0, 2)
+    )
     builder = IntentMessageBuilder(producer="decision_engine", target="exec_bridge")
     envelope = builder.build(build_intent(), correlation_id="corr_cli")
 
     dispatch_result = dispatcher.dispatch(envelope)
     writer.write_record(envelope, dispatch_result)
 
-    output = run_cli([
-        "--base-dir", str(tmp_path),
-        "message",
-        "--date", "2026-04-24",
-        "--target", "exec_bridge",
-        "--message-id", envelope.message_id,
-    ])
+    output = run_cli(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "message",
+            "--date",
+            "2026-04-24",
+            "--target",
+            "exec_bridge",
+            "--message-id",
+            envelope.message_id,
+        ]
+    )
     payload = json.loads(output)
 
     assert payload["record"]["message_id"] == envelope.message_id

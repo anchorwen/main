@@ -1,62 +1,39 @@
-from pathlib import Path
-from dataclasses import dataclass
 import io
 import json
-import csv
-import tempfile
-import shutil
 import threading
-from types import SimpleNamespace
 from contextlib import redirect_stdout
 from http.client import HTTPConnection
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from apps.engine.bootstrap_v9 import build_v9_shadow_runtime_loop
 from apps.engine.main_v9_shadow import (
-    BaselineSuiteSpec,
     FeatureInputError,
     OutputPlan,
-    StreamEnvelopePlan,
     SessionStreamPlan,
     ShadowSessionManager,
+    StreamEnvelopePlan,
+    apply_stable_output_contract,
     assert_formal_baseline_gate,
     assert_formal_suite_semantics,
-    build_edge_allow_stub_feature_source,
-    build_edge_deny_stub_feature_source,
-    build_long_actionable_stub_feature_source,
-    build_short_actionable_stub_feature_source,
     build_output_extension_fields,
-    apply_stable_output_contract,
-    build_summary_mirror_fields_from_operations_summary,
     build_stream_envelope,
     build_stream_meta,
-    build_stub_feature_source,
+    build_summary_mirror_fields_from_operations_summary,
     build_summary_payload,
     check_batch_regression_baselines,
     check_regression_baseline,
-    diff_regression_baseline,
     load_feature_batch_from_json,
     load_feature_samples_from_dir,
     load_feature_source_from_json,
     load_formal_baseline_manifest,
     load_formal_baseline_suites,
     main,
-    prepare_batch_results,
-    prepare_results,
-    prepare_single_results,
     rebuild_formal_baseline_suites,
-    render_batch_regression_diff_text,
-    render_csv,
     render_json_output,
     render_output_content,
-    render_regression_baseline,
-    render_regression_diff_text,
-    render_result_text,
-    render_session_sse_event,
-    render_sse_event,
     render_stats_text,
     render_summary_output,
-    render_summary_text,
     run_scenario,
     run_shadow_session_sse_server,
     stream_session_sse,
@@ -64,10 +41,9 @@ from apps.engine.main_v9_shadow import (
     write_regression_baseline,
 )
 from apps.engine.v9_shadow_sse import iter_sse_messages_from_chunks
-from core.contracts.enums import DispatchStatus
 from core.deployment.domain_keys import (
-    PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
     PAYLOAD_KEY_BLOCK_REASONS,
+    PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
     PAYLOAD_KEY_EXECUTED_MESSAGE_IDS,
     PAYLOAD_KEY_EXECUTION_MODE,
     PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE,
@@ -76,20 +52,12 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_OPERATIONS_SUMMARY,
     PAYLOAD_KEY_POSTURE,
     PAYLOAD_KEY_POSTURE_SOURCE,
-    PAYLOAD_KEY_SKIPPED_MESSAGE_IDS,
     PAYLOAD_KEY_SKIP_REASONS,
+    PAYLOAD_KEY_SKIPPED_MESSAGE_IDS,
     PAYLOAD_KEY_SUMMARY_SOURCE,
 )
 from tests.engine.shadow_testkit import (
-    assert_client_completed_terminal_message,
-    assert_client_error_terminal_message,
-    assert_completed_flow_alignment,
-    assert_error_flow_alignment,
-    assert_manager_sse_completed_terminal_payloads,
-    assert_manager_sse_error_terminal_payloads,
-    build_blocked_manager_payload,
     build_blocked_manager_result,
-    build_fallback_manager_payload,
     build_fallback_manager_result,
     run_engine_cli,
     run_engine_cli_allow_exit,
@@ -102,7 +70,6 @@ def run_cli(*args: str) -> str:
     return run_engine_cli(main, *args)
 
 
-
 def run_cli_allow_exit(*args: str):
     return run_engine_cli_allow_exit(main, *args)
 
@@ -111,13 +78,16 @@ def run_cli_capture_stderr_allow_exit(*args: str) -> tuple[str, str, int | None]
     stdout = io.StringIO()
     stderr = io.StringIO()
     exit_code = None
-    with patch("sys.argv", ["main_v9_shadow.py", *args]), redirect_stdout(stdout), patch("sys.stderr", stderr):
+    with (
+        patch("sys.argv", ["main_v9_shadow.py", *args]),
+        redirect_stdout(stdout),
+        patch("sys.stderr", stderr),
+    ):
         try:
             main()
         except SystemExit as exc:
             exit_code = exc.code
     return stdout.getvalue(), stderr.getvalue(), exit_code
-
 
 
 def patch_prepare_results_with_contract(monkeypatch, manager_payload, manager_result):
@@ -126,14 +96,9 @@ def patch_prepare_results_with_contract(monkeypatch, manager_payload, manager_re
         lambda _args: ([manager_payload], "ignored", [manager_result]),
     )
     monkeypatch.setattr(
-        "tests.engine.test_v9_shadow_smoke.prepare_results",
-        lambda _args: ([manager_payload], "ignored", [manager_result]),
-    )
-    monkeypatch.setattr(
         "apps.engine.main_v9_shadow.extend_payloads_for_output",
         lambda payloads, _results: payloads,
     )
-
 
 
 def assert_summary_output_has_contract_fields(
@@ -167,10 +132,12 @@ def assert_summary_output_has_contract_fields(
         assert f"'block_reasons': {block_reasons}" in output
     assert f"operations_posture={operations_posture}" in output
     assert f"posture_sources={{'operations_posture_source': '{posture_source}'}}" in output
-    assert f"governance_sources={{'summary_source': {summary_source!r}, 'execution_projection_source': {execution_projection_source!r}}}" in output
+    assert (
+        f"governance_sources={{'summary_source': {summary_source!r}, 'execution_projection_source': {execution_projection_source!r}}}"
+        in output
+    )
     assert "--- compact ---" in output
     assert "total=1" in output
-
 
 
 def assert_runtime_stable_output_fields(
@@ -207,16 +174,16 @@ def assert_runtime_stable_output_fields(
         assert payload[PAYLOAD_KEY_BLOCK_REASONS] == block_reasons
 
 
-
 def run_json_with_stats_contract(*, actual_run_cli, manager_payload, manager_result, monkeypatch):
     patch_prepare_results_with_contract(monkeypatch, manager_payload, manager_result)
-    return json.loads(actual_run_cli(
-        "--scenario",
-        "long",
-        "--json",
-        "--json-with-stats",
-    ))
-
+    return json.loads(
+        actual_run_cli(
+            "--scenario",
+            "long",
+            "--json",
+            "--json-with-stats",
+        )
+    )
 
 
 def test_v9_shadow_load_formal_baseline_suites_from_manifest():
@@ -224,74 +191,94 @@ def test_v9_shadow_load_formal_baseline_suites_from_manifest():
     suites = load_formal_baseline_suites()
 
     assert manifest.version == "2"
-    assert manifest.description == "Formal baseline suites for V9 shadow neutral stability, actionable decision, and risk boundary acceptance checks."
-    assert [suite.key for suite in suites] == ["neutral_stability", "actionable_decisions", "risk_boundary"]
+    assert (
+        manifest.description
+        == "Formal baseline suites for V9 shadow neutral stability, actionable decision, and risk boundary acceptance checks."
+    )
+    assert [suite.key for suite in suites] == [
+        "neutral_stability",
+        "actionable_decisions",
+        "risk_boundary",
+    ]
     assert suites[0].batch_file == "D:/cursor/data/snapshots/v9_shadow_neutral_batch.json"
     assert suites[0].baseline_dir == "D:/cursor/data/replays/v9_shadow_baselines/neutral_stability"
     assert suites[1].batch_file == "D:/cursor/data/snapshots/v9_shadow_actionable_batch.json"
-    assert suites[1].baseline_dir == "D:/cursor/data/replays/v9_shadow_baselines/actionable_decisions"
+    assert (
+        suites[1].baseline_dir == "D:/cursor/data/replays/v9_shadow_baselines/actionable_decisions"
+    )
     assert suites[2].batch_file == "D:/cursor/data/snapshots/v9_shadow_edge_batch.json"
     assert suites[2].baseline_dir == "D:/cursor/data/replays/v9_shadow_baselines/risk_boundary"
-
 
 
 def test_v9_shadow_load_formal_baseline_suites_rejects_missing_version(tmp_path):
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(
-        json.dumps({
-            "description": "test manifest",
-            "suites": [],
-        }),
+        json.dumps(
+            {
+                "description": "test manifest",
+                "suites": [],
+            }
+        ),
         encoding="utf-8",
     )
 
     try:
         load_formal_baseline_suites(str(manifest_path))
     except FeatureInputError as exc:
-        assert str(exc) == f"Formal baseline manifest is missing required field 'version': {manifest_path}"
+        assert (
+            str(exc)
+            == f"Formal baseline manifest is missing required field 'version': {manifest_path}"
+        )
     else:
         raise AssertionError("Expected FeatureInputError for missing manifest version")
-
 
 
 def test_v9_shadow_load_formal_baseline_suites_rejects_non_string_version(tmp_path):
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(
-        json.dumps({
-            "version": 1,
-            "description": "test manifest",
-            "suites": [],
-        }),
+        json.dumps(
+            {
+                "version": 1,
+                "description": "test manifest",
+                "suites": [],
+            }
+        ),
         encoding="utf-8",
     )
 
     try:
         load_formal_baseline_suites(str(manifest_path))
     except FeatureInputError as exc:
-        assert str(exc) == f"Formal baseline manifest field 'version' must be a string: {manifest_path}"
+        assert (
+            str(exc)
+            == f"Formal baseline manifest field 'version' must be a string: {manifest_path}"
+        )
     else:
         raise AssertionError("Expected FeatureInputError for non-string manifest version")
-
 
 
 def test_v9_shadow_load_formal_baseline_suites_rejects_non_string_description(tmp_path):
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(
-        json.dumps({
-            "version": "1",
-            "description": 123,
-            "suites": [],
-        }),
+        json.dumps(
+            {
+                "version": "1",
+                "description": 123,
+                "suites": [],
+            }
+        ),
         encoding="utf-8",
     )
 
     try:
         load_formal_baseline_suites(str(manifest_path))
     except FeatureInputError as exc:
-        assert str(exc) == f"Formal baseline manifest field 'description' must be a string: {manifest_path}"
+        assert (
+            str(exc)
+            == f"Formal baseline manifest field 'description' must be a string: {manifest_path}"
+        )
     else:
         raise AssertionError("Expected FeatureInputError for non-string manifest description")
-
 
 
 def test_v9_shadow_load_formal_baseline_suites_rejects_invalid_json(tmp_path):
@@ -301,10 +288,12 @@ def test_v9_shadow_load_formal_baseline_suites_rejects_invalid_json(tmp_path):
     try:
         load_formal_baseline_suites(str(manifest_path))
     except FeatureInputError as exc:
-        assert str(exc) == f"Invalid formal baseline manifest JSON in {manifest_path}: Expecting property name enclosed in double quotes"
+        assert (
+            str(exc)
+            == f"Invalid formal baseline manifest JSON in {manifest_path}: Expecting property name enclosed in double quotes"
+        )
     else:
         raise AssertionError("Expected FeatureInputError for invalid manifest JSON")
-
 
 
 def test_v9_shadow_load_formal_baseline_suites_rejects_non_object_payload(tmp_path):
@@ -319,18 +308,20 @@ def test_v9_shadow_load_formal_baseline_suites_rejects_non_object_payload(tmp_pa
         raise AssertionError("Expected FeatureInputError for non-object manifest payload")
 
 
-
 def test_v9_shadow_load_formal_baseline_suites_rejects_non_array_suites(tmp_path):
     manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(json.dumps({"version": "1", "suites": {"key": "core"}}), encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps({"version": "1", "suites": {"key": "core"}}), encoding="utf-8"
+    )
 
     try:
         load_formal_baseline_suites(str(manifest_path))
     except FeatureInputError as exc:
-        assert str(exc) == f"Formal baseline manifest 'suites' must be a JSON array: {manifest_path}"
+        assert (
+            str(exc) == f"Formal baseline manifest 'suites' must be a JSON array: {manifest_path}"
+        )
     else:
         raise AssertionError("Expected FeatureInputError for non-array suites")
-
 
 
 def test_v9_shadow_load_formal_baseline_suites_rejects_non_object_suite_item(tmp_path):
@@ -345,17 +336,20 @@ def test_v9_shadow_load_formal_baseline_suites_rejects_non_object_suite_item(tmp
         raise AssertionError("Expected FeatureInputError for non-object suite item")
 
 
-
 def test_v9_shadow_load_formal_baseline_suites_rejects_missing_key(tmp_path):
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(
-        json.dumps({
-            "version": "1",
-            "suites": [{
-                "batch_file": "D:/cursor/data/snapshots/v9_shadow_batch.json",
-                "baseline_dir": "D:/cursor/data/replays/v9_shadow_baselines/core",
-            }]
-        }),
+        json.dumps(
+            {
+                "version": "1",
+                "suites": [
+                    {
+                        "batch_file": "D:/cursor/data/snapshots/v9_shadow_batch.json",
+                        "baseline_dir": "D:/cursor/data/replays/v9_shadow_baselines/core",
+                    }
+                ],
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -367,7 +361,6 @@ def test_v9_shadow_load_formal_baseline_suites_rejects_missing_key(tmp_path):
         raise AssertionError("Expected FeatureInputError for missing suite key")
 
 
-
 def test_v9_shadow_load_feature_source_from_json():
     feature_source = load_feature_source_from_json("D:/cursor/data/snapshots/v9_shadow_long.json")
 
@@ -376,18 +369,19 @@ def test_v9_shadow_load_feature_source_from_json():
     assert feature_source["M5_Ret_1"] == 0.0012
 
 
-
 def test_v9_shadow_load_feature_source_from_json_supports_embedded_features_shape(tmp_path):
     sample_path = tmp_path / "embedded_sample.json"
     sample_path.write_text(
-        json.dumps({
-            "name": "embedded_long",
-            "description": "embedded description",
-            "features": {
-                "M5_Ret_1": 0.123,
-                "H1_Hurst": -1.1,
-            },
-        }),
+        json.dumps(
+            {
+                "name": "embedded_long",
+                "description": "embedded description",
+                "features": {
+                    "M5_Ret_1": 0.123,
+                    "H1_Hurst": -1.1,
+                },
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -399,14 +393,14 @@ def test_v9_shadow_load_feature_source_from_json_supports_embedded_features_shap
     assert feature_source["M15_RSI_14"] == 0.0
 
 
-
 def test_v9_shadow_load_neutral_feature_source_from_json():
-    feature_source = load_feature_source_from_json("D:/cursor/data/snapshots/v9_shadow_neutral.json")
+    feature_source = load_feature_source_from_json(
+        "D:/cursor/data/snapshots/v9_shadow_neutral.json"
+    )
 
     assert len(feature_source) == 40
     assert feature_source["H1_Hurst"] == 0.21
     assert feature_source["M15_RSI_14"] == 58.0
-
 
 
 def test_v9_shadow_load_short_feature_source_from_json():
@@ -417,20 +411,23 @@ def test_v9_shadow_load_short_feature_source_from_json():
     assert abs(feature_source["M15_Hurst"]) == 0.65
 
 
-
 def test_v9_shadow_load_feature_batch_from_json():
     batch = load_feature_batch_from_json("D:/cursor/data/snapshots/v9_shadow_batch.json")
 
     assert len(batch) == 3
     assert batch[0]["name"] == "neutral_case"
-    assert batch[0]["description"] == "Default reference sample expected to remain passive and abstain."
+    assert (
+        batch[0]["description"]
+        == "Default reference sample expected to remain passive and abstain."
+    )
     assert batch[1]["name"] == "long_case"
     assert batch[1]["description"] == "Lower H1_Hurst to push the model into an open long decision."
     assert batch[2]["name"] == "short_case"
-    assert batch[2]["description"] == "Invert the M15 feature group to trigger an open short decision."
+    assert (
+        batch[2]["description"] == "Invert the M15 feature group to trigger an open short decision."
+    )
     assert batch[1]["feature_source"]["H1_Hurst"] == -1.1
     assert abs(batch[2]["feature_source"]["M15_RSI_14"]) == 145.0
-
 
 
 def test_v9_shadow_load_feature_samples_from_dir():
@@ -464,18 +461,19 @@ def test_v9_shadow_load_feature_samples_from_dir():
     assert abs(samples[4]["feature_source"]["M15_RSI_14"]) == 145.0
 
 
-
 def test_v9_shadow_load_feature_samples_from_dir_uses_embedded_metadata(tmp_path):
     sample_path = tmp_path / "custom_sample.json"
     sample_path.write_text(
-        json.dumps({
-            "name": "custom_case",
-            "description": "custom description",
-            "features": {
-                "M5_Ret_1": 0.456,
-                "H1_Hurst": -1.1,
-            },
-        }),
+        json.dumps(
+            {
+                "name": "custom_case",
+                "description": "custom description",
+                "features": {
+                    "M5_Ret_1": 0.456,
+                    "H1_Hurst": -1.1,
+                },
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -490,16 +488,21 @@ def test_v9_shadow_load_feature_samples_from_dir_uses_embedded_metadata(tmp_path
     assert samples[0]["feature_source"]["M15_RSI_14"] == 0.0
 
 
-
 def test_v9_shadow_cli_feature_batch_json_output():
-    payload = json.loads(run_cli(
-        "--feature-batch-file",
-        "D:/cursor/data/snapshots/v9_shadow_batch.json",
-        "--json",
-    ))
+    payload = json.loads(
+        run_cli(
+            "--feature-batch-file",
+            "D:/cursor/data/snapshots/v9_shadow_batch.json",
+            "--json",
+        )
+    )
 
     assert [item["scenario"] for item in payload] == ["neutral_case", "long_case", "short_case"]
-    assert [item["feature_source_type"] for item in payload] == ["batch_file", "batch_file", "batch_file"]
+    assert [item["feature_source_type"] for item in payload] == [
+        "batch_file",
+        "batch_file",
+        "batch_file",
+    ]
     assert [item["sample_description"] for item in payload] == [
         "Default reference sample expected to remain passive and abstain.",
         "Lower H1_Hurst to push the model into an open long decision.",
@@ -509,13 +512,14 @@ def test_v9_shadow_cli_feature_batch_json_output():
     assert [item["side"] for item in payload] == ["flat", "long", "short"]
 
 
-
 def test_v9_shadow_cli_feature_dir_json_output():
-    payload = json.loads(run_cli(
-        "--feature-dir",
-        "D:/cursor/data/snapshots",
-        "--json",
-    ))
+    payload = json.loads(
+        run_cli(
+            "--feature-dir",
+            "D:/cursor/data/snapshots",
+            "--json",
+        )
+    )
 
     assert [item["scenario"] for item in payload] == [
         "edge_allow_case",
@@ -543,14 +547,15 @@ def test_v9_shadow_cli_feature_dir_json_output():
     assert [item["side"] for item in payload] == ["flat", "flat", "long", "flat", "short"]
 
 
-
 def test_v9_shadow_cli_json_with_stats_output():
-    output = json.loads(run_cli(
-        "--feature-batch-file",
-        "D:/cursor/data/snapshots/v9_shadow_actionable_batch.json",
-        "--json",
-        "--json-with-stats",
-    ))
+    output = json.loads(
+        run_cli(
+            "--feature-batch-file",
+            "D:/cursor/data/snapshots/v9_shadow_actionable_batch.json",
+            "--json",
+            "--json-with-stats",
+        )
+    )
 
     assert output["meta"]["output_mode"] == "json"
     assert output["meta"]["source_type"] == "batch_file"
@@ -558,14 +563,17 @@ def test_v9_shadow_cli_json_with_stats_output():
     assert output["meta"]["scenario_count"] == 2
     assert output["meta"]["result_count"] == 2
     assert output["meta"]["manifest"]["version"] == "2"
-    assert output["meta"]["manifest"]["path"].replace("\\", "/").endswith("/data/replays/v9_shadow_baselines/manifest.json")
+    assert (
+        output["meta"]["manifest"]["path"]
+        .replace("\\", "/")
+        .endswith("/data/replays/v9_shadow_baselines/manifest.json")
+    )
     assert output["stats"]["total"] == 2
     assert output["stats"]["side_actions"]["long.open"] == 1
     assert output["stats"]["side_actions"]["short.open"] == 1
     assert output["stats"]["risk_dispatches"]["allow.protocol_validated"] == 2
     assert output["results"][0]["scenario"] == "long_case"
     assert all(item["scenario"] in {"long_case", "short_case"} for item in output["results"])
-
 
 
 def test_v9_shadow_cli_rejects_removed_positional_scenario_argument():
@@ -576,14 +584,15 @@ def test_v9_shadow_cli_rejects_removed_positional_scenario_argument():
     assert "unrecognized arguments: long" in stderr
 
 
-
 def test_v9_shadow_cli_json_include_meta_without_stats_output():
-    output = json.loads(run_cli(
-        "--feature-batch-file",
-        "D:/cursor/data/snapshots/v9_shadow_actionable_batch.json",
-        "--json",
-        "--json-include-meta",
-    ))
+    output = json.loads(
+        run_cli(
+            "--feature-batch-file",
+            "D:/cursor/data/snapshots/v9_shadow_actionable_batch.json",
+            "--json",
+            "--json-include-meta",
+        )
+    )
 
     assert output["meta"]["output_mode"] == "json"
     assert output["meta"]["source_type"] == "batch_file"
@@ -593,7 +602,6 @@ def test_v9_shadow_cli_json_include_meta_without_stats_output():
     assert "stats" not in output
     assert len(output["results"]) == 2
     assert [item["scenario"] for item in output["results"]] == ["long_case", "short_case"]
-
 
 
 def test_v9_shadow_cli_summary_full_output_contains_compact_footer():
@@ -607,13 +615,17 @@ def test_v9_shadow_cli_summary_full_output_contains_compact_footer():
 
     assert "scenario=long_case" in output
     assert "scenario=short_case" in output
-    assert "sample_description=Lower H1_Hurst to push the model into an open long decision." in output
-    assert "sample_description=Invert the M15 feature group to trigger an open short decision." in output
+    assert (
+        "sample_description=Lower H1_Hurst to push the model into an open long decision." in output
+    )
+    assert (
+        "sample_description=Invert the M15 feature group to trigger an open short decision."
+        in output
+    )
     assert "--- compact_stats ---" in output
     assert "total=2" in output
     assert "side_actions={'long.open': 1, 'short.open': 1}" in output
     assert "risk_dispatches={'allow.protocol_validated': 2}" in output
-
 
 
 def test_v9_shadow_cli_stats_compact_output():
@@ -632,7 +644,6 @@ def test_v9_shadow_cli_stats_compact_output():
     assert "dispatch_statuses={'protocol_validated': 2}" in output
     assert "side_actions={'long.open': 1, 'short.open': 1}" in output
     assert "risk_dispatches={'allow.protocol_validated': 2}" in output
-
 
 
 def test_v9_shadow_summary_output_includes_communication_operation_mirrors(monkeypatch):
@@ -672,7 +683,6 @@ def test_v9_shadow_summary_output_includes_communication_operation_mirrors(monke
         execution_projection_source=None,
         summary_prefix="scenario=long_case",
     )
-
 
 
 def test_v9_shadow_json_with_stats_output_includes_communication_operation_mirrors(monkeypatch):
@@ -722,7 +732,6 @@ def test_v9_shadow_json_with_stats_output_includes_communication_operation_mirro
     assert output["stats"]["side_actions"] == {"long.open": 1}
 
 
-
 def test_v9_shadow_apply_stable_output_contract_normalizes_summary_only_payload():
     payload = {
         "scenario": "long_case",
@@ -743,7 +752,6 @@ def test_v9_shadow_apply_stable_output_contract_normalizes_summary_only_payload(
         summary_source="summary.source",
         execution_projection_source="summary.execution",
     )
-
 
 
 def test_v9_shadow_output_extensions_prefer_operations_summary_over_stale_result_mirrors():
@@ -787,7 +795,6 @@ def test_v9_shadow_output_extensions_prefer_operations_summary_over_stale_result
     )
 
 
-
 def test_v9_shadow_output_extensions_backfill_operations_summary_from_result_when_missing():
     manager_payload = build_summary_payload(
         "long_case",
@@ -797,9 +804,7 @@ def test_v9_shadow_output_extensions_backfill_operations_summary_from_result_whe
         sample_description="contract sample",
     )
     manager_payload = {
-        key: value
-        for key, value in manager_payload.items()
-        if key != "operations_summary"
+        key: value for key, value in manager_payload.items() if key != "operations_summary"
     }
     result_stub = SimpleNamespace(
         communication_operations={
@@ -832,21 +837,23 @@ def test_v9_shadow_output_extensions_backfill_operations_summary_from_result_whe
 
 
 def test_v9_shadow_apply_stable_output_contract_mirrors_replay_execution_fields():
-    payload = apply_stable_output_contract({
-        "scenario": "long_case",
-        PAYLOAD_KEY_OPERATIONS_SUMMARY: {
-            PAYLOAD_KEY_POSTURE: "targeted_replay",
-            PAYLOAD_KEY_POSTURE_SOURCE: "summary.posture",
-            PAYLOAD_KEY_GOVERNANCE_SUMMARY_SOURCE: "summary.source",
-            PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE: "summary.execution",
-            PAYLOAD_KEY_EXECUTION_MODE: "targeted",
-            PAYLOAD_KEY_EXECUTED_MESSAGE_IDS: ["message_001"],
-            PAYLOAD_KEY_SKIPPED_MESSAGE_IDS: ["message_002"],
-            PAYLOAD_KEY_BLOCKED_MESSAGE_IDS: [],
-            PAYLOAD_KEY_SKIP_REASONS: {"skip_acknowledged_message": ["message_002"]},
-            PAYLOAD_KEY_BLOCK_REASONS: {},
-        },
-    })
+    payload = apply_stable_output_contract(
+        {
+            "scenario": "long_case",
+            PAYLOAD_KEY_OPERATIONS_SUMMARY: {
+                PAYLOAD_KEY_POSTURE: "targeted_replay",
+                PAYLOAD_KEY_POSTURE_SOURCE: "summary.posture",
+                PAYLOAD_KEY_GOVERNANCE_SUMMARY_SOURCE: "summary.source",
+                PAYLOAD_KEY_EXECUTION_PROJECTION_SOURCE: "summary.execution",
+                PAYLOAD_KEY_EXECUTION_MODE: "targeted",
+                PAYLOAD_KEY_EXECUTED_MESSAGE_IDS: ["message_001"],
+                PAYLOAD_KEY_SKIPPED_MESSAGE_IDS: ["message_002"],
+                PAYLOAD_KEY_BLOCKED_MESSAGE_IDS: [],
+                PAYLOAD_KEY_SKIP_REASONS: {"skip_acknowledged_message": ["message_002"]},
+                PAYLOAD_KEY_BLOCK_REASONS: {},
+            },
+        }
+    )
 
     assert_runtime_stable_output_fields(
         payload,
@@ -863,7 +870,9 @@ def test_v9_shadow_apply_stable_output_contract_mirrors_replay_execution_fields(
     )
 
 
-def test_v9_shadow_cli_out_multi_base_writes_summary_json_stats_using_recommended_overrides(tmp_path):
+def test_v9_shadow_cli_out_multi_base_writes_summary_json_stats_using_recommended_overrides(
+    tmp_path,
+):
     base_path = tmp_path / "reports" / "replay"
 
     stdout = run_cli(
@@ -903,8 +912,6 @@ def test_v9_shadow_cli_out_multi_base_writes_summary_json_stats_using_recommende
     assert stats_payload["side_actions"] == {"long.open": 1, "short.open": 1}
 
 
-
-
 def test_v9_shadow_cli_out_multi_base_rejects_removed_legacy_by_mode_overrides(tmp_path):
     base_path = tmp_path / "reports" / "legacy_replay"
 
@@ -922,7 +929,6 @@ def test_v9_shadow_cli_out_multi_base_rejects_removed_legacy_by_mode_overrides(t
 
     assert stdout == ""
     assert exit_code == 2
-
 
 
 def test_v9_shadow_cli_out_multi_writes_explicit_paths(tmp_path):
@@ -961,12 +967,14 @@ def test_v9_shadow_cli_out_multi_writes_explicit_paths(tmp_path):
     stats_text = stats_path.read_text(encoding="utf-8")
     assert json_payload["meta"]["source_type"] == "batch_file"
     assert len(json_payload["results"]) == 2
-    assert csv_text.splitlines()[0] == "scenario,feature_source_type,feature_file,sample_description,symbol,mode,action,side,conviction,risk_status,dispatch_status,brain_count,ledger_path,record_id"
+    assert (
+        csv_text.splitlines()[0]
+        == "scenario,feature_source_type,feature_file,sample_description,symbol,mode,action,side,conviction,risk_status,dispatch_status,brain_count,ledger_path,record_id"
+    )
     assert "long_case" in csv_text
     assert "short_case" in csv_text
     assert "total=2" in stats_text
     assert "dispatch_statuses.protocol_validated=2" in stats_text
-
 
 
 def test_v9_shadow_cli_out_suffix_inference_for_json_summary_stats(tmp_path):
@@ -1004,7 +1012,6 @@ def test_v9_shadow_cli_out_suffix_inference_for_json_summary_stats(tmp_path):
     assert "risk_dispatches.allow.protocol_validated=2" in stats_path.read_text(encoding="utf-8")
 
 
-
 def test_v9_shadow_session_sse_completed_flow_smoke():
     args = SimpleNamespace(
         scenario_flag="long",
@@ -1013,7 +1020,9 @@ def test_v9_shadow_session_sse_completed_flow_smoke():
         feature_batch_file=None,
         feature_dir=None,
     )
-    stream_plan = SessionStreamPlan(include_meta=True, include_stats=True, event_name_prefix="session")
+    stream_plan = SessionStreamPlan(
+        include_meta=True, include_stats=True, event_name_prefix="session"
+    )
 
     manager_events = list(ShadowSessionManager(stream_plan=stream_plan).stream_run(args))
     sse_chunks = list(stream_session_sse(args, stream_plan=stream_plan))
@@ -1044,14 +1053,13 @@ def test_v9_shadow_session_sse_completed_flow_smoke():
     assert results["side"] == "long"
 
 
-
 def test_v9_shadow_session_sse_server_smoke_completed_flow():
     server = run_shadow_session_sse_server(host="127.0.0.1", port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
         host, port = server.server_address
-        connection = HTTPConnection(host, port, timeout=5)
+        connection = HTTPConnection(host, port, timeout=5)  # type: ignore[reportArgumentType]
         connection.request(
             "GET",
             "/engine/v9-shadow/stream?scenario=long&include_meta=true&include_stats=true",
@@ -1077,14 +1085,13 @@ def test_v9_shadow_session_sse_server_smoke_completed_flow():
     assert completed["results"]["scenario"] == "long"
 
 
-
 def test_v9_shadow_session_sse_server_smoke_error_flow():
     server = run_shadow_session_sse_server(host="127.0.0.1", port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
         host, port = server.server_address
-        connection = HTTPConnection(host, port, timeout=5)
+        connection = HTTPConnection(host, port, timeout=5)  # type: ignore[reportArgumentType]
         connection.request(
             "GET",
             "/engine/v9-shadow/stream?feature_file=one.json&feature_batch_file=two.json",
@@ -1102,8 +1109,10 @@ def test_v9_shadow_session_sse_server_smoke_error_flow():
     assert [message["event"] for message in messages] == ["session.error"]
     error_payload = messages[0]["data"]["data"]
     assert error_payload["error_type"] == "SessionStreamQueryError"
-    assert error_payload["message"] == "Use only one of --feature-file, --feature-batch-file, or --feature-dir."
-
+    assert (
+        error_payload["message"]
+        == "Use only one of --feature-file, --feature-batch-file, or --feature-dir."
+    )
 
 
 def test_v9_shadow_cli_write_and_check_baseline_smoke(tmp_path):
@@ -1135,7 +1144,6 @@ def test_v9_shadow_cli_write_and_check_baseline_smoke(tmp_path):
     assert "changes[0].scenario=long" in check_stdout
 
 
-
 def test_v9_shadow_cli_write_and_check_batch_baselines_smoke(tmp_path):
     baseline_dir = tmp_path / "batch_baselines"
 
@@ -1163,12 +1171,13 @@ def test_v9_shadow_cli_write_and_check_batch_baselines_smoke(tmp_path):
     assert "diff_count=0" in check_stdout
 
 
-
 def test_v9_shadow_cli_check_formal_baselines_json_smoke():
-    output = json.loads(run_cli(
-        "--check-formal-baselines",
-        "--json",
-    ))
+    output = json.loads(
+        run_cli(
+            "--check-formal-baselines",
+            "--json",
+        )
+    )
 
     assert output["meta"]["output_mode"] == "json"
     assert output["meta"]["suite_count"] == 3
@@ -1186,9 +1195,10 @@ def test_v9_shadow_cli_check_formal_baselines_json_smoke():
     ]
 
 
-
 def test_v9_shadow_cli_rebuild_formal_baselines_json_smoke(tmp_path):
-    manifest = json.loads(Path("D:/cursor/data/replays/v9_shadow_baselines/manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads(
+        Path("D:/cursor/data/replays/v9_shadow_baselines/manifest.json").read_text(encoding="utf-8")
+    )
     rebuilt_manifest = {
         **manifest,
         "suites": [
@@ -1202,12 +1212,14 @@ def test_v9_shadow_cli_rebuild_formal_baselines_json_smoke(tmp_path):
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps(rebuilt_manifest), encoding="utf-8")
 
-    output = json.loads(run_cli(
-        "--formal-baseline-manifest",
-        str(manifest_path),
-        "--rebuild-formal-baselines",
-        "--json",
-    ))
+    output = json.loads(
+        run_cli(
+            "--formal-baseline-manifest",
+            str(manifest_path),
+            "--rebuild-formal-baselines",
+            "--json",
+        )
+    )
 
     assert output["meta"]["output_mode"] == "json"
     assert output["meta"]["suite_count"] == 3
@@ -1224,14 +1236,13 @@ def test_v9_shadow_cli_rebuild_formal_baselines_json_smoke(tmp_path):
     assert sum(len(suite["written_paths"]) for suite in output["suites"]) == 5
 
 
-
 def test_v9_shadow_session_sse_server_event_prefix_query_smoke():
     server = run_shadow_session_sse_server(host="127.0.0.1", port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
         host, port = server.server_address
-        connection = HTTPConnection(host, port, timeout=5)
+        connection = HTTPConnection(host, port, timeout=5)  # type: ignore[reportArgumentType]
         connection.request(
             "GET",
             "/engine/v9-shadow/stream?scenario=long&event_prefix=shadow&include_meta=false&include_stats=false",
@@ -1256,14 +1267,13 @@ def test_v9_shadow_session_sse_server_event_prefix_query_smoke():
     assert completed["results"]["scenario"] == "long"
 
 
-
 def test_v9_shadow_session_sse_server_invalid_event_prefix_error_smoke():
     server = run_shadow_session_sse_server(host="127.0.0.1", port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
         host, port = server.server_address
-        connection = HTTPConnection(host, port, timeout=5)
+        connection = HTTPConnection(host, port, timeout=5)  # type: ignore[reportArgumentType]
         connection.request(
             "GET",
             "/engine/v9-shadow/stream?scenario=long&event_prefix=bad.prefix",
@@ -1283,14 +1293,13 @@ def test_v9_shadow_session_sse_server_invalid_event_prefix_error_smoke():
     assert error_payload["message"] == "event_prefix must not contain dots"
 
 
-
 def test_v9_shadow_session_sse_server_invalid_bool_query_error_smoke():
     server = run_shadow_session_sse_server(host="127.0.0.1", port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
         host, port = server.server_address
-        connection = HTTPConnection(host, port, timeout=5)
+        connection = HTTPConnection(host, port, timeout=5)  # type: ignore[reportArgumentType]
         connection.request(
             "GET",
             "/engine/v9-shadow/stream?scenario=long&include_stats=maybe",
@@ -1310,13 +1319,14 @@ def test_v9_shadow_session_sse_server_invalid_bool_query_error_smoke():
     assert error_payload["message"] == "Invalid boolean query value: maybe"
 
 
-
 def test_v9_shadow_cli_feature_file_json_output():
-    payload = json.loads(run_cli(
-        "--feature-file",
-        "D:/cursor/data/snapshots/v9_shadow_long.json",
-        "--json",
-    ))
+    payload = json.loads(
+        run_cli(
+            "--feature-file",
+            "D:/cursor/data/snapshots/v9_shadow_long.json",
+            "--json",
+        )
+    )
 
     assert [item["scenario"] for item in payload] == ["neutral", "long", "short"]
     assert [item["feature_source_type"] for item in payload] == ["file", "file", "file"]
@@ -1327,7 +1337,6 @@ def test_v9_shadow_cli_feature_file_json_output():
     ]
     assert [item["action"] for item in payload] == ["open", "open", "open"]
     assert [item["side"] for item in payload] == ["long", "long", "long"]
-
 
 
 def test_v9_shadow_cli_feature_file_summary_output():
@@ -1347,7 +1356,6 @@ def test_v9_shadow_cli_feature_file_summary_output():
     assert "side_actions={'long.open': 3}" in output
 
 
-
 def test_v9_shadow_cli_feature_file_csv_output():
     output = run_cli(
         "--feature-file",
@@ -1356,7 +1364,10 @@ def test_v9_shadow_cli_feature_file_csv_output():
     )
 
     lines = output.splitlines()
-    assert lines[0] == "scenario,feature_source_type,feature_file,sample_description,symbol,mode,action,side,conviction,risk_status,dispatch_status,brain_count,ledger_path,record_id"
+    assert (
+        lines[0]
+        == "scenario,feature_source_type,feature_file,sample_description,symbol,mode,action,side,conviction,risk_status,dispatch_status,brain_count,ledger_path,record_id"
+    )
     assert len(lines) == 4
     assert '"neutral","file","D:/cursor/data/snapshots/v9_shadow_long.json"' in lines[1]
     assert '"long","file","D:/cursor/data/snapshots/v9_shadow_long.json"' in lines[2]
@@ -1364,7 +1375,6 @@ def test_v9_shadow_cli_feature_file_csv_output():
     assert '"open","long"' in lines[1]
     assert '"open","long"' in lines[2]
     assert '"open","long"' in lines[3]
-
 
 
 def test_v9_shadow_cli_feature_dir_summary_output():
@@ -1386,7 +1396,6 @@ def test_v9_shadow_cli_feature_dir_summary_output():
     assert "sides={'flat': 3, 'long': 1, 'short': 1}" in output
 
 
-
 def test_v9_shadow_cli_feature_dir_csv_output():
     output = run_cli(
         "--feature-dir",
@@ -1395,7 +1404,10 @@ def test_v9_shadow_cli_feature_dir_csv_output():
     )
 
     lines = output.splitlines()
-    assert lines[0] == "scenario,feature_source_type,feature_file,sample_description,symbol,mode,action,side,conviction,risk_status,dispatch_status,brain_count,ledger_path,record_id"
+    assert (
+        lines[0]
+        == "scenario,feature_source_type,feature_file,sample_description,symbol,mode,action,side,conviction,risk_status,dispatch_status,brain_count,ledger_path,record_id"
+    )
     assert len(lines) == 6
     assert any('"edge_allow_case","dir_file"' in line for line in lines[1:])
     assert any('"edge_deny_case","dir_file"' in line for line in lines[1:])
@@ -1405,7 +1417,6 @@ def test_v9_shadow_cli_feature_dir_csv_output():
     assert any('"abstain","flat"' in line for line in lines[1:])
     assert any('"open","long"' in line for line in lines[1:])
     assert any('"open","short"' in line for line in lines[1:])
-
 
 
 def test_v9_shadow_assert_formal_baseline_gate_and_semantics_smoke():
@@ -1425,9 +1436,10 @@ def test_v9_shadow_assert_formal_baseline_gate_and_semantics_smoke():
     ]
 
 
-
 def test_v9_shadow_rebuild_formal_baseline_suites_returns_written_paths(tmp_path):
-    manifest = json.loads(Path("D:/cursor/data/replays/v9_shadow_baselines/manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads(
+        Path("D:/cursor/data/replays/v9_shadow_baselines/manifest.json").read_text(encoding="utf-8")
+    )
     rebuilt_manifest = {
         **manifest,
         "suites": [
@@ -1455,7 +1467,6 @@ def test_v9_shadow_rebuild_formal_baseline_suites_returns_written_paths(tmp_path
     }
 
 
-
 def test_v9_shadow_check_regression_baseline_matches_written_baseline(tmp_path):
     payload = build_summary_payload("long", run_scenario("long"), feature_source_type="scenario")
     baseline_path = tmp_path / "single.baseline.json"
@@ -1469,7 +1480,6 @@ def test_v9_shadow_check_regression_baseline_matches_written_baseline(tmp_path):
     assert diff == {"matches": True, "change_count": 0, "changes": []}
 
 
-
 def test_v9_shadow_check_batch_regression_baselines_matches_written_batch(tmp_path):
     batch = load_feature_batch_from_json("D:/cursor/data/snapshots/v9_shadow_actionable_batch.json")
     write_batch_regression_baselines(str(tmp_path), batch)
@@ -1479,20 +1489,21 @@ def test_v9_shadow_check_batch_regression_baselines_matches_written_batch(tmp_pa
     assert diff == {"matches": True, "missing": [], "diffs": []}
 
 
-
 def test_v9_shadow_render_json_output_summary_stats_and_stream_helpers():
     payloads = [
         build_summary_payload("long", run_scenario("long"), feature_source_type="scenario"),
         build_summary_payload("short", run_scenario("short"), feature_source_type="scenario"),
     ]
 
-    json_output = json.loads(render_json_output(
-        payloads,
-        include_stats=True,
-        output_mode="json",
-        source_type="scenario",
-        include_meta=True,
-    ))
+    json_output = json.loads(
+        render_json_output(
+            payloads,
+            include_stats=True,
+            output_mode="json",
+            source_type="scenario",
+            include_meta=True,
+        )
+    )
     summary_output = render_summary_output(payloads, style="full", include_compact_stats=True)
     stats_output = render_stats_text(json_output["stats"])
     envelope = build_stream_envelope(
@@ -1522,7 +1533,6 @@ def test_v9_shadow_render_json_output_summary_stats_and_stream_helpers():
     assert meta["source_type"] == "scenario"
     assert meta["scenario_count"] == 2
     assert meta["result_count"] == 2
-
 
 
 def test_v9_shadow_render_output_content_json_preserves_single_payload_source_type():
