@@ -409,6 +409,10 @@ def main(argv: list[str] | None = None) -> int:
     else:
         feature_store_disabled = True
 
+    # ── Initialize performance tracker (always-on, both single and multi-brain) ──
+    tracker = BrainPerformanceTracker(window_size=100)
+    weighter: Any = None
+
     # ── Initialize brain adapter(s) ──
     multi_brain = args.multi_brain
     brains: list[dict[str, Any]] = []  # list of {"brain_id": str, "adapter": brain}
@@ -442,7 +446,6 @@ def main(argv: list[str] | None = None) -> int:
                 mt5.shutdown()
             return 2
         parliament = ParliamentService()
-        tracker = BrainPerformanceTracker(window_size=100)
         weighter = DynamicBrainWeighter(tracker)
     else:
         if args.brain_type == "onnx_v9" and not args.no_mt5:
@@ -586,6 +589,14 @@ def main(argv: list[str] | None = None) -> int:
                         skip_event["out_vol"] = round(raw_output.get("out_vol", 0.0), 6)
                         skip_event["runtime_ms"] = round(raw_output.get("runtime_ms", 0.0), 2)
                         skip_event["backend"] = brain.describe()["backend"]
+                        brain_id = brain_entry.get("brain_id", "unknown")
+                        tracker.record_outcome(
+                            brain_id,
+                            {
+                                "composite_score": round(0.3 + confidence * 0.3, 4),
+                                "execution_outcome": "consensus_skip",
+                            },
+                        )
                     print(json.dumps(skip_event, ensure_ascii=False), flush=True)
                     if args.once:
                         break
@@ -636,6 +647,15 @@ def main(argv: list[str] | None = None) -> int:
                             pass
 
                         _record_brain_outcomes(proposals, direction, "shadow_verified", tracker)
+                    elif not multi_brain:
+                        brain_id = brain_entry.get("brain_id", "unknown")
+                        tracker.record_outcome(
+                            brain_id,
+                            {
+                                "composite_score": round(0.5 + confidence * 0.35, 4),
+                                "execution_outcome": "shadow_verified",
+                            },
+                        )
                 else:
                     # ── Get current prices for SL/TP computation ──
                     mid, bid, ask = _mid_and_prices(mt5, args.symbol)
@@ -700,6 +720,17 @@ def main(argv: list[str] | None = None) -> int:
                         dispatch_ok = out.get("status", "") not in ("error", "rejected", "timeout")
                         outcome = "filled" if dispatch_ok else "rejected"
                         _record_brain_outcomes(proposals, direction, outcome, tracker)
+                    else:
+                        dispatch_ok = out.get("status", "") not in ("error", "rejected", "timeout")
+                        outcome = "filled" if dispatch_ok else "rejected"
+                        brain_id = brain_entry.get("brain_id", "unknown")
+                        tracker.record_outcome(
+                            brain_id,
+                            {
+                                "composite_score": round(0.5 + confidence * 0.35, 4),
+                                "execution_outcome": outcome,
+                            },
+                        )
 
             except Exception as exc:
                 print(
@@ -716,12 +747,11 @@ def main(argv: list[str] | None = None) -> int:
             time.sleep(args.interval_seconds)
     finally:
         # Persist performance tracker so daily_ops governance can see the data
-        if multi_brain:
-            try:
-                save_path = Path(args.base_dir) / "brain_performance.json"
-                tracker.save(save_path)
-            except Exception:
-                pass
+        try:
+            save_path = Path(args.base_dir) / "brain_performance.json"
+            tracker.save(save_path)
+        except Exception:
+            pass
         if mt5 is not None:
             mt5.shutdown()  # type: ignore[attr-defined]
 

@@ -1,6 +1,11 @@
+import json
 from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 from core.contracts.exceptions import BrainNotFoundError, InvalidTransitionError
+
+GOVERNANCE_STATE_SCHEMA = "governance_state.v1"
 
 
 class GovernanceService:
@@ -25,10 +30,38 @@ class GovernanceService:
         "retired": set(),
     }
 
-    def __init__(self, audit_log=None):
+    def __init__(self, audit_log: Any = None):
         self._brain_states: dict[str, dict] = {}
         self._transition_log: list[dict] = []
         self._audit_log = audit_log
+
+    # ── persistence ──
+
+    def save(self, path: str | Path) -> Path:
+        """Persist governance state to a JSON file."""
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "schema_version": GOVERNANCE_STATE_SCHEMA,
+            "brain_states": self._brain_states,
+            "transition_log": self._transition_log,
+        }
+        out.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
+        )
+        return out
+
+    @classmethod
+    def load(cls, path: str | Path, audit_log: Any = None) -> "GovernanceService":
+        """Load governance state from a JSON file."""
+        src = Path(path)
+        if not src.exists():
+            raise FileNotFoundError(f"governance state file not found: {src}")
+        data = json.loads(src.read_text(encoding="utf-8"))
+        svc = cls(audit_log=audit_log)
+        svc._brain_states = data.get("brain_states", {})
+        svc._transition_log = data.get("transition_log", [])
+        return svc
 
     def register_brain(self, brain_id: str, initial_status: str = "candidate") -> dict:
         state = {

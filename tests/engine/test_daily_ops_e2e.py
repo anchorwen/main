@@ -63,6 +63,39 @@ def test_tracker_save_creates_valid_json(populated_tracker_path: Path):
     assert len(data["records"]["V9"]) == 30
 
 
+# ── GovernanceService persistence ──
+
+
+def test_governance_save_load_roundtrip(tmp_path: Path):
+    from core.governance.governance_service import GovernanceService
+
+    gov = GovernanceService()
+    gov.register_brain("V9", "live")
+    gov.register_brain("XGB", "candidate")
+    gov.transition("XGB", "live", reason="promoted")
+
+    path = tmp_path / "governance_state.json"
+    gov.save(path)
+    assert path.exists()
+
+    loaded = GovernanceService.load(path)
+    assert loaded.get_brain_state("V9")["status"] == "live"
+    assert loaded.get_brain_state("XGB")["status"] == "live"
+    assert len(loaded.get_transition_log()) == 1
+    assert loaded.get_transition_log()[0]["from_status"] == "candidate"
+    assert loaded.get_transition_log()[0]["to_status"] == "live"
+
+
+def test_governance_load_file_not_found(tmp_path: Path):
+    from core.governance.governance_service import GovernanceService
+
+    try:
+        GovernanceService.load(tmp_path / "nonexistent.json")
+        raise AssertionError("should have raised FileNotFoundError")
+    except FileNotFoundError:
+        pass
+
+
 # ── Governance with populated tracker ──
 
 
@@ -163,16 +196,11 @@ def test_daily_ops_full_pipeline_with_tracker(populated_tracker_path: Path, tmp_
     assert report["schema_version"] == "daily_ops.v1"
     steps = report["steps"]
 
-    # Should have tracker_loaded + governance + champion_challenger
+    # Should have state_loaded + governance + champion_challenger
     step_names = [s["step"] for s in steps]
-    assert "tracker_loaded" in step_names
+    assert "state_loaded" in step_names
     assert "governance" in step_names
     assert "champion_challenger" in step_names
-
-    # Verify tracker_loaded has brain count
-    tracker_step = [s for s in steps if s["step"] == "tracker_loaded"]
-    if tracker_step:
-        assert tracker_step[0]["brains_tracked"] == 3
 
     # Governance step should have assessed brains
     gov_step = [s for s in steps if s["step"] == "governance"]

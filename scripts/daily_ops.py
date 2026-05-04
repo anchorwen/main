@@ -32,6 +32,14 @@ THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = THIS_DIR.parent
 
 DEFAULT_TRACKER_PATH = "data/brain_performance.json"
+DEFAULT_GOVERNANCE_PATH = "data/governance_state.json"
+
+# Default brain registrations when creating a fresh governance service
+DEFAULT_BRAIN_REGISTRATIONS = {
+    "V9": "candidate",
+    "XGB": "candidate",
+    "OU": "candidate",
+}
 
 
 def _utc_now_iso() -> str:
@@ -59,6 +67,27 @@ def _load_or_create_tracker(base_dir: str) -> Any:
         return BrainPerformanceTracker(window_size=100)
 
 
+def _load_or_create_governance(base_dir: str) -> Any:
+    """Load persisted governance state, or create a fresh one with defaults."""
+    gov_path = Path(base_dir) / "governance_state.json"
+    try:
+        from core.governance.governance_service import GovernanceService
+
+        if gov_path.exists():
+            return GovernanceService.load(gov_path)
+        gov = GovernanceService()
+        for brain_id, status in DEFAULT_BRAIN_REGISTRATIONS.items():
+            gov.register_brain(brain_id, status)
+        return gov
+    except Exception:
+        from core.governance.governance_service import GovernanceService
+
+        gov = GovernanceService()
+        for brain_id, status in DEFAULT_BRAIN_REGISTRATIONS.items():
+            gov.register_brain(brain_id, status)
+        return gov
+
+
 def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
     """Run shadow ensemble and return summary."""
     try:
@@ -82,16 +111,16 @@ def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
 
 
 def _step_governance(
-    base_dir: str, *, dry_run: bool = False, tracker: Any = None
+    base_dir: str, *, dry_run: bool = False, tracker: Any = None, governance: Any = None
 ) -> dict[str, Any]:
     """Run governance cycle and return summary."""
     try:
-        from core.governance.governance_service import GovernanceService
         from scripts.training.governance_scheduler import run_governance_cycle
 
         if tracker is None:
             tracker = _load_or_create_tracker(base_dir)
-        governance = GovernanceService()
+        if governance is None:
+            governance = _load_or_create_governance(base_dir)
         report = run_governance_cycle(tracker, governance, dry_run=dry_run)
         return {
             "step": "governance",
@@ -107,16 +136,16 @@ def _step_governance(
 
 
 def _step_champion_challenger(
-    base_dir: str, *, dry_run: bool = False, tracker: Any = None
+    base_dir: str, *, dry_run: bool = False, tracker: Any = None, governance: Any = None
 ) -> dict[str, Any]:
     """Run champion/challenger promotion cycle and return summary."""
     try:
-        from core.governance.governance_service import GovernanceService
         from scripts.training.champion_challenger import run_promotion_cycle
 
         if tracker is None:
             tracker = _load_or_create_tracker(base_dir)
-        governance = GovernanceService()
+        if governance is None:
+            governance = _load_or_create_governance(base_dir)
         report = run_promotion_cycle(tracker, governance, dry_run=dry_run)
         return {
             "step": "champion_challenger",
@@ -192,19 +221,22 @@ def run_daily_ops(
     """
     steps: list[dict[str, Any]] = []
 
-    # Shared tracker: load persisted state so governance and champion
-    # see performance data accumulated by live_intent_loop.
-    shared_tracker = None
+    # Shared tracker + governance: load persisted state so governance and champion
+    # see data accumulated by live_intent_loop, and brain registrations survive restarts.
+    shared_tracker: Any = None
+    shared_governance: Any = None
     if not skip_governance or not skip_champion:
         shared_tracker = _load_or_create_tracker(base_dir)
+        shared_governance = _load_or_create_governance(base_dir)
         brain_count = len(shared_tracker.get_all_summaries())
-        if brain_count > 0:
+        gov_brain_count = len(shared_governance.get_all_states())
+        if brain_count > 0 or gov_brain_count > 0:
             steps.append(
                 {
-                    "step": "tracker_loaded",
+                    "step": "state_loaded",
                     "status": "ok",
                     "brains_tracked": brain_count,
-                    "path": str(Path(base_dir) / "brain_performance.json"),
+                    "brains_registered": gov_brain_count,
                 }
             )
 
@@ -212,10 +244,26 @@ def run_daily_ops(
         steps.append(_step_shadow_ensemble(base_dir))
 
     if not skip_governance:
-        steps.append(_step_governance(base_dir, dry_run=dry_run, tracker=shared_tracker))
+        steps.append(
+            _step_governance(
+                base_dir, dry_run=dry_run, tracker=shared_tracker, governance=shared_governance
+            )
+        )
 
     if not skip_champion:
-        steps.append(_step_champion_challenger(base_dir, dry_run=dry_run, tracker=shared_tracker))
+        steps.append(
+            _step_champion_challenger(
+                base_dir, dry_run=dry_run, tracker=shared_tracker, governance=shared_governance
+            )
+        )
+
+    # Persist governance state after modifications
+    if shared_governance is not None and not dry_run:
+        try:
+            gov_path = Path(base_dir) / "governance_state.json"
+            shared_governance.save(gov_path)
+        except Exception:
+            pass
 
     if not skip_retraining:
         steps.append(_step_retraining_check(base_dir))
