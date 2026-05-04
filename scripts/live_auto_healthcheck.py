@@ -37,7 +37,7 @@ def _collect_outbox(outbox_root: Path, *, limit: int = 20) -> tuple[int, list[st
 def _collect_receipts(receipt_root: Path, *, limit: int = 10) -> tuple[int, list[str]]:
     if not receipt_root.exists():
         return 0, []
-    paths = sorted(receipt_root.rglob("*.receipt.json"))
+    paths = sorted(receipt_root.rglob("*.ack.json"))
     sample = [str(p.as_posix()) for p in paths[:limit]]
     return len(paths), sample
 

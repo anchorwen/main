@@ -130,6 +130,65 @@ def _status_consistency(journal_status: str | None, receipt_status: str | None) 
     return f"ok({journal_status})"
 
 
+def _parse_iso_to_epoch(iso_str: str | None) -> float | None:
+    """Parse ISO timestamp to epoch seconds, returning None on failure."""
+    if not iso_str:
+        return None
+    try:
+        from datetime import UTC, datetime
+
+        # Handle 'Z' suffix
+        s = iso_str.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(UTC).replace(tzinfo=None)
+        return dt.timestamp()
+    except (ValueError, TypeError):
+        return None
+
+
+def _latency_check(
+    journal_recorded_at: str | None,
+    receipt_received_at: str | None,
+    max_latency_seconds: float = 30.0,
+) -> dict[str, Any]:
+    """Check latency between journal recorded_at and receipt received_at."""
+    j_epoch = _parse_iso_to_epoch(journal_recorded_at)
+    r_epoch = _parse_iso_to_epoch(receipt_received_at)
+    result: dict[str, Any] = {
+        "journal_recorded_at": journal_recorded_at,
+        "receipt_received_at": receipt_received_at,
+        "latency_seconds": None,
+        "exceeds_threshold": False,
+        "max_latency_seconds": max_latency_seconds,
+    }
+    if j_epoch is not None and r_epoch is not None:
+        latency = abs(r_epoch - j_epoch)
+        result["latency_seconds"] = round(latency, 3)
+        result["exceeds_threshold"] = latency > max_latency_seconds
+    elif j_epoch is None and r_epoch is not None:
+        result["latency_seconds"] = None
+        result["parse_error"] = "journal_recorded_at unparseable"
+    elif r_epoch is None and j_epoch is not None:
+        result["latency_seconds"] = None
+        result["parse_error"] = "receipt_received_at unparseable"
+    return result
+
+
+def _receipt_format_issues(
+    receipt_rec: dict[str, Any] | None,
+) -> list[str]:
+    """Check for format issues in receipt record."""
+    issues: list[str] = []
+    if receipt_rec is None:
+        return issues
+    if "error" in receipt_rec:
+        issues.append(f"receipt_has_error_field: {receipt_rec['error']}")
+    if "ack_status" not in receipt_rec and receipt_rec:
+        issues.append("receipt_missing_ack_status")
+    return issues
+
+
 def build_report(
     base_dir: Path,
     *,
@@ -142,6 +201,15 @@ def build_report(
     outbox_root = base_dir / "mt5_outbox"
 
     journals = _read_journal_entries(journal_path, date_filter=date_filter)
+
+    # Schema validation
+    try:
+        from scripts.validators.journal_validator import validate_journal_file
+
+        journal_schema_check = validate_journal_file(journal_path, date_filter=date_filter)
+    except Exception:
+        journal_schema_check = {"error": "journal_validator_import_failed"}
+
     receipt_map = _collect_receipt_map(receipt_root, date_filter=date_filter)
     archive_map = _collect_archive_map(archive_root, date_filter=date_filter)
     outbox_map = _collect_outbox_map(outbox_root)
@@ -155,6 +223,8 @@ def build_report(
     journal_without_archive: list[
         str
     ] = []  # message_ids referenced in journal but no archive found
+    latency_exceeded: list[dict[str, Any]] = []
+    receipt_format_issues: list[dict[str, Any]] = []
 
     for j_rec in journals:
         mid = str(j_rec.get("message_id", ""))
@@ -180,6 +250,21 @@ def build_report(
         elif j_status is not None and r_status is not None and j_status != r_status:
             status_mismatches.append(cross)
 
+        # Latency check (journal recorded_at vs receipt received_at)
+        if r_rec is not None:
+            lat = _latency_check(
+                j_rec.get("recorded_at"),
+                r_rec.get("received_at"),
+            )
+            if lat.get("exceeds_threshold") or lat.get("parse_error"):
+                lat["message_id"] = mid
+                latency_exceeded.append(lat)
+
+        # Receipt format issues
+        fmt_issues = _receipt_format_issues(r_rec)
+        if fmt_issues:
+            receipt_format_issues.append({"message_id": mid, "issues": fmt_issues})
+
         # Check archive coverage
         ref_archive = j_rec.get("archive_path", j_rec.get("outbox_path", ""))
         if ref_archive and not archive_map.get(mid):
@@ -197,13 +282,20 @@ def build_report(
 
     staleness = _stale_outbox_report(outbox_map, stale_max_age_minutes)
 
+    schema_issues = (
+        journal_schema_check.get("invalid", 0) if isinstance(journal_schema_check, dict) else 0
+    )
+
     issues_count = (
         len(journal_without_receipt)
         + len(receipt_without_journal)
         + len(status_mismatches)
         + len(journal_without_archive)
         + len(archive_without_journal)
+        + len(latency_exceeded)
+        + len(receipt_format_issues)
         + staleness["stale_count"]
+        + schema_issues
     )
 
     return {
@@ -211,6 +303,7 @@ def build_report(
         "generated_at": _utc_now_iso(),
         "base_dir": str(base_dir.resolve()),
         "date_filter": date_filter,
+        "journal_schema_validation": journal_schema_check,
         "summary": {
             "total_journal_entries": len(journals),
             "total_receipts": len(receipt_map),
@@ -224,6 +317,8 @@ def build_report(
             "status_mismatches": status_mismatches,
             "journal_without_archive": journal_without_archive,
             "archive_without_journal": archive_without_journal,
+            "latency_exceeded": latency_exceeded,
+            "receipt_format_issues": receipt_format_issues,
         },
         "outbox_staleness": staleness,
         "matched_cross_checks": matched,
