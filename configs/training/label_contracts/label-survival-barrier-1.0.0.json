@@ -1,0 +1,33 @@
+{
+  "schema_version": "label_contract.v1",
+  "contract_id": "label-survival-barrier-1.0.0",
+  "type": "survival_barrier",
+  "horizon_bars": 12,
+  "bar_timeframe": "M5",
+  "barriers": {
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 3.5
+  },
+  "atr_config": {
+    "timeframe": "M5",
+    "period": 14
+  },
+  "timeout_label": "timeout",
+  "label_classes": {
+    "1": "tp_hit_first",
+    "0": "timeout",
+    "-1": "sl_hit_first"
+  },
+  "metadata": {
+    "description": "Default survival barrier label contract for sur lane. Long/short trades are labeled based on which barrier (SL or TP) price hits first within a 12-bar (M5) horizon. SL=2.0xATR(14), TP=3.5xATR(14). Regime-adjusted multipliers are applied at runtime by RegimeDetector.",
+    "author": "quant-os",
+    "created": "2026-05-05",
+    "version": "1.0.0",
+    "rationale": "12-bar M5 horizon = 1 hour. SL=2.0xATR gives ~1.5-3x average bar range buffer. TP=3.5xATR gives ~1.75:1 reward-to-risk ratio. These are BASE values; live trading adjusts per volatility regime via RegimeDetector.",
+    "references": [
+      "docs/TRAINING_BLUEPRINT.md",
+      "core/contracts/training/label_contract.py",
+      "core/risk/regime_detector.py"
+    ]
+  }
+}

@@ -1,0 +1,109 @@
+"""MT5 implementation of :class:`BrokerAdapter`.
+
+Wraps the MetaTrader5 Python API behind the broker-agnostic protocol so
+every consumer (live cycle, order dispatch, risk evaluation) talks to
+a ``BrokerAdapter`` instead of the raw MT5 library.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+class MT5BrokerAdapter:
+    """BrokerAdapter backed by a long-lived MetaTrader5 connection.
+
+    The MT5 terminal must already be initialized (``mt5.initialize()``)
+    before constructing this adapter.  The caller owns the MT5 lifecycle;
+    this adapter does NOT call ``mt5.initialize()`` or ``mt5.shutdown()``.
+
+    Usage::
+
+        import MetaTrader5 as mt5
+        mt5.initialize(path="C:\\...")
+        broker = MT5BrokerAdapter(mt5)
+        mid, bid, ask = broker.fetch_prices("XAUUSDc")
+    """
+
+    broker_name = "mt5"
+
+    def __init__(self, mt5_module: Any) -> None:
+        self._mt5 = mt5_module
+
+    # ── Required by BrokerAdapter ──
+
+    def fetch_prices(self, symbol: str) -> tuple[float, float, float]:
+        tick = self._mt5.symbol_info_tick(symbol)
+        if tick is None:
+            raise RuntimeError(f"tick unavailable for {symbol}")
+        bid = float(tick.bid)
+        ask = float(tick.ask)
+        mid = (bid + ask) / 2.0
+        return mid, bid, ask
+
+    def fetch_current_atr(self, symbol: str, period: int = 14) -> float:
+        try:
+            import numpy as np
+
+            rates = self._mt5.copy_rates_from_pos(symbol, self._mt5.TIMEFRAME_M5, 0, period + 1)
+            if rates is None or len(rates) < period + 1:
+                return 0.0
+            h = np.array([r["high"] for r in rates], dtype=np.float64)
+            low = np.array([r["low"] for r in rates], dtype=np.float64)
+            c = np.array([r["close"] for r in rates], dtype=np.float64)
+            prev_c = c[-(period + 1) : -1]
+            cur_h = h[-period:]
+            cur_l = low[-period:]
+            tr = np.maximum(
+                cur_h - cur_l,
+                np.maximum(abs(cur_h - prev_c), abs(cur_l - prev_c)),
+            )
+            return float(np.mean(tr))
+        except Exception:
+            return 0.0
+
+    def count_positions(self, symbol: str) -> int:
+        pos = self._mt5.positions_get(symbol=symbol)
+        return len(pos) if pos else 0
+
+    def get_position_tickets(self, symbol: str) -> list[int]:
+        pos = self._mt5.positions_get(symbol=symbol)
+        return [p.ticket for p in pos] if pos else []
+
+    def get_account_drawdown_pct(self) -> float:
+        try:
+            acc = self._mt5.account_info()
+            if acc is None:
+                return 0.0
+            equity = float(getattr(acc, "equity", 0))
+            balance = float(getattr(acc, "balance", 0))
+            if balance <= 0:
+                return 0.0
+            return round(max(0.0, (balance - equity) / balance) * 100, 2)
+        except Exception:
+            return 0.0
+
+    def get_open_positions_detail(self, symbol: str) -> list[dict[str, Any]]:
+        positions = self._mt5.positions_get(symbol=symbol) or []
+        result: list[dict[str, Any]] = []
+        for pos in positions:
+            result.append(
+                {
+                    "symbol": getattr(pos, "symbol", symbol),
+                    "volume": float(getattr(pos, "volume", 0)),
+                    "price_open": float(getattr(pos, "price_open", 0)),
+                    "ticket": getattr(pos, "ticket", 0),
+                }
+            )
+        return result
+
+    # ── Future extension points ──
+
+    def connect(self) -> bool:
+        return True  # MT5 is already initialized by caller
+
+    def disconnect(self) -> None:
+        pass  # MT5 lifecycle is owned by caller
+
+    def is_connected(self) -> bool:
+        return True

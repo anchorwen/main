@@ -1,0 +1,233 @@
+{
+  "registry_version": "1.0.0",
+  "created_at": "2026-05-04T19:30:00+08:00",
+  "audit_scope": "Full-system deep audit across 12 subsystems",
+  "total_issues": 15,
+  "severity_counts": {
+    "critical": 3,
+    "high": 5,
+    "medium": 4,
+    "low": 3
+  },
+  "issues": [
+    {
+      "id": "QO-0001",
+      "severity": "critical",
+      "system": "Decision Records",
+      "title": "record_shadow_from_proposals() never called in live dispatch path",
+      "file": "scripts/live_intent_loop.py",
+      "lines": "807-881",
+      "status": "FIXED",
+      "dependency_of": [
+        "QO-0002",
+        "QO-0008"
+      ],
+      "root_cause": "The if args.no_mt5: branch calls record_shadow_from_proposals() for verification mode. The else: branch (live trading) dispatches orders but never persists shadow decisions.",
+      "impact": "Zero decision records from live trading; feedback loop, brain leaderboard, and retraining trigger operate on empty data.",
+      "fix_approach": "Add _record_shadow_decisions(proposals, ...) call after signal generation in the live else-branch, before dispatch.",
+      "fixed_at": "2026-05-04T20:15:00+08:00"
+    },
+    {
+      "id": "QO-0002",
+      "severity": "critical",
+      "system": "Decision Records",
+      "title": "Decision record path mismatch between producer and consumer",
+      "file": "core/ledger/storage/jsonl_ledger_store.py",
+      "lines": "14 vs feedback_loop.py:119",
+      "status": "FIXED",
+      "dependency_of": [
+        "QO-0008"
+      ],
+      "root_cause": "JsonlLedgerStore writes to data/{date_key}/{symbol}.decisions.jsonl but feedback_loop.py reads from data/decisions/{date_key}/{symbol}.decisions.jsonl. The decisions/ subdirectory is missing from producer path.",
+      "impact": "Even when decision records ARE written, the feedback loop cannot find them.",
+      "fix_approach": "Align both paths to use data/decisions/{date_key}/{symbol}.decisions.jsonl",
+      "fixed_at": "2026-05-04T20:15:00+08:00"
+    },
+    {
+      "id": "QO-0003",
+      "severity": "critical",
+      "system": "Trade Journal",
+      "title": "No position_ticket in any journal entry; P&L computation impossible",
+      "file": "scripts/mt5_bridge_worker.py",
+      "lines": "410-418",
+      "status": "FIXED",
+      "dependency_of": [
+        "QO-0008"
+      ],
+      "root_cause": "Journal entry written from pre-execution envelope fields. Post-execution position_ticket in detail.order never written back.",
+      "impact": "All 10 trades unlabeled. label_builder cannot match open/close pairs. Zero training datasets produced.",
+      "fix_approach": "After receiving order result, update journal entry with position_ticket = detail.get('order') before archiving.",
+      "fixed_at": "2026-05-04T20:15:00+08:00"
+    },
+    {
+      "id": "QO-0004",
+      "severity": "high",
+      "system": "Brain Inventory",
+      "title": "OU_Params_V6_Sniper artifact file missing; runs as stub",
+      "file": "configs/brains/ou_params_v6.json",
+      "lines": "9",
+      "status": "FIXED",
+      "dependency_of": [],
+      "root_cause": "Config references D:\\ai\\Meta_ppo_v6\\arb_params.json which does not exist. Adapter falls back to stub: neutral output.",
+      "impact": "Wastes voting slot in 3-brain ensemble. Stub neutral vote drags agreement_score down.",
+      "fix_approach": "Disable OU_Params_V6_Sniper in configs/live.yaml brains.registry_entries until artifact is trained.",
+      "fixed_at": "2026-05-04T20:15:00+08:00"
+    },
+    {
+      "id": "QO-0005",
+      "severity": "high",
+      "system": "Feature Store",
+      "title": "Schema mismatch: XAUUSD (v9_institutional_40/M5) vs XAUUSDc (v9_institutional/M1)",
+      "file": "scripts/features/feature_store_warmer.py vs core/deployment/feature_update_producer.py",
+      "lines": "44-53",
+      "status": "FIXED",
+      "dependency_of": [
+        "QO-0006"
+      ],
+      "root_cause": "Two different schema names/symbols/timeframes registered. Shadow ensemble queries stale XAUUSD data; live writes XAUUSDc data that nobody reads.",
+      "impact": "Shadow ensemble runs on April 1-18 data instead of live May 4 features.",
+      "fix_approach": "Unify to v9_institutional_40/1.0.0 schema. Update feature_update_producer to XAUUSDc/M5. Update shadow ensemble query.",
+      "fixed_at": "2026-05-04T20:15:00+08:00"
+    },
+    {
+      "id": "QO-0006",
+      "severity": "high",
+      "system": "Configuration",
+      "title": "Symbol inconsistency across 12+ files",
+      "file": "Multiple (12+ files)",
+      "lines": "various",
+      "status": "FIXED",
+      "dependency_of": [
+        "QO-0005"
+      ],
+      "root_cause": "Live trading uses XAUUSDc (MT5 broker convention). Shadow, healthcheck, brains, daily_ops use XAUUSD.",
+      "impact": "Feature queries return empty/stale data. Shadow reports show wrong symbol. Healthcheck probes wrong symbol.",
+      "fix_approach": "Centralize to XAUUSDc across all subsystems. Add symbol normalization in feature store query layer.",
+      "fixed_at": "2026-05-04T20:15:00+08:00"
+    },
+    {
+      "id": "QO-0007",
+      "severity": "high",
+      "system": "Risk Control",
+      "title": "RiskEvaluationService never instantiated in live intent loop",
+      "file": "scripts/live_intent_loop.py",
+      "lines": "699-715",
+      "status": "OPEN",
+      "dependency_of": [],
+      "root_cause": "RiskEvaluationService exists but is never imported or called in live trading path. No risk context (drawdown, exposure) supplied.",
+      "impact": "Risk policies defined but never enforced. Only cooldown + max_positions protect live trading.",
+      "fix_approach": "Import RiskEvaluationService, build risk context from MT5 account state, evaluate before dispatch."
+    },
+    {
+      "id": "QO-0008",
+      "severity": "high",
+      "system": "Training Pipeline",
+      "title": "Zero training datasets built; label_builder cannot match open/close pairs",
+      "file": "scripts/training/label_builder.py, scripts/training/dataset_builder.py",
+      "lines": "119-127, 74",
+      "status": "OPEN",
+      "dependency_of": [],
+      "depends_on": [
+        "QO-0003"
+      ],
+      "root_cause": "Depends on QO-0003. Without position_tickets, all trades unlabeled. Symbol query also mismatched.",
+      "impact": "data/training/ contains zero Parquet/NPZ files. Self-evolving loop starved of input.",
+      "fix_approach": "After QO-0003: fix label_builder ticket matching, fix dataset_builder symbol, generate first dataset."
+    },
+    {
+      "id": "QO-0009",
+      "severity": "medium",
+      "system": "Feature Store",
+      "title": "Feature warmer replicates M5 data across all timeframes",
+      "file": "scripts/features/feature_store_warmer.py",
+      "lines": "258-264",
+      "status": "OPEN",
+      "dependency_of": [],
+      "root_cause": "M5 features copied to M15/M30/H1 slots with comment about approximation. Not real multi-timeframe computation.",
+      "impact": "M15/M30/H1 features are statistically identical to M5 — provide no additional information to models.",
+      "fix_approach": "Compute each timeframe independently from corresponding OHLC bars at each resolution."
+    },
+    {
+      "id": "QO-0010",
+      "severity": "medium",
+      "system": "Error Handling",
+      "title": "6+ bare except:pass blocks silently swallow failures",
+      "file": "scripts/live_intent_loop.py, scripts/daily_ops.py",
+      "lines": "679,693,794,901,303",
+      "status": "FIXED",
+      "dependency_of": [],
+      "root_cause": "Critical operations wrapped in try/except:pass with zero logging. Feature write, brain inference, decision recording failures are invisible.",
+      "impact": "Operators cannot distinguish 'no data to record' from 'recording crashed'. Debugging requires code inspection.",
+      "fix_approach": "Replace each except:pass with except Exception as exc: logger.warning(...) using module-level logger.",
+      "fixed_at": "2026-05-04T20:15:00+08:00"
+    },
+    {
+      "id": "QO-0011",
+      "severity": "medium",
+      "system": "Alpha Registry",
+      "title": "Corrupted entry: MT5 path parsed as alpha_id",
+      "file": "data/alpha_registry.json",
+      "lines": "5",
+      "status": "FIXED",
+      "dependency_of": [],
+      "root_cause": "alpha_id = '5\\\\terminal64.exe' from backslash splitting of 'D:\\MetaTrader 5\\terminal64.exe'.",
+      "impact": "Corrupted registry entry. Would cause errors if governance iterates over alphas.",
+      "fix_approach": "Remove corrupted entry. Fix path-to-alpha_id conversion to use basename sans extension.",
+      "fixed_at": "2026-05-04T20:15:00+08:00"
+    },
+    {
+      "id": "QO-0012",
+      "severity": "medium",
+      "system": "Replay Baseline",
+      "title": "2 of 4 baseline subdirectories empty; incomplete coverage",
+      "file": "data/replays/v9_shadow_baselines/",
+      "lines": "manifest.json",
+      "status": "OPEN",
+      "dependency_of": [],
+      "root_cause": "neutral_stability/ and risk_boundary/ categories have zero files. Only 4 baseline files total.",
+      "impact": "Shadow-live comparison cannot detect divergence in neutral stability and risk boundary scenarios.",
+      "fix_approach": "Run shadow ensemble across full scenario spectrum; commit baselines for all 4 categories."
+    },
+    {
+      "id": "QO-0013",
+      "severity": "low",
+      "system": "Daily Recap",
+      "title": "Recap runs before trading activity; misses actual trades",
+      "file": "scripts/daily_ops.py",
+      "lines": "scheduler config",
+      "status": "OPEN",
+      "dependency_of": [],
+      "root_cause": "Recap at 14:13 local time, trades at 19:19 local time. Reports zero activity on active trading days.",
+      "impact": "Historical recaps misleadingly show zero activity on days when trading occurred.",
+      "fix_approach": "Schedule recap after market close or query full 24h window regardless of run time."
+    },
+    {
+      "id": "QO-0014",
+      "severity": "low",
+      "system": "Code Quality",
+      "title": "Hardcoded Path.cwd() references depend on launch directory",
+      "file": "scripts/live_intent_loop.py, scripts/send_live_order.py",
+      "lines": "96,107,153,525,39,43",
+      "status": "OPEN",
+      "dependency_of": [],
+      "root_cause": "Multiple Path.cwd() and os.getcwd() calls assume process launched from project root.",
+      "impact": "Path resolution breaks if launched from different directory (systemd, task scheduler).",
+      "fix_approach": "Replace Path.cwd() with Path(__file__).resolve().parent.parent for PROJECT_ROOT derivation."
+    },
+    {
+      "id": "QO-0015",
+      "severity": "low",
+      "system": "Localization",
+      "title": "Garbled Chinese characters in daily recap run_state field",
+      "file": "scripts/live_daily_recap.py",
+      "lines": "run_state field",
+      "status": "OPEN",
+      "dependency_of": [],
+      "root_cause": "Chinese text encoded in non-UTF-8 codec (likely cp936/GBK) written to UTF-8 JSON log.",
+      "impact": "run_state field unreadable in reports.",
+      "fix_approach": "Add encoding='utf-8' to all file open() calls. Set PYTHONUTF8=1 env var."
+    }
+  ],
+  "fixed_count": 8,
+  "open_count": 7
+}

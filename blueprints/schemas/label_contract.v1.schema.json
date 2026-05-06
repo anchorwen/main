@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor.local/blueprints/schemas/label_contract.v1.schema.json",
+  "title": "Label Contract",
+  "description": "Defines how training labels are generated from price data. A Label Contract is the mathematical expression of a trading hypothesis — it specifies what the model is trying to predict. See blueprints/TRAINING_BLUEPRINT.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_id",
+    "type",
+    "horizon_bars",
+    "label_classes"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "label_contract.v1"
+    },
+    "contract_id": {
+      "type": "string",
+      "pattern": "^label-[a-z][a-z0-9-]*-(\\d+\\.\\d+\\.\\d+)$",
+      "description": "Unique identifier, e.g. label-survival-barrier-1.0.0"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["survival_barrier", "regression", "binary_class"],
+      "description": "survival_barrier: which barrier hits first within horizon. regression: future N-bar return. binary_class: direction up/down."
+    },
+    "horizon_bars": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 288,
+      "description": "Number of bars in the forward window (e.g. 12 M5 bars = 60 minutes)"
+    },
+    "bar_timeframe": {
+      "type": "string",
+      "enum": ["M1", "M5", "M15", "M30", "H1", "H4", "D1"],
+      "default": "M5",
+      "description": "Timeframe of bars used for horizon"
+    },
+    "barriers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sl_atr_mult": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 10.0,
+          "default": 2.0,
+          "description": "Stop-loss distance as multiple of ATR"
+        },
+        "tp_atr_mult": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 20.0,
+          "default": 3.5,
+          "description": "Take-profit distance as multiple of ATR"
+        }
+      }
+    },
+    "atr_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeframe": {
+          "type": "string",
+          "enum": ["M5", "M15", "M30", "H1", "H4", "D1"],
+          "default": "M5"
+        },
+        "period": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 50,
+          "default": 14
+        }
+      }
+    },
+    "label_classes": {
+      "type": "object",
+      "description": "Mapping from integer label values to semantic class names. For survival_barrier: {\"1\": \"tp_hit_first\", \"0\": \"timeout\", \"-1\": \"sl_hit_first\"}. For regression: value = forward return. For binary_class: {\"1\": \"up\", \"0\": \"down\"}.",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "timeout_label": {
+      "type": "string",
+      "default": "timeout",
+      "description": "Semantic class for samples that hit neither barrier within horizon"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional documentation fields (author, rationale, regime_notes, etc.)"
+    }
+  }
+}

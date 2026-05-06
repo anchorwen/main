@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://future/schemas/label_contract.v1.schema.json",
+  "title": "Label Contract",
+  "description": "A versioned, immutable specification of how training labels are generated from price data. One contract = one falsifiable trading hypothesis.",
+  "type": "object",
+  "required": ["schema_version", "contract_id", "type", "horizon_bars", "label_classes"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "label_contract.v1"
+    },
+    "contract_id": {
+      "type": "string",
+      "description": "Unique identifier, e.g. label-survival-barrier-1.0.0"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["survival_barrier", "regression", "binary_class"],
+      "description": "Label generation strategy"
+    },
+    "horizon_bars": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Forward-looking window in bars"
+    },
+    "bar_timeframe": {
+      "type": "string",
+      "default": "M5",
+      "description": "Timeframe of the price bars used for labeling"
+    },
+    "barriers": {
+      "type": "object",
+      "description": "SL/TP barrier definition (required for survival_barrier type)",
+      "properties": {
+        "sl_atr_mult": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 2.0,
+          "description": "Stop-loss distance in ATR multiples"
+        },
+        "tp_atr_mult": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 3.5,
+          "description": "Take-profit distance in ATR multiples"
+        }
+      },
+      "required": ["sl_atr_mult", "tp_atr_mult"]
+    },
+    "atr_config": {
+      "type": "object",
+      "description": "ATR calculation parameters",
+      "properties": {
+        "timeframe": {
+          "type": "string",
+          "default": "M5"
+        },
+        "period": {
+          "type": "integer",
+          "minimum": 5,
+          "default": 14
+        }
+      }
+    },
+    "regression_target": {
+      "type": "string",
+      "enum": ["forward_return", "log_return"],
+      "description": "Required when type=regression"
+    },
+    "timeout_label": {
+      "type": "string",
+      "default": "timeout",
+      "description": "Label assigned when no barrier is hit within horizon"
+    },
+    "label_classes": {
+      "type": "object",
+      "description": "Mapping of label values to human-readable descriptions",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {
+        "1": "tp_hit_first",
+        "0": "timeout",
+        "-1": "sl_hit_first"
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional metadata (author, description, references, etc.)"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "type": { "const": "survival_barrier" } }
+      },
+      "then": {
+        "required": ["barriers"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "type": { "const": "regression" } }
+      },
+      "then": {
+        "required": ["regression_target"]
+      }
+    }
+  ]
+}

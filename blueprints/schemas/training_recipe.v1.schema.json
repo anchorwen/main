@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor.local/blueprints/schemas/training_recipe.v1.schema.json",
+  "title": "Training Recipe",
+  "description": "A Training Recipe is the single source of truth for one complete, reproducible model training run. It combines a model identity, a label contract reference, data configuration, training hyperparameters, and evaluation criteria. Two recipes that differ only by seed produce the same model family. See blueprints/TRAINING_BLUEPRINT.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "recipe_id",
+    "model_identity",
+    "label_contract_ref",
+    "data",
+    "training",
+    "evaluation"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "training_recipe.v1"
+    },
+    "recipe_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*-(?:g\\d{4}\\.\\d+)-recipe-\\d{3}$",
+      "description": "e.g. sur-g2026.1-recipe-001"
+    },
+    "model_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lane", "role", "generation", "feature_contract_id"],
+      "properties": {
+        "lane": {
+          "type": "string",
+          "pattern": "^[a-z]{2,16}$",
+          "description": "Model lane: sur, mtx, arb, xgbinrepo, etc."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["prd", "chlg", "cabl", "stub"]
+        },
+        "generation": {
+          "type": "string",
+          "pattern": "^g\\d{4}\\.\\d+$"
+        },
+        "feature_contract_id": {
+          "type": "string",
+          "minLength": 4,
+          "description": "Must match the feature schema used for training, e.g. feat-v9-institutional-1.0.0"
+        }
+      }
+    },
+    "label_contract_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_id"],
+      "properties": {
+        "contract_id": {
+          "type": "string",
+          "description": "References a Label Contract by its contract_id, e.g. label-survival-barrier-1.0.0"
+        },
+        "contract_path": {
+          "type": "string",
+          "description": "Optional relative path to the contract JSON file"
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset_slice_id"],
+      "properties": {
+        "dataset_slice_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Training data version identifier"
+        },
+        "train_date_range": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"type": "string", "format": "date"},
+          "description": "[start_date, end_date] for training split"
+        },
+        "val_date_range": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"type": "string", "format": "date"},
+          "description": "[start_date, end_date] for validation split"
+        },
+        "min_samples_per_class": {
+          "type": "integer",
+          "minimum": 10,
+          "default": 100
+        },
+        "normalization_strategy": {
+          "type": "string",
+          "enum": ["fixed", "rolling_ewma", "rank"],
+          "default": "fixed",
+          "description": "fixed: train-set mean/std. rolling_ewma: adaptive with halflife. rank: cross-sectional percentile."
+        },
+        "normalization_halflife_days": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 504,
+          "default": 63,
+          "description": "EWMA halflife in trading days (only for rolling_ewma)"
+        },
+        "data_augmentation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {"type": "boolean", "default": false},
+            "volatility_scaling": {
+              "type": "array",
+              "items": {"type": "number", "minimum": 0.1, "maximum": 3.0},
+              "default": [0.7, 0.85, 1.0, 1.15, 1.3]
+            },
+            "noise_std": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 0.1,
+              "default": 0.01
+            }
+          }
+        }
+      }
+    },
+    "training": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["epochs", "seeds"],
+      "properties": {
+        "architecture": {
+          "type": "string",
+          "default": "mlp_multihead",
+          "enum": ["mlp_multihead", "transformer", "xgboost", "ou_params", "online_sgd"],
+          "description": "Backbone architecture determined by lane"
+        },
+        "input_dim": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 40
+        },
+        "hidden_dims": {
+          "type": "array",
+          "items": {"type": "integer", "minimum": 4},
+          "default": [128, 64, 32]
+        },
+        "dropout": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 0.9,
+          "default": 0.3
+        },
+        "loss_weights": {
+          "type": "object",
+          "additionalProperties": {"type": "number"},
+          "default": {"direction": 1.0, "risk": 0.5, "volatility": 0.3},
+          "description": "Per-head loss weights for multi-task models"
+        },
+        "optimizer": {
+          "type": "string",
+          "enum": ["adam", "adamw", "sgd"],
+          "default": "adam"
+        },
+        "learning_rate": {
+          "type": "number",
+          "minimum": 1e-6,
+          "maximum": 0.1,
+          "default": 0.001
+        },
+        "batch_size": {
+          "type": "integer",
+          "minimum": 8,
+          "maximum": 4096,
+          "default": 256
+        },
+        "epochs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000,
+          "default": 200
+        },
+        "early_stopping_patience": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 20
+        },
+        "seeds": {
+          "type": "array",
+          "items": {"type": "integer", "minimum": 0},
+          "minItems": 1,
+          "description": "Training seeds for reproducibility and sensitivity analysis"
+        }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metrics"],
+      "properties": {
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "accuracy", "precision", "recall", "f1",
+              "sharpe_ratio", "sortino_ratio", "max_drawdown",
+              "profit_factor", "win_rate", "avg_pnl",
+              "direction_bias", "regime_consistency"
+            ]
+          },
+          "minItems": 1
+        },
+        "regime_splits": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "low": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+              "normal": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+              "high": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}
+            }
+          },
+          "default": {
+            "atr_percentile": {
+              "low": [0.0, 0.33],
+              "normal": [0.33, 0.67],
+              "high": [0.67, 1.0]
+            }
+          },
+          "description": "Regime split definitions for per-regime evaluation. Keys are feature names, values are percentile ranges for low/normal/high."
+        },
+        "stability_checks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["walk_forward", "seed_sensitivity", "regime_consistency", "data_augmentation_robustness"]
+          },
+          "default": ["walk_forward", "seed_sensitivity"]
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional documentation fields"
+    }
+  }
+}

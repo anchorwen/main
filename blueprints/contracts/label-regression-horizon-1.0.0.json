@@ -1,0 +1,19 @@
+{
+  "schema_version": "label_contract.v1",
+  "contract_id": "label-regression-horizon-1.0.0",
+  "type": "regression",
+  "horizon_bars": 64,
+  "bar_timeframe": "M5",
+  "regression_target": "forward_return",
+  "label_classes": {
+    "continuous": "forward_log_return_over_horizon"
+  },
+  "metadata": {
+    "author": "quant-os",
+    "rationale": "Regression labels for microstructure/sequence models (mtx lane). Predict the forward log return over a 64-bar horizon (320 min ≈ 5.3 hours on M5). Unlike survival_barrier which predicts discrete events, regression directly predicts the magnitude and sign of future price movement, suitable for transformer architectures that process 64-bar sequences.",
+    "target_formula": "log(close[t+64] / close[t]) * 10000  (basis points)",
+    "applicable_lanes": ["mtx", "mtx_transformer"],
+    "training_data_source": "D:\\ai\\Meta_ppo_v4.5\\V4_Train_Tensors.pt",
+    "created_at": "2026-05-05"
+  }
+}
