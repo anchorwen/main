@@ -487,7 +487,7 @@ class TestReadDecisionRecords:
         date = "2026-05-04"
         decisions_dir = tmp_path / "decisions" / date
         decisions_dir.mkdir(parents=True)
-        record_path = decisions_dir / "XAUUSD.decisions.jsonl"
+        record_path = decisions_dir / "XAUUSDc.decisions.jsonl"
         record_path.write_text(
             json.dumps(
                 {
@@ -642,15 +642,31 @@ class TestIngestJournalToTracker:
         base = tmp_path / "data"
         base.mkdir()
 
+        # New feedback_loop resolves close entries by matching open→close pairs.
+        # Create both open and close journal entries with detail.price for P&L calc.
         journal = base / "live_trade_journal.jsonl"
         journal.write_text(
             json.dumps(
                 {
-                    "recorded_at": "2026-05-04T10:00:00Z",
+                    "recorded_at": "2026-05-04T09:00:00Z",
+                    "action": "open",
                     "ack_status": "accepted",
                     "position_ticket": 1,
-                    "symbol": "XAUUSD",
-                    "side": "BUY",
+                    "symbol": "XAUUSDc",
+                    "side": "long",
+                    "volume": 0.01,
+                    "detail": {"request": {"price": 2600.0}},
+                }
+            )
+            + "\n"
+            + json.dumps(
+                {
+                    "recorded_at": "2026-05-04T10:00:00Z",
+                    "action": "close",
+                    "position_ticket": 1,
+                    "symbol": "XAUUSDc",
+                    "side": "short",
+                    "detail": {"close_price": 2610.0},
                 }
             )
             + "\n",
@@ -659,11 +675,12 @@ class TestIngestJournalToTracker:
 
         dec_dir = base / "decisions" / "2026-05-04"
         dec_dir.mkdir(parents=True)
-        decisions = dec_dir / "XAUUSD.decisions.jsonl"
+        decisions = dec_dir / "XAUUSDc.decisions.jsonl"
         decisions.write_text(
             json.dumps(
                 {
-                    "labels": {"decision_side": "BUY"},
+                    "event_time": "2026-05-04T09:00:00Z",
+                    "labels": {"decision_side": "LONG"},
                     "attribution": {"supporting_brains": ["V9", "XGB"], "opposing_brains": ["OU"]},
                 }
             )
@@ -675,11 +692,12 @@ class TestIngestJournalToTracker:
         report = ingest_journal_to_tracker(tracker, base_dir=str(base), date_filter="2026-05-04")
 
         assert report["mode"] == "multi_brain"
-        assert report["updates_applied"] == 2
-        assert set(report["brain_ids_updated"]) == {"V9", "XGB"}
+        # New code attributes to both supporting + opposing brains (OU gets penalty)
+        assert report["updates_applied"] == 3
+        assert set(report["brain_ids_updated"]) == {"V9", "XGB", "OU"}
         assert tracker.get_brain_summary("V9")["sample_count"] == 1
         assert tracker.get_brain_summary("XGB")["sample_count"] == 1
-        assert tracker.get_brain_summary("OU")["sample_count"] == 0
+        assert tracker.get_brain_summary("OU")["sample_count"] == 1
 
     def test_multi_brain_no_decision_match(self, tmp_path: Path):
         from core.feedback.brain_performance_tracker import BrainPerformanceTracker
@@ -704,7 +722,7 @@ class TestIngestJournalToTracker:
 
         dec_dir = base / "decisions" / "2026-05-04"
         dec_dir.mkdir(parents=True)
-        decisions = dec_dir / "XAUUSD.decisions.jsonl"
+        decisions = dec_dir / "XAUUSDc.decisions.jsonl"
         decisions.write_text(
             json.dumps(
                 {

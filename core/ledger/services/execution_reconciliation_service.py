@@ -43,6 +43,12 @@ from core.deployment.domain_keys import (
     TERMINAL_EVENT_FILLED,
     TERMINAL_EVENT_REJECTED,
 )
+from core.observability.metric_names import (
+    RECONCILIATION_BREACHED,
+    RECONCILIATION_MATCHED,
+    RECONCILIATION_PARTIAL,
+    RECONCILIATION_UNMATCHED,
+)
 
 
 class ExecutionReconciliationService:
@@ -59,9 +65,10 @@ class ExecutionReconciliationService:
     STATUS_BREACHED = RECONCILIATION_STATUS_BREACHED
     STATUS_STALE = RECONCILIATION_STATUS_STALE
 
-    def __init__(self, communication_reader, execution_event_reader):
+    def __init__(self, communication_reader, execution_event_reader, metrics=None):
         self._communication_reader = communication_reader
         self._execution_event_reader = execution_event_reader
+        self._metrics = metrics
 
     def reconcile_message(
         self, *, date_key: str, target: str, message_id: str, correlation_id: str
@@ -92,6 +99,7 @@ class ExecutionReconciliationService:
             message_results.append(msg_result)
 
         statuses = [r[PAYLOAD_KEY_STATUS] for r in message_results]
+        self._inc_reconciliation_metrics(statuses)
         if all(s == self.STATUS_MATCHED for s in statuses):
             overall = self.STATUS_MATCHED
         elif any(s == self.STATUS_BREACHED for s in statuses):
@@ -241,3 +249,16 @@ class ExecutionReconciliationService:
         for s in statuses:
             counts[s] = counts.get(s, 0) + 1
         return counts
+
+    def _inc_reconciliation_metrics(self, statuses: list[str]) -> None:
+        if self._metrics is None:
+            return
+        for s in statuses:
+            if s == self.STATUS_MATCHED:
+                self._metrics.inc(RECONCILIATION_MATCHED)
+            elif s == self.STATUS_BREACHED:
+                self._metrics.inc(RECONCILIATION_BREACHED)
+            elif s == self.STATUS_UNMATCHED:
+                self._metrics.inc(RECONCILIATION_UNMATCHED)
+            elif s == self.STATUS_PARTIAL:
+                self._metrics.inc(RECONCILIATION_PARTIAL)

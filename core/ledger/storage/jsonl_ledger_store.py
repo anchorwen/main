@@ -11,7 +11,13 @@ class JsonlLedgerStore:
     def append_record(
         self, date_key: str, symbol: str, record, stream_name: str = LEDGER_STREAM_DECISIONS
     ) -> Path:
-        target_dir = self._base_dir / date_key
+        # Only decision records live under the decisions/ subdirectory.
+        # Other streams (communications, execution_events, replays, runtime_evidence)
+        # are stored directly under base_dir/{date_key}/ to keep read paths backward-compatible.
+        if stream_name == LEDGER_STREAM_DECISIONS:
+            target_dir = self._base_dir / "decisions" / date_key
+        else:
+            target_dir = self._base_dir / date_key
         target_dir.mkdir(parents=True, exist_ok=True)
         target_file = target_dir / stream_jsonl_filename(symbol, stream_name)
         with target_file.open("a", encoding="utf-8") as f:

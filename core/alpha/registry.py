@@ -1,7 +1,9 @@
-"""In-memory Alpha Registry MVP."""
+"""Alpha Registry with JSON file persistence."""
 
+import json
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 
 from core.alpha.contracts import AlphaRecord
 from core.alpha.schema_versions import SCHEMA_ALPHA_REGISTRY
@@ -49,3 +51,35 @@ class AlphaRegistry:
             "alpha_count": len(self._records),
             "records": [record.to_dict() for record in self.list_records()],
         }
+
+    # ── persistence ──
+
+    def save(self, path: str | Path) -> Path:
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
+            json.dumps(self.to_dict(), indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+        return out
+
+    @classmethod
+    def load(cls, path: str | Path) -> "AlphaRegistry":
+        src = Path(path)
+        if not src.exists():
+            raise FileNotFoundError(f"alpha registry state file not found: {src}")
+        data = json.loads(src.read_text(encoding="utf-8"))
+        registry = cls()
+        for rec_data in data.get("records", []):
+            record = AlphaRecord(
+                alpha_id=rec_data["alpha_id"],
+                name=rec_data["name"],
+                version=rec_data["version"],
+                state=rec_data.get("state", "candidate"),
+                strategy_id=rec_data.get("strategy_id"),
+                tags=tuple(rec_data.get("tags", [])),
+                metadata=rec_data.get("metadata", {}),
+                performance=rec_data.get("performance", {}),
+            )
+            registry._records[record.alpha_id] = record
+        return registry

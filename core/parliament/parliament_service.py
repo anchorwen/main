@@ -98,15 +98,32 @@ class ParliamentService:
         total = len(biases)
         majority_ratio = max(long_count, short_count) / total if total else 0
 
-        if neutral_count > long_count and neutral_count > short_count:
-            bias = "neutral"
-            score = max(weighted_up, weighted_down)
-        elif weighted_up >= weighted_down:
+        # Use weighted scores to determine bias direction.
+        # When neutral votes dominate (e.g. 2 neutral, 1 long, 1 short),
+        # the weighted scores still express a directional preference —
+        # honour that preference instead of forcing a neutral deadlock.
+        if weighted_up >= weighted_down:
             bias = "long"
-            score = weighted_up
+            raw_score = weighted_up
         else:
             bias = "short"
-            score = weighted_down
+            raw_score = weighted_down
+
+        # Apply neutral-uncertainty penalty when neutral votes are the
+        # largest bloc.  The penalty reduces conviction but preserves
+        # direction so the downstream gate can still decide.
+        if neutral_count > long_count and neutral_count > short_count:
+            neutral_ratio = neutral_count / total if total else 0
+            # Scale penalty by how dominant the neutral bloc is.
+            # 2/4 neutral → 0.85; 3/4 neutral → 0.70; 4/4 neutral → 0.55
+            neutral_penalty = max(0.50, 1.0 - neutral_ratio * 0.30)
+            raw_score *= neutral_penalty
+
+        # Blend raw probability score with majority agreement strength.
+        # A 2v2 deadlock (majority_ratio=0.5) stays near ~0.5; 3/4 agreement
+        # (majority_ratio=0.75) boosts the score into actionable territory.
+        majority_weight = 0.35
+        score = raw_score * (1.0 - majority_weight) + majority_ratio * majority_weight
 
         return {
             "aggregated_bias": bias,

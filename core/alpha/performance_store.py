@@ -1,7 +1,9 @@
-"""Alpha performance store MVP."""
+"""Alpha performance store with JSON file persistence."""
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from statistics import mean
 from typing import Any
 
@@ -163,6 +165,35 @@ class AlphaPerformanceStore:
             "alpha_count": len(self._snapshots),
             "summaries": [self.summarize(alpha_id) for alpha_id in sorted(self._snapshots)],
         }
+
+    # ── persistence ──
+
+    def save(self, path: str | Path) -> Path:
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
+            json.dumps(self.to_dict(), indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+        return out
+
+    @classmethod
+    def load(cls, path: str | Path) -> "AlphaPerformanceStore":
+        src = Path(path)
+        if not src.exists():
+            raise FileNotFoundError(f"alpha performance store file not found: {src}")
+        data = json.loads(src.read_text(encoding="utf-8"))
+        store = cls()
+        for summary in data.get("summaries", []):
+            latest = summary.get("latest")
+            if latest:
+                store.record_snapshot(
+                    alpha_id=latest["alpha_id"],
+                    metrics=latest.get("metrics", {}),
+                    source=latest.get("source", "loaded"),
+                    window=latest.get("window", "latest"),
+                )
+        return store
 
     def _aggregate(self, history: list[AlphaPerformanceSnapshot]) -> dict[str, Any]:
         numeric_values: dict[str, list[float]] = {}

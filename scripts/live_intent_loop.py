@@ -1,45 +1,55 @@
-"""Periodic live intent producer → mt5_outbox (V9 Institutional ONNX pipeline).
+"""Periodic live intent producer → mt5_outbox (multi-brain / single-brain pipeline).
 
-Replaces the simple anchor-price-delta strategy with the full V9 feature
-computation engine + ONNX inference, producing BrainDecisionProposal signals.
+Thin CLI + init + main loop shell. The cycle execution logic lives in
+core.runtime.live_cycle so it can be tested and reused independently.
+
+Usage:
+  python scripts/live_intent_loop.py --mt5-terminal-path "C:\\..." [--multi-brain] [--no-mt5]
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import time
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.brains.services.dynamic_brain_weighter import DynamicBrainWeighter
-from core.deployment.feature_update_producer import build_v9_schema, produce_from_live_computer
-from core.features.feature_service import FeatureService
-from core.features.local_feature_store import LocalFeatureStore
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from core.features.rolling_normalizer import RollingNormalizer
 from core.feedback.brain_performance_tracker import BrainPerformanceTracker
-from scripts.send_live_order import (
-    _validate_sl_tp,
-    dispatch_live_open_order,
-    resolve_protection_flag_path,
+from core.risk.regime_detector import RegimeDetector
+from core.runtime.live_cycle import (
+    LiveCycleConfig,
+    LiveCycleState,
+    _utc_iso,
+    compute_sl_tp_for_side,
+    cooldown_blocks_fire,
+    execute_live_cycle,
 )
+
+# Re-export symbols that moved to core.runtime.live_cycle so existing
+# test imports (scripts.live_intent_loop.xxx) keep working.
+__all__ = [
+    "LiveCycleConfig",
+    "LiveCycleState",
+    "build_parser",
+    "compute_sl_tp_for_side",
+    "cooldown_blocks_fire",
+    "decide_side_from_anchor",
+    "execute_live_cycle",
+    "load_brain_entry",
+    "load_normalization_config",
+    "main",
+]
 
 # ── Feature engine defaults ──
 DEFAULT_NORM_CONFIG = "configs/brains/v9_institutional_01.normalization.json"
 DEFAULT_BRAIN_ENTRY = "configs/brains/v9_institutional_01.json"
 DEFAULT_FEATURE_STORE_DIR = "data/feature_store"
-
-
-def _utc_iso() -> str:
-    return (
-        datetime.now(UTC)
-        .replace(tzinfo=None)
-        .replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
 
 
 def decide_side_from_anchor(price: float, anchor: float, threshold: float) -> str | None:
@@ -51,94 +61,10 @@ def decide_side_from_anchor(price: float, anchor: float, threshold: float) -> st
     return None
 
 
-def compute_sl_tp_for_side(
-    side: str,
-    *,
-    ref_long: float,
-    ref_short: float,
-    sl_distance: float,
-    tp_distance: float,
-) -> tuple[float, float, float]:
-    """Returns stop_loss, take_profit, ref_for_guard."""
-    if side == "long":
-        stop_loss = ref_long - sl_distance
-        take_profit = ref_long + tp_distance
-        ref_for_guard = ref_long
-    else:
-        stop_loss = ref_short + sl_distance
-        take_profit = ref_short - tp_distance
-        ref_for_guard = ref_short
-    return stop_loss, take_profit, ref_for_guard
-
-
-def cooldown_blocks_fire(now: float, last_fire: float, cooldown_seconds: float) -> bool:
-    return (now - last_fire) < cooldown_seconds
-
-
-def _mid_and_prices(mt5: Any, symbol: str) -> tuple[float, float, float]:
-    tick = mt5.symbol_info_tick(symbol)
-    if tick is None:
-        raise RuntimeError("tick unavailable")
-    bid = float(tick.bid)
-    ask = float(tick.ask)
-    return (bid + ask) / 2.0, bid, ask
-
-
-def _position_count(mt5: Any, symbol: str) -> int:
-    pos = mt5.positions_get(symbol=symbol)
-    return len(pos) if pos else 0
-
-
-def load_normalization_config(path: str) -> dict[str, Any]:
-    """Load normalization config from JSON, resolving relative paths."""
-    p = Path(path)
-    if not p.is_absolute():
-        p = Path(os.getcwd()) / p
-    if not p.exists():
-        raise FileNotFoundError(f"normalization config not found: {p}")
-    with open(p) as fh:
-        return json.load(fh)
-
-
-def load_brain_entry(path: str) -> dict[str, Any]:
-    """Load brain registry entry from JSON, resolving relative paths."""
-    p = Path(path)
-    if not p.is_absolute():
-        p = Path(os.getcwd()) / p
-    if not p.exists():
-        raise FileNotFoundError(f"brain entry not found: {p}")
-    with open(p) as fh:
-        return json.load(fh)
-
-
-def proposal_to_side(proposal: Any) -> str | None:
-    """Convert BrainDecisionProposal to trade side, applying confidence threshold.
-
-    Returns 'long', 'short', or None (neutral/insufficient confidence).
-    """
-    direction = proposal.prediction.get("direction_bias", "neutral")
-    confidence = proposal.prediction.get("confidence", 0.0)
-
-    # Only act on sufficiently confident signals
-    MIN_CONFIDENCE = 0.55
-    if confidence < MIN_CONFIDENCE:
-        return None
-
-    if direction == "long":
-        return "long"
-    elif direction == "short":
-        return "short"
-    return None
-
-
 def _resolve_consensus_side(consensus: dict[str, Any], min_confidence: float) -> str | None:
-    """Convert ParliamentService consensus dict to trade side.
-
-    Returns 'long', 'short', or None (neutral/insufficient consensus).
-    """
+    """Convert ParliamentService consensus dict to trade side."""
     bias = consensus.get("aggregated_bias", "neutral")
     score = consensus.get("consensus_score", 0.0)
-
     if score < min_confidence or bias == "neutral":
         return None
     if bias in ("long", "short"):
@@ -146,11 +72,85 @@ def _resolve_consensus_side(consensus: dict[str, Any], min_confidence: float) ->
     return None
 
 
+def _bootstrap_regime_detector(
+    mt5: Any, symbol: str, detector: Any, *, bootstrap_bars: int = 200
+) -> bool:
+    """Warm-start regime detector from MT5 historical ATR data."""
+    if detector.is_warmed_up and detector.atr_mean > 0.1:
+        return True
+
+    try:
+        import numpy as np
+
+        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 0, bootstrap_bars)
+        if rates is None or len(rates) < 30:
+            return False
+
+        h = np.array([r["high"] for r in rates], dtype=np.float64)
+        low = np.array([r["low"] for r in rates], dtype=np.float64)
+        c = np.array([r["close"] for r in rates], dtype=np.float64)
+        n = len(c)
+
+        atr_period = 14
+        atr_values = []
+        for i in range(atr_period, n):
+            cur_h = h[i - atr_period + 1 : i + 1]
+            cur_l = low[i - atr_period + 1 : i + 1]
+            prev_c = c[i - atr_period : i]
+            tr = np.maximum(
+                cur_h - cur_l,
+                np.maximum(np.abs(cur_h - prev_c), np.abs(cur_l - prev_c)),
+            )
+            atr_val = float(np.mean(tr))
+            if atr_val > 0.01:
+                atr_values.append(atr_val)
+                detector.update(atr_val)
+
+        if atr_values and detector.count > 0:
+            sample_mean = float(np.mean(atr_values))
+            sample_var = float(np.var(atr_values))
+            if sample_mean > 0.1 and sample_var > 0.01:
+                detector._mean = sample_mean
+                detector._var = sample_var - detector._eps
+
+        return detector.is_warmed_up
+    except Exception:
+        return False
+
+
+def load_normalization_config(path: str) -> dict[str, Any]:
+    """Load normalization config from JSON, resolving relative paths."""
+    p = Path(path)
+    if not p.is_absolute():
+        p = PROJECT_ROOT / p
+        if not p.exists():
+            p = Path.cwd() / Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"normalization config not found: {p}")
+    with open(p, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def load_brain_entry(path: str) -> dict[str, Any]:
+    """Load brain registry entry from JSON, resolving relative paths."""
+    p = Path(path)
+    if not p.is_absolute():
+        p = PROJECT_ROOT / p
+        if not p.exists():
+            p = Path.cwd() / Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"brain entry not found: {p}")
+    with open(p, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
 def _load_brain_entries_from_dir(brains_dir: str) -> list[dict[str, Any]]:
     """Load all brain registry entry JSON files from a directory."""
     p = Path(brains_dir)
     if not p.is_absolute():
-        p = Path.cwd() / p
+        p = PROJECT_ROOT / p
+        if not p.is_dir():
+            p = Path.cwd() / Path(brains_dir)
     if not p.is_dir():
         raise FileNotFoundError(f"brains directory not found: {p}")
     entries: list[dict[str, Any]] = []
@@ -171,13 +171,7 @@ def _load_brain_entries_from_dir(brains_dir: str) -> list[dict[str, Any]]:
 def _apply_governance_filter(
     entries: list[dict[str, Any]], base_dir: str
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Filter brain entries by governance status and apply weight penalties.
-
-    - retired / frozen: removed entirely
-    - probation: kept but vote_weight halved (applied as entry annotation)
-
-    Returns (filtered_entries, report).
-    """
+    """Filter brain entries by governance status and apply weight penalties."""
     report: dict[str, Any] = {
         "governance_loaded": False,
         "total_entries": len(entries),
@@ -205,7 +199,6 @@ def _apply_governance_filter(
         state = gov.get_brain_state(brain_id)
 
         if state is None:
-            # Not registered yet — let through
             filtered.append(entry)
             report["kept"].append(brain_id)
             continue
@@ -228,7 +221,6 @@ def _apply_governance_filter(
             continue
 
         if status == "probation":
-            # Annotate entry with reduced weight
             entry = dict(entry)
             original_weight = entry.get("vote_weight", 1.0)
             entry["vote_weight"] = round(original_weight * 0.5, 4)
@@ -260,12 +252,7 @@ def _apply_governance_filter(
 
 
 def _check_single_brain_governance(brain_id: str, base_dir: str) -> dict[str, Any]:
-    """Check whether a single brain should be blocked or warned by governance.
-
-    Returns a dict with:
-      - blocked: True if status is retired/frozen
-      - warning: True if status is probation (brain may run but at reduced weight)
-    """
+    """Check whether a single brain should be blocked or warned by governance."""
     gov_path = Path(base_dir) / "governance_state.json"
     if not gov_path.exists():
         return {"blocked": False, "warning": False, "reason": "no_governance_state"}
@@ -300,57 +287,24 @@ def _check_single_brain_governance(brain_id: str, base_dir: str) -> dict[str, An
     return {"blocked": False, "warning": False, "status": status}
 
 
-def _build_feature_snapshot(symbol: str, feature_vector: Any) -> Any:
-    """Build a minimal feature snapshot for ParliamentService.build_candidate()."""
-    from apps.engine.runtime_loop import SimpleFeatureSnapshot
-    from core.contracts.ids import new_snapshot_id
-
-    return SimpleFeatureSnapshot(
-        snapshot_id=new_snapshot_id(),
-        event_time=datetime.now(UTC).replace(tzinfo=None),
-        symbol=symbol,
-        venue="live_intent_loop",
-        feature_vector=feature_vector,
+def _init_risk_service() -> Any:
+    """Create RiskEvaluationService with standard live trading policies."""
+    from core.risk.risk_evaluation_service import RiskEvaluationService
+    from core.risk.risk_policies import (
+        ConcentrationPolicy,
+        DrawdownPolicy,
+        ExposurePolicy,
+        ModePolicy,
+        PositionLimitPolicy,
     )
 
-
-def _build_minimal_control_snapshot() -> Any:
-    """Build a minimal control snapshot for ParliamentService.build_candidate()."""
-    from core.contracts.domain.system_mode_state import SystemModeState
-    from core.contracts.enums import SystemMode
-    from core.state.schema_versions import SCHEMA_SYSTEM_MODE_STATE
-
-    mode_state = SystemModeState(
-        schema_version=SCHEMA_SYSTEM_MODE_STATE,
-        mode_state_id="intent_loop_default",
-        current_mode=SystemMode.NORMAL,
-        entered_at=datetime.now(UTC).replace(tzinfo=None),
-        previous_mode=None,
-        reason="live_intent_loop",
-    )
-
-    class _MinimalControlSnapshot:
-        def __init__(self, mode_state):
-            self.mode_state = mode_state
-            self.active_overrides = []
-
-    return _MinimalControlSnapshot(mode_state)
-
-
-def _record_brain_outcomes(proposals, direction, execution_outcome, tracker):
-    """Record each brain's performance based on consensus agreement."""
-    for p in proposals:
-        p_dir = p.prediction.get("direction_bias", "neutral")
-        matched = p_dir == direction if direction != "neutral" else p_dir == "neutral"
-        composite = (
-            round(0.55 + p.prediction.get("confidence", 0.0) * 0.3, 4)
-            if matched
-            else round(0.25 + p.prediction.get("confidence", 0.0) * 0.2, 4)
-        )
-        tracker.record_outcome(
-            p.brain_id,
-            {"composite_score": composite, "execution_outcome": execution_outcome},
-        )
+    svc = RiskEvaluationService()
+    svc.add_policy(DrawdownPolicy(max_drawdown_pct=5.0))
+    svc.add_policy(PositionLimitPolicy(max_open_positions=10))
+    svc.add_policy(ConcentrationPolicy(max_per_symbol=3))
+    svc.add_policy(ExposurePolicy(max_notional=1_000_000.0))
+    svc.add_policy(ModePolicy())
+    return svc
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -362,20 +316,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--confidence-threshold",
         type=float,
-        default=0.55,
+        default=0.50,
         help="Minimum prediction confidence to fire a trade (0.0-1.0)",
     )
     p.add_argument(
-        "--sl-distance",
+        "--sl-atr-mult",
         type=float,
-        default=15.0,
-        help="Distance from reference fill price to SL (absolute)",
+        default=2.0,
+        help="SL distance as multiple of M5 ATR(14) (e.g. 2.0 = 2x ATR)",
     )
     p.add_argument(
-        "--tp-distance",
+        "--tp-atr-mult",
         type=float,
-        default=25.0,
-        help="Distance from reference fill price to TP (absolute)",
+        default=3.5,
+        help="TP distance as multiple of M5 ATR(14) (e.g. 3.5 = 3.5x ATR)",
     )
     p.add_argument("--cooldown-seconds", type=float, default=300.0)
     p.add_argument("--max-positions", type=int, default=1)
@@ -437,7 +391,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--disable-feature-store",
         action="store_true",
-        help="Skip feature persistence to LocalFeatureStore (use only live computation)",
+        help="Skip feature persistence to LocalFeatureStore",
     )
     p.add_argument(
         "--once",
@@ -455,25 +409,56 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    # ── Import MT5 (skip if --no-mt5) ──
+    # ── Build LiveCycleConfig from args ──
+    config = LiveCycleConfig(
+        symbol=args.symbol,
+        base_dir=args.base_dir,
+        interval_seconds=args.interval_seconds,
+        confidence_threshold=args.confidence_threshold,
+        cooldown_seconds=args.cooldown_seconds,
+        max_positions=args.max_positions,
+        sl_atr_mult=args.sl_atr_mult,
+        tp_atr_mult=args.tp_atr_mult,
+        volume=args.volume,
+        no_mt5=args.no_mt5,
+        once=args.once,
+        ignore_protection_flag=args.ignore_protection_flag,
+        protection_flag_path=args.protection_flag_path,
+        mt5_terminal_path=args.mt5_terminal_path,
+        brain_type=args.brain_type,
+        multi_brain=args.multi_brain,
+        feature_store_dir=args.feature_store_dir,
+        disable_feature_store=args.disable_feature_store,
+    )
+
+    # ── Import MT5 ──
     mt5: Any = None
     if not args.no_mt5:
         try:
-            import MetaTrader5 as mt5  # type: ignore
+            import MetaTrader5 as mt5_mod
+
+            mt5 = mt5_mod
         except Exception as exc:
             print(
                 json.dumps({"error": "MetaTrader5 package required", "detail": str(exc)}, indent=2)
             )
             return 2
 
-        if not mt5.initialize(path=args.mt5_terminal_path):  # type: ignore[attr-defined]
+        if not mt5.initialize(path=args.mt5_terminal_path):
             print(
                 json.dumps(
                     {"error": "mt5_initialize_failed", "detail": str(mt5.last_error())},
-                    indent=2,  # type: ignore[attr-defined]
+                    indent=2,
                 )
             )
             return 2
+
+    # ── Build broker adapter (swap point for future FIX / cloud brokers) ──
+    _broker: Any = None
+    if not args.no_mt5 and mt5 is not None:
+        from core.execution.mt5_broker_adapter import MT5BrokerAdapter
+
+        _broker = MT5BrokerAdapter(mt5)
 
     # ── Load configs ──
     try:
@@ -483,16 +468,112 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps({"error": "normalization_config_load_failed", "detail": str(exc)}, indent=2)
         )
         if mt5 is not None:
-            mt5.shutdown()  # type: ignore[attr-defined]
+            mt5.shutdown()
         return 2
+
+    # ── Initialize rolling normalizer ──
+    rolling_norm: Any = None
+    normalize_enabled = norm_config.get("normalize", True)
+    if not args.no_mt5 and normalize_enabled:
+        rolling_norm = RollingNormalizer.from_static(
+            mean=norm_config["mean"],
+            std=norm_config["std"],
+            warmup_bars=100,
+        )
+        _state_path = Path(args.base_dir) / "rolling_norm_state.json"
+        if _state_path.exists():
+            try:
+                rolling_norm.load_state(_state_path)
+                print(
+                    json.dumps(
+                        {
+                            "event": "rolling_norm_state_loaded",
+                            "time": _utc_iso(),
+                            "path": str(_state_path),
+                            "count": rolling_norm.count,
+                            "warmed_up": rolling_norm.is_warmed_up,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+            except Exception as exc:
+                print(
+                    json.dumps(
+                        {
+                            "event": "rolling_norm_state_load_error",
+                            "time": _utc_iso(),
+                            "error": str(exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+
+    # ── Initialize regime detector ──
+    regime_detector: Any = None
+    if not args.no_mt5:
+        regime_detector = RegimeDetector()
+        _regime_path = Path(args.base_dir) / "regime_detector_state.json"
+        if _regime_path.exists():
+            try:
+                regime_detector.load_state(_regime_path)
+                print(
+                    json.dumps(
+                        {
+                            "event": "regime_detector_state_loaded",
+                            "time": _utc_iso(),
+                            "path": str(_regime_path),
+                            "count": regime_detector.count,
+                            "atr_mean": regime_detector.atr_mean,
+                            "atr_std": regime_detector.atr_std,
+                            "warmed_up": regime_detector.is_warmed_up,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+            except Exception as exc:
+                print(
+                    json.dumps(
+                        {
+                            "event": "regime_detector_state_load_error",
+                            "time": _utc_iso(),
+                            "error": str(exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+
+        needs_bootstrap = not regime_detector.is_warmed_up or regime_detector.atr_mean < 0.1
+        if needs_bootstrap:
+            bootstrapped = _bootstrap_regime_detector(mt5, args.symbol, regime_detector)
+            print(
+                json.dumps(
+                    {
+                        "event": "regime_detector_bootstrap",
+                        "time": _utc_iso(),
+                        "bootstrapped": bootstrapped,
+                        "warmed_up": regime_detector.is_warmed_up,
+                        "count": regime_detector.count,
+                        "atr_mean": round(regime_detector.atr_mean, 4),
+                        "atr_std": round(regime_detector.atr_std, 4),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
 
     try:
         brain_entry = load_brain_entry(args.brain_entry)
     except Exception as exc:
         print(json.dumps({"error": "brain_entry_load_failed", "detail": str(exc)}, indent=2))
         if mt5 is not None:
-            mt5.shutdown()  # type: ignore[attr-defined]
+            mt5.shutdown()
         return 2
+
+    config.brain_entry = brain_entry
 
     # Apply overrides
     if args.onnx_artifact:
@@ -500,60 +581,122 @@ def main(argv: list[str] | None = None) -> int:
     if args.disable_onnx:
         brain_entry["enable_onnxruntime"] = False
 
-    # Ensure project root is on sys.path so core.* imports resolve
-    _project_root = Path(__file__).resolve().parent.parent
-    if str(_project_root) not in sys.path:
-        sys.path.insert(0, str(_project_root))
-
-    # ── Initialize feature computer (skip if --no-mt5) ──
+    # ── Initialize feature services ──
     feature_adapter: Any = None
     feature_service: Any = None
+    feature_computer: Any = None
+    feature_schema: Any = None
+    feature_store: Any = None
 
     if not args.no_mt5:
         from core.features.computers.v9_live_computer import V9LiveFeatureComputer
 
         feature_computer = V9LiveFeatureComputer(mt5, args.symbol)
 
-        # ── Initialize feature adapter with normalization ──
         from core.features.adapters.v9_feature_adapter import V9FeatureAdapter
 
-        feature_adapter = V9FeatureAdapter(normalization_config=norm_config)
+        feature_adapter = V9FeatureAdapter(
+            rolling_normalizer=rolling_norm,
+            normalization_config=norm_config,
+        )
 
-        # ── Initialize LocalFeatureStore (Fix 1: feature persistence) ──
         _store_dir = Path(args.feature_store_dir)
         if not _store_dir.is_absolute():
-            _store_dir = Path.cwd() / _store_dir
+            _store_dir = PROJECT_ROOT / _store_dir
+        from core.features.local_feature_store import LocalFeatureStore
+
         feature_store = LocalFeatureStore(str(_store_dir))
+        from core.deployment.feature_update_producer import build_v9_schema
+
         feature_schema = build_v9_schema(symbol=args.symbol)
         feature_store.register_schema(feature_schema)
-        feature_store_disabled = args.disable_feature_store
 
-        # ── Initialize FeatureService (Fix 2: hierarchical store→live→stub resolution) ──
+        from core.features.feature_service import FeatureService
+
         feature_service = FeatureService(
             feature_adapter=feature_adapter,
             feature_computer=feature_computer,
             default_venue="MT5",
             feature_store=feature_store,
             default_symbol=args.symbol,
-            store_schema_name="v9_institutional",
-            store_timeframe="M1",
+            store_schema_name="v9_institutional_40",
+            store_timeframe="M5",
         )
-    else:
-        feature_store_disabled = True
 
-    # ── Initialize performance tracker (always-on, both single and multi-brain) ──
-    tracker = BrainPerformanceTracker(window_size=100)
-    weighter: Any = None
+    # ── Initialize risk service ──
+    risk_service = _init_risk_service()
+
+    # ── Initialize performance tracker ──
+    tracker_path = Path(args.base_dir) / "brain_performance.json"
+    if tracker_path.exists():
+        try:
+            tracker = BrainPerformanceTracker.load(tracker_path)
+            print(
+                json.dumps(
+                    {
+                        "event": "brain_performance_loaded",
+                        "time": _utc_iso(),
+                        "path": str(tracker_path),
+                        "brain_count": len(tracker.get_brain_ids()),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        except Exception:
+            tracker = BrainPerformanceTracker(window_size=100)
+    else:
+        tracker = BrainPerformanceTracker(window_size=100)
+
+    # ── Initialize P&L ledger ──
+    from core.feedback.brain_pnl_ledger import BrainPnLStore
+
+    pnl_ledger_path = Path(args.base_dir) / "brain_pnl_ledger.json"
+    pnl_ledger: Any = None
+    if args.multi_brain:
+        try:
+            pnl_ledger = BrainPnLStore.load(pnl_ledger_path)
+            print(
+                json.dumps(
+                    {
+                        "event": "pnl_ledger_loaded",
+                        "time": _utc_iso(),
+                        "settled_count": pnl_ledger.total_settled,
+                        "pending_count": pnl_ledger.pending_count,
+                        "brain_ids": pnl_ledger.brain_ids,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        except Exception:
+            pnl_ledger = BrainPnLStore(window_size=100)
+    else:
+        pnl_ledger = BrainPnLStore(window_size=100)
+
+    # ── Load open positions from journal ──
+    _journal_path = Path(args.base_dir) / "live_trade_journal.jsonl"
+    known_open_tickets: dict[int, dict[str, Any]] = {}
+    if _journal_path.exists():
+        try:
+            for line in _journal_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                rec = json.loads(line)
+                if rec.get("action") == "open" and rec.get("ack_status") == "accepted":
+                    ticket = rec.get("position_ticket")
+                    if ticket is not None and isinstance(ticket, int) and ticket > 0:
+                        known_open_tickets[ticket] = rec
+        except Exception:
+            pass
 
     # ── Initialize brain adapter(s) ──
-    multi_brain = args.multi_brain
-    brains: list[dict[str, Any]] = []  # list of {"brain_id": str, "adapter": brain}
+    brains: list[dict[str, Any]] = []
     parliament: Any = None
 
-    if multi_brain:
+    if args.multi_brain:
         entries = _load_brain_entries_from_dir(args.brains_dir)
-
-        # Apply governance filter: skip retired/frozen, penalize probation
         entries, gov_report = _apply_governance_filter(entries, args.base_dir)
 
         from core.brains.services.brain_factory import BrainFactory
@@ -563,7 +706,13 @@ def main(argv: list[str] | None = None) -> int:
         for entry in entries:
             try:
                 b = factory.build(entry)
-                brains.append({"brain_id": entry.get("brain_id", "unknown"), "adapter": b})
+                brains.append(
+                    {
+                        "brain_id": entry.get("brain_id", "unknown"),
+                        "adapter": b,
+                        "magic": entry.get("magic", 90001),
+                    }
+                )
             except Exception as exc:
                 print(
                     json.dumps(
@@ -582,9 +731,8 @@ def main(argv: list[str] | None = None) -> int:
                 mt5.shutdown()
             return 2
         parliament = ParliamentService()
-        weighter = DynamicBrainWeighter(tracker)
     else:
-        # Single-brain mode: check governance before loading
+        # Single-brain mode: check governance
         brain_id = brain_entry.get("brain_id", "unknown")
         gov_check = _check_single_brain_governance(brain_id, args.base_dir)
         if gov_check.get("blocked"):
@@ -605,9 +753,18 @@ def main(argv: list[str] | None = None) -> int:
 
             brain = BrainFactory().build(brain_entry)
 
-    last_fire = 0.0
-    flag_notice = False
+        brains.append(
+            {
+                "brain_id": brain_entry.get("brain_id", "unknown"),
+                "adapter": brain,
+                "magic": brain_entry.get("magic", 90001),
+            }
+        )
 
+    # ── Initial state ──
+    state = LiveCycleState(known_open_tickets=known_open_tickets)
+
+    # ── Start event ──
     start_event: dict[str, Any] = {
         "event": "live_intent_loop_start",
         "time": _utc_iso(),
@@ -616,7 +773,7 @@ def main(argv: list[str] | None = None) -> int:
         "interval_seconds": args.interval_seconds,
         "volume": args.volume,
     }
-    if multi_brain:
+    if args.multi_brain:
         start_event["mode"] = "multi_brain"
         start_event["brain_count"] = len(brains)
         start_event["brain_ids"] = [b["brain_id"] for b in brains]
@@ -626,260 +783,31 @@ def main(argv: list[str] | None = None) -> int:
         start_event["brain_id"] = brain_entry.get("brain_id", "unknown")
     print(json.dumps(start_event, ensure_ascii=False), flush=True)
 
+    # ── Main loop ──
     try:
         while True:
             try:
-                # ── Protection flag check ──
-                flag_path = resolve_protection_flag_path(args.base_dir, args.protection_flag_path)
-                if flag_path.exists() and not args.ignore_protection_flag:
-                    if not flag_notice:
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "protection_skip",
-                                    "time": _utc_iso(),
-                                    "flag": str(flag_path),
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-                        flag_notice = True
-                    time.sleep(args.interval_seconds)
-                    continue
-                flag_notice = False
-
-                # ── Cooldown check ──
-                now = time.monotonic()
-                if cooldown_blocks_fire(now, last_fire, args.cooldown_seconds):
-                    time.sleep(args.interval_seconds)
-                    continue
-
-                # ── Position limit check (skip if --no-mt5) ──
-                if not args.no_mt5 and _position_count(mt5, args.symbol) >= args.max_positions:
-                    time.sleep(args.interval_seconds)
-                    continue
-
-                # ── Compute features (zero vector if --no-mt5) ──
-                if args.no_mt5:
-                    import numpy as np
-
-                    feature_vector: Any = np.zeros(40, dtype=np.float64)
-                else:
-                    trigger = {"symbol": args.symbol, "venue": "MT5"}
-                    feature_vector = feature_service.build_feature_vector(trigger)
-
-                # ── Persist features to LocalFeatureStore (skip if --no-mt5) ──
-                if not feature_store_disabled and not args.no_mt5:
-                    try:
-                        for record in produce_from_live_computer(
-                            feature_computer, feature_schema, args.symbol
-                        ):
-                            feature_store.write_records([record])
-                    except Exception:
-                        pass
-
-                # ── Run inference ──
-                raw_output: dict[str, Any] = {}
-                proposal: Any = None
-
-                if multi_brain:
-                    proposals = []
-                    for b_info in brains:
-                        try:
-                            raw = b_info["adapter"].infer(feature_vector)
-                            prop = b_info["adapter"].get_signal(raw)
-                            proposals.append(prop)
-                        except Exception:
-                            pass
-
-                    # Apply dynamic vote weights from tracked performance
-                    weighter.apply_weights(proposals)
-
-                    # Build a proper candidate via ParliamentService (governance
-                    # filtering, regime detection, feasibility — not just raw consensus).
-                    feature_snapshot = _build_feature_snapshot(args.symbol, feature_vector)
-                    control_snapshot = _build_minimal_control_snapshot()
-                    candidate = parliament.build_candidate(
-                        feature_snapshot, proposals, control_snapshot
-                    )
-                    direction = candidate.consensus.get("aggregated_bias", "neutral")
-                    confidence = candidate.consensus.get("consensus_score", 0.0)
-                    consensus_extra = {
-                        "voter_count": candidate.consensus.get("voter_count", 0),
-                        "majority_ratio": candidate.consensus.get("majority_ratio", 0.0),
-                        "disagreement_score": candidate.consensus.get("disagreement_score", 0.0),
-                        "supporting_brains": candidate.supporting_brains,
-                        "opposing_brains": candidate.opposing_brains,
-                        "is_feasible": candidate.execution_feasibility.get("is_feasible", True),
-                    }
-                else:
-                    raw_output = brain.infer(feature_vector)
-                    proposal = brain.get_signal(raw_output)
-                    direction = proposal.prediction.get("direction_bias", "neutral")
-                    confidence = proposal.prediction.get("confidence", 0.0)
-
-                if confidence < args.confidence_threshold or direction == "neutral":
-                    # Log low-confidence skip
-                    skip_event: dict[str, Any] = {
-                        "event": "low_confidence_skip",
-                        "time": _utc_iso(),
-                        "direction": direction,
-                        "confidence": round(confidence, 6),
-                        "threshold": args.confidence_threshold,
-                    }
-                    if multi_brain:
-                        skip_event["mode"] = "multi_brain"
-                        skip_event.update(consensus_extra)
-                        _record_brain_outcomes(proposals, direction, "consensus_skip", tracker)
-                    else:
-                        skip_event["out_risk"] = round(raw_output.get("out_risk", 0.0), 6)
-                        skip_event["out_vol"] = round(raw_output.get("out_vol", 0.0), 6)
-                        skip_event["runtime_ms"] = round(raw_output.get("runtime_ms", 0.0), 2)
-                        skip_event["backend"] = brain.describe()["backend"]
-                        brain_id = brain_entry.get("brain_id", "unknown")
-                        tracker.record_outcome(
-                            brain_id,
-                            {
-                                "composite_score": round(0.3 + confidence * 0.3, 4),
-                                "execution_outcome": "consensus_skip",
-                            },
-                        )
-                    print(json.dumps(skip_event, ensure_ascii=False), flush=True)
-                    if args.once:
-                        break
-                    time.sleep(args.interval_seconds)
-                    continue
-
-                side = direction  # "long" or "short"
-
-                if args.no_mt5:
-                    # ── Verification-only mode: report consensus, skip dispatch ──
-                    verify_event: dict[str, Any] = {
-                        "event": "inference_verified",
-                        "time": _utc_iso(),
-                        "side": side,
-                        "confidence": round(confidence, 6),
-                        "mode": "no_mt5_dry_run",
-                    }
-                    if multi_brain:
-                        verify_event.update(consensus_extra)
-                    print(json.dumps(verify_event, ensure_ascii=False, default=str), flush=True)
-
-                    # ── Persist shadow decision for audit trail ──
-                    if multi_brain and proposals:
-                        try:
-                            from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
-                            from scripts.shadow_decision_recorder import (
-                                record_shadow_from_proposals,
-                            )
-
-                            store = JsonlLedgerStore(args.base_dir)
-                            consensus_for_record = {
-                                "aggregated_bias": direction,
-                                "consensus_score": confidence,
-                                "voter_count": candidate.consensus.get("voter_count", 0),
-                                "majority_ratio": candidate.consensus.get("majority_ratio", 0.0),
-                                "disagreement_score": candidate.consensus.get(
-                                    "disagreement_score", 0.0
-                                ),
-                            }
-                            record_shadow_from_proposals(
-                                proposals=proposals,
-                                consensus=consensus_for_record,
-                                symbol=args.symbol.replace("c", ""),
-                                store=store,
-                                dispatch_status="shadow_verify",
-                            )
-                        except Exception:
-                            pass
-
-                        _record_brain_outcomes(proposals, direction, "shadow_verified", tracker)
-                    elif not multi_brain:
-                        brain_id = brain_entry.get("brain_id", "unknown")
-                        tracker.record_outcome(
-                            brain_id,
-                            {
-                                "composite_score": round(0.5 + confidence * 0.35, 4),
-                                "execution_outcome": "shadow_verified",
-                            },
-                        )
-                else:
-                    # ── Get current prices for SL/TP computation ──
-                    mid, bid, ask = _mid_and_prices(mt5, args.symbol)
-                    ref_long = ask
-                    ref_short = bid
-
-                    # ── Compute SL/TP ──
-                    stop_loss, take_profit, ref_for_guard = compute_sl_tp_for_side(
-                        side,
-                        ref_long=ref_long,
-                        ref_short=ref_short,
-                        sl_distance=args.sl_distance,
-                        tp_distance=args.tp_distance,
-                    )
-
-                    _validate_sl_tp(
-                        side=side,
-                        stop_loss=stop_loss,
-                        take_profit=take_profit,
-                        reference_price=ref_for_guard,
-                    )
-
-                    # ── Dispatch order ──
-                    out = dispatch_live_open_order(
-                        base_dir=args.base_dir,
-                        mt5_terminal_path=args.mt5_terminal_path,
-                        symbol=args.symbol,
-                        side=side,
-                        stop_loss=stop_loss,
-                        take_profit=take_profit,
-                        skip_price_guard=True,
-                        ignore_protection_flag=args.ignore_protection_flag,
-                        protection_flag_path=args.protection_flag_path,
-                        volume=args.volume,
-                    )
-                    last_fire = now
-
-                    dispatch_event = {
-                        "event": "intent_dispatched",
-                        "time": _utc_iso(),
-                        "mid": mid,
-                        "side": side,
-                        "confidence": round(confidence, 6),
-                        "reference_used": ref_for_guard,
-                        "sl": stop_loss,
-                        "tp": take_profit,
-                        "dispatch": out,
-                    }
-                    if multi_brain:
-                        dispatch_event["mode"] = "multi_brain"
-                        dispatch_event.update(consensus_extra)
-                    else:
-                        dispatch_event["out_risk"] = round(raw_output.get("out_risk", 0.0), 6)
-                        dispatch_event["out_vol"] = round(raw_output.get("out_vol", 0.0), 6)
-                        dispatch_event["runtime_ms"] = round(raw_output.get("runtime_ms", 0.0), 2)
-                        dispatch_event["backend"] = brain.describe()["backend"]
-
-                    print(json.dumps(dispatch_event, ensure_ascii=False, default=str), flush=True)
-
-                    # Record dispatch outcome as "pending" — feedback_loop resolves to real P&L later
-                    if multi_brain:
-                        dispatch_ok = out.get("status", "") not in ("error", "rejected", "timeout")
-                        outcome = "pending" if dispatch_ok else "pending_rejected"
-                        _record_brain_outcomes(proposals, direction, outcome, tracker)
-                    else:
-                        dispatch_ok = out.get("status", "") not in ("error", "rejected", "timeout")
-                        outcome = "pending" if dispatch_ok else "pending_rejected"
-                        brain_id = brain_entry.get("brain_id", "unknown")
-                        tracker.record_outcome(
-                            brain_id,
-                            {
-                                "composite_score": round(0.5 + confidence * 0.35, 4),
-                                "execution_outcome": outcome,
-                            },
-                        )
-
+                state, should_continue = execute_live_cycle(
+                    config,
+                    state,
+                    mt5=mt5,
+                    broker=_broker,
+                    feature_service=feature_service,
+                    feature_computer=feature_computer,
+                    feature_schema=feature_schema,
+                    feature_store=feature_store,
+                    brains=brains,
+                    parliament=parliament,
+                    risk_service=risk_service,
+                    regime_detector=regime_detector,
+                    tracker=tracker,
+                    rolling_norm=rolling_norm,
+                    feature_adapter=feature_adapter,
+                    journal_path=_journal_path,
+                    pnl_ledger=pnl_ledger,
+                )
+                if not should_continue:
+                    break
             except Exception as exc:
                 print(
                     json.dumps(
@@ -888,20 +816,80 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
+                if args.once:
+                    break
 
-            if args.once:
-                break
+            # ── Persist normalizer + regime detector state every ~1 hour ──
+            state.cycle_count += 1
+            if state.loop_iteration % config.state_save_interval == 0:
+                if rolling_norm is not None:
+                    try:
+                        _state_path = Path(args.base_dir) / "rolling_norm_state.json"
+                        rolling_norm.save_state(_state_path)
+                    except Exception:
+                        pass
+                if regime_detector is not None:
+                    try:
+                        _regime_path = Path(args.base_dir) / "regime_detector_state.json"
+                        regime_detector.save_state(_regime_path)
+                    except Exception:
+                        pass
+                if pnl_ledger is not None:
+                    try:
+                        pnl_ledger.save(pnl_ledger_path)
+                    except Exception:
+                        pass
 
             time.sleep(args.interval_seconds)
     finally:
-        # Persist performance tracker so daily_ops governance can see the data
+        # ── Persist state on shutdown ──
+        if rolling_norm is not None:
+            try:
+                _state_path = Path(args.base_dir) / "rolling_norm_state.json"
+                rolling_norm.save_state(_state_path)
+            except Exception:
+                pass
+        if regime_detector is not None:
+            try:
+                _regime_path = Path(args.base_dir) / "regime_detector_state.json"
+                regime_detector.save_state(_regime_path)
+            except Exception:
+                pass
         try:
             save_path = Path(args.base_dir) / "brain_performance.json"
             tracker.save(save_path)
-        except Exception:
-            pass
+        except Exception as exc:
+            print(
+                json.dumps(
+                    {"event": "tracker_save_error", "time": _utc_iso(), "error": str(exc)},
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        if pnl_ledger is not None:
+            try:
+                pnl_ledger.save(pnl_ledger_path)
+                print(
+                    json.dumps(
+                        {
+                            "event": "pnl_ledger_saved",
+                            "time": _utc_iso(),
+                            "settled_count": pnl_ledger.total_settled,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+            except Exception as exc:
+                print(
+                    json.dumps(
+                        {"event": "pnl_ledger_save_error", "time": _utc_iso(), "error": str(exc)},
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
         if mt5 is not None:
-            mt5.shutdown()  # type: ignore[attr-defined]
+            mt5.shutdown()
 
     return 0
 
