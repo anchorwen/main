@@ -63,13 +63,27 @@ def test_normalisation_config_smoke(norm_config: dict):
 
 
 def test_v9_feature_adapter_normalizes(norm_config: dict):
-    """V9FeatureAdapter uses normalisation config to produce zero-mean-ish output."""
-    adapter = V9FeatureAdapter(normalization_config=norm_config)
-    # Feed the mean vector itself → expected ~zero after normalization
-    mean_vec = np.asarray(norm_config["mean"], dtype=np.float32)
-    result = adapter.normalize(mean_vec)
+    """V9FeatureAdapter applies z-score when normalize=true, skips when false."""
+    mean_arr = np.asarray(norm_config["mean"], dtype=np.float32)
+
+    # ── normalize=true (synthetic config, does not mutate the file fixture) ──
+    norm_on = {**norm_config, "normalize": True}
+    adapter_on = V9FeatureAdapter(normalization_config=norm_on)
+    result = adapter_on.normalize(mean_arr)
     assert result.shape == (40,)
     assert np.allclose(result, 0.0, atol=1e-5), "mean vector should normalize to near-zero"
+
+    # ── normalize=false: raw features pass through unchanged ──
+    norm_off = {**norm_config, "normalize": False}
+    adapter_off = V9FeatureAdapter(normalization_config=norm_off)
+    raw = np.arange(40, dtype=np.float32)
+    result = adapter_off.normalize(raw)
+    np.testing.assert_array_equal(result, raw)
+
+    # ── ATR-like values at raw scale: (raw - mean) / std ≠ raw ──
+    atr_like = np.full(40, 50.0, dtype=np.float32)
+    result_off = adapter_off.normalize(atr_like)
+    np.testing.assert_array_equal(result_off, atr_like)
 
 
 def test_feature_service_tier3_stub():

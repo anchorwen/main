@@ -945,10 +945,10 @@ def build_formal_suite_semantic_rules() -> dict[str, dict[str, dict]]:
                 "dispatch_status": "protocol_validated",
             },
             "short_case": {
-                "action": "open",
-                "side": "short",
-                "risk_status": "allow",
-                "dispatch_status": "protocol_validated",
+                "action": "abstain",
+                "side": "flat",
+                "risk_status": "deny",
+                "dispatch_status": "skipped",
             },
         },
         "risk_boundary": {

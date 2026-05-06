@@ -49,11 +49,22 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
             self._backend = "onnxruntime"
         except Exception as exc:
             self._backend = f"stub:{type(exc).__name__}"
+            bid = self._brain_entry.get("brain_id", "unknown")
+            art = self._brain_entry.get("artifact_path", "unknown")
+            print(
+                f"[v9_onnx_adapter] load_failed brain_id={bid} artifact={art} "
+                f"error={type(exc).__name__}: {exc}",
+                flush=True,
+            )
 
     def infer(self, feature_vector: np.ndarray) -> dict[str, Any]:
         """Run ONNX inference on a 1-D feature vector.
 
         Returns dict with: out_dir, out_risk, out_vol, runtime_ms, fallback.
+
+        Handles two ONNX output formats:
+        - V9 format (3 outputs): [logits(1,3), risk(1,1), vol(1,1)]
+        - CRT format (1 output):  [logits(1,3)] — risk/vol derived from logits
 
         The caller is responsible for normalising and preparing the feature
         vector before passing it here.  This method only reshapes for ONNX.
@@ -75,8 +86,17 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
         runtime_ms = (perf_counter() - started) * 1000.0
 
         out_dir = outputs[0][0]
-        out_risk = float(outputs[1][0][0])
-        out_vol = float(outputs[2][0][0])
+        if len(outputs) >= 3:
+            # V9 format: separate risk + vol outputs
+            out_risk = float(outputs[1][0][0])
+            out_vol = float(outputs[2][0][0])
+        else:
+            # CRT format: single logits output → derive risk/vol from class distribution
+            probs = self._decode_direction(out_dir)
+            max_prob = float(np.max(probs))
+            out_risk = round(1.0 - max_prob, 6)
+            entropy = -float(np.sum(probs * np.log(probs + 1e-8)))
+            out_vol = round(min(1.0, entropy / 1.1), 6)
 
         return {
             "out_dir": out_dir,
