@@ -116,10 +116,10 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         str(cfg["interval_seconds"]),
         "--confidence-threshold",
         str(cfg["confidence_threshold"]),
-        "--sl-distance",
-        str(cfg["sl_distance"]),
-        "--tp-distance",
-        str(cfg["tp_distance"]),
+        "--sl-atr-mult",
+        str(cfg["sl_atr_mult"]),
+        "--tp-atr-mult",
+        str(cfg["tp_atr_mult"]),
         "--cooldown-seconds",
         str(cfg["cooldown_seconds"]),
         "--max-positions",
@@ -150,7 +150,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         flush=True,
     )
     print(
-        f"  SL: {cfg['sl_distance']}  TP: {cfg['tp_distance']}  "
+        f"  SL: {cfg['sl_atr_mult']}xATR  TP: {cfg['tp_atr_mult']}xATR  "
         f"Cooldown: {cfg['cooldown_seconds']}s",
         flush=True,
     )
@@ -165,12 +165,15 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     print("", flush=True)
 
     # ── Launch subprocesses ──
+    subprocess_env = {**dict(subprocess.os.environ), "PYTHONUTF8": "1"}
     bridge_proc = subprocess.Popen(
         bridge_cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         bufsize=1,
+        encoding="utf-8",
+        env=subprocess_env,
     )
     print(f"[launcher] Bridge worker started (pid={bridge_proc.pid})", flush=True)
 
@@ -180,6 +183,8 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         stderr=subprocess.PIPE,
         text=True,
         bufsize=1,
+        encoding="utf-8",
+        env=subprocess_env,
     )
     print(f"[launcher] Intent loop started (pid={intent_proc.pid})", flush=True)
 

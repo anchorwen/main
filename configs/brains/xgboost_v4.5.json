@@ -6,10 +6,11 @@
   "model_version": "v4.5",
   "status": "shadow",
   "vote_weight": 0.8,
-  "artifact_path": "D:\\ai\\Meta_ppo_v4.5\\V4.X_XGBoost_Core.json",
+  "magic": 90003,
+  "artifact_path": "data/models/V4.X_XGBoost_Core.json",
   "feature_schema_id": "v4.5_microstructure_9",
   "deployment_scope": {
-    "symbols": ["XAUUSD"],
+    "symbols": ["XAUUSDc", "XAUUSD"],
     "sessions": ["all"],
     "regimes": ["trend", "volatile_trend", "microstructure_noise"]
   }

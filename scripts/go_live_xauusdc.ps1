@@ -1,3 +1,4 @@
+# DEPRECATED — replaced by python main.py live (one-command live trading).
 param(
   [string]$BaseDir = "data",
   [string]$Mt5TerminalPath = "D:\MetaTrader 5\terminal64.exe",

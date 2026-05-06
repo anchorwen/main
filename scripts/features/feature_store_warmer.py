@@ -174,11 +174,30 @@ def compute_features_from_ohlc(ohlc_df: pd.DataFrame) -> dict[str, float]:
     }
 
 
+def _resample_ohlc(df: pd.DataFrame, factor: int) -> pd.DataFrame:
+    """Resample M5 OHLC bars to a higher timeframe by aggregating `factor` rows."""
+    if factor <= 1:
+        return df.copy()
+    rows = []
+    for start in range(0, len(df), factor):
+        chunk = df.iloc[start : start + factor]
+        rows.append(
+            {
+                "open": chunk["open"].iloc[0],
+                "high": chunk["high"].max(),
+                "low": chunk["low"].min(),
+                "close": chunk["close"].iloc[-1],
+                "volume": chunk["volume"].sum() if "volume" in chunk.columns else factor,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def warm_store(
     csv_path: Path,
     store_dir: Path,
     *,
-    symbol: str = "XAUUSD",
+    symbol: str = "XAUUSDc",
     timeframe: str = "M5",
     max_rows: int = 50000,
     step: int = 5,
@@ -253,15 +272,38 @@ def warm_store(
         except Exception:
             pass
 
+    # Pre-build resampled OHLC for each timeframe
+    tf_factors = {"M5": 1, "M15": 3, "M30": 6, "H1": 12}
+    tf_dfs = {label: _resample_ohlc(df, factor) for label, factor in tf_factors.items()}
+
+    # Pre-built zero fallback for higher timeframes not yet eligible
+    _M5_KEYS = [
+        "M5_Ret_1",
+        "M5_Body_Ratio",
+        "M5_ATR_14",
+        "M5_RSI_14",
+        "M5_MACD",
+        "M5_Vol_ZScore",
+        "M5_Macro1_Corr",
+        "M5_Macro_Gold_Silver_Spread",
+        "M5_OU_Theta",
+        "M5_Hurst",
+    ]
+    _ZERO_FEATS = {k: 0.0 for k in _M5_KEYS}
+
     records = []
     n = len(df)
     for i in range(MIN_BARS, n, step):
-        window = df.iloc[: i + 1]
         feats = {}
-        # Use same features for all timeframes (M5 granularity, approximation)
-        for tf_label in ["M5", "M15", "M30", "H1"]:
-            tf_feats = compute_features_from_ohlc(window)
-            feats.update({k.replace("M5_", f"{tf_label}_"): v for k, v in tf_feats.items()})
+        for tf_label, factor in tf_factors.items():
+            tf_df = tf_dfs[tf_label]
+            tf_idx = i // factor
+            if tf_idx >= MIN_BARS:
+                tf_feats = compute_features_from_ohlc(tf_df.iloc[: tf_idx + 1])
+            else:
+                tf_feats = _ZERO_FEATS
+            for k, v in tf_feats.items():
+                feats[k.replace("M5_", f"{tf_label}_")] = v
 
         event_time = base_time + timedelta(minutes=5 * i)
         records.append(
@@ -300,7 +342,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("data/feature_store"),
         help="LocalFeatureStore base dir",
     )
-    p.add_argument("--symbol", default="XAUUSD")
+    p.add_argument("--symbol", default="XAUUSDc")
     p.add_argument("--timeframe", default="M5")
     p.add_argument("--max-rows", type=int, default=50000, help="Max rows to process")
     p.add_argument("--step", type=int, default=5, help="Step interval between feature snapshots")

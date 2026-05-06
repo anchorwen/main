@@ -42,6 +42,9 @@ class EnvironmentConfig:
     target_name: str = "exec_bridge"
 
     enable_feedback_loop: bool = False
+    daily_ops_enabled: bool = True
+    feature_store_scheduled_update: bool = True
+    ops_monitoring_enabled: bool = True
     enable_audit_log: bool = True
     enable_metrics: bool = True
     enable_idempotency: bool = True
@@ -99,6 +102,9 @@ class EnvironmentConfig:
             "enable_audit_log": False,
             "enable_metrics": False,
             "enable_idempotency": False,
+            "daily_ops_enabled": False,
+            "feature_store_scheduled_update": False,
+            "ops_monitoring_enabled": False,
             "adapter_name": "stub",
         }
         defaults.update(overrides)

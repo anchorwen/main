@@ -74,7 +74,12 @@ class TestSchedulerService:
         assert sched.get_status()["task_count"] >= 1
 
     def test_for_container_runs(self, tmp_path):
-        c = _container(tmp_path)
+        c = _container(
+            tmp_path,
+            daily_ops_enabled=False,
+            feature_store_scheduled_update=False,
+            ops_monitoring_enabled=False,
+        )
         c.governance_service.register_brain("t1", "live")  # type: ignore[reportOptionalMemberAccess]
         c.brain_tracker.record_outcome("t1", {"composite_score": 0.8})  # type: ignore[reportOptionalMemberAccess]
         sp = StatePersistence(str(tmp_path / "state"))

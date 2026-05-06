@@ -1,6 +1,8 @@
 {
-  "sur": "python scripts/training/trainers/sur_trainer.py --manifest-path {manifest_path} --result-json-path {manifest_path}.result.json --artifact-path {artifact_path}",
-  "mtx": "python scripts/training/trainers/mtx_trainer.py --manifest-path {manifest_path} --result-json-path {manifest_path}.result.json --artifact-path {artifact_path} --mode transformer",
-  "mtx_xgb": "python scripts/training/trainers/mtx_trainer.py --manifest-path {manifest_path} --result-json-path {manifest_path}.result.json --artifact-path {artifact_path} --mode xgboost",
-  "arb": "python scripts/training/trainers/arb_trainer.py --manifest-path {manifest_path} --result-json-path {manifest_path}.result.json --artifact-path {artifact_path}"
+  "sur": "python scripts/training/trainers/sur_trainer.py --manifest-path {manifest_path} --result-json-path {manifest_path}.result.json --artifact-path {artifact_path} --recipe {recipe_path}",
+  "mtx": "python scripts/training/trainers/mtx_trainer.py --manifest-path {manifest_path} --result-json-path {manifest_path}.result.json --artifact-path {artifact_path} --mode transformer --recipe {recipe_path}",
+  "mtx_xgb": "python scripts/training/trainers/mtx_trainer.py --manifest-path {manifest_path} --result-json-path {manifest_path}.result.json --artifact-path {artifact_path} --mode xgboost --recipe {recipe_path}",
+  "arb": "python scripts/training/trainers/arb_trainer.py --manifest-path {manifest_path} --result-json-path {manifest_path}.result.json --artifact-path {artifact_path} --recipe {recipe_path}",
+  "xgbinrepo": "python scripts/training/trainers/xgb_trainer.py --data data/training/train.npz --output-model {artifact_path} --output-result {manifest_path}.result.json --recipe {recipe_path}",
+  "online_sgd": "python scripts/training/train_online_init.py --csv data/raw/xauusdc_m5_1y.csv --output {artifact_path}"
 }

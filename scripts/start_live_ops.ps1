@@ -1,3 +1,5 @@
+# DEPRECATED — replaced by python scripts/bridge_supervisor.py (bridge) + python scripts/daily_ops.py (daily).
+# Use: python main.py live
 param(
   [string]$RepoRoot = "D:\cursor",
   [string]$BaseDir = "data",

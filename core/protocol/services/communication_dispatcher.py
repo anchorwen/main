@@ -9,6 +9,12 @@ from core.deployment.domain_keys import (
     DISPATCH_FAILURE_REASON_LIVE_READ_ONLY,
     DISPATCH_FAILURE_REASON_SYMBOL_NOT_LIVE_ENABLED,
 )
+from core.observability.metric_names import (
+    DISPATCH_FAILED,
+    DISPATCH_PROTOCOL_VALIDATED,
+    DISPATCH_SKIPPED,
+    DISPATCH_TRANSPORT_DELIVERED,
+)
 from core.protocol.schema_versions import SCHEMA_DISPATCH_REQUEST, SCHEMA_DISPATCH_RESULT
 from core.protocol.services.communication_adapter_registry import CommunicationAdapterRegistry
 
@@ -23,6 +29,7 @@ class CommunicationDispatcher:
         live_read_only: bool = False,
         live_dispatch_enabled: bool = True,
         live_allowed_symbols: tuple[str, ...] = (),
+        metrics=None,
     ):
         self._adapter = adapter
         self._adapter_registry = adapter_registry
@@ -31,6 +38,7 @@ class CommunicationDispatcher:
         self._live_read_only = live_read_only
         self._live_dispatch_enabled = live_dispatch_enabled
         self._live_allowed_symbols = tuple(live_allowed_symbols)
+        self._metrics = metrics
 
     def dispatch(self, envelope, *, route_policy=None, transport_hints=None, governance=None):
         route_policy = route_policy or {}
@@ -49,6 +57,8 @@ class CommunicationDispatcher:
         attempts = []
 
         if self._live_read_only:
+            if self._metrics:
+                self._metrics.inc(DISPATCH_FAILED)
             return DispatchResult(
                 schema_version=SCHEMA_DISPATCH_RESULT,
                 dispatch_id=request.dispatch_id,
@@ -72,6 +82,8 @@ class CommunicationDispatcher:
 
         symbol = envelope.payload.get("symbol") if isinstance(envelope.payload, dict) else None
         if not self._live_dispatch_enabled:
+            if self._metrics:
+                self._metrics.inc(DISPATCH_FAILED)
             return DispatchResult(
                 schema_version=SCHEMA_DISPATCH_RESULT,
                 dispatch_id=request.dispatch_id,
@@ -95,6 +107,8 @@ class CommunicationDispatcher:
             )
 
         if self._live_allowed_symbols and symbol not in self._live_allowed_symbols:
+            if self._metrics:
+                self._metrics.inc(DISPATCH_FAILED)
             return DispatchResult(
                 schema_version=SCHEMA_DISPATCH_RESULT,
                 dispatch_id=request.dispatch_id,
@@ -124,6 +138,8 @@ class CommunicationDispatcher:
                 date_key=request.requested_at.strftime("%Y-%m-%d"),
             )
             if claim.get("duplicate"):
+                if self._metrics:
+                    self._metrics.inc(DISPATCH_SKIPPED)
                 return DispatchResult(
                     schema_version=SCHEMA_DISPATCH_RESULT,
                     dispatch_id=request.dispatch_id,
@@ -147,6 +163,8 @@ class CommunicationDispatcher:
                 )
 
         if envelope.deadline_at is not None and request.requested_at > envelope.deadline_at:
+            if self._metrics:
+                self._metrics.inc(DISPATCH_FAILED)
             return DispatchResult(
                 schema_version=SCHEMA_DISPATCH_RESULT,
                 dispatch_id=request.dispatch_id,
@@ -186,6 +204,8 @@ class CommunicationDispatcher:
                     "reason": None,
                 }
             )
+            if self._metrics:
+                self._metrics.inc(DISPATCH_TRANSPORT_DELIVERED)
             return result
         except Exception as exc:
             attempts.append(
@@ -197,6 +217,8 @@ class CommunicationDispatcher:
             )
             fallback_adapter = self._resolve_fallback_adapter(route_policy)
             if fallback_adapter is None:
+                if self._metrics:
+                    self._metrics.inc(DISPATCH_FAILED)
                 return DispatchResult(
                     schema_version=SCHEMA_DISPATCH_RESULT,
                     dispatch_id=request.dispatch_id,
@@ -231,6 +253,8 @@ class CommunicationDispatcher:
                     "failed_adapter": primary_adapter_name,
                     "fallback_adapter": fallback_adapter_name,
                 }
+                if self._metrics:
+                    self._metrics.inc(DISPATCH_PROTOCOL_VALIDATED)
                 return fallback_result
             except Exception as fallback_exc:
                 attempts.append(
@@ -240,6 +264,8 @@ class CommunicationDispatcher:
                         "reason": str(fallback_exc),
                     }
                 )
+                if self._metrics:
+                    self._metrics.inc(DISPATCH_FAILED)
                 return DispatchResult(
                     schema_version=SCHEMA_DISPATCH_RESULT,
                     dispatch_id=request.dispatch_id,

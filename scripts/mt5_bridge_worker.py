@@ -82,6 +82,14 @@ def _write_receipt(
 
 def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
     journal_path.parent.mkdir(parents=True, exist_ok=True)
+    mid = record.get("message_id", "")
+    if mid and journal_path.exists():
+        try:
+            for line in journal_path.read_text(encoding="utf-8").splitlines():
+                if mid in line:
+                    return  # duplicate, skip
+        except Exception:
+            pass
     with journal_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
 
@@ -187,6 +195,7 @@ def _mt5_market_open(
         return "rejected", {"reason": "tick_unavailable", "symbol": symbol}
     price = tick.ask if side == "buy" else tick.bid
     order_type = mt5.ORDER_TYPE_BUY if side == "buy" else mt5.ORDER_TYPE_SELL
+    comment = str(msg_payload.get("message_id", ""))[:31]
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,
@@ -195,6 +204,7 @@ def _mt5_market_open(
         "price": float(price),
         "deviation": int(deviation),
         "magic": int(magic),
+        "comment": comment,
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": mt5.ORDER_FILLING_IOC,
     }
@@ -262,6 +272,7 @@ def _mt5_close_position(
     )
     price = float(tick.bid if order_type == mt5.ORDER_TYPE_SELL else tick.ask)
 
+    close_comment = str(msg_payload.get("message_id", ""))[:31]
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,
@@ -271,6 +282,7 @@ def _mt5_close_position(
         "price": price,
         "deviation": int(deviation),
         "magic": int(magic),
+        "comment": close_comment,
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": mt5.ORDER_FILLING_IOC,
     }
@@ -370,8 +382,10 @@ def process_one(
         ack_status = "acknowledged"
         detail = {"reason": "dry_run"}
     else:
+        # Per-order magic override from brain (multi-brain attribution).
+        order_magic = int(msg_payload.get("magic", magic))
         ack_status, detail = _send_to_mt5(
-            payload, default_volume=default_volume, deviation=deviation, magic=magic
+            payload, default_volume=default_volume, deviation=deviation, magic=order_magic
         )
 
     receipt_payload = _build_receipt_payload(
@@ -395,6 +409,7 @@ def process_one(
     shutil.move(str(message_path), str(archive_path))
 
     vol_disp = msg_payload.get("volume", msg_payload.get("lots"))
+    action = normalize_action(msg_payload.get("action"))
     journal_record = {
         "schema_version": "live_trade_journal.v2",
         "recorded_at": _utc_now(),
@@ -403,11 +418,13 @@ def process_one(
         "ack_status": ack_status,
         "detail": detail,
         "symbol": msg_payload.get("symbol"),
-        "action": normalize_action(msg_payload.get("action")),
+        "action": action,
         "side": msg_payload.get("side"),
         "volume": vol_disp,
+        "pnl": None,
+        "label": None,
         "effective_volume_hint": effective_volume(msg_payload, default_volume=default_volume),
-        "position_ticket": coerce_position_ticket(msg_payload),
+        "position_ticket": detail.get("order") or coerce_position_ticket(msg_payload),
         "execution_payload_schema": msg_payload.get("execution_payload_schema"),
         "sl": msg_payload.get("sl", msg_payload.get("stop_loss")),
         "tp": msg_payload.get("tp", msg_payload.get("take_profit")),

@@ -39,6 +39,7 @@ DEFAULT_BRAIN_REGISTRATIONS = {
     "V9_Institutional_01": "candidate",
     "XGBoost_V4.5_Microstructure": "candidate",
     "OU_Params_V6_Sniper": "candidate",
+    "Online_SGD_V1": "candidate",
 }
 
 
@@ -97,7 +98,7 @@ def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
             brains_dir=PROJECT_ROOT / "configs" / "brains",
             feature_store_dir=Path(base_dir) / "feature_store",
             parallel=True,
-            symbol="XAUUSD",
+            symbol="XAUUSDc",
         )
         return {
             "step": "shadow_ensemble",
@@ -131,6 +132,118 @@ def _step_feedback_loop(
         }
     except Exception as exc:
         return {"step": "feedback_loop", "status": "error", "error": str(exc)[:500]}
+
+
+def _step_online_feedback(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
+    """Feed closed trade outcomes to OnlineLearnerAdapter via partial_fit."""
+    try:
+        from core.brains.adapters.online_learner_adapter import OnlineLearnerAdapter
+        from core.feedback.online_feedback_hook import OnlineFeedbackHook
+
+        base = Path(base_dir)
+        config_path = PROJECT_ROOT / "configs" / "brains" / "online_learner_v1.json"
+        if not config_path.exists():
+            return {"step": "online_feedback", "status": "skipped", "reason": "no_config"}
+
+        brain_entry = json.loads(config_path.read_text(encoding="utf-8"))
+        artifact = brain_entry.get("artifact_path", "")
+        if artifact and not Path(artifact).is_absolute():
+            brain_entry["artifact_path"] = str((PROJECT_ROOT / artifact).resolve())
+
+        adapter = OnlineLearnerAdapter(brain_entry)
+        adapter.load()
+        updates_before = adapter._total_updates
+
+        if dry_run:
+            journal_path = base / "live_trade_journal.jsonl"
+            paper_path = base / "paper_trade_journal.jsonl"
+            closed_count = 0
+            for jp in (journal_path, paper_path):
+                if jp.exists():
+                    for line in jp.read_text(encoding="utf-8").splitlines():
+                        if not line.strip():
+                            continue
+                        try:
+                            if str(json.loads(line).get("ack_status", "")) == "closed":
+                                closed_count += 1
+                        except json.JSONDecodeError:
+                            continue
+            return {
+                "step": "online_feedback",
+                "status": "ok",
+                "dry_run": True,
+                "updates_before": updates_before,
+                "closed_trades_in_journals": closed_count,
+            }
+
+        total_updated = 0
+        total_skipped = 0
+        total_errors = 0
+
+        # 1. Process live trade journal
+        live_journal = base / "live_trade_journal.jsonl"
+        if live_journal.exists():
+            hook = OnlineFeedbackHook(
+                adapter=adapter,
+                journal_path=str(live_journal),
+                feature_store_dir=str(base / "feature_store" / "records"),
+            )
+            result = hook.process_new_trades(save_weights=False)
+            total_updated += result.get("updated", 0)
+            total_skipped += result.get("skipped", 0)
+            total_errors += result.get("errors", 0)
+
+        # 2. Process paper trade journal
+        paper_journal = base / "paper_trade_journal.jsonl"
+        if paper_journal.exists():
+            paper_hook = OnlineFeedbackHook(
+                adapter=adapter,
+                journal_path=str(paper_journal),
+                feature_store_dir=str(base / "feature_store" / "records"),
+                last_processed_path=str(base / "paper_feedback_state.json"),
+            )
+            result = paper_hook.process_new_trades(save_weights=False)
+            total_updated += result.get("updated", 0)
+            total_skipped += result.get("skipped", 0)
+            total_errors += result.get("errors", 0)
+
+        if total_updated > 0:
+            adapter.save_weights()
+
+        updates_after = adapter._total_updates
+        return {
+            "step": "online_feedback",
+            "status": "ok",
+            "updates_before": updates_before,
+            "updates_after": updates_after,
+            "updated": total_updated,
+            "skipped": total_skipped,
+            "errors": total_errors,
+        }
+    except Exception as exc:
+        return {"step": "online_feedback", "status": "error", "error": str(exc)[:500]}
+
+
+def _step_paper_trade_simulation(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
+    """Run paper trade simulator to generate labeled outcomes from shadow decisions."""
+    try:
+        from scripts.paper_trade_simulator import run_simulator
+
+        result = run_simulator(
+            since=None,
+            dry_run=dry_run,
+            output_path=Path(base_dir) / "paper_trade_journal.jsonl",
+        )
+        return {
+            "step": "paper_trade_simulation",
+            "status": result.get("status", "ok"),
+            "trades": result.get("trades", 0),
+            "total_pnl": result.get("total_pnl", 0),
+            "win_rate": result.get("win_rate", 0),
+            "dry_run": dry_run,
+        }
+    except Exception as exc:
+        return {"step": "paper_trade_simulation", "status": "error", "error": str(exc)[:500]}
 
 
 def _step_governance(
@@ -207,12 +320,101 @@ def _step_retraining_check(base_dir: str) -> dict[str, Any]:
         return {"step": "retraining_check", "status": "error", "error": str(exc)[:500]}
 
 
-def _step_daily_recap(base_dir: str) -> dict[str, Any]:
+def _step_alpha_lifecycle(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
+    """Run alpha lifecycle evaluation: promotion gate on all registered alphas."""
+    try:
+        from core.alpha.lifecycle_service import AlphaLifecycleService
+        from core.alpha.performance_store import AlphaPerformanceStore
+        from core.alpha.promotion_gate import AlphaPromotionGate, AlphaPromotionPolicy
+        from core.alpha.registry import AlphaRegistry
+
+        registry_path = Path(base_dir) / "alpha_registry.json"
+        perf_path = Path(base_dir) / "alpha_performance.json"
+
+        if registry_path.exists():
+            registry = AlphaRegistry.load(registry_path)
+        else:
+            registry = AlphaRegistry()
+
+        perf_store = (
+            AlphaPerformanceStore.load(perf_path) if perf_path.exists() else AlphaPerformanceStore()
+        )
+        lifecycle = AlphaLifecycleService(registry)
+        gate = AlphaPromotionGate(perf_store, policy=AlphaPromotionPolicy())
+
+        decisions: list[dict[str, Any]] = []
+        for record in registry.list_records():
+            decision = gate.evaluate(record)
+            decisions.append(decision.to_dict())
+            if decision.approved and decision.target_state and not dry_run:
+                try:
+                    lifecycle.transition(record.alpha_id, decision.target_state, decision.action)
+                except ValueError:
+                    pass
+
+        if not dry_run:
+            registry.save(registry_path)
+            perf_store.save(perf_path)
+
+        applied = [d for d in decisions if d.get("approved")]
+        return {
+            "step": "alpha_lifecycle",
+            "status": "ok",
+            "alphas_assessed": len(decisions),
+            "actions_applied": len(applied) if not dry_run else 0,
+            "actions_flagged": len(applied) if dry_run else len(applied),
+            "details": applied,
+        }
+    except Exception as exc:
+        return {"step": "alpha_lifecycle", "status": "error", "error": str(exc)[:500]}
+
+
+def _step_feature_store_maintenance(
+    base_dir: str, *, dry_run: bool = False, retention_days: int = 90
+) -> dict[str, Any]:
+    """Run feature store compaction and stats collection."""
+    try:
+        from scripts.feature_store_maintenance import run_full_maintenance
+
+        store_dir = Path(base_dir) / "feature_store"
+        fs_dir = str(store_dir) if store_dir.exists() else None
+        report = run_full_maintenance(
+            base_dir=base_dir,
+            feature_store_dir=fs_dir,
+            retention_days=retention_days,
+            skip_update=True,  # daily ops focuses on compaction + stats
+            dry_run=dry_run,
+        )
+        steps = report.get("steps", [])
+        compaction = next(
+            (s for s in steps if s.get("step") == "compaction"),
+            {"records_before": 0, "records_after": 0, "duplicates_removed": 0},
+        )
+        stats = next(
+            (s for s in steps if s.get("step") == "stats"),
+            {"total_records": 0, "total_file_size_mb": 0},
+        )
+        return {
+            "step": "feature_store_maintenance",
+            "status": "ok",
+            "dry_run": dry_run,
+            "compaction": compaction,
+            "stats": stats,
+        }
+    except Exception as exc:
+        return {"step": "feature_store_maintenance", "status": "error", "error": str(exc)[:500]}
+
+
+def _step_daily_recap(base_dir: str, *, mt5_terminal_path: str | None = None) -> dict[str, Any]:
     """Run daily recap and return summary."""
     try:
         from scripts.live_daily_recap import build_report as build_recap
 
-        report = build_recap(base_dir=Path(base_dir), symbol="XAUUSD")
+        report = build_recap(
+            base_dir=Path(base_dir),
+            symbol="XAUUSDc",
+            mt5_terminal_path=mt5_terminal_path,
+        )
         run_state = report.get("run_state", "unknown")
         return {
             "step": "daily_recap",
@@ -234,7 +436,12 @@ def run_daily_ops(
     skip_champion: bool = False,
     skip_retraining: bool = False,
     skip_recap: bool = False,
+    skip_alpha: bool = False,
+    skip_online_feedback: bool = False,
+    skip_paper_simulation: bool = False,
+    skip_fs_maintenance: bool = False,
     dry_run: bool = False,
+    mt5_terminal_path: str | None = None,
 ) -> dict[str, Any]:
     """Run the full daily operations pipeline.
 
@@ -246,6 +453,9 @@ def run_daily_ops(
         skip_champion: Skip champion/challenger promotion.
         skip_retraining: Skip retraining degradation check.
         skip_recap: Skip daily recap.
+        skip_online_feedback: Skip online learner partial_fit from closed trades.
+        skip_paper_simulation: Skip paper trade simulation from shadow decisions.
+        skip_fs_maintenance: Skip feature store maintenance (compaction + stats).
         dry_run: Assess but don't apply transitions.
 
     Returns:
@@ -280,6 +490,15 @@ def run_daily_ops(
     if not skip_feedback:
         steps.append(_step_feedback_loop(base_dir, dry_run=dry_run, tracker=shared_tracker))
 
+    # Paper trade simulation: generate labeled trade outcomes from shadow decisions
+    if not skip_paper_simulation:
+        steps.append(_step_paper_trade_simulation(base_dir, dry_run=dry_run))
+
+    # Online feedback: feed closed trades to online SGD learner via partial_fit
+    # Runs after paper_trade_simulation and feedback_loop so all data is available
+    if not skip_online_feedback:
+        steps.append(_step_online_feedback(base_dir, dry_run=dry_run))
+
     if not skip_governance:
         steps.append(
             _step_governance(
@@ -294,19 +513,32 @@ def run_daily_ops(
             )
         )
 
-    # Persist governance state after modifications
-    if shared_governance is not None and not dry_run:
-        try:
-            gov_path = Path(base_dir) / "governance_state.json"
-            shared_governance.save(gov_path)
-        except Exception:
-            pass
+    # Persist tracker and governance state after modifications
+    if not dry_run:
+        if shared_tracker is not None:
+            try:
+                tracker_path = Path(base_dir) / "brain_performance.json"
+                shared_tracker.save(tracker_path)
+            except Exception:
+                pass
+        if shared_governance is not None:
+            try:
+                gov_path = Path(base_dir) / "governance_state.json"
+                shared_governance.save(gov_path)
+            except Exception:
+                pass
 
     if not skip_retraining:
         steps.append(_step_retraining_check(base_dir))
 
     if not skip_recap:
-        steps.append(_step_daily_recap(base_dir))
+        steps.append(_step_daily_recap(base_dir, mt5_terminal_path=mt5_terminal_path))
+
+    if not skip_alpha:
+        steps.append(_step_alpha_lifecycle(base_dir, dry_run=dry_run))
+
+    if not skip_fs_maintenance:
+        steps.append(_step_feature_store_maintenance(base_dir, dry_run=dry_run))
 
     errors = [s for s in steps if s.get("status") == "error"]
     actions = sum(s.get("actions_applied", 0) + s.get("promotions", 0) for s in steps)
@@ -336,7 +568,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--skip-champion", action="store_true", help="Skip champion/challenger")
     p.add_argument("--skip-retraining", action="store_true", help="Skip retraining check")
     p.add_argument("--skip-recap", action="store_true", help="Skip daily recap")
+    p.add_argument("--skip-alpha", action="store_true", help="Skip alpha lifecycle evaluation")
+    p.add_argument(
+        "--skip-online-feedback", action="store_true", help="Skip online learner feedback"
+    )
+    p.add_argument(
+        "--skip-paper-simulation", action="store_true", help="Skip paper trade simulation"
+    )
+    p.add_argument(
+        "--skip-fs-maintenance", action="store_true", help="Skip feature store maintenance"
+    )
     p.add_argument("--output", type=Path, default=None, help="Write combined report JSON to file")
+    p.add_argument(
+        "--mt5-terminal-path", default=None, help="MT5 terminal64.exe path for P&L snapshot"
+    )
     return p
 
 
@@ -355,7 +600,12 @@ def main(argv: list[str] | None = None) -> int:
         skip_champion=args.skip_champion,
         skip_retraining=args.skip_retraining,
         skip_recap=args.skip_recap,
+        skip_alpha=args.skip_alpha,
+        skip_online_feedback=args.skip_online_feedback,
+        skip_paper_simulation=args.skip_paper_simulation,
+        skip_fs_maintenance=args.skip_fs_maintenance,
         dry_run=args.dry_run,
+        mt5_terminal_path=args.mt5_terminal_path,
     )
 
     text = json.dumps(report, indent=2, ensure_ascii=False, default=str)

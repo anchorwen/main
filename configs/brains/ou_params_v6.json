@@ -6,10 +6,11 @@
   "model_version": "v6.0",
   "status": "shadow",
   "vote_weight": 0.5,
-  "artifact_path": "D:\\ai\\Meta_ppo_v6\\arb_params.json",
+  "magic": 90004,
+  "artifact_path": "data/models/arb_params.json",
   "feature_schema_id": "v6_price_series_1",
   "deployment_scope": {
-    "symbols": ["XAUUSD"],
+    "symbols": ["XAUUSDc", "XAUUSD"],
     "sessions": ["all"],
     "regimes": ["mean_reversion", "oscillation", "low_volatility"]
   }

@@ -41,11 +41,11 @@ def produce_from_live_computer(
     )
 
 
-def build_v9_schema(symbol: str, timeframe: str = "M1") -> FeatureSchema:
+def build_v9_schema(symbol: str, timeframe: str = "M5") -> FeatureSchema:
     """Build the standard V9 institutional feature schema."""
     return FeatureSchema(
-        name="v9_institutional",
-        version="1.0",
+        name="v9_institutional_40",
+        version="1.0.0",
         fields=tuple(V9_INSTITUTIONAL_40_FEATURES),
         symbol=symbol,
         timeframe=timeframe,

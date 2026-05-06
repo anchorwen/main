@@ -62,6 +62,18 @@ def build_v9_shadow_container() -> ServiceContainer:
         "live",
     )
 
+    # Register Online SGD V1 if config and artifact exist
+    online_brain_path = repo_root / "configs" / "brains" / "online_learner_v1.json"
+    online_weights = repo_root / "data" / "models" / "online_learner_weights.json"
+    if online_brain_path.exists() and online_weights.exists():
+        online_entry = loader.load_json(str(online_brain_path))
+        online_entry["artifact_path"] = str(online_weights.resolve())
+        container.brain_registry.register(online_entry)
+        container.governance_service.register_brain(
+            online_entry.get("brain_id", "Online_SGD_V1"),
+            "candidate",
+        )
+
     return container
 
 

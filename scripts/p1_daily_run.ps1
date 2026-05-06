@@ -1,3 +1,4 @@
+# DEPRECATED — replaced by python main.py daily-ops.
 param(
   [string]$RepoRoot = "D:\cursor",
   [string]$BaseDir = "data",

@@ -45,6 +45,7 @@ from core.ledger.services.execution_event_writer import ExecutionEventWriter
 from core.ledger.services.execution_reconciliation_service import ExecutionReconciliationService
 from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
 from core.market.position_tracker import MarketContextProvider, PositionTracker
+from core.observability.alert_channels import CompositeAlertChannel, SlackAlertChannel
 from core.observability.alert_service import AlertService, LogAlertChannel
 from core.observability.audit_log import StructuredAuditLog
 from core.observability.diagnostics_dashboard import DiagnosticsDashboard
@@ -156,6 +157,7 @@ class ServiceContainer:
         self.reconciliation_service = ExecutionReconciliationService(
             self.communication_reader,
             self.execution_event_reader,
+            metrics=self.metrics,
         )
 
         self._build_inspection()
@@ -241,6 +243,7 @@ class ServiceContainer:
             adapter=adapter,
             idempotency_store=self.idempotency_store,
             live_read_only=self.config.live_read_only,
+            metrics=self.metrics,
         )
 
     def _resolve_comm_adapter(self):
@@ -349,9 +352,9 @@ class ServiceContainer:
                     path = entry["path"]
                     with open(path, encoding="utf-8") as fh:
                         brain_data = json.load(fh)
-                    self.brain_registry.register_entry(brain_data)
+                    self.brain_registry.register(brain_data)
                 elif isinstance(entry, dict) and "brain_id" in entry:
-                    self.brain_registry.register_entry(entry)
+                    self.brain_registry.register(entry)
             except Exception:
                 logging.getLogger(__name__).warning(
                     "Failed to auto-register brain entry: %s", entry, exc_info=True
@@ -460,10 +463,15 @@ class ServiceContainer:
         )
 
     def _build_alert_service(self) -> None:
-        channels = []
+        channels: list = []
         if self.audit_log:
             channels.append(LogAlertChannel(self.audit_log))
-        self.alert_service = AlertService.with_default_rules(channels=channels)
+        slack = SlackAlertChannel()
+        if slack._url:
+            channels.append(slack)
+        self.alert_service = AlertService.with_default_rules(
+            channels=[CompositeAlertChannel(channels)] if channels else []
+        )
 
     def _build_config_hot_reload(self) -> None:
         from pathlib import Path

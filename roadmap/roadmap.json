@@ -1,11 +1,11 @@
 {
   "meta": {
     "project": "Quant OS",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "constitution_version": "1.1.0",
-    "last_updated": "2026-05-02T11:09:00+08:00",
+    "last_updated": "2026-05-06T12:00:00+08:00",
     "current_phase": "phase_a",
-    "current_phase_name": "中枢加冕期"
+    "current_phase_name": "中枢加冕期 (生产架构: live_intent_loop → core/runtime/live_cycle.py)"
   },
   "phases": {
     "phase_a": {
@@ -13,8 +13,8 @@
       "code": "hub_agent",
       "timeframe": "0-1.5年",
       "status": "in_progress",
-      "progress_pct": 75,
-      "description": "完成基础设施重构，摆脱客户端束缚，实现策略的模块化。基于已有 core/ 层进行中枢加冕。",
+      "progress_pct": 90,
+      "description": "完成基础设施重构，摆脱客户端束缚，实现策略的模块化。A3 Feature Store 批量调度已完工，A4/A5 延后。",
       "modules": {
         "hub_main_py": {
           "name": "中枢入口 main.py",
@@ -27,9 +27,9 @@
         },
         "model_pipeline": {
           "name": "模型管线打通（多模型蓝本）",
-          "status": "in_progress",
-          "progress_pct": 40,
-          "description": "训练产出的多种模型产物（ONNX / XGBoost JSON / OU参数 JSON）通过 ModelArtifactAdapter 抽象层接入 BrainRunService",
+          "status": "completed",
+          "progress_pct": 100,
+          "description": "5 种 brain adapter (ONNX/XGBoost/OUParams/OnlineSGD/Base) 全在生产中运行",
           "depends_on": [
             "brain_factory",
             "brain_registry",
@@ -40,14 +40,16 @@
             "core/brains/adapters/v9_onnx_brain_adapter.py",
             "core/brains/adapters/xgboost_brain_adapter.py",
             "core/brains/adapters/params_brain_adapter.py",
+            "core/brains/adapters/online_learner_adapter.py",
             "core/brains/services/brain_factory.py",
             "core/features/feature_service.py"
           ]
         },
         "data_flow": {
           "name": "真实Feature流",
-          "status": "pending",
-          "description": "将价格流替换为 FeatureService 的特征流，接入定时增量更新",
+          "status": "completed",
+          "progress_pct": 100,
+          "description": "FeatureService 三层回退 + LocalFeatureStore 60s 实时写入 + 独立批量增量更新调度（5min周期）+ 每日 compact 去重 + stats 监控。",
           "depends_on": [
             "feature_service",
             "feature_store"
@@ -60,22 +62,24 @@
         },
         "fix_gateway": {
           "name": "FIX/MT5 实盘网关",
-          "status": "in_progress",
-          "progress_pct": 50,
-          "description": "从 StubAdapter 切换到真实 FIX 或 MT5 网关",
+          "status": "deferred",
+          "progress_pct": 60,
+          "description": "MT5 生产可用；FIX adapter 为 dry-run 骨架。BrokerAdapter Protocol 已预留接口，FIX 实现延后至云端部署阶段。",
           "depends_on": [
             "communication_dispatcher"
           ],
           "files": [
             "core/execution/fix_gateway_adapter.py",
+            "core/execution/broker_adapter.py",
+            "core/execution/mt5_broker_adapter.py",
             "core/protocol/services/mt5_communication_adapter.py",
             "core/protocol/services/communication_dispatcher.py"
           ]
         },
         "cloud_deploy": {
           "name": "云端24/5部署",
-          "status": "pending",
-          "description": "Docker + systemd/k8s 容器化部署，自动重连，无需人工干预",
+          "status": "deferred",
+          "description": "Docker + systemd/k8s 容器化部署，自动重连。BrokerAdapter 接口已预留，延后至用户指示。当前本地 Windows 桌面运行。",
           "depends_on": [
             "hub_main_py",
             "model_pipeline",
@@ -86,8 +90,8 @@
         },
         "execution_algos": {
           "name": "执行算法 TWAP/VWAP",
-          "status": "pending",
-          "description": "大单拆分 TWAP/VWAP，监控滑点，生成执行质量报表",
+          "status": "deferred",
+          "description": "大单拆分 TWAP/VWAP，延后至交易量需要时启动。监控滑点基础设施已有 (quality_analyzer.py)。",
           "depends_on": [
             "fix_gateway"
           ],
@@ -102,14 +106,15 @@
       "name": "Alpha 市场期",
       "code": "alpha_market",
       "timeframe": "1.5-3年",
-      "status": "planned",
-      "progress_pct": 40,
-      "description": "实现策略的优胜劣汰与资金动态分配，20-50个Alpha（覆盖多种模型类型）并行竞争。",
+      "status": "in_progress",
+      "progress_pct": 65,
+      "description": "实现策略的优胜劣汰与资金动态分配。组件大量前置构建（议会/治理/反馈闭环/在线学习全在生产中），但缺 LLM/RL 和 20-50 Alpha 规模化。",
       "modules": {
         "brain_parallel": {
           "name": "Brain并行化",
-          "status": "not_started",
-          "description": "同时运行20-50个模型实例（覆盖 ONNX / XGBoost JSON / OU参数 / LightGBM 等多种 brain_type）",
+          "status": "in_progress",
+          "progress_pct": 40,
+          "description": "4 个 brain (V9+CRT+XGBoost+OnlineSGD) 在多脑模式下运行。目标：20-50 个覆盖多种 brain_type。",
           "depends_on": [
             "phase_a.hub_main_py",
             "phase_a.model_pipeline"
@@ -121,8 +126,9 @@
         },
         "alpha_market_mechanism": {
           "name": "Alpha市场机制",
-          "status": "not_started",
-          "description": "PortfolioAllocator 根据夏普/回撤/相关性动态分配资金",
+          "status": "in_progress",
+          "progress_pct": 30,
+          "description": "PortfolioAllocator 合约完整，PromotionGate 状态机已定义。未投入生产使用（缺 Alpha 注册表填充）。",
           "depends_on": [
             "brain_parallel",
             "performance_tracker"
@@ -134,9 +140,9 @@
         },
         "parliament_governance": {
           "name": "议会治理",
-          "status": "in_progress",
-          "progress_pct": 50,
-          "description": "ParliamentService 对多个信号加权投票（统一 DecisionCandidate 接口，与模型类型无关），替代硬编码单一策略",
+          "status": "completed",
+          "progress_pct": 100,
+          "description": "ParliamentService 多脑加权投票（含 neutral deadlock 修复：方向始终由加权分数决定，neutral 仅施加不确定性惩罚）+ GovernanceRuleEngine 4条自动规则 + DynamicBrainWeighter 动态权重，全在生产中运行。",
           "depends_on": [
             "phase_a.model_pipeline"
           ],
@@ -145,10 +151,25 @@
             "core/governance/governance_rule_engine.py"
           ]
         },
+        "brain_pnl_ledger": {
+          "name": "Brain P&L Ledger (反事实盈亏账本)",
+          "status": "completed",
+          "progress_pct": 100,
+          "description": "Phase 1+2 完成: BrainPnLStore 反事实独立核算 + DynamicBrainWeighter 接入真实 Sharpe/win_rate/drawdown 替代合成 composite_score。32 tests pass。Phase 3 待做: 多层归因报告。",
+          "depends_on": [
+            "parliament_governance"
+          ],
+          "files": [
+            "core/feedback/brain_pnl_ledger.py",
+            "core/brains/services/dynamic_brain_weighter.py",
+            "tests/engine/test_brain_pnl_ledger.py",
+            "tests/unit/test_dynamic_brain_weighter.py"
+          ]
+        },
         "independent_risk_agent": {
           "name": "独立风控Agent",
           "status": "not_started",
-          "description": "从 RiskEvaluationService 孵化独立风控协程，主动生成对冲指令",
+          "description": "从 RiskEvaluationService 孵化独立风控协程，主动生成对冲指令（当前仅被动评估）。",
           "depends_on": [
             "phase_a.fix_gateway"
           ],
@@ -176,13 +197,13 @@
       "code": "quant_os",
       "timeframe": "3-5年",
       "status": "planned",
-      "progress_pct": 10,
-      "description": "机器自我繁衍策略，多模态多智能体系统，基因池含模型类型维度，最高宪法约束一切。",
+      "progress_pct": 15,
+      "description": "机器自我繁衍策略，多模态多智能体系统。在线学习+自动治理已就绪，基因池/K8s未开始。",
       "modules": {
         "gene_pool": {
           "name": "基因池与策略变异",
           "status": "not_started",
-          "description": "基于 trainer 注册表模式，自动组合特征、修改超参、切换模型类型（ONNX / XGBoost / OU参数 / LightGBM / PyTorch JIT），生成新策略",
+          "description": "基于 trainer 注册表模式，自动组合特征、修改超参、切换模型类型，生成新策略",
           "depends_on": [
             "phase_b.brain_parallel",
             "phase_a.model_pipeline"
@@ -197,7 +218,7 @@
           "name": "沙盒晋升流水线",
           "status": "in_progress",
           "progress_pct": 30,
-          "description": "新模型自动进入 ShadowLive 3个月观察，PromotionGate 自动评估晋升（与模型类型无关）",
+          "description": "PromotionGate 状态机已定义。ShadowLive 观察 + 自动评估晋升链路部分就绪。",
           "depends_on": [
             "phase_a.model_pipeline"
           ],
@@ -236,12 +257,49 @@
         "module": "main.py (中枢入口)",
         "path": "main.py",
         "status": "active",
-        "note": "A1 里程碑完成 — status/run/train/auto-recover 四命令闭环"
+        "note": "A1 里程碑完成 — live/daily-ops/status/train 四命令闭环"
+      },
+      {
+        "module": "LiveIntentLoop (生产规范路径)",
+        "path": "scripts/live_intent_loop.py",
+        "status": "active",
+        "note": "生产实盘主循环 — CLI + 初始化 + 调用 core/runtime/live_cycle.py"
+      },
+      {
+        "module": "LiveCycle (核心周期逻辑)",
+        "path": "core/runtime/live_cycle.py",
+        "status": "active",
+        "note": "从 live_intent_loop.py 提取的独立可测试周期执行逻辑"
+      },
+      {
+        "module": "BrokerAdapter (执行抽象接口)",
+        "path": "core/execution/broker_adapter.py",
+        "status": "active",
+        "note": "为未来 FIX/云端部署预留的 broker 无关接口"
+      },
+      {
+        "module": "MT5BrokerAdapter",
+        "path": "core/execution/mt5_broker_adapter.py",
+        "status": "active",
+        "note": "BrokerAdapter 的 MT5 实现"
       },
       {
         "module": "ServiceContainer",
         "path": "core/deployment/service_container.py",
-        "status": "active"
+        "status": "alternative",
+        "note": "备用架构 — DI 容器 + RuntimeLoop/Orchestrator 装配，非当前生产路径"
+      },
+      {
+        "module": "RuntimeLoop",
+        "path": "apps/engine/runtime_loop.py",
+        "status": "alternative",
+        "note": "备用架构 — 单次决策周期函数，被 DecisionCycleOrchestrator 包装"
+      },
+      {
+        "module": "DecisionCycleOrchestrator",
+        "path": "apps/engine/orchestrator.py",
+        "status": "alternative",
+        "note": "备用架构 — 编排器，当前仅测试/影子场景使用"
       },
       {
         "module": "BrainFactory",
@@ -264,24 +322,42 @@
         "status": "active"
       },
       {
-        "module": "RuntimeLoop",
-        "path": "apps/engine/runtime_loop.py",
+        "module": "XGBoostBrainAdapter",
+        "path": "core/brains/adapters/xgboost_brain_adapter.py",
         "status": "active"
       },
       {
-        "module": "DecisionCycleOrchestrator",
-        "path": "apps/engine/orchestrator.py",
+        "module": "ParamsBrainAdapter",
+        "path": "core/brains/adapters/params_brain_adapter.py",
+        "status": "active"
+      },
+      {
+        "module": "OnlineLearnerAdapter",
+        "path": "core/brains/adapters/online_learner_adapter.py",
+        "status": "active"
+      },
+      {
+        "module": "BaseBrainAdapter",
+        "path": "core/brains/adapters/base_adapter.py",
         "status": "active"
       },
       {
         "module": "ParliamentService",
         "path": "core/parliament/parliament_service.py",
-        "status": "active"
+        "status": "active",
+        "note": "B2 议会治理 — 多脑加权投票已上线。2026-05-06 修复 neutral deadlock：方向始终由加权分数决定"
+      },
+      {
+        "module": "BrainPnLStore",
+        "path": "core/feedback/brain_pnl_ledger.py",
+        "status": "active",
+        "note": "Phase 1 完成 — 反事实 P&L 账本: record_signal/settle_all/get_metrics。23 tests pass。已集成至 live_cycle + live_intent_loop"
       },
       {
         "module": "GovernanceRuleEngine",
         "path": "core/governance/governance_rule_engine.py",
-        "status": "active"
+        "status": "active",
+        "note": "4条自动规则 (freeze/demote/promote/unfreeze) 已上线"
       },
       {
         "module": "RiskEvaluationService",
@@ -291,6 +367,28 @@
       {
         "module": "FeedbackLoop",
         "path": "core/feedback/feedback_loop.py",
+        "status": "active"
+      },
+      {
+        "module": "OnlineFeedbackHook",
+        "path": "core/feedback/online_feedback_hook.py",
+        "status": "active",
+        "note": "实盘 partial_fit 已接入 daily_ops"
+      },
+      {
+        "module": "BrainPerformanceTracker",
+        "path": "core/feedback/brain_performance_tracker.py",
+        "status": "active"
+      },
+      {
+        "module": "DynamicBrainWeighter",
+        "path": "core/brains/services/dynamic_brain_weighter.py",
+        "status": "active",
+        "note": "Phase 2 完成 — 接入 BrainPnLStore 真实 Sharpe/win_rate/drawdown 替代合成 composite_score"
+      },
+      {
+        "module": "RegimeDetector",
+        "path": "core/risk/regime_detector.py",
         "status": "active"
       },
       {
@@ -311,16 +409,12 @@
       {
         "module": "PortfolioAllocator",
         "path": "core/alpha/portfolio_allocator.py",
-        "status": "active"
+        "status": "active",
+        "note": "合约完整，未投入生产使用"
       },
       {
         "module": "PromotionGate",
         "path": "core/alpha/promotion_gate.py",
-        "status": "active"
-      },
-      {
-        "module": "BrainPerformanceTracker",
-        "path": "core/feedback/brain_performance_tracker.py",
         "status": "active"
       },
       {
@@ -341,7 +435,8 @@
       {
         "module": "FIXGatewayAdapter",
         "path": "core/execution/fix_gateway_adapter.py",
-        "status": "active"
+        "status": "stub",
+        "note": "Dry-run 骨架 — 待实现真实 FIX 网络 I/O"
       },
       {
         "module": "TrainerRegistry",
@@ -349,53 +444,39 @@
         "status": "active"
       },
       {
-        "module": "LaneTrainersConfig",
-        "path": "scripts/training/lane_trainers.json",
-        "status": "active",
-        "note": "支持 onnx / xgboost_json / ou_params_json 三种 model_type"
-      },
-      {
         "module": "ShadowLiveIntentProducer",
         "path": "scripts/live_shadow_intent_producer.py",
         "status": "active"
       },
       {
-        "module": "LiveIntentLoop",
-        "path": "scripts/live_intent_loop.py",
-        "status": "legacy",
-        "note": "将被 RuntimeLoop 替代"
-      },
-      {
         "module": "SendLiveOrder",
         "path": "scripts/send_live_order.py",
-        "status": "legacy",
-        "note": "将被 CommunicationDispatcher 替代"
+        "status": "active",
+        "note": "新增 dispatch_live_order() broker-agnostic 接口"
+      },
+      {
+        "module": "FeatureStoreMaintenance",
+        "path": "scripts/feature_store_maintenance.py",
+        "status": "active",
+        "note": "A3 独立批量增量更新 — 5min 调度周期 + compact 去重 + stats 监控"
       }
     ],
     "missing_critical": [
       {
-        "module": "ModelArtifactAdapter (base_adapter.py)",
-        "description": "抽象基类：统一 ONNX/XGBoost/OU参数 的 load() + infer() 接口"
+        "module": "FIX Gateway (real network I/O)",
+        "description": "fix_gateway_adapter.py 仅有 dry-run 骨架。BrokerAdapter 接口已预留，延后至云端部署阶段。"
       },
       {
-        "module": "XGBoostBrainAdapter",
-        "description": "XGBoost JSON 模型推理 Adapter"
+        "module": "Docker / K8s deployment",
+        "description": "无 Dockerfile，无容器编排。BrokerAdapter 接口已预留，延后至用户指示。"
       },
       {
-        "module": "OUParamsBrainAdapter",
-        "description": "OU参数/Z-Score 信号生成 Adapter"
+        "module": "TWAP / VWAP execution algos",
+        "description": "大单拆分执行算法延后至交易量需要时启动。"
       },
       {
-        "module": "brain_entries.json",
-        "description": "模型注册清单，定义 brain_type 多样化的模型如何参与实盘"
-      },
-      {
-        "module": "live.yaml",
-        "description": "统一实盘配置入口"
-      },
-      {
-        "module": "Feature Store daily update",
-        "description": "特征流定时增量更新机制"
+        "module": "LLM / RL asset allocation committee",
+        "description": "ParliamentService 为规则驱动加权平均，非 LLM/RL（ADR-007 记录为有意延后至 Phase C）"
       }
     ]
   },
@@ -421,56 +502,65 @@
       "name": "多模型蓝本管线打通",
       "phase": "phase_a",
       "status": "completed",
-      "criteria": "训练产出的 ONNX / XGBoost JSON / OU参数 JSON 三种模型都能在实盘环境产生信号，信号经过风控门禁到达执行网关"
+      "criteria": "5 种 brain adapter (ONNX/XGBoost/OU/OnlineSGD/Base) 全在生产中运行"
     },
     {
       "id": "A3",
       "name": "真实Feature流",
       "phase": "phase_a",
-      "status": "pending",
-      "criteria": "FeatureService 提供EMA/ADX/波动率等特征，替代硬编码的价格差策略"
+      "status": "completed",
+      "criteria": "FeatureService 三层回退 + 60s 实时写入 + 独立调度批量增量更新（5min 周期）+ compact 去重 + stats 监控"
     },
     {
       "id": "A4",
       "name": "云端24/5运行",
       "phase": "phase_a",
-      "status": "pending",
-      "criteria": "Docker容器在云端连续运行7天无人工干预，断网自动重连"
+      "status": "deferred",
+      "criteria": "Docker容器在云端连续运行7天无人工干预。BrokerAdapter 接口已预留，延后至用户指示。"
     },
     {
       "id": "B1",
       "name": "多模型Alpha并行",
       "phase": "phase_b",
-      "status": "pending",
-      "criteria": "至少10个模型（覆盖 ≥3 种 brain_type）同时运行，BrainPerformanceTracker 记录各自表现"
+      "status": "in_progress",
+      "criteria": "至少10个模型（覆盖 ≥3 种 brain_type）同时运行。当前 4/10。"
     },
     {
       "id": "B2",
       "name": "议会治理上线",
       "phase": "phase_b",
-      "status": "pending",
-      "criteria": "ParliamentService 取代单一策略，多信号加权投票产生最终决策（与模型类型无关）"
+      "status": "completed",
+      "criteria": "ParliamentService 多脑加权投票 + Governance 自动规则 + DynamicBrainWeighter 全在生产中"
     },
     {
       "id": "B3",
       "name": "Alpha市场机制",
       "phase": "phase_b",
-      "status": "pending",
-      "criteria": "PortfolioAllocator 每周自动根据夏普/回撤/相关性重分配虚拟资金"
+      "status": "in_progress",
+      "criteria": "PortfolioAllocator 合约完整但未投入生产使用"
     },
     {
       "id": "C1",
       "name": "自动策略繁衍（含模型类型变异）",
       "phase": "phase_c",
       "status": "pending",
-      "criteria": "系统自动组合特征 + 模型类型（ONNX/XGBoost/OU参数/LightGBM）生成新trainer配置并提交训练"
+      "criteria": "系统自动组合特征 + 模型类型生成新trainer配置并提交训练"
     },
     {
       "id": "C2",
       "name": "沙盒自动晋升",
       "phase": "phase_c",
-      "status": "pending",
-      "criteria": "PromotionGate 在3个月观察期后自动评估并晋升满足条件的Alpha（与模型类型无关）"
+      "status": "in_progress",
+      "criteria": "PromotionGate 状态机已定义，ShadowLive 3个月观察期自动化未完成"
     }
-  ]
+  ],
+  "architecture_decision": {
+    "canonical_production_path": "main.py live → live_launcher.py → live_intent_loop.py → core/runtime/live_cycle.py → execute_live_cycle()",
+    "alternative_path": "ServiceContainer → RuntimeLoop → DecisionCycleOrchestrator (备用/测试/影子场景)",
+    "broker_swap_point": "core/execution/broker_adapter.py (实现 BrokerAdapter Protocol 即可接入新券商)",
+    "adr_references": [
+      "ADR-006: 生产架构选型 — live_intent_loop 为规范路径",
+      "ADR-007: LLM/RL 资产分配委员会延后至 Phase C"
+    ]
+  }
 }

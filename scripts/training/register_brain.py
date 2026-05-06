@@ -25,6 +25,8 @@ LANE_TO_BRAIN_TYPE: dict[str, str] = {
     "sur": "onnx_v9",
     "mtx": "xgboost_v4.5",
     "arb": "ou_params_v6",
+    "xgbinrepo": "xgboost_v4.5",
+    "online_sgd": "online_sgd",
 }
 
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "configs" / "brains"

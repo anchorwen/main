@@ -42,7 +42,7 @@ fix:
 # ---------------------------------------------------------------------------
 mt5:
   terminal_path: ""
-  default_symbol: "XAUUSD"
+  default_symbol: "XAUUSDc"
   # Normalization config for V9 40-feature z-score normalization (mean/std)
   normalization_config: "configs/brains/v9_institutional_01.normalization.json"
 
@@ -68,8 +68,15 @@ brains:
     # XGBoost V4.5 Microstructure (shadow)
     - path: "configs/brains/xgboost_v4.5.json"
       enabled: true
+    # CRT.sur.chlg.g2026.1 — 40-dim MLP trained from CSV barrier labels
+    - path: "configs/brains/crt_sur_chlg_g2026.json"
+      enabled: true
     # OU Params V6 Sniper — statistical arbitrage (shadow)
+    # DISABLED: artifact D:\ai\Meta_ppo_v6\arb_params.json missing (QO-0004)
     - path: "configs/brains/ou_params_v6.json"
+      enabled: false
+    # Online SGD V1 — streaming logistic regression with incremental updates (shadow)
+    - path: "configs/brains/online_learner_v1.json"
       enabled: true
 
 # ---------------------------------------------------------------------------
@@ -111,14 +118,14 @@ training:
 
   # Training data directories (if not using trainer-root defaults)
   sur:
-    trainer_root: "D:\\ai\\Survival_V9"
-    dataset_csv: "D:\\ai\\Survival_V9\\V9_Symbiosis_Matrix.csv"
+    trainer_root: "data/training/sur_v9"
+    dataset_csv: "data/training/sur_v9/V9_Symbiosis_Matrix.csv"
   arb:
-    trainer_root: "D:\\ai\\Meta_ppo_v6"
-    dataset_csv: "D:\\ai\\Meta_ppo_v6\\Exness_XAUUSDm_2026_04.csv"
+    trainer_root: "data/training/arb_v6"
+    dataset_csv: "data/training/arb_v6/Exness_XAUUSDm_2026_04.csv"
   mtx:
-    trainer_root: "D:\\ai\\Meta_ppo_v6"
-    dataset_csv: "D:\\ai\\Meta_ppo_v6\\Exness_XAUUSDm_2026_04.csv"
+    trainer_root: "data/training/mtx_v4.5"
+    dataset_csv: "data/training/mtx_v4.5/Exness_XAUUSDm_2026_04.csv"
 
 # ---------------------------------------------------------------------------
 # Live Trading — production trading parameters (used by `main.py live`)
@@ -131,11 +138,11 @@ live_trading:
   symbol: "XAUUSDc"
   volume: 0.01
   interval_seconds: 60
-  confidence_threshold: 0.55
+  confidence_threshold: 0.50
 
-  # Risk management
-  sl_distance: 15.0
-  tp_distance: 25.0
+  # Risk management — ATR-based dynamic SL/TP (multiples of M5_ATR(14))
+  sl_atr_mult: 2.0
+  tp_atr_mult: 3.5
   cooldown_seconds: 300
   max_positions: 1
 
@@ -181,6 +188,6 @@ healthcheck:
     - name: "signal_heartbeat"
       max_staleness_sec: 60   # 1 minute
     - name: "mt5_connection"
-      symbol: "XAUUSD"
+      symbol: "XAUUSDc"
     - name: "journal_health"
       max_consecutive_rejects: 3

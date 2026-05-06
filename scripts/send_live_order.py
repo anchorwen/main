@@ -11,6 +11,7 @@ from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.enums import CommunicationMessageType, CommunicationPriority
 from core.deployment.environment_config import EnvironmentConfig
 from core.deployment.service_container import ServiceContainer
+from core.execution.broker_adapter import BrokerAdapter
 from core.protocol.live_execution_contract import (
     attach_schema_metadata,
     execution_route,
@@ -30,26 +31,34 @@ def _coerce_positive_float_sg(value: Any) -> float | None:
 
 from core.protocol.schema_versions import SCHEMA_COMMUNICATION_ENVELOPE
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 
 def resolve_protection_flag_path(base_dir: str, protection_flag_path: str) -> Path:
-    """Resolve flag path when relative: prefer cwd legacy layout, else anchor under base_dir."""
+    """Resolve flag path when relative: prefer PROJECT_ROOT, then cwd, then base_dir."""
     raw = Path(protection_flag_path)
     if raw.is_absolute():
         return raw
+    project_candidate = (PROJECT_ROOT / raw).resolve()
+    if project_candidate.exists():
+        return project_candidate
     cwd_candidate = (Path.cwd() / raw).resolve()
     if cwd_candidate.exists():
         return cwd_candidate
     base = Path(base_dir)
-    base = base.resolve() if base.is_absolute() else (Path.cwd() / base).resolve()
+    base = base.resolve() if base.is_absolute() else (PROJECT_ROOT / base).resolve()
     if len(raw.parts) == 1:
         return (base / raw).resolve()
     return (base / raw.name).resolve()
 
 
-def dispatch_live_mt5_execution(
+# ── Broker-agnostic dispatch (Future: swap MT5 → FIX / cloud) ──
+
+
+def dispatch_live_order(
     *,
     base_dir: str,
-    mt5_terminal_path: str,
+    broker: BrokerAdapter,
     symbol: str,
     execution_payload: dict[str, Any],
     intent_id: str | None = None,
@@ -57,10 +66,25 @@ def dispatch_live_mt5_execution(
     skip_price_guard: bool = False,
     ignore_protection_flag: bool = False,
     protection_flag_path: str = "data/live_dispatch_block.flag",
+    adapter_name: str = "mt5",
 ) -> dict:
-    """Generic MT5 handoff: ``execution_payload`` becomes envelope.payload (Phase B / Phase C hook).
+    """Broker-agnostic order dispatch — the canonical entry point for all venues.
 
-    Recommended keys: action, side, sl/tp, volume, position_ticket, execution_payload_schema (auto-filled).
+    Accepts a :class:`BrokerAdapter` for price validation instead of
+    hard-coding MT5.  When you swap MT5 for FIX / IB / cloud, you only
+    need to provide a different ``broker`` — this function stays unchanged.
+
+    Args:
+        base_dir: Ledger / data root directory.
+        broker: BrokerAdapter implementation (e.g. MT5BrokerAdapter).
+        symbol: Trading symbol.
+        execution_payload: dict with action, side, sl/tp, volume, magic, etc.
+        intent_id: Unique intent identifier.
+        correlation_id: Correlation identifier.
+        skip_price_guard: If True, skip SL/TP price validation.
+        ignore_protection_flag: If True, ignore live_dispatch_block.flag.
+        protection_flag_path: Path to the protection flag file.
+        adapter_name: Communication adapter name ("mt5", "fix", "file_queue", "stub").
     """
     if not ignore_protection_flag:
         protection_flag = resolve_protection_flag_path(base_dir, protection_flag_path)
@@ -84,9 +108,8 @@ def dispatch_live_mt5_execution(
                 "market_open requires positive sl and tp (or stop_loss/take_profit) for price guard"
             )
         side = str(body.get("side") or "long")
-        price = _fetch_reference_price(
-            mt5_terminal_path=mt5_terminal_path, symbol=symbol, side=side
-        )
+        mid, bid, ask = broker.fetch_prices(symbol)
+        price = ask if side == "long" else bid
         _validate_sl_tp(side=side, stop_loss=sl, take_profit=tp, reference_price=price)
 
     intent_id = intent_id or f"live_exec_{uuid.uuid4().hex}"
@@ -94,10 +117,9 @@ def dispatch_live_mt5_execution(
 
     cfg = EnvironmentConfig.production(
         base_dir=base_dir,
-        adapter_name="mt5",
+        adapter_name=adapter_name,
         live_dispatch_enabled=True,
         live_allowed_symbols=(symbol,),
-        extensions={"mt5_terminal_path": mt5_terminal_path},
     )
     container = ServiceContainer(cfg).build()
     envelope = CommunicationEnvelope(
@@ -113,13 +135,54 @@ def dispatch_live_mt5_execution(
         payload=body,
         deadline_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=30),
     )
-    result = container.dispatcher.dispatch(envelope)  # type: ignore[reportOptionalMemberAccess]
+    result = container.dispatcher.dispatch(envelope)
     return {
         "adapter": result.adapter_name,
         "status": str(result.status),
         "transport": getattr(result, "transport_metadata", None),
         "intent_id": intent_id,
     }
+
+
+# ── MT5-specific wrappers (backward compat) ──
+
+
+def dispatch_live_mt5_execution(
+    *,
+    base_dir: str,
+    mt5_terminal_path: str,
+    symbol: str,
+    execution_payload: dict[str, Any],
+    intent_id: str | None = None,
+    correlation_id: str | None = None,
+    skip_price_guard: bool = False,
+    ignore_protection_flag: bool = False,
+    protection_flag_path: str = "data/live_dispatch_block.flag",
+) -> dict:
+    """MT5-specific handoff — **backward compat only, prefer** :func:`dispatch_live_order`."""
+    # Build a throwaway MT5 broker adapter just for price validation
+    import MetaTrader5 as _mt5
+
+    if not _mt5.initialize(path=mt5_terminal_path):
+        raise RuntimeError(f"mt5 initialize failed: {_mt5.last_error()}")
+    try:
+        from core.execution.mt5_broker_adapter import MT5BrokerAdapter
+
+        broker = MT5BrokerAdapter(_mt5)
+        return dispatch_live_order(
+            base_dir=base_dir,
+            broker=broker,
+            symbol=symbol,
+            execution_payload=execution_payload,
+            intent_id=intent_id,
+            correlation_id=correlation_id,
+            skip_price_guard=skip_price_guard,
+            ignore_protection_flag=ignore_protection_flag,
+            protection_flag_path=protection_flag_path,
+            adapter_name="mt5",
+        )
+    finally:
+        _mt5.shutdown()
 
 
 def dispatch_live_open_order(
@@ -136,6 +199,7 @@ def dispatch_live_open_order(
     ignore_protection_flag: bool = False,
     protection_flag_path: str = "data/live_dispatch_block.flag",
     volume: float | None = None,
+    magic: int | None = None,
 ) -> dict:
     """Open-market helper; delegates to :func:`dispatch_live_mt5_execution`."""
     iid = intent_id or f"live_open_{uuid.uuid4().hex}"
@@ -148,6 +212,8 @@ def dispatch_live_open_order(
     }
     if volume is not None and volume > 0:
         execution_payload["volume"] = float(volume)
+    if magic is not None:
+        execution_payload["magic"] = int(magic)
 
     return dispatch_live_mt5_execution(
         base_dir=base_dir,

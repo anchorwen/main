@@ -33,7 +33,7 @@ class TestLedgerPersistence:
         assert outcome.decision_result is not None
 
         today = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
-        ledger_dir = Path(str(tmp_path / "data")) / today
+        ledger_dir = Path(str(tmp_path / "data")) / "decisions" / today
         decision_files = list(ledger_dir.glob(f"*.{stream_jsonl_suffix(LEDGER_STREAM_DECISIONS)}"))
         assert len(decision_files) >= 1
 
@@ -65,7 +65,7 @@ class TestLedgerPersistence:
 
         today = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
         decision_files = list(
-            (Path(str(tmp_path / "data")) / today).glob(
+            (Path(str(tmp_path / "data")) / "decisions" / today).glob(
                 f"*.{stream_jsonl_suffix(LEDGER_STREAM_DECISIONS)}"
             )
         )
@@ -82,7 +82,7 @@ class TestLedgerPersistence:
 
         today = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
         decision_files = list(
-            (Path(str(tmp_path / "data")) / today).glob(
+            (Path(str(tmp_path / "data")) / "decisions" / today).glob(
                 f"*.{stream_jsonl_suffix(LEDGER_STREAM_DECISIONS)}"
             )
         )
@@ -193,7 +193,7 @@ class TestFullDataChain:
 
         today = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
         decision_files = list(
-            (Path(str(tmp_path / "data")) / today).glob(
+            (Path(str(tmp_path / "data")) / "decisions" / today).glob(
                 f"*.{stream_jsonl_suffix(LEDGER_STREAM_DECISIONS)}"
             )
         )

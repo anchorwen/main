@@ -66,7 +66,7 @@ def _outbox_staleness_report(outbox_root: Path, *, max_age_minutes: int = 10) ->
     """Find .mt5.json files older than max_age_minutes and report the count."""
     if not outbox_root.exists():
         return {"stale_count": 0, "stale_paths": [], "max_age_minutes": max_age_minutes}
-    cutoff = datetime.now(UTC).replace(tzinfo=None).timestamp() - (max_age_minutes * 60)
+    cutoff = datetime.now(UTC).timestamp() - (max_age_minutes * 60)
     stale: list[str] = []
     for p in outbox_root.rglob("*.mt5.json"):
         try:
@@ -111,7 +111,7 @@ def _bridge_supervisor_status(base_dir: Path) -> dict[str, Any]:
     }
     if log_path.exists():
         try:
-            age_s = datetime.now(UTC).replace(tzinfo=None).timestamp() - log_path.stat().st_mtime
+            age_s = datetime.now(UTC).timestamp() - log_path.stat().st_mtime
             status["age_seconds"] = round(age_s, 1)
             status["fresh"] = age_s < 300
         except OSError:

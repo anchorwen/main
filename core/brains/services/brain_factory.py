@@ -28,6 +28,16 @@ class BrainFactory:
                 brain_entry=brain_entry,
                 feature_adapter=feature_adapter,
             )
+        elif brain_type == "online_sgd":
+            # OnlineLearnerAdapter optionally accepts a feature_adapter for
+            # normalization; pass V9FeatureAdapter if norm config is present.
+            norm_path = brain_entry.get("normalization_config_path", "")
+            feat_adapter = None
+            if norm_path:
+                with open(norm_path, encoding="utf-8") as f:
+                    norm_config = json.load(f)
+                feat_adapter = V9FeatureAdapter(normalization_config=norm_config)
+            adapter = adapter_cls(brain_entry=brain_entry, feature_adapter=feat_adapter)
         else:
             adapter = adapter_cls(brain_entry=brain_entry)
 

@@ -136,7 +136,7 @@ def test_record_shadow_from_ensemble(tmp_path: Path):
 
     # Read back the written file
     date_key = datetime.now(UTC).replace(tzinfo=None).date().isoformat()
-    file_path = tmp_path / date_key / "XAUUSD.decisions.jsonl"
+    file_path = tmp_path / "decisions" / date_key / "XAUUSD.decisions.jsonl"
     assert file_path.exists()
 
     lines = file_path.read_text(encoding="utf-8").strip().splitlines()
@@ -266,7 +266,7 @@ def test_record_shadow_from_proposals(tmp_path: Path):
     assert result["brain_count"] == 2
 
     date_key = now.date().isoformat()
-    file_path = tmp_path / date_key / "XAUUSD.decisions.jsonl"
+    file_path = tmp_path / "decisions" / date_key / "XAUUSD.decisions.jsonl"
     assert file_path.exists()
 
     record = json.loads(file_path.read_text(encoding="utf-8"))
@@ -320,7 +320,7 @@ def test_record_shadow_writes_to_correct_path(tmp_path: Path):
     )
 
     date_str = now.date().isoformat()
-    expected_path = tmp_path / date_str / "XAUUSD.decisions.jsonl"
+    expected_path = tmp_path / "decisions" / date_str / "XAUUSD.decisions.jsonl"
     assert expected_path.exists()
     assert result["path"] == str(expected_path)
     assert "record_id" in result

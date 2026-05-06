@@ -1,6 +1,6 @@
 """CRT lane trainer wrapper: Meta_ppo_v6 OU Statistical Arbitrage (lane=arb).
 
-Bridges D:\\ai\\Meta_ppo_v6 OU process mean-reversion strategy into the CRT pipeline.
+Bridges Meta_ppo_v6 OU process mean-reversion strategy into the CRT pipeline.
 
 Unlike sur/mtx which train neural networks, the arb lane is a parameter optimization
 problem: find the optimal OU theta / Z-Score thresholds / half-life filter that
@@ -10,7 +10,7 @@ Protocol:
 1. Accept --manifest-path (CRT manifest JSON, read-only input)
 2. Accept --result-json-path (where to write result.json for your_trainer.py to ingest)
 3. Accept --artifact-path (target path for arb_params.json)
-4. Accept --trainer-root (default: D:\\ai\\Meta_ppo_v6)
+4. Accept --trainer-root (default: data/training/arb_v6)
 5. Accept --dataset-csv (override data CSV, default: Exness_XAUUSDm_2026_04.csv)
 6. Run OU parameter grid search backtest, output optimal params JSON
 7. Write result.json with metrics / artifact_primary / risk_notes
@@ -74,8 +74,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--trainer-root",
         type=Path,
-        default=Path(r"D:\ai\Meta_ppo_v6"),
-        help="Directory containing Meta_ppo_v6 scripts (default: D:\\ai\\Meta_ppo_v6)",
+        default=PROJECT_ROOT / "data" / "training" / "arb_v6",
+        help="Directory containing Meta_ppo_v6 scripts (default: data/training/arb_v6)",
+    )
+    p.add_argument(
+        "--recipe",
+        type=Path,
+        default=None,
+        help="Path to Training Recipe JSON for hyperparameters and provenance",
     )
     return p
 
@@ -369,7 +375,22 @@ def main(argv: list[str] | None = None) -> int:
     generation = manifest.get("generation", "g2026.1")
     seed = manifest.get("seed", 42)
 
+    # ── Load recipe if provided ──
+    recipe_id: str | None = None
+    if args.recipe:
+        from core.contracts.training.training_recipe import TrainingRecipe
+
+        recipe_obj = TrainingRecipe.from_file(args.recipe)
+        recipe_id = recipe_obj.recipe_id
+        print(f"[arb_trainer] Recipe: {recipe_id}")
+
     trainer_root = args.trainer_root.resolve()
+    if not trainer_root.exists():
+        legacy = Path(r"D:\ai\Meta_ppo_v6")
+        if legacy.exists():
+            print(f"[arb_trainer] Internal trainer root not found: {trainer_root}")
+            print(f"[arb_trainer] Falling back to legacy path: {legacy}")
+            trainer_root = legacy
     dataset_csv = (args.dataset_csv or (trainer_root / "Exness_XAUUSDm_2026_04.csv")).resolve()
     artifact_path = args.artifact_path.resolve()
     result_path = args.result_json_path.resolve()
@@ -463,6 +484,10 @@ def main(argv: list[str] | None = None) -> int:
         else:
             result["risk_notes"].append("Artifact not found after backtest")
             result["metrics"]["train_finished"] = False
+
+    # Inject recipe provenance
+    if recipe_id:
+        result["recipe_id"] = recipe_id
 
     # Write result.json
     result_path.parent.mkdir(parents=True, exist_ok=True)

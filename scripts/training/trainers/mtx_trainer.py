@@ -1,6 +1,6 @@
 """CRT lane trainer wrapper: Meta_ppo_v4.5 Microstructure Execution (lane=mtx).
 
-Bridges D:\\ai\\Meta_ppo_v4.5 training scripts into the CRT pipeline.
+Bridges Meta_ppo_v4.5 training scripts into the CRT pipeline.
 
 Two training modes:
   1. Transformer (03_Profit_Aware_Training.py)  → V4.3_Transformer_Core.pth  → .onnx export
@@ -10,7 +10,7 @@ Protocol:
 1. Accept --manifest-path (CRT manifest JSON, read-only input)
 2. Accept --result-json-path (where to write result.json for your_trainer.py to ingest)
 3. Accept --artifact-path (target path for artifact)
-4. Accept --trainer-root (directory containing training scripts, default: D:\\ai\\Meta_ppo_v4.5)
+4. Accept --trainer-root (directory containing training scripts, default: data/training/mtx_v4.5)
 5. Accept --mode (transformer | xgboost, default: transformer)
 6. Execute the selected training script, convert to ONNX if transformer mode, copy artifacts
 7. Write result.json with metrics / artifact_primary / norm_artifact / risk_notes
@@ -47,6 +47,9 @@ def utc_now_iso_z() -> str:
     )
 
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # future/
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="mtx_trainer",
@@ -71,8 +74,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--trainer-root",
         type=Path,
-        default=Path(r"D:\ai\Meta_ppo_v4.5"),
-        help="Directory containing Meta_ppo_v4.5 training scripts (default: D:\\ai\\Meta_ppo_v4.5)",
+        default=PROJECT_ROOT / "data" / "training" / "mtx_v4.5",
+        help="Directory containing Meta_ppo_v4.5 training scripts (default: data/training/mtx_v4.5)",
+    )
+    p.add_argument(
+        "--recipe",
+        type=Path,
+        default=None,
+        help="Path to Training Recipe JSON for hyperparameters and provenance",
     )
     return p
 
@@ -248,7 +257,28 @@ def main(argv: list[str] | None = None) -> int:
     lane = manifest.get("lane", "mtx")
     generation = manifest.get("generation", "g2026.1")
 
+    # ── Load recipe if provided ──
+    recipe_id: str | None = None
+    if args.recipe:
+        from core.contracts.training.training_recipe import TrainingRecipe
+
+        recipe_obj = TrainingRecipe.from_file(args.recipe)
+        recipe_id = recipe_obj.recipe_id
+        print(f"[mtx_trainer] Recipe: {recipe_id}")
+        # Recipe can suggest mode via architecture hints
+        if recipe_obj.training.hidden_dims and len(recipe_obj.training.hidden_dims) > 0:
+            if args.mode == "xgboost" and len(recipe_obj.training.hidden_dims) >= 3:
+                print(
+                    f"[mtx_trainer] Recipe suggests transformer architecture (hidden_dims={recipe_obj.training.hidden_dims})"
+                )
+
     trainer_root = args.trainer_root.resolve()
+    if not trainer_root.exists():
+        legacy = Path(r"D:\ai\Meta_ppo_v4.5")
+        if legacy.exists():
+            print(f"[mtx_trainer] Internal trainer root not found: {trainer_root}")
+            print(f"[mtx_trainer] Falling back to legacy path: {legacy}")
+            trainer_root = legacy
     artifact_path = args.artifact_path.resolve()
     result_path = args.result_json_path.resolve()
 
@@ -338,6 +368,10 @@ def main(argv: list[str] | None = None) -> int:
         else:
             result["risk_notes"].append("Artifact not found after training")
             result["metrics"]["train_finished"] = False
+
+    # Inject recipe provenance
+    if recipe_id:
+        result["recipe_id"] = recipe_id
 
     # Write result.json
     result_path.parent.mkdir(parents=True, exist_ok=True)

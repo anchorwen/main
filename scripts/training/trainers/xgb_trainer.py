@@ -249,8 +249,12 @@ def build_and_train(
     *,
     params: dict[str, Any] | None = None,
     val_data_path: Path | None = None,
+    augment: bool = False,
+    augment_vol_scales: list[float] | None = None,
+    augment_noise_std: float = 0.0,
+    augment_seed: int | None = None,
 ) -> dict[str, Any]:
-    """Full pipeline: load → train → save.
+    """Full pipeline: load → augment → train → save.
 
     Returns summary dict.
     """
@@ -260,6 +264,21 @@ def build_and_train(
     if val_data_path is not None:
         Xv, yv, _, _ = load_training_data(val_data_path)
         val_data = (Xv, yv)
+
+    # ── Data augmentation ──
+    augment_applied = False
+    if augment and (augment_vol_scales or augment_noise_std > 0):
+        from core.features.data_augmentation import augment_dataset
+
+        X, y = augment_dataset(
+            X,
+            y,
+            volatility_scaling=augment_vol_scales or [1.0],
+            noise_std=augment_noise_std,
+            seed=augment_seed,
+            concat_original=True,
+        )
+        augment_applied = True
 
     booster, metrics = train_xgboost(
         X, y, params=params, val_data=val_data, feature_names=feature_names
@@ -280,6 +299,18 @@ def build_and_train(
         features=X.shape[1],
         params=merged_params,
     )
+
+    # Inject augmentation metadata into result
+    if augment_applied and result_path and result_path.exists():
+        result_data = json.loads(result_path.read_text(encoding="utf-8"))
+        result_data["data_augmentation"] = {
+            "enabled": True,
+            "volatility_scaling": augment_vol_scales,
+            "noise_std": augment_noise_std,
+        }
+        result_path.write_text(
+            json.dumps(result_data, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
 
     return {
         "model_path": str(model_path),
@@ -313,6 +344,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--max-depth", type=int, default=None)
     p.add_argument("--learning-rate", type=float, default=None)
     p.add_argument("--seed", type=int, default=None)
+    p.add_argument(
+        "--recipe",
+        type=Path,
+        default=None,
+        help="Path to Training Recipe JSON for hyperparameters and provenance",
+    )
     return p
 
 
@@ -322,6 +359,37 @@ def main(argv: list[str] | None = None) -> int:
     if not args.data.exists():
         print(f"[xgb_trainer] ERROR: data file not found: {args.data}", file=sys.stderr)
         return 2
+
+    # ── Load recipe if provided ──
+    recipe_obj = None
+    recipe_id: str | None = None
+    augment_enabled = False
+    augment_vol_scales: list[float] | None = None
+    augment_noise_std = 0.0
+    if args.recipe:
+        from core.contracts.training.training_recipe import TrainingRecipe
+
+        recipe_obj = TrainingRecipe.from_file(args.recipe)
+        recipe_id = recipe_obj.recipe_id
+        print(f"[xgb_trainer] Recipe: {recipe_id}")
+
+        # Recipe provides defaults; CLI overrides take precedence
+        if args.n_estimators is None:
+            args.n_estimators = recipe_obj.training.epochs
+        if args.learning_rate is None:
+            args.learning_rate = recipe_obj.training.learning_rate
+        if args.max_depth is None and recipe_obj.training.hidden_dims:
+            args.max_depth = recipe_obj.training.hidden_dims[0]
+
+        # ── Augmentation config from recipe ──
+        da = recipe_obj.data.data_augmentation
+        if da.enabled:
+            augment_enabled = True
+            augment_vol_scales = da.volatility_scaling
+            augment_noise_std = da.noise_std
+            print(
+                f"[xgb_trainer] Augmentation: vol_scales={augment_vol_scales}, noise={augment_noise_std}"
+            )
 
     params: dict[str, Any] = {}
     if args.params:
@@ -346,7 +414,21 @@ def main(argv: list[str] | None = None) -> int:
         result_path=args.output_result.resolve() if args.output_result else None,
         params=params,
         val_data_path=args.val_data.resolve() if args.val_data else None,
+        augment=augment_enabled,
+        augment_vol_scales=augment_vol_scales,
+        augment_noise_std=augment_noise_std,
+        augment_seed=args.seed,
     )
+
+    # Inject recipe provenance into result
+    if recipe_id and args.output_result:
+        result_path = args.output_result.resolve()
+        if result_path.exists():
+            result_data = json.loads(result_path.read_text(encoding="utf-8"))
+            result_data["recipe_id"] = recipe_id
+            result_path.write_text(
+                json.dumps(result_data, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
 
     print(json.dumps(summary, indent=2, ensure_ascii=False, default=str))
     return 0

@@ -102,7 +102,7 @@ def _collect_outbox_map(outbox_root: Path) -> dict[str, Path]:
 
 
 def _stale_outbox_report(outbox_map: dict[str, Path], max_age_minutes: int) -> dict[str, Any]:
-    cutoff = datetime.now(UTC).replace(tzinfo=None).timestamp() - (max_age_minutes * 60)
+    cutoff = datetime.now(UTC).timestamp() - (max_age_minutes * 60)
     stale: list[str] = []
     for mid, p in outbox_map.items():
         try:

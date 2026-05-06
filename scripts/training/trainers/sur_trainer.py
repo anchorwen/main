@@ -1,21 +1,23 @@
 """CRT lane trainer wrapper: Survival_V9 Institutional (lane=sur).
 
-Bridges D:\\ai\\Survival_V9\\1_V9_Institutional_Forge.py into the CRT pipeline.
+Bridges Survival_V9 1_V9_Institutional_Forge.py into the CRT pipeline.
 
 Protocol:
 1. Accept --manifest-path (CRT manifest JSON, read-only input)
 2. Accept --result-json-path (where to write result.json for your_trainer.py to ingest)
 3. Accept --artifact-path (target path for .onnx artifact)
 4. Accept --dataset-csv (override training data CSV, default: V9_Symbiosis_Matrix.csv)
-5. Accept --trainer-root (directory containing 1_V9_Institutional_Forge.py, default: D:\\ai\\Survival_V9)
-6. Execute forge_v9_institutional() via subprocess, then copy artifacts to artifact-path
-7. Write result.json with metrics / artifact_primary / norm_artifact / risk_notes
+5. Accept --trainer-root (directory containing 1_V9_Institutional_Forge.py, default: data/training/sur_v9)
+6. Accept --recipe (Training Recipe JSON — the single source of truth for hyperparameters)
+7. Execute forge_v9_institutional() via subprocess, then copy artifacts to artifact-path
+8. Write result.json with metrics / artifact_primary / norm_artifact / risk_notes
 
 Usage (as lane command template):
   python scripts/training/trainers/sur_trainer.py \\
     --manifest-path {manifest_path} \\
     --result-json-path {manifest_path}.result.json \\
-    --artifact-path {artifact_path}
+    --artifact-path {artifact_path} \\
+    --recipe blueprints/recipes/sur-g2026.1-recipe-001.json
 """
 
 from __future__ import annotations
@@ -70,14 +72,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--trainer-root",
         type=Path,
-        default=Path(r"D:\ai\Survival_V9"),
-        help="Directory containing 1_V9_Institutional_Forge.py (default: D:\\ai\\Survival_V9)",
+        default=PROJECT_ROOT / "data" / "training" / "sur_v9",
+        help="Directory containing 1_V9_Institutional_Forge.py (default: data/training/sur_v9)",
     )
     p.add_argument(
         "--epochs",
         type=int,
-        default=200,
-        help="Override training epochs (default: 200)",
+        default=None,
+        help="Override training epochs (default: from recipe or 200)",
+    )
+    p.add_argument(
+        "--recipe",
+        type=Path,
+        default=None,
+        help="Path to Training Recipe JSON (single source of truth for hyperparameters)",
     )
     return p
 
@@ -96,7 +104,7 @@ def run_sur_forge(
     """Run Survival_V9 forge as a subprocess via an inline script.
 
     We inject the training entry point as an inline Python -c script to avoid
-    modifying the original D:\\ai files. This preserves the original forge logic
+    modifying the original trainer files. This preserves the original forge logic
     while redirecting CSV input and artifact output under CRT control.
     """
     forge_script = trainer_root / "1_V9_Institutional_Forge.py"
@@ -179,9 +187,36 @@ def main(argv: list[str] | None = None) -> int:
     generation = manifest.get("generation", "g2026.1")
 
     trainer_root = args.trainer_root.resolve()
+    if not trainer_root.exists():
+        legacy = Path(r"D:\ai\Survival_V9")
+        if legacy.exists():
+            print(f"[sur_trainer] Internal trainer root not found: {trainer_root}")
+            print(f"[sur_trainer] Falling back to legacy path: {legacy}")
+            trainer_root = legacy
     dataset_csv = (args.dataset_csv or (trainer_root / "V9_Symbiosis_Matrix.csv")).resolve()
     artifact_path = args.artifact_path.resolve()
     result_path = args.result_json_path.resolve()
+
+    # ── Load recipe if provided ──
+    recipe_id: str | None = None
+    label_contract_id: str | None = None
+    epochs = args.epochs or 200
+
+    if args.recipe:
+        from core.contracts.training.training_recipe import TrainingRecipe
+
+        recipe = TrainingRecipe.from_file(args.recipe)
+        recipe_id = recipe.recipe_id
+        label_contract_id = recipe.label_contract_ref.contract_id
+        if args.epochs is None:
+            epochs = recipe.training.epochs
+        print(f"[sur_trainer] Recipe: {recipe_id}")
+        print(f"[sur_trainer] Label contract: {label_contract_id}")
+        print(
+            f"[sur_trainer] Recipe params: lr={recipe.training.learning_rate}, "
+            f"batch={recipe.training.batch_size}, dropout={recipe.training.dropout}, "
+            f"optimizer={recipe.training.optimizer}"
+        )
 
     if not dataset_csv.exists():
         print(f"[sur_trainer] ERROR: Dataset CSV not found: {dataset_csv}", file=sys.stderr)
@@ -191,9 +226,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[sur_trainer] Trainer root: {trainer_root}")
     print(f"[sur_trainer] Dataset CSV: {dataset_csv}")
     print(f"[sur_trainer] Artifact target: {artifact_path}")
-    print(f"[sur_trainer] Starting Survival_V9 forge (epochs={args.epochs})...")
+    print(f"[sur_trainer] Starting Survival_V9 forge (epochs={epochs})...")
 
-    proc = run_sur_forge(trainer_root, dataset_csv, args.epochs)
+    proc = run_sur_forge(trainer_root, dataset_csv, epochs)
 
     print(proc.stdout or "")
     if proc.stderr:
@@ -211,13 +246,18 @@ def main(argv: list[str] | None = None) -> int:
         "metrics": {
             "train_finished": proc.returncode == 0,
             "trainer_exit_code": proc.returncode,
-            "epochs_requested": args.epochs,
+            "epochs_requested": epochs,
             "dataset_csv": str(dataset_csv),
         },
         "risk_notes": [],
         "artifact_primary": None,
         "norm_artifact": None,
     }
+
+    if recipe_id:
+        result["recipe_id"] = recipe_id
+    if label_contract_id:
+        result["label_contract_id"] = label_contract_id
 
     # Parse key lines from stdout
     for line in (proc.stdout or "").splitlines():

@@ -91,6 +91,14 @@ BATCH_PLAN = {
                 "iface_semver": "1.0.0",
                 "dataset": "D:\\ai\\Meta_ppo_v6\\Exness_XAUUSDm_2026_04.csv",
             },
+            "xgb_inrepo": {
+                "role": "chlg",
+                "seeds": [42, 43, 44],
+                "description": "In-repo XGBoost trained from dataset_builder NPZ output (journal→labels→features→train)",
+                "feature_contract_id": "feat-xgb-inrepo-v9-institutional-1.0.0",
+                "iface_semver": "1.0.0",
+                "dataset": "data/training/train.npz",
+            },
         },
     },
 }
@@ -108,8 +116,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--lanes",
-        default="sur,mtx_transformer,mtx_xgboost,arb",
-        help="Comma-separated lane keys (default: all 4)",
+        default="sur,mtx_transformer,mtx_xgboost,arb,xgb_inrepo",
+        help="Comma-separated lane keys (default: all 5)",
     )
     p.add_argument(
         "--output-dir",
@@ -156,6 +164,8 @@ def generate_manifests(
         # Map lane key to CRT lane id
         if lane_key in ("mtx_transformer", "mtx_xgboost"):
             lane_id = "mtx"
+        elif lane_key == "xgb_inrepo":
+            lane_id = "xgbinrepo"
         else:
             lane_id = lane_key
 
@@ -185,6 +195,7 @@ def generate_manifests(
                 "artifact_primary": None,
                 "norm_artifact": None,
                 "training_run_id": training_run_id,
+                "recipe_id": f"{lane_id}-{generation}-recipe-001",
             }
 
             manifests.append(manifest)

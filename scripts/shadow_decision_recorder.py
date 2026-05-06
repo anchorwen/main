@@ -12,7 +12,6 @@ Usage:
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
@@ -45,9 +44,9 @@ def _direction_to_side(direction: str) -> str:
 
 
 def _derive_action(consensus: str | dict[str, Any]) -> str:
-    """Derive decision_action from consensus: OPEN when direction exists, ABSTAIN otherwise."""
+    """Derive decision_action: OPEN when direction is long/short, ABSTAIN otherwise."""
     if isinstance(consensus, dict):
-        c = consensus.get("consensus", "no_results")
+        c = consensus.get("consensus") or consensus.get("aggregated_bias", "no_results")
     else:
         c = str(consensus)
     if c in ("split", "no_results", "neutral"):
@@ -60,7 +59,7 @@ def _derive_action(consensus: str | dict[str, Any]) -> str:
 def _derive_side(consensus: str | dict[str, Any]) -> str:
     """Derive decision_side from consensus direction."""
     if isinstance(consensus, dict):
-        c = consensus.get("consensus", "no_results")
+        c = consensus.get("consensus") or consensus.get("aggregated_bias", "no_results")
     else:
         c = str(consensus)
     return _direction_to_side(c)
@@ -138,6 +137,16 @@ def record_shadow_from_ensemble(
         Dict with written count, path, and per-brain record_ids.
     """
     ok_results = [r for r in results if r.get("status") == "ok"]
+    errored = [r for r in results if r.get("status") != "ok"]
+    if errored:
+        print(
+            "[shadow_decision_recorder] dropping non-OK results: "
+            + ", ".join(
+                f"{r.get('brain_id', '?')}: {r.get('error', r.get('status', 'unknown'))}"
+                for r in errored
+            ),
+            flush=True,
+        )
     supporting, opposing = _group_by_direction(ok_results)
 
     if not ok_results:
@@ -191,10 +200,7 @@ def record_shadow_from_ensemble(
             "total_results": len(results),
         },
     )
-    store.append_record(date_key, symbol, record)
-
-    target_dir = Path(store._base_dir) / date_key
-    target_file = target_dir / f"{symbol}.decisions.jsonl"
+    target_file = store.append_record(date_key, symbol, record)
 
     return {
         "written": True,
@@ -207,12 +213,48 @@ def record_shadow_from_ensemble(
     }
 
 
+def _serialize_feature_vector(fv: Any) -> list[float] | None:
+    """Convert a numpy array or list feature vector to a plain list of floats."""
+    if fv is None:
+        return None
+    try:
+        import numpy as np
+
+        if isinstance(fv, np.ndarray):
+            return fv.tolist()
+    except ImportError:
+        pass
+    if isinstance(fv, list | tuple):
+        return [float(x) for x in fv]
+    return None
+
+
+def _extract_vote_details(proposals: list[Any]) -> list[dict[str, Any]]:
+    """Extract per-brain prediction details from proposals."""
+    votes: list[dict[str, Any]] = []
+    for p in proposals:
+        pred = getattr(p, "prediction", {}) or {}
+        votes.append(
+            {
+                "brain_id": getattr(p, "brain_id", "unknown"),
+                "direction_bias": pred.get("direction_bias", "neutral"),
+                "up_probability": round(float(pred.get("up_probability", 0.5)), 6),
+                "down_probability": round(float(pred.get("down_probability", 0.5)), 6),
+                "confidence": round(float(pred.get("confidence", 0.0)), 6),
+            }
+        )
+    return votes
+
+
 def record_shadow_from_proposals(
     proposals: list[Any],
     consensus: dict[str, Any],
     symbol: str = "XAUUSD",
     store: JsonlLedgerStore | None = None,
     dispatch_status: str = "shadow_verify",
+    *,
+    feature_vector: Any = None,
+    regime_info: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Persist multi-brain proposals as DecisionRecords (used by live_intent_loop).
 
@@ -225,6 +267,8 @@ def record_shadow_from_proposals(
         symbol: Trading symbol.
         store: JsonlLedgerStore; creates one if None.
         dispatch_status: Status for execution block (default: "shadow_verify").
+        feature_vector: Optional numpy array or list of 40 feature values.
+        regime_info: Optional market regime dict from RegimeDetector.
 
     Returns:
         Dict with written count and paths.
@@ -308,11 +352,13 @@ def record_shadow_from_proposals(
             "brain_count": len(proposals),
             "proposal_count": len(proposals),
         },
+        extensions={
+            "feature_vector": _serialize_feature_vector(feature_vector),
+            "regime_info": regime_info or {},
+            "vote_details": _extract_vote_details(proposals),
+        },
     )
-    store.append_record(date_key, symbol, record)
-
-    target_dir = Path(store._base_dir) / date_key
-    target_file = target_dir / f"{symbol}.decisions.jsonl"
+    target_file = store.append_record(date_key, symbol, record)
 
     return {
         "written": True,

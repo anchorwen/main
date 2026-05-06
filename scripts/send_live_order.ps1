@@ -1,3 +1,4 @@
+# DEPRECATED — use: python scripts/send_live_order.py directly.
 param(
   [string]$BaseDir = "data",
   [string]$Mt5TerminalPath = "D:\MetaTrader 5\terminal64.exe",

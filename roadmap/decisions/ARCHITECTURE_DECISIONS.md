@@ -11,6 +11,8 @@
 | 3 | 执行网关选型：优先 MT5 | 2026-05-01 | 提议 |
 | 4 | 配置分层架构 | 2026-05-01 | 已接受 |
 | 5 | 去ONNX中心化 — 多模型类型抽象 | 2026-05-01 | 已接受 |
+| 6 | 生产架构选型 — live_intent_loop 为规范路径 | 2026-05-06 | 已接受 |
+| 7 | LLM/RL 资产分配委员会延后至 Phase C | 2026-05-06 | 已接受 |
 
 ---
 
@@ -126,4 +128,61 @@
 
 ---
 
-> **最后更新**: 2026-05-01
+---
+
+## ADR-006: 生产架构选型 — live_intent_loop 为规范路径
+
+- **状态**: 已接受
+- **日期**: 2026-05-06
+
+### 背景
+
+系统存在两套推理→决策→派发架构：
+
+| 架构 | 路径 | 使用场景 |
+|------|------|----------|
+| **A**: live_intent_loop | `main.py live` → `live_launcher.py` → `live_intent_loop.py` → `core/runtime/live_cycle.py` | **当前生产**（5-brain 多脑模式运行中） |
+| **B**: RuntimeLoop | `ServiceContainer` → `RuntimeLoop` → `DecisionCycleOrchestrator` | 测试/影子场景/`main_v9_shadow.py` |
+
+两套架构维护成本翻倍，功能分歧风险持续增长。`roadmap.json` v1.1.0 曾标记架构 A 为 "legacy, 将被 RuntimeLoop 替代"，但架构 A 是唯一经过实盘验证的路径。
+
+### 决策
+
+1. **架构 A（live_intent_loop → live_cycle）为规范生产路径**。
+2. **架构 B（RuntimeLoop → Orchestrator）降为备用架构**，保留用于测试和影子场景分析，不再作为迁移目标。
+3. `core/runtime/live_cycle.py` 已通过 2026-05-06 模块化提取，将核心周期逻辑独立于 CLI 脚本，满足可测试性要求。
+4. `BrokerAdapter` Protocol（`core/execution/broker_adapter.py`）作为执行层抽象，统一两套架构的执行入口。
+
+### 后果
+
+- **正面**: 单一生产路径降低维护成本；live_cycle 可独立单元测试；BrokerAdapter 为 FIX/云端迁移提供统一接口
+- **负面**: RuntimeLoop/Orchestrator 中的部分功能（断路器、指标收集）需在 live_cycle 中重新实现
+- **风险**: 无
+
+---
+
+## ADR-007: LLM/RL 资产分配委员会延后至 Phase C
+
+- **状态**: 已接受
+- **日期**: 2026-05-06
+
+### 背景
+
+用户原始蓝图方案 B 的核心设计是"引入大语言模型（LLM）或强化学习作为资产分配委员会"。当前系统使用 `ParliamentService` 规则驱动加权平均完成多脑投票——不涉及任何 LLM 调用或 RL 策略梯度更新。
+
+### 决策
+
+1. **当前阶段（Phase A→B 过渡）使用规则驱动 ParliamentService 作为资产分配机制**。
+2. **LLM/RL 智能分配延后至 Phase C**，届时系统已有稳定的多 Alpha 并行基础设施（20-50 个 Alpha）和足够的交易历史数据供 RL 训练。
+3. `ParliamentService` 的加权投票机制（vote_weight × confidence × fallback_penalty）保留为 baseline，LLM/RL 作为可插拔的高级替代。
+4. `DynamicBrainWeighter` + `BrainPerformanceTracker` 闭环提供数据驱动的权重调整，构成 RL 的前置数据管道。
+
+### 后果
+
+- **正面**: 降低 Phase B 复杂度，聚焦可验证的规则驱动分配；ParliamentService 已通过多脑实盘验证
+- **负面**: 偏离原始 B 方案愿景中的"LLM 智能分配"特征
+- **风险**: 规则驱动分配在极端市场条件下可能不如 LLM 灵活 → 缓解: RegimeDetector 动态调整 multiplier
+
+---
+
+> **最后更新**: 2026-05-06

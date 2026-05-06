@@ -15,12 +15,14 @@ def test_decide_side_long_short_none():
 
 
 def test_compute_sl_tp_long_short():
+    # sl_atr_mult=2.0, tp_atr_mult=4.0, current_atr=2.5 → sl_dist=5.0, tp_dist=10.0
     sl, tp, ref = compute_sl_tp_for_side(
         "long",
         ref_long=100.0,
         ref_short=99.9,
-        sl_distance=5.0,
-        tp_distance=10.0,
+        sl_atr_mult=2.0,
+        tp_atr_mult=4.0,
+        current_atr=2.5,
     )
     assert (sl, tp, ref) == (95.0, 110.0, 100.0)
 
@@ -28,8 +30,9 @@ def test_compute_sl_tp_long_short():
         "short",
         ref_long=100.0,
         ref_short=99.9,
-        sl_distance=5.0,
-        tp_distance=10.0,
+        sl_atr_mult=2.0,
+        tp_atr_mult=4.0,
+        current_atr=2.5,
     )
     assert (sl, tp, ref) == (104.9, 89.9, 99.9)
 

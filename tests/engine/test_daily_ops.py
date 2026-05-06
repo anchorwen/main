@@ -17,6 +17,10 @@ def test_run_all_steps_skip_all():
         skip_champion=True,
         skip_retraining=True,
         skip_recap=True,
+        skip_alpha=True,
+        skip_online_feedback=True,
+        skip_paper_simulation=True,
+        skip_fs_maintenance=True,
     )
     assert report["total_steps"] == 0
     assert report["errors"] == 0
@@ -55,6 +59,10 @@ def test_daily_ops_dry_run():
         skip_champion=True,
         skip_retraining=True,
         skip_recap=True,
+        skip_alpha=True,
+        skip_online_feedback=True,
+        skip_paper_simulation=True,
+        skip_fs_maintenance=True,
         dry_run=True,
     )
     assert report["dry_run"] is True
@@ -71,6 +79,10 @@ def test_daily_ops_error_count():
         skip_champion=True,
         skip_retraining=True,
         skip_recap=True,
+        skip_alpha=True,
+        skip_online_feedback=True,
+        skip_paper_simulation=True,
+        skip_fs_maintenance=True,
     )
     assert report["errors"] == 0
     assert "steps" in report
@@ -97,6 +109,10 @@ def test_main_dry_run(tmp_path: Path, monkeypatch):
                 "--skip-champion",
                 "--skip-retraining",
                 "--skip-recap",
+                "--skip-alpha",
+                "--skip-online-feedback",
+                "--skip-paper-simulation",
+                "--skip-fs-maintenance",
             ]
         )
     finally:
@@ -118,6 +134,10 @@ def test_main_output_file(tmp_path: Path, monkeypatch):
             "--skip-champion",
             "--skip-retraining",
             "--skip-recap",
+            "--skip-alpha",
+            "--skip-online-feedback",
+            "--skip-paper-simulation",
+            "--skip-fs-maintenance",
             "--output",
             str(out),
         ]

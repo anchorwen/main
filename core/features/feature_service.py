@@ -26,8 +26,8 @@ class FeatureService:
         default_venue: str = "MT5",
         feature_store=None,
         default_symbol: str = "XAUUSD",
-        store_schema_name: str = "v9_institutional",
-        store_timeframe: str = "M1",
+        store_schema_name: str = "v9_institutional_40",
+        store_timeframe: str = "M5",
     ):
         self._adapter = feature_adapter
         self._computer = feature_computer

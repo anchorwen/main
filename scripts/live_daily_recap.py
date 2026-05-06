@@ -17,6 +17,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+# Fix garbled Chinese output on Windows (QO-0015)
+if sys.stdout.encoding != "utf-8":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 SCHEMA_VERSION = "live_daily_recap.v1"
 
 
@@ -32,6 +39,13 @@ def _utc_now_iso() -> str:
 
 def _today_utc_key() -> str:
     return datetime.now(UTC).replace(tzinfo=None).date().isoformat()
+
+
+def _lookback_date_key(hours: int = 24) -> str:
+    """Return the ISO date key for `hours` ago, so recaps catch all recent trades."""
+    from datetime import timedelta
+
+    return (datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours)).date().isoformat()
 
 
 def _run_quality_report(base_dir: Path, date_key: str) -> dict[str, Any]:
@@ -347,7 +361,7 @@ def _write_evolution_plan_update(
     try:
         # Optional backup
         mtime = plan_path.stat().st_mtime
-        age_hours = (datetime.now(UTC).replace(tzinfo=None).timestamp() - mtime) / 3600
+        age_hours = (datetime.now(UTC).timestamp() - mtime) / 3600
         if age_hours > backup_threshold_hours:
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = plan_path.parent / f"EVOLUTION_PLAN.backup.{stamp}.md"
@@ -383,7 +397,7 @@ def build_report(
     run_governance: bool = False,
     run_champion: bool = False,
 ) -> dict[str, Any]:
-    date = date_key or _today_utc_key()
+    date = date_key or _lookback_date_key(hours=24)
     journal_path = base_dir / "live_trade_journal.jsonl"
     flag_path = base_dir / "live_dispatch_block.flag"
 

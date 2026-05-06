@@ -83,6 +83,17 @@ def main(argv: list[str] | None = None) -> int:
     artifacts_dir = args.artifacts_dir or (manifest_path.parent / "artifacts")
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     artifact_path = artifacts_dir / f"{safe_name(m.model_id)}.onnx"
+
+    # ── Resolve recipe path from manifest ──
+    recipe_path = ""
+    recipe_id = getattr(m, "recipe_id", None) or ""
+    if recipe_id:
+        resolved = PROJECT_ROOT / "blueprints" / "recipes" / f"{recipe_id}.json"
+        if resolved.exists():
+            recipe_path = str(resolved)
+        else:
+            print(f"[your_trainer] WARN: recipe_id={recipe_id} but file not found: {resolved}")
+
     values = {
         "manifest_path": str(manifest_path),
         "model_id": m.model_id,
@@ -90,6 +101,7 @@ def main(argv: list[str] | None = None) -> int:
         "lane": m.lane,
         "dataset_slice_id": m.dataset_slice_id,
         "artifact_path": str(artifact_path),
+        "recipe_path": recipe_path,
     }
 
     lane_templates = load_lane_templates(args.lane_command_file)

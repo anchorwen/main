@@ -29,6 +29,7 @@ BRAIN_TO_LANE: dict[str, str] = {
     "V9": "sur",
     "XGB": "mtx",
     "OU": "arb",
+    "Online_SGD": "online_sgd",
 }
 
 # Promotion criteria

@@ -45,16 +45,12 @@ def test_parse_iso_invalid():
 # ── _normalize_symbol tests ──
 
 
-def test_normalize_symbol_strips_c():
+def test_normalize_symbol_canonical():
     from scripts.training.dataset_builder import _normalize_symbol
 
-    assert _normalize_symbol("XAUUSDc") == "XAUUSD"
-
-
-def test_normalize_symbol_noop():
-    from scripts.training.dataset_builder import _normalize_symbol
-
-    assert _normalize_symbol("XAUUSD") == "XAUUSD"
+    # XAUUSDc is the canonical form
+    assert _normalize_symbol("XAUUSDc") == "XAUUSDc"
+    assert _normalize_symbol("XAUUSD") == "XAUUSDc"
     assert _normalize_symbol("EURUSD") == "EURUSD"
 
 
@@ -121,7 +117,7 @@ def _make_label(label_id, open_at, label="win", symbol="XAUUSDc", side="long", p
     }
 
 
-def _make_feature_record(store, event_time_str, symbol="XAUUSD", **extra_values):
+def _make_feature_record(store, event_time_str, symbol="XAUUSDc", **extra_values):
     """Write a single feature record to the store and return it."""
     from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
     from core.features.store_contracts import FeatureRecord, FeatureSchema
@@ -210,7 +206,7 @@ def test_join_full_pipeline(tmp_path: Path):
     # First row: win
     assert joined[0]["label"] == "win"
     assert joined[0]["pnl"] == 15.0
-    assert joined[0]["symbol"] == "XAUUSD"
+    assert joined[0]["symbol"] == "XAUUSDc"
     assert abs(joined[0]["time_delta_seconds"]) == 5.0
     assert "f_0" in joined[0]
     assert "f_39" in joined[0]

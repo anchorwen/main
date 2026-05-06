@@ -144,8 +144,8 @@ def test_build_basic_stats_report():
     assert stats["total_records"] == 4
     assert stats["closed_trades"] == 3
     assert stats["open_trades"] == 1
-    assert stats["labels"]["win"] == 2
-    assert stats["labels"]["loss"] == 1
+    assert stats["labels"]["win_or_tp"] == 2
+    assert stats["labels"]["loss_or_sl"] == 1
     assert stats["labels"]["unlabeled"] == 1
     assert stats["pnl_summary"]["total_pnl"] == 8.0
     assert stats["pnl_summary"]["max_pnl"] == 10.0

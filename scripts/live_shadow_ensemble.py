@@ -61,16 +61,26 @@ def _discover_brain_entries(
     return entries
 
 
-def _build_brain(entry: dict[str, Any]) -> Any | None:
-    """Build and load a brain adapter from entry. Returns adapter or None."""
+def _build_brain(entry: dict[str, Any]) -> tuple[Any | None, str | None]:
+    """Build and load a brain adapter from entry.
+
+    Returns (adapter, error_string). On success, adapter is set and error is None.
+    On failure, adapter is None and error contains the exception message.
+    """
+    bid = entry.get("brain_id", "unknown")
     try:
         from core.brains.services.brain_factory import BrainFactory
 
         factory = BrainFactory()
         adapter = factory.build(entry)
-        return adapter
-    except Exception:
-        return None
+        return adapter, None
+    except Exception as exc:
+        err_msg = f"{type(exc).__name__}: {exc}"
+        print(
+            f"[shadow_ensemble] build_failed brain_id={bid} error={err_msg}",
+            flush=True,
+        )
+        return None, err_msg
 
 
 def _run_single_brain(
@@ -101,12 +111,18 @@ def _run_single_brain(
         }
     except Exception as exc:
         elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
+        err_str = str(exc)[:500]
+        print(
+            f"[shadow_ensemble] infer_error brain_id={brain_id} "
+            f"brain_type={brain_type} error={err_str}",
+            flush=True,
+        )
         return {
             "brain_id": brain_id,
             "brain_type": brain_type,
             "status": "error",
             "runtime_ms": elapsed_ms,
-            "error": str(exc)[:500],
+            "error": err_str,
         }
 
 
@@ -153,6 +169,7 @@ def _compare_directions(results: list[dict[str, Any]]) -> dict[str, Any]:
 def _resolve_feature_vector(
     feature_store_dir: Path | str | None = None,
     feature_dim: int = 40,
+    symbol: str = "XAUUSDc",
 ) -> tuple[np.ndarray, str]:
     """Try to load the latest real feature vector from LocalFeatureStore.
 
@@ -165,7 +182,7 @@ def _resolve_feature_vector(
             from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
 
             store = LocalFeatureStore(str(store_dir))
-            record = store.latest("XAUUSD", "M5", schema_name="v9_institutional_40")
+            record = store.latest(symbol, "M5", schema_name="v9_institutional_40")
             if record is not None and record.values:
                 vec = np.array(
                     [float(record.values.get(name, 0.0)) for name in V9_INSTITUTIONAL_40_FEATURES],
@@ -184,7 +201,7 @@ def build_report(
     feature_dim: int = 40,
     feature_store_dir: Path | None = None,
     parallel: bool = True,
-    symbol: str = "XAUUSD",
+    symbol: str = "XAUUSDc",
     write_decisions: bool = True,
 ) -> dict[str, Any]:
     brains = brains_dir or DEFAULT_BRAINS_DIR
@@ -202,6 +219,7 @@ def build_report(
     feature_vector, feature_source = _resolve_feature_vector(
         feature_store_dir=feature_store_dir,
         feature_dim=feature_dim,
+        symbol=symbol,
     )
 
     # Build adapters
@@ -209,9 +227,11 @@ def build_report(
     load_errors: list[dict[str, Any]] = []
     for entry in entries:
         bid = entry.get("brain_id", "unknown")
-        adapter = _build_brain(entry)
+        adapter, err_msg = _build_brain(entry)
         if adapter is None:
-            load_errors.append({"brain_id": bid, "error": "build_failed"})
+            load_errors.append(
+                {"brain_id": bid, "error": "build_failed", "detail": err_msg or "unknown"}
+            )
         else:
             adapters[bid] = (adapter, entry.get("brain_type", "?"))
 
@@ -297,8 +317,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--output", default=None, help="Write JSON report to file")
     p.add_argument(
         "--symbol",
-        default="XAUUSD",
-        help="Trading symbol for decision ledger (default: XAUUSD)",
+        default="XAUUSDc",
+        help="Trading symbol for decision ledger (default: XAUUSDc)",
     )
     p.add_argument(
         "--no-write-decisions",

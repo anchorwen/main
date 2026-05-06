@@ -1,3 +1,4 @@
+# DEPRECATED — replaced by python main.py live (one-command live trading).
 param(
   [string]$RepoRoot = "D:\cursor",
   [string]$BaseDir = "data",
@@ -6,8 +7,8 @@ param(
   [double]$DefaultVolume = 0.01,
   [double]$IntentIntervalSeconds = 30,
   [double]$ThresholdPriceDelta = 10.0,
-  [double]$SlDistance = 15.0,
-  [double]$TpDistance = 25.0,
+  [double]$SlAtrMult = 2.0,
+  [double]$TpAtrMult = 3.5,
   [double]$CooldownSeconds = 300.0,
   [int]$MaxPositions = 1,
   [switch]$SkipPolicy,
@@ -68,7 +69,7 @@ python scripts/live_intent_loop.py `
   --symbol $Symbol `
   --interval-seconds $IntentIntervalSeconds `
   --threshold-price-delta $ThresholdPriceDelta `
-  --sl-distance $SlDistance `
-  --tp-distance $TpDistance `
+  --sl-atr-mult $SlAtrMult `
+  --tp-atr-mult $TpAtrMult `
   --cooldown-seconds $CooldownSeconds `
   --max-positions $MaxPositions

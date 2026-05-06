@@ -1,38 +1,26 @@
 #!/usr/bin/env python3
 """Quant OS Central Hub — 中枢入口.
 
-Assembles ServiceContainer → RuntimeLoop → DecisionCycleOrchestrator and
-drives the live/shadow/training pipeline.
+Three commands you need:
 
-Commands:
-  run          Launch the live decision loop (polling trigger source).
-  status       Run health checks and print diagnostics.
-  train        Trigger CRT batch training for all lanes.
-  auto-recover Check gate state and attempt auto-recovery.
-  features-update  Compute and persist features from MT5.
-  daily-ops    Run full daily governance + monitoring pipeline.
-  leaderboard  Show brain performance leaderboard.
-  dashboard    Show full daily system dashboard.
-  live         Start full live trading pipeline (one command).
+  python main.py live        启动实盘（bridge + intent 双进程）
+  python main.py daily-ops   每日运维（shadow → paper → feedback → online → governance）
+  python main.py status      快速诊断（health check → diagnostics → leaderboard）
 
-Usage:
-  python main.py live                       # one-command live trading
-  python main.py run --env configs/environments/mt5.json
-  python main.py status --env configs/environments/mt5.json
-  python main.py train
-  python main.py auto-recover --config configs/live.yaml
-  python main.py daily-ops --dry-run
-  python main.py leaderboard
-  python main.py dashboard
+Extended commands:
+
+  python main.py train           Trigger CRT batch training for all lanes.
+  python main.py features-update Compute and persist features from MT5.
+  python main.py leaderboard     Show brain performance leaderboard.
+  python main.py dashboard       Show full daily system dashboard.
+  python main.py auto-recover    Check gate state and attempt auto-recovery.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import signal
 import sys
-import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -177,99 +165,6 @@ def _build_env_config(args: argparse.Namespace) -> Any:
         fix_venue=fix_venue,
         extensions=extensions,
     )
-
-
-# ---------------------------------------------------------------------------
-# Command: run
-# ---------------------------------------------------------------------------
-
-
-def cmd_run(args: argparse.Namespace) -> int:
-    """Launch the live decision loop.
-
-    Builds ServiceContainer → RuntimeLoop → Orchestrator, then runs a
-    polling loop that creates a trigger for each cycle.
-    """
-    config = _build_env_config(args)
-
-    print(f"[hub] Bootstrapping ServiceContainer  env={config.environment.value}")
-    from core.deployment.service_container import ServiceContainer
-
-    container = ServiceContainer(config)
-    container.build()
-    container.build_runtime_loop()
-    orchestrator = container.build_orchestrator()
-
-    poll_interval = float(getattr(args, "interval", 1.0))
-    symbol = (config.extensions or {}).get("default_symbol", "XAUUSD")
-    max_cycles = int(getattr(args, "max_cycles", 0) or 0)
-
-    print(
-        f"[hub] Live loop starting  symbol={symbol}  interval={poll_interval}s  "
-        f"max_cycles={max_cycles if max_cycles else 'unlimited'}  "
-        f"dispatch={config.live_dispatch_enabled}"
-    )
-
-    running = True
-    cycle_count = 0
-    stop_requested = False
-
-    def _on_signal(_sig, _frame):
-        nonlocal stop_requested
-        print("\n[hub] Signal received – shutting down gracefully...")
-        stop_requested = True
-
-    signal.signal(signal.SIGINT, _on_signal)
-    signal.signal(signal.SIGTERM, _on_signal)
-
-    while running and not stop_requested:
-        try:
-            trigger = {
-                "symbol": symbol,
-                "ts": utc_now_iso_z(),
-                "source": "hub.poll_loop",
-                "cycle_index": cycle_count,
-            }
-
-            feature_source = {
-                "symbol": symbol,
-                "ts": utc_now_iso_z(),
-                "source": "hub.poll_loop",
-            }
-
-            outcome = orchestrator.run_cycle(trigger, feature_source)
-            cycle_count += 1
-
-            # Brief status per cycle
-            verdict_status = (
-                outcome.decision_result.verdict.status.value
-                if outcome.decision_result
-                and hasattr(outcome.decision_result.verdict, "status")
-                and hasattr(outcome.decision_result.verdict.status, "value")
-                else "N/A"
-            )
-            print(
-                f"[hub] cycle={cycle_count:04d}  id={outcome.cycle_id}  "
-                f"verdict={verdict_status}"
-            )
-
-            if max_cycles and cycle_count >= max_cycles:
-                print(f"[hub] Reached max_cycles={max_cycles} – stopping.")
-                running = False
-
-            if running:
-                time.sleep(poll_interval)
-
-        except KeyboardInterrupt:
-            print("\n[hub] Interrupted – shutting down.")
-            running = False
-        except Exception as exc:
-            print(f"[hub] Cycle error: {exc}", file=sys.stderr)
-            if running:
-                time.sleep(poll_interval)
-
-    print(f"[hub] Loop finished.  total_cycles={cycle_count}")
-    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +333,9 @@ def cmd_daily_ops(args: argparse.Namespace) -> int:
         skip_champion=args.skip_champion,
         skip_retraining=args.skip_retraining,
         skip_recap=args.skip_recap,
+        skip_alpha=getattr(args, "skip_alpha", False),
+        skip_online_feedback=getattr(args, "skip_online_feedback", False),
+        skip_paper_simulation=getattr(args, "skip_paper_simulation", False),
         dry_run=args.dry_run,
     )
 
@@ -615,64 +513,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    # ---- run ----
-    run_cmd = sub.add_parser("run", help="Launch the live decision loop")
-    run_cmd.add_argument(
-        "--env",
-        default="configs/environments/mt5.json",
-        help="Path to environment config JSON (e.g., mt5.json)",
-    )
-    run_cmd.add_argument(
-        "--config",
-        default="configs/live.yaml",
-        help="Fallback path to live.yaml (used if --env not found)",
-    )
-    run_cmd.add_argument(
-        "--environment",
-        default="development",
-        choices=["development", "simulation", "production", "test", "replay"],
-        help="Deployment environment",
-    )
-    run_cmd.add_argument(
-        "--live",
-        action="store_true",
-        default=False,
-        help="Enable live dispatch (real orders)",
-    )
-    run_cmd.add_argument(
-        "--adapter",
-        default="stub",
-        choices=["stub", "file_queue", "mt5", "fix"],
-        help="Communication adapter type",
-    )
-    run_cmd.add_argument(
-        "--symbols",
-        default="XAUUSD",
-        help="Comma-separated live allowed symbols",
-    )
-    run_cmd.add_argument(
-        "--interval",
-        type=float,
-        default=1.0,
-        help="Polling interval in seconds between cycles",
-    )
-    run_cmd.add_argument(
-        "--max-cycles",
-        type=int,
-        default=0,
-        help="Maximum cycles to run (0 = unlimited)",
-    )
-    run_cmd.add_argument(
-        "--base-dir",
-        default=None,
-        help="Base directory for data/ledgers (default: PROJECT_ROOT/data)",
-    )
-    run_cmd.add_argument(
-        "--brain-registry",
-        default=None,
-        help="Path to brain registry entries JSON",
-    )
-
     # ---- status ----
     status_cmd = sub.add_parser("status", help="Run health checks")
     status_cmd.add_argument(
@@ -744,6 +584,9 @@ def build_parser() -> argparse.ArgumentParser:
     daily_cmd.add_argument("--skip-champion", action="store_true")
     daily_cmd.add_argument("--skip-retraining", action="store_true")
     daily_cmd.add_argument("--skip-recap", action="store_true")
+    daily_cmd.add_argument("--skip-alpha", action="store_true")
+    daily_cmd.add_argument("--skip-online-feedback", action="store_true")
+    daily_cmd.add_argument("--skip-paper-simulation", action="store_true")
     daily_cmd.add_argument("--output", type=Path, default=None, help="Write report JSON to file")
 
     # ---- leaderboard ----
@@ -773,7 +616,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     commands: dict[str, Callable[[argparse.Namespace], int]] = {
-        "run": cmd_run,
         "status": cmd_status,
         "train": cmd_train,
         "auto-recover": cmd_auto_recover,

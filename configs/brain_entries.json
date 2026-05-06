@@ -6,7 +6,7 @@
         "brain_role": "primary_survival",
         "model_version": "v9.0.0",
         "status": "shadow",
-        "artifact_path": "D:\\ai\\Survival_V9\\v9_institutional_brain.onnx",
+        "artifact_path": "data/models/v9_institutional_brain.onnx",
         "normalization_config_path": "configs/brains/v9_institutional_01.normalization.json",
         "enable_onnxruntime": true,
         "feature_schema_id": "v9_institutional_40",
@@ -17,6 +17,7 @@
                 "high_volatility"
             ],
             "symbols": [
+                "XAUUSDc",
                 "XAUUSD"
             ]
         }
@@ -27,13 +28,14 @@
         "brain_role": "microstructure",
         "model_version": "v4.5.0",
         "status": "shadow",
-        "artifact_path": "D:\\ai\\Meta_ppo_v4.5\\V4.X_XGBoost_Core.json",
+        "artifact_path": "data/models/V4.X_XGBoost_Core.json",
         "feature_schema_id": "v4.5_microstructure_9",
         "deployment_scope": {
             "regimes": [
                 "trending"
             ],
             "symbols": [
+                "XAUUSDc",
                 "XAUUSD"
             ]
         }
@@ -44,13 +46,14 @@
         "brain_role": "stat_arb",
         "model_version": "v6.0.0",
         "status": "shadow",
-        "artifact_path": "D:\\ai\\Meta_ppo_v6\\arb_params.json",
+        "artifact_path": "data/models/arb_params.json",
         "feature_schema_id": "v6_price_series_1",
         "deployment_scope": {
             "regimes": [
                 "mean_reverting"
             ],
             "symbols": [
+                "XAUUSDc",
                 "XAUUSD"
             ]
         }

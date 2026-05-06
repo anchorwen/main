@@ -1,14 +1,19 @@
-"""Build training datasets by joining P&L labels with feature vectors.
+"""Build training datasets by joining labels with feature vectors.
 
 Reads labels from label_builder.py output, queries the LocalFeatureStore for
 nearest feature vectors by time, joins them, splits into train/validation sets,
-and exports as Parquet files.
+and exports as Parquet/NPZ files.
+
+When --label-contract is provided, validates label distribution against the
+contract definition and embeds contract_id in output metadata for full
+training provenance.
 
 Usage:
-  python scripts/training/dataset_builder.py \
-    --labels data/reports/live_labels.jsonl \
-    --feature-store-dir data/feature_store \
-    --output-dir data/training
+  python scripts/training/dataset_builder.py \\
+    --labels data/labels/live_labels.jsonl \\
+    --feature-store-dir data/feature_store \\
+    --output-dir data/training \\
+    --label-contract blueprints/contracts/label-survival-barrier-1.0.0.json
 """
 
 from __future__ import annotations
@@ -46,8 +51,10 @@ def _parse_iso(ts: str | None) -> datetime | None:
 
 
 def _normalize_symbol(symbol: str) -> str:
-    """Strip trailing 'c' from symbols like 'XAUUSDc' -> 'XAUUSD'."""
-    return symbol.rstrip("c") if symbol.endswith("c") else symbol
+    """Normalise symbol to canonical form (XAUUSDc)."""
+    if symbol == "XAUUSD":
+        return "XAUUSDc"
+    return symbol
 
 
 def _find_nearest_feature(
@@ -81,7 +88,13 @@ def _find_nearest_feature(
     best = None
     best_delta = float("inf")
     for r in records:
-        delta = abs((r.event_time - label_time).total_seconds())
+        rec_time = r.event_time
+        if rec_time.tzinfo is not None:
+            rec_time = rec_time.replace(tzinfo=None) - rec_time.utcoffset()
+        lt = label_time
+        if lt.tzinfo is not None:
+            lt = lt.replace(tzinfo=None) - lt.utcoffset()
+        delta = abs((rec_time - lt).total_seconds())
         if delta < best_delta:
             best_delta = delta
             best = r
@@ -93,7 +106,7 @@ def join_labels_to_features(
     labels: list[dict[str, Any]],
     feature_store: LocalFeatureStore,
     *,
-    symbol: str = "XAUUSD",
+    symbol: str = "XAUUSDc",
     max_time_delta_seconds: float = 300.0,
 ) -> dict[str, Any]:
     """Join each labeled trade to its nearest feature vector.
@@ -127,7 +140,13 @@ def join_labels_to_features(
             unmatched += 1
             continue
 
-        time_delta = (record.event_time - label_time).total_seconds()
+        rec_time = record.event_time
+        if rec_time.tzinfo is not None:
+            rec_time = rec_time.replace(tzinfo=None) - rec_time.utcoffset()
+        lt = label_time
+        if lt.tzinfo is not None:
+            lt = lt.replace(tzinfo=None) - lt.utcoffset()
+        time_delta = (rec_time - lt).total_seconds()
 
         row: dict[str, Any] = {
             "label_id": lab.get("label_id", ""),
@@ -238,10 +257,11 @@ def build_dataset(
     feature_store_dir: Path,
     output_dir: Path,
     *,
-    symbol: str = "XAUUSD",
+    symbol: str = "XAUUSDc",
     max_time_delta_seconds: float = 300.0,
     val_ratio: float = 0.2,
     fmt: str = "parquet",
+    label_contract_path: str | None = None,
 ) -> dict[str, Any]:
     """Full pipeline: labels → join → split → export.
 
@@ -253,10 +273,18 @@ def build_dataset(
         max_time_delta_seconds: Max time window for feature matching.
         val_ratio: Fraction of data for validation (temporal split).
         fmt: Export format — "parquet" or "npz".
+        label_contract_path: Optional path to Label Contract JSON for provenance.
 
     Returns:
         Summary dict with schema_version, counts, and output paths.
     """
+    # ── Load contract if provided ──
+    contract_id: str | None = None
+    if label_contract_path:
+        from core.contracts.training.label_contract import LabelContract
+
+        contract = LabelContract.from_file(label_contract_path)
+        contract_id = contract.contract_id
     # ── Load labels ──
     labels: list[dict[str, Any]] = []
     if labels_path.exists():
@@ -270,11 +298,14 @@ def build_dataset(
                 continue
 
     if not labels:
-        return {
+        result: dict[str, Any] = {
             "schema_version": SCHEMA_VERSION,
             "error": "no_labels_found",
             "labels_path": str(labels_path),
         }
+        if contract_id:
+            result["label_contract_id"] = contract_id
+        return result
 
     # ── Load feature store ──
     store = LocalFeatureStore(str(feature_store_dir))
@@ -289,13 +320,16 @@ def build_dataset(
 
     joined = join_result["joined"]
     if not joined:
-        return {
+        summary: dict[str, Any] = {
             "schema_version": SCHEMA_VERSION,
             "labels_loaded": len(labels),
             **{k: v for k, v in join_result.items() if k != "joined"},
             "train_path": None,
             "val_path": None,
         }
+        if contract_id:
+            summary["label_contract_id"] = contract_id
+        return summary
 
     # ── Split ──
     train, val = temporal_split(joined, val_ratio=val_ratio)
@@ -315,7 +349,7 @@ def build_dataset(
             "error": f"unsupported_format: {fmt}",
         }
 
-    return {
+    result = {
         "schema_version": SCHEMA_VERSION,
         "labels_loaded": len(labels),
         "matched": join_result["matched"],
@@ -326,6 +360,9 @@ def build_dataset(
         "train_path": str(train_path),
         "val_path": str(val_path),
     }
+    if contract_id:
+        result["label_contract_id"] = contract_id
+    return result
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -350,7 +387,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--symbol",
-        default="XAUUSD",
+        default="XAUUSDc",
         help="Trading symbol for feature store matching (default: XAUUSD)",
     )
     p.add_argument(
@@ -371,6 +408,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="parquet",
         help="Export format (default: parquet)",
     )
+    p.add_argument(
+        "--label-contract",
+        type=Path,
+        default=None,
+        help="Path to Label Contract JSON for provenance and validation",
+    )
     return p
 
 
@@ -384,6 +427,7 @@ def main(argv: list[str] | None = None) -> int:
         max_time_delta_seconds=args.max_time_delta,
         val_ratio=args.val_ratio,
         fmt=args.format,
+        label_contract_path=str(args.label_contract) if args.label_contract else None,
     )
     print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
     if result.get("error"):

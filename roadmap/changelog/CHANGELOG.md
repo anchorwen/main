@@ -4,6 +4,190 @@
 
 ---
 
+## [2026-05-06] BrainPnLStore 反事实 P&L 账本 Phase 1 + ParliamentService 修复 + 标签符号规范化
+
+### 类型
+新模块 (New Module) + Bug修复 (Bug Fix)
+
+### BrainPnLStore — Phase 1 完成
+
+反事实独立核算账本 (counterfactual P&L ledger)：每个 brain 的方向信号被独立记录并以下一根 K 线收盘价结算——"如果这个 brain 单独交易会赚/亏多少"。
+
+| 组件 | 路径 | 说明 |
+|------|------|------|
+| `BrainPnLStore` | `core/feedback/brain_pnl_ledger.py` | 反事实 P&L 账本 — record_signal / settle_one / settle_all / get_metrics / save / load |
+| `BrainPnLMetrics` | `core/feedback/brain_pnl_ledger.py` | 滚动性能指标: Sharpe (年化 72576=M5×252天)、胜率、最大回撤、盈亏比、方向分解、健康信号 |
+| 测试 | `tests/engine/test_brain_pnl_ledger.py` | 23 tests pass (信号记录/多空结算/窗口限制/持久化/健康阈值) |
+
+**架构原则**: 完全解耦于任何运行时 — 同时支持 live/shadow/backtest。
+
+**集成点**:
+- `core/runtime/live_cycle.py`: 周期开始时结算 pending 信号，推理后记录新信号
+- `scripts/live_intent_loop.py`: 初始化加载 + 定期保存 + 退出保存
+
+**Phase 2/3/4 路线**:
+- Phase 2 ✅ DynamicBrainWeighter 接入真实 Sharpe/win_rate/drawdown (替代合成 composite_score) — **2026-05-06 完成**
+- Phase 3 📋 多层归因报告 (BrainAttributionService)
+- Phase 4 📋 容量感知仓位分配 (Sharpe + drawdown → position sizing)
+
+### ParliamentService neutral deadlock 修复
+
+**问题**: 当 neutral 票数占多数时，加权分数被忽略，`_compute_consensus()` 直接返回 `direction="neutral"` → 0 交易。
+
+**修复**: `core/parliament/parliament_service.py` — 方向始终由加权分数决定，neutral 仅施加不确定性惩罚 (neutral_ratio × 0.30 penalty, 下限 0.50)。
+
+### 标签符号规范化
+
+**问题**: `dataset_builder.py` 中 XAUUSD → XAUUSDc 未正确映射，导致 labels 与 features 的 symbol 不匹配。
+
+**修复**: `scripts/training/dataset_builder.py` — `_normalize_symbol()` 将 XAUUSD 规范化为 XAUUSDc。
+
+### Feature Store 去重
+
+- `local_feature_store.py` compact 执行: **4,997 条重复记录移除**，54,962 → 49,965。
+
+### 修改的文件
+
+| 文件 | 修改内容 |
+|------|---------|
+| `core/feedback/brain_pnl_ledger.py` | 新建 — 反事实 P&L 账本 (360行) |
+| `tests/engine/test_brain_pnl_ledger.py` | 新建 — 23 tests |
+| `core/parliament/parliament_service.py` | 修复 neutral deadlock：方向始终由加权分数决定 |
+| `core/runtime/live_cycle.py` | 新增 pnl_ledger 参数，周期初结算 + 推理后记录 |
+| `scripts/live_intent_loop.py` | 新增 P&L ledger 初始化/保存/退出 |
+| `scripts/training/dataset_builder.py` | XAUUSD → XAUUSDc 规范化 |
+| `tests/engine/test_dataset_builder.py` | 更新用例以匹配规范化行为 |
+| `roadmap/roadmap.json` | 新增 brain_pnl_ledger 模块 + BrainPnLStore 基础设施条目 |
+| `roadmap/README.md` | 基础设施列表更新 |
+| `roadmap/changelog/CHANGELOG.md` | 本条目 |
+
+### 测试基线
+
+- **1,660 passed** (23 新增 all pass, 19 pre-existing shadow smoke failures on this branch)
+- `test_brain_pnl_ledger.py`: 23/23 pass
+
+---
+
+## [2026-05-06] A3 Feature Store 批量调度完成 + A4/执行算法延后
+
+### 类型
+里程碑完成 (Milestone) + 架构决策延期 (Deferral)
+
+### A3 真实 Feature 流 — 完成
+
+**独立调度批量增量更新任务**：
+
+| 新增 | 路径 | 说明 |
+|------|------|------|
+| `FeatureStoreMaintenance` | `scripts/feature_store_maintenance.py` | 独立维护脚本，支持 update/compact/stats 三种模式 |
+| `LocalFeatureStore.compact()` | `core/features/local_feature_store.py` | JSONL 去重（按 event_time）+ 按 retention_days 修剪旧记录 |
+| `LocalFeatureStore.stats()` | `core/features/local_feature_store.py` | 分区级别统计：记录数、日期范围、文件大小 |
+| `LocalFeatureStore.count()` | `core/features/local_feature_store.py` | 快速计数，无需加载全部记录 |
+
+**集成点**：
+- `SchedulerService.for_container()` 注册 `feature_store_update` 定时任务（300s 周期）
+- `daily_ops.py` 新增 `_step_feature_store_maintenance` 步骤（每日 compact + stats）
+
+### A4 / TWAP-VWAP / 云端部署 — 标记延后
+
+| 模块 | 状态 | 说明 |
+|------|------|------|
+| FIX 网关 | `in_progress 60%` → `deferred` | BrokerAdapter 接口已预留 |
+| 云端 24/5 部署 | `pending` → `deferred` | 当前本地 Windows 桌面运行 |
+| TWAP/VWAP 执行算法 | `pending` → `deferred` | 延后至交易量需要时 |
+
+### 修改的文件
+
+| 文件 | 修改内容 |
+|------|---------|
+| `core/features/local_feature_store.py` | 新增 `compact()`、`stats()`、`count()` 方法 + `_iter_record_paths()` 辅助 |
+| `scripts/feature_store_maintenance.py` | 新建 — 独立维护 CLI（update/compact/stats/full） |
+| `core/deployment/scheduler_service.py` | `for_container()` 新增 `feature_store_update` 任务（300s） |
+| `scripts/daily_ops.py` | 新增 `_step_feature_store_maintenance` + `--skip-fs-maintenance` |
+| `roadmap/roadmap.json` | A3 → completed, A4/cloud/execution_algos → deferred, phase_a 80%→90% |
+| `roadmap/README.md` | 当前状态更新至 2026-05-06 |
+| `roadmap/changelog/CHANGELOG.md` | 本条目 |
+
+### 方案 A 当前状态
+
+```
+A1 中枢入口     ✅ completed
+A2 多模型管线   ✅ completed
+A3 Feature流   ✅ completed  ← 本次完工
+A4 实盘网关     ⏸️ deferred (BrokerAdapter 预留)
+A5 云端部署     ⏸️ deferred (BrokerAdapter 预留)
+TWAP/VWAP      ⏸️ deferred
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+方案 A 进度: 90%
+```
+
+---
+
+## [2026-05-06] 路线图矫正 — 5项背离修复 + 执行抽象接口 + 架构归一
+
+### 类型
+路线图矫正 (Roadmap Alignment) + 架构决策 (Architecture Decision)
+
+### 背景
+完成三大方案（A/B/C）全面评估，发现系统实际状态与路线图文档之间存在 5 项背离。系统在架构上已进入 Phase B 早期（议会/治理/反馈闭环全在生产中），但基础设施停留在 Phase A 中期（无 Docker、FIX 骨架、TWAP/VWAP 未实现）。同步完成 Phase II 三项任务（移除 main.py run 冗余、SL/TP 参数优化、intent_loop 模块化）。
+
+### 修复的 5 项背离
+
+| # | 背离 | 修复 |
+|---|------|------|
+| 1 | Phase B/C 组件在生产中运行但 Phase A 未完成 | 路线图标记更新，缺失项明确列出，BrokerAdapter 为云端预留接口 |
+| 2 | 两套架构并存（live_intent_loop vs RuntimeLoop） | ADR-006: live_intent_loop → live_cycle 为规范路径，RuntimeLoop 降为备用 |
+| 3 | MT5 直连而非 FIX，阻碍云端部署 | 新增 BrokerAdapter Protocol + MT5BrokerAdapter，dispatch_live_order() broker-agnostic |
+| 4 | 路线图文档与代码脱节 | roadmap.json v1.1.0 → v1.2.0，同步所有模块状态、里程碑、缺失清单 |
+| 5 | 无 LLM/RL 组件，偏离 B 方案愿景 | ADR-007: LLM/RL 延后至 Phase C，当前 ParliamentService 为 baseline |
+
+### 新增模块
+
+| 模块 | 路径 | 说明 |
+|------|------|------|
+| `BrokerAdapter` | `core/execution/broker_adapter.py` | 执行抽象接口（Protocol），定义 fetch_prices/fetch_current_atr/count_positions 等 |
+| `MT5BrokerAdapter` | `core/execution/mt5_broker_adapter.py` | BrokerAdapter 的 MT5 实现，封装 MetaTrader5 API |
+| `LiveCycle` | `core/runtime/live_cycle.py` | 从 live_intent_loop.py 提取的核心周期逻辑（1008行），LiveCycleConfig + LiveCycleState + execute_live_cycle() |
+| `online_feedback_hook` (CLI) | `scripts/online_feedback_hook.py` | online_feedback_hook 的独立 CLI 入口 |
+| `optimize_sl_tp` | `scripts/optimize_sl_tp.py` | SL/TP 参数扫描工具（粗扫→精扫） |
+
+### 修改的文件
+
+| 文件 | 修改内容 |
+|------|---------|
+| `main.py` | 移除 `cmd_run()` 冗余路径和 `run` 子命令 (~160行删除)；新增 `--skip-paper-simulation` |
+| `scripts/live_intent_loop.py` | 1760行→804行（-54%），核心周期逻辑提取至 core/runtime/live_cycle.py；新增 broker adapter 集成 |
+| `scripts/send_live_order.py` | 新增 `dispatch_live_order()` broker-agnostic 函数；`dispatch_live_mt5_execution()` 委托至新函数 |
+| `scripts/shadow_decision_recorder.py` | `record_shadow_from_proposals()` 新增 feature_vector/regime_info/vote_details 扩展字段 |
+| `core/feedback/online_feedback_hook.py` | 接入 daily_ops.py `_step_online_feedback` |
+| `roadmap/roadmap.json` | v1.1.0 → v1.2.0，全模块状态同步，新增 architecture_decision 段 |
+| `roadmap/README.md` | 当前状态更新至 2026-05-06 真实进度（A:80%, B:65%, C:15%） |
+| `roadmap/decisions/ARCHITECTURE_DECISIONS.md` | 新增 ADR-006（生产架构选型）、ADR-007（LLM/RL 延后） |
+| `roadmap/changelog/CHANGELOG.md` | 本条目 |
+
+### Phase II 三项任务完成 (2026-05-05 ~ 2026-05-06)
+
+1. **移除 `main.py run` 冗余**: 删除 `cmd_run()` 函数、`run` 子命令和关联参数 (~160行)
+2. **SL/TP 参数优化**: 创建 `scripts/optimize_sl_tp.py`，结论：四月决策数据质量不足（2-brain coin flip），当前默认值 (SL=2.0/TP=3.5) 保持
+3. **intent_loop 模块化**: `live_intent_loop.py` 1760→804行，核心周期逻辑独立至 `core/runtime/live_cycle.py`
+
+### 决策记录补齐 (2026-05-05)
+
+- `DecisionRecord.extensions` 字段补齐三缺口: `feature_vector` (40维)、`regime_info` (市场体制)、`vote_details` (每脑投票详情)
+- `live_intent_loop.py` 新增体制检测块，在推理前运行 RegimeDetector.update()
+
+### 关键发现
+
+- 系统真实位置: **Phase B 早期 Alpha 市场系统**（议会/治理/反馈闭环全在线），运行于 **Phase A 中期基础设施**（Windows 桌面、MT5 直连、无容器化）
+- 最大风险: 单点故障（一台 Windows 机器）、两套架构双轨维护、路线图文档滞后
+- 最健康模块: Brain 多模型管线（5 种 adapter）、Governance+Feedback 闭环（端到端自动化）、Risk 多层门禁（5 策略 + 3 层 gate）
+
+### 关联 ADR
+- ADR-006: 生产架构选型 — live_intent_loop 为规范路径
+- ADR-007: LLM/RL 资产分配委员会延后至 Phase C
+
+---
+
 ## [2026-05-01] 路线图初始化
 
 ### 创建

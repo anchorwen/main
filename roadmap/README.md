@@ -35,13 +35,14 @@
 ━━━━━━━━━━━━━━━━━━━━    ━━━━━━━━━━━━━━━━━━━━     ━━━━━━━━━━━━━━━━━━━━
 │ 中枢加冕               │  Alpha 市场              │  自驱动 Quant OS
 │                        │                          │
-│ • main.py 中枢启动     │  • 20-50个Alpha并行      │  • 基因池与策略变异
-│ • ONNX模型接入实盘     │  • 议会多信号投票         │  • 沙盒自动晋升
-│ • Feature Store流式    │  • 动态资金分配           │  • 深度学习执行
-│ • FIX/MT5 实盘网关     │  • 独立风控Agent          │  • 最高宪法约束
-│ • 云端24/5稳定运行     │  • 基金经理视角Dashboard  │  • K8s集群部署
+│ • main.py 中枢启动 ✅  │  • 4/50个Alpha并行 🔄    │  • 基因池与策略变异
+│ • 多模型管线打通 ✅    │  • 议会多信号投票 ✅     │  • 沙盒自动晋升 🔄
+│ • Feature Store流式 ✅ │  • 动态资金分配 🔄      │  • 深度学习执行
+│ • MT5 实盘网关 ✅     │  • 独立风控Agent         │  • 最高宪法约束
+│ • BrokerAdapter 预留 ✅│  • LLM/RL 延后至Phase C  │  • K8s集群部署
+│ • 云端24/5 ⏸️         │                          │
 │                        │                          │
-│ 状态：基础设施70%完成   │  状态：组件40%已存在      │  状态：规划中
+│ 状态：90%完成          │  状态：65%完成           │  状态：15%完成
 └────────────────────────┴──────────────────────────┴──────────────────────────
 ```
 
@@ -49,25 +50,32 @@
 
 ## 当前状态
 
-- **阶段**: 方案A — 中枢加冕期
-- **当前里程碑**: 创建 main.py 中枢，打通训练→实盘模型管线
-- **核心发现**: `core/` 层已包含完整的 ServiceContainer、RuntimeLoop、BrainFactory、DecisionCycleOrchestrator，但生产链路（`scripts/`）从未使用它们
+- **阶段**: 方案A 收尾 → 方案B 早期（组件大量前置构建）
+- **生产架构**: `main.py live` → `live_launcher.py` → `live_intent_loop.py` → `core/runtime/live_cycle.py`
+- **备用架构**: `ServiceContainer` → `RuntimeLoop` → `DecisionCycleOrchestrator`（测试/影子场景）
+- **当前里程碑**: A1/A2/A3 完成，B2 完成；A4/A5/TWAP-VWAP 延后（接口预留），B1/B3 推进中
+- **核心决策 (2026-05-06)**: live_intent_loop 为规范生产路径（ADR-006），LLM/RL 延后至 Phase C（ADR-007）
 - **已有基础设施完成度**:
-  - ✅ `ServiceContainer` — 30+服务DI容器
-  - ✅ `BrainFactory` — ONNX v9模型工厂
-  - ✅ `BrainRegistryService` — 模型注册表
-  - ✅ `BrainRunService` — 模型运行服务
-  - ✅ `RuntimeLoop` — 推理→决策→派发循环
-  - ✅ `DecisionCycleOrchestrator` — 编排器
-  - ✅ `ParliamentService` — 多信号投票
-  - ✅ `GovernanceRuleEngine` — 规则门禁
-  - ✅ `RiskEvaluationService` — 风控评估
-  - ✅ `FeedbackLoop` — 反馈闭环
-  - ✅ `ConfigHotReload` — 运行时配置热加载
-  - ✅ `SystemModeState` — NORMAL/SAFE/EMERGENCY模式切换
-  - ❌ `main.py` — 中枢入口（缺失）
-  - ❌ 训练产出的ONNX模型接入实盘（断链）
-  - ❌ 真实行情Feature流（当前仅有占位价格差策略）
+  - ✅ `main.py` — 中枢入口（live/daily-ops/status/train 四命令）
+  - ✅ `LiveCycle` — 核心周期逻辑（core/runtime/live_cycle.py, 1008行）
+  - ✅ `BrokerAdapter` — 执行抽象接口（为FIX/云端预留）
+  - ✅ `MT5BrokerAdapter` — MT5实现
+  - ✅ `BrainFactory` — 5种adapter工厂（ONNX/XGBoost/OU/OnlineSGD/Base）
+  - ✅ `ParliamentService` — 多脑加权投票（B2完成）
+  - ✅ `GovernanceRuleEngine` — 4条自动规则
+  - ✅ `DynamicBrainWeighter` — 表现→投票权重
+  - ✅ `BrainPerformanceTracker` — 100窗口滚动评分
+  - ✅ `BrainPnLStore` — 反事实 P&L 账本（独立核算每脑盈亏，23 tests pass）
+  - ✅ `FeedbackLoop` — 反馈闭环（含OnlineFeedbackHook partial_fit）
+  - ✅ `RiskEvaluationService` — 5条风控策略 + RegimeDetector
+  - ✅ `FeatureStoreMaintenance` — 独立调度批量增量更新（5min周期）+ compact 去重（A3完成）
+  - ✅ `ServiceContainer` — DI容器（备用架构）
+  - ✅ `RuntimeLoop` — 决策周期（备用架构）
+  - ✅ `PortfolioAllocator` — 合约完整（未投产）
+  - ⏸️ FIX Gateway — BrokerAdapter接口已预留，延后至云端阶段
+  - ⏸️ Docker/K8s — BrokerAdapter接口已预留，延后至用户指示
+  - ⏸️ TWAP/VWAP — 延后至交易量需要时
+  - ❌ LLM/RL 资产分配 — 有意延后至Phase C（ADR-007）
 
 ---
 
@@ -119,6 +127,6 @@ python D:\future\roadmap\scripts\update_roadmap.py
 
 ---
 
-> **最后更新**: 2026-05-01
+> **最后更新**: 2026-05-06
 > **维护者**: 量化构建系统团队
 > **许可证**: 私有

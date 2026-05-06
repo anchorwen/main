@@ -187,4 +187,145 @@ class SchedulerService:
 
             svc.add_task("engine_config_poll", engine_config_poll, interval_seconds=poll_iv)
 
+        # Daily ops: feedback loop, governance, champion/challenger, retraining check, recap
+        daily_ops_enabled = getattr(container.config, "daily_ops_enabled", True)
+        if daily_ops_enabled:
+
+            def daily_ops():
+                import sys
+                from pathlib import Path
+
+                _project_root = Path(__file__).resolve().parents[2]
+                if str(_project_root) not in sys.path:
+                    sys.path.insert(0, str(_project_root))
+
+                from scripts.daily_ops import run_daily_ops
+
+                base_dir = str(container.config.base_dir)
+                run_daily_ops(base_dir=base_dir, skip_shadow=True)
+
+                # Reload container's tracker from disk so governance sees fresh data
+                if container.brain_tracker is not None:
+                    try:
+                        tracker_path = Path(base_dir) / "brain_performance.json"
+                        if tracker_path.exists():
+                            fresh = type(container.brain_tracker).load(tracker_path)
+                            container.brain_tracker._records = fresh._records
+                    except Exception:
+                        pass
+
+            svc.add_task("daily_ops", daily_ops, interval_seconds=86400)
+
+        # ── Feature store periodic update ──
+        feature_store_enabled = getattr(container.config, "feature_store_scheduled_update", True)
+        if feature_store_enabled:
+
+            def feature_store_update():
+                import sys
+                from pathlib import Path
+
+                _project_root = Path(__file__).resolve().parents[2]
+                if str(_project_root) not in sys.path:
+                    sys.path.insert(0, str(_project_root))
+
+                from scripts.feature_store_maintenance import run_full_maintenance
+
+                base_dir = str(container.config.base_dir)
+                symbol = getattr(container.config, "symbol", "XAUUSDc")
+                mt5_path = getattr(container.config, "mt5_terminal_path", None)
+                extensions = getattr(container.config, "extensions", {}) or {}
+                if not mt5_path:
+                    mt5_path = extensions.get("mt5_terminal_path", None)
+                fs_dir = extensions.get("feature_store_dir", None)
+
+                run_full_maintenance(
+                    base_dir=base_dir,
+                    symbol=symbol,
+                    mt5_terminal_path=mt5_path,
+                    feature_store_dir=fs_dir,
+                    retention_days=90,
+                    skip_compact=False,
+                )
+
+            # Run every 5 minutes — fills gaps the trading loop might miss
+            svc.add_task("feature_store_update", feature_store_update, interval_seconds=300)
+
+        # ── Ops monitoring ──
+        ops_mon_enabled = getattr(container.config, "ops_monitoring_enabled", True)
+        if ops_mon_enabled:
+            base_dir = str(container.config.base_dir)
+            symbol = getattr(container.config, "symbol", "XAUUSDc")
+            mt5_path = getattr(container.config, "mt5_terminal_path", None)
+            extensions = getattr(container.config, "extensions", {}) or {}
+            if not mt5_path:
+                mt5_path = extensions.get("mt5_terminal_path", None)
+
+            def live_monitor_snapshot():
+                import sys
+                from pathlib import Path
+
+                _project_root = Path(__file__).resolve().parents[2]
+                if str(_project_root) not in sys.path:
+                    sys.path.insert(0, str(_project_root))
+
+                import json
+
+                from scripts.live_monitor import build_snapshot
+
+                snap = build_snapshot(
+                    base_dir=Path(base_dir),
+                    symbol=symbol,
+                    mt5_terminal_path=mt5_path,
+                )
+                # Write snapshot to file for dashboard consumption
+                out_path = Path(base_dir) / "reports" / "monitor_snapshot_latest.json"
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_text(
+                    json.dumps(snap, ensure_ascii=False, default=str), encoding="utf-8"
+                )
+
+            svc.add_task("live_monitor_snapshot", live_monitor_snapshot, interval_seconds=30)
+
+            def auto_healthcheck():
+                import sys
+                from pathlib import Path
+
+                _project_root = Path(__file__).resolve().parents[2]
+                if str(_project_root) not in sys.path:
+                    sys.path.insert(0, str(_project_root))
+
+                import json
+
+                from scripts.live_auto_healthcheck import build_report
+
+                report = build_report(base_dir=Path(base_dir), symbol=symbol)
+                out_path = Path(base_dir) / "reports" / "healthcheck_latest.json"
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_text(
+                    json.dumps(report, ensure_ascii=False, default=str), encoding="utf-8"
+                )
+
+            svc.add_task("auto_healthcheck", auto_healthcheck, interval_seconds=60)
+
+            def data_quality_report():
+                import sys
+                from pathlib import Path
+
+                _project_root = Path(__file__).resolve().parents[2]
+                if str(_project_root) not in sys.path:
+                    sys.path.insert(0, str(_project_root))
+
+                import json
+
+                from scripts.live_data_quality_report import build_report
+
+                report = build_report(base_dir=Path(base_dir))
+                out_path = Path(base_dir) / "reports" / "data_quality_latest.json"
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_text(
+                    json.dumps(report, ensure_ascii=False, default=str), encoding="utf-8"
+                )
+
+            svc.add_task("data_quality_report", data_quality_report, interval_seconds=900)
+
         return svc
