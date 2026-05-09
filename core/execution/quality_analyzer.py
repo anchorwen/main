@@ -1,7 +1,10 @@
-"""Execution quality analytics."""
+"""Execution quality analytics with time-series slippage tracking."""
 
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 from statistics import mean
+from typing import Any
 
 from core.execution.gateway_contracts import OrderState
 from core.execution.quality_contracts import (
@@ -10,6 +13,138 @@ from core.execution.quality_contracts import (
     ExecutionQualityReport,
 )
 from core.execution.schema_versions import SCHEMA_EXECUTION_QUALITY_REPORT
+
+
+class SlippageTracker:
+    """Time-series slippage recorder for trend analysis.
+
+    Appends one JSONL record per trade with slippage, session, and day-of-week.
+    Enables queries like "Friday afternoon slippage vs Tuesday morning".
+    """
+
+    def __init__(self, data_path: str | Path):
+        self._path = Path(data_path)
+
+    def record(
+        self,
+        *,
+        symbol: str,
+        strategy: str,
+        side: str,
+        volume: float,
+        decision_price: float | None,
+        fill_price: float,
+        timestamp: str = "",
+        session: str = "",
+    ) -> None:
+        slippage_bps = None
+        if decision_price and decision_price > 0 and fill_price > 0:
+            if side == "buy":
+                slippage_bps = round((fill_price - decision_price) / decision_price * 10000, 4)
+            else:
+                slippage_bps = round((decision_price - fill_price) / decision_price * 10000, 4)
+
+        if timestamp:
+            try:
+                dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                dt = datetime.now(UTC).replace(tzinfo=None)
+        else:
+            dt = datetime.now(UTC).replace(tzinfo=None)
+
+        record = {
+            "time": dt.isoformat(),
+            "symbol": symbol,
+            "strategy": strategy,
+            "side": side,
+            "volume": volume,
+            "decision_price": decision_price,
+            "fill_price": fill_price,
+            "slippage_bps": slippage_bps,
+            "day_of_week": dt.strftime("%A"),
+            "hour_utc": dt.hour,
+            "session": session,
+        }
+
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            with self._path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except OSError:
+            pass
+
+    def query(
+        self, *, min_time: str = "", max_time: str = "", day: str = ""
+    ) -> list[dict[str, Any]]:
+        """Query slippage records with optional filters."""
+        results: list[dict[str, Any]] = []
+        if not self._path.exists():
+            return results
+        for line in self._path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if min_time and r.get("time", "") < min_time:
+                continue
+            if max_time and r.get("time", "") > max_time:
+                continue
+            if day and r.get("day_of_week", "") != day:
+                continue
+            results.append(r)
+        return results
+
+    def summary(self) -> dict[str, Any]:
+        """Aggregate slippage summary by day-of-week and hour."""
+        if not self._path.exists():
+            return {"total_records": 0}
+
+        records = self.query()
+        if not records:
+            return {"total_records": 0}
+
+        by_day: dict[str, list[float]] = {}
+        by_hour: dict[int, list[float]] = {}
+        all_slips: list[float] = []
+
+        for r in records:
+            s = r.get("slippage_bps")
+            if s is None:
+                continue
+            all_slips.append(s)
+            d = r.get("day_of_week", "Unknown")
+            h = r.get("hour_utc", 99)
+            by_day.setdefault(d, []).append(s)
+            by_hour.setdefault(h, []).append(s)
+
+        day_summary = {}
+        for d, vals in sorted(by_day.items()):
+            day_summary[d] = {
+                "count": len(vals),
+                "avg_bps": round(mean(vals), 2),
+                "min_bps": round(min(vals), 2),
+                "max_bps": round(max(vals), 2),
+            }
+
+        hour_summary = {}
+        for h, vals in sorted(by_hour.items()):
+            hour_summary[str(h)] = {
+                "count": len(vals),
+                "avg_bps": round(mean(vals), 2),
+                "min_bps": round(min(vals), 2),
+                "max_bps": round(max(vals), 2),
+            }
+
+        return {
+            "total_records": len(records),
+            "overall_avg_bps": round(mean(all_slips), 2),
+            "overall_max_bps": round(max(all_slips), 2),
+            "by_day": day_summary,
+            "by_hour_utc": hour_summary,
+        }
 
 
 class ExecutionQualityAnalyzer:

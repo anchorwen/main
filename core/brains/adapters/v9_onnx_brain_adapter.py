@@ -60,11 +60,12 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
     def infer(self, feature_vector: np.ndarray) -> dict[str, Any]:
         """Run ONNX inference on a 1-D feature vector.
 
-        Returns dict with: out_dir, out_risk, out_vol, runtime_ms, fallback.
+        Returns dict with: out_dir/raw_score, out_risk, out_vol, runtime_ms, fallback.
 
-        Handles two ONNX output formats:
-        - V9 format (3 outputs): [logits(1,3), risk(1,1), vol(1,1)]
+        Handles three ONNX output formats:
+        - V9 format (3 outputs): [logits(1,3), risk(1,1), vol(1,1)] — classification
         - CRT format (1 output):  [logits(1,3)] — risk/vol derived from logits
+        - Regression format (3 outputs): [regression(1,1), risk(1,1), vol(1,1)] — P&L regression
 
         The caller is responsible for normalising and preparing the feature
         vector before passing it here.  This method only reshapes for ONNX.
@@ -84,6 +85,21 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
 
         outputs = self._run_inference(model_input)
         runtime_ms = (perf_counter() - started) * 1000.0
+
+        # Detect regression format: first output shape (1, 1) instead of (1, 3)
+        is_regression = outputs[0].shape[-1] == 1
+
+        if is_regression:
+            raw_score = float(outputs[0][0][0])
+            out_risk = float(outputs[1][0][0]) if len(outputs) >= 2 else 0.5
+            out_vol = float(outputs[2][0][0]) if len(outputs) >= 3 else 0.5
+            return {
+                "raw_score": raw_score,
+                "out_risk": out_risk,
+                "out_vol": out_vol,
+                "runtime_ms": runtime_ms,
+                "fallback": self._backend != "onnxruntime",
+            }
 
         out_dir = outputs[0][0]
         if len(outputs) >= 3:
@@ -107,19 +123,43 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
         }
 
     def get_signal(self, raw_output: dict[str, Any]) -> BrainDecisionProposal:
-        """Map ONNX logits to BrainDecisionProposal."""
-        out_dir = raw_output["out_dir"]
+        """Map ONNX outputs to BrainDecisionProposal.
+
+        Supports two modes:
+        - Classification: out_dir (logits) → softmax → direction
+        - Regression: raw_score → _score_to_direction (same as XGBoost/LightGBM)
+        """
         out_risk = raw_output["out_risk"]
         out_vol = raw_output["out_vol"]
         runtime_ms = raw_output.get("runtime_ms", 0.0)
         fallback_used = raw_output.get("fallback", self._backend != "onnxruntime")
 
-        probs = self._decode_direction(out_dir)
-        direction_idx = int(np.argmax(probs))
-        confidence = float(np.max(probs))
-        direction_bias = self._map_direction(direction_idx)
-        up_probability = float(probs[1])  # long class
-        down_probability = float(probs[2])  # short class
+        if "raw_score" in raw_output:
+            # Regression mode: P&L score → direction via tanh threshold
+            raw_score = raw_output["raw_score"]
+            direction_bias, up_probability, down_probability = self._score_to_direction(raw_score)
+            confidence = max(up_probability, down_probability)
+            raw_outputs_ext = {
+                "raw_score": raw_score,
+                "out_risk": out_risk,
+                "out_vol": out_vol,
+            }
+            reason_tags = ["v9_institutional_onnx", "regression"]
+        else:
+            # Classification mode: logits → softmax → direction
+            out_dir = raw_output["out_dir"]
+            probs = self._decode_direction(out_dir)
+            direction_idx = int(np.argmax(probs))
+            confidence = float(np.max(probs))
+            direction_bias = self._map_direction(direction_idx)
+            up_probability = float(probs[1])
+            down_probability = float(probs[2])
+            raw_outputs_ext = {
+                "out_dir": out_dir.tolist() if hasattr(out_dir, "tolist") else list(out_dir),
+                "out_risk": out_risk,
+                "out_vol": out_vol,
+            }
+            reason_tags = ["v9_institutional_onnx"]
 
         warnings = []
         if fallback_used:
@@ -149,7 +189,7 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
                 "symbol_tags": self._brain_entry.get("deployment_scope", {}).get("symbols", []),
             },
             rationale={
-                "reason_tags": ["v9_institutional_onnx"],
+                "reason_tags": reason_tags,
                 "warnings": warnings,
             },
             health={
@@ -162,11 +202,7 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
             },
             vote_weight=self._brain_entry.get("vote_weight", 1.0),
             extensions={
-                "raw_outputs": {
-                    "out_dir": out_dir.tolist() if hasattr(out_dir, "tolist") else list(out_dir),
-                    "out_risk": out_risk,
-                    "out_vol": out_vol,
-                }
+                "raw_outputs": raw_outputs_ext,
             },
         )
 
@@ -235,6 +271,21 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
     def _decode_direction(logits: np.ndarray) -> np.ndarray:
         """Return softmax probabilities [neutral, long, short]."""
         return V9OnnxBrainAdapter._softmax(logits)
+
+    @staticmethod
+    def _score_to_direction(raw_score: float) -> tuple[str, float, float]:
+        """Map regression score to (direction_bias, up_prob, down_prob).
+
+        Same logic as XGBoostBrainAdapter and LightGBMBrainAdapter.
+        Positive score → long bias; negative → short bias; near-zero → neutral.
+        """
+        confidence = float(np.tanh(abs(raw_score)))
+        if raw_score > 0.1:
+            return "long", confidence, max(0.0, 1.0 - confidence)
+        elif raw_score < -0.1:
+            return "short", max(0.0, 1.0 - confidence), confidence
+        else:
+            return "neutral", 0.5, 0.5
 
     @staticmethod
     def _map_direction(idx: int) -> str:

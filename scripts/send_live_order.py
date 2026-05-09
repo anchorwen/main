@@ -58,7 +58,7 @@ def resolve_protection_flag_path(base_dir: str, protection_flag_path: str) -> Pa
 def dispatch_live_order(
     *,
     base_dir: str,
-    broker: BrokerAdapter,
+    broker: BrokerAdapter | None,
     symbol: str,
     execution_payload: dict[str, Any],
     intent_id: str | None = None,
@@ -67,6 +67,7 @@ def dispatch_live_order(
     ignore_protection_flag: bool = False,
     protection_flag_path: str = "data/live_dispatch_block.flag",
     adapter_name: str = "mt5",
+    extensions: dict[str, Any] | None = None,
 ) -> dict:
     """Broker-agnostic order dispatch — the canonical entry point for all venues.
 
@@ -120,6 +121,7 @@ def dispatch_live_order(
         adapter_name=adapter_name,
         live_dispatch_enabled=True,
         live_allowed_symbols=(symbol,),
+        extensions=extensions or {},
     )
     container = ServiceContainer(cfg).build()
     envelope = CommunicationEnvelope(
@@ -160,7 +162,23 @@ def dispatch_live_mt5_execution(
     protection_flag_path: str = "data/live_dispatch_block.flag",
 ) -> dict:
     """MT5-specific handoff — **backward compat only, prefer** :func:`dispatch_live_order`."""
-    # Build a throwaway MT5 broker adapter just for price validation
+    # When skip_price_guard is True, we don't need MT5 for price validation.
+    # Skipping initialize/shutdown avoids killing the main loop's MT5 connection.
+    if skip_price_guard:
+        return dispatch_live_order(
+            base_dir=base_dir,
+            broker=None,
+            symbol=symbol,
+            execution_payload=execution_payload,
+            intent_id=intent_id,
+            correlation_id=correlation_id,
+            skip_price_guard=True,
+            ignore_protection_flag=ignore_protection_flag,
+            protection_flag_path=protection_flag_path,
+            adapter_name="mt5",
+            extensions={"mt5_terminal_path": mt5_terminal_path},
+        )
+
     import MetaTrader5 as _mt5
 
     if not _mt5.initialize(path=mt5_terminal_path):
@@ -180,6 +198,7 @@ def dispatch_live_mt5_execution(
             ignore_protection_flag=ignore_protection_flag,
             protection_flag_path=protection_flag_path,
             adapter_name="mt5",
+            extensions={"mt5_terminal_path": mt5_terminal_path},
         )
     finally:
         _mt5.shutdown()
@@ -200,6 +219,7 @@ def dispatch_live_open_order(
     protection_flag_path: str = "data/live_dispatch_block.flag",
     volume: float | None = None,
     magic: int | None = None,
+    brain_ids: list[str] | None = None,
 ) -> dict:
     """Open-market helper; delegates to :func:`dispatch_live_mt5_execution`."""
     iid = intent_id or f"live_open_{uuid.uuid4().hex}"
@@ -214,6 +234,8 @@ def dispatch_live_open_order(
         execution_payload["volume"] = float(volume)
     if magic is not None:
         execution_payload["magic"] = int(magic)
+    if brain_ids:
+        execution_payload["brain_ids"] = list(brain_ids)
 
     return dispatch_live_mt5_execution(
         base_dir=base_dir,

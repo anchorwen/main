@@ -17,7 +17,16 @@ from typing import Any
 SCHEMA_VERSION = "training_recipe.v1"
 
 # ── Supported values ──
-VALID_ARCHITECTURES = {"mlp_multihead", "transformer", "xgboost", "ou_params"}
+VALID_ARCHITECTURES = {
+    "mlp_multihead",
+    "deep_res_mlp",
+    "transformer",
+    "xgboost",
+    "lightgbm",
+    "ou_params",
+    "online_mlp",
+    "online_sgd",
+}
 VALID_OPTIMIZERS = {"adam", "adamw", "sgd"}
 VALID_NORM_STRATEGIES = {"fixed", "rolling_ewma", "rank"}
 VALID_ROLES = {"prd", "chlg", "cabl", "stub"}
@@ -328,9 +337,13 @@ class TrainingRecipe:
         # Architecture ↔ lane compatibility hints
         lane_arch_hints = {
             "sur": "mlp_multihead",
+            "deepresmlp": "deep_res_mlp",
             "mtx": "transformer",
             "arb": "ou_params",
             "xgbinrepo": "xgboost",
+            "lgbinrepo": "lightgbm",
+            "online_mlp": "online_mlp",
+            "online_sgd": "online_sgd",
         }
         expected_arch = lane_arch_hints.get(mi.lane)
         if expected_arch and self.training.architecture != expected_arch:

@@ -65,6 +65,9 @@ def test_imports() -> list[dict[str, Any]]:
         "core.contracts.ids",
         "core.features.local_feature_store",
         "core.features.schemas.v9_institutional_schema",
+        "core.features.schemas.microstructure_schema",
+        "core.features.adapters.microstructure_feature_adapter",
+        "core.features.computers.microstructure_computer",
         "core.feedback.brain_performance_tracker",
         "core.governance.governance_service",
         "core.ledger.storage.jsonl_ledger_store",
@@ -74,6 +77,7 @@ def test_imports() -> list[dict[str, Any]]:
         "core.alpha.promotion_gate",
         "core.brains.services.brain_factory",
         "core.brains.services.brain_registry_service",
+        "core.brains.adapters.transformer_brain_adapter",
     ]
     for mod in modules:
         results.append(_check_no_exception(mod, __import__, mod))

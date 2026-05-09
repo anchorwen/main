@@ -1,0 +1,50 @@
+"""StatArb strategy line — OU mean-reversion.
+
+Brain: ou_params_v6
+Contract: ou_mean_reversion_zscore
+Magic: 90003
+
+Uses raw mid-price as input (not feature vectors).
+Only trades when Z-score exceeds thresholds.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+
+from core.execution.strategy_line import StrategyLine
+
+
+class StatArbStrategy(StrategyLine):
+    """OU mean-reversion strategy.
+
+    Single brain (ou_params_v6).  Direction is derived from Z-score:
+      Z > 2.0  → short (overbought, expect reversion down)
+      Z < -2.0 → long  (oversold, expect reversion up)
+      |Z| < 1.0 → neutral
+    """
+
+    def _run_inference(
+        self,
+        feature_vector: Any,
+        micro_feature_vector: Any,
+        mid_price: float | None,
+    ) -> list[Any]:
+        proposals: list[Any] = []
+        for b_info in self.brains:
+            try:
+                price = float(mid_price) if mid_price else 0.0
+                raw = b_info["adapter"].infer(np.array([price], dtype=np.float32))
+                prop = b_info["adapter"].get_signal(raw)
+                bid = b_info.get("brain_id", "unknown")
+                try:
+                    if not getattr(prop, "brain_id", None):
+                        prop.brain_id = bid
+                except Exception:
+                    pass
+                proposals.append(prop)
+            except Exception:
+                pass
+        return proposals

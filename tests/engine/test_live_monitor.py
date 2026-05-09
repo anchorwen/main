@@ -68,7 +68,11 @@ def test_circuit_breaker_corrupt_flag(tmp_path: Path):
 # ── _check_trade_quality tests ──
 
 
-def _make_journal_line(ack_status, recorded_at, action="open", side="long"):
+def _make_journal_line(ack_status, recorded_at=None, action="open", side="long"):
+    if recorded_at is None:
+        from datetime import UTC, datetime
+
+        recorded_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     return json.dumps(
         {
             "schema_version": "live_trade_journal.v2",
@@ -87,14 +91,13 @@ def test_trade_quality_counts(tmp_path: Path):
     from scripts.live_monitor import _check_trade_quality
 
     journal = tmp_path / "journal.jsonl"
-    now_iso = "2026-05-04T14:00:00Z"
     lines = [
-        _make_journal_line("accepted", now_iso),
-        _make_journal_line("accepted", now_iso),
-        _make_journal_line("rejected", now_iso),
-        _make_journal_line("rejected", now_iso),
-        _make_journal_line("rejected", now_iso),
-        _make_journal_line("accepted", now_iso),
+        _make_journal_line("accepted"),
+        _make_journal_line("accepted"),
+        _make_journal_line("rejected"),
+        _make_journal_line("rejected"),
+        _make_journal_line("rejected"),
+        _make_journal_line("accepted"),
     ]
     journal.write_text("\n".join(lines), encoding="utf-8")
 
@@ -117,12 +120,11 @@ def test_trade_quality_tail_consecutive_rejected(tmp_path: Path):
     from scripts.live_monitor import _check_trade_quality
 
     journal = tmp_path / "journal.jsonl"
-    now = "2026-05-04T14:00:00Z"
     lines = [
-        _make_journal_line("accepted", now),
-        _make_journal_line("rejected", now),
-        _make_journal_line("rejected", now),
-        _make_journal_line("rejected", now),
+        _make_journal_line("accepted"),
+        _make_journal_line("rejected"),
+        _make_journal_line("rejected"),
+        _make_journal_line("rejected"),
     ]
     journal.write_text("\n".join(lines), encoding="utf-8")
 

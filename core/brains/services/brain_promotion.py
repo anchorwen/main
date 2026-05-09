@@ -192,7 +192,7 @@ class BrainPromotionEvaluator:
             return self._eval_candidate(brain_id, status, metrics_snapshot, t)
         elif status == "probation":
             return self._eval_probation(brain_id, status, metrics_snapshot, t)
-        elif status == "active":
+        elif status in ("active", "live"):
             return self._eval_active(brain_id, status, metrics_snapshot, t)
         else:
             return BrainPromotionDecision(

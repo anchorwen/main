@@ -1,3 +1,4 @@
+import warnings
 from datetime import UTC, datetime
 
 from core.contracts.domain.decision_candidate import DecisionCandidate
@@ -6,12 +7,26 @@ from core.parliament.schema_versions import SCHEMA_DECISION_CANDIDATE
 
 
 class ParliamentService:
-    """Multi-brain deliberation service.
+    """Multi-brain deliberation service (legacy — DEPRECATED for live trading).
 
-    Aggregates proposals from all active brains, applies weighting
-    based on brain role/health, detects consensus/dissent, and
-    produces a DecisionCandidate for the downstream compiler.
+    **For live multi-brain trading**, use the contract-group architecture:
+      - ``core.parliament.contract_groups.compute_all_group_signals()``
+      - ``core.execution.capital_allocator.resolve_conflicts()``
+
+    This class is retained for:
+      - Shadow mode (apps/engine/v9_shadow_support.py)
+      - Backward-compatible testing
+      - Single-brain mode (trivially compatible with both paths)
+
+    The key problem with the legacy approach: it mixed incommensurate
+    confidence values (softmax vs tanh vs sigmoid) across models trained
+    on different contracts into a single weighted average.  The new
+    contract-group approach fixes this by voting within homogeneous
+    groups and resolving cross-group conflicts at the capital-allocation
+    level.
     """
+
+    _DEPRECATION_SHOWN = False
 
     def __init__(self, governance_service=None, regime_detector=None):
         self._governance = governance_service
@@ -23,6 +38,24 @@ class ParliamentService:
         proposals: list,
         control_snapshot,
     ) -> DecisionCandidate:
+        """Build a DecisionCandidate via cross-contract mixed voting.
+
+        **Deprecated for live trading.**  Use the contract-group
+        architecture instead: ``compute_all_group_signals()`` →
+        ``resolve_conflicts()``.
+
+        Still used by the shadow runtime (apps/engine/).
+        """
+        if not ParliamentService._DEPRECATION_SHOWN:
+            warnings.warn(
+                "ParliamentService.build_candidate() is deprecated for live "
+                "trading. Use core.parliament.contract_groups.compute_all_group_signals() "
+                "and core.execution.capital_allocator.resolve_conflicts() instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            ParliamentService._DEPRECATION_SHOWN = True
+
         active_proposals = self._filter_active_proposals(proposals)
 
         regime_state = self._detect_regime(feature_snapshot)
@@ -171,6 +204,24 @@ class ParliamentService:
             "risk_bias": "acceptable" if avg_risk is None or avg_risk < 0.6 else "elevated",
             "avg_risk_score": round(avg_risk, 4) if avg_risk is not None else None,
         }
+
+    # ── Bridge to new contract-group architecture ──────────────────────
+
+    def group_consensus(self, group_definition: dict, proposals: list, dynamic_weighter=None):
+        """Compute consensus for a single contract-homogeneous group.
+
+        Convenience method that delegates to ``ContractGroupConsensus``.
+        Use this when you have proposals that are already grouped by
+        training contract.
+
+        Returns a ``GroupSignal`` or ``None``.
+        """
+        from core.parliament.contract_groups import ContractGroupConsensus
+
+        cgc = ContractGroupConsensus(group_definition)
+        return cgc.compute(proposals, dynamic_weighter)
+
+    # ── Internal helpers ───────────────────────────────────────────────
 
     def _build_summary(self, feature_snapshot, consensus: dict, proposals: list) -> dict:
         bias = consensus["aggregated_bias"]

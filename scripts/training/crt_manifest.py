@@ -33,6 +33,7 @@ class CRTManifestV1(BaseModel):
     artifact_primary: str | None = None
     norm_artifact: str | None = None
     training_run_id: str | None = None
+    recipe_id: str | None = None
 
     @field_validator("generation")
     @classmethod
@@ -132,6 +133,7 @@ def build_manifest(
     artifact_primary: str | None = None,
     norm_artifact: str | None = None,
     training_run_id: str | None = None,
+    recipe_id: str | None = None,
 ) -> CRTManifestV1:
     fc = build_feature_contract_slug(feature_contract_id)
     mid = build_model_id(lane=lane, role=role, generation=generation, feature_contract_id=fc)
@@ -153,4 +155,5 @@ def build_manifest(
         artifact_primary=artifact_primary,
         norm_artifact=norm_artifact,
         training_run_id=training_run_id,
+        recipe_id=recipe_id,
     )

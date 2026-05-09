@@ -86,10 +86,11 @@ class DynamicBrainWeighter:
         return self._compute_weight(summary)
 
     def _compute_weight_from_metrics(self, m: BrainPnLMetrics) -> float:
-        """Map real P&L metrics to vote weight in [0.1, 3.0].
+        """Map real P&L metrics to vote weight in [0.0, 3.0].
 
         Rationale
         ---------
+        - **zero-win** (≥8 samples, 0% WR) → 0.0  (silenced — toxic signal)
         - **insufficient_data** → 1.0  (neutral)
         - **critical**          → 0.1  (near-silent)
         - **degraded**          → 0.25 (heavily damped)
@@ -101,12 +102,16 @@ class DynamicBrainWeighter:
         A Sharpe of 0 → lower bound; Sharpe ≥ 5 → upper bound.
         Win rate acts as a secondary modifier (±15%).
         """
+        # Zero-win detection: brain with enough data but 0% WR is toxic
+        if m.sample_count >= 8 and m.win_rate <= 0.0:
+            return 0.0
+
         health = m.health_signal
 
         if health == "insufficient_data":
             return 1.0
         if health == "critical":
-            return 0.1
+            return 0.0
         if health == "degraded":
             return 0.25
         if health == "warning":
@@ -136,7 +141,7 @@ class DynamicBrainWeighter:
         return round(max(0.1, min(3.0, weight)), 2)
 
     def _compute_weight(self, summary: dict) -> float:
-        """Map a brain performance tracker summary to a vote weight in [0.1, 3.0].
+        """Map a brain performance tracker summary to a vote weight in [0.0, 3.0].
 
         Used as fallback when P&L metrics are not available.
 
@@ -145,14 +150,17 @@ class DynamicBrainWeighter:
         - **insufficient_data** → 1.0  (neutral; not enough signal to judge)
         - **healthy / stable**   → scaled by composite_mean, range [0.5, 3.0]
         - **warning**            → 0.5 (damped but still voting)
-        - **degraded / critical** → 0.1 (near-silent; governance should freeze)
+        - **degraded**           → 0.1 (near-silent)
+        - **critical / zero-win** → 0.0 (silenced; toxic signal)
         """
         health = summary.get("health_signal", "insufficient_data")
         composite = float(summary.get("composite_mean", 0.0))
 
         if health == "insufficient_data":
             return 1.0
-        if health in ("critical", "degraded"):
+        if health == "critical":
+            return 0.0
+        if health == "degraded":
             return 0.1
         if health == "warning":
             return 0.5

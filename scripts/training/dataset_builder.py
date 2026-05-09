@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import bisect
 import json
 from datetime import datetime
 from pathlib import Path
@@ -28,7 +29,6 @@ import numpy as np
 
 from core.features.local_feature_store import LocalFeatureStore
 from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
-from core.features.store_contracts import FeatureQuery
 
 SCHEMA_VERSION = "training_dataset.v1"
 
@@ -57,49 +57,68 @@ def _normalize_symbol(symbol: str) -> str:
     return symbol
 
 
-def _find_nearest_feature(
+def _load_feature_index(
+    feature_store: LocalFeatureStore, symbol: str
+) -> list[tuple[datetime, str, dict[str, Any]]]:
+    """Load all feature records into a sorted (time, event_time_str, values) list for fast binary search."""
+    path = feature_store._record_path(symbol, "M5")
+    if not path.exists():
+        return []
+    records: list[tuple[datetime, str, dict[str, Any]]] = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("schema_name") != "v9_institutional_40":
+                continue
+            et_str = rec.get("event_time", "")
+            if not et_str:
+                continue
+            try:
+                et = datetime.fromisoformat(et_str)
+            except (ValueError, TypeError):
+                continue
+            if et.tzinfo is not None:
+                et = et.replace(tzinfo=None) - et.utcoffset()
+            records.append((et, et_str, rec.get("values", {})))
+    records.sort(key=lambda x: x[0])
+    return records
+
+
+def _find_nearest_in_index(
     label_time: datetime,
-    store: LocalFeatureStore,
-    symbol: str,
+    index: list[tuple[datetime, str, dict[str, Any]]],
     max_delta_seconds: float,
-) -> Any | None:
-    """Find the feature record nearest to label_time within max_delta_seconds.
+) -> tuple[str, dict[str, Any], float] | None:
+    """Binary-search the sorted feature index for the nearest record.
 
-    Queries the store for records within [label_time - max_delta, label_time + max_delta]
-    and returns the one with minimum absolute time difference.
+    Returns (event_time_str, values_dict, time_delta_seconds) or None.
     """
-    from datetime import timedelta
-
-    start = label_time - timedelta(seconds=max_delta_seconds)
-    end = label_time + timedelta(seconds=max_delta_seconds)
-
-    query = FeatureQuery(
-        symbol=symbol,
-        timeframe="M5",
-        schema_name="v9_institutional_40",
-        start=start,
-        end=end,
-    )
-    records = store.query(query)
-
-    if not records:
+    if not index:
         return None
-
-    best = None
-    best_delta = float("inf")
-    for r in records:
-        rec_time = r.event_time
-        if rec_time.tzinfo is not None:
-            rec_time = rec_time.replace(tzinfo=None) - rec_time.utcoffset()
-        lt = label_time
-        if lt.tzinfo is not None:
-            lt = lt.replace(tzinfo=None) - lt.utcoffset()
-        delta = abs((rec_time - lt).total_seconds())
-        if delta < best_delta:
-            best_delta = delta
-            best = r
-
-    return best
+    if label_time.tzinfo is not None:
+        label_time = label_time.replace(tzinfo=None) - label_time.utcoffset()
+    timestamps = [t for t, _, _ in index]
+    idx = bisect.bisect_left(timestamps, label_time)
+    candidates = []
+    if idx < len(timestamps):
+        delta = (timestamps[idx] - label_time).total_seconds()
+        if abs(delta) <= max_delta_seconds:
+            candidates.append((abs(delta), idx))
+    if idx > 0:
+        delta = (timestamps[idx - 1] - label_time).total_seconds()
+        if abs(delta) <= max_delta_seconds:
+            candidates.append((abs(delta), idx - 1))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x[0])
+    _, best_idx = candidates[0]
+    return index[best_idx][1], index[best_idx][2], candidates[0][0]
 
 
 def join_labels_to_features(
@@ -111,42 +130,37 @@ def join_labels_to_features(
 ) -> dict[str, Any]:
     """Join each labeled trade to its nearest feature vector.
 
-    Args:
-        labels: List of label dicts from label_builder.py (training_label.v1).
-        feature_store: LocalFeatureStore instance with feature records.
-        symbol: Trading symbol to match in the feature store.
-        max_time_delta_seconds: Maximum allowed time gap between label and feature.
-
-    Returns:
-        {"joined": [...], "matched": N, "unmatched": N, "skipped_unlabeled": N}
+    Builds an in-memory sorted index of all feature records once, then binary-searches
+    for each label — O(N log M) instead of O(N*M) per-query linear scans.
     """
+    print(f"Loading feature index for {symbol}...")
+    index = _load_feature_index(feature_store, symbol)
+    print(f"  {len(index)} feature records indexed. Joining {len(labels)} labels...")
+
     joined: list[dict[str, Any]] = []
     matched = 0
     unmatched = 0
     skipped_unlabeled = 0
 
-    for lab in labels:
+    for i, lab in enumerate(labels):
+        if (i + 1) % 10000 == 0:
+            print(f"  ... {i + 1}/{len(labels)} labels processed ({matched} matched)")
+
         if lab.get("label") == "unlabeled":
             skipped_unlabeled += 1
             continue
 
-        label_time = _parse_iso(lab.get("open_recorded_at"))
+        label_time = _parse_iso(lab.get("open_recorded_at") or lab.get("entry_time"))
         if label_time is None:
             unmatched += 1
             continue
 
-        record = _find_nearest_feature(label_time, feature_store, symbol, max_time_delta_seconds)
-        if record is None:
+        result = _find_nearest_in_index(label_time, index, max_time_delta_seconds)
+        if result is None:
             unmatched += 1
             continue
 
-        rec_time = record.event_time
-        if rec_time.tzinfo is not None:
-            rec_time = rec_time.replace(tzinfo=None) - rec_time.utcoffset()
-        lt = label_time
-        if lt.tzinfo is not None:
-            lt = lt.replace(tzinfo=None) - lt.utcoffset()
-        time_delta = (rec_time - lt).total_seconds()
+        feature_event_time, values, time_delta = result
 
         row: dict[str, Any] = {
             "label_id": lab.get("label_id", ""),
@@ -157,19 +171,21 @@ def join_labels_to_features(
             "entry_price": lab.get("entry_price"),
             "exit_price": lab.get("exit_price"),
             "volume": lab.get("volume"),
-            "open_recorded_at": lab.get("open_recorded_at", ""),
-            "feature_event_time": record.event_time.isoformat(),
-            "feature_source": record.source,
+            "open_recorded_at": lab.get("open_recorded_at") or lab.get("entry_time", ""),
+            "feature_event_time": feature_event_time,
+            "feature_source": "feature_store_warmer",
             "time_delta_seconds": round(time_delta, 2),
         }
 
-        # Add feature values as f_0..f_39
-        for i, fname in enumerate(V9_INSTITUTIONAL_40_FEATURES):
-            row[f"f_{i}"] = record.values.get(fname, 0.0)
+        for j, fname in enumerate(V9_INSTITUTIONAL_40_FEATURES):
+            row[f"f_{j}"] = values.get(fname, 0.0)
 
         joined.append(row)
         matched += 1
 
+    print(
+        f"  Done. matched={matched}, unmatched={unmatched}, skipped_unlabeled={skipped_unlabeled}"
+    )
     return {
         "joined": joined,
         "matched": matched,
@@ -226,26 +242,35 @@ def export_npz(
 
     Produces:
       X: (n_samples, 40) feature matrix
-      y: (n_samples,) binary labels (1=win, 0=loss/breakeven)
+      y: (n_samples,) binary labels (1=tp_hit_first/win, 0=other)
+      y_reg: (n_samples,) P&L values for regression target
       pnl: (n_samples,) P&L values
       feature_names: list of 40 feature names
     """
     n = len(joined)
     X = np.zeros((n, 40), dtype=np.float64)
     y = np.zeros(n, dtype=np.int32)
+    y_reg = np.zeros(n, dtype=np.float64)
     pnl = np.zeros(n, dtype=np.float64)
 
     for i, row in enumerate(joined):
         for j in range(40):
             X[i, j] = float(row.get(f"f_{j}", 0.0))
-        y[i] = 1 if row.get("label") == "win" else 0
-        pnl[i] = float(row.get("pnl", 0.0) or 0.0)
+        label_val = row.get("label", "")
+        pnl_val = float(row.get("pnl", 0.0) or 0.0)
+        if label_val in ("win", "tp_hit_first"):
+            y[i] = 1
+        else:
+            y[i] = 0
+        pnl[i] = pnl_val
+        y_reg[i] = pnl_val
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
         output_path,
         X=X,
         y=y,
+        y_reg=y_reg,
         pnl=pnl,
         feature_names=np.array(V9_INSTITUTIONAL_40_FEATURES, dtype=str),
     )

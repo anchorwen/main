@@ -38,7 +38,7 @@ OPTIONAL_FIELDS: dict[str, type | tuple] = {
     "receipt_path": str,
 }
 
-VALID_ACK_STATUSES = {"accepted", "rejected", "acknowledged"}
+VALID_ACK_STATUSES = {"accepted", "rejected", "acknowledged", "closed"}
 VALID_ACTIONS = {"open", "close", "modify"}
 VALID_SIDES = {"long", "short"}
 

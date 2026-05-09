@@ -52,7 +52,16 @@ class BrainRunService:
         control_snapshot,
         feature_vector: np.ndarray | None = None,
         feature_source: dict | None = None,
+        micro_feature_source: dict | None = None,
     ) -> list:
+        """Run inference for all active brains.
+
+        Routes the correct feature_source to each brain based on its
+        ``feature_schema_id`` entry field:
+
+        - ``v9_institutional_40`` / ``None`` → *feature_source*
+        - ``v4.3_microstructure_9``  / ``v4.5_microstructure_9`` → *micro_feature_source*
+        """
         proposals = []
 
         for entry in self._brain_registry_service.list_active_entries():
@@ -69,8 +78,15 @@ class BrainRunService:
                     )
                     continue
 
+            # Select the correct feature source for this brain
+            schema_id = entry.get("feature_schema_id", "")
+            if "microstructure" in schema_id and micro_feature_source is not None:
+                brain_feature_source = micro_feature_source
+            else:
+                brain_feature_source = feature_source
+
             try:
-                proposal = adapter.run(feature_snapshot, feature_source)
+                proposal = adapter.run(feature_snapshot, brain_feature_source)
                 proposals.append(proposal)
             except Exception:
                 logging.exception(

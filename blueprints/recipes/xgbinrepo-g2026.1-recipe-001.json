@@ -1,0 +1,51 @@
+{
+  "schema_version": "training_recipe.v1",
+  "recipe_id": "xgbinrepo-g2026.1-recipe-001",
+  "model_identity": {
+    "lane": "xgbinrepo",
+    "role": "chlg",
+    "generation": "g2026.1",
+    "feature_contract_id": "feat-xgb-inrepo-v9-institutional-1.0.0"
+  },
+  "label_contract_ref": {
+    "contract_id": "label-regression-bps-1.0.0",
+    "contract_path": "blueprints/contracts/label-regression-bps-1.0.0.json"
+  },
+  "data": {
+    "dataset_slice_id": "g2026.1_full",
+    "train_date_range": ["2025-01-01", "2026-04-30"],
+    "min_samples_per_class": 50,
+    "normalization_strategy": "none",
+    "normalization_halflife_days": 63,
+    "data_augmentation": {
+      "enabled": false,
+      "volatility_scaling": [0.7, 0.85, 1.0, 1.15, 1.3],
+      "noise_std": 0.01
+    }
+  },
+  "training": {
+    "architecture": "xgboost_regressor",
+    "input_dim": 40,
+    "epochs": 200,
+    "hidden_dims": [64, 32],
+    "dropout": 0.0,
+    "loss_weights": {"direction": 1.0, "risk": 0.5, "volatility": 0.3},
+    "optimizer": "adam",
+    "learning_rate": 0.05,
+    "batch_size": 256,
+    "early_stopping_patience": 20,
+    "seeds": [42, 43, 44]
+  },
+  "evaluation": {
+    "metrics": ["r2", "rmse", "direction_accuracy", "sharpe_ratio", "max_drawdown"],
+    "regime_splits": {},
+    "stability_checks": ["seed_sensitivity"]
+  },
+  "metadata": {
+    "author": "quant-os",
+    "description": "In-repo XGBoost regressor trained on live-accumulated data from dataset_builder NPZ output (54k samples, 40 V9 features). Uses reg:squarederror objective for direction scoring.",
+    "training_data_source": "data/training/train.npz",
+    "target_model": "xgboost_v9_institutional.json",
+    "created_at": "2026-05-07"
+  }
+}

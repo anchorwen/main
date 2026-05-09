@@ -121,6 +121,13 @@ def main(argv: list[str] | None = None) -> int:
     lane_stderr = ""
     lane_exit_code = 0
 
+    # Ensure --recipe flag doesn't break when recipe_path is empty
+    if not recipe_path:
+        command_template = command_template.replace("--recipe {recipe_path}", "").replace(
+            "--recipe {recipe_path} ", ""
+        )
+    values["recipe_path"] = recipe_path
+
     if not args.dry_run:
         if command_template:
             lane_command = render_cmd(command_template, values)

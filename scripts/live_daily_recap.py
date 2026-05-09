@@ -106,6 +106,213 @@ def _run_mt5_pnl_snapshot(
         return {"error": str(exc)}
 
 
+def _effective_pnl(entry: dict[str, Any]) -> float:
+    """Extract realized P&L from a journal entry, falling back to detail.pnl."""
+    pnl = entry.get("pnl")
+    if pnl is not None:
+        return float(pnl)
+    detail = entry.get("detail", {})
+    if isinstance(detail, dict):
+        detail_pnl = detail.get("pnl")
+        if detail_pnl is not None:
+            return float(detail_pnl)
+    return 0.0
+
+
+def _count_labeled_trades(journal_path: Path) -> dict[str, Any]:
+    """Count close entries with real labels (excluding auto-orphan cleanup)."""
+    if not journal_path.exists():
+        return {"labeled_trades": 0, "label_distribution": {}, "total_pnl": 0.0}
+
+    from collections import Counter
+
+    labeled = []
+    for line in journal_path.read_text(encoding="utf-8").strip().split("\n"):
+        if not line:
+            continue
+        try:
+            e = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if (
+            e.get("action") == "close"
+            and e.get("label")
+            and not str(e.get("label", "")).startswith("auto_orphan")
+        ):
+            labeled.append(e)
+
+    labels = Counter(e.get("label") for e in labeled)
+    total_pnl = sum(_effective_pnl(e) for e in labeled)
+
+    return {
+        "labeled_trades": len(labeled),
+        "label_distribution": dict(labels),
+        "total_pnl": round(total_pnl, 2),
+    }
+
+
+def _read_governance_progress(base_dir: Path, threshold: int = 10) -> dict[str, Any]:
+    """Read governance state and brain_pnl_ledger, produce per-brain progress toward promotion."""
+    result: dict[str, Any] = {
+        "brains": [],
+        "threshold": threshold,
+    }
+
+    # Governance state
+    gov_path = base_dir / "governance_state.json"
+    gov = {}
+    if gov_path.exists():
+        try:
+            gov = json.loads(gov_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Brain P&L ledger (for per-brain trade counts)
+    pnl_path = base_dir / "brain_pnl_ledger.json"
+    pnl_ledger: dict[str, int] = {}
+    if pnl_path.exists():
+        try:
+            pnl = json.loads(pnl_path.read_text(encoding="utf-8"))
+            for bid, outcomes in pnl.get("settled", {}).items():
+                pnl_ledger[bid] = len(outcomes)
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    brain_states = gov.get("brain_states", {})
+    if not brain_states:
+        return result
+
+    for bid, bs in brain_states.items():
+        trade_count = pnl_ledger.get(bid, 0)
+        status = bs.get("status", "unknown")
+        result["brains"].append(
+            {
+                "brain_id": bid,
+                "status": status,
+                "trade_count": trade_count,
+                "remaining": max(0, threshold - trade_count),
+                "fraction": min(1.0, trade_count / threshold) if threshold > 0 else 1.0,
+            }
+        )
+
+    return result
+
+
+def _read_contract_group_summary(base_dir: Path) -> dict[str, Any]:
+    """Aggregate brain P&L metrics by contract group.
+
+    Maps each brain_id to its contract group (barrier_12bar / micro_3bar /
+    statarb_dynamic) via contract_groups.py, then computes per-group:
+    brain_count, total_signals, avg_pnl_per_unit, win_rate, sharpe estimate.
+    """
+    result: dict[str, Any] = {
+        "groups": {},
+        "total_brains": 0,
+        "total_signals": 0,
+    }
+
+    from core.parliament.contract_groups import get_group_for_brain_type
+
+    # Load brain registry entries to get brain_type → brain_id mapping
+    brains_dir = Path("configs/brains")
+    brain_id_to_type: dict[str, str] = {}
+    if brains_dir.exists():
+        for f in brains_dir.glob("*.json"):
+            if "normalization" in f.name:
+                continue
+            try:
+                entry = json.loads(f.read_text(encoding="utf-8"))
+                brain_id_to_type[entry["brain_id"]] = entry.get("brain_type", "")
+            except (json.JSONDecodeError, OSError, KeyError):
+                pass
+
+    # Load P&L ledger
+    pnl_path = base_dir / "brain_pnl_ledger.json"
+    if not pnl_path.exists():
+        return result
+
+    try:
+        pnl = json.loads(pnl_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return result
+
+    settled = pnl.get("settled", {})
+
+    # Aggregate per group
+    groups: dict[str, dict[str, Any]] = {}
+    for bid, outcomes in settled.items():
+        bt = brain_id_to_type.get(bid, "")
+        group = get_group_for_brain_type(bt) if bt else None
+        gname = group["name"] if group else "unassigned"
+
+        if gname not in groups:
+            groups[gname] = {
+                "group_name": gname,
+                "contract": group["contract"] if group else "",
+                "brain_count": 0,
+                "total_signals": 0,
+                "total_pnl": 0.0,
+                "win_count": 0,
+                "loss_count": 0,
+                "brain_ids": [],
+            }
+
+        g = groups[gname]
+        g["brain_count"] += 1
+        g["brain_ids"].append(bid)
+        pnls = [o.get("pnl_per_unit", 0.0) for o in outcomes]
+        g["total_signals"] += len(pnls)
+        g["total_pnl"] += sum(pnls)
+        g["win_count"] += sum(1 for p in pnls if p > 0)
+        g["loss_count"] += sum(1 for p in pnls if p < 0)
+
+    # Compute derived metrics
+    for _gname, g in groups.items():
+        n = g["total_signals"]
+        g["avg_pnl"] = round(g["total_pnl"] / n, 6) if n > 0 else 0.0
+        g["win_rate"] = round(g["win_count"] / n, 4) if n > 0 else 0.0
+        # Simple Sharpe estimate (annualised)
+        if n > 1:
+            import math
+
+            avg = g["avg_pnl"]
+            variance = sum(
+                (o.get("pnl_per_unit", 0.0) - avg) ** 2
+                for bid in g["brain_ids"]
+                for o in settled.get(bid, [])
+            ) / (n - 1)
+            std = math.sqrt(variance) if variance > 1e-12 else 1e-12
+            g["sharpe_estimate"] = round((avg / std) * math.sqrt(288 * 252), 2)
+        else:
+            g["sharpe_estimate"] = 0.0
+        # Directional agreement: fraction of signals in dominant direction
+        long_count = sum(
+            1
+            for bid in g["brain_ids"]
+            for o in settled.get(bid, [])
+            if o.get("direction") == "long"
+        )
+        short_count = sum(
+            1
+            for bid in g["brain_ids"]
+            for o in settled.get(bid, [])
+            if o.get("direction") == "short"
+        )
+        g["long_pct"] = round(long_count / n, 3) if n > 0 else 0.0
+        g["short_pct"] = round(short_count / n, 3) if n > 0 else 0.0
+        result["total_brains"] += g["brain_count"]
+        result["total_signals"] += n
+
+    result["groups"] = groups
+    return result
+
+
+def _format_progress_bar(fraction: float, width: int = 10) -> str:
+    """Render a single progress bar segment: ████░░░░░░."""
+    filled = round(fraction * width)
+    return "█" * filled + "░" * (width - filled)
+
+
 def _derive_run_state(
     trade_quality: dict[str, Any],
     data_quality: dict[str, Any],
@@ -146,6 +353,10 @@ def _generate_evolution_block(
     feature_quality: dict[str, Any] | None = None,
     governance: dict[str, Any] | None = None,
     champion_challenger: dict[str, Any] | None = None,
+    labeled_trades: dict[str, Any] | None = None,
+    governance_progress: dict[str, Any] | None = None,
+    brain_attribution: dict[str, Any] | None = None,
+    contract_group_summary: dict[str, Any] | None = None,
 ) -> str:
     """Produce the Markdown block to append to EVOLUTION_PLAN.md."""
     counts = trade_quality.get("counts", {})
@@ -206,6 +417,51 @@ def _generate_evolution_block(
         if promotions > 0 or eligible > 0:
             champion_lines = f"\n- 晋升评估: 已晋升={promotions} 符合条件={eligible}"
 
+    labeled_lines = ""
+    if labeled_trades:
+        lt_count = labeled_trades.get("labeled_trades", 0)
+        lt_pnl = labeled_trades.get("total_pnl", 0.0)
+        lt_dist = labeled_trades.get("label_distribution", {})
+        labeled_lines = f"\n- 已标注交易: {lt_count}笔 | 总P&L={lt_pnl:+.2f} | 分布={lt_dist}"
+
+    gov_progress_lines = ""
+    if governance_progress and governance_progress.get("brains"):
+        bar_parts = []
+        threshold = governance_progress.get("threshold", 10)
+        for b in governance_progress["brains"]:
+            bar = _format_progress_bar(b["fraction"])
+            bar_parts.append(
+                f"{b['brain_id'][:15]}: {bar} {b['trade_count']}/{threshold}  ({b['status']})"
+            )
+        gov_progress_lines = "\n- 治理晋升进度:\n  " + "\n  ".join(bar_parts)
+
+    contract_group_lines = ""
+    if contract_group_summary and contract_group_summary.get("groups"):
+        cg_parts = []
+        for gname, g in sorted(contract_group_summary["groups"].items()):
+            direction_hint = (
+                f"做多{g['long_pct']:.0%}/做空{g['short_pct']:.0%}"
+                if g["total_signals"] > 0
+                else "无信号"
+            )
+            cg_parts.append(
+                f"{gname}: {g['brain_count']}脑 {g['total_signals']}信号 "
+                f"胜率={g['win_rate']:.1%} 均值={g['avg_pnl']:.4f} "
+                f"Sharpe≈{g['sharpe_estimate']:.1f} [{direction_hint}]"
+            )
+        contract_group_lines = "\n- 合同组表现:\n  " + "\n  ".join(cg_parts)
+
+    attr_lines = ""
+    if brain_attribution and brain_attribution.get("brains"):
+        parts = [f"{bid}: {info}" for bid, info in brain_attribution["brains"].items()]
+        attr_lines = (
+            f"\n- 大脑归因P&L: {brain_attribution.get('total_realized_pnl', 0):+.2f} | "
+            + " | ".join(parts)
+        )
+        unatt = brain_attribution.get("unattributed_trades", 0)
+        if unatt > 0:
+            attr_lines += f" | 未归因交易: {unatt}笔"
+
     return f"""
 
 ### Daily Update - {_utc_now_iso()}（自动生成）
@@ -214,7 +470,7 @@ def _generate_evolution_block(
 - 运行状态: {run_state}
 - 核心统计: 接受={counts.get('accepted', 0)} 拒绝={counts.get('rejected', 0)} 确认={counts.get('acknowledged', 0)} 其他={counts.get('other', 0)} 合计={trade_quality.get('total', 0)} 拒单率={trade_quality.get('rejection_rate', 0.0)}
 - 数据质量: 交叉校验问题={dq_issues} outbox超时={outbox_stale}
-- live_dispatch_block.flag: {"存在" if flag_present else "不存在"}{ensemble_lines}{align_lines}{leaderboard_lines}{feature_quality_lines}{governance_lines}{champion_lines}
+- live_dispatch_block.flag: {"存在" if flag_present else "不存在"}{labeled_lines}{attr_lines}{gov_progress_lines}{contract_group_lines}{ensemble_lines}{align_lines}{leaderboard_lines}{feature_quality_lines}{governance_lines}{champion_lines}
 - 关键事件: <手动最多 3 条>
 - 根因与修复: <手动最多 3 条>
 - 阶段进度: <Phase A/B/C 到达位置>
@@ -448,6 +704,27 @@ def build_report(
     if run_champion:
         champion = _run_champion_challenger_snapshot(base_dir, dry_run=True)
 
+    # ── Labeled trades & governance progress ──
+    labeled_trades = _count_labeled_trades(journal_path)
+    governance_progress = _read_governance_progress(base_dir, threshold=10)
+
+    # ── Contract group summary ──
+    contract_group_summary = _read_contract_group_summary(base_dir)
+
+    # ── Brain attribution ──
+    brain_attribution: dict[str, Any] = {}
+    try:
+        from core.brains.services.brain_attribution_service import BrainAttributionService
+
+        pnl_ledger_path = base_dir / "brain_pnl_ledger.json"
+        attr_svc = BrainAttributionService(
+            journal_path=journal_path,
+            pnl_ledger_path=pnl_ledger_path if pnl_ledger_path.exists() else None,
+        )
+        brain_attribution = attr_svc.quick_summary()
+    except Exception:
+        pass
+
     # ── Build training dataset (Phase B) ──
     training_dataset: dict[str, Any] = {}
     if build_dataset_flag:
@@ -480,6 +757,10 @@ def build_report(
             feature_quality=feature_quality if feature_quality else None,
             governance=governance if governance else None,
             champion_challenger=champion if champion else None,
+            labeled_trades=labeled_trades,
+            governance_progress=governance_progress,
+            brain_attribution=brain_attribution if brain_attribution else None,
+            contract_group_summary=contract_group_summary if contract_group_summary else None,
         )
         evolution_result = _write_evolution_plan_update(
             Path(evolution_plan_path),
@@ -506,6 +787,10 @@ def build_report(
         "brain_leaderboard": brain_leaderboard,
         "governance": governance,
         "champion_challenger": champion,
+        "labeled_trades": labeled_trades,
+        "governance_progress": governance_progress,
+        "brain_attribution": brain_attribution,
+        "contract_group_summary": contract_group_summary,
         "evolution_plan_update": evolution_result,
         "training_dataset": training_dataset,
     }

@@ -47,6 +47,13 @@ class ParamsBrainAdapter(BaseBrainAdapter):
     # BaseBrainAdapter interface
     # ------------------------------------------------------------------
 
+    def bootstrap_buffer(self, prices: list[float]) -> None:
+        """Pre-fill the price buffer from historical MT5 data to avoid cold start."""
+        if not prices:
+            return
+        max_buf = max(self._window, 200)
+        self._price_buffer = list(prices[-max_buf:])
+
     def load(self) -> None:
         """Load optimal OU parameters from the arb_params.json artifact."""
         artifact_path = self._brain_entry.get("artifact_path")

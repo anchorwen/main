@@ -4,5 +4,9 @@
   "mtx_xgb": "python scripts/training/trainers/mtx_trainer.py --manifest-path {manifest_path} --result-json-path {manifest_path}.result.json --artifact-path {artifact_path} --mode xgboost --recipe {recipe_path}",
   "arb": "python scripts/training/trainers/arb_trainer.py --manifest-path {manifest_path} --result-json-path {manifest_path}.result.json --artifact-path {artifact_path} --recipe {recipe_path}",
   "xgbinrepo": "python scripts/training/trainers/xgb_trainer.py --data data/training/train.npz --output-model {artifact_path} --output-result {manifest_path}.result.json --recipe {recipe_path}",
+  "lgbinrepo": "python scripts/training/trainers/lgb_trainer.py --data data/training/train.npz --output-model {artifact_path} --output-result {manifest_path}.result.json --recipe {recipe_path}",
+  "deepresmlp": "python scripts/training/trainers/deep_res_mlp_trainer.py --data data/training/train.npz --output-model {artifact_path} --output-result {manifest_path}.result.json --recipe {recipe_path}",
+  "transformer_v5": "python scripts/training/trainers/transformer_trainer.py --data D:/ai/Meta_ppo_v4.5/V4_Train_Tensors.pt --output-model {artifact_path} --output-result {manifest_path}.result.json --max-samples 20000 --epochs 80 --recipe {recipe_path}",
+  "online_mlp": "python scripts/training/trainers/online_mlp_trainer.py --data data/training/train.npz --output {artifact_path} --output-result {manifest_path}.result.json",
   "online_sgd": "python scripts/training/train_online_init.py --csv data/raw/xauusdc_m5_1y.csv --output {artifact_path}"
 }

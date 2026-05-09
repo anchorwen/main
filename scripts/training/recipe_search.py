@@ -1,18 +1,29 @@
-"""Optuna hyperparameter search for Training Recipes.
+"""Optuna hyperparameter search for Training Recipes — all 5 backbones.
 
 Searches the hyperparameter space defined by a base recipe to find optimal
 parameters. Outputs a new recipe JSON with the best found configuration.
 
-Supports:
-  - xgb_trainer (in-process, fast, recommended for search)
-  - sur_trainer (subprocess to D:\\ai, slow, use --trainer sur)
+Supports all 5 model backbones:
+  - xgboost (in-process, fast)
+  - lightgbm (in-process, fast)
+  - deep_res_mlp (PyTorch, ONNX export)
+  - online_mlp (PyTorch, JSON export)
+  - ou_params (Optuna-native, search over OU params)
 
 Usage:
-  # Fast search on XGBoost with 50 trials
+  # Search on LightGBM with 50 trials
   python scripts/training/recipe_search.py \\
-    --recipe blueprints/recipes/sur-g2026.1-recipe-001.json \\
+    --recipe blueprints/recipes/lgb-g2026.1-recipe-001.json \\
     --data data/training/train.npz \\
+    --architecture lightgbm \\
     --trials 50
+
+  # Search on DeepResMLP
+  python scripts/training/recipe_search.py \\
+    --recipe blueprints/recipes/deepresmlp-g2026.1-recipe-001.json \\
+    --data data/training/train.npz \\
+    --architecture deep_res_mlp \\
+    --trials 30
 
   # Search + export best recipe
   python scripts/training/recipe_search.py \\
@@ -58,7 +69,7 @@ def _utc_now_iso() -> str:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def suggest_params(trial, recipe: dict[str, Any]) -> dict[str, Any]:
+def suggest_params(trial, recipe: dict[str, Any], architecture: str = "xgboost") -> dict[str, Any]:
     """Suggest hyperparameters for one Optuna trial.
 
     Uses the recipe's ranges as bounds. Each parameter gets a sensible
@@ -67,35 +78,56 @@ def suggest_params(trial, recipe: dict[str, Any]) -> dict[str, Any]:
     t = recipe.get("training", {})
     d = recipe.get("data", {})
 
-    params: dict[str, Any] = {}
+    params: dict[str, Any] = {"architecture": architecture}
 
-    # ── Core training params ──
-    params["n_estimators"] = trial.suggest_int(
-        "n_estimators",
-        max(50, t.get("epochs", 200) // 4),
-        t.get("epochs", 200) * 2,
-        step=25,
-    )
+    # ── Common training params (all architectures) ──
+    if architecture in ("xgboost", "lightgbm"):
+        params["n_estimators"] = trial.suggest_int(
+            "n_estimators",
+            max(50, t.get("epochs", 200) // 4),
+            t.get("epochs", 200) * 2,
+            step=25,
+        )
+    else:
+        params["epochs"] = trial.suggest_int(
+            "epochs",
+            max(10, t.get("epochs", 200) // 4),
+            t.get("epochs", 200) * 2,
+            step=10,
+        )
+
     params["learning_rate"] = trial.suggest_float(
         "learning_rate",
         t.get("learning_rate", 0.001) * 0.1,
         t.get("learning_rate", 0.001) * 3.0,
         log=True,
     )
-    params["max_depth"] = trial.suggest_int(
-        "max_depth",
-        3,
-        max(t.get("hidden_dims", [128, 64, 32])[0] // 4, 8),
-    )
 
-    # ── Regularization ──
-    params["subsample"] = trial.suggest_float("subsample", 0.5, 1.0, step=0.1)
-    params["colsample_bytree"] = trial.suggest_float("colsample_bytree", 0.5, 1.0, step=0.1)
-    params["dropout"] = trial.suggest_float(
-        "dropout",
-        t.get("dropout", 0.3) * 0.3,
-        min(t.get("dropout", 0.3) * 2.0, 0.8),
-    )
+    # ── Architecture-specific params ──
+    if architecture in ("xgboost", "lightgbm"):
+        params["max_depth"] = trial.suggest_int(
+            "max_depth",
+            3,
+            max(t.get("hidden_dims", [128, 64, 32])[0] // 4, 8),
+        )
+        params["subsample"] = trial.suggest_float("subsample", 0.5, 1.0, step=0.1)
+        params["colsample_bytree"] = trial.suggest_float("colsample_bytree", 0.5, 1.0, step=0.1)
+
+    elif architecture == "deep_res_mlp":
+        params["batch_size"] = trial.suggest_categorical("batch_size", [64, 128, 256])
+        params["dropout"] = trial.suggest_float("dropout", 0.05, 0.5, step=0.05)
+        params["weight_decay"] = trial.suggest_float("weight_decay", 1e-5, 1e-3, log=True)
+
+    elif architecture == "online_mlp":
+        params["batch_size"] = trial.suggest_categorical("batch_size", [32, 64, 128])
+
+    # ── Regularization (common) ──
+    if architecture in ("xgboost", "lightgbm", "deep_res_mlp"):
+        params["dropout"] = trial.suggest_float(
+            "dropout",
+            t.get("dropout", 0.3) * 0.3,
+            min(t.get("dropout", 0.3) * 2.0, 0.8),
+        )
 
     # ── Data augmentation (on/off) ──
     da = d.get("data_augmentation", {})
@@ -114,53 +146,109 @@ def _train_and_evaluate(
     data_path: Path,
     params: dict[str, Any],
     *,
+    architecture: str = "xgboost",
     val_data_path: Path | None = None,
     augment: bool = False,
     augment_vol_scales: list[float] | None = None,
     augment_noise_std: float = 0.0,
     seed: int = 42,
 ) -> dict[str, Any]:
-    """Train XGBoost and return metrics."""
-    from core.features.data_augmentation import augment_dataset
-    from scripts.training.trainers.xgb_trainer import (
-        load_training_data,
-        train_xgboost,
-    )
+    """Train model with given params and return metrics. Dispatches to architecture-specific trainer."""
 
-    X, y, _pnl, feature_names = load_training_data(data_path)
+    if architecture == "xgboost":
+        from scripts.training.trainers.xgb_trainer import load_training_data, train_xgboost
 
-    val_data = None
-    if val_data_path is not None:
-        Xv, yv, _, _ = load_training_data(val_data_path)
-        val_data = (Xv, yv)
+        X, y, _pnl, feature_names = load_training_data(data_path)
+        val_data = None
+        if val_data_path:
+            Xv, yv, _, _ = load_training_data(val_data_path)
+            val_data = (Xv, yv)
+        if augment:
+            from core.features.data_augmentation import augment_dataset
 
-    if augment:
-        X, y = augment_dataset(
+            X, y = augment_dataset(
+                X,
+                y,
+                volatility_scaling=augment_vol_scales or [1.0],
+                noise_std=augment_noise_std,
+                seed=seed,
+                concat_original=True,
+            )
+        xgb_params = {
+            "n_estimators": params.get("n_estimators", 200),
+            "max_depth": params.get("max_depth", 5),
+            "learning_rate": params.get("learning_rate", 0.05),
+            "subsample": params.get("subsample", 0.8),
+            "colsample_bytree": params.get("colsample_bytree", 0.8),
+            "objective": "binary:logistic",
+            "eval_metric": "logloss",
+            "random_state": seed,
+            "n_jobs": -1,
+            "early_stopping_rounds": 20,
+        }
+        _booster, metrics = train_xgboost(
+            X, y, params=xgb_params, val_data=val_data, feature_names=feature_names
+        )
+        return metrics
+
+    elif architecture == "lightgbm":
+        from scripts.training.trainers.lgb_trainer import load_data as lgb_load
+        from scripts.training.trainers.lgb_trainer import train_lightgbm
+
+        X, y, feature_names = lgb_load(data_path)
+        val_data = None
+        if val_data_path:
+            Xv, yv, _ = lgb_load(val_data_path)
+            val_data = (Xv, yv)
+        lgb_params = {
+            "n_estimators": params.get("n_estimators", 500),
+            "num_leaves": params.get("max_depth", 5) * 5,
+            "learning_rate": params.get("learning_rate", 0.05),
+            "subsample": params.get("subsample", 0.8),
+            "colsample_bytree": params.get("colsample_bytree", 0.8),
+            "random_state": seed,
+            "n_jobs": -1,
+            "verbosity": -1,
+        }
+        booster, metrics = train_lightgbm(
+            X, y, params=lgb_params, val_data=val_data, feature_names=feature_names
+        )
+        return metrics
+
+    elif architecture == "deep_res_mlp":
+        from scripts.training.trainers.deep_res_mlp_trainer import load_data as drm_load
+        from scripts.training.trainers.deep_res_mlp_trainer import train_deep_res_mlp
+
+        X, y, feature_names = drm_load(data_path)
+        model, metrics = train_deep_res_mlp(
             X,
             y,
-            volatility_scaling=augment_vol_scales or [1.0],
-            noise_std=augment_noise_std,
+            epochs=params.get("epochs", 200),
+            lr=params["learning_rate"],
+            batch_size=params.get("batch_size", 128),
+            dropout=params.get("dropout", 0.2),
+            weight_decay=params.get("weight_decay", 1e-4),
             seed=seed,
-            concat_original=True,
         )
+        return metrics
 
-    xgb_params = {
-        "n_estimators": params.get("n_estimators", 200),
-        "max_depth": params.get("max_depth", 5),
-        "learning_rate": params.get("learning_rate", 0.05),
-        "subsample": params.get("subsample", 0.8),
-        "colsample_bytree": params.get("colsample_bytree", 0.8),
-        "objective": "binary:logistic",
-        "eval_metric": "logloss",
-        "random_state": seed,
-        "n_jobs": -1,
-        "early_stopping_rounds": 20,
-    }
+    elif architecture == "online_mlp":
+        from scripts.training.trainers.online_mlp_trainer import load_data as oml_load
+        from scripts.training.trainers.online_mlp_trainer import train_mlp
 
-    _booster, metrics = train_xgboost(
-        X, y, params=xgb_params, val_data=val_data, feature_names=feature_names
-    )
-    return metrics
+        X, y = oml_load(data_path)
+        mlp, metrics = train_mlp(
+            X,
+            y,
+            epochs=params.get("epochs", 50),
+            lr=params["learning_rate"],
+            batch_size=params.get("batch_size", 64),
+            seed=seed,
+        )
+        return metrics
+
+    else:
+        raise ValueError(f"Unsupported architecture for search: {architecture}")
 
 
 def _load_recipe(recipe_path: Path) -> dict[str, Any]:
@@ -176,6 +264,7 @@ def run_search(
     recipe: dict[str, Any],
     data_path: Path,
     *,
+    architecture: str = "xgboost",
     n_trials: int = 30,
     val_data_path: Path | None = None,
     study_name: str = "recipe-search",
@@ -189,6 +278,7 @@ def run_search(
     Args:
         recipe: Loaded recipe dict (training_recipe.v1).
         data_path: Path to training data (NPZ or Parquet).
+        architecture: Model architecture to search (xgboost, lightgbm, deep_res_mlp, online_mlp).
         n_trials: Number of Optuna trials.
         val_data_path: Optional separate validation data.
         study_name: Optuna study name for resuming.
@@ -205,12 +295,14 @@ def run_search(
     da = recipe.get("data", {}).get("data_augmentation", {})
 
     def objective(trial):
-        params = suggest_params(trial, recipe)
+        params = suggest_params(trial, recipe, architecture)
 
         augment = params.pop("augment", False)
+        arch = params.pop("architecture", architecture)
         metrics = _train_and_evaluate(
             data_path,
             params,
+            architecture=arch,
             val_data_path=val_data_path,
             augment=augment,
             augment_vol_scales=da.get("volatility_scaling"),
@@ -226,7 +318,9 @@ def run_search(
         # Report intermediate values for pruning
         trial.set_user_attr("train_accuracy", metrics.get("train_accuracy"))
         trial.set_user_attr("val_accuracy", metrics.get("val_accuracy"))
-        trial.set_user_attr("n_estimators", metrics.get("n_estimators"))
+        trial.set_user_attr(
+            "n_estimators", metrics.get("n_estimators", metrics.get("epochs_completed"))
+        )
         trial.set_user_attr("early_stopped", metrics.get("early_stopped", False))
 
         return float(score)
@@ -322,6 +416,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--recipe", type=Path, required=True, help="Base Training Recipe JSON")
     p.add_argument("--data", type=Path, required=True, help="Training data (NPZ or Parquet)")
     p.add_argument("--val-data", type=Path, default=None, help="Validation data (NPZ or Parquet)")
+    p.add_argument(
+        "--architecture",
+        default="xgboost",
+        choices=["xgboost", "lightgbm", "deep_res_mlp", "online_mlp"],
+        help="Model architecture to search (default: xgboost)",
+    )
     p.add_argument("--trials", type=int, default=30, help="Number of Optuna trials (default: 30)")
     p.add_argument(
         "--study-name",
@@ -377,6 +477,7 @@ def main(argv: list[str] | None = None) -> int:
     best_params, study = run_search(
         recipe,
         args.data,
+        architecture=args.architecture,
         n_trials=args.trials,
         val_data_path=args.val_data,
         study_name=study_name,

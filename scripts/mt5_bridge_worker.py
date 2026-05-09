@@ -34,6 +34,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--poll-seconds", type=float, default=1.0)
     parser.add_argument("--journal-path", default="data/live_trade_journal.jsonl")
     parser.add_argument("--protection-flag-path", default="data/live_dispatch_block.flag")
+    parser.add_argument(
+        "--mt5-terminal-path",
+        default=None,
+        help="MT5 terminal64.exe path (initialize once at startup)",
+    )
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     return parser
@@ -98,6 +103,53 @@ def _is_protection_active(protection_flag_path: Path) -> bool:
     return protection_flag_path.exists()
 
 
+# ── Retry / resilience helpers ──
+
+_MAX_RETRIES = 3
+
+# MT5 retcodes that are transient (deserve a retry)
+_TRANSIENT_RETCODES: set[int] = {
+    10004,  # TRADE_RETCODE_REQUOTE
+    10015,  # TRADE_RETCODE_INVALID_PRICE
+    10016,  # TRADE_RETCODE_PRICE_CHANGED
+    10018,  # TRADE_RETCODE_OFF_QUOTES
+    10019,  # TRADE_RETCODE_CONNECTION
+    10028,  # TRADE_RETCODE_TIMEOUT
+}
+
+# Permanent rejection reasons (no retry)
+_PERMANENT_REASONS: set[str] = {
+    "position_not_found",
+    "position_ticket_required",
+    "modify_requires_sl_or_tp",
+    "invalid_symbol_or_side",
+    "symbol_not_found",
+    "tick_unavailable",
+    "symbol_not_selected",
+}
+
+
+def _should_retry(retcode: int, reason: str) -> bool:
+    """Decide if a rejected modify_sltp should be retried."""
+    if reason in _PERMANENT_REASONS:
+        return False
+    if retcode in _TRANSIENT_RETCODES:
+        return True
+    # Generic rejection (10010) without a permanent reason — retry once
+    if retcode == 10010 and not reason:
+        return True
+    return False
+
+
+def _verify_position_exists(mt5: Any, ticket: int) -> bool:
+    """Post-fill check: confirm the position actually exists after mt5.order_send()."""
+    try:
+        positions = mt5.positions_get(ticket=ticket)
+        return positions is not None and len(positions) > 0
+    except Exception:
+        return False
+
+
 def _normalize_side(value: Any) -> str:
     text = str(value or "").lower()
     if text in {"long", "buy"}:
@@ -120,48 +172,38 @@ def _coerce_positive_float(value: Any) -> float | None:
 
 
 def _send_to_mt5(
-    payload: dict[str, Any], *, default_volume: float, deviation: int, magic: int
+    mt5: Any, payload: dict[str, Any], *, default_volume: float, deviation: int, magic: int
 ) -> tuple[str, dict[str, Any]]:
-    try:
-        import MetaTrader5 as mt5  # type: ignore
-    except Exception as exc:  # pragma: no cover - depends on local env
-        return "rejected", {"reason": "mt5_module_unavailable", "error": str(exc)}
+    """Execute order via already-initialized MT5 module.
 
-    mt5_info = payload.get("mt5", {})
-    terminal_path = mt5_info.get("terminal_path")
-    if not terminal_path:
-        return "rejected", {"reason": "terminal_path_missing"}
-    if not mt5.initialize(
-        path=str(terminal_path)
-    ):  # pragma: no cover - depends on local env  # type: ignore[reportAttributeAccessIssue]
-        return "rejected", {"reason": "mt5_initialize_failed", "last_error": mt5.last_error()}  # type: ignore[reportAttributeAccessIssue]
-    try:
-        envelope = payload.get("envelope", {})
-        msg_payload = envelope.get("payload", {})
-        action = normalize_action(msg_payload.get("action"))
-        route = execution_route(action)
+    mt5.initialize() is called ONCE in run_worker(); this function should NOT
+    call initialize() or shutdown() — doing so tears down the shared IPC
+    connection and starves the live intent loop of tick data.
+    """
+    envelope = payload.get("envelope", {})
+    msg_payload = envelope.get("payload", {})
+    action = normalize_action(msg_payload.get("action"))
+    route = execution_route(action)
 
-        if route == "unsupported":
-            return "acknowledged", {"reason": "unsupported_action", "action": action}
+    if route == "unsupported":
+        return "acknowledged", {"reason": "unsupported_action", "action": action}
 
-        if route == "market_open":
-            return _mt5_market_open(
-                mt5,
-                envelope=envelope,
-                msg_payload=msg_payload,
-                default_volume=default_volume,
-                deviation=deviation,
-                magic=magic,
-            )
-        if route == "close":
-            return _mt5_close_position(
-                mt5, envelope=envelope, msg_payload=msg_payload, deviation=deviation, magic=magic
-            )
-        if route == "modify_sltp":
-            return _mt5_modify_sltp(mt5, envelope=envelope, msg_payload=msg_payload)
-        return "acknowledged", {"reason": "unknown_route", "route": route}
-    finally:
-        mt5.shutdown()  # pragma: no cover - depends on local env  # type: ignore[reportAttributeAccessIssue]
+    if route == "market_open":
+        return _mt5_market_open(
+            mt5,
+            envelope=envelope,
+            msg_payload=msg_payload,
+            default_volume=default_volume,
+            deviation=deviation,
+            magic=magic,
+        )
+    if route == "close":
+        return _mt5_close_position(
+            mt5, envelope=envelope, msg_payload=msg_payload, deviation=deviation, magic=magic
+        )
+    if route == "modify_sltp":
+        return _mt5_modify_sltp(mt5, envelope=envelope, msg_payload=msg_payload)
+    return "acknowledged", {"reason": "unknown_route", "route": route}
 
 
 def _mt5_market_open(
@@ -363,6 +405,7 @@ def process_one(
     deviation: int,
     magic: int,
     dry_run: bool,
+    mt5: Any = None,
 ) -> dict[str, Any]:
     payload = _load_message(message_path)
     envelope = payload.get("envelope", {})
@@ -382,11 +425,58 @@ def process_one(
         ack_status = "acknowledged"
         detail = {"reason": "dry_run"}
     else:
-        # Per-order magic override from brain (multi-brain attribution).
         order_magic = int(msg_payload.get("magic", magic))
-        ack_status, detail = _send_to_mt5(
-            payload, default_volume=default_volume, deviation=deviation, magic=order_magic
+        if mt5 is None:
+            ack_status = "rejected"
+            detail = {"reason": "mt5_module_unavailable_no_terminal_path"}
+        else:
+            ack_status, detail = _send_to_mt5(
+                mt5, payload, default_volume=default_volume, deviation=deviation, magic=order_magic
+            )
+
+    action = normalize_action(msg_payload.get("action"))
+    retcode = int(detail.get("retcode", 0)) if isinstance(detail, dict) else 0
+    reject_reason = str(detail.get("reason", "")) if isinstance(detail, dict) else ""
+
+    # ── Retry: transient modify_sltp failure → requeue ──
+    retry_count = int(msg_payload.get("_retry_count", 0))
+    if (
+        action == "modify_sltp"
+        and ack_status == "rejected"
+        and _should_retry(retcode, reject_reason)
+        and retry_count < _MAX_RETRIES
+    ):
+        msg_payload["_retry_count"] = retry_count + 1
+        retry_msg_path = outbox_dir / f"{message_id}.mt5.json"
+        retry_msg_path.parent.mkdir(parents=True, exist_ok=True)
+        retry_msg_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        # Archive the old message so it doesn't pile up
+        rel_path = (
+            message_path.relative_to(outbox_dir)
+            if message_path.is_relative_to(outbox_dir)
+            else Path(message_path.name)
         )
+        archive_path = archive_dir / rel_path
+        archive_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(message_path), str(archive_path))
+        return {
+            "message_id": message_id,
+            "ack_status": "retrying",
+            "retry_count": retry_count + 1,
+            "archive_path": str(archive_path),
+        }
+
+    # ── Post-fill verification: market_open accepted → verify position ──
+    if action == "open" and ack_status == "accepted":
+        ticket = detail.get("order") if isinstance(detail, dict) else None
+        if ticket and mt5 is not None:
+            if not _verify_position_exists(mt5, int(ticket)):
+                ack_status = "rejected"
+                detail = {
+                    "reason": "post_fill_position_not_found",
+                    "order": ticket,
+                    "retcode": retcode,
+                }
 
     receipt_payload = _build_receipt_payload(
         message_id=message_id, ack_status=ack_status, detail=detail
@@ -409,7 +499,6 @@ def process_one(
     shutil.move(str(message_path), str(archive_path))
 
     vol_disp = msg_payload.get("volume", msg_payload.get("lots"))
-    action = normalize_action(msg_payload.get("action"))
     journal_record = {
         "schema_version": "live_trade_journal.v2",
         "recorded_at": _utc_now(),
@@ -421,7 +510,7 @@ def process_one(
         "action": action,
         "side": msg_payload.get("side"),
         "volume": vol_disp,
-        "pnl": None,
+        "pnl": msg_payload.get("pnl"),
         "label": None,
         "effective_volume_hint": effective_volume(msg_payload, default_volume=default_volume),
         "position_ticket": detail.get("order") or coerce_position_ticket(msg_payload),
@@ -431,6 +520,7 @@ def process_one(
         "outbox_path": str(message_path),
         "archive_path": str(archive_path),
         "receipt_path": str(receipt_path),
+        "brain_ids": msg_payload.get("brain_ids"),
     }
     _append_journal(journal_path, journal_record)
 
@@ -449,28 +539,53 @@ def run_worker(args: argparse.Namespace) -> int:
     archive_dir = Path(args.archive_dir)
     journal_path = Path(args.journal_path)
     protection_flag_path = Path(args.protection_flag_path)
-    while True:
-        processed = []
-        for path in _list_pending(outbox_dir):
-            processed.append(
-                process_one(
-                    path,
-                    outbox_dir=outbox_dir,
-                    receipt_dir=receipt_dir,
-                    archive_dir=archive_dir,
-                    journal_path=journal_path,
-                    protection_flag_path=protection_flag_path,
-                    default_volume=args.default_volume,
-                    deviation=args.deviation,
-                    magic=args.magic,
-                    dry_run=bool(args.dry_run),
+
+    # ── Initialize MT5 once at startup ──
+    mt5 = None
+    terminal_path = args.mt5_terminal_path
+    if terminal_path:
+        try:
+            import MetaTrader5 as _mt5
+
+            if _mt5.initialize(path=str(terminal_path)):
+                mt5 = _mt5
+                print(f"[bridge] MT5 initialized: {terminal_path}", flush=True)
+            else:
+                print(f"[bridge] WARN: MT5 init failed: {_mt5.last_error()}", flush=True)
+        except Exception as exc:
+            print(f"[bridge] WARN: MT5 unavailable: {exc}", flush=True)
+
+    try:
+        while True:
+            processed = []
+            for path in _list_pending(outbox_dir):
+                processed.append(
+                    process_one(
+                        path,
+                        outbox_dir=outbox_dir,
+                        receipt_dir=receipt_dir,
+                        archive_dir=archive_dir,
+                        journal_path=journal_path,
+                        protection_flag_path=protection_flag_path,
+                        default_volume=args.default_volume,
+                        deviation=args.deviation,
+                        magic=args.magic,
+                        dry_run=bool(args.dry_run),
+                        mt5=mt5,
+                    )
                 )
-            )
-        if processed:
-            print(json.dumps({"processed": processed}, ensure_ascii=False, default=str))
-        if args.once:
-            return 0
-        time.sleep(args.poll_seconds)
+            if processed:
+                print(json.dumps({"processed": processed}, ensure_ascii=False, default=str))
+            if args.once:
+                return 0
+            time.sleep(args.poll_seconds)
+    finally:
+        if mt5 is not None:
+            try:
+                mt5.shutdown()
+                print("[bridge] MT5 shutdown", flush=True)
+            except Exception:
+                pass
 
 
 def main(argv: list[str] | None = None) -> int:

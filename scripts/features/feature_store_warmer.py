@@ -291,6 +291,16 @@ def warm_store(
     ]
     _ZERO_FEATS = {k: 0.0 for k in _M5_KEYS}
 
+    # Build timestamp array from CSV
+    timestamps: list = []
+    if time_col and time_col in df.columns:
+        try:
+            timestamps = pd.to_datetime(df[time_col]).to_list()
+        except Exception:
+            timestamps = [base_time + timedelta(minutes=5 * i) for i in range(n)]
+    else:
+        timestamps = [base_time + timedelta(minutes=5 * i) for i in range(n)]
+
     records = []
     n = len(df)
     for i in range(MIN_BARS, n, step):
@@ -305,7 +315,14 @@ def warm_store(
             for k, v in tf_feats.items():
                 feats[k.replace("M5_", f"{tf_label}_")] = v
 
-        event_time = base_time + timedelta(minutes=5 * i)
+        if i < len(timestamps):
+            event_time = timestamps[i]
+            if hasattr(event_time, "to_pydatetime"):
+                event_time = event_time.to_pydatetime()
+            if hasattr(event_time, "tzinfo") and event_time.tzinfo is not None:
+                event_time = event_time.replace(tzinfo=None) - event_time.utcoffset()
+        else:
+            event_time = base_time + timedelta(minutes=5 * i)
         records.append(
             FeatureRecord(
                 schema_name=SCHEMA_NAME,

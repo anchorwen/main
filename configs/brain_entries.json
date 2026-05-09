@@ -41,6 +41,20 @@
         }
     },
     {
+        "brain_type": "transformer_v4.3",
+        "brain_id": "mtx-transformer-v4.3",
+        "brain_role": "microstructure",
+        "model_version": "v4.3.0",
+        "status": "shadow",
+        "artifact_path": "data/models/mtx_transformer_core.onnx",
+        "normalization_artifact_path": "data/models/mtx_transformer_scaler.joblib",
+        "feature_schema_id": "v4.3_microstructure_9",
+        "deployment_scope": {
+            "regimes": ["trending", "volatile"],
+            "symbols": ["XAUUSDc", "XAUUSD"]
+        }
+    },
+    {
         "brain_type": "ou_params_v6",
         "brain_id": "ou-v6-stat-arb",
         "brain_role": "stat_arb",

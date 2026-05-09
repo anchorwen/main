@@ -32,6 +32,16 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
     # BaseBrainAdapter interface
     # ------------------------------------------------------------------
 
+    def run(self, snapshot, feature_source: dict | None = None) -> BrainDecisionProposal:
+        """Override to extract 9 microstructure features in canonical order."""
+        if self._feature_adapter is not None and feature_source is not None:
+            feature_vector = self._feature_adapter.build_model_input(feature_source).ravel()
+        elif feature_source is not None:
+            feature_vector = np.asarray(list(feature_source.values()), dtype=np.float64)
+        else:
+            feature_vector = np.zeros(40, dtype=np.float64)
+        return self.inference(feature_vector)
+
     def load(self) -> None:
         """Load XGBoost booster from JSON artifact."""
         artifact_path = self._brain_entry.get("artifact_path")
@@ -173,4 +183,5 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
         base = super().describe()
         base["num_features"] = self._num_features
         base["booster_loaded"] = self._booster is not None
+        base["uses_feature_adapter"] = self._feature_adapter is not None
         return base

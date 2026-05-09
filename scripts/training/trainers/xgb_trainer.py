@@ -29,7 +29,7 @@ from typing import Any
 
 import numpy as np
 
-DEFAULT_PARAMS: dict[str, Any] = {
+DEFAULT_PARAMS_CLS: dict[str, Any] = {
     "n_estimators": 200,
     "max_depth": 5,
     "learning_rate": 0.05,
@@ -37,6 +37,19 @@ DEFAULT_PARAMS: dict[str, Any] = {
     "colsample_bytree": 0.8,
     "objective": "binary:logistic",
     "eval_metric": "logloss",
+    "random_state": 42,
+    "n_jobs": -1,
+    "early_stopping_rounds": 20,
+}
+
+DEFAULT_PARAMS_REG: dict[str, Any] = {
+    "n_estimators": 200,
+    "max_depth": 5,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "objective": "reg:squarederror",
+    "eval_metric": "rmse",
     "random_state": 42,
     "n_jobs": -1,
     "early_stopping_rounds": 20,
@@ -56,14 +69,25 @@ def _utc_now_iso() -> str:
 # ── Data loading ──
 
 
-def load_npz(data_path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
+def load_npz(
+    data_path: Path, *, regression: bool = False
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
     """Load training data from .npz file.
 
-    Returns (X, y, pnl, feature_names).
+    Returns (X, y, pnl, feature_names).  y is y_reg when regression=True.
     """
     data = np.load(data_path)
     X = data["X"]
-    y = data["y"]
+    if regression:
+        y_reg = data.get("y_reg")
+        if y_reg is not None:
+            y = y_reg
+        elif "pnl" in data:
+            y = data["pnl"].astype(np.float64)
+        else:
+            y = data["y"].astype(np.float64)
+    else:
+        y = data["y"]
     pnl_arr = data.get("pnl")
     if pnl_arr is None:
         pnl_arr = np.zeros(len(y))
@@ -92,14 +116,16 @@ def load_parquet(data_path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, l
     return X, y, pnl_arr, feature_cols
 
 
-def load_training_data(data_path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
+def load_training_data(
+    data_path: Path, *, regression: bool = False
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
     """Load training data, dispatching by extension.
 
     Returns (X, y, pnl, feature_names).
     """
     ext = data_path.suffix.lower()
     if ext == ".npz":
-        return load_npz(data_path)
+        return load_npz(data_path, regression=regression)
     if ext == ".parquet":
         return load_parquet(data_path)
     raise ValueError(f"unsupported data format: {ext} (expected .npz or .parquet)")
@@ -115,22 +141,24 @@ def train_xgboost(
     *,
     val_data: tuple[np.ndarray, np.ndarray] | None = None,
     feature_names: list[str] | None = None,
+    regression: bool = False,
 ) -> tuple[Any, dict[str, Any]]:
-    """Train an XGBoost classifier and return (booster, metrics).
+    """Train an XGBoost model and return (booster, metrics).
 
     Args:
         X: Feature matrix (n_samples, n_features).
-        y: Binary labels (0/1).
-        params: XGBoost parameters dict; merges with DEFAULT_PARAMS.
+        y: Binary labels (0/1) for classification or P&L values for regression.
+        params: XGBoost parameters dict; merged with defaults per mode.
         val_data: Optional (X_val, y_val) for early stopping and eval.
         feature_names: Optional list of feature names.
+        regression: If True, use reg:squarederror objective and R²/MSE metrics.
 
     Returns:
         (booster, metrics_dict).
     """
     import xgboost as xgb
 
-    merged = {**DEFAULT_PARAMS, **(params or {})}
+    merged = {**(DEFAULT_PARAMS_REG if regression else DEFAULT_PARAMS_CLS), **(params or {})}
 
     early_stop = merged.pop("early_stopping_rounds", None)
     n_estimators = merged.pop("n_estimators", 200)
@@ -161,26 +189,46 @@ def train_xgboost(
 
     elapsed = round(time.perf_counter() - t0, 3)
 
-    # Compute training accuracy
-    train_preds = (booster.predict(dtrain) > 0.5).astype(int)
-    train_acc = float((train_preds == y).mean())
-
-    val_acc: float | None = None
-    if val_data is not None:
-        dval_post = xgb.DMatrix(val_data[0], label=val_data[1])
-        if feature_names:
-            dval_post.feature_names = feature_names
-        val_preds = (booster.predict(dval_post) > 0.5).astype(int)
-        val_acc = float((val_preds == val_data[1]).mean())
-
     n_rounds = booster.num_boosted_rounds()
     metrics: dict[str, Any] = {
-        "train_accuracy": round(train_acc, 6),
-        "val_accuracy": round(val_acc, 6) if val_acc is not None else None,
         "n_estimators": n_rounds,
         "train_time_seconds": elapsed,
         "early_stopped": n_rounds != n_estimators,
     }
+
+    if regression:
+        train_preds_reg = booster.predict(dtrain)
+        y_f64 = y.astype(np.float64)
+        ss_res = float(np.sum((y_f64 - train_preds_reg) ** 2))
+        ss_tot = float(np.sum((y_f64 - np.mean(y_f64)) ** 2))
+        train_r2 = float(1.0 - ss_res / ss_tot) if ss_tot > 1e-12 else 0.0
+        train_rmse = float(np.sqrt(np.mean((y_f64 - train_preds_reg) ** 2)))
+        metrics["train_r2"] = round(train_r2, 6)
+        metrics["train_rmse"] = round(train_rmse, 6)
+        if val_data is not None:
+            dval_post = xgb.DMatrix(val_data[0], label=val_data[1])
+            if feature_names:
+                dval_post.feature_names = feature_names
+            val_preds_reg = booster.predict(dval_post)
+            yv = val_data[1].astype(np.float64)
+            ss_res_val = float(np.sum((yv - val_preds_reg) ** 2))
+            ss_tot_val = float(np.sum((yv - np.mean(yv)) ** 2))
+            val_r2 = float(1.0 - ss_res_val / ss_tot_val) if ss_tot_val > 1e-12 else 0.0
+            val_rmse = float(np.sqrt(np.mean((yv - val_preds_reg) ** 2)))
+            metrics["val_r2"] = round(val_r2, 6)
+            metrics["val_rmse"] = round(val_rmse, 6)
+    else:
+        train_preds = (booster.predict(dtrain) > 0.5).astype(int)
+        train_acc = float((train_preds == y).mean())
+        metrics["train_accuracy"] = round(train_acc, 6)
+        val_acc: float | None = None
+        if val_data is not None:
+            dval_post = xgb.DMatrix(val_data[0], label=val_data[1])
+            if feature_names:
+                dval_post.feature_names = feature_names
+            val_preds = (booster.predict(dval_post) > 0.5).astype(int)
+            val_acc = float((val_preds == val_data[1]).mean())
+        metrics["val_accuracy"] = round(val_acc, 6) if val_acc is not None else None
     # Include final eval logloss
     for ds_name, metrics_list in evals_result.items():
         if isinstance(metrics_list, dict):
@@ -253,16 +301,17 @@ def build_and_train(
     augment_vol_scales: list[float] | None = None,
     augment_noise_std: float = 0.0,
     augment_seed: int | None = None,
+    regression: bool = False,
 ) -> dict[str, Any]:
     """Full pipeline: load → augment → train → save.
 
     Returns summary dict.
     """
-    X, y, pnl, feature_names = load_training_data(data_path)
+    X, y, pnl, feature_names = load_training_data(data_path, regression=regression)
 
     val_data = None
     if val_data_path is not None:
-        Xv, yv, _, _ = load_training_data(val_data_path)
+        Xv, yv, _, _ = load_training_data(val_data_path, regression=regression)
         val_data = (Xv, yv)
 
     # ── Data augmentation ──
@@ -281,7 +330,7 @@ def build_and_train(
         augment_applied = True
 
     booster, metrics = train_xgboost(
-        X, y, params=params, val_data=val_data, feature_names=feature_names
+        X, y, params=params, val_data=val_data, feature_names=feature_names, regression=regression
     )
 
     save_model(booster, model_path)
@@ -289,7 +338,7 @@ def build_and_train(
     if result_path is None:
         result_path = model_path.with_suffix(".result.json")
 
-    merged_params = {**DEFAULT_PARAMS, **(params or {})}
+    merged_params = {**(DEFAULT_PARAMS_REG if regression else DEFAULT_PARAMS_CLS), **(params or {})}
     save_result(
         metrics,
         model_path,
@@ -344,6 +393,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--max-depth", type=int, default=None)
     p.add_argument("--learning-rate", type=float, default=None)
     p.add_argument("--seed", type=int, default=None)
+    p.add_argument(
+        "--mode",
+        choices=["cls", "reg"],
+        default="cls",
+        help="Training mode: cls (classification) or reg (P&L regression)",
+    )
     p.add_argument(
         "--recipe",
         type=Path,
@@ -418,6 +473,7 @@ def main(argv: list[str] | None = None) -> int:
         augment_vol_scales=augment_vol_scales,
         augment_noise_std=augment_noise_std,
         augment_seed=args.seed,
+        regression=args.mode == "reg",
     )
 
     # Inject recipe provenance into result

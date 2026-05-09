@@ -194,6 +194,32 @@ def _resolve_feature_vector(
     return np.zeros(feature_dim, dtype=np.float64), "stub"
 
 
+def _resolve_micro_feature_vector(
+    feature_store_dir: Path | str | None = None,
+    symbol: str = "XAUUSDc",
+) -> tuple[np.ndarray, str]:
+    """Load latest microstructure 9-feature vector from store, or return stub."""
+    store_dir = Path(feature_store_dir) if feature_store_dir else None
+    if store_dir is not None and store_dir.is_dir():
+        try:
+            from core.features.adapters.microstructure_feature_adapter import (
+                MicrostructureFeatureAdapter,
+            )
+            from core.features.local_feature_store import LocalFeatureStore
+
+            store = LocalFeatureStore(str(store_dir))
+            record = store.latest(symbol, "M5", schema_name="v4.3_microstructure_9")
+            if record is not None and record.values:
+                adapter = MicrostructureFeatureAdapter(
+                    scaler_path="data/models/mtx_transformer_scaler.joblib",
+                )
+                vec = adapter.build_model_input(record.values).ravel()
+                return vec, "store"
+        except Exception:
+            pass
+    return np.zeros(9, dtype=np.float64), "stub"
+
+
 def build_report(
     brains_dir: Path | None = None,
     *,
@@ -221,6 +247,10 @@ def build_report(
         feature_dim=feature_dim,
         symbol=symbol,
     )
+    micro_feature_vector, micro_source = _resolve_micro_feature_vector(
+        feature_store_dir=feature_store_dir,
+        symbol=symbol,
+    )
 
     # Build adapters
     adapters: dict[str, Any] = {}
@@ -233,21 +263,23 @@ def build_report(
                 {"brain_id": bid, "error": "build_failed", "detail": err_msg or "unknown"}
             )
         else:
-            adapters[bid] = (adapter, entry.get("brain_type", "?"))
+            schema_id = entry.get("feature_schema_id", "")
+            adapters[bid] = (adapter, entry.get("brain_type", "?"), schema_id)
 
-    # Run inference
+    # Run inference — route correct feature vector per brain
     results: list[dict[str, Any]] = []
     if parallel and len(adapters) > 1:
         with ThreadPoolExecutor(max_workers=min(len(adapters), 4)) as executor:
-            futures = {
-                executor.submit(_run_single_brain, adapter, bid, feature_vector, btype): bid
-                for bid, (adapter, btype) in adapters.items()
-            }
+            futures = {}
+            for bid, (adapter, btype, schema_id) in adapters.items():
+                fv = micro_feature_vector if "microstructure" in schema_id else feature_vector
+                futures[executor.submit(_run_single_brain, adapter, bid, fv, btype)] = bid
             for future in as_completed(futures):
                 results.append(future.result())
     else:
-        for bid, (adapter, btype) in adapters.items():
-            results.append(_run_single_brain(adapter, bid, feature_vector, btype))
+        for bid, (adapter, btype, schema_id) in adapters.items():
+            fv = micro_feature_vector if "microstructure" in schema_id else feature_vector
+            results.append(_run_single_brain(adapter, bid, fv, btype))
 
     # Add load errors
     results.extend(

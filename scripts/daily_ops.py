@@ -369,6 +369,47 @@ def _step_alpha_lifecycle(base_dir: str, *, dry_run: bool = False) -> dict[str, 
         return {"step": "alpha_lifecycle", "status": "error", "error": str(exc)[:500]}
 
 
+def _step_alpha_allocation(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
+    """Run AlphaPortfolioAllocator: produce capital allocation recommendations."""
+    try:
+        from core.alpha.performance_store import AlphaPerformanceStore
+        from core.alpha.portfolio_allocator import (
+            AlphaAllocationPolicy,
+            AlphaPortfolioAllocator,
+        )
+        from core.alpha.registry import AlphaRegistry
+
+        registry_path = Path(base_dir) / "alpha_registry.json"
+        perf_path = Path(base_dir) / "alpha_performance.json"
+
+        registry = AlphaRegistry.load(registry_path) if registry_path.exists() else AlphaRegistry()
+        perf_store = (
+            AlphaPerformanceStore.load(perf_path) if perf_path.exists() else AlphaPerformanceStore()
+        )
+
+        allocator = AlphaPortfolioAllocator(registry, perf_store, policy=AlphaAllocationPolicy())
+        allocation = allocator.allocate()
+
+        # Persist allocation report
+        out_dir = Path(base_dir) / "reports"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / "alpha_allocation.json"
+        if not dry_run:
+            out_path.write_text(
+                json.dumps(allocation, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+
+        return {
+            "step": "alpha_allocation",
+            "status": "ok",
+            "alpha_count": allocation.get("alpha_count", 0),
+            "allocatable_count": allocation.get("allocatable_count", 0),
+            "output": str(out_path) if not dry_run else None,
+        }
+    except Exception as exc:
+        return {"step": "alpha_allocation", "status": "error", "error": str(exc)[:500]}
+
+
 def _step_feature_store_maintenance(
     base_dir: str, *, dry_run: bool = False, retention_days: int = 90
 ) -> dict[str, Any]:
@@ -437,6 +478,7 @@ def run_daily_ops(
     skip_retraining: bool = False,
     skip_recap: bool = False,
     skip_alpha: bool = False,
+    skip_alpha_allocation: bool = False,
     skip_online_feedback: bool = False,
     skip_paper_simulation: bool = False,
     skip_fs_maintenance: bool = False,
@@ -536,6 +578,8 @@ def run_daily_ops(
 
     if not skip_alpha:
         steps.append(_step_alpha_lifecycle(base_dir, dry_run=dry_run))
+    if not skip_alpha_allocation:
+        steps.append(_step_alpha_allocation(base_dir, dry_run=dry_run))
 
     if not skip_fs_maintenance:
         steps.append(_step_feature_store_maintenance(base_dir, dry_run=dry_run))
@@ -570,6 +614,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--skip-recap", action="store_true", help="Skip daily recap")
     p.add_argument("--skip-alpha", action="store_true", help="Skip alpha lifecycle evaluation")
     p.add_argument(
+        "--skip-alpha-allocation", action="store_true", help="Skip alpha portfolio allocation"
+    )
+    p.add_argument(
         "--skip-online-feedback", action="store_true", help="Skip online learner feedback"
     )
     p.add_argument(
@@ -601,6 +648,7 @@ def main(argv: list[str] | None = None) -> int:
         skip_retraining=args.skip_retraining,
         skip_recap=args.skip_recap,
         skip_alpha=args.skip_alpha,
+        skip_alpha_allocation=args.skip_alpha_allocation,
         skip_online_feedback=args.skip_online_feedback,
         skip_paper_simulation=args.skip_paper_simulation,
         skip_fs_maintenance=args.skip_fs_maintenance,

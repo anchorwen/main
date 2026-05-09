@@ -35,6 +35,19 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 # ---------------------------------------------------------------------------
 
 
+def _effective_pnl(entry: dict[str, Any]) -> float:
+    """Extract realized P&L from a journal entry, falling back to detail.pnl."""
+    pnl = entry.get("pnl")
+    if pnl is not None:
+        return float(pnl)
+    detail = entry.get("detail", {})
+    if isinstance(detail, dict):
+        detail_pnl = detail.get("pnl")
+        if detail_pnl is not None:
+            return float(detail_pnl)
+    return 0.0
+
+
 def utc_now_iso_z() -> str:
     """ISO-8601 UTC timestamp with Z suffix (no microseconds)."""
     return (
@@ -173,7 +186,7 @@ def _build_env_config(args: argparse.Namespace) -> Any:
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    """Run health checks and print diagnostics."""
+    """Run health checks and print diagnostics (includes live MT5 data when available)."""
     config = _build_env_config(args)
 
     from core.deployment.service_container import ServiceContainer
@@ -189,14 +202,246 @@ def cmd_status(args: argparse.Namespace) -> int:
 
     liveness = health.liveness()
     readiness = health.readiness()
-    result = {
+
+    result: dict[str, Any] = {
         "liveness": liveness,
         "readiness": readiness,
         "healthy": readiness.get("status") == "ready",
     }
 
+    # ── Live MT5 diagnostics (best-effort, non-blocking) ──
+    mt5_diag: dict[str, Any] = _probe_mt5(config, args)
+    if mt5_diag:
+        result["mt5"] = mt5_diag
+
+    # ── Journal statistics ──
+    journal_diag = _probe_journal(config, args)
+    if journal_diag:
+        result["journal"] = journal_diag
+
+    # ── Governance progress ──
+    gov_diag = _probe_governance(config, args)
+    if gov_diag:
+        result["governance"] = gov_diag
+
     print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
     return 0 if result["healthy"] else 1
+
+
+def _probe_mt5(config: Any, args: argparse.Namespace) -> dict[str, Any] | None:
+    """Probe MT5 for live position/account data. Returns None if unavailable."""
+    try:
+        import MetaTrader5 as mt5
+    except Exception:
+        return {"error": "MetaTrader5 package not installed"}
+
+    # Resolve terminal path
+    terminal_path = ""
+    extensions = getattr(config, "extensions", {}) or {}
+    terminal_path = extensions.get("mt5_terminal_path", "")
+    if not terminal_path:
+        # Try loading from live.yaml mt5 section as fallback
+        cfg_path = args.config if hasattr(args, "config") else "configs/live.yaml"
+        try:
+            import yaml
+
+            with open(_resolve(cfg_path), encoding="utf-8") as fh:
+                cfg = yaml.safe_load(fh)
+            terminal_path = cfg.get("live_trading", {}).get("mt5_terminal_path", "") or cfg.get(
+                "mt5", {}
+            ).get("terminal_path", "")
+        except Exception:
+            pass
+
+    if not terminal_path:
+        return {"error": "mt5_terminal_path not configured"}
+
+    if not mt5.initialize(path=terminal_path):
+        err = mt5.last_error()
+        return {"connected": False, "error": str(err)}
+
+    try:
+        diag: dict[str, Any] = {"connected": True}
+
+        # Account
+        acc = mt5.account_info()
+        if acc:
+            diag["account"] = {
+                "login": acc.login,
+                "balance": round(acc.balance, 2),
+                "equity": round(acc.equity, 2),
+                "margin": round(acc.margin, 2),
+                "free_margin": round(acc.margin_free, 2),
+                "margin_level_pct": round(acc.margin_level, 1) if acc.margin_level else None,
+            }
+
+        # Positions
+        positions = mt5.positions_get()
+        diag["positions_count"] = len(positions) if positions else 0
+        if positions:
+            pos_list = []
+            for pos in positions:
+                pos_list.append(
+                    {
+                        "ticket": pos.ticket,
+                        "symbol": pos.symbol,
+                        "type": "BUY" if pos.type == 0 else "SELL",
+                        "volume": pos.volume,
+                        "open_price": pos.price_open,
+                        "current_price": pos.price_current,
+                        "sl": pos.sl,
+                        "tp": pos.tp,
+                        "profit": round(pos.profit, 2),
+                        "swap": round(pos.swap, 2),
+                    }
+                )
+            diag["positions"] = pos_list
+
+        # Pending orders
+        orders = mt5.orders_get()
+        diag["pending_orders_count"] = len(orders) if orders else 0
+        if orders:
+            ord_list = []
+            for o in orders:
+                ord_list.append(
+                    {
+                        "ticket": o.ticket,
+                        "symbol": o.symbol,
+                        "type": o.type,
+                        "volume": o.volume_initial,
+                        "price": o.price_open,
+                        "sl": o.sl,
+                        "tp": o.tp,
+                    }
+                )
+            diag["pending_orders"] = ord_list
+
+        # Symbol info (XAUUSDc)
+        symbol = getattr(args, "symbol", None) or "XAUUSDc"
+        tick = mt5.symbol_info_tick(symbol)
+        if tick:
+            diag["symbol"] = {
+                "name": symbol,
+                "bid": tick.bid,
+                "ask": tick.ask,
+                "spread": round(tick.ask - tick.bid, 5) if tick.ask and tick.bid else None,
+                "time": str(tick.time) if tick.time else None,
+            }
+
+        return diag
+    finally:
+        mt5.shutdown()
+
+
+def _probe_journal(config: Any, args: argparse.Namespace) -> dict[str, Any] | None:
+    """Analyse live trade journal for statistics."""
+    base_dir = getattr(config, "base_dir", "data")
+    journal_path = _resolve(base_dir) / "live_trade_journal.jsonl"
+    if not journal_path.exists():
+        return None
+
+    try:
+        import json
+        from collections import Counter
+
+        entries = []
+        for line in journal_path.read_text(encoding="utf-8").strip().split("\n"):
+            if line:
+                try:
+                    entries.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+
+        if not entries:
+            return None
+
+        actions = Counter(e.get("action") for e in entries)
+        statuses = Counter(e.get("ack_status") for e in entries)
+
+        # Count labeled trades (real closes, not auto-orphan)
+        labeled = [
+            e
+            for e in entries
+            if e.get("action") == "close"
+            and e.get("label")
+            and not str(e.get("label", "")).startswith("auto_orphan")
+        ]
+        labels = Counter(e.get("label") for e in labeled)
+
+        # Open positions (without close)
+        opens: dict[str, dict] = {}
+        for e in entries:
+            if e.get("action") == "open" and e.get("ack_status") == "accepted":
+                opens[e["message_id"]] = e
+        for e in entries:
+            if e.get("action") == "close":
+                oid = e.get("open_message_id")
+                if oid and oid in opens:
+                    del opens[oid]
+
+        total_pnl = sum(_effective_pnl(e) for e in labeled)
+
+        # Brain attribution
+        attribution: dict[str, Any] = {}
+        try:
+            from core.brains.services.brain_attribution_service import BrainAttributionService
+
+            pnl_path = _resolve(base_dir) / "brain_pnl_ledger.json"
+            attr_svc = BrainAttributionService(
+                journal_path=journal_path,
+                pnl_ledger_path=pnl_path if pnl_path.exists() else None,
+            )
+            attribution = attr_svc.quick_summary()
+        except Exception:
+            pass
+
+        return {
+            "total_entries": len(entries),
+            "actions": dict(actions),
+            "statuses": dict(statuses),
+            "labeled_trades": len(labeled),
+            "total_pnl": round(total_pnl, 2),
+            "label_distribution": dict(labels),
+            "open_positions_in_journal": len(opens),
+            "brain_attribution": attribution,
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def _probe_governance(config: Any, args: argparse.Namespace) -> dict[str, Any] | None:
+    """Read governance state and summarise progress toward first promotion."""
+    base_dir = getattr(config, "base_dir", "data")
+    gov_path = _resolve(base_dir) / "governance_state.json"
+    if not gov_path.exists():
+        return None
+
+    try:
+        import json
+
+        gov = json.loads(gov_path.read_text(encoding="utf-8"))
+        brain_states = gov.get("brain_states", {})
+        threshold = 10  # trades needed per brain for first promotion
+
+        summary = []
+        for bid, bs in brain_states.items():
+            summary.append(
+                {
+                    "brain_id": bid,
+                    "status": bs.get("status", "unknown"),
+                    "transition_count": bs.get("transition_count", 0),
+                    "exposure_limited": bs.get("exposure_limited", False),
+                }
+            )
+
+        return {
+            "brains_registered": len(brain_states),
+            "threshold_trades_for_promotion": threshold,
+            "brain_summary": summary,
+            "transition_log": gov.get("transition_log", [])[-5:],
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
 
 
 # ---------------------------------------------------------------------------

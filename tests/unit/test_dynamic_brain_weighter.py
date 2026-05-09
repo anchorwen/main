@@ -13,7 +13,7 @@ from core.feedback.brain_pnl_ledger import BrainPnLMetrics, BrainPnLStore
     "health, composite, expected_min, expected_max",
     [
         ("insufficient_data", 0.0, 1.0, 1.0),
-        ("critical", 0.0, 0.1, 0.1),
+        ("critical", 0.0, 0.0, 0.0),
         ("degraded", 0.3, 0.1, 0.1),
         ("warning", 0.4, 0.5, 0.5),
         ("stable", 0.5, 1.0, 2.0),
@@ -98,7 +98,7 @@ def test_apply_weights_modifies_proposals():
     # Brain_A: healthy high performer
     for _ in range(20):
         tracker.record_outcome("Brain_A", {"composite_score": 0.85, "execution_outcome": "filled"})
-    # Brain_B: degraded
+    # Brain_B: critical (100% rejected → breach_rate > 0.3)
     for _ in range(20):
         tracker.record_outcome(
             "Brain_B", {"composite_score": 0.25, "execution_outcome": "rejected"}
@@ -111,7 +111,7 @@ def test_apply_weights_modifies_proposals():
     assert result is proposals  # returns same list
 
     assert proposals[0].vote_weight > 1.5  # Brain_A: healthy, high composite
-    assert proposals[1].vote_weight == 0.1  # Brain_B: degraded
+    assert proposals[1].vote_weight == 0.0  # Brain_B: critical (100% breach rate)
     assert proposals[2].vote_weight == 1.0  # Brain_C: untracked → default unchanged
 
 
@@ -142,7 +142,7 @@ class TestPnLMetricsWeighting:
         "health, sharpe, win_rate, expected_min, expected_max",
         [
             ("insufficient_data", 0.0, 0.5, 1.0, 1.0),
-            ("critical", -2.0, 0.2, 0.1, 0.1),
+            ("critical", -2.0, 0.2, 0.0, 0.0),
             ("degraded", -0.7, 0.35, 0.25, 0.25),
             ("warning", -0.3, 0.42, 0.5, 0.5),
             ("stable", 0.0, 0.50, 0.5, 0.5),  # Sharpe 0 → base

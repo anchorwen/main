@@ -41,7 +41,7 @@ fix:
 # MT5 — MetaTrader 5 bridge configuration (required when adapter.name == "mt5")
 # ---------------------------------------------------------------------------
 mt5:
-  terminal_path: ""
+  terminal_path: "D:\\MetaTrader 5\\terminal64.exe"
   default_symbol: "XAUUSDc"
   # Normalization config for V9 40-feature z-score normalization (mean/std)
   normalization_config: "configs/brains/v9_institutional_01.normalization.json"
@@ -71,12 +71,23 @@ brains:
     # CRT.sur.chlg.g2026.1 — 40-dim MLP trained from CSV barrier labels
     - path: "configs/brains/crt_sur_chlg_g2026.json"
       enabled: true
-    # OU Params V6 Sniper — statistical arbitrage (shadow)
-    # DISABLED: artifact D:\ai\Meta_ppo_v6\arb_params.json missing (QO-0004)
+    # OU Params V6 Sniper — statistical arbitrage (optimized params)
     - path: "configs/brains/ou_params_v6.json"
-      enabled: false
-    # Online SGD V1 — streaming logistic regression with incremental updates (shadow)
+      enabled: true
+    # Microstructure Transformer V5.0 — 32-bar sequence with RegimeContext ONNX (shadow)
+    - path: "configs/brains/transformer_v5.json"
+      enabled: true
+    # Online MLP V1 — streaming non-linear MLP with incremental updates (shadow)
     - path: "configs/brains/online_learner_v1.json"
+      enabled: true
+    # LightGBM V1 Institutional — leaf-wise gradient boosting, 40-dim V9 features (shadow)
+    - path: "configs/brains/lightgbm_v1.json"
+      enabled: true
+    # DeepResMLP V1 — residual MLP with LayerNorm/GELU, 40-dim V9 features (shadow)
+    - path: "configs/brains/deep_res_mlp_v1.json"
+      enabled: true
+    # XGBoost V9 Institutional — gradient boosting on 40-dim V9 features (shadow)
+    - path: "configs/brains/xgboost_v9_institutional.json"
       enabled: true
 
 # ---------------------------------------------------------------------------
@@ -138,13 +149,13 @@ live_trading:
   symbol: "XAUUSDc"
   volume: 0.01
   interval_seconds: 60
-  confidence_threshold: 0.50
+  confidence_threshold: 0.40
 
   # Risk management — ATR-based dynamic SL/TP (multiples of M5_ATR(14))
   sl_atr_mult: 2.0
   tp_atr_mult: 3.5
   cooldown_seconds: 300
-  max_positions: 1
+  max_positions: 3
 
   # Brain configuration
   multi_brain: true
@@ -162,6 +173,196 @@ live_trading:
 
   # Base data directory
   base_dir: "data"
+
+# ---------------------------------------------------------------------------
+# Exit Management — dynamic exit orchestration (replaces static SL/TP)
+# ---------------------------------------------------------------------------
+exit_management:
+  # Set to false to fall back to static SL/TP
+  enabled: true
+
+  # Layer 1: Chandelier trailing stop
+  trail_atr_mult: 2.0           # Trail multiplier in ATR units (normal regime)
+  trail_atr_mult_low: 1.5       # Trail multiplier in low-volatility regime
+  trail_atr_mult_high: 3.0      # Trail multiplier in high-volatility regime
+  breakeven_threshold_atr: 1.0  # ATR multiple to trigger breakeven SL move
+
+  # Layer 2: Brain ensemble flip exit
+  brain_reeval_interval: 5       # Cycles between re-running all brains
+  flip_exit_threshold: 0.5       # Fraction of supporting brains that flip → exit
+  confidence_drop_threshold: 0.10  # Consensus score drop threshold
+
+  # Layer 3: Time / regime-based exit
+  max_hold_cycles: 60            # Max cycles held without min R
+  require_min_r: 0.3             # Minimum R-multiple to avoid time exit
+
+  # Minimum SL change to send modify (avoids spamming bridge)
+  min_sl_step: 0.005
+
+# ---------------------------------------------------------------------------
+# Capital Allocator — cross-group conflict resolution & position sizing
+# ---------------------------------------------------------------------------
+capital_allocator:
+  # Base volume (lots); dynamic sizing scales from here
+  base_volume: 0.01
+
+  # Volume limits (lots)
+  min_volume: 0.01
+  max_volume: 0.10
+
+  # Require unanimous group agreement before trading (conservative mode)
+  require_unanimous: false
+
+  # Regime adjustment multipliers
+  regime:
+    low_vol_mult: 1.20
+    normal_mult: 1.00
+    high_vol_mult: 0.70
+
+  # Volatility reference for ATR normalization (5.0 ≈ M5 XAUUSD mean)
+  vol_reference_atr: 5.0
+
+# ---------------------------------------------------------------------------
+# Meta Exit Engine — multi-factor exit scoring
+# ---------------------------------------------------------------------------
+meta_exit:
+  # Path to trained LightGBM model (empty or missing → heuristic mode)
+  model_path: "data/models/meta_exit_model.txt"
+
+  # Exit urgency threshold [0, 1]; urgency >= threshold → close position
+  urgency_threshold: 0.65
+
+  # Factor weights (heuristic mode); must sum to ~1.0
+  factor_weights:
+    pnl: 0.30         # PnL trajectory (current R, drawdown)
+    time: 0.20        # Time decay (cycles_held vs expected horizon)
+    regime: 0.15      # Regime alignment (trend direction match)
+    consensus: 0.25   # Brain consensus drift since entry
+    volatility: 0.10  # ATR expansion risk
+
+# ---------------------------------------------------------------------------
+# Group Correlation Tracker — cross-group co-direction EMA
+# ---------------------------------------------------------------------------
+correlation_tracker:
+  # EMA alpha for pairwise group direction agreement
+  ema_alpha: 0.05
+
+  # Minimum updates before applying correlation penalty
+  min_updates: 3
+
+# ---------------------------------------------------------------------------
+# Strategy Lines — independent strategy execution per contract group
+# ---------------------------------------------------------------------------
+strategy_lines:
+  barrier_12bar:
+    enabled: true
+    magic: 90001
+    brain_types: [onnx_v9, deepresmlp, online_sgd, xgboost_v9, lightgbm_v1]
+    base_volume: 0.01
+    max_volume: 0.05
+    sl:
+      base_atr_mult: 2.0
+      hard_sl_ratio: 1.5
+      dynamic: true
+    tp:
+      base_atr_mult: 3.5
+      partial_tp_enabled: true
+      partial_tp_ratio: 0.5
+      partial_tp_r: 1.5
+    exit:
+      trail_enabled: true
+      trail_atr_mult: 2.0
+      flip_exit_enabled: true
+      flip_threshold: 0.5
+      time_exit_cycles: 60
+      min_r_for_hold: 0.3
+      confidence_decay_exit: true
+      hesitation_cycles: 2
+    budget:
+      daily_loss_limit_pct: -0.03
+      max_consecutive_losses: 5
+    direction_balance:
+      long_bias_discount: 0.05
+
+  micro_3bar:
+    enabled: true
+    magic: 90002
+    brain_types: [xgboost_v4.5, transformer_v4.3, transformer_v5]
+    base_volume: 0.01
+    max_volume: 0.03
+    sl:
+      base_atr_mult: 1.0
+      hard_sl_ratio: 1.5
+      dynamic: true
+    tp:
+      base_atr_mult: 1.5
+      partial_tp_enabled: false
+    exit:
+      trail_enabled: false
+      flip_exit_enabled: true
+      flip_threshold: 0.45
+      time_exit_cycles: 15
+      hesitation_cycles: 1
+    budget:
+      daily_loss_limit_pct: -0.02
+      max_consecutive_losses: 6
+    direction_balance:
+      long_bias_discount: 0.03
+
+  statarb_dynamic:
+    enabled: true
+    magic: 90003
+    brain_types: [ou_params_v6]
+    base_volume: 0.01
+    max_volume: 0.03
+    sl:
+      base_atr_mult: 1.5
+      hard_sl_ratio: 1.5
+      dynamic: true
+    tp:
+      base_atr_mult: 3.0
+      partial_tp_enabled: true
+      partial_tp_ratio: 0.5
+      partial_tp_r: 2.0
+    exit:
+      trail_enabled: true
+      trail_atr_mult: 1.5
+      flip_exit_enabled: false
+      time_exit_cycles: 40
+      zscore_exit_enabled: true
+      hesitation_cycles: 2
+    budget:
+      daily_loss_limit_pct: -0.015
+      max_consecutive_losses: 4
+    direction_balance:
+      long_bias_discount: 0.0  # mean-reversion strategy, naturally balanced
+
+# ---------------------------------------------------------------------------
+# Portfolio Risk — cross-strategy aggregate risk limits
+# ---------------------------------------------------------------------------
+portfolio_risk:
+  max_gross_exposure: 0.10
+  max_net_exposure: 0.05
+  max_same_direction_strategies: 2
+  netting_mode: "net_out"
+  execution_stagger_seconds: 20
+
+# ---------------------------------------------------------------------------
+# Regime Gate — ADX/ATR strategy activation filter
+# ---------------------------------------------------------------------------
+regime_gate:
+  adx:
+    trending_threshold: 30
+    mild_trend_threshold: 20
+  atr_percentile:
+    high_vol_threshold: 80
+    low_vol_threshold: 20
+  regime_map:
+    trending:     {barrier_12bar: full,  micro_3bar: reduced, statarb_dynamic: off}
+    mild_trend:   {barrier_12bar: full,  micro_3bar: full,    statarb_dynamic: reduced}
+    ranging:      {barrier_12bar: reduced, micro_3bar: reduced, statarb_dynamic: full}
+    high_vol:     {barrier_12bar: off,   micro_3bar: full,    statarb_dynamic: reduced}
+    normal:       {barrier_12bar: full,  micro_3bar: full,    statarb_dynamic: full}
 
 # ---------------------------------------------------------------------------
 # Shadow — shadow replay / intent producer

@@ -32,8 +32,34 @@ class MT5BrokerAdapter:
 
     # ── Required by BrokerAdapter ──
 
-    def fetch_prices(self, symbol: str) -> tuple[float, float, float]:
-        tick = self._mt5.symbol_info_tick(symbol)
+    def fetch_prices(self, symbol: str, timeout: float = 5.0) -> tuple[float, float, float]:
+        """Fetch bid/ask/mid with thread timeout to prevent MT5 hang."""
+        import threading
+
+        result: list[Any] = [None]
+        exc_info: list[Any] = [None]
+
+        def _target() -> None:
+            try:
+                tick = self._mt5.symbol_info_tick(symbol)
+                if tick is None:
+                    try:
+                        self._mt5.initialize()
+                        tick = self._mt5.symbol_info_tick(symbol)
+                    except Exception:
+                        pass
+                result[0] = tick
+            except Exception as e:
+                exc_info[0] = e
+
+        t = threading.Thread(target=_target, daemon=True)
+        t.start()
+        t.join(timeout=timeout)
+        if t.is_alive():
+            raise TimeoutError(f"symbol_info_tick timed out after {timeout}s")
+        if exc_info[0] is not None:
+            raise exc_info[0]
+        tick = result[0]
         if tick is None:
             raise RuntimeError(f"tick unavailable for {symbol}")
         bid = float(tick.bid)
@@ -41,30 +67,64 @@ class MT5BrokerAdapter:
         mid = (bid + ask) / 2.0
         return mid, bid, ask
 
-    def fetch_current_atr(self, symbol: str, period: int = 14) -> float:
-        try:
-            import numpy as np
+    def fetch_current_atr(self, symbol: str, period: int = 14, timeout: float = 5.0) -> float:
+        """Compute current M5 ATR(14) with thread timeout to prevent MT5 hang."""
+        import threading
 
-            rates = self._mt5.copy_rates_from_pos(symbol, self._mt5.TIMEFRAME_M5, 0, period + 1)
-            if rates is None or len(rates) < period + 1:
-                return 0.0
-            h = np.array([r["high"] for r in rates], dtype=np.float64)
-            low = np.array([r["low"] for r in rates], dtype=np.float64)
-            c = np.array([r["close"] for r in rates], dtype=np.float64)
-            prev_c = c[-(period + 1) : -1]
-            cur_h = h[-period:]
-            cur_l = low[-period:]
-            tr = np.maximum(
-                cur_h - cur_l,
-                np.maximum(abs(cur_h - prev_c), abs(cur_l - prev_c)),
-            )
-            return float(np.mean(tr))
-        except Exception:
+        import numpy as np
+
+        result: list[Any] = [None]
+        exc_info: list[Any] = [None]
+
+        def _target() -> None:
+            try:
+                rates = self._mt5.copy_rates_from_pos(symbol, self._mt5.TIMEFRAME_M5, 0, period + 1)
+                result[0] = rates
+            except Exception as e:
+                exc_info[0] = e
+
+        t = threading.Thread(target=_target, daemon=True)
+        t.start()
+        t.join(timeout=timeout)
+        if t.is_alive() or exc_info[0] is not None:
             return 0.0
+        rates = result[0]
+        if rates is None or len(rates) < period + 1:
+            return 0.0
+        h = np.array([r["high"] for r in rates], dtype=np.float64)
+        low = np.array([r["low"] for r in rates], dtype=np.float64)
+        c = np.array([r["close"] for r in rates], dtype=np.float64)
+        prev_c = c[-(period + 1) : -1]
+        cur_h = h[-period:]
+        cur_l = low[-period:]
+        tr = np.maximum(
+            cur_h - cur_l,
+            np.maximum(abs(cur_h - prev_c), abs(cur_l - prev_c)),
+        )
+        return float(np.mean(tr))
 
-    def count_positions(self, symbol: str) -> int:
-        pos = self._mt5.positions_get(symbol=symbol)
-        return len(pos) if pos else 0
+    def count_positions(self, symbol: str, timeout: float = 5.0) -> int:
+        """Count open MT5 positions with thread timeout to prevent hanging."""
+        import threading
+
+        result: list[int | None] = [None]
+        exc_info: list[Any] = [None]
+
+        def _target() -> None:
+            try:
+                pos = self._mt5.positions_get(symbol=symbol)
+                result[0] = len(pos) if pos else 0
+            except Exception as e:
+                exc_info[0] = e
+
+        t = threading.Thread(target=_target, daemon=True)
+        t.start()
+        t.join(timeout=timeout)
+        if t.is_alive():
+            return -1  # timed out → signal caller to treat as unavailable
+        if exc_info[0] is not None:
+            return -1
+        return result[0] if result[0] is not None else -1
 
     def get_position_tickets(self, symbol: str) -> list[int]:
         pos = self._mt5.positions_get(symbol=symbol)

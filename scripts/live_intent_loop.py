@@ -403,6 +403,72 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip MT5 initialization; use zero feature vector for brain inference verification",
     )
+
+    # ── Exit management ──
+    p.add_argument(
+        "--disable-exit-management",
+        action="store_true",
+        help="Disable dynamic exit management; fall back to static SL/TP",
+    )
+    p.add_argument(
+        "--exit-trail-atr-mult",
+        type=float,
+        default=2.0,
+        help="Chandelier trail multiplier in ATR units (default: 2.0)",
+    )
+    p.add_argument(
+        "--exit-trail-atr-mult-low",
+        type=float,
+        default=1.5,
+        help="Trail multiplier in low-volatility regime (default: 1.5)",
+    )
+    p.add_argument(
+        "--exit-trail-atr-mult-high",
+        type=float,
+        default=3.0,
+        help="Trail multiplier in high-volatility regime (default: 3.0)",
+    )
+    p.add_argument(
+        "--exit-breakeven-atr",
+        type=float,
+        default=1.0,
+        help="ATR multiple to trigger breakeven SL move (default: 1.0)",
+    )
+    p.add_argument(
+        "--exit-brain-reeval-interval",
+        type=int,
+        default=5,
+        help="Cycles between brain re-evaluation during management (default: 5)",
+    )
+    p.add_argument(
+        "--exit-flip-threshold",
+        type=float,
+        default=0.5,
+        help="Fraction of supporting brains that must flip to trigger exit (default: 0.5)",
+    )
+    p.add_argument(
+        "--exit-confidence-drop",
+        type=float,
+        default=0.10,
+        help="Drop in consensus score that triggers confidence exit (default: 0.10)",
+    )
+    p.add_argument(
+        "--exit-max-hold-cycles",
+        type=int,
+        default=60,
+        help="Max cycles to hold without min R before time exit (default: 60)",
+    )
+    p.add_argument(
+        "--exit-require-min-r",
+        type=float,
+        default=0.3,
+        help="Minimum R-multiple to avoid time-based exit (default: 0.3)",
+    )
+    p.add_argument(
+        "--config",
+        default=None,
+        help="Path to live.yaml for strategy_lines config overrides",
+    )
     return p
 
 
@@ -410,6 +476,37 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     # ── Build LiveCycleConfig from args ──
+    # ── Load strategy_lines overrides from live.yaml ──
+    strategy_configs: dict[str, Any] = {}
+    if args.config:
+        try:
+            import yaml
+
+            with open(args.config, encoding="utf-8") as fh:
+                full_cfg = yaml.safe_load(fh)
+            strategy_configs = full_cfg.get("strategy_lines", {})
+            if strategy_configs:
+                print(
+                    json.dumps(
+                        {
+                            "event": "strategy_configs_loaded",
+                            "time": _utc_iso(),
+                            "config_path": args.config,
+                            "strategies": list(strategy_configs.keys()),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+        except Exception as exc:
+            print(
+                json.dumps(
+                    {"event": "strategy_configs_load_warning", "error": str(exc)},
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+
     config = LiveCycleConfig(
         symbol=args.symbol,
         base_dir=args.base_dir,
@@ -429,6 +526,17 @@ def main(argv: list[str] | None = None) -> int:
         multi_brain=args.multi_brain,
         feature_store_dir=args.feature_store_dir,
         disable_feature_store=args.disable_feature_store,
+        exit_management_enabled=not args.disable_exit_management,
+        exit_trail_atr_mult=args.exit_trail_atr_mult,
+        exit_trail_atr_mult_low=args.exit_trail_atr_mult_low,
+        exit_trail_atr_mult_high=args.exit_trail_atr_mult_high,
+        exit_breakeven_threshold_atr=args.exit_breakeven_atr,
+        exit_brain_reeval_interval=args.exit_brain_reeval_interval,
+        exit_flip_threshold=args.exit_flip_threshold,
+        exit_confidence_drop=args.exit_confidence_drop,
+        exit_max_hold_cycles=args.exit_max_hold_cycles,
+        exit_require_min_r=args.exit_require_min_r,
+        strategy_configs=strategy_configs,
     )
 
     # ── Import MT5 ──
@@ -587,6 +695,8 @@ def main(argv: list[str] | None = None) -> int:
     feature_computer: Any = None
     feature_schema: Any = None
     feature_store: Any = None
+    micro_feature_adapter: Any = None
+    micro_feature_computer: Any = None
 
     if not args.no_mt5:
         from core.features.computers.v9_live_computer import V9LiveFeatureComputer
@@ -600,6 +710,19 @@ def main(argv: list[str] | None = None) -> int:
             normalization_config=norm_config,
         )
 
+        # Microstructure 9-feature computer + adapter (for Transformer V4.3 & XGBoost V4.5)
+        from core.features.adapters.microstructure_feature_adapter import (
+            MicrostructureFeatureAdapter,
+        )
+        from core.features.computers.microstructure_computer import (
+            MicrostructureFeatureComputer,
+        )
+
+        micro_feature_computer = MicrostructureFeatureComputer(mt5, args.symbol)
+        micro_feature_adapter = MicrostructureFeatureAdapter(
+            scaler_path="data/models/mtx_transformer_scaler.joblib",
+        )
+
         _store_dir = Path(args.feature_store_dir)
         if not _store_dir.is_absolute():
             _store_dir = PROJECT_ROOT / _store_dir
@@ -607,9 +730,11 @@ def main(argv: list[str] | None = None) -> int:
 
         feature_store = LocalFeatureStore(str(_store_dir))
         from core.deployment.feature_update_producer import build_v9_schema
+        from core.features.schemas.microstructure_schema import build_microstructure_schema
 
         feature_schema = build_v9_schema(symbol=args.symbol)
         feature_store.register_schema(feature_schema)
+        feature_store.register_schema(build_microstructure_schema(symbol=args.symbol))
 
         from core.features.feature_service import FeatureService
 
@@ -653,25 +778,22 @@ def main(argv: list[str] | None = None) -> int:
 
     pnl_ledger_path = Path(args.base_dir) / "brain_pnl_ledger.json"
     pnl_ledger: Any = None
-    if args.multi_brain:
-        try:
-            pnl_ledger = BrainPnLStore.load(pnl_ledger_path)
-            print(
-                json.dumps(
-                    {
-                        "event": "pnl_ledger_loaded",
-                        "time": _utc_iso(),
-                        "settled_count": pnl_ledger.total_settled,
-                        "pending_count": pnl_ledger.pending_count,
-                        "brain_ids": pnl_ledger.brain_ids,
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-        except Exception:
-            pnl_ledger = BrainPnLStore(window_size=100)
-    else:
+    try:
+        pnl_ledger = BrainPnLStore.load(pnl_ledger_path)
+        print(
+            json.dumps(
+                {
+                    "event": "pnl_ledger_loaded",
+                    "time": _utc_iso(),
+                    "settled_count": pnl_ledger.total_settled,
+                    "pending_count": pnl_ledger.pending_count,
+                    "brain_ids": pnl_ledger.brain_ids,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+    except Exception:
         pnl_ledger = BrainPnLStore(window_size=100)
 
     # ── Load open positions from journal ──
@@ -710,7 +832,9 @@ def main(argv: list[str] | None = None) -> int:
                     {
                         "brain_id": entry.get("brain_id", "unknown"),
                         "adapter": b,
+                        "brain_type": entry.get("brain_type", ""),
                         "magic": entry.get("magic", 90001),
+                        "feature_schema_id": entry.get("feature_schema_id", ""),
                     }
                 )
             except Exception as exc:
@@ -731,6 +855,56 @@ def main(argv: list[str] | None = None) -> int:
                 mt5.shutdown()
             return 2
         parliament = ParliamentService()
+
+        # ── Warm-start brain buffers from MT5 historical data ──
+        if not args.no_mt5 and mt5 is not None:
+            for b_info in brains:
+                btype = b_info.get("brain_type", "")
+                adapter = b_info["adapter"]
+
+                if btype == "ou_params_v6":
+                    try:
+                        rates = mt5.copy_rates_from_pos(args.symbol, mt5.TIMEFRAME_M5, 0, 300)
+                        if rates is not None and len(rates) >= 30:
+                            prices = [float(r["close"]) for r in rates]
+                            adapter.bootstrap_buffer(prices)
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "ou_buffer_bootstrapped",
+                                        "time": _utc_iso(),
+                                        "brain_id": b_info["brain_id"],
+                                        "prices_loaded": len(prices),
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                    except Exception:
+                        pass
+
+                elif btype == "transformer_v4.3":
+                    try:
+                        if micro_feature_computer is not None and micro_feature_adapter is not None:
+                            micro_feats = micro_feature_computer.compute_all()
+                            fv = micro_feature_adapter.build_model_input(micro_feats).ravel()
+                            # Fill buffer with current features so model can
+                            # produce signals immediately; entries rotate out
+                            # as live data arrives over the next 32 cycles.
+                            adapter.bootstrap_buffer([fv] * 32)
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "transformer_buffer_bootstrapped",
+                                        "time": _utc_iso(),
+                                        "brain_id": b_info["brain_id"],
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                    except Exception:
+                        pass
     else:
         # Single-brain mode: check governance
         brain_id = brain_entry.get("brain_id", "unknown")
@@ -761,8 +935,187 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
 
+    # ── Initialize MetaExitEngine (multi-factor exit scoring) ──
+    meta_exit_engine: Any = None
+    if not args.no_mt5:
+        try:
+            from core.execution.meta_exit_engine import create_exit_engine
+
+            meta_model = args.meta_exit_model if hasattr(args, "meta_exit_model") else None
+            meta_exit_engine = create_exit_engine(
+                model_path=meta_model or "data/models/meta_exit_model.txt",
+                urgency_threshold=getattr(args, "meta_exit_threshold", 0.65),
+            )
+        except Exception:
+            pass
+
+    # ── Initialize ActivePositionManager with restart recovery ──
+    position_manager: Any = None
+    _pos_state_path = Path(args.base_dir) / "state" / "active_position.json"
+    if not args.disable_exit_management and not args.no_mt5 and _broker is not None:
+        from core.execution.position_manager import ActivePositionManager
+
+        position_manager = ActivePositionManager(
+            trail_atr_mult=args.exit_trail_atr_mult,
+            trail_atr_mult_low=args.exit_trail_atr_mult_low,
+            trail_atr_mult_high=args.exit_trail_atr_mult_high,
+            breakeven_threshold_atr=args.exit_breakeven_atr,
+            brain_reeval_interval=args.exit_brain_reeval_interval,
+            flip_exit_threshold=args.exit_flip_threshold,
+            confidence_drop_threshold=args.exit_confidence_drop,
+            max_hold_cycles=args.exit_max_hold_cycles,
+            require_min_r=args.exit_require_min_r,
+            pnl_store=pnl_ledger,
+            meta_exit_engine=meta_exit_engine,
+        )
+
+        # ── Restart recovery: try persisted state first, fall back to MT5 ──
+        recovered = False
+        try:
+            restored = position_manager.load_state(_pos_state_path)
+            if restored is not None:
+                # Verify the position still exists in MT5
+                mt5_positions = mt5.positions_get(ticket=restored.ticket)
+                if mt5_positions and len(mt5_positions) > 0:
+                    mp = mt5_positions[0]
+                    # Sync current SL/TP from MT5 (ground truth)
+                    restored.current_sl = float(mp.sl) if mp.sl > 0 else restored.current_sl
+                    restored.current_tp = float(mp.tp) if mp.tp > 0 else restored.current_tp
+                    # Update price extremes from current (MT5 doesn't track historical highs)
+                    restored.highest_high = max(restored.highest_high, float(mp.price_current))
+                    restored.lowest_low = min(restored.lowest_low, float(mp.price_current))
+                    recovered = True
+                    print(
+                        json.dumps(
+                            {
+                                "event": "position_restored_from_state",
+                                "time": _utc_iso(),
+                                "ticket": restored.ticket,
+                                "side": restored.side,
+                                "cycles_held": restored.cycles_held,
+                                "breakeven_triggered": restored.breakeven_triggered,
+                                "trail_multiplier": restored.trail_multiplier,
+                                "highest_r": round(restored.highest_r, 4),
+                                "current_sl": restored.current_sl,
+                                "current_tp": restored.current_tp,
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                else:
+                    # Position no longer exists on MT5 — stale state, ignore
+                    position_manager.clear_position()
+        except Exception:
+            pass
+
+        if not recovered:
+            # ── Fallback: reconstruct from MT5 (basic recovery, no trail state) ──
+            try:
+                open_positions = _broker.get_open_positions_detail(args.symbol)
+                if open_positions:
+                    pos_detail = open_positions[0]
+                    ticket = pos_detail.get("ticket", 0)
+                    if ticket > 0:
+                        mt5_positions = mt5.positions_get(ticket=ticket)
+                        if mt5_positions and len(mt5_positions) > 0:
+                            mp = mt5_positions[0]
+                            side = "long" if mp.type == 0 else "short"
+                            entry_price = float(mp.price_open)
+                            current_sl_val = float(mp.sl) if mp.sl > 0 else entry_price
+                            current_tp_val = float(mp.tp) if mp.tp > 0 else 0.0
+                            volume = float(mp.volume)
+
+                            recovered_consensus: dict[str, Any] = {
+                                "aggregated_bias": side,
+                                "consensus_score": 0.5,
+                            }
+                            recovered_supporting: list[str] = []
+
+                            if _journal_path.exists():
+                                for line in _journal_path.read_text(encoding="utf-8").splitlines():
+                                    line = line.strip()
+                                    if not line:
+                                        continue
+                                    try:
+                                        rec = json.loads(line)
+                                        if (
+                                            rec.get("position_ticket") == ticket
+                                            and rec.get("action") == "open"
+                                        ):
+                                            recovered_supporting = rec.get("brain_ids", [])
+                                            break
+                                    except Exception:
+                                        pass
+
+                            recovery_atr = (
+                                _broker.fetch_current_atr(args.symbol)
+                                if _broker is not None
+                                else 2.31
+                            )
+                            if recovery_atr <= 0:
+                                recovery_atr = 2.31
+
+                            current_high = max(entry_price, float(mp.price_current))
+                            min(entry_price, float(mp.price_current))
+
+                            position_manager.register_position(
+                                ticket=ticket,
+                                side=side,
+                                entry_price=entry_price,
+                                volume=volume,
+                                initial_sl=current_sl_val,
+                                initial_tp=current_tp_val,
+                                entry_atr=recovery_atr,
+                                entry_cycle=0,
+                                entry_consensus=recovered_consensus,
+                                supporting_brain_ids=recovered_supporting,
+                                current_high=current_high,
+                            )
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "position_recovered_from_mt5",
+                                        "time": _utc_iso(),
+                                        "ticket": ticket,
+                                        "side": side,
+                                        "entry_price": entry_price,
+                                        "current_sl": current_sl_val,
+                                        "current_tp": current_tp_val,
+                                        "volume": volume,
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+            except Exception as _recovery_exc:
+                print(
+                    json.dumps(
+                        {
+                            "event": "position_recovery_error",
+                            "time": _utc_iso(),
+                            "error": str(_recovery_exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+
+    # ── Initialize GroupCorrelationTracker ──
+    correlation_tracker: Any = None
+    try:
+        from core.execution.capital_allocator import GroupCorrelationTracker
+
+        correlation_tracker = GroupCorrelationTracker(ema_alpha=0.05)
+    except Exception:
+        pass
+
     # ── Initial state ──
-    state = LiveCycleState(known_open_tickets=known_open_tickets)
+    state = LiveCycleState(
+        known_open_tickets=known_open_tickets,
+        position_manager=position_manager,
+        correlation_tracker=correlation_tracker,
+    )
 
     # ── Start event ──
     start_event: dict[str, Any] = {
@@ -783,6 +1136,20 @@ def main(argv: list[str] | None = None) -> int:
         start_event["brain_id"] = brain_entry.get("brain_id", "unknown")
     print(json.dumps(start_event, ensure_ascii=False), flush=True)
 
+    # ── Config hot-reload ──
+    hot_reload: Any = None
+    _hot_path = (
+        Path(args.config) if hasattr(args, "config") and args.config else Path("configs/live.yaml")
+    )
+    if _hot_path.exists():
+        try:
+            from core.deployment.config_hot_reload import ConfigHotReload
+
+            hot_reload = ConfigHotReload(str(_hot_path))
+            hot_reload.load()
+        except Exception:
+            pass
+
     # ── Main loop ──
     try:
         while True:
@@ -794,6 +1161,8 @@ def main(argv: list[str] | None = None) -> int:
                     broker=_broker,
                     feature_service=feature_service,
                     feature_computer=feature_computer,
+                    micro_feature_computer=micro_feature_computer,
+                    micro_feature_adapter=micro_feature_adapter,
                     feature_schema=feature_schema,
                     feature_store=feature_store,
                     brains=brains,
@@ -819,8 +1188,25 @@ def main(argv: list[str] | None = None) -> int:
                 if args.once:
                     break
 
-            # ── Persist normalizer + regime detector state every ~1 hour ──
+            # ── Persist state every ~1 hour + check config hot-reload ──
             state.cycle_count += 1
+            if hot_reload is not None and state.loop_iteration % 30 == 0:
+                try:
+                    changes = hot_reload.check_and_reload()
+                    if changes:
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "config_hot_reloaded",
+                                    "time": _utc_iso(),
+                                    "changes": list(changes.keys()),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                except Exception:
+                    pass
             if state.loop_iteration % config.state_save_interval == 0:
                 if rolling_norm is not None:
                     try:
@@ -842,7 +1228,32 @@ def main(argv: list[str] | None = None) -> int:
 
             time.sleep(args.interval_seconds)
     finally:
-        # ── Persist state on shutdown ──
+        # ── Graceful shutdown: persist all state ──
+        print(
+            json.dumps({"event": "shutdown_start", "time": _utc_iso()}, ensure_ascii=False),
+            flush=True,
+        )
+
+        if position_manager is not None and position_manager.has_position():
+            try:
+                _pos_path = Path(args.base_dir) / "state" / "active_position.json"
+                position_manager.save_state(str(_pos_path))
+                print(
+                    json.dumps(
+                        {
+                            "event": "position_state_saved",
+                            "time": _utc_iso(),
+                            "ticket": position_manager.get_position().ticket
+                            if position_manager.get_position()
+                            else 0,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+            except Exception:
+                pass
+
         if rolling_norm is not None:
             try:
                 _state_path = Path(args.base_dir) / "rolling_norm_state.json"
@@ -890,6 +1301,10 @@ def main(argv: list[str] | None = None) -> int:
                 )
         if mt5 is not None:
             mt5.shutdown()
+        print(
+            json.dumps({"event": "shutdown_complete", "time": _utc_iso()}, ensure_ascii=False),
+            flush=True,
+        )
 
     return 0
 

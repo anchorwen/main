@@ -328,18 +328,26 @@ class ServiceContainer:
 
     def _build_decision_pipeline(self) -> None:
         from datetime import UTC, datetime
+        from pathlib import Path as _Path
 
-        initial_mode_state = SystemModeState(
-            schema_version=SCHEMA_SYSTEM_MODE_STATE,
-            mode_state_id="mode_state_default",
-            current_mode=SystemMode(self.config.system_mode)
-            if self.config.system_mode in {m.value for m in SystemMode}
-            else SystemMode.NORMAL,
-            entered_at=datetime.now(UTC).replace(tzinfo=None),
-            previous_mode=None,
-            reason="container_bootstrap",
+        mode_save_path = _Path(self.config.base_dir) / "state" / "system_mode.json"
+        mode_store = SystemModeStore.load_latest(
+            mode_save_path,
+            default_mode=SystemMode.NORMAL,
         )
-        mode_store = SystemModeStore(initial_state=initial_mode_state)
+        # If no persisted state, initialise from config
+        if mode_store.get_current().mode_state_id == "init":
+            initial_mode_state = SystemModeState(
+                schema_version=SCHEMA_SYSTEM_MODE_STATE,
+                mode_state_id="mode_state_default",
+                current_mode=SystemMode(self.config.system_mode)
+                if self.config.system_mode in {m.value for m in SystemMode}
+                else SystemMode.NORMAL,
+                entered_at=datetime.now(UTC).replace(tzinfo=None),
+                previous_mode=None,
+                reason="container_bootstrap",
+            )
+            mode_store = SystemModeStore(initial_state=initial_mode_state, save_path=mode_save_path)
         override_store = OverrideStore()
         self.brain_registry = FeatureBrainRegistry()
         # Auto-register brain entries from config (e.g. live.yaml registry_entries)
