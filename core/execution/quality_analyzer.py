@@ -1,4 +1,4 @@
-"""Execution quality analytics with time-series slippage tracking."""
+"""Execution quality analytics with time-series slippage tracking and VWAP benchmarking."""
 
 import json
 from datetime import UTC, datetime
@@ -11,8 +11,30 @@ from core.execution.quality_contracts import (
     ExecutionBenchmark,
     ExecutionQualityMetric,
     ExecutionQualityReport,
+    ImplementationShortfall,
 )
 from core.execution.schema_versions import SCHEMA_EXECUTION_QUALITY_REPORT
+
+# ── VWAP benchmark ────────────────────────────────────────────────────────
+
+
+def compute_vwap(fills: list[dict[str, float]]) -> float | None:
+    """Compute Volume-Weighted Average Price from a list of fills.
+
+    Each fill is a dict with ``price`` and ``volume`` keys.
+    Returns None if no fills or total volume is zero.
+    """
+    total_volume = 0.0
+    total_value = 0.0
+    for f in fills:
+        price = float(f.get("price", 0))
+        volume = float(f.get("volume", 0))
+        if price > 0 and volume > 0:
+            total_value += price * volume
+            total_volume += volume
+    if total_volume <= 0:
+        return None
+    return round(total_value / total_volume, 6)
 
 
 class SlippageTracker:
@@ -147,6 +169,72 @@ class SlippageTracker:
         }
 
 
+def compute_implementation_shortfall(
+    *,
+    order_id: str,
+    symbol: str,
+    side: str,
+    decision_price: float,
+    arrival_price: float,
+    average_fill_price: float | None = None,
+    filled_quantity: float = 0.0,
+    requested_quantity: float = 0.0,
+    submitted_price: float | None = None,
+) -> ImplementationShortfall:
+    """Decompose execution shortfall into delay, impact, and opportunity cost.
+
+    Implementation Shortfall (Perold 1988) decomposes the total slippage from
+    decision time to final fill:
+
+    - **delay_cost**: price move between decision and arrival/submission
+    - **market_impact**: price move between arrival and fill (execution cost)
+    - **opportunity_cost**: cost of unfilled quantity (if partial fill)
+
+    All values in bps; positive = unfavourable (cost to buyer).
+    """
+    fill_price = average_fill_price or arrival_price
+    # Buy/Long: cost = fill - decision (higher fill = worse)
+    # Sell/Short: cost = decision - fill (lower fill = worse)
+    side_mult = 1.0 if side.lower() in ("buy", "long") else -1.0
+    fill_rate = filled_quantity / requested_quantity if requested_quantity > 0 else 1.0
+
+    def _bps(ref_price: float, exec_price: float) -> float:
+        if ref_price <= 0:
+            return 0.0
+        return round(side_mult * (exec_price - ref_price) / ref_price * 10000, 6)
+
+    # Arrival price for delay calc: use submitted_price if available, else arrival_price
+    exec_start = submitted_price if submitted_price and submitted_price > 0 else arrival_price
+
+    delay_cost = _bps(decision_price, exec_start)
+    market_impact = _bps(exec_start, fill_price)
+    total_shortfall = _bps(decision_price, fill_price)
+
+    # Opportunity cost: unfilled portion valued at spread cost
+    unfilled_ratio = max(0.0, 1.0 - fill_rate)
+    opportunity_cost = round(unfilled_ratio * abs(total_shortfall), 6) if fill_rate < 1.0 else 0.0
+
+    # Adjust market_impact to ensure decomposition sums to total
+    residual = round(total_shortfall - delay_cost - market_impact - opportunity_cost, 6)
+    market_impact = round(market_impact + residual, 6)
+
+    return ImplementationShortfall(
+        order_id=order_id,
+        symbol=symbol,
+        side=side,
+        decision_price=decision_price,
+        arrival_price=arrival_price,
+        average_fill_price=fill_price,
+        filled_quantity=filled_quantity,
+        requested_quantity=requested_quantity,
+        total_shortfall_bps=total_shortfall,
+        delay_cost_bps=delay_cost,
+        market_impact_bps=market_impact,
+        opportunity_cost_bps=opportunity_cost,
+        fill_rate=round(fill_rate, 6),
+    )
+
+
 class ExecutionQualityAnalyzer:
     """Builds per-order execution quality metrics and aggregate reports."""
 
@@ -178,6 +266,9 @@ class ExecutionQualityAnalyzer:
             submitted_slippage_bps=self._slippage_bps(
                 order.side, benchmark.submitted_price, order.average_price
             ),
+            vwap_slippage_bps=self._slippage_bps(
+                order.side, benchmark.vwap_price, order.average_price
+            ),
             latency_ms=latency_ms,
             fill_count=len(order.fills),
             reject_reason=order.rejection_reason,
@@ -205,6 +296,9 @@ class ExecutionQualityAnalyzer:
             ),
             average_submitted_slippage_bps=self._nullable_average(
                 [m.submitted_slippage_bps for m in metrics]
+            ),
+            average_vwap_slippage_bps=self._nullable_average(
+                [m.vwap_slippage_bps for m in metrics]
             ),
             venue_summary=self._venue_summary(metrics),
             order_metrics=metrics,

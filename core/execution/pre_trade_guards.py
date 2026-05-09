@@ -212,6 +212,87 @@ class IntradayDrawdownKill:
         }
 
 
+# ── Data quality auto-repair ─────────────────────────────────────────────
+
+
+def repair_feature_vector(feature_vector: Any) -> tuple[Any, dict[str, Any]]:
+    """Repair NaN/Inf values in a feature vector before inference.
+
+    Strategy:
+      - NaN → forward-fill from preceding valid value (or 0 if leading)
+      - +Inf → column median of valid values (or 0 if all Inf)
+      - -Inf → column median of valid values (or 0 if all Inf)
+
+    Returns (repaired_vector, repair_log) where repair_log records what was fixed.
+    """
+    import numpy as np
+
+    fv = np.asarray(feature_vector, dtype=np.float64).ravel().copy()
+    total = len(fv)
+    repair_log: dict[str, Any] = {
+        "total_features": total,
+        "nan_filled": 0,
+        "inf_filled": 0,
+        "repaired": False,
+    }
+
+    if total == 0:
+        return fv, repair_log
+
+    # Forward-fill NaN
+    nan_mask = np.isnan(fv)
+    if np.any(nan_mask):
+        repair_log["nan_filled"] = int(nan_mask.sum())
+        last_valid = 0.0
+        for i in range(total):
+            if np.isnan(fv[i]):
+                fv[i] = last_valid
+            else:
+                last_valid = float(fv[i])
+
+    # Replace Inf with median of column (exclude Inf/NaN)
+    inf_mask = np.isinf(fv)
+    if np.any(inf_mask):
+        repair_log["inf_filled"] = int(inf_mask.sum())
+        finite_vals = fv[np.isfinite(fv)]
+        median = float(np.median(finite_vals)) if len(finite_vals) > 0 else 0.0
+        fv[inf_mask] = median
+
+    repair_log["repaired"] = repair_log["nan_filled"] > 0 or repair_log["inf_filled"] > 0
+    return fv, repair_log
+
+
+def check_feature_freshness(
+    feature_timestamp: float | None,
+    max_age_seconds: float = 300.0,
+) -> dict[str, Any]:
+    """Check whether feature data is fresh enough for live inference.
+
+    Args:
+        feature_timestamp: Unix timestamp (seconds) when features were computed.
+        max_age_seconds: Maximum allowed age before flagging as stale.
+
+    Returns dict with: fresh, age_seconds, max_age_seconds.
+    """
+    import time
+
+    if feature_timestamp is None or feature_timestamp <= 0:
+        return {
+            "fresh": False,
+            "age_seconds": None,
+            "max_age_seconds": max_age_seconds,
+            "reason": "missing_timestamp",
+        }
+
+    now = time.time()
+    age = now - feature_timestamp
+    return {
+        "fresh": age <= max_age_seconds,
+        "age_seconds": round(age, 3),
+        "max_age_seconds": max_age_seconds,
+    }
+
+
 # ── Data quality guards ─────────────────────────────────────────────────
 
 

@@ -81,6 +81,95 @@ class InMemoryAlertChannel(AlertChannel):
         self._alerts.clear()
 
 
+class BatchingAlertChannel(AlertChannel):
+    """Accumulates non-critical alerts and flushes them in batches.
+
+    ``critical`` and ``error`` severity alerts pass through immediately.
+    ``warning`` alerts are batched every ``batch_interval_seconds``.
+    ``info`` alerts are batched and only flushed once per ``batch_interval_seconds``.
+
+    The batched alerts are forwarded to the wrapped ``target`` channel as a
+    single compound alert.
+    """
+
+    def __init__(
+        self,
+        target: AlertChannel,
+        *,
+        batch_interval_seconds: float = 300.0,
+        max_batch_size: int = 20,
+    ):
+        self._target = target
+        self._batch_interval = batch_interval_seconds
+        self._max_batch = max_batch_size
+        self._buffer: list[dict] = []
+        self._last_flush: float = 0.0
+
+    def send(self, alert: dict) -> bool:
+        severity = alert.get("severity", "warning")
+        if severity in ("critical", "error"):
+            return self._target.send(alert)
+
+        self._buffer.append(alert)
+        if len(self._buffer) >= self._max_batch:
+            return self._flush()
+        return True
+
+    def _flush(self) -> bool:
+        import time
+
+        if not self._buffer:
+            return True
+        batched = {
+            "rule_name": "batched_alerts",
+            "severity": "warning",
+            "fired_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+            "context_snapshot": {"batched_count": len(self._buffer)},
+            "batched_alerts": list(self._buffer),
+        }
+        self._buffer.clear()
+        self._last_flush = time.time()
+        return self._target.send(batched)
+
+    def flush(self) -> bool:
+        """Explicitly flush the batch buffer (e.g., end-of-day)."""
+        return self._flush()
+
+
+class SeverityRouter(AlertChannel):
+    """Routes alerts to different channels based on severity.
+
+    Typical setup::
+
+        critical_ch = SlackAlertChannel()   # P0 — instant
+        batched_ch = BatchingAlertChannel(SlackAlertChannel())  # P1/P2 — batched
+        router = SeverityRouter({
+            "critical": critical_ch,
+            "error": critical_ch,
+            "warning": batched_ch,
+            "info": batched_ch,
+        }, default=batched_ch)
+    """
+
+    def __init__(
+        self,
+        routes: dict[str, AlertChannel] | None = None,
+        default: AlertChannel | None = None,
+    ):
+        self._routes = dict(routes) if routes else {}
+        self._default = default
+
+    def add_route(self, severity: str, channel: AlertChannel) -> None:
+        self._routes[severity] = channel
+
+    def send(self, alert: dict) -> bool:
+        severity = alert.get("severity", "warning")
+        channel = self._routes.get(severity, self._default)
+        if channel is None:
+            return False
+        return channel.send(alert)
+
+
 class AlertService:
     """Evaluates alert rules against system state and dispatches to channels."""
 

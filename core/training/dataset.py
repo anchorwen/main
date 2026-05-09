@@ -143,6 +143,39 @@ class TrainingDataset:
             )
             yield train_slice, test_slice, i
 
+    def purged_walk_forward(
+        self,
+        n_splits: int = 5,
+        train_ratio: float = 0.6,
+        purge_gap: int = 10,
+        min_train_size: int = 200,
+    ):
+        """Generator yielding (train, test, fold_idx) with purge gap.
+
+        A ``purge_gap`` of N samples is removed between the end of the training
+        set and the start of the test set to prevent information leakage through
+        overlapping observations (e.g., labels that look ahead).
+        """
+        n = self.n_samples
+        fold_size = (n - min_train_size - purge_gap * n_splits) // n_splits
+        if fold_size < 10:
+            fold_size = max(10, n // (n_splits + 1))
+
+        for i in range(n_splits):
+            test_start = min_train_size + i * (fold_size + purge_gap)
+            test_end = min(n, test_start + fold_size)
+            train_end = max(0, test_start - purge_gap)
+
+            if train_end < min_train_size or test_end - test_start < 10:
+                continue
+
+            train_slice = self.X[:train_end], self.y[:train_end]
+            test_slice = (
+                self.X[test_start:test_end],
+                self.y[test_start:test_end],
+            )
+            yield train_slice, test_slice, i
+
     # ── Factory ──
 
     @classmethod
