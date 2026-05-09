@@ -151,6 +151,21 @@ live_trading:
   interval_seconds: 60
   confidence_threshold: 0.40
 
+  # Vol-targeted position sizing — overrides fixed volume when risk_budget_usd > 0
+  # position = risk_budget_usd / (ATR × sl_atr_mult × contract_size)
+  # Clamped to [min_lot, max_lot] at lot_step granularity.
+  risk_budget_usd: 5.0          # Risk $5 per trade; set to 0 to use fixed volume
+  min_lot: 0.01
+  max_lot: 0.10
+  lot_step: 0.01
+
+  # Intraday drawdown kill — real-time equity circuit breaker
+  # Blocks all trading when intraday drawdown from peak exceeds kill_pct.
+  intraday_drawdown_kill:
+    enabled: true
+    kill_pct: 0.02              # 2% drawdown → block
+    reset_hour_utc: 0           # Reset watermark at 00:00 UTC
+
   # Risk management — ATR-based dynamic SL/TP (multiples of M5_ATR(14))
   sl_atr_mult: 2.0
   tp_atr_mult: 3.5

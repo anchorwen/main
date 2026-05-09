@@ -81,6 +81,16 @@ class LiveCycleConfig:
     # ── live.yaml strategy_lines overrides ──
     strategy_configs: dict[str, Any] = field(default_factory=dict)
 
+    # ── Vol-targeted position sizing ──
+    risk_budget_usd: float = 5.0  # 0 → use fixed volume
+    min_lot: float = 0.01
+    max_lot: float = 0.10
+    lot_step: float = 0.01
+
+    # ── Intraday drawdown kill ──
+    intraday_drawdown_kill_enabled: bool = True
+    intraday_drawdown_kill_pct: float = 0.02
+
 
 @dataclass
 class LiveCycleState:
@@ -100,6 +110,7 @@ class LiveCycleState:
         None  # prev-cycle shadow decision for counterfactual settlement
     )
     regime_gate: Any = None  # RegimeGate (persisted across cycles for ADX accumulation)
+    intraday_dd_kill: Any = None  # IntradayDrawdownKill (persisted across cycles)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -2094,6 +2105,24 @@ def execute_live_cycle(
     control_snapshot: Any = None
 
     dynamic_volume = config.volume or 0.01
+    _vol_targeted = False
+
+    # Vol-targeted position sizing — override fixed volume when risk_budget_usd > 0
+    if config.risk_budget_usd > 0 and current_atr > 0:
+        try:
+            from core.execution.pre_trade_guards import compute_position_size
+
+            dynamic_volume = compute_position_size(
+                risk_budget_usd=config.risk_budget_usd,
+                atr=current_atr,
+                sl_atr_mult=config.sl_atr_mult,
+                min_lot=config.min_lot,
+                max_lot=config.max_lot,
+                lot_step=config.lot_step,
+            )
+            _vol_targeted = True
+        except Exception:
+            pass  # fallback to fixed volume
 
     if config.multi_brain and config.multi_strategy_enabled:
         # ── NEW: Multi-strategy independent evaluation ──
@@ -2154,6 +2183,38 @@ def execute_live_cycle(
                 session_info = detect_session()
                 if session_info.get("risk_tier") == "off":
                     return state, True  # market closed, skip cycle
+
+                # Intraday drawdown kill switch — tracks equity peak-to-trough
+                if config.intraday_drawdown_kill_enabled:
+                    try:
+                        from core.execution.pre_trade_guards import IntradayDrawdownKill
+
+                        if state.intraday_dd_kill is None:
+                            state.intraday_dd_kill = IntradayDrawdownKill(
+                                kill_pct=config.intraday_drawdown_kill_pct,
+                            )
+                        # Fetch current equity from MT5 account
+                        _acc = mt5.account_info()
+                        if _acc is not None:
+                            _eq = float(getattr(_acc, "equity", 0))
+                            dd_result = state.intraday_dd_kill.update(_eq)
+                            if dd_result.get("blocked"):
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "intraday_drawdown_kill",
+                                            "time": _utc_iso(),
+                                            "drawdown_pct": dd_result["drawdown_pct"],
+                                            "high_watermark": dd_result["high_watermark"],
+                                            "current_equity": dd_result["current_equity"],
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
+                                return state, True
+                    except Exception:
+                        pass  # fail-open: don't block if MT5 unavailable
 
                 # Feature vector quality check
                 fv_check = check_feature_vector(feature_vector)
@@ -2502,6 +2563,36 @@ def execute_live_cycle(
                     _log_cycle_end(state.loop_iteration)
                     return state, not config.once
                 float(_s.get("volume_mult", 1.0))
+
+                # Intraday drawdown kill for legacy path
+                if config.intraday_drawdown_kill_enabled:
+                    try:
+                        from core.execution.pre_trade_guards import IntradayDrawdownKill
+
+                        if state.intraday_dd_kill is None:
+                            state.intraday_dd_kill = IntradayDrawdownKill(
+                                kill_pct=config.intraday_drawdown_kill_pct,
+                            )
+                        _acc = mt5.account_info()
+                        if _acc is not None:
+                            _eq = float(getattr(_acc, "equity", 0))
+                            _dd = state.intraday_dd_kill.update(_eq)
+                            if _dd.get("blocked"):
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "intraday_drawdown_kill_legacy",
+                                            "time": _utc_iso(),
+                                            "drawdown_pct": _dd["drawdown_pct"],
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
+                                _log_cycle_end(state.loop_iteration)
+                                return state, not config.once
+                    except Exception:
+                        pass
 
                 _fv = check_feature_vector(feature_vector)
                 if not _fv.get("passed"):

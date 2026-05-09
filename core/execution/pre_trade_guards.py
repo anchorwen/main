@@ -128,6 +128,90 @@ def check_pre_trade_var(
     }
 
 
+# ── Vol-targeted position sizing ────────────────────────────────────────
+
+
+def compute_position_size(
+    *,
+    risk_budget_usd: float,
+    atr: float,
+    sl_atr_mult: float,
+    contract_size: float = 100.0,
+    min_lot: float = 0.01,
+    max_lot: float = 0.10,
+    lot_step: float = 0.01,
+) -> float:
+    """Compute position size so every trade risks the same USD amount.
+
+    Formula: position = risk_budget / (ATR × SL_mult × contract_size)
+
+    Clamped to [min_lot, max_lot] at lot_step granularity.
+    """
+    import math
+
+    if atr <= 0 or sl_atr_mult <= 0:
+        return min_lot
+
+    sl_distance = atr * sl_atr_mult
+    raw = risk_budget_usd / (sl_distance * contract_size)
+    raw = max(min_lot, min(max_lot, raw))
+    # Use floor-round to avoid banker's rounding (2.5 → 2)
+    ticks = math.floor(raw / lot_step + 0.5)
+    return round(ticks * lot_step, 2)
+
+
+# ── Intraday drawdown kill ─────────────────────────────────────────────
+
+
+class IntradayDrawdownKill:
+    """Real-time equity-based circuit breaker.
+
+    Tracks intraday high-water mark and blocks trading when
+    drawdown from peak exceeds the configured threshold.
+    Reset daily at a configurable UTC hour.
+    """
+
+    def __init__(
+        self,
+        *,
+        kill_pct: float = 0.02,
+        reset_hour_utc: int = 0,
+        initial_equity: float = 0.0,
+    ):
+        self.kill_pct = kill_pct
+        self.reset_hour_utc = reset_hour_utc
+        self._high_watermark = initial_equity
+        self._last_reset_day = -1
+
+    def update(self, current_equity: float, now_utc: datetime | None = None) -> dict[str, Any]:
+        """Update watermark and check kill condition.
+
+        Returns dict with: blocked, drawdown_pct, high_watermark, current_equity.
+        """
+        if now_utc is None:
+            now_utc = datetime.now(UTC).replace(tzinfo=None)
+
+        # Daily reset
+        if now_utc.hour == self.reset_hour_utc and now_utc.day != self._last_reset_day:
+            self._high_watermark = current_equity
+            self._last_reset_day = now_utc.day
+
+        if current_equity > self._high_watermark:
+            self._high_watermark = current_equity
+
+        dd_pct = 0.0
+        if self._high_watermark > 0:
+            dd_pct = (self._high_watermark - current_equity) / self._high_watermark
+
+        return {
+            "blocked": dd_pct >= self.kill_pct,
+            "drawdown_pct": round(dd_pct, 6),
+            "high_watermark": round(self._high_watermark, 2),
+            "current_equity": round(current_equity, 2),
+            "kill_pct": self.kill_pct,
+        }
+
+
 # ── Data quality guards ─────────────────────────────────────────────────
 
 
