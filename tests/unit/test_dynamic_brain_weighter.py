@@ -157,7 +157,7 @@ class TestPnLMetricsWeighting:
     ):
         m = BrainPnLMetrics(
             brain_id="B1",
-            sample_count=20,
+            sample_count=50,
             sharpe_ratio=sharpe,
             win_rate=win_rate,
             health_signal=health,
@@ -176,7 +176,7 @@ class TestPnLMetricsWeighting:
         w0 = weighter._compute_weight_from_metrics(
             BrainPnLMetrics(
                 brain_id="B1",
-                sample_count=20,
+                sample_count=50,
                 sharpe_ratio=0.0,
                 win_rate=0.55,
                 health_signal="healthy",
@@ -185,7 +185,7 @@ class TestPnLMetricsWeighting:
         w2 = weighter._compute_weight_from_metrics(
             BrainPnLMetrics(
                 brain_id="B1",
-                sample_count=20,
+                sample_count=50,
                 sharpe_ratio=2.0,
                 win_rate=0.55,
                 health_signal="healthy",
@@ -194,7 +194,7 @@ class TestPnLMetricsWeighting:
         w5 = weighter._compute_weight_from_metrics(
             BrainPnLMetrics(
                 brain_id="B1",
-                sample_count=20,
+                sample_count=50,
                 sharpe_ratio=5.0,
                 win_rate=0.55,
                 health_signal="healthy",
@@ -209,7 +209,7 @@ class TestPnLMetricsWeighting:
         w_low = weighter._compute_weight_from_metrics(
             BrainPnLMetrics(
                 brain_id="B1",
-                sample_count=20,
+                sample_count=50,
                 sharpe_ratio=2.0,
                 win_rate=0.40,
                 health_signal="stable",
@@ -218,7 +218,7 @@ class TestPnLMetricsWeighting:
         w_mid = weighter._compute_weight_from_metrics(
             BrainPnLMetrics(
                 brain_id="B1",
-                sample_count=20,
+                sample_count=50,
                 sharpe_ratio=2.0,
                 win_rate=0.50,
                 health_signal="stable",
@@ -227,7 +227,7 @@ class TestPnLMetricsWeighting:
         w_high = weighter._compute_weight_from_metrics(
             BrainPnLMetrics(
                 brain_id="B1",
-                sample_count=20,
+                sample_count=50,
                 sharpe_ratio=2.0,
                 win_rate=0.60,
                 health_signal="stable",
@@ -242,7 +242,7 @@ class TestPnLMetricsWeighting:
         w_normal = weighter._compute_weight_from_metrics(
             BrainPnLMetrics(
                 brain_id="B1",
-                sample_count=20,
+                sample_count=50,
                 sharpe_ratio=2.0,
                 win_rate=0.55,
                 max_drawdown=1.0,
@@ -252,7 +252,7 @@ class TestPnLMetricsWeighting:
         w_dd = weighter._compute_weight_from_metrics(
             BrainPnLMetrics(
                 brain_id="B1",
-                sample_count=20,
+                sample_count=50,
                 sharpe_ratio=2.0,
                 win_rate=0.55,
                 max_drawdown=5.0,
@@ -268,7 +268,7 @@ class TestPnLMetricsWeighting:
         w = weighter._compute_weight_from_metrics(
             BrainPnLMetrics(
                 brain_id="B1",
-                sample_count=20,
+                sample_count=50,
                 sharpe_ratio=-3.0,
                 win_rate=0.45,
                 health_signal="stable",

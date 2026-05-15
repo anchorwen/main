@@ -328,9 +328,9 @@ class DynamicBrainWeighter:
         sharpe_factor = max(0.0, sharpe_factor)
 
         if health == "healthy":
-            weight = (base_weight + 1.0 + sharpe_factor * 2.0) * health_mult
+            weight = (base_weight * 2.0 + sharpe_factor * 2.0) * health_mult
         else:  # stable
-            weight = (base_weight + 0.5 + sharpe_factor * 2.0) * health_mult
+            weight = (base_weight + sharpe_factor * 2.0) * health_mult
 
         # Win rate modifier: ±15%
         if wr >= 0.55:

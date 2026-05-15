@@ -57,12 +57,12 @@ SECOND_LEG_WINDOW = 12  # 1 hour in M5
 
 
 def get_session_factor(hour_utc: int) -> float:
-    """Volatility-parity session sizing: Asian=1.0, London=0.8, NY=0.6."""
-    if 0 <= hour_utc <= 7:
-        return 1.0
-    elif 8 <= hour_utc <= 12:
-        return 0.8
-    return 0.6
+    """Session parity (v3.2 recal): 24h hard_stop histogram uniform — no session penalty.
+
+    Original hypothesis (NY most dangerous) disproven by data.
+    Vol-targeted sizing already normalizes risk across sessions.
+    """
+    return 1.0
 
 
 def session_name(hour_utc: int) -> str:

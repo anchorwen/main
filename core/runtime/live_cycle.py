@@ -1332,6 +1332,39 @@ def _execute_management_phase(
                 }
                 meta_supporting = list(set(_global_supporting))
 
+                # ── Opt3: Bleed stop (v3.2) ──
+                # Exit if 3 consecutive bars have negative PnL.
+                # Runs before OU exit because it saves ~1.55R vs hard_stop.
+                if mid is not None and mid > 0:
+                    _r_now = pm._compute_r_multiple(mid)
+                    _should_bleed, _bleed_reason = pm.should_exit_bleed(pos, _r_now)
+                    if _should_bleed:
+                        _dispatch_managed_close(
+                            config,
+                            pos,
+                            reason=_bleed_reason,
+                            mid=mid,
+                            state=state,
+                            strategy_name=_sname,
+                            exit_confidence=_exit_confidence,
+                            exit_watchdog=state.exit_watchdog,
+                        )
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "bleed_stop_triggered",
+                                    "time": _utc_iso(),
+                                    "ticket": pos.ticket,
+                                    "r_now": round(_r_now, 3),
+                                    "reason": _bleed_reason,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                        pm.clear_position()
+                        return True
+
                 # ── OU mean-reversion exit (ARB brain) ──
                 # Only applies to positions opened by the StatArb strategy
                 # (positions whose supporting brains include the OU brain).

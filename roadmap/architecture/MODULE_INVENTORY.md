@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-15T10:31:31Z
+> **自动生成**: 2026-05-15T10:44:10Z
 > **扫描模块数**: 405
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -210,7 +210,7 @@
 | `order_state_machine.py` | ✅ active | OrderStateMachine | 9 | 101 | — | |
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 141 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 11 | 409 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 34 | 1168 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 36 | 1217 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill | 14 | 564 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
 | `quality_contracts.py` | ✅ active | ExecutionBenchmark, ExecutionQualityMetric, ImplementationShortfall, ExecutionQualityReport | 3 | 138 | — | |
@@ -422,7 +422,7 @@
 | `execution_gateway_router.py` | ✅ active | ExecutionGatewayRouter | 5 | 30 | — | |
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 20 | 5112 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 20 | 5145 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 141 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 12 | 314 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
