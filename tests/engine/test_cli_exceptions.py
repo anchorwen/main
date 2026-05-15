@@ -6,14 +6,14 @@ from types import SimpleNamespace
 import pytest
 
 from apps.engine.cli import build_parser, main
+from core.contracts.domain_keys import (
+    ENGINE_CONFIG_KEY_RUNTIME_METRICS,
+    EVIDENCE_SECTION_ENGINE_CONFIG,
+)
 from core.contracts.exceptions import (
     BrainNotFoundError,
     InvalidTransitionError,
     OrderNotFoundError,
-)
-from core.deployment.domain_keys import (
-    ENGINE_CONFIG_KEY_RUNTIME_METRICS,
-    EVIDENCE_SECTION_ENGINE_CONFIG,
 )
 from core.deployment.schema_versions import (
     SCHEMA_ENGINE_CONFIG_EVIDENCE,

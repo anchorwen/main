@@ -9,7 +9,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     OPERATIONS_TIMELINE_FILE,
     PAYLOAD_KEY_ACTOR,
     PAYLOAD_KEY_CHANGED_KEYS,

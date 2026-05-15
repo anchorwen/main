@@ -35,22 +35,39 @@ def detect_session(now_utc: datetime | None = None) -> dict[str, Any]:
     weekday = now_utc.weekday()
     hour = now_utc.hour + now_utc.minute / 60.0
 
-    # Weekend
-    if weekday == 5 and hour >= 22:
+    # ── Weekend: Fri 22:00 UTC → Sun ~22:00 UTC ──
+    # Friday after market close
+    if weekday == 4 and hour >= 22:
         return {
             "session_name": "weekend",
             "volume_mult": 0.0,
             "sl_expand_mult": 2.0,
             "risk_tier": "off",
         }
+    # Saturday all day
+    if weekday == 5:
+        return {
+            "session_name": "weekend",
+            "volume_mult": 0.0,
+            "sl_expand_mult": 2.0,
+            "risk_tier": "off",
+        }
+    # Sunday (market re-opens ~22:00 UTC)
     if weekday == 6:
+        if hour < 22:
+            return {
+                "session_name": "weekend",
+                "volume_mult": 0.0,
+                "sl_expand_mult": 2.0,
+                "risk_tier": "off",
+            }
         return {
-            "session_name": "weekend",
-            "volume_mult": 0.0,
-            "sl_expand_mult": 2.0,
-            "risk_tier": "off",
+            "session_name": "sunday_open",
+            "volume_mult": 0.50,
+            "sl_expand_mult": 1.50,
+            "risk_tier": "caution",
         }
-    # Sunday open (potentially gap, low liquidity)
+    # Monday early hours (market just re-opened — gap risk)
     if weekday == 0 and hour < 1:
         return {
             "session_name": "sunday_open",
@@ -84,6 +101,75 @@ def detect_session(now_utc: datetime | None = None) -> dict[str, Any]:
         "sl_expand_mult": 1.20,
         "risk_tier": "reduced",
     }
+
+
+# ── Daily close window detection (for scheduling maintenance) ───────────
+
+
+def _compute_us_dst_boundaries(year: int) -> tuple[float, float]:
+    """Return (dst_start_utc_hour, dst_end_utc_hour) for a given year.
+
+    US DST: second Sunday of March 02:00 local → first Sunday of November 02:00 local.
+    Returned as UTC decimal hours (e.g. 7.0 for EST→EDT transition at 07:00 UTC).
+
+    On transition Sundays the market is closed, so edge precision doesn't matter.
+    """
+    from datetime import timedelta
+
+    # Second Sunday of March (transition at 07:00 UTC from EST)
+    mar1 = datetime(year, 3, 1)
+    mar_second_sun = mar1 + timedelta(days=(6 - mar1.weekday()) % 7 + 7)
+    dst_start = mar_second_sun.day + 7.0 / 24.0  # 07:00 UTC
+
+    # First Sunday of November (transition at 06:00 UTC from EDT)
+    nov1 = datetime(year, 11, 1)
+    nov_first_sun = nov1 + timedelta(days=(6 - nov1.weekday()) % 7)
+    dst_end = nov_first_sun.day + 6.0 / 24.0  # 06:00 UTC
+
+    return dst_start, dst_end
+
+
+def _is_us_dst(now_utc: datetime) -> bool:
+    """Return True if US is currently observing Daylight Saving Time."""
+    month = now_utc.month
+    day_frac = now_utc.day + now_utc.hour / 24.0 + now_utc.minute / 1440.0
+    dst_start, dst_end = _compute_us_dst_boundaries(now_utc.year)
+
+    if month < 3 or month > 11:
+        return False
+    if 3 < month < 11:
+        return True
+    if month == 3:
+        return day_frac >= dst_start
+    return day_frac < dst_end  # month == 11
+
+
+def _is_daily_close_window(now_utc: datetime | None = None) -> bool:
+    """Check whether current UTC time falls within the XAUUSD daily close window.
+
+    The CME daily maintenance break shifts by 1 hour between US DST/EST:
+      - US DST (summer): 20:58–22:02 UTC
+      - US EST (winter): 21:58–23:02 UTC
+
+    Beijing time (+8): 04:58–06:02 (DST) / 05:58–07:02 (EST).
+
+    Uses integer seconds arithmetic to avoid floating-point boundary errors.
+    """
+    if now_utc is None:
+        now_utc = datetime.now(UTC).replace(tzinfo=None)
+    elif now_utc.tzinfo is not None:
+        now_utc = now_utc.astimezone(UTC).replace(tzinfo=None)
+
+    total_sec = now_utc.hour * 3600 + now_utc.minute * 60 + now_utc.second
+
+    if _is_us_dst(now_utc):
+        start_sec = 20 * 3600 + 58 * 60  # 20:58:00
+        end_sec = 22 * 3600 + 2 * 60  # 22:02:00
+    else:
+        start_sec = 21 * 3600 + 58 * 60  # 21:58:00
+        end_sec = 23 * 3600 + 2 * 60  # 23:02:00
+
+    return start_sec <= total_sec <= end_sec
 
 
 # ── Pre-trade VaR check ────────────────────────────────────────────────
@@ -168,33 +254,47 @@ class IntradayDrawdownKill:
 
     Tracks intraday high-water mark and blocks trading when
     drawdown from peak exceeds the configured threshold.
-    Reset daily at a configurable UTC hour.
+    Reset daily — resets on the first update after midnight UTC
+    (or when the reset hour is reached), so missed cycles don't
+    skip the reset.
+
+    When ``force_close_enabled``, the kill returns ``force_close=True``
+    if drawdown exceeds ``force_close_pct`` (typically > kill_pct).
+    The caller should close all open positions when this flag is set.
     """
 
     def __init__(
         self,
         *,
         kill_pct: float = 0.02,
+        force_close_enabled: bool = False,
+        force_close_pct: float = 0.03,
         reset_hour_utc: int = 0,
         initial_equity: float = 0.0,
     ):
         self.kill_pct = kill_pct
+        self.force_close_enabled = force_close_enabled
+        self.force_close_pct = force_close_pct
         self.reset_hour_utc = reset_hour_utc
         self._high_watermark = initial_equity
-        self._last_reset_day = -1
+        self._last_reset_date: str = datetime.now(UTC).date().isoformat()
 
     def update(self, current_equity: float, now_utc: datetime | None = None) -> dict[str, Any]:
         """Update watermark and check kill condition.
 
-        Returns dict with: blocked, drawdown_pct, high_watermark, current_equity.
+        Returns dict with: blocked, drawdown_pct, high_watermark,
+        current_equity, kill_pct, force_close.
         """
         if now_utc is None:
             now_utc = datetime.now(UTC).replace(tzinfo=None)
 
-        # Daily reset
-        if now_utc.hour == self.reset_hour_utc and now_utc.day != self._last_reset_day:
+        today = now_utc.date().isoformat()
+
+        # Daily reset: trigger on first update after crossing into a new day
+        # (not just at exact reset hour — handles process restart)
+        if today != self._last_reset_date:
             self._high_watermark = current_equity
-            self._last_reset_day = now_utc.day
+            self._last_reset_date = today
 
         if current_equity > self._high_watermark:
             self._high_watermark = current_equity
@@ -203,13 +303,100 @@ class IntradayDrawdownKill:
         if self._high_watermark > 0:
             dd_pct = (self._high_watermark - current_equity) / self._high_watermark
 
+        blocked = dd_pct >= self.kill_pct
+        force_close = self.force_close_enabled and dd_pct >= self.force_close_pct
+
         return {
-            "blocked": dd_pct >= self.kill_pct,
+            "blocked": blocked,
+            "force_close": force_close,
             "drawdown_pct": round(dd_pct, 6),
             "high_watermark": round(self._high_watermark, 2),
             "current_equity": round(current_equity, 2),
             "kill_pct": self.kill_pct,
+            "force_close_pct": self.force_close_pct if self.force_close_enabled else 0.0,
         }
+
+
+# ── Kelly criterion position sizing ─────────────────────────────────────
+
+
+def compute_kelly_fraction(
+    *,
+    win_rate: float,
+    avg_win: float,
+    avg_loss: float,
+    max_fraction: float = 0.25,
+    use_half_kelly: bool = True,
+) -> dict[str, Any]:
+    """Optimal fraction of capital to risk per trade (Kelly criterion).
+
+    f* = (bp - q) / b
+
+    where:
+      b = avg_win / avg_loss  (odds ratio — must be > 0)
+      p = win_rate
+      q = 1 - p
+
+    Returns dict with: kelly_fraction, half_kelly, recommended_fraction, viable.
+    Clamped to [0, max_fraction] for safety (fractional Kelly).
+    """
+    if avg_loss <= 0 or win_rate <= 0 or win_rate >= 1.0:
+        return {
+            "kelly_fraction": 0.0,
+            "half_kelly": 0.0,
+            "recommended_fraction": 0.0,
+            "viable": False,
+            "reason": "insufficient_data",
+        }
+
+    b = avg_win / avg_loss
+    p = win_rate
+    q = 1.0 - p
+
+    f_star = (b * p - q) / b
+    f_star = max(0.0, min(max_fraction, f_star))
+    half_kelly = f_star / 2.0
+
+    recommended = half_kelly if use_half_kelly else f_star
+
+    return {
+        "kelly_fraction": round(f_star, 6),
+        "half_kelly": round(half_kelly, 6),
+        "recommended_fraction": round(recommended, 6),
+        "viable": f_star > 0,
+        "win_rate": win_rate,
+        "odds_ratio": round(b, 4),
+    }
+
+
+def compute_kelly_risk_budget(
+    *,
+    equity: float,
+    win_rate: float,
+    avg_win: float,
+    avg_loss: float,
+    max_risk_pct: float = 0.02,
+) -> dict[str, Any]:
+    """Compute USD risk budget from Kelly fraction × equity.
+
+    Combines Kelly optimal fraction with a hard max_risk_pct cap.
+    """
+    kelly = compute_kelly_fraction(
+        win_rate=win_rate,
+        avg_win=avg_win,
+        avg_loss=avg_loss,
+        max_fraction=max_risk_pct,
+        use_half_kelly=True,
+    )
+
+    recommended = kelly["recommended_fraction"]
+    risk_budget = round(equity * recommended, 2) if equity > 0 else 0.0
+
+    return {
+        **kelly,
+        "equity": round(equity, 2),
+        "risk_budget_usd": risk_budget,
+    }
 
 
 # ── Data quality auto-repair ─────────────────────────────────────────────
@@ -311,11 +498,11 @@ def check_tick_sanity(bid: float, ask: float, symbol: str = "XAUUSDc") -> dict[s
     if ask < bid:
         issues.append("inverted_spread")
 
-    # Price range sanity for XAUUSD
+    # Price range sanity for XAUUSD (1000-8000, covers current ~4700 + headroom)
     if symbol.startswith("XAU"):
-        if bid < 1500 or bid > 3500:
+        if bid < 1000 or bid > 8000:
             issues.append(f"bid_out_of_range:{bid}")
-        if ask < 1500 or ask > 3500:
+        if ask < 1000 or ask > 8000:
             issues.append(f"ask_out_of_range:{ask}")
 
     # Excessive spread (>100 bps ≈ $1 on XAUUSD)

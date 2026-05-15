@@ -1,8 +1,7 @@
 from datetime import UTC, datetime
 
 from core.contracts.domain.dispatch_result import DispatchResult
-from core.contracts.enums import DispatchStatus
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     PAYLOAD_KEY_ACTION,
     PAYLOAD_KEY_ACTION_COUNTS,
     PAYLOAD_KEY_CAPTURED_AT,
@@ -19,6 +18,7 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_TOTAL_DISPATCHES,
     TIMELINE_STATUS_UNKNOWN,
 )
+from core.contracts.enums import DispatchStatus
 from core.protocol.schema_versions import SCHEMA_DISPATCH_RESULT
 
 

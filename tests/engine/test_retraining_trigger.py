@@ -125,7 +125,7 @@ def test_guess_lane_exact():
     from scripts.training.retraining_trigger import _guess_lane
 
     assert _guess_lane("V9") == "sur"
-    assert _guess_lane("XGB") == "mtx"
+    assert _guess_lane("XGB") == "boost"
     assert _guess_lane("OU") == "arb"
 
 
@@ -133,8 +133,8 @@ def test_guess_lane_fuzzy():
     from scripts.training.retraining_trigger import _guess_lane
 
     assert _guess_lane("V9_institutional_01") == "sur"
-    assert _guess_lane("xgboost_v4.5") == "mtx"
-    assert _guess_lane("unknown_brain") == "unknown"
+    assert _guess_lane("xgboost_v4.5") == "boost"
+    assert _guess_lane("unknown_brain") == "unclassified"
 
 
 # ── detect_degradation tests ──

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from apps.engine.cli import main
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     ARTIFACT_EVIDENCE_MANIFEST,
     ARTIFACT_GATE,
     PAYLOAD_KEY_GOVERNANCE_FOCUS,

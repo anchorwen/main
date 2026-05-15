@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from apps.engine.cli import main
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     PAYLOAD_KEY_GOVERNANCE_FOCUS,
     PAYLOAD_KEY_GOVERNANCE_WARNING_COUNT,
     PAYLOAD_KEY_VALIDATION_MODE,

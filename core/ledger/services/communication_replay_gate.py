@@ -1,5 +1,4 @@
-from core.contracts.enums import ReplayGateDecision
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     PAYLOAD_KEY_ATTEMPT_COUNT,
     PAYLOAD_KEY_ATTEMPT_SUMMARY,
     PAYLOAD_KEY_CURRENT_STATUS,
@@ -52,6 +51,7 @@ from core.deployment.domain_keys import (
     REPLAY_TARGET_CODE_RECEIPT_PARTIALLY_FILLED,
     REPLAY_TARGET_CODE_RECEIPT_TIMEOUT,
 )
+from core.contracts.enums import ReplayGateDecision
 from core.ledger.services.gate_decision_refs import decision as gate_decision_value
 from core.ledger.services.replay_plan_refs import (
     final_statuses as plan_final_statuses,

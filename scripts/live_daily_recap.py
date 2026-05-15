@@ -578,6 +578,38 @@ def _run_brain_leaderboard(
         return {"error": str(exc)}
 
 
+def _run_pnl_leaderboard(base_dir: Path) -> dict[str, Any]:
+    """Generate PnL-based leaderboard using BrainPnLStore + GovernanceService."""
+    try:
+        from core.brains.services.brain_leaderboard import BrainLeaderboard
+        from core.feedback.brain_pnl_ledger import BrainPnLStore
+        from core.governance.governance_service import GovernanceService
+
+        pnl_path = base_dir / "brain_pnl_ledger.json"
+        gov_path = base_dir / "governance_state.json"
+
+        if not pnl_path.exists():
+            return {"error": "no_pnl_ledger", "path": str(pnl_path)}
+
+        pnl_store = BrainPnLStore.load(pnl_path)
+        governance = GovernanceService.load(gov_path) if gov_path.exists() else GovernanceService()
+
+        lb = BrainLeaderboard()
+        rankings = lb.rank(
+            pnl_store.get_all_metrics(),
+            governance_states=governance.get_all_states(),
+        )
+        return {
+            "schema_version": "pnl_leaderboard.v1",
+            "generated_at": _utc_now_iso(),
+            "total_brains": len(rankings),
+            "rankings": lb.to_records(rankings),
+            "table": lb.format_table(rankings),
+        }
+    except Exception as exc:
+        return {"error": str(exc)[:500]}
+
+
 def _run_governance_snapshot(base_dir: Path, *, dry_run: bool = True) -> dict[str, Any]:
     """Run governance cycle from persisted tracker data and return summary."""
     try:
@@ -695,6 +727,9 @@ def build_report(
             decisions_dir, date_filter=date, labels_path=labels_path
         )
 
+    # ── PnL-based leaderboard (from BrainPnLStore) ──
+    pnl_leaderboard = _run_pnl_leaderboard(base_dir)
+
     # ── Governance & Champion/Challenger snapshots (Phase C) ──
     governance: dict[str, Any] = {}
     if run_governance:
@@ -785,6 +820,7 @@ def build_report(
         "feature_quality": feature_quality,
         "eval_alignment": eval_alignment,
         "brain_leaderboard": brain_leaderboard,
+        "pnl_leaderboard": pnl_leaderboard,
         "governance": governance,
         "champion_challenger": champion,
         "labeled_trades": labeled_trades,

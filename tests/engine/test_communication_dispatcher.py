@@ -2,17 +2,17 @@ from datetime import datetime, timedelta
 
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.decision_intent import DecisionIntent
+from core.contracts.domain_keys import (
+    DISPATCH_FAILURE_REASON_LIVE_DISPATCH_DISABLED,
+    DISPATCH_FAILURE_REASON_LIVE_READ_ONLY,
+    DISPATCH_FAILURE_REASON_SYMBOL_NOT_LIVE_ENABLED,
+)
 from core.contracts.enums import (
     CommunicationMessageType,
     CommunicationPriority,
     DecisionAction,
     DecisionSide,
     DispatchStatus,
-)
-from core.deployment.domain_keys import (
-    DISPATCH_FAILURE_REASON_LIVE_DISPATCH_DISABLED,
-    DISPATCH_FAILURE_REASON_LIVE_READ_ONLY,
-    DISPATCH_FAILURE_REASON_SYMBOL_NOT_LIVE_ENABLED,
 )
 from core.protocol.schema_versions import (
     SCHEMA_COMMUNICATION_ENVELOPE,

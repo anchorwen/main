@@ -1,7 +1,7 @@
 import argparse
 import json
 
-from core.deployment.domain_keys import EVIDENCE_SECTION_ENGINE_CONFIG
+from core.contracts.domain_keys import EVIDENCE_SECTION_ENGINE_CONFIG
 
 
 class DiagnosticsCLI:

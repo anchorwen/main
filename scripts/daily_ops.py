@@ -89,6 +89,70 @@ def _load_or_create_governance(base_dir: str) -> Any:
         return gov
 
 
+def _step_label_builder(
+    base_dir: str, *, dry_run: bool = False, contract_path: Path | None = None
+) -> dict[str, Any]:
+    """Generate training labels from live + paper trade journals.
+
+    Calls label_builder.build_trade_records() to produce live_labels.jsonl,
+    which downstream steps (feedback_loop, retraining_check, leaderboard) depend on.
+    Runs BEFORE feedback_loop so tracker sees fresh labels.
+    """
+    try:
+        from scripts.training.label_builder import build_trade_records
+
+        base = Path(base_dir)
+        out_dir = base / "reports"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / "live_labels.jsonl"
+
+        # Load optional label contract for barrier-based classification
+        contract = None
+        if contract_path is not None and contract_path.exists():
+            from core.contracts.training.label_contract import LabelContract
+
+            contract = LabelContract.from_file(contract_path)
+
+        # Process live journal
+        live_records: list[dict[str, Any]] = []
+        live_journal = base / "live_trade_journal.jsonl"
+        if live_journal.exists():
+            live_records = build_trade_records(live_journal, contract=contract)
+
+        # Process paper journal
+        paper_records: list[dict[str, Any]] = []
+        paper_journal = base / "paper_trade_journal.jsonl"
+        if paper_journal.exists():
+            paper_records = build_trade_records(paper_journal, contract=contract)
+
+        all_records = live_records + paper_records
+
+        if not dry_run:
+            lines = "\n".join(json.dumps(r, ensure_ascii=False, default=str) for r in all_records)
+            out_path.write_text(lines + "\n", encoding="utf-8")
+
+        closed = sum(1 for r in all_records if r.get("is_closed"))
+        open_trades = len(all_records) - closed
+        wins = sum(1 for r in all_records if r["label"] in ("win", "tp_hit_first"))
+        losses = sum(1 for r in all_records if r["label"] in ("loss", "sl_hit_first"))
+
+        return {
+            "step": "label_builder",
+            "status": "ok",
+            "dry_run": dry_run,
+            "total_labels": len(all_records),
+            "live_labels": len(live_records),
+            "paper_labels": len(paper_records),
+            "closed_trades": closed,
+            "open_trades": open_trades,
+            "wins": wins,
+            "losses": losses,
+            "output": str(out_path) if not dry_run else None,
+        }
+    except Exception as exc:
+        return {"step": "label_builder", "status": "error", "error": str(exc)[:500]}
+
+
 def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
     """Run shadow ensemble and return summary."""
     try:
@@ -249,7 +313,11 @@ def _step_paper_trade_simulation(base_dir: str, *, dry_run: bool = False) -> dic
 def _step_governance(
     base_dir: str, *, dry_run: bool = False, tracker: Any = None, governance: Any = None
 ) -> dict[str, Any]:
-    """Run governance cycle and return summary."""
+    """Run governance cycle and cross-validate against leaderboard data.
+
+    Cross-checks tracker-based recommendations against the leaderboard's
+    trade-linked win_rates to detect inconsistent governance signals.
+    """
     try:
         from scripts.training.governance_scheduler import run_governance_cycle
 
@@ -258,6 +326,10 @@ def _step_governance(
         if governance is None:
             governance = _load_or_create_governance(base_dir)
         report = run_governance_cycle(tracker, governance, dry_run=dry_run)
+
+        # ── Cross-validate against leaderboard ──
+        cross_check = _cross_check_governance_with_leaderboard(base_dir, report)
+
         return {
             "step": "governance",
             "status": "ok",
@@ -266,9 +338,92 @@ def _step_governance(
             "actions_flagged": len(report.get("actions_flagged", [])),
             "details": report.get("actions_applied", []),
             "flagged": report.get("actions_flagged", []),
+            "leaderboard_cross_check": cross_check,
         }
     except Exception as exc:
         return {"step": "governance", "status": "error", "error": str(exc)[:500]}
+
+
+def _cross_check_governance_with_leaderboard(
+    base_dir: str, gov_report: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Cross-validate governance actions against leaderboard win_rates.
+
+    Returns a list of conflict warnings where tracker composite_score and
+    leaderboard trade-linked win_rate tell contradictory stories.
+    """
+    lb_path = Path(base_dir) / "reports" / "leaderboard.json"
+    if not lb_path.exists():
+        return []
+
+    try:
+        leaderboard = json.loads(lb_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+
+    lb_entries = leaderboard.get("leaderboard", [])
+    if not lb_entries:
+        return []
+
+    # Index leaderboard by brain_id
+    lb_index: dict[str, dict[str, Any]] = {}
+    for e in lb_entries:
+        lb_index[e.get("brain_id", "")] = e
+
+    conflicts: list[dict[str, Any]] = []
+
+    actions = gov_report.get("actions_applied", []) + gov_report.get("actions_flagged", [])
+    for action in actions:
+        brain_id = action.get("brain_id", "")
+        lb_entry = lb_index.get(brain_id)
+        if lb_entry is None:
+            continue
+
+        trade_perf = lb_entry.get("trade_performance") or {}
+        lb_win_rate = trade_perf.get("win_rate")
+        lb_linked = trade_perf.get("linked_trades", 0)
+        tracker_composite = action.get("composite_mean", 0.0)
+
+        # Conflict: tracker says healthy (composite > 0.5) but leaderboard
+        # shows low win_rate (<0.35) with enough linked trades
+        if (
+            lb_win_rate is not None
+            and lb_linked >= 5
+            and lb_win_rate < 0.35
+            and tracker_composite > 0.50
+        ):
+            conflicts.append(
+                {
+                    "brain_id": brain_id,
+                    "type": "tracker_leaderboard_divergence",
+                    "tracker_composite": tracker_composite,
+                    "leaderboard_win_rate": lb_win_rate,
+                    "leaderboard_linked_trades": lb_linked,
+                    "detail": "Tracker shows healthy composite but leaderboard win_rate is low",
+                }
+            )
+
+        # Conflict: tracker recommends demotion but leaderboard shows
+        # strong win_rate with sufficient data
+        recommendation = action.get("recommendation", "")
+        if (
+            recommendation in ("freeze", "demote_to_probation")
+            and lb_win_rate is not None
+            and lb_linked >= 5
+            and lb_win_rate > 0.50
+        ):
+            conflicts.append(
+                {
+                    "brain_id": brain_id,
+                    "type": "recommendation_leaderboard_divergence",
+                    "recommendation": recommendation,
+                    "leaderboard_win_rate": lb_win_rate,
+                    "leaderboard_linked_trades": lb_linked,
+                    "detail": f"Governance recommends {recommendation} but leaderboard shows strong win_rate",
+                }
+            )
+
+    return conflicts
 
 
 def _step_champion_challenger(
@@ -296,28 +451,175 @@ def _step_champion_challenger(
         return {"step": "champion_challenger", "status": "error", "error": str(exc)[:500]}
 
 
-def _step_retraining_check(base_dir: str) -> dict[str, Any]:
-    """Run retraining trigger degradation check and return summary."""
+def _step_retraining_check(
+    base_dir: str, *, dry_run: bool = False, auto_execute: bool = False
+) -> dict[str, Any]:
+    """Run retraining trigger degradation check and optionally auto-execute.
+
+    Auto-execute safety gates:
+      - Only when >=2 brains are degraded with critical severity
+      - Only when the same brain was degraded in the previous report
+        (2-day persistence gate), OR >=3 critical signals (strong first-time signal)
+      - Logs all execution events to data/retraining_log.jsonl
+    """
     try:
         from scripts.training.brain_leaderboard import build_report as build_lb
-        from scripts.training.retraining_trigger import detect_degradation
+        from scripts.training.retraining_trigger import detect_degradation, execute_retraining
 
-        # Build leaderboard from current decisions and labels
-        decisions_dir = Path(base_dir) / "decisions"
-        labels_path = Path(base_dir) / "reports" / "live_labels.jsonl"
+        base = Path(base_dir)
+        decisions_dir = base / "decisions"
+        labels_path = base / "reports" / "live_labels.jsonl"
+
+        # Load previous leaderboard for trend comparison
+        baseline = None
+        prev_lb_path = base / "reports" / "leaderboard_prev.json"
+        if prev_lb_path.exists():
+            baseline = json.loads(prev_lb_path.read_text(encoding="utf-8"))
+
         leaderboard = build_lb(
             decisions_dir, labels_path=labels_path if labels_path.exists() else None
         )
-        result = detect_degradation(leaderboard)
+        result = detect_degradation(leaderboard, baseline)
+
+        # Persist leaderboard for next run's comparison
+        reports_dir = base / "reports"
+        if not dry_run:
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            (reports_dir / "leaderboard.json").write_text(
+                json.dumps(leaderboard, indent=2, ensure_ascii=False, default=str),
+                encoding="utf-8",
+            )
+            (reports_dir / "leaderboard_prev.json").write_text(
+                json.dumps(leaderboard, indent=2, ensure_ascii=False, default=str),
+                encoding="utf-8",
+            )
+
+        # ── Auto-execute retraining (with safety gates) ──
+        execution_result = None
+        if auto_execute and not dry_run:
+            critical_signals = [s for s in result.get("signals", []) if s["urgency"] == "critical"]
+            if len(critical_signals) >= 2:
+                prev_critical_ids = _load_prev_critical_ids(base)
+                current_critical_ids = {s["brain_id"] for s in critical_signals}
+                persistent = current_critical_ids & prev_critical_ids
+
+                should_execute = len(persistent) >= 1 or len(critical_signals) >= 3
+                if should_execute:
+                    execution_result = execute_retraining(
+                        critical_signals,
+                        feature_store_dir=base / "feature_store",
+                        output_dir=base / "training",
+                        labels_path=labels_path if labels_path.exists() else None,
+                        dry_run=False,
+                    )
+                    _log_retraining_event(base, critical_signals, execution_result, persistent)
+            # Always save current signal for next day's persistence check
+            _save_prev_signal(base, result)
+
         return {
             "step": "retraining_check",
             "status": "ok" if "error" not in result else "error",
-            "degraded_brains": result.get("degraded_brains", 0),
-            "healthy_brains": result.get("healthy_brains", 0),
-            "details": result.get("assessments", []),
+            "degraded_count": result.get("degraded_count", 0),
+            "healthy_brains": result.get("total_brains_assessed", 0)
+            - result.get("degraded_count", 0),
+            "overall_urgency": result.get("overall_urgency", "ok"),
+            "details": result.get("signals", []),
+            "auto_execution": execution_result,
         }
     except Exception as exc:
         return {"step": "retraining_check", "status": "error", "error": str(exc)[:500]}
+
+
+def _load_prev_critical_ids(base: Path) -> set[str]:
+    """Load brain_ids that were critical in yesterday's retraining signal."""
+    sig_path = base / "reports" / "retraining_signal_prev.json"
+    if not sig_path.exists():
+        return set()
+    try:
+        prev = json.loads(sig_path.read_text(encoding="utf-8"))
+        return {s["brain_id"] for s in prev.get("signals", []) if s["urgency"] == "critical"}
+    except (json.JSONDecodeError, OSError, KeyError):
+        return set()
+
+
+def _save_prev_signal(base: Path, result: dict[str, Any]) -> None:
+    """Save current retraining signal for next day's persistence check."""
+    sig_path = base / "reports" / "retraining_signal_prev.json"
+    sig_path.write_text(
+        json.dumps(result, indent=2, ensure_ascii=False, default=str),
+        encoding="utf-8",
+    )
+
+
+def _log_retraining_event(
+    base: Path,
+    critical_signals: list[dict[str, Any]],
+    exec_result: dict[str, Any],
+    persistent_ids: set[str],
+) -> None:
+    """Append a retraining execution event to the retraining log."""
+    log_path = base / "retraining_log.jsonl"
+    event = {
+        "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
+        "critical_brains": [s["brain_id"] for s in critical_signals],
+        "persistent_brains": sorted(persistent_ids),
+        "execution": exec_result,
+    }
+    try:
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(event, ensure_ascii=False, default=str) + "\n")
+    except OSError:
+        print(
+            json.dumps(
+                {"event": "retraining_log_write_error", "path": str(log_path)},
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+
+
+def _step_param_optimization(
+    base_dir: str, retraining_result: dict[str, Any], *, dry_run: bool = False
+) -> dict[str, Any]:
+    """Generate parameter optimization suggestions for degraded brains.
+
+    Calls param_optimizer.suggest_parameters() with degraded brain_ids.
+    Writes suggestions to data/reports/param_suggestions.json for manual review.
+    """
+    try:
+        from core.feedback.param_optimizer import suggest_parameters
+
+        details = retraining_result.get("details", [])
+        degraded_ids = [
+            s["brain_id"] for s in details if isinstance(s, dict) and s.get("urgency") == "critical"
+        ]
+        if not degraded_ids:
+            return {
+                "step": "param_optimization",
+                "status": "skipped",
+                "reason": "no_critical_brains",
+            }
+
+        if not dry_run:
+            report = suggest_parameters(degraded_ids, base_dir=base_dir)
+            return {
+                "step": "param_optimization",
+                "status": "ok",
+                "degraded_brains": degraded_ids,
+                "searchable_count": report.get("searchable_count", 0),
+                "no_search_count": report.get("no_search_count", 0),
+                "output": f"{base_dir}/reports/param_suggestions.json",
+            }
+
+        return {
+            "step": "param_optimization",
+            "status": "ok",
+            "dry_run": True,
+            "degraded_brains": degraded_ids,
+            "would_generate": len(degraded_ids),
+        }
+    except Exception as exc:
+        return {"step": "param_optimization", "status": "error", "error": str(exc)[:500]}
 
 
 def _step_alpha_lifecycle(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
@@ -349,8 +651,19 @@ def _step_alpha_lifecycle(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             if decision.approved and decision.target_state and not dry_run:
                 try:
                     lifecycle.transition(record.alpha_id, decision.target_state, decision.action)
-                except ValueError:
-                    pass
+                except ValueError as exc:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "alpha_transition_error",
+                                "alpha_id": record.alpha_id,
+                                "target_state": decision.target_state,
+                                "error": str(exc),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
 
         if not dry_run:
             registry.save(registry_path)
@@ -411,9 +724,14 @@ def _step_alpha_allocation(base_dir: str, *, dry_run: bool = False) -> dict[str,
 
 
 def _step_feature_store_maintenance(
-    base_dir: str, *, dry_run: bool = False, retention_days: int = 90
+    base_dir: str,
+    *,
+    dry_run: bool = False,
+    retention_days: int = 90,
+    skip_update: bool = False,
+    mt5_terminal_path: str | None = None,
 ) -> dict[str, Any]:
-    """Run feature store compaction and stats collection."""
+    """Run feature store compaction, incremental update, and stats collection."""
     try:
         from scripts.feature_store_maintenance import run_full_maintenance
 
@@ -423,8 +741,9 @@ def _step_feature_store_maintenance(
             base_dir=base_dir,
             feature_store_dir=fs_dir,
             retention_days=retention_days,
-            skip_update=True,  # daily ops focuses on compaction + stats
+            skip_update=skip_update,
             dry_run=dry_run,
+            mt5_terminal_path=mt5_terminal_path,
         )
         steps = report.get("steps", [])
         compaction = next(
@@ -468,10 +787,19 @@ def _step_daily_recap(base_dir: str, *, mt5_terminal_path: str | None = None) ->
         return {"step": "daily_recap", "status": "error", "error": str(exc)[:500]}
 
 
+def _resolve_base_dir(base_dir: str | Path) -> str:
+    """Resolve relative base_dir against PROJECT_ROOT to guard against CWD drift."""
+    p = Path(base_dir)
+    if not p.is_absolute():
+        p = PROJECT_ROOT / p
+    return str(p)
+
+
 def run_daily_ops(
     base_dir: str = "data",
     *,
     skip_shadow: bool = False,
+    skip_label_builder: bool = False,
     skip_feedback: bool = False,
     skip_governance: bool = False,
     skip_champion: bool = False,
@@ -486,6 +814,9 @@ def run_daily_ops(
     mt5_terminal_path: str | None = None,
 ) -> dict[str, Any]:
     """Run the full daily operations pipeline.
+
+    base_dir is resolved against PROJECT_ROOT when relative, so the pipeline
+    works regardless of the process CWD.
 
     Args:
         base_dir: Base data directory.
@@ -503,6 +834,7 @@ def run_daily_ops(
     Returns:
         Combined report dict with per-step results.
     """
+    base_dir = _resolve_base_dir(base_dir)
     steps: list[dict[str, Any]] = []
 
     # Shared tracker + governance: load persisted state so governance and champion
@@ -526,6 +858,11 @@ def run_daily_ops(
 
     if not skip_shadow:
         steps.append(_step_shadow_ensemble(base_dir))
+
+    # Label builder: generate fresh training labels from journals.
+    # Runs BEFORE feedback_loop so tracker sees the latest labels.
+    if not skip_label_builder:
+        steps.append(_step_label_builder(base_dir, dry_run=dry_run))
 
     # Feedback loop: resolve pending dispatch outcomes → real P&L scores
     # Runs before governance/champion so they see the latest data
@@ -571,7 +908,7 @@ def run_daily_ops(
                 pass
 
     if not skip_retraining:
-        steps.append(_step_retraining_check(base_dir))
+        steps.append(_step_retraining_check(base_dir, dry_run=dry_run, auto_execute=not dry_run))
 
     if not skip_recap:
         steps.append(_step_daily_recap(base_dir, mt5_terminal_path=mt5_terminal_path))
@@ -582,7 +919,19 @@ def run_daily_ops(
         steps.append(_step_alpha_allocation(base_dir, dry_run=dry_run))
 
     if not skip_fs_maintenance:
-        steps.append(_step_feature_store_maintenance(base_dir, dry_run=dry_run))
+        steps.append(
+            _step_feature_store_maintenance(
+                base_dir, dry_run=dry_run, mt5_terminal_path=mt5_terminal_path
+            )
+        )
+
+    # Parameter optimization suggestions for degraded brains
+    # Runs after retraining_check so we know which brains are degraded
+    if not skip_retraining:
+        retraining_results = [s for s in steps if s.get("step") == "retraining_check"]
+        retraining_result = retraining_results[-1] if retraining_results else None
+        if retraining_result and retraining_result.get("degraded_count", 0) > 0:
+            steps.append(_step_param_optimization(base_dir, retraining_result, dry_run=dry_run))
 
     errors = [s for s in steps if s.get("status") == "error"]
     actions = sum(s.get("actions_applied", 0) + s.get("promotions", 0) for s in steps)
@@ -607,6 +956,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--base-dir", default="data", help="Base data directory")
     p.add_argument("--dry-run", action="store_true", help="Assess without applying transitions")
     p.add_argument("--skip-shadow", action="store_true", help="Skip shadow ensemble")
+    p.add_argument("--skip-label-builder", action="store_true", help="Skip label builder")
     p.add_argument("--skip-feedback", action="store_true", help="Skip feedback loop")
     p.add_argument("--skip-governance", action="store_true", help="Skip governance cycle")
     p.add_argument("--skip-champion", action="store_true", help="Skip champion/challenger")
@@ -642,6 +992,7 @@ def main(argv: list[str] | None = None) -> int:
     report = run_daily_ops(
         base_dir=args.base_dir,
         skip_shadow=args.skip_shadow,
+        skip_label_builder=args.skip_label_builder,
         skip_feedback=args.skip_feedback,
         skip_governance=args.skip_governance,
         skip_champion=args.skip_champion,
@@ -671,6 +1022,13 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     return 0
 
+
+try:
+    from core.deployment.scheduled_task_registry import register
+
+    register("daily_ops", run_daily_ops)
+except ImportError:
+    pass
 
 if __name__ == "__main__":
     raise SystemExit(main())

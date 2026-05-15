@@ -40,7 +40,7 @@ from core.alpha import (
     AlphaRiskBudgetExporter,
 )
 from core.alpha.schema_versions import SCHEMA_ALPHA_RISK_BUDGET
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     ENGINE_CONFIG_KEY_HOT_RELOAD,
     EVIDENCE_SECTION_ENGINE_CONFIG,
     VALIDATION_MODE_DEEP,

@@ -230,8 +230,17 @@ class ParliamentService:
         if bias == "neutral":
             up_prob = down_prob = score
         else:
-            up_prob = score if bias == "long" else 1 - score
-            down_prob = score if bias == "short" else 1 - score
+            # Clamp the directional probability to [0.5, 1.0] so a
+            # near-zero consensus score doesn't produce a spurious
+            # near-certain opposite-direction signal (e.g. 1 - 0.02 = 0.98
+            # short when the only brain voted neutral).
+            directional_prob = max(score, 0.5)
+            if bias == "long":
+                up_prob = directional_prob
+                down_prob = 1.0 - directional_prob
+            else:  # short
+                down_prob = directional_prob
+                up_prob = 1.0 - directional_prob
 
         return {
             "symbol": feature_snapshot.symbol,

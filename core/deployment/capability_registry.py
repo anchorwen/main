@@ -6,7 +6,7 @@ registry entries rather than scattered conditionals.
 
 from dataclasses import dataclass
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     READINESS_CAP_ALERTS,
     READINESS_CAP_AUDIT_LOG,
     READINESS_CAP_BACKTESTING,

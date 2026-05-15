@@ -39,7 +39,7 @@ OPTIONAL_FIELDS: dict[str, type | tuple] = {
 }
 
 VALID_ACK_STATUSES = {"accepted", "rejected", "acknowledged", "closed"}
-VALID_ACTIONS = {"open", "close", "modify"}
+VALID_ACTIONS = {"open", "close", "modify", "modify_sltp"}
 VALID_SIDES = {"long", "short"}
 
 

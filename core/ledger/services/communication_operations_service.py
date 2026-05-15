@@ -1,4 +1,4 @@
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     OPERATIONS_POSTURE_SOURCE_GOVERNANCE_SUMMARY,
     OPERATIONS_POSTURE_SOURCE_TRACE_DELIVERY_STATE,
     OPERATIONS_POSTURE_SOURCE_TRACE_DELIVERY_SUMMARY,
@@ -54,16 +54,16 @@ from core.deployment.domain_keys import (
     REPLAY_TRACE_SCOPE_CORRELATION,
     REPLAY_TRACE_SCOPE_MESSAGE,
 )
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     REPLAY_GOVERNANCE_PROJECTION_SOURCE_EXECUTION as GOVERNANCE_PROJECTION_SOURCE_EXECUTION,
 )
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     REPLAY_GOVERNANCE_SUMMARY_SOURCE_DERIVED as GOVERNANCE_SUMMARY_SOURCE_DERIVED,
 )
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     REPLAY_GOVERNANCE_SUMMARY_SOURCE_EXTENSIONS as GOVERNANCE_SUMMARY_SOURCE_EXTENSIONS,
 )
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     REPLAY_GOVERNANCE_SUMMARY_SOURCE_GATE as GOVERNANCE_SUMMARY_SOURCE_GATE,
 )
 from core.ledger.services.communication_replay_gate import build_replay_governance_summary

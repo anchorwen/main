@@ -3,7 +3,7 @@
 import json
 
 from apps.engine.cli import main
-from core.deployment.domain_keys import PAYLOAD_KEY_VALIDATION_MODE
+from core.contracts.domain_keys import PAYLOAD_KEY_VALIDATION_MODE
 from core.deployment.environment_config import EnvironmentConfig
 from core.deployment.schema_versions import SCHEMA_DEPLOYMENT_EXECUTION
 from core.deployment.service_container import ServiceContainer

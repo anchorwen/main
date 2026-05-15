@@ -293,16 +293,17 @@ def warm_store(
 
     # Build timestamp array from CSV
     timestamps: list = []
+    n_rows = len(df)
     if time_col and time_col in df.columns:
         try:
             timestamps = pd.to_datetime(df[time_col]).to_list()
         except Exception:
-            timestamps = [base_time + timedelta(minutes=5 * i) for i in range(n)]
+            timestamps = [base_time + timedelta(minutes=5 * i) for i in range(n_rows)]
     else:
-        timestamps = [base_time + timedelta(minutes=5 * i) for i in range(n)]
+        timestamps = [base_time + timedelta(minutes=5 * i) for i in range(n_rows)]
 
     records = []
-    n = len(df)
+    n = n_rows
     for i in range(MIN_BARS, n, step):
         feats = {}
         for tf_label, factor in tf_factors.items():

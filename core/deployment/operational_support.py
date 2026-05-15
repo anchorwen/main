@@ -1,7 +1,7 @@
 import time
 from collections.abc import Callable
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     HEALTH_CHECK_STATUS_FAILED,
     LIFECYCLE_PHASE_STATUS_ERROR,
     PAYLOAD_KEY_BACKOFF_FACTOR,

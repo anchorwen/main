@@ -1,7 +1,7 @@
 import threading
 from datetime import UTC, datetime
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     HEALTH_CHECK_STATUS_OK,
     LIFECYCLE_PHASE_STATUS_ERROR,
     PAYLOAD_KEY_BRAIN_ID,
@@ -22,6 +22,7 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_TASKS,
     PAYLOAD_KEY_THROTTLE_RATE,
 )
+from core.deployment.scheduled_task_registry import get_task
 from core.observability.metric_names import (
     CYCLES_ERRORS,
     CYCLES_THROTTLED,
@@ -146,6 +147,27 @@ class SchedulerService:
             def governance_eval():
                 summaries = container.brain_tracker.get_all_summaries()
                 summary_map = {s[PAYLOAD_KEY_BRAIN_ID]: s for s in summaries}
+
+                # Merge shadow metrics for candidate brains
+                if container.governance_service:
+                    try:
+                        from core.governance.shadow_tracker import (
+                            ShadowTracker,
+                            build_shadow_summary,
+                        )
+
+                        candidate_ids = [
+                            bid
+                            for bid, state in container.governance_service.get_all_states().items()
+                            if state.get("status") == "candidate"
+                        ]
+                        if candidate_ids:
+                            tracker = ShadowTracker(base_dir="data")
+                            shadow_map = build_shadow_summary(tracker, candidate_ids)
+                            summary_map.update(shadow_map)
+                    except Exception:
+                        pass  # Shadow tracking is non-critical
+
                 if summary_map:
                     container.governance_rule_engine.evaluate(summary_map)
 
@@ -192,14 +214,11 @@ class SchedulerService:
         if daily_ops_enabled:
 
             def daily_ops():
-                import sys
+                run_daily_ops = get_task("daily_ops")
+                if run_daily_ops is None:
+                    return
+
                 from pathlib import Path
-
-                _project_root = Path(__file__).resolve().parents[2]
-                if str(_project_root) not in sys.path:
-                    sys.path.insert(0, str(_project_root))
-
-                from scripts.daily_ops import run_daily_ops
 
                 base_dir = str(container.config.base_dir)
                 run_daily_ops(base_dir=base_dir, skip_shadow=True)
@@ -221,14 +240,9 @@ class SchedulerService:
         if feature_store_enabled:
 
             def feature_store_update():
-                import sys
-                from pathlib import Path
-
-                _project_root = Path(__file__).resolve().parents[2]
-                if str(_project_root) not in sys.path:
-                    sys.path.insert(0, str(_project_root))
-
-                from scripts.feature_store_maintenance import run_full_maintenance
+                run_full_maintenance = get_task("feature_store_maintenance")
+                if run_full_maintenance is None:
+                    return
 
                 base_dir = str(container.config.base_dir)
                 symbol = getattr(container.config, "symbol", "XAUUSDc")
@@ -261,16 +275,12 @@ class SchedulerService:
                 mt5_path = extensions.get("mt5_terminal_path", None)
 
             def live_monitor_snapshot():
-                import sys
-                from pathlib import Path
-
-                _project_root = Path(__file__).resolve().parents[2]
-                if str(_project_root) not in sys.path:
-                    sys.path.insert(0, str(_project_root))
+                build_snapshot = get_task("live_monitor_snapshot")
+                if build_snapshot is None:
+                    return
 
                 import json
-
-                from scripts.live_monitor import build_snapshot
+                from pathlib import Path
 
                 snap = build_snapshot(
                     base_dir=Path(base_dir),
@@ -287,16 +297,12 @@ class SchedulerService:
             svc.add_task("live_monitor_snapshot", live_monitor_snapshot, interval_seconds=30)
 
             def auto_healthcheck():
-                import sys
-                from pathlib import Path
-
-                _project_root = Path(__file__).resolve().parents[2]
-                if str(_project_root) not in sys.path:
-                    sys.path.insert(0, str(_project_root))
+                build_report = get_task("auto_healthcheck")
+                if build_report is None:
+                    return
 
                 import json
-
-                from scripts.live_auto_healthcheck import build_report
+                from pathlib import Path
 
                 report = build_report(base_dir=Path(base_dir), symbol=symbol)
                 out_path = Path(base_dir) / "reports" / "healthcheck_latest.json"
@@ -308,16 +314,12 @@ class SchedulerService:
             svc.add_task("auto_healthcheck", auto_healthcheck, interval_seconds=60)
 
             def data_quality_report():
-                import sys
-                from pathlib import Path
-
-                _project_root = Path(__file__).resolve().parents[2]
-                if str(_project_root) not in sys.path:
-                    sys.path.insert(0, str(_project_root))
+                build_report = get_task("data_quality_report")
+                if build_report is None:
+                    return
 
                 import json
-
-                from scripts.live_data_quality_report import build_report
+                from pathlib import Path
 
                 report = build_report(base_dir=Path(base_dir))
                 out_path = Path(base_dir) / "reports" / "data_quality_latest.json"

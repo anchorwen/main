@@ -84,7 +84,9 @@ def _load_feature_index(
             except (ValueError, TypeError):
                 continue
             if et.tzinfo is not None:
-                et = et.replace(tzinfo=None) - et.utcoffset()
+                offset = et.utcoffset()
+                if offset is not None:
+                    et = et.replace(tzinfo=None) - offset
             records.append((et, et_str, rec.get("values", {})))
     records.sort(key=lambda x: x[0])
     return records
@@ -98,27 +100,32 @@ def _find_nearest_in_index(
     """Binary-search the sorted feature index for the nearest record.
 
     Returns (event_time_str, values_dict, time_delta_seconds) or None.
+
+    CRITICAL: Only matches features AT or BEFORE label_time. Features must
+    come from bars that existed when the label entry occurred — never from
+    future bars (no look-ahead bias).
     """
     if not index:
         return None
     if label_time.tzinfo is not None:
-        label_time = label_time.replace(tzinfo=None) - label_time.utcoffset()
+        offset = label_time.utcoffset()
+        if offset is not None:
+            label_time = label_time.replace(tzinfo=None) - offset
     timestamps = [t for t, _, _ in index]
     idx = bisect.bisect_left(timestamps, label_time)
-    candidates = []
-    if idx < len(timestamps):
-        delta = (timestamps[idx] - label_time).total_seconds()
-        if abs(delta) <= max_delta_seconds:
-            candidates.append((abs(delta), idx))
-    if idx > 0:
-        delta = (timestamps[idx - 1] - label_time).total_seconds()
-        if abs(delta) <= max_delta_seconds:
-            candidates.append((abs(delta), idx - 1))
-    if not candidates:
-        return None
-    candidates.sort(key=lambda x: x[0])
-    _, best_idx = candidates[0]
-    return index[best_idx][1], index[best_idx][2], candidates[0][0]
+
+    # Exact match at or at the same timestamp — safe to use
+    if idx < len(timestamps) and timestamps[idx] == label_time:
+        return index[idx][1], index[idx][2], 0.0
+
+    # Only look backward — feature time must precede label time
+    candidate_idx = idx - 1
+    if candidate_idx >= 0:
+        delta = abs((timestamps[candidate_idx] - label_time).total_seconds())
+        if delta <= max_delta_seconds:
+            return index[candidate_idx][1], index[candidate_idx][2], delta
+
+    return None
 
 
 def join_labels_to_features(
@@ -168,6 +175,7 @@ def join_labels_to_features(
             "side": lab.get("side", ""),
             "label": lab.get("label", "unlabeled"),
             "pnl": lab.get("pnl"),
+            "pnl_r": lab.get("pnl_r"),
             "entry_price": lab.get("entry_price"),
             "exit_price": lab.get("exit_price"),
             "volume": lab.get("volume"),
@@ -234,6 +242,51 @@ def export_parquet(
     return output_path
 
 
+def _parse_iso_to_unix(ts: str | None) -> float:
+    """Parse an ISO-8601 timestamp to seconds since Unix epoch (float).
+
+    Returns 0.0 for unparseable or missing timestamps so downstream
+    code can detect and handle gaps.
+    """
+    if not ts:
+        return 0.0
+    try:
+        dt = _parse_iso(ts)
+        if dt is None:
+            return 0.0
+        return dt.timestamp()
+    except (ValueError, OSError):
+        return 0.0
+
+
+def _resolve_label(label_val: object) -> int:
+    """Map a label value to directional integer: -1=SL, 0=timeout, 1=TP.
+
+    Handles both string labels (from legacy JSONL) and integer labels
+    (from calibrated label builders).
+    """
+    if isinstance(label_val, int | float | np.integer | np.floating):
+        return int(label_val)
+    s = str(label_val).lower()
+    if s in ("win", "tp_hit_first", "tp", "1"):
+        return 1
+    if s in ("loss", "sl_hit_first", "sl", "-1"):
+        return -1
+    return 0
+
+
+def _resolve_pnl(row: dict[str, Any]) -> float:
+    """Extract PnL from a row, trying 'pnl' first, then 'pnl_r'."""
+    for key in ("pnl", "pnl_r"):
+        val = row.get(key)
+        if val is not None:
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                pass
+    return 0.0
+
+
 def export_npz(
     joined: list[dict[str, Any]],
     output_path: Path,
@@ -242,9 +295,10 @@ def export_npz(
 
     Produces:
       X: (n_samples, 40) feature matrix
-      y: (n_samples,) binary labels (1=tp_hit_first/win, 0=other)
+      y: (n_samples,) directional labels (-1=SL, 0=timeout, 1=TP)
       y_reg: (n_samples,) P&L values for regression target
       pnl: (n_samples,) P&L values
+      timestamps: (n_samples,) float64 Unix epoch seconds
       feature_names: list of 40 feature names
     """
     n = len(joined)
@@ -252,18 +306,45 @@ def export_npz(
     y = np.zeros(n, dtype=np.int32)
     y_reg = np.zeros(n, dtype=np.float64)
     pnl = np.zeros(n, dtype=np.float64)
+    timestamps = np.zeros(n, dtype=np.float64)
+    lookahead_count = 0
 
     for i, row in enumerate(joined):
         for j in range(40):
             X[i, j] = float(row.get(f"f_{j}", 0.0))
-        label_val = row.get("label", "")
-        pnl_val = float(row.get("pnl", 0.0) or 0.0)
-        if label_val in ("win", "tp_hit_first"):
-            y[i] = 1
-        else:
-            y[i] = 0
-        pnl[i] = pnl_val
+        y[i] = _resolve_label(row.get("label", 0))
+        pnl_val = _resolve_pnl(row)
         y_reg[i] = pnl_val
+        pnl[i] = pnl_val
+        ts = _parse_iso_to_unix(
+            row.get("open_recorded_at")
+            or row.get("entry_time")
+            or row.get("feature_event_time", "")
+        )
+        timestamps[i] = ts
+
+        # Validate no look-ahead: feature_time must be <= label_time
+        feature_ts = _parse_iso_to_unix(row.get("feature_event_time", ""))
+        label_ts_val = _parse_iso_to_unix(row.get("open_recorded_at") or row.get("entry_time", ""))
+        if feature_ts > 0 and label_ts_val > 0 and feature_ts > label_ts_val:
+            lookahead_count += 1
+
+    if lookahead_count > 0:
+        print(
+            f"  WARNING: {lookahead_count}/{n} rows ({100*lookahead_count/max(n,1):.1f}%) "
+            f"have feature_time > label_time — potential look-ahead bias"
+        )
+
+    # Compute time range metadata
+    valid_ts = timestamps[timestamps > 0]
+    if len(valid_ts) > 0:
+        min_time = datetime.fromtimestamp(float(valid_ts.min())).isoformat()
+        max_time = datetime.fromtimestamp(float(valid_ts.max())).isoformat()
+        time_range_days = float((valid_ts.max() - valid_ts.min()) / 86400.0)
+    else:
+        min_time = ""
+        max_time = ""
+        time_range_days = 0.0
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
@@ -272,8 +353,32 @@ def export_npz(
         y=y,
         y_reg=y_reg,
         pnl=pnl,
+        timestamps=timestamps,
         feature_names=np.array(V9_INSTITUTIONAL_40_FEATURES, dtype=str),
     )
+
+    # Also write lightweight metadata JSON alongside
+    meta_path = output_path.with_suffix(".meta.json")
+    import json
+
+    meta_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "training_dataset.v2",
+                "n_samples": n,
+                "n_features": 40,
+                "feature_schema": "v9_institutional_40",
+                "min_time": min_time,
+                "max_time": max_time,
+                "time_range_days": round(time_range_days, 2),
+                "has_timestamps": len(valid_ts) > 0,
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
     return output_path
 
 

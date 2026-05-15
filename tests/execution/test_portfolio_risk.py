@@ -45,7 +45,7 @@ class TestPortfolioRiskController:
         assert ctrl.max_gross == 0.10
         assert ctrl.max_net == 0.05
         assert ctrl.max_same_dir == 2
-        assert ctrl.netting_mode == "net_out"
+        assert ctrl.netting_mode == "allow_coexist"
 
     # ── Gross exposure ──
     def test_gross_exposure_exceeded_rejects(self):
@@ -54,8 +54,8 @@ class TestPortfolioRiskController:
             "barrier_12bar": _make_position(volume=0.06),
             "micro_3bar": _make_position(strategy="micro_3bar", volume=0.03),
         }
-        # gross = 0.09, new 0.02 → 0.11 > 0.10
-        dec = _make_decision(volume=0.02)
+        # gross = 0.09, new 0.02 → 0.11 > 0.10 (statarb is not in positions → no duplicate)
+        dec = _make_decision(strategy="statarb_dynamic", volume=0.02)
         result = ctrl.check(dec, positions)
         assert result.verdict == RiskVerdict.REJECTED
         assert "gross_exposure" in result.reason
@@ -63,9 +63,9 @@ class TestPortfolioRiskController:
     def test_gross_exposure_within_limit_approves(self):
         ctrl = PortfolioRiskController(max_gross_exposure=0.10, max_net_exposure=0.10)
         positions = {
-            "barrier_12bar": _make_position(volume=0.02),
+            "micro_3bar": _make_position(strategy="micro_3bar", volume=0.02),
         }
-        dec = _make_decision(volume=0.02)
+        dec = _make_decision(strategy="barrier_12bar", volume=0.02)
         result = ctrl.check(dec, positions)
         assert result.verdict != RiskVerdict.REJECTED
 
@@ -75,8 +75,8 @@ class TestPortfolioRiskController:
         positions = {
             "barrier_12bar": _make_position(volume=0.04, direction="long"),
         }
-        # net = 0.04 long, +0.02 → 0.06 > 0.05
-        dec = _make_decision(direction="long", volume=0.02)
+        # net = 0.04 long, +0.02 → 0.06 > 0.05 (statarb is not in positions)
+        dec = _make_decision(strategy="statarb_dynamic", direction="long", volume=0.02)
         result = ctrl.check(dec, positions)
         assert result.verdict == RiskVerdict.REJECTED
         assert "net_exposure" in result.reason
@@ -86,9 +86,8 @@ class TestPortfolioRiskController:
         positions = {
             "barrier_12bar": _make_position(volume=0.04, direction="long"),
         }
-        # net = 0.04 long, short 0.01 → 0.03, within 0.10 limit
-        # But netting_mode "net_out" with opposing positions → REDUCED or NET_OUT
-        dec = _make_decision(direction="short", volume=0.01)
+        # net = 0.04 long, short 0.01 → 0.03, within 0.10 limit (statarb is not in positions)
+        dec = _make_decision(strategy="statarb_dynamic", direction="short", volume=0.01)
         result = ctrl.check(dec, positions)
         assert result.verdict in (RiskVerdict.APPROVED, RiskVerdict.NET_OUT, RiskVerdict.REDUCED)
 
@@ -97,8 +96,8 @@ class TestPortfolioRiskController:
         positions = {
             "barrier_12bar": _make_position(volume=0.02, direction="long"),
         }
-        # net = +0.02, new short 0.04 → -0.02, |−0.02| ≤ 0.05
-        dec = _make_decision(direction="short", volume=0.04)
+        # net = +0.02, new short 0.04 → -0.02, |−0.02| ≤ 0.05 (statarb is not in positions)
+        dec = _make_decision(strategy="statarb_dynamic", direction="short", volume=0.04)
         result = ctrl.check(dec, positions)
         # May be rejected by netting or approved, but NOT rejected by net exposure
         if result.verdict == RiskVerdict.REJECTED:
@@ -131,17 +130,16 @@ class TestPortfolioRiskController:
         if result.verdict == RiskVerdict.REJECTED:
             assert "direction_concentration" not in result.reason
 
-    def test_same_strategy_excluded_from_count(self):
+    def test_same_strategy_duplicate_rejected(self):
         ctrl = PortfolioRiskController(max_same_direction=2)
         positions = {
             "barrier_12bar": _make_position(strategy="barrier_12bar", direction="short"),
         }
-        # Same strategy, same direction → excluded from count (strategy rep already present)
+        # Same strategy already has a position — duplicate check blocks new entry
         dec = _make_decision(strategy="barrier_12bar", direction="short", volume=0.01)
         result = ctrl.check(dec, positions)
-        # Not rejected by concentration because strategy != strategy check skips self
-        if result.verdict == RiskVerdict.REJECTED:
-            assert "direction_concentration" not in result.reason
+        assert result.verdict == RiskVerdict.REJECTED
+        assert "duplicate_strategy" in result.reason
 
     # ── Netting mode ──
     def test_net_out_reduces_opposing_larger(self):
@@ -173,9 +171,9 @@ class TestPortfolioRiskController:
     def test_no_opposite_positions_approved(self):
         ctrl = PortfolioRiskController()
         positions = {
-            "barrier_12bar": _make_position(direction="long"),
+            "micro_3bar": _make_position(strategy="micro_3bar", direction="long"),
         }
-        dec = _make_decision(direction="long", volume=0.01)
+        dec = _make_decision(strategy="statarb_dynamic", direction="long", volume=0.01)
         result = ctrl.check(dec, positions)
         assert result.verdict == RiskVerdict.APPROVED
 

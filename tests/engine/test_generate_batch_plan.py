@@ -39,7 +39,9 @@ def test_generate_manifests_model_id_format():
     }
     manifests = generate_manifests("g2026.1", ["sur"], plan_meta, "deadbeef")
     mid = manifests[0]["model_id"]
-    assert mid.startswith("CRT.sur.chlg.g2026.1@feat-sur-v9-institutional-1.0.0")
+    # v2 format: CRT.<lane>.<role>.<gen>.<TF>@<feat-contract>.s<seed>
+    assert mid.startswith("CRT.sur.chlg.g2026.1.M5@feat-sur-v9-institutional-1.0.0")
+    assert manifests[0]["timeframe"] == "M5"
 
 
 def test_generate_manifests_mtx_maps_to_lane_id():
@@ -56,3 +58,33 @@ def test_generate_manifests_mtx_maps_to_lane_id():
     manifests = generate_manifests("g2026.1", ["mtx_transformer"], plan_meta, "deadbeef")
     assert manifests[0]["lane"] == "mtx"
     assert manifests[0]["model_id"].startswith("CRT.mtx.")
+    assert manifests[0]["timeframe"] == "M5"
+
+
+def test_generate_manifests_v2_timeframe_expansion():
+    """v2: per-TF manifest entries with timeframe and dataset_override fields."""
+    plan_meta = {
+        "lanes": {
+            "arb": {
+                "role": "chlg",
+                "feature_contract_id": "feat-arb-v6-ou-sniper-1.0.0",
+                "iface_semver": "1.0.0",
+                "timeframes": {
+                    "M5": {"seeds": [42, 43], "dataset": "data/raw/xauusdc_m5.csv"},
+                    "M15": {"seeds": [44], "dataset": "data/raw/xauusdc_m15.csv"},
+                },
+            },
+        },
+    }
+    manifests = generate_manifests("g2026.2", ["arb"], plan_meta, "deadbeef")
+    assert len(manifests) == 3  # 2 M5 + 1 M15
+    tfs = {m["timeframe"] for m in manifests}
+    assert tfs == {"M5", "M15"}
+    datasets = {m["dataset_override"] for m in manifests}
+    assert "data/raw/xauusdc_m5.csv" in datasets
+    assert "data/raw/xauusdc_m15.csv" in datasets
+    # Model IDs include timeframe
+    m5_ids = [m["model_id"] for m in manifests if m["timeframe"] == "M5"]
+    m15_ids = [m["model_id"] for m in manifests if m["timeframe"] == "M15"]
+    assert all("M5@" in mid for mid in m5_ids)
+    assert all("M15@" in mid for mid in m15_ids)

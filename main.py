@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import yaml  # type: ignore
+import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
@@ -210,7 +210,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     }
 
     # ── Live MT5 diagnostics (best-effort, non-blocking) ──
-    mt5_diag: dict[str, Any] = _probe_mt5(config, args)
+    mt5_diag: dict[str, Any] | None = _probe_mt5(config, args)
     if mt5_diag:
         result["mt5"] = mt5_diag
 
@@ -532,10 +532,10 @@ def cmd_features_update(args: argparse.Namespace) -> int:
         print("[hub] ERROR: feature_store_dir not configured in extensions", file=sys.stderr)
         return 2
 
-    import MetaTrader5 as mt5  # type: ignore[import-untyped]
+    import MetaTrader5 as mt5
 
-    if not mt5.initialize(path=mt5_path):  # type: ignore[attr-defined]
-        err = mt5.last_error()  # type: ignore[attr-defined]
+    if not mt5.initialize(path=mt5_path):
+        err = mt5.last_error()
         print(f"[hub] ERROR: MT5 initialize failed: {err}", file=sys.stderr)
         return 1
 
@@ -725,8 +725,14 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
 
 
 def cmd_live(args: argparse.Namespace) -> int:
-    """Start the full live trading pipeline (intent loop + bridge worker)."""
+    """Start the full live trading pipeline (intent loop + bridge worker).
+
+    Uses Popen (non-blocking) so the hub process stays alive and can
+    restart the launcher if it exits.  Previously used subprocess.run()
+    which meant a single launcher crash killed the entire system.
+    """
     import subprocess
+    import time as _time
 
     launcher = PROJECT_ROOT / "scripts" / "live_launcher.py"
     if not launcher.exists():
@@ -737,12 +743,52 @@ def cmd_live(args: argparse.Namespace) -> int:
     print(f"[hub] Config: {args.config}")
     print()
 
-    proc = subprocess.run(
-        [sys.executable, str(launcher), args.config],
-        capture_output=False,
-        check=False,
-    )
-    return proc.returncode
+    RESTART_COOLDOWN = 10  # seconds between launcher restarts
+    MAX_CONSECUTIVE_CRASHES = 3  # fast crashes within 60s trigger escalation
+    ESCALATION_SLEEP = 300  # 5 min pause after fast-crash burst
+    crash_times: list[float] = []
+
+    while True:
+        proc = subprocess.Popen(
+            [sys.executable, str(launcher), args.config],
+            stdout=None,
+            stderr=None,
+        )
+        print(f"[hub] Launcher started (pid={proc.pid})", flush=True)
+
+        try:
+            retcode = proc.wait()
+        except KeyboardInterrupt:
+            print("[hub] KeyboardInterrupt — shutting down launcher...", flush=True)
+            proc.terminate()
+            try:
+                proc.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+            print("[hub] Launcher terminated.", flush=True)
+            return 0
+
+        now = _time.time()
+        crash_times.append(now)
+        # Keep only crashes within last 60s
+        crash_times = [t for t in crash_times if now - t < 60]
+
+        print(
+            f"[hub] Launcher exited with code {retcode} at {_time.strftime('%H:%M:%S')}", flush=True
+        )
+
+        if crash_times and len(crash_times) >= MAX_CONSECUTIVE_CRASHES:
+            print(
+                f"[hub] {MAX_CONSECUTIVE_CRASHES} crashes in 60s — "
+                f"cooling down {ESCALATION_SLEEP}s...",
+                flush=True,
+            )
+            _time.sleep(ESCALATION_SLEEP)
+            crash_times.clear()
+        else:
+            print(f"[hub] Restarting launcher in {RESTART_COOLDOWN}s...", flush=True)
+            _time.sleep(RESTART_COOLDOWN)
 
 
 # ---------------------------------------------------------------------------

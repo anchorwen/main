@@ -1,0 +1,26 @@
+{
+  "schema_version": "brain_registry_entry.v1",
+  "brain_id": "xgboost_h4_swing_xgboost_v1_20260514_165620",
+  "brain_type": "xgboost_v9",
+  "brain_role": "alpha_brain",
+  "model_version": "h4_swing_xgboost_v1",
+  "status": "shadow",
+  "vote_weight": 0.6,
+  "magic": 90340,
+  "artifact_path": "data/models/institutional/h4_swing_xgboost_v1_20260514_162903.json",
+  "feature_schema_id": "swing_24",
+  "training_contract": "h4_swing_xgboost_v1",
+  "normalization_config_path": "",
+  "deployment_scope": {
+    "symbols": ["XAUUSDc", "XAUUSD"],
+    "sessions": ["all"],
+    "regimes": ["trend", "volatile_trend", "mean_reversion", "ranging"]
+  },
+  "contract_group": "h4_swing",
+  "training_horizon": 18,
+  "feature_schema": "swing_24",
+  "_notes": "xgboost h4_swing — 18-bar barrier. train_sharpe=5.19, fw_sharpe=5.14, overfit_gap=0.06, hash=708a5e67fad4...",
+  "_model_hash": "708a5e67fad45e9ff458f8b4b5527235d842d5ba0b7ece2d73e6232e392b00ae",
+  "_created_at": "2026-05-14T16:56:20.015179+00:00",
+  "_quality_gate_passed": true
+}

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import time
 from datetime import UTC, datetime
@@ -60,8 +61,27 @@ def _list_pending(outbox_dir: Path) -> list[Path]:
     return sorted(outbox_dir.rglob("*.mt5.json"))
 
 
-def _load_message(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+def _load_message(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        raw = path.read_text(encoding="utf-8")
+        if not raw.strip():
+            return None
+        return json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+        return None
+
+
+def _safe_move(src: Path, dst: Path) -> bool:
+    """Move src to dst, tolerating missing source (e.g. already moved by prior run)."""
+    try:
+        shutil.move(str(src), str(dst))
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return False
 
 
 def _build_receipt_payload(
@@ -86,17 +106,45 @@ def _write_receipt(
 
 
 def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
+    """Append a record to the trade journal with advisory file locking.
+
+    The lock serialises concurrent writes from the bridge worker, live_cycle
+    reconciliation, and any other journal producer, eliminating the
+    read-then-write race that caused duplicate entries and corruption.
+    """
+    from core.infrastructure.distributed_lock import FileLock
+
     journal_path.parent.mkdir(parents=True, exist_ok=True)
-    mid = record.get("message_id", "")
-    if mid and journal_path.exists():
-        try:
-            for line in journal_path.read_text(encoding="utf-8").splitlines():
-                if mid in line:
-                    return  # duplicate, skip
-        except Exception:
-            pass
-    with journal_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+    lock = FileLock(
+        "live_trade_journal", lock_dir=str(journal_path.parent / ".locks"), ttl_seconds=10
+    )
+    acquired = lock.acquire(blocking=True, timeout_seconds=5)
+    if not acquired.acquired:
+        print(
+            json.dumps(
+                {
+                    "event": "journal_lock_failed",
+                    "message_id": record.get("message_id", ""),
+                    "error": acquired.error or "timeout",
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        return
+    try:
+        mid = record.get("message_id", "")
+        if mid and journal_path.exists():
+            try:
+                for line in journal_path.read_text(encoding="utf-8").splitlines():
+                    if mid in line:
+                        return  # duplicate, skip
+            except Exception:
+                pass
+        with journal_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+    finally:
+        lock.release()
 
 
 def _is_protection_active(protection_flag_path: Path) -> bool:
@@ -393,6 +441,25 @@ def _mt5_modify_sltp(
     }
 
 
+def _derive_label(action: str, msg_payload: dict[str, Any], detail: dict[str, Any]) -> str | None:
+    """Derive a human-readable label from the action/payload/detail for journal entries."""
+    if action == "open":
+        return None
+    if action == "modify_sltp":
+        return "trail" if msg_payload.get("sl") else None
+    if action == "close":
+        comment = msg_payload.get("comment", "")
+        if isinstance(comment, str) and comment:
+            # comment carries the structured exit reason from the strategy
+            return comment
+        if isinstance(detail, dict):
+            retcode = detail.get("retcode")
+            if retcode and retcode != 10009:
+                return f"close_failed_rc{retcode}"
+        return "close_accepted"
+    return None
+
+
 def process_one(
     message_path: Path,
     *,
@@ -408,6 +475,13 @@ def process_one(
     mt5: Any = None,
 ) -> dict[str, Any]:
     payload = _load_message(message_path)
+    if payload is None:
+        # File missing, empty, or invalid JSON — skip silently
+        return {
+            "message_id": message_path.stem,
+            "ack_status": "skipped",
+            "reason": "file_missing_or_invalid",
+        }
     envelope = payload.get("envelope", {})
     msg_payload = envelope.get("payload", {})
     message_id = str(envelope.get("message_id", message_path.stem))
@@ -434,6 +508,10 @@ def process_one(
                 mt5, payload, default_volume=default_volume, deviation=deviation, magic=order_magic
             )
 
+    # order_magic must be resolved for all code paths (dry_run/protection guard use default)
+    if "order_magic" not in dir():
+        order_magic = int(msg_payload.get("magic", magic))
+
     action = normalize_action(msg_payload.get("action"))
     retcode = int(detail.get("retcode", 0)) if isinstance(detail, dict) else 0
     reject_reason = str(detail.get("reason", "")) if isinstance(detail, dict) else ""
@@ -458,7 +536,7 @@ def process_one(
         )
         archive_path = archive_dir / rel_path
         archive_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(message_path), str(archive_path))
+        _safe_move(message_path, archive_path)
         return {
             "message_id": message_id,
             "ack_status": "retrying",
@@ -496,9 +574,21 @@ def process_one(
     )
     archive_path = archive_dir / rel_path
     archive_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(message_path), str(archive_path))
+    _safe_move(message_path, archive_path)
 
     vol_disp = msg_payload.get("volume", msg_payload.get("lots"))
+    _comment = msg_payload.get("comment", "")
+    _label = _derive_label(action, msg_payload, detail)
+    _magic = order_magic
+    _strategy = ""
+    try:
+        from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
+
+        _strategy = MAGIC_TO_STRATEGY.get(_magic, "")
+    except Exception:
+        pass
+    _open_msg_id = msg_payload.get("open_message_id", "")
+    position_ticket = detail.get("order") or coerce_position_ticket(msg_payload)
     journal_record = {
         "schema_version": "live_trade_journal.v2",
         "recorded_at": _utc_now(),
@@ -511,9 +601,12 @@ def process_one(
         "side": msg_payload.get("side"),
         "volume": vol_disp,
         "pnl": msg_payload.get("pnl"),
-        "label": None,
+        "label": _label,
+        "comment": _comment,
+        "magic": _magic,
+        "strategy": _strategy,
         "effective_volume_hint": effective_volume(msg_payload, default_volume=default_volume),
-        "position_ticket": detail.get("order") or coerce_position_ticket(msg_payload),
+        "position_ticket": position_ticket,
         "execution_payload_schema": msg_payload.get("execution_payload_schema"),
         "sl": msg_payload.get("sl", msg_payload.get("stop_loss")),
         "tp": msg_payload.get("tp", msg_payload.get("take_profit")),
@@ -522,6 +615,8 @@ def process_one(
         "receipt_path": str(receipt_path),
         "brain_ids": msg_payload.get("brain_ids"),
     }
+    if _open_msg_id:
+        journal_record["open_message_id"] = _open_msg_id
     _append_journal(journal_path, journal_record)
 
     result = {
@@ -555,27 +650,56 @@ def run_worker(args: argparse.Namespace) -> int:
         except Exception as exc:
             print(f"[bridge] WARN: MT5 unavailable: {exc}", flush=True)
 
+    health_path = Path(args.receipt_dir).parent / "reports" / "mt5_bridge_health.json"
+    health_path.parent.mkdir(parents=True, exist_ok=True)
+    _last_health_write = 0.0
+
     try:
         while True:
             processed = []
             for path in _list_pending(outbox_dir):
-                processed.append(
-                    process_one(
-                        path,
-                        outbox_dir=outbox_dir,
-                        receipt_dir=receipt_dir,
-                        archive_dir=archive_dir,
-                        journal_path=journal_path,
-                        protection_flag_path=protection_flag_path,
-                        default_volume=args.default_volume,
-                        deviation=args.deviation,
-                        magic=args.magic,
-                        dry_run=bool(args.dry_run),
-                        mt5=mt5,
+                try:
+                    processed.append(
+                        process_one(
+                            path,
+                            outbox_dir=outbox_dir,
+                            receipt_dir=receipt_dir,
+                            archive_dir=archive_dir,
+                            journal_path=journal_path,
+                            protection_flag_path=protection_flag_path,
+                            default_volume=args.default_volume,
+                            deviation=args.deviation,
+                            magic=args.magic,
+                            dry_run=bool(args.dry_run),
+                            mt5=mt5,
+                        )
                     )
-                )
+                except Exception as exc:
+                    processed.append(
+                        {
+                            "message_id": path.stem,
+                            "ack_status": "error",
+                            "reason": f"{type(exc).__name__}: {str(exc)[:200]}",
+                        }
+                    )
             if processed:
                 print(json.dumps({"processed": processed}, ensure_ascii=False, default=str))
+
+            # ── Periodic health heartbeat ──
+            _now = time.time()
+            if _now - _last_health_write > 30:
+                try:
+                    _hb = {
+                        "last_heartbeat_utc": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                        "pid": os.getpid(),
+                        "mt5_connected": mt5 is not None,
+                        "outbox_pending": len(_list_pending(outbox_dir)),
+                    }
+                    health_path.write_text(json.dumps(_hb, ensure_ascii=False), encoding="utf-8")
+                    _last_health_write = _now
+                except Exception:
+                    pass
+
             if args.once:
                 return 0
             time.sleep(args.poll_seconds)

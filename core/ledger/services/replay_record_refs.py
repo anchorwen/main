@@ -4,7 +4,7 @@ Keeps access to replay record sections centralized so callers do not
 duplicate nested `.get()` paths across services.
 """
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     EXECUTION_MODE_VALUE_FULL,
     EXECUTION_MODE_VALUE_TARGETED,
     PAYLOAD_KEY_BLOCKED_MESSAGES,

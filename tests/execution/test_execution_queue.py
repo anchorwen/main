@@ -194,12 +194,12 @@ class TestExecutionQueue:
 
         import sys
 
-        # Create a mock for scripts.send_live_order.dispatch_live_order
-        mock_dispatch_live = MagicMock()
+        # Create a mock for core.execution.live_order_sender.dispatch_live_order
+        mock_dispatch_live = MagicMock(return_value={"ok": True})
         # Patch where it's imported (inside flush())
         with patch.dict(
             sys.modules,
-            {"scripts.send_live_order": MagicMock(dispatch_live_order=mock_dispatch_live)},
+            {"core.execution.live_order_sender": MagicMock(dispatch_live_order=mock_dispatch_live)},
         ):
             results = eq.flush(lambda **kw: {"ok": True})
             mock_dispatch_live.assert_called_once()
@@ -223,10 +223,10 @@ class TestExecutionQueue:
 
         import sys
 
-        mock_dispatch_live = MagicMock()
+        mock_dispatch_live = MagicMock(return_value={"ok": True})
         with patch.dict(
             sys.modules,
-            {"scripts.send_live_order": MagicMock(dispatch_live_order=mock_dispatch_live)},
+            {"core.execution.live_order_sender": MagicMock(dispatch_live_order=mock_dispatch_live)},
         ):
             results = eq.flush(lambda **kw: {"ok": True})
             net_out_call = mock_dispatch_live.call_args

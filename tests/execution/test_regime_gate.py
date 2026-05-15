@@ -54,7 +54,7 @@ class TestRegimeGateGetStrategyMode:
         gate = RegimeGate()
         for _regime, strategies in gate.regime_map.items():
             for name in ("barrier_12bar", "micro_3bar", "statarb_dynamic"):
-                assert strategies[name] in ("full", "reduced", "off")
+                assert strategies[name] in ("full", "reduced", "shadow")
 
 
 class TestRegimeGateBarFeeding:
@@ -150,7 +150,7 @@ class TestRegimeGateClassify:
         # All strategies should return a valid mode
         for name in ("barrier_12bar", "micro_3bar", "statarb_dynamic"):
             mode = gate.get_strategy_mode(name)
-            assert mode in ("full", "reduced", "off")
+            assert mode in ("full", "reduced", "shadow")
 
     def test_strategy_gates_match_get_strategy_mode(self):
         gate = RegimeGate()

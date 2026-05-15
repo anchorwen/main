@@ -1,6 +1,6 @@
 """Validation mode helpers for deployment services."""
 
-from core.deployment.domain_keys import VALIDATION_MODE_DEEP
+from core.contracts.domain_keys import VALIDATION_MODE_DEEP
 
 
 def resolve_validation_mode(container, validation_mode: str | None) -> str:

@@ -462,7 +462,7 @@ def test_correlation_tracker_initial_penalty_is_neutral():
     assert tracker.get_correlation_penalty(signals) == 1.0
 
 
-def test_correlation_tracker_update_and_no_penalty_when_all_agree():
+def test_correlation_tracker_update_and_penalty_when_all_agree():
     tracker = GroupCorrelationTracker(ema_alpha=0.3)
     # Feed in many cycles of agreement
     for _ in range(10):
@@ -472,11 +472,12 @@ def test_correlation_tracker_update_and_no_penalty_when_all_agree():
             "statarb_dynamic": _gs_corr("statarb_dynamic", "long"),
         }
         tracker.update(signals)
-    # All agree now → no penalty
-    assert tracker.get_correlation_penalty(signals) == 1.0
+    # All agree + high correlation → concentration penalty applied
+    penalty = tracker.get_correlation_penalty(signals)
+    assert penalty < 1.0  # penalty due to same-direction concentration
 
 
-def test_correlation_tracker_penalty_on_correlated_disagreement():
+def test_correlation_tracker_no_penalty_on_disagreement():
     tracker = GroupCorrelationTracker(ema_alpha=0.5)
     # Build strong correlation between barrier and micro
     for _ in range(20):
@@ -486,14 +487,14 @@ def test_correlation_tracker_penalty_on_correlated_disagreement():
             "statarb_dynamic": None,
         }
         tracker.update(signals)
-    # Now barrier and micro disagree — penalty should trigger
+    # Now barrier and micro disagree — disagreement is natural hedge, no penalty
     signals_divergent = {
         "barrier_12bar": _gs_corr("barrier_12bar", "long"),
         "micro_3bar": _gs_corr("micro_3bar", "short"),
         "statarb_dynamic": None,
     }
     penalty = tracker.get_correlation_penalty(signals_divergent)
-    assert penalty < 0.85  # correlated disagreement → lower multiplier
+    assert penalty == 1.0  # opposing directions → natural hedge
 
 
 def test_correlation_tracker_no_penalty_uncorrelated_disagreement():
@@ -519,7 +520,7 @@ def test_correlation_tracker_no_penalty_uncorrelated_disagreement():
     assert penalty == 1.0
 
 
-def test_correlation_tracker_neutral_does_not_trigger():
+def test_correlation_tracker_neutral_excluded_but_same_direction_penalized():
     tracker = GroupCorrelationTracker(ema_alpha=0.5)
     for _ in range(10):
         signals = {
@@ -528,14 +529,14 @@ def test_correlation_tracker_neutral_does_not_trigger():
             "statarb_dynamic": _gs_corr("statarb_dynamic", "long"),
         }
         tracker.update(signals)
-    # One group goes neutral, others stay long → no penalty
+    # One group goes neutral, but barrier+statarb both still long + correlated → penalty
     signals = {
         "barrier_12bar": _gs_corr("barrier_12bar", "long"),
         "micro_3bar": _gs_corr("micro_3bar", "neutral"),
         "statarb_dynamic": _gs_corr("statarb_dynamic", "long"),
     }
     penalty = tracker.get_correlation_penalty(signals)
-    assert penalty == 1.0  # neutrals don't trigger penalty
+    assert penalty < 1.0  # barrier+statarb same-direction concentration penalized
 
 
 def test_correlation_tracker_two_neutral_skips():

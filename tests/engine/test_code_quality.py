@@ -196,7 +196,7 @@ class TestCodeQualityChecks:
 
     def test_domain_keys_constants_are_referenced(self):
         workspace = _repo_root()
-        domain_keys = workspace / "core/deployment/domain_keys.py"
+        domain_keys = workspace / "core/contracts/domain_keys.py"
         py_files = [p for p in workspace.rglob("*.py") if p != domain_keys]
         unused = self._unused_constants_in_file(domain_keys, py_files)
         assert unused == [], f"Unused domain key constants found: {unused}"

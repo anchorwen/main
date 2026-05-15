@@ -1,6 +1,6 @@
 """Validation mode default and override precedence tests."""
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     COMPLIANCE_CHECK_ALPHA_BUDGET_EVIDENCE_REGISTERED,
     COMPLIANCE_CHECK_ALPHA_BUDGET_WARNINGS_CLEAR,
     VALIDATION_MODE_DEEP,

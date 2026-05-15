@@ -6,6 +6,7 @@ import argparse
 import json
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 from scripts.trade_quality_report import build_report
 

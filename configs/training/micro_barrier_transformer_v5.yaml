@@ -1,0 +1,59 @@
+schema_version: training_contract.v2.1
+contract_id: micro_barrier_transformer_v5
+dataset:
+  path: data/training/calibrated_3bar_v2/train.npz
+  feature_schema: v9_institutional_40
+  min_samples_per_class: 100
+  sample_weighting: return_magnitude
+label:
+  contract_id: barrier_3bar_calibrated
+  sl_atr_mult: 3.0
+  tp_atr_mult: 1.0
+  horizon_bars: 3
+  profitability_calibrated: true
+  spread_pips: 0.3
+  slippage_pips: 0.5
+  pip_value: 0.01
+architecture:
+  type: transformer
+  objective_function: binary_logloss
+  search_space: default
+  optuna_trials: 20
+  n_seeds: 3
+  custom_params:
+    epochs: 200
+    lr: 0.0005
+    batch_size: 128
+    dropout: 0.1
+    weight_decay: 5.0e-05
+    seq_len: 64
+    d_model: 128
+    n_heads: 8
+    num_layers: 3
+    multi_class: false
+validation:
+  method: cpcv
+  n_groups: 6
+  n_test_groups: 2
+  purge_bars: 3
+  embargo_bars: 1
+  val_ratio: 0.15
+  test_ratio: 0.1
+quality_gates:
+  model_type: deep_learning
+  min_train_sharpe: 0.5
+  min_train_win_rate: 0.46
+  min_sortino_ratio: 0.7
+  min_calmar_ratio: 0.3
+  max_vol_scaled_dd_pct: 35.0
+  min_forward_sharpe: 0.5
+  min_forward_win_rate: 0.46
+  max_overfit_gap: 0.5
+  require_shap_stability: false
+output:
+  brain_id_template: transformer_{contract}_{timestamp}
+  model_dir: data/models/institutional
+  config_dir: configs/brains
+  registry_db: data/training/registry.db
+  auto_register: true
+  initial_status: shadow

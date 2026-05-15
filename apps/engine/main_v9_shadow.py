@@ -25,7 +25,7 @@ from apps.engine.v9_shadow_sse import (  # noqa: E402
 from apps.engine.v9_shadow_sse import (  # noqa: E402
     stream_session_sse as stream_session_sse_impl,
 )
-from core.deployment.domain_keys import (  # noqa: E402
+from core.contracts.domain_keys import (  # noqa: E402
     PAYLOAD_KEY_ACTION,
     PAYLOAD_KEY_BRAIN_COUNT,
     PAYLOAD_KEY_COMMUNICATION_LEDGER_PATH,

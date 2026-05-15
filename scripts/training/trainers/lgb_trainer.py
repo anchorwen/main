@@ -148,6 +148,9 @@ def train_lightgbm(
     val_data: tuple[np.ndarray, np.ndarray] | None = None,
     feature_names: list[str] | None = None,
     regression: bool = False,
+    custom_obj: Any | None = None,
+    custom_metric: Any | None = None,
+    sample_weight: np.ndarray | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     import lightgbm as lgb
 
@@ -161,8 +164,36 @@ def train_lightgbm(
         merged["random_state"] = merged["random_state"]
         merged["data_random_seed"] = merged["random_state"]
 
+    # ── Class imbalance: scale_pos_weight for binary classification ──
+    if not regression:
+        scale_pos_weight = merged.pop("scale_pos_weight", None)
+        if scale_pos_weight is not None and scale_pos_weight > 0:
+            pos_count = int(y.sum())
+            neg_count = len(y) - pos_count
+            if pos_count > 0:
+                merged["scale_pos_weight"] = scale_pos_weight
+                print(
+                    f"[lgb_trainer] scale_pos_weight={scale_pos_weight} (neg={neg_count} pos={pos_count})"
+                )
+
+    # ── Sample weights ──
+    weight_array = sample_weight
+    if weight_array is None and not regression:
+        scale_pos_weight = merged.pop("scale_pos_weight", None)
+        if scale_pos_weight is not None and scale_pos_weight > 0:
+            pos_count = int(y.sum())
+            neg_count = len(y) - pos_count
+            if pos_count > 0:
+                merged["scale_pos_weight"] = scale_pos_weight
+                print(
+                    f"[lgb_trainer] scale_pos_weight={scale_pos_weight} (neg={neg_count} pos={pos_count})"
+                )
+
     dtrain = lgb.Dataset(
-        X, label=y, feature_name=feature_names or [f"f_{i}" for i in range(X.shape[1])]
+        X,
+        label=y,
+        feature_name=feature_names or [f"f_{i}" for i in range(X.shape[1])],
+        weight=weight_array,
     )
 
     valid_sets = [dtrain]
@@ -177,6 +208,15 @@ def train_lightgbm(
         valid_sets.append(dval)
         valid_names.append("eval")
 
+    # ── Custom objective (LightGBM 4.x: pass via params, not fobj) ──
+    if custom_obj is not None:
+        merged.pop("objective", None)
+        merged.pop("metric", None)
+        merged["objective"] = custom_obj
+        print("[lgb_trainer] Using custom objective function (via params)")
+    if custom_metric is not None:
+        print("[lgb_trainer] Using custom evaluation metric")
+
     t0 = time.perf_counter()
     evals_result: dict[str, list[float]] = {}
 
@@ -186,6 +226,7 @@ def train_lightgbm(
         num_boost_round=n_estimators,
         valid_sets=valid_sets,
         valid_names=valid_names,
+        feval=custom_metric,
         callbacks=[
             lgb.record_evaluation(evals_result),
             lgb.early_stopping(early_stop, verbose=False) if early_stop else lgb.log_evaluation(0),
@@ -289,6 +330,9 @@ def build_and_train(
     augment_noise_std: float = 0.0,
     augment_seed: int | None = None,
     regression: bool = False,
+    custom_obj: Any | None = None,
+    custom_metric: Any | None = None,
+    sample_weight: np.ndarray | None = None,
 ) -> dict[str, Any]:
     X, y, pnl, feature_names = load_training_data(data_path, regression=regression)
 
@@ -312,7 +356,15 @@ def build_and_train(
         augment_applied = True
 
     booster, metrics = train_lightgbm(
-        X, y, params=params, val_data=val_data, feature_names=feature_names, regression=regression
+        X,
+        y,
+        params=params,
+        val_data=val_data,
+        feature_names=feature_names,
+        regression=regression,
+        custom_obj=custom_obj,
+        custom_metric=custom_metric,
+        sample_weight=sample_weight,
     )
 
     save_model(booster, model_path)
@@ -367,6 +419,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--n-estimators", type=int, default=None)
     p.add_argument("--num-leaves", type=int, default=None)
     p.add_argument("--learning-rate", type=float, default=None)
+    p.add_argument(
+        "--scale-pos-weight",
+        type=float,
+        default=None,
+        help="LightGBM scale_pos_weight for binary class imbalance (e.g. 6.58)",
+    )
     p.add_argument("--seed", type=int, default=None)
     p.add_argument(
         "--mode",
@@ -421,6 +479,7 @@ def main(argv: list[str] | None = None) -> int:
             ("num_leaves", args.num_leaves),
             ("learning_rate", args.learning_rate),
             ("random_state", args.seed),
+            ("scale_pos_weight", args.scale_pos_weight),
         ]
         if v is not None
     }

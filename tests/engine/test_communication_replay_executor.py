@@ -4,14 +4,14 @@ from datetime import datetime, timedelta
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.dispatch_result import DispatchResult
 from core.contracts.domain.replay_execution_record import ReplayExecutionRecord
+from core.contracts.domain_keys import (
+    REPLAY_GOVERNANCE_PROJECTION_SOURCE_REPLAY_RECORD_EXECUTION,
+)
 from core.contracts.enums import (
     CommunicationMessageType,
     CommunicationPriority,
     DispatchStatus,
     ReplayGateDecision,
-)
-from core.deployment.domain_keys import (
-    REPLAY_GOVERNANCE_PROJECTION_SOURCE_REPLAY_RECORD_EXECUTION,
 )
 from core.ledger.services.communication_inspection_service import CommunicationInspectionService
 from core.ledger.services.communication_record_reader import CommunicationRecordReader

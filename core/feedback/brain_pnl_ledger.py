@@ -63,6 +63,9 @@ class BrainPnLMetrics:
     short_win_rate: float = 0.0
     long_count: int = 0
     short_count: int = 0
+    # Friction costs
+    total_spread_cost: float = 0.0
+    total_slippage_cost: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -81,6 +84,8 @@ class BrainPnLMetrics:
             "short_win_rate": self.short_win_rate,
             "long_count": self.long_count,
             "short_count": self.short_count,
+            "total_spread_cost": self.total_spread_cost,
+            "total_slippage_cost": self.total_slippage_cost,
         }
 
 
@@ -95,11 +100,6 @@ class BrainPnLStore:
     # Annualisation factor for M5 bars: 288 bars/day * 252 trading days
     ANNUAL_FACTOR = 288 * 252  # 72576
 
-    def __init__(self, window_size: int = 100) -> None:
-        self._window_size = window_size
-        self._pending: dict[str, dict[str, Any]] = {}  # signal_id → entry
-        self._settled: dict[str, list[dict[str, Any]]] = {}  # brain_id → list[outcome]
-
     # ── recording ──────────────────────────────────────────────────────
 
     def record_signal(
@@ -112,6 +112,8 @@ class BrainPnLStore:
         confidence: float = 0.5,
         snapshot_id: str = "",
         metadata: dict[str, Any] | None = None,
+        entry_spread: float = 0.0,
+        entry_slippage: float = 0.0,
     ) -> str | None:
         """Record a brain's directional signal, pending next-bar settlement.
 
@@ -131,6 +133,8 @@ class BrainPnLStore:
             "snapshot_id": snapshot_id,
             "entry_time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             "metadata": metadata or {},
+            "entry_spread": entry_spread,
+            "entry_slippage": entry_slippage,
         }
         return signal_id
 
@@ -139,23 +143,58 @@ class BrainPnLStore:
         signal_id: str,
         close_price: float,
         close_time: str | None = None,
+        *,
+        spread: float = 0.0,
+        slippage: float = 0.0,
+        mfe_r: float = 0.0,
+        mae_r: float = 0.0,
     ) -> dict[str, Any] | None:
         """Settle a single pending signal.  Returns the outcome or None."""
         entry = self._pending.pop(signal_id, None)
         if entry is None:
             return None
 
-        return self._settle(entry, close_price, close_time)
+        return self._settle(
+            entry,
+            close_price,
+            close_time,
+            spread=spread,
+            slippage=slippage,
+            mfe_r=mfe_r,
+            mae_r=mae_r,
+        )
 
     def settle_all(
         self,
         close_price: float,
         close_time: str | None = None,
+        *,
+        spread: float = 0.0,
+        slippage: float = 0.0,
+        mfe_r: float = 0.0,
+        mae_r: float = 0.0,
     ) -> dict[str, dict[str, Any]]:
-        """Settle every pending signal at once.  Returns {brain_id: outcome}."""
+        """Settle every pending signal at once.  Returns {brain_id: outcome}.
+
+        Args:
+            close_price: Mid price for settlement. Long exits at (close - spread/2),
+                         short exits at (close + spread/2).
+            spread: Current bid-ask spread at settlement time.
+            slippage: Estimated slippage at settlement time.
+            mfe_r: Maximum favourable excursion (R-multiple) during holding period.
+            mae_r: Maximum adverse excursion (R-multiple) during holding period.
+        """
         results: dict[str, dict[str, Any]] = {}
         for signal_id in list(self._pending.keys()):
-            outcome = self.settle_one(signal_id, close_price, close_time)
+            outcome = self.settle_one(
+                signal_id,
+                close_price,
+                close_time,
+                spread=spread,
+                slippage=slippage,
+                mfe_r=mfe_r,
+                mae_r=mae_r,
+            )
             if outcome is not None:
                 results[outcome["brain_id"]] = outcome
         return results
@@ -165,14 +204,28 @@ class BrainPnLStore:
         entry: dict[str, Any],
         close_price: float,
         close_time: str | None,
+        *,
+        spread: float = 0.0,
+        slippage: float = 0.0,
+        mfe_r: float = 0.0,
+        mae_r: float = 0.0,
     ) -> dict[str, Any]:
         direction = entry["direction"]
         entry_price = entry["entry_price"]
+        entry_spread = float(entry.get("entry_spread", 0.0) or 0.0)
+        entry_slippage = float(entry.get("entry_slippage", 0.0) or 0.0)
+
+        # Exit at effective price:
+        #   LONG:  sell at bid  = mid - spread/2 - slippage
+        #   SHORT: buy at ask   = mid + spread/2 + slippage
+        # Net cost = entry_spread/2 (entry friction) + exit_spread/2 + slippage (exit friction)
+        half_entry_spread = entry_spread / 2.0 + entry_slippage
+        half_exit_friction = spread / 2.0 + slippage
 
         if direction == "long":
-            pnl_per_unit = close_price - entry_price
+            pnl_per_unit = close_price - entry_price - half_entry_spread - half_exit_friction
         else:
-            pnl_per_unit = entry_price - close_price
+            pnl_per_unit = entry_price - close_price - half_entry_spread - half_exit_friction
 
         pnl_bps = (pnl_per_unit / entry_price) * 10_000 if entry_price > 0 else 0.0
 
@@ -183,6 +236,11 @@ class BrainPnLStore:
             "pnl_per_unit": round(pnl_per_unit, 6),
             "pnl_bps": round(pnl_bps, 2),
             "is_win": pnl_per_unit > 0,
+            "exit_spread": spread,
+            "exit_slippage": slippage,
+            "total_friction": round(half_entry_spread + half_exit_friction, 6),
+            "mfe_r": round(mfe_r, 6),
+            "mae_r": round(mae_r, 6),
         }
 
         brain_id = entry["brain_id"]
@@ -262,6 +320,16 @@ class BrainPnLStore:
 
         health = self._assess_health(n, sharpe, win_rate, max_dd)
 
+        # Friction cost aggregation
+        total_spread = sum(
+            float(o.get("entry_spread", 0) or 0) + float(o.get("exit_spread", 0) or 0)
+            for o in outcomes
+        )
+        total_slippage = sum(
+            float(o.get("entry_slippage", 0) or 0) + float(o.get("exit_slippage", 0) or 0)
+            for o in outcomes
+        )
+
         return BrainPnLMetrics(
             brain_id=brain_id,
             sample_count=n,
@@ -278,6 +346,8 @@ class BrainPnLStore:
             short_win_rate=round(short_wr, 4),
             long_count=len(long_outs),
             short_count=len(short_outs),
+            total_spread_cost=round(total_spread, 4),
+            total_slippage_cost=round(total_slippage, 4),
         )
 
     def get_all_metrics(self) -> dict[str, BrainPnLMetrics]:
@@ -297,6 +367,22 @@ class BrainPnLStore:
 
     # ── health assessment ──────────────────────────────────────────────
 
+    # Fixed fallback thresholds (used when sample < 30 cross-brain)
+    FIXED_THRESHOLDS: dict[str, dict[str, float]] = {
+        "critical": {"sharpe": -1.0, "win_rate": 0.30},
+        "degraded": {"sharpe": -0.5, "win_rate": 0.40},
+        "warning": {"sharpe": 0.0, "win_rate": 0.48, "max_dd": 3.0},
+        "healthy": {"sharpe": 1.0, "win_rate": 0.55},
+    }
+
+    def __init__(self, window_size: int = 100) -> None:
+        self._window_size = window_size
+        self._pending: dict[str, dict[str, Any]] = {}
+        self._settled: dict[str, dict[str, Any]] = {}
+        # Rolling quantile thresholds (recalibrated from cross-brain distribution)
+        self._calibrated_thresholds: dict[str, dict[str, float]] | None = None
+        self._last_calibration_n: int = 0
+
     @staticmethod
     def _assess_health(
         n: int,
@@ -304,6 +390,9 @@ class BrainPnLStore:
         win_rate: float,
         max_dd: float,
     ) -> str:
+        # DEPRECATED (2026-05-12): New code should use BrainQualityEngine.assess()
+        # from core.feedback.brain_quality_engine.  Kept for internal get_metrics()
+        # backward compat — do NOT add new callers.
         if n < 10:
             return "insufficient_data"
         if sharpe < -1.0 or win_rate < 0.30:
@@ -315,6 +404,187 @@ class BrainPnLStore:
         if sharpe >= 1.0 and win_rate >= 0.55:
             return "healthy"
         return "stable"
+
+    def calibrate_thresholds(self, min_samples: int = 30) -> dict[str, dict[str, float]]:
+        """Compute percentile-based health thresholds from cross-brain distribution.
+
+        Uses the bottom 20% of Sharpe/win_rate as "critical", bottom 40% as
+        "degraded", top 30% as "healthy".  Falls back to fixed thresholds
+        when total settled samples < min_samples.
+        """
+        all_metrics = self.get_all_metrics()
+        sharpes: list[float] = []
+        win_rates: list[float] = []
+        for m in all_metrics.values():
+            if m.sample_count >= 10:
+                sharpes.append(m.sharpe_ratio)
+                win_rates.append(m.win_rate)
+
+        total_samples = sum(m.sample_count for m in all_metrics.values())
+        if len(sharpes) < 3 or total_samples < min_samples:
+            self._calibrated_thresholds = None
+            self._last_calibration_n = total_samples
+            return dict(self.FIXED_THRESHOLDS)
+
+        import numpy as np
+
+        s = np.array(sharpes)
+        w = np.array(win_rates)
+
+        calibrated = {
+            "critical": {
+                "sharpe": round(float(np.percentile(s, 20)), 2),
+                "win_rate": round(float(np.percentile(w, 20)), 4),
+            },
+            "degraded": {
+                "sharpe": round(float(np.percentile(s, 40)), 2),
+                "win_rate": round(float(np.percentile(w, 40)), 4),
+            },
+            "warning": {
+                "sharpe": round(float(np.percentile(s, 60)), 2),
+                "win_rate": round(float(np.percentile(w, 60)), 4),
+                "max_dd": self.FIXED_THRESHOLDS["warning"]["max_dd"],
+            },
+            "healthy": {
+                "sharpe": round(float(np.percentile(s, 70)), 2),
+                "win_rate": round(float(np.percentile(w, 70)), 4),
+            },
+            "_meta": {
+                "n_brains": len(sharpes),
+                "total_samples": total_samples,
+                "sharpe_median": round(float(np.median(s)), 2),
+                "win_rate_median": round(float(np.median(w)), 4),
+            },
+        }
+
+        self._calibrated_thresholds = calibrated
+        self._last_calibration_n = total_samples
+        return calibrated
+
+    def assess_health_calibrated(
+        self,
+        brain_id: str,
+        n: int,
+        sharpe: float,
+        win_rate: float,
+        max_dd: float,
+    ) -> str:
+        """Assess health using calibrated thresholds when available, else fixed."""
+        thresholds = (
+            self._calibrated_thresholds
+            if self._calibrated_thresholds is not None
+            else dict(self.FIXED_THRESHOLDS)
+        )
+
+        if n < 10:
+            return "insufficient_data"
+
+        crit = thresholds.get("critical", self.FIXED_THRESHOLDS["critical"])
+        degr = thresholds.get("degraded", self.FIXED_THRESHOLDS["degraded"])
+        warn = thresholds.get("warning", self.FIXED_THRESHOLDS["warning"])
+        heal = thresholds.get("healthy", self.FIXED_THRESHOLDS["healthy"])
+
+        if sharpe < crit["sharpe"] or win_rate < crit["win_rate"]:
+            return "critical"
+        if sharpe < degr["sharpe"] or win_rate < degr["win_rate"]:
+            return "degraded"
+        if (
+            sharpe < warn["sharpe"]
+            or win_rate < warn["win_rate"]
+            or max_dd > warn.get("max_dd", 3.0)
+        ):
+            return "warning"
+        if sharpe >= heal["sharpe"] and win_rate >= heal["win_rate"]:
+            return "healthy"
+        return "stable"
+
+    def get_metrics_calibrated(self, brain_id: str, window: int | None = None) -> BrainPnLMetrics:
+        """Same as get_metrics() but uses calibrated health thresholds."""
+        outcomes = self._settled.get(brain_id, [])
+        if window is not None:
+            outcomes = outcomes[-window:]
+
+        n = len(outcomes)
+        if n < 5:
+            pnls = [o["pnl_per_unit"] for o in outcomes]
+            cumulative = sum(pnls)
+            win_count = sum(1 for o in outcomes if o["is_win"])
+            return BrainPnLMetrics(
+                brain_id=brain_id,
+                sample_count=n,
+                cumulative_pnl=round(cumulative, 6),
+                win_rate=round(win_count / n, 4) if n > 0 else 0.0,
+                long_count=sum(1 for o in outcomes if o["direction"] == "long"),
+                short_count=sum(1 for o in outcomes if o["direction"] == "short"),
+            )
+
+        pnls = [o["pnl_per_unit"] for o in outcomes]
+        cumulative = sum(pnls)
+        win_count = sum(1 for o in outcomes if o["is_win"])
+        win_rate = win_count / n
+        avg_return = cumulative / n
+
+        variance = sum((p - avg_return) ** 2 for p in pnls) / max(1, n - 1)
+        std_return = math.sqrt(variance)
+
+        if std_return > 1e-12:
+            sharpe = (avg_return / std_return) * math.sqrt(self.ANNUAL_FACTOR)
+        else:
+            sharpe = 0.0
+
+        cumsum = 0.0
+        peak = -1e18
+        max_dd = 0.0
+        for p in pnls:
+            cumsum += p
+            if cumsum > peak:
+                peak = cumsum
+            dd = peak - cumsum
+            if dd > max_dd:
+                max_dd = dd
+
+        gross_profit = sum(p for p in pnls if p > 0)
+        gross_loss = abs(sum(p for p in pnls if p < 0))
+        profit_factor = gross_profit / gross_loss if gross_loss > 1e-12 else float("inf")
+
+        recent_20 = sum(pnls[-20:]) if n >= 20 else cumulative
+
+        long_outs = [o for o in outcomes if o["direction"] == "long"]
+        short_outs = [o for o in outcomes if o["direction"] == "short"]
+        long_wr = sum(1 for o in long_outs if o["is_win"]) / max(1, len(long_outs))
+        short_wr = sum(1 for o in short_outs if o["is_win"]) / max(1, len(short_outs))
+
+        health = self.assess_health_calibrated(brain_id, n, sharpe, win_rate, max_dd)
+
+        # Friction cost aggregation
+        total_spread = sum(
+            float(o.get("entry_spread", 0) or 0) + float(o.get("exit_spread", 0) or 0)
+            for o in outcomes
+        )
+        total_slippage = sum(
+            float(o.get("entry_slippage", 0) or 0) + float(o.get("exit_slippage", 0) or 0)
+            for o in outcomes
+        )
+
+        return BrainPnLMetrics(
+            brain_id=brain_id,
+            sample_count=n,
+            cumulative_pnl=round(cumulative, 6),
+            win_rate=round(win_rate, 4),
+            avg_return=round(avg_return, 6),
+            std_return=round(std_return, 6),
+            sharpe_ratio=round(sharpe, 2),
+            max_drawdown=round(max_dd, 6),
+            profit_factor=round(profit_factor, 2) if profit_factor != float("inf") else 999.0,
+            recent_pnl_20=round(recent_20, 6),
+            health_signal=health,
+            long_win_rate=round(long_wr, 4),
+            short_win_rate=round(short_wr, 4),
+            long_count=len(long_outs),
+            short_count=len(short_outs),
+            total_spread_cost=round(total_spread, 4),
+            total_slippage_cost=round(total_slippage, 4),
+        )
 
     # ── persistence ────────────────────────────────────────────────────
 

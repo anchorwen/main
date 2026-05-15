@@ -57,6 +57,9 @@ class BrainPromotionThresholds:
     # Profit factor thresholds
     promote_pf_probation: float = 0.90  # min PF: candidate → probation
     promote_pf_active: float = 1.10  # min PF: probation → active
+
+    # Maximum profit_factor cap to prevent extreme values near score=1.0
+    max_profit_factor: float = 10.0
     retire_pf: float = 0.60  # PF below this → retire
     throttle_pf: float = 0.80  # PF below this → throttle
 
@@ -132,40 +135,79 @@ class BrainPromotionEvaluator:
         }
 
         # ── Universal retirement checks (apply in any state) ──
+        # Protection: brains with < min_signals_active get graduated demotion, not direct retire
+        _new_brain = signal_count < t.min_signals_active
         if signal_count >= t.min_signals_candidate:
             if cons_losses > t.max_consecutive_losses:
+                if _new_brain:
+                    return BrainPromotionDecision(
+                        brain_id=brain_id,
+                        current_status=status,
+                        action="throttle",
+                        target_status="probation",
+                        approved=True,
+                        reasons=[
+                            f"consecutive_losses({cons_losses}) > {t.max_consecutive_losses} — probation (protected)"
+                        ],
+                        metrics_snapshot=metrics_snapshot,
+                    )
+                target = "retired" if status in ("frozen",) else "frozen"
                 return BrainPromotionDecision(
                     brain_id=brain_id,
                     current_status=status,
-                    action="retire",
-                    target_status="retired",
+                    action="retire" if target == "retired" else "freeze",
+                    target_status=target,
                     approved=True,
                     reasons=[f"consecutive_losses({cons_losses}) > {t.max_consecutive_losses}"],
                     metrics_snapshot=metrics_snapshot,
                 )
             if wr < t.retire_wr and signal_count >= t.min_signals_probation:
+                if _new_brain:
+                    return BrainPromotionDecision(
+                        brain_id=brain_id,
+                        current_status=status,
+                        action="throttle",
+                        target_status="probation",
+                        approved=True,
+                        reasons=[f"win_rate({wr:.2%}) < {t.retire_wr:.0%} — probation (protected)"],
+                        metrics_snapshot=metrics_snapshot,
+                    )
+                target = "retired" if status in ("frozen",) else "frozen"
                 return BrainPromotionDecision(
                     brain_id=brain_id,
                     current_status=status,
-                    action="retire",
-                    target_status="retired",
+                    action="retire" if target == "retired" else "freeze",
+                    target_status=target,
                     approved=True,
                     reasons=[f"win_rate({wr:.2%}) < {t.retire_wr:.0%}"],
                     metrics_snapshot=metrics_snapshot,
                 )
             if pf < t.retire_pf and signal_count >= t.min_signals_probation:
+                if _new_brain:
+                    return BrainPromotionDecision(
+                        brain_id=brain_id,
+                        current_status=status,
+                        action="throttle",
+                        target_status="probation",
+                        approved=True,
+                        reasons=[
+                            f"profit_factor({pf:.2f}) < {t.retire_pf:.2f} — probation (protected)"
+                        ],
+                        metrics_snapshot=metrics_snapshot,
+                    )
+                target = "retired" if status in ("frozen",) else "frozen"
                 return BrainPromotionDecision(
                     brain_id=brain_id,
                     current_status=status,
-                    action="retire",
-                    target_status="retired",
+                    action="retire" if target == "retired" else "freeze",
+                    target_status=target,
                     approved=True,
                     reasons=[f"profit_factor({pf:.2f}) < {t.retire_pf:.2f}"],
                     metrics_snapshot=metrics_snapshot,
                 )
 
         # ── Throttle checks (active/probation only) ──
-        if status in ("active", "probation") and signal_count >= t.min_signals_probation:
+        if status in ("active", "live", "probation") and signal_count >= t.min_signals_probation:
             if pf < t.throttle_pf:
                 return BrainPromotionDecision(
                     brain_id=brain_id,
@@ -269,7 +311,7 @@ class BrainPromotionEvaluator:
                 brain_id=brain_id,
                 current_status=status,
                 action="promote",
-                target_status="active",
+                target_status="live",
                 approved=True,
                 reasons=[
                     f"probation_thresholds_met: wr={m['win_rate']:.2%}, pf={m['profit_factor']:.2f}"

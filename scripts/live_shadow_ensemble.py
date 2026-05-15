@@ -211,7 +211,7 @@ def _resolve_micro_feature_vector(
             record = store.latest(symbol, "M5", schema_name="v4.3_microstructure_9")
             if record is not None and record.values:
                 adapter = MicrostructureFeatureAdapter(
-                    scaler_path="data/models/mtx_transformer_scaler.joblib",
+                    scaler_path=None,
                 )
                 vec = adapter.build_model_input(record.values).ravel()
                 return vec, "store"

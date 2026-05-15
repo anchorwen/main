@@ -20,6 +20,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+import numpy as np
+
 
 @dataclass
 class AllocationDecision:
@@ -278,11 +280,13 @@ class GroupCorrelationTracker:
     def get_correlation_penalty(self, group_signals: dict[str, Any]) -> float:
         """Compute a correlation-based volume penalty.
 
-        Returns a multiplier in [0.5, 1.0]:
-          1.0 = no correlated-group disagreement
-          0.5 = maximum penalty (highly-correlated groups deeply disagree)
+        Returns a multiplier in [0.7, 1.0]:
+          1.0 = no same-direction concentration risk
+          0.7 = maximum penalty (highly-correlated groups all pointing same way)
 
-        Penalty triggers when two groups that USUALLY agree now disagree.
+        Penalty triggers when two groups that USUALLY co-move both signal the
+        same direction — indicating redundant, concentrated exposure.
+        Opposite-direction signals are treated as a natural hedge (no penalty).
         """
         if self._update_count < 3:
             return 1.0  # not enough data
@@ -302,29 +306,104 @@ class GroupCorrelationTracker:
                 d1 = sig1.direction
                 d2 = sig2.direction
 
-                # Same direction → no penalty regardless of history
-                if d1 == d2 and d1 != "neutral":
-                    continue
-                # One neutral → mild penalty if historically correlated
+                # Neutral signals → skip
                 if d1 == "neutral" or d2 == "neutral":
                     continue
 
-                # Disagreement (long vs short)
+                # Opposite directions → natural hedge, no penalty
+                if d1 != d2:
+                    continue
+
+                # Same direction: concentration risk when historically correlated
+                # If groups usually co-move (high hist_corr) and both signal same
+                # direction, reduce volume to avoid over-concentration
                 key = (g1, g2)
                 hist_corr = self._pairwise_ema.get(key, 0.5)
 
-                # Penalty proportional to historical correlation:
-                # If groups usually agree (corr ~1.0) and now disagree → large penalty
-                # If groups are uncorrelated (corr ~0.5) → small penalty
                 if hist_corr > 0.5:
-                    (
-                        0.5 + 0.5 * (hist_corr - 0.5) / 0.5
-                    )  # maps [0.5, 1.0] to [0.5, 1.0] but inverted
-                    # Actually: high corr + disagree = big penalty → low multiplier
-                    corr_pen = 1.0 - 0.5 * max(0.0, (hist_corr - 0.5) / 0.5)
+                    # corr_pen ∈ [0.7, 1.0]: corr=1.0 → 0.70x, corr=0.5 → 1.0x
+                    corr_pen = 1.0 - 0.3 * max(0.0, (hist_corr - 0.5) / 0.5)
                     penalties.append(corr_pen)
 
         if not penalties:
             return 1.0
 
         return round(min(penalties), 4)  # most conservative penalty wins
+
+
+# ── Portfolio-optimizer bridge ──────────────────────────────────────────────
+
+
+def compute_optimal_group_weights(
+    group_returns: dict[str, list[float]],
+    *,
+    method: str = "risk_parity",
+    lookback: int = 50,
+    shrinkage: float = 0.2,
+) -> dict[str, float]:
+    """Bridge to ``core.metrics.portfolio_optimizer`` for cross-group allocation.
+
+    Uses historical per-group P&L snapshots to compute optimal capital weights
+    via Markowitz, Risk Parity, or Equal Weight — then normalises to [0, 1].
+
+    Args:
+        group_returns: dict group_name → list of periodic returns (e.g. trade P&L %).
+        method: "risk_parity" (default), "min_variance", "max_sharpe", or "equal".
+        lookback: max number of recent returns to use per group.
+        shrinkage: Ledoit-Wolf shrinkage delta for covariance.
+
+    Returns:
+        dict group_name → weight (float, sum ≈ 1.0).
+    """
+    from core.metrics.portfolio_optimizer import (
+        equal_weights,
+        max_sharpe_weights,
+        min_variance_weights,
+        risk_parity_weights,
+        shrunk_covariance,
+    )
+
+    groups = sorted(group_returns.keys())
+    if len(groups) < 2:
+        return {g: 1.0 for g in groups} if groups else {}
+
+    # Build aligned returns matrix (T x N)
+    min_len = min(len(group_returns[g][-lookback:]) if group_returns[g] else 0 for g in groups)
+    if min_len < 5:
+        return {g: 1.0 / len(groups) for g in groups}
+
+    returns_matrix = np.zeros((min_len, len(groups)), dtype=np.float64)
+    for j, g in enumerate(groups):
+        series = group_returns[g][-min_len:]
+        returns_matrix[:, j] = np.asarray(series, dtype=np.float64)
+
+    cov = shrunk_covariance(returns_matrix, delta=shrinkage)
+
+    if method == "min_variance":
+        weights = min_variance_weights(cov)
+    elif method == "max_sharpe":
+        weights = max_sharpe_weights(cov)
+    elif method == "risk_parity":
+        weights = risk_parity_weights(cov)
+    else:
+        weights = equal_weights(len(groups))
+
+    return {g: round(float(w), 6) for g, w in zip(groups, weights, strict=False)}
+
+
+def blend_group_weight(
+    portfolio_weight: float,
+    agreement_mult: float,
+    *,
+    portfolio_blend: float = 0.3,
+) -> float:
+    """Blend portfolio-optimizer weight with agreement-based volume multiplier.
+
+    ``portfolio_blend`` controls how much the portfolio-optimizer weight
+    influences the final size.  At 0.0 the optimiser is ignored; at 1.0
+    agreement multipliers are ignored.
+    """
+    return round(
+        portfolio_blend * portfolio_weight + (1.0 - portfolio_blend) * agreement_mult,
+        4,
+    )

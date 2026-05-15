@@ -1,0 +1,25 @@
+{
+  "schema_version": "brain_registry_entry.v1",
+  "brain_id": "DeepResMLP_V2_New",
+  "brain_type": "deepresmlp",
+  "brain_role": "alpha_brain",
+  "model_version": "v2.0",
+  "status": "shadow",
+  "vote_weight": 0.7,
+  "magic": 90015,
+  "artifact_path": "data/models/deepresmlp_v2_new.onnx",
+  "feature_schema_id": "v9_institutional_40",
+  "training_contract": "survival_barrier_2.0sl_3.5tp_12bar",
+  "normalization_config_path": "configs/brains/v9_institutional_01.normalization.json",
+  "deployment_scope": {
+    "symbols": ["XAUUSDc", "XAUUSD"],
+    "sessions": ["all"],
+    "regimes": ["trend", "volatile_trend", "mean_reversion"]
+  },
+  "contract_group": "barrier_12bar",
+  "training_horizon": 12,
+  "feature_schema": "v9_40dim",
+  "generation": "g2026.2",
+  "train_acc": 0.8405,
+  "val_acc": 0.8321
+}

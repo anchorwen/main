@@ -27,6 +27,28 @@ class BaseBrainAdapter(ABC):
         self._backend = "stub:not_loaded"
         self._feature_dimension: int = 40
 
+    # ── Pluggable-brain metadata (read from brain JSON, no hardcoding) ──
+
+    @property
+    def brain_id(self) -> str:
+        """Unique brain identifier from the registry entry."""
+        return self._brain_entry.get("brain_id", "")
+
+    @property
+    def contract_group(self) -> str:
+        """Contract group this brain belongs to (e.g. 'barrier_12bar')."""
+        return self._brain_entry.get("contract_group", "")
+
+    @property
+    def training_horizon(self) -> int:
+        """Training horizon in M5 cycles (e.g. 12 for barrier, 3 for micro)."""
+        return self._brain_entry.get("training_horizon", 12)
+
+    @property
+    def feature_schema(self) -> str:
+        """Feature schema identifier (e.g. 'v9_40dim', 'micro_9dim')."""
+        return self._brain_entry.get("feature_schema", "")
+
     # ------------------------------------------------------------------
     # Abstract — concrete adapters must implement
     # ------------------------------------------------------------------
@@ -109,7 +131,10 @@ class BaseBrainAdapter(ABC):
         return {
             "adapter_class": self.__class__.__name__,
             "brain_type": self._brain_entry.get("brain_type"),
-            "brain_id": self._brain_entry.get("brain_id"),
+            "brain_id": self.brain_id,
+            "contract_group": self.contract_group,
+            "training_horizon": self.training_horizon,
+            "feature_schema": self.feature_schema,
             "backend": self._backend,
             "artifact_path": self._brain_entry.get("artifact_path"),
         }

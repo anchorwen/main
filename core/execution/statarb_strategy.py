@@ -10,6 +10,7 @@ Only trades when Z-score exceeds thresholds.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import numpy as np
@@ -31,6 +32,8 @@ class StatArbStrategy(StrategyLine):
         feature_vector: Any,
         micro_feature_vector: Any,
         mid_price: float | None,
+        micro_sequences: dict[str, Any] | None = None,
+        daily_feature_vector: Any = None,
     ) -> list[Any]:
         proposals: list[Any] = []
         for b_info in self.brains:
@@ -45,6 +48,18 @@ class StatArbStrategy(StrategyLine):
                 except Exception:
                     pass
                 proposals.append(prop)
-            except Exception:
-                pass
+            except Exception as _exc:
+                print(
+                    json.dumps(
+                        {
+                            "event": "brain_inference_error",
+                            "brain_id": b_info.get("brain_id", "unknown"),
+                            "brain_type": b_info.get("brain_type", "unknown"),
+                            "strategy": "statarb_dynamic",
+                            "error": str(_exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
         return proposals

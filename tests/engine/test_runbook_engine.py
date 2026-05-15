@@ -3,7 +3,7 @@
 import json
 
 from apps.engine.cli import main
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     COMPLIANCE_CHECK_ALPHA_BUDGET_EVIDENCE_REGISTERED,
     PAYLOAD_KEY_GOVERNANCE_FOCUS,
     PAYLOAD_KEY_GOVERNANCE_WARNING_COUNT,

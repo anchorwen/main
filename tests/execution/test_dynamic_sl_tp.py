@@ -32,13 +32,13 @@ class TestComputeDynamicSLTP:
         assert result.vol_ratio == pytest.approx(2.0, rel=0.01)
 
     def test_low_vol_expands_multipliers(self):
-        """current_atr < ref_atr → effective multipliers expand."""
+        """current_atr < ref_atr → effective multipliers expand, capped by max."""
         result = compute_dynamic_sl_tp(
             base_sl_mult=2.0, base_tp_mult=3.5, current_atr=2.5, ref_atr=5.0
         )
-        # vol_ratio = 0.5 → mult = base / 0.5
-        assert result.sl_atr_mult > 2.0
-        assert result.tp_atr_mult > 3.5
+        # vol_ratio = 0.5 → mult = base / 0.5 = 4.0/7.0, clamped to [1.2, 3.0]/[1.2, 3.5]
+        assert result.sl_atr_mult == pytest.approx(3.0, rel=0.01)  # capped at max_sl_mult
+        assert result.tp_atr_mult == pytest.approx(3.5, rel=0.01)  # capped at max_tp_mult
         assert result.vol_ratio == pytest.approx(0.5, rel=0.01)
 
     def test_zero_atr_falls_back_to_ref(self):

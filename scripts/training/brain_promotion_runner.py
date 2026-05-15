@@ -89,7 +89,12 @@ def _compute_metrics_from_tracker(records: list[dict[str, Any]]) -> dict[str, An
 
     scores = [r.get("composite_score", 0.5) for r in records]
     avg_score = sum(scores) / len(scores) if scores else 0.5
-    profit_factor = avg_score / (1.0 - avg_score) if avg_score < 1.0 else avg_score * 2.0
+    if avg_score >= 0.99:
+        profit_factor = 10.0  # cap near-singularity
+    elif avg_score < 1.0:
+        profit_factor = min(avg_score / (1.0 - avg_score), 10.0)
+    else:
+        profit_factor = min(avg_score * 2.0, 10.0)
 
     dispatched = sum(1 for o in outcomes if o not in ("", "skipped"))
 

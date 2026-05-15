@@ -1,0 +1,29 @@
+{
+  "schema_version": "label_contract.v1",
+  "contract_id": "label-survival-barrier-1.0.0-H1",
+  "type": "survival_barrier",
+  "horizon_bars": 3,
+  "bar_timeframe": "H1",
+  "barriers": {
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 3.5
+  },
+  "atr_config": {
+    "timeframe": "H1",
+    "period": 14
+  },
+  "label_classes": {
+    "1": "tp_hit_first",
+    "0": "timeout",
+    "-1": "sl_hit_first"
+  },
+  "timeout_label": "timeout",
+  "metadata": {
+    "author": "quant-os",
+    "rationale": "2.0×ATR SL and 3.5×ATR TP on H1 bars with 3-bar (3 hour) horizon. M5→H1 compression ratio is 12×; original M5 horizon=12 bars, scaled 12/12=1, conservative round-up to 3. SL/TP multipliers kept same as M5 (2.0/3.5) for primary barrier strategy line consistency. 1.75:1 RR.",
+    "design_notes": "H1 variant for Survival barrier strategy. 3-bar horizon = 3h. Same SL/TP multipliers as M5 SUR contract. H1 features already present in v9_institutional_40 schema (8 H1-specific features). Sparse data constraint: H1 has ~15k bars vs M5's ~37k; fewer training samples expected.",
+    "applicable_lanes": ["sur"],
+    "parent_contract": "label-survival-barrier-1.0.0",
+    "created_at": "2026-05-10"
+  }
+}

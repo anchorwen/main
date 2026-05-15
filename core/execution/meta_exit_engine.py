@@ -37,6 +37,7 @@ class ExitFeatureSnapshot:
 
     # PnL state
     current_r: float = 0.0  # current R-multiple (pnl / entry_risk)
+    prev_r: float = 0.0  # previous cycle's R (for trajectory scoring)
     peak_r: float = 0.0  # highest R achieved
     drawdown_r: float = 0.0  # drawdown from peak R (always >= 0)
     pnl_pct: float = 0.0  # raw PnL as fraction of balance
@@ -245,7 +246,12 @@ class MetaExitEngine:
 
     @staticmethod
     def _score_pnl(snap: ExitFeatureSnapshot) -> float:
-        """Score PnL distress.
+        """Score PnL distress with R-trajectory awareness.
+
+        Base score from current R level, adjusted by trajectory:
+          - Stuck below 0.3R after 30+ cycles: +0.15 (trade going nowhere)
+          - R improving (current > prev): -0.05 (trade is working)
+          - R deteriorating (current < prev): +0.05 (trade is failing)
 
         0.0 = winning comfortably (R >= 2.0)
         0.5 = at breakeven
@@ -254,35 +260,53 @@ class MetaExitEngine:
         r = snap.current_r
 
         if r >= 1.5:
-            return 0.0  # winning, no urgency
-        if r >= 0.5:
-            return 0.15  # modest win, low urgency
-        if r >= 0.0:
-            return 0.30  # breakeven area
-        if r >= -0.5:
-            return 0.55  # small loss
-        if r >= -1.0:
-            return 0.75  # material loss
-        return 1.0  # deep loss
+            base = 0.0  # winning, no urgency
+        elif r >= 0.5:
+            base = 0.15  # modest win, low urgency
+        elif r >= 0.0:
+            base = 0.30  # breakeven area
+        elif r >= -0.5:
+            base = 0.55  # small loss
+        elif r >= -1.0:
+            base = 0.75  # material loss
+        else:
+            base = 1.0  # deep loss
+
+        # R-trajectory adjustments
+        if snap.cycles_held >= 30 and r < 0.3:
+            base += 0.15  # stuck — trade hasn't gone anywhere in 30+ cycles
+
+        if snap.prev_r != 0.0:
+            r_delta = r - snap.prev_r
+            if r_delta > 0.05:
+                base -= 0.05  # R improving — reduce urgency
+            elif r_delta < -0.05:
+                base += 0.05  # R deteriorating — increase urgency
+
+        return max(0.0, min(1.0, base))
 
     @staticmethod
     def _score_time(snap: ExitFeatureSnapshot) -> float:
-        """Score time decay.
+        """Score time decay with exponential ramp in the 80-100% zone.
 
         Phased urgency:
-          - 0-50% of horizon: 0.0-0.2 (let trade develop)
-          - 50-80%: 0.2-0.5 (start watching)
-          - 80-100%: 0.5-0.8 (exit pressure builds)
-          - >100%: 0.8-1.0 (overtime)
+          - 0-50% of horizon: 0.0 (let trade develop, no time pressure)
+          - 50-80%: 0.0 → 0.30 (linear, start watching)
+          - 80-100%: 0.30 → 0.60 (exponential, exit pressure builds)
+          - >100%: 0.80 (overtime, capped — PnL and other factors
+                   should drive the final exit decision)
         """
         ratio = snap.time_ratio
         if ratio < 0.5:
-            return 0.05
+            return 0.0
         if ratio < 0.8:
-            return 0.20 + 0.30 * (ratio - 0.5) / 0.3
+            # Linear: 0.0 at 50% → 0.30 at 80%
+            return 0.30 * (ratio - 0.5) / 0.3
         if ratio <= 1.0:
-            return 0.50 + 0.30 * (ratio - 0.8) / 0.2
-        return min(1.0, 0.80 + 0.20 * (ratio - 1.0))
+            # Exponential: 0.30 at 80% → 0.60 at 100%
+            t = (ratio - 0.8) / 0.2  # normalized [0, 1] within zone
+            return 0.30 + 0.30 * (t**2)  # quadratic ramp
+        return 0.80  # overtime, flat — don't force-close on time alone
 
     @staticmethod
     def _score_regime(snap: ExitFeatureSnapshot) -> float:
@@ -378,9 +402,10 @@ class MetaExitEngine:
             fmap = self._runtime_feature_map(snap)
             return [fmap.get(name, 0.0) for name in self._feature_names]
 
-        # Fallback: 16-dim runtime vector (no trained model loaded)
+        # Fallback: 17-dim runtime vector (no trained model loaded)
         return [
             snap.current_r,
+            snap.prev_r,
             snap.peak_r,
             snap.drawdown_r,
             snap.pnl_pct,
@@ -409,6 +434,7 @@ class MetaExitEngine:
         return {
             # PnL state
             "current_r": snap.current_r,
+            "prev_r": snap.prev_r,
             "peak_r": snap.peak_r,
             "drawdown_r": snap.drawdown_r,
             "pnl_pct": snap.pnl_pct,
@@ -449,8 +475,14 @@ def create_exit_engine(
     model_path: str | None = None,
     urgency_threshold: float = 0.65,
     **kwargs,
-) -> MetaExitEngine:
-    """Create a MetaExitEngine, loading model if available."""
+) -> MetaExitEngine | None:
+    """Create a MetaExitEngine, loading model if available.
+
+    When the trained model cannot be loaded (insufficient quality, data leakage,
+    or missing), returns None so that Layer 2.5 is gracefully disabled and the
+    existing trailing stop (Layer 1) + flip exit (Layer 2) + time exit (Layer 3)
+    handle exit management without a worse-than-random heuristic.
+    """
     engine = MetaExitEngine(
         model_path=model_path,
         urgency_threshold=urgency_threshold,
@@ -465,9 +497,11 @@ def create_exit_engine(
                         "event": "meta_exit_model_unavailable",
                         "time": "",
                         "model_path": model_path,
-                        "fallback": "heuristic_scoring",
+                        "fallback": "atr_trailing_stop_layer1",
+                        "action": "disabled_layer_2_5_using_layer_1_trail",
                     },
                 ),
                 flush=True,
             )
+            return None
     return engine

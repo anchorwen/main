@@ -9,7 +9,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     COMPLIANCE_CHECK_ALPHA_BUDGET_EVIDENCE_REGISTERED,
     COMPLIANCE_CHECK_ALPHA_BUDGET_WARNINGS_CLEAR,
     HEALTH_STATUS_ALIVE,

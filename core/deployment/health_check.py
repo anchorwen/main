@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     HEALTH_CHECK_NAME_DISPATCHER,
     HEALTH_CHECK_NAME_FEEDBACK_LOOP,
     HEALTH_CHECK_NAME_LEDGER_STORE,

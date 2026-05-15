@@ -9,7 +9,17 @@ from core.features.adapters.v9_feature_adapter import V9FeatureAdapter
 
 logger = logging.getLogger(__name__)
 
-MICROSTRUCTURE_BRAIN_TYPES = {"transformer_v4.3", "transformer_v5", "xgboost_v4.5"}
+MICROSTRUCTURE_BRAIN_TYPES = {
+    "transformer_v4.3",
+    "transformer_v5",
+    "transformer_v5_m15",
+    "transformer_v5_h1",
+    "transformer_v5_h4",
+    "xgboost_v4.5",
+    "xgboost_v4.5_m15",
+    "xgboost_v4.5_h1",
+    "xgboost_v4.5_h4",
+}
 V9_BRAIN_TYPES = {"onnx_v9", "deepresmlp", "lightgbm_v1", "xgboost_v9"}
 
 

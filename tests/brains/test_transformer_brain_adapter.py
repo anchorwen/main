@@ -1,7 +1,6 @@
 import numpy as np
 
 from core.brains.adapters.transformer_brain_adapter import (
-    FALLBACK_SEQ_LEN,
     MICROSTRUCTURE_9_FEATURES,
     NUM_FEATURES,
     TransformerBrainAdapter,
@@ -11,16 +10,15 @@ from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
 
 def _make_entry():
     return {
-        "brain_id": "Microstructure_Transformer_V4.3",
-        "brain_type": "transformer_v4.3",
+        "brain_id": "Microstructure_Transformer_V5.0_H4",
+        "brain_type": "transformer_v5_h4",
         "brain_role": "alpha_brain",
         "status": "shadow",
-        "model_version": "v4.3",
-        "vote_weight": 0.8,
-        "artifact_path": "data/models/mtx_transformer_core.onnx",
-        "normalization_artifact_path": "data/models/mtx_transformer_scaler.joblib",
+        "model_version": "v5.0-barrier-h4",
+        "vote_weight": 0.4,
+        "artifact_path": "data/models/transformer_v5_micro_barrier_h4.onnx",
         "deployment_scope": {
-            "regimes": ["trend", "volatile_trend"],
+            "regimes": ["trend"],
             "symbols": ["XAUUSDc"],
         },
     }
@@ -35,7 +33,7 @@ def test_transformer_brain_adapter_loads():
     assert info["session_loaded"], f"ONNX session not loaded: backend={info['backend']}"
     assert "uses_feature_adapter" in info
     assert info["num_features"] == NUM_FEATURES
-    assert info["seq_len"] == FALLBACK_SEQ_LEN
+    assert info["seq_len"] > 0  # detected from ONNX input shape
     assert info["buffer_size"] == 0
 
 
@@ -85,7 +83,7 @@ def test_transformer_brain_adapter_get_signal():
     proposal = adapter.get_signal(raw)
 
     assert isinstance(proposal, BrainDecisionProposal)
-    assert proposal.brain_id == "Microstructure_Transformer_V4.3"
+    assert proposal.brain_id == "Microstructure_Transformer_V5.0_H4"
     assert "direction_bias" in proposal.prediction
     assert proposal.prediction["direction_bias"] in ("long", "short", "neutral")
     assert "v4_3_microstructure_transformer" in proposal.rationale["reason_tags"]
@@ -148,7 +146,7 @@ def test_transformer_with_feature_adapter_e2e():
     from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
 
     feat_adapter = MicrostructureFeatureAdapter(
-        scaler_path="data/models/mtx_transformer_scaler.joblib",
+        scaler_path=None,  # H4 model uses no separate scaler
     )
 
     entry = _make_entry()
@@ -169,7 +167,7 @@ def test_transformer_with_feature_adapter_e2e():
     assert raw["fallback"] is False
     proposal = adapter.get_signal(raw)
 
-    assert proposal.brain_id == "Microstructure_Transformer_V4.3"
+    assert proposal.brain_id == "Microstructure_Transformer_V5.0_H4"
     assert proposal.prediction["direction_bias"] in ("long", "short", "neutral")
     assert proposal.health["fallback_used"] is False
     assert "v4_3_microstructure_transformer" in proposal.rationale["reason_tags"]
@@ -184,7 +182,7 @@ def test_xgboost_with_microstructure_feature_adapter():
     from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
 
     feat_adapter = MicrostructureFeatureAdapter(
-        scaler_path="data/models/mtx_transformer_scaler.joblib",
+        scaler_path=None,  # H4 model uses no separate scaler
     )
 
     entry = {

@@ -41,7 +41,7 @@ from apps.engine.main_v9_shadow import (
     write_regression_baseline,
 )
 from apps.engine.v9_shadow_sse import iter_sse_messages_from_chunks
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     PAYLOAD_KEY_BLOCK_REASONS,
     PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
     PAYLOAD_KEY_EXECUTED_MESSAGE_IDS,

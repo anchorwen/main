@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import time as time_module
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -22,6 +24,10 @@ THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = THIS_DIR.parent.parent
 
 SCHEMA_VERSION = "live_trading_dashboard.v1"
+
+# ── Performance data cache (avoid reloading 1.3MB JSON every 10s) ──
+_PERF_CACHE: dict[str, Any] = {"ts": 0.0, "data": None, "mtime": 0.0}
+_PERF_CACHE_TTL = 30.0
 
 # ── HTML template (self-contained, dark theme, CSS Grid) ──
 
@@ -38,65 +44,119 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   --green: #22c55e; --yellow: #eab308; --red: #ef4444; --blue: #3b82f6;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; padding: 12px; min-width: 1100px; }
+body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; padding: 12px; min-width: 1300px; }
 header { display: flex; align-items: center; justify-content: space-between; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px 16px; margin-bottom: 10px; }
 header h1 { font-size: 17px; font-weight: 600; letter-spacing: 0.3px; }
 header .ts { color: var(--muted); font-size: 13px; }
+.header-badges { display: flex; gap: 8px; }
+
+/* Grids */
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-.grid-3-2 { display: grid; grid-template-columns: 3fr 2fr; gap: 10px; margin-bottom: 10px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
 .card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 8px; }
+.card-full { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; margin-bottom: 10px; }
+.card-full h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 8px; }
+
+/* Tables */
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { text-align: left; color: var(--dim); font-weight: 500; padding: 4px 8px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; }
-td { padding: 4px 8px; border-bottom: 1px solid rgba(51,65,85,0.4); }
+th { text-align: left; color: var(--dim); font-weight: 500; padding: 4px 8px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; white-space: nowrap; }
+td { padding: 3px 8px; border-bottom: 1px solid rgba(51,65,85,0.4); }
+.dense-table { font-size: 11px; }
+.dense-table th { font-size: 10px; padding: 3px 6px; cursor: pointer; user-select: none; }
+.dense-table th:hover { color: var(--text); }
+.dense-table th .sort-arrow { font-size: 9px; margin-left: 2px; }
+.dense-table td { padding: 2px 6px; }
+.scroll-y { max-height: 500px; overflow-y: auto; }
+
+/* Badges */
 .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
 .badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
 .badge-yellow { background: rgba(234,179,8,0.15); color: var(--yellow); }
 .badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
 .badge-blue { background: rgba(59,130,246,0.15); color: var(--blue); }
+
+/* Colors */
 .green { color: var(--green); }
 .yellow { color: var(--yellow); }
 .red { color: var(--red); }
 .muted { color: var(--muted); }
 .dim { color: var(--dim); font-size: 12px; }
 .num { font-variant-numeric: tabular-nums; }
+
+/* Cells */
+.cell-green { color: var(--green); font-weight: 600; }
+.cell-yellow { color: var(--yellow); font-weight: 600; }
+.cell-red { color: var(--red); font-weight: 600; }
+.pnl-positive { color: var(--green); }
+.pnl-negative { color: var(--red); }
+
+/* Module status */
+.module-ok { border-left: 3px solid var(--green); }
+.module-warn { border-left: 3px solid var(--yellow); }
+.module-critical { border-left: 3px solid var(--red); }
+
+/* Stat rows */
 .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(51,65,85,0.3); }
 .stat-row:last-child { border-bottom: none; }
 .stat-val { font-size: 20px; font-weight: 700; }
-.brain-ok { border-left: 3px solid var(--green); }
-.brain-err { border-left: 3px solid var(--red); }
-.brain-warn { border-left: 3px solid var(--yellow); }
-.consensus-long { color: var(--green); font-weight: 700; }
-.consensus-short { color: var(--red); font-weight: 700; }
-.consensus-neutral, .consensus-split { color: var(--yellow); font-weight: 700; }
-.decision-card { display: flex; gap: 16px; }
-.decision-card > div { flex: 1; padding: 8px 12px; border-radius: 4px; background: rgba(15,23,42,0.5); }
-.error-block { color: var(--red); font-style: italic; font-size: 12px; padding: 8px; }
-.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.stat-sm { font-size: 12px; }
+
+/* SLO */
 .slo-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid rgba(51,65,85,0.3); font-size: 13px; }
 .slo-row:last-child { border-bottom: none; }
 .slo-bar-wrap { width: 140px; height: 14px; background: rgba(15,23,42,0.6); border-radius: 7px; overflow: hidden; position: relative; }
 .slo-bar-fill { height: 100%; border-radius: 7px; transition: width 0.5s; }
 .slo-bar-budget { height: 100%; border-radius: 7px; position: absolute; top: 0; opacity: 0.3; }
+
+/* Decisions */
+.decision-card { display: flex; gap: 16px; }
+.decision-card > div { flex: 1; padding: 8px 12px; border-radius: 4px; background: rgba(15,23,42,0.5); }
+.consensus-long { color: var(--green); font-weight: 700; }
+.consensus-short { color: var(--red); font-weight: 700; }
+.consensus-neutral, .consensus-split { color: var(--yellow); font-weight: 700; }
+
+/* Alerts */
 .alert-critical { border-left: 3px solid var(--red); }
 .alert-warning { border-left: 3px solid var(--yellow); }
-.health-ok { color: var(--green); }
-.health-warn { color: var(--yellow); }
-.health-critical { color: var(--red); }
 
+/* Governance sub-panels */
+.gov-section { margin-bottom: 10px; }
+.gov-section h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--dim); margin-bottom: 4px; }
+.gov-item { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; font-size: 12px; border-bottom: 1px solid rgba(51,65,85,0.2); }
+.gov-item:last-child { border-bottom: none; }
+
+/* Transition log */
+.transition-log { font-size: 11px; max-height: 140px; overflow-y: auto; }
+.transition-log .tl-entry { padding: 2px 0; border-bottom: 1px solid rgba(51,65,85,0.2); display: flex; justify-content: space-between; }
+
+/* Error block */
+.error-block { color: var(--red); font-style: italic; font-size: 12px; padding: 8px; }
 </style>
 </head>
 <body>
+
+<!-- HEADER -->
 <header>
   <div><h1>QUANT OS — LIVE TRADING DASHBOARD</h1></div>
   <div class="ts">UTC <span id="hdr-date">—</span> &nbsp; Refresh: <span id="hdr-refresh">—</span> &nbsp; Next: <span id="hdr-countdown">—</span>s</div>
-  <div id="hdr-badge"></div>
+  <div class="header-badges">
+    <span id="hdr-sys-badge"></span>
+    <span id="hdr-alert-badge"></span>
+  </div>
 </header>
 
-<div class="grid-3">
+<!-- ROW 1: Status bar (4 columns) -->
+<div class="grid-4">
   <div class="card">
     <h2>System Status</h2>
     <div id="panel-status"><span class="muted">Loading...</span></div>
+  </div>
+  <div class="card">
+    <h2>Module Health</h2>
+    <div id="panel-modules"><span class="muted">Loading...</span></div>
   </div>
   <div class="card">
     <h2>SLO Compliance</h2>
@@ -108,49 +168,105 @@ td { padding: 4px 8px; border-bottom: 1px solid rgba(51,65,85,0.4); }
   </div>
 </div>
 
-<div class="grid-3-2">
-  <div class="card">
-    <h2>Brain Panel</h2>
-    <div id="panel-brains"><span class="muted">Loading...</span></div>
-  </div>
-  <div class="card">
-    <h2>Trade Statistics</h2>
-    <div id="panel-stats"><span class="muted">Loading...</span></div>
-  </div>
+<!-- ROW 2: Performance Matrix (full width) -->
+<div class="card-full">
+  <h2>Brain Performance Matrix &nbsp;<span class="dim" style="text-transform:none;font-weight:400">(click headers to sort, default: Sharpe desc)</span></h2>
+  <div class="scroll-y" id="panel-performance"><span class="muted">Loading...</span></div>
 </div>
 
-<div class="card" style="margin-bottom:10px">
-  <h2>Alert History</h2>
-  <div id="panel-alerts" style="max-height:200px;overflow-y:auto"><span class="muted">Loading...</span></div>
-</div>
-
+<!-- ROW 3: Analytics & Governance (2 columns) -->
 <div class="grid-2">
   <div class="card">
-    <h2>Current Position</h2>
-    <div id="panel-positions"><span class="muted">Loading...</span></div>
+    <h2>Analytics &amp; Recommendations</h2>
+    <div id="panel-analytics"><span class="muted">Loading...</span></div>
+  </div>
+  <div class="card">
+    <h2>Governance Operations</h2>
+    <div id="panel-governance"><span class="muted">Loading...</span></div>
+  </div>
+</div>
+
+<!-- ROW 4: Live Trading (3 columns) -->
+<div class="grid-3">
+  <div class="card">
+    <h2>Brain Signals (Live)</h2>
+    <div id="panel-brains"><span class="muted">Loading...</span></div>
   </div>
   <div class="card">
     <h2>Live Decisions</h2>
     <div id="panel-decisions"><span class="muted">Loading...</span></div>
   </div>
+  <div class="card">
+    <h2>Current MT5 Positions</h2>
+    <div id="panel-positions"><span class="muted">Loading...</span></div>
+  </div>
 </div>
 
-<div class="card" style="margin-bottom:10px">
-  <h2>Recent Trades</h2>
-  <div id="panel-journal" style="max-height:200px;overflow-y:auto"><span class="muted">Loading...</span></div>
+<!-- ROW 5: History (2 columns) -->
+<div class="grid-2">
+  <div class="card">
+    <h2>Alert History</h2>
+    <div id="panel-alerts" style="max-height:220px;overflow-y:auto"><span class="muted">Loading...</span></div>
+  </div>
+  <div class="card">
+    <h2>Recent Trades</h2>
+    <div id="panel-journal" style="max-height:220px;overflow-y:auto"><span class="muted">Loading...</span></div>
+  </div>
 </div>
 
 <script>
 var REFRESH_SEC = 10;
 var COUNTDOWN = REFRESH_SEC;
 var CONSECUTIVE_FAILS = 0;
+var PERF_DATA = null;  // cached for client-side sorting
+var PERF_SORT = {col: 4, asc: false};  // default: Sharpe desc
+
+// ── Utilities ──
 
 function fmtTm(iso) { if (!iso) return '--:--:--'; return iso.replace('T',' ').substring(0,19); }
 function fmtTime(iso) { if (!iso) return '--:--'; return iso.substring(11,19); }
 function fmtPn(v) { if (v == null) return '$0.00'; var n = Number(v); return (n>=0?'+$':'-$') + Math.abs(n).toFixed(2); }
-function fmtPct(v) { if (v == null) return '—'; return (v*100).toFixed(1)+'%'; }
-
+function fmtPct(v) { if (v == null) return '--'; return (v*100).toFixed(1)+'%'; }
+function fmtNum(v, dec) { if (v == null) return '--'; dec = (dec == null ? 2 : dec); return Number(v).toFixed(dec); }
 function badge(label, cls) { return '<span class="badge badge-'+cls+'">'+label+'</span>'; }
+function timeAgo(iso) { if (!iso) return '--'; var diff = (Date.now() - Date.parse(iso))/1000; if (diff<60) return Math.floor(diff)+'s ago'; if (diff<3600) return Math.floor(diff/60)+'m ago'; if (diff<86400) return Math.floor(diff/3600)+'h ago'; return Math.floor(diff/86400)+'d ago'; }
+
+// cellColor(val, greenThresh, redThresh, higherIsBetter)
+function cellColor(val, gTh, rTh, hi) {
+  if (val == null || isNaN(val)) return '';
+  if (hi === false) {
+    if (val <= gTh) return 'cell-green';
+    if (val > rTh) return 'cell-red';
+    return 'cell-yellow';
+  }
+  if (val >= gTh) return 'cell-green';
+  if (val < rTh) return 'cell-red';
+  return 'cell-yellow';
+}
+
+// ── Sortable table ──
+
+function makeSortable(tableId) {
+  var table = document.getElementById(tableId);
+  if (!table) return;
+  var headers = table.querySelectorAll('th[data-col]');
+  for (var i = 0; i < headers.length; i++) {
+    headers[i].onclick = (function(idx) {
+      return function() {
+        if (PERF_SORT.col === idx) { PERF_SORT.asc = !PERF_SORT.asc; }
+        else { PERF_SORT.col = idx; PERF_SORT.asc = (idx === 0); }
+        renderPerformance(PERF_DATA);
+      };
+    })(i);
+  }
+}
+
+function sortArrow(colIdx) {
+  if (PERF_SORT.col !== colIdx) return ' <span class="sort-arrow dim">-</span>';
+  return PERF_SORT.asc ? ' <span class="sort-arrow">&#9650;</span>' : ' <span class="sort-arrow">&#9660;</span>';
+}
+
+// ── Render: System Status ──
 
 function renderStatus(data) {
   var j = data.journal || {};
@@ -160,16 +276,234 @@ function renderStatus(data) {
   if (f.active) { statusLabel = 'BLOCKED'; statusCls = 'red'; }
   else if (total > 0) { statusLabel = 'ACTIVE'; statusCls = 'green'; }
   else { statusLabel = 'IDLE'; statusCls = 'yellow'; }
-  document.getElementById('hdr-badge').innerHTML = badge(statusLabel, statusCls);
-  var h = '<div class="stat-row"><span>Run State</span><span>' + badge(statusLabel, statusCls) + '</span></div>';
-  h += '<div class="stat-row"><span>Journal Entries (today)</span><span class="num">' + total + '</span></div>';
-  h += '<div class="stat-row"><span>Accepted</span><span class="green num">' + acc + '</span></div>';
-  h += '<div class="stat-row"><span>Rejected</span><span class="'+(rej>0?'red':'muted')+' num">' + rej + '</span></div>';
+  document.getElementById('hdr-sys-badge').innerHTML = badge(statusLabel, statusCls);
+  var h = '';
+  h += '<div class="stat-row"><span>Run State</span><span>' + badge(statusLabel, statusCls) + '</span></div>';
+  h += '<div class="stat-row"><span>Journal (today)</span><span class="num">' + total + '</span></div>';
+  h += '<div class="stat-row"><span>Accepted / Rejected</span><span><span class="green num">'+acc+'</span> / <span class="'+(rej>0?'red':'muted')+' num">'+rej+'</span></span></div>';
   h += '<div class="stat-row"><span>Acknowledged</span><span class="muted num">' + ack + '</span></div>';
   h += '<div class="stat-row"><span>Dispatch Flag</span><span>' + (f.active ? badge('BLOCKED','red')+' <span class="dim">'+((f.payload||{}).reason||'')+'</span>' : badge('CLEAR','green')) + '</span></div>';
   if (data.errors && data.errors.length) h += '<div class="error-block">'+data.errors.length+' collector error(s)</div>';
+  // Stats summary
+  var labels = data.labels || {};
+  if (labels.total != null) {
+    var wr = labels.win_rate;
+    var pnl = labels.total_pnl || 0;
+    h += '<div class="stat-row" style="margin-top:4px"><span>P&amp;L / Win Rate</span><span><span class="'+(pnl>=0?'green':'red')+' num">'+fmtPn(pnl)+'</span> <span class="dim">'+fmtPct(wr)+'</span></span></div>';
+  }
   document.getElementById('panel-status').innerHTML = h;
 }
+
+// ── Render: Module Health ──
+
+function renderModules(data) {
+  if (!data || !data.modules) {
+    document.getElementById('panel-modules').innerHTML = '<span class="muted">No module data</span>';
+    return;
+  }
+  var mods = data.modules;
+  var modOrder = ['mt5_bridge','outbox','feature_store','brain_adapters','governance','dispatch','daily_ops'];
+  var labels = {mt5_bridge:'MT5 Bridge',outbox:'Outbox',feature_store:'Feature Store',brain_adapters:'Brain Adapters',governance:'Governance',dispatch:'Dispatch',daily_ops:'Daily Ops'};
+  var h = '';
+  for (var i = 0; i < modOrder.length; i++) {
+    var k = modOrder[i];
+    var m = mods[k];
+    if (!m) continue;
+    var st = m.status || 'OK';
+    var rowCls = st === 'CRITICAL' || st === 'ERROR' ? 'module-critical' : (st === 'WARNING' ? 'module-warn' : 'module-ok');
+    var stCls = st === 'CRITICAL' || st === 'ERROR' ? 'red' : (st === 'WARNING' ? 'yellow' : 'green');
+    var detail = '';
+    if (k === 'mt5_bridge') detail = (m.connected ? 'connected' : 'disconnected') + (m.last_heartbeat ? ' '+timeAgo(m.last_heartbeat) : '');
+    else if (k === 'outbox') detail = 'pending='+(m.pending||0)+' stale='+(m.stale||0);
+    else if (k === 'feature_store') detail = m.freshness || (m.available ? 'ok' : 'missing');
+    else if (k === 'brain_adapters') detail = (m.with_data||0)+'/'+(m.configured||0)+' with data';
+    else if (k === 'governance') detail = 'live='+(m.live||0)+' frozen='+(m.frozen||0);
+    else if (k === 'dispatch') detail = m.blocked ? 'BLOCKED' : 'clear';
+    else if (k === 'daily_ops') detail = m.last_recap || '--';
+    else detail = '';
+    h += '<div class="stat-row '+rowCls+'" style="padding:4px 6px"><span style="font-size:12px">'+(labels[k]||k)+'</span><span><span class="'+stCls+'" style="font-size:12px">'+st+'</span>'+(detail?' <span class="dim" style="font-size:11px">'+detail+'</span>':'')+'</span></div>';
+  }
+  // Resources
+  var res = data.resources || {};
+  if (res.available) {
+    h += '<div class="stat-row" style="padding:4px 6px;margin-top:4px;border-top:1px solid var(--border)"><span style="font-size:11px">CPU / Mem / Disk</span><span class="num dim" style="font-size:11px">'+(res.cpu_pct!=null?res.cpu_pct.toFixed(0)+'%':'?')+' / '+(res.memory_pct!=null?res.memory_pct.toFixed(0)+'%':'?')+' / '+(res.disk_pct!=null?res.disk_pct.toFixed(0)+'%':'?')+'</span></div>';
+  }
+  // Alert level badge
+  var al = data.alert_level || 'OK';
+  var alCls = al === 'CRITICAL' ? 'red' : (al === 'WARNING' ? 'yellow' : 'green');
+  document.getElementById('hdr-alert-badge').innerHTML = badge(al, alCls);
+  document.getElementById('panel-modules').innerHTML = h;
+}
+
+// ── Render: Performance Matrix ──
+
+function renderPerformance(data) {
+  if (!data || !data.brains) { document.getElementById('panel-performance').innerHTML = '<span class="muted">No performance data</span>'; return; }
+  PERF_DATA = data;
+  var brains = data.brains.slice();
+  // Sort
+  var col = PERF_SORT.col;
+  var asc = PERF_SORT.asc;
+  var keys = ['brain_id','governance_status','cumulative_pnl','win_rate','sharpe_ratio','profit_factor','max_drawdown','sample_count','health_signal','recommendation','long_win_rate','short_win_rate'];
+  brains.sort(function(a, b) {
+    var va = a[keys[col]], vb = b[keys[col]];
+    if (va == null) va = (typeof vb === 'number') ? -Infinity : '';
+    if (vb == null) vb = (typeof va === 'number') ? -Infinity : '';
+    if (typeof va === 'number' && typeof vb === 'number') return asc ? va - vb : vb - va;
+    va = String(va); vb = String(vb);
+    return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+  });
+
+  var h = '<table class="dense-table" id="perf-table"><thead><tr>';
+  var headers = ['Brain ID','Gov','P&amp;L','Win%','Sharpe','PF','MaxDD','N','Health','Rec','LongWR','ShortWR'];
+  for (var i = 0; i < headers.length; i++) {
+    h += '<th data-col="'+i+'">'+headers[i]+sortArrow(i)+'</th>';
+  }
+  h += '</tr></thead><tbody>';
+  for (var r = 0; r < brains.length; r++) {
+    var b = brains[r];
+    var govSt = b.governance_status || 'unknown';
+    var govCls = {'live':'green','candidate':'yellow','probation':'yellow','frozen':'red'}[govSt] || 'muted';
+    var hlCls = {'healthy':'green','stable':'green','degraded':'yellow','critical':'red','insufficient_data':'dim'}[b.health_signal] || 'dim';
+    var rec = b.recommendation || 'observe';
+    var recCls = rec === 'eligible_for_promotion' ? 'green' : (rec === 'freeze' || rec === 'demote_to_probation' ? 'red' : 'muted');
+    var recLabel = {'eligible_for_promotion':'PROMOTE','demote_to_probation':'DEMOTE','freeze':'FREEZE','limit_exposure':'LIMIT','observe':'observe','':'observe'}[rec] || rec;
+    h += '<tr>';
+    h += '<td style="font-weight:600">'+(b.brain_id||'?')+'</td>';
+    h += '<td>'+badge(govSt, govCls)+'</td>';
+    h += '<td class="num '+cellColor(b.cumulative_pnl, 0.01, 0)+'">'+fmtNum(b.cumulative_pnl, 4)+'</td>';
+    h += '<td class="num '+cellColor(b.win_rate, 0.55, 0.45)+'">'+fmtPct(b.win_rate)+'</td>';
+    h += '<td class="num '+cellColor(b.sharpe_ratio, 1.0, 0.0)+'">'+fmtNum(b.sharpe_ratio, 2)+'</td>';
+    h += '<td class="num '+cellColor(b.profit_factor, 1.5, 1.0)+'">'+fmtNum(b.profit_factor, 2)+'</td>';
+    h += '<td class="num '+cellColor(b.max_drawdown, 5.0, 15.0, false)+'">'+fmtNum(b.max_drawdown, 2)+'</td>';
+    h += '<td class="num dim">'+(b.sample_count||0)+'</td>';
+    h += '<td>'+badge(b.health_signal||'?', hlCls)+'</td>';
+    h += '<td class="'+recCls+'" style="font-size:10px;font-weight:600">'+recLabel+'</td>';
+    h += '<td class="num '+cellColor(b.long_win_rate, 0.55, 0.45)+'">'+fmtPct(b.long_win_rate)+'</td>';
+    h += '<td class="num '+cellColor(b.short_win_rate, 0.55, 0.45)+'">'+fmtPct(b.short_win_rate)+'</td>';
+    h += '</tr>';
+  }
+  h += '</tbody></table>';
+  if (data.errors && data.errors.length) h += '<div class="error-block" style="margin-top:4px">Errors: '+data.errors.join(', ')+'</div>';
+  document.getElementById('panel-performance').innerHTML = h;
+  makeSortable('perf-table');
+}
+
+// ── Render: Analytics ──
+
+function renderAnalytics(data) {
+  if (!data) { document.getElementById('panel-analytics').innerHTML = '<span class="muted">No analytics data</span>'; return; }
+  var h = '';
+
+  // Param suggestions
+  var sug = data.param_suggestions || [];
+  h += '<div class="gov-section"><h3>Parameter Suggestions ('+sug.length+')</h3>';
+  if (!sug.length) { h += '<span class="dim" style="font-size:11px">No suggestions</span>'; }
+  else {
+    for (var i = 0; i < Math.min(sug.length, 5); i++) {
+      var s = sug[i];
+      h += '<div class="gov-item"><span style="font-size:11px">'+(s.brain_id||s.param||'?')+'</span><span class="dim" style="font-size:11px">'+(s.reason||s.suggestion||'')+'</span></div>';
+    }
+  }
+  h += '</div>';
+
+  // Degraded brains
+  var degraded = data.degraded_brains || [];
+  h += '<div class="gov-section"><h3>Degraded Brains ('+degraded.length+')</h3>';
+  if (!degraded.length) { h += '<span class="dim" style="font-size:11px">None degraded</span>'; }
+  else {
+    for (var j = 0; j < degraded.length; j++) {
+      var d = degraded[j];
+      var dhl = d.health_signal === 'critical' ? 'red' : 'yellow';
+      h += '<div class="gov-item"><span style="font-size:11px">'+d.brain_id+'</span><span class="'+dhl+'" style="font-size:11px">'+d.health_signal+'</span><span class="dim" style="font-size:10px">n='+d.sample_count+' rec='+(d.recommendation||'?')+'</span></div>';
+    }
+  }
+  h += '</div>';
+
+  // Retirement candidates
+  var ret = data.retirement_candidates || [];
+  h += '<div class="gov-section"><h3>Retirement Candidates ('+ret.length+')</h3>';
+  if (!ret.length) { h += '<span class="dim" style="font-size:11px">None</span>'; }
+  else {
+    for (var k = 0; k < ret.length; k++) {
+      var rt = ret[k];
+      h += '<div class="gov-item"><span style="font-size:11px">'+rt.brain_id+'</span><span class="red" style="font-size:11px">'+rt.health_signal+'</span><span class="dim" style="font-size:10px">status='+(rt.current_status||'?')+'</span></div>';
+    }
+  }
+  h += '</div>';
+
+  if (data.errors && data.errors.length) h += '<div class="error-block">Errors: '+data.errors.join(', ')+'</div>';
+  document.getElementById('panel-analytics').innerHTML = h;
+}
+
+// ── Render: Governance ──
+
+function renderGovernance(data) {
+  if (!data) { document.getElementById('panel-governance').innerHTML = '<span class="muted">No governance data</span>'; return; }
+  var h = '';
+
+  // Status summary counts
+  var counts = data.status_counts || {};
+  h += '<div class="gov-section"><h3>Status Distribution</h3><div style="display:flex;gap:12px;font-size:12px;flex-wrap:wrap">';
+  var countKeys = Object.keys(counts);
+  for (var i = 0; i < countKeys.length; i++) {
+    var ck = countKeys[i];
+    var cc = counts[ck];
+    var cCls = ck === 'live' ? 'green' : (ck === 'frozen' ? 'red' : (ck === 'candidate'||ck==='probation' ? 'yellow' : 'dim'));
+    h += '<span><span class="'+cCls+'">'+ck+'</span>: <span class="num">'+cc+'</span></span>';
+  }
+  h += '</div></div>';
+
+  // Promotion queue
+  var pq = data.promotion_queue || [];
+  h += '<div class="gov-section"><h3>Promotion Queue ('+pq.length+')</h3>';
+  if (!pq.length) h += '<span class="dim" style="font-size:11px">Empty</span>';
+  else for (var p = 0; p < pq.length; p++) {
+    var pi = pq[p];
+    h += '<div class="gov-item"><span style="font-size:11px">'+pi.brain_id+'</span><span class="green" style="font-size:11px">score '+fmtNum(pi.composite_score,3)+'</span><span class="dim" style="font-size:10px">from '+pi.from_status+' n='+pi.sample_count+'</span></div>';
+  }
+  h += '</div>';
+
+  // Demotion warnings
+  var dw = data.demotion_warnings || [];
+  h += '<div class="gov-section"><h3>Demotion Warnings ('+dw.length+')</h3>';
+  if (!dw.length) h += '<span class="dim" style="font-size:11px">None</span>';
+  else for (var w = 0; w < dw.length; w++) {
+    var di = dw[w];
+    var recLabel = {'demote_to_probation':'DEMOTE','freeze':'FREEZE','limit_exposure':'LIMIT'}[di.recommendation] || di.recommendation;
+    h += '<div class="gov-item"><span style="font-size:11px">'+di.brain_id+'</span><span class="red" style="font-size:11px">'+recLabel+'</span><span class="dim" style="font-size:10px">score='+fmtNum(di.composite_score,3)+'</span></div>';
+  }
+  h += '</div>';
+
+  // Freeze list
+  var fl = data.freeze_list || [];
+  h += '<div class="gov-section"><h3>Frozen Brains ('+fl.length+')</h3>';
+  if (!fl.length) h += '<span class="dim" style="font-size:11px">None frozen</span>';
+  else for (var f = 0; f < fl.length; f++) {
+    var fi = fl[f];
+    h += '<div class="gov-item"><span style="font-size:11px">'+fi.brain_id+'</span><span class="red" style="font-size:10px">x'+fi.freeze_count+'</span><span class="dim" style="font-size:10px">'+(fi.reason||'')+'</span></div>';
+  }
+  h += '</div>';
+
+  // Recent transitions
+  var tr = data.recent_transitions || [];
+  h += '<div class="gov-section"><h3>Recent Transitions</h3><div class="transition-log">';
+  if (!tr.length) h += '<span class="dim" style="font-size:11px">No transitions</span>';
+  else for (var t = 0; t < tr.length; t++) {
+    var tx = tr[t];
+    var from = tx.from_status || tx.from || '?';
+    var to = tx.to_status || tx.to || '?';
+    var when = tx.transitioned_at || tx.at || tx.timestamp || '';
+    var toCls = to === 'live' ? 'green' : (to === 'frozen' ? 'red' : 'yellow');
+    h += '<div class="tl-entry"><span>'+tx.brain_id+'</span><span>'+from+' &rarr; <span class="'+toCls+'">'+to+'</span></span><span class="dim">'+timeAgo(when)+'</span></div>';
+  }
+  h += '</div></div>';
+
+  if (data.errors && data.errors.length) h += '<div class="error-block">Errors: '+data.errors.join(', ')+'</div>';
+  document.getElementById('panel-governance').innerHTML = h;
+}
+
+// ── Render: Positions ──
 
 function renderPositions(data) {
   if (!data.connected) {
@@ -181,64 +515,45 @@ function renderPositions(data) {
     document.getElementById('panel-positions').innerHTML = '<span class="muted">No open positions</span>' + age;
     return;
   }
+  var src = data._source ? ' <span class="dim" style="font-size:10px">['+data._source+']</span>' : '';
   var h = '<table><tr><th>Ticket</th><th>Symbol</th><th>Side</th><th>Entry</th><th>SL</th><th>TP</th><th>P&amp;L</th></tr>';
   for (var i=0; i<data.positions.length; i++) {
     var p = data.positions[i];
     var sideCls = p.side === 'BUY' ? 'green' : 'red';
     var pnl = p.profit != null ? p.profit : 0;
     var pnlCls = pnl >= 0 ? 'green' : 'red';
-    h += '<tr><td class="num">' + (p.ticket||'?') + '</td><td>' + (p.symbol||'?') + '</td><td class="'+sideCls+'">' + (p.side||'?') + '</td><td class="num">' + (p.price_open||'?') + '</td><td class="num dim">' + (p.sl||'—') + '</td><td class="num dim">' + (p.tp||'—') + '</td><td class="num '+pnlCls+'">' + fmtPn(pnl) + '</td></tr>';
+    h += '<tr><td class="num">' + (p.ticket||'?') + '</td><td>' + (p.symbol||'?') + '</td><td class="'+sideCls+'">' + (p.side||'?') + '</td><td class="num">' + (p.price_open||'?') + '</td><td class="num dim">' + (p.sl||'--') + '</td><td class="num dim">' + (p.tp||'--') + '</td><td class="num '+pnlCls+'">' + fmtPn(pnl) + '</td></tr>';
   }
   h += '</table>';
-  if (data.generated_at) h += '<div class="dim" style="margin-top:6px">Snapshot: ' + fmtTm(data.generated_at) + '</div>';
+  if (data.generated_at) h += '<div class="dim" style="margin-top:4px">'+fmtTm(data.generated_at)+src+'</div>';
   document.getElementById('panel-positions').innerHTML = h;
 }
+
+// ── Render: Brain Signals (enhanced with PnL badges) ──
 
 function renderBrains(data) {
   var brains = data.brains || [];
   if (!brains.length) { document.getElementById('panel-brains').innerHTML = '<span class="muted">No brain data</span>'; return; }
-  var h = '<table><tr><th>Brain ID</th><th>Status</th><th>Health</th><th>Direction</th><th>Confidence</th><th>Samples</th></tr>';
+  var h = '<table class="dense-table"><tr><th>Brain ID</th><th>St</th><th>Health</th><th>Dir</th><th>Conf</th><th>PnL</th><th>Sharpe</th><th>N</th></tr>';
   for (var i=0; i<brains.length; i++) {
     var b = brains[i];
     var stCls = {'live':'green','candidate':'yellow','probation':'yellow','frozen':'red'}[b.status] || 'muted';
     var hlCls = {'healthy':'green','stable':'green','degraded':'yellow','critical':'red','insufficient_data':'dim'}[b.health] || 'dim';
     var dirCls = b.last_direction === 'LONG' ? 'green' : b.last_direction === 'SHORT' ? 'red' : 'yellow';
-    var conf = b.confidence != null ? (b.confidence*100).toFixed(1)+'%' : '—';
-    var rowCls = b.health === 'critical' || b.status === 'frozen' ? 'brain-err' : (b.health === 'degraded' ? 'brain-warn' : 'brain-ok');
-    h += '<tr class="'+rowCls+'"><td>' + (b.brain_id||'?') + '</td><td>' + badge(b.status||'?', stCls) + '</td><td>' + badge(b.health||'?', hlCls) + '</td><td class="'+dirCls+'">' + (b.last_direction||'NEUTRAL') + '</td><td class="num">' + conf + '</td><td class="num dim">' + (b.sample_count||0) + '</td></tr>';
+    var conf = b.confidence != null ? (b.confidence*100).toFixed(0)+'%' : '--';
+    var pnl = b.pnl_total != null ? b.pnl_total : 0;
+    var pnlStr = pnl === 0 && b.pnl_samples == null ? '--' : (pnl>=0?'+':'')+pnl.toFixed(3);
+    var pnlCls = pnl > 0 ? 'green' : (pnl < 0 ? 'red' : 'muted');
+    var sharpe = b.sharpe_ratio != null ? b.sharpe_ratio.toFixed(2) : '--';
+    var n = b.sample_count || b.pnl_samples || 0;
+    var rowCls = b.health === 'critical' || b.status === 'frozen' ? 'module-critical' : (b.health === 'degraded' ? 'module-warn' : '');
+    h += '<tr class="'+rowCls+'"><td style="font-weight:500">'+(b.brain_id||'?')+'</td><td>'+badge(b.status||'?', stCls)+'</td><td>'+badge(b.health||'?', hlCls)+'</td><td class="'+dirCls+'">'+(b.last_direction||'?')+'</td><td class="num">'+conf+'</td><td class="num '+pnlCls+'">'+pnlStr+'</td><td class="num">'+sharpe+'</td><td class="num dim">'+n+'</td></tr>';
   }
   h += '</table>';
   document.getElementById('panel-brains').innerHTML = h;
 }
 
-function renderStats(data) {
-  var labels = data.labels || {};
-  var journal = data.journal || {};
-  var lst = labels;
-  var wins = lst.wins || 0, losses = lst.losses || 0, total = lst.total || 0, pnl = lst.total_pnl || 0, wr = lst.win_rate;
-  var rej = journal.rejected || 0, acc = journal.accepted || 0;
-  var h = '';
-  h += '<div class="stat-row"><span>Closed Trades</span><span class="stat-val num">' + total + '</span></div>';
-  h += '<div class="stat-row"><span>Win Rate</span><span class="stat-val num '+(wr!=null?(wr>=0.5?'green':'red'):'dim')+'">' + fmtPct(wr) + '</span></div>';
-  h += '<div class="stat-row"><span>Wins / Losses</span><span><span class="green num">'+wins+'</span> / <span class="red num">'+losses+'</span></span></div>';
-  h += '<div class="stat-row"><span>Total P&amp;L</span><span class="stat-val num '+(pnl>=0?'green':'red')+'">' + fmtPn(pnl) + '</span></div>';
-  h += '<div class="stat-row"><span>Accepted / Rejected</span><span><span class="green num">'+acc+'</span> / <span class="'+(rej>0?'red':'muted')+' num">'+rej+'</span></span></div>';
-  document.getElementById('panel-stats').innerHTML = h;
-}
-
-function renderJournal(data) {
-  var entries = data.entries || [];
-  if (!entries.length) { document.getElementById('panel-journal').innerHTML = '<span class="muted">No trades today</span>'; return; }
-  var h = '<table><tr><th>Time</th><th>Symbol</th><th>Action</th><th>Side</th><th>Status</th><th>SL</th><th>TP</th></tr>';
-  for (var i=0; i<entries.length; i++) {
-    var e = entries[i];
-    var stCls = {'accepted':'green','rejected':'red','acknowledged':'blue','closed':'dim'}[e.ack_status] || 'muted';
-    var sideCls = e.side === 'long' ? 'green' : e.side === 'short' ? 'red' : '';
-    h += '<tr><td class="dim num">' + fmtTime(e.recorded_at) + '</td><td>' + (e.symbol||'?') + '</td><td>' + (e.action||'?') + '</td><td class="'+sideCls+'">' + (e.side||'?') + '</td><td>' + badge(e.ack_status||'?', stCls) + '</td><td class="num dim">' + (e.sl||'—') + '</td><td class="num dim">' + (e.tp||'—') + '</td></tr>';
-  }
-  h += '</table>';
-  document.getElementById('panel-journal').innerHTML = h;
-}
+// ── Render: Decisions ──
 
 function renderDecisions(data) {
   var h = '<div class="decision-card">';
@@ -252,10 +567,12 @@ function _renderDecisionCard(title, d) {
   var c = d.consensus || 'no_results';
   var cls = 'consensus-'+c;
   var att = d.brains || {};
-  var sup = (att.supporting||[]).join(', ') || '—';
-  var opp = (att.opposing||[]).join(', ') || '—';
+  var sup = (att.supporting||[]).join(', ') || '--';
+  var opp = (att.opposing||[]).join(', ') || '--';
   return '<div><span class="dim">'+title+'</span><br><span class="'+cls+'" style="font-size:16px">' + c.toUpperCase() + '</span><br><span class="muted">'+ (d.decision_action||'?') + ' &middot; ' + (d.decision_side||'?') + '</span><br><span class="dim" style="font-size:11px">'+fmtTm(d.event_time)+'</span><br><span class="dim">Agreement: '+((d.agreement_score||d.consensus_score||0)*100).toFixed(1)+'%</span><br><span class="green">Supp: '+sup+'</span><br><span class="red">Opp: '+opp+'</span></div>';
 }
+
+// ── Render: SLO ──
 
 function renderSLO(data) {
   var objs = data.objectives || {};
@@ -275,19 +592,17 @@ function renderSLO(data) {
     var tgt = o.target != null ? o.target : 1;
     var met = o.met;
     var budget = o.error_budget_remaining_pct != null ? o.error_budget_remaining_pct : 100;
-    var isAbove = o.direction !== 'below';
     var displayVal = (val*100).toFixed(1)+'%';
-    var displayTgt = (tgt*100).toFixed(1)+'%';
     var barW = Math.min(100, Math.max(0, (val/tgt)*100));
     var barCls = met ? 'var(--green)' : 'var(--red)';
     var budgetCls = budget > 20 ? 'rgba(34,197,94,0.3)' : (budget > 0 ? 'rgba(234,179,8,0.5)' : 'rgba(239,68,68,0.6)');
-    h += '<div class="slo-row"><span style="width:110px;font-size:12px">'+ (labels[names[i]]||names[i]) +'</span>';
-    h += '<span class="num" style="width:55px;font-size:12px">'+displayVal+'</span>';
-    h += '<div class="slo-bar-wrap"><div class="slo-bar-fill" style="width:'+barW+'%;background:'+barCls+'"></div><div class="slo-bar-budget" style="width:'+budget+'%;background:'+budgetCls+'"></div></div>';
-    h += '<span class="num dim" style="width:40px;font-size:11px">'+budget.toFixed(0)+'%</span></div>';
+    h += '<div class="slo-row"><span style="width:90px;font-size:12px">'+ (labels[names[i]]||names[i]) +'</span>';
+    h += '<span class="num" style="width:50px;font-size:11px">'+displayVal+'</span>';
+    h += '<div class="slo-bar-wrap" style="width:100px"><div class="slo-bar-fill" style="width:'+barW+'%;background:'+barCls+'"></div><div class="slo-bar-budget" style="width:'+budget+'%;background:'+budgetCls+'"></div></div>';
+    h += '<span class="num dim" style="width:35px;font-size:10px">'+budget.toFixed(0)+'%</span></div>';
   }
   var statusCls = data.status === 'healthy' ? 'green' : 'red';
-  h += '<div style="margin-top:6px;font-size:12px">Status: <span class="'+statusCls+'">' + (data.status||'?').toUpperCase() + '</span>';
+  h += '<div style="margin-top:4px;font-size:11px">Status: <span class="'+statusCls+'">' + (data.status||'?').toUpperCase() + '</span>';
   if (data.failed_objectives && data.failed_objectives.length) {
     h += ' &middot; <span class="red">'+data.failed_objectives.length+' breaching</span>';
   }
@@ -295,10 +610,14 @@ function renderSLO(data) {
   document.getElementById('panel-slo').innerHTML = h;
 }
 
+// ── Render: Risk Gates ──
+
 function renderRisk(data) {
   var policies = data.policies || [];
   var h = '';
-  h += '<div class="stat-row"><span>Overall</span><span>' + badge(data.overall||'PASS', data.overall==='BLOCK'?'red':(data.overall==='WARN'?'yellow':'green')) + '</span></div>';
+  var overall = data.overall || 'PASS';
+  var overallCls = overall === 'BLOCK' ? 'red' : (overall === 'WARN' ? 'yellow' : 'green');
+  h += '<div class="stat-row"><span>Overall</span><span>' + badge(overall, overallCls) + '</span></div>';
   for (var i=0; i<policies.length; i++) {
     var p = policies[i];
     h += '<div class="stat-row"><span style="font-size:12px">' + (p.name||'?') + '</span><span>' + badge(p.passed?'PASS':'BLOCK', p.passed?'green':'red') + '</span></div>';
@@ -308,20 +627,40 @@ function renderRisk(data) {
   document.getElementById('panel-risk').innerHTML = h;
 }
 
+// ── Render: Alerts ──
+
 function renderAlerts(data) {
   var alerts = data.alerts || [];
   if (!alerts.length) { document.getElementById('panel-alerts').innerHTML = '<span class="muted">No alerts fired</span>'; return; }
-  var h = '<table><tr><th>Time</th><th>Severity</th><th>Rule</th><th>Context</th></tr>';
+  var h = '<table><tr><th>Time</th><th>Sev</th><th>Rule</th><th>Context</th></tr>';
   for (var i=0; i<Math.min(alerts.length, 30); i++) {
     var a = alerts[i];
     var sevCls = {'critical':'red','error':'red','warning':'yellow'}[a.severity] || 'muted';
     var ctx = a.context_snapshot || {};
     var ctxStr = Object.keys(ctx).slice(0,3).map(function(k){return k+'='+ctx[k]}).join(' ');
-    h += '<tr class="'+(a.severity==='critical'?'alert-critical':(a.severity==='warning'?'alert-warning':''))+'"><td class="dim num">' + fmtTime(a.fired_at) + '</td><td>' + badge(a.severity||'?', sevCls) + '</td><td style="font-size:12px">' + (a.rule_name||'?') + '</td><td class="dim" style="font-size:11px">' + (ctxStr||'—') + '</td></tr>';
+    h += '<tr class="'+(a.severity==='critical'?'alert-critical':(a.severity==='warning'?'alert-warning':''))+'"><td class="dim num">' + fmtTime(a.fired_at) + '</td><td>' + badge(a.severity||'?', sevCls) + '</td><td style="font-size:12px">' + (a.rule_name||'?') + '</td><td class="dim" style="font-size:11px">' + (ctxStr||'--') + '</td></tr>';
   }
   h += '</table>';
   document.getElementById('panel-alerts').innerHTML = h;
 }
+
+// ── Render: Journal (Recent Trades) ──
+
+function renderJournal(data) {
+  var entries = data.entries || [];
+  if (!entries.length) { document.getElementById('panel-journal').innerHTML = '<span class="muted">No trades today</span>'; return; }
+  var h = '<table><tr><th>Time</th><th>Symbol</th><th>Action</th><th>Side</th><th>Status</th><th>SL</th><th>TP</th></tr>';
+  for (var i=0; i<entries.length; i++) {
+    var e = entries[i];
+    var stCls = {'accepted':'green','rejected':'red','acknowledged':'blue','closed':'dim'}[e.ack_status] || 'muted';
+    var sideCls = e.side === 'long' ? 'green' : e.side === 'short' ? 'red' : '';
+    h += '<tr><td class="dim num">' + fmtTime(e.recorded_at) + '</td><td>' + (e.symbol||'?') + '</td><td>' + (e.action||'?') + '</td><td class="'+sideCls+'">' + (e.side||'?') + '</td><td>' + badge(e.ack_status||'?', stCls) + '</td><td class="num dim">' + (e.sl||'--') + '</td><td class="num dim">' + (e.tp||'--') + '</td></tr>';
+  }
+  h += '</table>';
+  document.getElementById('panel-journal').innerHTML = h;
+}
+
+// ── Timestamp ──
 
 function updateTimestamp() {
   var now = new Date().toISOString();
@@ -336,68 +675,22 @@ function doFetch(url, renderFn) {
     .catch(function(err) { console.warn('Fetch failed: '+url+' '+err.message); return false; });
 }
 
-var HEALTH_CACHE = null;
-
-function mergeHealth(healthData) {
-  HEALTH_CACHE = healthData;
-  // Append health rows to the existing status panel
-  var panel = document.getElementById('panel-status');
-  if (!panel || !healthData) return healthData;
-  return healthData;
-}
-
-function appendHealthExtras() {
-  if (!HEALTH_CACHE) return;
-  var panel = document.getElementById('panel-status');
-  if (!panel) return;
-  var h = panel.innerHTML;
-  // Remove any previously appended health extras
-  var marker = '<!-- health-extras -->';
-  var idx = h.indexOf(marker);
-  if (idx >= 0) h = h.substring(0, idx);
-  var extra = marker;
-  var subs = HEALTH_CACHE.subsystems || {};
-  var res = HEALTH_CACHE.resources || {};
-  var alertLvl = HEALTH_CACHE.alert_level || 'OK';
-  var alertCls = alertLvl === 'CRITICAL' ? 'red' : (alertLvl === 'WARNING' ? 'yellow' : 'green');
-  extra += '<div class="stat-row"><span>Health Check</span><span>' + badge(alertLvl, alertCls) + '</span></div>';
-  if (subs.bridge) extra += '<div class="stat-row"><span>Bridge</span><span class="'+(subs.bridge.status==='OK'?'green':'yellow')+'">'+(subs.bridge.status||'?')+'</span></div>';
-  if (subs.outbox) extra += '<div class="stat-row"><span>Outbox (pending/stale)</span><span class="num">'+(subs.outbox.detail.pending||0)+' / '+(subs.outbox.detail.stale||0)+'</span></div>';
-  if (subs.brains) {
-    var b = subs.brains.detail || {};
-    extra += '<div class="stat-row"><span>Brain Health</span><span><span class="green">'+b.healthy+'</span> / <span class="red">'+b.degraded+'</span> / <span class="dim">'+b.insufficient_data+'</span></span></div>';
-  }
-  if (subs.governance) {
-    var g = subs.governance.detail || {};
-    extra += '<div class="stat-row"><span>Gov (live/frozen)</span><span><span class="green">'+g.live+'</span> / <span class="red">'+g.frozen+'</span></span></div>';
-  }
-  if (res.available) {
-    extra += '<div class="stat-row"><span>CPU / Mem / Disk</span><span class="num dim">'+(res.cpu_pct!=null?res.cpu_pct.toFixed(0)+'%':'?')+' / '+(res.memory_pct!=null?res.memory_pct.toFixed(0)+'%':'?')+' / '+(res.disk_pct!=null?res.disk_pct.toFixed(0)+'%':'?')+'</span></div>';
-  }
-  if (HEALTH_CACHE.primary_codes && HEALTH_CACHE.primary_codes.length) {
-    extra += '<div class="stat-row"><span>Codes</span><span class="dim" style="font-size:11px">'+HEALTH_CACHE.primary_codes.join(', ')+'</span></div>';
-  }
-  panel.innerHTML = h + extra;
-}
+// ── Refresh all ──
 
 function refreshAll() {
   updateTimestamp();
   var promises = [
-    doFetch('/api/dashboard', function(data) {
-      renderStatus(data);
-      renderStats(data);
-      appendHealthExtras();
-    }),
+    doFetch('/api/dashboard', renderStatus),
+    doFetch('/api/modules', renderModules),
+    doFetch('/api/performance', renderPerformance),
+    doFetch('/api/governance', renderGovernance),
+    doFetch('/api/analytics', renderAnalytics),
     doFetch('/api/positions', renderPositions),
     doFetch('/api/brains', renderBrains),
     doFetch('/api/journal', renderJournal),
     doFetch('/api/decisions', renderDecisions),
     doFetch('/api/slo', renderSLO),
     doFetch('/api/alerts', renderAlerts),
-    doFetch('/api/health', function(data) {
-      HEALTH_CACHE = data;
-      appendHealthExtras();
-    }),
     doFetch('/api/risk', renderRisk),
   ];
   Promise.allSettled(promises).then(function(results) {
@@ -597,6 +890,14 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 self._serve_api_health()
             elif path == "/api/risk":
                 self._serve_api_risk()
+            elif path == "/api/performance":
+                self._serve_api_performance()
+            elif path == "/api/governance":
+                self._serve_api_governance()
+            elif path == "/api/analytics":
+                self._serve_api_analytics()
+            elif path == "/api/modules":
+                self._serve_api_modules()
             else:
                 self._serve_json({"error": "not_found"}, 404)
         except Exception:
@@ -753,6 +1054,23 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                             "freeze_count": state.get("freeze_count", 0),
                             "last_direction": "UNKNOWN",
                         }
+            except Exception:
+                pass
+
+        # 2.5 PnL data from counterfactual ledger
+        pnl_path = self.BASE_DIR / "brain_pnl_ledger.json"
+        if pnl_path.exists():
+            try:
+                from core.feedback.brain_pnl_ledger import BrainPnLStore
+
+                store = BrainPnLStore.load(pnl_path)
+                for bid, metrics in store.get_all_metrics().items():
+                    m = metrics.to_dict()
+                    if bid in brains:
+                        brains[bid]["pnl_total"] = m.get("cumulative_pnl", 0)
+                        brains[bid]["pnl_win_rate"] = m.get("win_rate", 0)
+                        brains[bid]["sharpe_ratio"] = m.get("sharpe_ratio", 0)
+                        brains[bid]["pnl_samples"] = m.get("sample_count", 0)
             except Exception:
                 pass
 
@@ -1084,6 +1402,456 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 "overall": overall,
                 "policies": policies,
                 "flag_active": (self.BASE_DIR / "live_dispatch_block.flag").exists(),
+            }
+        )
+
+    # ── NEW API: performance matrix ──
+
+    def _serve_api_performance(self) -> None:
+        """Return per-brain performance matrix (PnL, Sharpe, win rate, etc.)."""
+        global _PERF_CACHE
+        pnl_path = self.BASE_DIR / "brain_pnl_ledger.json"
+        tracker_path = self.BASE_DIR / "brain_performance.json"
+        gov_path = self.BASE_DIR / "governance_state.json"
+
+        # Check cache
+        now = time_module.time()
+        pnl_mtime = pnl_path.stat().st_mtime if pnl_path.exists() else 0
+        if (
+            _PERF_CACHE["data"] is not None
+            and (now - _PERF_CACHE["ts"]) < _PERF_CACHE_TTL
+            and pnl_mtime == _PERF_CACHE["mtime"]
+        ):
+            self._serve_json(_PERF_CACHE["data"])
+            return
+
+        brains: list[dict[str, Any]] = []
+        errors: list[str] = []
+
+        # 1. Load PnL ledger (counterfactual performance)
+        pnl_table: list[dict[str, Any]] = []
+        if pnl_path.exists():
+            try:
+                from core.feedback.brain_pnl_ledger import BrainPnLStore
+
+                store = BrainPnLStore.load(pnl_path)
+                pnl_table = store.get_summary_table()
+            except Exception as exc:
+                errors.append(f"pnl_ledger: {exc}")
+
+        # 2. Load BrainPerformanceTracker (composite scores, recommendations)
+        tracker: dict[str, dict[str, Any]] = {}
+        if tracker_path.exists():
+            try:
+                from core.feedback.brain_performance_tracker import (
+                    BrainPerformanceTracker,
+                )
+
+                t = BrainPerformanceTracker.load(tracker_path)
+                for s in t.get_all_summaries():
+                    tracker[s["brain_id"]] = s
+            except Exception as exc:
+                errors.append(f"tracker: {exc}")
+
+        # 3. Load GovernanceService (lifecycle status)
+        gov_states: dict[str, dict[str, Any]] = {}
+        if gov_path.exists():
+            try:
+                from core.governance.governance_service import GovernanceService
+
+                g = GovernanceService.load(gov_path)
+                gov_states = g.get_all_states()
+            except Exception as exc:
+                errors.append(f"governance: {exc}")
+
+        # 4. Merge
+        for pnl in pnl_table:
+            bid = pnl.get("brain_id", "")
+            entry = dict(pnl)
+            entry["governance_status"] = gov_states.get(bid, {}).get("status", "unknown")
+            entry["freeze_count"] = gov_states.get(bid, {}).get("freeze_count", 0)
+            tinfo = tracker.get(bid, {})
+            entry["composite_score"] = round(tinfo.get("composite_mean", 0), 4)
+            entry["recommendation"] = tinfo.get("recommendation", "observe")
+            brains.append(entry)
+
+        # Add brains that exist in tracker/governance but not in PnL ledger
+        seen = {b["brain_id"] for b in brains}
+        for bid, tinfo in tracker.items():
+            if bid not in seen:
+                gs = gov_states.get(bid, {})
+                brains.append(
+                    {
+                        "brain_id": bid,
+                        "governance_status": gs.get("status", "unknown"),
+                        "sample_count": tinfo.get("sample_count", 0),
+                        "cumulative_pnl": 0.0,
+                        "win_rate": 0.0,
+                        "sharpe_ratio": 0.0,
+                        "profit_factor": 0.0,
+                        "max_drawdown": 0.0,
+                        "avg_return": 0.0,
+                        "recent_pnl_20": 0.0,
+                        "long_win_rate": 0.0,
+                        "short_win_rate": 0.0,
+                        "long_count": 0,
+                        "short_count": 0,
+                        "health_signal": tinfo.get("health_signal", "insufficient_data"),
+                        "composite_score": round(tinfo.get("composite_mean", 0), 4),
+                        "recommendation": tinfo.get("recommendation", "observe"),
+                        "freeze_count": gs.get("freeze_count", 0),
+                    }
+                )
+                seen.add(bid)
+
+        # Sort by Sharpe descending
+        brains.sort(key=lambda b: b.get("sharpe_ratio", 0) or 0, reverse=True)
+
+        result = {
+            "generated_at": _utc_now_iso(),
+            "schema_version": SCHEMA_VERSION,
+            "brain_count": len(brains),
+            "brains": brains,
+            "errors": errors,
+        }
+        _PERF_CACHE = {"ts": now, "data": result, "mtime": pnl_mtime}
+        self._serve_json(result)
+
+    # ── NEW API: governance dashboard ──
+
+    def _serve_api_governance(self) -> None:
+        """Return governance actions: promotion queue, demotion warnings, freeze list, transitions."""
+        tracker_path = self.BASE_DIR / "brain_performance.json"
+        gov_path = self.BASE_DIR / "governance_state.json"
+        errors: list[str] = []
+
+        status_counts: dict[str, int] = {}
+        promotion_queue: list[dict[str, Any]] = []
+        demotion_warnings: list[dict[str, Any]] = []
+        freeze_list: list[dict[str, Any]] = []
+        recent_transitions: list[dict[str, Any]] = []
+
+        # Governance states
+        gov_states: dict[str, dict[str, Any]] = {}
+        if gov_path.exists():
+            try:
+                from core.governance.governance_service import GovernanceService
+
+                g = GovernanceService.load(gov_path)
+                gov_states = g.get_all_states()
+                # Status counts
+                for s in gov_states.values():
+                    st = s.get("status", "unknown")
+                    status_counts[st] = status_counts.get(st, 0) + 1
+                # Recent transitions
+                tlog = g.get_transition_log()
+                recent_transitions = list(tlog[-20:])
+                recent_transitions.reverse()
+            except Exception as exc:
+                errors.append(f"governance: {exc}")
+
+        # Tracker recommendations
+        if tracker_path.exists():
+            try:
+                from core.feedback.brain_performance_tracker import (
+                    BrainPerformanceTracker,
+                )
+
+                t = BrainPerformanceTracker.load(tracker_path)
+                for s in t.get_all_summaries():
+                    bid = s["brain_id"]
+                    rec = s.get("recommendation", "")
+                    gs = gov_states.get(bid, {})
+                    entry = {
+                        "brain_id": bid,
+                        "recommendation": rec,
+                        "composite_score": round(s.get("composite_mean", 0), 4),
+                        "from_status": gs.get("status", "unknown"),
+                        "sample_count": s.get("sample_count", 0),
+                    }
+                    if rec == "eligible_for_promotion":
+                        promotion_queue.append(entry)
+                    elif rec in ("demote_to_probation", "freeze", "limit_exposure"):
+                        demotion_warnings.append(entry)
+            except Exception as exc:
+                errors.append(f"tracker: {exc}")
+
+        # Freeze list from governance states
+        for bid, gs in gov_states.items():
+            if gs.get("status") == "frozen":
+                freeze_list.append(
+                    {
+                        "brain_id": bid,
+                        "status": "frozen",
+                        "freeze_count": gs.get("freeze_count", 0),
+                        "reason": gs.get("last_transition_reason", ""),
+                    }
+                )
+
+        self._serve_json(
+            {
+                "generated_at": _utc_now_iso(),
+                "status_counts": status_counts,
+                "promotion_queue": promotion_queue,
+                "demotion_warnings": demotion_warnings,
+                "freeze_list": freeze_list,
+                "recent_transitions": recent_transitions[:10],
+                "errors": errors,
+            }
+        )
+
+    # ── NEW API: analytics recommendations ──
+
+    def _serve_api_analytics(self) -> None:
+        """Return parameter tuning suggestions, retirement candidates, degraded brains."""
+        suggestions_path = self.BASE_DIR / "reports" / "param_suggestions.json"
+        tracker_path = self.BASE_DIR / "brain_performance.json"
+        gov_path = self.BASE_DIR / "governance_state.json"
+        errors: list[str] = []
+
+        param_suggestions: list[dict[str, Any]] = []
+        if suggestions_path.exists():
+            try:
+                data = json.loads(suggestions_path.read_text(encoding="utf-8"))
+                param_suggestions = data.get("suggestions", [])
+            except (json.JSONDecodeError, OSError) as exc:
+                errors.append(f"param_suggestions: {exc}")
+
+        retirement_candidates: list[dict[str, Any]] = []
+        degraded_brains: list[dict[str, Any]] = []
+
+        gov_states: dict[str, dict[str, Any]] = {}
+        if gov_path.exists():
+            try:
+                from core.governance.governance_service import GovernanceService
+
+                gov_states = GovernanceService.load(gov_path).get_all_states()
+            except Exception:
+                pass
+
+        if tracker_path.exists():
+            try:
+                from core.feedback.brain_performance_tracker import (
+                    BrainPerformanceTracker,
+                )
+
+                t = BrainPerformanceTracker.load(tracker_path)
+                for s in t.get_all_summaries():
+                    health = s.get("health_signal", "")
+                    rec = s.get("recommendation", "")
+                    n = s.get("sample_count", 0)
+                    gs = gov_states.get(s["brain_id"], {})
+                    current_status = gs.get("status", "unknown")
+                    entry = {
+                        "brain_id": s["brain_id"],
+                        "health_signal": health,
+                        "recommendation": rec,
+                        "sample_count": n,
+                        "composite_score": round(s.get("composite_mean", 0), 4),
+                        "current_status": current_status,
+                    }
+                    if (
+                        health in ("critical", "degraded")
+                        and n >= 10
+                        and current_status not in ("frozen", "retired")
+                    ):
+                        if rec == "freeze":
+                            retirement_candidates.append(entry)
+                        else:
+                            degraded_brains.append(entry)
+            except Exception as exc:
+                errors.append(f"tracker: {exc}")
+
+        self._serve_json(
+            {
+                "generated_at": _utc_now_iso(),
+                "param_suggestions": param_suggestions,
+                "retirement_candidates": retirement_candidates,
+                "degraded_brains": degraded_brains,
+                "errors": errors,
+            }
+        )
+
+    # ── NEW API: module health ──
+
+    def _serve_api_modules(self) -> None:
+        """Return per-module health status with data freshness indicators."""
+        errors: list[str] = []
+        modules: dict[str, dict[str, Any]] = {}
+        now = time_module.time()
+
+        # 1. MT5 Bridge
+        try:
+            bridge_health_path = self.BASE_DIR / "reports" / "mt5_bridge_health.json"
+            if bridge_health_path.exists():
+                bh = json.loads(bridge_health_path.read_text(encoding="utf-8"))
+                last_ts = bh.get("last_heartbeat_utc", "")
+                connected = bh.get("connected", False)
+                modules["mt5_bridge"] = {
+                    "status": "OK" if connected else "WARNING",
+                    "connected": connected,
+                    "detail": bh.get("status", "unknown"),
+                    "last_heartbeat": last_ts,
+                }
+            else:
+                modules["mt5_bridge"] = {
+                    "status": "WARNING",
+                    "connected": False,
+                    "detail": "no health file",
+                }
+        except Exception as exc:
+            modules["mt5_bridge"] = {"status": "ERROR", "detail": str(exc)[:100]}
+
+        # 2. Outbox
+        try:
+            outbox_dir = self.BASE_DIR / "mt5_outbox"
+            pending = 0
+            stale = 0
+            if outbox_dir.exists():
+                cutoff = now - 600  # 10 minutes stale
+                for root, _dirs, files in os.walk(str(outbox_dir)):
+                    for fn in files:
+                        if fn.endswith(".json"):
+                            pending += 1
+                            fp = Path(root) / fn
+                            if fp.stat().st_mtime < cutoff:
+                                stale += 1
+            modules["outbox"] = {
+                "status": "CRITICAL" if stale > 3 else ("WARNING" if pending > 10 else "OK"),
+                "pending": pending,
+                "stale": stale,
+            }
+        except Exception as exc:
+            modules["outbox"] = {"status": "ERROR", "detail": str(exc)[:100]}
+
+        # 3. Feature Store
+        try:
+            fs_dir = self.BASE_DIR / "feature_store"
+            if fs_dir.exists():
+                max_mtime = 0
+                for root, _dirs, files in os.walk(str(fs_dir)):
+                    for fn in files:
+                        fp = Path(root) / fn
+                        if fp.stat().st_mtime > max_mtime:
+                            max_mtime = fp.stat().st_mtime
+                age_sec = now - max_mtime if max_mtime > 0 else 9999
+                age_min = int(age_sec / 60)
+                if age_min < 5:
+                    fs_status = "OK"
+                elif age_min < 30:
+                    fs_status = "WARNING"
+                else:
+                    fs_status = "CRITICAL"
+                modules["feature_store"] = {
+                    "status": fs_status,
+                    "available": True,
+                    "freshness": f"{age_min}m ago" if age_min > 0 else "now",
+                }
+            else:
+                modules["feature_store"] = {
+                    "status": "WARNING",
+                    "available": False,
+                    "freshness": "not found",
+                }
+        except Exception as exc:
+            modules["feature_store"] = {"status": "ERROR", "detail": str(exc)[:100]}
+
+        # 4. Brain Adapters
+        try:
+            configs_dir = Path("configs/brains")
+            configured = (
+                len([f for f in configs_dir.glob("*.json") if "normalization" not in f.name])
+                if configs_dir.exists()
+                else 0
+            )
+            tracker_path = self.BASE_DIR / "brain_performance.json"
+            with_data = 0
+            if tracker_path.exists():
+                t_data = json.loads(tracker_path.read_text(encoding="utf-8"))
+                records = t_data.get("records", {})
+                with_data = sum(1 for v in records.values() if v and len(v) > 0)
+            active_count = with_data
+            if configured > 0 and with_data == 0:
+                adapter_status = "WARNING"
+            elif configured > 0 and with_data < configured:
+                adapter_status = "WARNING"
+            else:
+                adapter_status = "OK"
+            modules["brain_adapters"] = {
+                "status": adapter_status,
+                "configured": configured,
+                "with_data": with_data,
+                "active": active_count,
+            }
+        except Exception as exc:
+            modules["brain_adapters"] = {"status": "ERROR", "detail": str(exc)[:100]}
+
+        # 5. Governance
+        try:
+            gov_path = self.BASE_DIR / "governance_state.json"
+            if gov_path.exists():
+                from core.governance.governance_service import GovernanceService
+
+                g = GovernanceService.load(gov_path)
+                states = g.get_all_states()
+                live = sum(1 for s in states.values() if s.get("status") == "live")
+                frozen = sum(1 for s in states.values() if s.get("status") == "frozen")
+                modules["governance"] = {
+                    "status": "WARNING" if frozen > 0 else "OK",
+                    "live": live,
+                    "frozen": frozen,
+                    "total": len(states),
+                }
+            else:
+                modules["governance"] = {"status": "WARNING", "detail": "not initialized"}
+        except Exception as exc:
+            modules["governance"] = {"status": "ERROR", "detail": str(exc)[:100]}
+
+        # 6. Dispatch
+        flag_path = self.BASE_DIR / "live_dispatch_block.flag"
+        blocked = flag_path.exists()
+        modules["dispatch"] = {
+            "status": "CRITICAL" if blocked else "OK",
+            "blocked": blocked,
+        }
+
+        # 7. Daily Ops
+        try:
+            recap_path = self.BASE_DIR / "reports" / "daily_recap.json"
+            if recap_path.exists():
+                age_h = (now - recap_path.stat().st_mtime) / 3600
+                do_status = "OK" if age_h < 24 else "WARNING"
+                modules["daily_ops"] = {
+                    "status": do_status,
+                    "last_recap": f"{age_h:.0f}h ago" if age_h > 0.5 else "recent",
+                }
+            else:
+                modules["daily_ops"] = {"status": "WARNING", "last_recap": "never"}
+        except Exception as exc:
+            modules["daily_ops"] = {"status": "ERROR", "detail": str(exc)[:100]}
+
+        # 8. Resources
+        resources = _collect_system_resources()
+
+        # Determine overall alert level
+        statuses = [m.get("status", "OK") for m in modules.values()]
+        if "CRITICAL" in statuses:
+            alert_level = "CRITICAL"
+        elif "ERROR" in statuses or statuses.count("WARNING") >= 2:
+            alert_level = "WARNING"
+        else:
+            alert_level = "OK"
+
+        primary_codes = [k for k, v in modules.items() if v.get("status") in ("CRITICAL", "ERROR")]
+
+        self._serve_json(
+            {
+                "generated_at": _utc_now_iso(),
+                "alert_level": alert_level,
+                "modules": modules,
+                "resources": resources,
+                "primary_codes": primary_codes,
+                "errors": errors,
             }
         )
 

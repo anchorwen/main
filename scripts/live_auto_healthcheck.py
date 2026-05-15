@@ -222,5 +222,12 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+try:
+    from core.deployment.scheduled_task_registry import register
+
+    register("auto_healthcheck", build_report)
+except ImportError:
+    pass
+
 if __name__ == "__main__":
     raise SystemExit(main())

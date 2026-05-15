@@ -1,0 +1,29 @@
+{
+  "schema_version": "brain_registry_entry.v1",
+  "brain_id": "Microstructure_Transformer_V5.0_H4",
+  "brain_type": "transformer_v5_h4",
+  "brain_role": "alpha_brain",
+  "model_version": "v5.0-barrier-h4",
+  "status": "shadow",
+  "vote_weight": 0.4,
+  "magic": 90304,
+  "artifact_path": "data/models/transformer_v5_micro_barrier_h4.onnx",
+  "feature_schema_id": "v2_microstructure_9",
+  "training_contract": "label-micro-barrier-1.0.0-H4",
+  "hmre_layer": "H4",
+  "deployment_scope": {
+    "symbols": [
+      "XAUUSDc",
+      "XAUUSD"
+    ],
+    "sessions": [
+      "all"
+    ],
+    "regimes": [
+      "trend"
+    ]
+  },
+  "contract_group": "micro_h4",
+  "training_horizon": 3,
+  "feature_schema": "micro_9dim"
+}

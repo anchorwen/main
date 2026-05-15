@@ -46,10 +46,12 @@ __all__ = [
     "main",
 ]
 
-# ── Feature engine defaults ──
-DEFAULT_NORM_CONFIG = "configs/brains/v9_institutional_01.normalization.json"
-DEFAULT_BRAIN_ENTRY = "configs/brains/v9_institutional_01.json"
-DEFAULT_FEATURE_STORE_DIR = "data/feature_store"
+# ── Feature engine defaults (single source: core.deployment.path_defaults) ──
+from core.deployment.path_defaults import (
+    DEFAULT_BRAIN_ENTRY,
+    DEFAULT_FEATURE_STORE_DIR,
+    DEFAULT_NORM_CONFIG,
+)
 
 
 def decide_side_from_anchor(price: float, anchor: float, threshold: float) -> str | None:
@@ -437,8 +439,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--exit-brain-reeval-interval",
         type=int,
-        default=5,
-        help="Cycles between brain re-evaluation during management (default: 5)",
+        default=1,
+        help="Cycles between brain re-evaluation during management (default: 1 — every cycle)",
     )
     p.add_argument(
         "--exit-flip-threshold",
@@ -469,6 +471,27 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to live.yaml for strategy_lines config overrides",
     )
+    p.add_argument(
+        "--bar-sync",
+        action="store_true",
+        help="Enable event-driven bar sync (waits for real M5 bar instead of blind sleep)",
+    )
+    p.add_argument(
+        "--bar-sync-timeout",
+        type=float,
+        default=120.0,
+        help="Max seconds to wait for new bar before fallback to interval sleep",
+    )
+    p.add_argument(
+        "--use-limit-orders",
+        action="store_true",
+        help="Use passive limit orders instead of market orders for entries (K1 strategy)",
+    )
+    p.add_argument(
+        "--use-exit-watchdog",
+        action="store_true",
+        help="Wrap all exit dispatches with heartbeat watchdog (retry + escalation)",
+    )
     return p
 
 
@@ -498,6 +521,28 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
+
+            # Validate per-strategy exit configs for unknown keys (RC-09 config drift)
+            if strategy_configs:
+                try:
+                    from core.runtime.live_cycle import validate_strategy_exit_configs
+
+                    exit_warnings = validate_strategy_exit_configs(strategy_configs)
+                    if exit_warnings:
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "exit_config_validation_warning",
+                                    "time": _utc_iso(),
+                                    "warnings": exit_warnings,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                except Exception:
+                    pass
+
         except Exception as exc:
             print(
                 json.dumps(
@@ -506,6 +551,44 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
+
+    # ── Startup integrity check ──
+    try:
+        from core.deployment.brain_lifecycle_manager import BrainLifecycleManager
+
+        lifecycle = BrainLifecycleManager(
+            project_root=PROJECT_ROOT,
+            base_dir=args.base_dir,
+        )
+        integrity = lifecycle.verify_startup_integrity()
+        if (
+            integrity.missing_config_files
+            or integrity.governance_orphans
+            or integrity.hardcoded_path_mismatches
+        ):
+            print(
+                json.dumps(
+                    {
+                        "event": "startup_integrity_warning",
+                        "time": _utc_iso(),
+                        "missing_config_files": integrity.missing_config_files,
+                        "missing_yaml_entries": integrity.missing_yaml_entries,
+                        "missing_artifacts": integrity.missing_artifacts,
+                        "governance_orphans": integrity.governance_orphans,
+                        "hardcoded_path_mismatches": integrity.hardcoded_path_mismatches,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+    except Exception as exc:
+        print(
+            json.dumps(
+                {"event": "startup_integrity_error", "error": str(exc)},
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
 
     config = LiveCycleConfig(
         symbol=args.symbol,
@@ -720,7 +803,7 @@ def main(argv: list[str] | None = None) -> int:
 
         micro_feature_computer = MicrostructureFeatureComputer(mt5, args.symbol)
         micro_feature_adapter = MicrostructureFeatureAdapter(
-            scaler_path="data/models/mtx_transformer_scaler.joblib",
+            scaler_path=None,
         )
 
         _store_dir = Path(args.feature_store_dir)
@@ -747,6 +830,42 @@ def main(argv: list[str] | None = None) -> int:
             store_schema_name="v9_institutional_40",
             store_timeframe="M5",
         )
+
+        # Daily D1 feature provider for swing brain inference
+        daily_feature_provider: Any = None
+        try:
+            from core.features.computers.live_daily_provider import LiveDailyFeatureProvider
+
+            daily_feature_provider = LiveDailyFeatureProvider(
+                mt5_module=mt5,
+                symbol=args.symbol,
+                d1_csv="data/raw/xauusdc_d1_merged.csv",
+                h4_csv="data/raw/xauusdc_h4_merged.csv",
+            )
+            print(
+                json.dumps(
+                    {
+                        "event": "daily_feature_provider_ready",
+                        "time": _utc_iso(),
+                        "latest_timestamp": daily_feature_provider.latest_timestamp,
+                        "feature_dim": daily_feature_provider.feature_dim,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        except Exception as _dfp_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "daily_feature_provider_init_failed",
+                        "time": _utc_iso(),
+                        "error": str(_dfp_exc),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
 
     # ── Initialize risk service ──
     risk_service = _init_risk_service()
@@ -799,6 +918,8 @@ def main(argv: list[str] | None = None) -> int:
     # ── Load open positions from journal ──
     _journal_path = Path(args.base_dir) / "live_trade_journal.jsonl"
     known_open_tickets: dict[int, dict[str, Any]] = {}
+    from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
+
     if _journal_path.exists():
         try:
             for line in _journal_path.read_text(encoding="utf-8").splitlines():
@@ -809,6 +930,9 @@ def main(argv: list[str] | None = None) -> int:
                 if rec.get("action") == "open" and rec.get("ack_status") == "accepted":
                     ticket = rec.get("position_ticket")
                     if ticket is not None and isinstance(ticket, int) and ticket > 0:
+                        # Enrich with strategy name for management-phase lookup
+                        _magic = rec.get("detail", {}).get("request", {}).get("magic", 0)
+                        rec["strategy"] = MAGIC_TO_STRATEGY.get(_magic, "")
                         known_open_tickets[ticket] = rec
         except Exception:
             pass
@@ -835,6 +959,12 @@ def main(argv: list[str] | None = None) -> int:
                         "brain_type": entry.get("brain_type", ""),
                         "magic": entry.get("magic", 90001),
                         "feature_schema_id": entry.get("feature_schema_id", ""),
+                        "training_contract": entry.get("training_contract", ""),
+                        "hmre_layer": entry.get("hmre_layer"),
+                        "contract_group": entry.get("contract_group", ""),
+                        "training_horizon": entry.get("training_horizon", 12),
+                        "feature_schema": entry.get("feature_schema", ""),
+                        "status": entry.get("status", ""),
                     }
                 )
             except Exception as exc:
@@ -932,6 +1062,8 @@ def main(argv: list[str] | None = None) -> int:
                 "brain_id": brain_entry.get("brain_id", "unknown"),
                 "adapter": brain,
                 "magic": brain_entry.get("magic", 90001),
+                "brain_type": brain_entry.get("brain_type", ""),
+                "training_contract": brain_entry.get("training_contract", ""),
             }
         )
 
@@ -971,6 +1103,7 @@ def main(argv: list[str] | None = None) -> int:
 
         # ── Restart recovery: try persisted state first, fall back to MT5 ──
         recovered = False
+        managed_ticket: int | None = None
         try:
             restored = position_manager.load_state(_pos_state_path)
             if restored is not None:
@@ -978,6 +1111,7 @@ def main(argv: list[str] | None = None) -> int:
                 mt5_positions = mt5.positions_get(ticket=restored.ticket)
                 if mt5_positions and len(mt5_positions) > 0:
                     mp = mt5_positions[0]
+                    managed_ticket = restored.ticket
                     # Sync current SL/TP from MT5 (ground truth)
                     restored.current_sl = float(mp.sl) if mp.sl > 0 else restored.current_sl
                     restored.current_tp = float(mp.tp) if mp.tp > 0 else restored.current_tp
@@ -1020,6 +1154,7 @@ def main(argv: list[str] | None = None) -> int:
                         mt5_positions = mt5.positions_get(ticket=ticket)
                         if mt5_positions and len(mt5_positions) > 0:
                             mp = mt5_positions[0]
+                            managed_ticket = ticket
                             side = "long" if mp.type == 0 else "short"
                             entry_price = float(mp.price_open)
                             current_sl_val = float(mp.sl) if mp.sl > 0 else entry_price
@@ -1057,7 +1192,7 @@ def main(argv: list[str] | None = None) -> int:
                                 recovery_atr = 2.31
 
                             current_high = max(entry_price, float(mp.price_current))
-                            min(entry_price, float(mp.price_current))
+                            _ = min(entry_price, float(mp.price_current))  # retained for clarity
 
                             position_manager.register_position(
                                 ticket=ticket,
@@ -1100,6 +1235,63 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
+
+        # ── Post-recovery audit: detect all MT5 positions and report unmanaged ones ──
+        try:
+            all_mt5_positions = mt5.positions_get(symbol=args.symbol)
+            if all_mt5_positions:
+                managed_found = False
+                for mp in all_mt5_positions:
+                    ticket = mp.ticket
+                    side = "long" if mp.type == 0 else "short"
+                    entry_price = float(mp.price_open)
+                    profit = float(mp.profit)
+                    sl = float(mp.sl) if mp.sl > 0 else 0.0
+                    tp = float(mp.tp) if mp.tp > 0 else 0.0
+                    volume = float(mp.volume)
+
+                    if managed_ticket is not None and ticket == managed_ticket:
+                        managed_found = True
+                        continue
+
+                    # Unmanaged position — report and validate SL/TP
+                    no_sl = sl <= 0
+                    no_tp = tp <= 0
+                    print(
+                        json.dumps(
+                            {
+                                "event": "position_unmanaged_detected",
+                                "time": _utc_iso(),
+                                "ticket": ticket,
+                                "side": side,
+                                "entry_price": entry_price,
+                                "volume": volume,
+                                "current_sl": sl if sl > 0 else None,
+                                "current_tp": tp if tp > 0 else None,
+                                "profit": round(profit, 2),
+                                "missing_sl": no_sl,
+                                "missing_tp": no_tp,
+                                "note": "Position tracked by MT5 broker-side SL/TP only — no active trail/exit management",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                if managed_ticket is not None and not managed_found:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "position_managed_vanished",
+                                "time": _utc_iso(),
+                                "ticket": managed_ticket,
+                                "note": "Managed position no longer on MT5 — may have been closed externally",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+        except Exception:
+            pass
 
     # ── Initialize GroupCorrelationTracker ──
     correlation_tracker: Any = None
@@ -1150,8 +1342,155 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             pass
 
+    # ── Initialize BarSyncPoller (event-driven M5 bar detection) ──
+    bar_sync: Any = None
+    if args.bar_sync and not args.no_mt5 and mt5 is not None:
+        try:
+            from core.protocol.event_bar_sync import BarSyncPoller
+
+            bar_sync = BarSyncPoller(
+                symbol=args.symbol,
+                timeframe="M5",
+                terminal_path=args.mt5_terminal_path,
+                state_dir=args.base_dir,
+                timeout_seconds=args.bar_sync_timeout,
+            )
+            print(
+                json.dumps(
+                    {
+                        "event": "bar_sync_initialized",
+                        "time": _utc_iso(),
+                        "symbol": args.symbol,
+                        "timeframe": "M5",
+                        "timeout_seconds": args.bar_sync_timeout,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        except Exception as _bs_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "bar_sync_init_failed",
+                        "time": _utc_iso(),
+                        "error": str(_bs_exc),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+
+    # ── Initialize ExitWatchdog (heartbeat-protected exit dispatch) ──
+    exit_watchdog: Any = None
+    if args.use_exit_watchdog:
+        try:
+            from core.execution.exit_watchdog import ExitWatchdog
+
+            exit_watchdog = ExitWatchdog(data_dir=args.base_dir)
+            print(
+                json.dumps(
+                    {
+                        "event": "exit_watchdog_initialized",
+                        "time": _utc_iso(),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        except Exception as _ew_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "exit_watchdog_init_failed",
+                        "time": _utc_iso(),
+                        "error": str(_ew_exc),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+
+    # ── Initialize LimitOrderMonitor (spread-aware limit order tracking) ──
+    limit_monitor: Any = None
+    if args.use_limit_orders:
+        try:
+            from core.execution.limit_order_monitor import LimitOrderMonitor
+
+            limit_monitor = LimitOrderMonitor(data_dir=f"{args.base_dir}/limit_orders")
+            print(
+                json.dumps(
+                    {
+                        "event": "limit_monitor_initialized",
+                        "time": _utc_iso(),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        except Exception as _lm_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "limit_monitor_init_failed",
+                        "time": _utc_iso(),
+                        "error": str(_lm_exc),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+
+    # ── Global crash hook: capture ALL exits including C-level crashes ──
+    import sys as _sys
+    import traceback as _traceback
+    from datetime import UTC as _UTC
+    from datetime import datetime as _datetime
+
+    def _global_excepthook(exc_type, exc_value, exc_tb):
+        msg = {
+            "event": "fatal_error",
+            "time": _datetime.now(_UTC).replace(tzinfo=None).isoformat(),
+            "type": str(exc_type) if exc_type is not None else "None",
+            "message": str(exc_value) if exc_value is not None else "None",
+        }
+        if exc_tb is not None:
+            msg["traceback"] = "".join(_traceback.format_tb(exc_tb))[-2000:]
+        try:
+            print(json.dumps(msg, ensure_ascii=False), flush=True)
+        except Exception:
+            print(f"FATAL: {exc_type}: {exc_value}", flush=True)
+        _sys.__excepthook__(exc_type, exc_value, exc_tb)
+
+    _sys.excepthook = _global_excepthook
+
     # ── Main loop ──
+    _live_lock: Any = None
     try:
+        from core.infrastructure.distributed_lock import get_lock
+
+        _live_lock = get_lock(
+            "live_intent_loop",
+            backend="auto",
+            ttl_seconds=300,
+            lock_dir="data/locks",
+        )
+        _acquired = _live_lock.acquire()
+        if not _acquired.acquired:
+            print(
+                json.dumps(
+                    {
+                        "event": "lock_denied",
+                        "time": _utc_iso(),
+                        "holder": _acquired.holder_id,
+                        "error": _acquired.error or "Another live_intent_loop process is running",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            sys.exit(0)
+
         while True:
             try:
                 state, should_continue = execute_live_cycle(
@@ -1172,9 +1511,19 @@ def main(argv: list[str] | None = None) -> int:
                     tracker=tracker,
                     rolling_norm=rolling_norm,
                     feature_adapter=feature_adapter,
+                    daily_feature_provider=daily_feature_provider,
                     journal_path=_journal_path,
                     pnl_ledger=pnl_ledger,
+                    exit_watchdog=exit_watchdog,
+                    limit_monitor=limit_monitor,
                 )
+                # Reload tracker if daily_ops enriched it with realized P&L
+                if state._tracker_reload_pending:
+                    try:
+                        tracker = BrainPerformanceTracker.load(tracker_path)
+                        state._tracker_reload_pending = False
+                    except Exception:
+                        pass
                 if not should_continue:
                     break
             except Exception as exc:
@@ -1226,8 +1575,33 @@ def main(argv: list[str] | None = None) -> int:
                     except Exception:
                         pass
 
-            time.sleep(args.interval_seconds)
+            # ── Wait for next cycle: event-driven bar sync or interval sleep ──
+            if bar_sync is not None:
+                new_bar = bar_sync.wait_for_new_bar(timeout_seconds=args.bar_sync_timeout)
+                if new_bar is None:
+                    # Timeout — MT5 may be down; fall back to interval
+                    sync_state = bar_sync.get_state()
+                    print(
+                        json.dumps(
+                            {
+                                "event": "bar_sync_timeout",
+                                "time": _utc_iso(),
+                                "state": sync_state,
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                    time.sleep(args.interval_seconds)
+            else:
+                time.sleep(args.interval_seconds)
     finally:
+        # ── Release distributed lock ──
+        if _live_lock is not None:
+            try:
+                _live_lock.release()
+            except Exception:
+                pass
         # ── Graceful shutdown: persist all state ──
         print(
             json.dumps({"event": "shutdown_start", "time": _utc_iso()}, ensure_ascii=False),

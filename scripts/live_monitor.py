@@ -473,5 +473,12 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+try:
+    from core.deployment.scheduled_task_registry import register
+
+    register("live_monitor_snapshot", build_snapshot)
+except ImportError:
+    pass
+
 if __name__ == "__main__":
     raise SystemExit(main())

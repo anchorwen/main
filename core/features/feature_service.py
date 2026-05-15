@@ -76,7 +76,32 @@ class FeatureService:
                     schema_name=self._store_schema_name,
                 )
                 if record is not None and record.values:
-                    if self._adapter is not None:
+                    # ── Freshness SLA check ──
+                    _stale = False
+                    feature_ts = getattr(record, "event_time", None)
+                    if feature_ts is not None:
+                        try:
+                            from core.execution.pre_trade_guards import check_feature_freshness
+
+                            ts = (
+                                feature_ts.timestamp()
+                                if hasattr(feature_ts, "timestamp")
+                                else float(feature_ts)
+                            )
+                            freshness = check_feature_freshness(ts, max_age_seconds=300.0)
+                            if not freshness["fresh"]:
+                                logging.warning(
+                                    "FeatureService stale cache for %s: age=%.1fs (limit=%.0fs), falling through to live compute",
+                                    symbol,
+                                    freshness.get("age_seconds", -1),
+                                    freshness["max_age_seconds"],
+                                )
+                                _stale = True
+                        except Exception:
+                            pass  # freshness check is best-effort
+                    if _stale:
+                        pass  # don't return stale data — fall through to Tier 2
+                    elif self._adapter is not None:
                         return self._adapter.build_model_input(record.values)[0]
                     # Raw vector in V9 feature order (no normalization)
                     raw = np.asarray(

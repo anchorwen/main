@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import torch
 
 THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = THIS_DIR.parent.parent.parent
@@ -51,6 +52,7 @@ D_MODEL = 96
 N_HEADS = 4
 NUM_LAYERS = 2
 DROPOUT = 0.15
+NUM_CLASSES = 3  # -1 (sl), 0 (timeout), 1 (tp)
 
 
 def _utc_now_iso() -> str:
@@ -75,7 +77,7 @@ class UpgradedQuantTransformer:
       feature_embedding(9→128) + pos_encoding(1×32×128)
       → RegimeContext: concat(seq_mean, seq_std) → Linear(18→128)
       → TransformerEncoder(128, 4 heads, 3 layers, dropout=0.15)
-      → GlobalMeanPool + RegimeContext → decoder(128→64→1)
+      → GlobalMeanPool + RegimeContext → decoder(128→64→output_dim)
     """
 
     def __new__(
@@ -86,6 +88,7 @@ class UpgradedQuantTransformer:
         num_layers: int = NUM_LAYERS,
         dropout: float = DROPOUT,
         seq_len: int = SEQ_LEN,
+        output_dim: int = 1,
     ):
         import torch
         import torch.nn as nn
@@ -93,6 +96,8 @@ class UpgradedQuantTransformer:
         class _Model(nn.Module):
             def __init__(self):
                 super().__init__()
+                self.num_features = num_features
+                self.output_dim = output_dim
                 self.feature_embedding = nn.Linear(num_features, d_model)
                 self.pos_encoder = nn.Parameter(torch.zeros(1, seq_len, d_model))
 
@@ -119,7 +124,7 @@ class UpgradedQuantTransformer:
                     nn.Linear(d_model, 64),
                     nn.GELU(),
                     nn.Dropout(dropout),
-                    nn.Linear(64, 1),
+                    nn.Linear(64, output_dim),
                 )
 
                 self._init_weights()
@@ -127,34 +132,28 @@ class UpgradedQuantTransformer:
             def _init_weights(self):
                 for m in self.modules():
                     if isinstance(m, nn.Linear):
-                        # Use small init for output layers (fan_out <= 1 causes huge std)
                         if m.out_features <= 1:
                             nn.init.normal_(m.weight, mean=0.0, std=1e-3)
+                        elif m.out_features == 3:
+                            nn.init.xavier_uniform_(m.weight)
                         else:
                             nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
                         if m.bias is not None:
                             nn.init.constant_(m.bias, 0)
-                # Xavier init for position encoder
                 nn.init.xavier_normal_(self.pos_encoder)
 
             def forward(self, x):
                 # x: (batch, seq_len, num_features)
-                # Regime context from sequence statistics
-                seq_mean = x.mean(dim=1)  # (B, 9)
-                seq_std = x.std(dim=1).clamp(min=1e-6)  # (B, 9)
-                seq_stats = torch.cat([seq_mean, seq_std], dim=-1)  # (B, 18)
-                regime_ctx = self.regime_proj(seq_stats)  # (B, 128)
+                seq_mean = x.mean(dim=1)
+                seq_std = x.std(dim=1).clamp(min=1e-6)
+                seq_stats = torch.cat([seq_mean, seq_std], dim=-1)
+                regime_ctx = self.regime_proj(seq_stats)
 
-                # Feature embedding + position encoding
-                h = self.feature_embedding(x) + self.pos_encoder  # (B, 32, 128)
+                h = self.feature_embedding(x) + self.pos_encoder
+                h = self.transformer_encoder(h)
+                h = h.mean(dim=1) + regime_ctx
 
-                # Transformer encoder
-                h = self.transformer_encoder(h)  # (B, 32, 128)
-
-                # Global mean pool + regime context
-                h = h.mean(dim=1) + regime_ctx  # (B, 128)
-
-                return self.decoder(h)  # (B, 1)
+                return self.decoder(h)  # (B, output_dim)
 
         return _Model()
 
@@ -207,6 +206,45 @@ def load_pt_data(
     return X_sliced, Y_sliced
 
 
+def load_npz_data(
+    data_path: Path,
+    seq_len: int = SEQ_LEN,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Load training data from .npz file (from build_micro_barrier_dataset.py).
+
+    Expects keys: X (n_samples, seq_len, num_features), y (n_samples,).
+    X_flat key is ignored (for XGBoost).
+    """
+    data = np.load(data_path)
+    X = data["X"]
+    y = data["y"]
+
+    if X.ndim != 3:
+        raise ValueError(f"Expected 3D X array (n, seq_len, features), got shape {X.shape}")
+
+    actual_seq_len = X.shape[1]
+    if actual_seq_len > seq_len:
+        X = X[:, -seq_len:, :]
+    elif actual_seq_len < seq_len:
+        raise ValueError(f"Data seq_len={actual_seq_len} < required seq_len={seq_len}")
+
+    X_out = X.astype(np.float64)
+    y_out = y.astype(np.int32)
+
+    total = len(y_out)
+    tp_count = int((y_out == 1).sum())
+    sl_count = int((y_out == -1).sum())
+    timeout_count = int((y_out == 0).sum())
+
+    print(f"[transformer] Loaded {total} samples from {data_path.name}")
+    print(
+        f"[transformer] Label dist: tp={tp_count} ({100*tp_count/total:.1f}%),"
+        f" timeout={timeout_count} ({100*timeout_count/total:.1f}%),"
+        f" sl={sl_count} ({100*sl_count/total:.1f}%)"
+    )
+    return X_out, y_out
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Training
 # ═══════════════════════════════════════════════════════════════════════
@@ -232,6 +270,7 @@ def train_transformer(
     d_model: int = D_MODEL,
     n_heads: int = N_HEADS,
     num_layers: int = NUM_LAYERS,
+    multi_class: bool = False,
 ) -> tuple[Any, dict[str, Any]]:
     import torch
 
@@ -242,11 +281,43 @@ def train_transformer(
     n_val = int(n * val_split)
     idx = np.random.permutation(n)
     X_train = X[idx[n_val:]]
-    y_train = y[idx[n_val:]]
+    y_train_raw = y[idx[n_val:]]
     X_val = X[idx[:n_val]]
-    y_val = y[idx[:n_val]]
+    y_val_raw = y[idx[:n_val]]
 
-    print(f"[transformer] Train: {len(X_train)}, Val: {len(X_val)}")
+    # ── Multi-class: map -1,0,1 → 0,1,2 for CrossEntropyLoss ──
+    if multi_class:
+
+        def _map_labels(arr):
+            out = arr.astype(np.int64).copy()
+            out = np.where(out == -1, 2, out)  # sl → 2
+            out = np.where(out == 0, 0, out)  # timeout → 0
+            out = np.where(out == 1, 1, out)  # tp → 1
+            return out
+
+        y_train = _map_labels(y_train_raw)
+        y_val = _map_labels(y_val_raw)
+        output_dim = 3
+        # Class weights: inverse frequency
+        cls_counts = np.bincount(y_train, minlength=3)
+        cls_weights = len(y_train) / (3 * cls_counts.clip(min=1))
+        class_weight = torch.tensor(cls_weights, dtype=torch.float32)
+        criterion = torch.nn.CrossEntropyLoss(weight=class_weight)
+    else:
+        y_train = y_train_raw
+        y_val = y_val_raw
+        output_dim = 1
+        n_pos = int(y_train.sum())
+        n_neg = len(y_train) - n_pos
+        pos_weight = torch.tensor([n_neg / max(n_pos, 1)], dtype=torch.float32)
+        criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
+    print(f"[transformer] Train: {len(X_train)}, Val: {len(X_val)}, multi_class={multi_class}")
+    if multi_class:
+        print(
+            f"[transformer] Class distribution: {dict(zip(['timeout','tp','sl'], cls_counts.tolist(), strict=False))}"
+        )
+        print(f"[transformer] Class weights: {cls_weights.tolist()}")
 
     model = UpgradedQuantTransformer(
         num_features=NUM_FEATURES,
@@ -255,14 +326,9 @@ def train_transformer(
         num_layers=num_layers,
         dropout=dropout,
         seq_len=seq_len,
+        output_dim=output_dim,
     )
     model.train()
-
-    # Count pos/neg for pos_weight in BCE
-    n_pos = int(y_train.sum())
-    n_neg = len(y_train) - n_pos
-    pos_weight = torch.tensor([n_neg / max(n_pos, 1)], dtype=torch.float32)
-    criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 
@@ -291,8 +357,11 @@ def train_transformer(
             yb = y_shuf[i : i + batch_size]
 
             optimizer.zero_grad()
-            logits = model(Xb).squeeze(-1)
-            loss = criterion(logits, yb)
+            logits_raw = model(Xb)
+            if multi_class:
+                loss = criterion(logits_raw, yb.long())
+            else:
+                loss = criterion(logits_raw.squeeze(-1), yb)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
@@ -303,15 +372,19 @@ def train_transformer(
         # Validation
         model.eval()
         with torch.no_grad():
-            val_logits = model(X_val_t).squeeze(-1)
-            val_loss = float(criterion(val_logits, y_val_t))
-
-            # Binary accuracy at threshold 0
-            val_preds = (torch.sigmoid(val_logits) > 0.5).float()
-            val_acc = float((val_preds == y_val_t).float().mean())
-
-            # R² against binary labels
-            val_r2 = compute_r2(y_val_t, torch.sigmoid(val_logits))
+            val_logits_raw = model(X_val_t)
+            if multi_class:
+                val_logits = val_logits_raw  # (B, 3)
+                val_loss = float(criterion(val_logits, y_val_t.long()))
+                val_preds = val_logits.argmax(dim=1)
+                val_acc = float((val_preds == y_val_t.long()).float().mean())
+                val_r2 = 0.0  # not meaningful for 3-class
+            else:
+                val_logits = val_logits_raw.squeeze(-1)
+                val_loss = float(criterion(val_logits, y_val_t))
+                val_preds = (torch.sigmoid(val_logits) > 0.5).float()
+                val_acc = float((val_preds == y_val_t).float().mean())
+                val_r2 = compute_r2(y_val_t, torch.sigmoid(val_logits))
         model.train()
 
         if val_loss < best_val_loss:
@@ -325,7 +398,7 @@ def train_transformer(
             print(
                 f"[transformer] Early stopping at epoch {epoch+1}"
                 f" (best val_loss={best_val_loss:.4f},"
-                f" val_acc={val_acc:.4f}, val_r2={val_r2:.4f})"
+                f" val_acc={val_acc:.4f})"
             )
             break
 
@@ -334,8 +407,7 @@ def train_transformer(
                 f"[transformer] Epoch {epoch+1}/{epochs}:"
                 f" loss={epoch_loss / n_batches:.4f},"
                 f" val_loss={val_loss:.4f},"
-                f" val_acc={val_acc:.4f},"
-                f" val_r2={val_r2:.4f}"
+                f" val_acc={val_acc:.4f}"
             )
 
     if best_state is not None:
@@ -346,24 +418,61 @@ def train_transformer(
     # Final metrics (use pre-converted tensors)
     model.eval()
     with torch.no_grad():
-        train_logits = model(X_train_t).squeeze(-1)
-        train_loss = float(criterion(train_logits, y_train_t))
-        train_preds = (torch.sigmoid(train_logits) > 0.5).float()
-        train_acc = float((train_preds == y_train_t).float().mean())
-        train_r2 = compute_r2(y_train_t, torch.sigmoid(train_logits))
+        train_logits_raw = model(X_train_t)
+        if multi_class:
+            train_logits = train_logits_raw  # (B, 3)
+            train_loss = float(criterion(train_logits, y_train_t.long()))
+            train_preds = train_logits.argmax(dim=1)
+            train_acc = float((train_preds == y_train_t.long()).float().mean())
 
-        val_logits = model(X_val_t).squeeze(-1)
-        val_preds = (torch.sigmoid(val_logits) > 0.5).float()
-        val_acc = float((val_preds == y_val_t).float().mean())
-        val_r2 = compute_r2(y_val_t, torch.sigmoid(val_logits))
+            val_logits = train_logits_raw  # re-use if no val — but we have val
+            # Use val set
+            val_logits_raw_v = model(X_val_t)
+            val_logits_v = val_logits_raw_v
+            val_preds_v = val_logits_v.argmax(dim=1)
+            val_acc_v = float((val_preds_v == y_val_t.long()).float().mean())
 
-        # Directional signal check: what fraction produce non-neutral signals
-        # (using adapter threshold of ±0.1 after tanh on raw logit)
-        raw_scores = val_logits.numpy()
-        neutral_mask = (raw_scores > -0.1) & (raw_scores < 0.1)
-        signal_rate = float(1.0 - neutral_mask.mean())
-        long_rate = float((raw_scores > 0.1).mean())
-        short_rate = float((raw_scores < -0.1).mean())
+            # Per-class accuracy
+            per_class = {}
+            for cls_idx, cls_name in enumerate(["timeout", "tp_hit", "sl_hit"]):
+                mask = y_val_t.long() == cls_idx
+                if mask.sum() > 0:
+                    per_class[f"val_acc_{cls_name}"] = round(
+                        float((val_preds_v[mask] == y_val_t.long()[mask]).float().mean()), 6
+                    )
+
+            # Directional signal rates from softmax probabilities
+            probs = torch.softmax(val_logits_v, dim=1)  # (B, 3)
+            tp_prob = probs[:, 1]
+            sl_prob = probs[:, 2]
+            signal_rate = float(((tp_prob > 0.4) | (sl_prob > 0.4)).float().mean())
+            long_rate = float((tp_prob > 0.4).float().mean())
+            short_rate = float((sl_prob > 0.4).float().mean())
+
+            train_r2 = 0.0
+            val_r2 = 0.0
+            val_acc = val_acc_v
+        else:
+            train_logits = train_logits_raw.squeeze(-1)
+            train_loss = float(criterion(train_logits, y_train_t))
+            train_preds = (torch.sigmoid(train_logits) > 0.5).float()
+            train_acc = float((train_preds == y_train_t).float().mean())
+            train_r2 = compute_r2(y_train_t, torch.sigmoid(train_logits))
+
+            val_logits_v = model(X_val_t).squeeze(-1)
+            val_preds_v = (torch.sigmoid(val_logits_v) > 0.5).float()
+            val_acc_v = float((val_preds_v == y_val_t).float().mean())
+            val_r2 = compute_r2(y_val_t, torch.sigmoid(val_logits_v))
+
+            # Directional signal check
+            raw_scores = val_logits_v.numpy()
+            neutral_mask = (raw_scores > -0.1) & (raw_scores < 0.1)
+            signal_rate = float(1.0 - neutral_mask.mean())
+            long_rate = float((raw_scores > 0.1).mean())
+            short_rate = float((raw_scores < -0.1).mean())
+
+            per_class = {}
+            val_acc = val_acc_v
 
     n_params = sum(p.numel() for p in model.parameters())
 
@@ -382,17 +491,20 @@ def train_transformer(
         "seq_len": seq_len,
         "num_features": NUM_FEATURES,
         "activation": "GELU",
-        "pos_weight": round(float(pos_weight[0]), 2),
+        "multi_class": multi_class,
         "train_loss": round(train_loss, 6),
         "train_accuracy": round(train_acc, 6),
-        "train_r2": round(train_r2, 6),
         "best_val_loss": round(best_val_loss, 6),
         "val_accuracy": round(val_acc, 6),
-        "val_r2": round(val_r2, 6),
         "signal_rate": round(signal_rate, 6),
         "long_rate": round(long_rate, 6),
         "short_rate": round(short_rate, 6),
+        **per_class,
     }
+    if not multi_class:
+        metrics["pos_weight"] = round(float(pos_weight[0]), 2)
+        metrics["train_r2"] = round(train_r2, 6)
+        metrics["val_r2"] = round(val_r2, 6)
 
     return model, metrics
 
@@ -407,6 +519,8 @@ def export_onnx(
     output_path: Path,
     seq_len: int = SEQ_LEN,
     num_features: int = NUM_FEATURES,
+    *,
+    output_dim: int = 1,
 ) -> Path:
     import torch
 
@@ -414,6 +528,7 @@ def export_onnx(
     model.eval()
     dummy = torch.randn(1, seq_len, num_features)
 
+    output_names = ["scores"] if output_dim > 1 else ["score"]
     torch.onnx.export(
         model,
         dummy,
@@ -421,11 +536,12 @@ def export_onnx(
         export_params=True,
         do_constant_folding=True,
         input_names=["input"],
-        output_names=["score"],
-        opset_version=14,
+        output_names=output_names,
+        opset_version=18,
+        dynamo=False,
         dynamic_axes={
             "input": {0: "batch"},
-            "score": {0: "batch"},
+            output_names[0]: {0: "batch"},
         },
     )
     return output_path
@@ -547,6 +663,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Training Recipe JSON",
     )
+    p.add_argument(
+        "--mode",
+        choices=["binary", "multi"],
+        default="binary",
+        help="Training mode: binary (BCEWithLogitsLoss) or multi (3-class CrossEntropyLoss)",
+    )
     return p
 
 
@@ -586,13 +708,27 @@ def main(argv: list[str] | None = None) -> int:
 
     # Load
     print(f"[transformer] Loading {data_path}...")
-    X, y = load_pt_data(data_path, seq_len=SEQ_LEN, max_samples=max_samples, seed=args.seed)
+    ext = data_path.suffix.lower()
+    if ext == ".npz":
+        X, y = load_npz_data(data_path, seq_len=SEQ_LEN)
+    elif ext == ".pt":
+        X, y = load_pt_data(data_path, seq_len=SEQ_LEN, max_samples=max_samples, seed=args.seed)
+    else:
+        print(
+            f"[transformer] ERROR: unsupported data format: {ext} (expected .npz or .pt)",
+            file=sys.stderr,
+        )
+        return 2
 
     # Train
+    multi_class = args.mode == "multi"
+    output_dim = NUM_CLASSES if multi_class else 1
+
     print(
         f"[transformer] Training UpgradedQuantTransformer V5"
         f" (d_model={d_model}, heads={N_HEADS}, layers={num_layers},"
-        f" seq_len={SEQ_LEN}, epochs={epochs}, lr={lr}, batch={batch_size})..."
+        f" seq_len={SEQ_LEN}, epochs={epochs}, lr={lr}, batch={batch_size},"
+        f" mode={args.mode})..."
     )
     model, metrics = train_transformer(
         X,
@@ -605,10 +741,11 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
         d_model=d_model,
         num_layers=num_layers,
+        multi_class=multi_class,
     )
 
     # Export ONNX
-    model_path = export_onnx(model, args.output_model.resolve())
+    model_path = export_onnx(model, args.output_model.resolve(), output_dim=output_dim)
     print(f"[transformer] ONNX exported: {model_path}" f" ({model_path.stat().st_size} bytes)")
 
     # Save result

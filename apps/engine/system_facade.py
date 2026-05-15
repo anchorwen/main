@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     ENGINE_CONFIG_KEY_HOT_RELOAD,
     ENGINE_CONFIG_KEY_RUNTIME_METRICS,
     EVIDENCE_SECTION_ENGINE_CONFIG,

@@ -12,6 +12,7 @@ def test_run_all_steps_skip_all():
 
     report = run_daily_ops(
         skip_shadow=True,
+        skip_label_builder=True,
         skip_feedback=True,
         skip_governance=True,
         skip_champion=True,
@@ -107,6 +108,7 @@ def test_main_dry_run(tmp_path: Path, monkeypatch):
         exit_code = main(
             [
                 "--skip-shadow",
+                "--skip-label-builder",
                 "--skip-feedback",
                 "--skip-governance",
                 "--skip-champion",
@@ -133,6 +135,7 @@ def test_main_output_file(tmp_path: Path, monkeypatch):
     exit_code = main(
         [
             "--skip-shadow",
+            "--skip-label-builder",
             "--skip-feedback",
             "--skip-governance",
             "--skip-champion",

@@ -23,9 +23,10 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
     def __init__(self, brain_entry: dict, feature_adapter=None):
         super().__init__(brain_entry)
         self._feature_adapter = feature_adapter
-        self._session = None
-        self._input_name = None
+        self._session: Any = None  # onnxruntime.InferenceSession | None
+        self._input_name: Any = None  # str | None
         self._output_names: list[str] = []
+        self._guard: Any = None  # InferenceGuard | None
 
     # ------------------------------------------------------------------
     # BaseBrainAdapter interface
@@ -37,11 +38,32 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
             self._backend = "stub:disabled"
             return
 
+        artifact = self._brain_entry["artifact_path"]
+
+        # ── Optional subprocess isolation ──
+        if self._brain_entry.get("inference_isolation", False):
+            try:
+                from core.brains.services.inference_guard import InferenceGuard
+
+                self._guard = InferenceGuard(artifact, timeout=5.0, max_restarts=3)
+                self._input_name = "input"  # placeholder — guard handles real name
+                self._output_names = []  # guard handles real names
+                self._backend = "onnxruntime:isolated"
+                return
+            except Exception as exc:
+                self._guard = None
+                print(
+                    f"[v9_onnx_adapter] inference_isolation failed for "
+                    f"brain_id={self._brain_entry.get('brain_id', 'unknown')}: {exc}",
+                    flush=True,
+                )
+                # Fall through to in-process loading
+
         try:
             import onnxruntime as ort
 
             self._session = ort.InferenceSession(
-                self._brain_entry["artifact_path"],
+                artifact,
                 providers=["CPUExecutionProvider"],
             )
             self._input_name = self._session.get_inputs()[0].name
@@ -50,9 +72,8 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
         except Exception as exc:
             self._backend = f"stub:{type(exc).__name__}"
             bid = self._brain_entry.get("brain_id", "unknown")
-            art = self._brain_entry.get("artifact_path", "unknown")
             print(
-                f"[v9_onnx_adapter] load_failed brain_id={bid} artifact={art} "
+                f"[v9_onnx_adapter] load_failed brain_id={bid} artifact={artifact} "
                 f"error={type(exc).__name__}: {exc}",
                 flush=True,
             )
@@ -152,8 +173,8 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
             direction_idx = int(np.argmax(probs))
             confidence = float(np.max(probs))
             direction_bias = self._map_direction(direction_idx)
-            up_probability = float(probs[1])
-            down_probability = float(probs[2])
+            up_probability = float(probs[2])  # class 2 = long
+            down_probability = float(probs[0])  # class 0 = short
             raw_outputs_ext = {
                 "out_dir": out_dir.tolist() if hasattr(out_dir, "tolist") else list(out_dir),
                 "out_risk": out_risk,
@@ -236,11 +257,11 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
             h1_hurst = float(feature_source.get("H1_Hurst", 0))
             m15_hurst = float(feature_source.get("M15_Hurst", 0))
             if h1_hurst < -0.9:
-                logits_row = [0.35, 3.5, 0.35]  # class 1 = long
-            elif m15_hurst < 0:
-                logits_row = [0.35, 0.35, 3.5]  # class 2 = short
+                logits_row = [0.35, 0.35, 3.5]  # class 2 = long
+            elif m15_hurst < -0.80:
+                logits_row = [3.5, 0.35, 0.35]  # class 0 = short
             else:
-                logits_row = [3.0, 0.35, 0.35]  # class 0 = neutral
+                logits_row = [0.35, 3.0, 0.35]  # class 1 = neutral
             raw_output["out_dir"] = np.array(logits_row, dtype=np.float32)
 
         return self.get_signal(raw_output)
@@ -250,6 +271,13 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
     # ------------------------------------------------------------------
 
     def _run_inference(self, model_input: np.ndarray) -> list[Any]:
+        # ── Subprocess isolation path ──
+        if self._guard is not None and self._guard.is_alive:
+            result = self._guard.infer(self._input_name, self._output_names, model_input)
+            if result is not None:
+                return result
+            # Guard returned None → fall through to deterministic stub
+
         if self._session is not None:
             return self._session.run(self._output_names, {self._input_name: model_input})
 
@@ -257,11 +285,11 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
         m = float(np.mean(model_input))
         centered = float(np.tanh(m))
         if centered > -0.76:  # tanh(-1.0) — near-zero or positive mean → neutral bias
-            logits_row = [3.0, 0.35, 0.35]
+            logits_row = [0.35, 3.0, 0.35]  # class 1 = neutral
         elif centered > -0.995:  # tanh(-3.0) — moderate negative mean → long bias
-            logits_row = [0.35, 3.5, 0.35]
+            logits_row = [0.35, 0.35, 3.5]  # class 2 = long
         else:  # strongly negative mean → short bias
-            logits_row = [0.35, 0.35, 3.5]
+            logits_row = [3.5, 0.35, 0.35]  # class 0 = short
         out_dir = np.asarray([logits_row], dtype=np.float32)
         out_risk = np.asarray([[max(0.0, min(1.0, 0.35 - centered * 0.10))]], dtype=np.float32)
         out_vol = np.asarray([[max(0.0, min(1.0, 0.45 + abs(centered) * 0.10))]], dtype=np.float32)
@@ -269,7 +297,7 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
 
     @staticmethod
     def _decode_direction(logits: np.ndarray) -> np.ndarray:
-        """Return softmax probabilities [neutral, long, short]."""
+        """Return softmax probabilities [short, neutral, long] (class 0,1,2)."""
         return V9OnnxBrainAdapter._softmax(logits)
 
     @staticmethod
@@ -289,9 +317,10 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
 
     @staticmethod
     def _map_direction(idx: int) -> str:
-        if idx == 1:
-            return "long"
+        # Label encoding from train_from_csv.py: sl_hit_first=-1→0, timeout=0→1, tp_hit_first=1→2
         if idx == 2:
+            return "long"
+        if idx == 0:
             return "short"
         return "neutral"
 

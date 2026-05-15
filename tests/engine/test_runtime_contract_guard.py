@@ -4,7 +4,7 @@ from apps.engine.communication_summary_contract import (
     build_summary_mirror_fields_from_operations_summary,
 )
 from apps.engine.main_v9_shadow import apply_stable_output_contract, build_output_extension_fields
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     PAYLOAD_KEY_BLOCK_REASONS,
     PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
     PAYLOAD_KEY_EXECUTED_MESSAGE_IDS,

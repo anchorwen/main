@@ -55,6 +55,20 @@ DEFAULT_PARAMS_REG: dict[str, Any] = {
     "early_stopping_rounds": 20,
 }
 
+DEFAULT_PARAMS_MULTI: dict[str, Any] = {
+    "n_estimators": 200,
+    "max_depth": 5,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "objective": "multi:softmax",
+    "num_class": 3,
+    "eval_metric": "mlogloss",
+    "random_state": 42,
+    "n_jobs": -1,
+    "early_stopping_rounds": 20,
+}
+
 
 def _utc_now_iso() -> str:
     return (
@@ -70,14 +84,24 @@ def _utc_now_iso() -> str:
 
 
 def load_npz(
-    data_path: Path, *, regression: bool = False
+    data_path: Path, *, regression: bool = False, multi_class: bool = False
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
     """Load training data from .npz file.
 
     Returns (X, y, pnl, feature_names).  y is y_reg when regression=True.
+    When multi_class=True, y should be int class labels -1, 0, 1 (remapped to 0, 1, 2).
     """
     data = np.load(data_path)
     X = data["X"]
+    used_flat = False
+    # If X is 3D (sequence data), flatten to use last bar or X_flat key
+    if X.ndim == 3:
+        X_flat_key = data.get("X_flat")
+        if X_flat_key is not None:
+            X = X_flat_key
+            used_flat = True
+        else:
+            X = X[:, -1, :]  # use last bar of each sequence
     if regression:
         y_reg = data.get("y_reg")
         if y_reg is not None:
@@ -86,18 +110,27 @@ def load_npz(
             y = data["pnl"].astype(np.float64)
         else:
             y = data["y"].astype(np.float64)
+    elif multi_class:
+        y = data["y"].astype(np.int32)
+        # Map -1,0,1 → 0,1,2 for XGBoost multi:softmax
+        y = np.where(y == -1, 2, y)  # -1 → 2 (sl_hit_first)
+        y = np.where(y == 1, 1, y)  #  1 → 1 (tp_hit_first)
+        # 0 stays 0 (timeout)
     else:
         y = data["y"]
     pnl_arr = data.get("pnl")
     if pnl_arr is None:
         pnl_arr = np.zeros(len(y))
-    feat_raw = data.get("feature_names")
-    if feat_raw is None:
+    if used_flat:
         feature_names = [f"f_{i}" for i in range(X.shape[1])]
-    elif isinstance(feat_raw, np.ndarray):
-        feature_names = feat_raw.tolist()
     else:
-        feature_names = list(feat_raw)
+        feat_raw = data.get("feature_names")
+        if feat_raw is None:
+            feature_names = [f"f_{i}" for i in range(X.shape[1])]
+        elif isinstance(feat_raw, np.ndarray):
+            feature_names = feat_raw.tolist()
+        else:
+            feature_names = list(feat_raw)
     return X, y, pnl_arr, feature_names
 
 
@@ -117,7 +150,7 @@ def load_parquet(data_path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, l
 
 
 def load_training_data(
-    data_path: Path, *, regression: bool = False
+    data_path: Path, *, regression: bool = False, multi_class: bool = False
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
     """Load training data, dispatching by extension.
 
@@ -125,7 +158,7 @@ def load_training_data(
     """
     ext = data_path.suffix.lower()
     if ext == ".npz":
-        return load_npz(data_path, regression=regression)
+        return load_npz(data_path, regression=regression, multi_class=multi_class)
     if ext == ".parquet":
         return load_parquet(data_path)
     raise ValueError(f"unsupported data format: {ext} (expected .npz or .parquet)")
@@ -142,23 +175,38 @@ def train_xgboost(
     val_data: tuple[np.ndarray, np.ndarray] | None = None,
     feature_names: list[str] | None = None,
     regression: bool = False,
+    multi_class: bool = False,
+    custom_obj: Any | None = None,
+    sample_weight: np.ndarray | None = None,
+    pnl: np.ndarray | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """Train an XGBoost model and return (booster, metrics).
 
     Args:
         X: Feature matrix (n_samples, n_features).
-        y: Binary labels (0/1) for classification or P&L values for regression.
+        y: Binary labels (0/1) for classification, int 0/1/2 for multi-class,
+           or P&L values for regression.
         params: XGBoost parameters dict; merged with defaults per mode.
         val_data: Optional (X_val, y_val) for early stopping and eval.
         feature_names: Optional list of feature names.
-        regression: If True, use reg:squarederror objective and R²/MSE metrics.
+        regression: If True, use reg:squarederror.
+        multi_class: If True, use multi:softmax with num_class=3.
+        custom_obj: Optional custom objective callable for XGBoost.
+        sample_weight: Optional per-sample weights (e.g., return-magnitude).
+        pnl: Optional P&L array for custom objective computation.
 
     Returns:
         (booster, metrics_dict).
     """
     import xgboost as xgb
 
-    merged = {**(DEFAULT_PARAMS_REG if regression else DEFAULT_PARAMS_CLS), **(params or {})}
+    if regression:
+        defaults = DEFAULT_PARAMS_REG
+    elif multi_class:
+        defaults = DEFAULT_PARAMS_MULTI
+    else:
+        defaults = DEFAULT_PARAMS_CLS
+    merged = {**defaults, **(params or {})}
 
     early_stop = merged.pop("early_stopping_rounds", None)
     n_estimators = merged.pop("n_estimators", 200)
@@ -167,11 +215,47 @@ def train_xgboost(
     if feature_names:
         dtrain.feature_names = feature_names
 
+    # ── Sample weights for class imbalance ──
+    if sample_weight is not None:
+        dtrain.set_weight(sample_weight)
+        print(f"[xgb_trainer] Custom sample weights applied (mean={sample_weight.mean():.3f})")
+    elif multi_class:
+        cls_counts = np.bincount(y, minlength=3)
+        cls_weights = len(y) / (3 * cls_counts.clip(min=1))
+        multi_weights = cls_weights[y]
+        dtrain.set_weight(multi_weights)
+        print(
+            f"[xgb_trainer] Multi-class weights: {dict(zip(['timeout','tp','sl'], cls_weights.round(4).tolist(), strict=False))}"
+        )
+    elif not regression:
+        # Binary classification: scale_pos_weight for class imbalance
+        scale_pos_weight = merged.pop("scale_pos_weight", None)
+        if scale_pos_weight is not None and scale_pos_weight > 0:
+            pos_count = int(y.sum())
+            neg_count = len(y) - pos_count
+            if pos_count > 0:
+                merged["scale_pos_weight"] = scale_pos_weight
+                print(
+                    f"[xgb_trainer] scale_pos_weight={scale_pos_weight} (neg={neg_count} pos={pos_count})"
+                )
+
+    # ── Custom objective ──
+    if custom_obj is not None:
+        if "eval_metric" in merged:
+            merged.pop("eval_metric")
+        # Set a valid built-in objective; custom obj passed via xgb.train(obj=...)
+        merged["objective"] = "binary:logistic"
+        print("[xgb_trainer] Using custom objective function")
+
     evals: list[tuple[xgb.DMatrix, str]] = [(dtrain, "train")]
     if val_data is not None:
         dval = xgb.DMatrix(val_data[0], label=val_data[1])
         if feature_names:
             dval.feature_names = feature_names
+        if multi_class:
+            val_unique, val_counts = np.unique(val_data[1], return_counts=True)
+            val_cls_weights = len(val_data[1]) / (len(val_unique) * np.maximum(val_counts, 1))
+            dval.set_weight(val_cls_weights[val_data[1]])
         evals.append((dval, "eval"))
 
     t0 = time.perf_counter()
@@ -185,6 +269,7 @@ def train_xgboost(
         evals_result=evals_result,
         early_stopping_rounds=early_stop,
         verbose_eval=False,
+        obj=custom_obj if custom_obj is not None else None,
     )
 
     elapsed = round(time.perf_counter() - t0, 3)
@@ -217,6 +302,31 @@ def train_xgboost(
             val_rmse = float(np.sqrt(np.mean((yv - val_preds_reg) ** 2)))
             metrics["val_r2"] = round(val_r2, 6)
             metrics["val_rmse"] = round(val_rmse, 6)
+    elif multi_class:
+        # multi:softmax returns class predictions (0,1,2)
+        train_preds = booster.predict(dtrain).astype(np.int32)
+        train_acc = float((train_preds == y).mean())
+        metrics["train_accuracy"] = round(train_acc, 6)
+        # Per-class accuracy
+        for cls_idx, cls_name in enumerate(["timeout", "tp_hit", "sl_hit"]):
+            mask = y == cls_idx
+            if mask.sum() > 0:
+                metrics[f"train_acc_{cls_name}"] = round(
+                    float((train_preds[mask] == y[mask]).mean()), 6
+                )
+        if val_data is not None:
+            dval_post = xgb.DMatrix(val_data[0], label=val_data[1])
+            if feature_names:
+                dval_post.feature_names = feature_names
+            val_preds = booster.predict(dval_post).astype(np.int32)
+            val_acc = float((val_preds == val_data[1]).mean())
+            metrics["val_accuracy"] = round(val_acc, 6)
+            for cls_idx, cls_name in enumerate(["timeout", "tp_hit", "sl_hit"]):
+                mask = val_data[1] == cls_idx
+                if mask.sum() > 0:
+                    metrics[f"val_acc_{cls_name}"] = round(
+                        float((val_preds[mask] == val_data[1][mask]).mean()), 6
+                    )
     else:
         train_preds = (booster.predict(dtrain) > 0.5).astype(int)
         train_acc = float((train_preds == y).mean())
@@ -302,16 +412,23 @@ def build_and_train(
     augment_noise_std: float = 0.0,
     augment_seed: int | None = None,
     regression: bool = False,
+    multi_class: bool = False,
+    custom_obj: Any | None = None,
+    sample_weight: np.ndarray | None = None,
 ) -> dict[str, Any]:
     """Full pipeline: load → augment → train → save.
 
     Returns summary dict.
     """
-    X, y, pnl, feature_names = load_training_data(data_path, regression=regression)
+    X, y, pnl, feature_names = load_training_data(
+        data_path, regression=regression, multi_class=multi_class
+    )
 
     val_data = None
     if val_data_path is not None:
-        Xv, yv, _, _ = load_training_data(val_data_path, regression=regression)
+        Xv, yv, _, _ = load_training_data(
+            val_data_path, regression=regression, multi_class=multi_class
+        )
         val_data = (Xv, yv)
 
     # ── Data augmentation ──
@@ -330,7 +447,16 @@ def build_and_train(
         augment_applied = True
 
     booster, metrics = train_xgboost(
-        X, y, params=params, val_data=val_data, feature_names=feature_names, regression=regression
+        X,
+        y,
+        params=params,
+        val_data=val_data,
+        feature_names=feature_names,
+        regression=regression,
+        multi_class=multi_class,
+        custom_obj=custom_obj,
+        sample_weight=sample_weight,
+        pnl=pnl,
     )
 
     save_model(booster, model_path)
@@ -338,7 +464,13 @@ def build_and_train(
     if result_path is None:
         result_path = model_path.with_suffix(".result.json")
 
-    merged_params = {**(DEFAULT_PARAMS_REG if regression else DEFAULT_PARAMS_CLS), **(params or {})}
+    if regression:
+        defaults = DEFAULT_PARAMS_REG
+    elif multi_class:
+        defaults = DEFAULT_PARAMS_MULTI
+    else:
+        defaults = DEFAULT_PARAMS_CLS
+    merged_params = {**defaults, **(params or {})}
     save_result(
         metrics,
         model_path,
@@ -392,12 +524,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--n-estimators", type=int, default=None)
     p.add_argument("--max-depth", type=int, default=None)
     p.add_argument("--learning-rate", type=float, default=None)
+    p.add_argument(
+        "--scale-pos-weight",
+        type=float,
+        default=None,
+        help="XGBoost scale_pos_weight for binary class imbalance (e.g. 6.58 for 86.8%% class 0)",
+    )
     p.add_argument("--seed", type=int, default=None)
     p.add_argument(
         "--mode",
-        choices=["cls", "reg"],
+        choices=["cls", "reg", "multi"],
         default="cls",
-        help="Training mode: cls (classification) or reg (P&L regression)",
+        help="Training mode: cls (binary), reg (P&L regression), multi (3-class barrier)",
     )
     p.add_argument(
         "--recipe",
@@ -457,6 +595,7 @@ def main(argv: list[str] | None = None) -> int:
             ("max_depth", args.max_depth),
             ("learning_rate", args.learning_rate),
             ("random_state", args.seed),
+            ("scale_pos_weight", args.scale_pos_weight),
         ]
         if v is not None
     }
@@ -474,6 +613,7 @@ def main(argv: list[str] | None = None) -> int:
         augment_noise_std=augment_noise_std,
         augment_seed=args.seed,
         regression=args.mode == "reg",
+        multi_class=args.mode == "multi",
     )
 
     # Inject recipe provenance into result

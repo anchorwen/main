@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from core.deployment.domain_keys import PAYLOAD_KEY_CORRELATION_ID, PAYLOAD_KEY_MESSAGE_ID
+from core.contracts.domain_keys import PAYLOAD_KEY_CORRELATION_ID, PAYLOAD_KEY_MESSAGE_ID
 from core.ledger.stream_names import LEDGER_STREAM_COMMUNICATIONS, stream_jsonl_filename
 
 

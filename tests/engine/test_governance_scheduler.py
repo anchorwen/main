@@ -153,23 +153,28 @@ def test_main_dry_run(tmp_path: Path, monkeypatch):
 
     from scripts.training.governance_scheduler import main
 
+    base = tmp_path / "data"
+    base.mkdir()
+
     old_stdout = sys.stdout
     sys.stdout = io.StringIO()
     try:
-        exit_code = main(["--dry-run"])
+        exit_code = main(["--base-dir", str(base), "--dry-run"])
     finally:
         sys.stdout = old_stdout
 
-    # Empty tracker, no actions
+    # Empty tracker, no PnL data, no actions
     assert exit_code == 0
 
 
 def test_main_output_file(tmp_path: Path, monkeypatch):
     from scripts.training.governance_scheduler import main
 
+    base = tmp_path / "data"
+    base.mkdir()
     out = tmp_path / "actions.json"
-    exit_code = main(["--dry-run", "--output", str(out)])
+    exit_code = main(["--base-dir", str(base), "--dry-run", "--output", str(out)])
     assert exit_code == 0
     assert out.exists()
     data = json.loads(out.read_text(encoding="utf-8"))
-    assert data["schema_version"] == "governance_scheduler.v1"
+    assert data["schema_version"] == "governance_scheduler.v2"

@@ -28,10 +28,12 @@ class FileQueueCommunicationAdapter:
             },
             "envelope": envelope,
         }
-        target_file.write_text(
-            json.dumps(to_dict(payload), ensure_ascii=False, separators=(",", ":")),
-            encoding="utf-8",
-        )
+        payload_text = json.dumps(to_dict(payload), ensure_ascii=False, separators=(",", ":"))
+        # Atomic write via temp + rename — prevents bridge worker from
+        # reading a half-written file during concurrent dispatch cycles.
+        tmp_file = target_dir / f".tmp_{envelope.message_id}.json"
+        tmp_file.write_text(payload_text, encoding="utf-8")
+        tmp_file.replace(target_file)  # atomic on same filesystem
 
         return DispatchResult(
             schema_version=SCHEMA_DISPATCH_RESULT,

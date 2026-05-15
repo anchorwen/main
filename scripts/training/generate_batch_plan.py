@@ -52,52 +52,94 @@ def resolve_git_commit_short(fallback: str = "unknown") -> str:
 # g2026.1: First production batch across 3 lanes
 # model_id format: CRT.<lane>.<role>.gYYYY.N@feat-<name>-<semver>
 
+# v2: per-lane × per-timeframe batch plan matrix
+# Each lane can specify timeframes dict; if absent, defaults to M5-only.
 BATCH_PLAN = {
     "meta": {
-        "batch_id": "g2026.1",
-        "description": "First production batch — 3-lane CRT model generation",
+        "batch_id": "g2026.2",
+        "description": "Multi-TF production batch — per-lane × per-timeframe model matrix (Phase E)",
         "created_at_utc": None,  # filled at runtime
-        "total_models": 16,
+        "total_models": 0,  # computed at runtime
         "lanes": {
             "sur": {
                 "role": "chlg",
-                "seeds": [42, 43, 44, 45, 46],
                 "description": "Survival_V9 Institutional trend predictor (MLP 40dim -> 3-head)",
                 "feature_contract_id": "feat-sur-v9-institutional-1.0.0",
                 "iface_semver": "1.0.0",
-                "dataset": "D:\\ai\\Survival_V9\\V9_Symbiosis_Matrix.csv",
+                "timeframes": {
+                    "M5": {
+                        "seeds": [42, 43, 44, 45, 46],
+                        "dataset": "D:\\ai\\Survival_V9\\V9_Symbiosis_Matrix.csv",
+                    },
+                },
             },
             "mtx_transformer": {
                 "role": "chlg",
-                "seeds": [42, 43, 44, 45, 46],
-                "description": "Meta_ppo_v4.5 QuantTransformer execution (9feat*64seq, FocalLoss)",
+                "description": "HMRE microstructure Transformer (32bar×9feat, CrossEntropyLoss, 3-class barrier)",
                 "feature_contract_id": "feat-mtx-qtransformer-1.0.0",
                 "iface_semver": "1.0.0",
-                "dataset": "D:\\ai\\Meta_ppo_v4.5\\V4_Train_Tensors.pt",
+                "timeframes": {
+                    "M5": {
+                        "seeds": [42, 43, 44, 45, 46],
+                        "dataset": "data/training/micro_barrier_v2/train.npz",
+                    },
+                    "M15": {
+                        "seeds": [42, 43, 44, 45, 46],
+                        "dataset": "data/training/micro_barrier_m15_v2/train.npz",
+                    },
+                    "H1": {
+                        "seeds": [42, 43, 44, 45, 46],
+                        "dataset": "data/training/micro_barrier_h1_v2/train.npz",
+                    },
+                    "H4": {
+                        "seeds": [42, 43, 44],
+                        "dataset": "data/training/micro_barrier_h4_v2/train.npz",
+                    },
+                },
             },
             "mtx_xgboost": {
                 "role": "chlg",
-                "seeds": [47, 48, 49],
-                "description": "Meta_ppo_v4.5 XGBoost baseline (same features, for comparison)",
+                "description": "HMRE microstructure XGBoost (288dim flat, multi:softmax, 3-class barrier)",
                 "feature_contract_id": "feat-mtx-xgboost-1.0.0",
                 "iface_semver": "1.0.0",
-                "dataset": "D:\\ai\\Meta_ppo_v4.5\\V4_Train_Tensors.pt",
+                "timeframes": {
+                    "M5": {
+                        "seeds": [42, 43, 44, 45, 46],
+                        "dataset": "data/training/micro_barrier_v2/train.npz",
+                    },
+                    "M15": {
+                        "seeds": [42, 43, 44, 45, 46],
+                        "dataset": "data/training/micro_barrier_m15_v2/train.npz",
+                    },
+                    "H1": {
+                        "seeds": [42, 43, 44, 45, 46],
+                        "dataset": "data/training/micro_barrier_h1_v2/train.npz",
+                    },
+                    "H4": {
+                        "seeds": [42, 43, 44],
+                        "dataset": "data/training/micro_barrier_h4_v2/train.npz",
+                    },
+                },
             },
             "arb": {
                 "role": "chlg",
-                "seeds": [42, 43, 44],
-                "description": "Meta_ppo_v6 OU Statistical Arbitrage (parameter grid search)",
+                "description": "OU Statistical Arbitrage (Optuna TPE + Kalman, per-TF parameter search)",
                 "feature_contract_id": "feat-arb-v6-ou-sniper-1.0.0",
                 "iface_semver": "1.0.0",
-                "dataset": "D:\\ai\\Meta_ppo_v6\\Exness_XAUUSDm_2026_04.csv",
+                "timeframes": {
+                    "M5": {"seeds": [42, 43, 44], "dataset": "data/raw/xauusdc_m5_merged.csv"},
+                    "M15": {"seeds": [42, 43, 44], "dataset": "data/raw/xauusdc_m15_merged.csv"},
+                    "H1": {"seeds": [42, 43, 44], "dataset": "data/raw/xauusdc_h1_merged.csv"},
+                },
             },
             "xgb_inrepo": {
                 "role": "chlg",
-                "seeds": [42, 43, 44],
-                "description": "In-repo XGBoost trained from dataset_builder NPZ output (journal→labels→features→train)",
+                "description": "In-repo XGBoost trained from dataset_builder NPZ output",
                 "feature_contract_id": "feat-xgb-inrepo-v9-institutional-1.0.0",
                 "iface_semver": "1.0.0",
-                "dataset": "data/training/train.npz",
+                "timeframes": {
+                    "M5": {"seeds": [42, 43, 44], "dataset": "data/training/train.npz"},
+                },
             },
         },
     },
@@ -145,7 +187,12 @@ def generate_manifests(
     plan_meta: dict,
     git_commit: str,
 ) -> list[dict]:
-    """Generate individual CRT manifest entries conforming to CRTManifestV1 schema."""
+    """Generate individual CRT manifest entries conforming to CRTManifestV1 schema.
+
+    v2: Expands per-lane timeframes dict into TF × seed matrix.
+    Backward-compatible: if a lane has no 'timeframes' key (v1 format),
+    falls back to top-level 'seeds'/'dataset' fields.
+    """
     manifests = []
 
     for lane_key in lanes:
@@ -155,9 +202,7 @@ def generate_manifests(
             continue
 
         role = lane_config["role"]
-        seeds = lane_config["seeds"]
         lane_config.get("description", "")
-        lane_config.get("dataset", "")
         feature_contract_id = lane_config["feature_contract_id"]
         iface_semver = lane_config["iface_semver"]
 
@@ -169,36 +214,58 @@ def generate_manifests(
         else:
             lane_id = lane_key
 
-        for seed in seeds:
-            train_started = utc_now_iso_z()
-            training_run_id = f"run-{generation}-{lane_id}-s{seed}-{train_started.replace(':', '')}"
-
-            # Build CRT-compliant model_id: CRT.<lane>.<role>.gYYYY.N@feat-<name>-<semver>
-            model_id = f"CRT.{lane_id}.{role}.{generation}@{feature_contract_id}.s{seed}"
-
-            manifest = {
-                "schema_version": "crt_model_manifest.v1",
-                "model_id": model_id,
-                "lane": lane_id,
-                "role": role,
-                "generation": generation,
-                "feature_contract_id": feature_contract_id,
-                "iface_semver": iface_semver,
-                "dataset_slice_id": f"{generation}_full",
-                "git_commit": git_commit,
-                "train_started_at_utc": train_started,
-                "trainer_version": "",
-                "metrics": {},
-                "risk_notes": ["stub manifest; replace after real training run"],
-                "legacy_aliases": [],
-                "train_seed": seed,
-                "artifact_primary": None,
-                "norm_artifact": None,
-                "training_run_id": training_run_id,
-                "recipe_id": f"{lane_id}-{generation}-recipe-001",
+        # v2: expand timeframes dict; v1 fallback: single M5 entry from top-level fields
+        timeframes = lane_config.get("timeframes")
+        if timeframes is None:
+            # v1 backward-compat: wrap top-level seeds/dataset as M5-only
+            timeframes = {
+                "M5": {
+                    "seeds": lane_config.get("seeds", [42]),
+                    "dataset": lane_config.get("dataset", ""),
+                },
             }
 
-            manifests.append(manifest)
+        for tf_key, tf_cfg in timeframes.items():
+            seeds = tf_cfg.get("seeds", [42])
+            dataset = tf_cfg.get("dataset", "")
+            _tf_model_count = len(seeds)
+
+            for seed in seeds:
+                train_started = utc_now_iso_z()
+                training_run_id = (
+                    f"run-{generation}-{lane_id}-{tf_key}-s{seed}-{train_started.replace(':', '')}"
+                )
+
+                # model_id includes timeframe: CRT.<lane>.<role>.gYYYY.<TF>@feat-<name>-<semver>.s<N>
+                model_id = (
+                    f"CRT.{lane_id}.{role}.{generation}.{tf_key}" f"@{feature_contract_id}.s{seed}"
+                )
+
+                manifest = {
+                    "schema_version": "crt_model_manifest.v1",
+                    "model_id": model_id,
+                    "lane": lane_id,
+                    "role": role,
+                    "generation": generation,
+                    "timeframe": tf_key,
+                    "feature_contract_id": feature_contract_id,
+                    "iface_semver": iface_semver,
+                    "dataset_slice_id": f"{generation}_{tf_key}_full",
+                    "git_commit": git_commit,
+                    "train_started_at_utc": train_started,
+                    "trainer_version": "",
+                    "metrics": {},
+                    "risk_notes": ["multi-tf batch plan v2"],
+                    "legacy_aliases": [],
+                    "train_seed": seed,
+                    "artifact_primary": None,
+                    "norm_artifact": None,
+                    "training_run_id": training_run_id,
+                    "recipe_id": f"{lane_id}-{generation}-recipe-001",
+                    "dataset_override": dataset,
+                }
+
+                manifests.append(manifest)
 
     return manifests
 
@@ -232,8 +299,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  Output dir: {output_dir}")
         print("=" * 70)
         for i, m in enumerate(manifests):
+            tf = m.get("timeframe", "M5")
             print(
-                f"  [{i+1:02d}] {m['model_id']:60s}  lane={m['lane']:4s}  seed={m['train_seed']}  role={m['role']}"
+                f"  [{i+1:02d}] {m['model_id']:64s}  lane={m['lane']:4s}  tf={tf:3s}  seed={m['train_seed']}  role={m['role']}"
             )
         print("=" * 70)
         return 0
@@ -272,8 +340,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  Output: {output_dir}")
     print(f"{'=' * 70}")
     for i, m in enumerate(manifests):
+        tf = m.get("timeframe", "M5")
         print(
-            f"  [{i+1:02d}] {m['model_id']:60s}  lane={m['lane']:4s}  seed={m['train_seed']}  role={m['role']}"
+            f"  [{i+1:02d}] {m['model_id']:64s}  lane={m['lane']:4s}  tf={tf:3s}  seed={m['train_seed']}  role={m['role']}"
         )
     print(f"{'=' * 70}")
     print(f"\n  Next: run_train_batch.py --batch-dir {output_dir} --dry-run  (verify)")

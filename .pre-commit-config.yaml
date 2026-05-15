@@ -7,6 +7,23 @@ repos:
       - id: ruff-format
 
   # ------------------------------------------------------------------
+  # mypy type-check — iron law gate
+  # Blocks commit if any staged .py file has MORE mypy errors than baseline.
+  # Update baseline: python scripts/pre_commit_mypy.py --update-baseline
+  # ------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: mypy-iron-law
+        name: "[铁律] mypy type-check (no new errors)"
+        entry: python scripts/pre_commit_mypy.py
+        language: python
+        additional_dependencies: [mypy>=1.10]
+        files: \.py$
+        stages: [pre-commit]
+        pass_filenames: false
+        require_serial: true
+
+  # ------------------------------------------------------------------
   # 架构文档门禁 — 改动 core/ apps/ scripts/ configs/ main.py 时自动刷新
   # 模式: AUTO-UPDATE (扫描 → 生成 → 自动 git add)
   # 绕过: ARCHITECTURE_GATE_BYPASS=1
@@ -18,5 +35,18 @@ repos:
         entry: python roadmap/scripts/architecture_gate.py
         language: python
         files: ^(core/|apps/|scripts/|configs/|main\.py)
+        stages: [pre-commit]
+        pass_filenames: false
+
+  # ------------------------------------------------------------------
+  # 蓝图一致性门禁 — 验证模块蓝图、修复注册表、依赖图一致性
+  # ------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: blueprint-consistency
+        name: "[门禁] 蓝图一致性验证"
+        entry: python scripts/validate_blueprints.py
+        language: python
+        files: ^(blueprints/|core/|apps/|scripts/)
         stages: [pre-commit]
         pass_filenames: false

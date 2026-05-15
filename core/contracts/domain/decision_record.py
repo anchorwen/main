@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     CONTRACT_ERROR_INTENT_ID_REQUIRED,
     CONTRACT_ERROR_RECORDED_AT_BEFORE_EVENT_TIME,
     CONTRACT_ERROR_VERDICT_ID_REQUIRED,

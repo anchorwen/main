@@ -1,0 +1,33 @@
+{
+  "schema_version": "brain_registry_entry.v1",
+  "brain_id": "XGBoost_D1_Swing_5d",
+  "brain_type": "xgboost_v9",
+  "brain_role": "alpha_brain",
+  "model_version": "d1_swing_v2.0",
+  "status": "shadow",
+  "vote_weight": 0.6,
+  "magic": 90301,
+  "artifact_path": "data/models/daily/xgboost_d1_d1_swing_5d.json",
+  "feature_schema_id": "daily_swing_24",
+  "training_contract": "d1_swing_5d",
+  "normalization_config_path": "",
+  "deployment_scope": {
+    "symbols": [
+      "XAUUSDc",
+      "XAUUSD"
+    ],
+    "sessions": [
+      "all"
+    ],
+    "regimes": [
+      "trend",
+      "volatile_trend",
+      "mean_reversion",
+      "ranging"
+    ]
+  },
+  "contract_group": "daily_swing",
+  "training_horizon": 5,
+  "feature_schema": "daily_24dim",
+  "_notes": "D1 daily swing model — 5-bar (1-week) barrier, SL=2.0xATR, TP=3.5xATR. v3: Sharpe=1.40, best D1 model. 10d/20d failed."
+}

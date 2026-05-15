@@ -217,9 +217,15 @@ def test_daily_ops_empty_tracker_graceful(tmp_path: Path):
     report = run_daily_ops(
         base_dir=str(tmp_path),
         skip_shadow=True,
+        skip_label_builder=True,
         skip_feedback=True,
+        skip_paper_simulation=True,
+        skip_online_feedback=True,
         skip_retraining=True,
         skip_recap=True,
+        skip_alpha=True,
+        skip_alpha_allocation=True,
+        skip_fs_maintenance=True,
         dry_run=True,
     )
 

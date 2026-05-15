@@ -1,0 +1,31 @@
+{
+  "schema_version": "label_contract.v1",
+  "contract_id": "label-micro-barrier-1.0.0-M15",
+  "type": "survival_barrier",
+  "horizon_bars": 5,
+  "bar_timeframe": "M15",
+  "barriers": {
+    "sl_atr_mult": 1.5,
+    "tp_atr_mult": 2.5
+  },
+  "atr_config": {
+    "timeframe": "M5",
+    "period": 14
+  },
+  "label_classes": {
+    "1": "tp_hit_first",
+    "0": "timeout",
+    "-1": "sl_hit_first"
+  },
+  "timeout_label": "timeout",
+  "metadata": {
+    "author": "quant-os",
+    "rationale": "1.5×ATR SL ensures SL is outside the M5 noise band (~1×ATR). 2.5×ATR TP gives 1.67:1 RR ratio. 5-bar horizon (25 min) matches micro strategy's short-horizon, fast-in/out nature. SL=1.5×ATR ≈ 1.5σ on M5 gold, giving <5% random-noise stop-out probability vs ~32% at 1.0×ATR.",
+    "design_notes": "M15 variant: 5-bar horizon = 75min. SL=1.5xATR still outside M15 noise band. TP=2.5xATR, 1.67:1 RR.",
+    "applicable_lanes": [
+      "xgb_micro",
+      "transformer_micro"
+    ],
+    "created_at": "2026-05-09"
+  }
+}

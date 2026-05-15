@@ -1,0 +1,29 @@
+{
+  "schema_version": "label_contract.v1",
+  "contract_id": "label-survival-barrier-1.0.0-M15",
+  "type": "survival_barrier",
+  "horizon_bars": 6,
+  "bar_timeframe": "M15",
+  "barriers": {
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 3.5
+  },
+  "atr_config": {
+    "timeframe": "M15",
+    "period": 14
+  },
+  "label_classes": {
+    "1": "tp_hit_first",
+    "0": "timeout",
+    "-1": "sl_hit_first"
+  },
+  "timeout_label": "timeout",
+  "metadata": {
+    "author": "quant-os",
+    "rationale": "2.0×ATR SL and 3.5×ATR TP on M15 bars with 6-bar (90 min) horizon. M5→M15 compression ratio is 3×; original M5 horizon=12 bars, scaled 12/3=4, conservative round-up to 6. SL/TP multipliers kept same as M5 (2.0/3.5) for primary barrier strategy line consistency. 1.75:1 RR.",
+    "design_notes": "M15 variant for Survival barrier strategy. 6-bar horizon = 90min. Same SL/TP multipliers as M5 SUR contract; SUR line needs wider SL tolerance than micro line (1.5/2.5). M15 features already present in v9_institutional_40 schema (8 M15-specific features).",
+    "applicable_lanes": ["sur"],
+    "parent_contract": "label-survival-barrier-1.0.0",
+    "created_at": "2026-05-10"
+  }
+}

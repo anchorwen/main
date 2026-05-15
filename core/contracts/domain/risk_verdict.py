@@ -2,12 +2,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from core.contracts.enums import RiskDecisionStatus, SystemMode
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     CONTRACT_ERROR_ALLOW_LIMITED_VERDICT_MISSING_CONSTRAINTS,
     CONTRACT_ERROR_ALLOW_VERDICT_HAS_BLOCKING_REASON,
     CONTRACT_ERROR_DENY_VERDICT_REQUIRES_BLOCKING_REASON,
 )
+from core.contracts.enums import RiskDecisionStatus, SystemMode
 
 
 @dataclass

@@ -3,7 +3,7 @@
 import json
 
 from apps.engine.cli import main
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     EVIDENCE_SECTION_ENGINE_CONFIG,
     PAYLOAD_KEY_ALPHA_BUDGET_GOVERNANCE,
     PAYLOAD_KEY_GOVERNANCE_FOCUS,

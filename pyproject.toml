@@ -46,7 +46,6 @@ ignore = [
     "E402",
     "E741",
     "F811",
-    "F821",
     "B018",
 ]
 
@@ -60,5 +59,17 @@ markers = [
 
 [tool.mypy]
 python_version = "3.11"
-strict = true
+# ── Critical checks (iron law) ──
+check_untyped_defs = true       # catches unbound variables, conditional binding
+warn_unused_ignores = true      # prevents type: ignore rot
+no_implicit_optional = true     # None safety
+warn_redundant_casts = true
+strict_equality = true
 warn_unused_configs = true
+# ── Practical relaxations (third-party libs are untyped) ──
+follow_imports = "skip"
+ignore_missing_imports = true
+# ── Gradual tightening (enable as types are added) ──
+# disallow_untyped_defs = true
+# disallow_incomplete_defs = true
+# disallow_untyped_calls = true

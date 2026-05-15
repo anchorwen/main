@@ -137,7 +137,11 @@ def test_trail_stop_moves_down_for_short(short_position, manager):
 
 
 def test_trail_stop_never_moves_backward_long(long_position, manager):
-    """SL should not go down for a long when price retreats."""
+    """SL should not go down for a long when price retreats.
+
+    With graduated lock disabled, trail SL stays when highest_high unchanged.
+    """
+    manager.graduated_lock_enabled = False
     pos = manager._position = long_position
     pos.highest_high = 2510.0
     pos.current_sl = 2500.0  # already trailed up
@@ -145,6 +149,16 @@ def test_trail_stop_never_moves_backward_long(long_position, manager):
     new_sl = manager.compute_trail_stop(current_atr=5.0)
     # candidate still = 2510 - 10 = 2500, which == current_sl, so None
     assert new_sl is None
+
+
+def test_graduated_lock_advances_sl_at_3r_long(long_position, manager):
+    """At +3R peak, graduated lock raises SL floor to +1.5R."""
+    pos = manager._position = long_position
+    pos.highest_high = 2515.0  # +15 = 3R at entry_atr=5.0
+    pos.current_sl = 2500.0  # at breakeven
+    new_sl = manager.compute_trail_stop(current_atr=5.0)
+    # candidate = 2515 - 10 = 2505, graduated lock at 3R: floor = 2500 + 1.5*5 = 2507.5
+    assert new_sl == 2507.5
 
 
 def test_trail_stop_none_when_no_improvement(long_position, manager):
@@ -311,22 +325,26 @@ def test_regime_high_vol_loosens_trail(long_position, manager):
     assert pos.trail_multiplier == 3.0
 
 
-def test_regime_3r_tightens_aggressively(long_position, manager):
-    """At 3R, trail multiplier is halved."""
+def test_adaptive_trail_vol_expansion(long_position, manager):
+    """When volatility expands (vol_ratio > 1.5), trail K widens +0.8."""
     pos = manager._position = long_position
-    pos.r_milestones_hit = ["1R", "2R", "3R"]
     pos.trail_multiplier = 2.0
-    manager._adjust_trail_for_regime(5.0, {"regime": "normal"})
-    assert pos.trail_multiplier == 1.0  # 2.0 * 0.5
+    pos.entry_atr = 5.0
+    current_atr = 10.0  # vol_ratio = 2.0 (> 1.5)
+    pos.highest_high = 2550.0
+    manager._adjust_trail_for_regime(current_atr, {"regime": "normal"})
+    assert pos.trail_multiplier == 2.8  # 2.0 + 0.8
 
 
-def test_regime_2r_tightens_moderately(long_position, manager):
-    """At 2R, trail multiplier scaled by 0.7."""
+def test_adaptive_trail_vol_contraction(long_position, manager):
+    """When volatility contracts (vol_ratio < 0.7), trail K tightens -0.3."""
     pos = manager._position = long_position
-    pos.r_milestones_hit = ["1R", "2R"]
     pos.trail_multiplier = 2.0
-    manager._adjust_trail_for_regime(5.0, {"regime": "normal"})
-    assert pos.trail_multiplier == 1.4  # 2.0 * 0.7
+    pos.entry_atr = 5.0
+    current_atr = 1.0  # vol_ratio = 0.2 (< 0.7)
+    pos.highest_high = 2550.0
+    manager._adjust_trail_for_regime(current_atr, {"regime": "normal"})
+    assert pos.trail_multiplier == 1.7  # 2.0 - 0.3
 
 
 # ── Layer 2: Brain ensemble exit ──────────────────────────────────────────
@@ -393,17 +411,20 @@ def test_brain_flip_resets_on_no_flip(long_position, manager):
     assert manager._consecutive_flips == 0
 
 
-def test_brain_exit_confidence_drop(long_position, manager):
-    """Exit when confidence drops below threshold (no brain flip)."""
+def test_brain_exit_confidence_drop_ema(long_position, manager):
+    """Exit when confidence drops sharply — EMA-filtered single large drop."""
     pos = manager._position = long_position
-    manager._entry_consensus_score = 0.65  # match what register_position set
-    # Drop of 0.15 > 0.10
+    manager._entry_consensus_score = 0.65
+    pos.confidence_ema = 0.65  # seed EMA
+    # Single large drop: 0.65 → 0.30
+    # ema = 0.4 * 0.30 + 0.6 * 0.65 = 0.12 + 0.39 = 0.51
+    # ema_drop = 0.65 - 0.51 = 0.14 > 0.10
     should_exit, reason = manager.evaluate_brain_exit(
-        {"consensus_score": 0.50},
+        {"consensus_score": 0.30},
         pos.supporting_brain_ids,
     )
     assert should_exit
-    assert "confidence_drop" in reason
+    assert "confidence_decay_ema" in reason
 
 
 def test_brain_exit_no_confidence_drop_small(long_position, manager):
@@ -573,18 +594,67 @@ def test_update_prices_empty_when_no_position(manager):
 
 
 def test_ou_exit_when_z_reverts(long_position, manager):
-    """OU exit triggers when |z| < z_exit."""
+    """OU exit triggers when |current_z| < z_exit AND |entry_z| >= 1.5."""
     manager._position = long_position
-    should_exit, reason = manager.should_exit_ou_based(z_score=0.1, z_exit=0.3)
+    long_position.entry_z_score = 2.5  # entered at meaningful extreme
+    should_exit, reason = manager.should_exit_ou_based(current_z_score=0.1, z_exit=0.3)
     assert should_exit
-    assert "ou_reversion" in reason
+    assert "ou_revert_target_reached" in reason
 
 
 def test_ou_exit_not_when_z_still_high(long_position, manager):
-    """No OU exit when |z| is still above exit threshold."""
+    """No OU exit when |current_z| is still above exit threshold (still extreme)."""
     manager._position = long_position
-    should_exit, _ = manager.should_exit_ou_based(z_score=-2.5, z_exit=0.3)
+    long_position.entry_z_score = 2.5
+    should_exit, reason = manager.should_exit_ou_based(current_z_score=-2.5, z_exit=0.3)
     assert not should_exit
+    assert "ou_waiting_for_reversion" in reason
+
+
+def test_ou_no_exit_without_entry_extreme(long_position, manager):
+    """If entry was NOT at extreme (|z| < 1.5), don't use reversion exit."""
+    manager._position = long_position
+    long_position.entry_z_score = 0.5  # not an extreme entry
+    should_exit, reason = manager.should_exit_ou_based(current_z_score=0.1, z_exit=0.3)
+    assert not should_exit
+    assert "ou_ignored_low_entry_z" in reason
+
+
+def test_ou_no_exit_unknown_entry(long_position, manager):
+    """Recovered positions (entry_z_score=0) are never exited via OU reversion."""
+    manager._position = long_position
+    long_position.entry_z_score = 0.0  # unknown entry z (restart recovery)
+    long_position.cycles_held = 5  # even after many cycles, no warmup escape
+    should_exit, reason = manager.should_exit_ou_based(current_z_score=0.1, z_exit=0.3)
+    assert not should_exit
+    assert reason == "ou_ignored_low_entry_z_0.00"
+
+
+def test_ou_exit_threshold_boundary(long_position, manager):
+    """|entry_z|=1.5 exactly passes the gate."""
+    manager._position = long_position
+    long_position.entry_z_score = 1.5  # boundary — meets >= 1.5
+    should_exit, reason = manager.should_exit_ou_based(current_z_score=0.1, z_exit=0.3)
+    assert should_exit
+    assert "ou_revert_target_reached" in reason
+
+
+def test_ou_no_exit_just_below_threshold(long_position, manager):
+    """|entry_z|=1.49 is just below threshold — rejected."""
+    manager._position = long_position
+    long_position.entry_z_score = 1.49
+    should_exit, reason = manager.should_exit_ou_based(current_z_score=0.1, z_exit=0.3)
+    assert not should_exit
+    assert "ou_ignored_low_entry_z" in reason
+
+
+def test_ou_waiting_for_reversion(long_position, manager):
+    """Extreme entry but current_z still high — waiting, don't exit."""
+    manager._position = long_position
+    long_position.entry_z_score = 2.0
+    should_exit, reason = manager.should_exit_ou_based(current_z_score=1.8, z_exit=0.3)
+    assert not should_exit
+    assert reason == "ou_waiting_for_reversion"
 
 
 # ── Brain-specific trail ──────────────────────────────────────────────────

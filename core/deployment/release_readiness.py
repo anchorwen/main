@@ -11,11 +11,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from core.deployment.capability_registry import (
-    CapabilityRegistry,
-    build_default_release_capability_registry,
-)
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     COMPLIANCE_CHECK_ALPHA_BUDGET_EVIDENCE_REGISTERED,
     COMPLIANCE_CHECK_ALPHA_BUDGET_WARNINGS_CLEAR,
     HEALTH_STATUS_ALIVE,
@@ -133,6 +129,10 @@ from core.deployment.domain_keys import (
     TIMELINE_EVENT_ALPHA_BUDGET_GOVERNANCE,
     VALIDATION_MODE_DEEP,
     VALIDATION_MODE_FAST,
+)
+from core.deployment.capability_registry import (
+    CapabilityRegistry,
+    build_default_release_capability_registry,
 )
 from core.deployment.governance_summary import extract_governance_summary
 from core.deployment.schema_versions import SCHEMA_RELEASE_READINESS

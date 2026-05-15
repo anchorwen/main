@@ -4,14 +4,34 @@ Each strategy line gets an independent risk budget.  If a strategy hits its
 daily loss limit or maximum consecutive losses it is paused for the rest of
 the day — but OTHER strategies continue unaffected.  This is institutional
 standard: you don't shut down the whole fund because one PM is having a bad day.
+
+Per-SL graduated cooldown (added 2026-05-13):
+  Tier 1 (1st SL in window)    →  60 s cooldown
+  Tier 2 (2nd SL in window)    → 300 s cooldown  (5 min)
+  Tier 3 (3rd SL in window)    → 1800 s cooldown (30 min)
+  Tier 4 (4th SL in window)    → pause rest of day
+  Window: 1800 s (30 min) — SLs outside this window don't count.
+
+This is inspired by Citadel's graduated PM risk limits: small losses cool
+the strategy briefly; clustered losses escalate the cooling period.
 """
 
 from __future__ import annotations
 
 import time as _time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
+
+# ── Graduated per-SL cooldown ────────────────────────────────────────────
+
+SL_COOLDOWN_TIERS: list[tuple[int, float]] = [
+    (1, 60.0),  # 1st SL → 60 s
+    (2, 300.0),  # 2nd SL → 5 min
+    (3, 1800.0),  # 3rd SL → 30 min
+    (4, float("inf")),  # 4th SL → rest of day
+]
+SL_COOLDOWN_WINDOW: float = 1800.0  # 30 min lookback
 
 
 @dataclass
@@ -30,6 +50,11 @@ class StrategyBudget:
     paused_at: float = 0.0
     last_trade_day: str = ""  # ISO date, to reset daily counters
 
+    # Per-SL graduated cooldown (separate from consecutive-loss pause)
+    _sl_timestamps: list[float] = field(default_factory=list)
+    _sl_cooldown_until: float = 0.0
+    _sl_paused_rest_of_day: bool = False
+
     # Account reference
     account_balance: float = 1000.0
 
@@ -41,10 +66,27 @@ class StrategyBudget:
         self.consecutive_losses = 0
         self.total_trades_today = 0
         self.total_wins_today = 0
+        self._sl_timestamps.clear()
+        self._sl_cooldown_until = 0.0
+        self._sl_paused_rest_of_day = False
         self.last_trade_day = self._today()
 
     def check_pause(self) -> bool:
-        """Return True if this strategy is currently paused."""
+        """Return True if this strategy is currently paused (loss limit or SL cooldown)."""
+        # ── Day-level SL pause (4+ SLs in window) ──
+        if self._sl_paused_rest_of_day:
+            if self.last_trade_day != self._today():
+                self._sl_paused_rest_of_day = False  # new day
+            else:
+                return True
+
+        # ── Graduated SL cooldown ──
+        if self._sl_cooldown_until > 0:
+            if _time.time() < self._sl_cooldown_until:
+                return True
+            self._sl_cooldown_until = 0.0
+
+        # ── Consecutive-loss pause ──
         if not self.paused:
             return False
         if self.cooldown_minutes > 0 and _time.time() - self.paused_at > self.cooldown_minutes * 60:
@@ -102,18 +144,105 @@ class StrategyBudget:
             "consecutive_losses": self.consecutive_losses,
         }
 
+    def record_sl(self, timestamp: float | None = None) -> dict[str, Any]:
+        """Record a stop-loss event and apply graduated cooldown.
+
+        Call this when a position is closed by SL (native MT5 or managed).
+        Returns a status dict suitable for logging.
+
+        Cooldown tiers (SL_COOLDOWN_TIERS):
+          1st SL in window →  60 s
+          2nd SL in window → 300 s (5 min)
+          3rd SL in window → 1800 s (30 min)
+          4th SL in window → rest of day paused
+        """
+        now = timestamp if timestamp is not None else _time.time()
+
+        # Reset daily state if needed
+        _today = self._today()
+        if self.last_trade_day != _today:
+            self._reset_daily()
+
+        # Clean SL timestamps outside the lookback window
+        cutoff = now - SL_COOLDOWN_WINDOW
+        self._sl_timestamps = [t for t in self._sl_timestamps if t > cutoff]
+        self._sl_timestamps.append(now)
+
+        sl_count = len(self._sl_timestamps)
+
+        # Find the applicable tier
+        cooldown_seconds: float = 0.0
+        for tier_count, tier_seconds in SL_COOLDOWN_TIERS:
+            if sl_count >= tier_count:
+                cooldown_seconds = tier_seconds
+
+        if cooldown_seconds >= float("inf") or sl_count >= 4:
+            self._sl_paused_rest_of_day = True
+            self._sl_cooldown_until = 0.0
+            return {
+                "event": "sl_cooldown_paused_day",
+                "strategy": self.strategy_name,
+                "sl_count": sl_count,
+                "reason": "4_sl_in_window",
+            }
+
+        if cooldown_seconds > 0:
+            self._sl_cooldown_until = now + cooldown_seconds
+            return {
+                "event": "sl_cooldown_applied",
+                "strategy": self.strategy_name,
+                "sl_count": sl_count,
+                "cooldown_seconds": cooldown_seconds,
+                "cooldown_until_utc": datetime.fromtimestamp(
+                    self._sl_cooldown_until, tz=UTC
+                ).isoformat(),
+            }
+
+        return {"event": "sl_recorded", "strategy": self.strategy_name, "sl_count": sl_count}
+
+    def get_sl_cooldown_info(self) -> dict[str, Any]:
+        """Return current SL cooldown state for logging/debugging."""
+        return {
+            "strategy": self.strategy_name,
+            "sl_count_in_window": len(self._sl_timestamps),
+            "sl_cooldown_active": _time.time() < self._sl_cooldown_until,
+            "sl_cooldown_remaining_s": max(0.0, self._sl_cooldown_until - _time.time()),
+            "sl_paused_rest_of_day": self._sl_paused_rest_of_day,
+        }
+
     @property
     def win_rate_today(self) -> float:
         if self.total_trades_today == 0:
             return 0.0
         return self.total_wins_today / self.total_trades_today
 
+    def get_streak_multiplier(self) -> float:
+        """Graduated position-size reduction based on consecutive losses.
+
+        Instead of a binary on/off at max_consecutive_losses, this scales
+        position size down smoothly: 0.9^n_losses.  The hard pause still
+        fires at max_consecutive_losses as a safety floor.
+
+        Returns:
+            Multiplier in [0.0, 1.0] — 1.0 = no reduction, 0.0 = paused.
+        """
+        if self.paused:
+            return 0.0
+        if self.consecutive_losses <= 0:
+            return 1.0
+        mult = round(0.90**self.consecutive_losses, 4)
+        return max(0.30, mult)  # floor at 30% — hard pause takes over below that
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "strategy_name": self.strategy_name,
-            "paused": self.paused,
+            "paused": self.paused
+            or self._sl_paused_rest_of_day
+            or _time.time() < self._sl_cooldown_until,
             "daily_pnl_pct": round(self.daily_pnl_pct, 4),
             "consecutive_losses": self.consecutive_losses,
             "total_trades_today": self.total_trades_today,
             "win_rate_today": round(self.win_rate_today, 4),
+            "streak_multiplier": self.get_streak_multiplier(),
+            "sl_cooldown": self.get_sl_cooldown_info(),
         }

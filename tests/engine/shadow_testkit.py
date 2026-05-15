@@ -19,8 +19,7 @@ from unittest.mock import patch
 
 from apps.engine.main_v9_shadow import ShadowSessionManager, stream_session_sse
 from apps.engine.v9_shadow_sse import SessionSSEClientBuffer, iter_sse_messages_from_chunks
-from core.contracts.enums import DispatchStatus
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     OPERATIONS_POSTURE_SOURCE_TRACE_DELIVERY_STATE,
     PAYLOAD_KEY_BLOCK_REASONS,
     PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
@@ -69,6 +68,7 @@ from core.deployment.domain_keys import (
     PAYLOAD_KEY_TARGET_ISSUE_CODES,
     REPLAY_GOVERNANCE_PROJECTION_SOURCE_REPLAY_RECORD_EXECUTION,
 )
+from core.contracts.enums import DispatchStatus
 from core.ledger.services.communication_operations_service import CommunicationOperationsService
 from core.ledger.services.gate_decision_refs import governance_summary as gate_governance_summary
 from core.ledger.services.replay_record_refs import grouped_reasons as grouped_message_reasons

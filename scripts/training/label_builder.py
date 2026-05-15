@@ -202,7 +202,7 @@ def build_trade_records(
 
     for ticket, recs in by_ticket.items():
         opens = [r for r in recs if r.get("action") == "open"]
-        closes = [r for r in recs if r.get("action") in ("close", "modify")]
+        closes = [r for r in recs if r.get("action") in ("close", "modify", "modify_sltp")]
 
         for i, open_rec in enumerate(opens):
             close_rec = closes[i] if i < len(closes) else None
@@ -554,7 +554,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--price-data",
         type=Path,
         default=None,
-        help="Path to OHLC CSV for barrier label generation (barrier mode)",
+        help="Path to OHLC CSV for barrier label generation (barrier mode). "
+        "Use --timeframe for auto-resolution from data/raw/.",
+    )
+    # ── Timeframe convenience (auto-resolves --price-data) ──
+    p.add_argument(
+        "--timeframe",
+        default=None,
+        help="Timeframe for auto CSV resolution (M5/M15/H1/H4). "
+        "Resolves --price-data to data/raw/xauusdc_{tf}_merged.csv.",
     )
     # ── Label contract (optional, enriches both modes) ──
     p.add_argument(
@@ -597,8 +605,24 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if not args.journal and not args.price_data:
-        print("[label_builder] ERROR: --journal or --price-data is required", flush=True)
-        return 2
+        # Auto-resolve from --timeframe if provided
+        if args.timeframe:
+            tf = args.timeframe.upper()
+            auto_csv = Path(f"data/raw/xauusdc_{tf.lower()}_merged.csv")
+            if auto_csv.exists():
+                args.price_data = str(auto_csv)
+                print(
+                    f"[label_builder] Auto-resolved --price-data={args.price_data} from --timeframe={tf}"
+                )
+            else:
+                print(f"[label_builder] ERROR: Auto CSV not found: {auto_csv} (timeframe={tf})")
+                return 2
+        else:
+            print(
+                "[label_builder] ERROR: --journal, --price-data, or --timeframe is required",
+                flush=True,
+            )
+            return 2
 
     # ── Load contract if provided ──
     contract: LabelContract | None = None

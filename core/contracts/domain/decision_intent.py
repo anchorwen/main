@@ -2,13 +2,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from core.contracts.enums import DecisionAction, DecisionSide
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     CONTRACT_ERROR_ABSTAIN_ACTION_REQUIRES_FLAT_SIDE,
     CONTRACT_ERROR_COMPILED_AT_BEFORE_EVENT_TIME,
     CONTRACT_ERROR_CONVICTION_OUT_OF_RANGE_TEMPLATE,
     CONTRACT_ERROR_OBSERVE_ACTION_REQUIRES_FLAT_SIDE,
 )
+from core.contracts.enums import DecisionAction, DecisionSide
 
 
 @dataclass

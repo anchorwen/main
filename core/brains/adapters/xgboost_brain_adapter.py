@@ -32,9 +32,25 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
     # BaseBrainAdapter interface
     # ------------------------------------------------------------------
 
-    def run(self, snapshot, feature_source: dict | None = None) -> BrainDecisionProposal:
-        """Override to extract 9 microstructure features in canonical order."""
-        if self._feature_adapter is not None and feature_source is not None:
+    def run(self, snapshot, feature_source=None) -> BrainDecisionProposal:
+        """Override to handle dict, (n_bars, 9) sequence, or (288,) flat array.
+
+        - dict → build_model_input → (9,) vector (backward-compat)
+        - (n_bars, 9) ndarray → build_flat_input → (288,) vector
+        - (n_bars*9,) ndarray → use directly (pre-flattened)
+        """
+        if isinstance(feature_source, np.ndarray):
+            if feature_source.ndim == 2 and feature_source.shape[0] > 1:
+                # (n_bars, 9) → flatten via adapter
+                if self._feature_adapter is not None and hasattr(
+                    self._feature_adapter, "build_flat_input"
+                ):
+                    feature_vector = self._feature_adapter.build_flat_input(feature_source).ravel()
+                else:
+                    feature_vector = feature_source.ravel().astype(np.float64)
+            else:
+                feature_vector = feature_source.ravel().astype(np.float64)
+        elif self._feature_adapter is not None and feature_source is not None:
             feature_vector = self._feature_adapter.build_model_input(feature_source).ravel()
         elif feature_source is not None:
             feature_vector = np.asarray(list(feature_source.values()), dtype=np.float64)
@@ -83,10 +99,29 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
             return {"raw_score": 0.0, "feature_count": len(feature_vector), "fallback": True}
 
         started = perf_counter()
-        # Reshape to (1, N) for XGBoost DMatrix
+        n_cols = feature_vector.shape[0] if feature_vector.ndim == 1 else feature_vector.shape[1]
+
+        # Guard: model expects _num_features features.  Mismatched input
+        # (e.g. 9-dim single-bar when model was trained on 288-dim flat
+        # sequence) cannot produce meaningful predictions — return stub.
+        if self._num_features and n_cols != self._num_features:
+            return {
+                "raw_score": 0.0,
+                "feature_count": n_cols,
+                "runtime_ms": 0.0,
+                "fallback": True,
+                "fallback_reason": f"dim_mismatch_expected_{self._num_features}_got_{n_cols}",
+            }
+
+        booster_fn = self._booster.feature_names
+        if booster_fn and len(booster_fn) == n_cols:
+            feature_names = booster_fn
+        else:
+            feature_names = None
+
         dmatrix = self._xgb.DMatrix(
             feature_vector.reshape(1, -1),
-            feature_names=self._booster.feature_names if self._booster.feature_names else None,
+            feature_names=feature_names,
         )
         raw_score = float(self._booster.predict(dmatrix)[0])
         runtime_ms = (perf_counter() - started) * 1000.0

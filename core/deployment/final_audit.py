@@ -8,7 +8,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     COMPLIANCE_CHECK_REGISTRY_DEEP_VALIDATION_COVERAGE_COMPLETE,
     COMPLIANCE_CHECK_REGISTRY_DEEP_VALIDATION_PRESENT,
     COMPLIANCE_LEVEL_FAIL,

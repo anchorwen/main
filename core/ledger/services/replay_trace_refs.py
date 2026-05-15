@@ -1,6 +1,6 @@
 """Shared accessors for replay trace payloads."""
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
     PAYLOAD_KEY_CORRELATION_ID,
     PAYLOAD_KEY_EXECUTION_STATE,

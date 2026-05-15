@@ -61,6 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--artifact-path", type=Path, required=True, help="Target path for arb_params.json"
     )
     p.add_argument("--dataset-csv", type=Path, default=None, help="CSV training data")
+    p.add_argument("--timeframe", type=str, default=None, help="Timeframe label (M5/M15/H1/H4)")
     p.add_argument(
         "--trainer-root",
         type=Path,
@@ -155,7 +156,9 @@ def main(argv: list[str] | None = None) -> int:
     model_id = manifest.get("model_id", "unknown")
     lane = manifest.get("lane", "arb")
     generation = manifest.get("generation", "g2026.1")
-    seed = manifest.get("seed", 42)
+    seed = manifest.get("train_seed", manifest.get("seed", 42))
+    timeframe = args.timeframe or manifest.get("timeframe", "M5")
+    dataset_override = manifest.get("dataset_override", None)
 
     recipe_id: str | None = None
     if args.recipe:
@@ -166,7 +169,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[arb_trainer] Recipe: {recipe_id}")
 
     trainer_root = args.trainer_root.resolve()
-    dataset_csv = (args.dataset_csv or (trainer_root / "Exness_XAUUSDm_2026_04.csv")).resolve()
+    dataset_csv = (
+        args.dataset_csv
+        or (Path(dataset_override) if dataset_override else None)
+        or (trainer_root / "Exness_XAUUSDm_2026_04.csv")
+    ).resolve()
     artifact_path = args.artifact_path.resolve()
     result_path = args.result_json_path.resolve()
 
@@ -179,7 +186,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[arb_trainer] ERROR: Dataset CSV not found: {dataset_csv}", file=sys.stderr)
             return 2
 
-    print(f"[arb_trainer] Lane={lane}  Model={model_id}  Generation={generation}  Seed={seed}")
+    print(
+        f"[arb_trainer] Lane={lane}  Model={model_id}  Generation={generation}  TF={timeframe}  Seed={seed}"
+    )
     print(f"[arb_trainer] Dataset CSV: {dataset_csv}")
     print(f"[arb_trainer] Artifact target: {artifact_path}")
     print("[arb_trainer] Starting OU parameter optimization...")
@@ -212,6 +221,7 @@ def main(argv: list[str] | None = None) -> int:
         "model_id": model_id,
         "lane": lane,
         "generation": generation,
+        "timeframe": timeframe,
         "seed": seed,
         "exit_code": exit_code,
         "metrics": {

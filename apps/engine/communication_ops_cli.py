@@ -4,7 +4,7 @@ import json
 from apps.engine.communication_summary_contract import (
     build_summary_mirror_fields_from_operations_summary,
 )
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     PAYLOAD_KEY_GOVERNANCE_SOURCES,
     PAYLOAD_KEY_OPERATIONS_POSTURE,
     PAYLOAD_KEY_OPERATIONS_SUMMARY,

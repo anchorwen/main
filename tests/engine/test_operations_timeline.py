@@ -3,7 +3,7 @@
 import json
 
 from apps.engine.cli import main
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     PAYLOAD_KEY_ALPHA_BUDGET_GOVERNANCE,
     TIMELINE_EVENT_ALPHA_BUDGET_GOVERNANCE,
     TIMELINE_EVENT_EVIDENCE_BUNDLE,

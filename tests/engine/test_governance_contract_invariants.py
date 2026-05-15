@@ -1,6 +1,6 @@
 """Cross-service governance summary contract invariants."""
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     PAYLOAD_KEY_GOVERNANCE_FOCUS,
     PAYLOAD_KEY_GOVERNANCE_WARNING_COUNT,
 )

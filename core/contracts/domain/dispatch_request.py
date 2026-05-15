@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     CONTRACT_ERROR_DISPATCH_ID_REQUIRED,
     CONTRACT_ERROR_REQUESTED_AT_BEFORE_EVENT_TIME,
 )

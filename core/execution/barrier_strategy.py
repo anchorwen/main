@@ -9,6 +9,7 @@ Uses V9 40-dim institutional features for all brains.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from core.execution.strategy_line import StrategyLine
@@ -27,6 +28,8 @@ class BarrierStrategy(StrategyLine):
         feature_vector: Any,
         micro_feature_vector: Any,
         mid_price: float | None,
+        micro_sequences: dict[str, Any] | None = None,
+        daily_feature_vector: Any = None,
     ) -> list[Any]:
         proposals: list[Any] = []
         for b_info in self.brains:
@@ -41,6 +44,18 @@ class BarrierStrategy(StrategyLine):
                 except Exception:
                     pass
                 proposals.append(prop)
-            except Exception:
-                pass
+            except Exception as _exc:
+                print(
+                    json.dumps(
+                        {
+                            "event": "brain_inference_error",
+                            "brain_id": b_info.get("brain_id", "unknown"),
+                            "brain_type": b_info.get("brain_type", "unknown"),
+                            "strategy": "barrier_12bar",
+                            "error": str(_exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
         return proposals

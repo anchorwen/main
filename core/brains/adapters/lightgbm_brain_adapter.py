@@ -57,7 +57,12 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
 
         started = perf_counter()
         vec = np.asarray(feature_vector, dtype=np.float64).reshape(1, -1)
-        raw_score = float(self._booster.predict(vec)[0])
+        raw_pred = self._booster.predict(vec)
+        if raw_pred.ndim == 2 and raw_pred.shape[1] > 1:
+            # Multiclass: class 0=short, class 2=long → directional score [-1, 1]
+            raw_score = float(raw_pred[0, 2] - raw_pred[0, 0])
+        else:
+            raw_score = float(raw_pred[0])
         runtime_ms = (perf_counter() - started) * 1000.0
 
         return {

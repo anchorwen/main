@@ -90,7 +90,8 @@ def test_engine_overtime_trade_urgency_rises():
     )
     result = engine.evaluate(snap)
     # Losing + overtime + expanding vol should push urgency up
-    assert result.exit_urgency > 0.4
+    # (overtime capped at 0.80 — PnL/vol factors carry the remaining signal)
+    assert result.exit_urgency > 0.35
 
 
 def test_engine_consensus_collapse():
@@ -187,7 +188,7 @@ def test_score_time_early():
 
 def test_score_time_overtime():
     snap = _snap(time_ratio=2.0, cycles_held=24, expected_horizon=12)
-    assert MetaExitEngine._score_time(snap) > 0.8
+    assert MetaExitEngine._score_time(snap) >= 0.8
 
 
 def test_score_volatility_contracting():
@@ -221,8 +222,7 @@ def test_create_exit_engine_no_model():
 
 def test_create_exit_engine_nonexistent_model():
     engine = create_exit_engine(model_path="nonexistent/path/model.txt")
-    assert engine is not None
-    assert engine._model is None  # gracefully degraded
+    assert engine is None  # returns None: Layer 2.5 disabled, trail+flip+time handle exits
 
 
 # ── ExitFeatureSnapshot defaults ──

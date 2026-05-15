@@ -128,30 +128,30 @@ class TestIntradayDrawdownKill:
         assert result["blocked"]
 
     def test_daily_reset(self):
-        """Watermark should reset at configured UTC hour"""
+        """Watermark should reset on new day"""
         now = datetime(2026, 5, 9, 0, 5, 0)  # 00:05 UTC
         kill = IntradayDrawdownKill(kill_pct=0.02, initial_equity=5000.0, reset_hour_utc=0)
         # Simulate big loss then next-day reset
         kill._high_watermark = 5100.0
-        kill._last_reset_day = 8  # different day
+        kill._last_reset_date = "2026-05-08"  # different day
         result = kill.update(4900.0, now_utc=now)
         # After reset, watermark = current equity = 4900, so no drawdown
         assert not result["blocked"]
         assert result["high_watermark"] == 4900.0
 
-    def test_same_hour_no_double_reset(self):
+    def test_same_day_no_double_reset(self):
         """Reset should only happen once per day"""
         now1 = datetime(2026, 5, 9, 0, 1, 0)
         kill = IntradayDrawdownKill(kill_pct=0.02, initial_equity=5000.0, reset_hour_utc=0)
         kill._high_watermark = 5100.0
-        kill._last_reset_day = 8
+        kill._last_reset_date = "2026-05-08"
         kill.update(4900.0, now_utc=now1)  # resets to 4900
-        assert kill._last_reset_day == 9
+        assert kill._last_reset_date == "2026-05-09"
 
         now2 = datetime(2026, 5, 9, 0, 2, 0)
         kill.update(5100.0, now_utc=now2)  # should NOT reset again
         assert kill._high_watermark == 5100.0  # rose normally
-        assert kill._last_reset_day == 9  # unchanged
+        assert kill._last_reset_date == "2026-05-09"  # unchanged
 
     def test_zero_equity_safe(self):
         """Zero equity should not divide by zero"""
@@ -159,3 +159,109 @@ class TestIntradayDrawdownKill:
         result = kill.update(0.0)
         assert not result["blocked"]
         assert result["drawdown_pct"] == 0.0
+
+
+class TestIsDailyCloseWindow:
+    """Tests for XAUUSD daily close window detection (US DST-aware)."""
+
+    @staticmethod
+    def _utc(year, month, day, hour=0, minute=0, second=0):
+        from datetime import datetime
+
+        return datetime(year, month, day, hour, minute, second)
+
+    def test_us_dst_summer_july(self):
+        """July 2026 should be in US DST."""
+        from core.execution.pre_trade_guards import _is_us_dst
+
+        assert _is_us_dst(self._utc(2026, 7, 15, 12, 0)) is True
+
+    def test_us_dst_winter_january(self):
+        """January 2026 should NOT be in US DST."""
+        from core.execution.pre_trade_guards import _is_us_dst
+
+        assert _is_us_dst(self._utc(2026, 1, 15, 12, 0)) is False
+
+    def test_us_dst_march_before_transition(self):
+        """March 1 2026 is before DST starts (second Sunday ~Mar 8)."""
+        from core.execution.pre_trade_guards import _is_us_dst
+
+        assert _is_us_dst(self._utc(2026, 3, 1, 12, 0)) is False
+
+    def test_us_dst_november_after_transition(self):
+        """November 15 2026 is after DST ends (first Sunday ~Nov 1)."""
+        from core.execution.pre_trade_guards import _is_us_dst
+
+        assert _is_us_dst(self._utc(2026, 11, 15, 12, 0)) is False
+
+    def test_in_window_summer_dst(self):
+        """21:00 UTC in July → within summer window (20:58–22:02)."""
+        from core.execution.pre_trade_guards import _is_daily_close_window
+
+        assert _is_daily_close_window(self._utc(2026, 7, 15, 21, 0)) is True
+
+    def test_in_window_winter_est(self):
+        """22:00 UTC in January → within winter window (21:58–23:02)."""
+        from core.execution.pre_trade_guards import _is_daily_close_window
+
+        assert _is_daily_close_window(self._utc(2026, 1, 15, 22, 0)) is True
+
+    def test_outside_window_summer(self):
+        """14:00 UTC in July → outside any close window."""
+        from core.execution.pre_trade_guards import _is_daily_close_window
+
+        assert _is_daily_close_window(self._utc(2026, 7, 15, 14, 0)) is False
+
+    def test_outside_window_winter(self):
+        """03:00 UTC in January → outside any close window."""
+        from core.execution.pre_trade_guards import _is_daily_close_window
+
+        assert _is_daily_close_window(self._utc(2026, 1, 15, 3, 0)) is False
+
+    def test_summer_window_at_2100_is_wrong_for_winter(self):
+        """21:00 UTC in January → outside winter window (which is 21:58–23:02)."""
+        from core.execution.pre_trade_guards import _is_daily_close_window
+
+        assert _is_daily_close_window(self._utc(2026, 1, 15, 21, 0)) is False
+
+    def test_winter_window_at_2205_is_outside_summer(self):
+        """22:05 UTC in July → outside summer window (20:58–22:02)."""
+        from core.execution.pre_trade_guards import _is_daily_close_window
+
+        assert _is_daily_close_window(self._utc(2026, 7, 15, 22, 5)) is False
+
+    def test_summer_boundary_start(self):
+        """20:58 UTC in July → inside summer window."""
+        from core.execution.pre_trade_guards import _is_daily_close_window
+
+        assert _is_daily_close_window(self._utc(2026, 7, 15, 20, 58, 0)) is True
+
+    def test_summer_boundary_end(self):
+        """22:02 UTC in July → inside summer window."""
+        from core.execution.pre_trade_guards import _is_daily_close_window
+
+        assert _is_daily_close_window(self._utc(2026, 7, 15, 22, 2, 0)) is True
+
+    def test_summer_just_after_window(self):
+        """22:03 UTC in July → outside summer window."""
+        from core.execution.pre_trade_guards import _is_daily_close_window
+
+        assert _is_daily_close_window(self._utc(2026, 7, 15, 22, 3, 0)) is False
+
+    def test_winter_boundary_start(self):
+        """21:58 UTC in January → inside winter window."""
+        from core.execution.pre_trade_guards import _is_daily_close_window
+
+        assert _is_daily_close_window(self._utc(2026, 1, 15, 21, 58, 0)) is True
+
+    def test_winter_boundary_end(self):
+        """23:02 UTC in January → inside winter window."""
+        from core.execution.pre_trade_guards import _is_daily_close_window
+
+        assert _is_daily_close_window(self._utc(2026, 1, 15, 23, 2, 0)) is True
+
+    def test_winter_just_after_window(self):
+        """23:03 UTC in January → outside winter window."""
+        from core.execution.pre_trade_guards import _is_daily_close_window
+
+        assert _is_daily_close_window(self._utc(2026, 1, 15, 23, 3, 0)) is False

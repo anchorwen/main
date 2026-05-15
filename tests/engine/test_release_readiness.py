@@ -4,8 +4,7 @@ import json
 from pathlib import Path
 
 from apps.engine.cli import main
-from core.deployment.capability_registry import CapabilityRegistry
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     PAYLOAD_KEY_ALPHA_BUDGET_GOVERNANCE,
     PAYLOAD_KEY_GOVERNANCE_FOCUS,
     PAYLOAD_KEY_GOVERNANCE_WARNING_COUNT,
@@ -28,6 +27,7 @@ from core.deployment.domain_keys import (
     READINESS_CAP_TRACING,
     READINESS_CAP_VENUE_ROUTING,
 )
+from core.deployment.capability_registry import CapabilityRegistry
 from core.deployment.environment_config import EnvironmentConfig
 from core.deployment.release_readiness import ReleaseReadinessService
 from core.deployment.schema_versions import SCHEMA_RELEASE_READINESS

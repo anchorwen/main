@@ -159,6 +159,16 @@
 - **负面**: RuntimeLoop/Orchestrator 中的部分功能（断路器、指标收集）需在 live_cycle 中重新实现
 - **风险**: 无
 
+### 2026-05-15 补充：watchdog 残骸清理
+
+`scripts/hourly_watchdog.py` 是 2026-05-05 的一夜实验（最后一次写入 `data/watchdog.log` 为 2026-05-06）。无任何 scheduler/cron 调用它。其 `restart_live_system()` 使用 `taskkill /F` 粗暴杀进程，与 `live_launcher.py` 内置的逐子进程健康监控（launcher 内部 watchdog 循环，lines 422-648）机制冲突。
+
+已于 2026-05-15 删除：
+- `scripts/hourly_watchdog.py`
+- `data/watchdog.log`
+
+`live_launcher.py` 的内置子进程监控是唯一的生产健康检查机制。`scripts/training/monitor_training.py` 中的 "watchdog" 是训练批次监控，与此无关。
+
 ---
 
 ## ADR-007: LLM/RL 资产分配委员会延后至 Phase C

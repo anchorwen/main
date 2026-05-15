@@ -28,12 +28,14 @@ class TrainingDataset:
         X: Feature matrix (n_samples, n_features).
         y: Labels, integer-encoded for classification.
         feature_names: Optional list of feature names.
+        timestamps: Optional Unix epoch seconds per sample (for CPCV).
         metadata: Arbitrary metadata (source path, symbol, timeframe, etc.).
     """
 
     X: np.ndarray
     y: np.ndarray
     feature_names: list[str] = field(default_factory=list)
+    timestamps: np.ndarray | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     # ── Properties ──
@@ -52,6 +54,12 @@ class TrainingDataset:
         total = len(self.y)
         return {int(k): float(v / total) for k, v in zip(unique, counts, strict=False)}
 
+    @property
+    def has_timestamps(self) -> bool:
+        if self.timestamps is None or len(self.timestamps) == 0:
+            return False
+        return bool(np.any(self.timestamps > 0))
+
     # ── Validation ──
 
     def validate(self) -> list[str]:
@@ -65,8 +73,9 @@ class TrainingDataset:
             issues.append(f"Inf values found in feature columns: {inf_cols}")
         if self.n_samples < 20:
             issues.append(f"Too few samples: {self.n_samples} (need >= 20)")
-        class_counts = np.bincount(self.y) if len(self.y) > 0 else np.array([])
-        if len(class_counts) > 0 and class_counts.min() < 3:
+        unique_vals, counts = np.unique(self.y, return_counts=True)
+        class_counts = counts
+        if len(counts) > 0 and counts.min() < 3:
             issues.append(f"Minority class has fewer than 3 samples: {class_counts.tolist()}")
         return issues
 
@@ -176,16 +185,61 @@ class TrainingDataset:
             )
             yield train_slice, test_slice, i
 
+    def embargo_walk_forward(
+        self,
+        n_splits: int = 5,
+        train_ratio: float = 0.6,
+        purge_gap: int = 10,
+        embargo_gap: int = 5,
+        min_train_size: int = 200,
+    ):
+        """Generator yielding (train, test, fold_idx) with purge + embargo gaps.
+
+        Purge removes samples immediately before the test set (preventing
+        train→test leakage from look-ahead labels).  Embargo removes samples
+        immediately *after* the test set from subsequent training folds,
+        preventing test→train leakage when test observations are correlated
+        with future samples (common in financial time series with overlapping
+        returns or multi-bar labels).
+
+        Reference: De Prado, "Advances in Financial Machine Learning" (2018),
+        Chapter 7 — Cross-Validation in Finance.
+        """
+        n = self.n_samples
+        chunk = (n - min_train_size - (purge_gap + embargo_gap) * n_splits) // n_splits
+        if chunk < 10:
+            chunk = max(10, n // (n_splits + 1))
+
+        for i in range(n_splits):
+            test_start = min_train_size + i * (chunk + purge_gap + embargo_gap)
+            test_end = min(n, test_start + chunk)
+            train_end = max(0, test_start - purge_gap)
+
+            if train_end < min_train_size or test_end - test_start < 10:
+                continue
+
+            train_slice = self.X[:train_end], self.y[:train_end]
+            test_slice = (
+                self.X[test_start:test_end],
+                self.y[test_start:test_end],
+            )
+            yield train_slice, test_slice, i
+
     # ── Factory ──
 
     @classmethod
     def from_file(cls, path: str | Path) -> TrainingDataset:
-        """Load from NPZ or Parquet."""
+        """Load from NPZ or Parquet.
+
+        When the NPZ contains a ``timestamps`` array (Unix epoch seconds),
+        it is loaded into the dataset for temporal validation and CPCV.
+        """
         path = Path(path)
         ext = path.suffix.lower()
+        ts: np.ndarray | None = None
 
         if ext == ".npz":
-            d = np.load(path)
+            d = np.load(path, allow_pickle=True)
             X, y = d["X"], d["y"]
             feat_raw = d.get("feature_names")
             if feat_raw is None:
@@ -194,6 +248,10 @@ class TrainingDataset:
                 feature_names = feat_raw.tolist()
             else:
                 feature_names = list(feat_raw)
+            # Load timestamps if present (dataset v2)
+            ts_raw = d.get("timestamps")
+            if ts_raw is not None:
+                ts = np.asarray(ts_raw, dtype=np.float64)
         elif ext == ".parquet":
             import pandas as pd
 
@@ -224,6 +282,7 @@ class TrainingDataset:
             X=np.asarray(X, dtype=np.float64),
             y=np.asarray(y, dtype=np.int64),
             feature_names=feature_names,
+            timestamps=ts,
             metadata={"source_path": str(path.resolve()), "format": ext},
         )
 
@@ -289,3 +348,25 @@ def walk_forward_splits(
         n_splits=n_splits, train_ratio=train_ratio
     ):
         yield X_tr, y_tr, X_te, y_te
+
+
+# ── Timestamp utilities ──
+
+
+def validate_temporal_order(timestamps: np.ndarray) -> bool:
+    """Verify that samples are chronologically ordered (non-decreasing)."""
+    if len(timestamps) < 2:
+        return True
+    return bool(np.all(np.diff(timestamps) >= 0))
+
+
+def get_date_range(timestamps: np.ndarray) -> tuple[str, str]:
+    """Return (min_date, max_date) as ISO-8601 strings."""
+    from datetime import UTC, datetime
+
+    valid = timestamps[timestamps > 0]
+    if len(valid) == 0:
+        return ("", "")
+    min_dt = datetime.fromtimestamp(float(valid.min()), tz=UTC).isoformat()
+    max_dt = datetime.fromtimestamp(float(valid.max()), tz=UTC).isoformat()
+    return (min_dt, max_dt)

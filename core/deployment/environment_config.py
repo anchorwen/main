@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from core.deployment.domain_keys import VALIDATION_MODE_DEEP
+from core.contracts.domain_keys import VALIDATION_MODE_DEEP
 
 
 class Environment(str, Enum):

@@ -1,0 +1,147 @@
+# Adaptive Trading System — Service orchestration
+#
+# MT5 bridge and training run on Windows host (MT5 is Windows-only, training needs GPU).
+# The Linux containers handle headless ops: daily-ops, shadow ensemble, feedback loop,
+# feature warming, auto-recovery, and monitoring.
+#
+# Start ops stack (daily-ops + feedback + features + scheduler):
+#   docker-compose --profile ops up -d
+#
+# Start shadow ensemble only:
+#   docker-compose --profile shadow up -d
+#
+# Run a single job:
+#   docker-compose run --rm daily-ops
+#   docker-compose run --rm status
+#
+# View logs:
+#   docker-compose logs -f scheduler
+
+version: "3.9"
+
+services:
+  # ── Daily operations (one-shot) ──
+  daily-ops:
+    build: .
+    image: adaptive-trading:latest
+    container_name: at-daily-ops
+    volumes:
+      - ./data:/app/data
+    command:
+      - python
+      - main.py
+      - daily-ops
+      - --output
+      - /app/data/reports/daily_ops.json
+    restart: "no"
+    profiles:
+      - ops
+      - all
+
+  # ── Shadow ensemble (records counterfactual P&L, no real orders) ──
+  shadow:
+    build: .
+    image: adaptive-trading:latest
+    container_name: at-shadow
+    volumes:
+      - ./data:/app/data
+    command:
+      - python
+      - scripts/shadow_decision_recorder.py
+      - --loop
+    restart: unless-stopped
+    profiles:
+      - shadow
+      - all
+
+  # ── Feedback loop (updates brain weights from P&L outcomes) ──
+  feedback:
+    build: .
+    image: adaptive-trading:latest
+    container_name: at-feedback
+    volumes:
+      - ./data:/app/data
+    command:
+      - python
+      - scripts/feedback_loop.py
+    restart: "no"
+    profiles:
+      - ops
+      - all
+
+  # ── Feature store warmer (pre-computes features for fast inference) ──
+  features-update:
+    build: .
+    image: adaptive-trading:latest
+    container_name: at-features
+    volumes:
+      - ./data:/app/data
+    command:
+      - python
+      - main.py
+      - features-update
+    restart: "no"
+    profiles:
+      - ops
+      - all
+
+  # ── Auto-recovery (detects and repairs data/state anomalies) ──
+  auto-recover:
+    build: .
+    image: adaptive-trading:latest
+    container_name: at-recover
+    volumes:
+      - ./data:/app/data
+    command:
+      - python
+      - main.py
+      - auto-recover
+    restart: "no"
+    profiles:
+      - ops
+
+  # ── Status dashboard (one-shot, prints to stdout) ──
+  status:
+    build: .
+    image: adaptive-trading:latest
+    container_name: at-status
+    volumes:
+      - ./data:/app/data
+    command:
+      - python
+      - main.py
+      - status
+    restart: "no"
+    profiles:
+      - status
+
+  # ── Leaderboard (one-shot, prints brain rankings) ──
+  leaderboard:
+    build: .
+    image: adaptive-trading:latest
+    container_name: at-leaderboard
+    volumes:
+      - ./data:/app/data
+    command:
+      - python
+      - main.py
+      - leaderboard
+    restart: "no"
+    profiles:
+      - status
+
+  # ── Cron scheduler (runs daily-ops + feedback on a schedule) ──
+  scheduler:
+    build: .
+    image: adaptive-trading:latest
+    container_name: at-scheduler
+    volumes:
+      - ./data:/app/data
+      - ./scripts/daily_scheduler.sh:/app/scripts/daily_scheduler.sh:ro
+    command:
+      - /bin/bash
+      - /app/scripts/daily_scheduler.sh
+    restart: unless-stopped
+    profiles:
+      - ops
+      - all

@@ -2,13 +2,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from core.contracts.enums import DispatchStatus
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     CONTRACT_ERROR_ADAPTER_NAME_REQUIRED,
     CONTRACT_ERROR_DISPATCH_ID_REQUIRED,
     CONTRACT_ERROR_FAILURE_REASON_REQUIRED_WHEN_STATUS_FAILED,
     CONTRACT_ERROR_STATUS_REQUIRED,
 )
+from core.contracts.enums import DispatchStatus
 
 
 @dataclass

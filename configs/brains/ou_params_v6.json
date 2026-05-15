@@ -5,13 +5,26 @@
   "brain_role": "arb_brain",
   "model_version": "v7.0",
   "status": "shadow",
-  "vote_weight": 0.5,
+  "vote_weight": 1.5,
   "magic": 90010,
   "artifact_path": "data/models/arb_params_v7.json",
   "feature_schema_id": "v6_price_series_1",
+  "training_contract": "ou_mean_reversion_zscore",
   "deployment_scope": {
-    "symbols": ["XAUUSDc", "XAUUSD"],
-    "sessions": ["all"],
-    "regimes": ["mean_reversion", "oscillation", "low_volatility"]
-  }
+    "symbols": [
+      "XAUUSDc",
+      "XAUUSD"
+    ],
+    "sessions": [
+      "all"
+    ],
+    "regimes": [
+      "mean_reversion",
+      "oscillation",
+      "low_volatility"
+    ]
+  },
+  "contract_group": "statarb_dynamic",
+  "training_horizon": 0,
+  "feature_schema": "ou_price"
 }

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     PAYLOAD_KEY_CORRELATION_ID,
     PAYLOAD_KEY_EVENT_COUNT,
     PAYLOAD_KEY_EVENT_TYPE,

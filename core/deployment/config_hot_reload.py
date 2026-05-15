@@ -3,7 +3,7 @@ import logging
 import threading
 from pathlib import Path
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     PAYLOAD_KEY_CONFIG_PATH,
     PAYLOAD_KEY_CURRENT_KEYS,
     PAYLOAD_KEY_LAST_MODIFIED,

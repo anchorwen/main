@@ -58,7 +58,7 @@ def run_incremental_update(
     from core.features.update_job import IncrementalFeatureUpdateJob
 
     store = LocalFeatureStore(store_dir)
-    computer = V9LiveFeatureComputer(mt5, symbol) if mt5 is not None else None
+    computer = None  # mt5 is imported on-demand via MetaTrader5 below
 
     if computer is None:
         if not mt5_terminal_path:
@@ -263,6 +263,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     return 0
 
+
+try:
+    from core.deployment.scheduled_task_registry import register
+
+    register("feature_store_maintenance", run_full_maintenance)
+except ImportError:
+    pass
 
 if __name__ == "__main__":
     raise SystemExit(main())

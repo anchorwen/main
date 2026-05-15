@@ -8,7 +8,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     EVIDENCE_SECTION_ALPHA_BUDGET_USAGE,
     EVIDENCE_SECTION_PREFLIGHT,
     PAYLOAD_KEY_ALLOW_COUNT,

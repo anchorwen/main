@@ -17,7 +17,9 @@ from tests.execution.conftest import make_proposal
 def _make_strategy(config=None, brains=None, budget=None, proposals=None, infer_fn=None):
     """Create a fully wired StrategyLine subclass for testing."""
     if config is None:
-        config = StrategyLineConfig(name="test_line", magic=99999, brain_types={"test"})
+        config = StrategyLineConfig(
+            name="test_line", magic=99999, brain_types={"test"}, min_valid_brains=1
+        )
     if brains is None:
         # Build a minimal brain list with adapter-like entries
         adapter = MagicMock()
@@ -26,7 +28,14 @@ def _make_strategy(config=None, brains=None, budget=None, proposals=None, infer_
         brains = [{"adapter": adapter, "brain_id": "test_brain_01"}]
 
     class _TestLine(StrategyLine):
-        def _run_inference(self, feature_vector, micro_feature_vector, mid_price):
+        def _run_inference(
+            self,
+            feature_vector,
+            micro_feature_vector,
+            mid_price,
+            micro_sequences=None,
+            daily_feature_vector=None,
+        ):
             if infer_fn:
                 return infer_fn(feature_vector, micro_feature_vector, mid_price)
             return proposals or []
@@ -135,6 +144,7 @@ class TestEvaluateGates:
     def test_budget_not_paused_allows_evaluation(self):
         budget = MagicMock()
         budget.check_pause.return_value = False
+        budget.get_streak_multiplier.return_value = 1.0
         line = _make_strategy(
             budget=budget,
             proposals=[make_proposal()],
@@ -205,9 +215,9 @@ class TestEvaluateInference:
             micro_feature_vector=None,
             mid_price=2000.0,
         )
-        # neutral proposals + weak up/down → consensus confidence well below 0.40
+        # equal up/down + neutral → "neutral" consensus (no directional edge)
         assert result.should_trade is False
-        assert result.reason == "low_confidence"
+        assert result.reason == "neutral_consensus"
 
 
 # ── Successful trades ─────────────────────────────────────────────────────
@@ -381,11 +391,14 @@ class TestCounterTrendAction:
     def test_barrier_penalise_at_moderate_strength(self):
         result = _counter_trend_action("barrier_12bar", 0.20)
         assert result["action"] == "penalise"
-        assert result["confidence_mult"] == 0.75
+        assert result["confidence_mult"] == 0.60
+        assert result["vol_mult"] == 0.65  # now also penalises volume
 
     def test_barrier_allow_at_low_strength(self):
         result = _counter_trend_action("barrier_12bar", 0.05)
         assert result["action"] == "allow"
+        assert result["confidence_mult"] == 1.0
+        assert result["vol_mult"] == 1.0
 
     def test_statarb_never_blocks(self):
         result = _counter_trend_action("statarb_dynamic", 0.95)
@@ -394,7 +407,8 @@ class TestCounterTrendAction:
     def test_unknown_strategy_uses_default_threshold(self):
         result = _counter_trend_action("unknown_strategy", 0.50)
         assert result["action"] == "block"  # 0.50 >= 0.40 default block
-        assert result["confidence_mult"] == 0.80
+        assert result["confidence_mult"] == 0.60
+        assert result["vol_mult"] == 0.65
 
 
 # ── Consensus computation ─────────────────────────────────────────────────

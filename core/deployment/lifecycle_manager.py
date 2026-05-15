@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     HEALTH_CHECK_STATUS_OK,
     LIFECYCLE_AUDIT_ACTION_SHUTDOWN,
     LIFECYCLE_AUDIT_ACTION_STARTUP,

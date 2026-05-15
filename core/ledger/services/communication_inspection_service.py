@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     PAYLOAD_KEY_ACK_STATUS,
     PAYLOAD_KEY_ACKNOWLEDGED_MESSAGE_IDS,
     PAYLOAD_KEY_ADAPTER_NAME,

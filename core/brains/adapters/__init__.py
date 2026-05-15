@@ -33,12 +33,18 @@ BRAIN_TYPE_MAP: dict[str, str] = {
     "onnx_v9": "onnx",
     "deepresmlp": "onnx",
     "xgboost_v4.5": "xgboost_json",
+    "xgboost_v4.5_m15": "xgboost_json",
+    "xgboost_v4.5_h1": "xgboost_json",
+    "xgboost_v4.5_h4": "xgboost_json",
     "xgboost_v9": "xgboost_json",
     "lightgbm_v1": "lightgbm_txt",
     "ou_params_v6": "ou_params_json",
     "online_sgd": "online_sgd",
     "transformer_v4.3": "transformer_onnx",
     "transformer_v5": "transformer_onnx",
+    "transformer_v5_m15": "transformer_onnx",
+    "transformer_v5_h1": "transformer_onnx",
+    "transformer_v5_h4": "transformer_onnx",
 }
 
 __all__ = [

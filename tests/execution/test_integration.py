@@ -179,7 +179,9 @@ class TestMultiStrategyPipeline:
         """Each strategy line produces a decision independently."""
         # Barrier: long signal
         barrier = _make_strategy(
-            config=StrategyLineConfig(name="barrier_12bar", magic=90001, brain_types={"test"}),
+            config=StrategyLineConfig(
+                name="barrier_12bar", magic=90001, brain_types={"test"}, min_valid_brains=1
+            ),
             proposals=[
                 make_proposal(
                     up_probability=0.85,
@@ -191,7 +193,9 @@ class TestMultiStrategyPipeline:
         )
         # Micro: short signal
         micro = _make_strategy(
-            config=StrategyLineConfig(name="micro_3bar", magic=90002, brain_types={"test"}),
+            config=StrategyLineConfig(
+                name="micro_3bar", magic=90002, brain_types={"test"}, min_valid_brains=1
+            ),
             proposals=[
                 make_proposal(
                     up_probability=0.10,
@@ -203,7 +207,9 @@ class TestMultiStrategyPipeline:
         )
         # StatArb: long signal (oversold reversion)
         statarb = _make_strategy(
-            config=StrategyLineConfig(name="statarb_dynamic", magic=90003, brain_types={"test"}),
+            config=StrategyLineConfig(
+                name="statarb_dynamic", magic=90003, brain_types={"test"}, min_valid_brains=1
+            ),
             proposals=[
                 make_proposal(
                     up_probability=0.88,

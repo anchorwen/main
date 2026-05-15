@@ -1,0 +1,32 @@
+{
+  "schema_version": "label_contract.v1",
+  "contract_id": "label-micro-barrier-1.0.0-H1",
+  "type": "survival_barrier",
+  "horizon_bars": 4,
+  "bar_timeframe": "H1",
+  "barriers": {
+    "sl_atr_mult": 1.8,
+    "tp_atr_mult": 2.8
+  },
+  "atr_config": {
+    "timeframe": "H1",
+    "period": 14
+  },
+  "label_classes": {
+    "1": "tp_hit_first",
+    "0": "timeout",
+    "-1": "sl_hit_first"
+  },
+  "timeout_label": "timeout",
+  "metadata": {
+    "author": "quant-os",
+    "rationale": "H1 barrier contract: 4-bar horizon = 4 hours. SL=1.8xATR wider than M5/M15 (1.5x) to account for larger H1 bar noise. TP=2.8xATR gives 1.56:1 RR. ATR computed on H1 candles.",
+    "design_notes": "H1 resolution layer in HMRE architecture. 4h window matches intraday swing trading. Wider SL accounts for higher per-bar volatility on H1 timeframe.",
+    "applicable_lanes": [
+      "xgb_micro",
+      "transformer_micro"
+    ],
+    "hmre_layer": "H1",
+    "created_at": "2026-05-10"
+  }
+}

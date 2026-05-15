@@ -26,7 +26,7 @@ description: "Quant OS live & shadow unified configuration"
 # ---------------------------------------------------------------------------
 adapter:
   # Which adapter to activate: stub | file_queue | mt5 | fix
-  name: "stub"
+  name: "mt5"
 
 # ---------------------------------------------------------------------------
 # FIX — broker session configuration (required when adapter.name == "fix")
@@ -62,33 +62,42 @@ brains:
   # List of brain registry entries to load on every pipeline cycle.
   # Each entry points to a <brain_id>.json file in configs/brains/.
   registry_entries:
-    # Survival_V9 Institutional ONNX (shadow)
-    - path: "configs/brains/v9_institutional_01.json"
-      enabled: true
-    # XGBoost V4.5 Microstructure (shadow)
-    - path: "configs/brains/xgboost_v4.5.json"
-      enabled: true
-    # CRT.sur.chlg.g2026.1 — 40-dim MLP trained from CSV barrier labels
-    - path: "configs/brains/crt_sur_chlg_g2026.json"
-      enabled: true
-    # OU Params V6 Sniper — statistical arbitrage (optimized params)
+    # OU Params V6 Sniper — statistical arbitrage (champion, live)
     - path: "configs/brains/ou_params_v6.json"
       enabled: true
-    # Microstructure Transformer V5.0 — 32-bar sequence with RegimeContext ONNX (shadow)
-    - path: "configs/brains/transformer_v5.json"
-      enabled: true
-    # Online MLP V1 — streaming non-linear MLP with incremental updates (shadow)
+    # Online MLP V1 — streaming non-linear MLP with incremental updates (probation)
     - path: "configs/brains/online_learner_v1.json"
       enabled: true
-    # LightGBM V1 Institutional — leaf-wise gradient boosting, 40-dim V9 features (shadow)
-    - path: "configs/brains/lightgbm_v1.json"
+    # DeepResMLP V2 New — class-weighted retrain (live)
+    - path: "configs/brains/deepresmlp_v2_new.json"
       enabled: true
-    # DeepResMLP V1 — residual MLP with LayerNorm/GELU, 40-dim V9 features (shadow)
-    - path: "configs/brains/deep_res_mlp_v1.json"
-      enabled: true
-    # XGBoost V9 Institutional — gradient boosting on 40-dim V9 features (shadow)
-    - path: "configs/brains/xgboost_v9_institutional.json"
-      enabled: true
+    # ── HMRE M15 layer ──
+    - path: "configs/brains/xgboost_v4.5_m15.json"
+      enabled: true    # shadow
+    # ── HMRE H1 layer ──
+    - path: "configs/brains/xgboost_v4.5_h1.json"
+      enabled: true    # shadow
+    # ── HMRE H4 layer (gate-only, no independent signals) ──
+    - path: "configs/brains/xgboost_v4.5_h4.json"
+      enabled: true    # shadow, trend gate only
+    - path: "configs/brains/transformer_v5_h4.json"
+      enabled: true    # shadow, trend gate only
+
+    # ── D1 Daily Swing (separate dataset, 5-bar weekly) ──
+    - path: "configs/brains/xgboost_d1_swing.json"
+      enabled: true    # shadow, D1 5-bar daily swing
+
+    # ── Multi-TF Swing v2 (swing_24 features, trained 2026-05-15) ──
+    - path: "configs/brains/xgboost_m15_swing_xgboost_v1_20260514_165620.json"
+      enabled: true    # shadow, M15 24-bar — Sharpe 3.58
+    - path: "configs/brains/xgboost_m30_swing_xgboost_v1_20260514_165620.json"
+      enabled: true    # shadow, M30 12-bar — Sharpe 4.50
+    - path: "configs/brains/xgboost_h1_swing_xgboost_v1_20260514_165620.json"
+      enabled: true    # shadow, H1 24-bar — Sharpe 8.43
+    - path: "configs/brains/lightgbm_h1_swing_lightgbm_v1_20260514_165620.json"
+      enabled: true    # shadow, H1 24-bar — Sharpe 8.21
+    - path: "configs/brains/xgboost_h4_swing_xgboost_v1_20260514_165620.json"
+      enabled: true    # shadow, H4 18-bar — Sharpe 5.14
 
 # ---------------------------------------------------------------------------
 # Gate — dispatch policy gates
@@ -149,12 +158,13 @@ live_trading:
   symbol: "XAUUSDc"
   volume: 0.01
   interval_seconds: 60
-  confidence_threshold: 0.40
+  confidence_threshold: 0.25  # ↓ 0.40→0.25: only OU_Params profitable, lower bar
 
   # Vol-targeted position sizing — overrides fixed volume when risk_budget_usd > 0
   # position = risk_budget_usd / (ATR × sl_atr_mult × contract_size)
   # Clamped to [min_lot, max_lot] at lot_step granularity.
-  risk_budget_usd: 5.0          # Risk $5 per trade; set to 0 to use fixed volume
+  risk_budget_usd: 5.0          # Fixed USD risk per trade (fallback when equity_risk_pct=0)
+  equity_risk_pct: 0.005        # 0.5% of account equity per trade (overrides risk_budget_usd)
   min_lot: 0.01
   max_lot: 0.10
   lot_step: 0.01
@@ -188,6 +198,17 @@ live_trading:
 
   # Base data directory
   base_dir: "data"
+
+  # ── Execution safeguard modules (Pitfall 1-3) ──
+  # Event-driven bar sync: wait for real M5 bar instead of blind sleep
+  bar_sync: true                # set true to enable BarSyncPoller
+  bar_sync_timeout: 120         # max seconds to wait for new bar before fallback
+
+  # Heartbeat exit watchdog: retry + escalation for all exit dispatches
+  use_exit_watchdog: true       # set true to enable ExitWatchdog
+
+  # Spread-aware limit order monitor: shadow-record limit-equivalent entries
+  use_limit_orders: true        # set true to enable LimitOrderMonitor
 
 # ---------------------------------------------------------------------------
 # Exit Management — dynamic exit orchestration (replaces static SL/TP)
@@ -272,7 +293,9 @@ strategy_lines:
   barrier_12bar:
     enabled: true
     magic: 90001
-    brain_types: [onnx_v9, deepresmlp, online_sgd, xgboost_v9, lightgbm_v1]
+    min_valid_brains: 1    # ↓ 2→1: barrier brains frozen, only 2 remain
+    confidence_threshold: 0.25  # explicit threshold for barrier line
+    brain_types: [onnx_v9, deepresmlp, online_sgd, xgboost_v9, xgboost_v4.5, lightgbm_v1]
     base_volume: 0.01
     max_volume: 0.05
     sl:
@@ -300,23 +323,25 @@ strategy_lines:
       long_bias_discount: 0.05
 
   micro_3bar:
-    enabled: true
+    enabled: false    # disabled: both brains deeply negative (-92.59, -138.04) as of 2026-05-12
     magic: 90002
     brain_types: [xgboost_v4.5, transformer_v4.3, transformer_v5]
     base_volume: 0.01
     max_volume: 0.03
     sl:
-      base_atr_mult: 1.0
+      base_atr_mult: 1.5    # ↑ was 1.0 — outside M5 noise band (~1×ATR)
       hard_sl_ratio: 1.5
       dynamic: true
     tp:
-      base_atr_mult: 1.5
-      partial_tp_enabled: false
+      base_atr_mult: 2.5    # ↑ was 1.5 — 1.67:1 RR ratio
+      partial_tp_enabled: true     # enabled for short-horizon profit lock
+      partial_tp_ratio: 0.5
+      partial_tp_r: 1.0
     exit:
       trail_enabled: false
       flip_exit_enabled: true
       flip_threshold: 0.45
-      time_exit_cycles: 15
+      time_exit_cycles: 25   # ↑ was 15 — matches 5-bar × 5min / 1min cycles
       hesitation_cycles: 1
     budget:
       daily_loss_limit_pct: -0.02
@@ -324,12 +349,68 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.03
 
+  micro_m15:
+    enabled: true
+    magic: 90101
+    brain_types: [xgboost_v4.5_m15, transformer_v5_m15]
+    base_volume: 0.01
+    max_volume: 0.03
+    sl:
+      base_atr_mult: 1.5    # same as M5 micro — 1.5×ATR, outside noise band
+      hard_sl_ratio: 1.5
+      dynamic: true
+    tp:
+      base_atr_mult: 2.5    # 1.67:1 RR
+      partial_tp_enabled: true
+      partial_tp_ratio: 0.5
+      partial_tp_r: 1.0
+    exit:
+      trail_enabled: false
+      flip_exit_enabled: true
+      flip_threshold: 0.45
+      time_exit_cycles: 75   # 5-bar × 15min/bar / 1min cycles
+      hesitation_cycles: 1
+    budget:
+      daily_loss_limit_pct: -0.02
+      max_consecutive_losses: 6
+    direction_balance:
+      long_bias_discount: 0.03
+
+  micro_h1:
+    enabled: true
+    magic: 90201
+    brain_types: [xgboost_v4.5_h1, transformer_v5_h1]
+    base_volume: 0.01
+    max_volume: 0.02        # smaller max on H1 (higher timeframe, wider barriers)
+    sl:
+      base_atr_mult: 1.8    # wider SL for H1 timeframe (matching training contract)
+      hard_sl_ratio: 1.5
+      dynamic: true
+    tp:
+      base_atr_mult: 2.8    # 1.56:1 RR (matching training contract)
+      partial_tp_enabled: true
+      partial_tp_ratio: 0.5
+      partial_tp_r: 1.5
+    exit:
+      trail_enabled: true
+      trail_atr_mult: 2.0
+      flip_exit_enabled: true
+      flip_threshold: 0.45
+      time_exit_cycles: 240  # 4-bar × 60min/bar / 1min cycles
+      hesitation_cycles: 2
+    budget:
+      daily_loss_limit_pct: -0.015
+      max_consecutive_losses: 4    # tighter on H1: fewer trades, higher conviction
+    direction_balance:
+      long_bias_discount: 0.0
+
   statarb_dynamic:
     enabled: true
     magic: 90003
     brain_types: [ou_params_v6]
     base_volume: 0.01
     max_volume: 0.03
+    confidence_threshold: 0.20  # ↓ 0.25→0.20: emergency — only profitable brain
     sl:
       base_atr_mult: 1.5
       hard_sl_ratio: 1.5
@@ -345,12 +426,189 @@ strategy_lines:
       flip_exit_enabled: false
       time_exit_cycles: 40
       zscore_exit_enabled: true
+      confidence_decay_exit: false  # OU: confidence naturally decays as extreme normalises
       hesitation_cycles: 2
     budget:
       daily_loss_limit_pct: -0.015
       max_consecutive_losses: 4
     direction_balance:
       long_bias_discount: 0.0  # mean-reversion strategy, naturally balanced
+
+  statarb_m15:
+    enabled: false   # disabled: requires M15 mid_price pipeline
+    magic: 90103
+    brain_types: [ou_params_v6]
+    base_volume: 0.01
+    max_volume: 0.02        # reduced: wider bars, longer hold
+    confidence_threshold: 0.30
+    sl:
+      base_atr_mult: 2.0    # wider: M15 bars have 3x duration
+      hard_sl_ratio: 1.5
+      dynamic: true
+    tp:
+      base_atr_mult: 4.0    # wider: target larger moves
+      partial_tp_enabled: true
+      partial_tp_ratio: 0.5
+      partial_tp_r: 2.5
+    exit:
+      trail_enabled: true
+      trail_atr_mult: 2.0
+      flip_exit_enabled: false
+      time_exit_cycles: 120  # 3x M5 cycles
+      zscore_exit_enabled: true
+      confidence_decay_exit: false  # OU: confidence naturally decays as extreme normalises
+      hesitation_cycles: 3
+    budget:
+      daily_loss_limit_pct: -0.01
+      max_consecutive_losses: 3
+    direction_balance:
+      long_bias_discount: 0.0
+
+  # ── Multi-TF Swing strategies (D1 features, barrier contracts) ──
+  daily_swing:
+    enabled: true     # shadow only — daily feature refresh
+    magic: 90301
+    brain_types: [xgboost_v9, lightgbm_v1]
+    base_volume: 0.01
+    max_volume: 0.03
+    confidence_threshold: 0.45
+    sl:
+      base_atr_mult: 2.0
+      hard_sl_ratio: 1.5
+      dynamic: true
+    tp:
+      base_atr_mult: 3.5
+      partial_tp_enabled: true
+      partial_tp_ratio: 0.5
+      partial_tp_r: 2.0
+    exit:
+      trail_enabled: true
+      trail_atr_mult: 2.0
+      flip_exit_enabled: true
+      flip_threshold: 0.40
+      time_exit_cycles: 1440   # 5 D1 bars
+      hesitation_cycles: 3
+    budget:
+      daily_loss_limit_pct: -0.02
+      max_consecutive_losses: 3
+    direction_balance:
+      long_bias_discount: 0.0
+
+  m15_swing:
+    enabled: true     # shadow only
+    magic: 90310
+    brain_types: [xgboost_v9]
+    base_volume: 0.01
+    max_volume: 0.03
+    confidence_threshold: 0.45
+    sl:
+      base_atr_mult: 1.5
+      hard_sl_ratio: 1.5
+      dynamic: true
+    tp:
+      base_atr_mult: 3.0
+      partial_tp_enabled: true
+      partial_tp_ratio: 0.5
+      partial_tp_r: 1.5
+    exit:
+      trail_enabled: true
+      trail_atr_mult: 1.5
+      flip_exit_enabled: true
+      flip_threshold: 0.40
+      time_exit_cycles: 72     # 24 M15 bars
+      hesitation_cycles: 2
+    budget:
+      daily_loss_limit_pct: -0.015
+      max_consecutive_losses: 4
+    direction_balance:
+      long_bias_discount: 0.0
+
+  m30_swing:
+    enabled: true     # shadow only
+    magic: 90320
+    brain_types: [xgboost_v9]
+    base_volume: 0.01
+    max_volume: 0.03
+    confidence_threshold: 0.45
+    sl:
+      base_atr_mult: 1.5
+      hard_sl_ratio: 1.5
+      dynamic: true
+    tp:
+      base_atr_mult: 3.0
+      partial_tp_enabled: true
+      partial_tp_ratio: 0.5
+      partial_tp_r: 1.5
+    exit:
+      trail_enabled: true
+      trail_atr_mult: 1.5
+      flip_exit_enabled: true
+      flip_threshold: 0.40
+      time_exit_cycles: 36     # 12 M30 bars
+      hesitation_cycles: 2
+    budget:
+      daily_loss_limit_pct: -0.015
+      max_consecutive_losses: 4
+    direction_balance:
+      long_bias_discount: 0.0
+
+  h1_swing:
+    enabled: true     # shadow only
+    magic: 90330
+    brain_types: [xgboost_v9, lightgbm_v1]
+    base_volume: 0.01
+    max_volume: 0.02
+    confidence_threshold: 0.45
+    sl:
+      base_atr_mult: 2.0
+      hard_sl_ratio: 1.5
+      dynamic: true
+    tp:
+      base_atr_mult: 3.5
+      partial_tp_enabled: true
+      partial_tp_ratio: 0.5
+      partial_tp_r: 2.0
+    exit:
+      trail_enabled: true
+      trail_atr_mult: 2.0
+      flip_exit_enabled: true
+      flip_threshold: 0.40
+      time_exit_cycles: 288    # 24 H1 bars
+      hesitation_cycles: 3
+    budget:
+      daily_loss_limit_pct: -0.015
+      max_consecutive_losses: 3
+    direction_balance:
+      long_bias_discount: 0.0
+
+  h4_swing:
+    enabled: true     # shadow only
+    magic: 90340
+    brain_types: [xgboost_v9]
+    base_volume: 0.01
+    max_volume: 0.02
+    confidence_threshold: 0.45
+    sl:
+      base_atr_mult: 2.0
+      hard_sl_ratio: 1.5
+      dynamic: true
+    tp:
+      base_atr_mult: 4.0
+      partial_tp_enabled: true
+      partial_tp_ratio: 0.5
+      partial_tp_r: 2.5
+    exit:
+      trail_enabled: true
+      trail_atr_mult: 2.0
+      flip_exit_enabled: true
+      flip_threshold: 0.40
+      time_exit_cycles: 864    # 18 H4 bars
+      hesitation_cycles: 3
+    budget:
+      daily_loss_limit_pct: -0.015
+      max_consecutive_losses: 2
+    direction_balance:
+      long_bias_discount: 0.0
 
 # ---------------------------------------------------------------------------
 # Portfolio Risk — cross-strategy aggregate risk limits
@@ -373,11 +631,11 @@ regime_gate:
     high_vol_threshold: 80
     low_vol_threshold: 20
   regime_map:
-    trending:     {barrier_12bar: full,  micro_3bar: reduced, statarb_dynamic: off}
-    mild_trend:   {barrier_12bar: full,  micro_3bar: full,    statarb_dynamic: reduced}
-    ranging:      {barrier_12bar: reduced, micro_3bar: reduced, statarb_dynamic: full}
-    high_vol:     {barrier_12bar: off,   micro_3bar: full,    statarb_dynamic: reduced}
-    normal:       {barrier_12bar: full,  micro_3bar: full,    statarb_dynamic: full}
+    trending:     {barrier_12bar: full,  micro_3bar: reduced, micro_m15: reduced, micro_h1: full,    statarb_dynamic: off,    statarb_m15: off,    daily_swing: full,    m15_swing: full,    m30_swing: full,    h1_swing: full,    h4_swing: full}
+    mild_trend:   {barrier_12bar: full,  micro_3bar: full,    micro_m15: full,    micro_h1: full,    statarb_dynamic: reduced, statarb_m15: reduced, daily_swing: full,    m15_swing: full,    m30_swing: full,    h1_swing: full,    h4_swing: full}
+    ranging:      {barrier_12bar: reduced, micro_3bar: reduced, micro_m15: reduced, micro_h1: reduced, statarb_dynamic: full,    statarb_m15: full,    daily_swing: reduced, m15_swing: reduced, m30_swing: reduced, h1_swing: reduced, h4_swing: reduced}
+    high_vol:     {barrier_12bar: off,   micro_3bar: full,    micro_m15: full,    micro_h1: reduced, statarb_dynamic: reduced, statarb_m15: reduced, daily_swing: reduced, m15_swing: reduced, m30_swing: reduced, h1_swing: reduced, h4_swing: reduced}
+    normal:       {barrier_12bar: full,  micro_3bar: full,    micro_m15: full,    micro_h1: full,    statarb_dynamic: full,    statarb_m15: full,    daily_swing: full,    m15_swing: full,    m30_swing: full,    h1_swing: full,    h4_swing: full}
 
 # ---------------------------------------------------------------------------
 # Shadow — shadow replay / intent producer

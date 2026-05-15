@@ -24,12 +24,31 @@ from core.governance.governance_service import GovernanceService
 
 SCHEMA_VERSION = "champion_challenger.v1"
 
-# brain_id → lane mapping
-BRAIN_TO_LANE: dict[str, str] = {
+# brain_id prefix → lane mapping (comprehensive, covers all registered brains)
+BRAIN_ID_PREFIX_TO_LANE: dict[str, str] = {
     "V9": "sur",
-    "XGB": "mtx",
+    "CRT": "sur",
+    "XGBoost": "boost",
+    "XGB": "boost",
+    "LightGBM": "boost",
     "OU": "arb",
+    "OU_Params": "arb",
+    "Microstructure_Transformer": "mtx",
+    "DeepResMLP": "dl",
     "Online_SGD": "online_sgd",
+    "Online_MLP": "online_sgd",
+}
+
+# brain_type → lane fallback (from registry entries)
+BRAIN_TYPE_TO_LANE: dict[str, str] = {
+    "onnx_v9": "sur",
+    "xgboost_v10": "boost",
+    "xgboost_v4.5": "boost",
+    "lightgbm_v1": "boost",
+    "ou_params_v6": "arb",
+    "online_sgd_v1": "online_sgd",
+    "deep_res_mlp_v1": "dl",
+    "microstructure_transformer_v5": "mtx",
 }
 
 # Promotion criteria
@@ -48,15 +67,55 @@ def _utc_now_iso() -> str:
     )
 
 
-def _guess_lane(brain_id: str) -> str:
-    """Map brain_id to training lane, with fuzzy matching."""
-    if brain_id in BRAIN_TO_LANE:
-        return BRAIN_TO_LANE[brain_id]
+def _lookup_brain_type_from_config(brain_id: str) -> str | None:
+    """Try to read brain_type from a config file in configs/brains/."""
+    brains_dir = Path("configs/brains")
+    if not brains_dir.exists():
+        return None
+    for config_path in sorted(brains_dir.glob("*.json")):
+        if config_path.name.endswith(".normalization.json"):
+            continue
+        try:
+            entry = json.loads(config_path.read_text(encoding="utf-8"))
+            if entry.get("brain_id") == brain_id:
+                return entry.get("brain_type")
+        except (json.JSONDecodeError, FileNotFoundError):
+            continue
+    return None
+
+
+def _guess_lane(brain_id: str, *, configs_dir: str | None = None) -> str:
+    """Map brain_id to training lane. Shared with retraining_trigger.
+
+    1. Case-insensitive prefix match against BRAIN_ID_PREFIX_TO_LANE.
+    2. Fallback: read brain config JSON → brain_type → BRAIN_TYPE_TO_LANE.
+    3. Fallback: substring match on brain_id against prefix dict.
+    4. Unknown brains return "unclassified" (not silently skipped).
+    """
     upper = brain_id.upper()
-    for key, lane in BRAIN_TO_LANE.items():
-        if key in upper:
+    # 1. Prefix match (case-insensitive)
+    for prefix, lane in BRAIN_ID_PREFIX_TO_LANE.items():
+        if upper.startswith(prefix.upper()):
             return lane
-    return "unknown"
+
+    # 2. Config fallback
+    brain_type = _lookup_brain_type_from_config(brain_id)
+    if brain_type and brain_type in BRAIN_TYPE_TO_LANE:
+        return BRAIN_TYPE_TO_LANE[brain_type]
+
+    if brain_type:
+        # Fuzzy match brain_type against known types
+        for known, lane in BRAIN_TYPE_TO_LANE.items():
+            if known in brain_type or brain_type in known:
+                return lane
+
+    # 3. Substring match on brain_id prefix table
+    for prefix, lane in BRAIN_ID_PREFIX_TO_LANE.items():
+        if prefix.upper() in upper:
+            return lane
+
+    # 4. Not silently skipped — grouped for visibility
+    return "unclassified"
 
 
 def run_promotion_cycle(
@@ -92,11 +151,13 @@ def run_promotion_cycle(
         lane = _guess_lane(brain_id)
         lanes.setdefault(lane, []).append(s)
 
+    unclassified: list[str] = []
     comparisons: list[dict[str, Any]] = []
     promotions: list[dict[str, Any]] = []
 
     for lane, brains in lanes.items():
-        if lane == "unknown":
+        if lane == "unclassified":
+            unclassified = [b["brain_id"] for b in brains]
             continue
 
         # Find champion (live) and challengers (non-live) in this lane
@@ -158,12 +219,6 @@ def run_promotion_cycle(
                     "demote_to_probation",
                     reason=f"challenger:{challenger['brain_id']}",
                 )
-                # Promote challenger
-                promote_result = governance.apply_recommendation(
-                    challenger["brain_id"],
-                    "eligible_for_promotion",
-                    reason=f"outperformed:{champion['brain_id']}",
-                )
                 # Promote challenger directly to live
                 promote_result = governance.transition(
                     challenger["brain_id"],
@@ -188,6 +243,7 @@ def run_promotion_cycle(
         "brains_assessed": len(summaries),
         "comparisons": comparisons,
         "promotions": promotions,
+        "unclassified_brains": unclassified,
     }
 
 

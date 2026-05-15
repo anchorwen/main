@@ -42,11 +42,12 @@ class TransformerBrainAdapter(BaseBrainAdapter):
     def __init__(self, brain_entry: dict, feature_adapter=None):
         super().__init__(brain_entry)
         self._feature_adapter = feature_adapter
-        self._session = None
+        self._session: Any = None  # onnxruntime.InferenceSession | None
         self._input_name = "input"
-        self._seq_len = FALLBACK_SEQ_LEN  # will be updated by load() from ONNX input shape
+        self._seq_len = FALLBACK_SEQ_LEN
         self._buffer: deque = deque(maxlen=self._seq_len)
-        self._onnx_model_path = None
+        self._onnx_model_path: Any = None  # str | None
+        self._guard: Any = None  # InferenceGuard | None
 
     # ------------------------------------------------------------------
     # BaseBrainAdapter interface
@@ -71,6 +72,19 @@ class TransformerBrainAdapter(BaseBrainAdapter):
             self._backend = "stub:no_artifact_path"
             return
 
+        # ── Optional subprocess isolation ──
+        if self._brain_entry.get("inference_isolation", False):
+            try:
+                from core.brains.services.inference_guard import InferenceGuard
+
+                self._guard = InferenceGuard(artifact_path, timeout=5.0, max_restarts=3)
+                self._onnx_model_path = artifact_path
+                self._backend = "onnxruntime:transformer:isolated"
+                return
+            except Exception:
+                self._guard = None
+                # Fall through to in-process loading
+
         try:
             import onnxruntime as ort
 
@@ -87,13 +101,30 @@ class TransformerBrainAdapter(BaseBrainAdapter):
             self._backend = f"stub:{type(exc).__name__}"
             self._session = None
 
-    def run(self, snapshot, feature_source: dict | None = None) -> BrainDecisionProposal:
-        """Override to use MicrostructureFeatureAdapter for feature extraction.
+    def run(self, snapshot, feature_source=None) -> BrainDecisionProposal:
+        """Override to handle dict (single bar) or (n_bars, 9) pre-built sequence.
 
-        When feature_adapter is available, extracts 9 microstructure features
-        in canonical order and applies StandardScaler normalization before
-        appending to the sequence buffer.
+        - dict → extract 9 features → append to buffer → inference when buffer full
+        - (n_bars, 9) ndarray → skip buffer, use directly (Transformer + XGBoost compat)
+
+        When feature_source is a pre-built sequence, the adapter does NOT use
+        the internal rolling buffer — it passes the sequence directly to infer().
         """
+        if isinstance(feature_source, np.ndarray) and feature_source.ndim == 2:
+            # Pre-built (n_bars, 9) sequence — use directly (skip buffer)
+            if self._feature_adapter is not None and hasattr(
+                self._feature_adapter, "build_sequence_input"
+            ):
+                seq_batch = self._feature_adapter.build_sequence_input(feature_source)
+            else:
+                seq = feature_source.astype(np.float32)
+                seq_batch = seq.reshape(1, seq.shape[0], 9)
+            # Trim to model's expected sequence length (most recent bars)
+            if seq_batch.shape[1] > self._seq_len:
+                seq_batch = seq_batch[:, -self._seq_len :, :]
+            raw_output = self.infer_sequence(seq_batch)
+            return self.get_signal(raw_output)
+
         if self._feature_adapter is not None and feature_source is not None:
             feature_vector = self._feature_adapter.build_model_input(feature_source).ravel()
         elif feature_source is not None:
@@ -101,6 +132,44 @@ class TransformerBrainAdapter(BaseBrainAdapter):
         else:
             feature_vector = np.zeros(NUM_FEATURES, dtype=np.float64)
         return self.inference(feature_vector)
+
+    def _run_transformer(self, model_input: np.ndarray) -> list | None:
+        """Run ONNX inference through guard or in-process session.
+
+        Returns list of output arrays from ONNX, or None on failure.
+        """
+        if self._guard is not None and self._guard.is_alive:
+            result = self._guard.infer(self._input_name, None, model_input)
+            if result is not None:
+                return result
+        if self._session is not None:
+            return self._session.run(None, {self._input_name: model_input})
+        return None
+
+    def infer_sequence(self, sequence_batch: np.ndarray) -> dict[str, Any]:
+        """Run ONNX inference on a pre-built (1, seq_len, 9) sequence.
+
+        Unlike infer(), this skips the internal rolling buffer and uses
+        the provided sequence directly.  Used when feature_source is a
+        pre-computed numpy array.
+        """
+        started = perf_counter()
+        output = self._run_transformer(sequence_batch)
+        runtime_ms = (perf_counter() - started) * 1000.0
+
+        if output is not None:
+            return {
+                "raw_score": float(output[0].ravel()[0]),
+                "feature_count": int(sequence_batch.size),
+                "runtime_ms": runtime_ms,
+                "fallback": False,
+            }
+        return {
+            "raw_score": 0.0,
+            "feature_count": int(sequence_batch.size),
+            "fallback": True,
+            "fallback_reason": "no_onnx_session",
+        }
 
     def infer(self, feature_vector: np.ndarray) -> dict[str, Any]:
         """Run Transformer inference on accumulated sequence.
@@ -125,28 +194,26 @@ class TransformerBrainAdapter(BaseBrainAdapter):
                 "buffer_size": len(self._buffer),
             }
 
-        if self._session is None:
-            return {
-                "raw_score": 0.0,
-                "feature_count": len(feature_vector),
-                "fallback": True,
-                "fallback_reason": "no_onnx_session",
-            }
-
         # Build sequence batch: (1, self._seq_len, NUM_FEATURES)
         sequence = np.stack(list(self._buffer), axis=0, dtype=np.float32)
         sequence = sequence.reshape(1, self._seq_len, NUM_FEATURES)
 
         started = perf_counter()
-        output = self._session.run(None, {self._input_name: sequence})
-        raw_score = float(output[0].ravel()[0])
+        output = self._run_transformer(sequence)
         runtime_ms = (perf_counter() - started) * 1000.0
 
+        if output is not None:
+            return {
+                "raw_score": float(output[0].ravel()[0]),
+                "feature_count": len(feature_vector),
+                "runtime_ms": runtime_ms,
+                "fallback": False,
+            }
         return {
-            "raw_score": raw_score,
+            "raw_score": 0.0,
             "feature_count": len(feature_vector),
-            "runtime_ms": runtime_ms,
-            "fallback": False,
+            "fallback": True,
+            "fallback_reason": "no_onnx_session",
         }
 
     def get_signal(self, raw_output: dict[str, Any]) -> BrainDecisionProposal:

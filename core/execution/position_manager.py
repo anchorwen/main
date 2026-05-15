@@ -18,7 +18,9 @@ mt5_bridge_worker pipeline; the bridge already supports ``modify_sltp`` and
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -48,6 +50,7 @@ class ActivePosition:
     # Context captured at entry
     entry_atr: float
     entry_cycle: int
+    entry_z_score: float = 0.0  # OU z-score at entry (0 = unknown / recovered position)
     entry_consensus: dict[str, Any] = field(default_factory=dict)
     supporting_brain_ids: list[str] = field(default_factory=list)
 
@@ -62,6 +65,12 @@ class ActivePosition:
     r_milestones_hit: list[str] = field(default_factory=list)
     cycles_held: int = 0
     highest_r: float = 0.0  # peak R-multiple achieved
+    prev_r: float = 0.0  # previous cycle's R (for trajectory scoring)
+    partial_tp_triggered: bool = False  # partial take-profit already executed
+    partial_tp_r: float = 0.0  # R-multiple at which to trigger partial TP (0=disabled)
+    partial_tp_ratio: float = 0.5  # fraction of volume to close at partial TP
+    confidence_ema: float = 0.0  # EMA-smoothed confidence for noise-immune exit
+    confidence_alpha: float = 0.4  # EMA smoothing factor (0.4 ≈ 3 cycles to stabilise)
 
 
 # ── Manager ────────────────────────────────────────────────────────────────
@@ -90,8 +99,17 @@ class ActivePositionManager:
         max_hold_cycles: int = 60,
         require_min_r: float = 0.3,
         min_step: float = 0.005,  # minimum SL change to fire modify (~0.5 pip XAUUSD)
-        max_lock_atr: float = 1.0,  # max R to lock in via trailing (capped at original_SL + max_lock_atr × entry_atr)
+        max_lock_atr: float = 4.0,  # max R to lock in via trailing (capped at original_SL + max_lock_atr × entry_atr)
+        graduated_lock_enabled: bool = True,  # graduated profit locking: SL floor rises with R milestones
+        graduated_lock_levels: tuple[tuple[float, float], ...] = (
+            (3.0, 1.5),  # at +3R peak, SL floor ≥ +1.5R (protect 50% of peak)
+            (5.0, 3.5),  # at +5R peak, SL floor ≥ +3.5R (protect 70% of peak)
+        ),
+        confidence_decay_enabled: bool = True,  # per-strategy confidence_decay_exit toggle
+        hesitation_cycles: int = 0,  # exit if breakeven not reached within N cycles (0=disabled)
         flip_confirm_count: int = 2,  # consecutive flips required before brain-flip exit
+        min_hold_cycles: int = 3,  # minimum cycles before non-SL exit (toxicity veto can override)
+        toxicity_velocity_mult: float = 3.0,  # tick-velocity multiplier for toxicity veto
         pnl_store: Any = None,  # BrainPnLStore for brain-specific trail tuning
         meta_exit_engine: Any = None,  # MetaExitEngine for multi-factor exit scoring
     ):
@@ -106,7 +124,13 @@ class ActivePositionManager:
         self.require_min_r = require_min_r
         self.min_step = min_step
         self.max_lock_atr = max_lock_atr
+        self.graduated_lock_enabled = graduated_lock_enabled
+        self.graduated_lock_levels = graduated_lock_levels
+        self.confidence_decay_enabled = confidence_decay_enabled
+        self.hesitation_cycles = hesitation_cycles
         self.flip_confirm_count = flip_confirm_count
+        self.min_hold_cycles = min_hold_cycles
+        self.toxicity_velocity_mult = toxicity_velocity_mult
         self.pnl_store = pnl_store
         self.meta_exit_engine = meta_exit_engine
 
@@ -114,6 +138,8 @@ class ActivePositionManager:
         self._last_brain_reeval_cycle: int = -1
         self._entry_consensus_score: float = 0.0
         self._consecutive_flips: int = 0  # for 2-confirmation flip exit
+        self._last_state_path: str | None = None
+        self._recovery_cycle: int = -1  # -1=normal, >=0=in grace period (increments each cycle)
 
     # ── Public API ──────────────────────────────────────────────────────
 
@@ -123,10 +149,27 @@ class ActivePositionManager:
     def get_position(self) -> ActivePosition | None:
         return self._position
 
+    def is_in_grace_period(self, max_cycles: int = 5) -> bool:
+        """True during the first N cycles after a position is recovered from disk.
+
+        During grace period the system skips Layer 2 (brain flip), Layer 2.5
+        (Meta Exit), and Layer 3 (time decay) to give restarted features time
+        to stabilize.  Layer 1 (trailing stop + hard SL) still runs normally.
+        """
+        return 0 <= self._recovery_cycle < max_cycles
+
     def clear_position(self) -> None:
         self._position = None
         self._last_brain_reeval_cycle = -1
         self._entry_consensus_score = 0.0
+        self._recovery_cycle = -1
+        if self._last_state_path is not None:
+            try:
+                _p = Path(self._last_state_path)
+                if _p.exists():
+                    _p.unlink()
+            except OSError:
+                pass
 
     def register_position(
         self,
@@ -139,12 +182,36 @@ class ActivePositionManager:
         initial_tp: float,
         entry_atr: float,
         entry_cycle: int,
+        entry_z_score: float = 0.0,
         entry_consensus: dict[str, Any] | None = None,
         supporting_brain_ids: list[str] | None = None,
         model_horizons: dict[str, int] | None = None,
         current_high: float | None = None,
+        partial_tp_r: float = 0.0,
+        partial_tp_ratio: float = 0.5,
     ) -> ActivePosition:
-        """Record a newly-opened position (or recover one after restart)."""
+        """Record a newly-opened position (or recover one after restart).
+
+        Refuses to overwrite an existing active position — the caller must
+        call clear_position() first if the old position was closed.
+        """
+        if self._position is not None:
+            import json as _json
+
+            _existing_ticket = self._position.ticket
+            _msg = _json.dumps(
+                {
+                    "event": "register_position_blocked",
+                    "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+                    "existing_ticket": _existing_ticket,
+                    "new_ticket": ticket,
+                    "reason": "active_position_exists",
+                },
+                ensure_ascii=False,
+            )
+            print(_msg, flush=True)
+            return self._position  # keep existing position, reject new one
+
         high = current_high if current_high is not None else entry_price
         low = entry_price  # worst-case for a long; for short we'd swap
 
@@ -161,15 +228,22 @@ class ActivePositionManager:
             lowest_low=min(low, entry_price),
             entry_atr=entry_atr,
             entry_cycle=entry_cycle,
+            entry_z_score=entry_z_score,
             entry_consensus=dict(entry_consensus or {}),
             supporting_brain_ids=list(supporting_brain_ids or []),
             model_horizons=dict(model_horizons or {}),
             trail_multiplier=self.trail_atr_mult,
+            partial_tp_r=partial_tp_r,
+            partial_tp_ratio=partial_tp_ratio,
         )
         self._entry_consensus_score = float(
             self._position.entry_consensus.get("consensus_score", 0)
         )
+        # Seed EMA with entry confidence so first-cycle drop is measured
+        # against a warm start, not zero
+        self._position.confidence_ema = self._entry_consensus_score
         self._consecutive_flips = 0
+        self._recovery_cycle = -1  # normal entry, no grace period
         return self._position
 
     def update_prices(
@@ -187,12 +261,14 @@ class ActivePositionManager:
             return {}
 
         pos.cycles_held += 1
+        if self._recovery_cycle >= 0:
+            self._recovery_cycle += 1
 
         # Track extremes
         pos.highest_high = max(pos.highest_high, bid if pos.side == "long" else ask)
         pos.lowest_low = min(pos.lowest_low, ask if pos.side == "long" else bid)
 
-        # Track peak R
+        # Track peak R (prev_r already holds last cycle's value from prior update)
         r_now = self._compute_r_multiple(mid)
         pos.highest_r = max(pos.highest_r, r_now)
 
@@ -232,6 +308,12 @@ class ActivePositionManager:
                 candidate = max(candidate, pos.entry_price)
             # Never go below original SL (respect model training contract)
             candidate = max(candidate, pos.initial_sl)
+            # Graduated lock floor: SL rises with R-milestones (e.g. +2R→lock 0.5R)
+            if self.graduated_lock_enabled and pos.entry_atr > 0:
+                current_r = (pos.highest_high - pos.entry_price) / pos.entry_atr
+                for r_threshold, lock_r in self.graduated_lock_levels:
+                    if current_r >= r_threshold:
+                        candidate = max(candidate, pos.entry_price + lock_r * pos.entry_atr)
             # Lock-in cap: trail cannot lock more than max_lock_atr × entry_atr profit
             max_lock_level = pos.entry_price + self.max_lock_atr * pos.entry_atr
             candidate = min(candidate, max_lock_level)
@@ -244,6 +326,12 @@ class ActivePositionManager:
                 candidate = min(candidate, pos.entry_price)
             # Never go above original SL
             candidate = min(candidate, pos.initial_sl)
+            # Graduated lock floor: SL falls with R-milestones
+            if self.graduated_lock_enabled and pos.entry_atr > 0:
+                current_r = (pos.entry_price - pos.lowest_low) / pos.entry_atr
+                for r_threshold, lock_r in self.graduated_lock_levels:
+                    if current_r >= r_threshold:
+                        candidate = min(candidate, pos.entry_price - lock_r * pos.entry_atr)
             # Lock-in cap
             max_lock_level = pos.entry_price - self.max_lock_atr * pos.entry_atr
             candidate = max(candidate, max_lock_level)
@@ -262,6 +350,23 @@ class ActivePositionManager:
             return (pos.highest_high - pos.entry_price) >= threshold
         else:
             return (pos.entry_price - pos.lowest_low) >= threshold
+
+    def should_partial_tp(self, mid: float) -> tuple[bool, float, float]:
+        """Return (trigger, close_volume, remaining_volume) if partial TP should fire.
+
+        Only fires once per position.  When mid reaches partial_tp_r × risk,
+        return the close_volume (= volume × partial_tp_ratio).
+        """
+        pos = self._position
+        if pos is None or pos.partial_tp_triggered or pos.partial_tp_r <= 0:
+            return False, 0.0, 0.0
+
+        r = self._compute_r_multiple(mid)
+        if r >= pos.partial_tp_r:
+            close_vol = round(pos.volume * pos.partial_tp_ratio, 2)
+            remain_vol = round(pos.volume - close_vol, 2)
+            return True, max(0.01, close_vol), max(0.01, remain_vol)
+        return False, 0.0, 0.0
 
     def _compute_r_multiple(self, mid: float) -> float:
         """Current R-multiple (fraction of initial risk)."""
@@ -291,8 +396,8 @@ class ActivePositionManager:
     def _adjust_trail_for_regime(
         self, current_atr: float, regime_info: dict[str, Any] | None = None
     ) -> None:
-        """Dynamically adjust trail multiplier based on volatility regime
-        and brain-specific P&L performance."""
+        """Dynamically adjust trail multiplier based on volatility regime,
+        realised volatility expansion/contraction, and brain-specific P&L."""
         pos = self._position
         if pos is None:
             return
@@ -305,16 +410,43 @@ class ActivePositionManager:
         else:
             base = self.trail_atr_mult
 
-        # Apply R-milestone tightening on top
-        if "3R" in pos.r_milestones_hit:
-            base *= 0.5
-        elif "2R" in pos.r_milestones_hit:
-            base *= 0.7
+        # Volatility-adaptive K: widen in expanding vol (trend acceleration),
+        # tighten in contracting vol (trend exhaustion).  Replaces the old
+        # R-milestone tightening which punished trades for being successful.
+        base = self._compute_adaptive_trail_k(current_atr, pos, base)
 
         # Apply brain-specific adjustment based on live P&L performance
         base *= self._compute_brain_specific_trail_scale()
 
         pos.trail_multiplier = round(base, 3)
+
+    def _compute_adaptive_trail_k(
+        self, current_atr: float, pos: ActivePosition, base_k: float
+    ) -> float:
+        """Adjust trail multiplier based on realised volatility dynamics.
+
+        Core principle:
+          - Volatility expanding (trend accelerating) → widen trail, give room
+          - Volatility contracting (trend exhausting) → tighten trail, protect gains
+          - Stable volatility → use regime base K unchanged
+
+        Returns adjusted K in [1.2, 4.0].
+        """
+        if pos.entry_atr <= 0:
+            return base_k
+
+        vol_ratio = current_atr / pos.entry_atr
+
+        if vol_ratio > 1.5:
+            k = base_k + 0.8  # strong trend acceleration — wide trail
+        elif vol_ratio > 1.2:
+            k = base_k + 0.4  # mild expansion — moderately wide
+        elif vol_ratio < 0.7:
+            k = base_k - 0.3  # volatility collapse — tighten
+        else:
+            k = base_k  # stable — use regime base
+
+        return max(1.2, min(4.0, k))
 
     def _compute_brain_specific_trail_scale(self) -> float:
         """Scale trail multiplier by supporting brains' live Sharpe ratios.
@@ -354,12 +486,27 @@ class ActivePositionManager:
         self,
         current_consensus: dict[str, Any],
         current_supporting: list[str],
+        mid: float | None = None,
     ) -> tuple[bool, str]:
         """Check if brain consensus has flipped against the entry direction.
 
-        Requires ``flip_confirm_count`` consecutive flip detections to avoid
-        exiting on single-cycle noise.  An immediate exit is triggered only
-        when the flip ratio is extreme (≥0.70).
+        Three checks (in priority order):
+
+        1. **Signal-reversal**: the FULL brain consensus direction now opposes
+           the position side — immediate exit.  This catches cases where the
+           aggregate brain opinion has reversed even if the original supporting
+           brains haven't all flipped individually.
+
+        2. **Support-flip**: previously-supporting brains have withdrawn
+           support — requires ``flip_confirm_count`` consecutive detections
+           (or immediate at ≥70% flip ratio).
+
+        3. **EMA-filtered confidence decay**: smoothed confidence has fallen
+           below entry confidence by more than ``confidence_drop_threshold``.
+           EMA low-pass removes white noise while preserving trend sensitivity.
+
+        Minimum-hold protection: during the first ``min_hold_cycles``, exits
+        are suppressed unless the toxicity veto fires (price near hard SL).
 
         Returns (should_exit, reason).
         """
@@ -367,39 +514,66 @@ class ActivePositionManager:
         if pos is None:
             return False, ""
 
+        # ── Minimum-hold protection with toxicity veto ──
+        if self._is_protected_period() and not self._toxicity_veto(mid if mid is not None else 0.0):
+            return False, "protected_min_hold"
+
+        # ── 1. Signal-reversal: full consensus opposes position ──
+        consensus_dir = str(current_consensus.get("aggregated_bias", "neutral"))
+        if consensus_dir not in ("long", "short", "neutral"):
+            consensus_dir = "neutral"
+        if consensus_dir != "neutral" and consensus_dir != pos.side:
+            return True, f"signal_reversal_consensus_{consensus_dir}_vs_{pos.side}"
+
         entry_ids = set(pos.supporting_brain_ids)
 
-        # 1. Flip check: how many previously-supporting brains flipped?
+        # ── 2. Flip check: how many previously-supporting brains flipped? ──
         flip_detected = False
         flip_ratio = 0.0
+        single_brain = len(entry_ids) == 1
         if entry_ids:
             current_support_set = set(current_supporting)
             flipped = entry_ids - current_support_set
             flip_ratio = len(flipped) / len(entry_ids)
-            if flip_ratio >= self.flip_exit_threshold:
+            if single_brain:
+                # Single-brain strategy: require the brain to fully withdraw
+                # (100% flip) — a momentary neutral is not enough.  Also
+                # requires +1 extra consecutive confirmation (3 total).
+                if flip_ratio >= 1.0:
+                    flip_detected = True
+            elif flip_ratio >= self.flip_exit_threshold:
                 flip_detected = True
 
-        # 2. Confidence drop check
+        # ── 3. EMA-filtered confidence decay ──
+        # EMA low-pass filter removes high-frequency white noise while
+        # preserving 30s sampling responsiveness.  A true reversal will
+        # push the EMA below threshold within 3-4 cycles; a momentary
+        # jitter is absorbed by the smoothing.
         current_score = float(current_consensus.get("consensus_score", 0))
-        drop = self._entry_consensus_score - current_score
-        confidence_dropped = drop > self.confidence_drop_threshold
+        pos.confidence_ema = (
+            pos.confidence_alpha * current_score + (1.0 - pos.confidence_alpha) * pos.confidence_ema
+        )
+        ema_drop = self._entry_consensus_score - pos.confidence_ema
 
-        # ── Consecutive confirmation logic ──
+        # ── Consecutive confirmation logic (flip only — reversal is immediate) ──
         if flip_detected:
             self._consecutive_flips += 1
-            # Immediate exit on extreme flip
-            if flip_ratio >= 0.70:
+            _confirm_needed = self.flip_confirm_count + (1 if single_brain else 0)
+            # Single-brain: never treat as "extreme" (100% is the only
+            # possible flip_ratio for a single brain).  Always require
+            # consecutive confirmation.
+            if not single_brain and flip_ratio >= 0.70:
                 self._consecutive_flips = 0
                 return True, f"brain_flip_extreme_{int(flip_ratio*100)}pct"
-            # Exit after confirm_count consecutive flips
-            if self._consecutive_flips >= self.flip_confirm_count:
+            # Exit after required consecutive flips
+            if self._consecutive_flips >= _confirm_needed:
                 self._consecutive_flips = 0
-                return True, f"brain_flip_{int(flip_ratio*100)}pct_c{self.flip_confirm_count}"
+                return True, f"brain_flip_{int(flip_ratio*100)}pct_c{_confirm_needed}"
         else:
             self._consecutive_flips = 0
 
-        if confidence_dropped:
-            return True, f"confidence_drop_{drop:.3f}"
+        if self.confidence_decay_enabled and ema_drop > self.confidence_drop_threshold:
+            return True, f"confidence_decay_ema_{ema_drop:.3f}"
 
         return False, ""
 
@@ -410,11 +584,52 @@ class ActivePositionManager:
     def mark_brains_reevaluated(self, cycle_count: int) -> None:
         self._last_brain_reeval_cycle = cycle_count
 
-    def should_exit_ou_based(self, z_score: float, z_exit: float = 0.3) -> tuple[bool, str]:
-        """OU mean-reversion exit: exit when Z-score reverts to near zero.
+    def should_exit_ou_based(self, current_z_score: float, z_exit: float = 0.3) -> tuple[bool, str]:
+        """纯粹的均值回归平仓判定。
 
-        This is the natural exit for the ARB OU brain — it enters when
-        |z| > z_entry and exits when |z| < z_exit (mean reversion complete).
+        只有极端偏离入场的单子（|entry_z| >= 1.5），
+        才有资格因为 |current_z| < 0.3 而平仓。
+        时间维度的风控交给 TimeStop 模块，此处不做 warmup。
+        """
+        pos = self._position
+        if pos is None:
+            return False, ""
+
+        entry_z = abs(pos.entry_z_score)
+
+        # Gate 1: 入场不极端 → 直接否决（来自非OU逻辑开仓或重启恢复的仓位）
+        if entry_z < 1.5:
+            return False, f"ou_ignored_low_entry_z_{entry_z:.2f}"
+
+        # Gate 2: 当前仍处于极端 → 继续持有，等待回归
+        if abs(current_z_score) >= z_exit:
+            return False, "ou_waiting_for_reversion"
+
+        # Gate 3: 从极端回归到均值 → 触发平仓
+        return True, f"ou_revert_target_reached_z{abs(current_z_score):.2f}_from_{entry_z:.1f}"
+
+    # ── Z-score dynamic exit (v3.1) ──
+
+    def should_exit_zscore_dynamic(
+        self,
+        current_z_score: float,
+        mid: float,
+        current_atr: float,
+        bars_held: int | None = None,
+        m1_candles: list[dict[str, float]] | None = None,
+        z_entry: float = 1.5,
+        z_exit: float = 0.3,
+        max_hold: int = 8,
+    ) -> tuple[bool, str]:
+        """PnL-aware dynamic Z-score exit with toxic flow stop.
+
+        Decision tree:
+          1. |z| < z_exit AND PnL > 0 → profitable reversion → EXIT
+          2. |z| < z_exit AND PnL < 0 → mean drift trap → DO NOT EXIT
+             → fall through to toxic flow / time-based exit
+          3. bars_held >= 6 → check toxic flow (M1 extreme momentum against position)
+          4. bars_held >= max_hold → hard deadline → EXIT
+          5. PnL <= -2.0 ATR any time → hard stop → EXIT
 
         Returns (should_exit, reason).
         """
@@ -422,9 +637,140 @@ class ActivePositionManager:
         if pos is None:
             return False, ""
 
-        if abs(z_score) < z_exit:
-            return True, f"ou_reversion_z{abs(z_score):.2f}"
-        return False, ""
+        entry_z = abs(pos.entry_z_score)
+        if entry_z < z_entry:
+            return False, f"z_dyn_ignored_low_entry_z_{entry_z:.2f}"
+
+        r_now = self._compute_r_multiple(mid)
+        effective_bars = bars_held if bars_held is not None else pos.cycles_held
+
+        # ── 1. Profitable reversion ──
+        if abs(current_z_score) < z_exit:
+            if r_now > 0:
+                return True, f"z_reversion_profit_z{abs(current_z_score):.2f}_r{r_now:.2f}"
+            else:
+                # Mean drift trap detected — log it
+                self._log_mean_drift(entry_z, current_z_score, effective_bars, r_now, mid)
+                # Fall through to toxic flow / time checks below
+                # (explicitly NOT exiting here)
+
+        # ── 2. Hard stop: PnL <= -2.0 ATR ──
+        if r_now <= -2.0:
+            return True, f"z_hard_stop_r{r_now:.2f}"
+
+        # ── 3. Toxic flow stop (bars 6+) ──
+        if effective_bars >= 6 and effective_bars < max_hold:
+            toxic = self._detect_toxic_flow(m1_candles, pos.side, current_atr)
+            if toxic:
+                return True, f"z_toxic_flow_bar{effective_bars}_r{r_now:.2f}"
+
+        # ── 4. Hard deadline ──
+        if effective_bars >= max_hold:
+            return True, f"z_deadline_bar{effective_bars}_r{r_now:.2f}"
+
+        return False, "z_holding"
+
+    # ── Toxic flow detection ──
+
+    @staticmethod
+    def _detect_toxic_flow(
+        candles: list[dict[str, float]] | None,
+        side: str,
+        atr: float,
+    ) -> bool:
+        """Detect extreme one-sided momentum against the position.
+
+        When short: 2 consecutive bullish engulfing M5 bars (body > 0.3 × ATR,
+        close > previous high) signal toxic flow against the position.
+
+        When long: 2 consecutive bearish engulfing M5 bars signal toxic flow.
+
+        Falls back to M5 bars in `candles`; if none provided, returns False.
+        """
+        if not candles or len(candles) < 2:
+            return False
+
+        body_threshold = 0.3 * atr
+        last_two = candles[-2:]
+
+        bodies: list[float] = []
+        for c in last_two:
+            o = float(c.get("open", 0))
+            cl = float(c.get("close", 0))
+            bodies.append(abs(cl - o))
+
+        if side == "short":
+            # Looking for bullish engulfing: both bars close above open, second bar
+            # engulfs first (higher high, lower low), bodies above threshold
+            for i in range(2):
+                o = float(last_two[i].get("open", 0))
+                cl = float(last_two[i].get("close", 0))
+                if cl <= o or bodies[i] < body_threshold:
+                    return False
+            # Check engulfing on second bar
+            h0 = float(last_two[0].get("high", 0))
+            l0 = float(last_two[0].get("low", 0))
+            h1 = float(last_two[1].get("high", 0))
+            l1 = float(last_two[1].get("low", 0))
+            if h1 > h0 and l1 < l0:
+                return True
+        elif side == "long":
+            # Looking for bearish engulfing: both bars close below open
+            for i in range(2):
+                o = float(last_two[i].get("open", 0))
+                cl = float(last_two[i].get("close", 0))
+                if cl >= o or bodies[i] < body_threshold:
+                    return False
+            h0 = float(last_two[0].get("high", 0))
+            l0 = float(last_two[0].get("low", 0))
+            h1 = float(last_two[1].get("high", 0))
+            l1 = float(last_two[1].get("low", 0))
+            if h1 > h0 and l1 < l0:
+                return True
+
+        return False
+
+    # ── Mean drift logging ──
+
+    def _log_mean_drift(
+        self,
+        entry_z: float,
+        current_z: float,
+        bars_held: int,
+        pnl_r: float,
+        mid: float,
+    ) -> None:
+        """Log mean drift trap event for future escape-hatch optimisation.
+
+        Mean drift = |z| < 0.3 but PnL < 0 — the MA caught up with price,
+        not a real reversion.  This is a data goldmine for optimising
+        escape-hatch logic.
+        """
+        pos = self._position
+        drift_magnitude = abs(entry_z) - abs(current_z) if pos is not None else 0.0
+
+        record: dict[str, object] = {
+            "event": "mean_drift_trap",
+            "entry_z": round(entry_z, 4),
+            "current_z": round(current_z, 4),
+            "drift_magnitude": round(drift_magnitude, 4),
+            "bars_held": bars_held,
+            "pnl_r": round(pnl_r, 4),
+            "mid": round(mid, 2),
+        }
+        if pos is not None:
+            record["entry_price"] = round(pos.entry_price, 2)
+            record["side"] = pos.side
+            record["entry_z_score"] = round(pos.entry_z_score, 4)
+            if pos.entry_atr > 0:
+                record["price_move_vs_entry"] = round((mid - pos.entry_price) / pos.entry_atr, 4)
+
+        import json as _json
+
+        print(
+            _json.dumps(record, ensure_ascii=False, default=str),
+            flush=True,
+        )
 
     # ── Layer 2.5: Meta-model multi-factor exit ────────────────────────
 
@@ -465,6 +811,7 @@ class ActivePositionManager:
         snap = ExitFeatureSnapshot(
             # PnL state
             current_r=round(r_now, 4),
+            prev_r=round(pos.prev_r, 4),
             peak_r=round(pos.highest_r, 4),
             drawdown_r=round(max(0.0, pos.highest_r - r_now), 4),
             # Time state
@@ -490,6 +837,9 @@ class ActivePositionManager:
 
         evaluation = self.meta_exit_engine.evaluate(snap)
 
+        # Save current R for next cycle's trajectory comparison
+        pos.prev_r = round(r_now, 4)
+
         if evaluation.should_exit:
             return True, f"meta_exit_u{evaluation.exit_urgency:.2f}_{evaluation.exit_reason}"
 
@@ -503,6 +853,39 @@ class ActivePositionManager:
         if not pos_side or not trend_dir:
             return True  # unknown → assume aligned
         return pos_side == trend_dir
+
+    def compute_trail_tp(self, current_atr: float) -> float | None:
+        """Return new TP if it should be tightened based on ATR contraction.
+
+        TP only moves INWARD (closer to entry) — never widens.  When ATR
+        contracts significantly vs entry ATR, the original TP becomes
+        unrealistically far, so we tighten it to match current volatility.
+
+        Long:  candidate = mid + tp_atr_mult × current_atr  (but ≤ original TP)
+        Short: candidate = mid - tp_atr_mult × current_atr  (but ≥ original TP)
+        """
+        pos = self._position
+        if pos is None or pos.entry_atr <= 0 or current_atr <= 0:
+            return None
+
+        atr_ratio = current_atr / pos.entry_atr
+        # Only tighten when ATR has contracted meaningfully
+        if atr_ratio > 0.80:
+            return None
+
+        # Compute what the TP would be at current ATR
+        tp_distance = (
+            self.trail_atr_mult * current_atr * 1.75
+        )  # TP trail uses 1.75x the SL trail mult
+        if pos.side == "long":
+            candidate = pos.entry_price + tp_distance
+            if candidate < pos.current_tp:
+                return round(candidate, 3)
+        else:
+            candidate = pos.entry_price - tp_distance
+            if candidate > pos.current_tp:
+                return round(candidate, 3)
+        return None
 
     # ── Layer 3: Time / regime-based exit ───────────────────────────────
 
@@ -521,29 +904,41 @@ class ActivePositionManager:
             return self.max_hold_cycles
         return min(horizons)
 
-    def should_exit_time_based(self, mid: float) -> tuple[bool, str]:
+    def should_exit_time_based(
+        self,
+        mid: float,
+        override_horizon: int | None = None,
+        override_min_r: float | None = None,
+    ) -> tuple[bool, str]:
         """Phased time-decay exit based on model training horizon.
 
         Phase 1 (0-50% of horizon): model prediction is still valid, no time pressure.
         Phase 2 (50-80% of horizon): need ≥0.3R to avoid time exit.
         Phase 3 (80-100% of horizon): need ≥0.5R to avoid time exit.
         Phase 4 (>100% of horizon): model prediction expired, exit unless ≥1.0R.
+
+        *override_horizon* and *override_min_r* allow per-strategy tuning.
         """
         pos = self._position
         if pos is None:
             return False, ""
 
         r_now = self._compute_r_multiple(mid)
-        effective_horizon = self._get_effective_horizon()
+        effective_horizon = (
+            override_horizon
+            if override_horizon is not None and override_horizon > 0
+            else self._get_effective_horizon()
+        )
+        min_r = override_min_r if override_min_r is not None else self.require_min_r
         ratio = pos.cycles_held / max(effective_horizon, 1)
 
         if ratio < 0.50:
             return False, ""
         elif ratio < 0.80:
-            if r_now < self.require_min_r:  # 0.3R default
+            if r_now < min_r:
                 return True, f"time_phase2_{pos.cycles_held}c_h{effective_horizon}_r{r_now:.2f}"
         elif ratio < 1.00:
-            if r_now < self.require_min_r * 1.67:  # ~0.5R
+            if r_now < min_r * 1.67:  # ~0.5R when min_r=0.3
                 return True, f"time_phase3_{pos.cycles_held}c_h{effective_horizon}_r{r_now:.2f}"
         else:
             if r_now < 1.0:
@@ -552,6 +947,67 @@ class ActivePositionManager:
                     f"time_phase4_expired_{pos.cycles_held}c_h{effective_horizon}_r{r_now:.2f}",
                 )
         return False, ""
+
+    def should_exit_hesitation(self) -> tuple[bool, str]:
+        """Exit if position has not triggered breakeven within hesitation_cycles.
+
+        Catches positions that never gain traction — the consensus said "trade"
+        but the market did not follow through.  Returns (should_exit, reason).
+        """
+        if self.hesitation_cycles <= 0:
+            return False, ""
+        pos = self._position
+        if pos is None:
+            return False, ""
+        if pos.breakeven_triggered:
+            return False, ""
+        if pos.cycles_held >= self.hesitation_cycles:
+            return True, f"hesitation_{pos.cycles_held}c_no_breakeven"
+        return False, ""
+
+    # ── Minimum hold protection with toxicity veto ──────────────────────
+
+    def _is_protected_period(self) -> bool:
+        """True during the first min_hold_cycles after entry.
+
+        During protection, non-SL exits (Layer 2/2.5/3) are suppressed
+        unless the toxicity veto fires.
+        """
+        pos = self._position
+        if pos is None:
+            return False
+        return pos.cycles_held < self.min_hold_cycles
+
+    def _toxicity_veto(self, mid: float, tick_velocity: float | None = None) -> bool:
+        """Emergency escape: override protection when market is toxic.
+
+        Triggers when (any):
+          1. Price is within 0.3 × entry_atr of the hard SL (about to stop out)
+          2. Instantaneous tick velocity exceeds toxicity_velocity_mult × baseline
+
+        Returns True when the position should NOT be protected.
+        """
+        pos = self._position
+        if pos is None:
+            return False
+
+        # Condition 1: price approaching hard stop-loss
+        if pos.side == "long":
+            dist_to_sl = mid - pos.initial_sl
+        else:
+            dist_to_sl = pos.initial_sl - mid
+
+        if dist_to_sl < 0.3 * pos.entry_atr:
+            return True
+
+        # Condition 2: extreme tick velocity (if available)
+        if tick_velocity is not None and pos.entry_atr > 0:
+            baseline_vel = pos.entry_atr * 0.1  # ~10% of entry ATR per cycle
+            velocity_ratio = abs(tick_velocity) / max(baseline_vel, 0.0001)
+            if velocity_ratio > self.toxicity_velocity_mult:
+                return True
+
+        return False
 
     # ── Payload builders ─────────────────────────────────────────────────
 
@@ -569,16 +1025,21 @@ class ActivePositionManager:
             "comment": reason,
         }
 
-    def build_close_payload(self, reason: str = "") -> dict[str, Any]:
+    def build_close_payload(self, reason: str = "", *, magic: int = 0) -> dict[str, Any]:
         """Return execution_payload for a close dispatch."""
         pos = self._position
-        return {
+        payload: dict[str, Any] = {
             "action": "close",
             "side": pos.side if pos else "long",
             "position_ticket": pos.ticket if pos else 0,
             "volume": pos.volume if pos else 0.01,
             "comment": reason,
         }
+        if magic:
+            payload["magic"] = magic
+        if pos and pos.supporting_brain_ids:
+            payload["brain_ids"] = pos.supporting_brain_ids
+        return payload
 
     # ── Persistence ──────────────────────────────────────────────────────
 
@@ -597,6 +1058,7 @@ class ActivePositionManager:
             return
 
         p = _Path(save_path)
+        self._last_state_path = str(p)
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
             payload: dict[str, Any] = {
@@ -612,6 +1074,7 @@ class ActivePositionManager:
                 "lowest_low": pos.lowest_low,
                 "entry_atr": pos.entry_atr,
                 "entry_cycle": pos.entry_cycle,
+                "entry_z_score": pos.entry_z_score,
                 "entry_consensus": pos.entry_consensus,
                 "supporting_brain_ids": pos.supporting_brain_ids,
                 "model_horizons": pos.model_horizons,
@@ -623,6 +1086,7 @@ class ActivePositionManager:
                 "_last_brain_reeval_cycle": self._last_brain_reeval_cycle,
                 "_entry_consensus_score": self._entry_consensus_score,
                 "_consecutive_flips": self._consecutive_flips,
+                "_recovery_cycle": self._recovery_cycle,
                 "saved_at_utc": (
                     __import__("datetime")
                     .datetime.now(__import__("datetime").UTC)
@@ -634,16 +1098,30 @@ class ActivePositionManager:
         except OSError:
             pass  # Disk write failure is non-fatal
 
-    def load_state(self, save_path: str | Path) -> ActivePosition | None:
+    def load_state(
+        self, save_path: str | Path, max_age_hours: float = 24.0
+    ) -> ActivePosition | None:
         """Restore position + manager state from JSON, if fresh enough.
 
-        Returns the restored ActivePosition, or None if no valid state exists.
+        Returns the restored ActivePosition, or None if no valid (or too old) state exists.
         """
         import json as _json
         from pathlib import Path as _Path
 
         p = _Path(save_path)
         if not p.exists():
+            return None
+
+        # Reject state older than max_age_hours
+        try:
+            age_h = (time.time() - p.stat().st_mtime) / 3600
+            if age_h > max_age_hours:
+                try:
+                    p.unlink()  # clean up stale file
+                except OSError:
+                    pass
+                return None
+        except OSError:
             return None
 
         try:
@@ -668,6 +1146,7 @@ class ActivePositionManager:
             lowest_low=float(data.get("lowest_low", data["entry_price"])),
             entry_atr=float(data.get("entry_atr", 2.0)),
             entry_cycle=int(data.get("entry_cycle", 0)),
+            entry_z_score=float(data.get("entry_z_score", 0.0)),
             entry_consensus=data.get("entry_consensus", {}),
             supporting_brain_ids=data.get("supporting_brain_ids", []),
             model_horizons=data.get("model_horizons", {}),
@@ -676,9 +1155,14 @@ class ActivePositionManager:
             r_milestones_hit=data.get("r_milestones_hit", []),
             cycles_held=int(data.get("cycles_held", 0)),
             highest_r=float(data.get("highest_r", 0.0)),
+            prev_r=float(data.get("prev_r", 0.0)),
+            partial_tp_triggered=bool(data.get("partial_tp_triggered", False)),
+            partial_tp_r=float(data.get("partial_tp_r", 0.0)),
+            partial_tp_ratio=float(data.get("partial_tp_ratio", 0.5)),
         )
         self._position = pos
         self._last_brain_reeval_cycle = int(data.get("_last_brain_reeval_cycle", -1))
         self._entry_consensus_score = float(data.get("_entry_consensus_score", 0.0))
         self._consecutive_flips = int(data.get("_consecutive_flips", 0))
+        self._recovery_cycle = 0  # always start grace period on recovery
         return pos

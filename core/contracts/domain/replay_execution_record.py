@@ -2,8 +2,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
 
-from core.contracts.schema_versions import SCHEMA_REPLAY_EXECUTION_RECORD
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     EXECUTION_MODE_VALUE_FULL,
     EXECUTION_MODE_VALUE_TARGETED,
     PAYLOAD_KEY_BLOCKED_MESSAGES,
@@ -25,6 +24,7 @@ from core.deployment.domain_keys import (
     REPLAY_EXECUTION_STATUS_BLOCKED,
     TIMELINE_STATUS_UNKNOWN,
 )
+from core.contracts.schema_versions import SCHEMA_REPLAY_EXECUTION_RECORD
 from core.ledger.governance_sources import (
     REPLAY_GOVERNANCE_SUMMARY_SOURCE_DERIVED as GOVERNANCE_SUMMARY_SOURCE_DERIVED,
 )

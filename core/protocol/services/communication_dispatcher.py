@@ -2,13 +2,13 @@ from datetime import datetime
 
 from core.contracts.domain.dispatch_request import DispatchRequest
 from core.contracts.domain.dispatch_result import DispatchResult
-from core.contracts.enums import DispatchStatus
-from core.contracts.ids import new_dispatch_id
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     DISPATCH_FAILURE_REASON_LIVE_DISPATCH_DISABLED,
     DISPATCH_FAILURE_REASON_LIVE_READ_ONLY,
     DISPATCH_FAILURE_REASON_SYMBOL_NOT_LIVE_ENABLED,
 )
+from core.contracts.enums import DispatchStatus
+from core.contracts.ids import new_dispatch_id
 from core.observability.metric_names import (
     DISPATCH_FAILED,
     DISPATCH_PROTOCOL_VALIDATED,

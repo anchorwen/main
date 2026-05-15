@@ -1,6 +1,6 @@
 """Shared accessors for communication trace artifacts."""
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     PAYLOAD_KEY_ATTEMPT_SUMMARY,
     PAYLOAD_KEY_DELIVERY_POSTURE,
     PAYLOAD_KEY_DELIVERY_STATE,

@@ -5,9 +5,9 @@ from datetime import datetime
 
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.dispatch_request import DispatchRequest
+from core.contracts.domain_keys import TIMELINE_ACTOR_HOT_RELOAD, TIMELINE_EVENT_ENGINE_CONFIG
 from core.contracts.enums import CommunicationMessageType, CommunicationPriority, DispatchStatus
 from core.deployment.config_hot_reload import ConfigHotReload
-from core.deployment.domain_keys import TIMELINE_ACTOR_HOT_RELOAD, TIMELINE_EVENT_ENGINE_CONFIG
 from core.deployment.environment_config import EnvironmentConfig
 from core.deployment.scheduler_service import SchedulerService
 from core.deployment.service_container import ServiceContainer

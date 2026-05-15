@@ -1,0 +1,32 @@
+{
+  "schema_version": "label_contract.v1",
+  "contract_id": "label-micro-barrier-1.0.0-H4",
+  "type": "survival_barrier",
+  "horizon_bars": 3,
+  "bar_timeframe": "H4",
+  "barriers": {
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 3.0
+  },
+  "atr_config": {
+    "timeframe": "H4",
+    "period": 14
+  },
+  "label_classes": {
+    "1": "tp_hit_first",
+    "0": "timeout",
+    "-1": "sl_hit_first"
+  },
+  "timeout_label": "timeout",
+  "metadata": {
+    "author": "quant-os",
+    "rationale": "H4 barrier contract: 3-bar horizon = 12 hours. SL=2.0xATR wider than H1 (1.8x) to account for larger H4 bar noise. TP=3.0xATR gives 1.50:1 RR. ATR on H4 candles.",
+    "design_notes": "H4 resolution layer in HMRE architecture. 12h window matches swing/macro positioning. Wider barriers account for higher per-bar volatility on H4 timeframe.",
+    "applicable_lanes": [
+      "xgb_micro",
+      "transformer_micro"
+    ],
+    "hmre_layer": "H4",
+    "created_at": "2026-05-10"
+  }
+}

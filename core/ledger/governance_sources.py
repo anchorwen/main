@@ -1,6 +1,6 @@
 """Shared governance source constants for replay/operations contracts."""
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     REPLAY_GOVERNANCE_SUMMARY_SOURCE_DERIVED,
     REPLAY_GOVERNANCE_SUMMARY_SOURCE_EXTENSIONS,
     REPLAY_GOVERNANCE_SUMMARY_SOURCE_GATE,

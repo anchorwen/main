@@ -32,6 +32,11 @@ class BrainRegistryService:
                 entry_path = (self._project_root / entry_path).resolve()
 
             if not entry_path.exists():
+                logging.warning(
+                    "BrainRegistryService: referenced config file missing: %s (entry path: %s)",
+                    entry_path,
+                    path_str,
+                )
                 continue
 
             try:

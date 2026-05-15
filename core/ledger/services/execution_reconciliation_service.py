@@ -1,4 +1,4 @@
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     DISPATCH_STATUS_TRANSPORT_DELIVERED,
     MISMATCH_TYPE_QUANTITY,
     MISMATCH_TYPE_STATE,

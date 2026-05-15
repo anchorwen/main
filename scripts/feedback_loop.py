@@ -197,7 +197,12 @@ def ingest_journal_to_tracker(
         if j.get("action") != "close":
             continue
         ticket = j.get("position_ticket")
-        open_entry = open_by_ticket.get(ticket) if ticket else None
+        # Coerce string tickets for cross-source compatibility
+        try:
+            ticket_int = int(ticket) if ticket is not None else None
+        except (TypeError, ValueError):
+            ticket_int = None
+        open_entry = open_by_ticket.get(ticket_int) if ticket_int else None
         if open_entry is None:
             continue
         detail = j.get("detail", {}) if isinstance(j.get("detail"), dict) else {}

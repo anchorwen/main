@@ -417,8 +417,14 @@ def optimize(
     use_kalman: bool = True,
     use_trend_mute: bool = True,
     timeout_seconds: int = 600,
+    storage: str | None = None,
+    study_name: str = "ou_params_optimization",
 ) -> dict[str, Any]:
     """Run Optuna Bayesian optimization for OU parameters.
+
+    Args:
+        storage: Optuna storage URL.  Use ``sqlite:///data/optuna/ou_params.db``
+            for persistent studies that survive restarts.  None = in-memory.
 
     Returns {optimal_params, metrics, top_10_results, search_meta}.
     Falls back to grid search if optuna is not installed.
@@ -430,9 +436,12 @@ def optimize(
 
         objective = _make_objective(prices, use_kalman, use_trend_mute)
         study = optuna.create_study(
+            study_name=study_name,
+            storage=storage,
             direction="maximize",
             sampler=optuna.samplers.TPESampler(seed=seed),
             pruner=optuna.pruners.MedianPruner(n_startup_trials=20, n_warmup_steps=5),
+            load_if_exists=True,
         )
         study.optimize(
             objective, n_trials=n_trials, timeout=timeout_seconds, show_progress_bar=False

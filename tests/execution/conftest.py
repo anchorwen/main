@@ -187,18 +187,21 @@ def make_regime_info(
 # Synthetic price series generators
 # ---------------------------------------------------------------------------
 def generate_trending_bars(
-    n: int = 50, start_price: float = 2000.0, step: float = 0.5
+    n: int = 50, start_price: float = 2000.0, step: float = 0.5, noise: float = 0.15
 ) -> list[dict]:
-    """Generate synthetic OHLC bars in a strong uptrend."""
+    """Generate synthetic OHLC bars in a strong uptrend with realistic noise."""
+    import random
+
     bars: list[dict] = []
     price = start_price
     for _ in range(n):
-        o = price
-        h = price + 2.0
-        l = price - 0.3
-        c = price + 1.5
+        jitter = random.gauss(0.0, noise)
+        o = price + jitter * 0.3
+        h = price + 2.0 + abs(jitter) * 0.5
+        l = price - 0.3 - abs(jitter) * 0.5
+        c = price + 1.5 + jitter
         bars.append({"open": o, "high": h, "low": l, "close": c})
-        price += step
+        price += step + jitter * 0.1
     return bars
 
 

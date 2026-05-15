@@ -1,7 +1,7 @@
 import time
 
 from apps.engine.system_facade import SystemFacade, SystemSelfTest
-from core.deployment.domain_keys import EVIDENCE_SECTION_ENGINE_CONFIG
+from core.contracts.domain_keys import EVIDENCE_SECTION_ENGINE_CONFIG
 from core.deployment.environment_config import EnvironmentConfig
 from core.deployment.lifecycle_manager import LifecycleManager
 from core.deployment.scheduler_service import SchedulerService

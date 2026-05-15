@@ -191,8 +191,8 @@ def test_join_full_pipeline(tmp_path: Path):
         _make_label("L2", "2026-04-02T14:00:00Z", label="loss", pnl=-5.0),
         _make_label("L3", "2026-04-03T09:00:00Z", label="unlabeled"),
     ]
-    _make_feature_record(store, "2026-04-01T10:00:05+00:00")
-    _make_feature_record(store, "2026-04-02T14:00:00+00:00")
+    _make_feature_record(store, "2026-04-01T09:59:55+00:00")
+    _make_feature_record(store, "2026-04-02T13:59:55+00:00")
     # No feature for L3 (and it's unlabeled anyway)
 
     result = join_labels_to_features(labels, store)
@@ -236,7 +236,7 @@ def test_join_feature_within_window_chosen(tmp_path: Path):
 
     store = LocalFeatureStore(str(tmp_path))
     labels = [_make_label("L1", "2026-04-01T10:00:00Z", label="win")]
-    _make_feature_record(store, "2026-04-01T10:03:00+00:00")  # 3 min after
+    _make_feature_record(store, "2026-04-01T09:57:00+00:00")  # 3 min before
 
     result = join_labels_to_features(labels, store, max_time_delta_seconds=300.0)
     assert result["matched"] == 1
@@ -260,7 +260,7 @@ def test_export_parquet_roundtrip(tmp_path: Path):
             "exit_price": 3005.0,
             "volume": 0.01,
             "open_recorded_at": "2026-04-01T10:00:00Z",
-            "feature_event_time": "2026-04-01T10:00:05+00:00",
+            "feature_event_time": "2026-04-01T09:59:55+00:00",
             "feature_source": "test",
             "time_delta_seconds": 5.0,
             **{f"f_{j}": float(j) * 0.1 for j in range(40)},
@@ -301,7 +301,7 @@ def test_export_npz_roundtrip(tmp_path: Path):
             "exit_price": 3003.0,
             "volume": 0.01,
             "open_recorded_at": "2026-04-01T10:00:00Z",
-            "feature_event_time": "2026-04-01T10:00:05+00:00",
+            "feature_event_time": "2026-04-01T09:59:55+00:00",
             "feature_source": "test",
             "time_delta_seconds": 5.0,
             **{f"f_{j}": float(j) * 0.1 for j in range(40)},
@@ -319,8 +319,8 @@ def test_export_npz_roundtrip(tmp_path: Path):
     assert data["y"].shape == (3,)
     assert data["pnl"].shape == (3,)
     assert len(data["feature_names"]) == 40
-    assert data["y"][0] == 1  # win
-    assert data["y"][1] == 0  # loss
+    assert data["y"][0] == 1  # win → TP
+    assert data["y"][1] == -1  # loss → SL
 
 
 # ── build_dataset end-to-end tests ──
@@ -383,7 +383,7 @@ def test_build_dataset_e2e(tmp_path: Path):
             schema_version="1.0.0",
             symbol="XAUUSD",
             timeframe="M5",
-            event_time=datetime.fromisoformat(f"2026-05-0{i}T10:00:05+00:00"),
+            event_time=datetime.fromisoformat(f"2026-05-0{i}T09:59:55+00:00"),
             values=values,
             source="test",
         )

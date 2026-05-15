@@ -66,11 +66,9 @@ def run_attribution(result: BacktestResult) -> dict[str, Any]:
         strategy_pnl: dict[str, float] = {}
         for t in trades:
             magic = t.get("magic", 0)
-            strat_name = {
-                90001: "barrier_12bar",
-                90002: "micro_3bar",
-                90003: "statarb_dynamic",
-            }.get(magic, f"magic_{magic}")
+            from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
+
+            strat_name = MAGIC_TO_STRATEGY.get(magic, f"magic_{magic}")
             pnl = t.get("pnl", 0.0)
             strategy_pnl[strat_name] = strategy_pnl.get(strat_name, 0.0) + pnl
 
@@ -98,7 +96,7 @@ def run_attribution(result: BacktestResult) -> dict[str, Any]:
     return {
         "factor_attribution": factor_d,
         "brinson": brinson_d,
-        "trading_days": len(dates),
+        "trading_days": len({t.get("bar_time", "")[:10] for t in trades}) if trades else 0,
     }
 
 

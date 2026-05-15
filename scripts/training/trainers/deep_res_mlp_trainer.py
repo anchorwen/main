@@ -209,6 +209,7 @@ def train_deep_res_mlp(
     weight_decay: float = 1e-4,
     seed: int = 42,
     regression: bool = False,
+    class_weights: list[float] | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     import torch
 
@@ -262,7 +263,13 @@ def train_deep_res_mlp(
                 loss_vol = torch.nn.functional.mse_loss(vol.squeeze(-1), err_norm * 0.8 + 0.2)
             else:
                 yb_cls = yb.long()
-                loss_main = torch.nn.functional.cross_entropy(primary, yb_cls)
+                if class_weights is not None:
+                    cls_weight = torch.tensor(class_weights, dtype=torch.float32)
+                    loss_main = torch.nn.functional.cross_entropy(
+                        primary, yb_cls, weight=cls_weight
+                    )
+                else:
+                    loss_main = torch.nn.functional.cross_entropy(primary, yb_cls)
                 with torch.no_grad():
                     preds = primary.argmax(dim=1)
                     wrong_mask = (preds != yb_cls).float()
@@ -455,6 +462,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--batch-size", type=int, default=128, help="Batch size (default: 128)")
     p.add_argument("--dropout", type=float, default=0.2, help="Dropout rate (default: 0.2)")
     p.add_argument("--weight-decay", type=float, default=1e-4, help="Weight decay (default: 1e-4)")
+    p.add_argument(
+        "--class-weights",
+        type=str,
+        default=None,
+        help="Comma-separated class weights for CrossEntropyLoss (e.g. '1.0,6.58,0.0')",
+    )
     p.add_argument("--seed", type=int, default=42)
     p.add_argument(
         "--mode",
@@ -503,6 +516,11 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"[deep_res_mlp] Training DeepResMLP (epochs={epochs}, lr={lr}, batch={batch_size}, dropout={dropout}, mode={'reg' if regression else 'cls'})..."
     )
+    class_weights = None
+    if args.class_weights:
+        class_weights = [float(w) for w in args.class_weights.split(",")]
+        print(f"[deep_res_mlp] Class weights: {class_weights}")
+
     model, metrics = train_deep_res_mlp(
         X,
         y,
@@ -513,6 +531,7 @@ def main(argv: list[str] | None = None) -> int:
         weight_decay=weight_decay,
         seed=args.seed,
         regression=regression,
+        class_weights=class_weights,
     )
 
     model_path = export_onnx(model, args.output_model.resolve(), regression=regression)

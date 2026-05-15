@@ -104,9 +104,9 @@ class BrainAttributionService:
             pnl = json.loads(self._pnl_ledger_path.read_text(encoding="utf-8"))
             cf: dict[str, Any] = {}
             for bid, outcomes in pnl.get("settled", {}).items():
-                wins = sum(1 for o in outcomes if o.get("pnl", 0.0) > 0)
+                wins = sum(1 for o in outcomes if o.get("pnl_per_unit", 0.0) > 0)
                 total = len(outcomes)
-                total_pnl = sum(o.get("pnl", 0.0) for o in outcomes)
+                total_pnl = sum(o.get("pnl_per_unit", 0.0) for o in outcomes)
                 cf[bid] = {
                     "signals": total,
                     "winning_signals": wins,

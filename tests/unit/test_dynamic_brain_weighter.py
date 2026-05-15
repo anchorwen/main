@@ -284,8 +284,8 @@ class TestPnLStoreIntegration:
     def test_get_weights_prefers_pnl_metrics(self):
         """When P&L data is available, it should drive the weight."""
         pnl = BrainPnLStore()
-        # Record winning signals for B1 → healthy, high Sharpe
-        for i in range(20):
+        # Record winning signals for B1 → healthy, high Sharpe (≥30 for engine)
+        for i in range(35):
             sid = pnl.record_signal("B1", "XAUUSDc", "long", 100.0)
             pnl.settle_one(sid, 101.0 + i * 0.05)
 
@@ -339,7 +339,7 @@ class TestPnLStoreIntegration:
     def test_apply_weights_with_pnl_store(self):
         """apply_weights uses P&L metrics when available."""
         pnl = BrainPnLStore()
-        for i in range(20):
+        for i in range(35):
             sid = pnl.record_signal("B1", "XAUUSDc", "long", 100.0)
             pnl.settle_one(sid, 101.0 + i * 0.05)
 

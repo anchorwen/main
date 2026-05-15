@@ -9,7 +9,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     DEPLOYMENT_PLAN_STATUS_INVALID,
     DEPLOYMENT_PLAN_STATUS_READY,
     EVIDENCE_SECTION_GATE,

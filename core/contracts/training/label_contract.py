@@ -61,12 +61,18 @@ def _build_barrier_labels_array(
     tp_atr_mult: float,
     horizon_bars: int,
     atr_period: int = 14,
+    spread_pips: float = 0.3,
+    slippage_pips: float = 0.5,
+    pip_value: float = 0.01,
 ) -> BarrierResult:
     """Build barrier labels for a single entry point.
 
     Starting at entry_idx, walk forward up to horizon_bars (or end of data).
     For each bar, check if the high (for short SL / long TP) or low (for
     long SL / short TP) breaches the barrier. First breach wins.
+
+    Transaction costs are modeled: SL is hit earlier due to slippage,
+    TP must exceed the spread to be considered hit.
 
     Args:
         h: High price array.
@@ -78,11 +84,16 @@ def _build_barrier_labels_array(
         tp_atr_mult: Take-profit distance in ATR multiples.
         horizon_bars: Max bars to look forward.
         atr_period: ATR lookback period.
+        spread_pips: Spread in pips (XAUUSD default 0.3).
+        slippage_pips: Slippage in pips (default 0.5).
+        pip_value: Value of one pip (XAUUSD default 0.01).
 
     Returns:
         BarrierResult with label, hit info, and reference prices.
     """
     entry_price = float(c[entry_idx])
+    spread_cost = spread_pips * pip_value
+    slippage_cost = slippage_pips * pip_value
 
     # Compute ATR at entry (using data up to entry_idx)
     atr_val = _compute_atr(
@@ -98,9 +109,13 @@ def _build_barrier_labels_array(
     if side == "long":
         sl_price = entry_price - sl_dist
         tp_price = entry_price + tp_dist
+        effective_sl = sl_price - slippage_cost  # SL hit earlier with slippage
+        effective_tp = tp_price - spread_cost  # TP must exceed spread
     else:
         sl_price = entry_price + sl_dist
         tp_price = entry_price - tp_dist
+        effective_sl = sl_price + slippage_cost
+        effective_tp = tp_price + spread_cost
 
     end_idx = min(entry_idx + horizon_bars + 1, len(c))
 
@@ -109,22 +124,22 @@ def _build_barrier_labels_array(
         bar_low = float(low[i])
 
         if side == "long":
-            if bar_low <= sl_price:
+            if bar_low <= effective_sl:
                 return BarrierResult(
                     label="sl_hit_first",
                     hit_bar_index=i - entry_idx,
-                    hit_price=sl_price,
+                    hit_price=effective_sl,
                     entry_price=entry_price,
                     sl_price=sl_price,
                     tp_price=tp_price,
                     atr_at_entry=round(atr_val, 6),
                     horizon_bars=horizon_bars,
                 )
-            if bar_high >= tp_price:
+            if bar_high >= effective_tp:
                 return BarrierResult(
                     label="tp_hit_first",
                     hit_bar_index=i - entry_idx,
-                    hit_price=tp_price,
+                    hit_price=effective_tp,
                     entry_price=entry_price,
                     sl_price=sl_price,
                     tp_price=tp_price,
@@ -132,22 +147,22 @@ def _build_barrier_labels_array(
                     horizon_bars=horizon_bars,
                 )
         else:  # short
-            if bar_high >= sl_price:
+            if bar_high >= effective_sl:
                 return BarrierResult(
                     label="sl_hit_first",
                     hit_bar_index=i - entry_idx,
-                    hit_price=sl_price,
+                    hit_price=effective_sl,
                     entry_price=entry_price,
                     sl_price=sl_price,
                     tp_price=tp_price,
                     atr_at_entry=round(atr_val, 6),
                     horizon_bars=horizon_bars,
                 )
-            if bar_low <= tp_price:
+            if bar_low <= effective_tp:
                 return BarrierResult(
                     label="tp_hit_first",
                     hit_bar_index=i - entry_idx,
-                    hit_price=tp_price,
+                    hit_price=effective_tp,
                     entry_price=entry_price,
                     sl_price=sl_price,
                     tp_price=tp_price,
@@ -196,6 +211,11 @@ class LabelContract:
     # For regression type
     regression_target: str | None = None  # "forward_return" | "log_return"
 
+    # Transaction cost modeling
+    spread_pips: float = 0.3
+    slippage_pips: float = 0.5
+    pip_value: float = 0.01
+
     # Metadata
     timeout_label: str = "timeout"
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -227,6 +247,9 @@ class LabelContract:
             atr_period=int(data.get("atr_config", {}).get("period", 14)),
             atr_timeframe=data.get("atr_config", {}).get("timeframe", "M5"),
             regression_target=data.get("regression_target"),
+            spread_pips=float(data.get("spread_pips", 0.3)),
+            slippage_pips=float(data.get("slippage_pips", 0.5)),
+            pip_value=float(data.get("pip_value", 0.01)),
             timeout_label=data.get("timeout_label", "timeout"),
             metadata=data.get("metadata", {}),
         )
@@ -257,6 +280,9 @@ class LabelContract:
                 "tp_atr_mult": self.tp_atr_mult,
             }
             d["timeout_label"] = self.timeout_label
+        d["spread_pips"] = self.spread_pips
+        d["slippage_pips"] = self.slippage_pips
+        d["pip_value"] = self.pip_value
         if self.regression_target:
             d["regression_target"] = self.regression_target
         if self.metadata:
@@ -300,6 +326,9 @@ class LabelContract:
             tp_atr_mult=self.tp_atr_mult,
             horizon_bars=self.horizon_bars,
             atr_period=self.atr_period,
+            spread_pips=self.spread_pips,
+            slippage_pips=self.slippage_pips,
+            pip_value=self.pip_value,
         )
 
     # ── Self-consistency checks ──

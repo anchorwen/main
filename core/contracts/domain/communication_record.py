@@ -4,12 +4,12 @@ from typing import Any
 
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.dispatch_result import DispatchResult
-from core.contracts.schema_versions import SCHEMA_COMMUNICATION_RECORD
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     CONTRACT_ERROR_CORRELATION_ID_REQUIRED,
     CONTRACT_ERROR_MESSAGE_ID_REQUIRED,
     CONTRACT_ERROR_RECORDED_AT_BEFORE_EVENT_TIME,
 )
+from core.contracts.schema_versions import SCHEMA_COMMUNICATION_RECORD
 
 
 @dataclass

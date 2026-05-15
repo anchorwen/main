@@ -3,7 +3,7 @@ import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     CIRCUIT_STATE_OPEN,
     PAYLOAD_KEY_CIRCUIT_STATE,
     PAYLOAD_KEY_ERROR_RATE,

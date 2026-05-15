@@ -42,7 +42,7 @@ def brain_entry() -> dict:
         Path(__file__).resolve().parent.parent.parent
         / "configs"
         / "brains"
-        / "v9_institutional_01.json"
+        / "deepresmlp_v2_new.json"
     )
     if not path.exists():
         pytest.skip("brain entry config not found")

@@ -1,5 +1,4 @@
-from core.contracts.enums import ReplayGateDecision
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     PAYLOAD_KEY_BLOCK_REASONS,
     PAYLOAD_KEY_BLOCKED_MESSAGE_IDS,
     PAYLOAD_KEY_BLOCKED_MESSAGES,
@@ -51,6 +50,7 @@ from core.deployment.domain_keys import (
     REPLAY_TRACE_SCOPE_CORRELATION,
     REPLAY_TRACE_SCOPE_MESSAGE,
 )
+from core.contracts.enums import ReplayGateDecision
 from core.ledger.services.gate_decision_refs import (
     decision as gate_decision_value,
 )

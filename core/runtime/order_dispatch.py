@@ -1,0 +1,314 @@
+"""Order dispatch helpers — SL/TP computation, risk evaluation, brain outcomes.
+
+Extracted from live_cycle.py. These functions are independent of
+LiveCycleConfig/LiveCycleState and can be used by any dispatch path.
+"""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+
+def compute_sl_tp_for_side(
+    side: str,
+    *,
+    ref_long: float,
+    ref_short: float,
+    sl_atr_mult: float,
+    tp_atr_mult: float,
+    current_atr: float,
+) -> tuple[float, float, float]:
+    """Returns stop_loss, take_profit, ref_for_guard."""
+    sl_distance = sl_atr_mult * current_atr
+    tp_distance = tp_atr_mult * current_atr
+    if side == "long":
+        stop_loss = ref_long - sl_distance
+        take_profit = ref_long + tp_distance
+        ref_for_guard = ref_long
+    else:
+        stop_loss = ref_short + sl_distance
+        take_profit = ref_short - tp_distance
+        ref_for_guard = ref_short
+    return stop_loss, take_profit, ref_for_guard
+
+
+def _strategy_from_brain_ids(brain_ids: list[str]) -> str:
+    """Map a list of brain_ids to the owning strategy line via BrainRegistry.
+
+    Uses the ``contract_group`` field from brain JSON configs as the single
+    source of truth — no substring heuristics.
+    """
+    if not brain_ids:
+        return "barrier_12bar"
+    from core.brains.brain_registry import BrainRegistry
+
+    return BrainRegistry.instance().resolve_ids_to_group(brain_ids)
+
+
+def _check_recent_sl_streak(
+    journal_path: str,
+    lookback_seconds: float = 300.0,
+    threshold: int = 3,
+    strategy_name: str | None = None,
+) -> tuple[bool, int]:
+    """Scan the journal for a streak of recent SL hits — bypasses reconciliation.
+
+    When ``strategy_name`` is provided, only counts SL hits for that strategy.
+    Otherwise counts across all strategies.
+
+    This is a defense-in-depth check that runs right before dispatch.
+    """
+    import time as _time
+
+    try:
+        p = Path(journal_path)
+        if not p.exists():
+            return False, 0
+        lines = p.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return False, 0
+
+    now = _time.time()
+    sl_streak = 0
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except Exception:
+            continue
+        if rec.get("action") != "close":
+            continue
+        # Filter by strategy if requested
+        if strategy_name:
+            entry_brain_ids = rec.get("brain_ids", [])
+            if _strategy_from_brain_ids(entry_brain_ids) != strategy_name:
+                continue
+        recorded = rec.get("recorded_at", "")
+        try:
+            if recorded.endswith("Z"):
+                dt = datetime.fromisoformat(recorded.replace("Z", "+00:00"))
+            else:
+                dt = datetime.fromisoformat(recorded)
+            if now - dt.timestamp() > lookback_seconds:
+                break
+        except Exception:
+            continue
+        label = rec.get("label", "")
+        if label in ("sl_hit_first", "loss"):
+            sl_streak += 1
+        elif label in ("tp_hit_first", "win"):
+            break  # a win resets the streak
+
+    blocked = sl_streak >= threshold
+    return blocked, sl_streak
+
+
+def _build_feature_snapshot(symbol: str, feature_vector: Any) -> Any:
+    """Build a minimal feature snapshot for ParliamentService.build_candidate()."""
+    from apps.engine.runtime_loop import SimpleFeatureSnapshot
+    from core.contracts.ids import new_snapshot_id
+
+    return SimpleFeatureSnapshot(
+        snapshot_id=new_snapshot_id(),
+        event_time=datetime.now(UTC).replace(tzinfo=None),
+        symbol=symbol,
+        venue="live_intent_loop",
+        feature_vector=feature_vector,
+    )
+
+
+def _build_minimal_control_snapshot() -> Any:
+    """Build a minimal control snapshot for ParliamentService.build_candidate()."""
+    from core.contracts.domain.system_mode_state import SystemModeState
+    from core.contracts.enums import SystemMode
+    from core.state.schema_versions import SCHEMA_SYSTEM_MODE_STATE
+
+    mode_state = SystemModeState(
+        schema_version=SCHEMA_SYSTEM_MODE_STATE,
+        mode_state_id="intent_loop_default",
+        current_mode=SystemMode.NORMAL,
+        entered_at=datetime.now(UTC).replace(tzinfo=None),
+        previous_mode=None,
+        reason="live_intent_loop",
+    )
+
+    class _MinimalControlSnapshot:
+        def __init__(self, mode_state):
+            self.mode_state = mode_state
+            self.active_overrides = []
+
+    return _MinimalControlSnapshot(mode_state)
+
+
+def _record_brain_outcomes(proposals, direction, execution_outcome, tracker):
+    """Record each brain's performance based on consensus agreement."""
+    for p in proposals:
+        p_dir = p.prediction.get("direction_bias", "neutral")
+        matched = p_dir == direction if direction != "neutral" else p_dir == "neutral"
+        composite = (
+            round(0.55 + p.prediction.get("confidence", 0.0) * 0.3, 4)
+            if matched
+            else round(0.25 + p.prediction.get("confidence", 0.0) * 0.2, 4)
+        )
+        tracker.record_outcome(
+            p.brain_id,
+            {"composite_score": composite, "execution_outcome": execution_outcome},
+        )
+
+
+def _build_risk_context(mt5: Any, symbol: str) -> dict[str, Any]:
+    """Query MT5 for risk metrics: positions, exposure, drawdown (with timeout)."""
+    import threading
+
+    ctx: dict[str, Any] = {
+        "open_position_count": 0,
+        "current_drawdown_pct": 0.0,
+        "current_notional_exposure": 0.0,
+        "positions_per_symbol": {},
+    }
+    if mt5 is None:
+        ctx["_source"] = "no_mt5"
+        return ctx
+
+    try:
+        # positions_get with 5s timeout
+        _pos_result: list[Any] = [None]
+        _pos_exc: list[Any] = [None]
+
+        def _get_pos() -> None:
+            try:
+                _pos_result[0] = mt5.positions_get(symbol=symbol)
+            except Exception as e:
+                _pos_exc[0] = e
+
+        _pt = threading.Thread(target=_get_pos, daemon=True)
+        _pt.start()
+        _pt.join(timeout=5.0)
+        if _pt.is_alive() or _pos_exc[0] is not None:
+            ctx["_source"] = "mt5_timeout"
+            return ctx
+
+        positions = _pos_result[0] or []
+        ctx["open_position_count"] = len(positions)
+
+        per_sym: dict[str, int] = {}
+        for pos in positions:
+            sym = getattr(pos, "symbol", symbol)
+            per_sym[sym] = per_sym.get(sym, 0) + 1
+            vol = float(getattr(pos, "volume", 0))
+            price = float(getattr(pos, "price_open", 0))
+            ctx["current_notional_exposure"] += vol * price
+        ctx["positions_per_symbol"] = per_sym
+
+        # account_info with 5s timeout
+        _acc_result: list[Any] = [None]
+        _acc_exc: list[Any] = [None]
+
+        def _get_acc() -> None:
+            try:
+                _acc_result[0] = mt5.account_info()
+            except Exception as e:
+                _acc_exc[0] = e
+
+        _at = threading.Thread(target=_get_acc, daemon=True)
+        _at.start()
+        _at.join(timeout=5.0)
+        if not _at.is_alive() and _acc_exc[0] is None and _acc_result[0] is not None:
+            acc = _acc_result[0]
+            equity = float(getattr(acc, "equity", 0))
+            balance = float(getattr(acc, "balance", 0))
+            if balance > 0:
+                ctx["current_drawdown_pct"] = round(max(0.0, (balance - equity) / balance) * 100, 2)
+        ctx["_source"] = "mt5_live"
+    except Exception as exc:
+        ctx["_source"] = "mt5_error"
+        ctx["_error"] = str(exc)
+
+    return ctx
+
+
+def _build_risk_context_from_broker(broker: Any, symbol: str) -> dict[str, Any]:
+    """Build risk context from a BrokerAdapter (broker-agnostic path)."""
+    ctx: dict[str, Any] = {
+        "open_position_count": 0,
+        "current_drawdown_pct": 0.0,
+        "current_notional_exposure": 0.0,
+        "positions_per_symbol": {},
+    }
+    try:
+        positions = broker.get_open_positions_detail(symbol)
+        ctx["open_position_count"] = len(positions)
+
+        per_sym: dict[str, int] = {}
+        for pos in positions:
+            sym = pos.get("symbol", symbol)
+            per_sym[sym] = per_sym.get(sym, 0) + 1
+            vol = float(pos.get("volume", 0))
+            price = float(pos.get("price_open", 0))
+            ctx["current_notional_exposure"] += vol * price
+        ctx["positions_per_symbol"] = per_sym
+        ctx["current_drawdown_pct"] = broker.get_account_drawdown_pct()
+        ctx["_source"] = f"{getattr(broker, 'broker_name', 'unknown')}_live"
+    except Exception as exc:
+        ctx["_source"] = "broker_error"
+        ctx["_error"] = str(exc)
+    return ctx
+
+
+def _evaluate_risk(
+    risk_service: Any,
+    control_snapshot: Any,
+    risk_context: dict[str, Any],
+    symbol: str,
+    direction: str,
+    confidence: float,
+) -> dict[str, Any]:
+    """Run risk evaluation and return a lightweight verdict dict."""
+    from core.contracts.domain.decision_intent import DecisionIntent
+    from core.contracts.enums import DecisionAction, RiskDecisionStatus
+    from core.contracts.ids import new_intent_id
+
+    action = DecisionAction.OPEN
+    intent = DecisionIntent(
+        schema_version="decision_intent.v1",
+        intent_id=new_intent_id(),
+        candidate_id=new_intent_id(),
+        snapshot_id=new_intent_id(),
+        event_time=datetime.now(UTC).replace(tzinfo=None),
+        compiled_at=datetime.now(UTC).replace(tzinfo=None),
+        symbol=symbol,
+        venue="live",
+        action=action,
+        side=direction.upper(),
+        conviction=confidence,
+        priority="normal",
+    )
+
+    try:
+        verdict = risk_service.evaluate(intent, control_snapshot, context=risk_context)
+        return {
+            "status": verdict.status.value
+            if hasattr(verdict.status, "value")
+            else str(verdict.status),
+            "risk_tier": verdict.risk_tier,
+            "blocking_reasons": verdict.blocking_reasons,
+            "warning_reasons": verdict.warning_reasons,
+            "blocked": verdict.status in (RiskDecisionStatus.DENY, RiskDecisionStatus.DEFER),
+            "mode": control_snapshot.mode_state.current_mode.value
+            if hasattr(control_snapshot.mode_state.current_mode, "value")
+            else str(control_snapshot.mode_state.current_mode),
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "risk_tier": "unknown",
+            "blocking_reasons": [],
+            "warning_reasons": [f"risk_eval_error: {exc}"],
+            "blocked": False,
+            "mode": "unknown",
+        }

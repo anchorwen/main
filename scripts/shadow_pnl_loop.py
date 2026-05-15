@@ -89,6 +89,7 @@ def _build_brains(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "adapter": adapter,
                     "brain_type": entry.get("brain_type", "?"),
                     "feature_schema_id": entry.get("feature_schema_id", ""),
+                    "hmre_layer": entry.get("hmre_layer", "M5"),
                 }
             )
             print(f"  [shadow_pnl] loaded {bid} [{entry.get('brain_type', '?')}]", flush=True)
@@ -97,13 +98,19 @@ def _build_brains(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return brains
 
 
-def _get_mid_price(mt5: Any, symbol: str) -> float | None:
-    """Get current mid price from MT5."""
+def _get_prices(mt5: Any, symbol: str) -> tuple[float, float, float, float] | None:
+    """Get current (bid, ask, mid, spread) from MT5."""
     try:
         tick = mt5.symbol_info_tick(symbol)
         if tick is None:
             return None
-        return (tick.bid + tick.ask) / 2.0
+        bid = float(tick.bid)
+        ask = float(tick.ask)
+        if bid <= 0 or ask <= 0:
+            return None
+        mid = (bid + ask) / 2.0
+        spread = ask - bid
+        return (bid, ask, mid, spread)
     except Exception:
         return None
 
@@ -251,7 +258,7 @@ def main(argv: list[str] | None = None) -> int:
 
     micro_computer = MicrostructureFeatureComputer(mt5, symbol)
     micro_adapter = MicrostructureFeatureAdapter(
-        scaler_path="data/models/mtx_transformer_scaler.joblib",
+        scaler_path=None,
     )
 
     # ── Feature store ──
@@ -312,6 +319,41 @@ def main(argv: list[str] | None = None) -> int:
     else:
         pnl_ledger = BrainPnLStore(window_size=5000)
 
+    # ── Governance filter: skip retired brains when recording PnL ──
+    retired_ids: set[str] = set()
+    try:
+        import json as _json
+
+        _gov_path = base_dir / "governance_state.json"
+        if _gov_path.exists():
+            _gov_data = _json.loads(_gov_path.read_text(encoding="utf-8"))
+
+            # brain_states entries with status == retired
+            for bid, s in _gov_data.get("brain_states", {}).items():
+                if s.get("status") == "retired":
+                    retired_ids.add(bid)
+
+            # transition_log: brain_ids whose last transition was to retired
+            _log = _gov_data.get("transition_log", [])
+            _last_to: dict[str, str] = {}
+            for entry in _log:
+                bid = entry.get("brain_id", "")
+                to_status = entry.get("to_status", "")
+                if bid and to_status:
+                    _last_to[bid] = to_status
+            for bid, to_status in _last_to.items():
+                if to_status == "retired":
+                    retired_ids.add(bid)
+
+            if retired_ids:
+                print(
+                    f"[shadow_pnl] governance filter: skipping {len(retired_ids)} retired brains: "
+                    f"{sorted(retired_ids)}",
+                    flush=True,
+                )
+    except Exception:
+        pass
+
     # ── Regime detector ──
     from core.risk.regime_detector import RegimeDetector
 
@@ -360,16 +402,23 @@ def main(argv: list[str] | None = None) -> int:
             cycle_count += 1
 
             try:
-                # ── 1. Get current mid_price ──
-                mid_price = _get_mid_price(mt5, symbol)
-                if mid_price is None or mid_price <= 0:
+                # ── 1. Get current prices ──
+                prices = _get_prices(mt5, symbol)
+                if prices is None:
+                    time.sleep(1)
+                    continue
+                bid, ask, mid_price, live_spread = prices
+                if mid_price <= 0:
                     time.sleep(1)
                     continue
 
                 # ── 2. Settle previous pending signals ──
                 if pnl_ledger.pending_count > 0:
                     try:
-                        settled = pnl_ledger.settle_all(mid_price)
+                        settled = pnl_ledger.settle_all(
+                            mid_price,
+                            spread=live_spread,
+                        )
                         if settled and cycle_count % 20 == 0:
                             print(
                                 json.dumps(
@@ -379,6 +428,7 @@ def main(argv: list[str] | None = None) -> int:
                                         "cycle": cycle_count,
                                         "settled_count": len(settled),
                                         "mid_price": round(mid_price, 2),
+                                        "spread": round(live_spread, 5),
                                     },
                                     ensure_ascii=False,
                                 ),
@@ -400,9 +450,14 @@ def main(argv: list[str] | None = None) -> int:
                     normed_features = (raw_features - mean) / std
                 normed_features = normed_features.astype(np.float32)
 
-                # Microstructure features
+                # Microstructure features — single bar (backward-compat) + multi-TF sequences
                 micro_source = micro_computer.compute_all()
-                micro_features = micro_adapter.build_model_input(micro_source).ravel()
+                _micro_features = micro_adapter.build_model_input(micro_source).ravel()
+                micro_sequences: dict[str, np.ndarray] = {}
+                try:
+                    micro_sequences = micro_computer.compute_all_sequences(32)
+                except Exception:
+                    pass
 
                 # ── 4. Persist features to store ──
                 try:
@@ -427,25 +482,127 @@ def main(argv: list[str] | None = None) -> int:
                     schema_id = b.get("feature_schema_id", "")
                     btype = b.get("brain_type", "")
                     if btype == "ou_params_v6":
-                        fv = (
+                        result = _run_brain_inference(
+                            b["adapter"],
+                            b["brain_id"],
+                            btype,
                             np.array([mid_price], dtype=np.float32)
                             if mid_price
-                            else np.zeros(1, dtype=np.float32)
+                            else np.zeros(1, dtype=np.float32),
                         )
                     elif "microstructure" in schema_id:
-                        fv = micro_features
+                        hmre_layer = b.get("hmre_layer", "M5")
+                        seq = micro_sequences.get(hmre_layer)
+                        if seq is not None and seq.ndim == 2 and seq.shape[0] >= 32:
+                            try:
+                                prop = b["adapter"].run(None, seq)
+                                pred = prop.prediction if hasattr(prop, "prediction") else {}
+                                result = {
+                                    "brain_id": b["brain_id"],
+                                    "brain_type": btype,
+                                    "status": "ok",
+                                    "runtime_ms": round(
+                                        float(getattr(prop.health, "runtime_ms", 0)), 2
+                                    )
+                                    if hasattr(prop, "health")
+                                    else 0,
+                                    "direction_bias": pred.get("direction_bias", "neutral"),
+                                    "up_probability": round(
+                                        float(pred.get("up_probability", 0.5)), 6
+                                    ),
+                                    "down_probability": round(
+                                        float(pred.get("down_probability", 0.5)), 6
+                                    ),
+                                    "confidence": round(float(pred.get("confidence", 0.0)), 6),
+                                }
+                            except Exception:
+                                # Fallback: zero-padded (32,9) sequence to match 288-dim model
+                                fallback_seq = np.zeros((32, 9), dtype=np.float32)
+                                try:
+                                    prop = b["adapter"].run(None, fallback_seq)
+                                    pred = prop.prediction if hasattr(prop, "prediction") else {}
+                                    result = {
+                                        "brain_id": b["brain_id"],
+                                        "brain_type": btype,
+                                        "status": "fallback",
+                                        "runtime_ms": round(
+                                            float(getattr(prop.health, "runtime_ms", 0)), 2
+                                        )
+                                        if hasattr(prop, "health")
+                                        else 0,
+                                        "direction_bias": pred.get("direction_bias", "neutral"),
+                                        "up_probability": round(
+                                            float(pred.get("up_probability", 0.5)), 6
+                                        ),
+                                        "down_probability": round(
+                                            float(pred.get("down_probability", 0.5)), 6
+                                        ),
+                                        "confidence": round(float(pred.get("confidence", 0.0)), 6),
+                                    }
+                                except Exception:
+                                    result = {
+                                        "brain_id": b["brain_id"],
+                                        "brain_type": btype,
+                                        "status": "error",
+                                        "runtime_ms": 0,
+                                        "error": "adapter.run failed even with fallback sequence",
+                                    }
+                        else:
+                            # Cold start: zero-padded sequence for correct dimensionality
+                            fallback_seq = np.zeros((32, 9), dtype=np.float32)
+                            try:
+                                prop = b["adapter"].run(None, fallback_seq)
+                                pred = prop.prediction if hasattr(prop, "prediction") else {}
+                                result = {
+                                    "brain_id": b["brain_id"],
+                                    "brain_type": btype,
+                                    "status": "cold_start",
+                                    "runtime_ms": round(
+                                        float(getattr(prop.health, "runtime_ms", 0)), 2
+                                    )
+                                    if hasattr(prop, "health")
+                                    else 0,
+                                    "direction_bias": pred.get("direction_bias", "neutral"),
+                                    "up_probability": round(
+                                        float(pred.get("up_probability", 0.5)), 6
+                                    ),
+                                    "down_probability": round(
+                                        float(pred.get("down_probability", 0.5)), 6
+                                    ),
+                                    "confidence": round(float(pred.get("confidence", 0.0)), 6),
+                                }
+                            except Exception:
+                                result = {
+                                    "brain_id": b["brain_id"],
+                                    "brain_type": btype,
+                                    "status": "error",
+                                    "runtime_ms": 0,
+                                    "error": "seq unavailable and adapter.run failed",
+                                }
                     else:
-                        fv = normed_features
-                    result = _run_brain_inference(
-                        b["adapter"],
-                        b["brain_id"],
-                        b.get("brain_type", "?"),
-                        fv,
-                    )
+                        result = _run_brain_inference(
+                            b["adapter"],
+                            b["brain_id"],
+                            btype,
+                            normed_features,
+                        )
                     results.append(result)
 
                     # ── Record P&L signal ──
-                    if result["status"] == "ok" and result["direction_bias"] != "neutral":
+                    # Skip cold-start / fallback / invalid-feature predictions
+                    # so garbage predictions don't corrupt the PnL ledger.
+                    # Also skip retired brains — their PnL is frozen.
+                    _status = result.get("status", "ok")
+                    _cold = _status in ("cold_start", "fallback", "error")
+                    _valid = result.get("features_valid", True)
+                    _retired = result["brain_id"] in retired_ids
+                    if (
+                        not _cold
+                        and _valid
+                        and not _retired
+                        and result["status"] == "ok"
+                        and result["direction_bias"] != "neutral"
+                    ):
                         try:
                             pnl_ledger.record_signal(
                                 brain_id=result["brain_id"],
@@ -453,6 +610,7 @@ def main(argv: list[str] | None = None) -> int:
                                 direction=result["direction_bias"],
                                 entry_price=mid_price,
                                 confidence=result["confidence"],
+                                entry_spread=live_spread,
                             )
                         except Exception:
                             pass

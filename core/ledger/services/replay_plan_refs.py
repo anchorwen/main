@@ -4,7 +4,7 @@ Centralizes replay plan dictionary access so gate/executor logic
 does not duplicate nested `.get()` paths.
 """
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     PAYLOAD_KEY_ACKNOWLEDGED_MESSAGE_IDS,
     PAYLOAD_KEY_CORRELATION_ID,
     PAYLOAD_KEY_DELIVERY_SUMMARY,

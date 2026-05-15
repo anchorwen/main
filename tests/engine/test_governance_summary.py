@@ -2,7 +2,7 @@
 
 import importlib
 
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     COMPLIANCE_LEVEL_PASS,
     COMPLIANCE_LEVEL_WARN,
     PAYLOAD_KEY_GOVERNANCE_FOCUS,

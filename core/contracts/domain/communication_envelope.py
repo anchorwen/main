@@ -2,14 +2,14 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from core.contracts.enums import CommunicationMessageType, CommunicationPriority
-from core.deployment.domain_keys import (
+from core.contracts.domain_keys import (
     CONTRACT_ERROR_CORRELATION_ID_REQUIRED,
     CONTRACT_ERROR_DEADLINE_AT_BEFORE_EVENT_TIME,
     CONTRACT_ERROR_MESSAGE_ID_REQUIRED,
     CONTRACT_ERROR_PRODUCER_REQUIRED,
     CONTRACT_ERROR_TARGET_REQUIRED,
 )
+from core.contracts.enums import CommunicationMessageType, CommunicationPriority
 
 
 @dataclass

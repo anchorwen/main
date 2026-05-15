@@ -43,11 +43,19 @@ MIN_LINKED_TRADES = 5  # need at least 5 linked trades to assess win rate
 DIRECTION_COLLAPSE_THRESHOLD = 0.85  # >85% in one direction = lost discrimination
 MIN_SIGNAL_COUNT = 3  # fewer signals than this = starvation
 
-# brain_id → lane mapping (for retraining)
+# brain_id prefix → lane mapping (for retraining)
 BRAIN_TO_LANE: dict[str, str] = {
     "V9": "sur",
-    "XGB": "mtx",
+    "CRT": "sur",
+    "XGBoost": "boost",
+    "XGB": "boost",
+    "LightGBM": "boost",
     "OU": "arb",
+    "OU_Params": "arb",
+    "Microstructure_Transformer": "mtx",
+    "DeepResMLP": "dl",
+    "Online_SGD": "online_sgd",
+    "Online_MLP": "online_sgd",
 }
 
 
@@ -165,15 +173,20 @@ def _assess_brain(
     }
 
 
-def _guess_lane(brain_id: str) -> str:
-    """Map brain_id to training lane, with fuzzy matching."""
-    if brain_id in BRAIN_TO_LANE:
-        return BRAIN_TO_LANE[brain_id]
-    upper = brain_id.upper()
-    for key, lane in BRAIN_TO_LANE.items():
-        if key in upper:
-            return lane
-    return "unknown"
+# Import shared _guess_lane from champion_challenger (single source of truth)
+try:
+    from scripts.training.champion_challenger import _guess_lane as _guess_lane
+except ImportError:
+    # Fallback for environments where champion_challenger isn't available
+    def _guess_lane(brain_id: str) -> str:
+        upper = brain_id.upper()
+        for prefix, lane in BRAIN_TO_LANE.items():
+            if upper.startswith(prefix.upper()):
+                return lane
+        for key, lane in BRAIN_TO_LANE.items():
+            if key.upper() in upper:
+                return lane
+        return "unclassified"
 
 
 def detect_degradation(
@@ -350,8 +363,16 @@ def _find_latest_manifest(manifests_dir: Path, lane: str) -> Path | None:
     """Find the most recent manifest for a given lane."""
     if not manifests_dir.is_dir():
         return None
-    candidates = list(manifests_dir.rglob(f"*{lane}*/manifest.json"))
+    # Prefer structured layout: manifests_dir / lane / ... / manifest.json
+    lane_dir = manifests_dir / lane
+    if lane_dir.is_dir():
+        candidates = list(lane_dir.rglob("manifest.json"))
+    else:
+        candidates = list(manifests_dir.rglob("manifest.json"))
+    # Filter to paths where lane appears as a directory component
+    candidates = [p for p in candidates if lane in p.parent.parts]
     if not candidates:
+        # Fallback: any manifest, sorted by mtime
         candidates = list(manifests_dir.rglob("manifest.json"))
     candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     return candidates[0] if candidates else None
