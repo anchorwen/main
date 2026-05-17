@@ -65,24 +65,6 @@ brains:
     # OU Params V6 Sniper — statistical arbitrage (champion, live)
     - path: "configs/brains/ou_params_v6.json"
       enabled: true
-    # Online MLP V1 — streaming non-linear MLP with incremental updates (probation)
-    - path: "configs/brains/online_learner_v1.json"
-      enabled: true
-    # DeepResMLP V2 New — class-weighted retrain (live)
-    - path: "configs/brains/deepresmlp_v2_new.json"
-      enabled: true
-    # ── HMRE M15 layer ──
-    - path: "configs/brains/xgboost_v4.5_m15.json"
-      enabled: true    # shadow
-    # ── HMRE H1 layer ──
-    - path: "configs/brains/xgboost_v4.5_h1.json"
-      enabled: true    # shadow
-    # ── HMRE H4 layer (gate-only, no independent signals) ──
-    - path: "configs/brains/xgboost_v4.5_h4.json"
-      enabled: true    # shadow, trend gate only
-    - path: "configs/brains/transformer_v5_h4.json"
-      enabled: true    # shadow, trend gate only
-
     # ── D1 Daily Swing (separate dataset, 5-bar weekly) ──
     - path: "configs/brains/xgboost_d1_swing.json"
       enabled: true    # shadow, D1 5-bar daily swing
@@ -350,7 +332,7 @@ strategy_lines:
       long_bias_discount: 0.03
 
   micro_m15:
-    enabled: true
+    enabled: false   # disabled: all micro_m15 brains retired (XGBoost_V4.5_M15: 12.7% WR)
     magic: 90101
     brain_types: [xgboost_v4.5_m15, transformer_v5_m15]
     base_volume: 0.01
@@ -377,7 +359,7 @@ strategy_lines:
       long_bias_discount: 0.03
 
   micro_h1:
-    enabled: true
+    enabled: false   # disabled: all micro_h1 brains retired (XGBoost_V4.5_H1: 42.4% WR)
     magic: 90201
     brain_types: [xgboost_v4.5_h1, transformer_v5_h1]
     base_volume: 0.01

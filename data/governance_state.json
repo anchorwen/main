@@ -35,31 +35,6 @@
       "transition_count": 4,
       "freeze_count": 0
     },
-    "LightGBM_V2_Retrained": {
-      "brain_id": "LightGBM_V2_Retrained",
-      "status": "retired",
-      "registered_at": "2026-05-14T23:52:10.616558",
-      "last_transition_at": "2026-05-16T03:21:51.278655",
-      "transition_count": 1,
-      "freeze_count": 0,
-      "exposure_limited": true
-    },
-    "LightGBM_V3_New": {
-      "brain_id": "LightGBM_V3_New",
-      "status": "retired",
-      "registered_at": "2026-05-14T23:52:10.616558",
-      "last_transition_at": "2026-05-16T03:21:51.278655",
-      "transition_count": 1,
-      "freeze_count": 0
-    },
-    "XGBoost_V11_New": {
-      "brain_id": "XGBoost_V11_New",
-      "status": "retired",
-      "registered_at": "2026-05-14T23:52:10.616558",
-      "last_transition_at": "2026-05-16T03:21:51.278655",
-      "transition_count": 1,
-      "freeze_count": 0
-    },
     "XGBoost_V9_Institutional": {
       "brain_id": "XGBoost_V9_Institutional",
       "status": "probation",
@@ -165,30 +140,6 @@
       "transition_count": 1,
       "freeze_count": 0
     },
-    "Microstructure_Transformer_V5.0": {
-      "brain_id": "Microstructure_Transformer_V5.0",
-      "status": "retired",
-      "registered_at": "2026-05-16T07:49:08.307628",
-      "last_transition_at": "2026-05-16T07:49:08.307628",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "Microstructure_Transformer_V5.0_M15": {
-      "brain_id": "Microstructure_Transformer_V5.0_M15",
-      "status": "retired",
-      "registered_at": "2026-05-16T07:49:08.307628",
-      "last_transition_at": "2026-05-16T07:49:08.307628",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "Microstructure_Transformer_V5.0_H1": {
-      "brain_id": "Microstructure_Transformer_V5.0_H1",
-      "status": "retired",
-      "registered_at": "2026-05-16T07:49:08.307628",
-      "last_transition_at": "2026-05-16T07:49:08.307628",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
     "CRT.sur.chlg.g2026.1": {
       "brain_id": "CRT.sur.chlg.g2026.1",
       "status": "probation",
@@ -197,51 +148,11 @@
       "transition_count": 0,
       "freeze_count": 0
     },
-    "ARB_Params_V8_M15_S53": {
-      "brain_id": "ARB_Params_V8_M15_S53",
-      "status": "frozen",
-      "registered_at": "2026-05-16T21:57:54.413512",
-      "last_transition_at": "2026-05-16T21:57:54.413512",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "ARB_Params_V8_M5_S53": {
-      "brain_id": "ARB_Params_V8_M5_S53",
-      "status": "frozen",
-      "registered_at": "2026-05-16T21:57:54.413512",
-      "last_transition_at": "2026-05-16T21:57:54.413512",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "LIGHTGBM_barrier_12bar": {
-      "brain_id": "LIGHTGBM_barrier_12bar",
-      "status": "frozen",
-      "registered_at": "2026-05-16T21:57:54.413512",
-      "last_transition_at": "2026-05-16T21:57:54.413512",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "LightGBM_D1_Swing_5d": {
-      "brain_id": "LightGBM_D1_Swing_5d",
-      "status": "frozen",
-      "registered_at": "2026-05-16T21:57:54.413512",
-      "last_transition_at": "2026-05-16T21:57:54.413512",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "LightGBM_M15_Swing_24bar": {
-      "brain_id": "LightGBM_M15_Swing_24bar",
-      "status": "frozen",
-      "registered_at": "2026-05-16T21:57:54.413512",
-      "last_transition_at": "2026-05-16T21:57:54.413512",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "XGBOOST_barrier_12bar": {
-      "brain_id": "XGBOOST_barrier_12bar",
-      "status": "frozen",
-      "registered_at": "2026-05-16T21:57:54.413512",
-      "last_transition_at": "2026-05-16T21:57:54.413512",
+    "Meta_Stage1_Huber_V1": {
+      "brain_id": "Meta_Stage1_Huber_V1",
+      "status": "candidate",
+      "registered_at": "2026-05-17T08:00:00.000000",
+      "last_transition_at": "2026-05-17T08:00:00.000000",
       "transition_count": 0,
       "freeze_count": 0
     }
@@ -708,7 +619,21 @@
       "to_status": "retired",
       "reason": "pnl:critical",
       "timestamp": "2026-05-16T21:57:54.413512"
+    },
+    {
+      "brain_id": "Meta_Stage1_Huber_V1",
+      "from_status": "unknown",
+      "to_status": "candidate",
+      "reason": "FIX-20260517-011: orphan config registration — config exists at configs/brains/meta_stage1_huber_v1.json, vote_weight=0.0 tracking only",
+      "timestamp": "2026-05-17T08:00:00.000000"
+    },
+    {
+      "brain_id": "bulk_cleanup_12_zombies",
+      "from_status": "retired/frozen",
+      "to_status": "deleted",
+      "reason": "FIX-20260517-011: bulk removal of 12 brain_states with no config files (LightGBM_V2_Retrained, LightGBM_V3_New, XGBoost_V11_New, Microstructure_Transformer_V5.0/M15/H1, ARB_Params_V8_M15/M5, LIGHTGBM_barrier_12bar, LightGBM_D1_Swing_5d, LightGBM_M15_Swing_24bar, XGBOOST_barrier_12bar)",
+      "timestamp": "2026-05-17T08:00:00.000000"
     }
   ],
-  "updated_at": "2026-05-17T06:11:41"
+  "updated_at": "2026-05-17T08:00:31"
 }
