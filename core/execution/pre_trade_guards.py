@@ -473,6 +473,16 @@ def check_feature_freshness(
 
     now = time.time()
     age = now - feature_timestamp
+
+    # Reject future timestamps — clock skew or misconfigured data warmer
+    if age < 0:
+        return {
+            "fresh": False,
+            "age_seconds": round(age, 3),
+            "max_age_seconds": max_age_seconds,
+            "reason": "future_timestamp",
+        }
+
     return {
         "fresh": age <= max_age_seconds,
         "age_seconds": round(age, 3),

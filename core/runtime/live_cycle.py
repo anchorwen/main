@@ -697,7 +697,7 @@ def _execute_management_phase(
     micro_feature_computer: Any,
     micro_feature_adapter: Any,
     daily_feature_provider: Any = None,
-) -> bool:
+) -> Any:
     """Manage open position: trail stop, re-evaluate brains, check exits.
 
     Returns True if the position was closed (caller should skip post-exit
@@ -1853,7 +1853,7 @@ def _reconcile_closed_positions(
 
         close_price = None
         close_time = None
-        close_reason = None
+        close_reason: int | None = None
         close_volume = open_entry.get("volume") or open_entry.get("effective_volume_hint", 0.0)
 
         if deals:
@@ -1905,7 +1905,7 @@ def _reconcile_closed_positions(
             label = "manual_close"
 
         close_reason_str = {4: "sl_hit", 5: "tp_hit"}.get(
-            close_reason, "manual_close" if close_reason else "unknown_close"
+            close_reason or 0, "manual_close" if close_reason else "unknown_close"
         )
 
         # ── Resolve strategy name and magic with fallback ──
@@ -2012,13 +2012,15 @@ def _compute_contract_group_consensus(
     base_volume: float,
     current_atr: float,
     regime_info: dict[str, Any] | None = None,
+    total_budget: float = 0.0,
+    lot_value: float | None = None,
 ) -> dict[str, Any]:
     """Compute contract-group consensus and capital allocation from raw proposals.
 
     Returns a dict with keys: direction, confidence, dynamic_volume, proposals,
     consensus_extra.
     """
-    from core.execution.capital_allocator import compute_volume, resolve_conflicts
+    from core.execution.capital_allocator import CapitalAllocator, compute_volume, resolve_conflicts
     from core.parliament.contract_groups import compute_all_group_signals
 
     # Build (brain_info, proposal) pairs for group assignment
@@ -2049,6 +2051,20 @@ def _compute_contract_group_consensus(
                 },
             )
     weighter.apply_weights(raw_proposals)
+
+    # ── Capacity-aware position sizing (P&L Phase 4) ──
+    capacity_allocations: dict[str, float] = {}
+    if total_budget > 0:
+        try:
+            allocator = CapitalAllocator()
+            brain_weights = weighter.get_weights()
+            capacity_allocations = allocator.allocate_capacity(
+                total_budget=total_budget,
+                brain_weights=brain_weights,
+                lot_value=lot_value,
+            )
+        except Exception:
+            pass
 
     # Per-group consensus
     group_signals = compute_all_group_signals(brain_proposal_pairs, weighter)
@@ -2116,6 +2132,7 @@ def _compute_contract_group_consensus(
             },
             "aggregated_bias": direction,
             "consensus_score": confidence,
+            "capacity_allocations": capacity_allocations,
         }
         proposals = list(raw_proposals)
     else:
@@ -2133,6 +2150,7 @@ def _compute_contract_group_consensus(
                 "agreement_level": "none",
                 "reason": allocation.reason,
             },
+            "capacity_allocations": capacity_allocations,
         }
         proposals = list(raw_proposals)
 
@@ -2203,7 +2221,7 @@ def _build_strategy_lines(
 
     # Partition brains by contract_group (declared in brain JSON, not brain_type)
 
-    _known_groups = {g["name"]: [] for g in ALL_GROUPS}
+    _known_groups: dict[str, list[Any]] = {g["name"]: [] for g in ALL_GROUPS}
     _unknown_brains: list[dict[str, Any]] = []
 
     for b_info in brains:
@@ -2689,6 +2707,7 @@ def _evaluate_strategy_lines(
     daily_feature_vector: Any = None,
     account_equity: float | None = None,
     cycle_count: int = 0,
+    meta_signal_filter: Any = None,
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue.
 
@@ -2732,6 +2751,7 @@ def _evaluate_strategy_lines(
             pnl_ledger=pnl_ledger,
             micro_sequences=micro_sequences,
             daily_feature_vector=daily_feature_vector,
+            meta_filter=meta_signal_filter,
         )
 
         # Apply session + health volume multipliers
@@ -2836,6 +2856,7 @@ def execute_live_cycle(
     pnl_ledger: Any = None,
     exit_watchdog: Any = None,
     limit_monitor: Any = None,
+    meta_signal_filter: Any = None,
 ) -> tuple[LiveCycleState, bool]:
     """Execute one iteration of the live intent cycle.
 
@@ -3886,7 +3907,7 @@ def execute_live_cycle(
                                 _pm_pos = state.position_manager.get_position()
                                 if _pm_pos is not None and _pm_pos.ticket == _ticket:
                                     _entry_cycle_from_pm = _pm_pos.entry_cycle
-                            _brain_ids_from_pm = []
+                            _brain_ids_from_pm: list[str] = []
                             if (
                                 state.position_manager is not None
                                 and state.position_manager.has_position()
@@ -3972,6 +3993,7 @@ def execute_live_cycle(
             daily_feature_vector=daily_feature_vector,
             account_equity=_account_equity,
             cycle_count=state.cycle_count,
+            meta_signal_filter=meta_signal_filter,
         )
 
         # Log strategy evaluation results
@@ -4303,6 +4325,7 @@ def execute_live_cycle(
                         macro_regime=macro_regime,
                         risk_budget_usd=_effective_risk_budget,
                         micro_sequences=micro_sequences,
+                        meta_filter=meta_signal_filter,
                     )
                     if decision.should_trade and mid_price is not None:
                         state.shadow_verification_pending = {
@@ -4508,6 +4531,7 @@ def execute_live_cycle(
             base_volume=config.volume or 0.01,
             current_atr=current_atr,
             regime_info=regime_info,
+            total_budget=getattr(config, "risk_budget_usd", 0.0) or 0.0,
         )
         direction = result["direction"]
         confidence = result["confidence"]
@@ -4969,7 +4993,7 @@ def execute_live_cycle(
             try:
                 # Extract ticket from journal (written by dispatch_live_open_order)
                 intent_id = out.get("intent_id", "")
-                ticket: int | None = None
+                pm_ticket: int | None = None
                 if intent_id and journal_path and journal_path.exists():
                     for line in journal_path.read_text(encoding="utf-8").splitlines():
                         line = line.strip()
@@ -4980,38 +5004,38 @@ def execute_live_cycle(
                             if rec.get("message_id") == intent_id and rec.get("action") == "open":
                                 t = rec.get("position_ticket")
                                 if t is not None and isinstance(t, int) and t > 0:
-                                    ticket = t
+                                    pm_ticket = t
                         except Exception:
                             pass
                         break
-                if ticket is not None:
+                if pm_ticket is not None:
                     # Build entry consensus snapshot
-                    entry_consensus: dict[str, Any] = {}
-                    supporting: list[str] = []
+                    pm_entry_consensus: dict[str, Any] = {}
+                    pm_supporting: list[str] = []
                     if config.multi_brain:
-                        entry_consensus = {
+                        pm_entry_consensus = {
                             "aggregated_bias": consensus_extra.get("aggregated_bias", side),
                             "consensus_score": consensus_extra.get("consensus_score", confidence),
                             "voter_count": consensus_extra.get("voter_count", 0),
                             "majority_ratio": consensus_extra.get("majority_ratio", 0.0),
                             "disagreement_score": consensus_extra.get("disagreement_score", 0.0),
                         }
-                        supporting = list(consensus_extra.get("supporting_brains", []))
+                        pm_supporting = list(consensus_extra.get("supporting_brains", []))
                     else:
-                        entry_consensus = {
+                        pm_entry_consensus = {
                             "aggregated_bias": side,
                             "consensus_score": confidence,
                             "voter_count": 1,
                             "majority_ratio": 1.0,
                         }
-                        supporting = dispatch_brain_ids or []
+                        pm_supporting = dispatch_brain_ids or []
 
                     # ── Build per-model horizon map (reads training_horizon from brain JSON) ──
-                    model_horizons: dict[str, int] = {}
+                    pm_model_horizons: dict[str, int] = {}
                     if config.multi_brain:
                         for bi in brains:
                             bid = bi.get("brain_id", "")
-                            model_horizons[bid] = bi.get("training_horizon", _DEFAULT_HORIZON)
+                            pm_model_horizons[bid] = bi.get("training_horizon", _DEFAULT_HORIZON)
                     elif dispatch_brain_ids:
                         for bid in dispatch_brain_ids:
                             horizon = _DEFAULT_HORIZON
@@ -5019,10 +5043,10 @@ def execute_live_cycle(
                                 if bi.get("brain_id") == bid:
                                     horizon = bi.get("training_horizon", _DEFAULT_HORIZON)
                                     break
-                            model_horizons[bid] = horizon
+                            pm_model_horizons[bid] = horizon
 
                     state.position_manager.register_position(
-                        ticket=ticket,
+                        ticket=pm_ticket,
                         side=side,
                         entry_price=ref_for_guard,
                         volume=config.volume or 0.01,
@@ -5031,9 +5055,9 @@ def execute_live_cycle(
                         entry_atr=current_atr,
                         entry_cycle=state.loop_iteration,
                         entry_z_score=0.0,
-                        entry_consensus=entry_consensus,
-                        supporting_brain_ids=supporting,
-                        model_horizons=model_horizons,
+                        entry_consensus=pm_entry_consensus,
+                        supporting_brain_ids=pm_supporting,
+                        model_horizons=pm_model_horizons,
                         current_high=ref_for_guard,
                     )
                     print(

@@ -1,0 +1,25 @@
+{
+  "schema_version": "label_contract.v1",
+  "contract_id": "label-regression-barrier-2.0.0",
+  "type": "regression",
+  "horizon_bars": 12,
+  "bar_timeframe": "M5",
+  "regression_target": "forward_return",
+  "label_classes": {
+    "continuous": "forward_log_return_bps_with_deadband_squashing"
+  },
+  "spread_pips": 0.3,
+  "slippage_pips": 1.0,
+  "pip_value": 0.01,
+  "metadata": {
+    "author": "quant-os",
+    "rationale": "Regression labels for two-stage meta-labeling Stage 1 (Direction Compass). Uses apply_friction_deadband() piecewise function: sub-friction returns are zeroed rather than having friction subtracted, preventing phantom inverted signals on tiny moves. Cent-account conservative defaults: slippage_pips=1.0 (not 0.5). Friction dead-band ≈ 0.05 bps for gold at 2600 — near-zero but critical for precision on micro-moves.",
+    "target_formula": "deadband(log(close[t+12]/close[t]) * 10000, friction_bps=(spread+slippage)*pip_value/entry*10000)",
+    "dead_band_rule": "|return| <= friction -> 0 (neutral); return > friction -> return - friction (long signal); return < -friction -> return + friction (short signal)",
+    "applicable_lanes": ["barrier_12bar", "meta_labeling_stage1"],
+    "training_data_source": "data/training/train.npz",
+    "account_type": "cent",
+    "created_at": "2026-05-16",
+    "evolution": "Replaces simple friction subtraction with dead-band squashing per Architect Correction 1. Zeroes sub-friction returns rather than creating phantom inverted signals."
+  }
+}

@@ -53,6 +53,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260515-013 | 2026-05-15 | cursor-agent | — | Three-knife OU exit refactor: (1) Smart Entry inflection gate z_entry 1.5→2.0 + volume climax, (2) Drift Lock spatial re-entry lock after mean-drift exit, (3) Alpha Handoff OU→trailing-stop on profit+trend | missing-feature |
 | FIX-20260514-003 | 2026-05-14 | cursor-agent | a4a1005 | Fixed raw_proposals UnboundLocalError: elif indentation error caused multi-strategy evaluation to be unreachable | type-confusion |
 | FIX-20260513-001 | 2026-05-14 | cursor-agent | a4a1005 | PnL recording moved before approval gate: each proposal gets isolated PnL record to prevent missing ledger entries | state-leak |
 

@@ -43,6 +43,7 @@
 | **brains/adapters** | contracts, features (via factory) |
 | **brains/services** | contracts, features, feedback |
 | **brains/schema** | — |
+| **brains/validation** | brains, deployment |
 | **protocol/services** | contracts, execution, observability |
 | **protocol/governance** | contracts |
 | **protocol/parliament** | brains, contracts |

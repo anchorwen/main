@@ -183,6 +183,32 @@ def _build_barrier_labels_array(
     )
 
 
+# ── Friction dead-band squashing ──
+
+
+def apply_friction_deadband(raw_return_bps: np.ndarray, friction_bps: float) -> np.ndarray:
+    """Bidirectional friction with dead-band zeroing.
+
+    Subtractive friction creates phantom inverted signals: a +2 bps return
+    minus 3 bps friction = -1 bps target → model learns to SHORT on tiny
+    uptrends.  This is catastrophic for cent accounts where friction is a
+    large fraction of the expected return.
+
+    Dead-band rule:
+      - return > +friction  → return - friction  (long signal)
+      - return < -friction  → return + friction  (short signal)
+      - |return| ≤ friction → 0                  (neutral — stay flat)
+
+    The model learns that sub-friction moves are not tradeable.
+    """
+    adjusted = np.zeros_like(raw_return_bps, dtype=np.float64)
+    long_wins = raw_return_bps > friction_bps
+    adjusted[long_wins] = raw_return_bps[long_wins] - friction_bps
+    short_wins = raw_return_bps < -friction_bps
+    adjusted[short_wins] = raw_return_bps[short_wins] + friction_bps
+    return adjusted
+
+
 # ── Label Contract dataclass ──
 
 
@@ -211,9 +237,9 @@ class LabelContract:
     # For regression type
     regression_target: str | None = None  # "forward_return" | "log_return"
 
-    # Transaction cost modeling
+    # Transaction cost modeling (cent-account conservative defaults)
     spread_pips: float = 0.3
-    slippage_pips: float = 0.5
+    slippage_pips: float = 1.0
     pip_value: float = 0.01
 
     # Metadata
@@ -330,6 +356,146 @@ class LabelContract:
             slippage_pips=self.slippage_pips,
             pip_value=self.pip_value,
         )
+
+    # ── Regression label builder ──
+
+    def build_regression_labels(
+        self,
+        closes: np.ndarray,
+        *,
+        entry_idx: int,
+        side: str = "long",
+    ) -> float:
+        """Build a regression label for a single entry point.
+
+        Computes the forward log return over ``horizon_bars`` in basis points
+        (× 10000), then applies friction dead-band squashing so that
+        sub-friction returns are zeroed rather than producing phantom
+        inverted signals.
+
+        Formula:
+            raw_bps = sign * log(close[t+H] / close[t]) * 10000
+            friction_bps = (spread_pips + slippage_pips) * pip_value
+                           / entry_price * 10000
+            label = apply_friction_deadband(raw_bps, friction_bps)
+
+        Args:
+            closes: Close price array.
+            entry_idx: Index in array where the trade hypothetically opens.
+            side: "long" or "short".
+
+        Returns:
+            Adjusted forward return in basis points (float).
+        """
+        if self.type != "regression":
+            raise ValueError(
+                f"build_regression_labels requires type='regression', got '{self.type}'"
+            )
+        entry_price = float(closes[entry_idx])
+        if entry_price <= 0:
+            return 0.0
+
+        end_idx = min(entry_idx + self.horizon_bars, len(closes) - 1)
+        if end_idx <= entry_idx:
+            return 0.0
+
+        exit_price = float(closes[end_idx])
+        if exit_price <= 0:
+            return 0.0
+
+        # Forward log return in basis points
+        if side == "long":
+            raw_bps = float(np.log(exit_price / entry_price) * 10000)
+        else:
+            raw_bps = float(np.log(entry_price / exit_price) * 10000)
+
+        # Friction in basis points: (spread + slippage) / entry * 10000
+        friction_pips = self.spread_pips + self.slippage_pips
+        friction_bps = friction_pips * self.pip_value / entry_price * 10000
+
+        return float(apply_friction_deadband(np.array([raw_bps]), friction_bps)[0])
+
+    # ── Volatility-scaled regression labels ──
+
+    def build_vol_scaled_regression_labels(
+        self,
+        closes: np.ndarray,
+        highs: np.ndarray | None = None,
+        lows: np.ndarray | None = None,
+        *,
+        entry_idx: int,
+        side: str = "long",
+    ) -> float:
+        """Build a volatility-scaled regression label for anti-collapse training.
+
+        Instead of returning raw bps, divides the forward return by ATR at
+        entry to produce a unitless "ATR-multiple" label.  This eliminates
+        heteroskedasticity: a +10 bps move during 0.5 ATR quiet hours gets
+        the same label weight as a +20 bps move during 1.0 ATR volatile hours.
+
+        Formula:
+            raw_bps = log(close[t+H] / close[t]) * 10000
+            atr_at_entry = _compute_atr(high, low, close, period=14)
+            label = deadband(raw_bps / atr_at_entry, friction/atr_at_entry)
+
+        Args:
+            closes: Close price array.
+            highs: High price array (required for ATR computation).
+            lows: Low price array (required for ATR computation).
+            entry_idx: Index in array where the trade hypothetically opens.
+            side: "long" or "short".
+
+        Returns:
+            Volatility-scaled return in ATR multiples (float).
+        """
+        if self.type != "regression":
+            raise ValueError(
+                f"build_vol_scaled_regression_labels requires type='regression', got '{self.type}'"
+            )
+        entry_price = float(closes[entry_idx])
+        if entry_price <= 0:
+            return 0.0
+
+        end_idx = min(entry_idx + self.horizon_bars, len(closes) - 1)
+        if end_idx <= entry_idx:
+            return 0.0
+
+        exit_price = float(closes[end_idx])
+        if exit_price <= 0:
+            return 0.0
+
+        # Forward log return in basis points
+        if side == "long":
+            raw_bps = float(np.log(exit_price / entry_price) * 10000)
+        else:
+            raw_bps = float(np.log(entry_price / exit_price) * 10000)
+
+        # ATR at entry
+        if highs is not None and lows is not None:
+            atr_val = _compute_atr(
+                highs[: entry_idx + 1],
+                lows[: entry_idx + 1],
+                closes[: entry_idx + 1],
+                period=self.atr_period,
+            )
+        else:
+            # Fallback: approximate ATR from close volatility (suboptimal)
+            window = closes[max(0, entry_idx - self.atr_period) : entry_idx + 1]
+            if len(window) < 2:
+                return 0.0
+            atr_val = float(np.std(np.diff(np.log(window))) * entry_price)
+        if atr_val <= 1e-8:
+            return 0.0
+
+        # Friction in ATR multiples
+        friction_pips = self.spread_pips + self.slippage_pips
+        friction_bps = friction_pips * self.pip_value / entry_price * 10000
+        friction_atr = friction_bps / atr_val
+
+        # Scale return to ATR multiples
+        raw_atr_mult = raw_bps / atr_val
+
+        return float(apply_friction_deadband(np.array([raw_atr_mult]), friction_atr)[0])
 
     # ── Self-consistency checks ──
 

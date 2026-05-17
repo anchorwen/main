@@ -33,6 +33,7 @@ Active positions + pending intents → PortfolioRiskController.evaluate()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260517-007 | 2026-05-17 | cursor-agent | — | CapitalAllocator: capacity-aware position sizing with two defense lines — max_concentration (50% default, prevents single-brain hot-streak dominance) + min_lot_size gating (prevents sub-minimum-lot micro-orders). Proportional allocation based on DynamicBrainWeighter brain weights. | missing-feature |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

@@ -1,0 +1,140 @@
+# Brains / Validation
+
+## Purpose
+Load-time brain config validation and runtime alerting. Catches configuration errors before they become silent inference failures. Every fallback or degradation emits a structured JSON alert to stderr.
+
+## Key Files
+
+| File | Role |
+|------|------|
+| `core/deployment/brain_config_validator.py` | `BrainConfigValidator` — 7-check validation at BrainFactory.build() time |
+| `core/deployment/brain_alert.py` | `emit_brain_alert()` — structured JSON alerts to stderr |
+| `scripts/repair_brain_configs.py` | Batch repair tool for missing `features` fields |
+
+## Validation Rules (BrainConfigValidator)
+
+### Rule 1: Required Fields
+**Check**: `brain_id`, `brain_type`, `feature_schema_id`, `artifact_path`, `status` must be present and non-empty.
+**Level**: ERROR — brain excluded from inference.
+
+### Rule 2: Brain Type
+**Check**: `brain_type` must be a key in `BRAIN_TYPE_MAP` (15 known types).
+**Level**: ERROR.
+
+### Rule 3: Feature Schema
+**Check**: `feature_schema_id` must be in `SCHEMA_DIMENSIONS` (8 known schemas + aliases).
+**Level**: ERROR.
+
+### Rule 4: Artifact Path
+**Check**: `artifact_path` must point to an existing file.
+**Level**: WARNING — non-blocking (some models resolve paths at runtime).
+
+### Rule 5: Features List Length
+**Check**: If `features` field is present, its length must match `SCHEMA_DIMENSIONS[feature_schema_id]`.
+**Level**: ERROR.
+
+### Rule 6: Feature Name Validity
+**Check**: Each name in `features` must exist in the canonical schema feature list.
+**Level**: WARNING.
+
+### Rule 7: Model Dimension (Post-Load)
+**Check**: Adapter's `_num_features` (from model file) must match `SCHEMA_DIMENSIONS[feature_schema_id]`.
+**Level**: ERROR — `BrainConfigError` raised, brain excluded.
+
+## Schema Dimensions
+
+| Schema ID | Canonical | Dimension |
+|-----------|-----------|-----------|
+| `v9_institutional_40` | v9_institutional_40 | 40 |
+| `daily_swing_24` | daily_swing_24 | 24 |
+| `swing_24` | daily_swing_24 (alias) | 24 |
+| `v4.5_microstructure_9` | v4.3_microstructure_9 (alias) | 9 |
+| `v2_microstructure_9` | v4.3_microstructure_9 (alias) | 9 |
+| `v4.3_microstructure_9` | v4.3_microstructure_9 | 9 |
+| `v2_microstructure_288` | v2_microstructure_288 | 288 |
+| `meta_stage2_runtime_47` | meta_stage2_runtime_47 | 47 |
+| `meta_stage2_runtime_56` | meta_stage2_runtime_56 | 56 |
+| `meta_stage2_runtime_59` | meta_stage2_runtime_59 | 59 |
+| `v6_price_series_1` | v6_price_series_1 | 1 |
+
+## Alert Types
+
+| Alert Type | Trigger | Fallback Behavior |
+|-----------|---------|-------------------|
+| `config_validation_error` | BrainConfigValidator fails (ERROR level) | Brain excluded, added to `_failed_brain_ids` |
+| `feature_dimension_mismatch` | `len(feature_vector) != adapter._num_features` | Zero vector → neutral prediction |
+| `model_load_failed` | ONNX/XGBoost/LightGBM/JSON load exception | `stub:<ExceptionName>` backend |
+| `feature_missing` | No `features` in config AND booster unavailable | Zero vector |
+| `brain_stub_mode` | ONNX session is None, deterministic stub active | Heuristic-based fallback |
+
+All alerts follow the format: `{"event":"brain_alert","time":"<ISO8601>","brain_id":"...","alert_type":"...","detail":{...}}`
+
+Printed to **stderr** to avoid corrupting stdout JSON output (shadow CLI, feature export, etc.).
+
+## Brain Registration Checklist
+
+Before registering a new brain in `configs/brains/`:
+
+1. [ ] `brain_id` is unique and descriptive
+2. [ ] `brain_type` is in `BRAIN_TYPE_MAP`
+3. [ ] `feature_schema_id` matches the training data schema
+4. [ ] `artifact_path` exists and is the correct format for the brain_type
+5. [ ] `features` field is populated (run `python scripts/repair_brain_configs.py --write`)
+6. [ ] Run `python scripts/repair_brain_configs.py --validate-only` — no errors
+7. [ ] Run `python -m apps.engine.main_v9_shadow --symbol XAUUSDc --cycles 50` — brain produces varying signals
+8. [ ] Check for brain_alerts: `grep brain_alert` in shadow output
+
+## Data Flow
+
+```
+BrainConfigValidator.validate(brain_entry) → ValidationResult
+  └─ on ERROR  → BrainConfigError → brain excluded from inference
+  └─ on WARNING → emit_brain_alert() → brain runs with alert
+
+Adapter fallback paths
+  └─ emit_brain_alert(brain_id, alert_type, detail) → stderr JSON
+```
+
+## Inbound Dependencies
+
+| Module | What is imported | Why |
+|--------|-----------------|-----|
+| brains/adapters | BaseBrainAdapter | Validation of model file dimensions |
+| deployment/brain_alert | emit_brain_alert | Structured alert on validation failure |
+
+## Outbound Dependents
+
+| Module | What it imports | Why |
+|--------|-----------------|-----|
+| brains/services/brain_factory | BrainConfigValidator, BrainConfigError | Load-time brain config validation |
+| brains/services/brain_run_service | (indirect via BrainFactory) | Failed brains tracked in _failed_brain_ids |
+
+## Known Issues
+
+## Fix History
+
+| Fix ID | Date | Author | Commit | Summary | Root Cause |
+|--------|------|--------|--------|---------|------------|
+| FIX-20260516-009 | 2026-05-16 | cursor-agent | — | Added enable_onnxruntime:true to DeepResMLP_V2_New config (was missing, would cause stub mode). Deleted 4 stale configs for permanently retired brains. Registered 5 new shadow brains in governance_state. | RC-09 |
+| FIX-20260516-008 | 2026-05-16 | cursor-agent | — | BrainConfigValidator (7 checks at load time) + BrainAlert (structured JSON to stderr) + metadata completion + blueprint diagnostic manual | RC-09 |
+
+## Cross-Module Contracts
+
+| Contract | Consumers | Stability |
+|----------|-----------|----------|
+| `BrainConfigValidator.validate(brain_entry)` → `ValidationResult` | BrainFactory | Stable |
+| `emit_brain_alert(brain_id, alert_type, detail)` → stderr JSON | All adapters | Stable |
+| `repair_brain_configs.py --validate-only` → 0 errors gate | CI/CD, pre-registration | Stable |
+
+## Verification
+
+```bash
+# Validate all configs
+python scripts/repair_brain_configs.py --validate-only
+
+# Check for brain_alerts in stderr during shadow run
+python -m apps.engine.main_v9_shadow --symbol XAUUSDc --cycles 50 2>&1 >/dev/null | grep brain_alert
+
+# Brain-specific tests
+python -m pytest tests/ -k "brain" -q
+```

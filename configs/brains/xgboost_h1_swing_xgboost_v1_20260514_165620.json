@@ -12,9 +12,19 @@
   "training_contract": "h1_swing_xgboost_v1",
   "normalization_config_path": "",
   "deployment_scope": {
-    "symbols": ["XAUUSDc", "XAUUSD"],
-    "sessions": ["all"],
-    "regimes": ["trend", "volatile_trend", "mean_reversion", "ranging"]
+    "symbols": [
+      "XAUUSDc",
+      "XAUUSD"
+    ],
+    "sessions": [
+      "all"
+    ],
+    "regimes": [
+      "trend",
+      "volatile_trend",
+      "mean_reversion",
+      "ranging"
+    ]
   },
   "contract_group": "h1_swing",
   "training_horizon": 24,
@@ -22,5 +32,31 @@
   "_notes": "xgboost h1_swing — 24-bar barrier. train_sharpe=5.98, fw_sharpe=8.43, overfit_gap=2.44, hash=90fbb0912cb5...",
   "_model_hash": "90fbb0912cb5d0cb3270348806dc60f3ab403a43dfa4c01a56d0afb1cf09dbde",
   "_created_at": "2026-05-14T16:56:20.013179+00:00",
-  "_quality_gate_passed": true
+  "_quality_gate_passed": true,
+  "features": [
+    "D1_Ret_1",
+    "D1_Body_Ratio",
+    "D1_ATR_14",
+    "D1_RSI_14",
+    "D1_MACD",
+    "D1_Vol_ZScore",
+    "D1_Bollinger_Width",
+    "D1_ADX_14",
+    "H4_Trend_Strength",
+    "H4_ATR_Ratio",
+    "H4_RSI_Divergence",
+    "H4_vs_D1_Alignment",
+    "Cross_Gold_Silver_Ratio",
+    "Cross_DXY_Return",
+    "Cross_EURUSD_Return",
+    "Cross_Risk_On_Off",
+    "Derived_Weekday_Sin",
+    "Derived_Weekday_Cos",
+    "Derived_Days_To_MonthEnd",
+    "Derived_Is_MonthEnd_Week",
+    "Derived_Weekend_Gap",
+    "Derived_Vol_Regime",
+    "Derived_Momentum_5D",
+    "Derived_Momentum_20D"
+  ]
 }

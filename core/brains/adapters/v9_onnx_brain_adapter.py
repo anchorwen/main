@@ -12,6 +12,7 @@ import numpy as np
 
 from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
 from core.contracts.ids import new_proposal_id
+from core.deployment.brain_alert import emit_brain_alert
 
 from ..schema_versions import SCHEMA_BRAIN_DECISION_PROPOSAL
 from .base_adapter import BaseBrainAdapter
@@ -27,6 +28,7 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
         self._input_name: Any = None  # str | None
         self._output_names: list[str] = []
         self._guard: Any = None  # InferenceGuard | None
+        self._num_features: int | None = None
 
     # ------------------------------------------------------------------
     # BaseBrainAdapter interface
@@ -68,6 +70,10 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
             )
             self._input_name = self._session.get_inputs()[0].name
             self._output_names = [output.name for output in self._session.get_outputs()]
+            # Extract expected feature dimension from ONNX input shape
+            input_shape = self._session.get_inputs()[0].shape
+            if len(input_shape) >= 2 and isinstance(input_shape[1], int) and input_shape[1] > 0:
+                self._num_features = input_shape[1]
             self._backend = "onnxruntime"
         except Exception as exc:
             self._backend = f"stub:{type(exc).__name__}"
@@ -76,6 +82,11 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
                 f"[v9_onnx_adapter] load_failed brain_id={bid} artifact={artifact} "
                 f"error={type(exc).__name__}: {exc}",
                 flush=True,
+            )
+            emit_brain_alert(
+                bid,
+                "model_load_failed",
+                {"artifact": artifact, "error": f"{type(exc).__name__}: {exc}"},
             )
 
     def infer(self, feature_vector: np.ndarray) -> dict[str, Any]:
@@ -231,7 +242,7 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
     # Convenience — full pipeline (used by tests and simple callers)
     # ------------------------------------------------------------------
 
-    def run(self, snapshot, feature_source: dict) -> BrainDecisionProposal:
+    def run(self, snapshot, feature_source: dict | None = None) -> BrainDecisionProposal:
         """Full pipeline: feature_source → feature_vector → infer → get_signal.
 
         ``snapshot`` is kept for interface compatibility but ignored here;
@@ -254,8 +265,8 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
         # mean (≈0 for every scenario).  Replace with key-feature heuristics
         # so per-scenario direction variation is preserved.
         if self._session is None:
-            h1_hurst = float(feature_source.get("H1_Hurst", 0))
-            m15_hurst = float(feature_source.get("M15_Hurst", 0))
+            h1_hurst = float(feature_source.get("H1_Hurst", 0)) if feature_source else 0.0
+            m15_hurst = float(feature_source.get("M15_Hurst", 0)) if feature_source else 0.0
             if h1_hurst < -0.9:
                 logits_row = [0.35, 0.35, 3.5]  # class 2 = long
             elif m15_hurst < -0.80:
@@ -282,6 +293,14 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
             return self._session.run(self._output_names, {self._input_name: model_input})
 
         # Deterministic fallback when ONNX is unavailable.
+        emit_brain_alert(
+            self._brain_entry.get("brain_id", "unknown"),
+            "brain_stub_mode",
+            {
+                "backend": self._backend,
+                "message": "ONNX session unavailable, using deterministic stub",
+            },
+        )
         m = float(np.mean(model_input))
         centered = float(np.tanh(m))
         if centered > -0.76:  # tanh(-1.0) — near-zero or positive mean → neutral bias

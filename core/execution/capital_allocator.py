@@ -331,6 +331,61 @@ class GroupCorrelationTracker:
         return round(min(penalties), 4)  # most conservative penalty wins
 
 
+# ── Capacity-aware position sizing ──────────────────────────────────────────
+#
+#  Phase 4 of Brain P&L pipeline: allocates risk budget across brains
+#  proportionally to historical performance, with two institutional-grade
+#  defense lines to prevent concentration risk and micro-lot noise.
+
+
+class CapitalAllocator:
+    """Allocates risk budget across brains based on performance-driven weights.
+
+    Two defense lines:
+    1. Max Concentration Limit — no single brain can exceed `max_concentration`
+       of total budget (default 50%), preventing a hot-streak brain from
+       eating all capital.
+    2. Minimum Viable Size — allocations below `min_lot_size` are zeroed,
+       preventing sub-minimum-lot micro-orders that waste fees.
+    """
+
+    def allocate_capacity(
+        self,
+        total_budget: float,
+        brain_weights: dict[str, float],
+        max_concentration: float = 0.5,
+        min_lot_size: float = 0.01,
+        lot_value: float | None = None,
+    ) -> dict[str, float]:
+        """Allocate risk budget proportionally to brain weights.
+
+        Args:
+            total_budget: Total risk budget in account currency (USD).
+            brain_weights: {brain_id: weight} from DynamicBrainWeighter.
+            max_concentration: Max fraction of budget any single brain can use.
+            min_lot_size: Platform minimum lot size (0.01 for XAUUSDc).
+            lot_value: Notional value of one lot, for MVS gating.
+
+        Returns:
+            {brain_id: allocated_budget} — may include zero entries.
+        """
+        total_weight = sum(brain_weights.values())
+        if total_weight == 0:
+            return {b_id: 0.0 for b_id in brain_weights}
+
+        allocations: dict[str, float] = {}
+        for brain_id, weight in brain_weights.items():
+            raw_alloc = total_budget * (weight / total_weight)
+            capped_alloc = min(raw_alloc, total_budget * max_concentration)
+            if lot_value is not None and lot_value > 0:
+                lots = capped_alloc / lot_value
+                if lots < min_lot_size:
+                    capped_alloc = 0.0
+            allocations[brain_id] = round(capped_alloc, 4)
+
+        return allocations
+
+
 # ── Portfolio-optimizer bridge ──────────────────────────────────────────────
 
 

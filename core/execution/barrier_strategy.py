@@ -34,8 +34,7 @@ class BarrierStrategy(StrategyLine):
         proposals: list[Any] = []
         for b_info in self.brains:
             try:
-                raw = b_info["adapter"].infer(feature_vector)
-                prop = b_info["adapter"].get_signal(raw)
+                prop = b_info["adapter"].inference(feature_vector)
                 # Stamp brain_id
                 bid = b_info.get("brain_id", "unknown")
                 try:

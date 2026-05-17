@@ -34,6 +34,7 @@ class TrainingDataset:
 
     X: np.ndarray
     y: np.ndarray
+    y_reg: np.ndarray | None = None  # Regression labels (for Huber/meta-labeling)
     feature_names: list[str] = field(default_factory=list)
     timestamps: np.ndarray | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -237,10 +238,14 @@ class TrainingDataset:
         path = Path(path)
         ext = path.suffix.lower()
         ts: np.ndarray | None = None
+        y_reg: np.ndarray | None = None
 
         if ext == ".npz":
             d = np.load(path, allow_pickle=True)
             X, y = d["X"], d["y"]
+            y_reg_raw = d.get("y_reg")  # optional regression labels
+            if y_reg_raw is not None:
+                y_reg = np.asarray(y_reg_raw, dtype=np.float64)
             feat_raw = d.get("feature_names")
             if feat_raw is None:
                 feature_names = [f"f_{i}" for i in range(X.shape[1])]
@@ -281,6 +286,7 @@ class TrainingDataset:
         return cls(
             X=np.asarray(X, dtype=np.float64),
             y=np.asarray(y, dtype=np.int64),
+            y_reg=y_reg,
             feature_names=feature_names,
             timestamps=ts,
             metadata={"source_path": str(path.resolve()), "format": ext},

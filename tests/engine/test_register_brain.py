@@ -115,7 +115,7 @@ def test_register_brain_writes_file(tmp_path: Path):
     }
     output_dir = tmp_path / "brains"
     output_dir.mkdir()
-    out_path = register_brain(entry, output_dir)
+    out_path = register_brain(entry, output_dir, skip_gate=True)
     assert out_path.exists()
     assert out_path.name == "TestBrain_01.json"
     written = json.loads(out_path.read_text(encoding="utf-8"))

@@ -1,6 +1,6 @@
 ﻿# EVOLUTION PLAN - Quant OS 路线主文档
 
-最后更新(UTC): 2026-05-11T12:00:00Z
+最后更新(UTC): 2026-05-17T18:00:00Z
 维护人: Team + Agent
 
 > 2026-05-11: **退出/重入架构修复** — 5.11 实盘分析发现 statarb 每5分钟 brain_flip→重入循环，根因是 live.yaml exit.* 配置完全未接线。(1) 接线 `flip_exit_enabled`/`time_exit_cycles`/`zscore_exit_enabled`/`min_r_for_hold` 四个策略级退出配置到 StrategyLineConfig → _build_strategy_lines → _execute_management_phase。(2) 新建 `core/execution/reentry_guard.py` — 区分退出原因的质量守卫 + 连续同向仓位递减 (1.0→0.75→0.5→0)。(3) `evaluate_brain_exit()` 单脑策略保护 — 需要完全翻转(100%) + 3次连续确认而非默认2次。(4) `should_exit_time_based()` 支持 per-strategy horizon/min_r 覆盖。(5) `_dispatch_managed_close()` 记录退出到 ReentryState 供重入检查。statarb 策略: flip_exit 禁用、zscore_exit 启用、time_exit_cycles=40。2417 tests passed。
@@ -18,20 +18,24 @@
 
 ## 1) 我们现在所处阶段（当前工程现状）
 
-**阶段判定：Phase A 已通过，Phase B 收尾，Phase C 进行中**
+**阶段判定：Phase A 已通过，Phase B 已完成，Phase C 深化中**
 
 核心事实：
 
 - 实盘执行闭环已打通并稳定运行：`live_intent_loop -> mt5_outbox -> mt5_bridge_worker -> MT5 -> receipts -> live_trade_journal`
 - daily_ops 全自动化流水线就绪：shadow_ensemble → feedback_loop → governance → champion_challenger → retraining_check → daily_recap
-- 治理驱动的自进化运行时已接入：retired/frozen 大脑自动阻塞，probation 大脑 0.5x 权重惩罚
+- 治理驱动的自进化运行时已接入：retired/frozen 大脑自动阻塞，probation 大脑 0.5x 权重惩罚；BrainPromotionEvaluator 自动晋升评估已接入调度器
 - 数据资产生命周期完整：journal → labels → features → training dataset (Parquet/NPZ)
 - 观测面完整：live_dashboard (日报), brain_leaderboard (脑排名), brain_performance_tracker (性能追踪)
 - 训练闭环完整：label_builder → dataset_builder → xgb_trainer → register_brain → governance → runtime
 - `main.py train --execute` 一键训练就绪（generate_batch_plan → run_train_batch --execute）
-- 测试基线：**913 passed** (2026-05-07 02:00 UTC), 1 pre-existing failure (test_trade_quality_counts)
+- 大脑生命周期门禁系统上线：BrainConfigValidator (7 项硬检查) + BrainAlert (多通道告警) + 统一推理路径
+- mypy 静态类型基线：128 files, 932 errors (持续收窄)
+- P&L 管线 Phase 1-4 全部上线：账本→权重→归因→容量感知仓位
+- Route C+ Phase 4: **Training-Serving Skew 根治** — 3 SOTA Protocols (PiT OOF Generator / Platt Calibration / Conformal Prediction) 全部落地，LGB+MLP 集成部署实盘
+- 测试基线：**2,617 passed, 0 failures** (2026-05-17 18:00 UTC)
 
-结论：系统已从”可运行闭环”进入”数据驱动进化 + 治理自治”期，Phase B 全部完成。
+结论：系统已从”可运行闭环”进入”数据驱动进化 + 治理自治 + 机构级资金管理”期，Phase B 全部完成，Phase C 深度推进。
 
 ---
 
@@ -1356,6 +1360,76 @@ P&L 路线图:
 - 明日唯一优先事项: <1-3 条>
 
 
+### Daily Update - 2026-05-16T18:00:00Z（机构化推进：治理晋升闭环 + mypy 清零 + P&L Phase 4）
+
+- 阶段判定: Phase A ✅ | Phase B ✅ 100% | Phase C 🔄 大脑生命周期门禁 + 容量感知仓位上线
+- 测试基线: 2,617 passed, 0 failures
+- 今日交付:
+  1. **mypy 错误清零** — 28 个 mypy 错误全部修复，含 2 个运行时 bug：(a) `subprocess.os.environ` → `os.environ` (live_launcher.py:362 必崩调用)；(b) `-> bool` 签名但返回 tuple (live_cycle.py:855)。5 个连锁错误通过单点类型标注消掉 (contract_groups.py ALL_GROUPS, xgboost_brain_adapter _booster)。mypy 基线从 129 files/934 errors → 128 files/932 errors
+  2. **大脑生命周期门禁系统 (FIX-20260516-010)** — BrainConfigValidator (7 项硬检查: brain_id/status/artifact_path/model_version/brain_role/training_contract/feature_schema), BrainAlert (4 通道: 控制台/日志/指标/治理事件), 大脑元数据补全 (22→25 brains), 统一推理路径 (BrainRunService._gated_run), 蓝图诊断手册 (brain_adapter.md + brain_service.md, 含已知 ONNX 签名/回退/维度错配问题)
+  3. **治理晋升闭环** — BrainPromotionEvaluator 接入 SchedulerService (每 60 秒自动评估, 复用 compute_performance_from_ledger), 与 GovernanceRuleEngine 并列运行, 决策自动写入 governance_state.json
+  4. **P&L Phase 4: 容量感知仓位分配** — CapitalAllocator.allocate_capacity() 上线，含两道机构级防线：(a) 集中度上限熔断 (单大脑 ≤ 50% 总预算)；(b) 最小可行分配门控 (sub-0.01 Lot → 零)。接入 live_cycle.py 交易分发点
+- 五月 14-16 日修复汇总 (44 FIX):
+  - 5/14: raw_proposals UnboundLocalError (elif 缩进), 延迟处罚机制修复 (time_penalty_cycles_min/horizons), BrainPnLStore settle 逻辑 (含 partial_tp 处理)
+  - 5/14 Part B: 机构级模型训练管线 (标签盈利性校准→历史特征计算→XGBoost/LightGBM→大脑注册), 8 模型注册
+  - 5/15: M15/M30/H1/H4 四周期 swing 模型训练, LightGBM 4.x 适配, 预分割数据集, 8 模型注册
+  - 5/16: 大脑推理管线根治方案 (BrainConfigValidator/BrainAlert/统一推理路径) + 本日交付
+- 下一步: 积累实盘样本 → 触发首次治理晋升 → P&L Phase 5 (绩效驱动的策略线选择器)
+- 风险: 无阻断级故障
+
+### Daily Update - 2026-05-17T18:00:00Z（Route C+ Phase 4 收口：Training-Serving Skew 根治 + LGB+MLP 集成实盘部署）
+
+- 阶段判定: Phase A ✅ | Phase B ✅ 100% | Phase C 🔄 Route C+ 3 Protocols 全部落地，Stage 2 过滤器实盘切换至 v3
+- 测试基线: 2,617 passed, 0 failures
+- **背景**: Phase 4 训练管线完成后，Stage 2 模型在实盘产生冻结置信度 (LightGBM_V1: 0.552 恒定)。根因诊断: 训练时 OOF 特征 (cross_val_predict 批量预测) 与推理时特征 (MetaSignalFilter 滚动 deque) 分布不同构 — Training-Serving Skew。
+- **今日交付 (Route C+ 3 SOTA Protocols):**
+
+  **Protocol 1 — PiT OOF Generator** (`scripts/training/build_meta_features.py`)
+  - 用逐行走 deque 循环替代 cross_val_predict，像素级镜像 MetaSignalFilter._compute_runtime_meta_features()
+  - Cross-fold deque clearance: 每个 purged walk-forward fold 开始时 pred_deque.clear()
+  - 新增 --pit-cv CLI flag，非破坏性切换
+  - 注册 meta_stage2_runtime_59 schema (49 V9+micro + 10 PiT meta: spread_zscore/oim_divergence/toxicity_score)
+  - 产物: `data/training/meta_features_pit_v3.npz` (42,710 × 59 特征, collapse ratio 0.150)
+  - 验证: PiT z-score 与运行时 100% 同构；旧 post-hoc z-score 相关性仅 0.42
+
+  **Protocol 2 — Platt Scaling Calibration** (`scripts/training/calibrate_meta_filter.py` + `core/execution/meta_signal_filter.py`)
+  - LogisticRegression on log-odds (coef=2.44, intercept=-0.84) — 平滑 sigmoid
+  - 避免 IsotonicRegression PAVA step-function collapse (垂直断层 + 平坦死区)
+  - 校准器仅存储 2 个 float，joblib 加载
+  - _predict_proba(): raw_prob → clipped log-odds → calibrator.predict_proba → calibrated prob
+
+  **Protocol 3 — Conformal Prediction Thresholding** (`core/execution/meta_signal_filter.py`)
+  - 动态 80 百分位阈值，基于 500 预测滑动窗口，0.50 硬地板
+  - 前 100 bar 用固定阈值热身
+  - 自适应体制切换 (牛市→高阈值, 熊市→低阈值)
+
+  **LGB+MLP 集成训练与部署:**
+  | 模型 | Val Sharpe | Win Rate | Probs Range | 状态 |
+  |------|-----------|----------|-------------|------|
+  | MLP (PiT) | 18.8 | 61.6% | [0.57, 0.73] | 集成伙伴 |
+  | LGB (PiT) | **30.6** | 68.2% | [0.16, 0.95] | 集成主力 |
+  | Ensemble (0.6 LGB + 0.4 MLP) + Platt | 25.9 | **69.2%** | [0.07, 0.96] | **实盘部署** |
+
+  **实盘切换** (`apps/engine/bootstrap_v9.py:47`)
+  - Config: `meta_stage2_filter_v1.json` → `meta_stage2_filter_v3.json`
+  - 从 47 维 OOF 扭曲特征 → 59 维 PiT 同构特征
+  - 从单模型 (LGB-only, 冻结置信度) → LGB+MLP 集成 + Platt 校准 + Conformal 自适应
+  - Bootstrap 现在透传 calibrator_path / conformal_mode / window / percentile / min_threshold
+
+  **Shadow 验证结果** (200 模拟周期):
+  - LGB 独立值: 200/200 (旧 v1: 1/1 FROZEN)
+  - MLP 独立值: 199/200
+  - 校准概率范围: [0.37, 0.91]
+  - 预测多样性: **完全恢复**
+
+  **蓝图文档化:**
+  - FIX-20260517-001/002/003 注册至 FIX_REGISTRY.md + FIX_REGISTRY_2026.md
+  - 5 个模块 blueprint 更新 (execution-guards, training, runtime-live, deployment-config, brains-validation)
+  - Post-Fix Protocol 强化: 写入 auto-memory (feedback_post_fix_protocol.md)
+
+- 下一步: Stage 2 扩展到 statarb_dynamic, 积累实盘样本观察 v3 过滤器表现
+- 风险: 无阻断级故障。周一开盘需监控 v3 过滤器首次实盘表现。
+
 ### Daily Update - 2026-05-13T00:00:05（自动生成）
 
 - 日期键(UTC): 2026-05-12
@@ -1472,6 +1546,109 @@ P&L 路线图:
   unassigned: 7脑 2105信号 胜率=45.2% 均值=-0.2100 Sharpe≈-24.9 [做多24%/做空76%]
 - 多模型共识: neutral (一致性=100%, 参与=17)
 - 特征偏移: 14个特征偏离基线 >2σ
+- 关键事件: <手动最多 3 条>
+- 根因与修复: <手动最多 3 条>
+- 阶段进度: <Phase A/B/C 到达位置>
+- 明日唯一优先事项: <1-3 条>
+
+
+### Daily Update - 2026-05-16T00:00:05（自动生成）
+
+- 日期键(UTC): 2026-05-15
+- 运行状态: 需关注（数据质量异常较多）
+- 核心统计: 接受=132 拒绝=53 确认=0 其他=8 合计=193 拒单率=0.274611
+- 数据质量: 交叉校验问题=378 outbox超时=0
+- live_dispatch_block.flag: 不存在
+- 已标注交易: 302笔 | 总P&L=-3.50 | 分布={'breakeven': 6, 'loss': 16, 'tp_hit_first': 17, 'sl_hit_first': 67, 'manual_close': 29, 'win': 6, 'brain_flip_extreme_100pct': 5, 'confidence_drop_0.500': 4, 'confidence_drop_0.835': 1, 'ou_reversion_z0.11': 1, 'ou_reversion_z0.00': 1, 'ou_reversion_z0.27': 1, 'time_phase2_30c_h60_r-1.01': 1, 'time_phase2_30c_h60_r0.26': 1, 'signal_reversal_consensus_short_vs_long': 3, 'net_out:barrier_12bar': 8, 'net_out:statarb_dynamic': 7, 'partial_tp_1.5R': 2, 'time_phase4_expired_60c_h60_r0.78': 1, 'time_phase2_20c_h40_r-0.54': 1, 'time_phase2_20c_h40_r0.00': 1, 'time_phase3_50c_h60_r0.19': 1, 'time_phase2_20c_h40_r0.20': 1, 'time_phase2_20c_h40_r-1.45': 1, 'ou_revert_target_reached_z0.28_from_2.1': 1, 'time_phase2_30c_h60_r-0.10': 1, 'time_phase2_20c_h40_r-0.83': 1, 'hesitation_2c_no_breakeven': 12, 'confidence_drop_0.875': 15, 'brain_flip_60pct_c2': 2, 'hesitation_3c_no_breakeven': 24, 'confidence_drop_0.479': 1, 'hesitation_5c_no_breakeven': 2, 'time_phase2_23c_h40_r0.19': 1, 'exit_watchdog:hesitation_3c_no_breakeven': 40, 'exit_watchdog:hesitation_6c_no_breakeven': 5, 'exit_watchdog:hesitation_7c_no_breakeven': 5, 'exit_watchdog:bleed_stop_3bars_neg': 5, 'exit_watchdog:hesitation_5c_no_breakeven': 5}
+- 大脑归因P&L: -3.50 | ARB_Params_V8_M15_S53: -0.10 (8t, 12% wr) | ARB_Params_V8_M5_S53: +0.03 (14t, 7% wr) | CRT.sur.chlg.g2026.1: +0.01 (24t, 25% wr) | DeepResMLP_V1_Institutional: -0.31 (62t, 18% wr) | DeepResMLP_V2_New: -0.05 (26t, 4% wr) | LightGBM_M15_Swing_24bar: -0.44 (38t, 13% wr) | LightGBM_V1_Institutional: -0.03 (46t, 22% wr) | LightGBM_V2_Retrained: +0.01 (24t, 25% wr) | LightGBM_V3_New: -0.01 (8t, 0% wr) | Microstructure_Transformer_V5.0: -0.30 (16t, 6% wr) | Microstructure_Transformer_V5.0_H1: +0.04 (2t, 100% wr) | Microstructure_Transformer_V5.0_M15: -0.04 (1t, 0% wr) | OU_Params_V6_Sniper: -0.14 (113t, 20% wr) | Online_MLP_V1: -0.01 (45t, 22% wr) | Online_SGD_V1: +0.03 (2t, 50% wr) | SurvivalAlpha_Ensemble: -0.27 (19t, 11% wr) | TreeAlpha_Ensemble: -0.30 (17t, 6% wr) | V9_Institutional_01: +0.01 (25t, 24% wr) | XGBoost_D1_Swing_5d: -0.12 (1t, 0% wr) | XGBoost_V10_Retrained: +0.01 (14t, 43% wr) | XGBoost_V11_New: -0.01 (8t, 0% wr) | XGBoost_V4.5_H1: +0.04 (2t, 100% wr) | XGBoost_V4.5_M15: -0.04 (1t, 0% wr) | XGBoost_V4.5_Microstructure: -1.07 (23t, 9% wr) | XGBoost_V9_Institutional: -0.03 (46t, 22% wr) | lightgbm_h1_swing_lightgbm_v1_20260514_165620: +0.10 (20t, 10% wr) | xgboost_h1_swing_xgboost_v1_20260514_165620: +0.10 (20t, 10% wr) | 未归因交易: 52笔
+- 治理晋升进度:
+  OU_Params_V6_Sn: ██████████ 773/10  (live)
+  Online_MLP_V1: ░░░░░░░░░░ 0/10  (probation)
+  DeepResMLP_V1_I: ░░░░░░░░░░ 0/10  (probation)
+  LightGBM_V1_Ins: ██████████ 183/10  (probation)
+  LightGBM_V2_Ret: ░░░░░░░░░░ 0/10  (probation)
+  LightGBM_V3_New: ░░░░░░░░░░ 0/10  (probation)
+  XGBoost_V11_New: ░░░░░░░░░░ 0/10  (probation)
+  XGBoost_V9_Inst: ░░░░░░░░░░ 0/10  (probation)
+  xgboost_m15_swi: ░░░░░░░░░░ 0/10  (candidate)
+  xgboost_m30_swi: ░░░░░░░░░░ 0/10  (candidate)
+  xgboost_h1_swin: ░░░░░░░░░░ 0/10  (candidate)
+  lightgbm_h1_swi: ██████████ 676/10  (probation)
+  xgboost_h4_swin: ░░░░░░░░░░ 0/10  (candidate)
+  ARB_Params_V8_M: ██████████ 50/10  (frozen)
+  ARB_Params_V8_M: ██████████ 94/10  (frozen)
+  LIGHTGBM_barrie: ██████████ 244/10  (frozen)
+  LightGBM_D1_Swi: ██████████ 293/10  (frozen)
+  LightGBM_M15_Sw: ██████████ 262/10  (frozen)
+  Microstructure_: ██████████ 158/10  (frozen)
+  Microstructure_: ██████████ 618/10  (frozen)
+  Microstructure_: ██████████ 630/10  (frozen)
+  XGBOOST_barrier: ██████████ 267/10  (frozen)
+  XGBoost_V4.5_M1: ██████████ 63/10  (frozen)
+- 合同组表现:
+  m15_swing: 2脑 859信号 胜率=43.4% 均值=-0.2157 Sharpe≈-22.7 [做多100%/做空0%]
+  micro_3bar: 1脑 158信号 胜率=46.8% 均值=-0.8737 Sharpe≈-37.1 [做多37%/做空63%]
+  micro_h1: 1脑 33信号 胜率=42.4% 均值=-0.2058 Sharpe≈-64.7 [做多100%/做空0%]
+  micro_m15: 1脑 63信号 胜率=12.7% 均值=-0.1877 Sharpe≈-62.6 [做多100%/做空0%]
+  statarb_m15: 1脑 773信号 胜率=49.7% 均值=0.0737 Sharpe≈7.8 [做多59%/做空41%]
+  unassigned: 8脑 2458信号 胜率=45.1% 均值=-0.1393 Sharpe≈-24.9 [做多39%/做空61%]
+- 多模型共识: split (一致性=85%, 参与=20)
+- 特征偏移: 12个特征偏离基线 >2σ
+- 关键事件: <手动最多 3 条>
+- 根因与修复: <手动最多 3 条>
+- 阶段进度: <Phase A/B/C 到达位置>
+- 明日唯一优先事项: <1-3 条>
+
+
+### Daily Update - 2026-05-17T00:00:05（自动生成）
+
+- 日期键(UTC): 2026-05-16
+- 运行状态: 静默（当日无交易记录）
+- 核心统计: 接受=0 拒绝=0 确认=0 其他=0 合计=0 拒单率=0.0
+- 数据质量: 交叉校验问题=0 outbox超时=0
+- live_dispatch_block.flag: 不存在
+- 已标注交易: 302笔 | 总P&L=-3.50 | 分布={'breakeven': 6, 'loss': 16, 'tp_hit_first': 17, 'sl_hit_first': 67, 'manual_close': 29, 'win': 6, 'brain_flip_extreme_100pct': 5, 'confidence_drop_0.500': 4, 'confidence_drop_0.835': 1, 'ou_reversion_z0.11': 1, 'ou_reversion_z0.00': 1, 'ou_reversion_z0.27': 1, 'time_phase2_30c_h60_r-1.01': 1, 'time_phase2_30c_h60_r0.26': 1, 'signal_reversal_consensus_short_vs_long': 3, 'net_out:barrier_12bar': 8, 'net_out:statarb_dynamic': 7, 'partial_tp_1.5R': 2, 'time_phase4_expired_60c_h60_r0.78': 1, 'time_phase2_20c_h40_r-0.54': 1, 'time_phase2_20c_h40_r0.00': 1, 'time_phase3_50c_h60_r0.19': 1, 'time_phase2_20c_h40_r0.20': 1, 'time_phase2_20c_h40_r-1.45': 1, 'ou_revert_target_reached_z0.28_from_2.1': 1, 'time_phase2_30c_h60_r-0.10': 1, 'time_phase2_20c_h40_r-0.83': 1, 'hesitation_2c_no_breakeven': 12, 'confidence_drop_0.875': 15, 'brain_flip_60pct_c2': 2, 'hesitation_3c_no_breakeven': 24, 'confidence_drop_0.479': 1, 'hesitation_5c_no_breakeven': 2, 'time_phase2_23c_h40_r0.19': 1, 'exit_watchdog:hesitation_3c_no_breakeven': 40, 'exit_watchdog:hesitation_6c_no_breakeven': 5, 'exit_watchdog:hesitation_7c_no_breakeven': 5, 'exit_watchdog:bleed_stop_3bars_neg': 5, 'exit_watchdog:hesitation_5c_no_breakeven': 5}
+- 大脑归因P&L: -3.50 | ARB_Params_V8_M15_S53: -0.10 (8t, 12% wr) | ARB_Params_V8_M5_S53: +0.03 (14t, 7% wr) | CRT.sur.chlg.g2026.1: +0.01 (24t, 25% wr) | DeepResMLP_V1_Institutional: -0.31 (62t, 18% wr) | DeepResMLP_V2_New: -0.05 (26t, 4% wr) | LightGBM_M15_Swing_24bar: -0.44 (38t, 13% wr) | LightGBM_V1_Institutional: -0.03 (46t, 22% wr) | LightGBM_V2_Retrained: +0.01 (24t, 25% wr) | LightGBM_V3_New: -0.01 (8t, 0% wr) | Microstructure_Transformer_V5.0: -0.30 (16t, 6% wr) | Microstructure_Transformer_V5.0_H1: +0.04 (2t, 100% wr) | Microstructure_Transformer_V5.0_M15: -0.04 (1t, 0% wr) | OU_Params_V6_Sniper: -0.14 (113t, 20% wr) | Online_MLP_V1: -0.01 (45t, 22% wr) | Online_SGD_V1: +0.03 (2t, 50% wr) | SurvivalAlpha_Ensemble: -0.27 (19t, 11% wr) | TreeAlpha_Ensemble: -0.30 (17t, 6% wr) | V9_Institutional_01: +0.01 (25t, 24% wr) | XGBoost_D1_Swing_5d: -0.12 (1t, 0% wr) | XGBoost_V10_Retrained: +0.01 (14t, 43% wr) | XGBoost_V11_New: -0.01 (8t, 0% wr) | XGBoost_V4.5_H1: +0.04 (2t, 100% wr) | XGBoost_V4.5_M15: -0.04 (1t, 0% wr) | XGBoost_V4.5_Microstructure: -1.07 (23t, 9% wr) | XGBoost_V9_Institutional: -0.03 (46t, 22% wr) | lightgbm_h1_swing_lightgbm_v1_20260514_165620: +0.10 (20t, 10% wr) | xgboost_h1_swing_xgboost_v1_20260514_165620: +0.10 (20t, 10% wr) | 未归因交易: 52笔
+- 治理晋升进度:
+  OU_Params_V6_Sn: ██████████ 773/10  (live)
+  Online_MLP_V1: ░░░░░░░░░░ 0/10  (retired)
+  DeepResMLP_V1_I: ░░░░░░░░░░ 0/10  (probation)
+  LightGBM_V1_Ins: ██████████ 183/10  (probation)
+  LightGBM_V2_Ret: ░░░░░░░░░░ 0/10  (retired)
+  LightGBM_V3_New: ░░░░░░░░░░ 0/10  (retired)
+  XGBoost_V11_New: ░░░░░░░░░░ 0/10  (retired)
+  XGBoost_V9_Inst: ░░░░░░░░░░ 0/10  (probation)
+  xgboost_m15_swi: ░░░░░░░░░░ 0/10  (candidate)
+  xgboost_m30_swi: ░░░░░░░░░░ 0/10  (candidate)
+  xgboost_h1_swin: ░░░░░░░░░░ 0/10  (candidate)
+  lightgbm_h1_swi: ██████████ 676/10  (retired)
+  xgboost_h4_swin: ░░░░░░░░░░ 0/10  (candidate)
+  XGBoost_V4.5_M1: ██████████ 63/10  (retired)
+  V9_Institutiona: ░░░░░░░░░░ 0/10  (probation)
+  DeepResMLP_V2_N: ░░░░░░░░░░ 0/10  (retired)
+  Microstructure_: ░░░░░░░░░░ 0/10  (retired)
+  XGBoost_D1_Swin: ░░░░░░░░░░ 0/10  (candidate)
+  XGBoost_V4.5_H1: ██████████ 33/10  (retired)
+  XGBoost_V4.5_H4: ░░░░░░░░░░ 0/10  (retired)
+  Microstructure_: ██████████ 158/10  (retired)
+  Microstructure_: ██████████ 630/10  (retired)
+  Microstructure_: ██████████ 618/10  (retired)
+  CRT.sur.chlg.g2: ░░░░░░░░░░ 0/10  (probation)
+  ARB_Params_V8_M: ██████████ 50/10  (frozen)
+  ARB_Params_V8_M: ██████████ 94/10  (frozen)
+  LIGHTGBM_barrie: ██████████ 244/10  (frozen)
+  LightGBM_D1_Swi: ██████████ 293/10  (frozen)
+  LightGBM_M15_Sw: ██████████ 262/10  (frozen)
+  XGBOOST_barrier: ██████████ 267/10  (frozen)
+- 合同组表现:
+  m15_swing: 2脑 859信号 胜率=43.4% 均值=-0.2157 Sharpe≈-22.7 [做多100%/做空0%]
+  micro_3bar: 1脑 158信号 胜率=46.8% 均值=-0.8737 Sharpe≈-37.1 [做多37%/做空63%]
+  micro_h1: 1脑 33信号 胜率=42.4% 均值=-0.2058 Sharpe≈-64.7 [做多100%/做空0%]
+  micro_m15: 1脑 63信号 胜率=12.7% 均值=-0.1877 Sharpe≈-62.6 [做多100%/做空0%]
+  statarb_m15: 1脑 773信号 胜率=49.7% 均值=0.0737 Sharpe≈7.8 [做多59%/做空41%]
+  unassigned: 8脑 2458信号 胜率=45.1% 均值=-0.1393 Sharpe≈-24.9 [做多39%/做空61%]
+- 多模型共识: split (一致性=69%, 参与=13)
+- 特征偏移: 9个特征偏离基线 >2σ
 - 关键事件: <手动最多 3 条>
 - 根因与修复: <手动最多 3 条>
 - 阶段进度: <Phase A/B/C 到达位置>

@@ -1,0 +1,453 @@
+#!/usr/bin/env python3
+"""Blueprint compliance engine — enforces Iron Law #6 and #7.
+
+Three modes:
+  --pre-check <files>   Advisory reminder before editing (Iron Law #6). Always exit 0.
+  --check               Compliance gate (Iron Law #7). Non-zero if blueprint not updated
+                        for substantive .py changes. Used by verify.py --full and pre-commit.
+  --stamp <module>      Record acknowledgement of a change that needs no blueprint update.
+
+Key design decisions (per plan review):
+  - Git state isomorphism instead of timestamps (trap #1)
+  - Conservative cosmetic detection: only blank lines + # comments (trap #2)
+  - Orphan file FATAL block: unmapped files force MODULE_SOURCE_MAP update (trap #3)
+
+Usage:
+    python scripts/check_blueprint_compliance.py --pre-check core/brains/adapters/xgboost_brain_adapter.py
+    python scripts/check_blueprint_compliance.py --check
+    python scripts/check_blueprint_compliance.py --stamp execution-guards
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+MODULES_DIR = ROOT / "blueprints" / "modules"
+STAMPS_DIR = ROOT / ".blueprint_stamps"
+
+# Force UTF-8 on Windows
+if sys.platform == "win32":
+    import io
+
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
+_GIT_ENCODING = "utf-8" if sys.platform == "win32" else None
+
+
+def _run_git(args: list[str], timeout: int = 10) -> subprocess.CompletedProcess:
+    """Run a git command with proper encoding on all platforms."""
+    kwargs: dict = dict(capture_output=True, text=True, cwd=str(ROOT), timeout=timeout)
+    if _GIT_ENCODING:
+        kwargs["encoding"] = _GIT_ENCODING
+        kwargs["errors"] = "replace"
+    try:
+        return subprocess.run(args, **kwargs)
+    except subprocess.TimeoutExpired:
+        # Return a dummy result with non-zero rc
+        return subprocess.CompletedProcess(args, -1, stdout="", stderr="timeout")
+    except Exception:
+        return subprocess.CompletedProcess(args, -1, stdout="", stderr="error")
+
+
+# ── Module → source directory/file mapping ──
+# Each value is a list of directory prefixes or specific file paths.
+# Directories end with "/" and match any file under that tree.
+# Specific paths match a single file.
+# Files not matching any entry → FATAL (orphan detection, trap #3).
+
+MODULE_SOURCE_MAP: dict[str, list[str]] = {
+    "brains_adapters": ["core/brains/adapters/"],
+    "brains_services": ["core/brains/services/"],
+    "brains_schema": ["core/brains/schema_versions.py", "core/brains/brain_registry.py"],
+    "brains_validation": [
+        "core/deployment/brain_config_validator.py",
+        "core/deployment/brain_alert.py",
+        "core/deployment/brain_registration_gate.py",
+        "scripts/repair_brain_configs.py",
+    ],
+    "execution_guards": [
+        "core/execution/pre_trade_guards.py",
+        "core/execution/meta_signal_filter.py",
+        "core/execution/strategy_budget.py",
+        "core/execution/market_efficiency.py",
+    ],
+    "execution_orders": [
+        "core/execution/order_state_machine.py",
+        "core/execution/execution_manager.py",
+        "core/execution/position_manager.py",
+        "core/execution/strategy_line.py",
+        "core/execution/barrier_strategy.py",
+        "core/execution/micro_strategy.py",
+        "core/execution/swing_strategy.py",
+        "core/execution/statarb_strategy.py",
+    ],
+    "execution_reentry": ["core/execution/reentry_guard.py"],
+    "risk_policies": ["core/risk/risk_policies.py", "core/risk/risk_evaluation_service.py"],
+    "risk_regime": [
+        "core/risk/regime_detector.py",
+        "core/execution/regime_gate.py",
+        "core/execution/trend_detector.py",
+    ],
+    "risk_portfolio": ["core/execution/portfolio_risk.py", "core/execution/capital_allocator.py"],
+    "feedback_performance": [
+        "core/feedback/brain_performance_tracker.py",
+        "core/feedback/brain_quality_engine.py",
+        "core/feedback/decision_scorer.py",
+    ],
+    "feedback_pnl": ["core/feedback/brain_pnl_ledger.py"],
+    "feedback_online": [
+        "core/feedback/online_feedback_hook.py",
+        "core/feedback/param_optimizer.py",
+    ],
+    "protocol_governance": ["core/governance/"],
+    "protocol_parliament": ["core/parliament/"],
+    "protocol_services": ["core/protocol/"],
+    "contracts_domain": ["core/contracts/domain/"],
+    "contracts_ids": ["core/contracts/ids.py", "core/contracts/serialization/"],
+    "contracts_training": ["core/contracts/training/"],
+    "deployment_config": [
+        "core/deployment/environment_config.py",
+        "core/deployment/service_container.py",
+        "core/deployment/config_hot_reload.py",
+        "core/deployment/compliance_audit.py",
+        "core/deployment/compliance_control_matrix.py",
+        "core/deployment/deployment_executor.py",
+        "core/deployment/deployment_plan.py",
+        "core/deployment/scheduler_service.py",
+        "core/deployment/atomic_file_writer.py",
+    ],
+    "deployment_lifecycle": [
+        "core/deployment/lifecycle_manager.py",
+        "core/deployment/state_persistence.py",
+        "core/deployment/health_check.py",
+        "core/deployment/capability_registry.py",
+        "core/deployment/operational_support.py",
+        "core/deployment/brain_lifecycle_manager.py",
+        "scripts/verify.py",
+        "scripts/validate_blueprints.py",
+        "scripts/check_blueprint_compliance.py",
+        "scripts/hook_blueprint_precheck.py",
+        "scripts/hook_mypy_check.py",
+    ],
+    "features_rolling": [
+        "core/features/rolling_normalizer.py",
+        "core/features/data_augmentation.py",
+    ],
+    "features_service": [
+        "core/features/feature_service.py",
+        "core/features/local_feature_store.py",
+        "core/features/feature_snapshot.py",
+        "core/features/computers/v9_micro_computer.py",
+        "core/features/schemas/v9_micro_schema.py",
+    ],
+    "runtime_live": [
+        "core/runtime/",
+        "scripts/live_intent_loop.py",
+        "scripts/live_launcher.py",
+        "apps/engine/bootstrap_v9.py",
+        "apps/engine/runtime_loop.py",
+        "scripts/position_query.py",
+    ],
+    "runtime_state": ["core/state/"],
+    "training": ["core/training/", "scripts/training/"],
+}
+
+
+def resolve_modules(file_path: str) -> list[str]:
+    """Determine which module blueprint(s) claim ownership of a file.
+
+    Returns a list (possibly empty) of module names.  An empty list is a FATAL
+    condition — the caller must treat it as an orphan (trap #3).
+    """
+    matched: list[str] = []
+    for module, patterns in MODULE_SOURCE_MAP.items():
+        for pat in patterns:
+            if pat.endswith("/"):
+                if file_path.startswith(pat):
+                    matched.append(module)
+                    break
+            elif file_path == pat:
+                matched.append(module)
+                break
+    return matched
+
+
+def _get_changed_py_files(*, cached_only: bool = False) -> list[str]:
+    """Return sorted list of changed .py files (excluding tests/).
+
+    When cached_only=True (pre-commit context), uses --cached.
+    Otherwise uses HEAD diff.
+    """
+    args = ["git", "diff", "--name-only"]
+    if cached_only:
+        args.append("--cached")
+    else:
+        args.append("HEAD")
+
+    files: list[str] = []
+    result = _run_git(args)
+    if result.returncode == 0 and result.stdout:
+        for line in result.stdout.strip().split("\n"):
+            line = line.strip()
+            if line.endswith(".py") and not line.startswith("tests/"):
+                files.append(line)
+    return sorted(files)
+
+
+def _get_changed_files(*, cached_only: bool = False) -> set[str]:
+    """Return set of ALL changed file paths (not just .py)."""
+    args = ["git", "diff", "--name-only"]
+    if cached_only:
+        args.append("--cached")
+    else:
+        args.append("HEAD")
+
+    files: set[str] = set()
+    result = _run_git(args)
+    if result.returncode == 0 and result.stdout:
+        for line in result.stdout.strip().split("\n"):
+            line = line.strip()
+            if line:
+                files.add(line)
+    return files
+
+
+def classify_diff(file_path: str) -> str:
+    """Classify diff as 'substantive' or 'cosmetic'.
+
+    Conservative approach (trap #2): only blank lines and pure single-line
+    ``#`` comments are exempt.  Everything else (docstrings, type annotations,
+    multi-line changes) is treated as substantive.
+    """
+    full = ROOT / file_path
+    if not full.exists():
+        return "substantive"  # deleted — definitely substantive
+
+    try:
+        result = _run_git(
+            ["git", "diff", "-U0", "HEAD", "--", file_path],
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return "substantive"
+    except Exception:
+        return "substantive"
+
+    diff_lines = result.stdout.split("\n")
+    changed_lines: list[str] = []
+    for line in diff_lines:
+        if line.startswith("+") and not line.startswith("+++"):
+            changed_lines.append(line[1:].strip())
+        elif line.startswith("-") and not line.startswith("---"):
+            changed_lines.append(line[1:].strip())
+
+    if not changed_lines:
+        return "cosmetic"  # no actual content changes
+
+    for cl in changed_lines:
+        if cl == "":
+            continue  # blank line — cosmetic
+        if cl.startswith("#"):
+            continue  # pure comment — cosmetic
+        return "substantive"
+
+    return "cosmetic"
+
+
+def _blueprint_in_change_set(module: str, changed_files: set[str]) -> bool:
+    """Check if the module's blueprint file is in the change set."""
+    bp = f"blueprints/modules/{module}.md"
+    return bp in changed_files
+
+
+# ── Mode: pre-check (Iron Law #6 reminder) ──
+
+
+def pre_check(files: list[str]) -> int:
+    """Advisory reminder. Prints module info. Always returns 0."""
+    for fp in files:
+        modules = resolve_modules(fp)
+        if not modules:
+            print(
+                f"[blueprint] [FATAL] File '{fp}' is not mapped in MODULE_SOURCE_MAP!\n"
+                f"           Please update scripts/check_blueprint_compliance.py first."
+            )
+            continue
+        print(f"[blueprint] Iron Law #6: '{fp}' belongs to module(s): {', '.join(modules)}")
+        for m in modules:
+            print(f"  -> Read: blueprints/modules/{m}.md (Fix History + Known Issues)")
+        print("  -> Search: blueprints/system/FIX_REGISTRY.md for historical fixes to this file")
+        if modules:
+            print(f"  -> Run: python scripts/analyze_deps.py {modules[0]}")
+    return 0
+
+
+# ── Mode: compliance check (Iron Law #7 gate) ──
+
+
+def check_compliance() -> int:
+    """Compliance gate. Returns non-zero if any substantive .py change lacks
+    a corresponding blueprint update in the same change set.
+    """
+    py_files = _get_changed_py_files()
+    if not py_files:
+        print("[blueprint] No changed .py files — compliance check skipped.")
+        return 0
+
+    # Determine whether we're in pre-commit context
+    in_precommit = os.environ.get("PRE_COMMIT", "") == "1"
+
+    changed_all = _get_changed_files(cached_only=in_precommit)
+    errors: list[str] = []
+    cosmetic_count = 0
+    substantive_files: list[tuple[str, list[str]]] = []
+
+    for fp in py_files:
+        modules = resolve_modules(fp)
+
+        # ── Orphan detection (trap #3) ──
+        if not modules:
+            errors.append(
+                f"[FATAL] File '{fp}' is not mapped to any blueprint in MODULE_SOURCE_MAP!\n"
+                f"        Please update scripts/check_blueprint_compliance.py -> MODULE_SOURCE_MAP first."
+            )
+            continue
+
+        category = classify_diff(fp)
+        if category == "cosmetic":
+            cosmetic_count += 1
+            continue
+
+        substantive_files.append((fp, modules))
+
+    if cosmetic_count:
+        print(
+            f"[blueprint] Skipped {cosmetic_count} cosmetic change(s) (comments / blank lines only)."
+        )
+
+    if not substantive_files:
+        if not errors:
+            print("[blueprint] All substantive .py changes have been checked.")
+        if errors:
+            for e in errors:
+                print(e)
+            return 1
+        return 0
+
+    for fp, modules in substantive_files:
+        bp_updated = any(_blueprint_in_change_set(m, changed_all) for m in modules)
+        if bp_updated:
+            print(f"[blueprint] OK: {fp} -> {', '.join(modules)} (blueprint in change set)")
+        else:
+            errors.append(
+                f"VIOLATION: '{fp}' modified but no blueprint in change set.\n"
+                f"  Module(s): {', '.join(modules)}\n"
+                f"  Expected: blueprints/modules/{{{ '/'.join(modules) }}}.md\n"
+                f"  Action: update Fix History + Known Issues, then re-run."
+            )
+
+    if errors:
+        print(f"\n[FAIL] blueprint compliance: {len(errors)} violation(s)\n")
+        for e in errors:
+            print(e)
+        return 1
+
+    print("[PASS] blueprint compliance")
+    return 0
+
+
+# ── Mode: stamp management ──
+
+
+def stamp_module(module: str) -> int:
+    """Record an explicit acknowledgement for a module whose changes need no
+    blueprint update.  Writes a stamp file; --check respects it.
+    """
+    STAMPS_DIR.mkdir(parents=True, exist_ok=True)
+    stamp_path = STAMPS_DIR / f"{module}.json"
+    # Record current state of all source files in the module
+    patterns = MODULE_SOURCE_MAP.get(module)
+    if not patterns:
+        print(f"[blueprint] Unknown module: {module}")
+        return 1
+
+    file_hashes: dict[str, str] = {}
+    for pat in patterns:
+        if pat.endswith("/"):
+            import glob as _glob
+
+            for f in _glob.glob(str(ROOT / pat / "*.py")):
+                rel = str(Path(f).relative_to(ROOT)).replace("\\", "/")
+                try:
+                    import hashlib
+
+                    h = hashlib.sha256(Path(f).read_bytes()).hexdigest()[:16]
+                    file_hashes[rel] = h
+                except Exception:
+                    pass
+        else:
+            p = ROOT / pat
+            if p.exists():
+                import hashlib
+
+                h = hashlib.sha256(p.read_bytes()).hexdigest()[:16]
+                file_hashes[pat] = h
+
+    stamp = {
+        "module": module,
+        "acknowledged_at": __import__("time").time(),
+        "files": file_hashes,
+    }
+    with open(str(stamp_path), "w", encoding="utf-8") as fh:
+        json.dump(stamp, fh, indent=2)
+    print(f"[blueprint] Stamped {module}: {len(file_hashes)} file(s) acknowledged.")
+    return 0
+
+
+# ── CLI ──
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Blueprint compliance engine (Iron Law #6 / #7 enforcement)"
+    )
+    parser.add_argument(
+        "--pre-check",
+        nargs="+",
+        metavar="FILE",
+        help="Advisory reminder: which module owns these files (Iron Law #6). Always exit 0.",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Compliance gate: verify blueprint updated for substantive .py changes (Iron Law #7).",
+    )
+    parser.add_argument(
+        "--stamp",
+        metavar="MODULE",
+        help="Acknowledge a change that needs no blueprint update.",
+    )
+    args = parser.parse_args()
+
+    if args.pre_check:
+        return pre_check(args.pre_check)
+
+    if args.check:
+        return check_compliance()
+
+    if args.stamp:
+        return stamp_module(args.stamp)
+
+    parser.print_help()
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

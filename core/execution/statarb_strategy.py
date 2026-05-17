@@ -39,8 +39,7 @@ class StatArbStrategy(StrategyLine):
         for b_info in self.brains:
             try:
                 price = float(mid_price) if mid_price else 0.0
-                raw = b_info["adapter"].infer(np.array([price], dtype=np.float32))
-                prop = b_info["adapter"].get_signal(raw)
+                prop = b_info["adapter"].inference(np.array([price], dtype=np.float32))
                 bid = b_info.get("brain_id", "unknown")
                 try:
                     if not getattr(prop, "brain_id", None):

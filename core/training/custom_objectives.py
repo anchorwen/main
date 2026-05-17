@@ -235,10 +235,11 @@ def compute_sample_weights(
     """Compute per-sample weights for training.
 
     Args:
-        y: Label array.
+        y: Label array (regression targets or classification labels).
         pnl: P&L array for return-magnitude weighting.
         method: Weighting strategy.
             - "return_magnitude": weight ∝ |pnl|, normalized to mean=1.
+            - "abs_target": weight ∝ |y|, normalized to mean=1 (for regression).
             - "inverse_class_frequency": balanced class weights.
             - "none": uniform weights (all 1.0).
 
@@ -256,7 +257,18 @@ def compute_sample_weights(
         abs_pnl = np.abs(pnl)
         abs_pnl = np.clip(abs_pnl, 1e-8, None)
         weights = abs_pnl / abs_pnl.mean()
-        # Cap at 5x to prevent a few outliers from dominating
+        weights = np.clip(weights, 0.1, 5.0)
+        return weights.astype(np.float64)
+
+    if method == "abs_target":
+        # Weight ∝ |y| — amplifies large-magnitude regression targets.
+        # Useful for Huber regression to prevent prediction collapse:
+        # small-noise samples that carry no signal get low weight,
+        # large-return samples that carry real information get high weight.
+        y_f64 = np.asarray(y, dtype=np.float64).ravel()
+        abs_y = np.abs(y_f64)
+        abs_y = np.clip(abs_y, 1e-8, None)
+        weights = abs_y / abs_y.mean()
         weights = np.clip(weights, 0.1, 5.0)
         return weights.astype(np.float64)
 

@@ -1302,6 +1302,117 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:
         pass
 
+    # ── Initialize MetaSignalFilter (V3 Stage 2: LGB+MLP + Platt + Conformal) ──
+    meta_signal_filter: Any = None
+    if not args.no_mt5:
+        try:
+            from core.execution.meta_signal_filter import MetaSignalFilter
+
+            _filter_cfg_path = PROJECT_ROOT / "configs" / "brains" / "meta_stage2_filter_v3.json"
+            if _filter_cfg_path.exists():
+                with open(_filter_cfg_path, encoding="utf-8") as _fcfh:
+                    _fc = json.load(_fcfh)
+
+                # Resolve model paths relative to PROJECT_ROOT
+                _lgb_path = _fc.get("model_path", "")
+                _resolved_lgb = str(
+                    PROJECT_ROOT / _lgb_path
+                    if not Path(_lgb_path).is_absolute()
+                    else Path(_lgb_path)
+                )
+                _mlp_path = _fc.get("mlp_model_path", "")
+                _resolved_mlp: str | None = None
+                if _mlp_path:
+                    _candidate = (
+                        PROJECT_ROOT / _mlp_path
+                        if not Path(_mlp_path).is_absolute()
+                        else Path(_mlp_path)
+                    )
+                    _resolved_mlp = str(_candidate) if _candidate.exists() else None
+                _cal_path = _fc.get("calibrator_path", "")
+                _resolved_cal: str | None = None
+                if _cal_path:
+                    _candidate = (
+                        PROJECT_ROOT / _cal_path
+                        if not Path(_cal_path).is_absolute()
+                        else Path(_cal_path)
+                    )
+                    _resolved_cal = str(_candidate) if _candidate.exists() else None
+                _scaler_path = _fc.get("micro_scaler_path", "")
+                _resolved_scaler: str | None = None
+                if _scaler_path:
+                    _candidate = (
+                        PROJECT_ROOT / _scaler_path
+                        if not Path(_scaler_path).is_absolute()
+                        else Path(_scaler_path)
+                    )
+                    _resolved_scaler = str(_candidate) if _candidate.exists() else None
+
+                _raw_weights = _fc.get("ensemble_weights", [0.6, 0.4])
+                _ensemble_weights = (
+                    (float(_raw_weights[0]), float(_raw_weights[1]))
+                    if len(_raw_weights) >= 2
+                    else None
+                )
+
+                _cf_cfg = _fc.get("conformal", {})
+                meta_signal_filter = MetaSignalFilter(
+                    model_path=_resolved_lgb,
+                    mlp_model_path=_resolved_mlp,
+                    threshold=_fc.get("threshold", 0.65),
+                    enabled=True,
+                    mode=_fc.get("mode", "binary"),
+                    ensemble_weights=_ensemble_weights,
+                    micro_scaler_path=_resolved_scaler,
+                    calibrator_path=_resolved_cal,
+                    conformal_mode=bool(_cf_cfg.get("enabled", False)),
+                    conformal_window=int(_cf_cfg.get("window", 500)),
+                    conformal_percentile=float(_cf_cfg.get("percentile", 80.0)),
+                    min_threshold=float(_cf_cfg.get("min_threshold", 0.50)),
+                    conformal_max_age_days=float(_cf_cfg.get("max_age_days", 14.0)),
+                )
+                if meta_signal_filter.load():
+                    # Restore rolling buffers from previous run (crash recovery)
+                    _mf_state_path = Path(args.base_dir) / "meta_filter_state.json"
+                    meta_signal_filter.load_state(str(_mf_state_path))
+                    print(
+                        json.dumps(
+                            {
+                                "event": "meta_pipeline_wired",
+                                "time": _utc_iso(),
+                                "stage2_filter": _resolved_lgb,
+                                "threshold": _fc.get("threshold", 0.65),
+                                "features": len(meta_signal_filter._feature_names),
+                                "mlp_loaded": meta_signal_filter._mlp_model is not None,
+                                "lgb_loaded": meta_signal_filter._model is not None,
+                                "calibrator_loaded": meta_signal_filter._calibrator is not None,
+                                "conformal_enabled": meta_signal_filter._conformal_mode,
+                                "conformal_max_age_days": meta_signal_filter._conformal_max_age_days,
+                                "ensemble_weights": list(meta_signal_filter._ensemble_weights),
+                                "micro_scaler_loaded": meta_signal_filter._micro_scaler is not None,
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                else:
+                    print(
+                        json.dumps(
+                            {"event": "meta_filter_load_failed", "time": _utc_iso()},
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                    meta_signal_filter = None
+        except Exception as _mf_exc:
+            print(
+                json.dumps(
+                    {"event": "meta_filter_init_error", "time": _utc_iso(), "error": str(_mf_exc)},
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+
     # ── Initial state ──
     state = LiveCycleState(
         known_open_tickets=known_open_tickets,
@@ -1516,6 +1627,7 @@ def main(argv: list[str] | None = None) -> int:
                     pnl_ledger=pnl_ledger,
                     exit_watchdog=exit_watchdog,
                     limit_monitor=limit_monitor,
+                    meta_signal_filter=meta_signal_filter,
                 )
                 # Reload tracker if daily_ops enriched it with realized P&L
                 if state._tracker_reload_pending:
@@ -1572,6 +1684,11 @@ def main(argv: list[str] | None = None) -> int:
                 if pnl_ledger is not None:
                     try:
                         pnl_ledger.save(pnl_ledger_path)
+                    except Exception:
+                        pass
+                if meta_signal_filter is not None:
+                    try:
+                        meta_signal_filter.save_state(str(_mf_state_path))
                     except Exception:
                         pass
 
@@ -1673,6 +1790,11 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
+        if meta_signal_filter is not None:
+            try:
+                meta_signal_filter.save_state(str(_mf_state_path))
+            except Exception:
+                pass
         if mt5 is not None:
             mt5.shutdown()
         print(

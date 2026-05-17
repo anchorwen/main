@@ -56,9 +56,8 @@ class MicroStrategy(StrategyLine):
                     else:
                         continue  # sequence not available for this TF
                 else:
-                    # Legacy M5 brain: use 9-dim feature vector → adapter.infer()
-                    raw = b_info["adapter"].infer(micro_feature_vector)
-                    prop = b_info["adapter"].get_signal(raw)
+                    # Legacy M5 brain: use 9-dim feature vector → adapter.inference()
+                    prop = b_info["adapter"].inference(micro_feature_vector)
                 bid = b_info.get("brain_id", "unknown")
                 try:
                     if not getattr(prop, "brain_id", None):

@@ -1,10 +1,11 @@
 """LightGBM Brain Adapter — loads LightGBM Booster from .txt artifact.
 
-Implements BaseBrainAdapter.load() / infer() / get_signal().
+Implements BaseBrainAdapter.load() / run() / infer() / get_signal().
 Maps raw LightGBM regression scores onto BrainDecisionProposal via score→direction conversion.
 
-LightGBM uses leaf-wise tree growth with 40-dim V9 institutional features.
-Operates alongside XGBoost V4.5 (microstructure features) for tree-ensemble diversity.
+Feature extraction is metadata-driven: reads ``features`` from the brain config
+(populated at training time).  No hardcoded schema imports — the brain config is
+the single source of truth for feature names and their order.
 """
 
 from datetime import UTC, datetime
@@ -15,13 +16,14 @@ import numpy as np
 
 from core.brains.adapters.base_adapter import BaseBrainAdapter
 from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
+from core.deployment.brain_alert import emit_brain_alert
 
 
 class LightGBMBrainAdapter(BaseBrainAdapter):
     """Adapter for LightGBM models serialized as .txt (booster format).
 
     Produced by lgb_trainer, artifact: LightGBM_V1_Core.txt.
-    Uses 40-dim V9 institutional features via V9FeatureAdapter.
+    Feature names are read from the brain config ``features`` field.
     """
 
     def __init__(self, brain_entry: dict, feature_adapter=None):
@@ -44,16 +46,98 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
             import lightgbm as lgb
 
             self._lgb = lgb
-            self._booster = lgb.Booster(model_file=artifact_path)
-            self._num_features = self._booster.num_feature()
+            booster = lgb.Booster(model_file=artifact_path)
+            self._booster = booster
+            self._num_features = booster.num_feature()
             self._backend = "lightgbm:txt"
         except Exception as exc:
             self._backend = f"stub:{type(exc).__name__}"
             self._booster = None
+            emit_brain_alert(
+                self._brain_entry.get("brain_id", "unknown"),
+                "model_load_failed",
+                {"artifact": artifact_path, "error": f"{type(exc).__name__}: {exc}"},
+            )
+
+    def run(self, snapshot, feature_source: dict | None = None) -> BrainDecisionProposal:
+        """Metadata-driven feature extraction with three defense lines.
+
+        1. **Name-based extraction**: Read ``features`` from brain config
+           (populated at training time).  Extracts values in that exact order
+           from the feature_source dict.  Missing keys default to 0.0.
+
+        2. **Optional normalization**: Applied only when
+           ``self._feature_adapter`` exists.  The adapter's ``normalize()``
+           method respects its own ``normalize`` flag.
+
+        3. **Dimension assertion**: Final vector length must match
+           ``self._num_features`` (from ``booster.num_feature()``).
+        """
+        if feature_source is None:
+            return self.inference(np.zeros(self._num_features or 40, dtype=np.float64))
+
+        # ── Defense Line 1: Metadata-driven feature extraction ──
+        feature_names = self._brain_entry.get("features")
+        if not feature_names and self._booster is not None:
+            feature_names = list(self._booster.feature_name())
+
+        if not feature_names:
+            import logging
+
+            logging.error(
+                "LightGBMBrainAdapter [%s]: no features in config and booster "
+                "unavailable — cannot produce predictions",
+                self._brain_entry.get("brain_id", "?"),
+            )
+            emit_brain_alert(
+                self._brain_entry.get("brain_id", "unknown"),
+                "feature_missing",
+                {"message": "No feature names in config or booster — zero vector used"},
+            )
+            return self.inference(np.zeros(self._num_features or 40, dtype=np.float64))
+
+        raw_vector = np.array(
+            [float(feature_source.get(name, 0.0)) for name in feature_names],
+            dtype=np.float64,
+        )
+
+        # ── Defense Line 2: Optional normalization ──
+        if self._feature_adapter is not None:
+            try:
+                raw_vector = self._feature_adapter.normalize(raw_vector)
+            except Exception:
+                pass  # best-effort; dim mismatch caught by line 3
+
+        # ── Defense Line 3: Dimension assertion ──
+        if self._num_features and len(raw_vector) != self._num_features:
+            emit_brain_alert(
+                self._brain_entry.get("brain_id", "unknown"),
+                "feature_dimension_mismatch",
+                {"expected": self._num_features, "got": len(raw_vector)},
+            )
+            return self.inference(np.zeros(self._num_features, dtype=np.float64))
+
+        return self.inference(raw_vector)
 
     def infer(self, feature_vector: np.ndarray) -> dict[str, Any]:
         if self._booster is None:
             return {"raw_score": 0.0, "feature_count": len(feature_vector), "fallback": True}
+
+        # ── Dimension guard — catches direct infer() calls that bypass run() ──
+        n_cols = feature_vector.shape[0] if feature_vector.ndim == 1 else feature_vector.shape[1]
+        if self._num_features and n_cols != self._num_features:
+            emit_brain_alert(
+                self._brain_entry.get("brain_id", "unknown"),
+                "feature_dimension_mismatch",
+                {"expected": self._num_features, "got": n_cols},
+            )
+            return {
+                "raw_score": 0.0,
+                "feature_count": n_cols,
+                "runtime_ms": 0.0,
+                "fallback": True,
+                "fallback_reason": (f"dim_mismatch_expected_{self._num_features}_got_{n_cols}"),
+            }
 
         started = perf_counter()
         vec = np.asarray(feature_vector, dtype=np.float64).reshape(1, -1)

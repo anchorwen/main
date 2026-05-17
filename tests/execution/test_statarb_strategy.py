@@ -16,8 +16,7 @@ from tests.execution.conftest import make_proposal
 def statarb_brain():
     """Create a minimal brain entry for statarb strategy."""
     adapter = MagicMock()
-    adapter.infer.return_value = {"zscore": -2.5}
-    adapter.get_signal.return_value = make_proposal(
+    adapter.inference.return_value = make_proposal(
         brain_id="ou_params_v6_01",
         up_probability=0.88,
         down_probability=0.12,
@@ -41,7 +40,7 @@ class TestStatArbStrategyInference:
             mid_price=2015.75,
         )
         assert len(proposals) == 1
-        call_arg = statarb_brain["adapter"].infer.call_args[0][0]
+        call_arg = statarb_brain["adapter"].inference.call_args[0][0]
         assert isinstance(call_arg, np.ndarray)
         assert call_arg.dtype == np.float32
         assert float(call_arg[0]) == pytest.approx(2015.75)
@@ -58,7 +57,7 @@ class TestStatArbStrategyInference:
 
     def test_adapter_exception_skipped(self, statarb_brain):
         fail_adapter = MagicMock()
-        fail_adapter.infer.side_effect = RuntimeError("ou divergence")
+        fail_adapter.inference.side_effect = RuntimeError("ou divergence")
         brains = [
             {"adapter": fail_adapter, "brain_id": "crash_brain"},
             statarb_brain,
@@ -81,7 +80,7 @@ class TestStatArbStrategyInference:
             brains=[statarb_brain],
         )
         _ = strat._run_inference([], [], None)
-        call_arg = statarb_brain["adapter"].infer.call_args[0][0]
+        call_arg = statarb_brain["adapter"].inference.call_args[0][0]
         assert float(call_arg[0]) == 0.0
 
     def test_empty_brains_returns_empty(self):

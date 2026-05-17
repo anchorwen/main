@@ -38,8 +38,7 @@ class SwingStrategy(StrategyLine):
 
         for b_info in self.brains:
             try:
-                raw = b_info["adapter"].infer(daily_feature_vector)
-                prop = b_info["adapter"].get_signal(raw)
+                prop = b_info["adapter"].inference(daily_feature_vector)
                 bid = b_info.get("brain_id", "unknown")
                 try:
                     if not getattr(prop, "brain_id", None):

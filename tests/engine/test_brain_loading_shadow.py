@@ -1,6 +1,5 @@
 """Smoke-test brain loading + inference via live.yaml + ServiceContainer."""
 
-import numpy as np
 import yaml
 
 from core.deployment.environment_config import EnvironmentConfig
@@ -26,9 +25,25 @@ def main() -> None:
     loaded = brain_run_service.ensure_loaded()
     print(f"Loaded brains ({len(loaded)}):", loaded)
 
-    # Run inference with dummy feature vector
-    dummy_features = np.zeros(40, dtype=np.float64)
-    proposals = brain_run_service.run_active_brains({}, {}, dummy_features)
+    # Run inference with a V9 feature dict on the blackboard.
+    # Brain configs now have a "features" field; the adapter extracts
+    # values by name.  Missing keys default to 0.0.
+    feature_blackboard = {
+        "v9_institutional_40": {
+            # Provide a realistic feature dict for V9 institutional brains.
+            # All values at 0.0 is valid — the model will produce a
+            # prediction (not frozen, just based on zero-feature input).
+            "M5_Ret_1": 0.0,
+            "M5_Body_Ratio": 0.5,
+            "M5_ATR_14": 2.0,
+            "M5_RSI_14": 50.0,
+            "M5_MACD": 0.0,
+            "M5_Vol_ZScore": 0.0,
+            "M5_Macro1_Corr": 0.3,
+            "M5_Macro_Gold_Silver_Spread": 4.0,
+        }
+    }
+    proposals = brain_run_service.run_active_brains({}, {}, feature_blackboard)
     print(f"\nInference proposals ({len(proposals)}):")
     for p in proposals:
         pred = p.prediction

@@ -48,6 +48,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260516-009 | 2026-05-16 | cursor-agent | — | Governance state integrity: fixed run_promotion.py dual-write bug (apply_decisions + ensure_governance_registration now append to transition_log). Removed 12 zombie brain_states, reconciled 6 inconsistencies, registered 5 new brains, deleted 4 stale configs. governance_state.json added to git tracking. | RC-06, RC-10 |
 | FIX-20260515-010 | 2026-05-15 | cursor-agent | — | Aggressive data cleanup: removed 2 frozen brain configs + 4 associated model files, 29 orphaned model files, 4 orphaned training NPZs, 2 .bak files, 4 dangling training contracts, 5 April decision directories, 10 frozen governance entries. Cleaned live.yaml disabled entries. | stale-data |
 | FIX-20260515-009 | 2026-05-15 | cursor-agent | — | Auto-shadow mechanism: ShadowTracker integrated into governance eval (scheduler_service.py), train.py auto-register in live.yaml + governance_state.json, vote_weight=0.0 for shadow brains. | missing-feature |
 | FIX-20260515-008 | 2026-05-15 | cursor-agent | — | Watchdog cleanup: deleted scripts/hourly_watchdog.py (May 5 experiment), data/watchdog.log. Updated ADR-006. Fixed verify.py deleted-file filter. | config-drift |

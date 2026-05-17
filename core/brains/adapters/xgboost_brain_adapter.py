@@ -14,6 +14,7 @@ import numpy as np
 
 from core.brains.adapters.base_adapter import BaseBrainAdapter
 from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
+from core.deployment.brain_alert import emit_brain_alert
 
 
 class XGBoostBrainAdapter(BaseBrainAdapter):
@@ -25,7 +26,7 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
     def __init__(self, brain_entry: dict, feature_adapter=None):
         super().__init__(brain_entry)
         self._feature_adapter = feature_adapter
-        self._booster = None
+        self._booster: Any = None
         self._num_features: int | None = None
 
     # ------------------------------------------------------------------
@@ -76,19 +77,27 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
             if feature_names:
                 self._num_features = len(feature_names)
             else:
-                # Fallback: try to get from model attributes
+                # Fallback: try to get from model attributes via save_config()
                 config = json.loads(self._booster.save_config())
-                # XGBoost config has learner->gradient_booster->model_param->num_feature
-                self._num_features = (
-                    config.get("learner", {})
-                    .get("gradient_booster", {})
+                learner_cfg = config.get("learner", {})
+                # num_feature lives in learner_model_param (XGBoost ≥1.6);
+                # older versions stored it in gradient_booster.model_param.
+                raw = learner_cfg.get("learner_model_param", {}).get(
+                    "num_feature",
+                    learner_cfg.get("gradient_booster", {})
                     .get("model_param", {})
-                    .get("num_feature", 9)
+                    .get("num_feature"),
                 )
+                self._num_features = int(raw) if raw is not None else None
             self._backend = "xgboost:json"
         except Exception as exc:
             self._backend = f"stub:{type(exc).__name__}"
             self._booster = None
+            emit_brain_alert(
+                self._brain_entry.get("brain_id", "unknown"),
+                "model_load_failed",
+                {"artifact": artifact_path, "error": f"{type(exc).__name__}: {exc}"},
+            )
 
     def infer(self, feature_vector: np.ndarray) -> dict[str, Any]:
         """Run XGBoost inference on a 1-D feature vector.
@@ -105,6 +114,11 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
         # (e.g. 9-dim single-bar when model was trained on 288-dim flat
         # sequence) cannot produce meaningful predictions — return stub.
         if self._num_features and n_cols != self._num_features:
+            emit_brain_alert(
+                self._brain_entry.get("brain_id", "unknown"),
+                "feature_dimension_mismatch",
+                {"expected": self._num_features, "got": n_cols},
+            )
             return {
                 "raw_score": 0.0,
                 "feature_count": n_cols,

@@ -76,6 +76,10 @@ class ActivePosition:
     bar_pnls: list[float] = field(default_factory=list)
     bleed_triggered: bool = False  # set when bleed stop fires (prevents duplicate exit)
 
+    # v3.2: Alpha Handoff — OU exit bypassed in favor of trailing stop
+    ou_handoff_active: bool = False  # True → use trail stop, NOT ou_exit
+    ou_handoff_r: float = 0.0  # R-multiple at handoff time (for journal)
+
 
 # ── Manager ────────────────────────────────────────────────────────────────
 
@@ -144,6 +148,12 @@ class ActivePositionManager:
         self._consecutive_flips: int = 0  # for 2-confirmation flip exit
         self._last_state_path: str | None = None
         self._recovery_cycle: int = -1  # -1=normal, >=0=in grace period (increments each cycle)
+
+        # v3.2 Knife 2: Drift Lock — per-direction spatial lock after mean-drift exit
+        # Key: "long" or "short", Value: z-score threshold to unlock
+        # When OU exit triggers with PnL < 0 (mean drifted, not price reverted),
+        # same-direction re-entry is blocked until z crosses to the OPPOSITE side.
+        self._drift_lock: dict[str, float] = {}
 
     # ── Public API ──────────────────────────────────────────────────────
 
@@ -656,6 +666,182 @@ class ActivePositionManager:
             pos.bleed_triggered = True
             return True, f"bleed_stop_{bleed_bars}bars_neg"
         return False, ""
+
+    # ── Knife 2: Drift Lock (v3.2) ──
+
+    def is_direction_locked(self, direction: str, current_z: float) -> tuple[bool, str]:
+        """Check if *direction* is locked by a prior mean-drift exit.
+
+        Returns (is_locked, reason).  A lock expires when z crosses to the
+        OPPOSITE side of zero, confirming the mean has relocated.
+
+        Lock semantics:
+          - "long" locked → blocked until z > +1.0 (price pushed to upside,
+            shorts got hit, long opportunity is real again)
+          - "short" locked → blocked until z < -1.0
+        """
+        unlock_target = self._drift_lock.get(direction)
+        if unlock_target is None:
+            return False, ""
+
+        if direction == "long":
+            if current_z >= unlock_target:
+                self._drift_lock.pop("long", None)
+                return False, "drift_lock_long_released"
+            return True, f"drift_lock_long_active_z{current_z:.2f}_need_{unlock_target}"
+        else:
+            if current_z <= unlock_target:
+                self._drift_lock.pop("short", None)
+                return False, "drift_lock_short_released"
+            return True, f"drift_lock_short_active_z{current_z:.2f}_need_{unlock_target}"
+
+    def set_drift_lock(self, exit_direction: str, exit_pnl_r: float, exit_z: float) -> None:
+        """Set drift lock after an OU exit.
+
+        Only locks when PnL < 0 — the exit was mean-drift (MA moved toward
+        price), NOT genuine price reversion.  Profit-taking exits do NOT lock.
+
+        Lock targets:
+          - Long exit → lock "long" entry until z > +1.0
+          - Short exit → lock "short" entry until z < -1.0
+        """
+        if exit_pnl_r >= 0:
+            return  # profitable exit = genuine reversion, no lock
+
+        if exit_direction == "long":
+            self._drift_lock["long"] = 1.0
+        elif exit_direction == "short":
+            self._drift_lock["short"] = -1.0
+
+    def clear_drift_lock(self, direction: str | None = None) -> None:
+        """Clear drift lock(s).  If *direction* is None, clear all."""
+        if direction is None:
+            self._drift_lock.clear()
+        else:
+            self._drift_lock.pop(direction, None)
+
+    # ── Knife 1: Volume Climax Check (v3.2) ──
+
+    @staticmethod
+    def check_volume_climax(
+        current_tick_volume: float,
+        prev_tick_volume: float | None,
+        recent_tick_volumes: list[float] | None = None,
+        *,
+        current_high: float = 0.0,
+        current_low: float = 0.0,
+        current_open: float = 0.0,
+        current_close: float = 0.0,
+        lookback: int = 20,
+        climax_mult: float = 2.0,
+        wick_ratio: float = 0.50,
+    ) -> tuple[bool, str]:
+        """Check if the current bar shows a distinctive volume pattern at inflection.
+
+        Two valid patterns (either confirms genuine exhaustion, not fake-out):
+          a) Volume contraction: current tick_volume < previous bar
+             → selling/buying pressure exhausted.
+          b) Volume climax + absorption wick: tick_volume > climax_mult × lookback
+             mean AND wick > wick_ratio of total range → institutional passive
+             wall absorbed the move.
+
+        Normal volume at a z-score inflection = likely fake turnaround → skip.
+        """
+        if prev_tick_volume is None:
+            return False, "vol_insufficient_data"
+
+        cv = float(current_tick_volume)
+        pv = float(prev_tick_volume)
+
+        # Pattern A: Volume contraction — exhaustion
+        if cv < pv:
+            return True, "vol_contraction"
+
+        # Pattern B: Volume climax + long wick — absorption
+        if recent_tick_volumes and len(recent_tick_volumes) >= lookback:
+            mean_vol = float(np.mean(recent_tick_volumes[-lookback:]))
+            if mean_vol > 0 and cv > climax_mult * mean_vol:
+                body = abs(float(current_close) - float(current_open))
+                total_range = float(current_high) - float(current_low)
+                if total_range > 0 and body / total_range < wick_ratio:
+                    return True, "vol_climax_absorption"
+
+        # Normal volume = fake inflection
+        return False, "vol_normal"
+
+    # ── Knife 3: Alpha Handoff (v3.2) ──
+
+    def should_handoff_ou_to_trail(
+        self,
+        current_z: float,
+        mid: float,
+        adx: float | None = None,
+        hurst: float | None = None,
+        *,
+        min_r_for_handoff: float = 1.0,
+        min_adx: float = 25.0,
+        min_hurst: float = 0.50,
+        min_peak_r: float = 2.5,
+    ) -> tuple[bool, str]:
+        """Check if OU exit should be bypassed in favor of trailing stop.
+
+        When |z| < 0.3 (OU says exit) but the position has strong unrealized
+        profit AND the trend is still pushing in our favor, closing is premature.
+        Instead, switch to trailing stop to let the trend carry further.
+
+        Conditions:
+          - PnL > +1.0R (real profit, not just z-score noise)
+          - ADX > 25 OR Hurst > 0.50 OR highest_r > 2.5 (trend is real)
+          - |z| < 0.3 (OU exit band — the handoff trigger zone)
+        """
+        pos = self._position
+        if pos is None:
+            return False, ""
+        if pos.ou_handoff_active:
+            return False, "handoff_already_active"
+
+        r_now = self._compute_r_multiple(mid)
+        if r_now < min_r_for_handoff:
+            return False, f"handoff_r_too_low_r{r_now:.2f}"
+
+        trend_strong = False
+        if adx is not None and adx >= min_adx:
+            trend_strong = True
+        if hurst is not None and hurst >= min_hurst:
+            trend_strong = True
+        if pos.highest_r >= min_peak_r:
+            trend_strong = True  # peak profit proves trend was real
+
+        if not trend_strong:
+            return False, "handoff_trend_too_weak"
+
+        # Direction check: trend must be aligned with position
+        if pos.side == "long" and current_z > 0:
+            return False, "handoff_long_z_wrong_sign"
+        if pos.side == "short" and current_z < 0:
+            return False, "handoff_short_z_wrong_sign"
+
+        return True, f"handoff_ou_to_trail_r{r_now:.2f}"
+
+    def activate_handoff(self, mid: float) -> None:
+        """Activate alpha handoff: bypass OU exit, use trailing stop instead."""
+        pos = self._position
+        if pos is None:
+            return
+        pos.ou_handoff_active = True
+        pos.ou_handoff_r = self._compute_r_multiple(mid)
+        # Force breakeven SL floor (entry + 0.1 ATR) so handoff doesn't give
+        # back what was already earned
+        if not pos.breakeven_triggered and pos.entry_atr > 0:
+            if pos.side == "long":
+                be_sl = pos.entry_price + 0.1 * pos.entry_atr
+                if be_sl > pos.current_sl:
+                    pos.current_sl = round(be_sl, 3)
+            else:
+                be_sl = pos.entry_price - 0.1 * pos.entry_atr
+                if be_sl < pos.current_sl:
+                    pos.current_sl = round(be_sl, 3)
+            pos.breakeven_triggered = True
 
     # ── Z-score dynamic exit (v3.1) ──
 

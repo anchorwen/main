@@ -78,6 +78,7 @@ def _stream_reader(
 ):
     """Read lines from a subprocess stdout, print with prefix, and optionally tee to a log file."""
     try:
+        assert proc.stdout is not None
         for line in iter(proc.stdout.readline, ""):
             if stop_event.is_set():
                 break
@@ -359,7 +360,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         pass
 
     # ── Launch subprocesses ──
-    subprocess_env = {**dict(subprocess.os.environ), "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"}
+    subprocess_env = {**dict(os.environ), "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"}
     bridge_proc = subprocess.Popen(
         bridge_cmd,
         stdout=subprocess.PIPE,
@@ -541,6 +542,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
 
     # ── Stall detection helpers ──
     decisions_dir = PROJECT_ROOT / cfg["base_dir"] / "decisions"
+    trade_journal_path = PROJECT_ROOT / cfg["base_dir"] / "live_trade_journal.jsonl"
     bridge_health_path = PROJECT_ROOT / cfg["base_dir"] / "reports" / "mt5_bridge_health.json"
     active_position_path = PROJECT_ROOT / cfg["base_dir"] / "state" / "active_position.json"
     governance_path = PROJECT_ROOT / cfg["base_dir"] / "governance_state.json"
@@ -556,17 +558,19 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         alerts: list[str] = []
         now = time_module.time()
 
-        # 1. Decision freshness — check newest decision file across all dates
-        newest_decision_age = 9999.0
-        if decisions_dir.exists():
+        # 1. Engine liveness — check trade journal (primary) and decisions dir (fallback)
+        engine_age = 9999.0
+        if trade_journal_path.exists():
+            engine_age = (now - trade_journal_path.stat().st_mtime) / 60
+        if engine_age > STALL_MINUTES and decisions_dir.exists():
             for date_dir in decisions_dir.iterdir():
                 if date_dir.is_dir():
                     for dec_file in date_dir.glob("*.jsonl"):
                         age_min = (now - dec_file.stat().st_mtime) / 60
-                        if age_min < newest_decision_age:
-                            newest_decision_age = age_min
-        if newest_decision_age > STALL_MINUTES:
-            alerts.append(f"ENGINE_STALL: no new decisions for {newest_decision_age:.0f}m")
+                        if age_min < engine_age:
+                            engine_age = age_min
+        if engine_age > STALL_MINUTES:
+            alerts.append(f"ENGINE_STALL: no new decisions for {engine_age:.0f}m")
 
         # 2. Bridge health — check heartbeat freshness
         if bridge_health_path.exists():

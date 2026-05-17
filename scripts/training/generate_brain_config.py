@@ -151,6 +151,40 @@ def make_brain_id(lane: str, timeframe: str, seed: int | None, prefix: str) -> s
     return f"{prefix}{tf_part}{seed_part}"
 
 
+def _resolve_features_for_schema(feature_schema_id: str) -> list[str] | None:
+    """Resolve canonical feature name list for a schema_id."""
+    try:
+        if feature_schema_id in ("v9_institutional_40",):
+            from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+
+            return list(V9_INSTITUTIONAL_40_FEATURES)
+        elif feature_schema_id == "v9_micro_49":
+            from core.features.schemas.v9_micro_schema import V9_MICRO_49_FEATURES
+
+            return list(V9_MICRO_49_FEATURES)
+        elif feature_schema_id in ("daily_swing_24", "swing_24"):
+            from core.features.schemas.daily_swing_schema import DAILY_SWING_24_FEATURES
+
+            return list(DAILY_SWING_24_FEATURES)
+        elif feature_schema_id in (
+            "v4.5_microstructure_9",
+            "v2_microstructure_9",
+            "v4.3_microstructure_9",
+        ):
+            from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
+
+            return list(MICROSTRUCTURE_9_FEATURES)
+        elif feature_schema_id == "v2_microstructure_288":
+            from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
+
+            return list(MICROSTRUCTURE_9_FEATURES) * 32
+        elif feature_schema_id == "v6_price_series_1":
+            return ["price_return"]
+        return None
+    except Exception:
+        return None
+
+
 def make_brain_config(
     model_path: Path,
     brain_type: str,
@@ -186,6 +220,11 @@ def make_brain_config(
             "regimes": ["all"],
         },
     }
+
+    # Auto-populate features from schema
+    features = _resolve_features_for_schema(feature_schema_id)
+    if features:
+        config["features"] = features
     if training_contract:
         config["training_contract"] = training_contract
     if hmre_layer:

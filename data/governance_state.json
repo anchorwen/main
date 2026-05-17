@@ -1,0 +1,714 @@
+{
+  "schema_version": "governance_state.v1",
+  "brain_states": {
+    "OU_Params_V6_Sniper": {
+      "brain_id": "OU_Params_V6_Sniper",
+      "status": "live",
+      "registered_at": "2026-05-04T10:51:17.123332",
+      "last_transition_at": "2026-05-16T00:00:00.000000",
+      "transition_count": 3,
+      "freeze_count": 0,
+      "exposure_limited": false
+    },
+    "Online_MLP_V1": {
+      "brain_id": "Online_MLP_V1",
+      "status": "retired",
+      "registered_at": "2026-05-07T07:30:00.000000",
+      "last_transition_at": "2026-05-16T07:49:08.307628",
+      "transition_count": 4,
+      "freeze_count": 0
+    },
+    "DeepResMLP_V1_Institutional": {
+      "brain_id": "DeepResMLP_V1_Institutional",
+      "status": "probation",
+      "registered_at": "2026-05-14T23:52:10.616558",
+      "last_transition_at": "2026-05-14T23:52:10.616558",
+      "transition_count": 0,
+      "freeze_count": 0,
+      "exposure_limited": true
+    },
+    "LightGBM_V1_Institutional": {
+      "brain_id": "LightGBM_V1_Institutional",
+      "status": "probation",
+      "registered_at": "2026-05-14T23:52:10.616558",
+      "last_transition_at": "2026-05-16T07:49:08.307628",
+      "transition_count": 4,
+      "freeze_count": 0
+    },
+    "LightGBM_V2_Retrained": {
+      "brain_id": "LightGBM_V2_Retrained",
+      "status": "retired",
+      "registered_at": "2026-05-14T23:52:10.616558",
+      "last_transition_at": "2026-05-16T03:21:51.278655",
+      "transition_count": 1,
+      "freeze_count": 0,
+      "exposure_limited": true
+    },
+    "LightGBM_V3_New": {
+      "brain_id": "LightGBM_V3_New",
+      "status": "retired",
+      "registered_at": "2026-05-14T23:52:10.616558",
+      "last_transition_at": "2026-05-16T03:21:51.278655",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "XGBoost_V11_New": {
+      "brain_id": "XGBoost_V11_New",
+      "status": "retired",
+      "registered_at": "2026-05-14T23:52:10.616558",
+      "last_transition_at": "2026-05-16T03:21:51.278655",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "XGBoost_V9_Institutional": {
+      "brain_id": "XGBoost_V9_Institutional",
+      "status": "probation",
+      "registered_at": "2026-05-14T23:52:10.616558",
+      "last_transition_at": "2026-05-14T23:52:10.616558",
+      "transition_count": 0,
+      "freeze_count": 0,
+      "exposure_limited": true
+    },
+    "xgboost_m15_swing_xgboost_v1_20260514_165620": {
+      "brain_id": "xgboost_m15_swing_xgboost_v1_20260514_165620",
+      "status": "candidate",
+      "registered_at": "2026-05-15T08:00:00.000000",
+      "last_transition_at": "2026-05-15T08:00:00.000000",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "xgboost_m30_swing_xgboost_v1_20260514_165620": {
+      "brain_id": "xgboost_m30_swing_xgboost_v1_20260514_165620",
+      "status": "candidate",
+      "registered_at": "2026-05-15T08:00:00.000000",
+      "last_transition_at": "2026-05-15T08:00:00.000000",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "xgboost_h1_swing_xgboost_v1_20260514_165620": {
+      "brain_id": "xgboost_h1_swing_xgboost_v1_20260514_165620",
+      "status": "candidate",
+      "registered_at": "2026-05-15T08:00:00.000000",
+      "last_transition_at": "2026-05-15T08:00:00.000000",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "lightgbm_h1_swing_lightgbm_v1_20260514_165620": {
+      "brain_id": "lightgbm_h1_swing_lightgbm_v1_20260514_165620",
+      "status": "candidate",
+      "registered_at": "2026-05-15T08:00:00.000000",
+      "last_transition_at": "2026-05-17T00:00:00.000000",
+      "transition_count": 4,
+      "freeze_count": 0
+    },
+    "xgboost_h4_swing_xgboost_v1_20260514_165620": {
+      "brain_id": "xgboost_h4_swing_xgboost_v1_20260514_165620",
+      "status": "candidate",
+      "registered_at": "2026-05-15T08:00:00.000000",
+      "last_transition_at": "2026-05-15T08:00:00.000000",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "XGBoost_V4.5_M15": {
+      "brain_id": "XGBoost_V4.5_M15",
+      "status": "retired",
+      "registered_at": "2026-05-15T22:56:04.472999",
+      "last_transition_at": "2026-05-16T07:49:08.307628",
+      "transition_count": 2,
+      "freeze_count": 0
+    },
+    "V9_Institutional_01": {
+      "brain_id": "V9_Institutional_01",
+      "status": "probation",
+      "registered_at": "2026-05-16T03:21:51.278655",
+      "last_transition_at": "2026-05-16T03:21:51.278655",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "DeepResMLP_V2_New": {
+      "brain_id": "DeepResMLP_V2_New",
+      "status": "retired",
+      "registered_at": "2026-05-16T03:21:51.278655",
+      "last_transition_at": "2026-05-16T07:49:08.307628",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "Microstructure_Transformer_V5.0_H4": {
+      "brain_id": "Microstructure_Transformer_V5.0_H4",
+      "status": "retired",
+      "registered_at": "2026-05-16T03:21:51.278655",
+      "last_transition_at": "2026-05-16T07:49:08.307628",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "XGBoost_D1_Swing_5d": {
+      "brain_id": "XGBoost_D1_Swing_5d",
+      "status": "candidate",
+      "registered_at": "2026-05-16T03:21:51.278655",
+      "last_transition_at": "2026-05-16T03:21:51.278655",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "XGBoost_V4.5_H1": {
+      "brain_id": "XGBoost_V4.5_H1",
+      "status": "retired",
+      "registered_at": "2026-05-16T03:21:51.278655",
+      "last_transition_at": "2026-05-16T07:49:08.307628",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "XGBoost_V4.5_H4": {
+      "brain_id": "XGBoost_V4.5_H4",
+      "status": "retired",
+      "registered_at": "2026-05-16T03:21:51.278655",
+      "last_transition_at": "2026-05-16T07:49:08.307628",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "Microstructure_Transformer_V5.0": {
+      "brain_id": "Microstructure_Transformer_V5.0",
+      "status": "retired",
+      "registered_at": "2026-05-16T07:49:08.307628",
+      "last_transition_at": "2026-05-16T07:49:08.307628",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "Microstructure_Transformer_V5.0_M15": {
+      "brain_id": "Microstructure_Transformer_V5.0_M15",
+      "status": "retired",
+      "registered_at": "2026-05-16T07:49:08.307628",
+      "last_transition_at": "2026-05-16T07:49:08.307628",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "Microstructure_Transformer_V5.0_H1": {
+      "brain_id": "Microstructure_Transformer_V5.0_H1",
+      "status": "retired",
+      "registered_at": "2026-05-16T07:49:08.307628",
+      "last_transition_at": "2026-05-16T07:49:08.307628",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "CRT.sur.chlg.g2026.1": {
+      "brain_id": "CRT.sur.chlg.g2026.1",
+      "status": "probation",
+      "registered_at": "2026-05-16T21:57:48.900273",
+      "last_transition_at": "2026-05-16T21:57:48.900273",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "ARB_Params_V8_M15_S53": {
+      "brain_id": "ARB_Params_V8_M15_S53",
+      "status": "frozen",
+      "registered_at": "2026-05-16T21:57:54.413512",
+      "last_transition_at": "2026-05-16T21:57:54.413512",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "ARB_Params_V8_M5_S53": {
+      "brain_id": "ARB_Params_V8_M5_S53",
+      "status": "frozen",
+      "registered_at": "2026-05-16T21:57:54.413512",
+      "last_transition_at": "2026-05-16T21:57:54.413512",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "LIGHTGBM_barrier_12bar": {
+      "brain_id": "LIGHTGBM_barrier_12bar",
+      "status": "frozen",
+      "registered_at": "2026-05-16T21:57:54.413512",
+      "last_transition_at": "2026-05-16T21:57:54.413512",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "LightGBM_D1_Swing_5d": {
+      "brain_id": "LightGBM_D1_Swing_5d",
+      "status": "frozen",
+      "registered_at": "2026-05-16T21:57:54.413512",
+      "last_transition_at": "2026-05-16T21:57:54.413512",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "LightGBM_M15_Swing_24bar": {
+      "brain_id": "LightGBM_M15_Swing_24bar",
+      "status": "frozen",
+      "registered_at": "2026-05-16T21:57:54.413512",
+      "last_transition_at": "2026-05-16T21:57:54.413512",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "XGBOOST_barrier_12bar": {
+      "brain_id": "XGBOOST_barrier_12bar",
+      "status": "frozen",
+      "registered_at": "2026-05-16T21:57:54.413512",
+      "last_transition_at": "2026-05-16T21:57:54.413512",
+      "transition_count": 0,
+      "freeze_count": 0
+    }
+  },
+  "transition_log": [
+    {
+      "brain_id": "OU_Params_V6_Sniper",
+      "from_status": "live",
+      "to_status": "live",
+      "reason": "FIX-20260515-016: Phase1 revival — exposure_limited lifted, shadow status removed, 20.6% directional rate confirmed",
+      "timestamp": "2026-05-16T00:00:00.000000"
+    },
+    {
+      "brain_id": "LightGBM_V1_Institutional",
+      "from_status": "probation",
+      "to_status": "live",
+      "reason": "FIX-20260515-016: Phase1 revival — only barrier directional brain (100% LONG), promoted to live",
+      "timestamp": "2026-05-16T00:00:00.000000"
+    },
+    {
+      "brain_id": "lightgbm_h1_swing_lightgbm_v1_20260514_165620",
+      "from_status": "candidate",
+      "to_status": "probation",
+      "reason": "FIX-20260515-016: Phase1 revival — only h1_swing directional brain, candidate→probation",
+      "timestamp": "2026-05-16T00:00:00.000000"
+    },
+    {
+      "brain_id": "Online_MLP_V1",
+      "from_status": "probation",
+      "to_status": "candidate",
+      "reason": "auto:upgraded_to_mlp",
+      "timestamp": "2026-05-07T07:30:00.000000"
+    },
+    {
+      "brain_id": "Online_MLP_V1",
+      "from_status": "probation",
+      "to_status": "live",
+      "reason": "manual:pnl_bug_fixed — PnP recording now precedes approval gates; per-brain counterfactual tracking restored 2026-05-13; win/loss profile identical to LightGBM_V1_Institutional and XGBoost_V9_Institutional (10W/73L/8BE, 11.0% WR) with better PnP potential via SHORT bias diversification vs all-LONG peers",
+      "timestamp": "2026-05-13T02:30:00.000000"
+    },
+    {
+      "brain_id": "DeepResMLP_V1_Institutional",
+      "from_status": "candidate",
+      "to_status": "live",
+      "reason": "promotion: best val R²=0.369, DeepResMLP architecture with LayerNorm/GELU",
+      "timestamp": "2026-05-07T10:20:45.122089"
+    },
+    {
+      "brain_id": "LightGBM_V1_Institutional",
+      "from_status": "candidate",
+      "to_status": "live",
+      "reason": "promotion: 24 live records, stable shadow performance, leaf-wise boosting",
+      "timestamp": "2026-05-07T10:20:45.122089"
+    },
+    {
+      "brain_id": "DeepResMLP_V1_Institutional",
+      "from_status": "live",
+      "to_status": "probation",
+      "reason": "auto:degraded",
+      "timestamp": "2026-05-10T20:59:47.360584"
+    },
+    {
+      "brain_id": "OU_Params_V6_Sniper",
+      "from_status": "candidate",
+      "to_status": "probation",
+      "reason": "auto:degraded",
+      "timestamp": "2026-05-10T20:59:47.360584"
+    },
+    {
+      "brain_id": "Online_MLP_V1",
+      "from_status": "candidate",
+      "to_status": "probation",
+      "reason": "auto:degraded",
+      "timestamp": "2026-05-10T20:59:47.360584"
+    },
+    {
+      "brain_id": "XGBoost_V4.5_Microstructure",
+      "from_status": "candidate",
+      "to_status": "probation",
+      "reason": "auto:degraded",
+      "timestamp": "2026-05-10T20:59:47.360584"
+    },
+    {
+      "brain_id": "LightGBM_V1_Institutional",
+      "from_status": "live",
+      "to_status": "probation",
+      "reason": "challenger:LightGBM_V2_Retrained",
+      "timestamp": "2026-05-10T20:59:47.363585"
+    },
+    {
+      "brain_id": "LightGBM_V2_Retrained",
+      "from_status": "candidate",
+      "to_status": "live",
+      "reason": "promoted_over:LightGBM_V1_Institutional",
+      "timestamp": "2026-05-10T20:59:47.363585"
+    },
+    {
+      "brain_id": "XGBoost_V10_Retrained",
+      "from_status": "candidate",
+      "to_status": "live",
+      "reason": "promoted_over:LightGBM_V1_Institutional",
+      "timestamp": "2026-05-10T20:59:47.363585"
+    },
+    {
+      "brain_id": "XGBoost_V4.5_Microstructure",
+      "from_status": "probation",
+      "to_status": "live",
+      "reason": "promoted_over:LightGBM_V1_Institutional",
+      "timestamp": "2026-05-10T20:59:47.363585"
+    },
+    {
+      "brain_id": "CRT.sur.chlg.g2026.1",
+      "from_status": "candidate",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-05-12T04:51:18.086926"
+    },
+    {
+      "brain_id": "DeepResMLP_V1_Institutional",
+      "from_status": "probation",
+      "to_status": "live",
+      "reason": "pnl:stable",
+      "timestamp": "2026-05-12T04:51:18.086926"
+    },
+    {
+      "brain_id": "LightGBM_V1_Institutional",
+      "from_status": "probation",
+      "to_status": "live",
+      "reason": "pnl:stable",
+      "timestamp": "2026-05-12T04:51:18.086926"
+    },
+    {
+      "brain_id": "LightGBM_V2_Retrained",
+      "from_status": "live",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-05-12T04:51:18.086926"
+    },
+    {
+      "brain_id": "OU_Params_V6_Sniper",
+      "from_status": "probation",
+      "to_status": "live",
+      "reason": "pnl:stable",
+      "timestamp": "2026-05-12T04:51:18.086926"
+    },
+    {
+      "brain_id": "V9_Institutional_01",
+      "from_status": "candidate",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-05-12T04:51:18.086926"
+    },
+    {
+      "brain_id": "XGBoost_V10_Retrained",
+      "from_status": "live",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-05-12T04:51:18.086926"
+    },
+    {
+      "brain_id": "XGBoost_V4.5_Microstructure",
+      "from_status": "live",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-05-12T04:51:18.086926"
+    },
+    {
+      "brain_id": "XGBoost_V9_Institutional",
+      "from_status": "probation",
+      "to_status": "live",
+      "reason": "pnl:stable",
+      "timestamp": "2026-05-12T04:51:18.086926"
+    },
+    {
+      "brain_id": "DeepResMLP_V1_Institutional",
+      "from_status": "live",
+      "to_status": "probation",
+      "reason": "auto:degraded",
+      "timestamp": "2026-05-13T01:49:01.698685"
+    },
+    {
+      "brain_id": "LightGBM_V1_Institutional",
+      "from_status": "live",
+      "to_status": "probation",
+      "reason": "auto:degraded",
+      "timestamp": "2026-05-13T01:49:01.698685"
+    },
+    {
+      "brain_id": "XGBoost_V9_Institutional",
+      "from_status": "live",
+      "to_status": "probation",
+      "reason": "auto:degraded",
+      "timestamp": "2026-05-13T01:49:01.698685"
+    },
+    {
+      "brain_id": "DeepResMLP_V1_Institutional",
+      "from_status": "probation",
+      "to_status": "live",
+      "reason": "pnl:stable",
+      "timestamp": "2026-05-13T01:49:44.925393"
+    },
+    {
+      "brain_id": "LightGBM_V1_Institutional",
+      "from_status": "probation",
+      "to_status": "live",
+      "reason": "pnl:stable",
+      "timestamp": "2026-05-13T01:49:44.925393"
+    },
+    {
+      "brain_id": "LightGBM_V3_New",
+      "from_status": "probation",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-05-13T01:49:44.925393"
+    },
+    {
+      "brain_id": "XGBoost_V11_New",
+      "from_status": "probation",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-05-13T01:49:44.925393"
+    },
+    {
+      "brain_id": "XGBoost_V9_Institutional",
+      "from_status": "probation",
+      "to_status": "live",
+      "reason": "pnl:stable",
+      "timestamp": "2026-05-13T01:49:44.925393"
+    },
+    {
+      "brain_id": "DeepResMLP_V1_Institutional",
+      "from_status": "live",
+      "to_status": "probation",
+      "reason": "auto:degraded",
+      "timestamp": "2026-05-14T00:51:11.145924"
+    },
+    {
+      "brain_id": "LightGBM_V1_Institutional",
+      "from_status": "live",
+      "to_status": "probation",
+      "reason": "auto:degraded",
+      "timestamp": "2026-05-14T00:51:11.145924"
+    },
+    {
+      "brain_id": "XGBoost_V9_Institutional",
+      "from_status": "live",
+      "to_status": "probation",
+      "reason": "auto:degraded",
+      "timestamp": "2026-05-14T00:51:11.145924"
+    },
+    {
+      "brain_id": "Online_MLP_V1",
+      "from_status": "live",
+      "to_status": "probation",
+      "reason": "challenger:Online_SGD_V1",
+      "timestamp": "2026-05-14T00:51:11.153926"
+    },
+    {
+      "brain_id": "DeepResMLP_V1_Institutional",
+      "from_status": "probation",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-05-14T00:51:53.989428"
+    },
+    {
+      "brain_id": "LightGBM_V1_Institutional",
+      "from_status": "probation",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-05-14T00:51:53.989428"
+    },
+    {
+      "brain_id": "XGBoost_V9_Institutional",
+      "from_status": "probation",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-05-14T00:51:53.989428"
+    },
+    {
+      "brain_id": "LightGBM_V1_Institutional",
+      "from_status": "live",
+      "to_status": "probation",
+      "reason": "auto:degraded",
+      "timestamp": "2026-05-15T22:55:58.937755"
+    },
+    {
+      "brain_id": "LightGBM_V1_Institutional",
+      "from_status": "probation",
+      "to_status": "live",
+      "reason": "FIX-20260516-009: Phase1 revival status sync",
+      "timestamp": "2026-05-16T03:21:51.278655"
+    },
+    {
+      "brain_id": "DeepResMLP_V1_Institutional",
+      "from_status": "retired",
+      "to_status": "probation",
+      "reason": "FIX-20260516-009: restored from accidental deletion (6803d2a), reinstated per live.yaml active use",
+      "timestamp": "2026-05-16T03:21:51.278655"
+    },
+    {
+      "brain_id": "XGBoost_V9_Institutional",
+      "from_status": "retired",
+      "to_status": "probation",
+      "reason": "FIX-20260516-009: restored from accidental deletion (6803d2a), reinstated per live.yaml active use",
+      "timestamp": "2026-05-16T03:21:51.278655"
+    },
+    {
+      "brain_id": "XGBoost_V4.5_M15",
+      "from_status": "frozen",
+      "to_status": "candidate",
+      "reason": "FIX-20260516-009: unfrozen — config+artifact intact, never evaluated, micro_m15 strategy disabled",
+      "timestamp": "2026-05-16T03:21:51.278655"
+    },
+    {
+      "brain_id": "V9_Institutional_01",
+      "from_status": "unknown",
+      "to_status": "probation",
+      "reason": "FIX-20260516-009: config restored by FIX-20260515-014, active in barrier_12bar",
+      "timestamp": "2026-05-16T03:21:51.278655"
+    },
+    {
+      "brain_id": "DeepResMLP_V2_New",
+      "from_status": "unknown",
+      "to_status": "candidate",
+      "reason": "FIX-20260516-009: initial registration — config+artifact verified on disk, contract_group=barrier_12bar",
+      "timestamp": "2026-05-16T03:21:51.278655"
+    },
+    {
+      "brain_id": "Microstructure_Transformer_V5.0_H4",
+      "from_status": "unknown",
+      "to_status": "candidate",
+      "reason": "FIX-20260516-009: initial registration — config+artifact verified on disk, contract_group=micro_h4",
+      "timestamp": "2026-05-16T03:21:51.278655"
+    },
+    {
+      "brain_id": "XGBoost_D1_Swing_5d",
+      "from_status": "unknown",
+      "to_status": "candidate",
+      "reason": "FIX-20260516-009: initial registration — config+artifact verified on disk, contract_group=daily_swing",
+      "timestamp": "2026-05-16T03:21:51.278655"
+    },
+    {
+      "brain_id": "XGBoost_V4.5_H1",
+      "from_status": "unknown",
+      "to_status": "candidate",
+      "reason": "FIX-20260516-009: initial registration — config+artifact verified on disk, contract_group=micro_h1",
+      "timestamp": "2026-05-16T03:21:51.278655"
+    },
+    {
+      "brain_id": "XGBoost_V4.5_H4",
+      "from_status": "unknown",
+      "to_status": "candidate",
+      "reason": "FIX-20260516-009: initial registration — config+artifact verified on disk, contract_group=micro_h4",
+      "timestamp": "2026-05-16T03:21:51.278655"
+    },
+    {
+      "brain_id": "xgboost_m15_swing_xgboost_v1_20260514_165620",
+      "from_status": "unknown",
+      "to_status": "candidate",
+      "reason": "FIX-20260516-009: retroactive coverage: brain existed in brain_states without log entry",
+      "timestamp": "2026-05-16T03:21:51.278655"
+    },
+    {
+      "brain_id": "xgboost_m30_swing_xgboost_v1_20260514_165620",
+      "from_status": "unknown",
+      "to_status": "candidate",
+      "reason": "FIX-20260516-009: retroactive coverage: brain existed in brain_states without log entry",
+      "timestamp": "2026-05-16T03:21:51.278655"
+    },
+    {
+      "brain_id": "xgboost_h1_swing_xgboost_v1_20260514_165620",
+      "from_status": "unknown",
+      "to_status": "candidate",
+      "reason": "FIX-20260516-009: retroactive coverage: brain existed in brain_states without log entry",
+      "timestamp": "2026-05-16T03:21:51.278655"
+    },
+    {
+      "brain_id": "xgboost_h4_swing_xgboost_v1_20260514_165620",
+      "from_status": "unknown",
+      "to_status": "candidate",
+      "reason": "FIX-20260516-009: retroactive coverage: brain existed in brain_states without log entry",
+      "timestamp": "2026-05-16T03:21:51.278655"
+    },
+    {
+      "brain_id": "LightGBM_V1_Institutional",
+      "from_status": "live",
+      "to_status": "probation",
+      "reason": "MODEL_AUDIT_20260516: 38.8% WR, -36.30 P&L, 20 consecutive losses, demoted from live",
+      "timestamp": "2026-05-16T07:49:08.307628"
+    },
+    {
+      "brain_id": "lightgbm_h1_swing_lightgbm_v1_20260514_165620",
+      "from_status": "probation",
+      "to_status": "frozen",
+      "reason": "MODEL_AUDIT_20260516: -148.95 P&L, largest loss source in system",
+      "timestamp": "2026-05-16T07:49:08.307628"
+    },
+    {
+      "brain_id": "Online_MLP_V1",
+      "from_status": "probation",
+      "to_status": "retired",
+      "reason": "MODEL_AUDIT_20260516: known neutral trap (4.5% up/4.6% down), vote_weight=0.0, needs retraining",
+      "timestamp": "2026-05-16T07:49:08.307628"
+    },
+    {
+      "brain_id": "DeepResMLP_V2_New",
+      "from_status": "candidate",
+      "to_status": "retired",
+      "reason": "MODEL_AUDIT_20260516: missing ONNX .data file, runs in deterministic stub mode",
+      "timestamp": "2026-05-16T07:49:08.307628"
+    },
+    {
+      "brain_id": "XGBoost_V4.5_M15",
+      "from_status": "candidate",
+      "to_status": "retired",
+      "reason": "MODEL_AUDIT_20260516: 12.7% WR, 38 consecutive losses, catastrophic failure",
+      "timestamp": "2026-05-16T07:49:08.307628"
+    },
+    {
+      "brain_id": "XGBoost_V4.5_H1",
+      "from_status": "candidate",
+      "to_status": "retired",
+      "reason": "MODEL_AUDIT_20260516: 42.4% WR, -6.79 P&L",
+      "timestamp": "2026-05-16T07:49:08.307628"
+    },
+    {
+      "brain_id": "XGBoost_V4.5_H4",
+      "from_status": "candidate",
+      "to_status": "retired",
+      "reason": "MODEL_AUDIT_20260516: no P&L data, micro_h4 strategy disabled, part of micro family cleanup",
+      "timestamp": "2026-05-16T07:49:08.307628"
+    },
+    {
+      "brain_id": "Microstructure_Transformer_V5.0_H4",
+      "from_status": "candidate",
+      "to_status": "retired",
+      "reason": "MODEL_AUDIT_20260516: Transformer family all deep losses (-94 to -138 P&L)",
+      "timestamp": "2026-05-16T07:49:08.307628"
+    },
+    {
+      "brain_id": "Microstructure_Transformer_V5.0",
+      "from_status": "unknown",
+      "to_status": "retired",
+      "reason": "MODEL_AUDIT_20260516: registered for retirement, -138.04 P&L",
+      "timestamp": "2026-05-16T07:49:08.307628"
+    },
+    {
+      "brain_id": "Microstructure_Transformer_V5.0_M15",
+      "from_status": "unknown",
+      "to_status": "retired",
+      "reason": "MODEL_AUDIT_20260516: registered for retirement, -94.74 P&L",
+      "timestamp": "2026-05-16T07:49:08.307628"
+    },
+    {
+      "brain_id": "Microstructure_Transformer_V5.0_H1",
+      "from_status": "unknown",
+      "to_status": "retired",
+      "reason": "MODEL_AUDIT_20260516: registered for retirement, -106.02 P&L",
+      "timestamp": "2026-05-16T07:49:08.307628"
+    },
+    {
+      "brain_id": "lightgbm_h1_swing_lightgbm_v1_20260514_165620",
+      "from_status": "frozen",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-05-16T21:57:54.413512"
+    }
+  ],
+  "updated_at": "2026-05-17T06:11:41"
+}

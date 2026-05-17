@@ -143,6 +143,7 @@ class ServiceContainer:
         self.compliance_control_matrix = None
         self.final_audit = None
         self.ops_maturity = None
+        self.meta_signal_filter = None
 
     def build(self) -> "ServiceContainer":
         if self._built:
@@ -444,6 +445,7 @@ class ServiceContainer:
             communication_operations_service=self.operations_service,
             risk_evaluation_service=self.risk_service,
             dynamic_brain_weighter=getattr(self, "dynamic_brain_weighter", None),
+            meta_signal_filter=getattr(self, "meta_signal_filter", None),
         )
         return self.runtime_loop
 

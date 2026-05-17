@@ -5,6 +5,40 @@ import numpy as np
 
 from core.contracts.ids import new_snapshot_id
 from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+from core.features.schemas.v9_micro_schema import V9_MICRO_49_FEATURES
+
+# Schemas that the current runtime environment can compute.
+# Updated when new feature computer implementations are added.
+_IMPLEMENTED_SCHEMAS: set[str] = {
+    "v9_institutional_40",  # V9LiveFeatureComputer → V9FeatureAdapter
+    "v9_micro_49",  # V9MicroComputer → 40 V9 + 9 micro
+    "daily_swing_24",  # DailySwingFeatureComputer
+    "swing_24",  # → daily_swing_24 alias
+    "v4.3_microstructure_9",  # MicrostructureFeatureComputer
+    "v4.5_microstructure_9",  # → v4.3_microstructure_9 alias
+    "v2_microstructure_9",  # → v4.3_microstructure_9 alias
+    "v2_microstructure_288",  # MicrostructureFeatureComputer × 32
+    "v6_price_series_1",  # OU Params Z-Score
+}
+
+# Schema name → feature count
+_SCHEMA_DIMS: dict[str, int] = {
+    "v9_institutional_40": 40,
+    "v9_micro_49": 49,
+}
+
+
+def _schema_dimension(schema_name: str) -> int:
+    return _SCHEMA_DIMS.get(schema_name, 40)
+
+
+def _schema_feature_names(schema_name: str) -> list[str]:
+    """Return the canonical feature name list for a schema."""
+    if schema_name == "v9_institutional_40":
+        return list(V9_INSTITUTIONAL_40_FEATURES)
+    if schema_name == "v9_micro_49":
+        return list(V9_MICRO_49_FEATURES)
+    return list(V9_INSTITUTIONAL_40_FEATURES)
 
 
 class FeatureService:
@@ -18,6 +52,16 @@ class FeatureService:
     Wraps feature adapters and provides a consistent interface for
     the RuntimeLoop.
     """
+
+    @staticmethod
+    def available_schemas() -> set[str]:
+        """Return the set of feature schema IDs this runtime can compute.
+
+        Used by BrainIntegrityCheck for capability handshake:
+        a brain whose feature_schema_id is NOT in this set is blocked
+        from loading, preventing code-vs-model version skew in production.
+        """
+        return _IMPLEMENTED_SCHEMAS
 
     def __init__(
         self,
@@ -50,21 +94,26 @@ class FeatureService:
             feature_vector=feature_vector,
         )
 
-    def build_feature_vector(self, trigger: dict | None = None) -> np.ndarray:
+    def build_feature_vector(
+        self, trigger: dict | None = None, schema_name: str | None = None
+    ) -> np.ndarray:
         """Compute the normalized feature vector via tiered resolution.
 
         Tier 1 — LocalFeatureStore (warm cache):
           Queries the latest record for `symbol` + `timeframe`.  If found,
           normalizes through self._adapter (when available) or builds a raw
-          vector in V9 feature order.
+          vector in the requested schema's feature order.
 
         Tier 2 — Live MT5 computer:
-          Calls V9LiveFeatureComputer.compute_all() and normalizes through
-          V9FeatureAdapter.build_model_input().
+          Routes to V9LiveFeatureComputer (v9_institutional_40) or
+          V9MicroComputer (v9_micro_49) and normalizes through the
+          corresponding adapter.
 
         Tier 3 — Zero-vector stub:
-          Returns np.zeros(40) as a safe no-op.
+          Returns np.zeros(n_features) as a safe no-op.
         """
+        schema = schema_name or self._store_schema_name
+        n_features = _schema_dimension(schema)
         symbol = (trigger or {}).get("symbol", self._default_symbol)
 
         # ── Tier 1: LocalFeatureStore (warm cache) ──
@@ -99,19 +148,16 @@ class FeatureService:
                                 _stale = True
                         except Exception:
                             pass  # freshness check is best-effort
-                    if _stale:
-                        pass  # don't return stale data — fall through to Tier 2
-                    elif self._adapter is not None:
-                        return self._adapter.build_model_input(record.values)[0]
-                    # Raw vector in V9 feature order (no normalization)
-                    raw = np.asarray(
-                        [
-                            float(record.values.get(name, 0.0))
-                            for name in V9_INSTITUTIONAL_40_FEATURES
-                        ],
-                        dtype=np.float32,
-                    )
-                    return raw
+                    if not _stale:
+                        if self._adapter is not None:
+                            return self._adapter.build_model_input(record.values)[0]
+                        # Raw vector in schema feature order (no normalization)
+                        feat_names = _schema_feature_names(schema)
+                        raw = np.asarray(
+                            [float(record.values.get(name, 0.0)) for name in feat_names],
+                            dtype=np.float32,
+                        )
+                        return raw
             except Exception:
                 logging.exception(
                     "FeatureService failed reading from local store for symbol=%s",
@@ -128,10 +174,8 @@ class FeatureService:
                     try:
                         from core.features.store_contracts import FeatureRecord
 
-                        persisted = {
-                            name: float(features.get(name, 0.0))
-                            for name in V9_INSTITUTIONAL_40_FEATURES
-                        }
+                        feat_names = _schema_feature_names(schema)
+                        persisted = {name: float(features.get(name, 0.0)) for name in feat_names}
                         self._store.write_records(
                             [
                                 FeatureRecord(
@@ -156,7 +200,7 @@ class FeatureService:
                         )
 
                 model_input = self._adapter.build_model_input(features)
-                return model_input[0]  # (40,) 1-D
+                return model_input[0]  # (n_features,) 1-D
             except Exception:
                 logging.exception(
                     "FeatureService live MT5 feature computation failed for symbol=%s",
@@ -164,7 +208,7 @@ class FeatureService:
                 )
 
         # ── Tier 3: Zero-vector stub ──
-        return np.zeros(40, dtype=np.float32)
+        return np.zeros(n_features, dtype=np.float32)
 
 
 class FeatureBrainRegistry:

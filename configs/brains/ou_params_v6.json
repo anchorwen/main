@@ -4,7 +4,7 @@
   "brain_type": "ou_params_v6",
   "brain_role": "arb_brain",
   "model_version": "v7.0",
-  "status": "shadow",
+  "status": "probation",
   "vote_weight": 1.5,
   "magic": 90010,
   "artifact_path": "data/models/arb_params_v7.json",
@@ -26,5 +26,8 @@
   },
   "contract_group": "statarb_dynamic",
   "training_horizon": 0,
-  "feature_schema": "ou_price"
+  "feature_schema": "ou_price",
+  "features": [
+    "price_return"
+  ]
 }

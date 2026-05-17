@@ -71,8 +71,8 @@ def _ensemble_proposals(
 ENSEMBLE_GROUPS: list[dict[str, Any]] = [
     {
         "group_id": "SurvivalAlpha_Ensemble",
-        "label": "Survival Alpha (V9 + CRT)",
-        "brain_ids": ["V9_Institutional_01", "CRT.sur.chlg.g2026.1"],
+        "label": "Survival Alpha (V9 Institutional)",
+        "brain_ids": ["V9_Institutional_01"],
         "magic": 90005,
         "role": "alpha_brain",
         "vote_weight": 1.0,
@@ -86,3 +86,40 @@ ENSEMBLE_GROUPS: list[dict[str, Any]] = [
         "vote_weight": 0.9,
     },
 ]
+
+
+def validate_ensemble_references(
+    brain_states: dict[str, Any],
+    ensemble_groups: list[dict[str, Any]] | None = None,
+) -> list[str]:
+    """Validate that every brain_id in ENSEMBLE_GROUPS exists and is not retired.
+
+    This is a BLOCKING check — call it at startup before the trading loop begins.
+    A non-empty return value means the ensemble configuration is broken and must
+    be fixed before the engine can start safely.
+
+    Args:
+        brain_states: {brain_id: {status: ..., ...}} from governance_state.json
+        ensemble_groups: Override for testing. Defaults to ENSEMBLE_GROUPS.
+
+    Returns:
+        List of error messages. Empty list = all references valid.
+    """
+    errors: list[str] = []
+    groups = ensemble_groups if ensemble_groups is not None else ENSEMBLE_GROUPS
+    for group in groups:
+        for brain_id in group.get("brain_ids", []):
+            state = brain_states.get(brain_id)
+            if not state:
+                errors.append(
+                    f"ENSEMBLE {group['group_id']}: "
+                    f"brain_id='{brain_id}' NOT found in governance — "
+                    f"ensemble voting will fail at runtime"
+                )
+            elif state.get("status") == "retired":
+                errors.append(
+                    f"ENSEMBLE {group['group_id']}: "
+                    f"brain_id='{brain_id}' is retired — must be removed from "
+                    f"ENSEMBLE_GROUPS in signal_pipeline.py"
+                )
+    return errors

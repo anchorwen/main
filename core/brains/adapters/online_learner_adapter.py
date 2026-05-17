@@ -28,6 +28,7 @@ from core.brains.adapters.base_adapter import BaseBrainAdapter
 from core.brains.schema_versions import SCHEMA_BRAIN_DECISION_PROPOSAL
 from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
 from core.contracts.ids import new_proposal_id
+from core.deployment.brain_alert import emit_brain_alert
 
 logger = logging.getLogger(__name__)
 
@@ -97,10 +98,16 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
 
     def load(self) -> None:
         artifact_path = self._brain_entry.get("artifact_path", "")
+        brain_id = self._brain_entry.get("brain_id", "unknown")
         if not artifact_path or not Path(artifact_path).exists():
             self._backend = "online_sgd:zeros"
             self._init_zeros()
             logger.warning("OnlineLearnerAdapter: no artifact, starting from zero weights")
+            emit_brain_alert(
+                brain_id,
+                "model_load_failed",
+                {"reason": "artifact not found", "artifact": artifact_path},
+            )
             return
 
         try:
@@ -108,6 +115,11 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
         except Exception:
             self._backend = "online_sgd:zeros"
             self._init_zeros()
+            emit_brain_alert(
+                brain_id,
+                "model_load_failed",
+                {"reason": "json parse failed", "artifact": artifact_path},
+            )
             return
 
         # Detect MLP format
@@ -129,6 +141,9 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
             except Exception:
                 self._backend = "online_mlp:zeros"
                 self._init_mlp_zeros()
+                emit_brain_alert(
+                    brain_id, "model_load_failed", {"reason": "MLP state dict load failed"}
+                )
         else:
             self._use_mlp = False
             try:
@@ -147,6 +162,9 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
             except Exception:
                 self._backend = "online_sgd:zeros"
                 self._init_zeros()
+                emit_brain_alert(
+                    brain_id, "model_load_failed", {"reason": "SGD weights load failed"}
+                )
 
     def _init_zeros(self) -> None:
         n_classes = len(LABEL_CLASSES)
@@ -181,6 +199,15 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
 
         x = np.asarray(feature_vector, dtype=np.float64).reshape(1, -1)
         if x.shape[1] != self._n_features:
+            emit_brain_alert(
+                self._brain_entry.get("brain_id", "unknown"),
+                "feature_dimension_mismatch",
+                {
+                    "expected": self._n_features,
+                    "got": x.shape[1],
+                    "action": "truncating",
+                },
+            )
             x = x[:, : self._n_features]
 
         logits = x @ self._coef.T + self._intercept

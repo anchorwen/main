@@ -78,6 +78,7 @@ Dataset CPCV CustomObj  Trainer    EvaluationReport
 | FIX-20260515-011 | 2026-05-15 | cursor-agent | — | Foundation fixes: integrated profitability_calibrator into pipeline (calibrate_label_contract()), fixed temporal leakage in _find_nearest_in_index() (only backward matching), added spread/slippage transaction cost modeling to label_contract.py and profitability_calibrator.py, added tiered quality gates (tree/deep_learning/online) with stricter validation. | RC-01, RC-02, RC-03, RC-04 |
 | FIX-20260515-012 | 2026-05-15 | cursor-agent | — | Pipeline unification: extended train_single() to support all 5 model types (xgboost, lightgbm, deep_res_mlp, transformer, online_mlp/online_sgd). Added DL search spaces (DeepResMLP, Transformer, OnlineMLP). Fixed evaluation and model saving for non-tree models. Added --price-data CLI flag for profitability calibration. | RC-05 |
 | — | 2026-05-14 | cursor-agent | — | Phase E S1-S3 新建模块，无历史修复 | — |
+| FIX-20260517-001 | 2026-05-17 | cursor-agent | — | Route C+ Protocol 1: PiT OOF generator replacing cross_val_predict with row-by-row deque loop. Cross-fold deque clearance. Stage 2 LGB+MLP training scripts on PiT features. meta_stage2_runtime_59 schema registered. LGB Val Sharpe 30.6, MLP 18.8. | config-drift |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

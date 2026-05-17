@@ -557,6 +557,37 @@ def train_lightgbm_single(
 # ── Brain config generation ─────────────────────────────────────────────────
 
 
+def _resolve_features_for_schema(feature_schema_id: str) -> list[str] | None:
+    """Resolve canonical feature name list for a schema_id."""
+    if feature_schema_id in ("v9_institutional_40",):
+        from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+
+        return list(V9_INSTITUTIONAL_40_FEATURES)
+    elif feature_schema_id == "v9_micro_49":
+        from core.features.schemas.v9_micro_schema import V9_MICRO_49_FEATURES
+
+        return list(V9_MICRO_49_FEATURES)
+    elif feature_schema_id in ("daily_swing_24", "swing_24"):
+        from core.features.schemas.daily_swing_schema import DAILY_SWING_24_FEATURES
+
+        return list(DAILY_SWING_24_FEATURES)
+    elif feature_schema_id in (
+        "v4.5_microstructure_9",
+        "v2_microstructure_9",
+        "v4.3_microstructure_9",
+    ):
+        from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
+
+        return list(MICROSTRUCTURE_9_FEATURES)
+    elif feature_schema_id == "v2_microstructure_288":
+        from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
+
+        return list(MICROSTRUCTURE_9_FEATURES) * 32
+    elif feature_schema_id == "v6_price_series_1":
+        return ["price_return"]
+    return None
+
+
 def generate_brain_config(
     brain_id: str,
     arch: str,
@@ -567,6 +598,7 @@ def generate_brain_config(
     *,
     magic: int | None = None,
     micro_tf: str | None = None,
+    artifact_hash: str = "",
 ) -> dict[str, Any]:
     """Generate a brain_registry_entry.v1 config dict."""
     arch_info = ARCH_ADAPTER_MICRO if micro_tf else ARCH_ADAPTER_MAP
@@ -586,6 +618,18 @@ def generate_brain_config(
         }.get(arch, 100)
         magic = magic_base + hash(brain_id) % 100
 
+    # Resolve feature names from schema
+    features = _resolve_features_for_schema(feature_schema_id) or []
+
+    # Compute artifact hash if not provided
+    if not artifact_hash:
+        try:
+            from core.training.model_hashing import hash_model_file
+
+            artifact_hash = hash_model_file(Path(model_path))
+        except Exception:
+            pass
+
     config: dict[str, Any] = {
         "schema_version": "brain_registry_entry.v1",
         "brain_id": brain_id,
@@ -596,7 +640,9 @@ def generate_brain_config(
         "vote_weight": 0.8,
         "magic": magic,
         "artifact_path": model_path,
+        "artifact_hash": artifact_hash,
         "feature_schema_id": feature_schema_id,
+        "features": features,
         "feature_schema": ("v9_40dim" if "v9_institutional" in feature_schema_id else "micro_9dim"),
         "training_contract": "label-micro-barrier-1.0.0",
         "contract_group": strategy,

@@ -105,6 +105,7 @@ def ensure_governance_registration(
     from datetime import UTC, datetime
 
     brain_states = gov_state.setdefault("brain_states", {})
+    transition_log = gov_state.setdefault("transition_log", [])
     now = datetime.now(UTC).replace(tzinfo=None).isoformat()
     added = 0
 
@@ -118,6 +119,15 @@ def ensure_governance_registration(
                 "transition_count": 0,
                 "freeze_count": 0,
             }
+            transition_log.append(
+                {
+                    "brain_id": bid,
+                    "from_status": "unknown",
+                    "to_status": "candidate",
+                    "reason": "auto:registered_from_ledger",
+                    "timestamp": now,
+                }
+            )
             added += 1
 
     return added
@@ -128,6 +138,7 @@ def apply_decisions(gov_state: dict, decisions: list) -> int:
     from datetime import UTC, datetime
 
     brain_states = gov_state.setdefault("brain_states", {})
+    transition_log = gov_state.setdefault("transition_log", [])
     now = datetime.now(UTC).replace(tzinfo=None).isoformat()
     applied = 0
 
@@ -138,9 +149,21 @@ def apply_decisions(gov_state: dict, decisions: list) -> int:
             continue
 
         entry = brain_states[d.brain_id]
+        old_status = entry["status"]
         entry["status"] = d.target_status
         entry["last_transition_at"] = now
         entry["transition_count"] = entry.get("transition_count", 0) + 1
+        transition_log.append(
+            {
+                "brain_id": d.brain_id,
+                "from_status": old_status,
+                "to_status": d.target_status,
+                "reason": f"auto:promotion:{';'.join(d.reasons)}"
+                if d.reasons
+                else f"auto:promotion:{d.action}",
+                "timestamp": now,
+            }
+        )
         applied += 1
 
     return applied

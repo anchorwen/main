@@ -107,19 +107,44 @@ class BaseBrainAdapter(ABC):
         return self.get_signal(raw_output)
 
     # ------------------------------------------------------------------
+    # num_features (for load-time validation) ──────────────────────────
+
+    @property
+    def num_features(self) -> int | None:
+        """Number of features the model expects, or None if unknown.
+
+        Subclasses should set ``self._num_features`` during ``load()``.
+        The BrainConfigValidator uses this to check against schema dimension.
+        """
+        return getattr(self, "_num_features", None)
+
+    # ------------------------------------------------------------------
     # run — full pipeline (snapshot + feature_source → feature_vector → infer → signal)
     # ------------------------------------------------------------------
 
     def run(self, snapshot, feature_source: dict | None = None) -> BrainDecisionProposal:
         """Full pipeline: feature_source dict → feature_vector → infer → get_signal.
 
-        The default implementation converts dict values to a numpy array.
+        Metadata-driven extraction when ``features`` is present in the brain config:
+        extracts values in the exact order specified by the config, with missing
+        keys defaulting to 0.0.  Falls back to dict-values-to-array when no
+        ``features`` field exists.
+
         Adapters with a feature_adapter (e.g. V9OnnxBrainAdapter) override this
         to use their own normalization pipeline.
         """
         feature_vector: np.ndarray | None = None
-        if feature_source is not None:
-            feature_vector = np.array(list(feature_source.values()), dtype=np.float64)
+        if feature_source is not None and feature_source:
+            # Metadata-driven extraction: use brain config's features list
+            feature_names = self._brain_entry.get("features")
+            if feature_names:
+                feature_vector = np.array(
+                    [float(feature_source.get(name, 0.0)) for name in feature_names],
+                    dtype=np.float64,
+                )
+            else:
+                # Legacy fallback: dict order dependent (fragile)
+                feature_vector = np.array(list(feature_source.values()), dtype=np.float64)
         return self.inference(feature_vector)
 
     # ------------------------------------------------------------------

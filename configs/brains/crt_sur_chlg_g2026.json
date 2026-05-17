@@ -1,0 +1,28 @@
+{
+  "schema_version": "brain_registry_entry.v1",
+  "brain_id": "CRT.sur.chlg.g2026.1",
+  "brain_type": "onnx_v9",
+  "brain_role": "alpha_brain",
+  "model_version": "g2026.1",
+  "status": "shadow",
+  "vote_weight": 1.0,
+  "magic": 90012,
+  "contract_group": "barrier_12bar",
+  "enable_onnxruntime": true,
+  "artifact_path": "data/models/v9_institutional_brain.onnx",
+  "feature_schema_id": "v9_institutional_40",
+  "normalization_config_path": "configs/brains/crt_sur_chlg_g2026.normalization.json",
+  "deployment_scope": {
+    "symbols": [
+      "XAUUSD"
+    ],
+    "sessions": [
+      "all"
+    ],
+    "regimes": [
+      "trend",
+      "volatile_trend",
+      "macro_expansion"
+    ]
+  }
+}

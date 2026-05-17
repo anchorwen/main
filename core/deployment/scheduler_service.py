@@ -171,6 +171,32 @@ class SchedulerService:
                 if summary_map:
                     container.governance_rule_engine.evaluate(summary_map)
 
+                # ── Brain promotion evaluation ──
+                if container.governance_service:
+                    try:
+                        import json
+                        from pathlib import Path as _Path
+
+                        from core.brains.services.brain_promotion import (
+                            BrainPromotionEvaluator,
+                            apply_promotion_decisions,
+                        )
+                        from scripts.training.run_promotion import (
+                            compute_performance_from_ledger,
+                        )
+
+                        pnl_path = _Path("data") / "brain_pnl_ledger.json"
+                        if pnl_path.exists():
+                            pnl_ledger = json.loads(pnl_path.read_text(encoding="utf-8"))
+                            perf = compute_performance_from_ledger(pnl_ledger)
+                            brain_states = container.governance_service.get_all_states()
+                            evaluator = BrainPromotionEvaluator()
+                            decisions = evaluator.evaluate_all(brain_states, perf)
+                            governance_path = _Path("data") / "governance_state.json"
+                            apply_promotion_decisions(governance_path, decisions)
+                    except Exception:
+                        pass  # Promotion evaluation is non-critical, don't crash scheduler
+
             svc.add_task("governance_evaluation", governance_eval, interval_seconds=60)
 
         if persistence:

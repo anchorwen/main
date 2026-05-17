@@ -15,8 +15,7 @@ from tests.execution.conftest import make_proposal
 def micro_brain():
     """Create a minimal brain entry for micro strategy."""
     adapter = MagicMock()
-    adapter.infer.return_value = {"raw_output": [0.75, 0.25]}
-    adapter.get_signal.return_value = make_proposal(
+    adapter.inference.return_value = make_proposal(
         brain_id="xgb_v4.5_01",
         up_probability=0.75,
         down_probability=0.25,
@@ -40,7 +39,7 @@ class TestMicroStrategyInference:
         )
         assert len(proposals) == 1
         # Micro strategy passes micro_feature_vector, not feature_vector
-        micro_brain["adapter"].infer.assert_called_once_with(micro_fv)
+        micro_brain["adapter"].inference.assert_called_once_with(micro_fv)
 
     def test_brain_id_stamped(self, micro_brain):
         strat = MicroStrategy(
@@ -52,7 +51,7 @@ class TestMicroStrategyInference:
 
     def test_adapter_exception_skipped(self, micro_brain):
         fail_adapter = MagicMock()
-        fail_adapter.infer.side_effect = RuntimeError("timeout")
+        fail_adapter.inference.side_effect = RuntimeError("timeout")
         brains = [
             {"adapter": fail_adapter, "brain_id": "fail_brain"},
             micro_brain,

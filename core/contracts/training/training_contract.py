@@ -36,11 +36,12 @@ VALID_OBJECTIVE_FUNCTIONS = {
     "binary_logloss",
     "multi_logloss",
     "reg_squarederror",
+    "reg_huber",
     "custom_sharpe",
     "custom_profit_factor",
     "custom_weighted_logloss",
 }
-VALID_SAMPLE_WEIGHTING = {"none", "return_magnitude", "inverse_class_frequency"}
+VALID_SAMPLE_WEIGHTING = {"none", "return_magnitude", "inverse_class_frequency", "abs_target"}
 VALID_STATUSES = {"shadow", "live", "retired", "failed"}
 
 
@@ -77,8 +78,12 @@ class LabelSpec:
     horizon_bars: int = 12
     profitability_calibrated: bool = False
     spread_pips: float = 0.3
-    slippage_pips: float = 0.5
+    slippage_pips: float = 1.0
     pip_value: float = 0.01
+    vol_scale_target: bool = False
+    output_unit: str = (
+        "bps"  # "bps" | "atr_multiple" — set to "atr_multiple" when vol_scale_target=True
+    )
 
     def validate(self) -> list[str]:
         issues: list[str] = []
@@ -98,6 +103,10 @@ class LabelSpec:
             issues.append("spread_pips must be >= 0")
         if self.slippage_pips < 0:
             issues.append("slippage_pips must be >= 0")
+        if self.output_unit not in ("bps", "atr_multiple"):
+            issues.append(
+                f"Invalid output_unit '{self.output_unit}'. Must be 'bps' or 'atr_multiple'."
+            )
         return issues
 
 
@@ -305,6 +314,8 @@ class TrainingContract:
                 "spread_pips": self.label.spread_pips,
                 "slippage_pips": self.label.slippage_pips,
                 "pip_value": self.label.pip_value,
+                "vol_scale_target": self.label.vol_scale_target,
+                "output_unit": self.label.output_unit,
             },
             "architecture": {
                 "type": self.architecture.type,
@@ -380,8 +391,10 @@ class TrainingContract:
                 horizon_bars=lbl.get("horizon_bars", 12),
                 profitability_calibrated=lbl.get("profitability_calibrated", False),
                 spread_pips=lbl.get("spread_pips", 0.3),
-                slippage_pips=lbl.get("slippage_pips", 0.5),
+                slippage_pips=lbl.get("slippage_pips", 1.0),
                 pip_value=lbl.get("pip_value", 0.01),
+                vol_scale_target=lbl.get("vol_scale_target", False),
+                output_unit=lbl.get("output_unit", "bps"),
             ),
             architecture=ArchitectureSpec(
                 type=arch.get("type", "xgboost"),

@@ -35,6 +35,94 @@ class DecisionCycleResult:
     communication_operations: dict | None = None
 
 
+def _apply_meta_filter(
+    filter,
+    candidate,
+    proposals: list,
+    feature_blackboard: dict,
+    feature_snapshot,
+) -> None:
+    """Apply Stage 2 meta-signal filter to the candidate.
+
+    Finds the Stage 1 Huber proposal, extracts its raw prediction, computes
+    runtime meta-features from unified V9+Micro features (49-dim when micro
+    data is available, 40-dim V9 fallback), and evaluates P(TP|signal).
+    If the filter rejects, the candidate's consensus direction is set to
+    "neutral" so that no order is dispatched (shadow-only record).
+    """
+    consensus = candidate.consensus
+    direction_str = consensus.get("direction", "neutral")
+    if direction_str not in ("long", "short"):
+        return  # non-actionable, nothing to filter
+
+    direction = 1 if direction_str == "long" else -1
+
+    # Find the Stage 1 Huber proposal
+    stage1_proposal = None
+    for p in proposals:
+        raw_outputs = getattr(p, "extensions", {}).get("raw_outputs", {})
+        if "raw_score" in raw_outputs and getattr(p, "brain_role", "") == "alpha_brain":
+            stage1_proposal = p
+            break
+    if stage1_proposal is None:
+        candidate.risk_comments["meta_filter"] = "no_stage1_proposal"
+        return
+
+    raw_outputs = getattr(stage1_proposal, "extensions", {}).get("raw_outputs", {})
+    s1_prediction = float(raw_outputs.get("raw_score", 0.0))
+
+    # Prefer unified 49-dim features (V9 + micro) when available
+    unified_features = feature_blackboard.get("v9_micro_49", {})
+    if not unified_features:
+        unified_features = feature_blackboard.get("v9_institutional_40", {})
+    if not unified_features:
+        candidate.risk_comments["meta_filter"] = "no_v9_features"
+        return
+
+    # Get timestamp from snapshot
+    timestamp_utc = None
+    if hasattr(feature_snapshot, "event_time"):
+        try:
+            timestamp_utc = feature_snapshot.event_time.timestamp()
+        except Exception:
+            pass
+
+    # Apply the filter with unified 49-dim features
+    result = filter.filter(
+        direction=direction,
+        s1_prediction=s1_prediction,
+        v9_features=unified_features,
+        timestamp_utc=timestamp_utc,
+    )
+
+    # Record the filter result (include micro data availability)
+    micro_available = any(
+        k in unified_features
+        and unified_features.get(k) is not None
+        and not (
+            isinstance(unified_features.get(k), float)
+            and unified_features.get(k) != unified_features.get(k)
+        )
+        for k in ("avg_spread", "OIM", "tick_velocity")
+    )
+    candidate.extensions["meta_filter_result"] = {
+        "passed": result.passed,
+        "p_win": result.p_win,
+        "threshold": result.threshold,
+        "reason": result.reason,
+        "s1_prediction": s1_prediction,
+        "filter_brain_id": getattr(stage1_proposal, "brain_id", "unknown"),
+        "micro_data_available": micro_available,
+        "feature_dim": len(unified_features),
+    }
+
+    if not result.passed:
+        # Neutralize the direction — no order dispatch, shadow-only record
+        candidate.consensus["direction"] = "neutral"
+        candidate.risk_comments["meta_filter"] = result.reason
+        candidate.extensions["meta_filter_blocked"] = True
+
+
 class RuntimeLoop:
     def __init__(
         self,
@@ -51,6 +139,7 @@ class RuntimeLoop:
         communication_operations_service=None,
         risk_evaluation_service=None,
         dynamic_brain_weighter=None,
+        meta_signal_filter=None,
     ):
         self._control_snapshot_service = control_snapshot_service
         self._feature_service = feature_service
@@ -65,6 +154,7 @@ class RuntimeLoop:
         self._communication_operations_service = communication_operations_service
         self._risk_evaluation_service = risk_evaluation_service
         self._dynamic_brain_weighter = dynamic_brain_weighter
+        self._meta_signal_filter = meta_signal_filter
 
     def run_decision_cycle(
         self, trigger, feature_source: dict | None = None
@@ -76,11 +166,23 @@ class RuntimeLoop:
             regime=None,
         )
 
+        v9_dict = feature_source or {}
+        # Build unified v9_micro_49 dict when micro features are available
+        v9_micro_dict: dict[str, float] = {}
+        if feature_source and any(
+            k in feature_source for k in ("tick_return", "avg_spread", "OIM")
+        ):
+            v9_micro_dict = {**v9_dict}
+
+        feature_blackboard = {
+            "v9_institutional_40": v9_dict,
+            "v9_micro_49": v9_micro_dict if v9_micro_dict else v9_dict,
+            # swing_24: not computed yet — empty dict → safe neutral
+        }
         proposals = self._brain_run_service.run_active_brains(
             feature_snapshot=feature_snapshot,
             control_snapshot=control_snapshot,
-            feature_vector=getattr(feature_snapshot, "feature_vector", None),
-            feature_source=feature_source,
+            feature_blackboard=feature_blackboard,
         )
 
         if self._dynamic_brain_weighter is not None:
@@ -91,6 +193,16 @@ class RuntimeLoop:
             proposals=proposals,
             control_snapshot=control_snapshot,
         )
+
+        # ── Meta-Signal Filter (Stage 2 two-stage meta-labeling) ──
+        if self._meta_signal_filter is not None and self._meta_signal_filter.is_active():
+            _apply_meta_filter(
+                filter=self._meta_signal_filter,
+                candidate=candidate,
+                proposals=proposals,
+                feature_blackboard=feature_blackboard,
+                feature_snapshot=feature_snapshot,
+            )
 
         regime_name = candidate.regime_state.get("primary_regime")
         control_snapshot = self._control_snapshot_service.freeze(

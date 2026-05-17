@@ -300,6 +300,28 @@ def main() -> int:
         else:
             print("[PASS] ruff")
 
+        print(">>> blueprint compliance (Iron Law #7)...")
+        try:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "check_blueprint_compliance.py"),
+                    "--check",
+                ],
+                capture_output=True,
+                text=True,
+                cwd=str(ROOT),
+                timeout=30,
+            )
+            print(result.stdout.strip())
+            if result.stderr.strip():
+                print(result.stderr.strip())
+            if result.returncode != 0:
+                all_passed = False
+        except Exception as exc:
+            print(f"[FAIL] blueprint compliance check error: {exc}")
+            all_passed = False
+
         print(">>> pytest...")
         passed, output = run_pytest()
         if not passed:

@@ -1,0 +1,70 @@
+{
+  "schema_version": "brain_registry_entry.v1",
+  "brain_id": "XGBoost_V9_Institutional",
+  "brain_type": "xgboost_v9",
+  "brain_role": "alpha_brain",
+  "model_version": "v9.0",
+  "status": "shadow",
+  "vote_weight": 0.7,
+  "magic": 90007,
+  "contract_group": "barrier_12bar",
+  "artifact_path": "data/models/institutional/barrier_12bar_xgboost_v3_20260515_052345.json",
+  "feature_schema_id": "v9_institutional_40",
+  "normalization_config_path": "configs/brains/v9_institutional_01.normalization.json",
+  "deployment_scope": {
+    "symbols": [
+      "XAUUSDc",
+      "XAUUSD"
+    ],
+    "sessions": [
+      "all"
+    ],
+    "regimes": [
+      "trend",
+      "volatile_trend",
+      "mean_reversion"
+    ]
+  },
+  "features": [
+    "M5_Ret_1",
+    "M5_Body_Ratio",
+    "M5_ATR_14",
+    "M5_RSI_14",
+    "M5_MACD",
+    "M5_Vol_ZScore",
+    "M5_Macro1_Corr",
+    "M5_Macro_Gold_Silver_Spread",
+    "M15_Ret_1",
+    "M15_Body_Ratio",
+    "M15_ATR_14",
+    "M15_RSI_14",
+    "M15_MACD",
+    "M15_Vol_ZScore",
+    "M15_Macro1_Corr",
+    "M15_Macro_Gold_Silver_Spread",
+    "M30_Ret_1",
+    "M30_Body_Ratio",
+    "M30_ATR_14",
+    "M30_RSI_14",
+    "M30_MACD",
+    "M30_Vol_ZScore",
+    "M30_Macro1_Corr",
+    "M30_Macro_Gold_Silver_Spread",
+    "H1_Ret_1",
+    "H1_Body_Ratio",
+    "H1_ATR_14",
+    "H1_RSI_14",
+    "H1_MACD",
+    "H1_Vol_ZScore",
+    "H1_Macro1_Corr",
+    "H1_Macro_Gold_Silver_Spread",
+    "M5_OU_Theta",
+    "M15_OU_Theta",
+    "M30_OU_Theta",
+    "H1_OU_Theta",
+    "M5_Hurst",
+    "M15_Hurst",
+    "M30_Hurst",
+    "H1_Hurst"
+  ]
+}

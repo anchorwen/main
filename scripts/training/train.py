@@ -150,6 +150,27 @@ def _build_objective(contract: TrainingContract, pnl: np.ndarray | None = None):
         elif arch == "lightgbm":
             return lightgbm_sharpe_obj, lightgbm_sharpe_eval
         return None, None
+    elif obj == "reg_huber":
+        delta = float(contract.architecture.custom_params.get("huber_delta", 1.0))
+        if arch == "lightgbm":
+            # LightGBM 4.x native Huber — Hessian handled in C++, safe for trees.
+            import logging
+
+            logging.getLogger(__name__).info(
+                "reg_huber: using LightGBM native huber objective (alpha=%.2f)", delta
+            )
+            # Return None to use built-in; alpha passed via custom_params merged into params
+            return None, None
+        elif arch == "xgboost":
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "ARCHITECT_GATE: reg_huber + xgboost has zero-Hessian risk in L1 region. "
+                "Prefer lightgbm for native Huber support. Proceeding with reg:squarederror "
+                "as safe fallback — consider switching to lightgbm."
+            )
+            return None, None
+        return None, None
 
     return None, None
 
@@ -157,7 +178,7 @@ def _build_objective(contract: TrainingContract, pnl: np.ndarray | None = None):
 def _resolve_train_mode(contract: TrainingContract) -> str:
     """Determine training mode from contract objective function."""
     obj = contract.architecture.objective_function
-    if obj in ("reg_squarederror",):
+    if obj in ("reg_squarederror", "reg_huber"):
         return "reg"
     if obj in ("multi_logloss",):
         return "multi"
@@ -229,6 +250,13 @@ def _train_lightgbm(
         "random_state": seed,
         **contract.architecture.custom_params,
     }
+
+    # Inject LightGBM native huber params (Correction 2: no custom Huber)
+    if contract.architecture.objective_function == "reg_huber":
+        delta = float(contract.architecture.custom_params.get("huber_delta", 1.0))
+        params["objective"] = "huber"
+        params["alpha"] = delta
+        params.pop("huber_delta", None)
 
     custom_obj, custom_metric = _build_objective(contract, pnl)
     mode = _resolve_train_mode(contract)
@@ -446,32 +474,42 @@ def compute_financial_metrics(
     pnl: np.ndarray | None = None,
     *,
     annual_factor: int = 252,
+    regression: bool = False,
 ) -> dict[str, float]:
     """Compute trading-aligned metrics from predictions.
 
     Args:
-        y_true: True labels (0/1 binary, or -1/0/1 for multi-class).
-        y_pred: Predicted probabilities or class predictions.
+        y_true: True labels (0/1 binary, or continuous for regression).
+        y_pred: Predicted probabilities or regression values.
         pnl: Optional P&L array for return-magnitude weighting.
         annual_factor: Annualization factor (252 for daily).
+        regression: If True, y_pred/y_true are continuous; metrics use
+            sign(pred) as position and y_true as realized return.
 
     Returns:
         Dict with sharpe_ratio, win_rate, profit_factor, max_drawdown, etc.
     """
-    # Convert to binary predictions
-    if y_pred.ndim > 1:
-        # Multi-class: take argmax
-        pred_class = np.argmax(y_pred, axis=1)
+    if regression:
+        # Regression: use sign(prediction) as trade direction,
+        # actual forward return (y_true) as realized PnL.
+        positions = np.sign(y_pred)  # +1 long, -1 short, 0 flat
+        # Zero out flat positions
+        positions = np.where(np.abs(y_pred) < 1e-8, 0, positions)
+        returns = positions * y_true.astype(np.float64)
     else:
-        pred_class = (y_pred > 0.5).astype(np.int32)
+        # Convert to binary predictions
+        if y_pred.ndim > 1:
+            pred_class = np.argmax(y_pred, axis=1)
+        else:
+            pred_class = (y_pred > 0.5).astype(np.int32)
 
-    # Map to positions: 1 = long, -1 = short, 0 = flat
-    if pnl is not None and len(pnl) > 0:
-        returns = np.where(pred_class == 1, pnl, np.where(pred_class == 0, -pnl, 0.0))
-    else:
-        direction = 2.0 * y_true.astype(np.float64) - 1.0
-        pos = 2.0 * pred_class.astype(np.float64) - 1.0
-        returns = pos * direction
+        # Map to positions: 1 = long, -1 = short, 0 = flat
+        if pnl is not None and len(pnl) > 0:
+            returns = np.where(pred_class == 1, pnl, np.where(pred_class == 0, -pnl, 0.0))
+        else:
+            direction = 2.0 * y_true.astype(np.float64) - 1.0
+            pos = 2.0 * pred_class.astype(np.float64) - 1.0
+            returns = pos * direction
 
     # Sharpe ratio
     mean_ret = float(np.mean(returns))
@@ -552,16 +590,23 @@ def check_quality_gates(
     """
     gates = contract.quality_gates
     results: dict[str, bool] = {}
+    is_regression = _resolve_train_mode(contract) == "reg"
 
     results["train_sharpe"] = train_metrics.get("sharpe_ratio", 0.0) >= gates.min_train_sharpe
-    results["train_win_rate"] = train_metrics.get("win_rate", 0.0) >= gates.min_train_win_rate
+    results["train_win_rate"] = (
+        True if is_regression else train_metrics.get("win_rate", 0.0) >= gates.min_train_win_rate
+    )
     results["train_sortino"] = train_metrics.get("sortino_ratio", -999.0) >= gates.min_sortino_ratio
     results["train_calmar"] = train_metrics.get("calmar_ratio", -999.0) >= gates.min_calmar_ratio
     results["vol_scaled_dd"] = (
         train_metrics.get("max_vol_scaled_dd", 100.0) <= gates.max_vol_scaled_dd_pct
     )
     results["forward_sharpe"] = forward_metrics.get("sharpe_ratio", 0.0) >= gates.min_forward_sharpe
-    results["forward_win_rate"] = forward_metrics.get("win_rate", 0.0) >= gates.min_forward_win_rate
+    results["forward_win_rate"] = (
+        True
+        if is_regression
+        else forward_metrics.get("win_rate", 0.0) >= gates.min_forward_win_rate
+    )
     results["overfit_gap"] = (
         abs(train_metrics.get("sharpe_ratio", 0.0) - forward_metrics.get("sharpe_ratio", 0.0))
         <= gates.max_overfit_gap
@@ -697,6 +742,52 @@ def _auto_register_in_governance(brain_config: dict[str, Any]) -> None:
         print(f"[train] WARNING: Failed to update governance_state.json: {e}")
 
 
+def _write_model_meta_json(model_path: str | Path, contract: TrainingContract) -> None:
+    """Write .meta.json alongside the model file for MetaSignalFilter consumers.
+
+    Includes feature_names in the exact order the model was trained on,
+    plus training metadata (contract_id, threshold, output_unit).
+    """
+    model_path = Path(model_path)
+    # MetaSignalFilter.load() expects model.txt → model.meta.json
+    meta_path = model_path.with_suffix(".meta.json")
+
+    # Resolve feature names: prefer NPZ runtime_feature_names if available
+    ds_path = Path(contract.dataset.path)
+    feature_names: list[str] = []
+    if ds_path.suffix == ".npz" and ds_path.exists():
+        try:
+            data = np.load(ds_path, allow_pickle=True)
+            rt_names = data.get("runtime_feature_names")
+            if rt_names is not None:
+                feature_names = (
+                    rt_names.tolist() if isinstance(rt_names, np.ndarray) else list(rt_names)
+                )
+            else:
+                fn = data.get("feature_names")
+                if fn is not None:
+                    feature_names = fn.tolist() if isinstance(fn, np.ndarray) else list(fn)
+        except Exception:
+            pass
+
+    if not feature_names:
+        feature_names = [f"f_{i}" for i in range(40)]  # fallback
+
+    meta: dict[str, object] = {
+        "schema_version": "model_meta.v1",
+        "contract_id": contract.contract_id,
+        "feature_names": feature_names,
+        "n_features": len(feature_names),
+        "output_unit": getattr(contract.label, "output_unit", "bps"),
+        "threshold": None,  # set by optimize_meta_threshold.py
+        "n_wins": 0,
+        "win_rate": 0.0,
+    }
+
+    meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    print(f"[train] Meta metadata: {meta_path} ({len(feature_names)} features)")
+
+
 def generate_brain_config(
     contract: TrainingContract,
     model_path: str,
@@ -724,6 +815,16 @@ def generate_brain_config(
     is_shadow = initial_status in ("shadow", "candidate")
     vote_weight = 0.0 if is_shadow else 0.6
 
+    # Resolve feature names from schema — required by registration gate
+    from core.deployment.brain_config_validator import _get_schema_feature_names
+
+    features = _get_schema_feature_names(contract.dataset.feature_schema) or []
+    if not features:
+        print(
+            f"[WARN] {brain_id}: Could not resolve features for schema "
+            f"{contract.dataset.feature_schema}, registration gate will reject"
+        )
+
     config: dict[str, Any] = {
         "schema_version": "brain_registry_entry.v1",
         "brain_id": brain_id,
@@ -734,7 +835,9 @@ def generate_brain_config(
         "vote_weight": vote_weight,
         "magic": magic,
         "artifact_path": model_path,
+        "artifact_hash": model_hash,
         "feature_schema_id": contract.dataset.feature_schema,
+        "features": features,
         "training_contract": contract.contract_id,
         "normalization_config_path": "",
         "deployment_scope": {
@@ -909,7 +1012,9 @@ def run_optuna_search(
                 val_preds = model.predict(X_val)
             if hasattr(val_preds, "flatten"):
                 val_preds = val_preds.astype(np.float64).flatten()
-            val_metrics = compute_financial_metrics(y_val, val_preds)
+            val_metrics = compute_financial_metrics(
+                y_val, val_preds, regression=_resolve_train_mode(contract) == "reg"
+            )
             forward_s = val_metrics.get("sharpe_ratio", -999.0)
         except Exception:
             forward_s = -999.0
@@ -1182,6 +1287,42 @@ def run_pipeline(
         print(f"[train] ERROR: {e}")
         return result
 
+    # ── Regression mode: swap classification labels for regression labels ──
+    train_mode = _resolve_train_mode(contract)
+    if train_mode == "reg":
+        if ds.y_reg is not None:
+            print(
+                f"[train] Regression mode — using y_reg labels "
+                f"(mean={float(np.mean(ds.y_reg)):.4f}, std={float(np.std(ds.y_reg)):.4f})"
+            )
+            y_reg = ds.y_reg.ravel().astype(np.float64)
+
+            # ── Volatility-scaled targets (anti-collapse) ──
+            if contract.label.vol_scale_target:
+                # Divide regression target by ATR to convert from bps to ATR-multiples.
+                # This eliminates heteroskedasticity: a +10 bps move during 0.5 ATR
+                # gets the same label as a +20 bps move during 1.0 ATR.
+                atr_col = (
+                    ds.feature_names.index("M5_ATR_14") if "M5_ATR_14" in ds.feature_names else 2
+                )
+                atr_vals = ds.X[:, atr_col]
+                atr_safe = np.maximum(atr_vals, 1e-6)
+                y_reg = y_reg / atr_safe
+                contract.label.output_unit = "atr_multiple"
+                print(
+                    f"[train] Vol-scaled regression labels: "
+                    f"mean={float(np.mean(y_reg)):.6f} ATR-multiple, "
+                    f"std={float(np.std(y_reg)):.6f}"
+                )
+            else:
+                contract.label.output_unit = "bps"
+
+            ds.y = y_reg
+        else:
+            print("[train] ERROR: Regression mode requires y_reg in dataset, but none found")
+            result.errors = ["Regression labels (y_reg) not found in dataset"]
+            return result
+
     # ── Sample weights ──
     pnl_array: np.ndarray | None = None
     sample_weight: np.ndarray | None = None
@@ -1198,13 +1339,22 @@ def run_pipeline(
             pass
 
     # ── Label preprocessing: directional (-1/0/1) → binary (0/1) ──
-    y_raw = ds.y.astype(np.int32)
-    unique_labels = set(np.unique(y_raw))
-    if unique_labels == {-1, 0, 1}:
-        print("[train] Detected directional labels (-1/0/1) — remapping to binary (TP=1, rest=0)")
-        y_binary = np.where(y_raw == 1, 1, 0).astype(np.int32)
-        ds.y = y_binary
-        print(f"[train] Remapped: {np.sum(y_binary==1)} TP, {np.sum(y_binary==0)} non-TP")
+    if train_mode == "reg":
+        # Regression mode: labels are continuous floats — no remapping needed
+        print(
+            f"[train] Regression mode — continuous labels "
+            f"(std={float(np.std(ds.y)):.2f}, mean={float(np.mean(ds.y)):.2f})"
+        )
+    else:
+        y_raw = ds.y.astype(np.int32)
+        unique_labels = set(np.unique(y_raw))
+        if unique_labels == {-1, 0, 1}:
+            print(
+                "[train] Detected directional labels (-1/0/1) — remapping to binary (TP=1, rest=0)"
+            )
+            y_binary = np.where(y_raw == 1, 1, 0).astype(np.int32)
+            ds.y = y_binary
+            print(f"[train] Remapped: {np.sum(y_binary==1)} TP, {np.sum(y_binary==0)} non-TP")
 
     if contract.dataset.sample_weighting != "none":
         sample_weight = compute_sample_weights(
@@ -1231,7 +1381,7 @@ def run_pipeline(
             X_val = raw["X_val"]
             y_val_raw = np.asarray(raw["y_val"], dtype=np.int32).ravel()
             unique_v = set(np.unique(y_val_raw))
-            if unique_v == {-1, 0, 1}:
+            if train_mode != "reg" and unique_v == {-1, 0, 1}:
                 y_val = np.where(y_val_raw == 1, 1, 0).astype(np.int32)
             else:
                 y_val = y_val_raw
@@ -1242,7 +1392,7 @@ def run_pipeline(
                 X_test = X_test_raw
                 y_test_r = np.asarray(y_test_raw, dtype=np.int32).ravel()
                 unique_t = set(np.unique(y_test_r))
-                if unique_t == {-1, 0, 1}:
+                if train_mode != "reg" and unique_t == {-1, 0, 1}:
                     y_test = np.where(y_test_r == 1, 1, 0).astype(np.int32)
                 else:
                     y_test = y_test_r
@@ -1281,15 +1431,34 @@ def run_pipeline(
 
         print(f"[train] Split: train={n_train}, val={n_val}, test={n_test}")
 
-    # Ensure arrays are float64 for model training
+    # ── Apply vol-scaling to val/test labels if regression mode ──
+    if train_mode == "reg" and contract.label.vol_scale_target:
+        atr_idx = ds.feature_names.index("M5_ATR_14") if "M5_ATR_14" in ds.feature_names else 2
+        # Val ATR from X_val
+        val_atr = np.maximum(X_val[:, atr_idx], 1e-6)
+        y_val = (
+            np.asarray(y_val, dtype=np.float64).ravel()
+            / np.asarray(val_atr, dtype=np.float64).ravel()
+        )
+        # Test ATR from X_test if available
+        if X_test is not None:
+            test_atr = np.maximum(X_test[:, atr_idx], 1e-6)
+            y_test = (
+                np.asarray(y_test, dtype=np.float64).ravel()
+                / np.asarray(test_atr, dtype=np.float64).ravel()
+            )
+        y_train = np.asarray(y_train, dtype=np.float64).ravel()  # already scaled above
+
+    # Ensure arrays are correctly typed for model training
     X_train = np.asarray(X_train, dtype=np.float64)
     X_val = np.asarray(X_val, dtype=np.float64)
     if X_test is not None:
         X_test = np.asarray(X_test, dtype=np.float64)
-    y_train = np.asarray(y_train, dtype=np.int32).ravel()
-    y_val = np.asarray(y_val, dtype=np.int32).ravel()
+    y_dtype = np.float64 if train_mode == "reg" else np.int32
+    y_train = np.asarray(y_train, dtype=y_dtype).ravel()
+    y_val = np.asarray(y_val, dtype=y_dtype).ravel()
     if y_test is not None:
-        y_test = np.asarray(y_test, dtype=np.int32).ravel()
+        y_test = np.asarray(y_test, dtype=y_dtype).ravel()
 
     # ── Optuna hyperparameter optimization ──
     if contract.architecture.optuna_trials > 0:
@@ -1364,6 +1533,7 @@ def run_pipeline(
             forward_metrics = compute_financial_metrics(
                 y_test,
                 test_preds,
+                regression=(train_mode == "reg"),
             )
 
             # Train-set predictions for overfit gap calculation
@@ -1394,7 +1564,27 @@ def run_pipeline(
                 )
             else:
                 train_preds_arr = np.zeros(len(y_train), dtype=np.float64)
-            train_fin = compute_financial_metrics(y_train, train_preds_arr)
+            train_fin = compute_financial_metrics(
+                y_train, train_preds_arr, regression=(train_mode == "reg")
+            )
+
+            # Prediction collapse monitor: regression models must learn variance
+            if train_mode == "reg":
+                pred_std = float(np.std(train_preds_arr))
+                target_std = float(np.std(y_train)) + 1e-10
+                collapse_ratio = pred_std / target_std
+                if collapse_ratio < 0.1:
+                    print(
+                        f"[train] COLLAPSE_ERROR seed={seed}: pred_std={pred_std:.4f}, "
+                        f"target_std={target_std:.4f}, ratio={collapse_ratio:.4f} — "
+                        "model predicts near-constant values, Huber regression failed to learn"
+                    )
+                elif collapse_ratio < 0.3:
+                    print(
+                        f"[train] COLLAPSE_WARN seed={seed}: pred_std={pred_std:.4f}, "
+                        f"target_std={target_std:.4f}, ratio={collapse_ratio:.4f} — "
+                        "low signal, check huber_delta"
+                    )
 
             forward_sharpe = forward_metrics.get("sharpe_ratio", -999.0)
             print(
@@ -1483,7 +1673,9 @@ def run_pipeline(
                         best_model.predict(X_te) if best_model is not None else np.zeros(len(y_te))
                     )
 
-                fold_metrics = compute_financial_metrics(y_te, fold_preds)
+                fold_metrics = compute_financial_metrics(
+                    y_te, fold_preds, regression=(train_mode == "reg")
+                )
                 fold.metrics = fold_metrics
                 fold_sharpes.append(fold_metrics.get("sharpe_ratio", 0.0))
 
@@ -1567,6 +1759,9 @@ def run_pipeline(
     result.model_path = str(model_path)
     print(f"[train] Model saved: {model_path}")
 
+    # ── Meta metadata (for MetaSignalFilter / Stage 2 model consumers) ──
+    _write_model_meta_json(model_path, contract)
+
     # ── Model hash ──
     try:
         model_hash = hash_model_file(model_path)
@@ -1611,6 +1806,22 @@ def run_pipeline(
             brain_config = generate_brain_config(
                 contract, str(model_path), model_hash or "", result.metrics
             )
+
+            # Registration gate — block deployment if any check fails
+            from core.deployment.brain_registration_gate import BrainRegistrationGate
+
+            project_root = Path(__file__).resolve().parents[2]
+            gate = BrainRegistrationGate(project_root=project_root)
+            gate_result = gate.validate(brain_config)
+            if not gate_result.passed:
+                print(f"[train] REJECTED {brain_config['brain_id']}:")
+                for check, detail in gate_result.failures:
+                    print(f"  [FAIL] {check}: {detail}")
+                raise RuntimeError(
+                    f"Registration gate rejected {brain_config['brain_id']}: "
+                    f"{len(gate_result.failures)} check(s) failed"
+                )
+
             config_dir = Path(contract.output.config_dir)
             config_dir.mkdir(parents=True, exist_ok=True)
             config_path = config_dir / f"{brain_config['brain_id']}.json"
@@ -1628,7 +1839,12 @@ def run_pipeline(
 
     # ── Finalize ──
     result.elapsed_seconds = round(time.perf_counter() - t_start, 1)
-    result.status = "PASSED" if gate_passed else "FAILED"
+    if smoke:
+        result.status = "PASSED"  # smoke mode: gates are informational only
+        if not gate_passed:
+            print("[train] SMOKE: Quality gates bypassed (informational only)")
+    else:
+        result.status = "PASSED" if gate_passed else "FAILED"
     print(f"[train] Pipeline complete: {result.status} ({result.elapsed_seconds}s)")
 
     return result

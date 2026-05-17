@@ -15,6 +15,7 @@ import numpy as np
 
 from core.brains.adapters.base_adapter import BaseBrainAdapter
 from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
+from core.deployment.brain_alert import emit_brain_alert
 
 FALLBACK_SEQ_LEN = 64
 NUM_FEATURES = 9
@@ -48,6 +49,7 @@ class TransformerBrainAdapter(BaseBrainAdapter):
         self._buffer: deque = deque(maxlen=self._seq_len)
         self._onnx_model_path: Any = None  # str | None
         self._guard: Any = None  # InferenceGuard | None
+        self._num_features: int | None = NUM_FEATURES
 
     # ------------------------------------------------------------------
     # BaseBrainAdapter interface
@@ -90,16 +92,23 @@ class TransformerBrainAdapter(BaseBrainAdapter):
 
             self._session = ort.InferenceSession(artifact_path)
             self._input_name = self._session.get_inputs()[0].name
-            # Auto-detect sequence length from ONNX input shape: (batch, seq, features)
+            # Auto-detect sequence length and features from ONNX input shape
             input_shape = self._session.get_inputs()[0].shape
             if len(input_shape) >= 2 and isinstance(input_shape[1], int) and input_shape[1] > 0:
                 self._seq_len = input_shape[1]
                 self._buffer = deque(maxlen=self._seq_len)
+            if len(input_shape) >= 3 and isinstance(input_shape[2], int) and input_shape[2] > 0:
+                self._num_features = input_shape[2]
             self._onnx_model_path = artifact_path
             self._backend = "onnxruntime:transformer"
         except Exception as exc:
             self._backend = f"stub:{type(exc).__name__}"
             self._session = None
+            emit_brain_alert(
+                self._brain_entry.get("brain_id", "unknown"),
+                "model_load_failed",
+                {"artifact": artifact_path, "error": f"{type(exc).__name__}: {exc}"},
+            )
 
     def run(self, snapshot, feature_source=None) -> BrainDecisionProposal:
         """Override to handle dict (single bar) or (n_bars, 9) pre-built sequence.

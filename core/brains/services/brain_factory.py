@@ -2,6 +2,8 @@ import json
 import logging
 
 from core.brains.adapters import ADAPTER_REGISTRY, BRAIN_TYPE_MAP
+from core.deployment.brain_alert import emit_brain_alert
+from core.deployment.brain_config_validator import BrainConfigError, get_validator
 from core.features.adapters.microstructure_feature_adapter import (
     MicrostructureFeatureAdapter,
 )
@@ -64,10 +66,40 @@ class BrainFactory:
         else:
             adapter = adapter_cls(brain_entry=brain_entry)
 
+        # ── Load-time validation (catches config drift before inference) ──
+        validator = get_validator()
+        vresult = validator.validate(brain_entry)
+        brain_id = brain_entry.get("brain_id", "?")
+        if not vresult.ok:
+            for err in vresult.errors:
+                logger.error("BrainFactory config error: %s", err)
+                emit_brain_alert(brain_id, "config_validation_error", {"errors": vresult.errors})
+            raise BrainConfigError(
+                f"Brain config validation failed for {brain_id}: " + "; ".join(vresult.errors)
+            )
+        for warn in vresult.warnings:
+            logger.warning("BrainFactory config warning: %s", warn)
+
         adapter.load()
+
+        # ── Post-load dimension validation ──
+        num_features = getattr(adapter, "_num_features", None)
+        dim_result = validator.validate_model_dimension(brain_entry, num_features)
+        if not dim_result.ok:
+            for err in dim_result.errors:
+                logger.error("BrainFactory dimension mismatch: %s", err)
+                emit_brain_alert(
+                    brain_id,
+                    "feature_dimension_mismatch",
+                    {"errors": dim_result.errors, "num_features": num_features},
+                )
+            raise BrainConfigError(
+                f"Model dimension mismatch for {brain_id}: " + "; ".join(dim_result.errors)
+            )
+
         logger.info(
             "BrainFactory built and loaded adapter brain_id=%s type=%s backend=%s",
-            brain_entry.get("brain_id", "?"),
+            brain_id,
             brain_type,
             getattr(adapter, "_backend", "unknown"),
         )

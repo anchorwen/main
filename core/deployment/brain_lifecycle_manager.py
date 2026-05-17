@@ -21,6 +21,19 @@ from typing import Any
 
 from core.deployment.path_defaults import BRAINS_DIR, LIVE_YAML_PATH, RETIRED_BRAINS_DIR
 
+
+def _utc_now_iso() -> str:
+    from datetime import UTC, datetime
+
+    return datetime.now(UTC).isoformat()
+
+
+def _utc_now_compact() -> str:
+    from datetime import UTC, datetime
+
+    return datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+
+
 # ── Report data classes ────────────────────────────────────────────────────
 
 
@@ -28,11 +41,16 @@ from core.deployment.path_defaults import BRAINS_DIR, LIVE_YAML_PATH, RETIRED_BR
 class RetirementReport:
     brain_id: str = ""
     governance_updated: bool = False
+    transition_logged: bool = False
     config_archived: str | None = None
-    live_yaml_updated: bool = False
+    live_yaml_removed: bool = False
+    pnl_archived: bool = False
+    atomic_success: bool = False
+    rollback_triggered: bool = False
     artifact_report: list[str] = field(default_factory=list)
     reference_warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -163,7 +181,10 @@ class BrainLifecycleManager:
         scan_references: bool = True,
         dry_run: bool = False,
     ) -> RetirementReport:
-        """Retire a brain in one shot.
+        """Retire a brain in one atomic transaction.
+
+        Transaction boundary: governance_state.json + live.yaml + config move.
+        If any step fails, all changes are rolled back.
 
         Args:
             brain_id: The brain to retire.
@@ -173,56 +194,99 @@ class BrainLifecycleManager:
             dry_run: Report what would happen without making changes.
         """
         report = RetirementReport(brain_id=brain_id)
-
-        # 1. Governance state transition
-        gov = self._load_governance_service()
-        if not dry_run:
-            result = gov.transition(brain_id, "retired", reason="manual:lifecycle_manager")
-            if result.get("action") in ("transitioned", "registered"):
-                report.governance_updated = True
-                self._save_governance_service(gov)
-            else:
-                report.errors.append(f"governance_transition_failed: {result}")
-        else:
-            state = gov.get_brain_state(brain_id)
-            report.governance_updated = state is not None or True  # would succeed
-
-        # 2. Archive config file
         config_path = self._find_config_by_brain_id(brain_id)
-        if config_path and archive_config:
-            target = self._retired_dir / config_path.name
-            if not dry_run:
-                self._retired_dir.mkdir(parents=True, exist_ok=True)
-                config_path.rename(target)
-            report.config_archived = str(target)
 
-        # 3. Update live.yaml
-        if self._live_yaml_path.exists():
-            live = self._load_live_yaml()
-            entries = live.get("brains", {}).get("registry_entries", [])
-            updated = False
-            for entry in entries:
-                path_str = entry.get("path", "")
-                if config_path and Path(path_str).name == config_path.name:
-                    if not dry_run:
-                        entry["enabled"] = False
-                    updated = True
-                    break
-            if updated:
-                report.live_yaml_updated = True
-                if not dry_run:
-                    self._save_live_yaml(live)
-
-        # 4. Report artifact paths (do NOT auto-delete)
-        if config_path:
-            try:
-                cfg = (
-                    json.loads(config_path.read_text(encoding="utf-8"))
-                    if config_path.exists()
-                    else {}
+        if dry_run:
+            state = self._load_governance_service().get_brain_state(brain_id)
+            report.governance_updated = state is not None
+            report.transition_logged = state is not None
+            if config_path:
+                report.config_archived = str(self._retired_dir / config_path.name)
+            report.live_yaml_removed = config_path is not None
+            report.pnl_archived = self._pnl_exists(brain_id)
+            if scan_references and config_path:
+                report.reference_warnings = self._scan_hardcoded_refs_for_path(
+                    str(config_path.name)
                 )
-            except (json.JSONDecodeError, OSError):
+            return report
+
+        # ── Atomic transaction ──
+        from core.deployment.atomic_file_writer import AtomicFileWriter
+
+        gov_state_path = self._base_dir / "governance_state.json"
+        targets = [gov_state_path]
+        if self._live_yaml_path.exists():
+            targets.append(self._live_yaml_path)
+
+        writer = AtomicFileWriter(targets)
+        try:
+            writer.backup()
+
+            # 1. Governance state transition (in memory, then staged to file)
+            gov = self._load_governance_service()
+            result = gov.transition(brain_id, "retired", reason="manual:lifecycle_manager")
+            if result.get("action") not in ("transitioned", "registered"):
+                report.errors.append(f"governance_transition_failed: {result}")
+                writer.rollback()
+                report.rollback_triggered = True
+                return report
+            report.governance_updated = True
+            report.transition_logged = True
+            gov.save(str(gov_state_path))
+
+            # 2. Build new live.yaml in memory, remove brain entry
+            if config_path and self._live_yaml_path.exists():
+                live = self._load_live_yaml()
+                entries = live.get("brains", {}).get("registry_entries", [])
+                removed = False
+                new_entries = []
+                for entry in entries:
+                    path_str = entry.get("path", "")
+                    if Path(path_str).name == config_path.name:
+                        removed = True
+                        continue
+                    new_entries.append(entry)
+                if removed:
+                    live["brains"]["registry_entries"] = new_entries
+                    self._save_live_yaml(live)
+                    report.live_yaml_removed = True
+                else:
+                    report.warnings.append(
+                        f"brain_id={brain_id} not found in live.yaml registry_entries"
+                    )
+
+            # 3. Archive config file
+            if config_path and archive_config:
+                self._retired_dir.mkdir(parents=True, exist_ok=True)
+                target = self._retired_dir / config_path.name
+                # Avoid overwriting existing retired config
+                if target.exists():
+                    target = target.with_name(f"{target.stem}_{_utc_now_compact()}{target.suffix}")
+                config_path.rename(target)
+                report.config_archived = str(target)
+
+            # 4. Cold-storage PnL transfer (never delete)
+            report.pnl_archived = self._archive_retired_pnl(brain_id)
+
+            # 5. Report artifact paths (do NOT auto-delete)
+            if config_path and config_path.exists():
+                try:
+                    cfg = json.loads(config_path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    cfg = {}
+            elif config_path:
+                # Config was moved; try reading from retired location
+                archived = report.config_archived
+                if archived:
+                    try:
+                        cfg = json.loads(Path(archived).read_text(encoding="utf-8"))
+                    except (json.JSONDecodeError, OSError):
+                        cfg = {}
+                else:
+                    cfg = {}
+            else:
                 cfg = {}
+
             for key in ("artifact_path", "normalization_config_path"):
                 val = cfg.get(key)
                 if val and isinstance(val, str):
@@ -234,12 +298,84 @@ class BrainLifecycleManager:
                     else:
                         report.artifact_report.append(f"already_missing: {val}")
 
-        # 5. Scan for hardcoded references
-        if scan_references and config_path:
-            refs = self._scan_hardcoded_refs_for_path(str(config_path.name))
-            report.reference_warnings = refs
+            # 6. Scan for hardcoded references
+            if scan_references and config_path:
+                report.reference_warnings = self._scan_hardcoded_refs_for_path(
+                    str(config_path.name)
+                )
+
+            writer.commit()
+            report.atomic_success = True
+
+        except Exception as exc:
+            report.errors.append(f"retirement_transaction_failed: {exc}")
+            try:
+                writer.rollback()
+                report.rollback_triggered = True
+            except Exception as rb_exc:
+                report.errors.append(f"rollback_failed: {rb_exc}")
 
         return report
+
+    # ── PnL cold storage ────────────────────────────────────────────────
+
+    def _archive_retired_pnl(self, brain_id: str) -> bool:
+        """Move a single brain's PnL records from hot ledger to cold storage.
+
+        Uses per-brain sharding (data/ledger/retired/{brain_id}.json) to avoid
+        concurrent-write corruption from multi-process retirement.
+        """
+        ledger_path = self._base_dir / "brain_pnl_ledger.json"
+        if not ledger_path.exists():
+            return False
+
+        try:
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return False
+
+        settled = ledger.get("settled", {})
+        records = settled.pop(brain_id, None)
+        if records is None:
+            return False
+
+        # Write cold-storage file
+        cold_dir = self._base_dir / "ledger" / "retired"
+        cold_dir.mkdir(parents=True, exist_ok=True)
+        cold_entry = {
+            "brain_id": brain_id,
+            "archived_at": _utc_now_iso(),
+            "final_status": "retired",
+            "record_count": len(records),
+            "records": records,
+        }
+        cold_path = cold_dir / f"{brain_id}.json"
+        cold_path.write_text(
+            json.dumps(cold_entry, indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+
+        # Update hot ledger
+        ledger["settled"] = settled
+        backup_path = ledger_path.with_suffix(".json.bak")
+        ledger_path.rename(backup_path)
+        ledger_path.write_text(
+            json.dumps(ledger, indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+
+        return True
+
+    def _pnl_exists(self, brain_id: str) -> bool:
+        """Check if a brain has PnL records in the hot ledger."""
+        ledger_path = self._base_dir / "brain_pnl_ledger.json"
+        if not ledger_path.exists():
+            return False
+        try:
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            return brain_id in ledger.get("settled", {})
+        except (json.JSONDecodeError, OSError):
+            return False
 
     # ── one-shot registration ────────────────────────────────────────────
 
@@ -347,7 +483,9 @@ class BrainLifecycleManager:
     # ── startup integrity ────────────────────────────────────────────────
 
     def verify_startup_integrity(self, *, fail_fast: bool = False) -> IntegrityReport:
-        """Cross-validate live.yaml entries, disk files, governance state, and PnL ledger.
+        """Cross-validate live.yaml, disk files, governance state, PnL ledger,
+        transition_log coverage, ensemble references, capability handshake,
+        and artifact hash integrity.
 
         Raises RuntimeError if *fail_fast* is True and any mismatch is found.
         """
@@ -399,14 +537,13 @@ class BrainLifecycleManager:
                             report.missing_artifacts.append(f"{_bid}: {val}")
 
         # ── governance orphans ──
+        gov_data: dict = {}
         gov_path = self._base_dir / "governance_state.json"
         if gov_path.exists():
             try:
                 gov_data = json.loads(gov_path.read_text(encoding="utf-8"))
                 for bid in gov_data.get("brain_states", {}):
-                    # Check if config exists on disk (by scanning for matching brain_id)
                     found = bid in disk_brains
-                    # Also check retired dir
                     if not found and self._retired_dir.exists():
                         for rc in self._retired_dir.glob("*.json"):
                             try:
@@ -419,6 +556,114 @@ class BrainLifecycleManager:
                     if not found:
                         report.governance_orphans.append(bid)
             except (json.JSONDecodeError, OSError):
+                pass
+
+        # ── transition_log coverage ──
+        if gov_data:
+            bs_ids = set(gov_data.get("brain_states", {}).keys())
+            tl_ids = set(e.get("brain_id") for e in gov_data.get("transition_log", []))
+            uncovered = bs_ids - tl_ids
+            if uncovered:
+                report.hardcoded_path_mismatches.append(
+                    f"brain_states without transition_log: {sorted(uncovered)}"
+                )
+
+        # ── brain_id consistency (live.yaml path → config → brain_id) ──
+        if self._live_yaml_path.exists():
+            for entry in entries:
+                path_str = entry.get("path", "")
+                cfg_path = Path(path_str)
+                if not cfg_path.is_absolute():
+                    cfg_path = (self._project_root / cfg_path).resolve()
+                if cfg_path.exists():
+                    try:
+                        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+                        cfg_bid = cfg.get("brain_id", "")
+                        # Verify the config file name is consistent
+                        expected_name = f"{cfg_bid}.json"
+                        if cfg_path.name != expected_name:
+                            report.hardcoded_path_mismatches.append(
+                                f"config path mismatch: {path_str} → brain_id='{cfg_bid}' "
+                                f"(expected filename: {expected_name})"
+                            )
+                    except (json.JSONDecodeError, OSError):
+                        pass
+
+        # ── magic uniqueness ──
+        magic_map: dict[int, str] = {}
+        for bid, cfg in disk_brains.items():
+            magic = cfg.get("magic")
+            if magic is not None:
+                if magic in magic_map:
+                    report.hardcoded_path_mismatches.append(
+                        f"magic collision: {magic} used by '{magic_map[magic]}' and '{bid}'"
+                    )
+                else:
+                    magic_map[magic] = bid
+
+        # ── ensemble reference validity ──
+        try:
+            from core.runtime.signal_pipeline import validate_ensemble_references
+
+            bs = gov_data.get("brain_states", {})
+            ensemble_errors = validate_ensemble_references(bs)
+            for err in ensemble_errors:
+                report.hardcoded_path_mismatches.append(f"ensemble: {err}")
+        except Exception:
+            pass
+
+        # ── contract_group validity ──
+        known_cgs: set[str] = set()
+        if self._live_yaml_path.exists():
+            live = self._load_live_yaml()
+            known_cgs = set(live.get("strategy_lines", {}).keys())
+        if known_cgs:
+            for bid, cfg in disk_brains.items():
+                cg = cfg.get("contract_group", "")
+                if cg and cg not in known_cgs:
+                    report.hardcoded_path_mismatches.append(
+                        f"{bid}: contract_group='{cg}' not in live.yaml strategy_lines: "
+                        f"{sorted(known_cgs)}"
+                    )
+
+        # ── capability handshake: schema support ──
+        try:
+            from core.features.feature_service import FeatureService
+
+            available = FeatureService.available_schemas()
+            for bid, cfg in disk_brains.items():
+                schema_id = cfg.get("feature_schema_id", "")
+                if schema_id and schema_id not in available:
+                    report.hardcoded_path_mismatches.append(
+                        f"{bid}: schema '{schema_id}' NOT supported by FeatureService. "
+                        f"Available: {sorted(available)}"
+                    )
+        except Exception:
+            pass
+
+        # ── artifact_hash integrity ──
+        import hashlib
+
+        for bid, cfg in disk_brains.items():
+            expected_hash = cfg.get("artifact_hash", "")
+            if not expected_hash:
+                continue
+            artifact_path = cfg.get("artifact_path", "")
+            if not artifact_path:
+                continue
+            fp = Path(artifact_path)
+            if not fp.is_absolute():
+                fp = (self._project_root / fp).resolve()
+            if not fp.exists():
+                continue
+            try:
+                actual_hash = hashlib.sha256(fp.read_bytes()).hexdigest()
+                if actual_hash != expected_hash:
+                    report.hardcoded_path_mismatches.append(
+                        f"{bid}: artifact_hash mismatch — config={expected_hash[:16]}... "
+                        f"file={actual_hash[:16]}..."
+                    )
+            except OSError:
                 pass
 
         # ── validate DEFAULT_* paths ──

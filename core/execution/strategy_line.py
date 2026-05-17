@@ -239,6 +239,7 @@ class StrategyLine:
         pnl_ledger: Any = None,
         micro_sequences: dict[str, Any] | None = None,
         daily_feature_vector: Any = None,
+        meta_filter: Any = None,
     ) -> StrategyDecision:
         """Run the full strategy evaluation for one cycle.
 
@@ -252,6 +253,7 @@ class StrategyLine:
             risk_budget_usd: Per-trade risk budget for vol-targeted sizing.
                              0 = use fixed base_volume.
             micro_sequences: optional dict TF → (32,9) ndarray for HMRE brains.
+            meta_filter: Optional :class:`MetaSignalFilter` for Gate 4d ML check.
 
         Returns a StrategyDecision — may have should_trade=False.
         """
@@ -347,34 +349,6 @@ class StrategyLine:
                 except Exception:
                     pass
 
-        # ── 3a2b. Record per-brain votes for continuous analysis (BEFORE approval gates) ──
-        # Records every brain's directional vote for every cycle so that
-        # individual brain behaviour can be tracked regardless of whether
-        # the consensus passes subsequent gates.
-        try:
-            from core.runtime.shadow_recorder import record_brain_votes
-
-            # Compute a rough consensus direction from proposals for the record
-            _up = sum(
-                float(getattr(p, "prediction", {}).get("up_probability", 0.5)) for p in proposals
-            )
-            _down = sum(
-                float(getattr(p, "prediction", {}).get("down_probability", 0.5)) for p in proposals
-            )
-            _rough_dir = "long" if _up >= _down else "short"
-            _rough_conf = round(abs(_up - _down) / max(len(proposals), 1), 4)
-
-            record_brain_votes(
-                proposals=proposals,
-                strategy_name=name,
-                consensus_direction=_rough_dir,
-                consensus_confidence=_rough_conf,
-                symbol=getattr(self.config, "symbol", "XAUUSDc"),
-                base_dir="data",
-            )
-        except Exception:
-            pass
-
         # ── 3a3. Capture entry_z_score from OU-style brains ──
         entry_z_score = 0.0
         for p in proposals:
@@ -440,6 +414,24 @@ class StrategyLine:
         direction, confidence, brain_ids, support_count, total_count = self._compute_consensus(
             proposals
         )
+
+        # ── 4a. Record per-brain votes with REAL consensus confidence ──
+        # Recorded AFTER consensus so reported confidence matches what the
+        # gate sees.  Runs for every cycle so individual brain behaviour
+        # can be tracked regardless of whether the consensus passes gates.
+        try:
+            from core.runtime.shadow_recorder import record_brain_votes
+
+            record_brain_votes(
+                proposals=proposals,
+                strategy_name=name,
+                consensus_direction=direction,
+                consensus_confidence=confidence,
+                symbol=getattr(self.config, "symbol", "XAUUSDc"),
+                base_dir="data",
+            )
+        except Exception:
+            pass
 
         if direction == "neutral" or confidence < self.config.confidence_threshold:
             return StrategyDecision(
@@ -507,12 +499,16 @@ class StrategyLine:
         # ── 4c. Z-score inflection gate (v3.2) ──
         # For OU/statarb strategies: require z-score turning back toward mean.
         # Prevents catching falling knives when z is still accelerating away.
+        # Knife 1: z_entry raised to 2.0 — only trade extreme reversions where
+        # the edge is strongest and mean-drift risk is lowest.
         if "statarb" in name or "ou" in name.lower():
             if entry_z_score != 0.0:
+                _z_entry = 2.0 if "statarb" in name else 1.5
                 _inf_allow, _inf_reason = check_z_inflection(
                     entry_z_score,
                     self._last_entry_z,
                     direction,
+                    z_entry=_z_entry,
                 )
                 self._last_entry_z = entry_z_score
                 if not _inf_allow:
@@ -531,6 +527,52 @@ class StrategyLine:
                         total_count=total_count,
                         regime_mode=regime_gate_mode,
                         reason=_inf_reason,
+                    )
+
+        # ── 4d. Meta-Labeling ML Gate (Stage 2) ──
+        # Filters barrier_12bar signals through the LGB+MLP ensemble model.
+        # Extracts Stage 1 raw prediction from the Huber brain, assembles the
+        # 49-dim named feature dict from the V9 + micro ndarrays, and applies
+        # Platt calibration + conformal thresholding.  Other strategies pass
+        # through unchanged (scope isolation).
+        if meta_filter is not None and name == "barrier_12bar":
+            _s1_prediction: float | None = None
+            for p in proposals:
+                try:
+                    raw_outputs = getattr(p, "extensions", {}).get("raw_outputs", {})
+                    # Meta_Stage1_Huber_V1 uses raw_score (regression bps)
+                    _s1 = raw_outputs.get("raw_score")
+                    if _s1 is not None:
+                        _s1_prediction = float(_s1)
+                        break
+                except (TypeError, ValueError, AttributeError):
+                    pass
+
+            if _s1_prediction is not None:
+                result = meta_filter.filter_arrays(
+                    direction=direction,
+                    s1_prediction=_s1_prediction,
+                    v9_array=feature_vector,
+                    micro_array=micro_feature_vector,
+                )
+                if not result.passed:
+                    return StrategyDecision(
+                        strategy_name=name,
+                        magic=self.config.magic,
+                        should_trade=False,
+                        direction=direction,
+                        confidence=confidence,
+                        volume=0.0,
+                        sl=0.0,
+                        tp=0.0,
+                        hard_sl=0.0,
+                        brain_ids=brain_ids,
+                        supporting_count=support_count,
+                        total_count=total_count,
+                        regime_mode=regime_gate_mode,
+                        reason=f"meta_filter_rejected:{result.reason}"
+                        if result.reason
+                        else "meta_filter_rejected",
                     )
 
         # ── 5. Dynamic SL/TP ──
@@ -830,12 +872,12 @@ class StrategyLine:
         # v3.2: Bandit sizing — OU regime × sigmoid exhaustion × Z depth decay
         bandit_factor = ou_regime_factor * exhaustion_factor * depth_penalty
 
-        size = (
-            base_volume * agreement_factor * gate_factor * vol_factor * macro_factor * bandit_factor
-        )
+        effective_mult = agreement_factor * gate_factor * vol_factor * macro_factor * bandit_factor
 
-        # v3.1: MVS cut-off — kill micro-positions
-        size = apply_mvs(size, threshold=MVS_THRESHOLD)
+        # v3.1: MVS cut-off — kill micro-positions where multiplier too low
+        effective_mult = apply_mvs(effective_mult, threshold=MVS_THRESHOLD)
+
+        size = base_volume * effective_mult
 
         # ── Graduated streak reduction ──
         streak_mult = 1.0

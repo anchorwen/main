@@ -41,6 +41,7 @@ EXPECTED_MODULES = [
     "brains_adapters",
     "brains_services",
     "brains_schema",
+    "brains_validation",
     "execution_guards",
     "execution_orders",
     "execution_reentry",
@@ -143,6 +144,92 @@ def check_system_files_exist() -> list[str]:
     return errors
 
 
+def check_source_blueprint_freshness() -> list[str]:
+    """Check that changed .py files have corresponding blueprint updates.
+
+    Uses MODULE_SOURCE_MAP from check_blueprint_compliance to verify
+    that any substantive .py change has a blueprint update in the same change set.
+    Returns list of errors.
+    """
+    errors: list[str] = []
+
+    # Import the compliance engine
+    try:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from check_blueprint_compliance import classify_diff, resolve_modules
+    except ImportError as exc:
+        errors.append(f"CANNOT IMPORT: check_blueprint_compliance — {exc}")
+        return errors
+
+    import subprocess as _sp
+
+    # Get changed .py files (both staged and unstaged)
+    changed_py: set[str] = set()
+    for args in [
+        ["git", "diff", "--name-only", "HEAD"],
+        ["git", "diff", "--name-only", "--cached"],
+    ]:
+        try:
+            result = _sp.run(args, capture_output=True, text=True, cwd=str(ROOT), timeout=10)
+            if result.returncode == 0:
+                for line in result.stdout.strip().split("\n"):
+                    line = line.strip()
+                    if line.endswith(".py") and not line.startswith("tests/"):
+                        changed_py.add(line)
+        except Exception:
+            pass
+
+    if not changed_py:
+        return errors
+
+    # Check each substantive .py change has blueprint update
+    for fp in sorted(changed_py):
+        modules = resolve_modules(fp)
+        if not modules:
+            errors.append(f"ORPHAN: {fp} changed but not mapped in MODULE_SOURCE_MAP")
+            continue
+
+        category = classify_diff(fp)
+        if category == "cosmetic":
+            continue
+
+        # Check if any owning blueprint is also changed
+        bp_changed = False
+        for m in modules:
+            bp_path = f"blueprints/modules/{m}.md"
+            if bp_path in changed_py:
+                bp_changed = True
+                break
+
+        if not bp_changed:
+            # Check git diff for blueprint files too (they're .md, not .py)
+            for args in [
+                ["git", "diff", "--name-only", "HEAD"],
+                ["git", "diff", "--name-only", "--cached"],
+            ]:
+                try:
+                    result = _sp.run(
+                        args, capture_output=True, text=True, cwd=str(ROOT), timeout=10
+                    )
+                    if result.returncode == 0:
+                        for line in result.stdout.strip().split("\n"):
+                            line = line.strip()
+                            for m in modules:
+                                if line == f"blueprints/modules/{m}.md":
+                                    bp_changed = True
+                                    break
+                except Exception:
+                    pass
+
+        if not bp_changed:
+            errors.append(
+                f"STALE: {fp} substantively changed but blueprint(s) "
+                f"{', '.join(modules)} not in same change set"
+            )
+
+    return errors
+
+
 def check_dependency_graph_consistency() -> list[str]:
     """Check DEPENDENCY_GRAPH references all modules. Returns list of errors."""
     errors: list[str] = []
@@ -175,6 +262,7 @@ def main() -> int:
         ("Module sections complete", check_module_sections),
         ("System files exist", check_system_files_exist),
         ("Fix registry consistency", check_fix_registry_consistency),
+        ("Source-blueprint freshness", check_source_blueprint_freshness),
         ("Dependency graph coverage", check_dependency_graph_consistency),
     ]
 

@@ -1,56 +1,215 @@
 # Brains / Adapters
 
 ## Purpose
-Model inference adapters that wrap diverse brain backends (XGBoost, LightGBM, Transformer, ONNX, OnlineMLP, SGD) behind a uniform `BaseBrainAdapter` interface. Each adapter handles loading artifacts, running inference, and producing `BrainDecisionProposal` outputs.
+Model inference adapters that wrap diverse brain backends (XGBoost, LightGBM, Transformer, ONNX, OnlineMLP, SGD) behind a uniform `BaseBrainAdapter` interface. All inference paths now converge through `BrainRunService` — no other code path calls `adapter.infer()` directly.
 
-## Key Files
-| File | Role |
-|------|------|
-| `core/brains/adapters/__init__.py` | Registry: `ADAPTER_REGISTRY`, `BRAIN_TYPE_MAP` |
-| `core/brains/adapters/base_adapter.py` | Abstract interface: `load()`, `infer()`, `get_signal()`, `run()` |
-| `core/brains/adapters/xgboost_brain_adapter.py` | XGBoost JSON booster adapter |
-| `core/brains/adapters/lightgbm_brain_adapter.py` | LightGBM .txt booster adapter |
-| `core/brains/adapters/v9_onnx_brain_adapter.py` | V9 institutional ONNX adapter (classification + regression) |
-| `core/brains/adapters/transformer_brain_adapter.py` | QuantTransformer ONNX with 64-bar rolling buffer |
-| `core/brains/adapters/online_learner_adapter.py` | Dual-backend online learner (SGDClassifier / OnlineMLP) with drift protection |
-| `core/brains/adapters/params_brain_adapter.py` | OU process Z-Score from arb_params.json |
+## Architecture Overview
+
+```
+ALL consumers (live, shadow, backtest, verify)
+  → BrainRunService.run_active_brains(feature_snapshot, control_snapshot, feature_blackboard)
+    → BrainFactory.build(entry) → BrainConfigValidator.validate(entry) → adapter.load()
+    → adapter.run(feature_snapshot, feature_dict)     # metadata-driven extraction
+      → feature_names = brain_entry["features"]        # from config (single source of truth)
+      → feature_vector = [feature_dict[name] for name in feature_names]
+      → infer(feature_vector) → get_signal(raw_output) → BrainDecisionProposal
+```
+
+**Key principle**: Brain config JSON is the single source of truth for feature names, order, and dimensionality. No hardcoded schema imports in adapter code.
 
 ## Data Flow
+
 ```
-brain_entry (config dict) → BrainFactory → adapter.load() → adapter.infer(feature_vector) → adapter.get_signal() → BrainDecisionProposal
+BrainRegistryService → brain_entries → BrainFactory → adapters
+                                                     ↓
+                                             BrainRunService.run_active_brains()
+                                                     ↓
+                                             BrainDecisionProposal[]
+                                                     ↓
+                               Parliament / StrategyLine / Consensus
 ```
 
+## Key Files
+
+| File | Role |
+|------|------|
+| `core/brains/adapters/__init__.py` | Registry: `ADAPTER_REGISTRY`, `BRAIN_TYPE_MAP` (15 brain types → 6 adapters) |
+| `core/brains/adapters/base_adapter.py` | Abstract interface: `load()`, `infer()`, `get_signal()`, `inference()`, `run()` (metadata-driven) |
+| `core/brains/adapters/xgboost_brain_adapter.py` | XGBoost JSON booster, `_num_features` from feature_names, dimension guard + brain_alert |
+| `core/brains/adapters/lightgbm_brain_adapter.py` | LightGBM .txt booster, three defense lines (name extraction → normalization → dim assertion) |
+| `core/brains/adapters/v9_onnx_brain_adapter.py` | V9 institutional ONNX (classification + regression), `_num_features` from ONNX shape |
+| `core/brains/adapters/transformer_brain_adapter.py` | QuantTransformer ONNX with rolling buffer, `_num_features` from ONNX shape |
+| `core/brains/adapters/online_learner_adapter.py` | Dual-backend (SGD/MLP) with drift protection, dimension alert on truncation |
+| `core/brains/adapters/params_brain_adapter.py` | OU process Z-Score from arb_params.json |
+| `core/brains/services/brain_factory.py` | Builds adapters from config, integrates BrainConfigValidator |
+| `core/brains/services/brain_run_service.py` | Unified inference entry point — single path for all consumers |
+| `core/deployment/brain_config_validator.py` | Load-time config validation (7 checks) |
+| `core/deployment/brain_alert.py` | Structured JSON alerts to stderr on any fallback/degradation |
+
+## Feature Schema Reference
+
+| Schema ID | Dim | Feature Names Source | Used By |
+|-----------|-----|---------------------|---------|
+| `v9_institutional_40` | 40 | `V9_INSTITUTIONAL_40_FEATURES` (M5/M15/M30/H1 technicals + OU/Hurst) | onnx_v9, deepresmlp, lightgbm_v1, xgboost_v9, online_sgd, crt_sur_chlg |
+| `daily_swing_24` / `swing_24` | 24 | `DAILY_SWING_24_FEATURES` (D1 tech + H4 macro + cross-asset + derived) | lightgbm_h1_swing, xgboost_*_swing |
+| `v4.3_microstructure_9` / `v4.5_microstructure_9` / `v2_microstructure_9` | 9 | `MICROSTRUCTURE_9_FEATURES` (tick/HL/CO/spread/OIM/velocity/3xFX) | transformer_v5, xgboost_v4.5 |
+| `v2_microstructure_288` | 288 | `MICROSTRUCTURE_9_FEATURES × 32` (32-bar flat sequence) | xgboost_v4.5_h1/h4/m15 |
+| `v6_price_series_1` | 1 | `["price_return"]` | ou_params_v6 |
+
+**Schema aliases** (resolved automatically by `_resolve_schema_key()` in BrainRunService):
+- `swing_24` → `daily_swing_24`
+- `v2_microstructure_9` → `v4.3_microstructure_9`
+- `v4.5_microstructure_9` → `v4.3_microstructure_9`
+
+## Brain Type Reference
+
+| brain_type | Adapter Class | Registry Key | Model Format | Schema |
+|------------|--------------|-------------|-------------|--------|
+| `onnx_v9` | V9OnnxBrainAdapter | onnx | ONNX | v9_institutional_40 (40) |
+| `deepresmlp` | V9OnnxBrainAdapter | onnx | ONNX | v9_institutional_40 (40) |
+| `xgboost_v4.5` | XGBoostBrainAdapter | xgboost_json | JSON booster | v4.3_microstructure_9 (9) |
+| `xgboost_v4.5_m15` | XGBoostBrainAdapter | xgboost_json | JSON booster | v2_microstructure_288 (288) |
+| `xgboost_v4.5_h1` | XGBoostBrainAdapter | xgboost_json | JSON booster | v2_microstructure_288 (288) |
+| `xgboost_v4.5_h4` | XGBoostBrainAdapter | xgboost_json | JSON booster | v2_microstructure_288 (288) |
+| `xgboost_v9` | XGBoostBrainAdapter | xgboost_json | JSON booster | v9_institutional_40 (40) |
+| `lightgbm_v1` | LightGBMBrainAdapter | lightgbm_txt | .txt booster | v9_institutional_40 (40) |
+| `ou_params_v6` | ParamsBrainAdapter | ou_params_json | JSON params | v6_price_series_1 (1) |
+| `online_sgd` | OnlineLearnerAdapter | online_sgd | JSON weights | v9_institutional_40 (40) |
+| `transformer_v4.3` | TransformerBrainAdapter | transformer_onnx | ONNX | v4.3_microstructure_9 (9) |
+| `transformer_v5` | TransformerBrainAdapter | transformer_onnx | ONNX | v4.3_microstructure_9 (9) |
+| `transformer_v5_m15` | TransformerBrainAdapter | transformer_onnx | ONNX | v2_microstructure_9 (9) |
+| `transformer_v5_h1` | TransformerBrainAdapter | transformer_onnx | ONNX | v2_microstructure_9 (9) |
+| `transformer_v5_h4` | TransformerBrainAdapter | transformer_onnx | ONNX | v2_microstructure_9 (9) |
+
+## Brain Inference Pipeline (Unified)
+
+All consumers use the same path:
+
+```
+BrainRunService.run_active_brains(feature_snapshot, control_snapshot, feature_blackboard)
+  │
+  ├─ ensure_loaded()  — BrainFactory.build() + BrainConfigValidator.validate()
+  │
+  └─ for each active brain entry:
+       ├─ schema_id → _resolve_schema_key() → blackboard[schema_id] → feature_dict
+       ├─ adapter.run(feature_snapshot, feature_dict)
+       │   ├─ feature_names = brain_entry["features"]      (metadata-driven)
+       │   ├─ feature_vector = [feature_dict[name] ...]     (ordered extraction)
+       │   ├─ infer(feature_vector)                         (with dimension guard)
+       │   └─ get_signal(raw_output)                        (BrainDecisionProposal)
+       └─ on error → brain_alert (stderr) → continue
+```
+
+**Special methods**:
+- `run_single_brain(brain_id, ...)` — OU exit re-evaluation, drift-lock
+- `run_brain_type(brain_type, ...)` — first brain matching type
+- `run_brains_for_contract_group(contract_group, ...)` — per-strategy filtering
+
+## Diagnostic Manual
+
+### Symptom: "Brain output constant / frozen confidence"
+
+**Checklist**:
+1. **Feature freshness**: Are features changing between cycles?
+   - Check: `grep "FeatureService stale cache"` — fresh features being used?
+   - Fix: If stale, ensure `check_feature_freshness()` is working (FIX-20260516-005)
+2. **Feature names correct?**: Does `brain_entry["features"]` match the schema?
+   - Check: `python scripts/repair_brain_configs.py --validate-only`
+   - Common root cause: config had wrong feature names (e.g. D1_* instead of V9_*)
+3. **Model loaded?**: Is `adapter._backend` showing a proper backend or `stub:*`?
+   - Check: `grep "brain_alert.*model_load_failed"` — any load failures?
+4. **Dimension match?**: Does `_num_features` match schema dimension?
+   - Check: `grep "brain_alert.*feature_dimension_mismatch"`
+
+### Symptom: "Brain in stub mode"
+
+**Checklist**:
+1. **Artifact path**: Does the file at `artifact_path` exist?
+   - Check: `ls -la <artifact_path>`
+2. **Model format**: Is the artifact the correct format for the brain_type?
+3. **Dependencies**: Are xgboost/lightgbm/onnxruntime installed?
+
+### Symptom: "Inference error: matmul dimension mismatch"
+
+**Checklist**:
+1. **Config `features` field length**: Does it match `feature_schema_id` dimension?
+2. **Model `_num_features`**: Does booster/ONNX input match schema?
+3. **Feature blackboard**: Is the right schema key present with correct feature count?
+
+### Symptom: "Brain excluded from inference"
+
+**Check**:
+- `grep "brain_alert.*config_validation_error"` for specific validation errors
+- Brain appears in `BrainRunService._failed_brain_ids` — will not be retried until `reload_adapters()`
+
+## Brain Alert Types
+
+| Alert Type | Meaning | Response |
+|-----------|---------|----------|
+| `config_validation_error` | Brain config failed load-time validation | Fix config JSON, reload |
+| `feature_dimension_mismatch` | Feature vector dim != model expected dim | Check features field vs schema |
+| `model_load_failed` | Artifact couldn't be loaded | Check artifact path/format |
+| `feature_missing` | Feature key not in source dict | Check feature blackboard |
+| `brain_stub_mode` | Brain running on deterministic stub | Check ONNX/model availability |
+
+All alerts are printed as single-line JSON to stderr: `{"event":"brain_alert","time":"...","brain_id":"...","alert_type":"...","detail":{...}}`
+
 ## Inbound Dependencies
+
 | Module | What is imported | Why |
 |--------|-----------------|-----|
 | contracts/domain | BrainDecisionProposal | Output type for all adapters |
 | contracts/ids | new_proposal_id | Proposal ID generation |
-| brains/schema | SCHEMA_BRAIN_DECISION_PROPOSAL | Schema version stamp |
-| brains/services | InferenceGuard, run_worker | Subprocess isolation (optional) |
+| deployment/brain_alert | emit_brain_alert | Structured alert on fallback |
+| deployment/brain_config_validator | BrainConfigError, get_validator | Load-time validation |
 
 ## Outbound Dependents
+
 | Module | What it imports | Why |
 |--------|-----------------|-----|
 | brains/services/brain_factory | ADAPTER_REGISTRY, BRAIN_TYPE_MAP | Builds adapters from config |
-| brains/services/brain_run_service | BaseBrainAdapter | Runs inference across adapters |
-| runtime/signal_pipeline | BrainDecisionProposal | Aggregates brain outputs |
+| brains/services/brain_run_service | BaseBrainAdapter | Unified inference entry point |
+| runtime/live_cycle | BrainRunService | Management phase brain re-eval |
+| execution/strategy_line | adapter.inference() | Per-strategy brain inference |
 
 ## Known Issues
-<!-- Add known issues here with tracking IDs -->
+
+- **XGBoost_V9_Institutional & swing XGBoost models**: Previously reported as 9-dim due to adapter `load()` bug (FIX-20260517-005). Adapter read `num_feature` from `gradient_booster.model_param` (empty in XGBoost >=1.6) instead of `learner_model_param` (actual value: 40 for V9, 24 for swings). Models were ALWAYS trained on correct dimension — verified by counting unique feature indices in tree splits (0-39 / 0-23). Fixed with two-tier fallback: `learner_model_param.num_feature` → `gradient_booster.model_param.num_feature` → None.
+- **Online_MLP_V1**: Model weights trained to always output neutral (up=4.5%, down=4.6%, confidence=0.909 frozen). NOT a dimension mismatch — model has n_features=40 matching config. Root cause: MLP converged to constant-neutral solution during training. Set vote_weight=0.0 on 2026-05-16 to prevent barrier_12bar consensus dilution. Needs retraining with better regularization.
+- **DeepResMLP_V2_New**: ONNX model uses external data format — `.onnx.data` companion file is missing. `onnxruntime` cannot load the model; brain runs in deterministic stub mode (always neutral, 0.876 confidence). Need to re-export ONNX with embedded weights or recover the `.data` file from the training environment.
 
 ## Fix History
+
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+|--------|------|--------|--------|---------|------------|
+| FIX-20260516-004 | 2026-05-16 | cursor-agent | — | LightGBM: metadata-driven run() with 3 defense lines replacing fragile dict.values() extraction | RC-06 (config drift) |
+| FIX-20260516-006 | 2026-05-16 | cursor-agent | — | All adapters: added dimension guards + brain_alert on fallback paths. V9_ONNX + Transformer: _num_features extracted from ONNX input shape. OnlineLearner: alert on silent truncation. XGBoost: alert on dim mismatch. | RC-06 (silent failure) |
+| FIX-20260516-007 | 2026-05-16 | cursor-agent | — | Base adapter run(): metadata-driven feature extraction from brain_entry["features"]. Replaced dict-order-dependent values() extraction. | RC-06 (config drift) |
+| FIX-20260517-005 | 2026-05-17 | cursor-agent | — | XGBoost adapter load() fallback: read num_feature from learner_model_param instead of gradient_booster.model_param (empty in XGBoost>=1.6). Fixed 5 swing models (24-dim) + V9_Institutional (40-dim). Un-retired lightgbm_h1_swing. | RC-06 (contract-violation) |
 
 ## Cross-Module Contracts
+
 | Contract | Consumers | Stability |
 |----------|-----------|----------|
-| `BaseBrainAdapter.load()` → sets `self._backend` | BrainFactory | Stable |
-| `BaseBrainAdapter.infer(feature_vector)` → `dict[str, Any]` | BrainRunService | Stable |
-| `BaseBrainAdapter.get_signal(raw_output)` → `BrainDecisionProposal` | BrainRunService | Stable |
+| `BaseBrainAdapter.load()` → sets `self._backend` + `self._num_features` | BrainFactory, BrainConfigValidator | Stable |
+| `BaseBrainAdapter.run(snapshot, feature_dict)` → `BrainDecisionProposal` | BrainRunService | Stable |
+| `BaseBrainAdapter.inference(feature_vector)` → `BrainDecisionProposal` | Strategy files | Stable |
+| `BrainRunService.run_active_brains(snapshot, control, blackboard)` → `list[BrainDecisionProposal]` | live_cycle, shadow, verify | Stable |
+| `BrainConfigValidator.validate(entry)` → `ValidationResult` | BrainFactory | Stable |
 | `ADAPTER_REGISTRY` dict format: `{registry_key: adapter_class}` | BrainFactory | Stable |
 
 ## Verification
+
 ```bash
+# All brain tests
 python -m pytest tests/ -k "brain" -q
+
+# Validate all brain configs
+python scripts/repair_brain_configs.py --validate-only
+
+# Verify all brains produce varying signals
 python scripts/verify_all_brains.py
+
+# Check for brain alerts during shadow run
+python -m apps.engine.main_v9_shadow --symbol XAUUSDc --cycles 50 2>&1 | grep brain_alert
 ```

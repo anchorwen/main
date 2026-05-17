@@ -20,7 +20,7 @@ from typing import Any
 # ── Contract group definitions ────────────────────────────────────────────
 
 # Group 1: Trained on survival-barrier contract (2.0×ATR SL, 3.5×ATR TP, 12-bar M5)
-BARRIER_GROUP = {
+BARRIER_GROUP: dict[str, Any] = {
     "name": "barrier_12bar",
     "horizon_cycles": 12,
     "brain_types": {
@@ -36,7 +36,7 @@ BARRIER_GROUP = {
 
 # Group 2a: Micro M5 (5-bar, 1.5×ATR SL, 2.5×ATR TP, ~25 min)
 # Uses Union Ensemble: any brain detecting TP → signal, maximizing TP recall
-MICRO_GROUP = {
+MICRO_GROUP: dict[str, Any] = {
     "name": "micro_3bar",
     "horizon_cycles": 8,
     "brain_types": {
@@ -51,7 +51,7 @@ MICRO_GROUP = {
 
 # Group 2b: Micro M15 (5-bar M15, 1.5×ATR SL, 2.5×ATR TP, ~75 min)
 # Uses Union Ensemble: XGBoost+Transformer union — TP=46% (vs 21% solo XGBoost)
-MICRO_M15_GROUP = {
+MICRO_M15_GROUP: dict[str, Any] = {
     "name": "micro_m15",
     "horizon_cycles": 5,
     "brain_types": {
@@ -65,7 +65,7 @@ MICRO_M15_GROUP = {
 
 # Group 2c: Micro H1 (4-bar H1, 1.8×ATR SL, 2.8×ATR TP, ~4h)
 # Uses Union Ensemble: XGBoost+Transformer union
-MICRO_H1_GROUP = {
+MICRO_H1_GROUP: dict[str, Any] = {
     "name": "micro_h1",
     "horizon_cycles": 4,
     "brain_types": {
@@ -78,7 +78,7 @@ MICRO_H1_GROUP = {
 }
 
 # Group 2d: Micro H4 (3-bar H4, 2.0×ATR SL, 3.0×ATR TP, ~12h) — gate-only, no signals
-MICRO_H4_GROUP = {
+MICRO_H4_GROUP: dict[str, Any] = {
     "name": "micro_h4",
     "horizon_cycles": 3,
     "brain_types": {
@@ -90,7 +90,7 @@ MICRO_H4_GROUP = {
 }
 
 # Group 3: OU mean-reversion (dynamic half-life, no fixed horizon)
-ARB_GROUP = {
+ARB_GROUP: dict[str, Any] = {
     "name": "statarb_dynamic",
     "horizon_cycles": 0,  # dynamic, determined by OU half-life
     "brain_types": {
@@ -101,7 +101,7 @@ ARB_GROUP = {
 }
 
 # Group 3b: OU mean-reversion M15 (same brain type, wider timeframe)
-STATARB_M15_GROUP = {
+STATARB_M15_GROUP: dict[str, Any] = {
     "name": "statarb_m15",
     "horizon_cycles": 0,
     "brain_types": {
@@ -112,7 +112,7 @@ STATARB_M15_GROUP = {
 }
 
 # Group 4: D1 daily swing (5-bar D1, 2.0×ATR SL, 3.5×ATR TP, ~1 week)
-DAILY_SWING_GROUP = {
+DAILY_SWING_GROUP: dict[str, Any] = {
     "name": "daily_swing",
     "horizon_cycles": 1440,  # 5 D1 bars × 288 M5 cycles/day
     "brain_types": {"xgboost_v9", "lightgbm_v1"},
@@ -122,7 +122,7 @@ DAILY_SWING_GROUP = {
 }
 
 # Group 4b: M15 intraday swing (24-bar M15, 1.5×ATR SL, 3.0×ATR TP, ~6h)
-M15_SWING_GROUP = {
+M15_SWING_GROUP: dict[str, Any] = {
     "name": "m15_swing",
     "horizon_cycles": 72,  # 24 M15 bars × 3 M5 cycles/M15
     "brain_types": {"lightgbm_v1"},
@@ -132,7 +132,7 @@ M15_SWING_GROUP = {
 }
 
 # Group 4c: M30 intraday swing (12-bar M30, 1.5×ATR SL, 3.0×ATR TP, ~6h)
-M30_SWING_GROUP = {
+M30_SWING_GROUP: dict[str, Any] = {
     "name": "m30_swing",
     "horizon_cycles": 36,  # 12 M30 bars × 3 M5 cycles/M30 (M30≈6 M5 bars)
     "brain_types": {"xgboost_v9"},
@@ -142,7 +142,7 @@ M30_SWING_GROUP = {
 }
 
 # Group 4d: H1 daily swing (24-bar H1, 2.0×ATR SL, 3.5×ATR TP, ~1d)
-H1_SWING_GROUP = {
+H1_SWING_GROUP: dict[str, Any] = {
     "name": "h1_swing",
     "horizon_cycles": 288,  # 24 H1 bars × 12 M5 cycles/H1
     "brain_types": {"xgboost_v9"},
@@ -152,7 +152,7 @@ H1_SWING_GROUP = {
 }
 
 # Group 4e: H4 multi-day swing (18-bar H4, 2.0×ATR SL, 4.0×ATR TP, ~3d)
-H4_SWING_GROUP = {
+H4_SWING_GROUP: dict[str, Any] = {
     "name": "h4_swing",
     "horizon_cycles": 864,  # 18 H4 bars × 48 M5 cycles/H4
     "brain_types": {"xgboost_v9"},
@@ -161,7 +161,7 @@ H4_SWING_GROUP = {
     "description": "H4 multi-day swing — 18-bar (~3d) barrier, SL=2.0xATR, TP=4.0xATR",
 }
 
-ALL_GROUPS = (
+ALL_GROUPS: tuple[dict[str, Any], ...] = (
     BARRIER_GROUP,
     MICRO_GROUP,
     MICRO_M15_GROUP,
@@ -370,7 +370,7 @@ class ContractGroupConsensus:
         neutral_count = directions.count("neutral")
         if neutral_count > 0:
             neutral_ratio = neutral_count / total
-            raw_score *= max(0.50, 1.0 - neutral_ratio * 0.30)
+            raw_score *= max(0.35, 1.0 - neutral_ratio * 0.15)
 
         # Majority agreement boost (within-group, so it's meaningful)
         long_count = directions.count("long")

@@ -70,7 +70,20 @@ def build_brain_entry(
     }
 
 
-def register_brain(entry: dict[str, Any], output_dir: Path) -> Path:
+def register_brain(entry: dict[str, Any], output_dir: Path, *, skip_gate: bool = False) -> Path:
+    # Registration gate — block if any check fails (skip for tests / legacy)
+    if not skip_gate:
+        from core.deployment.brain_registration_gate import BrainRegistrationGate
+
+        gate = BrainRegistrationGate()
+        result = gate.validate(entry)
+        if not result.passed:
+            raise ValueError(
+                f"Registration gate rejected {entry.get('brain_id', '?')}: "
+                f"{len(result.failures)} check(s) failed — "
+                f"{', '.join(check for check, _ in result.failures)}"
+            )
+
     output_dir.mkdir(parents=True, exist_ok=True)
     brain_id = entry["brain_id"]
     out_path = output_dir / f"{brain_id}.json"

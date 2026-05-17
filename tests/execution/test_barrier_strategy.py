@@ -15,8 +15,7 @@ from tests.execution.conftest import make_proposal
 def barrier_brain():
     """Create a minimal brain entry for barrier strategy."""
     adapter = MagicMock()
-    adapter.infer.return_value = {"raw_output": [0.85, 0.15]}
-    adapter.get_signal.return_value = make_proposal(
+    adapter.inference.return_value = make_proposal(
         brain_id="onnx_v9_01",
         up_probability=0.85,
         down_probability=0.15,
@@ -38,7 +37,7 @@ class TestBarrierStrategyInference:
             mid_price=2000.0,
         )
         assert len(proposals) == 1
-        barrier_brain["adapter"].infer.assert_called_once_with([1.0] * 40)
+        barrier_brain["adapter"].inference.assert_called_once_with([1.0] * 40)
 
     def test_brain_id_stamped_on_proposal(self, barrier_brain):
         strat = BarrierStrategy(
@@ -50,7 +49,7 @@ class TestBarrierStrategyInference:
 
     def test_adapter_exception_skipped(self, barrier_brain):
         fail_adapter = MagicMock()
-        fail_adapter.infer.side_effect = RuntimeError("crash")
+        fail_adapter.inference.side_effect = RuntimeError("crash")
         brains = [
             {"adapter": fail_adapter, "brain_id": "crash_brain"},
             barrier_brain,

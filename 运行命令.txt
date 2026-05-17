@@ -1,0 +1,90 @@
+以下是所有新创建/更新的脚本的运行命令：
+0、从现在起，你只需要记住 3 条命令：
+python main.py live        启动实盘（bridge + intent 双进程）
+python main.py daily-ops   每日运维（含 online feedback）
+python main.py status      快速诊断
+一、一键运行主程序：python main.py live
+二、面板启动方式：python apps/monitor/live_trading_dashboard.py --port 8080
+      打开 http://127.0.0.1:8080 即可看到面板。
+三、bridge_supervisor.py 是 MT5 执行层的心跳守护进程。它与主程序是生产者-消费者关系，必须同时运行：
+      python scripts/bridge_supervisor.py
+
+
+
+## Step 1: 实盘链路加固
+
+```powershell
+# 1.1 堆栈诊断（检查 dispatch/gate/receipt/flag 全链路状态）
+cd D:\future
+python scripts/live_stack_diagnostic.py --base-dir data --symbol XAUUSDc
+
+# 1.2 自动健康巡检（含断路器恢复）
+python scripts/live_auto_healthcheck.py --base-dir data --symbol XAUUSDc
+
+# 1.3 微闸口检查器（点差/滑点检查）
+python scripts/live_micro_rollout_gate.py --base-dir data --symbol XAUUSDc --spread-threshold-pips 30
+```
+
+## Step 2: 数据质量报告
+
+```powershell
+# 2.1 完整性报告（统计级）
+python scripts/live_data_quality_report.py --base-dir data --mode summary
+
+# 2.2 条目级交叉校验
+python scripts/live_data_quality_report.py --base-dir data --mode entries
+
+# 2.3 文件级完整性检查
+python scripts/live_data_quality_report.py --base-dir data --mode files
+
+# 2.4 按日期过滤
+python scripts/live_data_quality_report.py --base-dir data --mode summary --date 2026-04-30
+```
+
+## Step 3: 每日复盘
+
+```powershell
+# 3.1 生成日报（当天，不含 P&L 和进化计划）
+cd D:\future
+python scripts/live_daily_recap.py --base-dir data --symbol XAUUSDc
+
+# 3.2 指定日期 + 输出到文件
+python scripts/live_daily_recap.py --base-dir data --symbol XAUUSDc --date 2026-04-30 --output data/reports/recap.json
+
+# 3.3 含 P&L 快照 + 自动更新进化计划
+python scripts/live_daily_recap.py --base-dir data --symbol XAUUSDc `
+  --mt5-terminal-path "C:\Program Files\MetaTrader 5\terminal64.exe" `
+  --evolution-plan D:\future\EVOLUTION_PLAN.md `
+  --output data/reports/recap.json
+```面板/仪表盘命令
+两个面板都可以正常使用：
+
+1. Web Dashboard（实时 HTML）
+
+python apps/monitor/live_trading_dashboard.py
+python apps/monitor/live_trading_dashboard.py --port 8080 --base-dir data
+打开浏览器访问 http://localhost:8080，10 秒自动刷新，展示：
+
+系统状态（ACTIVE/BLOCKED/IDLE）、Dispatch Flag
+SLO 合规、风险闸门
+Brain Panel（16 个模型信号、共识方向）
+当前持仓（MT5 实时数据）
+实时决策、最近交易、告警历史
+2. 文本仪表盘（CLI）
+
+python main.py dashboard                    # 今日完整仪表盘
+python main.py dashboard --date 2026-05-08  # 指定日期
+3. 快速诊断
+
+python main.py status                       # 健康检查 + MT5诊断 + Journal统计 + 治理进度
+输出 JSON：liveness、readiness、MT5 持仓/账户、journal 统计、brain governance 状态。
+
+4. 每日运营报告
+
+python scripts/daily_ops.py                 # 完整每日运营面板
+python scripts/live_daily_recap.py          # 每日复盘报告
+当前运行命令
+
+python main.py live                         # 启动实盘（已运行中）
+开盘后（周日 22:00 UTC，北京时间周一 06:00），系统会自动从 weekend 切换到 sunday_open → asian_low → london，恢复正常交易周期。
+
