@@ -147,7 +147,13 @@ class FeatureService:
                                 )
                                 _stale = True
                         except Exception:
-                            pass  # freshness check is best-effort
+                            logging.warning(
+                                "FeatureService freshness check failed for %s — "
+                                "forcing live recompute to avoid stale cache",
+                                symbol,
+                                exc_info=True,
+                            )
+                            _stale = True
                     if not _stale:
                         if self._adapter is not None:
                             return self._adapter.build_model_input(record.values)[0]
@@ -208,6 +214,22 @@ class FeatureService:
                 )
 
         # ── Tier 3: Zero-vector stub ──
+        logging.warning(
+            "FeatureService returned ZERO feature vector for symbol=%s — "
+            "both LocalFeatureStore and live MT5 computation failed. "
+            "Downstream ML brains will receive constant input → FROZEN confidence.",
+            symbol,
+        )
+        try:
+            from core.deployment.brain_alert import emit_brain_alert
+
+            emit_brain_alert(
+                "feature_service",
+                "zero_feature_vector_fallback",
+                {"symbol": symbol, "n_features": n_features, "tier": 3},
+            )
+        except Exception:
+            pass
         return np.zeros(n_features, dtype=np.float32)
 
 

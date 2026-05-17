@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-05-17T06:31:08Z
+> **自动生成**: 2026-05-17T07:16:12Z
 
 ## Package-Level Dependencies
 
@@ -203,7 +203,7 @@
 ### `core/features/`
 
 - `data_augmentation.py` → (无内部依赖)
-- `feature_service.py` → `apps.engine.runtime_loop`, `core.contracts.ids`, `core.execution.pre_trade_guards`, `core.features.schemas.v9_institutional_schema`, `core.features.schemas.v9_micro_schema`, `core.features.store_contracts`
+- `feature_service.py` → `apps.engine.runtime_loop`, `core.contracts.ids`, `core.deployment.brain_alert`, `core.execution.pre_trade_guards`, `core.features.schemas.v9_institutional_schema`, `core.features.schemas.v9_micro_schema`, `core.features.store_contracts`
 - `feature_snapshot.py` → `core.features.store_contracts`
 - `local_feature_store.py` → `core.features.store_contracts`
 - `rolling_normalizer.py` → (无内部依赖)

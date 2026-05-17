@@ -77,6 +77,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/execution/meta_signal_filter.py",
         "core/execution/strategy_budget.py",
         "core/execution/market_efficiency.py",
+        "core/execution/dynamic_sl_tp.py",
     ],
     "execution_orders": [
         "core/execution/order_state_machine.py",

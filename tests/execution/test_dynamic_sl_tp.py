@@ -21,25 +21,33 @@ class TestComputeDynamicSLTP:
         assert result.tp_atr_mult == pytest.approx(3.5, rel=0.01)
         assert result.vol_ratio == pytest.approx(1.0, rel=0.01)
 
-    def test_high_vol_shrinks_multipliers(self):
-        """current_atr > ref_atr → effective multipliers shrink."""
+    def test_high_vol_keeps_constant_multiplier(self):
+        """current_atr > ref_atr → multiplier stays constant, distance scales with ATR."""
         result = compute_dynamic_sl_tp(
             base_sl_mult=2.0, base_tp_mult=3.5, current_atr=10.0, ref_atr=5.0
         )
-        # vol_ratio = 2.0 → mult = base / 2.0
-        assert result.sl_atr_mult < 2.0
-        assert result.tp_atr_mult < 3.5
+        # Multiplier stays at base (not shrunk), distance proportional to current ATR
+        assert result.sl_atr_mult == pytest.approx(2.0, rel=0.01)
+        assert result.tp_atr_mult == pytest.approx(3.5, rel=0.01)
         assert result.vol_ratio == pytest.approx(2.0, rel=0.01)
+        assert result.sl_distance == pytest.approx(20.0, rel=0.01)  # 2.0 × 10
+        assert result.tp_distance == pytest.approx(35.0, rel=0.01)  # 3.5 × 10
 
-    def test_low_vol_expands_multipliers(self):
-        """current_atr < ref_atr → effective multipliers expand, capped by max."""
+    def test_low_vol_keeps_constant_multiplier(self):
+        """current_atr < ref_atr → multiplier stays constant, distance shrinks with ATR.
+
+        At ATR=2.5: SL=2.0×2.5=5.0 (still 2 ATR). The multiplier doesn't expand because
+        ATR itself defines the risk distance — lower ATR already means tighter stops.
+        """
         result = compute_dynamic_sl_tp(
             base_sl_mult=2.0, base_tp_mult=3.5, current_atr=2.5, ref_atr=5.0
         )
-        # vol_ratio = 0.5 → mult = base / 0.5 = 4.0/7.0, clamped to [1.2, 3.0]/[1.2, 3.5]
-        assert result.sl_atr_mult == pytest.approx(3.0, rel=0.01)  # capped at max_sl_mult
-        assert result.tp_atr_mult == pytest.approx(3.5, rel=0.01)  # capped at max_tp_mult
+        # Multiplier stays at base, distance is proportional to current ATR
+        assert result.sl_atr_mult == pytest.approx(2.0, rel=0.01)
+        assert result.tp_atr_mult == pytest.approx(3.5, rel=0.01)
         assert result.vol_ratio == pytest.approx(0.5, rel=0.01)
+        assert result.sl_distance == pytest.approx(5.0, rel=0.01)  # 2.0 × 2.5
+        assert result.tp_distance == pytest.approx(8.75, rel=0.01)  # 3.5 × 2.5
 
     def test_zero_atr_falls_back_to_ref(self):
         """current_atr=0 → uses ref_atr, vol_ratio=1.0."""
@@ -57,30 +65,31 @@ class TestComputeDynamicSLTP:
         assert result.vol_ratio == pytest.approx(1.0)
 
     def test_multiplier_clamping_min(self):
-        """Effective multiplier never goes below min_sl_mult."""
+        """Effective multiplier never goes below min_sl_mult (safety floor)."""
         result = compute_dynamic_sl_tp(
-            base_sl_mult=2.0,
-            base_tp_mult=3.5,
-            current_atr=50.0,
+            base_sl_mult=0.1,  # Below min_sl_mult default (1.2)
+            base_tp_mult=0.3,
+            current_atr=5.0,
             ref_atr=5.0,
             min_sl_mult=0.5,
         )
-        # vol_ratio = 10.0 → mult = 2.0/10 = 0.2 → clamped to 0.5
+        # base 0.1 → clamped to min_sl_mult 0.5
         assert result.sl_atr_mult == pytest.approx(0.5)
         assert result.tp_atr_mult >= 0.5
 
     def test_multiplier_clamping_max(self):
-        """Effective multiplier never exceeds max_sl_mult."""
+        """Both SL and TP multipliers respect their respective ceilings."""
         result = compute_dynamic_sl_tp(
-            base_sl_mult=2.0,
-            base_tp_mult=3.5,
-            current_atr=0.5,
+            base_sl_mult=5.0,  # Above max_sl_mult
+            base_tp_mult=8.0,  # Above max_tp_mult
+            current_atr=5.0,
             ref_atr=5.0,
             max_sl_mult=4.0,
+            max_tp_mult=6.0,
         )
-        # vol_ratio = 0.1 → mult = 2.0/0.1 = 20 → clamped to 4.0
+        # base 5.0 → clamped to max_sl_mult 4.0; base 8.0 → clamped to max_tp_mult 6.0
         assert result.sl_atr_mult == pytest.approx(4.0)
-        assert result.tp_atr_mult <= 4.0
+        assert result.tp_atr_mult == pytest.approx(6.0)
 
     def test_hard_sl_is_sl_times_ratio(self):
         """hard_sl_distance = sl_distance * hard_sl_ratio."""

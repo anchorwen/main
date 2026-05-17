@@ -586,6 +586,61 @@
 - **Prevention**: Two-tier fallback. If both missing, _num_features stays None (skip check) instead of defaulting to hardcoded 9.
 - **Dependents Checked**: ruff (pass), mypy (pass), pytest (2617 passed), 7 models validated end-to-end
 
+### FIX-20260517-006
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: contracts-training
+- **Files**: `core/contracts/training/label_contract.py`, `core/training/build_labels.py`
+- **Description**: Friction dead-band: `apply_friction_deadband()` prevents phantom inverted signals from subtractive friction (catastrophic for cent accounts). `build_regression_labels()` + `build_vol_scaled_regression_labels()`. `LabelSpec`: vol_scale_target, output_unit, reg_huber, abs_target weighting. `slippage_pips` 0.5→1.0.
+- **Root Cause**: RC-06 — contract-violation: friction subtraction produced inverted signals when raw signal < friction.
+- **Prevention**: Dead-band clamps to zero when |signal| < friction, preserving signal sign.
+- **Dependents Checked**: ruff (pass), mypy (pass)
+
+### FIX-20260517-007
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: risk-portfolio
+- **Files**: `core/risk/capital_allocator.py`
+- **Description**: Capacity-aware position sizing with two defense lines — max_concentration (50% default) + min_lot_size gating (prevents sub-minimum-lot micro-orders). Proportional allocation from DynamicBrainWeighter weights.
+- **Root Cause**: RC-12 — missing-feature: no capital allocation logic existed; all positions were equal-sized.
+- **Prevention**: CapitalAllocator enforces concentration + lot constraints at position dispatch time.
+- **Dependents Checked**: ruff (pass), mypy (pass)
+
+### FIX-20260517-008
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: protocol-parliament
+- **Files**: `core/protocols/parliament_rules.py`
+- **Description**: Added explicit type annotations (dict[str, Any]) to BARRIER_GROUP, MICRO_GROUP, and all contract group dicts for mypy strict compliance.
+- **Root Cause**: RC-02 — type-confusion: untyped dicts failed mypy strict checks.
+- **Prevention**: All contract group dicts now have explicit type annotations.
+- **Dependents Checked**: ruff (pass), mypy (pass)
+
+### FIX-20260517-009
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: brains-adapters, features-service
+- **Files**: `core/features/feature_service.py`, `core/brains/adapters/lightgbm_brain_adapter.py`, `core/brains/adapters/xgboost_brain_adapter.py`, `core/brains/adapters/v9_onnx_brain_adapter.py`, `core/brains/adapters/online_learner_adapter.py`
+- **Description**: Zero-vector frozen-confidence defense. FeatureService Tier 3 now emits brain_alert before returning np.zeros() instead of silent fallback. Cache freshness check exception handler forces `_stale=True` instead of silently swallowing. Zero-vector guard added to LightGBM/XGBoost/V9_ONNX/OnlineLearner `infer()` — detects all-zero input (np.max(np.abs(vec))<1e-10) and returns neutral fallback with explicit `fallback_reason="zero_feature_vector"`.
+- **Root Cause**: RC-06 — contract-violation: Tier 3 silently returned np.zeros(), ML models produce constant confidence from zero input.
+- **Prevention**: brain_alert on zero-vector fallback in FeatureService. Zero-vector detection in all 4 adapters with neutral fallback + reason tag.
+- **Dependents Checked**: ruff (pass), mypy (pass), pytest (2617 passed)
+
+### FIX-20260517-010
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-guards
+- **Files**: `core/execution/dynamic_sl_tp.py`, `tests/execution/test_dynamic_sl_tp.py`
+- **Description**: Fixed inverse-volatility SL/TP formula bug. Old formula: `sl_mult = base_sl_mult / vol_ratio` mathematically cancelled to fixed distance regardless of current ATR — at ATR=8, SL shrank to 1.25 ATR (noise-triggered). New formula: `sl_mult = base_sl_mult` (direct multiplication), `sl_distance = sl_mult * current_atr` — SL always spans exactly base_sl_mult ATRs regardless of vol regime. Also updated `ref_atr` default from 5.0 to 7.0 (current XAUUSD M5 ATR). Updated 4 unit tests to match corrected behavior.
+- **Root Cause**: RC-05 — boundary-error: inverse-volatility formula treated vol_ratio as a shrink/expand factor on multipliers, but ATR multiplication already encodes vol in the distance.
+- **Prevention**: Multipliers stay at base values, allowing ATR itself to scale SL/TP distances proportionally. Clamping (min 1.2, max 3.0) still provides safety bounds.
+- **Dependents Checked**: ruff (pass), mypy (pass), pytest (12/12 SL/TP tests passed), full suite pending
+
 <!--
   Template for new fix entries — copy to the bottom of this file:
   ### FIX-YYYYMMDD-NNN

@@ -33,7 +33,7 @@ def compute_dynamic_sl_tp(
     base_tp_mult: float,
     *,
     current_atr: float,
-    ref_atr: float = 5.0,
+    ref_atr: float = 7.0,
     hard_sl_ratio: float = 1.5,
     min_sl_mult: float = 1.2,
     max_sl_mult: float = 3.0,
@@ -61,9 +61,12 @@ def compute_dynamic_sl_tp(
 
     vol_ratio = current_atr / ref_atr
 
-    # Scale multipliers inversely to volatility → constant risk budget
-    sl_mult = base_sl_mult / vol_ratio
-    tp_mult = base_tp_mult / vol_ratio
+    # Direct ATR multiplication — SL/TP scale proportionally with volatility.
+    # At ATR=5: SL=2.0×5=10.0 (2.0 ATR). At ATR=8: SL=2.0×8=16.0 (still 2.0 ATR).
+    # Previous inverse formula (base_sl_mult / vol_ratio) mathematically cancelled
+    # to a fixed distance, causing SL to shrink to ~1.25 ATR in high vol → noise-triggered.
+    sl_mult = base_sl_mult
+    tp_mult = base_tp_mult
 
     # Clamp to reasonable bounds (SL and TP have separate ceilings)
     if max_tp_mult is None:

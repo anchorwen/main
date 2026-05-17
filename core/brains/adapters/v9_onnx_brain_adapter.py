@@ -104,6 +104,25 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
         """
         started = perf_counter()
 
+        # ── Zero-vector guard — catches silent FeatureService fallback ──
+        vec_arr = np.asarray(feature_vector, dtype=np.float64)
+        if feature_vector.size > 0 and np.max(np.abs(vec_arr)) < 1e-10:
+            emit_brain_alert(
+                self._brain_entry.get("brain_id", "unknown"),
+                "zero_feature_vector",
+                {"feature_count": feature_vector.shape[0]},
+            )
+            return {
+                "out_dir": np.array([0.5, 0.5, 0.5]),
+                "out_risk": 0.5,
+                "out_vol": 0.5,
+                "raw_score": 0.0,
+                "feature_count": feature_vector.shape[0],
+                "runtime_ms": 0.0,
+                "fallback": True,
+                "fallback_reason": "zero_feature_vector",
+            }
+
         # Reshape flat features to (1, N) — caller has already normalized
         if feature_vector.size == 0:
             return {

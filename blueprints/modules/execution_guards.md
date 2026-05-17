@@ -42,6 +42,7 @@ Market data → detect_session() → check_var() → compute_position_size()
 | FIX-20260516-005 | 2026-05-16 | cursor-agent | — | check_feature_freshness() rejected negative age (future timestamps). Was: `age <= max_age` always True for future dates. Now: explicit `age < 0 → fresh:False, reason:future_timestamp` guard. | contract-violation |
 | FIX-20260517-002 | 2026-05-17 | cursor-agent | — | Route C+ Protocol 2+3: Platt scaling calibration (smooth sigmoid, coef=2.44/intercept=-0.84) + conformal prediction thresholding (80th pctile of 500-pred window, 0.50 floor). MetaSignalFilter extended with calibrator_path/conformal_mode/window/percentile/min_threshold. Fixed P(class=1) extraction bug. | missing-feature |
 | FIX-20260517-004 | 2026-05-17 | cursor-agent | — | MetaSignalFilter DevOps hardening: state persistence (save_state/load_state JSON), time-decayed conformal (14d max_age_days), Platt safety clamp (eps 1e-4 + max/min output clamp). Integrated into live_intent_loop. | state-leak, boundary-error |
+| FIX-20260517-010 | 2026-05-17 | cursor-agent | — | Fixed inverse-volatility SL/TP formula: `sl_mult = base_sl_mult / vol_ratio` mathematically cancelled to fixed distance regardless of ATR, causing SL to shrink to 1.25 ATR in high vol (noise-triggered). Changed to direct multiplication: `sl_mult = base_sl_mult`, `sl_distance = sl_mult * current_atr` — SL always spans exactly base_sl_mult ATRs. Updated ref_atr from 5.0 to 7.0 (current XAUUSD M5). | RC-05 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

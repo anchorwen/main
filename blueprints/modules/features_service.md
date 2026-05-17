@@ -50,6 +50,7 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 | FIX-20260516-005 | 2026-05-16 | cursor-agent | — | _stale=True dead code: pass was no-op, execution fell to raw vector return from same stale record. Fixed by inverting to `if not _stale:` guard with early return, so stale records genuinely fall through to Tier 2/3. | contract-violation |
+| FIX-20260517-009 | 2026-05-17 | cursor-agent | — | Zero-vector frozen-confidence defense: Tier 3 now emits brain_alert before returning np.zeros() instead of silent fallback. Cache freshness check exception handler no longer silently swallows errors — now logs warning and forces live recompute (_stale=True) instead of accepting potentially stale cache. | contract-violation |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

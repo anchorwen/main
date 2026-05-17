@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-17T06:31:08Z
+> **自动生成**: 2026-05-17T07:16:12Z
 > **扫描模块数**: 423
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -72,12 +72,12 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `base_adapter.py` | ✅ active | BaseBrainAdapter | 12 | 165 | — | |
-| `lightgbm_brain_adapter.py` | ✅ active | LightGBMBrainAdapter | 7 | 232 | — | |
-| `online_learner_adapter.py` | ✅ active | OnlineLearnerAdapter | 18 | 597 | — | |
+| `lightgbm_brain_adapter.py` | ✅ active | LightGBMBrainAdapter | 7 | 248 | — | |
+| `online_learner_adapter.py` | ✅ active | OnlineLearnerAdapter | 18 | 615 | — | |
 | `params_brain_adapter.py` | ✅ active | ParamsBrainAdapter | 9 | 306 | — | |
 | `transformer_brain_adapter.py` | ✅ active | TransformerBrainAdapter | 10 | 317 | — | |
-| `v9_onnx_brain_adapter.py` | ✅ active | V9OnnxBrainAdapter | 10 | 350 | — | |
-| `xgboost_brain_adapter.py` | ✅ active | XGBoostBrainAdapter | 7 | 236 | — | |
+| `v9_onnx_brain_adapter.py` | ✅ active | V9OnnxBrainAdapter | 10 | 369 | — | |
+| `xgboost_brain_adapter.py` | ✅ active | XGBoostBrainAdapter | 7 | 252 | — | |
 
 ## core/brains/services
 
@@ -193,7 +193,7 @@
 | `barrier_strategy.py` | ✅ active | BarrierStrategy | 1 | 60 | — | |
 | `broker_adapter.py` | ✅ active | BrokerAdapter | 9 | 68 | — | |
 | `capital_allocator.py` | ✅ active | AllocationDecision, GroupCorrelationTracker, CapitalAllocator | 9 | 464 | — | |
-| `dynamic_sl_tp.py` | ✅ active | DynamicSLTP | 2 | 124 | — | |
+| `dynamic_sl_tp.py` | ✅ active | DynamicSLTP | 2 | 127 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 161 | — | |
 | `execution_queue.py` | ✅ active | QueuedDecision, DispatchResult, ExecutionQueue | 4 | 300 | — | |
 | `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 7 | 369 | — | |
@@ -233,7 +233,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `data_augmentation.py` | ✅ active | — | 4 | 141 | — | |
-| `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 14 | 253 | — | |
+| `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 14 | 275 | — | |
 | `feature_snapshot.py` | ✅ active | StoredFeatureSnapshot | 2 | 33 | — | |
 | `local_feature_store.py` | ✅ active | LocalFeatureStore | 17 | 251 | — | |
 | `rolling_normalizer.py` | ✅ active | RollingNormalizer | 15 | 231 | — | |
@@ -498,7 +498,7 @@
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 453 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 454 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
 | `daily_ops.py` | ✅ active | — | 24 | 1034 | — | |

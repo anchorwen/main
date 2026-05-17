@@ -108,7 +108,23 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
             return {"raw_score": 0.0, "feature_count": len(feature_vector), "fallback": True}
 
         started = perf_counter()
+
+        # ── Zero-vector guard — catches silent FeatureService fallback ──
         n_cols = feature_vector.shape[0] if feature_vector.ndim == 1 else feature_vector.shape[1]
+        vec_arr = np.asarray(feature_vector, dtype=np.float64)
+        if np.max(np.abs(vec_arr)) < 1e-10:
+            emit_brain_alert(
+                self._brain_entry.get("brain_id", "unknown"),
+                "zero_feature_vector",
+                {"feature_count": n_cols},
+            )
+            return {
+                "raw_score": 0.0,
+                "feature_count": n_cols,
+                "runtime_ms": 0.0,
+                "fallback": True,
+                "fallback_reason": "zero_feature_vector",
+            }
 
         # Guard: model expects _num_features features.  Mismatched input
         # (e.g. 9-dim single-bar when model was trained on 288-dim flat

@@ -123,6 +123,22 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
         if self._booster is None:
             return {"raw_score": 0.0, "feature_count": len(feature_vector), "fallback": True}
 
+        # ── Zero-vector guard — catches silent FeatureService fallback ──
+        vec_arr = np.asarray(feature_vector, dtype=np.float64)
+        if np.max(np.abs(vec_arr)) < 1e-10:
+            emit_brain_alert(
+                self._brain_entry.get("brain_id", "unknown"),
+                "zero_feature_vector",
+                {"feature_count": len(feature_vector)},
+            )
+            return {
+                "raw_score": 0.0,
+                "feature_count": len(feature_vector),
+                "runtime_ms": 0.0,
+                "fallback": True,
+                "fallback_reason": "zero_feature_vector",
+            }
+
         # ── Dimension guard — catches direct infer() calls that bypass run() ──
         n_cols = feature_vector.shape[0] if feature_vector.ndim == 1 else feature_vector.shape[1]
         if self._num_features and n_cols != self._num_features:

@@ -84,13 +84,15 @@ FIX-YYYYMMDD-NNN
 | FIX-20260517-006 | 2026-05-17 | contracts-training | Friction dead-band: apply_friction_deadband() prevents phantom inverted signals from subtractive friction (catastrophic for cent accounts). build_regression_labels() + build_vol_scaled_regression_labels(). LabelSpec: vol_scale_target, output_unit, reg_huber, abs_target weighting. slippage_pips 0.5→1.0. | RC-06 |
 | FIX-20260517-007 | 2026-05-17 | risk-portfolio | CapitalAllocator: capacity-aware position sizing with two defense lines — max_concentration (50% default) + min_lot_size gating (prevents sub-minimum-lot micro-orders). Proportional allocation from DynamicBrainWeighter weights. | RC-12 |
 | FIX-20260517-008 | 2026-05-17 | protocol-parliament | Added explicit type annotations (dict[str, Any]) to BARRIER_GROUP, MICRO_GROUP, and all contract group dicts for mypy strict compliance | RC-02 |
+| FIX-20260517-009 | 2026-05-17 | brains-adapters, features-service | Zero-vector frozen-confidence defense: FeatureService Tier 3 now emits brain_alert before returning np.zeros(). Cache freshness check exception handler forces _stale=True instead of silently swallowing. Zero-vector guard added to LightGBM/XGBoost/V9_ONNX/OnlineLearner infer() — detects all-zero input and returns neutral fallback with explicit fallback_reason. | RC-06 |
+| FIX-20260517-010 | 2026-05-17 | execution-guards | Fixed inverse-volatility SL/TP formula: `sl_mult = base_sl_mult / vol_ratio` cancelled to fixed distance → SL shrank to 1.25 ATR in high vol. Changed to direct multiplication `sl_mult = base_sl_mult` so SL always spans base_sl_mult ATRs. Updated ref_atr 5.0→7.0. | RC-05 |
 
 ---
 ## Fix Details by Year
 
 | Year | File | Count |
 |------|------|-------|
-| 2026 | [FIX_REGISTRY_2026.md](FIX_REGISTRY_2026.md) | 47 |
+| 2026 | [FIX_REGISTRY_2026.md](FIX_REGISTRY_2026.md) | 49 |
 
 > New fix entries should be added to the relevant year file.
 > Keep the Fix Index table above updated with every fix.

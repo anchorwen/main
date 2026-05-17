@@ -179,6 +179,24 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
     def infer(self, feature_vector: np.ndarray) -> dict[str, Any]:
         t0 = time.perf_counter()
 
+        # ── Zero-vector guard — catches silent FeatureService fallback ──
+        vec_arr = np.asarray(feature_vector, dtype=np.float64)
+        if np.max(np.abs(vec_arr)) < 1e-10:
+            emit_brain_alert(
+                self._brain_entry.get("brain_id", "unknown"),
+                "zero_feature_vector",
+                {"feature_count": len(feature_vector)},
+            )
+            return {
+                "probs": np.array([0.5, 0.5, 0.5], dtype=np.float32),
+                "classes": LABEL_CLASSES.copy(),
+                "runtime_ms": 0.0,
+                "fallback": True,
+                "fallback_reason": "zero_feature_vector",
+                "total_updates": self._total_updates,
+                "logits": None,
+            }
+
         if self._use_mlp and self._mlp is not None:
             x = np.asarray(feature_vector, dtype=np.float64)
             probs = self._mlp.forward_numpy(x)
