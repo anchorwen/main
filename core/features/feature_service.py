@@ -132,11 +132,12 @@ class FeatureService:
                         try:
                             from core.execution.pre_trade_guards import check_feature_freshness
 
-                            ts = (
-                                feature_ts.timestamp()
-                                if hasattr(feature_ts, "timestamp")
-                                else float(feature_ts)
-                            )
+                            if hasattr(feature_ts, "timestamp"):
+                                if feature_ts.tzinfo is None:
+                                    feature_ts = feature_ts.replace(tzinfo=UTC)
+                                ts = feature_ts.timestamp()
+                            else:
+                                ts = float(feature_ts)
                             freshness = check_feature_freshness(ts, max_age_seconds=300.0)
                             if not freshness["fresh"]:
                                 logging.warning(
@@ -180,22 +181,38 @@ class FeatureService:
                     try:
                         from core.features.store_contracts import FeatureRecord
 
-                        feat_names = _schema_feature_names(schema)
-                        persisted = {name: float(features.get(name, 0.0)) for name in feat_names}
-                        self._store.write_records(
-                            [
-                                FeatureRecord(
-                                    schema_name=self._store_schema_name,
-                                    schema_version="1.0",
-                                    symbol=symbol,
-                                    timeframe=self._store_timeframe,
-                                    event_time=datetime.now(UTC).replace(tzinfo=None),
-                                    values=persisted,
-                                    source="mt5_live",
-                                    ingested_at=datetime.now(UTC).replace(tzinfo=None),
-                                )
-                            ]
+                        resolved_version = self._store.resolve_version(
+                            schema_name=self._store_schema_name,
+                            symbol=symbol,
+                            timeframe=self._store_timeframe,
                         )
+                        if resolved_version is None:
+                            logging.warning(
+                                "FeatureService write-back skipped: no registered schema "
+                                "for name=%s symbol=%s timeframe=%s",
+                                self._store_schema_name,
+                                symbol,
+                                self._store_timeframe,
+                            )
+                        else:
+                            feat_names = _schema_feature_names(schema)
+                            persisted = {
+                                name: float(features.get(name, 0.0)) for name in feat_names
+                            }
+                            self._store.write_records(
+                                [
+                                    FeatureRecord(
+                                        schema_name=self._store_schema_name,
+                                        schema_version=resolved_version,
+                                        symbol=symbol,
+                                        timeframe=self._store_timeframe,
+                                        event_time=datetime.now(UTC).replace(tzinfo=None),
+                                        values=persisted,
+                                        source="mt5_live",
+                                        ingested_at=datetime.now(UTC).replace(tzinfo=None),
+                                    )
+                                ]
+                            )
                     except Exception:
                         logging.exception(
                             (

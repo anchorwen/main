@@ -3649,7 +3649,12 @@ def execute_live_cycle(
             if latest_record is not None:
                 ts = getattr(latest_record, "event_time", None)
                 if ts is not None:
-                    ts_unix = ts.timestamp() if hasattr(ts, "timestamp") else float(ts)
+                    if hasattr(ts, "timestamp"):
+                        if ts.tzinfo is None:
+                            ts = ts.replace(tzinfo=UTC)
+                        ts_unix = ts.timestamp()
+                    else:
+                        ts_unix = float(ts)
                     freshness = check_feature_freshness(ts_unix, max_age_seconds=300.0)
                     if not freshness["fresh"]:
                         print(

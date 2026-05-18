@@ -824,6 +824,23 @@
 - **Prevention**: All SL/TP modifications per position per cycle must be a single dispatch. PositionManager methods that need position context should accept explicit `ticket` parameter. Config paths must be computed from single base_dir root at startup, not rely on divergent defaults.
 - **Dependents Checked**: mypy (pass), ruff (pass), blueprint compliance (pass). 12 position_manager methods, 30+ call sites in live_cycle.py updated. Breakeven flag set BEFORE dispatch to prevent double-fire across restarts.
 
+### FIX-20260518-039
+- **Date**: 2026-05-18
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: features-service, runtime-live
+- **Files**: `core/features/feature_service.py`, `core/runtime/live_cycle.py`, `data/feature_store/records/symbol=XAUUSDc/timeframe=M5/features.jsonl`
+- **Description**: Feature store freshness check timezone normalization — two-part fix:
+
+  1. **Timezone normalization at `.timestamp()` call sites**: Feature store records from `mt5_live` source have naive UTC datetimes (no `+00:00` suffix), unlike `feature_store_warmer` records which include timezone. `_normalize_dt()` in `LocalFeatureStore` strips timezone to naive, but then `.timestamp()` on naive datetime interprets it as local time (UTC+8 on this machine) — adding exactly 28,800 seconds of artificial staleness. Fix: `ts.replace(tzinfo=UTC)` before `.timestamp()` at both freshness check sites (`feature_service.py` Tier 1 cache SLA check + `live_cycle.py` cycle-level `feature_stale_warning` JSON event).
+
+  2. **Feature store cleanup**: Filtered 36,341 future-timestamp records (source=`feature_store_warmer`, timestamps up to September 2026) from `features.jsonl` using atomic write pattern. Store reduced from 78,971 records (126MB) to 42,630 records (66MB). 0 remaining future-timestamp records.
+
+  Before the cleanup, future records (`September 2026`) had timestamps far ahead of `now`, producing negative age which passed the freshness check — masking the timezone bug entirely. After cleanup, the latest record timestamp appeared 8 hours old instead of 13 seconds old, exposing the timezone normalization gap.
+- **Root Cause**: RC-05 — boundary-error: Mixed timezone conventions in feature store (`mt5_live` = naive, `feature_store_warmer` = `+00:00`). `LocalFeatureStore._normalize_dt()` normalizes to naive UTC, but Python `.timestamp()` on naive datetime uses local time (UTC+8). The 8-hour offset was hidden by future-dated warmer records that produced negative `age` values in freshness check.
+- **Prevention**: All `.timestamp()` calls on feature store event_time values must guard against naive datetimes by adding UTC timezone (`ts.replace(tzinfo=UTC)`) first. Long-term: standardize feature store writer to always include timezone info.
+- **Dependents Checked**: mypy (pass), ruff (pass). Two freshness check sites fixed. Feature store validated with 0 remaining future records.
+
 ### FIX-20260518-037
 - **Date**: 2026-05-18
 - **Author**: cursor-agent
