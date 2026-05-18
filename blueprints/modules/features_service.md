@@ -50,6 +50,7 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260518-045 | 2026-05-18 | cursor-agent | — | Commit catch-up: local_feature_store.resolve_version() schema lookup (previously documented under FIX-20260518-024 but never committed due to pre-commit deadlock). | process-violation |
 | FIX-20260518-039 | 2026-05-18 | cursor-agent | — | Timezone normalization at freshness check: `feature_ts.timestamp()` on naive datetime interpreted as local time (UTC+8) — 28,800s artificial staleness. Fix: `feature_ts.replace(tzinfo=UTC)` before `.timestamp()` call. Affected FeatureService Tier 1 cache freshness SLA. | timezone-naive |
 | FIX-20260518-024 | 2026-05-18 | cursor-agent | — | Phase 1b: Hardcoded schema_version="1.0" → dynamic resolve_version() from registered schemas; write-back skipped gracefully when no matching schema exists. Added LocalFeatureStore.resolve_version(). | hardcoded-value |
 | FIX-20260516-005 | 2026-05-16 | cursor-agent | — | _stale=True dead code: pass was no-op, execution fell to raw vector return from same stale record. Fixed by inverting to `if not _stale:` guard with early return, so stale records genuinely fall through to Tier 2/3. | contract-violation |

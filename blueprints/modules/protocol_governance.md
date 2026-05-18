@@ -32,6 +32,9 @@ BrainQualityVerdict → GovernanceRuleEngine.evaluate() → lifecycle_action
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260517-015 | 2026-05-17 | cursor-agent | — | health_signal unblock: ShadowTracker.build_shadow_summary() health_signal changed from hardcoded "unknown" to "healthy". The old value blocked GovernanceRuleEngine auto-promotion rules (auto_promote_healthy requires health_signal=="healthy"), preventing candidate→probation transitions. | missing-feature |
+| FIX-20260517-017 | 2026-05-17 | cursor-agent | — | Auditor/Executor separation: GovernanceRuleEngine.execute_transitions(report) added as single Executor. BrainPromotionEvaluator reduced to pure Auditor (evaluate_all returns report, no state writes). scheduler_service wired as: evaluator.evaluate_all() → engine.execute_transitions(). | contract-violation |
+| Fix ID | Date | Author | Commit | Summary | Root Cause |
 | FIX-20260515-009 | 2026-05-15 | cursor-agent | — | Auto-shadow mechanism: ShadowTracker (counts candidate signals), auto_promote_shadow_to_probation rule (50+ signals→probation), auto_promote_probation_to_live rule (100+ signals+quality→live). New file core/governance/shadow_tracker.py. | missing-feature |
 | FIX-20260514-015 | 2026-05-14 | cursor-agent | a4a1005 | 大脑批量复活脚本：用修复后的BrainQualityEngine重评退休大脑，score≥10恢复为probation，score≥50恢复为live | contract-violation |
 | FIX-20260514-006 | 2026-05-14 | cursor-agent | a4a1005 | Add max 1 retirement/cycle safety valve, map marginal tier to frozen, add insufficient_data skip logging | missing-validation |

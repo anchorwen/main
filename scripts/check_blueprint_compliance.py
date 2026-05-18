@@ -67,10 +67,12 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
     "brains_services": ["core/brains/services/"],
     "brains_schema": ["core/brains/schema_versions.py", "core/brains/brain_registry.py"],
     "brains_validation": [
+        "core/deployment/startup_validator.py",
         "core/deployment/brain_config_validator.py",
         "core/deployment/brain_alert.py",
         "core/deployment/brain_registration_gate.py",
         "scripts/repair_brain_configs.py",
+        "scripts/validate_brain_before_deploy.py",
     ],
     "execution_guards": [
         "core/execution/pre_trade_guards.py",
@@ -88,6 +90,11 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/execution/micro_strategy.py",
         "core/execution/swing_strategy.py",
         "core/execution/statarb_strategy.py",
+        "core/execution/exit_watchdog.py",
+        "core/execution/live_order_sender.py",
+        "core/execution/mt5_broker_adapter.py",
+        "core/execution/execution_queue.py",
+        "scripts/mt5_bridge_worker.py",
     ],
     "execution_reentry": ["core/execution/reentry_guard.py"],
     "risk_policies": ["core/risk/risk_policies.py", "core/risk/risk_evaluation_service.py"],
@@ -102,7 +109,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/feedback/brain_quality_engine.py",
         "core/feedback/decision_scorer.py",
     ],
-    "feedback_pnl": ["core/feedback/brain_pnl_ledger.py"],
+    "feedback_pnl": ["core/feedback/brain_pnl_ledger.py", "scripts/shadow_pnl_loop.py"],
     "feedback_online": [
         "core/feedback/online_feedback_hook.py",
         "core/feedback/param_optimizer.py",
@@ -114,6 +121,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
     "contracts_ids": ["core/contracts/ids.py", "core/contracts/serialization/"],
     "contracts_training": ["core/contracts/training/"],
     "deployment_config": [
+        "core/constants.py",
         "core/deployment/environment_config.py",
         "core/deployment/service_container.py",
         "core/deployment/config_hot_reload.py",
@@ -121,6 +129,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/deployment/compliance_control_matrix.py",
         "core/deployment/deployment_executor.py",
         "core/deployment/deployment_plan.py",
+        "core/deployment/path_defaults.py",
         "core/deployment/scheduler_service.py",
         "core/deployment/atomic_file_writer.py",
     ],
@@ -147,6 +156,9 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/features/feature_snapshot.py",
         "core/features/computers/v9_micro_computer.py",
         "core/features/schemas/v9_micro_schema.py",
+    ],
+    "monitor_dashboard": [
+        "apps/monitor/live_trading_dashboard.py",
     ],
     "runtime_live": [
         "core/runtime/",

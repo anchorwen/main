@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-05-18T11:32:48Z
+> **自动生成**: 2026-05-18T16:07:46Z
 
 ## Package-Level Dependencies
 
@@ -468,6 +468,7 @@
 - `smoke_test_e2e.py` → `core.features.local_feature_store`, `core.features.store_contracts`, `core.feedback.brain_performance_tracker`, `core.governance.governance_service`, `core.ledger.storage.jsonl_ledger_store`, `scripts.daily_ops`, `scripts.feedback_loop`, `scripts.live_shadow_ensemble`, `scripts.shadow_decision_recorder`, `scripts.training.dataset_builder`, `scripts.training.governance_scheduler`
 - `trade_quality_report.py` → (无内部依赖)
 - `validate_blueprints.py` → (无内部依赖)
+- `validate_brain_before_deploy.py` → `core.brains.services.brain_factory`
 - `verify.py` → (无内部依赖)
 - `verify_all_brains.py` → `core.brains.services.brain_factory`
 

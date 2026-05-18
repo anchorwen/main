@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-18T11:32:48Z
-> **扫描模块数**: 426
+> **自动生成**: 2026-05-18T16:07:46Z
+> **扫描模块数**: 427
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -221,7 +221,7 @@
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill | 14 | 574 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
 | `quality_contracts.py` | ✅ active | ExecutionBenchmark, ExecutionQualityMetric, ImplementationShortfall, ExecutionQualityReport | 3 | 138 | — | |
-| `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 7 | 319 | — | |
+| `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 7 | 330 | — | |
 | `regime_gate.py` | ✅ active | RegimeModulation, OURegime2D, RegimeGate | 37 | 701 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 64 | — | |
@@ -431,7 +431,7 @@
 | `execution_gateway_router.py` | ✅ active | ExecutionGatewayRouter | 5 | 30 | — | |
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 23 | 5463 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 23 | 5474 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 141 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 12 | 314 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
@@ -501,7 +501,7 @@
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 454 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 466 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
 | `daily_ops.py` | ✅ active | — | 24 | 1034 | — | |
@@ -545,7 +545,8 @@
 | `shadow_pnl_loop.py` | ✅ active | — | 9 | 735 | — | |
 | `smoke_test_e2e.py` | ✅ active | — | 15 | 381 | — | |
 | `trade_quality_report.py` | ✅ active | — | 6 | 113 | — | |
-| `validate_blueprints.py` | ✅ active | — | 7 | 289 | — | |
+| `validate_blueprints.py` | ✅ active | — | 7 | 290 | — | |
+| `validate_brain_before_deploy.py` | ✅ active | — | 12 | 394 | — | |
 | `verify.py` | ✅ active | — | 9 | 341 | — | |
 | `verify_all_brains.py` | ✅ active | — | 1 | 91 | — | |
 

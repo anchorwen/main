@@ -61,6 +61,7 @@
 | **training** | contracts/training, numpy |
 | **state** | contracts |
 | **runtime/state** | contracts |
+| **monitor/dashboard** | feedback, governance, observability |
 | **deployment/config** | contracts |
 | **deployment/lifecycle** | contracts, state |
 

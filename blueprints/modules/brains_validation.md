@@ -115,8 +115,11 @@ Adapter fallback paths
 
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |--------|------|--------|--------|---------|------------|
+| FIX-20260518-025 | 2026-05-18 | cursor-agent | — | Phase 1a: Per-brain schema startup validator — validates each brain's feature_schema_id against registered schemas (Tier 1 cache) and implemented schemas (Tier 2 live compute). Drops individual mismatched brains instead of killing all strategy lines. | config-drift, contract-violation |
+| FIX-20260518-042 | 2026-05-18 | cursor-agent | — | Brain deployment quality gate: `validate_brain_before_deploy.py` catches direction bias (>90% one direction), NEUTRAL death (>80%), signal redundancy (>0.85 correlation), and output validity gaps BEFORE deployment. Fixed `_get_direction_and_confidence()` to read from `proposal.prediction` dict (direction_bias/confidence) instead of non-existent top-level attributes. Tested on all registered brains. | RC-09 |
 | FIX-20260516-009 | 2026-05-16 | cursor-agent | — | Added enable_onnxruntime:true to DeepResMLP_V2_New config (was missing, would cause stub mode). Deleted 4 stale configs for permanently retired brains. Registered 5 new shadow brains in governance_state. | RC-09 |
 | FIX-20260516-008 | 2026-05-16 | cursor-agent | — | BrainConfigValidator (7 checks at load time) + BrainAlert (structured JSON to stderr) + metadata completion + blueprint diagnostic manual | RC-09 |
+| FIX-20260517-012 | 2026-05-17 | cursor-agent | — | Magic uniqueness 放宽为 per-contract_group：同一策略线（barrier_12bar）的大脑共享同一 magic（如 90001），不再被 brain_registration_gate 拒绝。 | RC-06 |
 
 ## Cross-Module Contracts
 

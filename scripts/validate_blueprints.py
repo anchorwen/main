@@ -64,6 +64,7 @@ EXPECTED_MODULES = [
     "runtime_live",
     "runtime_state",
     "training",
+    "monitor_dashboard",
 ]
 
 FIX_ID_RE = re.compile(r"FIX-\d{8}-\d{3}")

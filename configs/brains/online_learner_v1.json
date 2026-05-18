@@ -5,7 +5,7 @@
   "brain_role": "alpha_brain",
   "model_version": "v2.0",
   "status": "shadow",
-  "vote_weight": 0.6,
+  "vote_weight": 1.2,
   "magic": 90009,
   "enable_onnxruntime": false,
   "artifact_path": "data/models/online_mlp_v2.json",

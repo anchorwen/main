@@ -1951,11 +1951,22 @@ def _reconcile_closed_positions(
                     close_time = getattr(last_deal, "time", None)
 
         side = str(open_entry.get("side", ""))
-        entry_price = None
-        detail = open_entry.get("detail", {})
-        if isinstance(detail, dict):
-            req = detail.get("request", {})
-            entry_price = req.get("price")
+        # ── Resolve entry price from MT5 deal history (actual fill) ──
+        entry_price: float | None = None
+        if deals:
+            entry_deals = [d for d in deals if getattr(d, "entry", -1) == 0]
+            if entry_deals:
+                _entry_fill = getattr(entry_deals[0], "price", None)
+                if _entry_fill is not None and _entry_fill > 0:
+                    entry_price = float(_entry_fill)
+        # Fallback: open journal entry's order request price
+        if entry_price is None:
+            detail = open_entry.get("detail", {})
+            if isinstance(detail, dict):
+                req = detail.get("request", {})
+                _req_price = req.get("price")
+                if _req_price is not None and _req_price > 0:
+                    entry_price = float(_req_price)
 
         pnl = None
         if entry_price is not None and close_price is not None and close_volume:
@@ -2366,7 +2377,7 @@ def _build_strategy_lines(
                 name="barrier_12bar",
                 magic=90001,
                 brain_types=BARRIER_GROUP["brain_types"],
-                base_volume=config.volume or _cfg("barrier_12bar", "base_volume", 0.01),
+                base_volume=_cfg("barrier_12bar", "base_volume", None) or config.volume or 0.01,
                 max_volume=_cfg("barrier_12bar", "max_volume", 0.05),
                 base_sl_atr_mult=_cfg("barrier_12bar", "sl", {}).get(
                     "base_atr_mult", config.sl_atr_mult
@@ -2405,7 +2416,7 @@ def _build_strategy_lines(
                 name="micro_3bar",
                 magic=90002,
                 brain_types=MICRO_GROUP["brain_types"],
-                base_volume=config.volume or _cfg("micro_3bar", "base_volume", 0.01),
+                base_volume=_cfg("micro_3bar", "base_volume", None) or config.volume or 0.01,
                 max_volume=_cfg("micro_3bar", "max_volume", 0.03),
                 base_sl_atr_mult=_cfg("micro_3bar", "sl", {}).get("base_atr_mult", 2.0),
                 base_tp_atr_mult=_cfg("micro_3bar", "tp", {}).get("base_atr_mult", 2.5),
@@ -2440,7 +2451,7 @@ def _build_strategy_lines(
                 name="micro_m15",
                 magic=90101,
                 brain_types=MICRO_M15_GROUP["brain_types"],
-                base_volume=config.volume or _cfg("micro_m15", "base_volume", 0.01),
+                base_volume=_cfg("micro_m15", "base_volume", None) or config.volume or 0.01,
                 max_volume=_cfg("micro_m15", "max_volume", 0.03),
                 base_sl_atr_mult=_cfg("micro_m15", "sl", {}).get("base_atr_mult", 1.5),
                 base_tp_atr_mult=_cfg("micro_m15", "tp", {}).get("base_atr_mult", 2.5),
@@ -2475,7 +2486,7 @@ def _build_strategy_lines(
                 name="micro_h1",
                 magic=90201,
                 brain_types=MICRO_H1_GROUP["brain_types"],
-                base_volume=config.volume or _cfg("micro_h1", "base_volume", 0.01),
+                base_volume=_cfg("micro_h1", "base_volume", None) or config.volume or 0.01,
                 max_volume=_cfg("micro_h1", "max_volume", 0.02),
                 base_sl_atr_mult=_cfg("micro_h1", "sl", {}).get("base_atr_mult", 1.8),
                 base_tp_atr_mult=_cfg("micro_h1", "tp", {}).get("base_atr_mult", 2.8),
@@ -2512,7 +2523,7 @@ def _build_strategy_lines(
                 name="statarb_dynamic",
                 magic=90003,
                 brain_types=ARB_GROUP["brain_types"],
-                base_volume=config.volume or _cfg("statarb_dynamic", "base_volume", 0.01),
+                base_volume=_cfg("statarb_dynamic", "base_volume", None) or config.volume or 0.01,
                 max_volume=_cfg("statarb_dynamic", "max_volume", 0.03),
                 base_sl_atr_mult=_cfg("statarb_dynamic", "sl", {}).get("base_atr_mult", 1.5),
                 base_tp_atr_mult=_cfg("statarb_dynamic", "tp", {}).get("base_atr_mult", 3.0),
@@ -2547,7 +2558,7 @@ def _build_strategy_lines(
                 name="statarb_m15",
                 magic=90103,
                 brain_types=STATARB_M15_GROUP["brain_types"],
-                base_volume=config.volume or _cfg("statarb_m15", "base_volume", 0.01),
+                base_volume=_cfg("statarb_m15", "base_volume", None) or config.volume or 0.01,
                 max_volume=_cfg("statarb_m15", "max_volume", 0.02),
                 base_sl_atr_mult=_cfg("statarb_m15", "sl", {}).get("base_atr_mult", 2.0),
                 base_tp_atr_mult=_cfg("statarb_m15", "tp", {}).get("base_atr_mult", 4.0),
@@ -2591,7 +2602,7 @@ def _build_strategy_lines(
                 name="daily_swing",
                 magic=90301,
                 brain_types=DAILY_SWING_GROUP["brain_types"],
-                base_volume=config.volume or _cfg("daily_swing", "base_volume", 0.01),
+                base_volume=_cfg("daily_swing", "base_volume", None) or config.volume or 0.01,
                 max_volume=_cfg("daily_swing", "max_volume", 0.03),
                 base_sl_atr_mult=_cfg("daily_swing", "sl", {}).get("base_atr_mult", 2.0),
                 base_tp_atr_mult=_cfg("daily_swing", "tp", {}).get("base_atr_mult", 3.5),
@@ -2624,7 +2635,7 @@ def _build_strategy_lines(
                 name="m15_swing",
                 magic=90310,
                 brain_types=M15_SWING_GROUP["brain_types"],
-                base_volume=config.volume or _cfg("m15_swing", "base_volume", 0.01),
+                base_volume=_cfg("m15_swing", "base_volume", None) or config.volume or 0.01,
                 max_volume=_cfg("m15_swing", "max_volume", 0.03),
                 base_sl_atr_mult=_cfg("m15_swing", "sl", {}).get("base_atr_mult", 1.5),
                 base_tp_atr_mult=_cfg("m15_swing", "tp", {}).get("base_atr_mult", 3.0),
@@ -2657,7 +2668,7 @@ def _build_strategy_lines(
                 name="m30_swing",
                 magic=90320,
                 brain_types=M30_SWING_GROUP["brain_types"],
-                base_volume=config.volume or _cfg("m30_swing", "base_volume", 0.01),
+                base_volume=_cfg("m30_swing", "base_volume", None) or config.volume or 0.01,
                 max_volume=_cfg("m30_swing", "max_volume", 0.03),
                 base_sl_atr_mult=_cfg("m30_swing", "sl", {}).get("base_atr_mult", 1.5),
                 base_tp_atr_mult=_cfg("m30_swing", "tp", {}).get("base_atr_mult", 3.0),
@@ -2690,7 +2701,7 @@ def _build_strategy_lines(
                 name="h1_swing",
                 magic=90330,
                 brain_types=H1_SWING_GROUP["brain_types"],
-                base_volume=config.volume or _cfg("h1_swing", "base_volume", 0.01),
+                base_volume=_cfg("h1_swing", "base_volume", None) or config.volume or 0.01,
                 max_volume=_cfg("h1_swing", "max_volume", 0.02),
                 base_sl_atr_mult=_cfg("h1_swing", "sl", {}).get("base_atr_mult", 2.0),
                 base_tp_atr_mult=_cfg("h1_swing", "tp", {}).get("base_atr_mult", 3.5),
@@ -2723,7 +2734,7 @@ def _build_strategy_lines(
                 name="h4_swing",
                 magic=90340,
                 brain_types=H4_SWING_GROUP["brain_types"],
-                base_volume=config.volume or _cfg("h4_swing", "base_volume", 0.01),
+                base_volume=_cfg("h4_swing", "base_volume", None) or config.volume or 0.01,
                 max_volume=_cfg("h4_swing", "max_volume", 0.02),
                 base_sl_atr_mult=_cfg("h4_swing", "sl", {}).get("base_atr_mult", 2.0),
                 base_tp_atr_mult=_cfg("h4_swing", "tp", {}).get("base_atr_mult", 4.0),

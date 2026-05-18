@@ -51,8 +51,14 @@ Web-based real-time monitoring dashboard for the live trading system. Single-fil
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |--------|------|--------|--------|---------|------------|
-| FIX-20260517-023 | 2026-05-17 | cursor-agent | — | Dashboard redesign: Chinese localization, layout restructure (5-row→4-row+tab), brain detail endpoint with sparkline, P0 fix shadow/live same file | missing-feature |
-| — | 2026-05-17 | cursor-agent | — | P0: Fixed `_serve_api_decisions()` — shadow and live previously both read `XAUUSDc.decisions.jsonl`. Live now reads `live_trade_journal.jsonl`. | config-drift |
+| FIX-20260518-028 | 2026-05-18 | cursor-agent | — | Phase 3: Unified health aggregator — _build_unified_health() reads 7 data sources, /api/health/full endpoint with 10s cache, overall_status: healthy|degraded|critical, frontend single-request rendering with fallback to individual endpoints. | missing-feature, observability-gap |
+| FIX-20260517-023 | 2026-05-17 | cursor-agent | — | Panel redesign: 全局汉化 + 布局重整 5行→4行+tab + 新增 /api/brain/{id} 端点 (SVG sparkline PnL 走势/方向分布/治理/训练指标) + P0 shadow/live 同文件修复 + 异常日志改进 + 新建 monitor_dashboard 蓝图。 | missing-feature, config-drift |
+
+## Cross-Module Contracts
+| Contract | Consumers | Stability |
+|----------|-----------|----------|
+| `/api/brain/{id}` | live_dashboard frontend | Stable |
+| `/api/health/full` | live_dashboard health panel | Stable |
 
 ## Verification
 ```bash

@@ -55,6 +55,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260518-044 | 2026-05-18 | cursor-agent | — | Commit catch-up: execution_queue (close_dispatch_fn callback, direction field, net_out_ticket_update), exit_watchdog (L2 forced liquidation fallback), live_order_sender (_validate_ack_sl_tp canary, dispatched field), mt5_broker_adapter (close_position L2 method), mt5_bridge_worker (spin-wait trap fixes #1/#2). All previously documented under FIX-20260517-019/021/022 but never committed due to pre-commit blueprint check deadlock. | process-violation |
 | FIX-20260517-021 | 2026-05-17 | cursor-agent | — | Phase 2: Bridge worker spin-wait confirmed SL/TP readback (陷阱一修正) + _validate_ack_sl_tp() canary upgrade warn→ERROR with ack receipt polling. | missing-error-handling, contract-violation |
 | FIX-20260517-022 | 2026-05-17 | cursor-agent | — | Phase 3: 4 exit gaps wired to Watchdog + partial close new_ticket capture via POSITION_IDENTIFIER (陷阱二修正) + net-out upper-layer interception (陷阱三修正). ExecutionQueue DispatchResult extended with direction field. | missing-error-handling, contract-violation |
 | FIX-20260517-019 | 2026-05-17 | cursor-agent | — | ExitWatchdog institutional refactor: (1) dispatch_live_order() returns "dispatched" key fixing contract mismatch; (2) L2 forced liquidation via MT5BrokerAdapter.close_position() on timeout/retry-exhaustion. | missing-error-handling, contract-violation |
