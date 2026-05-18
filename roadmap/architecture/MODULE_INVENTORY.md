@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-17T08:02:33Z
-> **扫描模块数**: 423
+> **自动生成**: 2026-05-18T09:50:31Z
+> **扫描模块数**: 426
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -183,6 +183,7 @@
 | `scheduler_service.py` | ✅ active | ScheduledTask, SchedulerService | 19 | 359 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 29 | — | |
 | `service_container.py` | ✅ active | ServiceContainer | 41 | 573 | — | |
+| `startup_validator.py` | ✅ active | — | 1 | 114 | — | |
 | `state_persistence.py` | ✅ active | StatePersistence | 6 | 100 | — | |
 | `validation_mode.py` | ✅ active | — | 1 | 10 | — | |
 
@@ -193,6 +194,7 @@
 | `barrier_strategy.py` | ✅ active | BarrierStrategy | 1 | 60 | — | |
 | `broker_adapter.py` | ✅ active | BrokerAdapter | 9 | 68 | — | |
 | `capital_allocator.py` | ✅ active | AllocationDecision, GroupCorrelationTracker, CapitalAllocator | 9 | 464 | — | |
+| `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 103 | — | |
 | `dynamic_sl_tp.py` | ✅ active | DynamicSLTP | 2 | 127 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 161 | — | |
 | `execution_queue.py` | ✅ active | QueuedDecision, DispatchResult, ExecutionQueue | 4 | 300 | — | |
@@ -203,6 +205,7 @@
 | `fix_gateway_adapter.py` | ✅ active | FixGatewayAdapter | 12 | 136 | — | |
 | `fix_message_builder.py` | ✅ active | FixMessageBuilder | 5 | 57 | — | |
 | `gateway_contracts.py` | ✅ active | OrderRequest, Fill, OrderState, ExecutionGateway | 9 | 103 | — | |
+| `kelly_sizer.py` | ✅ active | KellyResult | 2 | 130 | — | |
 | `limit_order_monitor.py` | ✅ active | LimitOrderIntent, LimitFillResult, LimitOrderMonitor | 9 | 329 | — | |
 | `live_order_sender.py` | ✅ active | — | 5 | 238 | — | |
 | `market_efficiency.py` | ✅ active | — | 2 | 67 | — | |
@@ -214,7 +217,7 @@
 | `order_state_machine.py` | ✅ active | OrderStateMachine | 9 | 101 | — | |
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 141 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 11 | 409 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 42 | 1403 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 47 | 1547 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill | 14 | 574 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
 | `quality_contracts.py` | ✅ active | ExecutionBenchmark, ExecutionQualityMetric, ImplementationShortfall, ExecutionQualityReport | 3 | 138 | — | |
@@ -428,7 +431,7 @@
 | `execution_gateway_router.py` | ✅ active | ExecutionGatewayRouter | 5 | 30 | — | |
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 20 | 5169 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 23 | 5404 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 141 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 12 | 314 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
@@ -514,7 +517,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 369 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 12 | 1809 | — | |
+| `live_intent_loop.py` | ✅ active | — | 12 | 1864 | — | |
 | `live_launcher.py` | ✅ active | — | 12 | 709 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 136 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 484 | — | |

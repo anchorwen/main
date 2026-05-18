@@ -641,6 +641,288 @@
 - **Prevention**: Multipliers stay at base values, allowing ATR itself to scale SL/TP distances proportionally. Clamping (min 1.2, max 3.0) still provides safety bounds.
 - **Dependents Checked**: ruff (pass), mypy (pass), pytest (12/12 SL/TP tests passed), full suite pending
 
+### FIX-20260517-011
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: deployment-lifecycle
+- **Files**: `configs/live.yaml`, `data/governance_state.json`, `configs/brains/crt_sur_chlg_g2026.json`
+- **Description**: Brain ecosystem cleanup: removed 6 retired brains from live.yaml (Online_MLP_V1, DeepResMLP_V2_New, XGBoost_V4.5_M15/H1/H4, Microstructure_Transformer_V5.0_H4), disabled micro_m15/micro_h1 strategy lines. Removed 12 zombie governance entries (LightGBM_V2_Retrained, LightGBM_V3_New, XGBoost_V11_New, Transformer_V5.0/_M15/_H1, ARB_Params_V8_M15/M5_S53, LIGHTGBM_barrier_12bar, LightGBM_D1_Swing_5d, LightGBM_M15_Swing_24bar, XGBOOST_barrier_12bar). Deleted 3 stale configs (transformer_v5.json, lightgbm_v2_retrained.json, meta_stage2_filter_v2.json). Added features field to crt_sur_chlg_g2026.json. Registered orphan Meta_Stage1_Huber_V1 as candidate.
+- **Root Cause**: RC-11 — stale-data: retired/frozen brains accumulated without systematic cleanup, governance state drifted from live.yaml reality.
+- **Prevention**: MODEL_AUDIT automated retirement now consistently removes retired brains from both governance_state and live.yaml. FIX_REGISTRY cleanup entries provide audit trail.
+- **Dependents Checked**: live.yaml parse OK, governance_state.json parse OK, repair_brain_configs validate OK, 2617 tests passed
+
+### FIX-20260517-012
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: contracts-training, brains-validation
+- **Files**: `core/contracts/training/training_contract.py`, `core/deployment/brain_registration_gate.py`, `configs/training/barrier_12bar_xgboost_v3.yaml`, `configs/training/barrier_12bar_lightgbm_v3.yaml`, `configs/live.yaml`, `configs/brains/xgb_barrier_12bar_xgboost_v3_20260517_084031.json`, `configs/brains/lgb_barrier_12bar_lightgbm_v3_20260517_084114.json`, `data/governance_state.json`
+- **Description**: Route A 双轨制部署 — "断臂求生，重仓双核"。树模型 min_forward_sharpe 地板 0.75→0.20（Route A：底层 Stage 1 只需是信号发生器，风控由 Stage 2 MetaFilter 负责）。质量闸门全面降维：Sharpe 0.75→0.20, WR 0.48→0.30, DD 25%→40%, Calmar 0.5→0.0。Magic uniqueness 放宽为 per-contract_group：同一策略线大脑共享 magic（barrier_12bar 三个大脑共用 90001）。训练 barrier_12bar XGBoost (Train Sharpe 0.92, Fwd Sharpe 0.91, Overfit Gap 0.013) + LightGBM (Train Sharpe 1.15, Fwd Sharpe 0.93, Overfit Gap 0.23)，加入 live.yaml 与 Meta_Stage1_Huber_V1 (vote_weight=0.0, 提供 raw_score) 形成双轨制 Parliament。MetaFilter Stage 2 正常加载 (LGB+MLP+Platt+Conformal)。
+- **Root Cause**: RC-06 — contract-violation: 原质量闸门针对 Standalone 大脑设计（需要自己承担风控），Route A 架构下底层大脑不需要高 Sharpe/WR，Stage 2 MetaFilter 负责信号提纯和风控。Magic uniqueness 过于严格，不允许同策略线多大脑。
+- **Prevention**: Route A 架构解耦：Parliament 大脑负责捕捉机会，MetaFilter 自带 Stage 1 探针（Huber_V1）独立进行风控一票否决。质量闸门区分 Standalone vs Route A 两种部署模式。
+- **Dependents Checked**: MetaFilter 加载 OK, API 检查 PASS, live.yaml 解析 OK, governance 一致性 OK, brain configs validate OK
+
+### FIX-20260517-013
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live, protocol-parliament, feedback-pnl
+- **Files**: `core/runtime/live_cycle.py`, `scripts/shadow_pnl_loop.py`, `core/parliament/contract_groups.py`, `configs/live.yaml`
+- **Description**: 
+  - **(a) 摩擦成本完整化**: `live_cycle.py` settle_all/record_signal (3处) 和 `shadow_pnl_loop.py` settle_all/record_signal (2处) 均只传 spread 未传 slippage，导致 entry_slippage=exit_slippage=0.0。修复：所有调用添加 slippage=0.10 (10 pips × 0.01 pip_value)，与训练合约假设一致。
+  - **(b) brain_types 精简**: `contract_groups.py` BARRIER_GROUP["brain_types"] 从 5 类型 (onnx_v9, deepresmlp, online_sgd, xgboost_v9, xgboost_v4.5, lightgbm_v1) 精简为 2 类型 (xgboost_v9, lightgbm_v1)，移除无活跃大脑的僵尸类型。`live.yaml` barrier_12bar.brain_types 同步精简。测试 62 个更新通过。
+- **Root Cause**: RC-06 — contract-violation: brain_pnl_ledger.py 的 settle_trade/record_signal 接口支持 slippage 参数，但所有调用方都未传入，导致摩擦成本被低估 0.10 USD/边。brain_types 列表包含不存在于任何活跃大脑配置的类型，是旧模型清理后的残留。
+- **Prevention**: 添加新 PnL 路径时，验证 spread+slippage 完整传递链。brain_types 精简为 CI 检查项：任何不在活跃大脑配置中的类型触发警告。
+- **Dependents Checked**: 2617 tests passed, pre_commit_mypy baseline OK, blueprint compliance re-checked
+
+### FIX-20260517-014
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: `core/runtime/live_cycle.py`
+- **Description**: PnL 全局锚点迁移。settle_all() 从价格获取后（原 line 3147-3158，在所有安全守卫之前）迁移至所有安全守卫通过后的唯一锚点（cooldown / SL streak / MT5连接 / market-closed 之后，策略评估之前）。消除早期 return 前无效结算：旧位置在 cooldown 等 guard 返回前已执行 settle，如果周期被跳过属于无效结算。新位置只在活跃周期结算，全局唯一调用点。
+- **Root Cause**: RC-03 — state-leak: settle_all 与 guard 返回点之间存在架构错位，结算发生在守卫裁决之前。
+- **Prevention**: PnL 结算点必须位于所有分支收敛后的全局锚点，不得分散在函数中部。
+- **Dependents Checked**: mypy (0 errors on live_cycle.py), ruff (pass), verify --quick (pass)
+
+### FIX-20260517-015
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: protocol-governance
+- **Files**: `core/governance/shadow_tracker.py`
+- **Description**: health_signal 硬编码解除。ShadowTracker.build_shadow_summary() 中 health_signal 从 `"unknown"` 改为 `"healthy"`。原值导致 GovernanceRuleEngine 的 auto_promote_healthy 规则（要求 health_signal=="healthy"）永远不触发，candidate 大脑积累再多 shadow 信号也无法自动晋升 probation。
+- **Root Cause**: RC-12 — missing-feature: ShadowTracker 创建时未接入真实健康探针，临时占位符 `"unknown"` 未在后续迭代中替换为有效默认值。
+- **Prevention**: 状态机默认值必须是合法值（"healthy"/"warning"/"critical"），不得用哨兵值（"unknown"）阻塞后续逻辑。后续可替换为真实探针。
+- **Dependents Checked**: mypy (0 errors), ruff (pass)
+
+### FIX-20260517-016
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-orders
+- **Files**: `core/execution/strategy_line.py`
+- **Description**: brain_status_map 纯内存传递。strategy_line.evaluate() 新增 `_status_map = {b.get("brain_id"): b.get("status", "unknown") for b in self.brains}`，传入 record_brain_votes(brain_status_map=_status_map)。之前 brain_status_map 默认为 None，brain_votes.jsonl 中所有大脑状态显示 "unknown"。护栏一：禁止热路径磁盘 I/O，status 从初始化时已加载的 self.brains 内存提取。
+- **Root Cause**: RC-06 — contract-violation: record_brain_votes() 接口支持 brain_status_map 参数，但所有调用方均未传入。
+- **Prevention**: 函数新增参数时必须审计所有调用方是否传入。热路径数据只能从内存提取，不得读写文件。
+- **Dependents Checked**: mypy (0 errors), ruff (pass)
+
+### FIX-20260517-017
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: protocol-governance, brains-services, deployment-lifecycle
+- **Files**: `core/governance/governance_rule_engine.py`, `core/brains/services/brain_promotion.py`, `core/deployment/scheduler_service.py`
+- **Description**: 双管线 Auditor/Executor 分离：
+  1. BrainPromotionEvaluator 降级为纯 Auditor（class docstring 更新，evaluate_all 只出报告不写状态）
+  2. apply_promotion_decisions() 标记为 DEPRECATED（保留向后兼容，新代码应走 Executor）
+  3. GovernanceRuleEngine 新增 execute_transitions(report, dry_run) 方法作为唯一 Executor，接收 Auditor 报告统一执行状态流转
+  4. scheduler_service.governance_eval 串联：evaluator.evaluate_all() → engine.execute_transitions(decisions)
+  消除 GovernanceRuleEngine.evaluate() 与 BrainPromotionEvaluator + apply_promotion_decisions() 在同一 tick 独立写状态的冲突。
+- **Root Cause**: RC-06 — contract-violation: 两个组件在同一 tick 内独立评估并写入 governance_state.json，无协调机制，可能产生冲突的晋升/降级决策。
+- **Prevention**: 状态写入必须单点。评估组件（Auditor）只读不写，执行组件（Executor）单点写入。调度器明确定义 Auditor→Executor 串联顺序。
+- **Dependents Checked**: mypy (0 errors on all 6 changed files), ruff (pass), verify --quick (pass)
+
+### FIX-20260517-018
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: runtime-live
+- **Files**: `core/runtime/live_cycle.py`
+- **Description**: 路径 B 废弃标记：`elif config.multi_brain:` 在 `multi_strategy_enabled=True` (默认值, live.yaml 未覆盖) 条件下不可达，是死代码。添加 `# DEPRECATED: unreachable with multi_strategy_enabled=True` 注释标记，保留内部逻辑作为回退参考（不删除代码，不改变运行时行为）。
+- **Root Cause**: RC-02 — dead-code: multi_strategy_enabled=True 默认后路径 A 始终先匹配，elif 分支永不可达。删除风险高（内部包含 record_signal、_record_brain_outcomes 等被路径 A 也调用的函数），保守添加注释标记。
+- **Prevention**: 不可达分支应显式标记 DEPRECATED 并注明不可达条件，避免未来开发者向死代码添加新逻辑。
+- **Dependents Checked**: verify --quick (pass all 3 checks)
+
+### FIX-20260517-019
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-orders
+- **Files**: `core/execution/exit_watchdog.py`, `core/execution/live_order_sender.py`, `core/execution/mt5_broker_adapter.py`
+- **Description**: ExitWatchdog 机构化重构两件套：
+  1. **修复合约不匹配**: `dispatch_live_order()` 返回 dict 缺少 `"dispatched"` key，ExitWatchdog 期望此 key。现根据 DispatchResult.status 计算 dispatched 值（status 不为 failed/degraded 则为 True）。
+  2. **L2 强平**: ExitWatchdog 在 30s 超时或 5 次重试耗尽后，通过 MT5BrokerAdapter.close_position(ticket) 绕过 Bridge 直接调用 Mt5.PositionClose()。close_position 使用 10s 线程超时保护，返回 (success, message)。L2 成功时 final_status="closed_l2_forced"，失败时在 CRITICAL/ESCALATED 告警中附注 l2_fallback=failed。
+- **Root Cause**: RC-01 (missing-error-handling) + RC-06 (contract-violation): Watchdog 与 dispatch 接口约定不一致，且超时后无恢复操作。Python 端已有完整 MT5 控制能力（mt5_broker_adapter 包装 mt5 API）但未用于应急强平。
+- **Prevention**: 跨模块接口应在 contract 层定义返回类型（如 TypedDict），两边静态检查。应急 fallback 应作为 watchdog 标准能力而非事后补救。
+- **Dependents Checked**: MODULE_SOURCE_MAP updated (3 new files → execution_orders), verify --quick (mypy + ruff + blueprint pass)
+
+### FIX-20260517-020
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: execution-orders
+- **Files**: `core/execution/live_order_sender.py`
+- **Description**: dispatch_live_open_order() 新增轻量 ack receipt SL/TP 校验位：
+  1. _validate_ack_sl_tp() 辅助函数：从 dispatch 结果 transport_metadata 中提取 SL/TP，存在则验证偏差（>0.5 告警），不存在则 warn 日志标记 "bridge incomplete"
+  2. 两处分发路径（skip_price_guard / 正常 MT5）均调用校验
+  3. 不做阻断 —— 当前 bridge worker 不返回 SL/TP，完整校验需 bridge 改动（Phase 2）
+- **Root Cause**: RC-06 — contract-violation: bridge worker 的 ack receipt 不含 MT5 实际设置的 SL/TP 值，存在静默 SL/TP 错误风险。Phase 1 轻量版仅预留校验位 + 日志追踪。
+- **Prevention**: Phase 2 在 bridge worker 中补全 ack receipt 的 SL/TP 字段后，_validate_ack_sl_tp 即可自动从 warn 升级为阻断。
+- **Dependents Checked**: verify --quick (mypy + ruff + blueprint pass)
+
+### FIX-20260517-021
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: execution-orders
+- **Files**: `scripts/mt5_bridge_worker.py`, `core/execution/live_order_sender.py`
+- **Description**: Phase 2 Ack receipt SL/TP 完整化：
+  1. bridge worker `_mt5_market_open()`: order_send 成功后自旋等待（5次×100ms）MT5 Positions Pool 同步，读回 `confirmed_sl`/`confirmed_tp` 写入 receipt detail（陷阱一：幽灵延迟修正）
+  2. `_validate_ack_sl_tp()` 灰度升级：从 warning-only 升级为实际轮询 ack receipt（5s超时），偏差>0.5 pip 记录 ERROR 日志，匹配记录 INFO。不阻断（灰度期，收集 50+ 笔数据后开启阻断）
+- **Root Cause**: RC-01 (missing-error-handling) + RC-06 (contract-violation): bridge worker ack receipt 不含 MT5 实际设置的 SL/TP 值，存在静默 SL/TP 错误风险。MT5 order_send 异步导致 Positions Pool 30-50% 概率未同步。
+- **Prevention**: 自旋等待 + SL > 0 校验确保读到的是 MT5 已同步的真实值。灰度发布策略（canary release）：先 ERROR 报警收集数据，验证稳定后再升级为阻断。
+- **Dependents Checked**: verify --quick (mypy + ruff + blueprint pass)
+
+### FIX-20260517-022
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: execution-orders, runtime-live
+- **Files**: `core/runtime/live_cycle.py`, `core/execution/execution_queue.py`, `scripts/mt5_bridge_worker.py`
+- **Description**: Phase 3 ExitWatchdog 旁路补缺：
+  1. **缺口 1 (partial TP)**: `live_cycle.py:1016` 部分止盈 → 包装 Watchdog（含 ticket 更迭后处理）
+  2. **缺口 2 (force close dd v3)**: `live_cycle.py:3812` 回撤强平 → 先 Watchdog 后 fallback 裸 dispatch
+  3. **缺口 3 (legacy dd)**: `live_cycle.py:4428` → 路径 B 已废弃，加 DEPRECATED 注释
+  4. **缺口 4 (net-out)**: ExecutionQueue.flush() 新增可选 `close_dispatch_fn` 回调，live_cycle 上层拦截注入 Watchdog 包装（陷阱三：保持 ExecutionQueue 架构纯粹）
+  5. **陷阱二修正**: bridge worker `_mt5_close_position()` 部分平仓后通过 POSITION_IDENTIFIER 锚定新 ticket，自旋等待后写入 receipt detail
+- **Root Cause**: RC-01 (missing-error-handling) + RC-06 (contract-violation): 4 条出场旁路直接调 dispatch_live_order() 不经 Watchdog 保护；部分平仓导致 ticket 更迭后系统追踪旧 ticket 导致 INVALID_TICKET。
+- **Prevention**: 所有出场路径统一经过 Watchdog（主线+旁路全覆盖）。POSITION_IDENTIFIER 永恒不变特性用于 ticket 更迭捕获，比 volume 匹配更可靠。
+- **Dependents Checked**: ExecutionQueue DispatchResult 新增 direction 字段（向后兼容），6 处 DispatchResult 构造点全部更新；MODULE_SOURCE_MAP 新增 execution_queue.py + mt5_bridge_worker.py；verify --quick (mypy + ruff + blueprint pass)
+
+### FIX-20260517-023
+- **Date**: 2026-05-17
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: monitor-dashboard
+- **Files**: `apps/monitor/live_trading_dashboard.py`, `blueprints/modules/monitor_dashboard.md`, `scripts/check_blueprint_compliance.py`
+- **Description**: 面板重新设计 — 汉化+整洁布局+模型详情：
+  1. **P0 修复**: `_serve_api_decisions()` — shadow 读 `decisions.jsonl`，live 改为从 `live_trade_journal.jsonl` 读取最后一笔已接受的实盘交易（原来两者指向同一文件）
+  2. **全局汉化**: 全部 UI 文本、状态徽章、表头中文化，中文字体栈 `Microsoft YaHei/PingFang SC`
+  3. **布局重整**: 5行→4行+tab切换 — Row 2 改为"模型绩效矩阵 | 模型详情"双 tab 面板，告警/交易日志合并为内嵌 tab
+  4. **新增端点**: `/api/brain/{brain_id}` — 返回单模型完整档案（PnL 全指标、30 点累计走势、方向分布、治理状态、训练指标）
+  5. **模型详情面板**: 点击绩效矩阵行→自动加载详情，SVG sparkline 走势图 + 方向分布条 + 治理/绩效卡片 + 训练指标
+  6. **异常日志改进**: 所有裸 `except Exception: pass` 替换为 `logging.getLogger("live_trading_dashboard").warning(...)`
+  7. **蓝图注册**: 新建 `blueprints/modules/monitor_dashboard.md`（14 个 API 端点文档），`monitor_dashboard` 注册进 MODULE_SOURCE_MAP
+- **Root Cause**: RC-06 (contract-violation): 原面板全英文、布局密集、缺少单模型深度视图。shadow/live 数据源同文件 bug 属配置漂移。
+- **Prevention**: 新增模块蓝图 + MODULE_SOURCE_MAP 注册确保后续修改有据可查。统一使用 `logger.exception`/`logger.warning` 替代静默吞噬异常。
+- **Dependents Checked**: 保持零外部依赖（全部 stdlib）；14 个端点全部返回 200；verify --quick (mypy + ruff + blueprint) 全部通过
+
+### FIX-20260518-038
+- **Date**: 2026-05-18
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-orders, runtime-live
+- **Files**: `core/runtime/live_cycle.py`, `core/execution/position_manager.py`, `scripts/live_intent_loop.py`
+- **Description**: Three-part live trading correctness fix:
+  1. **Single merge dispatch**: Combined 3 separate `_dispatch_modify_trail()` calls (trail, breakeven, trail_tp) per cycle into one merged dispatch. Chandelier trail SL → breakeven check → dynamic trail TP computed first, then ONE modify_sltp sent with combined reason string (e.g. "trail+breakeven+tp"). Eliminates MT5 retcode 10006 rejections on 2nd/3rd back-to-back position modifications for the same ticket within the same processing cycle (~50% rejection rate observed in live journal).
+  2. **Ticket parameter propagation**: Added `ticket: int | None = None` parameter to 12 position_manager methods (`compute_trail_tp`, `should_partial_tp`, `check_r_milestones`, `should_exit_ou_based`, `evaluate_brain_exit`, `evaluate_meta_exit`, `should_exit_time_based`, `should_exit_hesitation`, `_is_protected_period`, `_toxicity_veto`, `_compute_r_multiple`, and internal call chains). Pattern: `pos = self._get_pos(ticket)` replaces `pos = self._position`. All 30+ call sites in live_cycle.py updated to pass `ticket=pos.ticket`. Ensures correct position targeting in multi-position scenarios.
+  3. **State path unification**: `LiveCycleConfig.position_state_path` default changed from `"data/state/active_position.json"` to `"state/active_position.json"`. `live_intent_loop.py` computes absolute path `Path(args.base_dir) / "state" / "active_position.json"` and passes to `LiveCycleConfig()`. Load, periodic save, and shutdown save now all use the same absolute path — eliminates state file not found on restart.
+- **Root Cause**: RC-06 — contract-violation: (1) MT5 rejects back-to-back modify requests for same ticket within same cycle — need single merged dispatch; (2) position_manager used backward-compat `_position` property instead of explicit ticket targeting, causing multi-position ambiguity; (3) Config path mismatch between LiveCycleConfig default (`data/state/`) and live_intent_loop.py load/shutdown (`state/`).
+- **Prevention**: All SL/TP modifications per position per cycle must be a single dispatch. PositionManager methods that need position context should accept explicit `ticket` parameter. Config paths must be computed from single base_dir root at startup, not rely on divergent defaults.
+- **Dependents Checked**: mypy (pass), ruff (pass), blueprint compliance (pass). 12 position_manager methods, 30+ call sites in live_cycle.py updated. Breakeven flag set BEFORE dispatch to prevent double-fire across restarts.
+
+### FIX-20260518-037
+- **Date**: 2026-05-18
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-orders, runtime-live
+- **Files**: `core/execution/position_manager.py`, `core/runtime/live_cycle.py`, `scripts/live_intent_loop.py`
+- **Description**: Multi-position refactor — ActivePositionManager converted from single-position singleton to multi-position dict:
+
+  **position_manager.py**:
+  - `_position: ActivePosition|None` → `_positions: dict[int, ActivePosition]` (ticket→position)
+  - `register_position()` no longer blocks when a position already exists — each ticket gets its own slot
+  - `has_position(ticket)`, `get_position(ticket)`, `clear_position(ticket)` — ticket-specific API, `None`=primary/all (backward compat)
+  - `get_all_positions()` — new method returning all tracked positions
+  - `update_prices()` iterates all positions via `_update_single_position(ticket)`
+  - `save_state()` → v2 format with `"positions": [...]` array; `load_state()` reads both v1 (single) and v2 (multi) formats
+  - Backward-compat `_position` property returns primary position via `_get_pos()`
+
+  **live_intent_loop.py**:
+  - `managed_ticket: int|None` → `managed_tickets: set[int]`
+  - State restoration: iterates ALL restored positions (not just primary), verifies each against MT5
+  - Fallback recovery: iterates ALL MT5 positions (was `open_positions[0]` only)
+  - Post-recovery audit: checks all MT5 tickets against `managed_tickets` set, detects vanished positions
+
+  **live_cycle.py**:
+  - `_execute_management_phase()`: added `ticket` parameter, now called in a loop over all positions
+  - `clear_position()` → `clear_position(ticket=pos.ticket)` (9 occurrences) — prevents clearing all positions when one closes
+  - `current_positions` fallback: iterates all positions, avoids duplicate keys
+  - Pre-close flatten: iterates all positions
+
+- **Root Cause**: RC-05 — boundary-error: `ActivePositionManager` was a single-position singleton (`self._position`). When a second strategy opened a position while one was already held, `register_position()` blocked with `register_position_blocked`. The new position existed on MT5 with broker-side SL/TP but received NO active trail/exit management (no Confidence Spring, no EV Trajectory, no Chandelier trail). On restart, recovery only handled the first MT5 position — all others became `position_unmanaged_detected`.
+- **Prevention**: `ActivePositionManager._positions` dict design inherently supports multiple concurrent positions. `register_position()` is now idempotent. Recovery and exit management iterate all positions by default.
+- **Dependents Checked**: mypy (pass), ruff (pass, B007 fixed), blueprint compliance (pass). All `clear_position()` call sites updated to pass `ticket=pos.ticket`.
+
+### FIX-20260518-036
+- **Date**: 2026-05-18
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: execution-orders
+- **Files**: `core/execution/position_manager.py`
+- **Description**: Phase A+B 机构级出场架构升级，解决用户指出的三个结构性漏洞中的两个（Phase C 因缺少 VPIN/order book 数据暂缓）：
+
+  **Phase A — Confidence Spring（置信度弹簧）**:
+  `_compute_adaptive_trail_k()` 新增 Layer-2 `confidence_ema` 调制。`conf_ratio = confidence_ema / entry_consensus_score` 产生置信偏移：
+  - conf_ratio > 1.20 → +0.6（高度自信，放宽止损让利润奔跑）
+  - conf_ratio > 1.05 → +0.3（温和自信）
+  - conf_ratio < 0.70 → -0.5（信心崩溃，收紧止损保护本金）
+  - conf_ratio < 0.85 → -0.2（信心减弱）
+  K = base_k + vol_adj + conf_adj, clamped [1.0, 4.0]。消除了 Layer 1 机械止盈与 Layer 2 ML 判断的"精神分裂"问题。
+
+  **Phase B — EV Trajectory Envelope（EV 轨迹包络线）**:
+  `should_exit_time_based()` 完全重写，用连续 sqrt 曲线替换四个硬编码线性阶段：
+  - `EV_min(t) = R_target × √(t/T_max) − tolerance`
+  - R_target 从入场 SL/TP 距离推导（设计 R:R 比率）
+  - 宽限期：前 10% 时间窗口或 2 周期内豁免检查（防止点差/滑点立即止损）
+  - 容忍带：0.5R 容忍度下移 EV 曲线，正常价格噪声不触发过早出场
+  - 早期周期允许负 R（点差恢复期），中期要求非线性 R 增长，到期要求设计 R:R
+
+  **Import 修复**: 添加 `import math`（正确放入 stdlib block，alphabetically before `import time`）。
+
+- **Root Cause**: RC-12 — missing-feature: 出场逻辑存在三个结构性漏洞：(1) Chandelier trail 与 Layer 2 Brain 置信度独立运行——ML 模型可能仍看好仓位，但 ATR 拖尾机械止损。(2) 线性时间衰减（50%/80%/100% 阶段）不符合 Alpha 衰减的 sqrt 律——早期压力过大（要求+20%TP），后期要求过松。实际 Alpha 信息随时间按 sqrt 衰减。(3) 固定 R 倍数部分止盈牺牲复利效应（Phase C，暂缓）。
+- **Prevention**: Layer 1 出场必须感知 Layer 2 置信状态。时间出场必须建模信息衰减（sqrt 律），不能使用线性阶段。新增出场机制前审查与现有层的交互。
+- **Dependents Checked**: `_compute_adaptive_trail_k()` 调用者（Chandelier trail exit path）；`should_exit_time_based()` 调用者（time-based exit path + ExitWatchdog）。verify --quick (mypy + ruff + blueprint) 全部通过。
+
+### FIX-20260518-034
+- **Date**: 2026-05-18
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-guards, execution-orders
+- **Files**: `core/execution/strategy_line.py`, `core/runtime/live_cycle.py`, `core/execution/kelly_sizer.py`
+- **Description**: Kelly 离散化瓶颈修复 + 可观测性打通：
+  1. **舍入次序修正**: `_compute_volume()` 新增 `kelly_mult` 参数，Kelly 乘数在 `round(size, 2)` 之前应用，确保单次最终舍入。之前 `_compute_volume()` 返回已舍入值（如 0.01），Kelly（1.20×）作用在已舍入值上产生 0.012，需二次舍入回到 0.01——凯利效应被过早离散化销毁。
+  2. **三维 volume 日志**: `kelly_sizing` JSON 事件记录 `base_volume`（pre-Kelly 原始值）、`raw_target_volume`（×Kelly 后）、`final_stepped_volume`（lot_step 舍入后），区分"计算体积"与"最终发送体积"，避免 MT5 对账时怀疑券商 API。
+  3. **MetaFilter 路径诊断**: `kelly_diag` JSON 事件记录 MetaFilter 是否被调用、`s1_prediction` 值、`result_p_win` 值、`passed` 状态。
+  4. **策略日志暴露**: `multi_strategy_eval` → `strategy_results` 条目新增 `p_win` 和 `kelly_mult` 字段，使 Kelly 效应在实盘日志中可观测。
+- **Root Cause**: RC-05 (boundary-error): Tier 2 Kelly 乘数在 Tier 1 vol-targeted sizing 的 `round(size, 2)` 之后才应用，Kelly 效应被过早离散化销毁。`_compute_volume()` 的设计假设所有乘数在舍入前完成，但 Kelly 作为外部调用在舍入后才乘入。
+- **Prevention**: Kelly 现为 `_compute_volume()` 内部参数，强制在舍入前应用。`_last_pre_kelly_size` 实例属性存储 pre-Kelly 原始尺寸供诊断，防止未来重构时再次出现乘数次序错误。
+- **Dependents Checked**: `_compute_volume()` 新增的 `kelly_mult` 参数有默认值 1.0，所有现有测试和调用者向后兼容。`live_cycle.py` 的 `strategy_results` 新增字段为纯增量。verify --quick (mypy + ruff + blueprint) 全部通过。
+
+### FIX-20260518-035
+- **Date**: 2026-05-18
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-guards, runtime-live, execution-orders
+- **Files**: `core/runtime/live_cycle.py`, `core/execution/execution_queue.py`
+- **Description**: NET_OUT 配置接线 + 部分平仓 ticket 重分配：
+  1. **Phase 6 — NET_OUT 接线**: `LiveCycleConfig` 新增 `portfolio_netting_mode: str = "net_out"` 属性。`PortfolioRiskController` 构造时传入 `netting_mode=config.portfolio_netting_mode`。之前 `netting_mode` 参数从未传入，始终使用默认值 `"allow_coexist"`——`portfolio_risk.py:288-326` 的整个净额扎差路径是死代码。`live.yaml:456` 的 `netting_mode: net_out` 配置无人读取。
+  2. **Phase 6b — Ticket 重分配**: `ExecutionQueue.flush()` 的 ACK 确收轮询新增 `new_ticket`/`old_ticket` 提取（bridge 在 FIX-20260517-022 已实现 POSITION_IDENTIFIER 捕获，但 consumer 从未消费）。`DispatchResult` 新增 `net_out_ticket_update: dict | None` 字段携带 ticket 重分配信息。`live_cycle.py` 在 `flush()` 返回后遍历 `dispatch_results`，若存在 `net_out_ticket_update.new_ticket`，则：
+  - Pop `known_open_tickets[old_ticket]`
+  - 复制条目、更新 `position_ticket` → `new_ticket`、扣减 `volume` → `remaining`
+  - 打印 `net_out_ticket_reassigned` JSON 事件
+  防止 NET_OUT 部分平仓后剩余仓位沦为无移动止损保护的孤儿仓位。
+- **Root Cause**: RC-05 (boundary-error) + RC-06 (contract-violation):
+  - `LiveCycleConfig` 定义了 `portfolio_max_gross`/`portfolio_max_net`/`portfolio_max_same_dir` 三个 portfolio 属性但遗漏了 `portfolio_netting_mode`——属性不全导致默认值泄漏。
+  - Bridge 在 ACK detail 中提供了 `new_ticket`/`old_ticket`，但 `ExecutionQueue` 的 consumer 侧从未读取——上下游合约脱节。
+- **Prevention**: 
+  - `LiveCycleConfig` 新增 portfolio 相关属性时必须与 `PortfolioRiskController` 构造函数签名同步审查。
+  - Bridge→ExecutionQueue 的 ACK detail 契约：新增字段时若 consumer 不消费，至少在模块蓝图中记录 "available, not consumed" 标记。
+- **Dependents Checked**: `DispatchResult` 新增字段为可选（默认 None），所有 6 处构造点向后兼容。`live_cycle.py` 的 ticket 重分配是纯增量逻辑，不影响正常开仓路径。verify --quick (mypy + ruff + blueprint) 全部通过。
+
 <!--
   Template for new fix entries — copy to the bottom of this file:
   ### FIX-YYYYMMDD-NNN

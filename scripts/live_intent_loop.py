@@ -590,9 +590,11 @@ def main(argv: list[str] | None = None) -> int:
             flush=True,
         )
 
+    _position_state_path = str(Path(args.base_dir) / "state" / "active_position.json")
     config = LiveCycleConfig(
         symbol=args.symbol,
         base_dir=args.base_dir,
+        position_state_path=_position_state_path,
         interval_seconds=args.interval_seconds,
         confidence_threshold=args.confidence_threshold,
         cooldown_seconds=args.cooldown_seconds,
@@ -943,6 +945,55 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.multi_brain:
         entries = _load_brain_entries_from_dir(args.brains_dir)
+
+        # ── Per-brain schema validation (Phase 1a) ──
+        try:
+            from core.deployment.startup_validator import validate_per_brain_schema
+            from core.features.local_feature_store import LocalFeatureStore
+
+            _store = LocalFeatureStore(base_dir=args.base_dir)
+            _validation = validate_per_brain_schema(entries, _store)
+            if _validation["dropped"]:
+                _dropped_ids = {d["brain_id"] for d in _validation["dropped"]}
+                entries = [e for e in entries if e.get("brain_id") not in _dropped_ids]
+                print(
+                    json.dumps(
+                        {
+                            "event": "schema_validation_dropped",
+                            "time": _utc_iso(),
+                            "dropped": _validation["dropped"],
+                            "ok_count": len(_validation["ok"]),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+            if _validation["ok"]:
+                print(
+                    json.dumps(
+                        {
+                            "event": "schema_validation_ok",
+                            "time": _utc_iso(),
+                            "brains_ok": len(_validation["ok"]),
+                            "brains_total": len(entries),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+        except Exception as _vex:
+            print(
+                json.dumps(
+                    {
+                        "event": "schema_validation_error",
+                        "time": _utc_iso(),
+                        "error": str(_vex),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+
         entries, gov_report = _apply_governance_filter(entries, args.base_dir)
 
         from core.brains.services.brain_factory import BrainFactory
@@ -1103,126 +1154,128 @@ def main(argv: list[str] | None = None) -> int:
 
         # ── Restart recovery: try persisted state first, fall back to MT5 ──
         recovered = False
-        managed_ticket: int | None = None
+        managed_tickets: set[int] = set()
         try:
             restored = position_manager.load_state(_pos_state_path)
             if restored is not None:
-                # Verify the position still exists in MT5
-                mt5_positions = mt5.positions_get(ticket=restored.ticket)
-                if mt5_positions and len(mt5_positions) > 0:
-                    mp = mt5_positions[0]
-                    managed_ticket = restored.ticket
-                    # Sync current SL/TP from MT5 (ground truth)
-                    restored.current_sl = float(mp.sl) if mp.sl > 0 else restored.current_sl
-                    restored.current_tp = float(mp.tp) if mp.tp > 0 else restored.current_tp
-                    # Update price extremes from current (MT5 doesn't track historical highs)
-                    restored.highest_high = max(restored.highest_high, float(mp.price_current))
-                    restored.lowest_low = min(restored.lowest_low, float(mp.price_current))
-                    recovered = True
-                    print(
-                        json.dumps(
-                            {
-                                "event": "position_restored_from_state",
-                                "time": _utc_iso(),
-                                "ticket": restored.ticket,
-                                "side": restored.side,
-                                "cycles_held": restored.cycles_held,
-                                "breakeven_triggered": restored.breakeven_triggered,
-                                "trail_multiplier": restored.trail_multiplier,
-                                "highest_r": round(restored.highest_r, 4),
-                                "current_sl": restored.current_sl,
-                                "current_tp": restored.current_tp,
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
-                else:
-                    # Position no longer exists on MT5 — stale state, ignore
-                    position_manager.clear_position()
+                # load_state now returns the primary restored position (v2 multi-position format).
+                # Verify ALL restored positions still exist on MT5.
+                for rt in position_manager.get_all_positions():
+                    _rt_ticket = rt.ticket
+                    mt5_positions = mt5.positions_get(ticket=_rt_ticket)
+                    if mt5_positions and len(mt5_positions) > 0:
+                        mp = mt5_positions[0]
+                        managed_tickets.add(_rt_ticket)
+                        # Sync current SL/TP from MT5 (ground truth)
+                        rt.current_sl = float(mp.sl) if mp.sl > 0 else rt.current_sl
+                        rt.current_tp = float(mp.tp) if mp.tp > 0 else rt.current_tp
+                        # Update price extremes from current (MT5 doesn't track historical highs)
+                        rt.highest_high = max(rt.highest_high, float(mp.price_current))
+                        rt.lowest_low = min(rt.lowest_low, float(mp.price_current))
+                        recovered = True
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "position_restored_from_state",
+                                    "time": _utc_iso(),
+                                    "ticket": rt.ticket,
+                                    "side": rt.side,
+                                    "cycles_held": rt.cycles_held,
+                                    "breakeven_triggered": rt.breakeven_triggered,
+                                    "trail_multiplier": rt.trail_multiplier,
+                                    "highest_r": round(rt.highest_r, 4),
+                                    "current_sl": rt.current_sl,
+                                    "current_tp": rt.current_tp,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                    else:
+                        # Position no longer exists on MT5 — remove from tracking
+                        position_manager.clear_position(ticket=_rt_ticket)
         except Exception:
             pass
 
         if not recovered:
-            # ── Fallback: reconstruct from MT5 (basic recovery, no trail state) ──
+            # ── Fallback: reconstruct ALL positions from MT5 (basic recovery, no trail state) ──
             try:
                 open_positions = _broker.get_open_positions_detail(args.symbol)
                 if open_positions:
-                    pos_detail = open_positions[0]
-                    ticket = pos_detail.get("ticket", 0)
-                    if ticket > 0:
+                    recovery_atr = (
+                        _broker.fetch_current_atr(args.symbol) if _broker is not None else 2.31
+                    )
+                    if recovery_atr <= 0:
+                        recovery_atr = 2.31
+
+                    for pos_detail in open_positions:
+                        ticket = pos_detail.get("ticket", 0)
+                        if ticket <= 0:
+                            continue
                         mt5_positions = mt5.positions_get(ticket=ticket)
-                        if mt5_positions and len(mt5_positions) > 0:
-                            mp = mt5_positions[0]
-                            managed_ticket = ticket
-                            side = "long" if mp.type == 0 else "short"
-                            entry_price = float(mp.price_open)
-                            current_sl_val = float(mp.sl) if mp.sl > 0 else entry_price
-                            current_tp_val = float(mp.tp) if mp.tp > 0 else 0.0
-                            volume = float(mp.volume)
+                        if not mt5_positions or len(mt5_positions) == 0:
+                            continue
+                        mp = mt5_positions[0]
+                        managed_tickets.add(ticket)
+                        side = "long" if mp.type == 0 else "short"
+                        entry_price = float(mp.price_open)
+                        current_sl_val = float(mp.sl) if mp.sl > 0 else entry_price
+                        current_tp_val = float(mp.tp) if mp.tp > 0 else 0.0
+                        volume = float(mp.volume)
 
-                            recovered_consensus: dict[str, Any] = {
-                                "aggregated_bias": side,
-                                "consensus_score": 0.5,
-                            }
-                            recovered_supporting: list[str] = []
+                        recovered_consensus: dict[str, Any] = {
+                            "aggregated_bias": side,
+                            "consensus_score": 0.5,
+                        }
+                        recovered_supporting: list[str] = []
 
-                            if _journal_path.exists():
-                                for line in _journal_path.read_text(encoding="utf-8").splitlines():
-                                    line = line.strip()
-                                    if not line:
-                                        continue
-                                    try:
-                                        rec = json.loads(line)
-                                        if (
-                                            rec.get("position_ticket") == ticket
-                                            and rec.get("action") == "open"
-                                        ):
-                                            recovered_supporting = rec.get("brain_ids", [])
-                                            break
-                                    except Exception:
-                                        pass
+                        if _journal_path.exists():
+                            for line in _journal_path.read_text(encoding="utf-8").splitlines():
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                try:
+                                    rec = json.loads(line)
+                                    if (
+                                        rec.get("position_ticket") == ticket
+                                        and rec.get("action") == "open"
+                                    ):
+                                        recovered_supporting = rec.get("brain_ids", [])
+                                        break
+                                except Exception:
+                                    pass
 
-                            recovery_atr = (
-                                _broker.fetch_current_atr(args.symbol)
-                                if _broker is not None
-                                else 2.31
-                            )
-                            if recovery_atr <= 0:
-                                recovery_atr = 2.31
+                        current_high = max(entry_price, float(mp.price_current))
 
-                            current_high = max(entry_price, float(mp.price_current))
-                            _ = min(entry_price, float(mp.price_current))  # retained for clarity
-
-                            position_manager.register_position(
-                                ticket=ticket,
-                                side=side,
-                                entry_price=entry_price,
-                                volume=volume,
-                                initial_sl=current_sl_val,
-                                initial_tp=current_tp_val,
-                                entry_atr=recovery_atr,
-                                entry_cycle=0,
-                                entry_consensus=recovered_consensus,
-                                supporting_brain_ids=recovered_supporting,
-                                current_high=current_high,
-                            )
-                            print(
-                                json.dumps(
-                                    {
-                                        "event": "position_recovered_from_mt5",
-                                        "time": _utc_iso(),
-                                        "ticket": ticket,
-                                        "side": side,
-                                        "entry_price": entry_price,
-                                        "current_sl": current_sl_val,
-                                        "current_tp": current_tp_val,
-                                        "volume": volume,
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                                flush=True,
-                            )
+                        position_manager.register_position(
+                            ticket=ticket,
+                            side=side,
+                            entry_price=entry_price,
+                            volume=volume,
+                            initial_sl=current_sl_val,
+                            initial_tp=current_tp_val,
+                            entry_atr=recovery_atr,
+                            entry_cycle=0,
+                            entry_consensus=recovered_consensus,
+                            supporting_brain_ids=recovered_supporting,
+                            current_high=current_high,
+                        )
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "position_recovered_from_mt5",
+                                    "time": _utc_iso(),
+                                    "ticket": ticket,
+                                    "side": side,
+                                    "entry_price": entry_price,
+                                    "current_sl": current_sl_val,
+                                    "current_tp": current_tp_val,
+                                    "volume": volume,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
             except Exception as _recovery_exc:
                 print(
                     json.dumps(
@@ -1240,7 +1293,6 @@ def main(argv: list[str] | None = None) -> int:
         try:
             all_mt5_positions = mt5.positions_get(symbol=args.symbol)
             if all_mt5_positions:
-                managed_found = False
                 for mp in all_mt5_positions:
                     ticket = mp.ticket
                     side = "long" if mp.type == 0 else "short"
@@ -1250,8 +1302,7 @@ def main(argv: list[str] | None = None) -> int:
                     tp = float(mp.tp) if mp.tp > 0 else 0.0
                     volume = float(mp.volume)
 
-                    if managed_ticket is not None and ticket == managed_ticket:
-                        managed_found = True
+                    if ticket in managed_tickets:
                         continue
 
                     # Unmanaged position — report and validate SL/TP
@@ -1277,13 +1328,17 @@ def main(argv: list[str] | None = None) -> int:
                         ),
                         flush=True,
                     )
-                if managed_ticket is not None and not managed_found:
+                # Check for vanished managed positions (tickets we track but MT5 no longer has)
+                mt5_ticket_set = {mp.ticket for mp in all_mt5_positions}
+                vanished = managed_tickets - mt5_ticket_set
+                for vt in vanished:
+                    position_manager.clear_position(ticket=vt)
                     print(
                         json.dumps(
                             {
                                 "event": "position_managed_vanished",
                                 "time": _utc_iso(),
-                                "ticket": managed_ticket,
+                                "ticket": vt,
                                 "note": "Managed position no longer on MT5 — may have been closed externally",
                             },
                             ensure_ascii=False,

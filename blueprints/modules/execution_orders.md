@@ -8,7 +8,7 @@ Order lifecycle management (creation → ack → fill → close), position track
 |------|------|
 | `core/execution/order_state_machine.py` | `OrderStateMachine` — canonical state transitions |
 | `core/execution/execution_manager.py` | `ExecutionManager` — order lifecycle, venue event processing |
-| `core/execution/position_manager.py` | `ActivePositionManager` — 3-layer exits (Chandelier, consensus flip, time-decay) |
+| `core/execution/position_manager.py` | `ActivePositionManager` — 3-layer exits (Confidence Spring Chandelier, consensus flip, EV Trajectory sqrt time-exit) |
 | `core/execution/meta_exit_engine.py` | `MetaExitEngine` — multi-factor exit urgency scorer |
 | `core/execution/dynamic_sl_tp.py` | `compute_dynamic_sl_tp()`, `compute_sl_tp_levels()` |
 | `core/execution/capital_allocator.py` | `resolve_conflicts()`, `compute_volume()`, `GroupCorrelationTracker` |
@@ -19,6 +19,8 @@ Order lifecycle management (creation → ack → fill → close), position track
 | `core/execution/mt5_broker_adapter.py` | MT5 broker adapter implementation |
 | `core/execution/fill_simulator.py` | `FillSimulator` — deterministic fill simulation |
 | `core/execution/market_impact.py` | `estimate_market_impact()` — Almgren-Chriss model |
+| `core/execution/kelly_sizer.py` | `compute_kelly_mult()` — fractional Kelly edge sizing with EV veto |
+| `core/execution/correlation_sizer.py` | `apply_sqrt_n_discount()` — √N correlation decay for multi-strategy consensus |
 
 ## Data Flow
 ```
@@ -53,7 +55,17 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260517-021 | 2026-05-17 | cursor-agent | — | Phase 2: Bridge worker spin-wait confirmed SL/TP readback (陷阱一修正) + _validate_ack_sl_tp() canary upgrade warn→ERROR with ack receipt polling. | missing-error-handling, contract-violation |
+| FIX-20260517-022 | 2026-05-17 | cursor-agent | — | Phase 3: 4 exit gaps wired to Watchdog + partial close new_ticket capture via POSITION_IDENTIFIER (陷阱二修正) + net-out upper-layer interception (陷阱三修正). ExecutionQueue DispatchResult extended with direction field. | missing-error-handling, contract-violation |
+| FIX-20260517-019 | 2026-05-17 | cursor-agent | — | ExitWatchdog institutional refactor: (1) dispatch_live_order() returns "dispatched" key fixing contract mismatch; (2) L2 forced liquidation via MT5BrokerAdapter.close_position() on timeout/retry-exhaustion. | missing-error-handling, contract-violation |
+| FIX-20260517-020 | 2026-05-17 | cursor-agent | — | Ack receipt SL/TP validation hook: _validate_ack_sl_tp() checks transport_metadata for SL/TP post-dispatch, warns if missing. Non-blocking — full validation deferred to Phase 2. | contract-violation |
+| FIX-20260517-016 | 2026-05-17 | cursor-agent | — | brain_status_map pass-through: strategy_line.evaluate() now derives status_map from self.brains (pure in-memory: {brain_id: status}) and passes it to record_brain_votes(). Previously brain_status_map defaulted to None, causing all brain_votes.jsonl entries to show "unknown". Hot-path safe — no disk I/O. | contract-violation |
+| Fix ID | Date | Author | Commit | Summary | Root Cause |
 | FIX-20260515-013 | 2026-05-15 | cursor-agent | — | Three-knife OU exit refactor: (1) Smart Entry inflection gate z_entry 1.5→2.0 + volume climax, (2) Drift Lock spatial re-entry lock after mean-drift exit, (3) Alpha Handoff OU→trailing-stop on profit+trend | missing-feature |
+| FIX-20260518-038 | 2026-05-18 | cursor-agent | — | Single merge dispatch: trail SL + breakeven + trail TP merged into one modify_sltp per cycle (was 2-3 back-to-back → MT5 retcode 10006 rejections). Ticket param added to 12 position_manager methods for multi-position correctness. State path default unified (data/state/ → state/) across load/save/shutdown. | contract-violation |
+| FIX-20260518-037 | 2026-05-18 | cursor-agent | — | Multi-position refactor: ActivePositionManager converted from single-position singleton to multi-position dict (ticket→ActivePosition). register_position() no longer blocks when a position already exists. Recovery iterates ALL MT5 positions. _execute_management_phase loops all positions. Backward-compat `_position` property returns primary. Save/load supports v2 multi-position format. | boundary-error |
+| FIX-20260518-036 | 2026-05-18 | cursor-agent | — | Phase A+B: Confidence Spring (Layer-2 confidence_ema modulates Chandelier trail multiplier, ±0.6 range) + EV Trajectory Envelope (sqrt-law Alpha decay exit with grace period first 10% horizon + 0.5R tolerance floor) replacing linear time-decay phases | boundary-error |
+| FIX-20260518-032 | 2026-05-18 | cursor-agent | — | Tier 2 Kelly/Edge sizing: `StrategyDecision` extended with `p_win`/`kelly_mult` fields. `evaluate()` computes fractional Kelly multiplier from MetaFilter P(TP|signal) or PnLStore rolling win rate. EV veto: kf≤0 → hard reject (should_trade=False, reason=negative_kelly_ev). `_compute_volume()` keeps Tier 1 vol-targeted sizing only; Kelly applied at call site. | missing-feature |
 | FIX-20260514-003 | 2026-05-14 | cursor-agent | a4a1005 | Fixed raw_proposals UnboundLocalError: elif indentation error caused multi-strategy evaluation to be unreachable | type-confusion |
 | FIX-20260513-001 | 2026-05-14 | cursor-agent | a4a1005 | PnL recording moved before approval gate: each proposal gets isolated PnL record to prevent missing ledger entries | state-leak |
 
@@ -64,6 +76,58 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 | `dispatch_live_order(envelope)` → `bool` | ExecutionQueue | Stable |
 | `ActivePositionManager.evaluate_exits(market_data)` → `list[ExitEvaluation]` | live_cycle | Stable |
 | `compute_dynamic_sl_tp(atr, regime)` → `DynamicSLTP` | strategy_line | Stable |
+
+## Evolution Roadmap (开单/止损/止盈 机构化路线图)
+
+> **状态**: Phase 1/2/3 已全部交付 (FIX-20260517-018 ~ 022)。仅剩 Phase 4 动态 SL/TP 校准。
+
+| Phase | 范围 | 关键改动 | 依赖 |
+|-------|------|----------|------|
+| **Phase 2** | Ack receipt 完整化 | bridge worker 补全 ack receipt SL/TP 字段 → `_validate_ack_sl_tp()` 从 warn 升级为阻断 (偏差 > 0.5 pip 拒绝) | bridge worker 改动 (C++/Python) |
+| **Phase 3** | ExitWatchdog 实盘集成 | 确认所有出场路径 (bleed_stop, Z-reversion, consensus_flip, time_decay) 都经过 Watchdog.execute_exit()；Watchdog 健康监控接入 daily_ops | live_cycle.py 出场段审查 |
+| **Phase 4** | 动态 SL/TP 校准 | 每策略基于已实现波动率自适应调整 SL/TP 乘数；策略级 ref_atr 自动更新；MetaExitEngine 与 Watchdog 集成 | Phase 3 完成 + 至少 100 笔实盘出场记录 |
+| **Phase C** | 微结构部分止盈 (DEFERRED) | VPIN/订单簿深度驱动的部分止盈决策；流动性不足预警；OIM 代理指标先行验证 | Phase A+B ≥30 笔完整出场 + VPIN/订单簿数据源就绪 |
+
+### Phase 2 详细说明 ✅ 已交付 (FIX-20260517-021)
+- **已完成**: bridge worker `_mt5_market_open()` order_send 成功后自旋等待（5次×100ms）MT5 Positions Pool 同步，读回 `confirmed_sl`/`confirmed_tp` 写入 ack receipt
+- **已完成**: `_validate_ack_sl_tp()` 灰度升级：实际轮询 ack receipt（5s 超时），偏差 > 0.5 pip 记录 ERROR 日志。灰度期不阻断，收集 50+ 笔数据后开启阻断
+- **受益**: 消除静默 SL/TP 设置错误风险（历史上发生过 SL 设在入场价上方导致立即止损）
+
+### Phase 3 详细说明 ✅ 已交付 (FIX-20260517-022)
+- **已完成**: 审查并修复 4 条出场旁路 — partial TP（陷阱二：ticket 更迭）、force_close_dd v3、legacy dd（死代码标记）、net-out（陷阱三：上层拦截回调）
+- **已完成**: bridge worker 部分平仓后通过 POSITION_IDENTIFIER 锚定新 ticket，自旋等待后写入 receipt detail
+- **已完成**: ExecutionQueue.flush() 新增可选 `close_dispatch_fn` 回调参数，live_cycle 上层注入 Watchdog 包装
+- **受益**: 所有出场都有 5 次重试 + L2 强平保护，不再有静默失败的出场
+
+### Phase 4 详细说明
+- **问题**: 当前 SL/TP 乘数 (`base_sl_atr_mult`, `base_tp_atr_mult`) 是静态配置，不随波动率环境变化
+- **操作**: 引入 `AdaptiveSLTP` 类，根据滚动窗口已实现波动率与 ref_atr 的比值动态调整乘数；MetaExitEngine 输出接入 Watchdog 作为出场信号源之一
+- **受益**: 高波动期自适应放宽止损避免震荡出局，低波动期收紧止盈锁定利润
+
+### Phase C 详细说明 ⏸️ DEFERRED (条件未成熟)
+
+> ⚠️ **提醒机制**: 此 Phase 写入蓝图时设置了自动提醒。触发条件满足时 (`memory/phase_c_microstructure_reminder.md`) 会提示推进。触发条件见下方"推进闸门"。
+
+- **问题**: 当前出场逻辑 (Confidence Spring + EV Trajectory Envelope + MetaExitEngine) 无法感知订单簿微观结构。在流动性枯竭时，部分止盈应该提前触发以降低滑点损耗；在深度充足时，应该让利润奔跑。
+- **目标**: 引入基于 VPIN (Volume-synchronized Probability of Informed Trading) 和订单簿深度的部分止盈决策模块 (`MicrostructurePartialTP`)。
+- **操作**:
+  1. 计算 VPIN 指标 (tick-volume bucketed by time, 50-bucket rolling window) 作为逆向选择概率代理
+  2. 从 Bridge 获取买一/卖一挂单量 (bid_volume, ask_volume)，计算加权深度
+  3. VPIN > 0.8 (高位) + 深度 < 2x 平均深度 → 流动性枯竭预警 → 提前部分止盈 (partial_close_ratio=0.5)
+  4. 若无 VPIN 数据: 使用 OIM (Order Imbalance Metric) 作为价格驱动代理 — `(bid_vol - ask_vol) / (bid_vol + ask_vol)`
+- **受益**: 流动性枯竭时降低持仓风险暴露；深度充足时减少过早止盈的概率
+
+**推进闸门 (所有条件必须满足)**:
+1. ✅ Phase A (Confidence Spring) + Phase B (EV Trajectory Envelope) 实盘验证 ≥30 笔完整出场记录
+2. ✅ MetaExit 模型文件就绪 (至少一个 live 状态模型)
+3. ❌ VPIN 数据源可用 — 需要 tick-volume 按时间分桶数据 (当前无)
+4. ❌ 订单簿深度数据可用 — Bridge 已支持 `market_depth` 事件但无持久化存储
+
+**当前替代方案**:
+- OIM (Order Imbalance Metric) 可从价差和成交量代理计算，不依赖真实订单簿
+- 可作为 Phase C 第一步，VPIN/深度数据就绪后再升级
+
+**建议复评日期**: 2026-06-15 (约1个月后，预计 ≥30 笔出场 + VPIN 数据源评估)
 
 ## Verification
 ```bash

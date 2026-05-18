@@ -8,8 +8,8 @@ system that runs every cycle while a position is open:
               the model training contract)
     Layer 2 — Brain ensemble flip exit (re-evaluates brains every N cycles,
               requires 2 consecutive confirmations to avoid noise)
-    Layer 3 — Model-aware time decay exit (phased pressure based on each
-              model's training horizon)
+    Layer 3 — EV trajectory time exit (sqrt-based Alpha decay envelope,
+              replaces the old linear-four-phase time decay)
 
 All exit actions flow through the existing ``dispatch_live_order()`` →
 mt5_bridge_worker pipeline; the bridge already supports ``modify_sltp`` and
@@ -18,6 +18,7 @@ mt5_bridge_worker pipeline; the bridge already supports ``modify_sltp`` and
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -85,10 +86,11 @@ class ActivePosition:
 
 
 class ActivePositionManager:
-    """Orchestrates dynamic exit logic for one position at a time.
+    """Orchestrates dynamic exit logic for multiple concurrent positions.
 
-    Designed for ``max_positions=1``.  If you later raise the limit you create
-    one manager per position.
+    Each position is tracked independently — trail state, flip counters,
+    confidence EMA, and model horizons are all per-position.  Recovery
+    scans ALL MT5 positions so no ticket is left unmanaged.
 
     All numeric parameters are defaults; they can be overridden per instance
     from CLI flags or ``live.yaml``.
@@ -142,12 +144,33 @@ class ActivePositionManager:
         self.pnl_store = pnl_store
         self.meta_exit_engine = meta_exit_engine
 
-        self._position: ActivePosition | None = None
+        self._positions: dict[int, ActivePosition] = {}  # ticket → position
+        self._primary_ticket: int | None = None  # "primary" for backward compat
         self._last_brain_reeval_cycle: int = -1
         self._entry_consensus_score: float = 0.0
-        self._consecutive_flips: int = 0  # for 2-confirmation flip exit
+        self._consecutive_flips: int = (
+            0  # for 2-confirmation flip exit (per-position, stored on ActivePosition)
+        )
         self._last_state_path: str | None = None
         self._recovery_cycle: int = -1  # -1=normal, >=0=in grace period (increments each cycle)
+
+    # ── Internal helpers ──────────────────────────────────────────────────
+
+    def _get_pos(self, ticket: int | None = None) -> ActivePosition | None:
+        """Return a specific position or the primary (backward compat)."""
+        if ticket is not None:
+            return self._positions.get(ticket)
+        if self._primary_ticket is not None:
+            return self._positions.get(self._primary_ticket)
+        # Fallback: return any position
+        for pos in self._positions.values():
+            return pos
+        return None
+
+    @property
+    def _position(self) -> ActivePosition | None:
+        """Backward-compat property: returns primary position."""
+        return self._get_pos()
 
         # v3.2 Knife 2: Drift Lock — per-direction spatial lock after mean-drift exit
         # Key: "long" or "short", Value: z-score threshold to unlock
@@ -157,11 +180,19 @@ class ActivePositionManager:
 
     # ── Public API ──────────────────────────────────────────────────────
 
-    def has_position(self) -> bool:
-        return self._position is not None
+    def has_position(self, ticket: int | None = None) -> bool:
+        """True if any position exists (ticket=None) or if *ticket* is tracked."""
+        if ticket is not None:
+            return ticket in self._positions
+        return len(self._positions) > 0
 
-    def get_position(self) -> ActivePosition | None:
-        return self._position
+    def get_position(self, ticket: int | None = None) -> ActivePosition | None:
+        """Return a specific position, the primary, or any (backward compat)."""
+        return self._get_pos(ticket)
+
+    def get_all_positions(self) -> list[ActivePosition]:
+        """Return all tracked positions (for exit evaluation loops)."""
+        return list(self._positions.values())
 
     def is_in_grace_period(self, max_cycles: int = 5) -> bool:
         """True during the first N cycles after a position is recovered from disk.
@@ -172,18 +203,28 @@ class ActivePositionManager:
         """
         return 0 <= self._recovery_cycle < max_cycles
 
-    def clear_position(self) -> None:
-        self._position = None
-        self._last_brain_reeval_cycle = -1
-        self._entry_consensus_score = 0.0
-        self._recovery_cycle = -1
-        if self._last_state_path is not None:
-            try:
-                _p = Path(self._last_state_path)
-                if _p.exists():
-                    _p.unlink()
-            except OSError:
-                pass
+    def clear_position(self, ticket: int | None = None) -> None:
+        """Clear a specific position or all positions (ticket=None)."""
+        if ticket is not None:
+            self._positions.pop(ticket, None)
+            if self._primary_ticket == ticket:
+                self._primary_ticket = (
+                    next(iter(self._positions), None) if self._positions else None
+                )
+        else:
+            self._positions.clear()
+            self._primary_ticket = None
+            self._last_brain_reeval_cycle = -1
+            self._entry_consensus_score = 0.0
+        if not self._positions:
+            self._recovery_cycle = -1
+            if self._last_state_path is not None:
+                try:
+                    _p = Path(self._last_state_path)
+                    if _p.exists():
+                        _p.unlink()
+                except OSError:
+                    pass
 
     def register_position(
         self,
@@ -206,30 +247,13 @@ class ActivePositionManager:
     ) -> ActivePosition:
         """Record a newly-opened position (or recover one after restart).
 
-        Refuses to overwrite an existing active position — the caller must
-        call clear_position() first if the old position was closed.
+        Multi-position safe: each ticket gets its own slot.  If *ticket*
+        already exists, its entry data is refreshed (idempotent).
         """
-        if self._position is not None:
-            import json as _json
-
-            _existing_ticket = self._position.ticket
-            _msg = _json.dumps(
-                {
-                    "event": "register_position_blocked",
-                    "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
-                    "existing_ticket": _existing_ticket,
-                    "new_ticket": ticket,
-                    "reason": "active_position_exists",
-                },
-                ensure_ascii=False,
-            )
-            print(_msg, flush=True)
-            return self._position  # keep existing position, reject new one
-
         high = current_high if current_high is not None else entry_price
         low = entry_price  # worst-case for a long; for short we'd swap
 
-        self._position = ActivePosition(
+        pos = ActivePosition(
             ticket=ticket,
             side=side,
             entry_price=entry_price,
@@ -250,15 +274,17 @@ class ActivePositionManager:
             partial_tp_r=partial_tp_r,
             partial_tp_ratio=partial_tp_ratio,
         )
-        self._entry_consensus_score = float(
-            self._position.entry_consensus.get("consensus_score", 0)
-        )
+        self._entry_consensus_score = float(pos.entry_consensus.get("consensus_score", 0))
         # Seed EMA with entry confidence so first-cycle drop is measured
         # against a warm start, not zero
-        self._position.confidence_ema = self._entry_consensus_score
+        pos.confidence_ema = self._entry_consensus_score
         self._consecutive_flips = 0
         self._recovery_cycle = -1  # normal entry, no grace period
-        return self._position
+
+        self._positions[ticket] = pos
+        if self._primary_ticket is None:
+            self._primary_ticket = ticket
+        return pos
 
     def update_prices(
         self,
@@ -268,9 +294,29 @@ class ActivePositionManager:
         current_atr: float,
         regime_info: dict[str, Any] | None = None,
         cycle_count: int = 0,
+        ticket: int | None = None,
     ) -> dict[str, Any]:
-        """Per-cycle update.  Returns an action dict (may be empty)."""
-        pos = self._position
+        """Per-cycle update for one or all positions.  Returns aggregate info."""
+        if ticket is not None:
+            return self._update_single_position(ticket, mid, bid, ask, current_atr, regime_info)
+
+        # Update all positions
+        result: dict[str, Any] = {}
+        for t in list(self._positions):
+            result = self._update_single_position(t, mid, bid, ask, current_atr, regime_info)
+        return result
+
+    def _update_single_position(
+        self,
+        ticket: int,
+        mid: float,
+        bid: float,
+        ask: float,
+        current_atr: float,
+        regime_info: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Update one position's cycle trackers and extremes."""
+        pos = self._positions.get(ticket)
         if pos is None:
             return {}
 
@@ -282,12 +328,12 @@ class ActivePositionManager:
         pos.highest_high = max(pos.highest_high, bid if pos.side == "long" else ask)
         pos.lowest_low = min(pos.lowest_low, ask if pos.side == "long" else bid)
 
-        # Track peak R (prev_r already holds last cycle's value from prior update)
-        r_now = self._compute_r_multiple(mid)
+        # Track peak R
+        r_now = self._compute_r_multiple(mid, ticket=ticket)
         pos.highest_r = max(pos.highest_r, r_now)
 
         # Adjust trail multiplier for regime
-        self._adjust_trail_for_regime(current_atr, regime_info)
+        self._adjust_trail_for_regime(current_atr, regime_info, ticket=ticket)
 
         return {
             "mid": mid,
@@ -298,7 +344,7 @@ class ActivePositionManager:
 
     # ── Layer 1: Chandelier trailing stop ───────────────────────────────
 
-    def compute_trail_stop(self, current_atr: float) -> float | None:
+    def compute_trail_stop(self, current_atr: float, ticket: int | None = None) -> float | None:
         """Return new SL if the trail has advanced, else None.
 
         Long:  max(current_sl, highest_high - trail_mult × atr)
@@ -310,7 +356,7 @@ class ActivePositionManager:
         max_lock_atr R of profit to be locked in by the trailing stop.
         The original TP remains as the hard ceiling — never cancelled.
         """
-        pos = self._position
+        pos = self._get_pos(ticket)
         if pos is None:
             return None
 
@@ -353,9 +399,9 @@ class ActivePositionManager:
                 return None
             return round(candidate, 3)
 
-    def should_breakeven(self, mid: float, current_atr: float) -> bool:
+    def should_breakeven(self, mid: float, current_atr: float, ticket: int | None = None) -> bool:
         """Return True when the favorable move exceeds the breakeven threshold."""
-        pos = self._position
+        pos = self._get_pos(ticket)
         if pos is None or pos.breakeven_triggered:
             return False
 
@@ -365,13 +411,13 @@ class ActivePositionManager:
         else:
             return (pos.entry_price - pos.lowest_low) >= threshold
 
-    def should_partial_tp(self, mid: float) -> tuple[bool, float, float]:
+    def should_partial_tp(self, mid: float, ticket: int | None = None) -> tuple[bool, float, float]:
         """Return (trigger, close_volume, remaining_volume) if partial TP should fire.
 
         Only fires once per position.  When mid reaches partial_tp_r × risk,
         return the close_volume (= volume × partial_tp_ratio).
         """
-        pos = self._position
+        pos = self._get_pos(ticket)
         if pos is None or pos.partial_tp_triggered or pos.partial_tp_r <= 0:
             return False, 0.0, 0.0
 
@@ -382,9 +428,9 @@ class ActivePositionManager:
             return True, max(0.01, close_vol), max(0.01, remain_vol)
         return False, 0.0, 0.0
 
-    def _compute_r_multiple(self, mid: float) -> float:
+    def _compute_r_multiple(self, mid: float, ticket: int | None = None) -> float:
         """Current R-multiple (fraction of initial risk)."""
-        pos = self._position
+        pos = self._get_pos(ticket)
         if pos is None:
             return 0.0
         risk = abs(pos.entry_price - pos.initial_sl)
@@ -395,9 +441,9 @@ class ActivePositionManager:
         else:
             return (pos.entry_price - mid) / risk
 
-    def check_r_milestones(self, mid: float) -> str | None:
+    def check_r_milestones(self, mid: float, ticket: int | None = None) -> str | None:
         """Return '1R', '2R', or '3R' if newly crossed, else None."""
-        pos = self._position
+        pos = self._get_pos(ticket)
         if pos is None:
             return None
         r = self._compute_r_multiple(mid)
@@ -408,11 +454,14 @@ class ActivePositionManager:
         return None
 
     def _adjust_trail_for_regime(
-        self, current_atr: float, regime_info: dict[str, Any] | None = None
+        self,
+        current_atr: float,
+        regime_info: dict[str, Any] | None = None,
+        ticket: int | None = None,
     ) -> None:
         """Dynamically adjust trail multiplier based on volatility regime,
         realised volatility expansion/contraction, and brain-specific P&L."""
-        pos = self._position
+        pos = self._get_pos(ticket)
         if pos is None:
             return
 
@@ -430,46 +479,74 @@ class ActivePositionManager:
         base = self._compute_adaptive_trail_k(current_atr, pos, base)
 
         # Apply brain-specific adjustment based on live P&L performance
-        base *= self._compute_brain_specific_trail_scale()
+        base *= self._compute_brain_specific_trail_scale(ticket=ticket)
 
         pos.trail_multiplier = round(base, 3)
 
     def _compute_adaptive_trail_k(
         self, current_atr: float, pos: ActivePosition, base_k: float
     ) -> float:
-        """Adjust trail multiplier based on realised volatility dynamics.
+        """Adjust trail multiplier based on realised volatility AND Layer-2 confidence.
 
-        Core principle:
+        Core principles:
+          - Confidence rising (model conviction growing) → widen trail, let profits run
+          - Confidence falling (model conviction decaying) → tighten trail, protect gains
           - Volatility expanding (trend accelerating) → widen trail, give room
-          - Volatility contracting (trend exhausting) → tighten trail, protect gains
-          - Stable volatility → use regime base K unchanged
+          - Volatility contracting (trend exhausting) → tighten trail
 
-        Returns adjusted K in [1.2, 4.0].
+        Returns adjusted K in [1.0, 4.0].
+
+        FIX-20260518-036: Confidence Spring — Layer-2 confidence_ema now
+        dynamically modulates the mechanical Chandelier trail multiplier.
+        Previously Layer 1 (vol-based) and Layer 2 (model confidence) were
+        completely independent, causing the Chandelier trail to "assassinate"
+        positions that the ML brain still strongly supported.
         """
         if pos.entry_atr <= 0:
             return base_k
 
+        # ── Volatility adjustment (original) ──
         vol_ratio = current_atr / pos.entry_atr
 
         if vol_ratio > 1.5:
-            k = base_k + 0.8  # strong trend acceleration — wide trail
+            vol_adj = 0.8  # strong trend acceleration — wide trail
         elif vol_ratio > 1.2:
-            k = base_k + 0.4  # mild expansion — moderately wide
+            vol_adj = 0.4  # mild expansion — moderately wide
         elif vol_ratio < 0.7:
-            k = base_k - 0.3  # volatility collapse — tighten
+            vol_adj = -0.3  # volatility collapse — tighten
         else:
-            k = base_k  # stable — use regime base
+            vol_adj = 0.0  # stable — use regime base
 
-        return max(1.2, min(4.0, k))
+        # ── Confidence Spring adjustment (FIX-20260518-036) ──
+        confidence_ema = getattr(pos, "confidence_ema", 0.5)
+        entry_conf = getattr(self, "_entry_consensus_score", 0.5)
+        if entry_conf > 1e-6:
+            conf_ratio = confidence_ema / entry_conf
+        else:
+            conf_ratio = 1.0
 
-    def _compute_brain_specific_trail_scale(self) -> float:
+        if conf_ratio > 1.20:
+            conf_adj = 0.6  # confidence rising significantly → wide trail
+        elif conf_ratio > 1.05:
+            conf_adj = 0.3  # confidence rising mildly
+        elif conf_ratio < 0.70:
+            conf_adj = -0.5  # confidence collapsing → tighten sharply
+        elif conf_ratio < 0.85:
+            conf_adj = -0.2  # confidence decaying → moderate tighten
+        else:
+            conf_adj = 0.0  # stable confidence → no adjustment
+
+        k = base_k + vol_adj + conf_adj
+        return max(1.0, min(4.0, k))
+
+    def _compute_brain_specific_trail_scale(self, ticket: int | None = None) -> float:
         """Scale trail multiplier by supporting brains' live Sharpe ratios.
 
         High Sharpe → wider trail (let profits run).
         Negative Sharpe → tighter trail (cut faster).
         Returns a multiplier in [0.6, 1.5].
         """
-        pos = self._position
+        pos = self._get_pos(ticket)
         if pos is None or not pos.supporting_brain_ids:
             return 1.0
         if self.pnl_store is None:
@@ -501,6 +578,7 @@ class ActivePositionManager:
         current_consensus: dict[str, Any],
         current_supporting: list[str],
         mid: float | None = None,
+        ticket: int | None = None,
     ) -> tuple[bool, str]:
         """Check if brain consensus has flipped against the entry direction.
 
@@ -524,12 +602,14 @@ class ActivePositionManager:
 
         Returns (should_exit, reason).
         """
-        pos = self._position
+        pos = self._get_pos(ticket)
         if pos is None:
             return False, ""
 
         # ── Minimum-hold protection with toxicity veto ──
-        if self._is_protected_period() and not self._toxicity_veto(mid if mid is not None else 0.0):
+        if self._is_protected_period(ticket=ticket) and not self._toxicity_veto(
+            mid if mid is not None else 0.0, ticket=ticket
+        ):
             return False, "protected_min_hold"
 
         # ── 1. Signal-reversal: full consensus opposes position ──
@@ -598,14 +678,16 @@ class ActivePositionManager:
     def mark_brains_reevaluated(self, cycle_count: int) -> None:
         self._last_brain_reeval_cycle = cycle_count
 
-    def should_exit_ou_based(self, current_z_score: float, z_exit: float = 0.3) -> tuple[bool, str]:
+    def should_exit_ou_based(
+        self, current_z_score: float, z_exit: float = 0.3, ticket: int | None = None
+    ) -> tuple[bool, str]:
         """纯粹的均值回归平仓判定。
 
         只有极端偏离入场的单子（|entry_z| >= 1.5），
         才有资格因为 |current_z| < 0.3 而平仓。
         时间维度的风控交给 TimeStop 模块，此处不做 warmup。
         """
-        pos = self._position
+        pos = self._get_pos(ticket)
         if pos is None:
             return False, ""
 
@@ -1016,6 +1098,7 @@ class ActivePositionManager:
         regime_info: dict[str, Any] | None = None,
         current_consensus: dict[str, Any] | None = None,
         current_supporting: list[str] | None = None,
+        ticket: int | None = None,
     ) -> tuple[bool, str]:
         """Multi-factor exit evaluation using MetaExitEngine.
 
@@ -1028,7 +1111,7 @@ class ActivePositionManager:
         if self.meta_exit_engine is None:
             return False, ""
 
-        pos = self._position
+        pos = self._get_pos(ticket)
         if pos is None:
             return False, ""
 
@@ -1089,7 +1172,7 @@ class ActivePositionManager:
             return True  # unknown → assume aligned
         return pos_side == trend_dir
 
-    def compute_trail_tp(self, current_atr: float) -> float | None:
+    def compute_trail_tp(self, current_atr: float, ticket: int | None = None) -> float | None:
         """Return new TP if it should be tightened based on ATR contraction.
 
         TP only moves INWARD (closer to entry) — never widens.  When ATR
@@ -1099,7 +1182,7 @@ class ActivePositionManager:
         Long:  candidate = mid + tp_atr_mult × current_atr  (but ≤ original TP)
         Short: candidate = mid - tp_atr_mult × current_atr  (but ≥ original TP)
         """
-        pos = self._position
+        pos = self._get_pos(ticket)
         if pos is None or pos.entry_atr <= 0 or current_atr <= 0:
             return None
 
@@ -1144,46 +1227,63 @@ class ActivePositionManager:
         mid: float,
         override_horizon: int | None = None,
         override_min_r: float | None = None,
+        ticket: int | None = None,
     ) -> tuple[bool, str]:
-        """Phased time-decay exit based on model training horizon.
+        """Dynamic EV trajectory envelope — sqrt-law Alpha decay exit.
 
-        Phase 1 (0-50% of horizon): model prediction is still valid, no time pressure.
-        Phase 2 (50-80% of horizon): need ≥0.3R to avoid time exit.
-        Phase 3 (80-100% of horizon): need ≥0.5R to avoid time exit.
-        Phase 4 (>100% of horizon): model prediction expired, exit unless ≥1.0R.
+        Replaces the old linear-phase time decay (50%→0.3R, 80%→0.5R, 100%→1.0R)
+        with a smooth sqrt-based expected-value curve per Triple-Barrier theory:
 
-        *override_horizon* and *override_min_r* allow per-strategy tuning.
+            EV_min(t) = R_target × √(t/T_max) − tolerance
+
+        - Early cycles: curve starts negative (tolerance absorbs spread/slippage).
+        - Mid-life: curve rises non-linearly (Alpha must prove itself).
+        - Expiry: curve reaches R_target (must be at design R:R).
+
+        A grace period (first 10% of horizon or 2 cycles) prevents instant stop-out
+        from spread/slippage drag right after entry.
+
+        FIX-20260518-036: replaces the four hard-coded linear phases with a
+        continuous sqrt trajectory.  The tolerance floor (0.5R) gives normal
+        price noise room to breathe; the grace period lets the position survive
+        the friction-cost recovery window.
         """
-        pos = self._position
+        pos = self._get_pos(ticket)
         if pos is None:
             return False, ""
 
-        r_now = self._compute_r_multiple(mid)
+        r_now = self._compute_r_multiple(mid, ticket=ticket)
         effective_horizon = (
             override_horizon
             if override_horizon is not None and override_horizon > 0
             else self._get_effective_horizon()
         )
-        min_r = override_min_r if override_min_r is not None else self.require_min_r
-        ratio = pos.cycles_held / max(effective_horizon, 1)
+        T_max = max(effective_horizon, 1)
+        t_ratio = pos.cycles_held / T_max
 
-        if ratio < 0.50:
+        # ── Grace period: let the position survive friction recovery ──
+        if t_ratio < 0.10 or pos.cycles_held < 2:
             return False, ""
-        elif ratio < 0.80:
-            if r_now < min_r:
-                return True, f"time_phase2_{pos.cycles_held}c_h{effective_horizon}_r{r_now:.2f}"
-        elif ratio < 1.00:
-            if r_now < min_r * 1.67:  # ~0.5R when min_r=0.3
-                return True, f"time_phase3_{pos.cycles_held}c_h{effective_horizon}_r{r_now:.2f}"
-        else:
-            if r_now < 1.0:
-                return (
-                    True,
-                    f"time_phase4_expired_{pos.cycles_held}c_h{effective_horizon}_r{r_now:.2f}",
-                )
+
+        # ── Design R:R — the strategy's expected reward at horizon expiry ──
+        _sl_dist = abs(pos.entry_price - pos.initial_sl)
+        _tp_dist = abs(pos.initial_tp - pos.entry_price)
+        r_target = _tp_dist / _sl_dist if _sl_dist > 1e-8 else 1.75
+
+        # ── EV trajectory with tolerance floor ──
+        # sqrt(t_ratio) starts small and grows to 1.0.  Subtracting tolerance
+        # creates a curve that starts negative (absorbing friction) and rises
+        # to R_target − tolerance at expiry.
+        tolerance = 0.5  # 0.5R buffer for normal price noise
+        ev_floor = r_target * math.sqrt(min(t_ratio, 1.0)) - tolerance
+
+        if r_now < ev_floor:
+            return True, (
+                f"ev_trajectory_t{t_ratio:.0%}_r{r_now:.2f}_lt_{ev_floor:.2f}" f"_h{T_max}c"
+            )
         return False, ""
 
-    def should_exit_hesitation(self) -> tuple[bool, str]:
+    def should_exit_hesitation(self, ticket: int | None = None) -> tuple[bool, str]:
         """Exit if position has not triggered breakeven within hesitation_cycles.
 
         Catches positions that never gain traction — the consensus said "trade"
@@ -1191,7 +1291,7 @@ class ActivePositionManager:
         """
         if self.hesitation_cycles <= 0:
             return False, ""
-        pos = self._position
+        pos = self._get_pos(ticket)
         if pos is None:
             return False, ""
         if pos.breakeven_triggered:
@@ -1202,18 +1302,20 @@ class ActivePositionManager:
 
     # ── Minimum hold protection with toxicity veto ──────────────────────
 
-    def _is_protected_period(self) -> bool:
+    def _is_protected_period(self, ticket: int | None = None) -> bool:
         """True during the first min_hold_cycles after entry.
 
         During protection, non-SL exits (Layer 2/2.5/3) are suppressed
         unless the toxicity veto fires.
         """
-        pos = self._position
+        pos = self._get_pos(ticket)
         if pos is None:
             return False
         return pos.cycles_held < self.min_hold_cycles
 
-    def _toxicity_veto(self, mid: float, tick_velocity: float | None = None) -> bool:
+    def _toxicity_veto(
+        self, mid: float, tick_velocity: float | None = None, ticket: int | None = None
+    ) -> bool:
         """Emergency escape: override protection when market is toxic.
 
         Triggers when (any):
@@ -1222,7 +1324,7 @@ class ActivePositionManager:
 
         Returns True when the position should NOT be protected.
         """
-        pos = self._position
+        pos = self._get_pos(ticket)
         if pos is None:
             return False
 
@@ -1281,47 +1383,60 @@ class ActivePositionManager:
     _SAVE_INTERVAL_CYCLES = 5  # persist every N cycles to limit disk I/O
 
     def save_state(self, save_path: str | Path) -> None:
-        """Persist current position + manager state to JSON.
+        """Persist all tracked positions + manager state to JSON.
 
-        Called from the main loop every N cycles.  Skipped if no position.
+        Called from the main loop every N cycles.  Skipped if no positions.
         """
         import json as _json
         from pathlib import Path as _Path
 
-        pos = self._position
-        if pos is None:
+        if not self._positions:
             return
 
         p = _Path(save_path)
         self._last_state_path = str(p)
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
+            positions_payload: list[dict[str, Any]] = []
+            for _ticket, pos in self._positions.items():
+                positions_payload.append(
+                    {
+                        "ticket": pos.ticket,
+                        "side": pos.side,
+                        "entry_price": pos.entry_price,
+                        "volume": pos.volume,
+                        "initial_sl": pos.initial_sl,
+                        "initial_tp": pos.initial_tp,
+                        "current_sl": pos.current_sl,
+                        "current_tp": pos.current_tp,
+                        "highest_high": pos.highest_high,
+                        "lowest_low": pos.lowest_low,
+                        "entry_atr": pos.entry_atr,
+                        "entry_cycle": pos.entry_cycle,
+                        "entry_z_score": pos.entry_z_score,
+                        "entry_consensus": pos.entry_consensus,
+                        "supporting_brain_ids": pos.supporting_brain_ids,
+                        "model_horizons": pos.model_horizons,
+                        "breakeven_triggered": pos.breakeven_triggered,
+                        "trail_multiplier": pos.trail_multiplier,
+                        "r_milestones_hit": pos.r_milestones_hit,
+                        "cycles_held": pos.cycles_held,
+                        "highest_r": pos.highest_r,
+                        "partial_tp_triggered": pos.partial_tp_triggered,
+                        "partial_tp_r": pos.partial_tp_r,
+                        "partial_tp_ratio": pos.partial_tp_ratio,
+                        "ou_handoff_active": pos.ou_handoff_active,
+                        "ou_handoff_r": pos.ou_handoff_r,
+                    }
+                )
             payload: dict[str, Any] = {
-                "ticket": pos.ticket,
-                "side": pos.side,
-                "entry_price": pos.entry_price,
-                "volume": pos.volume,
-                "initial_sl": pos.initial_sl,
-                "initial_tp": pos.initial_tp,
-                "current_sl": pos.current_sl,
-                "current_tp": pos.current_tp,
-                "highest_high": pos.highest_high,
-                "lowest_low": pos.lowest_low,
-                "entry_atr": pos.entry_atr,
-                "entry_cycle": pos.entry_cycle,
-                "entry_z_score": pos.entry_z_score,
-                "entry_consensus": pos.entry_consensus,
-                "supporting_brain_ids": pos.supporting_brain_ids,
-                "model_horizons": pos.model_horizons,
-                "breakeven_triggered": pos.breakeven_triggered,
-                "trail_multiplier": pos.trail_multiplier,
-                "r_milestones_hit": pos.r_milestones_hit,
-                "cycles_held": pos.cycles_held,
-                "highest_r": pos.highest_r,
+                "version": 2,  # multi-position format
+                "positions": positions_payload,
                 "_last_brain_reeval_cycle": self._last_brain_reeval_cycle,
                 "_entry_consensus_score": self._entry_consensus_score,
                 "_consecutive_flips": self._consecutive_flips,
                 "_recovery_cycle": self._recovery_cycle,
+                "_primary_ticket": self._primary_ticket,
                 "saved_at_utc": (
                     __import__("datetime")
                     .datetime.now(__import__("datetime").UTC)
@@ -1336,9 +1451,10 @@ class ActivePositionManager:
     def load_state(
         self, save_path: str | Path, max_age_hours: float = 24.0
     ) -> ActivePosition | None:
-        """Restore position + manager state from JSON, if fresh enough.
+        """Restore all positions + manager state from JSON, if fresh enough.
 
-        Returns the restored ActivePosition, or None if no valid (or too old) state exists.
+        Handles both v1 (single-position) and v2 (multi-position array) formats.
+        Returns the primary restored position (for backward compat), or None.
         """
         import json as _json
         from pathlib import Path as _Path
@@ -1364,40 +1480,68 @@ class ActivePositionManager:
         except (_json.JSONDecodeError, OSError):
             return None
 
-        # Require minimum fields
-        if not all(k in data for k in ("ticket", "side", "entry_price", "volume")):
-            return None
+        def _build_position(d: dict[str, Any]) -> ActivePosition:
+            return ActivePosition(
+                ticket=int(d["ticket"]),
+                side=str(d["side"]),
+                entry_price=float(d["entry_price"]),
+                volume=float(d["volume"]),
+                initial_sl=float(d.get("initial_sl", d["entry_price"])),
+                initial_tp=float(d.get("initial_tp", 0)),
+                current_sl=float(d.get("current_sl", d["initial_sl"])),
+                current_tp=float(d.get("current_tp", d.get("initial_tp", 0))),
+                highest_high=float(d.get("highest_high", d["entry_price"])),
+                lowest_low=float(d.get("lowest_low", d["entry_price"])),
+                entry_atr=float(d.get("entry_atr", 2.0)),
+                entry_cycle=int(d.get("entry_cycle", 0)),
+                entry_z_score=float(d.get("entry_z_score", 0.0)),
+                entry_consensus=d.get("entry_consensus", {}),
+                supporting_brain_ids=d.get("supporting_brain_ids", []),
+                model_horizons=d.get("model_horizons", {}),
+                breakeven_triggered=bool(d.get("breakeven_triggered", False)),
+                trail_multiplier=float(d.get("trail_multiplier", self.trail_atr_mult)),
+                r_milestones_hit=d.get("r_milestones_hit", []),
+                cycles_held=int(d.get("cycles_held", 0)),
+                highest_r=float(d.get("highest_r", 0.0)),
+                prev_r=float(d.get("prev_r", 0.0)),
+                partial_tp_triggered=bool(d.get("partial_tp_triggered", False)),
+                partial_tp_r=float(d.get("partial_tp_r", 0.0)),
+                partial_tp_ratio=float(d.get("partial_tp_ratio", 0.5)),
+                ou_handoff_active=bool(d.get("ou_handoff_active", False)),
+                ou_handoff_r=float(d.get("ou_handoff_r", 0.0)),
+            )
 
-        pos = ActivePosition(
-            ticket=int(data["ticket"]),
-            side=str(data["side"]),
-            entry_price=float(data["entry_price"]),
-            volume=float(data["volume"]),
-            initial_sl=float(data.get("initial_sl", data["entry_price"])),
-            initial_tp=float(data.get("initial_tp", 0)),
-            current_sl=float(data.get("current_sl", data["initial_sl"])),
-            current_tp=float(data.get("current_tp", data.get("initial_tp", 0))),
-            highest_high=float(data.get("highest_high", data["entry_price"])),
-            lowest_low=float(data.get("lowest_low", data["entry_price"])),
-            entry_atr=float(data.get("entry_atr", 2.0)),
-            entry_cycle=int(data.get("entry_cycle", 0)),
-            entry_z_score=float(data.get("entry_z_score", 0.0)),
-            entry_consensus=data.get("entry_consensus", {}),
-            supporting_brain_ids=data.get("supporting_brain_ids", []),
-            model_horizons=data.get("model_horizons", {}),
-            breakeven_triggered=bool(data.get("breakeven_triggered", False)),
-            trail_multiplier=float(data.get("trail_multiplier", self.trail_atr_mult)),
-            r_milestones_hit=data.get("r_milestones_hit", []),
-            cycles_held=int(data.get("cycles_held", 0)),
-            highest_r=float(data.get("highest_r", 0.0)),
-            prev_r=float(data.get("prev_r", 0.0)),
-            partial_tp_triggered=bool(data.get("partial_tp_triggered", False)),
-            partial_tp_r=float(data.get("partial_tp_r", 0.0)),
-            partial_tp_ratio=float(data.get("partial_tp_ratio", 0.5)),
-        )
-        self._position = pos
-        self._last_brain_reeval_cycle = int(data.get("_last_brain_reeval_cycle", -1))
-        self._entry_consensus_score = float(data.get("_entry_consensus_score", 0.0))
-        self._consecutive_flips = int(data.get("_consecutive_flips", 0))
-        self._recovery_cycle = 0  # always start grace period on recovery
-        return pos
+        is_v2 = isinstance(data.get("version"), int) and data["version"] >= 2
+
+        if is_v2:
+            position_list: list[dict[str, Any]] = data.get("positions", [])
+            if not position_list:
+                return None
+            primary_pos = None
+            for pd in position_list:
+                if not all(k in pd for k in ("ticket", "side", "entry_price", "volume")):
+                    continue
+                pos = _build_position(pd)
+                self._positions[pos.ticket] = pos
+                if primary_pos is None:
+                    primary_pos = pos
+            self._primary_ticket = int(data.get("_primary_ticket", 0)) or (
+                primary_pos.ticket if primary_pos else None
+            )
+            self._last_brain_reeval_cycle = int(data.get("_last_brain_reeval_cycle", -1))
+            self._entry_consensus_score = float(data.get("_entry_consensus_score", 0.0))
+            self._consecutive_flips = int(data.get("_consecutive_flips", 0))
+            self._recovery_cycle = 0  # always start grace period on recovery
+            return primary_pos
+        else:
+            # v1 format: single position
+            if not all(k in data for k in ("ticket", "side", "entry_price", "volume")):
+                return None
+            pos = _build_position(data)
+            self._positions[pos.ticket] = pos
+            self._primary_ticket = pos.ticket
+            self._last_brain_reeval_cycle = int(data.get("_last_brain_reeval_cycle", -1))
+            self._entry_consensus_score = float(data.get("_entry_consensus_score", 0.0))
+            self._consecutive_flips = int(data.get("_consecutive_flips", 0))
+            self._recovery_cycle = 0  # always start grace period on recovery
+            return pos

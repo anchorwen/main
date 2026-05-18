@@ -10,7 +10,7 @@ import json
 import os
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -78,7 +78,7 @@ class LiveCycleConfig:
     symbol: str = "XAUUSDc"
     base_dir: str = "data"
     calendar_path: str = "data/config/market_calendar.json"
-    position_state_path: str = "data/state/active_position.json"
+    position_state_path: str = "state/active_position.json"
     interval_seconds: float = 30.0
     confidence_threshold: float = 0.50
     cooldown_seconds: float = 300.0
@@ -118,6 +118,7 @@ class LiveCycleConfig:
     portfolio_max_gross: float = 0.10
     portfolio_max_net: float = 0.05
     portfolio_max_same_dir: int = 2
+    portfolio_netting_mode: str = "net_out"  # "net_out" | "allow_coexist"
 
     # ── live.yaml strategy_lines overrides ──
     strategy_configs: dict[str, Any] = field(default_factory=dict)
@@ -232,6 +233,13 @@ def _run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> 
         json.dumps({"event": "daily_ops_scheduled", "time": _utc_iso()}, ensure_ascii=False),
         flush=True,
     )
+
+    # ── Persist "decided to execute" BEFORE running to prevent edge reentry ──
+    # If the process crashes mid-execution, the persisted timestamp ensures
+    # the post-restart date-based check skips re-trigger for the same day.
+    state._last_daily_ops_utc = datetime.now(UTC).timestamp()
+    _save_daily_ops_state(config.base_dir, state._last_daily_ops_utc)
+
     try:
         from scripts.daily_ops import run_daily_ops
 
@@ -241,8 +249,6 @@ def _run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> 
             skip_recap=True,
             mt5_terminal_path=config.mt5_terminal_path,
         )
-        state._last_daily_ops_utc = datetime.now(UTC).timestamp()
-        _save_daily_ops_state(config.base_dir, state._last_daily_ops_utc)
         state._tracker_reload_pending = True  # daily_ops wrote enriched tracker to disk
 
         # Persist the full report to disk (CLI uses --output, API path doesn't)
@@ -395,14 +401,13 @@ def _check_pre_close(config: LiveCycleConfig, state: LiveCycleState) -> dict[str
     if not result.get("in_pre_close"):
         return {}
 
-    # If we must flatten and have an open position, close it immediately
+    # If we must flatten and have open positions, close them all
     if (
         result.get("must_flatten")
         and state.position_manager is not None
         and state.position_manager.has_position()
     ):
-        pos = state.position_manager.get_position()
-        if pos is not None:
+        for pos in state.position_manager.get_all_positions():
             print(
                 json.dumps(
                     {
@@ -697,24 +702,25 @@ def _execute_management_phase(
     micro_feature_computer: Any,
     micro_feature_adapter: Any,
     daily_feature_provider: Any = None,
+    ticket: int | None = None,
 ) -> Any:
     """Manage open position: trail stop, re-evaluate brains, check exits.
 
-    Returns True if the position was closed (caller should skip post-exit
-    bookkeeping that assumes the position still exists).
+    If *ticket* is given, manages that specific position; otherwise manages
+    the primary (backward compat).  Returns True if the position was closed.
     """
     pm = state.position_manager
-    if pm is None or not pm.has_position():
+    if pm is None or not pm.has_position(ticket=ticket):
         return False
 
-    pos = pm.get_position()
+    pos = pm.get_position(ticket=ticket)
     if pos is None:
         return False
 
     # Guard: if MT5 already closed this position (detected by reconciliation),
     # clear the stale position and skip management phase entirely.
     if state.known_open_tickets and pos.ticket not in state.known_open_tickets:
-        pm.clear_position()
+        pm.clear_position(ticket=pos.ticket)
         print(
             json.dumps(
                 {
@@ -736,7 +742,7 @@ def _execute_management_phase(
         try:
             _mt5_pos = mt5.positions_get(ticket=pos.ticket)
             if not _mt5_pos:
-                pm.clear_position()
+                pm.clear_position(ticket=pos.ticket)
                 state.known_open_tickets.pop(pos.ticket, None)
                 print(
                     json.dumps(
@@ -881,59 +887,96 @@ def _execute_management_phase(
     # ── 3. Update position tracking ──
     pm.update_prices(mid, bid, ask, current_atr, regime_info, state.loop_iteration)
 
-    # ── 4. Layer 1: Chandelier trailing stop ──
-    new_sl = pm.compute_trail_stop(current_atr)
-    if new_sl is not None and abs(new_sl - pos.current_sl) >= config.exit_min_step:
+    # ── 4-5.2: Trail SL, breakeven, trail TP — computed separately,
+    # dispatched as a SINGLE modify_sltp to prevent MT5 rejecting
+    # back-to-back requests for the same ticket (retcode 10006). ──
+    _final_sl = pos.current_sl
+    _final_tp = pos.current_tp
+    _reasons: list[str] = []
+    _old_sl = pos.current_sl
+    _old_tp = pos.current_tp
+    _trail_sl: float | None = None
+    _be_triggered = False
+    _be_dispatched = False
+
+    # Layer 1: Chandelier trailing stop
+    _trail_sl = pm.compute_trail_stop(current_atr, ticket=pos.ticket)
+    if _trail_sl is not None and abs(_trail_sl - pos.current_sl) >= config.exit_min_step:
+        _reasons.append("trail")
+        _final_sl = _trail_sl
+
+    # Breakeven check — only fires once per position
+    if not pos.breakeven_triggered and pm.should_breakeven(mid, current_atr, ticket=pos.ticket):
+        _be_triggered = True
+        _be_sl = pos.entry_price
+        _be_improves = (pos.side == "long" and _be_sl > _final_sl) or (
+            pos.side == "short" and _be_sl < _final_sl
+        )
+        if _be_improves:
+            _reasons.append("breakeven")
+            _final_sl = _be_sl
+            _be_dispatched = True
+        pos.breakeven_triggered = True
+
+    # Dynamic trailing TP — tightens when ATR contracts
+    _trail_tp = pm.compute_trail_tp(current_atr, ticket=pos.ticket)
+    if _trail_tp is not None and abs(_trail_tp - pos.current_tp) >= config.exit_min_step:
+        _reasons.append("tp")
+        _final_tp = _trail_tp
+
+    # ── Single dispatch (prevents MT5 retcode 10006 rejections) ──
+    _sl_changed = abs(_final_sl - pos.current_sl) >= config.exit_min_step
+    _tp_changed = abs(_final_tp - pos.current_tp) >= config.exit_min_step
+    if _reasons:
         _dispatch_modify_trail(
             config,
             pos,
-            new_sl,
-            pos.current_tp,
-            reason="trail",
+            _final_sl,
+            _final_tp,
+            reason="+".join(_reasons),
             brain_ids=pos.supporting_brain_ids,
             strategy_name=_sname,
             state=state,
         )
-        old_sl = pos.current_sl
-        pos.current_sl = new_sl
-        print(
-            json.dumps(
-                {
-                    "event": "trail_stop_moved",
-                    "time": _utc_iso(),
-                    "ticket": pos.ticket,
-                    "side": pos.side,
-                    "old_sl": round(old_sl, 3),
-                    "new_sl": round(new_sl, 3),
-                    "highest_high": round(pos.highest_high, 3),
-                    "trail_mult": pos.trail_multiplier,
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
-
-    # ── 5. Breakeven check ──
-    # Only dispatch if breakeven SL improves current SL (trail may have
-    # already moved SL past entry, making breakeven a downgrade).
-    if not pos.breakeven_triggered and pm.should_breakeven(mid, current_atr):
-        breakeven_sl = pos.entry_price
-        improve = (pos.side == "long" and breakeven_sl > pos.current_sl) or (
-            pos.side == "short" and breakeven_sl < pos.current_sl
-        )
-        if improve:
-            _dispatch_modify_trail(
-                config,
-                pos,
-                breakeven_sl,
-                pos.current_tp,
-                reason="breakeven",
-                brain_ids=pos.supporting_brain_ids,
-                strategy_name=_sname,
-                state=state,
+        # Update local state and log AFTER dispatch
+        if _sl_changed:
+            pos.current_sl = _final_sl
+            print(
+                json.dumps(
+                    {
+                        "event": "trail_stop_moved",
+                        "time": _utc_iso(),
+                        "ticket": pos.ticket,
+                        "side": pos.side,
+                        "old_sl": round(_old_sl, 3),
+                        "new_sl": round(_final_sl, 3),
+                        "highest_high": round(pos.highest_high, 3),
+                        "trail_mult": pos.trail_multiplier,
+                        "merged_reasons": "+".join(_reasons),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
             )
-            pos.current_sl = breakeven_sl
-        pos.breakeven_triggered = True
+        if _tp_changed:
+            pos.current_tp = _final_tp
+            print(
+                json.dumps(
+                    {
+                        "event": "trail_tp_moved",
+                        "time": _utc_iso(),
+                        "ticket": pos.ticket,
+                        "side": pos.side,
+                        "old_tp": round(_old_tp, 3),
+                        "new_tp": round(_final_tp, 3),
+                        "atr_ratio": round(current_atr / max(pos.entry_atr, 0.01), 2),
+                        "merged_reasons": "+".join(_reasons),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+    if _be_triggered:
         print(
             json.dumps(
                 {
@@ -943,38 +986,7 @@ def _execute_management_phase(
                     "side": pos.side,
                     "entry_price": pos.entry_price,
                     "mid": round(mid, 3),
-                    "dispatched": improve,
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
-
-    # ── 5.2 Dynamic trailing TP (tighten when ATR contracts) ──
-    new_tp = pm.compute_trail_tp(current_atr)
-    if new_tp is not None and abs(new_tp - pos.current_tp) >= config.exit_min_step:
-        _dispatch_modify_trail(
-            config,
-            pos,
-            pos.current_sl,
-            new_tp,
-            reason="trail_tp",
-            brain_ids=pos.supporting_brain_ids,
-            strategy_name=_sname,
-            state=state,
-        )
-        old_tp = pos.current_tp
-        pos.current_tp = new_tp
-        print(
-            json.dumps(
-                {
-                    "event": "trail_tp_moved",
-                    "time": _utc_iso(),
-                    "ticket": pos.ticket,
-                    "side": pos.side,
-                    "old_tp": round(old_tp, 3),
-                    "new_tp": round(new_tp, 3),
-                    "atr_ratio": round(current_atr / max(pos.entry_atr, 0.01), 2),
+                    "dispatched": _be_dispatched,
                 },
                 ensure_ascii=False,
             ),
@@ -983,7 +995,7 @@ def _execute_management_phase(
 
     # ── 5.5 Partial take-profit ──
     if not pos.partial_tp_triggered and pos.partial_tp_r > 0:
-        should_ptp, ptp_close_vol, ptp_remain_vol = pm.should_partial_tp(mid)
+        should_ptp, ptp_close_vol, ptp_remain_vol = pm.should_partial_tp(mid, ticket=pos.ticket)
         if should_ptp:
             _close_payload: dict[str, Any] = {
                 "action": "close",
@@ -1010,21 +1022,63 @@ def _execute_management_phase(
             if _open_msg_id:
                 _close_payload["open_message_id"] = _open_msg_id
             _ptp_dispatched = False
+            _ptp_watchdog = getattr(state, "exit_watchdog", None)
             try:
-                from core.execution.live_order_sender import dispatch_live_order
+                if _ptp_watchdog is not None:
+                    from core.execution.live_order_sender import dispatch_live_order
 
-                dispatch_live_order(
-                    base_dir=config.base_dir,
-                    broker=None,
-                    symbol=config.symbol,
-                    execution_payload=_close_payload,
-                    skip_price_guard=True,
-                    ignore_protection_flag=config.ignore_protection_flag,
-                    protection_flag_path=config.protection_flag_path,
-                    adapter_name="mt5",
-                    extensions={"mt5_terminal_path": config.mt5_terminal_path},
-                )
-                _ptp_dispatched = True
+                    def _ptp_dispatch_fn(p: dict) -> dict:
+                        return dispatch_live_order(
+                            base_dir=config.base_dir,
+                            broker=None,
+                            symbol=config.symbol,
+                            execution_payload=p,
+                            skip_price_guard=True,
+                            ignore_protection_flag=config.ignore_protection_flag,
+                            protection_flag_path=config.protection_flag_path,
+                            adapter_name="mt5",
+                            extensions={"mt5_terminal_path": config.mt5_terminal_path},
+                        )
+
+                    _ptp_result = _ptp_watchdog.execute_exit(
+                        position_ticket=pos.ticket,
+                        volume=ptp_close_vol,
+                        side=pos.side,
+                        reason=f"partial_tp_{pos.partial_tp_r}R",
+                        magic=_close_payload.get("magic", 0),
+                        dispatch_fn=_ptp_dispatch_fn,
+                        brain_ids=_ptp_brain_ids,
+                    )
+                    _ptp_dispatched = _ptp_result.success
+                    if not _ptp_result.success:
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "partial_tp_watchdog_failed",
+                                    "time": _utc_iso(),
+                                    "ticket": pos.ticket,
+                                    "final_status": _ptp_result.final_status,
+                                    "alerts": _ptp_result.alerts,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                else:
+                    from core.execution.live_order_sender import dispatch_live_order
+
+                    dispatch_live_order(
+                        base_dir=config.base_dir,
+                        broker=None,
+                        symbol=config.symbol,
+                        execution_payload=_close_payload,
+                        skip_price_guard=True,
+                        ignore_protection_flag=config.ignore_protection_flag,
+                        protection_flag_path=config.protection_flag_path,
+                        adapter_name="mt5",
+                        extensions={"mt5_terminal_path": config.mt5_terminal_path},
+                    )
+                    _ptp_dispatched = True
             except Exception as _ptp_exc:
                 print(
                     json.dumps(
@@ -1069,7 +1123,7 @@ def _execute_management_phase(
                             "event": "partial_tp_executed",
                             "time": _utc_iso(),
                             "ticket": pos.ticket,
-                            "r": round(pm._compute_r_multiple(mid), 2),
+                            "r": round(pm._compute_r_multiple(mid, ticket=pos.ticket), 2),
                             "closed_volume": ptp_close_vol,
                             "remaining_volume": ptp_remain_vol,
                             "sl_moved_to_be": improve,
@@ -1080,7 +1134,7 @@ def _execute_management_phase(
                 )
 
     # ── 6. R-milestone checks ──
-    milestone = pm.check_r_milestones(mid)
+    milestone = pm.check_r_milestones(mid, ticket=pos.ticket)
     if milestone:
         print(
             json.dumps(
@@ -1089,7 +1143,7 @@ def _execute_management_phase(
                     "time": _utc_iso(),
                     "ticket": pos.ticket,
                     "milestone": milestone,
-                    "r": round(pm._compute_r_multiple(mid), 2),
+                    "r": round(pm._compute_r_multiple(mid, ticket=pos.ticket), 2),
                 },
                 ensure_ascii=False,
             ),
@@ -1125,7 +1179,7 @@ def _execute_management_phase(
     # premature exits caused by transient feature instability.
     # Layer 1 (trailing stop + hard SL) still runs normally.
     if pm.is_in_grace_period():
-        _gr_r = round(pm._compute_r_multiple(mid), 2) if mid is not None else 0.0
+        _gr_r = round(pm._compute_r_multiple(mid, ticket=pos.ticket), 2) if mid is not None else 0.0
         # Emergency exit: if position is deeply underwater, close immediately
         # even during grace period.  Feature buffers may be cold, but a severe
         # adverse move is a high-confidence signal that transcends noise.
@@ -1156,7 +1210,7 @@ def _execute_management_phase(
                 ),
                 flush=True,
             )
-            pm.clear_position()
+            pm.clear_position(ticket=pos.ticket)
             return True
 
         print(
@@ -1336,7 +1390,7 @@ def _execute_management_phase(
                 # Exit if 3 consecutive bars have negative PnL.
                 # Runs before OU exit because it saves ~1.55R vs hard_stop.
                 if mid is not None and mid > 0:
-                    _r_now = pm._compute_r_multiple(mid)
+                    _r_now = pm._compute_r_multiple(mid, ticket=pos.ticket)
                     _should_bleed, _bleed_reason = pm.should_exit_bleed(pos, _r_now)
                     if _should_bleed:
                         _dispatch_managed_close(
@@ -1362,7 +1416,7 @@ def _execute_management_phase(
                             ),
                             flush=True,
                         )
-                        pm.clear_position()
+                        pm.clear_position(ticket=pos.ticket)
                         return True
 
                 # ── OU mean-reversion exit (ARB brain) ──
@@ -1382,7 +1436,9 @@ def _execute_management_phase(
                             try:
                                 raw_ou = b_info["adapter"].infer(np.array([mid], dtype=np.float32))
                                 ou_z = float(raw_ou.get("z_score", 0.0))
-                                should_ou_exit, ou_reason = pm.should_exit_ou_based(ou_z)
+                                should_ou_exit, ou_reason = pm.should_exit_ou_based(
+                                    ou_z, ticket=pos.ticket
+                                )
                                 if should_ou_exit:
                                     _dispatch_managed_close(
                                         config,
@@ -1407,7 +1463,7 @@ def _execute_management_phase(
                                         ),
                                         flush=True,
                                     )
-                                    pm.clear_position()
+                                    pm.clear_position(ticket=pos.ticket)
                                     return True
                             except Exception:
                                 pass
@@ -1417,7 +1473,7 @@ def _execute_management_phase(
                 exit_reason = ""
                 if _flip_enabled:
                     should_exit, exit_reason = pm.evaluate_brain_exit(
-                        current_consensus, current_supporting, mid=mid
+                        current_consensus, current_supporting, mid=mid, ticket=pos.ticket
                     )
                 if should_exit:
                     _bf_confidence = float(
@@ -1445,7 +1501,7 @@ def _execute_management_phase(
                         ),
                         flush=True,
                     )
-                    pm.clear_position()
+                    pm.clear_position(ticket=pos.ticket)
                     return True
             except Exception as exc:
                 print(
@@ -1457,8 +1513,8 @@ def _execute_management_phase(
                 )
 
     # ── 7.5 Layer 2.5: Meta-model multi-factor exit ──
-    _skip_meta = pm._is_protected_period() and not pm._toxicity_veto(
-        mid if mid is not None else 0.0
+    _skip_meta = pm._is_protected_period(ticket=pos.ticket) and not pm._toxicity_veto(
+        mid if mid is not None else 0.0, ticket=pos.ticket
     )
     if not _skip_meta and pm.meta_exit_engine is not None:
         try:
@@ -1485,6 +1541,7 @@ def _execute_management_phase(
                 regime_info=_regime_with_side,
                 current_consensus=_meta_cons,
                 current_supporting=_meta_sup,
+                ticket=pos.ticket,
             )
             if should_meta_exit:
                 _dispatch_managed_close(
@@ -1509,7 +1566,7 @@ def _execute_management_phase(
                     ),
                     flush=True,
                 )
-                pm.clear_position()
+                pm.clear_position(ticket=pos.ticket)
                 return True
         except Exception as exc:
             print(
@@ -1521,11 +1578,11 @@ def _execute_management_phase(
             )
 
     # ── 7.8 Layer 2.8: Hesitation exit (no breakeven within N cycles) ──
-    _skip_hesitation = pm._is_protected_period() and not pm._toxicity_veto(
-        mid if mid is not None else 0.0
+    _skip_hesitation = pm._is_protected_period(ticket=pos.ticket) and not pm._toxicity_veto(
+        mid if mid is not None else 0.0, ticket=pos.ticket
     )
     if not _skip_hesitation:
-        should_hesitate, hesitate_reason = pm.should_exit_hesitation()
+        should_hesitate, hesitate_reason = pm.should_exit_hesitation(ticket=pos.ticket)
         if should_hesitate:
             _dispatch_managed_close(
                 config,
@@ -1550,12 +1607,12 @@ def _execute_management_phase(
                 ),
                 flush=True,
             )
-            pm.clear_position()
+            pm.clear_position(ticket=pos.ticket)
             return True
 
     # ── 8. Layer 3: Time-based exit ──
-    _skip_time = pm._is_protected_period() and not pm._toxicity_veto(
-        mid if mid is not None else 0.0
+    _skip_time = pm._is_protected_period(ticket=pos.ticket) and not pm._toxicity_veto(
+        mid if mid is not None else 0.0, ticket=pos.ticket
     )
     if not _skip_time:
         _tz_override = int(_exit_time_cycles) if _exit_time_cycles is not None else None
@@ -1563,6 +1620,7 @@ def _execute_management_phase(
             mid,
             override_horizon=_tz_override,
             override_min_r=_exit_min_r,
+            ticket=pos.ticket,
         )
         if should_time_exit:
             _dispatch_managed_close(
@@ -1582,13 +1640,13 @@ def _execute_management_phase(
                         "time": _utc_iso(),
                         "ticket": pos.ticket,
                         "cycles_held": pos.cycles_held,
-                        "r": round(pm._compute_r_multiple(mid), 2),
+                        "r": round(pm._compute_r_multiple(mid, ticket=pos.ticket), 2),
                     },
                     ensure_ascii=False,
                 ),
                 flush=True,
             )
-            pm.clear_position()
+            pm.clear_position(ticket=pos.ticket)
             return True
 
     return False
@@ -2749,6 +2807,7 @@ def _evaluate_strategy_lines(
             risk_budget_usd=risk_budget_usd,
             tracker=tracker,
             pnl_ledger=pnl_ledger,
+            pnl_store=pnl_ledger,
             micro_sequences=micro_sequences,
             daily_feature_vector=daily_feature_vector,
             meta_filter=meta_signal_filter,
@@ -2767,6 +2826,8 @@ def _evaluate_strategy_lines(
                 "direction": decision.direction,
                 "confidence": decision.confidence,
                 "volume": decision.volume,
+                "p_win": getattr(decision, "p_win", 0.5),
+                "kelly_mult": getattr(decision, "kelly_mult", 1.0),
                 "regime_mode": gate_mode,
                 "venue": getattr(decision, "venue", "live"),
                 "reason": decision.reason,
@@ -2811,6 +2872,58 @@ def _evaluate_strategy_lines(
             "entry_cycle": cycle_count,  # entry in current cycle
             "brain_ids": getattr(decision, "brain_ids", []),
         }
+
+    # ── Tier 3: √N correlation discount ─────────────────────────────
+    # When N strategies signal same direction on same symbol, total
+    # position is discounted by 1/√N to prevent linear risk concentration.
+    from core.execution.correlation_sizer import apply_sqrt_n_discount
+    from core.execution.portfolio_risk import RiskVerdict
+
+    _, sqrt_n_clusters = apply_sqrt_n_discount(decisions)
+
+    # Update queued items for dropped strategies so flush() skips them
+    dropped_names = {
+        d.strategy_name
+        for d in decisions
+        if not d.should_trade and "sqrt_n_dropped" in getattr(d, "reason", "")
+    }
+    if dropped_names:
+        for qd in execution_queue._queue:
+            if qd.strategy_name in dropped_names:
+                qd.risk_result.verdict = RiskVerdict.REJECTED
+                qd.risk_result.reason = getattr(qd.decision, "reason", "sqrt_n_dropped")
+        # Remove dropped strategies from current_positions snapshot
+        for sname in list(current_positions.keys()):
+            if sname in dropped_names:
+                del current_positions[sname]
+        # Update strategy_results entries for dropped strategies
+        for sr in strategy_results:
+            if sr.get("strategy", "") in dropped_names:
+                for d in decisions:
+                    if d.strategy_name == sr["strategy"]:
+                        sr["should_trade"] = False
+                        sr["reason"] = d.reason
+                        sr["volume"] = 0.0
+                        break
+
+    # Log √N discount clusters for audit
+    for cluster in sqrt_n_clusters:
+        if cluster.dropped_strategies:
+            print(
+                json.dumps(
+                    {
+                        "event": "sqrt_n_discount",
+                        "time": _utc_iso(),
+                        "direction": cluster.direction,
+                        "n_same_direction": cluster.n_same_direction,
+                        "raw_total": cluster.raw_total_volume,
+                        "discounted_total": cluster.discounted_volume,
+                        "dropped": cluster.dropped_strategies,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
 
     # Summary
     len([d for d in decisions if d.should_trade])
@@ -2895,14 +3008,22 @@ def execute_live_cycle(
     if state.loop_iteration == 1 and not config.no_mt5:
         _bootstrap_restart_state(state, str(journal_path), config)
 
-    # ── Daily ops auto-scheduler ──
-    # Restore last-run state on first cycle; trigger purely by elapsed time.
+    # ── Daily ops auto-scheduler (The Highlander Rule) ──
+    # Fixed UTC 22:00–23:00 window (= 06:00–07:00 CST, post-market-close).
+    # Restore last-run state on first cycle; skip if already ran today.
     if state.loop_iteration == 1 and state._last_daily_ops_utc == 0:
         state._last_daily_ops_utc = _load_daily_ops_state(config.base_dir)
     try:
         _now_utc = datetime.now(UTC)
-        _elapsed = _now_utc.timestamp() - state._last_daily_ops_utc
-        if state._last_daily_ops_utc == 0 or _elapsed > 82800:  # 23h
+        _today_22z = _now_utc.replace(hour=22, minute=0, second=0, microsecond=0)
+        _window_end = _today_22z + timedelta(hours=1)
+        _last_date = (
+            datetime.fromtimestamp(state._last_daily_ops_utc, UTC).date()
+            if state._last_daily_ops_utc > 0
+            else None
+        )
+        _already_ran_today = _last_date == _now_utc.date()
+        if _today_22z <= _now_utc < _window_end and not _already_ran_today:
             _run_scheduled_daily_ops(config, state)
     except Exception:
         pass  # never let scheduling error disrupt the cycle
@@ -3044,23 +3165,23 @@ def execute_live_cycle(
                     if _ticket is not None:
                         state.known_open_tickets.pop(_ticket, None)
 
-                # Sync position_manager: clear if its position was closed by MT5
+                # Sync position_manager: clear positions that were closed by MT5
                 if state.position_manager is not None and state.position_manager.has_position():
-                    _pm_pos = state.position_manager.get_position()
-                    if _pm_pos is not None and _pm_pos.ticket not in state.known_open_tickets:
-                        state.position_manager.clear_position()
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "position_manager_synced_clear",
-                                    "time": _utc_iso(),
-                                    "ticket": _pm_pos.ticket,
-                                    "reason": "mt5_already_closed",
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
+                    for _pm_pos in list(state.position_manager.get_all_positions()):
+                        if _pm_pos.ticket not in state.known_open_tickets:
+                            state.position_manager.clear_position(ticket=_pm_pos.ticket)
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "position_manager_synced_clear",
+                                        "time": _utc_iso(),
+                                        "ticket": _pm_pos.ticket,
+                                        "reason": "mt5_already_closed",
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
 
                 print(
                     json.dumps(
@@ -3141,19 +3262,6 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except Exception:
-            pass
-
-    # ── P&L ledger: settle pending signals ──
-    if (
-        pnl_ledger is not None
-        and mid_price is not None
-        and mid_price > 0
-        and pnl_ledger.pending_count > 0
-    ):
-        try:
-            _live_spread = float(_ask - _bid) if (_bid and _ask and _ask > _bid) else 0.0
-            pnl_ledger.settle_all(mid_price, spread=_live_spread)
         except Exception:
             pass
 
@@ -3435,6 +3543,21 @@ def execute_live_cycle(
             except Exception:
                 pass
 
+        # ── Global P&L settlement anchor (护栏二: 唯一结算点) ──
+        # All safety guards have passed.  Settle pending counterfactual signals
+        # exactly once per active cycle, before strategy evaluation begins.
+        if (
+            pnl_ledger is not None
+            and mid_price is not None
+            and mid_price > 0
+            and pnl_ledger.pending_count > 0
+        ):
+            try:
+                _live_spread = float(_ask - _bid) if (_bid and _ask and _ask > _bid) else 0.0
+                pnl_ledger.settle_all(mid_price, spread=_live_spread, slippage=0.10)
+            except Exception:
+                pass
+
         # ── Dynamic exit management phase ──
         # Runs whenever positions are registered, regardless of position limit.
         if (
@@ -3443,20 +3566,22 @@ def execute_live_cycle(
             and state.position_manager.has_position()
         ):
             try:
-                _execute_management_phase(
-                    config,
-                    state,
-                    mt5=mt5,
-                    broker=broker,
-                    brains=brains,
-                    parliament=parliament,
-                    regime_detector=regime_detector,
-                    tracker=tracker,
-                    feature_service=feature_service,
-                    micro_feature_computer=micro_feature_computer,
-                    micro_feature_adapter=micro_feature_adapter,
-                    daily_feature_provider=daily_feature_provider,
-                )
+                for _pm_pos in list(state.position_manager.get_all_positions()):
+                    _execute_management_phase(
+                        config,
+                        state,
+                        mt5=mt5,
+                        broker=broker,
+                        brains=brains,
+                        parliament=parliament,
+                        regime_detector=regime_detector,
+                        tracker=tracker,
+                        feature_service=feature_service,
+                        micro_feature_computer=micro_feature_computer,
+                        micro_feature_adapter=micro_feature_adapter,
+                        daily_feature_provider=daily_feature_provider,
+                        ticket=_pm_pos.ticket,
+                    )
             except Exception:
                 pass
             # Persist position state every N cycles (trail steps, breakeven, etc.)
@@ -3807,20 +3932,53 @@ def execute_live_cycle(
                                             }
                                             if _dd_brain_ids:
                                                 _dd_payload["brain_ids"] = _dd_brain_ids
-                                            dispatch_live_order(
-                                                base_dir=config.base_dir,
-                                                broker=None,
-                                                symbol=config.symbol,
-                                                execution_payload=_dd_payload,
-                                                skip_price_guard=True,
-                                                ignore_protection_flag=config.ignore_protection_flag,
-                                                protection_flag_path=config.protection_flag_path,
-                                                adapter_name="mt5",
-                                                extensions={
-                                                    "mt5_terminal_path": config.mt5_terminal_path
-                                                },
+                                            _dd_dispatched = False
+                                            if exit_watchdog is not None:
+                                                try:
+
+                                                    def _dd_dispatch_fn(p: dict) -> dict:
+                                                        return dispatch_live_order(
+                                                            base_dir=config.base_dir,
+                                                            broker=None,
+                                                            symbol=config.symbol,
+                                                            execution_payload=p,
+                                                            skip_price_guard=True,
+                                                            ignore_protection_flag=config.ignore_protection_flag,
+                                                            protection_flag_path=config.protection_flag_path,
+                                                            adapter_name="mt5",
+                                                            extensions={
+                                                                "mt5_terminal_path": config.mt5_terminal_path
+                                                            },
+                                                        )
+
+                                                    _dd_wd = exit_watchdog.execute_exit(
+                                                        position_ticket=_pos.ticket,
+                                                        volume=_pos.volume,
+                                                        side=_pos.side,
+                                                        reason="force_close_drawdown_kill",
+                                                        dispatch_fn=_dd_dispatch_fn,
+                                                        brain_ids=_dd_brain_ids,
+                                                    )
+                                                    _dd_dispatched = _dd_wd.success
+                                                except Exception:
+                                                    _dd_dispatched = False
+                                            if not _dd_dispatched:
+                                                dispatch_live_order(
+                                                    base_dir=config.base_dir,
+                                                    broker=None,
+                                                    symbol=config.symbol,
+                                                    execution_payload=_dd_payload,
+                                                    skip_price_guard=True,
+                                                    ignore_protection_flag=config.ignore_protection_flag,
+                                                    protection_flag_path=config.protection_flag_path,
+                                                    adapter_name="mt5",
+                                                    extensions={
+                                                        "mt5_terminal_path": config.mt5_terminal_path
+                                                    },
+                                                )
+                                            state.position_manager.clear_position(
+                                                ticket=_pos.ticket
                                             )
-                                            state.position_manager.clear_position()
                                             print(
                                                 json.dumps(
                                                     {
@@ -3875,6 +4033,7 @@ def execute_live_cycle(
                 max_gross_exposure=config.portfolio_max_gross,
                 max_net_exposure=config.portfolio_max_net,
                 max_same_direction=config.portfolio_max_same_dir,
+                netting_mode=config.portfolio_netting_mode,
             )
         portfolio_risk = state.portfolio_risk_controller
         exec_queue = ExecutionQueue(
@@ -3935,8 +4094,7 @@ def execute_live_cycle(
             and state.position_manager is not None
             and state.position_manager.has_position()
         ):
-            pos = state.position_manager.get_position()
-            if pos is not None:
+            for pos in list(state.position_manager.get_all_positions()):
                 # Determine which strategy owns this position (from supporting brains)
                 owner = "barrier_12bar"  # default
                 if pos.supporting_brain_ids:
@@ -3955,14 +4113,16 @@ def execute_live_cycle(
                                 elif bt in ARB_GROUP["brain_types"]:
                                     owner = "statarb_dynamic"
                                 break
-                current_positions[owner] = {
-                    "strategy": owner,
-                    "direction": pos.side,
-                    "volume": pos.volume,
-                    "ticket": pos.ticket,
-                    "entry_cycle": pos.entry_cycle,
-                    "brain_ids": pos.supporting_brain_ids,
-                }
+                # Only add to current_positions if not already populated by MT5 query
+                if owner not in current_positions:
+                    current_positions[owner] = {
+                        "strategy": owner,
+                        "direction": pos.side,
+                        "volume": pos.volume,
+                        "ticket": pos.ticket,
+                        "entry_cycle": pos.entry_cycle,
+                        "brain_ids": pos.supporting_brain_ids,
+                    }
 
         # Evaluate all strategy lines
         eval_summary = _evaluate_strategy_lines(
@@ -4076,6 +4236,41 @@ def execute_live_cycle(
         if exec_queue.queue_size > 0 and not config.no_mt5:
             from core.execution.live_order_sender import dispatch_live_open_order
 
+            # 陷阱三: net-out close orders intercepted at upper layer for Watchdog wrapping
+            _net_out_close_dispatch_fn = None
+            if exit_watchdog is not None:
+                from core.execution.live_order_sender import dispatch_live_order as _net_dispatch
+
+                def _net_out_close_dispatch_fn(payload: dict) -> dict:
+                    _ticket = payload.get("position_ticket", 0)
+                    _vol = payload.get("volume", 0.01)
+                    _side = payload.get("side", "long")
+                    _reason = payload.get("comment", "net_out")
+                    _magic = payload.get("magic", 0)
+                    _brain_ids = payload.get("brain_ids")
+                    _wd = exit_watchdog.execute_exit(
+                        position_ticket=_ticket,
+                        volume=_vol,
+                        side=_side,
+                        reason=_reason,
+                        magic=_magic,
+                        dispatch_fn=lambda p: _net_dispatch(
+                            base_dir=config.base_dir,
+                            broker=None,
+                            symbol=config.symbol,
+                            execution_payload=p,
+                            skip_price_guard=True,
+                            ignore_protection_flag=config.ignore_protection_flag,
+                            protection_flag_path=config.protection_flag_path,
+                            adapter_name="mt5",
+                            extensions={"mt5_terminal_path": config.mt5_terminal_path},
+                        ),
+                        brain_ids=_brain_ids,
+                    )
+                    return {"dispatched": _wd.success, "intent_id": ""}
+
+                _net_out_close_dispatch_fn = _net_out_close_dispatch_fn
+
             dispatch_results = exec_queue.flush(
                 dispatch_live_open_order,
                 journal_path=str(journal_path),
@@ -4085,7 +4280,39 @@ def execute_live_cycle(
                 ignore_protection_flag=config.ignore_protection_flag,
                 protection_flag_path=config.protection_flag_path,
                 broker=broker,
+                close_dispatch_fn=_net_out_close_dispatch_fn,
             )
+
+            # ── NET_OUT ticket reassignment: partial close creates new MT5 ticket ──
+            for dr in dispatch_results:
+                _tkt_update = dr.net_out_ticket_update
+                if _tkt_update and _tkt_update.get("new_ticket"):
+                    _old_tkt = _tkt_update["old_ticket"]
+                    _new_tkt = _tkt_update["new_ticket"]
+                    _close_vol = _tkt_update.get("close_volume", 0.0)
+                    _old_entry = state.known_open_tickets.pop(int(_old_tkt), None)
+                    if _old_entry:
+                        _old_vol = float(_old_entry.get("volume", 0.0))
+                        _remaining = round(max(0.0, _old_vol - _close_vol), 2)
+                        _new_entry = dict(_old_entry)
+                        _new_entry["position_ticket"] = int(_new_tkt)
+                        _new_entry["volume"] = _remaining
+                        state.known_open_tickets[int(_new_tkt)] = _new_entry
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "net_out_ticket_reassigned",
+                                    "time": _utc_iso(),
+                                    "old_ticket": int(_old_tkt),
+                                    "new_ticket": int(_new_tkt),
+                                    "close_volume": _close_vol,
+                                    "remaining_volume": _remaining,
+                                    "strategy": _old_entry.get("strategy", ""),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
 
             # Log dispatch results
             dispatched_count = sum(1 for r in dispatch_results if r.dispatched)
@@ -4324,6 +4551,7 @@ def execute_live_cycle(
                         h4_trend_strength=h4_trend_strength,
                         macro_regime=macro_regime,
                         risk_budget_usd=_effective_risk_budget,
+                        pnl_store=pnl_ledger,
                         micro_sequences=micro_sequences,
                         meta_filter=meta_signal_filter,
                     )
@@ -4344,6 +4572,8 @@ def execute_live_cycle(
             return state, not config.once
 
     elif config.multi_brain:
+        # DEPRECATED: unreachable with multi_strategy_enabled=True (default).
+        # Retained as rollback reference only — do not add new logic here.
         # ── LEGACY: Contract-group consensus (fallback) ──
         pre_close = _check_pre_close(config, state)
         if pre_close.get("no_new_positions"):
@@ -4401,7 +4631,8 @@ def execute_live_cycle(
                                     ),
                                     flush=True,
                                 )
-                                # Force-close on severe drawdown
+                                # DEPRECATED force-close: dead code — path B unreachable with
+                                # multi_strategy_enabled=True. Retained as rollback reference.
                                 if _dd.get("force_close") and state.position_manager is not None:
                                     _pos = state.position_manager.get_position()
                                     if _pos is not None:
@@ -4434,7 +4665,9 @@ def execute_live_cycle(
                                                     "mt5_terminal_path": config.mt5_terminal_path
                                                 },
                                             )
-                                            state.position_manager.clear_position()
+                                            state.position_manager.clear_position(
+                                                ticket=_pos.ticket
+                                            )
                                             print(
                                                 json.dumps(
                                                     {
@@ -4563,6 +4796,7 @@ def execute_live_cycle(
                         entry_price=mid_price,
                         confidence=p.prediction.get("confidence", 0.5),
                         entry_spread=_live_spread,
+                        entry_slippage=0.10,
                     )
                 except Exception:
                     pass
@@ -4577,6 +4811,7 @@ def execute_live_cycle(
                     entry_price=mid_price,
                     confidence=proposal.prediction.get("confidence", 0.5),
                     entry_spread=_live_spread,
+                    entry_slippage=0.10,
                 )
             except Exception:
                 pass
