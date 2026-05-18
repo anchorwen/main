@@ -59,8 +59,8 @@ def _make_prop(
 def test_barrier_group_definition():
     assert BARRIER_GROUP["name"] == "barrier_12bar"
     assert BARRIER_GROUP["horizon_cycles"] == 12
-    assert "onnx_v9" in BARRIER_GROUP["brain_types"]
     assert "xgboost_v9" in BARRIER_GROUP["brain_types"]
+    assert "lightgbm_v1" in BARRIER_GROUP["brain_types"]
 
 
 def test_micro_group_definition():
@@ -90,12 +90,19 @@ def test_all_groups_disjoint():
 
 
 def test_get_group_for_brain_type_known():
-    assert get_group_for_brain_type("onnx_v9") is not None
-    assert get_group_for_brain_type("onnx_v9")["name"] == "barrier_12bar"
-    assert get_group_for_brain_type("xgboost_v4.5")["name"] == "micro_3bar"
+    # xgboost_v9 and lightgbm_v1 appear in multiple groups; _TYPE_TO_GROUP
+    # returns last-write-wins.  Preferred: contract_group + get_group_for_contract_group().
+    g = get_group_for_brain_type("xgboost_v9")
+    assert g is not None
+    assert g["name"] in ("barrier_12bar", "daily_swing", "m30_swing", "h1_swing", "h4_swing")
+    g45 = get_group_for_brain_type("xgboost_v4.5")
+    assert g45 is not None
+    assert g45["name"] == "micro_3bar"
     # Legacy _TYPE_TO_GROUP returns last-write-wins (statarb_m15 overwrites statarb_dynamic
     # for ou_params_v6).  Preferred: use contract_group field + get_group_for_contract_group().
-    assert get_group_for_brain_type("ou_params_v6")["name"] in ("statarb_dynamic", "statarb_m15")
+    g_ou = get_group_for_brain_type("ou_params_v6")
+    assert g_ou is not None
+    assert g_ou["name"] in ("statarb_dynamic", "statarb_m15")
 
 
 def test_get_group_for_brain_type_unknown():
@@ -113,7 +120,7 @@ def test_get_group_for_proposal_by_brain_type_attr():
 def test_get_group_for_proposal_by_source():
     @dataclass
     class Source:
-        brain_type: str = "onnx_v9"
+        brain_type: str = "xgboost_v9"
 
     @dataclass
     class Prop:
@@ -124,7 +131,9 @@ def test_get_group_for_proposal_by_source():
     p = Prop(source=Source(), brain_type="")
     g = get_group_for_proposal(p)
     assert g is not None
-    assert g["name"] == "barrier_12bar"
+    # brain_type="xgboost_v9" appears in multiple groups; _TYPE_TO_GROUP
+    # returns last-write-wins.  Prefer contract_group for disambiguation.
+    assert g["name"] in ("barrier_12bar", "daily_swing", "m30_swing", "h1_swing", "h4_swing")
 
 
 def test_get_group_for_proposal_by_metadata():
@@ -272,7 +281,11 @@ def test_compute_all_group_signals_groups_correctly():
     """Proposals from different brain types land in correct groups."""
     brain_proposals = [
         (
-            {"brain_type": "onnx_v9", "contract_group": "barrier_12bar", "brain_id": "B_barrier"},
+            {
+                "brain_type": "xgboost_v9",
+                "contract_group": "barrier_12bar",
+                "brain_id": "B_barrier",
+            },
             _make_prop(up=0.7, down=0.3, conf=0.8, direction="long", bid="B_barrier"),
         ),
         (
@@ -301,7 +314,7 @@ def test_compute_all_group_signals_groups_correctly():
 def test_compute_all_group_signals_empty_group_is_none():
     brain_proposals = [
         (
-            {"brain_type": "onnx_v9", "contract_group": "barrier_12bar", "brain_id": "B1"},
+            {"brain_type": "xgboost_v9", "contract_group": "barrier_12bar", "brain_id": "B1"},
             _make_prop(up=0.7, down=0.3, conf=0.8, direction="long", bid="B1"),
         ),
     ]

@@ -53,6 +53,7 @@ BrainRegistryService → brain_entries → BrainFactory → adapters
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260517-017 | 2026-05-17 | cursor-agent | — | BrainPromotionEvaluator role reduction: class docstring updated to "Auditor". apply_promotion_decisions() deprecated (use GovernanceRuleEngine.execute_transitions() instead). No functional change to evaluation logic. | contract-violation |
 |--------|------|--------|--------|---------|------------|
 | FIX-20260516-008 | 2026-05-16 | cursor-agent | — | BrainConfigValidator (7 checks at BrainFactory.build() time) + BrainAlert (structured JSON to stderr). BrainRunService extended with schema aliases, _failed_brain_ids tracking, run_single_brain/run_brain_type/run_brains_for_contract_group. 20 brain configs repaired with features field. Training pipelines auto-populate features. | RC-09 |
 | FIX-20260516-007 | 2026-05-16 | cursor-agent | — | Base adapter run(): metadata-driven feature extraction from brain_entry["features"]. Strategy files + live_cycle unified to adapter.inference() convenience method. | RC-06 |

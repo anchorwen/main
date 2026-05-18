@@ -231,11 +231,16 @@ class BrainRegistrationGate:
         if magic is None:
             return True
         brain_id = entry.get("brain_id", "?")
+        group = entry.get("contract_group", "")
         existing = self._scan_all_configs()
         for bid, cfg in existing.items():
             if bid == brain_id:
                 continue
             if cfg.get("magic") == magic:
+                # Same contract_group can share magic (same strategy line)
+                other_group = cfg.get("contract_group", "")
+                if group and other_group and group == other_group:
+                    continue
                 result.failures.append(
                     ("magic_unique", f"magic={magic} already used by brain_id='{bid}'")
                 )

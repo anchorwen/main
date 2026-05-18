@@ -46,6 +46,7 @@ from core.features.local_feature_store import LocalFeatureStore
 from core.features.rolling_normalizer import RollingNormalizer
 from core.features.schemas.microstructure_schema import build_microstructure_schema
 from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+from core.features.store_contracts import FeatureRecord
 from core.feedback.brain_pnl_ledger import BrainPnLStore
 
 SCHEMA_VERSION = "shadow_pnl_loop.v1"
@@ -418,6 +419,7 @@ def main(argv: list[str] | None = None) -> int:
                         settled = pnl_ledger.settle_all(
                             mid_price,
                             spread=live_spread,
+                            slippage=0.10,
                         )
                         if settled and cycle_count % 20 == 0:
                             print(
@@ -461,18 +463,39 @@ def main(argv: list[str] | None = None) -> int:
 
                 # ── 4. Persist features to store ──
                 try:
-                    feature_store.ingest(
-                        symbol=symbol,
-                        timeframe="M5",
-                        schema_name="v9_institutional_40",
-                        values=feature_source,
-                    )
-                    feature_store.ingest(
-                        symbol=symbol,
-                        timeframe="M5",
-                        schema_name="v4.3_microstructure_9",
-                        values=micro_source,
-                    )
+                    from datetime import UTC
+                    from datetime import datetime as dt
+
+                    _now = dt.now(UTC).replace(tzinfo=None)
+                    _records = []
+                    if feature_source:
+                        _records.append(
+                            FeatureRecord(
+                                schema_name="v9_institutional_40",
+                                schema_version="1.0.0",
+                                symbol=symbol,
+                                timeframe="M5",
+                                event_time=_now,
+                                values=feature_source,
+                                source="shadow_pnl",
+                                ingested_at=_now,
+                            )
+                        )
+                    if micro_source:
+                        _records.append(
+                            FeatureRecord(
+                                schema_name="v4.3_microstructure_9",
+                                schema_version="1.0.0",
+                                symbol=symbol,
+                                timeframe="M5",
+                                event_time=_now,
+                                values=micro_source,
+                                source="shadow_pnl",
+                                ingested_at=_now,
+                            )
+                        )
+                    if _records:
+                        feature_store.write_records(_records)
                 except Exception:
                     pass
 
@@ -611,6 +634,7 @@ def main(argv: list[str] | None = None) -> int:
                                 entry_price=mid_price,
                                 confidence=result["confidence"],
                                 entry_spread=live_spread,
+                                entry_slippage=0.10,
                             )
                         except Exception:
                             pass
@@ -630,7 +654,7 @@ def main(argv: list[str] | None = None) -> int:
 
                 # ── 8. Log summary ──
                 if cycle_count % 10 == 0:
-                    dirs = {}
+                    dirs: dict[str, int] = {}
                     for r in results:
                         if r["status"] == "ok":
                             d = r["direction_bias"]

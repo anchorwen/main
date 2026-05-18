@@ -53,6 +53,7 @@ Web-based real-time monitoring dashboard for the live trading system. Single-fil
 |--------|------|--------|--------|---------|------------|
 | FIX-20260518-028 | 2026-05-18 | cursor-agent | — | Phase 3: Unified health aggregator — _build_unified_health() reads 7 data sources, /api/health/full endpoint with 10s cache, overall_status: healthy|degraded|critical, frontend single-request rendering with fallback to individual endpoints. | missing-feature, observability-gap |
 | FIX-20260517-023 | 2026-05-17 | cursor-agent | — | Panel redesign: 全局汉化 + 布局重整 5行→4行+tab + 新增 /api/brain/{id} 端点 (SVG sparkline PnL 走势/方向分布/治理/训练指标) + P0 shadow/live 同文件修复 + 异常日志改进 + 新建 monitor_dashboard 蓝图。 | missing-feature, config-drift |
+| FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: schema v2 + logging + unified health cache. Previously registered as FIX-20260517-023, FIX-20260518-028. | process-violation |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

@@ -202,6 +202,12 @@ class MetaSignalFilter:
                 import lightgbm as lgb
 
                 self._model = lgb.Booster(model_file=self.model_path)
+                # Fallback: if .meta.json is missing, get feature names from the booster itself
+                if not self._feature_names:
+                    try:
+                        self._feature_names = self._model.feature_name()
+                    except Exception:
+                        pass
                 self._load_mlp_model()  # optional ensemble partner
                 self._load_calibrator()
                 return True

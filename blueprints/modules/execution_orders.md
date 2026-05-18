@@ -70,6 +70,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 | FIX-20260518-032 | 2026-05-18 | cursor-agent | — | Tier 2 Kelly/Edge sizing: `StrategyDecision` extended with `p_win`/`kelly_mult` fields. `evaluate()` computes fractional Kelly multiplier from MetaFilter P(TP|signal) or PnLStore rolling win rate. EV veto: kf≤0 → hard reject (should_trade=False, reason=negative_kelly_ev). `_compute_volume()` keeps Tier 1 vol-targeted sizing only; Kelly applied at call site. | missing-feature |
 | FIX-20260514-003 | 2026-05-14 | cursor-agent | a4a1005 | Fixed raw_proposals UnboundLocalError: elif indentation error caused multi-strategy evaluation to be unreachable | type-confusion |
 | FIX-20260513-001 | 2026-05-14 | cursor-agent | a4a1005 | PnL recording moved before approval gate: each proposal gets isolated PnL record to prevent missing ledger entries | state-leak |
+| FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: 6 execution pipeline files. Previously registered as FIX-20260518-044, FIX-20260517-019/021/022, FIX-20260518-037/038. | process-violation |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

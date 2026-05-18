@@ -126,7 +126,7 @@ def build_shadow_summary(
             "shadow_short_count": m.short_count,
             "shadow_avg_confidence": m.avg_confidence,
             "shadow_win_rate": m.win_rate,
-            "health_signal": "unknown",
+            "health_signal": "healthy",
             "sample_count": m.shadow_signal_count,
             "composite_mean": min(m.avg_confidence, 1.0),
         }

@@ -181,6 +181,11 @@ INFERENCE_GUARD_RESTART_COOLDOWN_SECONDS = 3
 # Daily ops run interval (seconds) — 23h to allow slack.
 DAILY_OPS_INTERVAL_SECONDS = 82800
 
+# Daily ops fixed UTC window: 22:00–23:00 UTC (= 06:00–07:00 CST, post-market-close).
+# The Highlander Rule: this built-in scheduler is the ONE AND ONLY trigger for daily_ops.
+DAILY_OPS_WINDOW_HOUR = 22
+DAILY_OPS_WINDOW_DURATION_HOURS = 1
+
 # System mode stale threshold (seconds) — reset to NORMAL after 24h.
 # Used by: core.state.stores.system_mode_store.SystemModeStore
 MODE_STALE_SECONDS = 86400

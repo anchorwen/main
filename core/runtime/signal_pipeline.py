@@ -68,24 +68,7 @@ def _ensemble_proposals(
     )
 
 
-ENSEMBLE_GROUPS: list[dict[str, Any]] = [
-    {
-        "group_id": "SurvivalAlpha_Ensemble",
-        "label": "Survival Alpha (V9 Institutional)",
-        "brain_ids": ["V9_Institutional_01"],
-        "magic": 90005,
-        "role": "alpha_brain",
-        "vote_weight": 1.0,
-    },
-    {
-        "group_id": "TreeAlpha_Ensemble",
-        "label": "Tree Alpha (LightGBM Champ + XGBoost V9 Challenger)",
-        "brain_ids": ["LightGBM_V1_Institutional", "XGBoost_V9_Institutional"],
-        "magic": 90008,
-        "role": "alpha_brain",
-        "vote_weight": 0.9,
-    },
-]
+ENSEMBLE_GROUPS: list[dict[str, Any]] = []
 
 
 def validate_ensemble_references(

@@ -37,8 +37,12 @@ class DispatchResult:
     strategy_name: str
     magic: int
     dispatched: bool
+    direction: str = ""
     reason: str = ""
     journal_entry: dict[str, Any] | None = None
+    net_out_ticket_update: dict[str, Any] | None = None
+    # {"old_ticket": int, "new_ticket": int, "close_volume": float, "remaining_volume": float}
+    # Populated when NET_OUT partial close causes an MT5 ticket reassignment
 
 
 class ExecutionQueue:
@@ -71,17 +75,19 @@ class ExecutionQueue:
         ignore_protection_flag: bool = False,
         protection_flag_path: str = "",
         broker: Any = None,
+        close_dispatch_fn: Any = None,
     ) -> list[DispatchResult]:
         """Process all queued decisions in priority order with stagger delay.
 
         Args:
-            dispatch_fn: Callable that takes (decision, mt5_terminal_path, ...)
-                         and dispatches to MT5.  Signature should match
-                         ``dispatch_live_open_order``.
+            dispatch_fn: Callable for open-order dispatch.
             broker: Optional BrokerAdapter for pre-dispatch price validation.
-                    When provided, SL/TP are validated against current mid price
-                    before dispatch (price guard).  This avoids the MT5 re-init
-                    inside dispatch_live_open_order.
+            close_dispatch_fn: Optional callable for net-out close dispatch.
+                Signature: fn(payload: dict) -> dict.  When provided, net-out
+                close orders are routed through this instead of bare
+                ``dispatch_live_order``.  Used by live_cycle to inject
+                ExitWatchdog wrapping without coupling ExecutionQueue to
+                watchdog types (陷阱三: upper-layer interception).
 
         Returns:
             List of DispatchResult, one per queued decision.
@@ -112,6 +118,7 @@ class ExecutionQueue:
                         strategy_name=queued.strategy_name,
                         magic=decision.magic,
                         dispatched=False,
+                        direction=decision.direction,
                         reason=f"risk_rejected:{risk.reason}",
                     )
                 )
@@ -133,6 +140,7 @@ class ExecutionQueue:
                                     strategy_name=queued.strategy_name,
                                     magic=decision.magic,
                                     dispatched=False,
+                                    direction=decision.direction,
                                     reason=f"price_guard_failed: sl={decision.sl} < price={_current_price} < tp={decision.tp}",
                                 )
                             )
@@ -145,6 +153,7 @@ class ExecutionQueue:
                                     strategy_name=queued.strategy_name,
                                     magic=decision.magic,
                                     dispatched=False,
+                                    direction=decision.direction,
                                     reason=f"price_guard_failed: tp={decision.tp} < price={_current_price} < sl={decision.sl}",
                                 )
                             )
@@ -154,6 +163,7 @@ class ExecutionQueue:
                     pass  # if price guard validation itself fails, let the order through
 
             # If NET_OUT or REDUCED, handle opposing position first
+            _net_out_ticket_update: dict[str, Any] | None = None
             if risk.verdict.value in ("net_out", "reduced") and risk.net_out_ticket:
                 # Close/reduce existing opposing position
                 _close_confirmed = False
@@ -173,6 +183,7 @@ class ExecutionQueue:
                         "volume": _close_vol if _close_vol > 0 else 0.01,
                         "comment": f"net_out:{queued.strategy_name}",
                         "magic": decision.magic,
+                        "side": "short" if decision.direction == "long" else "long",
                     }
                     # Carry brain_ids from the position being closed (or aggressor as fallback)
                     _aggressor_brain_ids = getattr(queued.decision, "brain_ids", None)
@@ -181,17 +192,21 @@ class ExecutionQueue:
                         _close_payload["brain_ids"] = _net_out_brain_ids
                     elif _aggressor_brain_ids:
                         _close_payload["brain_ids"] = _aggressor_brain_ids
-                    _close_result = dispatch_live_order(
-                        base_dir=base_dir,
-                        broker=None,
-                        symbol=symbol,
-                        execution_payload=_close_payload,
-                        skip_price_guard=True,
-                        ignore_protection_flag=ignore_protection_flag,
-                        protection_flag_path=protection_flag_path,
-                        adapter_name="mt5",
-                        extensions={"mt5_terminal_path": mt5_terminal_path},
-                    )
+                    # 陷阱三: upper-layer interception — use callback if available
+                    if close_dispatch_fn is not None:
+                        _close_result = close_dispatch_fn(_close_payload)
+                    else:
+                        _close_result = dispatch_live_order(
+                            base_dir=base_dir,
+                            broker=None,
+                            symbol=symbol,
+                            execution_payload=_close_payload,
+                            skip_price_guard=True,
+                            ignore_protection_flag=ignore_protection_flag,
+                            protection_flag_path=protection_flag_path,
+                            adapter_name="mt5",
+                            extensions={"mt5_terminal_path": mt5_terminal_path},
+                        )
                     # ── Close confirmation poll (timeout 30 s, max 120 iterations) ──
                     if isinstance(_close_result, dict):
                         _intent_id = _close_result.get("intent_id")
@@ -212,6 +227,14 @@ class ExecutionQueue:
                                             )
                                             if _ack.get("ack_status") == "accepted":
                                                 _close_confirmed = True
+                                                # 陷阱二: extract new_ticket from partial close ACK
+                                                _ack_detail = _ack.get("detail", {})
+                                                if _ack_detail.get("new_ticket"):
+                                                    _net_out_ticket_update = {
+                                                        "old_ticket": _ack_detail["old_ticket"],
+                                                        "new_ticket": _ack_detail["new_ticket"],
+                                                        "close_volume": _close_vol,
+                                                    }
                                                 break
                                         except Exception:
                                             pass
@@ -228,6 +251,7 @@ class ExecutionQueue:
                             strategy_name=queued.strategy_name,
                             magic=decision.magic,
                             dispatched=False,
+                            direction=decision.direction,
                             reason="net_out_close_not_confirmed",
                         )
                     )
@@ -274,8 +298,10 @@ class ExecutionQueue:
                         strategy_name=queued.strategy_name,
                         magic=decision.magic,
                         dispatched=True,
+                        direction=decision.direction,
                         reason="ok",
                         journal_entry=_journal_entry,
+                        net_out_ticket_update=_net_out_ticket_update,
                     )
                 )
             else:
@@ -284,7 +310,9 @@ class ExecutionQueue:
                         strategy_name=queued.strategy_name,
                         magic=decision.magic,
                         dispatched=False,
+                        direction=decision.direction,
                         reason=_last_error,
+                        net_out_ticket_update=_net_out_ticket_update,
                     )
                 )
 

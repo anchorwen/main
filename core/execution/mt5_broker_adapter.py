@@ -143,6 +143,47 @@ class MT5BrokerAdapter:
         except Exception:
             return 0.0
 
+    def close_position(self, ticket: int, slippage: int = 200) -> tuple[bool, str]:
+        """L2 forced liquidation: close a position by ticket directly via MT5.
+
+        Returns (success, message).  Bypasses the bridge — use only when the
+        normal dispatch path has timed out or exhausted retries.
+        """
+        import threading
+
+        result: list[Any] = [None]
+        exc_info: list[Any] = [None]
+
+        def _target() -> None:
+            try:
+                request = {
+                    "action": self._mt5.TRADE_ACTION_DEAL,
+                    "position": ticket,
+                    "slippage": slippage,
+                }
+                resp = self._mt5.order_send(request)
+                if resp is None:
+                    result[0] = (False, f"order_send returned None (ticket={ticket})")
+                elif resp.retcode == self._mt5.TRADE_RETCODE_DONE:
+                    result[0] = (True, f"L2 close ok ticket={ticket} vol={resp.volume}")
+                else:
+                    result[0] = (
+                        False,
+                        f"L2 close failed ticket={ticket} retcode={resp.retcode} "
+                        f"comment={getattr(resp, 'comment', '')}",
+                    )
+            except Exception as e:
+                exc_info[0] = e
+
+        t = threading.Thread(target=_target, daemon=True)
+        t.start()
+        t.join(timeout=10.0)
+        if t.is_alive():
+            return False, f"L2 close timed out (ticket={ticket})"
+        if exc_info[0] is not None:
+            return False, f"L2 close exception: {exc_info[0]}"
+        return result[0] if result[0] is not None else (False, "L2 close: no result")
+
     def get_open_positions_detail(self, symbol: str) -> list[dict[str, Any]]:
         positions = self._mt5.positions_get(symbol=symbol) or []
         result: list[dict[str, Any]] = []

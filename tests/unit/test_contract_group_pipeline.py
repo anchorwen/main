@@ -53,12 +53,16 @@ def test_pipeline_all_groups_agree_long():
     """All 3 contract groups agree long → full allocation with full volume."""
     brain_proposals = [
         (
-            {"brain_type": "onnx_v9", "contract_group": "barrier_12bar", "brain_id": "B_barrier1"},
+            {
+                "brain_type": "xgboost_v9",
+                "contract_group": "barrier_12bar",
+                "brain_id": "B_barrier1",
+            },
             _make_prop(up=0.8, down=0.2, conf=0.85, direction="long", bid="B_barrier1"),
         ),
         (
             {
-                "brain_type": "deepresmlp",
+                "brain_type": "lightgbm_v1",
                 "contract_group": "barrier_12bar",
                 "brain_id": "B_barrier2",
             },
@@ -102,7 +106,11 @@ def test_pipeline_barrier_long_micro_short_no_trade():
     """Barrier group long, micro group short → NO TRADE (conflict)."""
     brain_proposals = [
         (
-            {"brain_type": "onnx_v9", "contract_group": "barrier_12bar", "brain_id": "B_barrier1"},
+            {
+                "brain_type": "xgboost_v9",
+                "contract_group": "barrier_12bar",
+                "brain_id": "B_barrier1",
+            },
             _make_prop(up=0.8, down=0.2, conf=0.85, direction="long", bid="B_barrier1"),
         ),
         (
@@ -138,12 +146,16 @@ def test_pipeline_two_agree_one_neutral_reduced_volume():
     """2 groups agree long, 1 neutral → reduced allocation."""
     brain_proposals = [
         (
-            {"brain_type": "onnx_v9", "contract_group": "barrier_12bar", "brain_id": "B_barrier1"},
+            {
+                "brain_type": "xgboost_v9",
+                "contract_group": "barrier_12bar",
+                "brain_id": "B_barrier1",
+            },
             _make_prop(up=0.8, down=0.2, conf=0.85, direction="long", bid="B_barrier1"),
         ),
         (
             {
-                "brain_type": "deepresmlp",
+                "brain_type": "lightgbm_v1",
                 "contract_group": "barrier_12bar",
                 "brain_id": "B_barrier2",
             },
@@ -171,7 +183,11 @@ def test_pipeline_only_one_group_active_reduced_confidence():
     """Only barrier group active, others absent → lower confidence."""
     brain_proposals = [
         (
-            {"brain_type": "onnx_v9", "contract_group": "barrier_12bar", "brain_id": "B_barrier1"},
+            {
+                "brain_type": "xgboost_v9",
+                "contract_group": "barrier_12bar",
+                "brain_id": "B_barrier1",
+            },
             _make_prop(up=0.8, down=0.2, conf=0.85, direction="long", bid="B_barrier1"),
         ),
     ]
@@ -191,7 +207,11 @@ def test_pipeline_high_regime_reduces_volume():
     """High volatility regime → volume reduced."""
     brain_proposals = [
         (
-            {"brain_type": "onnx_v9", "contract_group": "barrier_12bar", "brain_id": "B_barrier1"},
+            {
+                "brain_type": "xgboost_v9",
+                "contract_group": "barrier_12bar",
+                "brain_id": "B_barrier1",
+            },
             _make_prop(up=0.8, down=0.2, conf=0.85, direction="long", bid="B_barrier1"),
         ),
         (
@@ -218,7 +238,11 @@ def test_pipeline_atr_expansion_shrinks_volume():
     """High ATR (volatile) → volume scaled down for risk normalization."""
     brain_proposals = [
         (
-            {"brain_type": "onnx_v9", "contract_group": "barrier_12bar", "brain_id": "B_barrier1"},
+            {
+                "brain_type": "xgboost_v9",
+                "contract_group": "barrier_12bar",
+                "brain_id": "B_barrier1",
+            },
             _make_prop(up=0.8, down=0.2, conf=0.85, direction="long", bid="B_barrier1"),
         ),
     ]
@@ -243,7 +267,7 @@ def test_pipeline_all_neutral_produces_trade_with_low_confidence():
     """
     brain_proposals = [
         (
-            {"brain_type": "onnx_v9", "contract_group": "barrier_12bar", "brain_id": "B1"},
+            {"brain_type": "xgboost_v9", "contract_group": "barrier_12bar", "brain_id": "B1"},
             _make_prop(up=0.5, down=0.5, conf=0.5, direction="neutral", bid="B1"),
         ),
         (
@@ -348,7 +372,11 @@ def test_pipeline_with_correlation_penalty():
     # Now micro flips to short
     brain_proposals_divergent = [
         (
-            {"brain_type": "onnx_v9", "contract_group": "barrier_12bar", "brain_id": "B_barrier1"},
+            {
+                "brain_type": "xgboost_v9",
+                "contract_group": "barrier_12bar",
+                "brain_id": "B_barrier1",
+            },
             _make_prop(up=0.8, down=0.2, conf=0.85, direction="long", bid="B_barrier1"),
         ),
         (
@@ -374,7 +402,7 @@ def test_pipeline_volume_clamped():
     """Volume respects min/max bounds."""
     brain_proposals = [
         (
-            {"brain_type": "onnx_v9", "contract_group": "barrier_12bar", "brain_id": "B1"},
+            {"brain_type": "xgboost_v9", "contract_group": "barrier_12bar", "brain_id": "B1"},
             _make_prop(up=0.9, down=0.1, conf=0.95, direction="long", bid="B1"),
         ),
     ]
@@ -395,12 +423,16 @@ def test_pipeline_consensus_extra_structure():
     """Verify the consensus_extra dict structure (for downstream JSON logging)."""
     brain_proposals = [
         (
-            {"brain_type": "onnx_v9", "contract_group": "barrier_12bar", "brain_id": "B_barrier1"},
+            {
+                "brain_type": "xgboost_v9",
+                "contract_group": "barrier_12bar",
+                "brain_id": "B_barrier1",
+            },
             _make_prop(up=0.8, down=0.2, conf=0.85, direction="long", bid="B_barrier1"),
         ),
         (
             {
-                "brain_type": "deepresmlp",
+                "brain_type": "lightgbm_v1",
                 "contract_group": "barrier_12bar",
                 "brain_id": "B_barrier2",
             },
@@ -571,34 +603,32 @@ def test_shadow_verification_event_structure():
     """The shadow_verified event contains all required fields."""
     import json
 
-    pending = {
-        "direction": "short",
-        "entry_price": 4720.0,
-        "consensus_score": 0.65,
-        "supporting_brains": ["B_barrier"],
-        "opposing_brains": ["B_micro"],
-    }
+    direction: str = "short"
+    entry_price: float = 4720.0
+    consensus_score: float = 0.65
+    supporting_brains: list[str] = ["B_barrier"]
+    opposing_brains: list[str] = ["B_micro"]
     mid_price = 4700.0
 
-    pnl, bps = _compute_counterfactual_pnl(pending["direction"], pending["entry_price"], mid_price)
+    pnl, bps = _compute_counterfactual_pnl(direction, entry_price, mid_price)
 
-    event = {
+    event: dict[str, object] = {
         "event": "shadow_verified",
-        "direction": pending["direction"],
-        "entry_price": round(pending["entry_price"], 2),
+        "direction": direction,
+        "entry_price": round(entry_price, 2),
         "exit_price": round(mid_price, 2),
         "counterfactual_pnl": pnl,
         "counterfactual_bps": bps,
-        "consensus_score": pending["consensus_score"],
-        "supporting_brains": pending["supporting_brains"],
-        "opposing_brains": pending["opposing_brains"],
+        "consensus_score": consensus_score,
+        "supporting_brains": supporting_brains,
+        "opposing_brains": opposing_brains,
     }
 
     assert event["event"] == "shadow_verified"
     assert event["direction"] == "short"
     assert event["counterfactual_pnl"] == 20.0
     assert event["counterfactual_bps"] == pytest.approx(42.37, 0.01)
-    assert len(event["supporting_brains"]) == 1
-    assert len(event["opposing_brains"]) == 1
+    assert len(supporting_brains) == 1
+    assert len(opposing_brains) == 1
     # Verify JSON serializable
     json.dumps(event)

@@ -24,9 +24,6 @@ BARRIER_GROUP: dict[str, Any] = {
     "name": "barrier_12bar",
     "horizon_cycles": 12,
     "brain_types": {
-        "onnx_v9",
-        "deepresmlp",
-        "online_sgd",
         "xgboost_v9",
         "lightgbm_v1",
     },

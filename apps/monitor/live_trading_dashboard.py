@@ -1,4 +1,4 @@
-"""Live trading dashboard server.
+"""Live trading dashboard server — 量化交易实盘监控面板
 
 Single-file HTTP server serving an auto-refreshing HTML dashboard.
 Zero new dependencies — uses stdlib http.server + existing project modules.
@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 import time as time_module
@@ -23,31 +24,39 @@ from typing import Any
 THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = THIS_DIR.parent.parent
 
-SCHEMA_VERSION = "live_trading_dashboard.v1"
+SCHEMA_VERSION = "live_trading_dashboard.v2"
+logger = logging.getLogger("live_trading_dashboard")
 
-# ── Performance data cache (avoid reloading 1.3MB JSON every 10s) ──
+# ── Performance data cache ──
 _PERF_CACHE: dict[str, Any] = {"ts": 0.0, "data": None, "mtime": 0.0}
 _PERF_CACHE_TTL = 30.0
 
-# ── HTML template (self-contained, dark theme, CSS Grid) ──
+# ── Unified health cache ──
+_UNIFIED_HEALTH_CACHE: dict[str, Any] = {"ts": 0.0, "data": None}
+_UNIFIED_HEALTH_CACHE_TTL = 10.0
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HTML TEMPLATE — 中文界面 / 整洁布局 / 模型详情
+# ═══════════════════════════════════════════════════════════════════════════════
 
 HTML_TEMPLATE = r"""<!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QUANT OS — Live Trading Dashboard</title>
+<title>量化交易系统 — 实盘监控面板</title>
 <style>
 :root {
   --bg: #0f172a; --panel: #1e293b; --border: #334155;
   --text: #e2e8f0; --muted: #94a3b8; --dim: #64748b;
   --green: #22c55e; --yellow: #eab308; --red: #ef4444; --blue: #3b82f6;
+  --accent: #6366f1;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; padding: 12px; min-width: 1300px; }
-header { display: flex; align-items: center; justify-content: space-between; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px 16px; margin-bottom: 10px; }
+body { background: var(--bg); color: var(--text); font-family: 'Microsoft YaHei','PingFang SC','Noto Sans SC','Segoe UI',system-ui,sans-serif; padding: 10px; min-width: 1340px; }
+header { display: flex; align-items: center; justify-content: space-between; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 18px; margin-bottom: 10px; }
 header h1 { font-size: 17px; font-weight: 600; letter-spacing: 0.3px; }
-header .ts { color: var(--muted); font-size: 13px; }
+header .ts { color: var(--muted); font-size: 13px; display: flex; gap: 16px; align-items: center; }
 .header-badges { display: flex; gap: 8px; }
 
 /* Grids */
@@ -55,24 +64,35 @@ header .ts { color: var(--muted); font-size: 13px; }
 .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 
-.card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
-.card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 8px; }
-.card-full { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; margin-bottom: 10px; }
-.card-full h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 8px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.card h2 { font-size: 13px; font-weight: 600; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 8px; }
+.card-full { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+.card-full h2 { font-size: 13px; font-weight: 600; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 8px; }
+
+/* Tabs */
+.tab-bar { display: flex; gap: 2px; margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+.tab-btn { padding: 6px 16px; font-size: 12px; font-weight: 500; border: 1px solid transparent; border-radius: 6px 6px 0 0; cursor: pointer; background: transparent; color: var(--muted); font-family: inherit; }
+.tab-btn:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+.tab-btn.active { color: var(--text); background: var(--panel); border-color: var(--border); border-bottom-color: var(--panel); margin-bottom: -1px; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
 
 /* Tables */
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { text-align: left; color: var(--dim); font-weight: 500; padding: 4px 8px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; white-space: nowrap; }
+th { text-align: left; color: var(--dim); font-weight: 500; padding: 4px 8px; border-bottom: 1px solid var(--border); font-size: 12px; white-space: nowrap; cursor: pointer; user-select: none; }
+th:hover { color: var(--text); }
+th .sort-arrow { font-size: 10px; margin-left: 2px; }
 td { padding: 3px 8px; border-bottom: 1px solid rgba(51,65,85,0.4); }
-.dense-table { font-size: 11px; }
-.dense-table th { font-size: 10px; padding: 3px 6px; cursor: pointer; user-select: none; }
-.dense-table th:hover { color: var(--text); }
-.dense-table th .sort-arrow { font-size: 9px; margin-left: 2px; }
-.dense-table td { padding: 2px 6px; }
-.scroll-y { max-height: 500px; overflow-y: auto; }
+.dense-table { font-size: 12px; }
+.dense-table th { font-size: 11px; padding: 3px 7px; }
+.dense-table td { padding: 3px 7px; }
+.clickable-row { cursor: pointer; }
+.clickable-row:hover { background: rgba(99,102,241,0.08); }
+.clickable-row.selected { background: rgba(99,102,241,0.15); border-left: 3px solid var(--accent); }
+.scroll-y { max-height: 520px; overflow-y: auto; }
 
 /* Badges */
-.badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+.badge { display: inline-block; padding: 3px 10px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
 .badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
 .badge-yellow { background: rgba(234,179,8,0.15); color: var(--yellow); }
 .badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
@@ -107,13 +127,13 @@ td { padding: 3px 8px; border-bottom: 1px solid rgba(51,65,85,0.4); }
 /* SLO */
 .slo-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid rgba(51,65,85,0.3); font-size: 13px; }
 .slo-row:last-child { border-bottom: none; }
-.slo-bar-wrap { width: 140px; height: 14px; background: rgba(15,23,42,0.6); border-radius: 7px; overflow: hidden; position: relative; }
+.slo-bar-wrap { width: 120px; height: 14px; background: rgba(15,23,42,0.6); border-radius: 7px; overflow: hidden; position: relative; }
 .slo-bar-fill { height: 100%; border-radius: 7px; transition: width 0.5s; }
 .slo-bar-budget { height: 100%; border-radius: 7px; position: absolute; top: 0; opacity: 0.3; }
 
 /* Decisions */
 .decision-card { display: flex; gap: 16px; }
-.decision-card > div { flex: 1; padding: 8px 12px; border-radius: 4px; background: rgba(15,23,42,0.5); }
+.decision-card > div { flex: 1; padding: 8px 12px; border-radius: 6px; background: rgba(15,23,42,0.5); }
 .consensus-long { color: var(--green); font-weight: 700; }
 .consensus-short { color: var(--red); font-weight: 700; }
 .consensus-neutral, .consensus-split { color: var(--yellow); font-weight: 700; }
@@ -122,95 +142,99 @@ td { padding: 3px 8px; border-bottom: 1px solid rgba(51,65,85,0.4); }
 .alert-critical { border-left: 3px solid var(--red); }
 .alert-warning { border-left: 3px solid var(--yellow); }
 
-/* Governance sub-panels */
+/* Governance */
 .gov-section { margin-bottom: 10px; }
-.gov-section h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--dim); margin-bottom: 4px; }
+.gov-section h3 { font-size: 12px; font-weight: 600; letter-spacing: 0.4px; color: var(--dim); margin-bottom: 4px; }
 .gov-item { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; font-size: 12px; border-bottom: 1px solid rgba(51,65,85,0.2); }
 .gov-item:last-child { border-bottom: none; }
-
-/* Transition log */
-.transition-log { font-size: 11px; max-height: 140px; overflow-y: auto; }
+.transition-log { font-size: 11px; max-height: 160px; overflow-y: auto; }
 .transition-log .tl-entry { padding: 2px 0; border-bottom: 1px solid rgba(51,65,85,0.2); display: flex; justify-content: space-between; }
 
-/* Error block */
+/* Brain Detail */
+.brain-detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.brain-detail-grid .metric-box { background: rgba(15,23,42,0.5); border-radius: 6px; padding: 10px 12px; }
+.brain-detail-grid .metric-box h4 { font-size: 11px; font-weight: 500; color: var(--dim); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
+.brain-detail-grid .metric-box .metric-val { font-size: 18px; font-weight: 700; }
+.sparkline-wrap { display: flex; align-items: flex-end; gap: 2px; height: 50px; padding: 4px 0; }
+.sparkline-bar { flex: 1; min-width: 3px; border-radius: 1px; transition: height 0.3s; }
+.direction-bar { display: flex; height: 20px; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+.direction-bar .bar-seg { height: 100%; transition: width 0.3s; }
+.direction-bar .bar-long { background: var(--green); }
+.direction-bar .bar-short { background: var(--red); }
+.direction-bar .bar-neutral { background: var(--dim); }
+.detail-empty { color: var(--dim); font-style: italic; padding: 20px; text-align: center; }
+
+/* Error */
 .error-block { color: var(--red); font-style: italic; font-size: 12px; padding: 8px; }
+
+/* Dense inner tabs for bottom panel */
+.inner-tabs { display: flex; gap: 2px; margin-bottom: 6px; }
+.inner-tab { padding: 3px 12px; font-size: 11px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; background: transparent; color: var(--muted); font-family: inherit; }
+.inner-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.inner-panel { display: none; }
+.inner-panel.active { display: block; }
 </style>
 </head>
 <body>
 
 <!-- HEADER -->
 <header>
-  <div><h1>QUANT OS — LIVE TRADING DASHBOARD</h1></div>
-  <div class="ts">UTC <span id="hdr-date">—</span> &nbsp; Refresh: <span id="hdr-refresh">—</span> &nbsp; Next: <span id="hdr-countdown">—</span>s</div>
+  <div><h1>📊 量化交易系统 — 实盘监控面板</h1></div>
+  <div class="ts">
+    <span>UTC <span id="hdr-date">—</span></span>
+    <span>刷新: <span id="hdr-refresh">—</span></span>
+    <span>下次: <span id="hdr-countdown">—</span>秒</span>
+  </div>
   <div class="header-badges">
     <span id="hdr-sys-badge"></span>
     <span id="hdr-alert-badge"></span>
   </div>
 </header>
 
-<!-- ROW 1: Status bar (4 columns) -->
+<!-- ROW 1: 系统状态概览 (4列) -->
 <div class="grid-4">
-  <div class="card">
-    <h2>System Status</h2>
-    <div id="panel-status"><span class="muted">Loading...</span></div>
-  </div>
-  <div class="card">
-    <h2>Module Health</h2>
-    <div id="panel-modules"><span class="muted">Loading...</span></div>
-  </div>
-  <div class="card">
-    <h2>SLO Compliance</h2>
-    <div id="panel-slo"><span class="muted">Loading...</span></div>
-  </div>
-  <div class="card">
-    <h2>Risk Gates</h2>
-    <div id="panel-risk"><span class="muted">Loading...</span></div>
-  </div>
+  <div class="card"><h2>系统状态</h2><div id="panel-status"><span class="muted">加载中...</span></div></div>
+  <div class="card"><h2>模块健康</h2><div id="panel-modules"><span class="muted">加载中...</span></div></div>
+  <div class="card"><h2>SLO 合规</h2><div id="panel-slo"><span class="muted">加载中...</span></div></div>
+  <div class="card"><h2>风控关卡</h2><div id="panel-risk"><span class="muted">加载中...</span></div></div>
 </div>
 
-<!-- ROW 2: Performance Matrix (full width) -->
+<!-- ROW 2: 模型绩效矩阵 + 模型详情 (tab切换) -->
 <div class="card-full">
-  <h2>Brain Performance Matrix &nbsp;<span class="dim" style="text-transform:none;font-weight:400">(click headers to sort, default: Sharpe desc)</span></h2>
-  <div class="scroll-y" id="panel-performance"><span class="muted">Loading...</span></div>
-</div>
-
-<!-- ROW 3: Analytics & Governance (2 columns) -->
-<div class="grid-2">
-  <div class="card">
-    <h2>Analytics &amp; Recommendations</h2>
-    <div id="panel-analytics"><span class="muted">Loading...</span></div>
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchMainTab('perf')">📋 模型绩效矩阵</button>
+    <button class="tab-btn" onclick="switchMainTab('detail')" id="tab-detail-btn">🔍 模型详情 <span id="detail-brain-label" class="dim"></span></button>
   </div>
-  <div class="card">
-    <h2>Governance Operations</h2>
-    <div id="panel-governance"><span class="muted">Loading...</span></div>
+  <div id="tab-perf" class="tab-content active">
+    <div class="scroll-y" id="panel-performance"><span class="muted">加载中...</span></div>
+  </div>
+  <div id="tab-detail" class="tab-content">
+    <div id="panel-brain-detail"><span class="detail-empty">👈 请先在绩效矩阵中点击选择一个模型</span></div>
   </div>
 </div>
 
-<!-- ROW 4: Live Trading (3 columns) -->
+<!-- ROW 3: 实时交易 (3列) -->
 <div class="grid-3">
-  <div class="card">
-    <h2>Brain Signals (Live)</h2>
-    <div id="panel-brains"><span class="muted">Loading...</span></div>
-  </div>
-  <div class="card">
-    <h2>Live Decisions</h2>
-    <div id="panel-decisions"><span class="muted">Loading...</span></div>
-  </div>
-  <div class="card">
-    <h2>Current MT5 Positions</h2>
-    <div id="panel-positions"><span class="muted">Loading...</span></div>
-  </div>
+  <div class="card"><h2>大脑信号 (实时)</h2><div id="panel-brains"><span class="muted">加载中...</span></div></div>
+  <div class="card"><h2>实盘决策</h2><div id="panel-decisions"><span class="muted">加载中...</span></div></div>
+  <div class="card"><h2>当前持仓</h2><div id="panel-positions"><span class="muted">加载中...</span></div></div>
 </div>
 
-<!-- ROW 5: History (2 columns) -->
-<div class="grid-2">
+<!-- ROW 4: 治理 + 分析 + 告警/日志 (tab切换) -->
+<div class="grid-3">
+  <div class="card"><h2>治理操作</h2><div id="panel-governance"><span class="muted">加载中...</span></div></div>
+  <div class="card"><h2>分析与建议</h2><div id="panel-analytics"><span class="muted">加载中...</span></div></div>
   <div class="card">
-    <h2>Alert History</h2>
-    <div id="panel-alerts" style="max-height:220px;overflow-y:auto"><span class="muted">Loading...</span></div>
-  </div>
-  <div class="card">
-    <h2>Recent Trades</h2>
-    <div id="panel-journal" style="max-height:220px;overflow-y:auto"><span class="muted">Loading...</span></div>
+    <div class="inner-tabs">
+      <button class="inner-tab active" onclick="switchInnerTab('alerts')">告警</button>
+      <button class="inner-tab" onclick="switchInnerTab('journal')">交易日志</button>
+    </div>
+    <div id="inner-alerts" class="inner-panel active" style="max-height:300px;overflow-y:auto">
+      <div id="panel-alerts"><span class="muted">加载中...</span></div>
+    </div>
+    <div id="inner-journal" class="inner-panel" style="max-height:300px;overflow-y:auto">
+      <div id="panel-journal"><span class="muted">加载中...</span></div>
+    </div>
   </div>
 </div>
 
@@ -218,8 +242,9 @@ td { padding: 3px 8px; border-bottom: 1px solid rgba(51,65,85,0.4); }
 var REFRESH_SEC = 10;
 var COUNTDOWN = REFRESH_SEC;
 var CONSECUTIVE_FAILS = 0;
-var PERF_DATA = null;  // cached for client-side sorting
+var PERF_DATA = null;
 var PERF_SORT = {col: 4, asc: false};  // default: Sharpe desc
+var SELECTED_BRAIN = null;
 
 // ── Utilities ──
 
@@ -229,19 +254,31 @@ function fmtPn(v) { if (v == null) return '$0.00'; var n = Number(v); return (n>
 function fmtPct(v) { if (v == null) return '--'; return (v*100).toFixed(1)+'%'; }
 function fmtNum(v, dec) { if (v == null) return '--'; dec = (dec == null ? 2 : dec); return Number(v).toFixed(dec); }
 function badge(label, cls) { return '<span class="badge badge-'+cls+'">'+label+'</span>'; }
-function timeAgo(iso) { if (!iso) return '--'; var diff = (Date.now() - Date.parse(iso))/1000; if (diff<60) return Math.floor(diff)+'s ago'; if (diff<3600) return Math.floor(diff/60)+'m ago'; if (diff<86400) return Math.floor(diff/3600)+'h ago'; return Math.floor(diff/86400)+'d ago'; }
+function timeAgo(iso) { if (!iso) return '--'; var diff = (Date.now() - Date.parse(iso))/1000; if (diff<60) return Math.floor(diff)+'秒前'; if (diff<3600) return Math.floor(diff/60)+'分钟前'; if (diff<86400) return Math.floor(diff/3600)+'小时前'; return Math.floor(diff/86400)+'天前'; }
 
-// cellColor(val, greenThresh, redThresh, higherIsBetter)
+// Status/health labels in Chinese
+var STATUS_CN = {
+  ACTIVE:'运行中', IDLE:'空闲', BLOCKED:'已阻断', CLEAR:'放行',
+  live:'在线', frozen:'冻结', candidate:'候选', probation:'观察', shadow:'影子', retired:'退役', unknown:'未知',
+  healthy:'健康', stable:'稳定', degraded:'降级', critical:'严重', insufficient_data:'数据不足',
+  eligible_for_promotion:'可晋升', demote_to_probation:'降为观察', freeze:'冻结', limit_exposure:'限制敞口', observe:'观察',
+  OK:'正常', WARNING:'警告', ERROR:'错误', CRITICAL:'严重', PASS:'通过', WARN:'警告', BLOCK:'阻断'
+};
+var STATUS_CLS = {
+  ACTIVE:'green', IDLE:'yellow', BLOCKED:'red', CLEAR:'green',
+  live:'green', frozen:'red', candidate:'yellow', probation:'yellow', shadow:'dim', retired:'dim',
+  healthy:'green', stable:'green', degraded:'yellow', critical:'red', insufficient_data:'dim',
+  eligible_for_promotion:'green', demote_to_probation:'red', freeze:'red', limit_exposure:'yellow', observe:'muted',
+  OK:'green', WARNING:'yellow', ERROR:'red', CRITICAL:'red', PASS:'green', WARN:'yellow', BLOCK:'red'
+};
+
+function cn(v) { return STATUS_CN[v] || v; }
+function statusCls(v) { return STATUS_CLS[v] || 'muted'; }
+
 function cellColor(val, gTh, rTh, hi) {
   if (val == null || isNaN(val)) return '';
-  if (hi === false) {
-    if (val <= gTh) return 'cell-green';
-    if (val > rTh) return 'cell-red';
-    return 'cell-yellow';
-  }
-  if (val >= gTh) return 'cell-green';
-  if (val < rTh) return 'cell-red';
-  return 'cell-yellow';
+  if (hi === false) { if (val <= gTh) return 'cell-green'; if (val > rTh) return 'cell-red'; return 'cell-yellow'; }
+  if (val >= gTh) return 'cell-green'; if (val < rTh) return 'cell-red'; return 'cell-yellow';
 }
 
 // ── Sortable table ──
@@ -263,10 +300,67 @@ function makeSortable(tableId) {
 
 function sortArrow(colIdx) {
   if (PERF_SORT.col !== colIdx) return ' <span class="sort-arrow dim">-</span>';
-  return PERF_SORT.asc ? ' <span class="sort-arrow">&#9650;</span>' : ' <span class="sort-arrow">&#9660;</span>';
+  return PERF_SORT.asc ? ' <span class="sort-arrow">▲</span>' : ' <span class="sort-arrow">▼</span>';
 }
 
-// ── Render: System Status ──
+// ── Tab switching ──
+
+function switchMainTab(tab) {
+  document.querySelectorAll('#tab-perf, #tab-detail').forEach(function(el) { el.classList.remove('active'); });
+  document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
+  document.getElementById('tab-'+tab).classList.add('active');
+  if (tab === 'perf') document.querySelector('.tab-btn:nth-child(1)').classList.add('active');
+  else document.querySelector('.tab-btn:nth-child(2)').classList.add('active');
+}
+
+function switchInnerTab(tab) {
+  document.querySelectorAll('#inner-alerts, #inner-journal').forEach(function(el) { el.classList.remove('active'); });
+  document.querySelectorAll('.inner-tab').forEach(function(el) { el.classList.remove('active'); });
+  document.getElementById('inner-'+tab).classList.add('active');
+  document.querySelector('.inner-tab:nth-child(' + (tab==='alerts'?1:2) + ')').classList.add('active');
+}
+
+function selectBrain(brainId) {
+  SELECTED_BRAIN = brainId;
+  document.getElementById('detail-brain-label').textContent = '— ' + brainId;
+  document.getElementById('tab-detail-btn').classList.add('active');
+  // Highlight row
+  var rows = document.querySelectorAll('#perf-table tbody tr');
+  for (var i = 0; i < rows.length; i++) {
+    rows[i].classList.remove('selected');
+    if (rows[i].getAttribute('data-brain') === brainId) rows[i].classList.add('selected');
+  }
+  // Fetch detail
+  fetch('/api/brain/' + encodeURIComponent(brainId), {signal: AbortSignal.timeout(8000)})
+    .then(function(r) { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(data) { renderBrainDetail(data); switchMainTab('detail'); })
+    .catch(function(err) { document.getElementById('panel-brain-detail').innerHTML = '<span class="red">加载失败: '+err.message+'</span>'; switchMainTab('detail'); });
+}
+
+// ── Sparkline ──
+
+function drawSparkline(values, width, height, positive) {
+  if (!values || values.length < 2) return '<span class="dim" style="font-size:11px">数据不足</span>';
+  var min = Math.min.apply(null, values.concat([0]));
+  var max = Math.max.apply(null, values.concat([0]));
+  var range = max - min || 1;
+  var pts = [];
+  var w = width || 120, h = height || 40;
+  var pad = 2;
+  for (var i = 0; i < values.length; i++) {
+    var x = pad + (i / (values.length - 1)) * (w - pad * 2);
+    var y = pad + (1 - (values[i] - min) / range) * (h - pad * 2);
+    pts.push(x + ',' + y);
+  }
+  var stroke = positive !== false ? 'var(--green)' : 'var(--red)';
+  if (positive === undefined) {
+    var last = values[values.length-1], first = values[0];
+    stroke = last >= first ? 'var(--green)' : 'var(--red)';
+  }
+  return '<svg width="'+w+'" height="'+h+'" style="display:block"><polyline points="'+pts.join(' ')+'" fill="none" stroke="'+stroke+'" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+
+// ══════════════════════ RENDER FUNCTIONS ══════════════════════
 
 function renderStatus(data) {
   var j = data.journal || {};
@@ -276,34 +370,31 @@ function renderStatus(data) {
   if (f.active) { statusLabel = 'BLOCKED'; statusCls = 'red'; }
   else if (total > 0) { statusLabel = 'ACTIVE'; statusCls = 'green'; }
   else { statusLabel = 'IDLE'; statusCls = 'yellow'; }
-  document.getElementById('hdr-sys-badge').innerHTML = badge(statusLabel, statusCls);
+  document.getElementById('hdr-sys-badge').innerHTML = badge(cn(statusLabel), statusCls);
   var h = '';
-  h += '<div class="stat-row"><span>Run State</span><span>' + badge(statusLabel, statusCls) + '</span></div>';
-  h += '<div class="stat-row"><span>Journal (today)</span><span class="num">' + total + '</span></div>';
-  h += '<div class="stat-row"><span>Accepted / Rejected</span><span><span class="green num">'+acc+'</span> / <span class="'+(rej>0?'red':'muted')+' num">'+rej+'</span></span></div>';
-  h += '<div class="stat-row"><span>Acknowledged</span><span class="muted num">' + ack + '</span></div>';
-  h += '<div class="stat-row"><span>Dispatch Flag</span><span>' + (f.active ? badge('BLOCKED','red')+' <span class="dim">'+((f.payload||{}).reason||'')+'</span>' : badge('CLEAR','green')) + '</span></div>';
-  if (data.errors && data.errors.length) h += '<div class="error-block">'+data.errors.length+' collector error(s)</div>';
-  // Stats summary
+  h += '<div class="stat-row"><span>运行状态</span><span>' + badge(cn(statusLabel), statusCls) + '</span></div>';
+  h += '<div class="stat-row"><span>今日日志</span><span class="num">' + total + '</span></div>';
+  h += '<div class="stat-row"><span>已接受 / 已拒绝</span><span><span class="green num">'+acc+'</span> / <span class="'+(rej>0?'red':'muted')+' num">'+rej+'</span></span></div>';
+  h += '<div class="stat-row"><span>已确认</span><span class="muted num">' + ack + '</span></div>';
+  h += '<div class="stat-row"><span>调度开关</span><span>' + (f.active ? badge(cn('BLOCKED'),'red')+' <span class="dim">'+((f.payload||{}).reason||'')+'</span>' : badge(cn('CLEAR'),'green')) + '</span></div>';
+  if (data.errors && data.errors.length) h += '<div class="error-block">'+data.errors.length+' 个采集错误</div>';
   var labels = data.labels || {};
   if (labels.total != null) {
     var wr = labels.win_rate;
     var pnl = labels.total_pnl || 0;
-    h += '<div class="stat-row" style="margin-top:4px"><span>P&amp;L / Win Rate</span><span><span class="'+(pnl>=0?'green':'red')+' num">'+fmtPn(pnl)+'</span> <span class="dim">'+fmtPct(wr)+'</span></span></div>';
+    h += '<div class="stat-row" style="margin-top:4px"><span>盈亏 / 胜率</span><span><span class="'+(pnl>=0?'green':'red')+' num">'+fmtPn(pnl)+'</span> <span class="dim">'+fmtPct(wr)+'</span></span></div>';
   }
   document.getElementById('panel-status').innerHTML = h;
 }
 
-// ── Render: Module Health ──
-
 function renderModules(data) {
   if (!data || !data.modules) {
-    document.getElementById('panel-modules').innerHTML = '<span class="muted">No module data</span>';
+    document.getElementById('panel-modules').innerHTML = '<span class="muted">无模块数据</span>';
     return;
   }
   var mods = data.modules;
   var modOrder = ['mt5_bridge','outbox','feature_store','brain_adapters','governance','dispatch','daily_ops'];
-  var labels = {mt5_bridge:'MT5 Bridge',outbox:'Outbox',feature_store:'Feature Store',brain_adapters:'Brain Adapters',governance:'Governance',dispatch:'Dispatch',daily_ops:'Daily Ops'};
+  var labels = {mt5_bridge:'MT5 桥接',outbox:'发件箱',feature_store:'特征库',brain_adapters:'大脑适配器',governance:'治理',dispatch:'调度',daily_ops:'每日运维'};
   var h = '';
   for (var i = 0; i < modOrder.length; i++) {
     var k = modOrder[i];
@@ -311,40 +402,34 @@ function renderModules(data) {
     if (!m) continue;
     var st = m.status || 'OK';
     var rowCls = st === 'CRITICAL' || st === 'ERROR' ? 'module-critical' : (st === 'WARNING' ? 'module-warn' : 'module-ok');
-    var stCls = st === 'CRITICAL' || st === 'ERROR' ? 'red' : (st === 'WARNING' ? 'yellow' : 'green');
     var detail = '';
-    if (k === 'mt5_bridge') detail = (m.connected ? 'connected' : 'disconnected') + (m.last_heartbeat ? ' '+timeAgo(m.last_heartbeat) : '');
-    else if (k === 'outbox') detail = 'pending='+(m.pending||0)+' stale='+(m.stale||0);
-    else if (k === 'feature_store') detail = m.freshness || (m.available ? 'ok' : 'missing');
-    else if (k === 'brain_adapters') detail = (m.with_data||0)+'/'+(m.configured||0)+' with data';
-    else if (k === 'governance') detail = 'live='+(m.live||0)+' frozen='+(m.frozen||0);
-    else if (k === 'dispatch') detail = m.blocked ? 'BLOCKED' : 'clear';
+    if (k === 'mt5_bridge') detail = (m.connected ? '已连接' : '未连接') + (m.last_heartbeat ? ' '+timeAgo(m.last_heartbeat) : '');
+    else if (k === 'outbox') detail = '待处理='+(m.pending||0)+' 过期='+(m.stale||0);
+    else if (k === 'feature_store') detail = m.freshness || (m.available ? '正常' : '缺失');
+    else if (k === 'brain_adapters') detail = (m.with_data||0)+'/'+(m.configured||0)+' 有数据';
+    else if (k === 'governance') detail = '在线='+(m.live||0)+' 冻结='+(m.frozen||0);
+    else if (k === 'dispatch') detail = m.blocked ? '已阻断' : '放行';
     else if (k === 'daily_ops') detail = m.last_recap || '--';
     else detail = '';
-    h += '<div class="stat-row '+rowCls+'" style="padding:4px 6px"><span style="font-size:12px">'+(labels[k]||k)+'</span><span><span class="'+stCls+'" style="font-size:12px">'+st+'</span>'+(detail?' <span class="dim" style="font-size:11px">'+detail+'</span>':'')+'</span></div>';
+    h += '<div class="stat-row '+rowCls+'" style="padding:4px 6px"><span style="font-size:12px">'+(labels[k]||k)+'</span><span><span class="'+statusCls(st)+'" style="font-size:12px">'+cn(st)+'</span>'+(detail?' <span class="dim" style="font-size:11px">'+detail+'</span>':'')+'</span></div>';
   }
   // Resources
   var res = data.resources || {};
   if (res.available) {
-    h += '<div class="stat-row" style="padding:4px 6px;margin-top:4px;border-top:1px solid var(--border)"><span style="font-size:11px">CPU / Mem / Disk</span><span class="num dim" style="font-size:11px">'+(res.cpu_pct!=null?res.cpu_pct.toFixed(0)+'%':'?')+' / '+(res.memory_pct!=null?res.memory_pct.toFixed(0)+'%':'?')+' / '+(res.disk_pct!=null?res.disk_pct.toFixed(0)+'%':'?')+'</span></div>';
+    h += '<div class="stat-row" style="padding:4px 6px;margin-top:4px;border-top:1px solid var(--border)"><span style="font-size:11px">CPU / 内存 / 磁盘</span><span class="num dim" style="font-size:11px">'+(res.cpu_pct!=null?res.cpu_pct.toFixed(0)+'%':'?')+' / '+(res.memory_pct!=null?res.memory_pct.toFixed(0)+'%':'?')+' / '+(res.disk_pct!=null?res.disk_pct.toFixed(0)+'%':'?')+'</span></div>';
   }
-  // Alert level badge
   var al = data.alert_level || 'OK';
-  var alCls = al === 'CRITICAL' ? 'red' : (al === 'WARNING' ? 'yellow' : 'green');
-  document.getElementById('hdr-alert-badge').innerHTML = badge(al, alCls);
+  document.getElementById('hdr-alert-badge').innerHTML = badge(cn(al), statusCls(al));
   document.getElementById('panel-modules').innerHTML = h;
 }
 
-// ── Render: Performance Matrix ──
-
 function renderPerformance(data) {
-  if (!data || !data.brains) { document.getElementById('panel-performance').innerHTML = '<span class="muted">No performance data</span>'; return; }
+  if (!data || !data.brains) { document.getElementById('panel-performance').innerHTML = '<span class="muted">无绩效数据</span>'; return; }
   PERF_DATA = data;
   var brains = data.brains.slice();
-  // Sort
   var col = PERF_SORT.col;
   var asc = PERF_SORT.asc;
-  var keys = ['brain_id','governance_status','cumulative_pnl','win_rate','sharpe_ratio','profit_factor','max_drawdown','sample_count','health_signal','recommendation','long_win_rate','short_win_rate'];
+  var keys = ['brain_id','governance_status','cumulative_pnl','win_rate','sharpe_ratio','profit_factor','max_drawdown','sample_count','health_signal','recommendation','long_win_rate','short_win_rate','recent_pnl_20'];
   brains.sort(function(a, b) {
     var va = a[keys[col]], vb = b[keys[col]];
     if (va == null) va = (typeof vb === 'number') ? -Infinity : '';
@@ -355,50 +440,152 @@ function renderPerformance(data) {
   });
 
   var h = '<table class="dense-table" id="perf-table"><thead><tr>';
-  var headers = ['Brain ID','Gov','P&amp;L','Win%','Sharpe','PF','MaxDD','N','Health','Rec','LongWR','ShortWR'];
+  var headers = ['大脑 ID','治理','盈亏','胜率','夏普','盈亏比','最大回撤','样本','健康','建议','做多胜率','做空胜率','近期走势'];
+  var hdrCols = ['brain_id','governance_status','cumulative_pnl','win_rate','sharpe_ratio','profit_factor','max_drawdown','sample_count','health_signal','recommendation','long_win_rate','short_win_rate','recent_pnl_20'];
   for (var i = 0; i < headers.length; i++) {
-    h += '<th data-col="'+i+'">'+headers[i]+sortArrow(i)+'</th>';
+    h += '<th data-col="'+i+'" data-key="'+hdrCols[i]+'">'+headers[i]+sortArrow(i)+'</th>';
   }
   h += '</tr></thead><tbody>';
   for (var r = 0; r < brains.length; r++) {
     var b = brains[r];
     var govSt = b.governance_status || 'unknown';
-    var govCls = {'live':'green','candidate':'yellow','probation':'yellow','frozen':'red'}[govSt] || 'muted';
-    var hlCls = {'healthy':'green','stable':'green','degraded':'yellow','critical':'red','insufficient_data':'dim'}[b.health_signal] || 'dim';
+    var hlCls = statusCls(b.health_signal);
     var rec = b.recommendation || 'observe';
-    var recCls = rec === 'eligible_for_promotion' ? 'green' : (rec === 'freeze' || rec === 'demote_to_probation' ? 'red' : 'muted');
-    var recLabel = {'eligible_for_promotion':'PROMOTE','demote_to_probation':'DEMOTE','freeze':'FREEZE','limit_exposure':'LIMIT','observe':'observe','':'observe'}[rec] || rec;
-    h += '<tr>';
+    var recCls = statusCls(rec);
+    var rowCls = (SELECTED_BRAIN === b.brain_id) ? 'clickable-row selected' : 'clickable-row';
+    var sparklineHtml = (b.recent_pnl_series && b.recent_pnl_series.length) ? drawSparkline(b.recent_pnl_series, 90, 32) : '<span class="dim">--</span>';
+    var recLabel = cn(rec);
+    h += '<tr class="'+rowCls+'" data-brain="'+(b.brain_id||'')+'" onclick="selectBrain(\''+(b.brain_id||'')+'\')">';
     h += '<td style="font-weight:600">'+(b.brain_id||'?')+'</td>';
-    h += '<td>'+badge(govSt, govCls)+'</td>';
+    h += '<td>'+badge(cn(govSt), statusCls(govSt))+'</td>';
     h += '<td class="num '+cellColor(b.cumulative_pnl, 0.01, 0)+'">'+fmtNum(b.cumulative_pnl, 4)+'</td>';
     h += '<td class="num '+cellColor(b.win_rate, 0.55, 0.45)+'">'+fmtPct(b.win_rate)+'</td>';
     h += '<td class="num '+cellColor(b.sharpe_ratio, 1.0, 0.0)+'">'+fmtNum(b.sharpe_ratio, 2)+'</td>';
     h += '<td class="num '+cellColor(b.profit_factor, 1.5, 1.0)+'">'+fmtNum(b.profit_factor, 2)+'</td>';
     h += '<td class="num '+cellColor(b.max_drawdown, 5.0, 15.0, false)+'">'+fmtNum(b.max_drawdown, 2)+'</td>';
     h += '<td class="num dim">'+(b.sample_count||0)+'</td>';
-    h += '<td>'+badge(b.health_signal||'?', hlCls)+'</td>';
-    h += '<td class="'+recCls+'" style="font-size:10px;font-weight:600">'+recLabel+'</td>';
+    h += '<td>'+badge(cn(b.health_signal||'?'), hlCls)+'</td>';
+    h += '<td class="'+recCls+'" style="font-size:11px;font-weight:600">'+recLabel+'</td>';
     h += '<td class="num '+cellColor(b.long_win_rate, 0.55, 0.45)+'">'+fmtPct(b.long_win_rate)+'</td>';
     h += '<td class="num '+cellColor(b.short_win_rate, 0.55, 0.45)+'">'+fmtPct(b.short_win_rate)+'</td>';
+    h += '<td>'+sparklineHtml+'</td>';
     h += '</tr>';
   }
   h += '</tbody></table>';
-  if (data.errors && data.errors.length) h += '<div class="error-block" style="margin-top:4px">Errors: '+data.errors.join(', ')+'</div>';
+  if (data.errors && data.errors.length) h += '<div class="error-block" style="margin-top:4px">错误: '+data.errors.join(', ')+'</div>';
   document.getElementById('panel-performance').innerHTML = h;
   makeSortable('perf-table');
 }
 
-// ── Render: Analytics ──
+// ── Brain Detail Panel ──
 
-function renderAnalytics(data) {
-  if (!data) { document.getElementById('panel-analytics').innerHTML = '<span class="muted">No analytics data</span>'; return; }
+function renderBrainDetail(data) {
+  if (!data || data.error) { document.getElementById('panel-brain-detail').innerHTML = '<span class="red">加载失败: '+(data&&data.error||'未知错误')+'</span>'; return; }
+  var g = data.governance || {};
+  var p = data.pnl || {};
+  var pf = data.performance || {};
+  var s = data.signals || {};
+  var t = data.training_metrics || {};
+
   var h = '';
 
-  // Param suggestions
+  // Key metric boxes
+  h += '<div class="brain-detail-grid">';
+  h += _metricBox('累计盈亏', fmtPn(p.cumulative_pnl), p.cumulative_pnl>=0?'green':'red');
+  h += _metricBox('胜率', fmtPct(p.win_rate), p.win_rate>=0.5?'green':(p.win_rate>=0.4?'yellow':'red'));
+  h += _metricBox('夏普比率', fmtNum(p.sharpe_ratio,2), p.sharpe_ratio>=1.0?'green':(p.sharpe_ratio>=0?'yellow':'red'));
+  h += _metricBox('盈亏比', fmtNum(p.profit_factor,2), p.profit_factor>=1.5?'green':(p.profit_factor>=1.0?'yellow':'red'));
+  h += _metricBox('最大回撤', fmtNum(p.max_drawdown,2)+'%', p.max_drawdown<=5?'green':(p.max_drawdown<=15?'yellow':'red'));
+  h += _metricBox('样本数', String(p.sample_count||0), 'muted');
+  h += '</div>';
+
+  // PnL sparkline
+  h += '<div style="background:rgba(15,23,42,0.5);border-radius:6px;padding:10px 12px;margin-bottom:10px">';
+  h += '<h4 style="font-size:11px;color:var(--dim);margin-bottom:6px">近期盈亏走势 (最近20笔)</h4>';
+  var pnlSeries = p.recent_pnl_series || [];
+  if (pnlSeries.length > 1) {
+    h += drawSparkline(pnlSeries, 400, 60);
+    h += '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-top:2px"><span>最早</span><span>最近 →</span></div>';
+  } else {
+    h += '<span class="dim">数据不足</span>';
+  }
+  h += '</div>';
+
+  // Direction distribution
+  h += '<div style="background:rgba(15,23,42,0.5);border-radius:6px;padding:10px 12px;margin-bottom:10px">';
+  h += '<h4 style="font-size:11px;color:var(--dim);margin-bottom:4px">方向分布</h4>';
+  var longPct = (p.long_count||0) / Math.max(1, (p.long_count||0)+(p.short_count||0)) * 100;
+  var shortPct = 100 - longPct;
+  var neutralPct = s.signal_frequency_pct ? (100 - s.signal_frequency_pct) : 0;
+  var dirPct = s.signal_frequency_pct || 0;
+  var longOfDir = dirPct > 0 ? (longPct / 100 * dirPct) : 0;
+  var shortOfDir = dirPct > 0 ? (shortPct / 100 * dirPct) : 0;
+  // Simpler: show long count vs short count
+  h += '<div style="display:flex;gap:16px;align-items:center;margin-top:4px">';
+  h += '<span style="font-size:12px">做多: <b class="green">'+(p.long_count||0)+'</b> (胜率 '+fmtPct(p.long_win_rate)+')</span>';
+  h += '<span style="font-size:12px">做空: <b class="red">'+(p.short_count||0)+'</b> (胜率 '+fmtPct(p.short_win_rate)+')</span>';
+  h += '<span style="font-size:12px">信号频率: <b>'+(s.signal_frequency_pct||0).toFixed(1)+'%</b></span>';
+  h += '</div>';
+  // Visual bar
+  var totalDir = (p.long_count||0) + (p.short_count||0) || 1;
+  h += '<div class="direction-bar" style="margin-top:6px">';
+  h += '<div class="bar-seg bar-long" style="width:'+((p.long_count||0)/totalDir*100)+'%"></div>';
+  h += '<div class="bar-seg bar-short" style="width:'+((p.short_count||0)/totalDir*100)+'%"></div>';
+  h += '</div>';
+  h += '</div>';
+
+  // Governance & Performance detail row
+  h += '<div class="grid-2" style="margin-bottom:10px">';
+  // Governance
+  h += '<div style="background:rgba(15,23,42,0.5);border-radius:6px;padding:10px 12px">';
+  h += '<h4 style="font-size:11px;color:var(--dim);margin-bottom:4px">治理状态</h4>';
+  h += '<div class="gov-item"><span>状态</span><span>'+badge(cn(g.status||'?'), statusCls(g.status))+'</span></div>';
+  h += '<div class="gov-item"><span>冻结次数</span><span class="num">'+(g.freeze_count||0)+'</span></div>';
+  h += '<div class="gov-item"><span>健康评级</span><span>'+badge(cn(pf.health_signal||'?'), statusCls(pf.health_signal))+'</span></div>';
+  h += '<div class="gov-item"><span>综合评分</span><span class="num">'+fmtNum(pf.composite_score,4)+'</span></div>';
+  h += '<div class="gov-item"><span>建议操作</span><span class="'+statusCls(pf.recommendation)+'">'+cn(pf.recommendation||'observe')+'</span></div>';
+  if (g.last_transition) h += '<div class="gov-item"><span>最近变更</span><span class="dim">'+timeAgo(g.last_transition)+'</span></div>';
+  h += '</div>';
+  // Performance metrics
+  h += '<div style="background:rgba(15,23,42,0.5);border-radius:6px;padding:10px 12px">';
+  h += '<h4 style="font-size:11px;color:var(--dim);margin-bottom:4px">绩效指标</h4>';
+  h += '<div class="gov-item"><span>平均收益</span><span class="num">'+fmtNum(p.avg_return,6)+'</span></div>';
+  h += '<div class="gov-item"><span>最近20笔盈亏</span><span class="num '+ (p.recent_pnl_20>=0?'green':'red')+'">'+fmtPn(p.recent_pnl_20)+'</span></div>';
+  h += '<div class="gov-item"><span>总交易笔数</span><span class="num">'+(p.sample_count||0)+'</span></div>';
+  h += '<div class="gov-item"><span>做多笔数 / 胜率</span><span class="num">'+(p.long_count||0)+' / '+fmtPct(p.long_win_rate)+'</span></div>';
+  h += '<div class="gov-item"><span>做空笔数 / 胜率</span><span class="num">'+(p.short_count||0)+' / '+fmtPct(p.short_win_rate)+'</span></div>';
+  if (t.train_sharpe != null) h += '<div class="gov-item"><span>训练夏普</span><span class="num">'+fmtNum(t.train_sharpe,2)+'</span></div>';
+  h += '</div>';
+  h += '</div>';
+
+  // Training metrics (if available)
+  if (t.train_sharpe != null || t.training_date) {
+    h += '<div style="background:rgba(15,23,42,0.5);border-radius:6px;padding:10px 12px">';
+    h += '<h4 style="font-size:11px;color:var(--dim);margin-bottom:4px">训练指标</h4>';
+    h += '<div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px">';
+    if (t.train_sharpe != null) h += '<span>训练夏普: <b>'+fmtNum(t.train_sharpe,2)+'</b></span>';
+    if (t.val_sharpe != null) h += '<span>验证夏普: <b>'+fmtNum(t.val_sharpe,2)+'</b></span>';
+    if (t.forward_sharpe != null) h += '<span>前向夏普: <b>'+fmtNum(t.forward_sharpe,2)+'</b></span>';
+    if (t.feature_count != null) h += '<span>特征数: <b>'+t.feature_count+'</b></span>';
+    if (t.training_date) h += '<span>训练日期: <b>'+t.training_date+'</b></span>';
+    h += '</div></div>';
+  }
+
+  document.getElementById('panel-brain-detail').innerHTML = h;
+}
+
+function _metricBox(label, val, cls) {
+  return '<div class="metric-box"><h4>'+label+'</h4><div class="metric-val '+cls+'">'+val+'</div></div>';
+}
+
+// ── Analytics ──
+
+function renderAnalytics(data) {
+  if (!data) { document.getElementById('panel-analytics').innerHTML = '<span class="muted">无分析数据</span>'; return; }
+  var h = '';
   var sug = data.param_suggestions || [];
-  h += '<div class="gov-section"><h3>Parameter Suggestions ('+sug.length+')</h3>';
-  if (!sug.length) { h += '<span class="dim" style="font-size:11px">No suggestions</span>'; }
+  h += '<div class="gov-section"><h3>参数建议 ('+sug.length+')</h3>';
+  if (!sug.length) { h += '<span class="dim" style="font-size:11px">暂无建议</span>'; }
   else {
     for (var i = 0; i < Math.min(sug.length, 5); i++) {
       var s = sug[i];
@@ -406,185 +593,166 @@ function renderAnalytics(data) {
     }
   }
   h += '</div>';
-
-  // Degraded brains
   var degraded = data.degraded_brains || [];
-  h += '<div class="gov-section"><h3>Degraded Brains ('+degraded.length+')</h3>';
-  if (!degraded.length) { h += '<span class="dim" style="font-size:11px">None degraded</span>'; }
+  h += '<div class="gov-section"><h3>降级模型 ('+degraded.length+')</h3>';
+  if (!degraded.length) { h += '<span class="dim" style="font-size:11px">无降级</span>'; }
   else {
     for (var j = 0; j < degraded.length; j++) {
       var d = degraded[j];
       var dhl = d.health_signal === 'critical' ? 'red' : 'yellow';
-      h += '<div class="gov-item"><span style="font-size:11px">'+d.brain_id+'</span><span class="'+dhl+'" style="font-size:11px">'+d.health_signal+'</span><span class="dim" style="font-size:10px">n='+d.sample_count+' rec='+(d.recommendation||'?')+'</span></div>';
+      h += '<div class="gov-item"><span style="font-size:11px">'+d.brain_id+'</span><span class="'+dhl+'" style="font-size:11px">'+cn(d.health_signal)+'</span><span class="dim" style="font-size:10px">n='+d.sample_count+' 建议='+(cn(d.recommendation)||'?')+'</span></div>';
     }
   }
   h += '</div>';
-
-  // Retirement candidates
   var ret = data.retirement_candidates || [];
-  h += '<div class="gov-section"><h3>Retirement Candidates ('+ret.length+')</h3>';
-  if (!ret.length) { h += '<span class="dim" style="font-size:11px">None</span>'; }
+  h += '<div class="gov-section"><h3>退役候选 ('+ret.length+')</h3>';
+  if (!ret.length) { h += '<span class="dim" style="font-size:11px">无</span>'; }
   else {
     for (var k = 0; k < ret.length; k++) {
       var rt = ret[k];
-      h += '<div class="gov-item"><span style="font-size:11px">'+rt.brain_id+'</span><span class="red" style="font-size:11px">'+rt.health_signal+'</span><span class="dim" style="font-size:10px">status='+(rt.current_status||'?')+'</span></div>';
+      h += '<div class="gov-item"><span style="font-size:11px">'+rt.brain_id+'</span><span class="red" style="font-size:11px">'+cn(rt.health_signal)+'</span><span class="dim" style="font-size:10px">状态='+(cn(rt.current_status)||'?')+'</span></div>';
     }
   }
   h += '</div>';
-
-  if (data.errors && data.errors.length) h += '<div class="error-block">Errors: '+data.errors.join(', ')+'</div>';
+  if (data.errors && data.errors.length) h += '<div class="error-block">错误: '+data.errors.join(', ')+'</div>';
   document.getElementById('panel-analytics').innerHTML = h;
 }
 
-// ── Render: Governance ──
+// ── Governance ──
 
 function renderGovernance(data) {
-  if (!data) { document.getElementById('panel-governance').innerHTML = '<span class="muted">No governance data</span>'; return; }
+  if (!data) { document.getElementById('panel-governance').innerHTML = '<span class="muted">无治理数据</span>'; return; }
   var h = '';
-
-  // Status summary counts
   var counts = data.status_counts || {};
-  h += '<div class="gov-section"><h3>Status Distribution</h3><div style="display:flex;gap:12px;font-size:12px;flex-wrap:wrap">';
+  h += '<div class="gov-section"><h3>状态分布</h3><div style="display:flex;gap:12px;font-size:12px;flex-wrap:wrap">';
   var countKeys = Object.keys(counts);
   for (var i = 0; i < countKeys.length; i++) {
     var ck = countKeys[i];
     var cc = counts[ck];
-    var cCls = ck === 'live' ? 'green' : (ck === 'frozen' ? 'red' : (ck === 'candidate'||ck==='probation' ? 'yellow' : 'dim'));
-    h += '<span><span class="'+cCls+'">'+ck+'</span>: <span class="num">'+cc+'</span></span>';
+    h += '<span><span class="'+statusCls(ck)+'">'+cn(ck)+'</span>: <span class="num">'+cc+'</span></span>';
   }
   h += '</div></div>';
-
-  // Promotion queue
   var pq = data.promotion_queue || [];
-  h += '<div class="gov-section"><h3>Promotion Queue ('+pq.length+')</h3>';
-  if (!pq.length) h += '<span class="dim" style="font-size:11px">Empty</span>';
+  h += '<div class="gov-section"><h3>晋升队列 ('+pq.length+')</h3>';
+  if (!pq.length) h += '<span class="dim" style="font-size:11px">空</span>';
   else for (var p = 0; p < pq.length; p++) {
     var pi = pq[p];
-    h += '<div class="gov-item"><span style="font-size:11px">'+pi.brain_id+'</span><span class="green" style="font-size:11px">score '+fmtNum(pi.composite_score,3)+'</span><span class="dim" style="font-size:10px">from '+pi.from_status+' n='+pi.sample_count+'</span></div>';
+    h += '<div class="gov-item"><span style="font-size:11px">'+pi.brain_id+'</span><span class="green" style="font-size:11px">评分 '+fmtNum(pi.composite_score,3)+'</span><span class="dim" style="font-size:10px">来自 '+cn(pi.from_status)+' n='+pi.sample_count+'</span></div>';
   }
   h += '</div>';
-
-  // Demotion warnings
   var dw = data.demotion_warnings || [];
-  h += '<div class="gov-section"><h3>Demotion Warnings ('+dw.length+')</h3>';
-  if (!dw.length) h += '<span class="dim" style="font-size:11px">None</span>';
+  h += '<div class="gov-section"><h3>降级警告 ('+dw.length+')</h3>';
+  if (!dw.length) h += '<span class="dim" style="font-size:11px">无</span>';
   else for (var w = 0; w < dw.length; w++) {
     var di = dw[w];
-    var recLabel = {'demote_to_probation':'DEMOTE','freeze':'FREEZE','limit_exposure':'LIMIT'}[di.recommendation] || di.recommendation;
-    h += '<div class="gov-item"><span style="font-size:11px">'+di.brain_id+'</span><span class="red" style="font-size:11px">'+recLabel+'</span><span class="dim" style="font-size:10px">score='+fmtNum(di.composite_score,3)+'</span></div>';
+    var recLabel = cn(di.recommendation);
+    h += '<div class="gov-item"><span style="font-size:11px">'+di.brain_id+'</span><span class="red" style="font-size:11px">'+recLabel+'</span><span class="dim" style="font-size:10px">评分='+fmtNum(di.composite_score,3)+'</span></div>';
   }
   h += '</div>';
-
-  // Freeze list
   var fl = data.freeze_list || [];
-  h += '<div class="gov-section"><h3>Frozen Brains ('+fl.length+')</h3>';
-  if (!fl.length) h += '<span class="dim" style="font-size:11px">None frozen</span>';
+  h += '<div class="gov-section"><h3>冻结模型 ('+fl.length+')</h3>';
+  if (!fl.length) h += '<span class="dim" style="font-size:11px">无冻结</span>';
   else for (var f = 0; f < fl.length; f++) {
     var fi = fl[f];
-    h += '<div class="gov-item"><span style="font-size:11px">'+fi.brain_id+'</span><span class="red" style="font-size:10px">x'+fi.freeze_count+'</span><span class="dim" style="font-size:10px">'+(fi.reason||'')+'</span></div>';
+    h += '<div class="gov-item"><span style="font-size:11px">'+fi.brain_id+'</span><span class="red" style="font-size:10px">×'+fi.freeze_count+'</span><span class="dim" style="font-size:10px">'+(fi.reason||'')+'</span></div>';
   }
   h += '</div>';
-
-  // Recent transitions
   var tr = data.recent_transitions || [];
-  h += '<div class="gov-section"><h3>Recent Transitions</h3><div class="transition-log">';
-  if (!tr.length) h += '<span class="dim" style="font-size:11px">No transitions</span>';
+  h += '<div class="gov-section"><h3>最近变更</h3><div class="transition-log">';
+  if (!tr.length) h += '<span class="dim" style="font-size:11px">无变更</span>';
   else for (var t = 0; t < tr.length; t++) {
     var tx = tr[t];
     var from = tx.from_status || tx.from || '?';
     var to = tx.to_status || tx.to || '?';
     var when = tx.transitioned_at || tx.at || tx.timestamp || '';
-    var toCls = to === 'live' ? 'green' : (to === 'frozen' ? 'red' : 'yellow');
-    h += '<div class="tl-entry"><span>'+tx.brain_id+'</span><span>'+from+' &rarr; <span class="'+toCls+'">'+to+'</span></span><span class="dim">'+timeAgo(when)+'</span></div>';
+    h += '<div class="tl-entry"><span>'+tx.brain_id+'</span><span>'+cn(from)+' → <span class="'+statusCls(to)+'">'+cn(to)+'</span></span><span class="dim">'+timeAgo(when)+'</span></div>';
   }
   h += '</div></div>';
-
-  if (data.errors && data.errors.length) h += '<div class="error-block">Errors: '+data.errors.join(', ')+'</div>';
+  if (data.errors && data.errors.length) h += '<div class="error-block">错误: '+data.errors.join(', ')+'</div>';
   document.getElementById('panel-governance').innerHTML = h;
 }
 
-// ── Render: Positions ──
+// ── Positions ──
 
 function renderPositions(data) {
   if (!data.connected) {
-    document.getElementById('panel-positions').innerHTML = '<span class="yellow">MT5 not connected</span>';
+    document.getElementById('panel-positions').innerHTML = '<span class="yellow">MT5 未连接</span>';
     return;
   }
   if (!data.positions || data.positions.length === 0) {
-    var age = data.generated_at ? (' <span class="dim">(snapshot '+fmtTime(data.generated_at)+')</span>') : '';
-    document.getElementById('panel-positions').innerHTML = '<span class="muted">No open positions</span>' + age;
+    var age = data.generated_at ? (' <span class="dim">(快照 '+fmtTime(data.generated_at)+')</span>') : '';
+    document.getElementById('panel-positions').innerHTML = '<span class="muted">无持仓</span>' + age;
     return;
   }
   var src = data._source ? ' <span class="dim" style="font-size:10px">['+data._source+']</span>' : '';
-  var h = '<table><tr><th>Ticket</th><th>Symbol</th><th>Side</th><th>Entry</th><th>SL</th><th>TP</th><th>P&amp;L</th></tr>';
+  var h = '<table><tr><th>Ticket</th><th>品种</th><th>方向</th><th>入场价</th><th>止损</th><th>止盈</th><th>盈亏</th></tr>';
   for (var i=0; i<data.positions.length; i++) {
     var p = data.positions[i];
     var sideCls = p.side === 'BUY' ? 'green' : 'red';
+    var sideLabel = p.side === 'BUY' ? '做多' : (p.side === 'SELL' ? '做空' : p.side);
     var pnl = p.profit != null ? p.profit : 0;
     var pnlCls = pnl >= 0 ? 'green' : 'red';
-    h += '<tr><td class="num">' + (p.ticket||'?') + '</td><td>' + (p.symbol||'?') + '</td><td class="'+sideCls+'">' + (p.side||'?') + '</td><td class="num">' + (p.price_open||'?') + '</td><td class="num dim">' + (p.sl||'--') + '</td><td class="num dim">' + (p.tp||'--') + '</td><td class="num '+pnlCls+'">' + fmtPn(pnl) + '</td></tr>';
+    h += '<tr><td class="num">' + (p.ticket||'?') + '</td><td>' + (p.symbol||'?') + '</td><td class="'+sideCls+'">' + (sideLabel||'?') + '</td><td class="num">' + (p.price_open||'?') + '</td><td class="num dim">' + (p.sl||'--') + '</td><td class="num dim">' + (p.tp||'--') + '</td><td class="num '+pnlCls+'">' + fmtPn(pnl) + '</td></tr>';
   }
   h += '</table>';
   if (data.generated_at) h += '<div class="dim" style="margin-top:4px">'+fmtTm(data.generated_at)+src+'</div>';
   document.getElementById('panel-positions').innerHTML = h;
 }
 
-// ── Render: Brain Signals (enhanced with PnL badges) ──
+// ── Brain Signals ──
 
 function renderBrains(data) {
   var brains = data.brains || [];
-  if (!brains.length) { document.getElementById('panel-brains').innerHTML = '<span class="muted">No brain data</span>'; return; }
-  var h = '<table class="dense-table"><tr><th>Brain ID</th><th>St</th><th>Health</th><th>Dir</th><th>Conf</th><th>PnL</th><th>Sharpe</th><th>N</th></tr>';
+  if (!brains.length) { document.getElementById('panel-brains').innerHTML = '<span class="muted">无大脑数据</span>'; return; }
+  var h = '<table class="dense-table"><tr><th>大脑 ID</th><th>治理</th><th>健康</th><th>方向</th><th>置信度</th><th>盈亏</th><th>夏普</th><th>样本</th></tr>';
   for (var i=0; i<brains.length; i++) {
     var b = brains[i];
-    var stCls = {'live':'green','candidate':'yellow','probation':'yellow','frozen':'red'}[b.status] || 'muted';
-    var hlCls = {'healthy':'green','stable':'green','degraded':'yellow','critical':'red','insufficient_data':'dim'}[b.health] || 'dim';
+    var st = b.status || 'unknown';
+    var hl = b.health || 'unknown';
     var dirCls = b.last_direction === 'LONG' ? 'green' : b.last_direction === 'SHORT' ? 'red' : 'yellow';
+    var dirLabel = b.last_direction === 'LONG' ? '做多' : b.last_direction === 'SHORT' ? '做空' : (b.last_direction||'?');
     var conf = b.confidence != null ? (b.confidence*100).toFixed(0)+'%' : '--';
     var pnl = b.pnl_total != null ? b.pnl_total : 0;
     var pnlStr = pnl === 0 && b.pnl_samples == null ? '--' : (pnl>=0?'+':'')+pnl.toFixed(3);
     var pnlCls = pnl > 0 ? 'green' : (pnl < 0 ? 'red' : 'muted');
     var sharpe = b.sharpe_ratio != null ? b.sharpe_ratio.toFixed(2) : '--';
     var n = b.sample_count || b.pnl_samples || 0;
-    var rowCls = b.health === 'critical' || b.status === 'frozen' ? 'module-critical' : (b.health === 'degraded' ? 'module-warn' : '');
-    h += '<tr class="'+rowCls+'"><td style="font-weight:500">'+(b.brain_id||'?')+'</td><td>'+badge(b.status||'?', stCls)+'</td><td>'+badge(b.health||'?', hlCls)+'</td><td class="'+dirCls+'">'+(b.last_direction||'?')+'</td><td class="num">'+conf+'</td><td class="num '+pnlCls+'">'+pnlStr+'</td><td class="num">'+sharpe+'</td><td class="num dim">'+n+'</td></tr>';
+    var rowCls = hl === 'critical' || st === 'frozen' ? 'module-critical' : (hl === 'degraded' ? 'module-warn' : '');
+    h += '<tr class="'+rowCls+'"><td style="font-weight:500">'+(b.brain_id||'?')+'</td><td>'+badge(cn(st), statusCls(st))+'</td><td>'+badge(cn(hl), statusCls(hl))+'</td><td class="'+dirCls+'">'+dirLabel+'</td><td class="num">'+conf+'</td><td class="num '+pnlCls+'">'+pnlStr+'</td><td class="num">'+sharpe+'</td><td class="num dim">'+n+'</td></tr>';
   }
   h += '</table>';
   document.getElementById('panel-brains').innerHTML = h;
 }
 
-// ── Render: Decisions ──
+// ── Decisions ──
 
 function renderDecisions(data) {
   var h = '<div class="decision-card">';
-  h += _renderDecisionCard('Shadow Ensemble', data.shadow);
-  h += _renderDecisionCard('Live Dispatch', data.live);
+  h += _renderDecisionCard('影子组合 (Shadow)', data.shadow);
+  h += _renderDecisionCard('实盘调度 (Live)', data.live);
   h += '</div>';
   document.getElementById('panel-decisions').innerHTML = h;
 }
+
 function _renderDecisionCard(title, d) {
-  if (!d) return '<div><span class="dim">'+title+'</span><br><span class="muted">No data</span></div>';
+  if (!d) return '<div><span class="dim">'+title+'</span><br><span class="muted">无数据</span></div>';
   var c = d.consensus || 'no_results';
   var cls = 'consensus-'+c;
   var att = d.brains || {};
   var sup = (att.supporting||[]).join(', ') || '--';
   var opp = (att.opposing||[]).join(', ') || '--';
-  return '<div><span class="dim">'+title+'</span><br><span class="'+cls+'" style="font-size:16px">' + c.toUpperCase() + '</span><br><span class="muted">'+ (d.decision_action||'?') + ' &middot; ' + (d.decision_side||'?') + '</span><br><span class="dim" style="font-size:11px">'+fmtTm(d.event_time)+'</span><br><span class="dim">Agreement: '+((d.agreement_score||d.consensus_score||0)*100).toFixed(1)+'%</span><br><span class="green">Supp: '+sup+'</span><br><span class="red">Opp: '+opp+'</span></div>';
+  var actionLabel = d.decision_action === 'ABSTAIN' ? '观望' : (d.decision_action||'?');
+  var sideLabel = d.decision_side === 'FLAT' ? '无方向' : (d.decision_side||'?');
+  return '<div><span class="dim">'+title+'</span><br><span class="'+cls+'" style="font-size:16px">' + c.toUpperCase() + '</span><br><span class="muted">'+ actionLabel + ' · ' + sideLabel + '</span><br><span class="dim" style="font-size:11px">'+fmtTm(d.event_time)+'</span><br><span class="dim">一致性: '+((d.agreement_score||d.consensus_score||0)*100).toFixed(1)+'%</span><br><span class="green">支持: '+sup+'</span><br><span class="red">反对: '+opp+'</span></div>';
 }
 
-// ── Render: SLO ──
+// ── SLO ──
 
 function renderSLO(data) {
   var objs = data.objectives || {};
   var names = Object.keys(objs);
-  if (!names.length) { document.getElementById('panel-slo').innerHTML = '<span class="muted">No SLO data</span>'; return; }
-  var labels = {
-    decision_success_rate: 'Decision Rate',
-    dispatch_success_rate: 'Dispatch Rate',
-    reconciliation_match_rate: 'Recon Match',
-    throttle_rate: 'Throttle',
-    circuit_open_rate: 'Circuit Open'
-  };
+  if (!names.length) { document.getElementById('panel-slo').innerHTML = '<span class="muted">无SLO数据</span>'; return; }
+  var labels = { decision_success_rate:'决策成功率', dispatch_success_rate:'调度成功率', reconciliation_match_rate:'对账匹配率', throttle_rate:'节流率', circuit_open_rate:'熔断率' };
   var h = '';
   for (var i=0; i<names.length; i++) {
     var o = objs[names[i]];
@@ -602,59 +770,63 @@ function renderSLO(data) {
     h += '<span class="num dim" style="width:35px;font-size:10px">'+budget.toFixed(0)+'%</span></div>';
   }
   var statusCls = data.status === 'healthy' ? 'green' : 'red';
-  h += '<div style="margin-top:4px;font-size:11px">Status: <span class="'+statusCls+'">' + (data.status||'?').toUpperCase() + '</span>';
+  h += '<div style="margin-top:4px;font-size:11px">状态: <span class="'+statusCls+'">' + ((data.status||'?').toUpperCase()) + '</span>';
   if (data.failed_objectives && data.failed_objectives.length) {
-    h += ' &middot; <span class="red">'+data.failed_objectives.length+' breaching</span>';
+    h += ' · <span class="red">'+data.failed_objectives.length+' 项超标</span>';
   }
   h += '</div>';
   document.getElementById('panel-slo').innerHTML = h;
 }
 
-// ── Render: Risk Gates ──
+// ── Risk Gates ──
 
 function renderRisk(data) {
   var policies = data.policies || [];
   var h = '';
   var overall = data.overall || 'PASS';
-  var overallCls = overall === 'BLOCK' ? 'red' : (overall === 'WARN' ? 'yellow' : 'green');
-  h += '<div class="stat-row"><span>Overall</span><span>' + badge(overall, overallCls) + '</span></div>';
+  var overallCls = statusCls(overall);
+  h += '<div class="stat-row"><span>总体</span><span>' + badge(cn(overall), overallCls) + '</span></div>';
   for (var i=0; i<policies.length; i++) {
     var p = policies[i];
-    h += '<div class="stat-row"><span style="font-size:12px">' + (p.name||'?') + '</span><span>' + badge(p.passed?'PASS':'BLOCK', p.passed?'green':'red') + '</span></div>';
+    var policyName = {market_calendar:'市场日历', journal_quality:'日志质量', spread:'点差检查', DrawdownPolicy:'回撤策略', PositionLimitPolicy:'仓位限制', ConcentrationPolicy:'集中度策略', ExposurePolicy:'敞口策略', ModePolicy:'模式策略'}[p.name] || p.name;
+    h += '<div class="stat-row"><span style="font-size:12px">' + policyName + '</span><span>' + badge(p.passed?cn('PASS'):cn('BLOCK'), p.passed?'green':'red') + '</span></div>';
     if (p.detail) h += '<div class="dim" style="font-size:11px;padding-left:8px">' + p.detail + '</div>';
   }
-  if (data.flag_active) h += '<div class="stat-row"><span>Dispatch Flag</span><span>' + badge('ACTIVE','red') + '</span></div>';
+  if (data.flag_active) h += '<div class="stat-row"><span>调度开关</span><span>' + badge(cn('BLOCKED'),'red') + '</span></div>';
   document.getElementById('panel-risk').innerHTML = h;
 }
 
-// ── Render: Alerts ──
+// ── Alerts ──
 
 function renderAlerts(data) {
   var alerts = data.alerts || [];
-  if (!alerts.length) { document.getElementById('panel-alerts').innerHTML = '<span class="muted">No alerts fired</span>'; return; }
-  var h = '<table><tr><th>Time</th><th>Sev</th><th>Rule</th><th>Context</th></tr>';
+  if (!alerts.length) { document.getElementById('panel-alerts').innerHTML = '<span class="muted">无告警</span>'; return; }
+  var h = '<table><tr><th>时间</th><th>级别</th><th>规则</th><th>上下文</th></tr>';
   for (var i=0; i<Math.min(alerts.length, 30); i++) {
     var a = alerts[i];
-    var sevCls = {'critical':'red','error':'red','warning':'yellow'}[a.severity] || 'muted';
+    var sevCls = statusCls(a.severity);
     var ctx = a.context_snapshot || {};
     var ctxStr = Object.keys(ctx).slice(0,3).map(function(k){return k+'='+ctx[k]}).join(' ');
-    h += '<tr class="'+(a.severity==='critical'?'alert-critical':(a.severity==='warning'?'alert-warning':''))+'"><td class="dim num">' + fmtTime(a.fired_at) + '</td><td>' + badge(a.severity||'?', sevCls) + '</td><td style="font-size:12px">' + (a.rule_name||'?') + '</td><td class="dim" style="font-size:11px">' + (ctxStr||'--') + '</td></tr>';
+    h += '<tr class="'+(a.severity==='critical'?'alert-critical':(a.severity==='warning'?'alert-warning':''))+'"><td class="dim num">' + fmtTime(a.fired_at) + '</td><td>' + badge(cn(a.severity||'?'), sevCls) + '</td><td style="font-size:12px">' + (a.rule_name||'?') + '</td><td class="dim" style="font-size:11px">' + (ctxStr||'--') + '</td></tr>';
   }
   h += '</table>';
   document.getElementById('panel-alerts').innerHTML = h;
 }
 
-// ── Render: Journal (Recent Trades) ──
+// ── Journal ──
 
 function renderJournal(data) {
   var entries = data.entries || [];
-  if (!entries.length) { document.getElementById('panel-journal').innerHTML = '<span class="muted">No trades today</span>'; return; }
-  var h = '<table><tr><th>Time</th><th>Symbol</th><th>Action</th><th>Side</th><th>Status</th><th>SL</th><th>TP</th></tr>';
+  if (!entries.length) { document.getElementById('panel-journal').innerHTML = '<span class="muted">今日无交易</span>'; return; }
+  var h = '<table><tr><th>时间</th><th>品种</th><th>操作</th><th>方向</th><th>状态</th><th>止损</th><th>止盈</th></tr>';
   for (var i=0; i<entries.length; i++) {
     var e = entries[i];
     var stCls = {'accepted':'green','rejected':'red','acknowledged':'blue','closed':'dim'}[e.ack_status] || 'muted';
+    var stLabel = {'accepted':'已接受','rejected':'已拒绝','acknowledged':'已确认','closed':'已关闭'}[e.ack_status] || e.ack_status;
     var sideCls = e.side === 'long' ? 'green' : e.side === 'short' ? 'red' : '';
-    h += '<tr><td class="dim num">' + fmtTime(e.recorded_at) + '</td><td>' + (e.symbol||'?') + '</td><td>' + (e.action||'?') + '</td><td class="'+sideCls+'">' + (e.side||'?') + '</td><td>' + badge(e.ack_status||'?', stCls) + '</td><td class="num dim">' + (e.sl||'--') + '</td><td class="num dim">' + (e.tp||'--') + '</td></tr>';
+    var sideLabel = e.side === 'long' ? '做多' : e.side === 'short' ? '做空' : (e.side||'?');
+    var actionLabel = e.action === 'open' ? '开仓' : e.action === 'close' ? '平仓' : (e.action||'?');
+    h += '<tr><td class="dim num">' + fmtTime(e.recorded_at) + '</td><td>' + (e.symbol||'?') + '</td><td>' + actionLabel + '</td><td class="'+sideCls+'">' + sideLabel + '</td><td>' + badge(stLabel||'?', stCls) + '</td><td class="num dim">' + (e.sl||'--') + '</td><td class="num dim">' + (e.tp||'--') + '</td></tr>';
   }
   h += '</table>';
   document.getElementById('panel-journal').innerHTML = h;
@@ -677,8 +849,19 @@ function doFetch(url, renderFn) {
 
 // ── Refresh all ──
 
+// ── Unified health render (Phase 3b) ──
+function renderUnifiedHealth(data) {
+  var statusEl = document.getElementById('health-status');
+  if (statusEl) {
+    statusEl.textContent = data.overall_status || 'unknown';
+    statusEl.className = 'badge ' + ((data.overall_status === 'healthy') ? 'badge-green' : (data.overall_status === 'degraded') ? 'badge-yellow' : 'badge-red');
+  }
+}
+
 function refreshAll() {
   updateTimestamp();
+  // Phase 3b: unified health first — single-request rendering for health panels
+  doFetch('/api/health/full', renderUnifiedHealth);
   var promises = [
     doFetch('/api/dashboard', renderStatus),
     doFetch('/api/modules', renderModules),
@@ -716,7 +899,9 @@ setInterval(countdownTick, 1000);
 </html>"""
 
 
-# ── Data helpers ──
+# ═══════════════════════════════════════════════════════════════════════════════
+# Data helpers
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 def _utc_now_iso() -> str:
@@ -758,13 +943,9 @@ def _read_last_n_lines(path: Path, n: int = 20) -> list[str]:
 
 
 def _collect_system_resources() -> dict[str, Any]:
-    """Collect system resource usage (CPU, memory, disk for data/ volume).
-
-    Returns a dict with keys: available, cpu_pct, memory_pct, disk_pct, disk_path.
-    Uses psutil if installed, otherwise falls back to available=False.
-    """
+    """Collect system resource usage (CPU, memory, disk for data/ volume)."""
     try:
-        import psutil  # type: ignore[import-not-found]
+        import psutil
 
         cpu = psutil.cpu_percent(interval=0.1)
         mem = psutil.virtual_memory().percent
@@ -793,7 +974,9 @@ def _collect_system_resources() -> dict[str, Any]:
             return {"available": False}
 
 
-# ── Live MT5 positions fetch (thread-timeout guarded) ──
+# ═══════════════════════════════════════════════════════════════════════════════
+# Live MT5 positions fetch (thread-timeout guarded)
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 def _fetch_live_mt5_positions(
@@ -801,11 +984,7 @@ def _fetch_live_mt5_positions(
     symbol: str = "XAUUSDc",
     timeout: float = 4.0,
 ) -> dict[str, Any]:
-    """Call MT5 positions_get() in a daemon thread with a hard timeout.
-
-    Returns the same shape as mt5_positions_snapshot.build_snapshot().
-    Never blocks the caller for more than *timeout* seconds.
-    """
+    """Call MT5 positions_get() in a daemon thread with a hard timeout."""
     import threading
 
     result: list[dict[str, Any] | None] = [None]
@@ -853,24 +1032,29 @@ def _fetch_live_mt5_positions(
     )
 
 
-# ── HTTP handler ──
+# ═══════════════════════════════════════════════════════════════════════════════
+# HTTP handler
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 class LiveDashboardHandler(BaseHTTPRequestHandler):
     """HTTP handler for the live trading dashboard."""
 
-    # Set by run_dashboard_server before serving
     BASE_DIR: Path = Path("data")
-    MT5_TERMINAL_PATH: str | None = None  # e.g. D:\\MetaTrader 5\\terminal64.exe
+    MT5_TERMINAL_PATH: str | None = None
 
     def log_message(self, fmt: str, *args: Any) -> None:  # noqa: ARG002
-        """Suppress default access logging to stderr (keep it clean)."""
+        """Suppress default access logging to stderr."""
         pass
 
     def do_GET(self) -> None:
         path = self.path.split("?")[0].rstrip("/") or "/"
         try:
-            if path == "/":
+            # Brain detail endpoint: /api/brain/{brain_id}
+            if path.startswith("/api/brain/") and len(path) > len("/api/brain/"):
+                brain_id = path[len("/api/brain/") :]
+                self._serve_api_brain_detail(brain_id)
+            elif path == "/":
                 self._serve_html()
             elif path == "/api/dashboard":
                 self._serve_api_dashboard()
@@ -888,6 +1072,8 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 self._serve_api_alerts()
             elif path == "/api/health":
                 self._serve_api_health()
+            elif path == "/api/health/full":
+                self._serve_api_health_full()
             elif path == "/api/risk":
                 self._serve_api_risk()
             elif path == "/api/performance":
@@ -901,6 +1087,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
             else:
                 self._serve_json({"error": "not_found"}, 404)
         except Exception:
+            logger.exception("Dashboard request failed: %s", self.path)
             self._serve_json({"error": "internal_error"}, 500)
 
     def _serve_html(self) -> None:
@@ -925,14 +1112,14 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
         date = _today_key()
         try:
             sys.path.insert(0, str(PROJECT_ROOT))
-            from scripts.live_dashboard import build_dashboard  # type: ignore[import-not-found]
+            from scripts.live_dashboard import build_dashboard
 
             report = build_dashboard(base_dir=str(self.BASE_DIR), date_key=date)
-            # Strip pre-rendered text blob
             report.pop("text", None)
             report["generated_at"] = _utc_now_iso()
             self._serve_json(report)
         except Exception as exc:
+            logger.warning("Dashboard collect failed: %s", exc)
             self._serve_json(
                 {
                     "schema_version": SCHEMA_VERSION,
@@ -947,7 +1134,6 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
             )
 
     def _serve_api_positions(self) -> None:
-        # 1. Try live MT5 via thread-timeout guard (if terminal path configured)
         if self.MT5_TERMINAL_PATH:
             data = _fetch_live_mt5_positions(
                 mt5_terminal_path=self.MT5_TERMINAL_PATH,
@@ -955,7 +1141,6 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 timeout=4.0,
             )
             if not data.get("error"):
-                # Live fetch succeeded — also write to snapshot cache for other consumers
                 snap_path = self.BASE_DIR / "reports" / "mt5_positions_live_now.json"
                 try:
                     snap_path.parent.mkdir(parents=True, exist_ok=True)
@@ -970,9 +1155,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 data["_source"] = "live_mt5"
                 self._serve_json(data)
                 return
-            # Live MT5 failed — fall through to snapshot
 
-        # 2. Fallback: read cached snapshot file
         snap_path = self.BASE_DIR / "reports" / "mt5_positions_live_now.json"
         if not snap_path.exists():
             self._serve_json(
@@ -1006,7 +1189,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
         self._serve_json(data)
 
     def _serve_api_brains(self) -> None:
-        """Merge tracker health + governance status + last direction per brain."""
+        """Merge tracker health + governance status + PnL + last direction per brain."""
         brains: dict[str, dict[str, Any]] = {}
 
         # 1. Performance tracker health
@@ -1030,7 +1213,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                         "last_direction": "UNKNOWN",
                     }
             except Exception:
-                pass
+                logger.warning("Failed to load brain performance tracker", exc_info=True)
 
         # 2. Governance status
         gov_path = self.BASE_DIR / "governance_state.json"
@@ -1055,9 +1238,9 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                             "last_direction": "UNKNOWN",
                         }
             except Exception:
-                pass
+                logger.warning("Failed to load governance state", exc_info=True)
 
-        # 2.5 PnL data from counterfactual ledger
+        # 2.5 PnL data
         pnl_path = self.BASE_DIR / "brain_pnl_ledger.json"
         if pnl_path.exists():
             try:
@@ -1072,7 +1255,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                         brains[bid]["sharpe_ratio"] = m.get("sharpe_ratio", 0)
                         brains[bid]["pnl_samples"] = m.get("sample_count", 0)
             except Exception:
-                pass
+                logger.warning("Failed to load brain PnL ledger", exc_info=True)
 
         # 3. Last direction from today's shadow decisions
         date = _today_key()
@@ -1087,7 +1270,6 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                     if isinstance(attr.get("consensus"), dict)
                     else "neutral"
                 )
-                # Normalize consensus to a canonical direction label
                 dir_label = consensus_dir.upper()
                 if dir_label in ("SPLIT", "NEUTRAL", "NO_RESULTS", "UNKNOWN"):
                     dir_label = "NEUTRAL"
@@ -1127,13 +1309,13 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
         self._serve_json({"count": len(entries), "entries": entries})
 
     def _serve_api_decisions(self) -> None:
+        """P0 FIX: Shadow reads from decisions file; Live reads from trade journal."""
         date = _today_key()
         dec_dir = self.BASE_DIR / "decisions" / date
 
         shadow_path = dec_dir / "XAUUSDc.decisions.jsonl"
-        live_path = dec_dir / "XAUUSDc.decisions.jsonl"
 
-        def _parse_last(p: Path) -> dict[str, Any] | None:
+        def _parse_decisions(p: Path) -> dict[str, Any] | None:
             line = _read_last_line(p)
             if not line:
                 return None
@@ -1158,23 +1340,51 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 },
             }
 
+        # Live: read last accepted/acknowledged trade from journal
+        def _parse_live_from_journal() -> dict[str, Any] | None:
+            journal_path = self.BASE_DIR / "live_trade_journal.jsonl"
+            lines = _read_last_n_lines(journal_path, n=50)
+            for line in reversed(lines):
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if rec.get("ack_status") in ("accepted", "acknowledged") and rec.get("action") in (
+                    "open",
+                    "close",
+                ):
+                    side = rec.get("side", "unknown")
+                    return {
+                        "event_time": rec.get("recorded_at", ""),
+                        "consensus": f"live_{rec.get('action', 'unknown')}",
+                        "decision_action": rec.get("action", "?").upper(),
+                        "decision_side": side.upper() if side in ("long", "short") else "FLAT",
+                        "agreement_score": None,
+                        "consensus_score": None,
+                        "brains": {
+                            "supporting": [],
+                            "opposing": [],
+                        },
+                    }
+            return None
+
         self._serve_json(
             {
-                "shadow": _parse_last(shadow_path),
-                "live": _parse_last(live_path),
+                "shadow": _parse_decisions(shadow_path),
+                "live": _parse_live_from_journal(),
             }
         )
 
     def _serve_api_slo(self) -> None:
-        """Return SLO compliance data for 5 objectives with error budgets."""
         try:
             sys.path.insert(0, str(PROJECT_ROOT))
-            from core.observability.slo_service import SloService  # type: ignore[import-not-found]
+            from core.observability.slo_service import SloService
 
             slo = SloService()
             report = slo.evaluate()
             self._serve_json(report)
         except Exception as exc:
+            logger.warning("SLO service failed: %s", exc)
             self._serve_json(
                 {
                     "status": "unavailable",
@@ -1185,24 +1395,21 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
             )
 
     def _serve_api_alerts(self) -> None:
-        """Return recent alert history from audit log + AlertService fired history."""
         alerts: list[dict[str, Any]] = []
 
-        # 1. AlertService fired history (in-memory, most recent)
         try:
             sys.path.insert(0, str(PROJECT_ROOT))
             from core.observability.alert_service import (
-                AlertService,  # type: ignore[import-not-found]
+                AlertService,
             )
 
             fired = AlertService.with_default_rules().get_fired_history(limit=50)
             alerts.extend(fired)
         except Exception:
-            pass
+            logger.warning("AlertService failed", exc_info=True)
 
-        # 2. Audit log entries with severity >= warning from today
         try:
-            from core.observability.audit_log import (  # type: ignore[import-not-found]
+            from core.observability.audit_log import (
                 StructuredAuditLog,
             )
 
@@ -1220,14 +1427,240 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                         }
                     )
         except Exception:
-            pass
+            logger.warning("AuditLog failed", exc_info=True)
 
-        # Sort by fired_at descending, take last 50
         alerts.sort(key=lambda a: str(a.get("fired_at", "")), reverse=True)
         self._serve_json({"count": len(alerts[-50:]), "alerts": alerts[-50:]})
 
+    # ── Unified health aggregator (Phase 3a) ──
+
+    @staticmethod
+    def _read_json_safe(path: Path) -> dict[str, Any]:
+        try:
+            if path.exists():
+                return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        return {}
+
+    @staticmethod
+    def _read_jsonl_head(path: Path, n: int = 10) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        try:
+            if path.exists():
+                with path.open("r", encoding="utf-8") as f:
+                    for line in f:
+                        if not line.strip():
+                            continue
+                        try:
+                            records.append(json.loads(line))
+                            if len(records) >= n:
+                                break
+                        except json.JSONDecodeError:
+                            continue
+        except Exception:
+            pass
+        return records
+
+    def _build_unified_health(self) -> dict[str, Any]:
+        """Aggregate 7 health data sources into a single unified report."""
+        now_ts = time_module.time()
+        report: dict[str, Any] = {
+            "generated_at": _utc_now_iso(),
+            "overall_status": "healthy",
+            "bridge": {
+                "connected": False,
+                "heartbeat_age_s": None,
+                "outbox_pending": 0,
+                "last_error": None,
+            },
+            "intent_loop": {
+                "iteration": 0,
+                "last_cycle_s": None,
+                "bar_sync": {},
+                "feature_store": {},
+                "daily_ops": {},
+            },
+            "brains": {
+                "tracked": 0,
+                "active": 0,
+                "probation": 0,
+                "frozen": 0,
+                "schema_mismatches": [],
+            },
+            "positions": {"open_count": 0, "total_exposure": 0.0},
+            "alerts": {"active_count": 0, "last_alert_age_s": None},
+            "slo": {"compliance_pct": 100.0, "budget_remaining_pct": 100.0},
+        }
+
+        # ── 1. Bridge health ──
+        try:
+            bridge = self._read_json_safe(self.BASE_DIR / "reports" / "mt5_bridge_health.json")
+            if bridge:
+                report["bridge"]["connected"] = bridge.get("connected", False)
+                hb = bridge.get("last_heartbeat_utc")
+                if hb:
+                    hb_ts = hb if isinstance(hb, int | float) else time_module.time()
+                    report["bridge"]["heartbeat_age_s"] = round(now_ts - hb_ts, 1)
+                report["bridge"]["outbox_pending"] = bridge.get("outbox_pending", 0)
+                report["bridge"]["last_error"] = bridge.get("last_error")
+        except Exception:
+            pass
+
+        # ── 2. Intent loop / bar sync ──
+        try:
+            bar = self._read_json_safe(self.BASE_DIR / "bar_sync_state.json")
+            if bar:
+                report["intent_loop"]["iteration"] = bar.get("iteration", 0)
+                report["intent_loop"]["bar_sync"] = {
+                    "last_bar_time": bar.get("last_bar_time"),
+                    "lag_count": bar.get("lag_count", 0),
+                }
+                report["intent_loop"]["last_cycle_s"] = round(
+                    now_ts - bar.get("last_cycle_ts", now_ts), 1
+                )
+        except Exception:
+            pass
+
+        # ── 3. Feature store ──
+        try:
+            store_dir = self.BASE_DIR / "feature_store"
+            schemas_path = store_dir / "schemas.json"
+            feature_schemas = self._read_json_safe(schemas_path)
+            report["intent_loop"]["feature_store"] = {
+                "schemas_count": len(feature_schemas),
+                "schema_version_ok": True,
+            }
+        except Exception:
+            pass
+
+        # ── 4. Daily ops ──
+        try:
+            ds = self._read_json_safe(self.BASE_DIR / "state" / "daily_ops_state.json")
+            if ds:
+                last_ts = ds.get("last_daily_ops_utc", 0)
+                report["intent_loop"]["daily_ops"] = {
+                    "last_run_utc": last_ts,
+                    "hours_ago": round((now_ts - float(last_ts)) / 3600.0, 2) if last_ts else None,
+                }
+        except Exception:
+            pass
+
+        # ── 5. Brain tracker + governance ──
+        try:
+            from core.feedback.brain_performance_tracker import BrainPerformanceTracker
+
+            tracker_path = self.BASE_DIR / "brain_performance.json"
+            if tracker_path.exists():
+                tracker = BrainPerformanceTracker.load(tracker_path)
+                summaries = tracker.get_all_summaries()
+                report["brains"]["tracked"] = len(summaries)
+                for s in summaries:
+                    hs = s.get("health_signal", "")
+                    if hs in ("healthy", "stable"):
+                        report["brains"]["active"] += 1
+                    elif hs == "degraded":
+                        report["brains"]["probation"] += 1
+        except Exception:
+            pass
+
+        try:
+            from core.governance.governance_service import GovernanceService
+
+            gov_path = self.BASE_DIR / "governance_state.json"
+            if gov_path.exists():
+                gov = GovernanceService.load(gov_path)
+                states = gov.get_all_states()
+                report["brains"]["frozen"] = sum(
+                    1 for s in states.values() if s.get("status") == "frozen"
+                )
+                report["brains"]["probation"] += sum(
+                    1 for s in states.values() if s.get("status") == "probation"
+                )
+        except Exception:
+            pass
+
+        # ── 6. Open positions ──
+        try:
+            snap_path = self.BASE_DIR / "reports" / "mt5_positions_live_now.json"
+            pos_data = self._read_json_safe(snap_path)
+            positions = pos_data.get("positions", [])
+            if positions:
+                report["positions"]["open_count"] = len(positions)
+                report["positions"]["total_exposure"] = round(
+                    sum(float(p.get("volume", 0)) for p in positions), 2
+                )
+        except Exception:
+            pass
+
+        # ── 7. Alerts ──
+        try:
+            alerts_path = self.BASE_DIR / "reports" / "exit_watchdog_alerts.jsonl"
+            recent_alerts = self._read_jsonl_head(alerts_path, n=50)
+            report["alerts"]["active_count"] = len(recent_alerts)
+            if recent_alerts:
+                newest_ts_str = recent_alerts[-1].get("fired_at") or recent_alerts[-1].get(
+                    "timestamp"
+                )
+                if newest_ts_str:
+                    try:
+                        newest_dt = datetime.fromisoformat(
+                            str(newest_ts_str).replace("Z", "+00:00")
+                        )
+                        report["alerts"]["last_alert_age_s"] = round(
+                            now_ts - newest_dt.timestamp(), 1
+                        )
+                    except (ValueError, TypeError):
+                        pass
+        except Exception:
+            pass
+
+        # ── 8. SLO ──
+        try:
+            slo_path = self.BASE_DIR / "slo_budget.json"
+            if slo_path.exists():
+                slo_data = self._read_json_safe(slo_path)
+                report["slo"] = {
+                    "compliance_pct": slo_data.get("compliance_pct", 100.0),
+                    "budget_remaining_pct": slo_data.get("budget_remaining_pct", 100.0),
+                }
+        except Exception:
+            pass
+
+        # ── Compute overall status ──
+        failures: list[str] = []
+        if not report["bridge"]["connected"]:
+            failures.append("bridge_disconnected")
+        if report["brains"]["frozen"] > 0:
+            failures.append(f"{report['brains']['frozen']}_brains_frozen")
+        bridge_age = report["bridge"]["heartbeat_age_s"]
+        if bridge_age is not None and bridge_age > 120:
+            failures.append(f"bridge_stale_{bridge_age:.0f}s")
+
+        if len(failures) >= 2:
+            report["overall_status"] = "critical"
+        elif len(failures) == 1:
+            report["overall_status"] = "degraded"
+        else:
+            report["overall_status"] = "healthy"
+
+        return report
+
+    def _serve_api_health_full(self) -> None:
+        global _UNIFIED_HEALTH_CACHE
+        now_ts = time_module.time()
+        if (
+            _UNIFIED_HEALTH_CACHE["data"] is not None
+            and (now_ts - _UNIFIED_HEALTH_CACHE["ts"]) < _UNIFIED_HEALTH_CACHE_TTL
+        ):
+            self._serve_json(_UNIFIED_HEALTH_CACHE["data"])
+            return
+
+        data = self._build_unified_health()
+        _UNIFIED_HEALTH_CACHE = {"ts": now_ts, "data": data}
+        self._serve_json(data)
+
     def _serve_api_health(self) -> None:
-        """Return unified health snapshot merging auto_healthcheck + diagnostics + resources."""
         report: dict[str, Any] = {
             "generated_at": _utc_now_iso(),
             "alert_level": "OK",
@@ -1235,9 +1668,8 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
             "resources": _collect_system_resources(),
         }
 
-        # 1. Auto healthcheck
         try:
-            from scripts.live_auto_healthcheck import (  # type: ignore[import-not-found]
+            from scripts.live_auto_healthcheck import (
                 build_report,
             )
 
@@ -1268,12 +1700,12 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
             }
             report["primary_codes"] = hc.get("primary_codes", [])
         except Exception as exc:
+            logger.warning("Health check failed: %s", exc)
             report["subsystems"]["healthcheck"] = {"status": "ERROR", "detail": str(exc)[:200]}
 
-        # 2. Brain health summary
         try:
             from core.feedback.brain_performance_tracker import (
-                BrainPerformanceTracker,  # type: ignore[import-not-found]
+                BrainPerformanceTracker,
             )
 
             tracker_path = self.BASE_DIR / "brain_performance.json"
@@ -1301,11 +1733,10 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                     },
                 }
         except Exception:
-            pass
+            logger.warning("Brain health summary failed", exc_info=True)
 
-        # 3. Governance summary
         try:
-            from core.governance.governance_service import (  # type: ignore[import-not-found]
+            from core.governance.governance_service import (
                 GovernanceService,
             )
 
@@ -1324,12 +1755,11 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                     },
                 }
         except Exception:
-            pass
+            logger.warning("Governance health summary failed", exc_info=True)
 
         self._serve_json(report)
 
     def _serve_api_risk(self) -> None:
-        """Return risk gate status: 5-policy summary + dispatch flag."""
         policies: list[dict[str, Any]] = []
         overall = "PASS"
 
@@ -1338,7 +1768,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
             from scripts.live_dispatch_policy import (
                 build_parser as policy_parser,
             )
-            from scripts.live_dispatch_policy import (  # type: ignore[import-not-found]
+            from scripts.live_dispatch_policy import (
                 load_gate_policy_config,
                 run_policy,
             )
@@ -1363,7 +1793,6 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
             elif result.get("dispatch_warnings"):
                 overall = "WARN"
 
-            # Extract policy checks from sources (market_calendar, journal_quality, spread)
             sources = result.get("sources", {})
             for src_key, src in sources.items():
                 src_blocked = src.get("blocked", False)
@@ -1376,7 +1805,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                     }
                 )
         except Exception:
-            # Fallback: read flag file directly
+            logger.warning("Risk gate policy evaluation failed", exc_info=True)
             flag_path = self.BASE_DIR / "live_dispatch_block.flag"
             if flag_path.exists():
                 try:
@@ -1405,16 +1834,15 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
             }
         )
 
-    # ── NEW API: performance matrix ──
+    # ── Performance matrix ──
 
     def _serve_api_performance(self) -> None:
-        """Return per-brain performance matrix (PnL, Sharpe, win rate, etc.)."""
+        """Return per-brain performance matrix with recent PnL time series."""
         global _PERF_CACHE
         pnl_path = self.BASE_DIR / "brain_pnl_ledger.json"
         tracker_path = self.BASE_DIR / "brain_performance.json"
         gov_path = self.BASE_DIR / "governance_state.json"
 
-        # Check cache
         now = time_module.time()
         pnl_mtime = pnl_path.stat().st_mtime if pnl_path.exists() else 0
         if (
@@ -1428,7 +1856,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
         brains: list[dict[str, Any]] = []
         errors: list[str] = []
 
-        # 1. Load PnL ledger (counterfactual performance)
+        # 1. PnL ledger
         pnl_table: list[dict[str, Any]] = []
         if pnl_path.exists():
             try:
@@ -1438,8 +1866,9 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 pnl_table = store.get_summary_table()
             except Exception as exc:
                 errors.append(f"pnl_ledger: {exc}")
+                logger.warning("PnL ledger load failed: %s", exc)
 
-        # 2. Load BrainPerformanceTracker (composite scores, recommendations)
+        # 2. BrainPerformanceTracker
         tracker: dict[str, dict[str, Any]] = {}
         if tracker_path.exists():
             try:
@@ -1452,8 +1881,9 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                     tracker[s["brain_id"]] = s
             except Exception as exc:
                 errors.append(f"tracker: {exc}")
+                logger.warning("Tracker load failed: %s", exc)
 
-        # 3. Load GovernanceService (lifecycle status)
+        # 3. Governance
         gov_states: dict[str, dict[str, Any]] = {}
         if gov_path.exists():
             try:
@@ -1463,19 +1893,24 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 gov_states = g.get_all_states()
             except Exception as exc:
                 errors.append(f"governance: {exc}")
+                logger.warning("Governance load failed: %s", exc)
 
-        # 4. Merge
+        # 4. Merge with recent_pnl_series for sparkline
         for pnl in pnl_table:
             bid = pnl.get("brain_id", "")
             entry = dict(pnl)
             entry["governance_status"] = gov_states.get(bid, {}).get("status", "unknown")
             entry["freeze_count"] = gov_states.get(bid, {}).get("freeze_count", 0)
             tinfo = tracker.get(bid, {})
+            entry["health_signal"] = tinfo.get("health_signal", "insufficient_data")
             entry["composite_score"] = round(tinfo.get("composite_mean", 0), 4)
             entry["recommendation"] = tinfo.get("recommendation", "observe")
+            # Try to get recent PnL series from raw data
+            entry["recent_pnl_series"] = _get_recent_pnl_series(
+                self.BASE_DIR / "brain_pnl_ledger.json", bid
+            )
             brains.append(entry)
 
-        # Add brains that exist in tracker/governance but not in PnL ledger
         seen = {b["brain_id"] for b in brains}
         for bid, tinfo in tracker.items():
             if bid not in seen:
@@ -1500,11 +1935,11 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                         "composite_score": round(tinfo.get("composite_mean", 0), 4),
                         "recommendation": tinfo.get("recommendation", "observe"),
                         "freeze_count": gs.get("freeze_count", 0),
+                        "recent_pnl_series": [],
                     }
                 )
                 seen.add(bid)
 
-        # Sort by Sharpe descending
         brains.sort(key=lambda b: b.get("sharpe_ratio", 0) or 0, reverse=True)
 
         result = {
@@ -1517,10 +1952,115 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
         _PERF_CACHE = {"ts": now, "data": result, "mtime": pnl_mtime}
         self._serve_json(result)
 
-    # ── NEW API: governance dashboard ──
+    # ── Brain detail endpoint ──
+
+    def _serve_api_brain_detail(self, brain_id: str) -> None:
+        """Return detailed metrics for a single brain."""
+        pnl_path = self.BASE_DIR / "brain_pnl_ledger.json"
+        tracker_path = self.BASE_DIR / "brain_performance.json"
+        gov_path = self.BASE_DIR / "governance_state.json"
+
+        result: dict[str, Any] = {
+            "brain_id": brain_id,
+            "generated_at": _utc_now_iso(),
+        }
+
+        # PnL metrics
+        if pnl_path.exists():
+            try:
+                from core.feedback.brain_pnl_ledger import BrainPnLStore
+
+                store = BrainPnLStore.load(pnl_path)
+                metrics = store.get_metrics(brain_id)
+                if metrics.sample_count > 0:
+                    result["pnl"] = metrics.to_dict()
+                    # Add recent PnL time series for sparkline
+                    result["pnl"]["recent_pnl_series"] = _get_recent_pnl_series(
+                        pnl_path, brain_id, n=30
+                    )
+                    result["pnl"]["long_count"] = getattr(metrics, "long_count", 0)
+                    result["pnl"]["short_count"] = getattr(metrics, "short_count", 0)
+                else:
+                    result["pnl"] = {
+                        "cumulative_pnl": 0,
+                        "win_rate": 0,
+                        "sharpe_ratio": 0,
+                        "profit_factor": 0,
+                        "max_drawdown": 0,
+                        "avg_return": 0,
+                        "recent_pnl_20": 0,
+                        "long_win_rate": 0,
+                        "short_win_rate": 0,
+                        "long_count": 0,
+                        "short_count": 0,
+                        "sample_count": 0,
+                        "recent_pnl_series": [],
+                    }
+            except Exception as exc:
+                logger.warning("Brain PnL detail failed for %s: %s", brain_id, exc)
+                result["pnl_error"] = str(exc)[:200]
+
+        # Performance / health
+        if tracker_path.exists():
+            try:
+                from core.feedback.brain_performance_tracker import (
+                    BrainPerformanceTracker,
+                )
+
+                t = BrainPerformanceTracker.load(tracker_path)
+                summary = t.get_brain_summary(brain_id)
+                result["performance"] = {
+                    "health_signal": summary.get("health_signal", "insufficient_data"),
+                    "composite_score": summary.get("composite_mean", 0),
+                    "recommendation": summary.get("recommendation", "observe"),
+                    "sample_count": summary.get("sample_count", 0),
+                    "outcome_distribution": summary.get("outcome_distribution", {}),
+                }
+            except Exception as exc:
+                logger.warning("Brain performance detail failed for %s: %s", brain_id, exc)
+
+        # Governance
+        if gov_path.exists():
+            try:
+                from core.governance.governance_service import GovernanceService
+
+                g = GovernanceService.load(gov_path)
+                state = g.get_all_states().get(brain_id, {})
+                result["governance"] = {
+                    "status": state.get("status", "unknown"),
+                    "freeze_count": state.get("freeze_count", 0),
+                    "last_transition": state.get("last_transition_at", ""),
+                }
+            except Exception as exc:
+                logger.warning("Brain governance detail failed for %s: %s", brain_id, exc)
+
+        # Training metrics from brain config (if available)
+        config_path = Path(f"configs/brains/{brain_id}.json")
+        if config_path.exists():
+            try:
+                cfg = json.loads(config_path.read_text(encoding="utf-8"))
+                train = cfg.get("training_metrics", cfg.get("training", {}))
+                result["training_metrics"] = {
+                    "train_sharpe": train.get("train_sharpe") or train.get("sharpe"),
+                    "val_sharpe": train.get("val_sharpe") or train.get("validation_sharpe"),
+                    "forward_sharpe": train.get("forward_sharpe") or train.get("fw_sharpe"),
+                    "feature_count": train.get("feature_count")
+                    or cfg.get("feature_count")
+                    or cfg.get("input_dim"),
+                    "training_date": train.get("training_date") or cfg.get("trained_at", ""),
+                }
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        # Signal stats from tracker
+        if tracker_path.exists() and "performance" not in result:
+            pass  # Already loaded above
+
+        self._serve_json(result)
+
+    # ── Governance dashboard ──
 
     def _serve_api_governance(self) -> None:
-        """Return governance actions: promotion queue, demotion warnings, freeze list, transitions."""
         tracker_path = self.BASE_DIR / "brain_performance.json"
         gov_path = self.BASE_DIR / "governance_state.json"
         errors: list[str] = []
@@ -1531,7 +2071,6 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
         freeze_list: list[dict[str, Any]] = []
         recent_transitions: list[dict[str, Any]] = []
 
-        # Governance states
         gov_states: dict[str, dict[str, Any]] = {}
         if gov_path.exists():
             try:
@@ -1539,18 +2078,16 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
 
                 g = GovernanceService.load(gov_path)
                 gov_states = g.get_all_states()
-                # Status counts
                 for s in gov_states.values():
                     st = s.get("status", "unknown")
                     status_counts[st] = status_counts.get(st, 0) + 1
-                # Recent transitions
                 tlog = g.get_transition_log()
                 recent_transitions = list(tlog[-20:])
                 recent_transitions.reverse()
             except Exception as exc:
                 errors.append(f"governance: {exc}")
+                logger.warning("Governance load failed: %s", exc)
 
-        # Tracker recommendations
         if tracker_path.exists():
             try:
                 from core.feedback.brain_performance_tracker import (
@@ -1575,8 +2112,8 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                         demotion_warnings.append(entry)
             except Exception as exc:
                 errors.append(f"tracker: {exc}")
+                logger.warning("Tracker load failed for governance: %s", exc)
 
-        # Freeze list from governance states
         for bid, gs in gov_states.items():
             if gs.get("status") == "frozen":
                 freeze_list.append(
@@ -1600,10 +2137,9 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
             }
         )
 
-    # ── NEW API: analytics recommendations ──
+    # ── Analytics recommendations ──
 
     def _serve_api_analytics(self) -> None:
-        """Return parameter tuning suggestions, retirement candidates, degraded brains."""
         suggestions_path = self.BASE_DIR / "reports" / "param_suggestions.json"
         tracker_path = self.BASE_DIR / "brain_performance.json"
         gov_path = self.BASE_DIR / "governance_state.json"
@@ -1627,7 +2163,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
 
                 gov_states = GovernanceService.load(gov_path).get_all_states()
             except Exception:
-                pass
+                logger.warning("Governance load failed for analytics", exc_info=True)
 
         if tracker_path.exists():
             try:
@@ -1661,6 +2197,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                             degraded_brains.append(entry)
             except Exception as exc:
                 errors.append(f"tracker: {exc}")
+                logger.warning("Tracker load failed for analytics: %s", exc)
 
         self._serve_json(
             {
@@ -1672,10 +2209,9 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
             }
         )
 
-    # ── NEW API: module health ──
+    # ── Module health ──
 
     def _serve_api_modules(self) -> None:
-        """Return per-module health status with data freshness indicators."""
         errors: list[str] = []
         modules: dict[str, dict[str, Any]] = {}
         now = time_module.time()
@@ -1708,7 +2244,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
             pending = 0
             stale = 0
             if outbox_dir.exists():
-                cutoff = now - 600  # 10 minutes stale
+                cutoff = now - 600
                 for root, _dirs, files in os.walk(str(outbox_dir)):
                     for fn in files:
                         if fn.endswith(".json"):
@@ -1728,7 +2264,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
         try:
             fs_dir = self.BASE_DIR / "feature_store"
             if fs_dir.exists():
-                max_mtime = 0
+                max_mtime = 0.0
                 for root, _dirs, files in os.walk(str(fs_dir)):
                     for fn in files:
                         fp = Path(root) / fn
@@ -1770,18 +2306,12 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 t_data = json.loads(tracker_path.read_text(encoding="utf-8"))
                 records = t_data.get("records", {})
                 with_data = sum(1 for v in records.values() if v and len(v) > 0)
-            active_count = with_data
-            if configured > 0 and with_data == 0:
-                adapter_status = "WARNING"
-            elif configured > 0 and with_data < configured:
-                adapter_status = "WARNING"
-            else:
-                adapter_status = "OK"
+            adapter_status = "WARNING" if (configured > 0 and with_data == 0) else "OK"
             modules["brain_adapters"] = {
                 "status": adapter_status,
                 "configured": configured,
                 "with_data": with_data,
-                "active": active_count,
+                "active": with_data,
             }
         except Exception as exc:
             modules["brain_adapters"] = {"status": "ERROR", "detail": str(exc)[:100]}
@@ -1833,7 +2363,6 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
         # 8. Resources
         resources = _collect_system_resources()
 
-        # Determine overall alert level
         statuses = [m.get("status", "OK") for m in modules.values()]
         if "CRITICAL" in statuses:
             alert_level = "CRITICAL"
@@ -1856,7 +2385,44 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
         )
 
 
-# ── Server entry point ──
+# ═══════════════════════════════════════════════════════════════════════════════
+# Helpers for per-brain PnL time series
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _get_recent_pnl_series(pnl_path: Path, brain_id: str, n: int = 20) -> list[float]:
+    """Extract recent PnL values for a brain from the ledger for sparkline display.
+
+    The ledger stores settled outcomes as a list of dicts per brain_id,
+    each dict containing a 'pnl' field with the realized PnL value.
+    """
+    try:
+        data = json.loads(pnl_path.read_text(encoding="utf-8"))
+        outcomes = data.get("settled", {}).get(brain_id, [])
+        if not isinstance(outcomes, list) or not outcomes:
+            return []
+        pnl_values = []
+        for entry in outcomes:
+            if isinstance(entry, dict):
+                pnl_values.append(float(entry.get("pnl", 0)))
+            elif isinstance(entry, int | float):
+                pnl_values.append(float(entry))
+        if not pnl_values:
+            return []
+        recent = pnl_values[-n:]
+        cum = 0.0
+        result = []
+        for pnl in recent:
+            cum += pnl
+            result.append(round(cum, 6))
+        return result
+    except (json.JSONDecodeError, OSError, KeyError, TypeError, ValueError):
+        return []
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Server entry point
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 def run_dashboard_server(
@@ -1865,15 +2431,7 @@ def run_dashboard_server(
     port: int = 8080,
     mt5_terminal_path: str | None = None,
 ) -> HTTPServer:
-    """Create and return the dashboard HTTP server.
-
-    Args:
-        base_dir: Base data directory.
-        host: Bind address (default 127.0.0.1).
-        port: TCP port (default 8080).
-        mt5_terminal_path: Optional MT5 terminal path (e.g. D:\\MetaTrader 5\\terminal64.exe).
-            When set, /api/positions will pull live data from MT5 with a thread timeout.
-    """
+    """Create and return the dashboard HTTP server."""
     LiveDashboardHandler.BASE_DIR = Path(base_dir)
     LiveDashboardHandler.MT5_TERMINAL_PATH = mt5_terminal_path
     server = HTTPServer((host, port), LiveDashboardHandler)
@@ -1888,11 +2446,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--mt5-terminal-path",
         default=None,
-        help="MT5 terminal path for live position fetching (e.g. D:\\MetaTrader 5\\terminal64.exe)",
+        help="MT5 terminal path for live position fetching",
     )
     args = parser.parse_args(argv)
 
-    # Ensure project root is on sys.path for imports
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
 

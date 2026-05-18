@@ -1,3 +1,6 @@
+from typing import Any
+
+
 class GovernanceRule:
     """A single declarative governance rule."""
 
@@ -98,6 +101,45 @@ class GovernanceRuleEngine:
             fired.append(chosen)
 
         return fired
+
+    def execute_transitions(
+        self,
+        report: list[Any],
+        *,
+        dry_run: bool = False,
+    ) -> list[str]:
+        """Executor: apply a promotion audit report as state transitions.
+
+        This is the sole writer for automated lifecycle state changes.
+        Auditor (BrainPromotionEvaluator) reads → Executor (this method) writes.
+
+        Args:
+            report: List of BrainPromotionDecision from BrainPromotionEvaluator.
+            dry_run: If True, log what would happen without writing.
+
+        Returns:
+            List of change descriptions.
+        """
+        changes: list[str] = []
+        for d in report:
+            if not d.approved or d.target_status is None:
+                continue
+            brain_id = d.brain_id
+            current = self._governance.get_brain_state(brain_id)
+            if current is None:
+                changes.append(f"{brain_id}: not registered — skipping")
+                continue
+            old_status = current.get("status", "unknown")
+            if old_status == d.target_status:
+                continue
+            if not dry_run:
+                self._governance.transition(
+                    brain_id,
+                    d.target_status,
+                    reason=f"promotion:{d.action} — {'; '.join(d.reasons)}",
+                )
+            changes.append(f"{brain_id}: {old_status} → {d.target_status} ({d.action})")
+        return changes if changes else ["no_changes"]
 
     @classmethod
     def with_default_rules(cls, governance_service, audit_log=None) -> "GovernanceRuleEngine":

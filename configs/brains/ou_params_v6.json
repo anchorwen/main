@@ -4,7 +4,7 @@
   "brain_type": "ou_params_v6",
   "brain_role": "arb_brain",
   "model_version": "v7.0",
-  "status": "probation",
+  "status": "live",
   "vote_weight": 1.5,
   "magic": 90010,
   "artifact_path": "data/models/arb_params_v7.json",

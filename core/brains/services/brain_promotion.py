@@ -74,7 +74,11 @@ class BrainPromotionThresholds:
 
 
 class BrainPromotionEvaluator:
-    """Evaluates brain performance and produces lifecycle decisions."""
+    """Auditor: evaluates brain performance and produces audit reports.
+
+    Does NOT write state.  Use GovernanceRuleEngine.execute_transitions()
+    to apply the returned decisions.
+    """
 
     def __init__(self, thresholds: BrainPromotionThresholds | None = None):
         self._thresholds = thresholds or BrainPromotionThresholds()
@@ -358,6 +362,9 @@ class BrainPromotionEvaluator:
 
 
 def apply_promotion_decisions(
+    # DEPRECATED: use GovernanceRuleEngine.execute_transitions() for state writes.
+    # This function is kept for backward compatibility with scripts/ that call it
+    # directly.  New code should route through the Auditor→Executor pipeline.
     governance_path: Path,
     decisions: list[BrainPromotionDecision],
     *,

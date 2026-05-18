@@ -128,6 +128,7 @@ class ExitWatchdog:
         dispatch_fn: Callable[..., dict[str, Any]],
         brain_ids: list[str] | None = None,
         get_position_open: Callable[[int], bool] | None = None,
+        l2_broker: Any = None,
     ) -> ExitWatchdogResult:
         """Execute an exit order with full watchdog protection.
 
@@ -155,9 +156,29 @@ class ExitWatchdog:
         for attempt_n in range(1, self.max_retries + 1):
             elapsed = time.monotonic() - start
             if elapsed > self.max_total_duration:
+                # L2 forced liquidation: bypass bridge, close directly via MT5
+                l2_ok = False
+                if l2_broker is not None:
+                    try:
+                        l2_ok, l2_msg = l2_broker.close_position(
+                            position_ticket, slippage=self.max_slippage_points
+                        )
+                        if l2_ok:
+                            return ExitWatchdogResult(
+                                success=True,
+                                position_ticket=position_ticket,
+                                total_attempts=attempt_n,
+                                total_duration_ms=round(elapsed * 1000),
+                                final_status="closed_l2_forced",
+                                attempts=attempts,
+                                alerts=alerts,
+                            )
+                    except Exception:
+                        pass
                 alert = (
                     f"CRITICAL: exit_watchdog_timeout ticket={position_ticket} "
                     f"reason={reason} elapsed={elapsed:.1f}s attempts={attempt_n - 1}"
+                    f"{' l2_fallback=' + ('ok' if l2_ok else 'failed') if l2_broker else ''}"
                 )
                 alerts.append(alert)
                 self._fire_alert(alert, position_ticket, reason)
@@ -256,8 +277,25 @@ class ExitWatchdog:
                 backoff = RETRY_BACKOFF_BASE * (2 ** (attempt_n - 1))
                 time.sleep(min(backoff, 10.0))  # cap at 10s
 
-        # All retries exhausted
+        # All retries exhausted — attempt L2 forced liquidation
         elapsed = time.monotonic() - start
+        if l2_broker is not None:
+            try:
+                l2_ok, _l2_msg = l2_broker.close_position(
+                    position_ticket, slippage=self.max_slippage_points
+                )
+                if l2_ok:
+                    return ExitWatchdogResult(
+                        success=True,
+                        position_ticket=position_ticket,
+                        total_attempts=self.max_retries,
+                        total_duration_ms=round(elapsed * 1000),
+                        final_status="closed_l2_forced",
+                        attempts=attempts,
+                        alerts=alerts,
+                    )
+            except Exception:
+                pass
         alert = (
             f"ESCALATED: exit_watchdog_exhausted ticket={position_ticket} "
             f"reason={reason} attempts={self.max_retries} elapsed={elapsed:.1f}s"

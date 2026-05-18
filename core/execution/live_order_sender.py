@@ -74,6 +74,63 @@ def _validate_sl_tp(
         )
 
 
+def _validate_ack_sl_tp(
+    result: dict, requested_sl: float, requested_tp: float, base_dir: str = "data"
+) -> None:
+    """SL/TP ack validation (Phase 2 — canary: ERROR on mismatch, no blocking yet).
+
+    Polls the bridge ack receipt for confirmed_sl/confirmed_tp fields (added by
+    Phase 2 bridge worker).  Validates against requested values with 0.5 pip
+    tolerance.  Full blocking upgrade after 50+ live trades confirm stability.
+    """
+    import json as _json
+    import logging
+    import time as _time
+    from datetime import UTC
+    from datetime import datetime as _datetime
+    from pathlib import Path as _Path
+
+    logger = logging.getLogger("live_order_sender")
+    intent_id = result.get("intent_id", "")
+
+    # Poll for ack receipt (bridge worker writes this async)
+    ack_sl = None
+    ack_tp = None
+    try:
+        today = _datetime.now(UTC).strftime("%Y-%m-%d")
+        ack_path = _Path(base_dir) / "receipts" / today / "exec_bridge" / f"{intent_id}.ack.json"
+        deadline = _time.monotonic() + 5.0
+        while _time.monotonic() < deadline:
+            if ack_path.exists():
+                ack = _json.loads(ack_path.read_text(encoding="utf-8"))
+                detail = ack.get("detail", {}) if isinstance(ack, dict) else {}
+                ack_sl = detail.get("confirmed_sl")
+                ack_tp = detail.get("confirmed_tp")
+                break
+            _time.sleep(0.2)
+    except Exception:
+        pass
+
+    if ack_sl is not None and ack_tp is not None:
+        sl_diff = abs(float(ack_sl) - requested_sl)
+        tp_diff = abs(float(ack_tp) - requested_tp)
+        if sl_diff > 0.5 or tp_diff > 0.5:
+            logger.error(
+                f"SL/TP MISMATCH (canary): requested sl={requested_sl:.2f} tp={requested_tp:.2f} "
+                f"vs confirmed sl={ack_sl:.2f} tp={ack_tp:.2f} "
+                f"diff sl={sl_diff:.2f} tp={tp_diff:.2f} intent_id={intent_id}"
+            )
+        else:
+            logger.info(
+                f"SL/TP confirmed ok: sl={ack_sl:.2f} tp={ack_tp:.2f} intent_id={intent_id}"
+            )
+    else:
+        logger.warning(
+            f"ack receipt missing confirmed SL/TP (bridge v1 or poll timeout): "
+            f"intent_id={intent_id} expected sl={requested_sl:.2f} tp={requested_tp:.2f}"
+        )
+
+
 def dispatch_live_order(
     *,
     base_dir: str,
@@ -115,6 +172,7 @@ def dispatch_live_order(
             raise ValueError(
                 "market_open requires positive sl and tp (or stop_loss/take_profit) for price guard"
             )
+        assert broker is not None  # guaranteed when skip_price_guard is False
         side = str(body.get("side") or "long")
         mid, bid, ask = broker.fetch_prices(symbol)
         price = ask if side == "long" else bid
@@ -145,9 +203,11 @@ def dispatch_live_order(
         deadline_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=30),
     )
     result = container.dispatcher.dispatch(envelope)
+    dispatched = str(result.status) not in ("failed", "degraded")
     return {
         "adapter": result.adapter_name,
         "status": str(result.status),
+        "dispatched": dispatched,
         "transport": getattr(result, "transport_metadata", None),
         "intent_id": intent_id,
     }
@@ -199,7 +259,7 @@ def dispatch_live_open_order(
         execution_payload["entry_context"] = dict(entry_context)
 
     if skip_price_guard:
-        return dispatch_live_order(
+        result = dispatch_live_order(
             base_dir=base_dir,
             broker=None,
             symbol=symbol,
@@ -212,6 +272,8 @@ def dispatch_live_open_order(
             adapter_name="mt5",
             extensions={"mt5_terminal_path": mt5_terminal_path},
         )
+        _validate_ack_sl_tp(result, stop_loss, take_profit, base_dir=base_dir)
+        return result
 
     import MetaTrader5 as _mt5
 
@@ -221,7 +283,7 @@ def dispatch_live_open_order(
         from core.execution.mt5_broker_adapter import MT5BrokerAdapter
 
         broker = MT5BrokerAdapter(_mt5)
-        return dispatch_live_order(
+        result = dispatch_live_order(
             base_dir=base_dir,
             broker=broker,
             symbol=symbol,
@@ -234,5 +296,7 @@ def dispatch_live_open_order(
             adapter_name="mt5",
             extensions={"mt5_terminal_path": mt5_terminal_path},
         )
+        _validate_ack_sl_tp(result, stop_loss, take_profit, base_dir=base_dir)
+        return result
     finally:
         _mt5.shutdown()

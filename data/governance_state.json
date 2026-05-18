@@ -10,40 +10,6 @@
       "freeze_count": 0,
       "exposure_limited": false
     },
-    "Online_MLP_V1": {
-      "brain_id": "Online_MLP_V1",
-      "status": "retired",
-      "registered_at": "2026-05-07T07:30:00.000000",
-      "last_transition_at": "2026-05-16T07:49:08.307628",
-      "transition_count": 4,
-      "freeze_count": 0
-    },
-    "DeepResMLP_V1_Institutional": {
-      "brain_id": "DeepResMLP_V1_Institutional",
-      "status": "probation",
-      "registered_at": "2026-05-14T23:52:10.616558",
-      "last_transition_at": "2026-05-14T23:52:10.616558",
-      "transition_count": 0,
-      "freeze_count": 0,
-      "exposure_limited": true
-    },
-    "LightGBM_V1_Institutional": {
-      "brain_id": "LightGBM_V1_Institutional",
-      "status": "probation",
-      "registered_at": "2026-05-14T23:52:10.616558",
-      "last_transition_at": "2026-05-16T07:49:08.307628",
-      "transition_count": 4,
-      "freeze_count": 0
-    },
-    "XGBoost_V9_Institutional": {
-      "brain_id": "XGBoost_V9_Institutional",
-      "status": "probation",
-      "registered_at": "2026-05-14T23:52:10.616558",
-      "last_transition_at": "2026-05-14T23:52:10.616558",
-      "transition_count": 0,
-      "freeze_count": 0,
-      "exposure_limited": true
-    },
     "xgboost_m15_swing_xgboost_v1_20260514_165620": {
       "brain_id": "xgboost_m15_swing_xgboost_v1_20260514_165620",
       "status": "candidate",
@@ -68,52 +34,12 @@
       "transition_count": 0,
       "freeze_count": 0
     },
-    "lightgbm_h1_swing_lightgbm_v1_20260514_165620": {
-      "brain_id": "lightgbm_h1_swing_lightgbm_v1_20260514_165620",
-      "status": "candidate",
-      "registered_at": "2026-05-15T08:00:00.000000",
-      "last_transition_at": "2026-05-17T00:00:00.000000",
-      "transition_count": 4,
-      "freeze_count": 0
-    },
     "xgboost_h4_swing_xgboost_v1_20260514_165620": {
       "brain_id": "xgboost_h4_swing_xgboost_v1_20260514_165620",
       "status": "candidate",
       "registered_at": "2026-05-15T08:00:00.000000",
       "last_transition_at": "2026-05-15T08:00:00.000000",
       "transition_count": 0,
-      "freeze_count": 0
-    },
-    "XGBoost_V4.5_M15": {
-      "brain_id": "XGBoost_V4.5_M15",
-      "status": "retired",
-      "registered_at": "2026-05-15T22:56:04.472999",
-      "last_transition_at": "2026-05-16T07:49:08.307628",
-      "transition_count": 2,
-      "freeze_count": 0
-    },
-    "V9_Institutional_01": {
-      "brain_id": "V9_Institutional_01",
-      "status": "probation",
-      "registered_at": "2026-05-16T03:21:51.278655",
-      "last_transition_at": "2026-05-16T03:21:51.278655",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "DeepResMLP_V2_New": {
-      "brain_id": "DeepResMLP_V2_New",
-      "status": "retired",
-      "registered_at": "2026-05-16T03:21:51.278655",
-      "last_transition_at": "2026-05-16T07:49:08.307628",
-      "transition_count": 1,
-      "freeze_count": 0
-    },
-    "Microstructure_Transformer_V5.0_H4": {
-      "brain_id": "Microstructure_Transformer_V5.0_H4",
-      "status": "retired",
-      "registered_at": "2026-05-16T03:21:51.278655",
-      "last_transition_at": "2026-05-16T07:49:08.307628",
-      "transition_count": 1,
       "freeze_count": 0
     },
     "XGBoost_D1_Swing_5d": {
@@ -124,35 +50,115 @@
       "transition_count": 0,
       "freeze_count": 0
     },
-    "XGBoost_V4.5_H1": {
-      "brain_id": "XGBoost_V4.5_H1",
-      "status": "retired",
-      "registered_at": "2026-05-16T03:21:51.278655",
-      "last_transition_at": "2026-05-16T07:49:08.307628",
-      "transition_count": 1,
-      "freeze_count": 0
-    },
-    "XGBoost_V4.5_H4": {
-      "brain_id": "XGBoost_V4.5_H4",
-      "status": "retired",
-      "registered_at": "2026-05-16T03:21:51.278655",
-      "last_transition_at": "2026-05-16T07:49:08.307628",
-      "transition_count": 1,
-      "freeze_count": 0
-    },
-    "CRT.sur.chlg.g2026.1": {
-      "brain_id": "CRT.sur.chlg.g2026.1",
+    "Meta_Stage1_Huber_V1": {
+      "brain_id": "Meta_Stage1_Huber_V1",
       "status": "probation",
-      "registered_at": "2026-05-16T21:57:48.900273",
-      "last_transition_at": "2026-05-16T21:57:48.900273",
+      "registered_at": "2026-05-17T08:00:00.000000",
+      "last_transition_at": "2026-05-17T20:59:32.555815",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "xgb_barrier_12bar_xgboost_v3_20260517_084031": {
+      "brain_id": "xgb_barrier_12bar_xgboost_v3_20260517_084031",
+      "status": "candidate",
+      "registered_at": "2026-05-17T08:40:32.101333+00:00",
+      "last_transition_at": "2026-05-17T08:40:32.101333+00:00",
       "transition_count": 0,
       "freeze_count": 0
     },
-    "Meta_Stage1_Huber_V1": {
-      "brain_id": "Meta_Stage1_Huber_V1",
+    "lgb_barrier_12bar_lightgbm_v3_20260517_084114": {
+      "brain_id": "lgb_barrier_12bar_lightgbm_v3_20260517_084114",
       "status": "candidate",
-      "registered_at": "2026-05-17T08:00:00.000000",
-      "last_transition_at": "2026-05-17T08:00:00.000000",
+      "registered_at": "2026-05-17T08:43:49.104582+00:00",
+      "last_transition_at": "2026-05-17T08:43:49.104582+00:00",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "LightGBM_V3_New": {
+      "brain_id": "LightGBM_V3_New",
+      "status": "probation",
+      "registered_at": "2026-05-17T20:59:32.555815",
+      "last_transition_at": "2026-05-17T20:59:32.555815",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "XGBoost_V11_New": {
+      "brain_id": "XGBoost_V11_New",
+      "status": "probation",
+      "registered_at": "2026-05-17T20:59:32.555815",
+      "last_transition_at": "2026-05-17T20:59:32.555815",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "ARB_Params_V8_M15_S53": {
+      "brain_id": "ARB_Params_V8_M15_S53",
+      "status": "frozen",
+      "registered_at": "2026-05-17T20:59:39.893462",
+      "last_transition_at": "2026-05-17T20:59:39.893462",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "ARB_Params_V8_M5_S53": {
+      "brain_id": "ARB_Params_V8_M5_S53",
+      "status": "frozen",
+      "registered_at": "2026-05-17T20:59:39.893462",
+      "last_transition_at": "2026-05-17T20:59:39.893462",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "LIGHTGBM_barrier_12bar": {
+      "brain_id": "LIGHTGBM_barrier_12bar",
+      "status": "frozen",
+      "registered_at": "2026-05-17T20:59:39.893462",
+      "last_transition_at": "2026-05-17T20:59:39.893462",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "LightGBM_D1_Swing_5d": {
+      "brain_id": "LightGBM_D1_Swing_5d",
+      "status": "frozen",
+      "registered_at": "2026-05-17T20:59:39.893462",
+      "last_transition_at": "2026-05-17T20:59:39.893462",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "LightGBM_M15_Swing_24bar": {
+      "brain_id": "LightGBM_M15_Swing_24bar",
+      "status": "frozen",
+      "registered_at": "2026-05-17T20:59:39.893462",
+      "last_transition_at": "2026-05-17T20:59:39.893462",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "Microstructure_Transformer_V5.0": {
+      "brain_id": "Microstructure_Transformer_V5.0",
+      "status": "frozen",
+      "registered_at": "2026-05-17T20:59:39.893462",
+      "last_transition_at": "2026-05-17T20:59:39.893462",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "Microstructure_Transformer_V5.0_H1": {
+      "brain_id": "Microstructure_Transformer_V5.0_H1",
+      "status": "frozen",
+      "registered_at": "2026-05-17T20:59:39.893462",
+      "last_transition_at": "2026-05-17T20:59:39.893462",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "Microstructure_Transformer_V5.0_M15": {
+      "brain_id": "Microstructure_Transformer_V5.0_M15",
+      "status": "frozen",
+      "registered_at": "2026-05-17T20:59:39.893462",
+      "last_transition_at": "2026-05-17T20:59:39.893462",
+      "transition_count": 0,
+      "freeze_count": 0
+    },
+    "XGBOOST_barrier_12bar": {
+      "brain_id": "XGBOOST_barrier_12bar",
+      "status": "frozen",
+      "registered_at": "2026-05-17T20:59:39.893462",
+      "last_transition_at": "2026-05-17T20:59:39.893462",
       "transition_count": 0,
       "freeze_count": 0
     }
@@ -633,7 +639,68 @@
       "to_status": "deleted",
       "reason": "FIX-20260517-011: bulk removal of 12 brain_states with no config files (LightGBM_V2_Retrained, LightGBM_V3_New, XGBoost_V11_New, Microstructure_Transformer_V5.0/M15/H1, ARB_Params_V8_M15/M5, LIGHTGBM_barrier_12bar, LightGBM_D1_Swing_5d, LightGBM_M15_Swing_24bar, XGBOOST_barrier_12bar)",
       "timestamp": "2026-05-17T08:00:00.000000"
+    },
+    {
+      "brain_id": "xgb_barrier_12bar_xgboost_v3_20260517_084031",
+      "from_status": "none",
+      "to_status": "candidate",
+      "reason": "auto:training_pipeline — new model registered",
+      "timestamp": "2026-05-17T08:40:32.101333+00:00"
+    },
+    {
+      "brain_id": "lgb_barrier_12bar_lightgbm_v3_20260517_084114",
+      "from_status": null,
+      "to_status": "candidate",
+      "timestamp": "2026-05-17T08:43:49.104582+00:00",
+      "reason": "FIX-20260517-011: barrier_12bar LightGBM Stage 1 trained (Sharpe 1.15/0.93), manual register after magic conflict fix",
+      "source": "manual"
+    },
+    {
+      "brain_id": "V9_Institutional_01",
+      "from_status": "probation",
+      "to_status": "retired",
+      "timestamp": "2026-05-17T09:52:16.849906+00:00",
+      "reason": "FIX-20260517-011 cleanup: Old institutional ONNX brain, superseded by XGBoost+LightGBM Route A. Config+model kept as reference.",
+      "source": "manual"
+    },
+    {
+      "brain_id": "DeepResMLP_V1_Institutional",
+      "from_status": "probation",
+      "to_status": "retired",
+      "timestamp": "2026-05-17T09:52:16.849906+00:00",
+      "reason": "FIX-20260517-011 cleanup: Config file never existed or was deleted. Ghost governance entry — no brain to govern.",
+      "source": "manual"
+    },
+    {
+      "brain_id": "LightGBM_V1_Institutional",
+      "from_status": "probation",
+      "to_status": "retired",
+      "timestamp": "2026-05-17T09:52:16.849906+00:00",
+      "reason": "FIX-20260517-011 cleanup: Config file never existed or was deleted. Ghost governance entry — no brain to govern.",
+      "source": "manual"
+    },
+    {
+      "brain_id": "XGBoost_V9_Institutional",
+      "from_status": "probation",
+      "to_status": "retired",
+      "timestamp": "2026-05-17T09:52:16.849906+00:00",
+      "reason": "FIX-20260517-011 cleanup: Model file deleted (May 15 training residue). Config artifact_path broken. Retired.",
+      "source": "manual"
+    },
+    {
+      "brain_id": "CRT.sur.chlg.g2026.1",
+      "from_status": "probation",
+      "to_status": "retired",
+      "timestamp": "2026-05-17T09:52:16.849906+00:00",
+      "reason": "FIX-20260517-011 cleanup: Challenge variant of V9 ONNX — same model as V9_Institutional_01. Not in live.yaml.",
+      "source": "manual"
+    },
+    {
+      "brain_id": "Meta_Stage1_Huber_V1",
+      "from_status": "candidate",
+      "to_status": "probation",
+      "reason": "auto:degraded",
+      "timestamp": "2026-05-17T20:59:32.555815"
     }
-  ],
-  "updated_at": "2026-05-17T08:00:31"
+  ]
 }

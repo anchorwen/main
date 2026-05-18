@@ -98,6 +98,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 | FIX-20260511-001 | 2026-05-14 | cursor-agent | a4a1005 | Fixed multiple issues found during surgical audit of daily_ops, governance training, and execution risk controls | missing-validation |
 | FIX-20260514-001 | 2026-05-14 | cursor-agent | a4a1005 | Blueprint mechanism upgrade: modular fix tracking with automated markers | contract-violation |
 | FIX-20260514-002 | 2026-05-14 | cursor-agent | a4a1005 | Blueprint mechanism upgrade: modular fix tracking (retry after hyphen fix) | contract-violation |
+| FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: bootstrap_v9.py (remove type:ignore, switch to LightGBM V3) + signal_pipeline.py (empty ENSEMBLE_GROUPS). Previously registered as FIX-20260517-003, FIX-20260518-031. | process-violation |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

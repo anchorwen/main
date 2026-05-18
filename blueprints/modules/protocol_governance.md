@@ -39,6 +39,7 @@ BrainQualityVerdict → GovernanceRuleEngine.evaluate() → lifecycle_action
 | FIX-20260514-015 | 2026-05-14 | cursor-agent | a4a1005 | 大脑批量复活脚本：用修复后的BrainQualityEngine重评退休大脑，score≥10恢复为probation，score≥50恢复为live | contract-violation |
 | FIX-20260514-006 | 2026-05-14 | cursor-agent | a4a1005 | Add max 1 retirement/cycle safety valve, map marginal tier to frozen, add insufficient_data skip logging | missing-validation |
 | FIX-20260514-005 | 2026-05-14 | cursor-agent | a4a1005 | Remove break-after-first-match, collect all matching rules per brain, apply most severe result, differentiate priorities (retire=110, freeze=100) | contract-violation |
+| FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: governance_rule_engine.py (execute_transitions) + shadow_tracker.py (health_signal). Previously registered as FIX-20260517-017, FIX-20260517-015. | process-violation |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

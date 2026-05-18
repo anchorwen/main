@@ -24,7 +24,7 @@ def mock_brain_adapter():
 
     class _MockAdapter:
         def __init__(self):
-            self.calls: list[dict] = []
+            self.calls: list[tuple] = []
 
         def infer(self, *args, **kwargs):
             self.calls.append(("infer", args, kwargs))
@@ -83,7 +83,7 @@ def barrier_config() -> StrategyLineConfig:
     return StrategyLineConfig(
         name="barrier_12bar",
         magic=90001,
-        brain_types={"onnx_v9", "deepresmlp", "online_sgd", "xgboost_v9", "lightgbm_v1"},
+        brain_types={"xgboost_v9", "lightgbm_v1"},
         base_volume=0.01,
         max_volume=0.05,
         base_sl_atr_mult=2.0,

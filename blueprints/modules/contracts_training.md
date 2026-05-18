@@ -66,7 +66,7 @@ configs/training/*.yaml → TrainingContract.from_yaml()
 |--------|------|--------|--------|---------|------------|
 | FIX-20260515-011 | 2026-05-15 | cursor-agent | — | TrainingContract enhancements: LabelSpec added profitability_calibrated, spread_pips, slippage_pips, pip_value. QualityGateSpec added model_type with tiered validation (tree≥0.75, deep_learning≥0.5, online≥0.4 forward Sharpe). | RC-01, RC-06 |
 | FIX-20260517-006 | 2026-05-17 | cursor-agent | — | Friction dead-band: apply_friction_deadband() prevents phantom inverted signals from subtractive friction (catastrophic for cent accounts). build_regression_labels() + build_vol_scaled_regression_labels() for vol-normalized target generation. LabelSpec: vol_scale_target, output_unit, reg_huber objective, abs_target weighting. slippage_pips default 0.5→1.0 (cent-account conservative). | RC-06 |
-| — | 2026-05-14 | cursor-agent | — | Phase E S2 新建 TrainingContract v2.1，无历史修复 | — |
+| FIX-20260517-012 | 2026-05-17 | cursor-agent | — | Route A 双轨制：树模型 min_forward_sharpe 地板从 0.75 降至 0.20。底层 Stage 1 大脑不需要高 Sharpe（风控由 Stage 2 MetaFilter 负责），只需是合格的候选信号发生器。 | RC-06 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

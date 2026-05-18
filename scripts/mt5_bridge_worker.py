@@ -308,10 +308,24 @@ def _mt5_market_open(
     retcode = int(getattr(result, "retcode", -1))
     done_code = int(getattr(mt5, "TRADE_RETCODE_DONE", 10009))
     if retcode == done_code:
+        # Spin-wait for MT5 Positions Pool sync (陷阱一)
+        # order_send is async — local DB may lag 100-500ms
+        order_ticket = getattr(result, "order", None)
+        confirmed_sl, confirmed_tp = 0.0, 0.0
+        if order_ticket:
+            for _ in range(5):
+                pos = mt5.positions_get(ticket=order_ticket)
+                if pos and len(pos) > 0 and (pos[0].sl > 0 or pos[0].tp > 0):
+                    confirmed_sl = float(pos[0].sl)
+                    confirmed_tp = float(pos[0].tp)
+                    break
+                time.sleep(0.1)
         return "accepted", {
             "retcode": retcode,
-            "order": getattr(result, "order", None),
+            "order": order_ticket,
             "request": request,
+            "confirmed_sl": confirmed_sl,
+            "confirmed_tp": confirmed_tp,
         }
     return "rejected", {
         "retcode": retcode,
@@ -339,6 +353,7 @@ def _mt5_close_position(
     pos = positions[0]
     symbol = pos.symbol
     pos_vol = float(getattr(pos, "volume", 0.0))
+    pos_identifier = getattr(pos, "identifier", ticket)  # 陷阱二: immutable anchor
     req_vol = _coerce_positive_float(msg_payload.get("volume"))
     close_vol = min(req_vol, pos_vol) if req_vol is not None else pos_vol
     if close_vol <= 0 or close_vol > pos_vol + 1e-9:
@@ -382,11 +397,28 @@ def _mt5_close_position(
     retcode = int(getattr(result, "retcode", -1))
     done_code = int(getattr(mt5, "TRADE_RETCODE_DONE", 10009))
     if retcode == done_code:
-        return "accepted", {
+        detail: dict[str, Any] = {
             "retcode": retcode,
             "order": getattr(result, "order", None),
             "request": request,
         }
+        # 陷阱二: Partial close creates new ticket — capture via identifier
+        if close_vol < pos_vol - 1e-9:
+            for _ in range(5):
+                remaining = mt5.positions_get(symbol=symbol)
+                if remaining:
+                    for rp in remaining:
+                        if (
+                            getattr(rp, "identifier", None) == pos_identifier
+                            and rp.ticket != ticket
+                        ):
+                            detail["new_ticket"] = rp.ticket
+                            detail["old_ticket"] = ticket
+                            break
+                if "new_ticket" in detail:
+                    break
+                time.sleep(0.1)
+        return "accepted", detail
     return "rejected", {
         "retcode": retcode,
         "comment": getattr(result, "comment", None),
@@ -550,10 +582,11 @@ def process_one(
         if ticket and mt5 is not None:
             if not _verify_position_exists(mt5, int(ticket)):
                 ack_status = "rejected"
+                _fallback_retcode: Any = retcode
                 detail = {
                     "reason": "post_fill_position_not_found",
                     "order": ticket,
-                    "retcode": retcode,
+                    "retcode": _fallback_retcode,
                 }
 
     receipt_payload = _build_receipt_payload(

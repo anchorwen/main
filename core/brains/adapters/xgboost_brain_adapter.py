@@ -28,6 +28,7 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
         self._feature_adapter = feature_adapter
         self._booster: Any = None
         self._num_features: int | None = None
+        self._num_class: int = 1  # 1=regression/binary, 3=multi:softprob
 
     # ------------------------------------------------------------------
     # BaseBrainAdapter interface
@@ -72,17 +73,16 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
             self._xgb = xgb
             self._booster = xgb.Booster()
             self._booster.load_model(artifact_path)
+            config = json.loads(self._booster.save_config())
+            learner_cfg = config.get("learner", {})
+            lmp = learner_cfg.get("learner_model_param", {})
+            self._num_class = int(lmp.get("num_class", "1") or "1")
             # Infer num_features from the booster's feature_names or from config
             feature_names = self._booster.feature_names
             if feature_names:
                 self._num_features = len(feature_names)
             else:
-                # Fallback: try to get from model attributes via save_config()
-                config = json.loads(self._booster.save_config())
-                learner_cfg = config.get("learner", {})
-                # num_feature lives in learner_model_param (XGBoost ≥1.6);
-                # older versions stored it in gradient_booster.model_param.
-                raw = learner_cfg.get("learner_model_param", {}).get(
+                raw = lmp.get(
                     "num_feature",
                     learner_cfg.get("gradient_booster", {})
                     .get("model_param", {})
@@ -153,7 +153,13 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
             feature_vector.reshape(1, -1),
             feature_names=feature_names,
         )
-        raw_score = float(self._booster.predict(dmatrix)[0])
+        preds = self._booster.predict(dmatrix)
+        if self._num_class > 2:
+            # multi:softprob — shape (1, num_class) → [P(SHORT), P(NEUTRAL), P(LONG)]
+            probs = preds[0]  # shape (num_class,)
+            raw_score = float(probs[2] - probs[0])  # LONG prob - SHORT prob
+        else:
+            raw_score = float(preds[0])
         runtime_ms = (perf_counter() - started) * 1000.0
 
         return {

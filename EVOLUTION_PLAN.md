@@ -1653,3 +1653,60 @@ P&L 路线图:
 - 根因与修复: <手动最多 3 条>
 - 阶段进度: <Phase A/B/C 到达位置>
 - 明日唯一优先事项: <1-3 条>
+
+
+### Daily Update - 2026-05-18T00:00:05（自动生成）
+
+- 日期键(UTC): 2026-05-17
+- 运行状态: 需关注（数据质量异常较多）
+- 核心统计: 接受=21 拒绝=2 确认=0 其他=1 合计=24 拒单率=0.083333
+- 数据质量: 交叉校验问题=47 outbox超时=0
+- live_dispatch_block.flag: 不存在
+- 已标注交易: 308笔 | 总P&L=-3.50 | 分布={'breakeven': 6, 'loss': 16, 'tp_hit_first': 18, 'sl_hit_first': 67, 'manual_close': 29, 'win': 6, 'brain_flip_extreme_100pct': 5, 'confidence_drop_0.500': 4, 'confidence_drop_0.835': 1, 'ou_reversion_z0.11': 1, 'ou_reversion_z0.00': 1, 'ou_reversion_z0.27': 1, 'time_phase2_30c_h60_r-1.01': 1, 'time_phase2_30c_h60_r0.26': 1, 'signal_reversal_consensus_short_vs_long': 3, 'net_out:barrier_12bar': 8, 'net_out:statarb_dynamic': 7, 'partial_tp_1.5R': 2, 'time_phase4_expired_60c_h60_r0.78': 1, 'time_phase2_20c_h40_r-0.54': 1, 'time_phase2_20c_h40_r0.00': 1, 'time_phase3_50c_h60_r0.19': 1, 'time_phase2_20c_h40_r0.20': 1, 'time_phase2_20c_h40_r-1.45': 1, 'ou_revert_target_reached_z0.28_from_2.1': 1, 'time_phase2_30c_h60_r-0.10': 1, 'time_phase2_20c_h40_r-0.83': 1, 'hesitation_2c_no_breakeven': 12, 'confidence_drop_0.875': 15, 'brain_flip_60pct_c2': 2, 'hesitation_3c_no_breakeven': 24, 'confidence_drop_0.479': 1, 'hesitation_5c_no_breakeven': 2, 'time_phase2_23c_h40_r0.19': 1, 'exit_watchdog:hesitation_3c_no_breakeven': 42, 'exit_watchdog:hesitation_6c_no_breakeven': 5, 'exit_watchdog:hesitation_7c_no_breakeven': 5, 'exit_watchdog:bleed_stop_3bars_neg': 6, 'exit_watchdog:hesitation_5c_no_breakeven': 5, 'exit_watchdog:hesitation_2c_no_breakeven': 1, 'exit_watchdog:signal_reversal_consensus_long_vs_short': 1}
+- 大脑归因P&L: -3.50 | ARB_Params_V8_M15_S53: -0.10 (8t, 12% wr) | ARB_Params_V8_M5_S53: +0.03 (14t, 7% wr) | CRT.sur.chlg.g2026.1: +0.01 (24t, 25% wr) | DeepResMLP_V1_Institutional: -0.31 (62t, 18% wr) | DeepResMLP_V2_New: -0.05 (26t, 4% wr) | LightGBM_M15_Swing_24bar: -0.44 (38t, 13% wr) | LightGBM_V1_Institutional: -0.03 (46t, 22% wr) | LightGBM_V2_Retrained: +0.01 (24t, 25% wr) | LightGBM_V3_New: -0.01 (8t, 0% wr) | Meta_Stage1_Huber_V1: +0.00 (4t, 0% wr) | Microstructure_Transformer_V5.0: -0.30 (16t, 6% wr) | Microstructure_Transformer_V5.0_H1: +0.04 (2t, 100% wr) | Microstructure_Transformer_V5.0_M15: -0.04 (1t, 0% wr) | OU_Params_V6_Sniper: -0.14 (114t, 20% wr) | Online_MLP_V1: -0.01 (45t, 22% wr) | Online_SGD_V1: +0.03 (2t, 50% wr) | SurvivalAlpha_Ensemble: -0.27 (19t, 11% wr) | TreeAlpha_Ensemble: -0.30 (17t, 6% wr) | V9_Institutional_01: +0.01 (25t, 24% wr) | XGBoost_D1_Swing_5d: -0.12 (1t, 0% wr) | XGBoost_V10_Retrained: +0.01 (14t, 43% wr) | XGBoost_V11_New: -0.01 (8t, 0% wr) | XGBoost_V4.5_H1: +0.04 (2t, 100% wr) | XGBoost_V4.5_M15: -0.04 (1t, 0% wr) | XGBoost_V4.5_Microstructure: -1.07 (23t, 9% wr) | XGBoost_V9_Institutional: -0.03 (46t, 22% wr) | lgb_barrier_12bar_lightgbm_v3_20260517_084114: +0.00 (4t, 0% wr) | lightgbm_h1_swing_lightgbm_v1_20260514_165620: +0.10 (20t, 10% wr) | xgb_barrier_12bar_xgboost_v3_20260517_084031: +0.00 (4t, 0% wr) | xgboost_h1_swing_xgboost_v1_20260514_165620: +0.10 (20t, 10% wr) | xgboost_m30_swing_xgboost_v1_20260514_165620: +0.00 (1t, 0% wr) | 未归因交易: 52笔
+- 治理晋升进度:
+  OU_Params_V6_Sn: ██████████ 773/10  (live)
+  Online_MLP_V1: ░░░░░░░░░░ 0/10  (retired)
+  DeepResMLP_V1_I: ░░░░░░░░░░ 0/10  (retired)
+  LightGBM_V1_Ins: ██████████ 183/10  (retired)
+  XGBoost_V9_Inst: ░░░░░░░░░░ 0/10  (retired)
+  xgboost_m15_swi: ██████░░░░ 6/10  (candidate)
+  xgboost_m30_swi: ██████░░░░ 6/10  (candidate)
+  xgboost_h1_swin: ██████░░░░ 6/10  (candidate)
+  lightgbm_h1_swi: ██████████ 676/10  (retired)
+  xgboost_h4_swin: ██████░░░░ 6/10  (candidate)
+  XGBoost_V4.5_M1: ██████████ 63/10  (retired)
+  V9_Institutiona: ░░░░░░░░░░ 0/10  (retired)
+  DeepResMLP_V2_N: ░░░░░░░░░░ 0/10  (retired)
+  Microstructure_: ░░░░░░░░░░ 0/10  (retired)
+  XGBoost_D1_Swin: ░░░░░░░░░░ 0/10  (candidate)
+  XGBoost_V4.5_H1: ██████████ 33/10  (retired)
+  XGBoost_V4.5_H4: ░░░░░░░░░░ 0/10  (retired)
+  CRT.sur.chlg.g2: ░░░░░░░░░░ 0/10  (retired)
+  Meta_Stage1_Hub: ██████░░░░ 6/10  (probation)
+  xgb_barrier_12b: ██████░░░░ 6/10  (candidate)
+  lgb_barrier_12b: ██████░░░░ 6/10  (candidate)
+  LightGBM_V3_New: ░░░░░░░░░░ 0/10  (probation)
+  XGBoost_V11_New: ░░░░░░░░░░ 0/10  (probation)
+  ARB_Params_V8_M: ██████████ 50/10  (frozen)
+  ARB_Params_V8_M: ██████████ 94/10  (frozen)
+  LIGHTGBM_barrie: ██████████ 244/10  (frozen)
+  LightGBM_D1_Swi: ██████████ 293/10  (frozen)
+  LightGBM_M15_Sw: ██████████ 262/10  (frozen)
+  Microstructure_: ██████████ 158/10  (frozen)
+  Microstructure_: ██████████ 618/10  (frozen)
+  Microstructure_: ██████████ 630/10  (frozen)
+  XGBOOST_barrier: ██████████ 267/10  (frozen)
+- 合同组表现:
+  h4_swing: 5脑 30信号 胜率=33.3% 均值=-0.1992 Sharpe≈-8.9 [做多100%/做空0%]
+  m15_swing: 4脑 871信号 胜率=43.5% 均值=-0.2167 Sharpe≈-22.1 [做多99%/做空1%]
+  micro_h1: 1脑 33信号 胜率=42.4% 均值=-0.2058 Sharpe≈-64.7 [做多100%/做空0%]
+  micro_m15: 1脑 63信号 胜率=12.7% 均值=-0.1877 Sharpe≈-62.6 [做多100%/做空0%]
+  statarb_m15: 1脑 773信号 胜率=49.7% 均值=0.0737 Sharpe≈7.8 [做多59%/做空41%]
+  unassigned: 9脑 2616信号 胜率=45.2% 均值=-0.1836 Sharpe≈-23.1 [做多39%/做空61%]
+- 多模型共识: split (一致性=94%, 参与=18)
+- 特征偏移: 12个特征偏离基线 >2σ
+- 关键事件: <手动最多 3 条>
+- 根因与修复: <手动最多 3 条>
+- 阶段进度: <Phase A/B/C 到达位置>
+- 明日唯一优先事项: <1-3 条>

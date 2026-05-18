@@ -36,6 +36,7 @@ BrainDecisionProposal[] → ContractGroupConsensus.compute_all_group_signals()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260517-013 | 2026-05-17 | cursor-agent | — | BARRIER_GROUP brain_types trimmed: removed onnx_v9, deepresmlp, online_sgd, xgboost_v4.5 (no active brains of these types). Kept xgboost_v9 + lightgbm_v1. live.yaml synced. | stale-data |
 | FIX-20260512-001 | 2026-05-14 | cursor-agent | a4a1005 | Strategy ping-pong: added allow_coexist + min_hold_cycles to prevent conflicting strategies from overtrading | contract-violation |
 | FIX-20260517-008 | 2026-05-17 | cursor-agent | — | Added explicit type annotations (dict[str, Any]) to BARRIER_GROUP, MICRO_GROUP, and all contract group dicts for mypy strict compliance | type-safety |
 

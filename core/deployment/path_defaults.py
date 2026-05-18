@@ -12,7 +12,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # ── Brain entry defaults (required at startup) ──
-DEFAULT_BRAIN_ENTRY = "configs/brains/deepresmlp_v2_new.json"
+DEFAULT_BRAIN_ENTRY = "configs/brains/lgb_barrier_12bar_lightgbm_v3_20260517_084114.json"
 DEFAULT_NORM_CONFIG = "configs/brains/v9_institutional_01.normalization.json"
 
 # ── Feature store ──

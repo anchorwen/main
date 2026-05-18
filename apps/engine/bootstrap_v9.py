@@ -43,8 +43,8 @@ def _wire_meta_pipeline(container: ServiceContainer, repo_root: Path) -> None:
     if stage1_config_path.exists() and stage1_model.exists():
         stage1_entry = loader.load_json(str(stage1_config_path))
         stage1_entry["artifact_path"] = str(stage1_model.resolve())
-        container.brain_registry.register(stage1_entry)  # type: ignore[attr-defined]
-        container.governance_service.register_brain(  # type: ignore[attr-defined]
+        container.brain_registry.register(stage1_entry)
+        container.governance_service.register_brain(
             stage1_entry.get("brain_id", "Meta_Stage1_Huber_V1"),
             "shadow",
         )
@@ -127,7 +127,7 @@ def _wire_meta_pipeline(container: ServiceContainer, repo_root: Path) -> None:
                 min_threshold=conformal_min_threshold,
             )
             if filt.load():
-                container.meta_signal_filter = filt  # type: ignore[assignment]
+                container.meta_signal_filter = filt
                 import sys
 
                 sys.stderr.write(
@@ -168,14 +168,16 @@ def build_v9_shadow_container() -> ServiceContainer:
     container = ServiceContainer(config).build()
 
     repo_root = _repo_root()
-    # Use DeepResMLP V2 — the active institutional brain that superseded V9 ONNX
-    brain_path = repo_root / "configs" / "brains" / "deepresmlp_v2_new.json"
+    # Use LightGBM V3 — the active institutional brain for barrier_12bar
+    brain_path = (
+        repo_root / "configs" / "brains" / "lgb_barrier_12bar_lightgbm_v3_20260517_084114.json"
+    )
     loader = BrainRegistryLoader()
     brain_entry = loader.load_json(str(brain_path))
     brain_entry["enable_onnxruntime"] = False
 
-    container.brain_registry.register(brain_entry)  # type: ignore[attr-defined]
-    container.governance_service.register_brain(  # type: ignore[attr-defined]
+    container.brain_registry.register(brain_entry)
+    container.governance_service.register_brain(
         brain_entry.get("brain_id", "DeepResMLP_V2_New"),
         "live",
     )
@@ -186,8 +188,8 @@ def build_v9_shadow_container() -> ServiceContainer:
     if online_brain_path.exists() and online_weights.exists():
         online_entry = loader.load_json(str(online_brain_path))
         online_entry["artifact_path"] = str(online_weights.resolve())
-        container.brain_registry.register(online_entry)  # type: ignore[attr-defined]
-        container.governance_service.register_brain(  # type: ignore[attr-defined]
+        container.brain_registry.register(online_entry)
+        container.governance_service.register_brain(
             online_entry.get("brain_id", "Online_SGD_V1"),
             "candidate",
         )

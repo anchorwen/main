@@ -188,6 +188,7 @@ All alerts are printed as single-line JSON to stderr: `{"event":"brain_alert","t
 | FIX-20260517-005 | 2026-05-17 | cursor-agent | — | XGBoost adapter load() fallback: read num_feature from learner_model_param instead of gradient_booster.model_param (empty in XGBoost>=1.6). Fixed 5 swing models (24-dim) + V9_Institutional (40-dim). Un-retired lightgbm_h1_swing. | RC-06 (contract-violation) |
 | FIX-20260517-009 | 2026-05-17 | cursor-agent | — | Zero-vector guard added to LightGBM, XGBoost, V9_ONNX, OnlineLearner infer(): np.max(np.abs(vec))<1e-10 → brain_alert + neutral fallback with fallback_reason="zero_feature_vector". Prevents silent frozen confidence when FeatureService Tier 3 returns np.zeros(). | RC-06 (contract-violation) |
 | FIX-20260518-029 | 2026-05-18 | cursor-agent | — | XGBoost adapter multi-class support: detect multi:softprob models via num_class in learner_model_param. Convert class probabilities → directional raw_score (P(LONG)−P(SHORT)). Previously float(pred[0]) failed when pred had shape (1,3) from 3-class classifier. Single-class regression path unchanged. | contract-violation |
+| FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: XGBoost multi-class support (num_class detection). Previously registered as FIX-20260518-029. | process-violation |
 
 ## Cross-Module Contracts
 

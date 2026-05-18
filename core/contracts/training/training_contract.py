@@ -213,9 +213,9 @@ class QualityGateSpec:
                     f"Deep learning models require max_overfit_gap <= 2.0, got {self.max_overfit_gap}"
                 )
         elif self.model_type == "tree":
-            if self.min_forward_sharpe < 0.75:
+            if self.min_forward_sharpe < 0.20:
                 issues.append(
-                    f"Tree models require min_forward_sharpe >= 0.75, got {self.min_forward_sharpe}"
+                    f"Tree models require min_forward_sharpe >= 0.20, got {self.min_forward_sharpe}"
                 )
             if self.max_overfit_gap > 1.0:
                 issues.append(

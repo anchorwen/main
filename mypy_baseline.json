@@ -57,7 +57,6 @@
   "scripts/mt5_positions_snapshot.py": 5,
   "scripts/mt5_spread_probe.py": 7,
   "scripts/send_live_order.py": 5,
-  "scripts/shadow_pnl_loop.py": 1,
   "scripts/trade_quality_report.py": 1,
   "scripts/training/batch_train_skeleton.py": 1,
   "scripts/training/build_profitable_labels.py": 1,
@@ -124,7 +123,5 @@
   "tests/engine/test_v9_shadow_sse_utils.py": 10,
   "tests/engine/test_validation_mode_defaults.py": 4,
   "tests/engine/test_venue_config_tracing.py": 2,
-  "tests/execution/conftest.py": 1,
-  "tests/execution/test_execution_queue.py": 1,
-  "tests/unit/test_contract_group_pipeline.py": 3
+  "tests/execution/test_execution_queue.py": 1
 }

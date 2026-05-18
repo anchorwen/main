@@ -13,8 +13,8 @@ label:
   tp_atr_mult: 3.5
   horizon_bars: 12
   profitability_calibrated: true
-  spread_pips: 0.3
-  slippage_pips: 1.0
+  spread_pips: 30
+  slippage_pips: 10
   pip_value: 0.01
 
 architecture:

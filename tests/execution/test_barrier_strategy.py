@@ -16,19 +16,21 @@ def barrier_brain():
     """Create a minimal brain entry for barrier strategy."""
     adapter = MagicMock()
     adapter.inference.return_value = make_proposal(
-        brain_id="onnx_v9_01",
+        brain_id="xgboost_v9_01",
         up_probability=0.85,
         down_probability=0.15,
         confidence=0.80,
         direction_bias="long",
     )
-    return {"adapter": adapter, "brain_id": "onnx_v9_01"}
+    return {"adapter": adapter, "brain_id": "xgboost_v9_01"}
 
 
 class TestBarrierStrategyInference:
     def test_passes_feature_vector_to_adapter(self, barrier_brain):
         strat = BarrierStrategy(
-            config=StrategyLineConfig(name="barrier_12bar", magic=90001, brain_types={"onnx_v9"}),
+            config=StrategyLineConfig(
+                name="barrier_12bar", magic=90001, brain_types={"xgboost_v9"}
+            ),
             brains=[barrier_brain],
         )
         proposals = strat._run_inference(
@@ -41,11 +43,13 @@ class TestBarrierStrategyInference:
 
     def test_brain_id_stamped_on_proposal(self, barrier_brain):
         strat = BarrierStrategy(
-            config=StrategyLineConfig(name="barrier_12bar", magic=90001, brain_types={"onnx_v9"}),
+            config=StrategyLineConfig(
+                name="barrier_12bar", magic=90001, brain_types={"xgboost_v9"}
+            ),
             brains=[barrier_brain],
         )
         proposals = strat._run_inference([], None, 2000.0)
-        assert proposals[0].brain_id == "onnx_v9_01"
+        assert proposals[0].brain_id == "xgboost_v9_01"
 
     def test_adapter_exception_skipped(self, barrier_brain):
         fail_adapter = MagicMock()
@@ -55,17 +59,21 @@ class TestBarrierStrategyInference:
             barrier_brain,
         ]
         strat = BarrierStrategy(
-            config=StrategyLineConfig(name="barrier_12bar", magic=90001, brain_types={"onnx_v9"}),
+            config=StrategyLineConfig(
+                name="barrier_12bar", magic=90001, brain_types={"xgboost_v9"}
+            ),
             brains=brains,
         )
         proposals = strat._run_inference([], None, 2000.0)
         # Only the non-crashing brain produces a proposal
         assert len(proposals) == 1
-        assert proposals[0].brain_id == "onnx_v9_01"
+        assert proposals[0].brain_id == "xgboost_v9_01"
 
     def test_empty_brains_returns_empty(self):
         strat = BarrierStrategy(
-            config=StrategyLineConfig(name="barrier_12bar", magic=90001, brain_types={"onnx_v9"}),
+            config=StrategyLineConfig(
+                name="barrier_12bar", magic=90001, brain_types={"xgboost_v9"}
+            ),
             brains=[],
         )
         proposals = strat._run_inference([], None, 2000.0)

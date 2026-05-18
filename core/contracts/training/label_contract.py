@@ -61,8 +61,8 @@ def _build_barrier_labels_array(
     tp_atr_mult: float,
     horizon_bars: int,
     atr_period: int = 14,
-    spread_pips: float = 0.3,
-    slippage_pips: float = 0.5,
+    spread_pips: float = 30.0,
+    slippage_pips: float = 10.0,
     pip_value: float = 0.01,
 ) -> BarrierResult:
     """Build barrier labels for a single entry point.
@@ -84,8 +84,8 @@ def _build_barrier_labels_array(
         tp_atr_mult: Take-profit distance in ATR multiples.
         horizon_bars: Max bars to look forward.
         atr_period: ATR lookback period.
-        spread_pips: Spread in pips (XAUUSD default 0.3).
-        slippage_pips: Slippage in pips (default 0.5).
+        spread_pips: Spread in pips (Exness XAUUSDc ~30 pips = 0.30 USD).
+        slippage_pips: Slippage in pips (~10 pips conservative).
         pip_value: Value of one pip (XAUUSD default 0.01).
 
     Returns:
@@ -237,9 +237,9 @@ class LabelContract:
     # For regression type
     regression_target: str | None = None  # "forward_return" | "log_return"
 
-    # Transaction cost modeling (cent-account conservative defaults)
-    spread_pips: float = 0.3
-    slippage_pips: float = 1.0
+    # Transaction cost modeling (Exness Standard Cent XAUUSDc: ~30 pips spread, ~10 pips slippage)
+    spread_pips: float = 30.0  # ~0.30 USD per oz (user confirmed avg spread)
+    slippage_pips: float = 10.0  # conservative estimate for normal market conditions
     pip_value: float = 0.01
 
     # Metadata

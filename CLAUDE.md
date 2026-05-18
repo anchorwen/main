@@ -6,6 +6,7 @@
 - 完成任何 `.py` 文件修改后，必须运行 `python scripts/verify.py --full` 并通过
 - 如果 `--full` 不通过，**不得声明工作完成**
 - mypy 新错误增加 = 阻断，必须先修复再交付
+- `verify.py --quick` 现在包含蓝图合规检查（Iron Law #7 自动阻断）
 
 ### 2. Ruff F821 零容忍
 - F821 (undefined name) 永不豁免
@@ -44,10 +45,10 @@
 ## 验证命令
 
 ```bash
-# 快速验证 (改了什么查什么, ~10s)
+# 快速验证 (mypy + ruff + 蓝图合规, ~10s)
 python scripts/verify.py --quick
 
-# 完整验证 (全量 mypy + ruff + pytest, ~2min)
+# 完整验证 (全量 mypy + ruff + 蓝图合规 + pytest, ~2min)
 python scripts/verify.py --full
 
 # 更新验证戳

@@ -32,6 +32,7 @@ Trade journal → BrainPnLStore.settle(brain_id, direction, entry, exit) → Bra
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260517-013 | 2026-05-17 | cursor-agent | — | shadow_pnl_loop.py: added slippage=0.10 to settle_all() and record_signal() calls. Previously slippage defaulted to 0.0, undercounting shadow PnL friction by 0.10 USD/side. | contract-violation |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

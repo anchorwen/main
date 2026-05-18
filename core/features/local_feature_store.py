@@ -247,5 +247,21 @@ class LocalFeatureStore:
                 rec_path = tf_dir / "features.jsonl"
                 yield rec_path
 
+    def resolve_version(self, schema_name: str, symbol: str, timeframe: str) -> str | None:
+        """Return the registered version for a schema name + symbol + timeframe.
+
+        Returns None when no matching schema is registered — callers should
+        either skip the operation or fall back to a safe default.
+        """
+        schemas = self._load_schemas()
+        for info in schemas.values():
+            if (
+                info.get("name") == schema_name
+                and info.get("symbol") == symbol
+                and info.get("timeframe") == timeframe
+            ):
+                return info["version"]
+        return None
+
     def _schema_key(self, name: str, version: str, symbol: str, timeframe: str) -> str:
         return f"{name}:{version}:{symbol}:{timeframe}"
