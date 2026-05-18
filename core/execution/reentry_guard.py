@@ -9,7 +9,7 @@ rather than a blunt same-direction block.  Inspired by:
 Design:
   Layer 1 — exit-reason classifier (normalises raw exit reason strings)
   Layer 2 — signal-quality gate (confidence improvement + price confirmation)
-  Layer 3 — volume decay (consecutive same-direction positions shrink)
+  Layer 3 — tiered volume decay (grace→warning→kill for same-direction re-entries)
 """
 
 from __future__ import annotations
@@ -207,10 +207,11 @@ def apply_reentry_volume_scale(
 ) -> tuple[float, bool]:
     """Scale volume down for consecutive same-direction entries.
 
-    0 = first entry (full size)
-    1 = first re-entry (0.75×)
-    2 = second re-entry (0.50×)
-    3+ = blocked (0)
+    Tiered decay (institutional):
+      0         = first entry (full size)
+      1         = grace period (1.0× — no volume penalty, gated by cooldown + confidence)
+      2         = warning (0.5×)
+      3+        = kill (0 → hard block)
 
     Returns (volume, should_block).  If the scaled volume rounds back
     up to the original volume due to min_lot discretization, the order
@@ -219,7 +220,14 @@ def apply_reentry_volume_scale(
     if consecutive_same_direction == 0:
         return base_volume, False
 
-    scale = max(0.0, 1.0 - (consecutive_same_direction * 0.25))
+    # Tiered non-linear decay: grace → warning → kill
+    if consecutive_same_direction == 1:
+        scale = 1.0
+    elif consecutive_same_direction == 2:
+        scale = 0.5
+    else:
+        scale = 0.0
+
     if scale == 0.0:
         return 0.0, True  # 3+ consecutive same-direction → hard block
 
@@ -228,6 +236,9 @@ def apply_reentry_volume_scale(
 
     # Core defense: if discretization rounds back to original volume,
     # the penalty is ineffective → hard block.
+    # At scale=1.0 this never fires (stepped_vol == base_volume but scale == 1.0).
+    # At scale=0.5 with base=0.01: 0.005→0.01 ≥ 0.01 → HARD BLOCK on 2nd re-entry.
+    # At scale=0.5 with base=0.10: 0.05 < 0.10 → passes, genuine 50% reduction.
     if stepped_vol >= base_volume and scale < 1.0:
         return 0.0, True
 

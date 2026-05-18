@@ -247,7 +247,7 @@ strategy_lines:
     magic: 90003
     brain_types:
     - ou_params_v6
-    base_volume: 0.01
+    base_volume: 0.02
     max_volume: 0.03
     confidence_threshold: 0.35
     sl:
