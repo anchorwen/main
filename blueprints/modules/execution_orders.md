@@ -71,6 +71,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 | FIX-20260514-003 | 2026-05-14 | cursor-agent | a4a1005 | Fixed raw_proposals UnboundLocalError: elif indentation error caused multi-strategy evaluation to be unreachable | type-confusion |
 | FIX-20260513-001 | 2026-05-14 | cursor-agent | a4a1005 | PnL recording moved before approval gate: each proposal gets isolated PnL record to prevent missing ledger entries | state-leak |
 | FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: 6 execution pipeline files. Previously registered as FIX-20260518-044, FIX-20260517-019/021/022, FIX-20260518-037/038. | process-violation |
+| FIX-20260519-003 | 2026-05-19 | cursor-agent | — | New file: correlation_sizer.py — Tier 3 sqrt(N) correlation discount for same-direction strategy volumes. Previously registered as FIX-20260518-033. | missing-feature |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

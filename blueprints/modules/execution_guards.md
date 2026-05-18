@@ -49,6 +49,7 @@ Market data → detect_session() → check_var() → compute_position_size()
 | FIX-20260518-034 | 2026-05-18 | cursor-agent | — | Kelly discretization fix: moved `kelly_mult` into `_compute_volume()` BEFORE `round(size, 2)` — previously applied to already-rounded value, destroying Kelly effect through premature discretization. Added `kelly_diag` (MetaFilter p_win capture) + `kelly_sizing` (three-way volume: base/raw_target/final_stepped) JSON events. `multi_strategy_eval` now includes `p_win`/`kelly_mult` per strategy. | boundary-error |
 | FIX-20260518-035 | 2026-05-18 | cursor-agent | — | NET_OUT config wiring: `portfolio_netting_mode` added to `LiveCycleConfig` (default `"net_out"`) and passed to `PortfolioRiskController`. Previously `netting_mode` defaulted to `"allow_coexist"` — the entire netting path was dead code. Also fixed ExecutionQueue ACK polling to extract `new_ticket` from partial close receipt and reassign `known_open_tickets` to prevent orphan positions without trailing stop. | config-drift |
 | FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: MetaSignalFilter feature_names fallback from booster. Previously registered as FIX-20260518-030. | process-violation |
+| FIX-20260519-003 | 2026-05-19 | cursor-agent | — | New file: kelly_sizer.py — Tier 2 Kelly/Edge position sizing with EV veto. Previously registered as FIX-20260518-032. | missing-feature |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

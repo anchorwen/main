@@ -80,8 +80,10 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/execution/strategy_budget.py",
         "core/execution/market_efficiency.py",
         "core/execution/dynamic_sl_tp.py",
+        "core/execution/kelly_sizer.py",
     ],
     "execution_orders": [
+        "core/execution/correlation_sizer.py",
         "core/execution/order_state_machine.py",
         "core/execution/execution_manager.py",
         "core/execution/position_manager.py",

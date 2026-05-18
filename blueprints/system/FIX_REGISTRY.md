@@ -122,6 +122,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260518-036 | 2026-05-18 | execution-orders | Phase A+B: Confidence Spring (Layer-2 confidence_ema modulates Chandelier trail K: +0.6 high-conf → -0.5 low-conf) + EV Trajectory Envelope (sqrt-law Alpha decay exit with grace period + 0.5R tolerance floor) replaces linear time-decay phases. Import math added. | RC-12 |
 | FIX-20260519-001 | 2026-05-19 | deployment-lifecycle | Pre-commit deadlock fix: validate_blueprints.py `check_source_blueprint_freshness()` now only checks `--cached` in pre-commit context. Breaks the recursive stash paradox where unstaged FIX entries from prior sessions revert to HEAD during pre-commit stash, producing false STALE/ORPHAN violations. | RC-06 |
 | FIX-20260519-002 | 2026-05-19 | multi-module | Commit catch-up: 23 .py files across 14 modules deliver previously registered fixes. Includes execution pipeline (6 files), governance (2 files), Route C+ migration (3 files), dashboard v2, XGBoost multi-class, MetaFilter fallback, feature store, brain registration, verify.py compliance check. | process-violation |
+| FIX-20260519-003 | 2026-05-19 | execution-guards, execution-orders, brains-validation | New files delivered: kelly_sizer.py (Tier 2 Kelly/Edge), correlation_sizer.py (Tier 3 sqrt(N)), startup_validator.py (per-brain schema validation). Previously registered as FIX-20260518-032/033/025. | missing-feature |
 
 ---
 ## Fix Details by Year

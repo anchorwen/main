@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-18T17:00:52Z
+> **自动生成**: 2026-05-18T17:04:01Z
 > **扫描模块数**: 427
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -194,7 +194,7 @@
 | `barrier_strategy.py` | ✅ active | BarrierStrategy | 1 | 60 | — | |
 | `broker_adapter.py` | ✅ active | BrokerAdapter | 9 | 68 | — | |
 | `capital_allocator.py` | ✅ active | AllocationDecision, GroupCorrelationTracker, CapitalAllocator | 9 | 464 | — | |
-| `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 103 | — | |
+| `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 109 | — | |
 | `dynamic_sl_tp.py` | ✅ active | DynamicSLTP | 2 | 127 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 161 | — | |
 | `execution_queue.py` | ✅ active | QueuedDecision, DispatchResult, ExecutionQueue | 4 | 328 | — | |
@@ -501,7 +501,7 @@
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 466 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 468 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
 | `daily_ops.py` | ✅ active | — | 24 | 1034 | — | |
