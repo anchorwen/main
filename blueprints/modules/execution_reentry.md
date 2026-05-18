@@ -30,6 +30,7 @@ Trade close event → _classify_exit_reason() → check_reentry_quality()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260518-040 | 2026-05-18 | cursor-agent | — | Wave 2: Fixed 3 missing exit classifications (hesitation_*, bleed_stop_*, ev_trajectory→time_expired). Wave 2: Tightened time_expired re-entry from unconditional to gated (60s cooldown + confidence may not decay >0.05). Wave 2: Added hesitation + bleed_stop quality gate handlers (180s cooldown, confidence improvement, price confirmation). Wave 3: Micro-lot volume decay defense — hard block when stepped_vol >= original_volume after min_lot discretization. | RC-05 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

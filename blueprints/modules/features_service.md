@@ -46,6 +46,7 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 | runtime/live_cycle | FeatureService | Feature resolution for trading cycle |
 
 ## Known Issues
+- `_normalize_dt()` strips timezone to naive UTC — consumers must add `tzinfo=UTC` before calling `.timestamp()` (see FIX-20260518-039)
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |

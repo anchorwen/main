@@ -121,6 +121,8 @@ class StrategyDecision:
     reason: str = ""
     entry_z_score: float = 0.0  # OU z-score at entry (0 = not an OU strategy or unknown)
     entry_context: dict[str, Any] = field(default_factory=dict)
+    p_win: float = 0.5  # P(TP|signal) from MetaFilter or rolling PnL win rate
+    kelly_mult: float = 1.0  # fractional Kelly multiplier (0.0 = EV veto)
     # entry_context carries passthrough data for the journal:
     #   {"atr": float, "regime": str, "vol_regime": str, "trend_direction": str,
     #    "macro_regime": str, "brain_predictions": [dict, ...],
@@ -237,6 +239,7 @@ class StrategyLine:
         risk_budget_usd: float = 0.0,
         tracker: Any = None,
         pnl_ledger: Any = None,
+        pnl_store: Any = None,
         micro_sequences: dict[str, Any] | None = None,
         daily_feature_vector: Any = None,
         meta_filter: Any = None,
@@ -422,6 +425,7 @@ class StrategyLine:
         try:
             from core.runtime.shadow_recorder import record_brain_votes
 
+            _status_map = {b.get("brain_id"): b.get("status", "unknown") for b in self.brains}
             record_brain_votes(
                 proposals=proposals,
                 strategy_name=name,
@@ -429,6 +433,7 @@ class StrategyLine:
                 consensus_confidence=confidence,
                 symbol=getattr(self.config, "symbol", "XAUUSDc"),
                 base_dir="data",
+                brain_status_map=_status_map,
             )
         except Exception:
             pass
@@ -448,7 +453,11 @@ class StrategyLine:
                 supporting_count=support_count,
                 total_count=total_count,
                 regime_mode=regime_gate_mode,
-                reason="low_confidence" if direction != "neutral" else "neutral_consensus",
+                reason=(
+                    f"low_confidence_{confidence:.4f}_lt_{self.config.confidence_threshold}"
+                    if direction != "neutral"
+                    else "neutral_consensus"
+                ),
             )
 
         # ── 4b. Counter-trend gate ──
@@ -535,6 +544,7 @@ class StrategyLine:
         # 49-dim named feature dict from the V9 + micro ndarrays, and applies
         # Platt calibration + conformal thresholding.  Other strategies pass
         # through unchanged (scope isolation).
+        _meta_p_win: float | None = None  # P(TP|signal) for Kelly sizing
         if meta_filter is not None and name == "barrier_12bar":
             _s1_prediction: float | None = None
             for p in proposals:
@@ -556,6 +566,29 @@ class StrategyLine:
                     micro_array=micro_feature_vector,
                 )
                 if not result.passed:
+                    import json as _json
+
+                    _diag_p_win = getattr(result, "p_win", None)
+                    print(
+                        _json.dumps(
+                            {
+                                "event": "kelly_diag",
+                                "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+                                "strategy": name,
+                                "stage": "meta_filter_rejected",
+                                "s1_prediction": round(_s1_prediction, 6)
+                                if _s1_prediction
+                                else None,
+                                "result_p_win": round(float(_diag_p_win), 4)
+                                if _diag_p_win is not None
+                                else None,
+                                "passed": False,
+                                "reason": result.reason if result.reason else "threshold",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
                     return StrategyDecision(
                         strategy_name=name,
                         magic=self.config.magic,
@@ -574,6 +607,24 @@ class StrategyLine:
                         if result.reason
                         else "meta_filter_rejected",
                     )
+                _meta_p_win = float(result.p_win)
+                import json as _json
+
+                print(
+                    _json.dumps(
+                        {
+                            "event": "kelly_diag",
+                            "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+                            "strategy": name,
+                            "stage": "meta_filter_p_win",
+                            "s1_prediction": round(_s1_prediction, 6),
+                            "result_p_win": round(_meta_p_win, 4),
+                            "passed": result.passed,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
 
         # ── 5. Dynamic SL/TP ──
         from core.execution.dynamic_sl_tp import compute_dynamic_sl_tp, compute_sl_tp_levels
@@ -630,6 +681,51 @@ class StrategyLine:
                 )
 
         # ── 6. Volume ──
+        # Resolve p_win for Tier 2 Kelly sizing
+        _p_win: float = 0.5
+        if _meta_p_win is not None:
+            _p_win = _meta_p_win  # Platt-calibrated P(TP|signal) from MetaFilter
+        elif pnl_store is not None:
+            from core.execution.kelly_sizer import resolve_p_win_from_brains
+
+            _p_win = resolve_p_win_from_brains(self.brains, pnl_store, direction)
+        # else: neutral 0.5 → Kelly mult = 1.0 (no amplification or dampening)
+
+        # RR ratio from SL/TP levels (already computed in step 5)
+        _rr_ratio: float = 1.0
+        sl_dist = abs(levels["stop_loss"] - entry_price)
+        tp_dist = abs(levels["take_profit"] - entry_price)
+        if sl_dist > 0:
+            _rr_ratio = tp_dist / sl_dist
+
+        # ── 6b. Tier 2 Kelly/Edge sizing (before _compute_volume, so applied pre-rounding) ──
+        from core.execution.kelly_sizer import compute_kelly_mult
+
+        kelly_result = compute_kelly_mult(_p_win, _rr_ratio)
+        if kelly_result.fractional_mult == 0.0:
+            # Hard EV veto — negative expected value trade
+            return StrategyDecision(
+                strategy_name=name,
+                magic=self.config.magic,
+                should_trade=False,
+                direction="neutral",
+                confidence=round(confidence, 4),
+                volume=0.0,
+                sl=levels["stop_loss"],
+                tp=levels["take_profit"],
+                hard_sl=levels["hard_sl"],
+                brain_ids=brain_ids,
+                supporting_count=support_count,
+                total_count=total_count,
+                regime_mode=regime_gate_mode,
+                venue="live",
+                reason=f"negative_kelly_ev:p_win={_p_win:.3f}_rr={_rr_ratio:.3f}_kf={kelly_result.kelly_fraction:.3f}",
+                entry_z_score=entry_z_score,
+                p_win=_p_win,
+                kelly_mult=0.0,
+            )
+        _kelly_mult = kelly_result.fractional_mult
+
         # v3.1: compute OU bandit factors (exhaustion + regime) for statarb strategies
         _ou_regime_factor = 1.0
         _exhaustion_factor = 1.0
@@ -637,6 +733,8 @@ class StrategyLine:
             if regime_info is not None:
                 _ou_regime_factor = float(regime_info.get("ou_regime_factor", 1.0))
             _exhaustion_factor = sigmoid_exhaustion(abs(entry_z_score))
+
+        # Kelly applied inside _compute_volume BEFORE lot_step rounding (single rounding at end)
         volume = self._compute_volume(
             confidence,
             current_atr,
@@ -647,9 +745,35 @@ class StrategyLine:
             exhaustion_factor=_exhaustion_factor,
             ou_regime_factor=_ou_regime_factor,
             depth_penalty=z_depth_penalty(abs(entry_z_score)),
+            kelly_mult=_kelly_mult,
         )
-        # Apply counter-trend volume penalty
+        # Apply counter-trend volume penalty (post-rounding — this is a discrete gate)
         volume *= _ct_vol_mult
+        volume = max(0.01, round(volume / 0.01) * 0.01)
+
+        # Diagnostic: three-way volume distinction (raw vs stepped)
+        _pre_kelly_raw = getattr(self, "_last_pre_kelly_size", volume)
+        _raw_target = _pre_kelly_raw * _kelly_mult
+        import json as _json
+
+        print(
+            _json.dumps(
+                {
+                    "event": "kelly_sizing",
+                    "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+                    "strategy": name,
+                    "p_win": round(_p_win, 4),
+                    "rr_ratio": round(_rr_ratio, 4),
+                    "kelly_mult": round(_kelly_mult, 4),
+                    "sizing_label": kelly_result.sizing_label,
+                    "base_volume": round(_pre_kelly_raw, 4),
+                    "raw_target_volume": round(_raw_target, 4),
+                    "final_stepped_volume": volume,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
 
         # ── Build entry context for journal ──
         _brain_preds: list[dict[str, Any]] = []
@@ -696,6 +820,8 @@ class StrategyLine:
             reason="approved",
             entry_z_score=entry_z_score,
             entry_context=entry_context,
+            p_win=_p_win,
+            kelly_mult=kelly_result.fractional_mult,
         )
 
     # ── Consensus computation ───────────────────────────────────────────
@@ -817,6 +943,7 @@ class StrategyLine:
         exhaustion_factor: float = 1.0,
         ou_regime_factor: float = 1.0,
         depth_penalty: float = 1.0,
+        kelly_mult: float = 1.0,
     ) -> float:
         """Compute dynamic volume with bandit sizing (v3.1 + v3.2 depth decay).
 
@@ -827,7 +954,10 @@ class StrategyLine:
         v3.2 bandit formula:
           M = base_lot × agreement × gate × vol × macro
               × exhaustion (sigmoid) × ou_regime × depth_penalty
-          → apply_mvs(M) → round_to_lot_step
+          → apply_mvs(M) → kelly_mult → round_to_lot_step
+
+        Kelly (Tier 2) is applied BEFORE the final lot_step rounding so
+        the effect is not destroyed by premature discretization.
         """
         if current_atr <= 0:
             current_atr = self.config.ref_atr
@@ -874,9 +1004,6 @@ class StrategyLine:
 
         effective_mult = agreement_factor * gate_factor * vol_factor * macro_factor * bandit_factor
 
-        # v3.1: MVS cut-off — kill micro-positions where multiplier too low
-        effective_mult = apply_mvs(effective_mult, threshold=MVS_THRESHOLD)
-
         size = base_volume * effective_mult
 
         # ── Graduated streak reduction ──
@@ -887,6 +1014,18 @@ class StrategyLine:
             except Exception:
                 pass
         size *= streak_mult
+
+        # Save pre-Kelly raw size for diagnostic logging
+        self._last_pre_kelly_size = size
+
+        # ── Tier 2 Kelly/Edge sizing (before rounding) ──
+        size *= kelly_mult
+
+        # v3.1: MVS cut-off AFTER Kelly — kills micro-positions where final
+        # multiplier (including Kelly) is too low.  Previously ran before Kelly,
+        # which prevented Kelly amplification from saving marginal signals.
+        if size > 0 and size < base_volume * MVS_THRESHOLD:
+            size = 0.0
 
         # Round to 0.01 lot step (MT5 requirement)
         return max(0.01, min(self.config.max_volume, round(size, 2)))

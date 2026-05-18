@@ -37,6 +37,12 @@ def _classify_exit_reason(raw_reason: str) -> str:
         return "ou_revert"
     if "meta_exit" in r:
         return "meta_exit"
+    if "hesitation_" in r:
+        return "hesitation"
+    if "bleed_stop_" in r:
+        return "bleed_stop"
+    if "ev_trajectory" in r:
+        return "time_expired"  # EV trajectory IS a time-based exit
     return "unknown"
 
 
@@ -105,8 +111,16 @@ def check_reentry_quality(
 
     if category == "time_expired":
         # Time expiry — model's prediction window closed naturally.
-        # Allow re-entry freely; this is normal signal refresh.
-        return True, "time_expired_normal_refresh"
+        # Require minimum elapsed time AND no significant confidence decay
+        # to prevent instant re-churn on the next cycle with same signal.
+        if elapsed < 60:
+            return False, f"time_expired_too_soon_{elapsed:.0f}s_lt_60s"
+        if new_confidence < exit_confidence - 0.05:
+            return (
+                False,
+                f"time_expired_confidence_decayed_{new_confidence:.3f}",
+            )
+        return True, "time_expired_refresh_allowed"
 
     if category == "tp_hit":
         # Take-profit — trend may continue, allow if confidence hasn't decayed.
@@ -144,6 +158,41 @@ def check_reentry_quality(
             )
         return True, "meta_exit_reentry_confirmed"
 
+    if category == "hesitation":
+        # Position never reached breakeven — market did not confirm the
+        # signal.  Require significantly stronger signal AND price
+        # confirmation before re-entering same direction.
+        if elapsed < 180:
+            return False, f"hesitation_too_soon_{elapsed:.0f}s_lt_180s"
+        if new_confidence < max(exit_confidence + 0.15, 0.70):
+            return (
+                False,
+                f"hesitation_confidence_not_improved_{new_confidence:.3f}",
+            )
+        # For LONG: price must be LOWER than exit (cheaper entry)
+        if exit_direction == "long" and mid_price >= exit_price:
+            return False, "hesitation_price_not_confirming_long"
+        # For SHORT: price must be HIGHER than exit (cheaper entry)
+        if exit_direction == "short" and mid_price <= exit_price:
+            return False, "hesitation_price_not_confirming_short"
+        return True, "hesitation_reentry_confirmed"
+
+    if category == "bleed_stop":
+        # Bleed stop — consecutive bars with negative PnL.  This is a
+        # strong adverse signal — treat similarly to SL hit.
+        if elapsed < 180:
+            return False, f"bleed_stop_too_soon_{elapsed:.0f}s_lt_180s"
+        if new_confidence < exit_confidence + 0.10:
+            return (
+                False,
+                f"bleed_stop_confidence_not_improved_{new_confidence:.3f}",
+            )
+        if exit_direction == "long" and mid_price <= exit_price + 1.0:
+            return False, "bleed_stop_price_not_confirming_long"
+        if exit_direction == "short" and mid_price >= exit_price - 1.0:
+            return False, "bleed_stop_price_not_confirming_short"
+        return True, "bleed_stop_recovery_allowed"
+
     # Unknown — conservative: block same-direction
     return False, f"unknown_exit_reason_blocked_{exit_reason_raw[:30]}"
 
@@ -154,17 +203,35 @@ def check_reentry_quality(
 def apply_reentry_volume_scale(
     base_volume: float,
     consecutive_same_direction: int,
-) -> float:
+    lot_step: float = 0.01,
+) -> tuple[float, bool]:
     """Scale volume down for consecutive same-direction entries.
 
     0 = first entry (full size)
     1 = first re-entry (0.75×)
     2 = second re-entry (0.50×)
     3+ = blocked (0)
+
+    Returns (volume, should_block).  If the scaled volume rounds back
+    up to the original volume due to min_lot discretization, the order
+    is hard-blocked — the penalty must have real effect.
     """
-    scales = [1.0, 0.75, 0.50, 0.0]
-    idx = min(consecutive_same_direction, len(scales) - 1)
-    return base_volume * scales[idx]
+    if consecutive_same_direction == 0:
+        return base_volume, False
+
+    scale = max(0.0, 1.0 - (consecutive_same_direction * 0.25))
+    if scale == 0.0:
+        return 0.0, True  # 3+ consecutive same-direction → hard block
+
+    raw_vol = base_volume * scale
+    stepped_vol = max(0.01, round(raw_vol / lot_step) * lot_step)
+
+    # Core defense: if discretization rounds back to original volume,
+    # the penalty is ineffective → hard block.
+    if stepped_vol >= base_volume and scale < 1.0:
+        return 0.0, True
+
+    return stepped_vol, False
 
 
 # ── State record ──────────────────────────────────────────────────────────
@@ -231,14 +298,15 @@ class ReentryState:
         if not allowed:
             return False, reason, 0.0
 
-        # Determine consecutive count for volume scaling
+        # Determine consecutive count for volume scaling.
+        # The caller applies apply_reentry_volume_scale with the actual
+        # decision volume to ensure min_lot discretization is handled.
         if direction == self.last_direction:
             self.consecutive_same_direction += 1
         else:
             self.consecutive_same_direction = 0
             self.last_direction = direction
-        scale = apply_reentry_volume_scale(1.0, self.consecutive_same_direction)
-        return True, reason, scale
+        return True, reason, float(self.consecutive_same_direction)
 
 
 # ── State helpers (for LiveCycleState integration) ────────────────────────

@@ -553,6 +553,23 @@ def _dispatch_managed_close(
             )
             reentry_state = ensure_reentry_state(state._reentry_states, strategy_name)
             reentry_state.record_exit(record)
+            # ── Diagnostic: log exit classification ──
+            print(
+                json.dumps(
+                    {
+                        "event": "exit_recorded",
+                        "time": _utc_iso(),
+                        "strategy": strategy_name,
+                        "direction": pos.side,
+                        "raw_reason": reason[:80],
+                        "classified_category": record.category,
+                        "exit_confidence": round(exit_confidence, 4),
+                        "ticket": pos.ticket,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
         except Exception:
             pass
 
@@ -4204,10 +4221,33 @@ def execute_live_cycle(
                 _rs = ensure_reentry_state(state._reentry_states, _qd.strategy_name)
                 _d = _qd.decision
                 _entry_price = mid_price if mid_price is not None and mid_price > 0 else 0.0
-                _allowed, _rr_reason, _vol_scale = _rs.check_and_record_entry(
+                _allowed, _rr_reason, _cons_count_f = _rs.check_and_record_entry(
                     direction=_d.direction,
                     confidence=_d.confidence,
                     mid=_entry_price,
+                )
+                # ── Diagnostic: log every re-entry check ──
+                _last_exit = _rs.last_exit
+                print(
+                    json.dumps(
+                        {
+                            "event": "reentry_check",
+                            "time": _utc_iso(),
+                            "strategy": _qd.strategy_name,
+                            "direction": _d.direction,
+                            "confidence": round(_d.confidence, 4),
+                            "allowed": _allowed,
+                            "reason": _rr_reason,
+                            "consecutive_same_dir": int(_cons_count_f),
+                            "elapsed_since_exit_s": (
+                                round(time.time() - _last_exit.timestamp, 1) if _last_exit else -1
+                            ),
+                            "last_exit_category": _last_exit.category if _last_exit else "none",
+                            "last_exit_reason": (_last_exit.reason[:60]) if _last_exit else "",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
                 )
                 if not _allowed:
                     _reentry_skipped.append(
@@ -4220,8 +4260,22 @@ def execute_live_cycle(
                     )
                     continue
                 # Apply volume decay for consecutive same-direction entries
-                if _vol_scale < 1.0 and _vol_scale > 0:
-                    _d.volume = max(0.01, round(_d.volume * _vol_scale, 2))
+                _cons_count = int(_cons_count_f)
+                if _cons_count > 0:
+                    from core.execution.reentry_guard import apply_reentry_volume_scale
+
+                    _scaled_vol, _should_block = apply_reentry_volume_scale(_d.volume, _cons_count)
+                    if _should_block:
+                        _reentry_skipped.append(
+                            {
+                                "strategy": _qd.strategy_name,
+                                "direction": _d.direction,
+                                "confidence": _d.confidence,
+                                "reason": f"volume_decay_blocked_consecutive_{_cons_count}",
+                            }
+                        )
+                        continue
+                    _d.volume = _scaled_vol
                 _filtered_queue.append(_qd)
             if _reentry_skipped:
                 exec_queue._queue = _filtered_queue

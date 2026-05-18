@@ -940,6 +940,42 @@
   - Bridge→ExecutionQueue 的 ACK detail 契约：新增字段时若 consumer 不消费，至少在模块蓝图中记录 "available, not consumed" 标记。
 - **Dependents Checked**: `DispatchResult` 新增字段为可选（默认 None），所有 6 处构造点向后兼容。`live_cycle.py` 的 ticket 重分配是纯增量逻辑，不影响正常开仓路径。verify --quick (mypy + ruff + blueprint) 全部通过。
 
+### FIX-20260518-040
+- **Date**: 2026-05-18
+- **Author**: cursor-agent
+- **Type**: fix + enhancement
+- **Module**: execution-reentry, execution-orders, runtime-live, deployment-config
+- **Files**: `core/execution/reentry_guard.py`, `core/execution/strategy_line.py`, `core/runtime/live_cycle.py`, `configs/live.yaml`
+- **Description**: Comprehensive threshold precision + exit classification + re-entry logic fix based on data analysis of live trading patterns for magic 90001 (barrier_12bar) and 90003 (statarb_dynamic):
+
+  **Wave 1 — Config changes (5 in live.yaml)**:
+  - A1: barrier_12bar confidence_threshold 0.25→0.45 (50% votes in 0.4-0.6 range)
+  - A2: barrier_12bar min_valid_brains 1→2 (both barrier brains shadow, single brain too loose)
+  - A3: statarb_dynamic confidence_threshold 0.20→0.35 (was equivalent to no gate, 22 trades/day)
+  - A4: statarb_dynamic long_bias_discount 0.0→0.10 (66% long bias inappropriate for mean-reversion)
+  - D1: statarb_dynamic hesitation_cycles 2→6 (OU needs 3-5 bars to materialize)
+
+  **Wave 2 — Exit classification fixes (reentry_guard.py)**:
+  - B1: Added 3 missing `_classify_exit_reason` categories: `hesitation_*`→"hesitation", `bleed_stop_*`→"bleed_stop", `ev_trajectory`→"time_expired"
+  - B3: Tightened `time_expired` from unconditional allow to gated (60s cooldown + confidence may not decay >0.05)
+  - Added full quality gate handlers for `hesitation` (180s + confidence +0.15 + price confirmation) and `bleed_stop` (180s + confidence +0.10 + price confirmation)
+
+  **Wave 3 — Micro-lot decay defense (reentry_guard.py + live_cycle.py)**:
+  - B4: `apply_reentry_volume_scale()` now returns `tuple[float, bool]` with hard-block when min_lot discretization rounds penalty back to original volume
+  - B5: Per-strategy cooldown via existing `ReentryState` isolation (NOT cross-strategy — different strategies have different regime advantages)
+
+  **Wave 4 — Observability**:
+  - E1: `reentry_check` JSON diagnostic log in live_cycle after check_and_record_entry
+  - E2: Enriched confidence rejection reason in strategy_line: `low_confidence_{value:.4f}_lt_{threshold}`
+  - E3: `exit_recorded` JSON event in _dispatch_managed_close with raw_reason + classified_category
+
+  **Architectural corrections from user review**:
+  - C1 REJECTED: Meta_Stage1_Huber_V1 kept at vote_weight=0.0 (it's a Stage 2 MetaFilter probe outputting continuous Huber BPS regression, not discrete probabilities — giving it vote_weight would destroy Parliament consensus)
+  - B5 CORRECTED: Cross-strategy cooldown rejected — barrier_12bar SL (trend failed→ranging) is exactly when statarb_dynamic (mean-reversion) should enter. Changed to per-strategy `(strategy_name, direction)` cooldown.
+- **Root Cause**: RC-05 — boundary-error (thresholds too loose created unfiltered signals; missing exit classifications caused unknown-category conservative blocks; micro-lot discretization neutralized volume decay penalty; unconditional time_expired re-entry allowed identical-signal rechurn next cycle).
+- **Prevention**: All confidence threshold changes must reference actual signal distribution percentiles (not arbitrary values). Exit classification function must have an explicit "add new category here" comment before the `return "unknown"` fallback. Volume decay must validate that discretized volume < original volume — if not, hard block. Config changes that affect multiple strategies must check per-strategy signal distributions independently.
+- **Dependents Checked**: `live_cycle.py` (B4 caller, E1+E3), `strategy_line.py` (E2), `live.yaml` (A1-A4, D1). No breaking API changes — `apply_reentry_volume_scale` signature changed but only called from one site. `check_and_record_entry` return type changed but all callers updated.
+
 <!--
   Template for new fix entries — copy to the bottom of this file:
   ### FIX-YYYYMMDD-NNN
