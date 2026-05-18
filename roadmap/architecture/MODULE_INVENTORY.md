@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-18T17:04:01Z
+> **自动生成**: 2026-05-18T17:29:35Z
 > **扫描模块数**: 427
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -501,7 +501,7 @@
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 468 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 483 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
 | `daily_ops.py` | ✅ active | — | 24 | 1034 | — | |
@@ -545,9 +545,9 @@
 | `shadow_pnl_loop.py` | ✅ active | — | 9 | 759 | — | |
 | `smoke_test_e2e.py` | ✅ active | — | 15 | 381 | — | |
 | `trade_quality_report.py` | ✅ active | — | 6 | 113 | — | |
-| `validate_blueprints.py` | ✅ active | — | 7 | 302 | — | |
+| `validate_blueprints.py` | ✅ active | — | 7 | 291 | — | |
 | `validate_brain_before_deploy.py` | ✅ active | — | 12 | 394 | — | |
-| `verify.py` | ✅ active | — | 9 | 363 | — | |
+| `verify.py` | ✅ active | — | 9 | 364 | — | |
 | `verify_all_brains.py` | ✅ active | — | 1 | 91 | — | |
 
 ## scripts/audit

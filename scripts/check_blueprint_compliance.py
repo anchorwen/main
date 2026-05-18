@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -234,20 +233,24 @@ def _get_changed_files(*, cached_only: bool = False) -> set[str]:
     return files
 
 
-def classify_diff(file_path: str) -> str:
+def classify_diff(file_path: str, *, cached_only: bool = False) -> str:
     """Classify diff as 'substantive' or 'cosmetic'.
 
     Conservative approach (trap #2): only blank lines and pure single-line
     ``#`` comments are exempt.  Everything else (docstrings, type annotations,
     multi-line changes) is treated as substantive.
+
+    When cached_only=True, compares index (staged) to HEAD instead of
+    working tree to HEAD.  Use in pre-commit context.
     """
     full = ROOT / file_path
     if not full.exists():
         return "substantive"  # deleted — definitely substantive
 
     try:
+        ref = "--cached" if cached_only else "HEAD"
         result = _run_git(
-            ["git", "diff", "-U0", "HEAD", "--", file_path],
+            ["git", "diff", "-U0", ref, "--", file_path],
             timeout=10,
         )
         if result.returncode != 0:
@@ -307,19 +310,24 @@ def pre_check(files: list[str]) -> int:
 # ── Mode: compliance check (Iron Law #7 gate) ──
 
 
-def check_compliance() -> int:
+def check_compliance(*, all_files: bool = False) -> int:
     """Compliance gate. Returns non-zero if any substantive .py change lacks
     a corresponding blueprint update in the same change set.
+
+    By default only checks staged files (--cached) to avoid false
+    violations from unstaged changes belonging to other sessions.
+    Pass all_files=True for comprehensive audit (verify.py --full).
     """
-    py_files = _get_changed_py_files()
+    # Default to staged-only — unstaged changes from prior sessions
+    # must not block commits or produce false violations.
+    cached_only = not all_files
+
+    py_files = _get_changed_py_files(cached_only=cached_only)
     if not py_files:
         print("[blueprint] No changed .py files — compliance check skipped.")
         return 0
 
-    # Determine whether we're in pre-commit context
-    in_precommit = os.environ.get("PRE_COMMIT", "") == "1"
-
-    changed_all = _get_changed_files(cached_only=in_precommit)
+    changed_all = _get_changed_files(cached_only=cached_only)
     errors: list[str] = []
     cosmetic_count = 0
     substantive_files: list[tuple[str, list[str]]] = []
@@ -335,7 +343,7 @@ def check_compliance() -> int:
             )
             continue
 
-        category = classify_diff(fp)
+        category = classify_diff(fp, cached_only=cached_only)
         if category == "cosmetic":
             cosmetic_count += 1
             continue
@@ -361,11 +369,13 @@ def check_compliance() -> int:
         if bp_updated:
             print(f"[blueprint] OK: {fp} -> {', '.join(modules)} (blueprint in change set)")
         else:
+            bp_paths = "\n    ".join(f"blueprints/modules/{m}.md" for m in modules)
             errors.append(
-                f"VIOLATION: '{fp}' modified but no blueprint in change set.\n"
+                f"VIOLATION: '{fp}' modified but blueprint(s) not in change set.\n"
                 f"  Module(s): {', '.join(modules)}\n"
-                f"  Expected: blueprints/modules/{{{ '/'.join(modules) }}}.md\n"
-                f"  Action: update Fix History + Known Issues, then re-run."
+                f"  Action: update Fix History in:\n"
+                f"    {bp_paths}\n"
+                f"  Then: git add {' '.join(f'blueprints/modules/{m}.md' for m in modules)}"
             )
 
     if errors:
@@ -445,6 +455,11 @@ def main() -> int:
         help="Compliance gate: verify blueprint updated for substantive .py changes (Iron Law #7).",
     )
     parser.add_argument(
+        "--all",
+        action="store_true",
+        help="When used with --check: scan ALL modified files (staged+unstaged), not just staged.",
+    )
+    parser.add_argument(
         "--stamp",
         metavar="MODULE",
         help="Acknowledge a change that needs no blueprint update.",
@@ -455,7 +470,7 @@ def main() -> int:
         return pre_check(args.pre_check)
 
     if args.check:
-        return check_compliance()
+        return check_compliance(all_files=args.all)
 
     if args.stamp:
         return stamp_module(args.stamp)

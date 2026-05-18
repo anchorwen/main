@@ -329,6 +329,7 @@ def main() -> int:
                     sys.executable,
                     str(ROOT / "scripts" / "check_blueprint_compliance.py"),
                     "--check",
+                    "--all",
                 ],
                 capture_output=True,
                 text=True,

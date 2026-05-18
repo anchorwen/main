@@ -174,8 +174,9 @@ def check_source_blueprint_freshness() -> list[str]:
     # blocked → changes stay unstaged → next session adds more.
     in_precommit = os.environ.get("PRE_COMMIT", "") == "1"
 
-    # Get changed .py files
+    # Get changed .py files AND all changed files (for blueprint matching)
     changed_py: set[str] = set()
+    changed_all: set[str] = set()
     diff_args_list: list[list[str]] = [
         ["git", "diff", "--name-only", "--cached"],
     ]
@@ -187,6 +188,9 @@ def check_source_blueprint_freshness() -> list[str]:
             if result.returncode == 0:
                 for line in result.stdout.strip().split("\n"):
                     line = line.strip()
+                    if not line:
+                        continue
+                    changed_all.add(line)
                     if line.endswith(".py") and not line.startswith("tests/"):
                         changed_py.add(line)
         except Exception:
@@ -202,42 +206,27 @@ def check_source_blueprint_freshness() -> list[str]:
             errors.append(f"ORPHAN: {fp} changed but not mapped in MODULE_SOURCE_MAP")
             continue
 
-        category = classify_diff(fp)
+        category = classify_diff(fp, cached_only=in_precommit)
         if category == "cosmetic":
             continue
 
-        # Check if any owning blueprint is also changed
+        # Check if any owning blueprint is also in the change set
         bp_changed = False
         for m in modules:
             bp_path = f"blueprints/modules/{m}.md"
-            if bp_path in changed_py:
+            if bp_path in changed_all:
                 bp_changed = True
                 break
 
         if not bp_changed:
-            # Check git diff for blueprint files too (they're .md, not .py)
-            for args in [
-                ["git", "diff", "--name-only", "HEAD"],
-                ["git", "diff", "--name-only", "--cached"],
-            ]:
-                try:
-                    result = _sp.run(
-                        args, capture_output=True, text=True, cwd=str(ROOT), timeout=10
-                    )
-                    if result.returncode == 0:
-                        for line in result.stdout.strip().split("\n"):
-                            line = line.strip()
-                            for m in modules:
-                                if line == f"blueprints/modules/{m}.md":
-                                    bp_changed = True
-                                    break
-                except Exception:
-                    pass
-
-        if not bp_changed:
+            bp_list = "\n    ".join(f"blueprints/modules/{m}.md" for m in modules)
             errors.append(
-                f"STALE: {fp} substantively changed but blueprint(s) "
-                f"{', '.join(modules)} not in same change set"
+                f"STALE: {fp} substantively changed but blueprint(s) not staged.\n"
+                f"  Missing: {', '.join(modules)}\n"
+                f"  Action: update Fix History in:\n"
+                f"    {bp_list}\n"
+                f"  Then: git add {' '.join(f'blueprints/modules/{m}.md' for m in modules)}\n"
+                f"  Tip: use 'python scripts/register_fix.py --help' or stage both .py + blueprint together."
             )
 
     return errors

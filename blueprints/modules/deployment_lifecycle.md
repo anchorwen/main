@@ -62,6 +62,7 @@ startup → LifecycleManager.initialize()
 | FIX-20260519-001 | 2026-05-19 | cursor-agent | — | Pre-commit deadlock fix: validate_blueprints.py `check_source_blueprint_freshness()` now only checks `--cached` in pre-commit context. Breaks the recursive stash paradox where unstaged FIX entries from prior sessions revert to HEAD during pre-commit stash, producing false STALE/ORPHAN violations that block commits. | RC-06 |
 | FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: verify.py blueprint compliance check in --quick mode. New feature. | process-violation |
 | FIX-20260519-003 | 2026-05-19 | cursor-agent | — | MODULE_SOURCE_MAP: added correlation_sizer.py to execution_orders, kelly_sizer.py to execution_guards, startup_validator.py to brains_validation. | config-drift |
+| FIX-20260519-004 | 2026-05-19 | cursor-agent | — | Defense-in-depth deadlock prevention: check_blueprint_compliance.py --check defaults to staged-only (--all for deep audit), classify_diff supports cached_only, validate_blueprints.py unified changed_all tracking removes dead code + second-pass git calls, verify.py --full uses --all. Breaks the unstaged-files-from-prior-sessions false-violation loop at all three check paths. | RC-06 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |
