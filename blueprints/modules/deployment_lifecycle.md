@@ -59,6 +59,7 @@ startup → LifecycleManager.initialize()
 | FIX-20260515-008 | 2026-05-15 | cursor-agent | — | Watchdog cleanup: deleted scripts/hourly_watchdog.py (May 5 experiment), data/watchdog.log. Updated ADR-006. Fixed verify.py deleted-file filter. | config-drift |
 | FIX-20260515-007 | 2026-05-15 | cursor-agent | a4a1005 | New swing models (5 brain IDs) not registered in governance_state.json. Added all 5 with candidate status for PnL tracking and automated promotion eligibility. | config-drift |
 | FIX-20260517-010 | 2026-05-17 | cursor-agent | — | MODULE_SOURCE_MAP: added core/execution/dynamic_sl_tp.py to execution_guards mapping (SL/TP formula fix). | config-drift |
+| FIX-20260519-001 | 2026-05-19 | cursor-agent | — | Pre-commit deadlock fix: validate_blueprints.py `check_source_blueprint_freshness()` now only checks `--cached` in pre-commit context. Breaks the recursive stash paradox where unstaged FIX entries from prior sessions revert to HEAD during pre-commit stash, producing false STALE/ORPHAN violations that block commits. | RC-06 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

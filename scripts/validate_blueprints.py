@@ -14,6 +14,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -164,12 +165,23 @@ def check_source_blueprint_freshness() -> list[str]:
 
     import subprocess as _sp
 
-    # Get changed .py files (both staged and unstaged)
+    # In pre-commit context only check staged files — unstaged changes are
+    # stashed by the pre-commit framework and belong to other sessions.
+    # Without this guard, cumulative unstaged changes from prior sessions
+    # create an unresolvable deadlock: each session's FIX entries are written
+    # to blueprints (Post-Fix Protocol) but the pre-commit stash reverts
+    # those blueprints to HEAD → false STALE/ORPHAN violations → commit
+    # blocked → changes stay unstaged → next session adds more.
+    in_precommit = os.environ.get("PRE_COMMIT", "") == "1"
+
+    # Get changed .py files
     changed_py: set[str] = set()
-    for args in [
-        ["git", "diff", "--name-only", "HEAD"],
+    diff_args_list: list[list[str]] = [
         ["git", "diff", "--name-only", "--cached"],
-    ]:
+    ]
+    if not in_precommit:
+        diff_args_list.append(["git", "diff", "--name-only", "HEAD"])
+    for args in diff_args_list:
         try:
             result = _sp.run(args, capture_output=True, text=True, cwd=str(ROOT), timeout=10)
             if result.returncode == 0:

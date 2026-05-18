@@ -120,6 +120,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260518-039 | 2026-05-18 | features-service, runtime-live | Feature store freshness check timezone normalization: naive UTC datetimes interpreted as local (UTC+8) → 28,800s artificial staleness. Fix: `ts.replace(tzinfo=UTC)` before `ts.timestamp()` at both freshness check sites. Also cleaned 36,341 future-timestamp records from feature store (78,971→42,630). | RC-05 |
 | FIX-20260518-037 | 2026-05-18 | execution-orders | Multi-position refactor: ActivePositionManager → dict[ticket→ActivePosition], register_position no longer blocks, recovery iterates ALL MT5 positions, management phase loops all positions, save/load v2 multi-position format | RC-05 |
 | FIX-20260518-036 | 2026-05-18 | execution-orders | Phase A+B: Confidence Spring (Layer-2 confidence_ema modulates Chandelier trail K: +0.6 high-conf → -0.5 low-conf) + EV Trajectory Envelope (sqrt-law Alpha decay exit with grace period + 0.5R tolerance floor) replaces linear time-decay phases. Import math added. | RC-12 |
+| FIX-20260519-001 | 2026-05-19 | deployment-lifecycle | Pre-commit deadlock fix: validate_blueprints.py `check_source_blueprint_freshness()` now only checks `--cached` in pre-commit context. Breaks the recursive stash paradox where unstaged FIX entries from prior sessions revert to HEAD during pre-commit stash, producing false STALE/ORPHAN violations. | RC-06 |
 
 ---
 ## Fix Details by Year

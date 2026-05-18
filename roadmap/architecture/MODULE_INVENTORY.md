@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-18T16:07:46Z
+> **自动生成**: 2026-05-18T16:46:06Z
 > **扫描模块数**: 427
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -545,7 +545,7 @@
 | `shadow_pnl_loop.py` | ✅ active | — | 9 | 735 | — | |
 | `smoke_test_e2e.py` | ✅ active | — | 15 | 381 | — | |
 | `trade_quality_report.py` | ✅ active | — | 6 | 113 | — | |
-| `validate_blueprints.py` | ✅ active | — | 7 | 290 | — | |
+| `validate_blueprints.py` | ✅ active | — | 7 | 302 | — | |
 | `validate_brain_before_deploy.py` | ✅ active | — | 12 | 394 | — | |
 | `verify.py` | ✅ active | — | 9 | 341 | — | |
 | `verify_all_brains.py` | ✅ active | — | 1 | 91 | — | |
