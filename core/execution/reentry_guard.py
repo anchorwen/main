@@ -25,7 +25,7 @@ def _classify_exit_reason(raw_reason: str) -> str:
     ``"time_expired"``, ``"ou_revert"``, ``"meta_exit"``, ``"unknown"``.
     """
     r = raw_reason.lower()
-    if "brain_flip" in r or "signal_reversal" in r or "confidence_drop" in r:
+    if "brain_flip" in r or "signal_reversal" in r or "confidence_drop" in r or "confidence_decay" in r:
         return "brain_flip"
     if "sl_hit" in r or "sl_stop" in r:
         return "sl_hit"
