@@ -48,6 +48,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260521-008 | 2026-05-21 | cursor-agent | — | MODULE_SOURCE_MAP expansion: add mt5_spread_probe.py, meta_filter_gate.py, test_meta_pipeline.py, backtest_high_recall_precision.py, backtest_meta_filter.py to module mappings | RC-06 |
 | FIX-20260520-027 | 2026-05-20 | cursor-agent | — | Institutional brain→live alignment validator (Layer 3): validate_brain_live_alignment() added to BrainLifecycleManager with hard fail (SL tightening, horizon truncation) + warnings (horizon expansion, TP deviation) + ensemble cross-brain consistency. Integrated into verify_startup_integrity() + live_intent_loop JSON surface. | RC-09 |
 | FIX-20260519-005 | 2026-05-19 | cursor-agent | — | verify.py subprocess encoding fix: 3处check_blueprint_compliance/validate_blueprints子进程调用添加encoding=utf-8 + errors=replace + None-safe stdout(stderr) | RC-06 |
 | FIX-20260517-011 | 2026-05-17 | cursor-agent | — | Brain ecosystem cleanup: removed 6 retired brains from live.yaml, 12 zombie governance entries, 3 stale configs, fixed crt_sur_chlg_g2026.json features field, registered Meta_Stage1_Huber_V1 orphan config. | RC-11 |

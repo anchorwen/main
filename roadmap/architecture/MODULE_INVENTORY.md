@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-21T12:26:03Z
+> **自动生成**: 2026-05-21T14:59:19Z
 > **扫描模块数**: 435
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -73,7 +73,7 @@
 |------|------|----|------|------|------|------|
 | `base_adapter.py` | ✅ active | BaseBrainAdapter | 12 | 165 | — | |
 | `lightgbm_brain_adapter.py` | ✅ active | LightGBMBrainAdapter | 7 | 248 | — | |
-| `meta_filter_adapter.py` | ✅ active | FeatureParityError, MetaFilterAdapter | 8 | 215 | — | |
+| `meta_filter_adapter.py` | ✅ active | FeatureParityError, MetaFilterAdapter | 8 | 207 | — | |
 | `online_learner_adapter.py` | ✅ active | OnlineLearnerAdapter | 18 | 615 | — | |
 | `params_brain_adapter.py` | ✅ active | ParamsBrainAdapter | 9 | 314 | — | |
 | `transformer_brain_adapter.py` | ✅ active | TransformerBrainAdapter | 10 | 317 | — | |
@@ -212,7 +212,7 @@
 | `market_efficiency.py` | ✅ active | — | 2 | 67 | — | |
 | `market_impact.py` | ✅ active | MarketImpactEstimate | 3 | 168 | — | |
 | `meta_exit_engine.py` | ✅ active | ExitFeatureSnapshot, ExitEvaluation, MetaExitEngine | 13 | 507 | — | |
-| `meta_filter_gate.py` | ✅ active | MetaFilterGate | 7 | 191 | — | |
+| `meta_filter_gate.py` | ✅ active | MetaFilterGate | 7 | 187 | — | |
 | `meta_signal_filter.py` | ✅ active | FilterResult, MetaSignalFilter | 19 | 874 | — | |
 | `micro_strategy.py` | ✅ active | MicroStrategy | 1 | 85 | — | |
 | `mt5_broker_adapter.py` | ✅ active | MT5BrokerAdapter | 15 | 210 | — | |
@@ -503,7 +503,7 @@
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 488 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 495 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
 | `daily_ops.py` | ✅ active | — | 24 | 1034 | — | |
@@ -546,7 +546,7 @@
 | `shadow_live_compare_report.py` | ✅ active | — | 9 | 218 | — | |
 | `shadow_pnl_loop.py` | ✅ active | — | 9 | 759 | — | |
 | `smoke_test_e2e.py` | ✅ active | — | 15 | 381 | — | |
-| `test_meta_pipeline.py` | ✅ active | — | 6 | 287 | — | |
+| `test_meta_pipeline.py` | ✅ active | — | 6 | 295 | — | |
 | `trade_quality_report.py` | ✅ active | — | 6 | 113 | — | |
 | `validate_blueprints.py` | ✅ active | — | 7 | 291 | — | |
 | `validate_brain_before_deploy.py` | ✅ active | — | 12 | 394 | — | |
@@ -565,8 +565,8 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `backtest_dynamic_exit.py` | ✅ active | — | 10 | 571 | — | |
-| `backtest_high_recall_precision.py` | ✅ active | — | 5 | 310 | — | |
-| `backtest_meta_filter.py` | ✅ active | — | 5 | 297 | — | |
+| `backtest_high_recall_precision.py` | ✅ active | — | 5 | 326 | — | |
+| `backtest_meta_filter.py` | ✅ active | — | 5 | 318 | — | |
 | `backtest_regime_2d.py` | ✅ active | — | 9 | 515 | — | |
 | `backtest_v3_combined.py` | ✅ active | — | 21 | 857 | — | |
 
@@ -598,7 +598,7 @@
 | `build_calibrated_dataset.py` | ✅ active | — | 19 | 743 | — | |
 | `build_live_labeled_dataset.py` | ✅ active | — | 4 | 236 | — | |
 | `build_meta_features.py` | ✅ active | — | 7 | 702 | — | |
-| `build_meta_labeling_dataset.py` | ✅ active | — | 7 | 616 | — | |
+| `build_meta_labeling_dataset.py` | ✅ active | — | 7 | 627 | — | |
 | `build_meta_labels.py` | ✅ active | — | 6 | 379 | — | |
 | `build_meta_learner.py` | ✅ active | — | 7 | 481 | — | |
 | `build_micro_barrier_dataset.py` | ✅ active | — | 6 | 344 | — | |
@@ -637,12 +637,12 @@
 | `retraining_trigger.py` | ✅ active | — | 9 | 474 | — | |
 | `run_promotion.py` | ✅ active | — | 6 | 256 | — | |
 | `run_train_batch.py` | ✅ active | — | 6 | 274 | — | |
-| `scan_profitability_surface.py` | ✅ active | — | 3 | 184 | — | |
+| `scan_profitability_surface.py` | ✅ active | — | 3 | 179 | — | |
 | `train.py` | ✅ active | PipelineResult | 23 | 1935 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 640 | — | |
 | `train_exit_metamodel.py` | ✅ active | — | 7 | 343 | — | |
 | `train_from_csv.py` | ✅ active | MLP | 10 | 725 | — | |
-| `train_meta_filter.py` | ✅ active | — | 5 | 329 | — | |
+| `train_meta_filter.py` | ✅ active | — | 5 | 332 | — | |
 | `train_meta_model.py` | ✅ active | — | 6 | 384 | — | |
 | `train_online_init.py` | ✅ active | — | 9 | 411 | — | |
 | `train_stage2_lgb_pit.py` | ✅ active | — | 4 | 187 | — | |

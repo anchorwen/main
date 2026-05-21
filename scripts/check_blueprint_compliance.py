@@ -76,6 +76,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
     "execution_guards": [
         "core/execution/pre_trade_guards.py",
         "core/execution/meta_signal_filter.py",
+        "core/execution/meta_filter_gate.py",
         "core/execution/strategy_budget.py",
         "core/execution/market_efficiency.py",
         "core/execution/dynamic_sl_tp.py",
@@ -97,6 +98,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/execution/execution_queue.py",
         "scripts/mt5_bridge_worker.py",
         "scripts/mt5_spread_probe.py",
+        "scripts/test_meta_pipeline.py",
     ],
     "execution_reentry": ["core/execution/reentry_guard.py"],
     "risk_policies": ["core/risk/risk_policies.py", "core/risk/risk_evaluation_service.py"],
@@ -175,7 +177,12 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/position_query.py",
     ],
     "runtime_state": ["core/state/"],
-    "training": ["core/training/", "scripts/training/"],
+    "training": [
+        "core/training/",
+        "scripts/training/",
+        "scripts/backtest/backtest_high_recall_precision.py",
+        "scripts/backtest/backtest_meta_filter.py",
+    ],
 }
 
 

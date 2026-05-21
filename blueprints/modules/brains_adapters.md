@@ -182,6 +182,7 @@ All alerts are printed as single-line JSON to stderr: `{"event":"brain_alert","t
 
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |--------|------|--------|--------|---------|------------|
+| FIX-20260521-007 | 2026-05-21 | cursor-agent | — | MetaFilter adapter: integrate track 3 47-dim LightGBM adapter (meta_filter_adapter.py) for dual-track Meta Pipeline bridging Huber BPS regression to Stage 2 LGB+MLP+Platt+Conformal filter chain | RC-06 |
 | FIX-20260520-022 | 2026-05-20 | cursor-agent | — | OU z_entry revert 2.0→1.3: FIX-20260519-016 overcorrected — silenced OU brain for 16h. arb_params_v7.json restored to Optuna-validated z_entry=1.3 (all top-10 trials converged). Half-life discount retained. Data: May 19 AM (z_entry=1.3) 65 non-neutral signals; May 19 PM+20 (z_entry=2.0) 0 signals — yet Z-scores were correctly computed. | RC-05, RC-09 |
 | FIX-20260519-016 | 2026-05-19 | cursor-agent | — | OU signal quality upgrade: (A) z_entry 1.3→2.0 in arb_params_v7.json — only 4.6% of normal samples exceed 2σ, filtering ~80% of weak mean-reversion signals; (B) half_life discount in _z_to_direction() — fast reversion (hl=18) gets 0.69× multiplier, slow reversion (hl=55) floor-capped at 0.3×, making confidence reflect reversion speed | RC-05, RC-06 |
 | FIX-20260516-004 | 2026-05-16 | cursor-agent | — | LightGBM: metadata-driven run() with 3 defense lines replacing fragile dict.values() extraction | RC-06 (config drift) |

@@ -34,6 +34,7 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260521-007 | 2026-05-21 | cursor-agent | — | MetaFilter gate: integrate meta_filter_gate.py for dual-track Meta Pipeline — Huber BPS regression probe → Stage 2 LGB+MLP+Platt+Conformal binary classifier gate | RC-06 |
 | FIX-20260514-013 | 2026-05-14 | cursor-agent | a4a1005 | 最低持仓保护期(min_hold_cycles=3)+毒性流否决逃生舱(tick速度3倍阈值/逼近硬止损0.3ATR) | missing-null-check |
 | FIX-20260514-012 | 2026-05-14 | cursor-agent | a4a1005 | 简化分级利润锁定：删除(+2R,0.5R)和(+4R,2.5R)易触发级别，仅保留灾难性保护(+3R,1.5R)和(+5R,3.5R) | boundary-error |
 | FIX-20260514-011 | 2026-05-14 | cursor-agent | a4a1005 | 废弃R里程碑拖尾收紧，引入基于已实现波动率的自适应K：vol_ratio > 1.5 放宽K+0.8，vol_ratio < 0.7 收紧K-0.3 | boundary-error |
