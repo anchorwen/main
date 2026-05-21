@@ -129,6 +129,7 @@ class ExitWatchdog:
         brain_ids: list[str] | None = None,
         get_position_open: Callable[[int], bool] | None = None,
         l2_broker: Any = None,
+        pnl: float | None = None,
     ) -> ExitWatchdogResult:
         """Execute an exit order with full watchdog protection.
 
@@ -202,6 +203,7 @@ class ExitWatchdog:
                 magic=magic,
                 brain_ids=brain_ids,
                 slippage_points=slippage,
+                pnl=pnl,
             )
 
             att_start = time.monotonic()
@@ -354,6 +356,7 @@ class ExitWatchdog:
         magic: int = 0,
         brain_ids: list[str] | None = None,
         slippage_points: int = 20,
+        pnl: float | None = None,
     ) -> dict[str, Any]:
         """Build the close-order payload for the MT5 bridge."""
         payload: dict[str, Any] = {
@@ -364,6 +367,8 @@ class ExitWatchdog:
             "comment": f"exit_watchdog:{reason}",
             "slippage": slippage_points,
         }
+        if pnl is not None:
+            payload["pnl"] = pnl
         if magic:
             payload["magic"] = magic
         if brain_ids:

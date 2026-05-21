@@ -26,7 +26,9 @@ class TestBrainPnLStore:
     def test_settle_long_win(self):
         store = BrainPnLStore()
         sid = store.record_signal("B1", "XAUUSDc", "long", 4650.0, confidence=0.9)
+        assert sid is not None
         outcome = store.settle_one(sid, 4660.0)
+        assert outcome is not None
 
         assert outcome is not None
         assert outcome["is_win"] is True
@@ -37,7 +39,9 @@ class TestBrainPnLStore:
     def test_settle_long_loss(self):
         store = BrainPnLStore()
         sid = store.record_signal("B1", "XAUUSDc", "long", 4650.0)
+        assert sid is not None
         outcome = store.settle_one(sid, 4640.0)
+        assert outcome is not None
 
         assert outcome["is_win"] is False
         assert outcome["pnl_per_unit"] == -10.0
@@ -45,7 +49,9 @@ class TestBrainPnLStore:
     def test_settle_short_win(self):
         store = BrainPnLStore()
         sid = store.record_signal("B1", "XAUUSDc", "short", 4650.0)
+        assert sid is not None
         outcome = store.settle_one(sid, 4640.0)
+        assert outcome is not None
 
         assert outcome["is_win"] is True
         assert outcome["pnl_per_unit"] == 10.0
@@ -53,10 +59,68 @@ class TestBrainPnLStore:
     def test_settle_short_loss(self):
         store = BrainPnLStore()
         sid = store.record_signal("B1", "XAUUSDc", "short", 4650.0)
+        assert sid is not None
         outcome = store.settle_one(sid, 4660.0)
+        assert outcome is not None
 
         assert outcome["is_win"] is False
         assert outcome["pnl_per_unit"] == -10.0
+
+    def test_settle_all_ttl_gating(self):
+        """Signals with TTL>0 should not settle (horizon-matched)."""
+        store = BrainPnLStore()
+        store.record_signal("B1", "XAUUSDc", "long", 100.0, expected_horizon=3)
+
+        # Without update_pending, TTL=3 → nothing settles
+        results = store.settle_all(105.0)
+        assert len(results) == 0
+        assert store.pending_count == 1
+
+        # After 3 update_pending calls, TTL=0 → settles
+        store.update_pending(102.0)
+        store.update_pending(103.0)
+        ready = store.update_pending(104.0)
+        assert ready == 1
+        results = store.settle_all(105.0)
+        assert len(results) == 1
+        assert results["B1"]["pnl_per_unit"] == 5.0
+
+    def test_settle_all_force_all_backward_compat(self):
+        """force_all=True settles everything regardless of TTL."""
+        store = BrainPnLStore()
+        store.record_signal("B1", "XAUUSDc", "long", 100.0, expected_horizon=12)
+
+        results = store.settle_all(105.0, force_all=True)
+        assert len(results) == 1
+        assert store.pending_count == 0
+
+    def test_mfe_mae_tracking(self):
+        """update_pending should track best/worst prices during holding."""
+        store = BrainPnLStore()
+        store.record_signal("B1", "XAUUSDc", "long", 100.0, expected_horizon=3)
+
+        # Simulate 3 cycles: price goes up then down
+        store.update_pending(102.0)  # TTL=2, mfe=102, mae=100
+        store.update_pending(98.0)  # TTL=1, mfe=102, mae=98
+        store.update_pending(101.0)  # TTL=0, mfe=102, mae=98
+
+        results = store.settle_all(101.0)
+        outcome = results["B1"]
+        assert outcome["pnl_per_unit"] == 1.0  # 101-100
+        assert outcome["mfe_r"] > 0  # MFE from 102 (2% favorable)
+        assert outcome["mae_r"] > 0  # MAE from 98 (2% adverse)
+
+    def test_mfe_mae_short_direction(self):
+        """MFE/MAE tracking for short trades."""
+        store = BrainPnLStore()
+        store.record_signal("B1", "XAUUSDc", "short", 100.0, expected_horizon=1)
+
+        # Price drops (favorable for short) then spikes (adverse)
+        store.update_pending(98.0)  # mfe=98 (lower=better for short)
+        results = store.settle_all(99.0)
+        outcome = results["B1"]
+        assert outcome["pnl_per_unit"] == 1.0  # 100-99
+        assert outcome["mfe_r"] > 0  # MFE: 100→98 = 2% favorable
 
     def test_settle_unknown_signal_returns_none(self):
         store = BrainPnLStore()
@@ -64,9 +128,11 @@ class TestBrainPnLStore:
 
     def test_settle_all(self):
         store = BrainPnLStore()
-        store.record_signal("B1", "XAUUSDc", "long", 100.0)
-        store.record_signal("B2", "XAUUSDc", "short", 100.0)
+        store.record_signal("B1", "XAUUSDc", "long", 100.0, expected_horizon=1)
+        store.record_signal("B2", "XAUUSDc", "short", 100.0, expected_horizon=1)
 
+        # TTL-based: must update_pending to decrement TTL before settle_all
+        assert store.update_pending(100.0) == 2  # both ready (TTL: 1→0)
         results = store.settle_all(105.0)
         assert len(results) == 2
         assert results["B1"]["pnl_per_unit"] == 5.0  # long: 105-100
@@ -77,7 +143,9 @@ class TestBrainPnLStore:
         """P&L is per unit, not notional."""
         store = BrainPnLStore()
         sid = store.record_signal("B1", "XAUUSDc", "long", 3000.0)
+        assert sid is not None
         outcome = store.settle_one(sid, 3015.0)
+        assert outcome is not None
         assert outcome["pnl_per_unit"] == 15.0
 
 
@@ -95,6 +163,7 @@ class TestMetrics:
         # 9 wins, 1 loss — needs 10 samples minimum for health signal
         for i in range(10):
             sid = store.record_signal("B1", "XAUUSDc", "long", 100.0)
+            assert sid is not None
             store.settle_one(sid, 101.0 if i < 9 else 99.0)
 
         m = store.get_metrics("B1")
@@ -107,6 +176,7 @@ class TestMetrics:
         # Varied returns so std > 0 for Sharpe calculation
         for i in range(20):
             sid = store.record_signal("B1", "XAUUSDc", "long", 100.0)
+            assert sid is not None
             store.settle_one(sid, 101.0 + i * 0.1)  # varied wins
 
         m = store.get_metrics("B1")
@@ -121,6 +191,7 @@ class TestMetrics:
         # Varied returns so std > 0 for Sharpe calculation
         for i in range(20):
             sid = store.record_signal("B1", "XAUUSDc", "long", 100.0)
+            assert sid is not None
             store.settle_one(sid, 99.0 - i * 0.05)  # varied losses
 
         m = store.get_metrics("B1")
@@ -133,10 +204,12 @@ class TestMetrics:
         # 5 winning longs
         for _ in range(5):
             sid = store.record_signal("B1", "XAUUSDc", "long", 100.0)
+            assert sid is not None
             store.settle_one(sid, 101.0)
         # 3 losing shorts
         for _ in range(3):
             sid = store.record_signal("B1", "XAUUSDc", "short", 100.0)
+            assert sid is not None
             store.settle_one(sid, 101.0)
 
         m = store.get_metrics("B1")
@@ -149,6 +222,7 @@ class TestMetrics:
         store = BrainPnLStore(window_size=10)
         for _ in range(15):
             sid = store.record_signal("B1", "XAUUSDc", "long", 100.0)
+            assert sid is not None
             store.settle_one(sid, 101.0)
 
         m = store.get_metrics("B1")
@@ -158,6 +232,7 @@ class TestMetrics:
         store = BrainPnLStore()
         for b in ["B1", "B2"]:
             sid = store.record_signal(b, "XAUUSDc", "long", 100.0)
+            assert sid is not None
             store.settle_one(sid, 101.0)
 
         all_m = store.get_all_metrics()
@@ -167,8 +242,10 @@ class TestMetrics:
     def test_get_summary_table(self):
         store = BrainPnLStore()
         sid = store.record_signal("B1", "XAUUSDc", "long", 100.0)
+        assert sid is not None
         store.settle_one(sid, 102.0)
         sid = store.record_signal("B2", "XAUUSDc", "long", 100.0)
+        assert sid is not None
         store.settle_one(sid, 101.0)
 
         table = store.get_summary_table()
@@ -182,6 +259,7 @@ class TestMetrics:
         # Winning brain → healthy
         for _ in range(15):
             sid = store.record_signal("winner", "XAUUSDc", "long", 100.0)
+            assert sid is not None
             store.settle_one(sid, 101.5)
         m = store.get_metrics("winner")
         assert m.health_signal in ("healthy", "stable")
@@ -189,6 +267,7 @@ class TestMetrics:
         # Losing brain → critical or degraded
         for _ in range(15):
             sid = store.record_signal("loser", "XAUUSDc", "long", 100.0)
+            assert sid is not None
             store.settle_one(sid, 98.0)
         m2 = store.get_metrics("loser")
         assert m2.health_signal in ("critical", "degraded")
@@ -200,6 +279,7 @@ class TestPersistence:
     def test_roundtrip(self, tmp_path: Path):
         store = BrainPnLStore()
         sid = store.record_signal("B1", "XAUUSDc", "long", 100.0, confidence=0.9)
+        assert sid is not None
         store.settle_one(sid, 105.0)
 
         p = tmp_path / "ledger.json"
@@ -239,6 +319,7 @@ class TestProperties:
         store = BrainPnLStore()
         for b in ["C", "A", "B"]:
             sid = store.record_signal(b, "XAUUSDc", "long", 100.0)
+            assert sid is not None
             store.settle_one(sid, 101.0)
 
         assert store.brain_ids == ["A", "B", "C"]
@@ -248,5 +329,6 @@ class TestProperties:
         assert store.total_settled == 0
 
         sid = store.record_signal("B1", "XAUUSDc", "long", 100.0)
+        assert sid is not None
         store.settle_one(sid, 101.0)
         assert store.total_settled == 1

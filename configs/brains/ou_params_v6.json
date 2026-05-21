@@ -26,6 +26,9 @@
   },
   "contract_group": "statarb_dynamic",
   "training_horizon": 0,
+  "training_params": {
+    "horizon_bars": 0
+  },
   "feature_schema": "ou_price",
   "features": [
     "price_return"

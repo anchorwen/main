@@ -164,9 +164,7 @@ def compute_features_from_ohlc(ohlc_df: pd.DataFrame) -> dict[str, float]:
         f"{label}_MACD": _macd(c),
         f"{label}_Vol_ZScore": _vol_zscore(v),
         f"{label}_Macro1_Corr": _returns(c) / 100.0 if abs(_returns(c)) < 100 else 0.0,
-        f"{label}_Macro_Gold_Silver_Spread": float(
-            (c[-1] - np.mean(c[-20:])) / (np.std(c[-20:]) + 1e-8)
-        )
+        f"{label}_Price_ZScore": float((c[-1] - np.mean(c[-20:])) / (np.std(c[-20:]) + 1e-8))
         if len(c) >= 20
         else 0.0,
         f"{label}_OU_Theta": _ou_theta(c),
@@ -285,7 +283,7 @@ def warm_store(
         "M5_MACD",
         "M5_Vol_ZScore",
         "M5_Macro1_Corr",
-        "M5_Macro_Gold_Silver_Spread",
+        "M5_Price_ZScore",
         "M5_OU_Theta",
         "M5_Hurst",
     ]

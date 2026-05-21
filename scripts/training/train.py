@@ -869,11 +869,12 @@ def generate_brain_config(
 
 
 XGB_SEARCH_SPACE: dict[str, Any] = {
-    "max_depth": ("int", 2, 7),
+    # Architect directive 2026-05-21: hardened against overfitting.
+    "max_depth": ("int", 3, 6),
     "learning_rate": ("float", 0.005, 0.15),
-    "subsample": ("float", 0.6, 1.0),
-    "colsample_bytree": ("float", 0.5, 1.0),
-    "min_child_weight": ("float", 0.5, 20.0),
+    "subsample": ("float", 0.6, 0.9),
+    "colsample_bytree": ("float", 0.6, 0.9),
+    "min_child_weight": ("int", 1, 20),
     "reg_lambda": ("float", 0.01, 10.0),
     "reg_alpha": ("float", 0.01, 10.0),
     "gamma": ("float", 0.0, 5.0),
@@ -883,12 +884,12 @@ XGB_SEARCH_SPACE: dict[str, Any] = {
 LGB_SEARCH_SPACE: dict[str, Any] = {
     "num_leaves": ("int", 15, 127),
     "learning_rate": ("float", 0.005, 0.15),
-    "feature_fraction": ("float", 0.5, 1.0),
-    "bagging_fraction": ("float", 0.5, 1.0),
+    "feature_fraction": ("float", 0.6, 0.9),
+    "bagging_fraction": ("float", 0.6, 0.9),
     "bagging_freq": ("int", 1, 10),
     "min_data_in_leaf": ("int", 10, 100),
-    "lambda_l1": ("float", 0.0, 10.0),
-    "lambda_l2": ("float", 0.0, 10.0),
+    "lambda_l1": ("float", 0.01, 10.0),
+    "lambda_l2": ("float", 0.01, 10.0),
     "n_estimators": ("int", 100, 2000),
 }
 

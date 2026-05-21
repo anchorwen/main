@@ -28,6 +28,8 @@ class BrainAttribution:
     avg_pnl_per_trade: float = 0.0
     win_rate: float = 0.0
     label_distribution: dict[str, int] = field(default_factory=dict)
+    sponsor_count: int = 0
+    dissenter_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -39,6 +41,8 @@ class BrainAttribution:
             "avg_pnl_per_trade": round(self.avg_pnl_per_trade, 4),
             "win_rate": round(self.win_rate, 4),
             "label_distribution": self.label_distribution,
+            "sponsor_count": self.sponsor_count,
+            "dissenter_count": self.dissenter_count,
         }
 
 
@@ -135,7 +139,7 @@ class BrainAttributionService:
             ):
                 labeled_closes.append(e)
 
-        # Index open entries by message_id for brain_ids lookup
+        # Index open entries by message_id for brain_ids/votes lookup
         opens_by_id: dict[str, dict[str, Any]] = {}
         for e in entries:
             if e.get("action") == "open":
@@ -143,26 +147,73 @@ class BrainAttributionService:
                 if mid:
                     opens_by_id[mid] = e
 
-        # Attribute each labeled close to brain_ids
+        # Attribute each labeled close to brain_ids (Track 3: confidence-weighted)
         brain_pnl: dict[str, list[float]] = defaultdict(list)
         brain_labels: dict[str, Counter] = defaultdict(Counter)
+        # Track sponsor/dissenter breakdown for each brain
+        brain_sponsor: dict[str, list[float]] = defaultdict(list)
+        brain_dissenter: dict[str, list[float]] = defaultdict(list)
 
         for close in labeled_closes:
             open_msg_id = close.get("open_message_id", "")
             pnl_val = self._effective_pnl(close)
             label = close.get("label", "unknown")
+            trade_side = str(close.get("side", "") or "").lower()
 
-            # Resolve brain_ids: prefer from close, fall back to linked open
-            brain_ids = (
-                close.get("brain_ids") or opens_by_id.get(open_msg_id, {}).get("brain_ids") or []
+            # Resolve brain_ids and brain_votes from close or linked open
+            open_entry = opens_by_id.get(open_msg_id, {})
+            brain_ids = close.get("brain_ids") or open_entry.get("brain_ids") or []
+            brain_votes: list[dict[str, Any]] = (
+                close.get("brain_votes") or open_entry.get("brain_votes") or []
             )
 
             if not brain_ids:
-                # Unattributed — record under "unknown"
                 brain_pnl["_unknown_"].append(pnl_val)
                 brain_labels["_unknown_"][label] += 1
+                continue
+
+            # If no trade_side, infer from open entry
+            if not trade_side:
+                trade_side = str(open_entry.get("side", "") or "").lower()
+
+            # Track 3: Confidence-Weighted Marginal Attribution
+            # Separate brains into sponsors (voted WITH trade direction) and
+            # dissenters (voted AGAINST). Only sponsors bear realized P&L.
+            if brain_votes and trade_side:
+                sponsors, dissenters = self._split_sponsors_dissenters(brain_votes, trade_side)
+                if sponsors:
+                    # Weight sponsors by confidence
+                    total_conf = sum(max(0.01, s.get("confidence", 0.5)) for s in sponsors)
+                    for s in sponsors:
+                        bid = s["brain_id"]
+                        weight = max(0.01, s.get("confidence", 0.5)) / total_conf
+                        weighted_pnl = pnl_val * weight
+                        brain_pnl[bid].append(weighted_pnl)
+                        brain_labels[bid][label] += 1
+                        brain_sponsor[bid].append(weighted_pnl)
+                    # Dissenters get a record but no P&L — their vote was
+                    # against the trade, so they shouldn't bear its outcome
+                    for d in dissenters:
+                        brain_labels[d["brain_id"]][f"dissented_{label}"] += 1
+                        brain_dissenter[d["brain_id"]].append(0.0)
+                    # Any brain_ids not in brain_votes (legacy) get even split
+                    voted_ids = {s["brain_id"] for s in sponsors} | {
+                        d["brain_id"] for d in dissenters
+                    }
+                    unvoted_ids = [bid for bid in brain_ids if bid not in voted_ids]
+                    if unvoted_ids:
+                        fallback_split = pnl_val / len(unvoted_ids)
+                        for bid in unvoted_ids:
+                            brain_pnl[bid].append(fallback_split)
+                            brain_labels[bid][label] += 1
+                else:
+                    # No sponsors (all dissenters or unknown) — even split fallback
+                    split_pnl = pnl_val / len(brain_ids)
+                    for bid in brain_ids:
+                        brain_pnl[bid].append(split_pnl)
+                        brain_labels[bid][label] += 1
             else:
-                # Evenly split P&L across contributing brains
+                # Legacy path: no brain_votes data — even split
                 split_pnl = pnl_val / len(brain_ids)
                 for bid in brain_ids:
                     brain_pnl[bid].append(split_pnl)
@@ -175,20 +226,48 @@ class BrainAttributionService:
             losses = sum(1 for p in pnls if p < 0)
             total = len(pnls)
             total_p = sum(pnls)
-            attributions.append(
-                BrainAttribution(
-                    brain_id=bid,
-                    total_trades=total,
-                    winning_trades=wins,
-                    losing_trades=losses,
-                    total_pnl=total_p,
-                    avg_pnl_per_trade=total_p / total if total > 0 else 0.0,
-                    win_rate=wins / total if total > 0 else 0.0,
-                    label_distribution=dict(brain_labels.get(bid, Counter())),
-                )
+            n_sponsor = len(brain_sponsor.get(bid, []))
+            n_dissenter = len(brain_dissenter.get(bid, []))
+            attr = BrainAttribution(
+                brain_id=bid,
+                total_trades=total,
+                winning_trades=wins,
+                losing_trades=losses,
+                total_pnl=total_p,
+                avg_pnl_per_trade=total_p / total if total > 0 else 0.0,
+                win_rate=wins / total if total > 0 else 0.0,
+                label_distribution=dict(brain_labels.get(bid, Counter())),
+                sponsor_count=n_sponsor,
+                dissenter_count=n_dissenter,
             )
+            if n_sponsor or n_dissenter:
+                attr.label_distribution["_sponsor_trades"] = n_sponsor
+                attr.label_distribution["_dissenter_trades"] = n_dissenter
+            attributions.append(attr)
 
         report.layer_2_attributed = attributions
+
+    @staticmethod
+    def _split_sponsors_dissenters(
+        brain_votes: list[dict[str, Any]],
+        trade_side: str,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Separate brain votes into sponsors (voted with trade) and dissenters (against).
+
+        A brain is a sponsor if its direction_bias matches the trade_side.
+        A brain with direction_bias='neutral' is neither — it gets dropped.
+        """
+        trade_dir = trade_side.lower()
+        sponsors: list[dict[str, Any]] = []
+        dissenters: list[dict[str, Any]] = []
+        for v in brain_votes:
+            vb_dir = str(v.get("direction_bias", "") or v.get("direction", "")).lower()
+            if vb_dir == trade_dir:
+                sponsors.append(v)
+            elif vb_dir in ("long", "short"):
+                dissenters.append(v)
+            # neutral votes are excluded from both
+        return sponsors, dissenters
 
     def _compute_realized(self, report: AttributionReport) -> None:
         total = sum(a.total_pnl for a in report.layer_2_attributed)

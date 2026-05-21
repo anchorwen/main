@@ -50,6 +50,11 @@ Market data → detect_session() → check_var() → compute_position_size()
 | FIX-20260518-035 | 2026-05-18 | cursor-agent | — | NET_OUT config wiring: `portfolio_netting_mode` added to `LiveCycleConfig` (default `"net_out"`) and passed to `PortfolioRiskController`. Previously `netting_mode` defaulted to `"allow_coexist"` — the entire netting path was dead code. Also fixed ExecutionQueue ACK polling to extract `new_ticket` from partial close receipt and reassign `known_open_tickets` to prevent orphan positions without trailing stop. | config-drift |
 | FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: MetaSignalFilter feature_names fallback from booster. Previously registered as FIX-20260518-030. | process-violation |
 | FIX-20260519-003 | 2026-05-19 | cursor-agent | — | New file: kelly_sizer.py — Tier 2 Kelly/Edge position sizing with EV veto. Previously registered as FIX-20260518-032. | missing-feature |
+| FIX-20260520-023 | 2026-05-20 | cursor-agent | — | Dual-Track Router: Meta Pipeline (Huber→Stage 2 LGB+MLP+Platt+Conformal) decoupled from Parliament. Added `_try_meta_pipeline()` method to StrategyLine — when Parliament fails (confidence < 0.45), Track 2 independently evaluates Huber raw_score (±0.30 threshold) → Stage 2 filter → SL/TP/Kelly → execution. Deleted dead V1 filter config (`meta_stage2_filter_v1.json`). Created `scripts/test_meta_pipeline.py` for mock signal injection validation — confirmed full chain electrically connected with P(win) varying 0.37-0.68 per signal quality. | RC-06 (serial deadlock) |
+| FIX-20260520-024 | 2026-05-20 | cursor-agent | — | Hesitation exit killed profitable positions: `should_exit_hesitation` only checked `breakeven_triggered` (binary, needs 1.5 ATR), ignoring current PnL. Added Pillar 3 Current-Profit Guard (`r_now > 0` → no exit). Lowered Profit Pardon: 0.30R → 0.15R. Added `mid` parameter for current R computation. Increased m15_swing hesitation_cycles 2→4, m30_swing 2→3. | RC-05 (boundary-error) |
+| FIX-20260520-025 | 2026-05-20 | cursor-agent | — | Absolute Refractory Period (Cut 1) + Cross-Strategy Family Entry Spacing (Cut 2): Added `CooldownRegistry` (passive exits=1×timeframe, active exits=60s, reverse-direction override) and `FamilyEntryTracker` (swing family same-direction ≥15min gap) to `pre_trade_guards.py`. Integrated into `live_cycle.py`: exit recording in `_dispatch_managed_close`, pre-evaluate cooldown+spacing checks in `_evaluate_strategy_lines`, family entry recording after dispatch. Re-enabled h1_swing (60% WR best performer). | RC-06 (missing-feature) |
+| FIX-20260520-026 | 2026-05-20 | cursor-agent | — | Dynamic Exit Manager: Per-strategy exit params (`trail_atr_mult`, `trail_atr_mult_low`, `trail_atr_mult_high`, `breakeven_threshold_atr`) added to `ActivePosition` dataclass. `register_position()` accepts and stores per-strategy overrides; `_adjust_trail_for_regime()`, `should_breakeven()`, `compute_trail_tp()` now read from `pos.*` instead of `self.*`. `live_cycle.py` passes per-strategy exit params at registration. `live.yaml` expanded: statarb=1.5/1.2/2.5+0.8x be, m15_swing=1.5/1.3/2.5+1.2x be, h1_swing=2.5/2.0/3.5+1.5x be, barrier_12bar=2.0/1.8/3.0+1.5x be. | RC-06 (config-drift) |
+| FIX-20260520-028 | 2026-05-20 | cursor-agent | — | Meta Pipeline Executive Veto: removed `not parliament_passed` precondition from Track 2 activation. Meta_Stage1_Huber_V1 now gets first-refusal on every barrier_12bar evaluation — if Huber detects extreme counter-consensus signal (|raw_score|>0.30) and passes Stage 2 LGB+MLP+Platt+Conformal→RR→Kelly chain, it overrides parliament. Fixes "tyranny of the majority" where 8 long-biased brains created spurious LONG consensus, silencing the only short-biased brain before Track 2 could evaluate it. | RC-06 (serial deadlock) |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |
@@ -60,6 +65,13 @@ Market data → detect_session() → check_var() → compute_position_size()
 | `apply_sqrt_n_discount(decisions, lot_step, min_lot)` → `(decisions, [ClusterResult])` | live_cycle | Stable |
 | `detect_session(timestamp)` → `str` (asian/london/ny) | live_cycle | Stable |
 | `StrategyBudget.check(strategy_id, sl_hit)` → `bool` | live_cycle | Stable |
+| `CooldownRegistry.record_exit(strategy, direction, reason, timestamp)` → `dict` | live_cycle | Stable |
+| `CooldownRegistry.check_cooldown(strategy, direction, now)` → `(bool, str)` | live_cycle | Stable |
+| `FamilyEntryTracker.record_entry(family, direction, timestamp)` → `None` | live_cycle | Stable |
+| `FamilyEntryTracker.check_spacing(family, direction, strategy, now, min_gap_sec)` → `(bool, str)` | live_cycle | Stable |
+| `strategy_to_family(strategy)` → `str` | live_cycle | Stable |
+| `strategy_timeframe_sec(strategy)` → `int` | live_cycle | Stable |
+| `ActivePositionManager.register_position(*, trail_atr_mult, trail_atr_mult_low, trail_atr_mult_high, breakeven_threshold_atr)` → `ActivePosition` | live_cycle | Stable |
 
 ## Verification
 ```bash

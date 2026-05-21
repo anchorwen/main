@@ -79,6 +79,9 @@ Dataset CPCV CustomObj  Trainer    EvaluationReport
 | FIX-20260515-012 | 2026-05-15 | cursor-agent | — | Pipeline unification: extended train_single() to support all 5 model types (xgboost, lightgbm, deep_res_mlp, transformer, online_mlp/online_sgd). Added DL search spaces (DeepResMLP, Transformer, OnlineMLP). Fixed evaluation and model saving for non-tree models. Added --price-data CLI flag for profitability calibration. | RC-05 |
 | — | 2026-05-14 | cursor-agent | — | Phase E S1-S3 新建模块，无历史修复 | — |
 | FIX-20260517-001 | 2026-05-17 | cursor-agent | — | Route C+ Protocol 1: PiT OOF generator replacing cross_val_predict with row-by-row deque loop. Cross-fold deque clearance. Stage 2 LGB+MLP training scripts on PiT features. meta_stage2_runtime_59 schema registered. LGB Val Sharpe 30.6, MLP 18.8. | config-drift |
+| FIX-20260520-029 | 2026-05-20 | cursor-agent | — | Future-data leak in build_v9_micro_dataset.py: np.abs(micro_ts - ts) allowed matching future micro features to past V9 bars. Fix: backward-only matching (micro_ts <= ts) with future_leak_prevented diagnostic counter. Same class of bug as FIX-20260515-011 (_find_nearest_in_index) but in the micro→V9 merge path. | RC-03 (state-leak) |
+| FIX-20260521-005 | 2026-05-21 | cursor-agent | — | label_builder.py变量遮蔽修复：unlinked循环中trade变量重命名为unlinked_trade，消除与linked循环trade变量的同名遮蔽。 | RC-02 |
+| FIX-20260520-030 | 2026-05-20 | cursor-agent | — | Regression training target: --target regression flag added to institutional_train.py. Uses y_reg (PnL values) from NPZ with reg:squarederror (XGBoost) / regression (LightGBM) objectives. RMSE/R² metrics instead of Sharpe/WR/PF. Clean dataset v9_micro_49_clean.npz built (42710 samples, 0 future leaks). | RC-12 (missing-feature) |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

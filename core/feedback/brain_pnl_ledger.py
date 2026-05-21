@@ -93,8 +93,21 @@ class BrainPnLStore:
     """Counterfactual P&L ledger for per-brain independent accounting.
 
     Each brain's directional call is recorded at signal time and settled
-    when the next bar's close price arrives.  P&L is computed *per unit*
-    (not notional) so volume scaling is applied later.
+    when its horizon-matched TTL expires (horizon bars later).  P&L is
+    computed *per unit* (not notional) so volume scaling is applied later.
+
+    Per-cycle flow::
+
+        # 1. Update MFE/MAE for all pending signals + decrement TTL
+        ready = store.update_pending(mid_price)
+
+        # 2. Settle only expired signals (TTL=0)
+        store.settle_all(mid_price)
+
+        # 3. Record new signals with per-brain horizon from registry
+        for p in proposals:
+            horizon = brain_registry.get_training_horizon(p.brain_id)
+            store.record_signal(..., expected_horizon=horizon)
     """
 
     # Annualisation factor for M5 bars: 288 bars/day * 252 trading days
@@ -110,12 +123,16 @@ class BrainPnLStore:
         entry_price: float,
         *,
         confidence: float = 0.5,
+        expected_horizon: int = 1,
         snapshot_id: str = "",
         metadata: dict[str, Any] | None = None,
         entry_spread: float = 0.0,
         entry_slippage: float = 0.0,
     ) -> str | None:
-        """Record a brain's directional signal, pending next-bar settlement.
+        """Record a brain's directional signal, pending horizon-matched settlement.
+
+        Signals now carry a TTL (expected_horizon) and are only settled when
+        TTL reaches 0, matching each brain's training label horizon.
 
         Returns the signal_id, or None for neutral signals (no P&L to track).
         """
@@ -123,20 +140,60 @@ class BrainPnLStore:
             return None
 
         signal_id = f"{brain_id}_{datetime.now(UTC).timestamp():.6f}"
+        entry_price_f = float(entry_price)
         self._pending[signal_id] = {
             "signal_id": signal_id,
             "brain_id": brain_id,
             "symbol": symbol,
             "direction": direction,
-            "entry_price": entry_price,
+            "entry_price": entry_price_f,
             "confidence": confidence,
+            "expected_horizon": expected_horizon,
+            "ttl": expected_horizon,
             "snapshot_id": snapshot_id,
             "entry_time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             "metadata": metadata or {},
             "entry_spread": entry_spread,
             "entry_slippage": entry_slippage,
+            # MFE/MAE tracking fields (updated per-cycle via update_pending)
+            "mfe_price": entry_price_f,  # best price in trade direction
+            "mae_price": entry_price_f,  # worst price in trade direction
         }
         return signal_id
+
+    def update_pending(self, mid_price: float) -> int:
+        """Update MFE/MAE and decrement TTL for all pending signals.
+
+        Called once per cycle BEFORE settle_all.  For each pending signal:
+        - Tracks the most favorable price excursion (MFE) in the trade direction.
+        - Tracks the most adverse price excursion (MAE) against the trade direction.
+        - Decrements TTL by 1.
+
+        Returns the number of signals whose TTL just reached 0 (ready to settle).
+        """
+        ready_count = 0
+        for sig in self._pending.values():
+            sig["ttl"] = max(0, int(sig.get("ttl", 0)) - 1)
+
+            direction = sig["direction"]
+            mid = float(mid_price)
+
+            # MFE: best price in trade direction (highest for long, lowest for short)
+            if direction == "long":
+                if mid > float(sig.get("mfe_price", sig["entry_price"])):
+                    sig["mfe_price"] = mid
+                if mid < float(sig.get("mae_price", sig["entry_price"])):
+                    sig["mae_price"] = mid
+            else:  # short
+                if mid < float(sig.get("mfe_price", sig["entry_price"])):
+                    sig["mfe_price"] = mid
+                if mid > float(sig.get("mae_price", sig["entry_price"])):
+                    sig["mae_price"] = mid
+
+            if sig["ttl"] == 0:
+                ready_count += 1
+
+        return ready_count
 
     def settle_one(
         self,
@@ -148,8 +205,14 @@ class BrainPnLStore:
         slippage: float = 0.0,
         mfe_r: float = 0.0,
         mae_r: float = 0.0,
+        mfe_price: float | None = None,
+        mae_price: float | None = None,
     ) -> dict[str, Any] | None:
-        """Settle a single pending signal.  Returns the outcome or None."""
+        """Settle a single pending signal.  Returns the outcome or None.
+
+        When mfe_price/mae_price are provided, they override the internally
+        tracked values (useful for backfill or manual settlement).
+        """
         entry = self._pending.pop(signal_id, None)
         if entry is None:
             return None
@@ -162,6 +225,8 @@ class BrainPnLStore:
             slippage=slippage,
             mfe_r=mfe_r,
             mae_r=mae_r,
+            mfe_price=mfe_price,
+            mae_price=mae_price,
         )
 
     def settle_all(
@@ -173,19 +238,28 @@ class BrainPnLStore:
         slippage: float = 0.0,
         mfe_r: float = 0.0,
         mae_r: float = 0.0,
+        force_all: bool = False,
     ) -> dict[str, dict[str, Any]]:
-        """Settle every pending signal at once.  Returns {brain_id: outcome}.
+        """Settle pending signals whose TTL has expired.
 
-        Args:
-            close_price: Mid price for settlement. Long exits at (close - spread/2),
-                         short exits at (close + spread/2).
-            spread: Current bid-ask spread at settlement time.
-            slippage: Estimated slippage at settlement time.
-            mfe_r: Maximum favourable excursion (R-multiple) during holding period.
-            mae_r: Maximum adverse excursion (R-multiple) during holding period.
+        By default (force_all=False), only signals with ttl <= 0 are settled.
+        This matches each brain's training_horizon to the holding period:
+        a barrier_12bar brain (horizon=12) settles after 12 bars, not 1.
+
+        Set force_all=True for backward compat (settle everything immediately,
+        e.g. shutdown, backtest).
+
+        Returns {brain_id: outcome}.
         """
         results: dict[str, dict[str, Any]] = {}
         for signal_id in list(self._pending.keys()):
+            sig = self._pending.get(signal_id)
+            if sig is None:
+                continue
+            ttl = int(sig.get("ttl", 0))
+            if not force_all and ttl > 0:
+                continue
+
             outcome = self.settle_one(
                 signal_id,
                 close_price,
@@ -194,6 +268,8 @@ class BrainPnLStore:
                 slippage=slippage,
                 mfe_r=mfe_r,
                 mae_r=mae_r,
+                mfe_price=float(sig.get("mfe_price", sig["entry_price"])),
+                mae_price=float(sig.get("mae_price", sig["entry_price"])),
             )
             if outcome is not None:
                 results[outcome["brain_id"]] = outcome
@@ -209,16 +285,17 @@ class BrainPnLStore:
         slippage: float = 0.0,
         mfe_r: float = 0.0,
         mae_r: float = 0.0,
+        mfe_price: float | None = None,
+        mae_price: float | None = None,
     ) -> dict[str, Any]:
         direction = entry["direction"]
-        entry_price = entry["entry_price"]
+        entry_price = float(entry["entry_price"])
         entry_spread = float(entry.get("entry_spread", 0.0) or 0.0)
         entry_slippage = float(entry.get("entry_slippage", 0.0) or 0.0)
 
         # Exit at effective price:
         #   LONG:  sell at bid  = mid - spread/2 - slippage
         #   SHORT: buy at ask   = mid + spread/2 + slippage
-        # Net cost = entry_spread/2 (entry friction) + exit_spread/2 + slippage (exit friction)
         half_entry_spread = entry_spread / 2.0 + entry_slippage
         half_exit_friction = spread / 2.0 + slippage
 
@@ -228,6 +305,18 @@ class BrainPnLStore:
             pnl_per_unit = entry_price - close_price - half_entry_spread - half_exit_friction
 
         pnl_bps = (pnl_per_unit / entry_price) * 10_000 if entry_price > 0 else 0.0
+
+        # Compute MFE/MAE R-multiples from tracked prices (Track 2).
+        # If explicit mfe_r/mae_r are passed (non-zero), they take precedence
+        # over the price-derived computation (backward compat / manual override).
+        if mfe_r == 0.0 and mae_r == 0.0 and mfe_price is not None and mae_price is not None:
+            if entry_price > 0:
+                if direction == "long":
+                    mfe_r = (float(mfe_price) - entry_price) / entry_price
+                    mae_r = (entry_price - float(mae_price)) / entry_price
+                else:
+                    mfe_r = (entry_price - float(mfe_price)) / entry_price
+                    mae_r = (float(mae_price) - entry_price) / entry_price
 
         outcome = {
             **entry,
@@ -378,7 +467,7 @@ class BrainPnLStore:
     def __init__(self, window_size: int = 100) -> None:
         self._window_size = window_size
         self._pending: dict[str, dict[str, Any]] = {}
-        self._settled: dict[str, dict[str, Any]] = {}
+        self._settled: dict[str, list[dict[str, Any]]] = {}
         # Rolling quantile thresholds (recalibrated from cross-brain distribution)
         self._calibrated_thresholds: dict[str, dict[str, float]] | None = None
         self._last_calibration_n: int = 0

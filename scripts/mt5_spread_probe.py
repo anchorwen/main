@@ -18,7 +18,7 @@ def probe_spread(
         "detail": None,
     }
     try:
-        import MetaTrader5 as mt5  # type: ignore[import-untyped]
+        import MetaTrader5 as mt5
     except Exception as exc:  # pragma: no cover - optional dependency
         result["detail"] = f"metaTrader5_import_failed:{exc}"
         return result
@@ -31,21 +31,19 @@ def probe_spread(
             return result
         kwargs["path"] = str(p)
 
-    if not mt5.initialize(
-        **kwargs
-    ):  # pragma: no cover - needs terminal  # type: ignore[reportAttributeAccessIssue]
-        result["detail"] = f"initialize_failed:{mt5.last_error()}"  # type: ignore[reportAttributeAccessIssue]
-        mt5.shutdown()  # type: ignore[reportAttributeAccessIssue]
+    if not mt5.initialize(**kwargs):  # pragma: no cover - needs terminal
+        result["detail"] = f"initialize_failed:{mt5.last_error()}"
+        mt5.shutdown()
         return result
 
     try:
-        info = mt5.symbol_info(symbol)  # type: ignore[reportAttributeAccessIssue]
+        info = mt5.symbol_info(symbol)
         if info is None:
             result["detail"] = "symbol_info_none"
             return result
         if not info.visible:
-            mt5.symbol_select(symbol, True)  # type: ignore[reportAttributeAccessIssue]
-        tick = mt5.symbol_info_tick(symbol)  # type: ignore[reportAttributeAccessIssue]
+            mt5.symbol_select(symbol, True)
+        tick = mt5.symbol_info_tick(symbol)
         if tick is None:
             result["detail"] = "tick_none"
             return result
@@ -64,4 +62,4 @@ def probe_spread(
         result["detail"] = "ok"
         return result
     finally:
-        mt5.shutdown()  # type: ignore[reportAttributeAccessIssue]
+        mt5.shutdown()

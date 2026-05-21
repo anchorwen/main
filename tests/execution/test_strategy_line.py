@@ -400,8 +400,14 @@ class TestCounterTrendAction:
         assert result["confidence_mult"] == 1.0
         assert result["vol_mult"] == 1.0
 
-    def test_statarb_never_blocks(self):
+    def test_statarb_blocks_at_very_high_trend_strength(self):
+        """statarb_dynamic now blocks at H1 >= 0.55 (strong trend crushes OU MR)."""
         result = _counter_trend_action("statarb_dynamic", 0.95)
+        assert result["action"] == "block"
+
+    def test_statarb_allow_at_low_trend_strength(self):
+        """Low trend strength → statarb_dynamic allows (MR needs weak/no trend)."""
+        result = _counter_trend_action("statarb_dynamic", 0.10)
         assert result["action"] == "allow"
 
     def test_unknown_strategy_uses_default_threshold(self):

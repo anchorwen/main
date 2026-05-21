@@ -366,7 +366,7 @@ class TestHealthProbe:
             state=SlotState.LIVE,
             process_id=os.getpid(),
             brain_id="test",
-            started_at="2026-05-09T00:00:01",
+            started_at="2026-05-21T00:00:01",  # today, well under 999999s min_uptime
         )
         result = probe.check(slot)
         assert not result["checks"]["min_uptime"]

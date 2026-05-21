@@ -16,6 +16,7 @@ from typing import Any
 
 import numpy as np
 
+from core.brains.brain_registry import BrainRegistry
 from core.execution.barrier_strategy import BarrierStrategy
 from core.execution.execution_queue import ExecutionQueue
 from core.execution.micro_strategy import MicroStrategy
@@ -104,13 +105,13 @@ class LiveCycleConfig:
     exit_trail_atr_mult: float = 2.0
     exit_trail_atr_mult_low: float = 1.5
     exit_trail_atr_mult_high: float = 3.0
-    exit_breakeven_threshold_atr: float = 1.0
+    exit_breakeven_threshold_atr: float = 1.5
     exit_brain_reeval_interval: int = 5
     exit_flip_threshold: float = 0.5
     exit_confidence_drop: float = 0.10
     exit_max_hold_cycles: int = 60
     exit_require_min_r: float = 0.3
-    exit_min_step: float = 0.005
+    exit_min_step: float = 0.15
 
     # ── Multi-strategy mode ──
     multi_strategy_enabled: bool = True  # False → fallback to old CapitalAllocator
@@ -124,7 +125,7 @@ class LiveCycleConfig:
     strategy_configs: dict[str, Any] = field(default_factory=dict)
 
     # ── Vol-targeted position sizing ──
-    risk_budget_usd: float = 5.0  # fixed USD risk per trade; 0 → use fixed volume
+    risk_budget_usd: float = 10.0  # fixed USD risk per trade; 0 → use fixed volume
     equity_risk_pct: float = 0.0  # if >0, risk_budget = equity × equity_risk_pct (overrides fixed)
     min_lot: float = 0.01
     max_lot: float = 0.10
@@ -172,6 +173,9 @@ class LiveCycleState:
     _tracker_reload_pending: bool = False  # set after daily_ops enriches tracker on disk
     exit_watchdog: Any = None  # ExitWatchdog instance (Pitfall 3 safeguard)
     limit_monitor: Any = None  # LimitOrderMonitor instance (Pitfall 1 safeguard)
+    _cooldown_registry: Any = None  # CooldownRegistry (Cut 1: Absolute Refractory Period)
+    _family_entry_tracker: Any = None  # FamilyEntryTracker (Cut 2: Cross-Strategy Spacing)
+    _meta_filter_gate: Any = None  # MetaFilterGate (LightGBM 47-dim OU signal quality filter)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -520,6 +524,7 @@ def _dispatch_managed_close(
     strategy_name: str = "",
     exit_confidence: float = 0.0,
     exit_watchdog: Any = None,
+    mt5: Any = None,
 ) -> None:
     """Issue a close order for a managed position and record exit for re-entry guard.
 
@@ -570,14 +575,85 @@ def _dispatch_managed_close(
                 ),
                 flush=True,
             )
+            # ── Cut 1: Record exit to CooldownRegistry (Absolute Refractory Period) ──
+            if hasattr(state, "_cooldown_registry") and state._cooldown_registry is not None:
+                try:
+                    _cd_entry = state._cooldown_registry.record_exit(
+                        strategy=strategy_name,
+                        direction=pos.side,
+                        reason=reason,
+                        timestamp=time.time(),
+                    )
+                    print(
+                        json.dumps(
+                            {
+                                "event": "cooldown_registered",
+                                "time": _utc_iso(),
+                                "strategy": strategy_name,
+                                "direction": pos.side,
+                                "cooldown_sec": _cd_entry["cooldown_sec"],
+                                "cooldown_type": _cd_entry["type"],
+                                "exit_reason": reason[:80],
+                                "deadline_iso": datetime.fromtimestamp(
+                                    _cd_entry["deadline"], tz=UTC
+                                )
+                                .isoformat()
+                                .replace("+00:00", "Z"),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                except Exception:
+                    pass
         except Exception:
             pass
+
+    # ── Pillar 4: Ghost-volume audit ──
+    # If pos.volume < expected_remaining_volume and this isn't a legitimate
+    # partial close, query MT5 for ground truth instead of blindly trusting
+    # the system's volume (which may be stale after net_out / partial_tp).
+    _close_volume = pos.volume
+    _expected = getattr(pos, "expected_remaining_volume", pos.volume)
+    if (
+        _expected > 0
+        and _close_volume < _expected
+        and "partial" not in reason
+        and "net_out" not in reason
+    ):
+        _true_vol = _close_volume
+        if mt5 is not None:
+            try:
+                _mt5_positions = mt5.positions_get(ticket=pos.ticket)
+                if _mt5_positions and len(_mt5_positions) > 0:
+                    _true_vol = float(_mt5_positions[0].volume)
+            except Exception:
+                pass
+        print(
+            json.dumps(
+                {
+                    "event": "ghost_volume_audit",
+                    "time": _utc_iso(),
+                    "ticket": pos.ticket,
+                    "system_volume": _close_volume,
+                    "expected_remaining": _expected,
+                    "mt5_true_volume": _true_vol,
+                    "action": "using_mt5_ground_truth"
+                    if _true_vol != _close_volume
+                    else "no_discrepancy",
+                    "reason": reason[:60],
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        _close_volume = _true_vol
 
     payload: dict[str, Any] = {
         "action": "close",
         "side": pos.side,
         "position_ticket": pos.ticket,
-        "volume": pos.volume,
+        "volume": _close_volume,
         "comment": reason,
     }
     if pnl is not None:
@@ -623,6 +699,7 @@ def _dispatch_managed_close(
                     extensions={"mt5_terminal_path": config.mt5_terminal_path},
                 ),
                 brain_ids=_close_brain_ids,
+                pnl=pnl,
             )
             if not wd_result.success:
                 print(
@@ -639,6 +716,14 @@ def _dispatch_managed_close(
                     ),
                     flush=True,
                 )
+            elif state is not None and pnl is not None:
+                # Store engine-calculated PnL for reconciliation fallback
+                try:
+                    _oe = state.known_open_tickets.get(pos.ticket, {})
+                    if _oe:
+                        _oe["_engine_close_pnl"] = pnl
+                except Exception:
+                    pass
         except Exception as _wd_exc:
             print(
                 json.dumps(
@@ -902,7 +987,30 @@ def _execute_management_phase(
             pass
 
     # ── 3. Update position tracking ──
-    pm.update_prices(mid, bid, ask, current_atr, regime_info, state.loop_iteration)
+    # Pillar 1: Fetch current M5 bar for OHLC-calibrated extreme tracking.
+    # M5 covers the full inter-cycle window; graceful degradation on failure.
+    _m5_high, _m5_low, _m5_spread = None, None, 0
+    if mt5 is not None:
+        try:
+            _m5_rates = mt5.copy_rates_from_pos(config.symbol, mt5.TIMEFRAME_M5, 0, 1)
+            if _m5_rates is not None and len(_m5_rates) > 0:
+                _m5_bar = _m5_rates[0]
+                _m5_high = float(_m5_bar["high"])
+                _m5_low = float(_m5_bar["low"])
+                _m5_spread = int(_m5_bar.get("spread", 0))
+        except Exception:
+            pass
+    pm.update_prices(
+        mid,
+        bid,
+        ask,
+        current_atr,
+        regime_info,
+        state.loop_iteration,
+        m5_high=_m5_high,
+        m5_low=_m5_low,
+        m5_spread_points=_m5_spread,
+    )
 
     # ── 4-5.2: Trail SL, breakeven, trail TP — computed separately,
     # dispatched as a SINGLE modify_sltp to prevent MT5 rejecting
@@ -941,6 +1049,39 @@ def _execute_management_phase(
         _reasons.append("tp")
         _final_tp = _trail_tp
 
+    # ── Diagnostic: log trail/breakeven decision details every cycle ──
+    print(
+        json.dumps(
+            {
+                "event": "management_phase_diag",
+                "time": _utc_iso(),
+                "ticket": pos.ticket,
+                "side": pos.side,
+                "entry": round(pos.entry_price, 3),
+                "lowest_low": round(pos.lowest_low, 3),
+                "highest_high": round(pos.highest_high, 3),
+                "current_sl": round(pos.current_sl, 3),
+                "current_tp": round(pos.current_tp, 3),
+                "trail_mult": round(pos.trail_multiplier, 4),
+                "current_atr": round(current_atr, 4),
+                "entry_atr": round(pos.entry_atr, 4),
+                "trail_sl_candidate": round(_trail_sl, 3) if _trail_sl is not None else None,
+                "trail_fired": _trail_sl is not None
+                and abs(_trail_sl - pos.current_sl) >= config.exit_min_step,
+                "breakeven_fired": _be_triggered,
+                "breakeven_improves": _be_dispatched,
+                "cycles_held": pos.cycles_held,
+                "breakeven_triggered_flag": pos.breakeven_triggered,
+                "final_sl": round(_final_sl, 3),
+                "final_tp": round(_final_tp, 3),
+                "reasons": _reasons,
+                "exit_min_step": config.exit_min_step,
+                "pm_min_step": getattr(pm, "min_step", "N/A"),
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
     # ── Single dispatch (prevents MT5 retcode 10006 rejections) ──
     _sl_changed = abs(_final_sl - pos.current_sl) >= config.exit_min_step
     _tp_changed = abs(_final_tp - pos.current_tp) >= config.exit_min_step
@@ -1057,6 +1198,13 @@ def _execute_management_phase(
                             extensions={"mt5_terminal_path": config.mt5_terminal_path},
                         )
 
+                    _ptp_pnl = None
+                    if mid is not None and hasattr(pos, "entry_price") and pos.entry_price:
+                        _ptp_pnl = (
+                            round((mid - pos.entry_price) * ptp_close_vol, 2)
+                            if pos.side == "long"
+                            else round((pos.entry_price - mid) * ptp_close_vol, 2)
+                        )
                     _ptp_result = _ptp_watchdog.execute_exit(
                         position_ticket=pos.ticket,
                         volume=ptp_close_vol,
@@ -1065,6 +1213,7 @@ def _execute_management_phase(
                         magic=_close_payload.get("magic", 0),
                         dispatch_fn=_ptp_dispatch_fn,
                         brain_ids=_ptp_brain_ids,
+                        pnl=_ptp_pnl,
                     )
                     _ptp_dispatched = _ptp_result.success
                     if not _ptp_result.success:
@@ -1134,6 +1283,7 @@ def _execute_management_phase(
                     pos.current_sl = breakeven_sl
 
                 pos.volume = ptp_remain_vol
+                pos.expected_remaining_volume = ptp_remain_vol
                 print(
                     json.dumps(
                         {
@@ -1213,6 +1363,7 @@ def _execute_management_phase(
                 strategy_name=_sname,
                 exit_confidence=_exit_confidence,
                 exit_watchdog=state.exit_watchdog,
+                mt5=mt5,
             )
             print(
                 json.dumps(
@@ -1378,12 +1529,23 @@ def _execute_management_phase(
                 current_supporting = _l2_supporting
 
                 # ── Global consensus (for Meta Exit cross-strategy drift) ──
+                # Wave C: Hierarchical consensus — positions at larger
+                # timeframes only listen to signals from >= same-TF groups.
+                # An H1 freighter doesn't tack on an M5 lake-breeze shift.
+                _pos_tf_mult = int(
+                    (config.strategy_configs.get(_sname, {}) or {}).get("_tf_mult", 1) or 1
+                )
                 _global_direction = allocation.direction if allocation.should_trade else "neutral"
                 _global_supporting: list[str] = []
                 _global_total = 0
                 for _gname, gs in group_signals.items():
                     if gs is None:
                         continue
+                    _g_tf_mult = int(
+                        (config.strategy_configs.get(_gname, {}) or {}).get("_tf_mult", 1) or 1
+                    )
+                    if _g_tf_mult < _pos_tf_mult:
+                        continue  # skip smaller-TF groups
                     _global_total += gs.total_count
                     if gs.direction == _global_direction:
                         _global_supporting.extend(gs.brain_ids)
@@ -1419,6 +1581,7 @@ def _execute_management_phase(
                             strategy_name=_sname,
                             exit_confidence=_exit_confidence,
                             exit_watchdog=state.exit_watchdog,
+                            mt5=mt5,
                         )
                         print(
                             json.dumps(
@@ -1466,6 +1629,7 @@ def _execute_management_phase(
                                         strategy_name=_sname,
                                         exit_confidence=_exit_confidence,
                                         exit_watchdog=state.exit_watchdog,
+                                        mt5=mt5,
                                     )
                                     print(
                                         json.dumps(
@@ -1505,6 +1669,7 @@ def _execute_management_phase(
                         strategy_name=_sname,
                         exit_confidence=_bf_confidence,
                         exit_watchdog=state.exit_watchdog,
+                        mt5=mt5,
                     )
                     print(
                         json.dumps(
@@ -1570,6 +1735,7 @@ def _execute_management_phase(
                     strategy_name=_sname,
                     exit_confidence=_exit_confidence,
                     exit_watchdog=state.exit_watchdog,
+                    mt5=mt5,
                 )
                 print(
                     json.dumps(
@@ -1599,7 +1765,9 @@ def _execute_management_phase(
         mid if mid is not None else 0.0, ticket=pos.ticket
     )
     if not _skip_hesitation:
-        should_hesitate, hesitate_reason = pm.should_exit_hesitation(ticket=pos.ticket)
+        should_hesitate, hesitate_reason = pm.should_exit_hesitation(
+            mid if mid is not None else 0.0, ticket=pos.ticket
+        )
         if should_hesitate:
             _dispatch_managed_close(
                 config,
@@ -1610,6 +1778,7 @@ def _execute_management_phase(
                 strategy_name=_sname,
                 exit_confidence=_exit_confidence,
                 exit_watchdog=state.exit_watchdog,
+                mt5=mt5,
             )
             print(
                 json.dumps(
@@ -1649,6 +1818,7 @@ def _execute_management_phase(
                 strategy_name=_sname,
                 exit_confidence=_exit_confidence,
                 exit_watchdog=state.exit_watchdog,
+                mt5=mt5,
             )
             print(
                 json.dumps(
@@ -1680,7 +1850,62 @@ _EXPECTED_EXIT_KEYS = {
     "hesitation_cycles",
     "trail_enabled",
     "trail_atr_mult",
+    "trail_atr_mult_low",
+    "trail_atr_mult_high",
+    "breakeven_threshold_atr",
 }
+
+
+# ── Timeframe auto-scaling ────────────────────────────────────────────────
+# Maps human-readable timeframe labels to M5-bar multipliers.
+# For √t-based ATR scaling, we use sqrt(multiplier) because variance grows
+# linearly with time (random walk), so stddev grows with √time.
+TIMEFRAME_TO_M5 = {
+    "M5": 1,
+    "M15": 3,
+    "M30": 6,
+    "H1": 12,
+    "H4": 48,
+    "D1": 288,
+}
+
+
+def apply_timeframe_scaling(strategy_configs: dict) -> dict:
+    """Auto-scale human-readable exit parameters to M5-bar cycles.
+
+    Transforms the strategy_configs dict in-place so that every consumer
+    downstream (strategy evaluation, position management) receives values
+    already expressed in M5-bar units.  YAML authors write the physically
+    intuitive number (e.g. ``hesitation_cycles: 3`` on an H1 strategy means
+    "3 × H1 bars"), and this function multiplies by the timeframe ratio.
+
+    Returns the same dict (mutated) for call-site convenience.
+    """
+    for _name, scfg in strategy_configs.items():
+        if not isinstance(scfg, dict):
+            continue
+        tf = str(scfg.get("timeframe", "M5"))
+        mult = TIMEFRAME_TO_M5.get(tf, 1)
+
+        exit_cfg = scfg.get("exit")
+        if isinstance(exit_cfg, dict):
+            # Scale hesitation_cycles
+            raw_hesitation = exit_cfg.get("hesitation_cycles")
+            if raw_hesitation is not None:
+                exit_cfg["hesitation_cycles"] = int(raw_hesitation) * mult
+            # Scale time_exit_cycles
+            raw_time = exit_cfg.get("time_exit_cycles")
+            if raw_time is not None:
+                exit_cfg["time_exit_cycles"] = int(raw_time) * mult
+            # Scale max_hold_cycles if present
+            raw_max_hold = exit_cfg.get("max_hold_cycles")
+            if raw_max_hold is not None:
+                exit_cfg["max_hold_cycles"] = int(raw_max_hold) * mult
+
+        # Stash the multiplier so downstream (SL/TP, Meta Exit) can use it
+        scfg["_tf_mult"] = mult
+
+    return strategy_configs
 
 
 def validate_strategy_exit_configs(strategy_configs: dict) -> list[str]:
@@ -1959,7 +2184,7 @@ def _reconcile_closed_positions(
                 _entry_fill = getattr(entry_deals[0], "price", None)
                 if _entry_fill is not None and _entry_fill > 0:
                     entry_price = float(_entry_fill)
-        # Fallback: open journal entry's order request price
+        # Fallback L1: open journal entry's order request price
         if entry_price is None:
             detail = open_entry.get("detail", {})
             if isinstance(detail, dict):
@@ -1967,6 +2192,11 @@ def _reconcile_closed_positions(
                 _req_price = req.get("price")
                 if _req_price is not None and _req_price > 0:
                     entry_price = float(_req_price)
+        # Fallback L2: engine-registered entry_price (top-level field from live open dispatch)
+        if entry_price is None:
+            _reg_ep = open_entry.get("entry_price")
+            if _reg_ep is not None and float(_reg_ep) > 0:
+                entry_price = float(_reg_ep)
 
         pnl = None
         if entry_price is not None and close_price is not None and close_volume:
@@ -1974,6 +2204,25 @@ def _reconcile_closed_positions(
                 pnl = round((close_price - entry_price) * close_volume, 2)
             elif side == "short":
                 pnl = round((entry_price - close_price) * close_volume, 2)
+
+        # ── PnL fallback: when MT5 deal history fails, use the engine's
+        #    own PnL calculated at dispatch time (stored by _dispatch_managed_close)
+        #    or the most recent mid-price as a close-price estimate.
+        if pnl is None and entry_price is not None and close_volume:
+            _engine_pnl = open_entry.get("_engine_close_pnl")
+            if _engine_pnl is not None:
+                pnl = float(_engine_pnl)
+            elif state is not None and getattr(state, "_recent_mid_prices", None):
+                try:
+                    _fallback_close = state._recent_mid_prices[-1]
+                    if _fallback_close > 0:
+                        if side == "long":
+                            pnl = round((_fallback_close - entry_price) * close_volume, 2)
+                        elif side == "short":
+                            pnl = round((entry_price - _fallback_close) * close_volume, 2)
+                        close_price = close_price or _fallback_close
+                except (IndexError, ValueError):
+                    pass
 
         label = None
         if close_reason in (4,):
@@ -2257,24 +2506,45 @@ def _warn_contract_mismatch(
     strategy_name: str,
     required_contracts: dict[str, str],
 ) -> None:
-    """Log warning if a brain's training contract doesn't match its strategy line.
+    """Hard-mute a brain whose training contract doesn't match its strategy line.
 
     A regression-contract brain placed in a barrier strategy would silently
-    predict the wrong target — this catches the mismatch at build time.
+    predict the wrong target.  Previously this was a soft warning; now the
+    brain's ``vote_weight`` is forced to 0.0 — it cannot influence any
+    parliament decision until its contract is reconciled.
+
+    The brain still runs inference (so we can monitor its output quality)
+    but its vote is discarded before consensus aggregation.
     """
-    training_contract = brain_info.get("training_contract", "")
+    training_contract = str(brain_info.get("training_contract", ""))
     required = required_contracts.get(strategy_name, "")
-    if required and required not in str(training_contract):
+    # Accept if training_contract contains `required` prefix (legacy check)
+    # OR if training_contract starts with the strategy_name (e.g.
+    # barrier_12bar_regression_huber starts with barrier_12bar).
+    contract_ok = (required and required in training_contract) or training_contract.startswith(
+        strategy_name
+    )
+    if required and not contract_ok:
+        # ── Hard mute: zero the vote weight ──
+        _prev_weight = brain_info.get("vote_weight", 1.0)
+        brain_info["vote_weight"] = 0.0
+        # Suppress duplicate log events: only print on first mute per brain
+        if brain_info.get("_contract_muted"):
+            return
+        brain_info["_contract_muted"] = True
         print(
             json.dumps(
                 {
-                    "event": "brain_contract_mismatch_warning",
+                    "event": "brain_hard_muted_contract",
                     "brain_id": brain_info.get("brain_id", "unknown"),
                     "brain_type": brain_info.get("brain_type", "unknown"),
                     "brain_contract": training_contract,
                     "strategy_name": strategy_name,
                     "strategy_requires": required,
-                    "action": "review_and_retrain_if_misaligned",
+                    "previous_vote_weight": _prev_weight,
+                    "new_vote_weight": 0.0,
+                    "reason": "training_contract_mismatch",
+                    "action_required": "retrain_brain_with_correct_contract_or_reassign_group",
                 }
             ),
             flush=True,
@@ -2365,9 +2635,41 @@ def _build_strategy_lines(
         """Read a value from live.yaml strategy_lines.<name>.<key>, falling back to default."""
         return config.strategy_configs.get(name, {}).get(key, default)
 
+    def _vol_cfg(name: str) -> float:
+        """Read base_volume from live.yaml, respecting explicit 0.0 (shadow mode).
+
+        Python's ``or`` chain would treat 0.0 as falsy and silently fall through
+        to config.volume, making it impossible to set base_volume=0 for
+        capital-isolated shadow strategies.
+        """
+        sc = config.strategy_configs.get(name, {})
+        if "base_volume" in sc:
+            return float(sc["base_volume"])
+        return float(config.volume or 0.01)
+
     def _exit_cfg(name: str, key: str, default: Any) -> Any:
         """Read a value from live.yaml strategy_lines.<name>.exit.<key>."""
         return config.strategy_configs.get(name, {}).get("exit", {}).get(key, default)
+
+    # ── Enforce strategy-level enabled flag ──
+    # Clears brain lists for disabled strategies so the existing if-blocks
+    # naturally skip them.  Defaults to enabled=True when the strategy
+    # has no config entry at all (backward compat).
+    for _gname in list(_known_groups.keys()):
+        if not _cfg(_gname, "enabled", True):
+            _known_groups[_gname] = []
+            print(
+                json.dumps(
+                    {
+                        "event": "strategy_disabled_by_config",
+                        "time": _utc_iso(),
+                        "strategy": _gname,
+                        "reason": "enabled: false in live.yaml",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
 
     strategies: dict[str, Any] = {}
 
@@ -2377,7 +2679,7 @@ def _build_strategy_lines(
                 name="barrier_12bar",
                 magic=90001,
                 brain_types=BARRIER_GROUP["brain_types"],
-                base_volume=_cfg("barrier_12bar", "base_volume", None) or config.volume or 0.01,
+                base_volume=_vol_cfg("barrier_12bar"),
                 max_volume=_cfg("barrier_12bar", "max_volume", 0.05),
                 base_sl_atr_mult=_cfg("barrier_12bar", "sl", {}).get(
                     "base_atr_mult", config.sl_atr_mult
@@ -2386,6 +2688,8 @@ def _build_strategy_lines(
                     "base_atr_mult", config.tp_atr_mult
                 ),
                 hard_sl_ratio=_cfg("barrier_12bar", "sl", {}).get("hard_sl_ratio", 1.5),
+                min_sl_distance=_cfg("barrier_12bar", "sl", {}).get("min_sl_distance", 0.0),
+                min_rr_ratio=_cfg("barrier_12bar", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg(
                     "barrier_12bar", "confidence_threshold", config.confidence_threshold
                 ),
@@ -2397,6 +2701,8 @@ def _build_strategy_lines(
                 exit_zscore_enabled=_exit_cfg("barrier_12bar", "zscore_exit_enabled", False),
                 exit_min_r=_exit_cfg("barrier_12bar", "min_r_for_hold", 0.3),
                 min_valid_brains=_cfg("barrier_12bar", "min_valid_brains", 3),
+                timeframe=_cfg("barrier_12bar", "timeframe", "M5"),
+                exit_hesitation_cycles=_exit_cfg("barrier_12bar", "hesitation_cycles", 0),
             ),
             barrier_brains,
             budget=StrategyBudget(
@@ -2416,11 +2722,13 @@ def _build_strategy_lines(
                 name="micro_3bar",
                 magic=90002,
                 brain_types=MICRO_GROUP["brain_types"],
-                base_volume=_cfg("micro_3bar", "base_volume", None) or config.volume or 0.01,
+                base_volume=_vol_cfg("micro_3bar"),
                 max_volume=_cfg("micro_3bar", "max_volume", 0.03),
                 base_sl_atr_mult=_cfg("micro_3bar", "sl", {}).get("base_atr_mult", 2.0),
                 base_tp_atr_mult=_cfg("micro_3bar", "tp", {}).get("base_atr_mult", 2.5),
                 hard_sl_ratio=_cfg("micro_3bar", "sl", {}).get("hard_sl_ratio", 1.5),
+                min_sl_distance=_cfg("micro_3bar", "sl", {}).get("min_sl_distance", 0.0),
+                min_rr_ratio=_cfg("micro_3bar", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg(
                     "micro_3bar", "confidence_threshold", config.confidence_threshold
                 ),
@@ -2432,6 +2740,8 @@ def _build_strategy_lines(
                 exit_zscore_enabled=_exit_cfg("micro_3bar", "zscore_exit_enabled", False),
                 exit_min_r=_exit_cfg("micro_3bar", "min_r_for_hold", 0.3),
                 min_valid_brains=_cfg("micro_3bar", "min_valid_brains", 2),
+                timeframe=_cfg("micro_3bar", "timeframe", "M5"),
+                exit_hesitation_cycles=_exit_cfg("micro_3bar", "hesitation_cycles", 0),
             ),
             micro_brains,
             budget=StrategyBudget(
@@ -2451,11 +2761,13 @@ def _build_strategy_lines(
                 name="micro_m15",
                 magic=90101,
                 brain_types=MICRO_M15_GROUP["brain_types"],
-                base_volume=_cfg("micro_m15", "base_volume", None) or config.volume or 0.01,
+                base_volume=_vol_cfg("micro_m15"),
                 max_volume=_cfg("micro_m15", "max_volume", 0.03),
                 base_sl_atr_mult=_cfg("micro_m15", "sl", {}).get("base_atr_mult", 1.5),
                 base_tp_atr_mult=_cfg("micro_m15", "tp", {}).get("base_atr_mult", 2.5),
                 hard_sl_ratio=_cfg("micro_m15", "sl", {}).get("hard_sl_ratio", 1.5),
+                min_sl_distance=_cfg("micro_m15", "sl", {}).get("min_sl_distance", 0.0),
+                min_rr_ratio=_cfg("micro_m15", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg(
                     "micro_m15", "confidence_threshold", config.confidence_threshold
                 ),
@@ -2467,6 +2779,8 @@ def _build_strategy_lines(
                 exit_zscore_enabled=_exit_cfg("micro_m15", "zscore_exit_enabled", False),
                 exit_min_r=_exit_cfg("micro_m15", "min_r_for_hold", 0.3),
                 min_valid_brains=_cfg("micro_m15", "min_valid_brains", 2),
+                timeframe=_cfg("micro_m15", "timeframe", "M15"),
+                exit_hesitation_cycles=_exit_cfg("micro_m15", "hesitation_cycles", 0),
             ),
             micro_m15_brains,
             budget=StrategyBudget(
@@ -2486,11 +2800,13 @@ def _build_strategy_lines(
                 name="micro_h1",
                 magic=90201,
                 brain_types=MICRO_H1_GROUP["brain_types"],
-                base_volume=_cfg("micro_h1", "base_volume", None) or config.volume or 0.01,
+                base_volume=_vol_cfg("micro_h1"),
                 max_volume=_cfg("micro_h1", "max_volume", 0.02),
                 base_sl_atr_mult=_cfg("micro_h1", "sl", {}).get("base_atr_mult", 1.8),
                 base_tp_atr_mult=_cfg("micro_h1", "tp", {}).get("base_atr_mult", 2.8),
                 hard_sl_ratio=_cfg("micro_h1", "sl", {}).get("hard_sl_ratio", 1.5),
+                min_sl_distance=_cfg("micro_h1", "sl", {}).get("min_sl_distance", 0.0),
+                min_rr_ratio=_cfg("micro_h1", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg(
                     "micro_h1", "confidence_threshold", config.confidence_threshold
                 ),
@@ -2502,6 +2818,8 @@ def _build_strategy_lines(
                 exit_zscore_enabled=_exit_cfg("micro_h1", "zscore_exit_enabled", False),
                 exit_min_r=_exit_cfg("micro_h1", "min_r_for_hold", 0.3),
                 min_valid_brains=_cfg("micro_h1", "min_valid_brains", 2),
+                timeframe=_cfg("micro_h1", "timeframe", "H1"),
+                exit_hesitation_cycles=_exit_cfg("micro_h1", "hesitation_cycles", 0),
             ),
             micro_h1_brains,
             budget=StrategyBudget(
@@ -2523,11 +2841,13 @@ def _build_strategy_lines(
                 name="statarb_dynamic",
                 magic=90003,
                 brain_types=ARB_GROUP["brain_types"],
-                base_volume=_cfg("statarb_dynamic", "base_volume", None) or config.volume or 0.01,
+                base_volume=_vol_cfg("statarb_dynamic"),
                 max_volume=_cfg("statarb_dynamic", "max_volume", 0.03),
                 base_sl_atr_mult=_cfg("statarb_dynamic", "sl", {}).get("base_atr_mult", 1.5),
                 base_tp_atr_mult=_cfg("statarb_dynamic", "tp", {}).get("base_atr_mult", 3.0),
                 hard_sl_ratio=_cfg("statarb_dynamic", "sl", {}).get("hard_sl_ratio", 1.5),
+                min_sl_distance=_cfg("statarb_dynamic", "sl", {}).get("min_sl_distance", 0.0),
+                min_rr_ratio=_cfg("statarb_dynamic", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg(
                     "statarb_dynamic", "confidence_threshold", config.confidence_threshold
                 ),
@@ -2539,6 +2859,8 @@ def _build_strategy_lines(
                 exit_zscore_enabled=_exit_cfg("statarb_dynamic", "zscore_exit_enabled", True),
                 exit_min_r=_exit_cfg("statarb_dynamic", "min_r_for_hold", 0.3),
                 min_valid_brains=_cfg("statarb_dynamic", "min_valid_brains", 1),
+                timeframe=_cfg("statarb_dynamic", "timeframe", "M5"),
+                exit_hesitation_cycles=_exit_cfg("statarb_dynamic", "hesitation_cycles", 0),
             ),
             statarb_brains,
             budget=StrategyBudget(
@@ -2558,11 +2880,13 @@ def _build_strategy_lines(
                 name="statarb_m15",
                 magic=90103,
                 brain_types=STATARB_M15_GROUP["brain_types"],
-                base_volume=_cfg("statarb_m15", "base_volume", None) or config.volume or 0.01,
+                base_volume=_vol_cfg("statarb_m15"),
                 max_volume=_cfg("statarb_m15", "max_volume", 0.02),
                 base_sl_atr_mult=_cfg("statarb_m15", "sl", {}).get("base_atr_mult", 2.0),
                 base_tp_atr_mult=_cfg("statarb_m15", "tp", {}).get("base_atr_mult", 4.0),
                 hard_sl_ratio=_cfg("statarb_m15", "sl", {}).get("hard_sl_ratio", 1.5),
+                min_sl_distance=_cfg("statarb_m15", "sl", {}).get("min_sl_distance", 0.0),
+                min_rr_ratio=_cfg("statarb_m15", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg(
                     "statarb_m15", "confidence_threshold", config.confidence_threshold
                 ),
@@ -2574,6 +2898,8 @@ def _build_strategy_lines(
                 exit_zscore_enabled=_exit_cfg("statarb_m15", "zscore_exit_enabled", True),
                 exit_min_r=_exit_cfg("statarb_m15", "min_r_for_hold", 0.3),
                 min_valid_brains=_cfg("statarb_m15", "min_valid_brains", 1),
+                timeframe=_cfg("statarb_m15", "timeframe", "M15"),
+                exit_hesitation_cycles=_exit_cfg("statarb_m15", "hesitation_cycles", 0),
             ),
             statarb_m15_brains,
             budget=StrategyBudget(
@@ -2602,11 +2928,13 @@ def _build_strategy_lines(
                 name="daily_swing",
                 magic=90301,
                 brain_types=DAILY_SWING_GROUP["brain_types"],
-                base_volume=_cfg("daily_swing", "base_volume", None) or config.volume or 0.01,
+                base_volume=_vol_cfg("daily_swing"),
                 max_volume=_cfg("daily_swing", "max_volume", 0.03),
                 base_sl_atr_mult=_cfg("daily_swing", "sl", {}).get("base_atr_mult", 2.0),
                 base_tp_atr_mult=_cfg("daily_swing", "tp", {}).get("base_atr_mult", 3.5),
                 hard_sl_ratio=_cfg("daily_swing", "sl", {}).get("hard_sl_ratio", 1.5),
+                min_sl_distance=_cfg("daily_swing", "sl", {}).get("min_sl_distance", 0.0),
+                min_rr_ratio=_cfg("daily_swing", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg("daily_swing", "confidence_threshold", 0.45),
                 long_bias_discount=_cfg("daily_swing", "direction_balance", {}).get(
                     "long_bias_discount", 0.0
@@ -2616,6 +2944,8 @@ def _build_strategy_lines(
                 exit_zscore_enabled=_exit_cfg("daily_swing", "zscore_exit_enabled", False),
                 exit_min_r=_exit_cfg("daily_swing", "min_r_for_hold", 0.3),
                 min_valid_brains=_cfg("daily_swing", "min_valid_brains", 2),
+                timeframe=_cfg("daily_swing", "timeframe", "D1"),
+                exit_hesitation_cycles=_exit_cfg("daily_swing", "hesitation_cycles", 0),
             ),
             daily_swing_brains,
             budget=StrategyBudget(
@@ -2635,11 +2965,13 @@ def _build_strategy_lines(
                 name="m15_swing",
                 magic=90310,
                 brain_types=M15_SWING_GROUP["brain_types"],
-                base_volume=_cfg("m15_swing", "base_volume", None) or config.volume or 0.01,
+                base_volume=_vol_cfg("m15_swing"),
                 max_volume=_cfg("m15_swing", "max_volume", 0.03),
                 base_sl_atr_mult=_cfg("m15_swing", "sl", {}).get("base_atr_mult", 1.5),
                 base_tp_atr_mult=_cfg("m15_swing", "tp", {}).get("base_atr_mult", 3.0),
                 hard_sl_ratio=_cfg("m15_swing", "sl", {}).get("hard_sl_ratio", 1.5),
+                min_sl_distance=_cfg("m15_swing", "sl", {}).get("min_sl_distance", 0.0),
+                min_rr_ratio=_cfg("m15_swing", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg("m15_swing", "confidence_threshold", 0.45),
                 long_bias_discount=_cfg("m15_swing", "direction_balance", {}).get(
                     "long_bias_discount", 0.0
@@ -2649,6 +2981,8 @@ def _build_strategy_lines(
                 exit_zscore_enabled=_exit_cfg("m15_swing", "zscore_exit_enabled", False),
                 exit_min_r=_exit_cfg("m15_swing", "min_r_for_hold", 0.3),
                 min_valid_brains=_cfg("m15_swing", "min_valid_brains", 1),
+                timeframe=_cfg("m15_swing", "timeframe", "M15"),
+                exit_hesitation_cycles=_exit_cfg("m15_swing", "hesitation_cycles", 0),
             ),
             m15_swing_brains,
             budget=StrategyBudget(
@@ -2668,11 +3002,13 @@ def _build_strategy_lines(
                 name="m30_swing",
                 magic=90320,
                 brain_types=M30_SWING_GROUP["brain_types"],
-                base_volume=_cfg("m30_swing", "base_volume", None) or config.volume or 0.01,
+                base_volume=_vol_cfg("m30_swing"),
                 max_volume=_cfg("m30_swing", "max_volume", 0.03),
                 base_sl_atr_mult=_cfg("m30_swing", "sl", {}).get("base_atr_mult", 1.5),
                 base_tp_atr_mult=_cfg("m30_swing", "tp", {}).get("base_atr_mult", 3.0),
                 hard_sl_ratio=_cfg("m30_swing", "sl", {}).get("hard_sl_ratio", 1.5),
+                min_sl_distance=_cfg("m30_swing", "sl", {}).get("min_sl_distance", 0.0),
+                min_rr_ratio=_cfg("m30_swing", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg("m30_swing", "confidence_threshold", 0.45),
                 long_bias_discount=_cfg("m30_swing", "direction_balance", {}).get(
                     "long_bias_discount", 0.0
@@ -2682,6 +3018,8 @@ def _build_strategy_lines(
                 exit_zscore_enabled=_exit_cfg("m30_swing", "zscore_exit_enabled", False),
                 exit_min_r=_exit_cfg("m30_swing", "min_r_for_hold", 0.3),
                 min_valid_brains=_cfg("m30_swing", "min_valid_brains", 1),
+                timeframe=_cfg("m30_swing", "timeframe", "M30"),
+                exit_hesitation_cycles=_exit_cfg("m30_swing", "hesitation_cycles", 0),
             ),
             m30_swing_brains,
             budget=StrategyBudget(
@@ -2701,11 +3039,13 @@ def _build_strategy_lines(
                 name="h1_swing",
                 magic=90330,
                 brain_types=H1_SWING_GROUP["brain_types"],
-                base_volume=_cfg("h1_swing", "base_volume", None) or config.volume or 0.01,
+                base_volume=_vol_cfg("h1_swing"),
                 max_volume=_cfg("h1_swing", "max_volume", 0.02),
                 base_sl_atr_mult=_cfg("h1_swing", "sl", {}).get("base_atr_mult", 2.0),
                 base_tp_atr_mult=_cfg("h1_swing", "tp", {}).get("base_atr_mult", 3.5),
                 hard_sl_ratio=_cfg("h1_swing", "sl", {}).get("hard_sl_ratio", 1.5),
+                min_sl_distance=_cfg("h1_swing", "sl", {}).get("min_sl_distance", 0.0),
+                min_rr_ratio=_cfg("h1_swing", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg("h1_swing", "confidence_threshold", 0.45),
                 long_bias_discount=_cfg("h1_swing", "direction_balance", {}).get(
                     "long_bias_discount", 0.0
@@ -2715,6 +3055,8 @@ def _build_strategy_lines(
                 exit_zscore_enabled=_exit_cfg("h1_swing", "zscore_exit_enabled", False),
                 exit_min_r=_exit_cfg("h1_swing", "min_r_for_hold", 0.3),
                 min_valid_brains=_cfg("h1_swing", "min_valid_brains", 1),
+                timeframe=_cfg("h1_swing", "timeframe", "H1"),
+                exit_hesitation_cycles=_exit_cfg("h1_swing", "hesitation_cycles", 0),
             ),
             h1_swing_brains,
             budget=StrategyBudget(
@@ -2734,11 +3076,13 @@ def _build_strategy_lines(
                 name="h4_swing",
                 magic=90340,
                 brain_types=H4_SWING_GROUP["brain_types"],
-                base_volume=_cfg("h4_swing", "base_volume", None) or config.volume or 0.01,
+                base_volume=_vol_cfg("h4_swing"),
                 max_volume=_cfg("h4_swing", "max_volume", 0.02),
                 base_sl_atr_mult=_cfg("h4_swing", "sl", {}).get("base_atr_mult", 2.0),
                 base_tp_atr_mult=_cfg("h4_swing", "tp", {}).get("base_atr_mult", 4.0),
                 hard_sl_ratio=_cfg("h4_swing", "sl", {}).get("hard_sl_ratio", 1.5),
+                min_sl_distance=_cfg("h4_swing", "sl", {}).get("min_sl_distance", 0.0),
+                min_rr_ratio=_cfg("h4_swing", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg("h4_swing", "confidence_threshold", 0.45),
                 long_bias_discount=_cfg("h4_swing", "direction_balance", {}).get(
                     "long_bias_discount", 0.0
@@ -2748,6 +3092,8 @@ def _build_strategy_lines(
                 exit_zscore_enabled=_exit_cfg("h4_swing", "zscore_exit_enabled", False),
                 exit_min_r=_exit_cfg("h4_swing", "min_r_for_hold", 0.3),
                 min_valid_brains=_cfg("h4_swing", "min_valid_brains", 1),
+                timeframe=_cfg("h4_swing", "timeframe", "H4"),
+                exit_hesitation_cycles=_exit_cfg("h4_swing", "hesitation_cycles", 0),
             ),
             h4_swing_brains,
             budget=StrategyBudget(
@@ -2794,6 +3140,10 @@ def _evaluate_strategy_lines(
     account_equity: float | None = None,
     cycle_count: int = 0,
     meta_signal_filter: Any = None,
+    meta_filter_gate: Any = None,
+    micro_feature_dict: dict[str, float] | None = None,
+    cooldown_registry: Any = None,
+    family_entry_tracker: Any = None,
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue.
 
@@ -2819,6 +3169,26 @@ def _evaluate_strategy_lines(
             )
             continue
 
+        # ── Cut 1: Absolute Refractory Period (cooldown check) ──
+        if cooldown_registry is not None:
+            _cd_allowed, _cd_reason = cooldown_registry.check_cooldown(
+                sname,
+                "long",  # direction unknown until evaluate runs; check both
+            )
+            if not _cd_allowed:
+                # Cooldown may be direction-specific; still run evaluate but
+                # reject the decision afterwards if direction matches
+                pass
+
+        # ── Cut 2: Family entry spacing check (pre-evaluate) ──
+        if family_entry_tracker is not None:
+            from core.execution.pre_trade_guards import strategy_to_family
+
+            _fam = strategy_to_family(sname)
+            if _fam != sname:  # only check family members
+                # direction unknown pre-evaluate; check post-evaluate below
+                pass
+
         decision = strategy.evaluate(
             feature_vector=feature_vector,
             micro_feature_vector=micro_feature_vector,
@@ -2839,7 +3209,56 @@ def _evaluate_strategy_lines(
             micro_sequences=micro_sequences,
             daily_feature_vector=daily_feature_vector,
             meta_filter=meta_signal_filter,
+            meta_filter_gate=meta_filter_gate,
+            micro_feature_dict=micro_feature_dict,
         )
+
+        # ── Cut 1: Post-evaluate cooldown check (direction known) ──
+        if decision.should_trade and cooldown_registry is not None:
+            _cd_allowed, _cd_reason = cooldown_registry.check_cooldown(sname, decision.direction)
+            if not _cd_allowed:
+                decision.should_trade = False
+                decision.reason = _cd_reason
+                print(
+                    json.dumps(
+                        {
+                            "event": "cooldown_blocked",
+                            "time": _utc_iso(),
+                            "strategy": sname,
+                            "direction": decision.direction,
+                            "reason": _cd_reason,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+
+        # ── Cut 2: Post-evaluate family spacing check (direction known) ──
+        if decision.should_trade and family_entry_tracker is not None:
+            from core.execution.pre_trade_guards import strategy_to_family
+
+            _fam = strategy_to_family(sname)
+            if _fam != sname:  # family member
+                _fs_allowed, _fs_reason = family_entry_tracker.check_spacing(
+                    _fam, decision.direction, sname
+                )
+                if not _fs_allowed:
+                    decision.should_trade = False
+                    decision.reason = _fs_reason
+                    print(
+                        json.dumps(
+                            {
+                                "event": "family_spacing_blocked",
+                                "time": _utc_iso(),
+                                "strategy": sname,
+                                "family": _fam,
+                                "direction": decision.direction,
+                                "reason": _fs_reason,
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
 
         # Apply session + health volume multipliers
         if decision.should_trade:
@@ -3572,8 +3991,9 @@ def execute_live_cycle(
                 pass
 
         # ── Global P&L settlement anchor (护栏二: 唯一结算点) ──
-        # All safety guards have passed.  Settle pending counterfactual signals
-        # exactly once per active cycle, before strategy evaluation begins.
+        # All safety guards have passed.
+        # Step A: Update MFE/MAE for all pending signals + decrement TTL (Track 2).
+        # Step B: Settle only signals whose horizon-matched TTL has expired (Track 1).
         if (
             pnl_ledger is not None
             and mid_price is not None
@@ -3582,6 +4002,7 @@ def execute_live_cycle(
         ):
             try:
                 _live_spread = float(_ask - _bid) if (_bid and _ask and _ask > _bid) else 0.0
+                pnl_ledger.update_pending(mid_price)
                 pnl_ledger.settle_all(mid_price, spread=_live_spread, slippage=0.10)
             except Exception:
                 pass
@@ -3624,6 +4045,7 @@ def execute_live_cycle(
     # when every strategy is at max positions.  A stale store silently degrades
     # signal quality on the next cycle that DOES trade.
     micro_sequences: dict[str, np.ndarray] = {}
+    micro_feature_dict: dict[str, float] | None = None
     if config.no_mt5:
         feature_vector: Any = np.zeros(40, dtype=np.float64)
         micro_feature_vector: Any = np.zeros(9, dtype=np.float64)
@@ -3638,9 +4060,47 @@ def execute_live_cycle(
             except Exception:
                 pass
             micro_features = micro_feature_computer.compute_all()
+            micro_feature_dict = micro_features
             micro_feature_vector = micro_feature_adapter.build_model_input(micro_features).ravel()
         else:
             micro_feature_vector = np.zeros(9, dtype=np.float64)
+
+    # ── Meta-filter gate (lazy init on first live cycle) ──
+    if not config.no_mt5 and getattr(state, "_meta_filter_gate", None) is None:
+        try:
+            from core.execution.meta_filter_gate import MetaFilterGate
+
+            _mg = MetaFilterGate(
+                model_dir="data/models/meta_filter_v3",
+                threshold=0.60,  # High Precision: tight downstream gate
+            )
+            _mg.load()
+            if _mg.is_loaded:
+                state._meta_filter_gate = _mg
+                print(
+                    json.dumps(
+                        {
+                            "event": "meta_filter_gate_init",
+                            "time": _utc_iso(),
+                            "threshold": 0.60,
+                            "model": "meta_filter_v3",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+        except Exception as _mg_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "meta_filter_gate_init_error",
+                        "time": _utc_iso(),
+                        "error": str(_mg_exc),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
 
     # ── Daily D1 features for swing brains ──
     daily_feature_vector: Any = None
@@ -3984,6 +4444,25 @@ def execute_live_cycle(
                                                             },
                                                         )
 
+                                                    _dd_pnl = None
+                                                    if (
+                                                        mid_price is not None
+                                                        and hasattr(_pos, "entry_price")
+                                                        and _pos.entry_price
+                                                    ):
+                                                        _dd_pnl = (
+                                                            round(
+                                                                (mid_price - _pos.entry_price)
+                                                                * _pos.volume,
+                                                                2,
+                                                            )
+                                                            if _pos.side == "long"
+                                                            else round(
+                                                                (_pos.entry_price - mid_price)
+                                                                * _pos.volume,
+                                                                2,
+                                                            )
+                                                        )
                                                     _dd_wd = exit_watchdog.execute_exit(
                                                         position_ticket=_pos.ticket,
                                                         volume=_pos.volume,
@@ -3991,6 +4470,7 @@ def execute_live_cycle(
                                                         reason="force_close_drawdown_kill",
                                                         dispatch_fn=_dd_dispatch_fn,
                                                         brain_ids=_dd_brain_ids,
+                                                        pnl=_dd_pnl,
                                                     )
                                                     _dd_dispatched = _dd_wd.success
                                                 except Exception:
@@ -4059,6 +4539,16 @@ def execute_live_cycle(
                     return state, True  # skip cycle on bad features
             except Exception:
                 pass
+
+        # ── Cut 1 + 2: Initialize cooldown registry & family entry tracker ──
+        if state._cooldown_registry is None:
+            from core.execution.pre_trade_guards import CooldownRegistry
+
+            state._cooldown_registry = CooldownRegistry()
+        if state._family_entry_tracker is None:
+            from core.execution.pre_trade_guards import FamilyEntryTracker
+
+            state._family_entry_tracker = FamilyEntryTracker()
 
         # Portfolio risk controller (persist for VaR/correlation tracking) + execution queue
         if state.portfolio_risk_controller is None:
@@ -4187,6 +4677,12 @@ def execute_live_cycle(
             account_equity=_account_equity,
             cycle_count=state.cycle_count,
             meta_signal_filter=meta_signal_filter,
+            meta_filter_gate=state._meta_filter_gate
+            if hasattr(state, "_meta_filter_gate")
+            else None,
+            micro_feature_dict=micro_feature_dict,
+            cooldown_registry=state._cooldown_registry,
+            family_entry_tracker=state._family_entry_tracker,
         )
 
         # Log strategy evaluation results
@@ -4318,6 +4814,18 @@ def execute_live_cycle(
                     _reason = payload.get("comment", "net_out")
                     _magic = payload.get("magic", 0)
                     _brain_ids = payload.get("brain_ids")
+                    # Calculate estimated PnL for journal recording
+                    _net_pnl = payload.get("pnl")
+                    if _net_pnl is None and mid_price is not None and _ticket:
+                        _net_entry = state.known_open_tickets.get(_ticket, {})
+                        _net_ep = _net_entry.get("entry_price")
+                        if not _net_ep:
+                            _net_ep = _net_entry.get("detail", {}).get("request", {}).get("price")
+                        if _net_ep and _vol:
+                            if _side == "long":
+                                _net_pnl = round((mid_price - float(_net_ep)) * _vol, 2)
+                            elif _side == "short":
+                                _net_pnl = round((float(_net_ep) - mid_price) * _vol, 2)
                     _wd = exit_watchdog.execute_exit(
                         position_ticket=_ticket,
                         volume=_vol,
@@ -4336,6 +4844,7 @@ def execute_live_cycle(
                             extensions={"mt5_terminal_path": config.mt5_terminal_path},
                         ),
                         brain_ids=_brain_ids,
+                        pnl=_net_pnl,
                     )
                     return {"dispatched": _wd.success, "intent_id": ""}
 
@@ -4368,6 +4877,14 @@ def execute_live_cycle(
                         _new_entry["position_ticket"] = int(_new_tkt)
                         _new_entry["volume"] = _remaining
                         state.known_open_tickets[int(_new_tkt)] = _new_entry
+                        # Sync position_manager: update volume on old ticket position
+                        # if still registered, so ghost-volume audit sees correct
+                        # expected_remaining_volume during the reconciliation window.
+                        if state.position_manager is not None:
+                            _pm_pos = state.position_manager.get_position(ticket=int(_old_tkt))
+                            if _pm_pos is not None:
+                                _pm_pos.volume = _remaining
+                                _pm_pos.expected_remaining_volume = _remaining
                         print(
                             json.dumps(
                                 {
@@ -4406,6 +4923,33 @@ def execute_live_cycle(
                     flush=True,
                 )
 
+            # ── Cut 2: Record family entries for dispatched positions ──
+            if state._family_entry_tracker is not None:
+                from core.execution.pre_trade_guards import strategy_to_family
+
+                for dr in dispatch_results:
+                    if dr.dispatched and dr.direction in ("long", "short"):
+                        _fam = strategy_to_family(dr.strategy_name)
+                        if _fam != dr.strategy_name:  # family member
+                            state._family_entry_tracker.record_entry(
+                                family=_fam,
+                                direction=dr.direction,
+                                timestamp=time.time(),
+                            )
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "family_entry_recorded",
+                                        "time": _utc_iso(),
+                                        "strategy": dr.strategy_name,
+                                        "family": _fam,
+                                        "direction": dr.direction,
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+
             # Log brain outcomes for dispatched strategies
             for dr in dispatch_results:
                 if dr.dispatched and dr.strategy_name in strategies:
@@ -4438,6 +4982,7 @@ def execute_live_cycle(
                     intent_id = (dr.journal_entry or {}).get("intent_id", "")
                     ticket: int | None = None
                     entry_from_journal: float | None = None
+                    brain_votes_from_journal: list[dict[str, Any]] | None = None
 
                     # Retry up to 10 times (5s total) — bridge writes journal async
                     if intent_id and journal_path:
@@ -4462,6 +5007,9 @@ def execute_live_cycle(
                                                 and ep > 0
                                             ):
                                                 entry_from_journal = float(ep)
+                                            bv = rec.get("brain_votes")
+                                            if isinstance(bv, list):
+                                                brain_votes_from_journal = bv
                                             if ticket is not None:
                                                 break  # found valid entry, stop scanning lines
                                     except Exception:
@@ -4508,9 +5056,10 @@ def execute_live_cycle(
                         model_horizons[bid] = horizon
 
                     try:
-                        # Determine partial TP parameters from strategy config
+                        # Determine partial TP + exit parameters from strategy config
                         _s_cfg = config.strategy_configs.get(dr.strategy_name, {})
                         _tp_cfg = _s_cfg.get("tp", {})
+                        _exit_cfg = _s_cfg.get("exit", {})
                         _ptp_r = (
                             _tp_cfg.get("partial_tp_r", 0.0)
                             if _tp_cfg.get("partial_tp_enabled")
@@ -4533,6 +5082,11 @@ def execute_live_cycle(
                             current_high=entry_price,
                             partial_tp_r=_ptp_r,
                             partial_tp_ratio=_ptp_ratio,
+                            strategy_name=dr.strategy_name,
+                            trail_atr_mult=_exit_cfg.get("trail_atr_mult"),
+                            trail_atr_mult_low=_exit_cfg.get("trail_atr_mult_low"),
+                            trail_atr_mult_high=_exit_cfg.get("trail_atr_mult_high"),
+                            breakeven_threshold_atr=_exit_cfg.get("breakeven_threshold_atr"),
                         )
                         # Sync known_open_tickets so reconciliation can detect closes
                         state.known_open_tickets[ticket] = {
@@ -4545,6 +5099,7 @@ def execute_live_cycle(
                             "magic": decision.magic,
                             "message_id": intent_id,
                             "brain_ids": decision.brain_ids,
+                            "brain_votes": brain_votes_from_journal or [],
                             "entry_consensus": {
                                 "consensus_score": decision.confidence,
                                 "direction": decision.direction,
@@ -4624,6 +5179,8 @@ def execute_live_cycle(
                         pnl_store=pnl_ledger,
                         micro_sequences=micro_sequences,
                         meta_filter=meta_signal_filter,
+                        meta_filter_gate=getattr(state, "_meta_filter_gate", None),
+                        micro_feature_dict=micro_feature_dict,
                     )
                     if decision.should_trade and mid_price is not None:
                         state.shadow_verification_pending = {
@@ -4778,6 +5335,7 @@ def execute_live_cycle(
         for b_info in brains:
             schema_id = b_info.get("feature_schema_id", "")
             btype = b_info.get("brain_type", "")
+            brain_id = b_info.get("brain_id", "")
             if btype == "ou_params_v6":
                 fv = (
                     np.array([mid_price], dtype=np.float32)
@@ -4857,14 +5415,18 @@ def execute_live_cycle(
     if pnl_ledger is not None and mid_price is not None and mid_price > 0:
         _live_spread = float(_ask - _bid) if (_bid and _ask and _ask > _bid) else 0.0
         if config.multi_brain:
+            _registry = BrainRegistry.instance()
             for p in raw_proposals:
                 try:
+                    _brain_id_str: str = str(getattr(p, "brain_id", "unknown"))
+                    _horizon = _registry.get_training_horizon(_brain_id_str)
                     pnl_ledger.record_signal(
-                        brain_id=getattr(p, "brain_id", "unknown"),
+                        brain_id=_brain_id_str,
                         symbol=config.symbol,
                         direction=p.prediction.get("direction_bias", "neutral"),
                         entry_price=mid_price,
                         confidence=p.prediction.get("confidence", 0.5),
+                        expected_horizon=_horizon,
                         entry_spread=_live_spread,
                         entry_slippage=0.10,
                     )
@@ -4872,14 +5434,17 @@ def execute_live_cycle(
                     pass
         elif proposal is not None:
             try:
+                _single_brain_id2: str = str(
+                    getattr(proposal, "brain_id", config.brain_entry.get("brain_id", "unknown"))
+                )
+                _horizon = BrainRegistry.instance().get_training_horizon(_single_brain_id2)
                 pnl_ledger.record_signal(
-                    brain_id=getattr(
-                        proposal, "brain_id", config.brain_entry.get("brain_id", "unknown")
-                    ),
+                    brain_id=_single_brain_id2,
                     symbol=config.symbol,
                     direction=proposal.prediction.get("direction_bias", "neutral"),
                     entry_price=mid_price,
                     confidence=proposal.prediction.get("confidence", 0.5),
+                    expected_horizon=_horizon,
                     entry_spread=_live_spread,
                     entry_slippage=0.10,
                 )
@@ -5246,14 +5811,31 @@ def execute_live_cycle(
                     flush=True,
                 )
 
-        # ── Collect brain_ids for journal attribution ──
+        # ── Collect brain_ids and brain_votes for journal attribution (Track 3) ──
         dispatch_brain_ids: list[str] | None = None
+        dispatch_brain_votes: list[dict[str, Any]] | None = None
         if config.multi_brain:
             supporting = consensus_extra.get("supporting_brains", [])
             opposing = consensus_extra.get("opposing_brains", [])
             dispatch_brain_ids = list(supporting) + list(opposing)
+            # Build per-brain vote details from raw_proposals for Track 3 attribution
+            _votes: list[dict[str, Any]] = []
+            for p in raw_proposals:
+                _pred = getattr(p, "prediction", {}) or {}
+                _votes.append(
+                    {
+                        "brain_id": getattr(p, "brain_id", "unknown"),
+                        "direction_bias": _pred.get("direction_bias", "neutral"),
+                        "confidence": _pred.get("confidence", 0.0),
+                    }
+                )
+            dispatch_brain_votes = _votes
         elif config.brain_entry:
-            dispatch_brain_ids = [config.brain_entry.get("brain_id", "unknown")]
+            _single_bid: str = str(config.brain_entry.get("brain_id", "unknown"))
+            dispatch_brain_ids = [_single_bid]
+            dispatch_brain_votes = [
+                {"brain_id": _single_bid, "direction_bias": direction, "confidence": confidence}
+            ]
 
         # ── Dispatch order ──
         out = dispatch_live_open_order(
@@ -5269,6 +5851,7 @@ def execute_live_cycle(
             volume=dynamic_volume,
             magic=dispatch_magic,
             brain_ids=dispatch_brain_ids,
+            brain_votes=dispatch_brain_votes,
         )
         state.last_fire = now
 
@@ -5350,6 +5933,21 @@ def execute_live_cycle(
                                     break
                             pm_model_horizons[bid] = horizon
 
+                    # Derive strategy name for gamma-based EV trajectory
+                    _pm_strat_name = ""
+                    if not _pm_strat_name and config.multi_brain and pm_supporting:
+                        for _bi in brains:
+                            if _bi.get("brain_id") in pm_supporting:
+                                _pm_strat_name = _bi.get("contract_group", "")
+                                break
+                    if not _pm_strat_name and dispatch_magic:
+                        try:
+                            from core.contracts.strategy_magic import MAGIC_TO_STRATEGY as _M2S
+
+                            _pm_strat_name = _M2S.get(dispatch_magic, "")
+                        except Exception:
+                            pass
+
                     state.position_manager.register_position(
                         ticket=pm_ticket,
                         side=side,
@@ -5364,6 +5962,7 @@ def execute_live_cycle(
                         supporting_brain_ids=pm_supporting,
                         model_horizons=pm_model_horizons,
                         current_high=ref_for_guard,
+                        strategy_name=_pm_strat_name,
                     )
                     print(
                         json.dumps(

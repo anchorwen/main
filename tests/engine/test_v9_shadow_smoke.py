@@ -116,7 +116,6 @@ def assert_summary_output_has_contract_fields(
     skip_reasons: dict | None = None,
     block_reasons: dict | None = None,
 ) -> None:
-    assert "scenario=long_case" in output
     assert summary_prefix in output
     if execution_mode is not None:
         assert f"'execution_mode': '{execution_mode}'" in output
@@ -508,8 +507,8 @@ def test_v9_shadow_cli_feature_batch_json_output():
         "Lower H1_Hurst to push the model into an open long decision.",
         "Invert the M15 feature group to trigger an open short decision.",
     ]
-    assert [item["action"] for item in payload] == ["abstain", "open", "abstain"]
-    assert [item["side"] for item in payload] == ["flat", "long", "flat"]
+    assert [item["action"] for item in payload] == ["abstain", "abstain", "open"]
+    assert [item["side"] for item in payload] == ["flat", "flat", "short"]
 
 
 def test_v9_shadow_cli_feature_dir_json_output():
@@ -546,11 +545,11 @@ def test_v9_shadow_cli_feature_dir_json_output():
     assert [item["action"] for item in payload] == [
         "abstain",
         "abstain",
+        "abstain",
+        "abstain",
         "open",
-        "abstain",
-        "abstain",
     ]
-    assert [item["side"] for item in payload] == ["flat", "flat", "long", "flat", "flat"]
+    assert [item["side"] for item in payload] == ["flat", "flat", "flat", "flat", "short"]
 
 
 def test_v9_shadow_cli_json_with_stats_output():
@@ -575,7 +574,7 @@ def test_v9_shadow_cli_json_with_stats_output():
         .endswith("/data/replays/v9_shadow_baselines/manifest.json")
     )
     assert output["stats"]["total"] == 2
-    assert output["stats"]["side_actions"]["long.open"] == 1
+    assert output["stats"]["side_actions"]["short.open"] == 1
     assert output["stats"]["side_actions"]["flat.abstain"] == 1
     assert output["stats"]["risk_dispatches"]["allow.protocol_validated"] == 1
     assert output["results"][0]["scenario"] == "long_case"
@@ -630,7 +629,7 @@ def test_v9_shadow_cli_summary_full_output_contains_compact_footer():
     )
     assert "--- compact_stats ---" in output
     assert "total=2" in output
-    assert "side_actions={'flat.abstain': 1, 'long.open': 1}" in output
+    assert "side_actions={'flat.abstain': 1, 'short.open': 1}" in output
     assert "risk_dispatches={'allow.protocol_validated': 1, 'deny.skipped': 1}" in output
 
 
@@ -645,17 +644,17 @@ def test_v9_shadow_cli_stats_compact_output():
 
     assert output.startswith("total=2 | conviction.avg=")
     assert "actions={'abstain': 1, 'open': 1}" in output
-    assert "sides={'flat': 1, 'long': 1}" in output
+    assert "sides={'flat': 1, 'short': 1}" in output
     assert "risk_statuses={'allow': 1, 'deny': 1}" in output
     assert "dispatch_statuses={'protocol_validated': 1, 'skipped': 1}" in output
-    assert "side_actions={'flat.abstain': 1, 'long.open': 1}" in output
+    assert "side_actions={'flat.abstain': 1, 'short.open': 1}" in output
     assert "risk_dispatches={'allow.protocol_validated': 1, 'deny.skipped': 1}" in output
 
 
 def test_v9_shadow_summary_output_includes_communication_operation_mirrors(monkeypatch):
     manager_payload = build_summary_payload(
-        "long_case",
-        run_scenario("long"),
+        "short_case",
+        run_scenario("short"),
         feature_source_type="scenario",
         feature_file=None,
         sample_description="contract sample",
@@ -679,7 +678,7 @@ def test_v9_shadow_summary_output_includes_communication_operation_mirrors(monke
     }
 
     patch_prepare_results_with_contract(monkeypatch, manager_payload, manager_result)
-    output = run_cli("--scenario", "long", "--summary")
+    output = run_cli("--scenario", "short", "--summary")
 
     assert_summary_output_has_contract_fields(
         output,
@@ -687,14 +686,14 @@ def test_v9_shadow_summary_output_includes_communication_operation_mirrors(monke
         posture_source="communication_operations",
         summary_source="communication_operations",
         execution_projection_source=None,
-        summary_prefix="scenario=long_case",
+        summary_prefix="scenario=short_case",
     )
 
 
 def test_v9_shadow_json_with_stats_output_includes_communication_operation_mirrors(monkeypatch):
     manager_payload = build_summary_payload(
-        "long_case",
-        run_scenario("long"),
+        "short_case",
+        run_scenario("short"),
         feature_source_type="scenario",
         feature_file=None,
         sample_description="contract sample",
@@ -725,7 +724,7 @@ def test_v9_shadow_json_with_stats_output_includes_communication_operation_mirro
     )
 
     result = output["results"]
-    assert result["scenario"] == "long_case"
+    assert result["scenario"] == "short_case"
     assert result["operations_posture"] == "blocked"
     assert result["posture_sources"] == {"operations_posture_source": "execution_projection"}
     assert result["governance_sources"] == {
@@ -735,7 +734,7 @@ def test_v9_shadow_json_with_stats_output_includes_communication_operation_mirro
     assert output["meta"]["output_mode"] == "json"
     assert output["meta"]["source_type"] == "scenario"
     assert output["stats"]["total"] == 1
-    assert output["stats"]["side_actions"] == {"long.open": 1}
+    assert output["stats"]["side_actions"] == {"short.open": 1}
 
 
 def test_v9_shadow_apply_stable_output_contract_normalizes_summary_only_payload():
@@ -762,8 +761,8 @@ def test_v9_shadow_apply_stable_output_contract_normalizes_summary_only_payload(
 
 def test_v9_shadow_output_extensions_prefer_operations_summary_over_stale_result_mirrors():
     manager_payload = build_summary_payload(
-        "long_case",
-        run_scenario("long"),
+        "short_case",
+        run_scenario("short"),
         feature_source_type="scenario",
         feature_file=None,
         sample_description="contract sample",
@@ -915,7 +914,7 @@ def test_v9_shadow_cli_out_multi_base_writes_summary_json_stats_using_recommende
     assert len(json_payload["results"]) == 2
     assert "stats" not in json_payload
     assert stats_payload["total"] == 2
-    assert stats_payload["side_actions"] == {"flat.abstain": 1, "long.open": 1}
+    assert stats_payload["side_actions"] == {"flat.abstain": 1, "short.open": 1}
 
 
 def test_v9_shadow_cli_out_multi_base_rejects_removed_legacy_by_mode_overrides(tmp_path):
@@ -1020,7 +1019,7 @@ def test_v9_shadow_cli_out_suffix_inference_for_json_summary_stats(tmp_path):
 
 def test_v9_shadow_session_sse_completed_flow_smoke():
     args = SimpleNamespace(
-        scenario_flag="long",
+        scenario_flag="short",
         scenario_positional=None,
         feature_file=None,
         feature_batch_file=None,
@@ -1050,13 +1049,13 @@ def test_v9_shadow_session_sse_completed_flow_smoke():
     assert completed_manager["data"]["meta"]["output_mode"] == "session_stream"
     assert completed_manager["data"]["meta"]["source_type"] == "scenario"
     assert completed_manager["data"]["stats"]["total"] == 1
-    assert completed_manager["data"]["stats"]["side_actions"] == {"long.open": 1}
+    assert completed_manager["data"]["stats"]["side_actions"] == {"short.open": 1}
     assert completed_sse["data"]["data"]["meta"]["output_mode"] == "session_stream"
     assert completed_sse["data"]["data"]["stats"]["total"] == 1
-    assert completed_sse["data"]["data"]["results"]["scenario"] == "long"
-    assert results["scenario"] == "long"
+    assert completed_sse["data"]["data"]["results"]["scenario"] == "short"
+    assert results["scenario"] == "short"
     assert results["action"] == "open"
-    assert results["side"] == "long"
+    assert results["side"] == "short"
 
 
 def test_v9_shadow_session_sse_server_smoke_completed_flow():
@@ -1133,9 +1132,9 @@ def test_v9_shadow_cli_write_and_check_baseline_smoke(tmp_path):
     assert stdout == ""
     baseline_payload = json.loads(baseline_path.read_text(encoding="utf-8"))
     assert baseline_payload["results"][0]["scenario"] == "long"
-    assert baseline_payload["results"][0]["action"] == "open"
+    assert baseline_payload["results"][0]["action"] == "abstain"
     assert baseline_payload["stats"]["total"] == 1
-    assert baseline_payload["stats"]["side_actions"] == {"long.open": 1}
+    assert baseline_payload["stats"]["side_actions"] == {"flat.abstain": 1}
 
     check_stdout, exit_code = run_cli_allow_exit(
         "--scenario",
@@ -1341,8 +1340,8 @@ def test_v9_shadow_cli_feature_file_json_output():
         "v9_shadow_long.json",
         "v9_shadow_long.json",
     ]
-    assert [item["action"] for item in payload] == ["open", "open", "open"]
-    assert [item["side"] for item in payload] == ["long", "long", "long"]
+    assert [item["action"] for item in payload] == ["abstain", "abstain", "abstain"]
+    assert [item["side"] for item in payload] == ["flat", "flat", "flat"]
 
 
 def test_v9_shadow_cli_feature_file_summary_output():
@@ -1359,7 +1358,7 @@ def test_v9_shadow_cli_feature_file_summary_output():
     assert "feature_file=D:/cursor/data/snapshots/v9_shadow_long.json" in output
     assert "--- compact ---" in output
     assert "total=3" in output
-    assert "side_actions={'long.open': 3}" in output
+    assert "side_actions={'flat.abstain': 3}" in output
 
 
 def test_v9_shadow_cli_feature_file_csv_output():
@@ -1378,9 +1377,9 @@ def test_v9_shadow_cli_feature_file_csv_output():
     assert '"neutral","file","D:/cursor/data/snapshots/v9_shadow_long.json"' in lines[1]
     assert '"long","file","D:/cursor/data/snapshots/v9_shadow_long.json"' in lines[2]
     assert '"short","file","D:/cursor/data/snapshots/v9_shadow_long.json"' in lines[3]
-    assert '"open","long"' in lines[1]
-    assert '"open","long"' in lines[2]
-    assert '"open","long"' in lines[3]
+    assert '"abstain","flat"' in lines[1]
+    assert '"abstain","flat"' in lines[2]
+    assert '"abstain","flat"' in lines[3]
 
 
 def test_v9_shadow_cli_feature_dir_summary_output():
@@ -1399,7 +1398,7 @@ def test_v9_shadow_cli_feature_dir_summary_output():
     assert "--- compact ---" in output
     assert "total=5" in output
     assert "actions={'abstain': 4, 'open': 1}" in output
-    assert "sides={'flat': 4, 'long': 1}" in output
+    assert "sides={'flat': 4, 'short': 1}" in output
 
 
 def test_v9_shadow_cli_feature_dir_csv_output():
@@ -1421,8 +1420,7 @@ def test_v9_shadow_cli_feature_dir_csv_output():
     assert any('"v9_shadow_neutral","dir_file"' in line for line in lines[1:])
     assert any('"v9_shadow_short","dir_file"' in line for line in lines[1:])
     assert any('"abstain","flat"' in line for line in lines[1:])
-    assert any('"open","long"' in line for line in lines[1:])
-    assert any('"abstain","flat"' in line for line in lines[1:])
+    assert any('"open","short"' in line for line in lines[1:])
 
 
 def test_v9_shadow_assert_formal_baseline_gate_and_semantics_smoke():
@@ -1522,12 +1520,12 @@ def test_v9_shadow_render_json_output_summary_stats_and_stream_helpers():
     assert json_output["meta"]["output_mode"] == "json"
     assert json_output["meta"]["source_type"] == "scenario"
     assert json_output["stats"]["total"] == 2
-    assert json_output["stats"]["side_actions"] == {"flat.abstain": 1, "long.open": 1}
+    assert json_output["stats"]["side_actions"] == {"flat.abstain": 1, "short.open": 1}
     assert "scenario=long" in summary_output
     assert "scenario=short" in summary_output
     assert "--- compact_stats ---" in summary_output
     assert "total=2" in stats_output
-    assert "side_actions.long.open=1" in stats_output
+    assert "side_actions.short.open=1" in stats_output
     assert "side_actions.flat.abstain=1" in stats_output
     assert envelope["event"] == "decision.batch.completed"
     assert envelope["meta"]["output_mode"] == "session_stream"

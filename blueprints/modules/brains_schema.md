@@ -33,6 +33,8 @@ configs/brains/*.json → BrainRegistry.load() → {brain_id: BrainEntry}
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260521-001 | 2026-05-21 | cursor-agent | — | Meta_Stage1_Huber_V1 vote_weight 0.0→0.8:解除物理阻断。V3脑禁用后Huber成为barrier_12bar唯一投票者，但vote_weight=0导致total_weight=0→parliament返回None→策略永远无法开单。0.8保留未来第二脑权重空间。 | RC-09 |
+| FIX-20260520-027 | 2026-05-20 | cursor-agent | — | BrainEntry added training_params field (dict[str, Any]) with sl_atr_mult, tp_atr_mult, horizon_bars, min_rr_ratio. BrainRegistry._load_all() parses training_params from JSON. Brain config schema extended: all 14 registry entries backfilled. | RC-09 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

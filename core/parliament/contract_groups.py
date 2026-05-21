@@ -24,11 +24,13 @@ BARRIER_GROUP: dict[str, Any] = {
     "name": "barrier_12bar",
     "horizon_cycles": 12,
     "brain_types": {
-        "xgboost_v9",
-        "lightgbm_v1",
+        "lightgbm_v1",  # Meta_Stage1_Huber_V1 (regression probe for MetaFilter)
+        "onnx_v9",  # CRT.sur.chlg.g2026.1 (survival barrier)
+        "online_sgd",  # Online_MLP_V1 (survival barrier)
+        # xgboost_v9 removed — necrotic 100% LONG bias (FIX-20260521)
     },
     "contract": "survival_barrier_2.0sl_3.5tp_12bar",
-    "description": "Predicts which barrier (SL/TP) is hit first in 60 min",
+    "description": "Survival mode: CRT + Online_MLP + Huber. Predicts barrier hit in 60 min.",
 }
 
 # Group 2a: Micro M5 (5-bar, 1.5×ATR SL, 2.5×ATR TP, ~25 min)
@@ -355,6 +357,26 @@ class ContractGroupConsensus:
         weighted_up = sum(up_scores) / total_weight
         weighted_down = sum(down_scores) / total_weight
 
+        neutral_count = directions.count("neutral")
+        long_count = directions.count("long")
+        short_count = directions.count("short")
+
+        # When every brain says neutral, the group has no directional signal.
+        # Don't fabricate "long" just because up==down.
+        if neutral_count == total:
+            return GroupSignal(
+                group_name=self.group["name"],
+                direction="neutral",
+                confidence=0.0,
+                consensus_score=0.0,
+                supporting_count=0,
+                opposing_count=0,
+                neutral_count=neutral_count,
+                total_count=total,
+                horizon_cycles=self.group["horizon_cycles"],
+                brain_ids=brain_ids,
+            )
+
         # Determine direction
         if weighted_up >= weighted_down:
             direction = "long"
@@ -364,14 +386,11 @@ class ContractGroupConsensus:
             raw_score = weighted_down
 
         # Neutral penalty: if neutrals dominate, scale down
-        neutral_count = directions.count("neutral")
         if neutral_count > 0:
             neutral_ratio = neutral_count / total
             raw_score *= max(0.35, 1.0 - neutral_ratio * 0.15)
 
         # Majority agreement boost (within-group, so it's meaningful)
-        long_count = directions.count("long")
-        short_count = directions.count("short")
         majority_ratio = max(long_count, short_count) / max(total, 1)
         consensus_score = raw_score * 0.65 + majority_ratio * 0.35
 

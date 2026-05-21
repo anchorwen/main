@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-05-18T17:29:35Z
+> **自动生成**: 2026-05-21T12:26:03Z
 
 ## Package-Level Dependencies
 
@@ -59,6 +59,7 @@
 
 - `base_adapter.py` → `core.contracts.domain.brain_decision_proposal`
 - `lightgbm_brain_adapter.py` → `core.brains.adapters.base_adapter`, `core.brains.schema_versions`, `core.contracts.domain.brain_decision_proposal`, `core.contracts.ids`, `core.deployment.brain_alert`
+- `meta_filter_adapter.py` → (无内部依赖)
 - `online_learner_adapter.py` → `core.brains.adapters.base_adapter`, `core.brains.online_mlp_model`, `core.brains.schema_versions`, `core.contracts.domain.brain_decision_proposal`, `core.contracts.ids`, `core.deployment.brain_alert`
 - `params_brain_adapter.py` → `core.brains.adapters.base_adapter`, `core.brains.schema_versions`, `core.contracts.domain.brain_decision_proposal`, `core.contracts.ids`
 - `transformer_brain_adapter.py` → `core.brains.adapters.base_adapter`, `core.brains.schema_versions`, `core.brains.services.inference_guard`, `core.contracts.domain.brain_decision_proposal`, `core.contracts.ids`, `core.deployment.brain_alert`
@@ -183,6 +184,7 @@
 - `market_efficiency.py` → (无内部依赖)
 - `market_impact.py` → (无内部依赖)
 - `meta_exit_engine.py` → (无内部依赖)
+- `meta_filter_gate.py` → `core.brains.adapters.meta_filter_adapter`, `core.features.schemas.microstructure_schema`, `core.features.schemas.v9_institutional_schema`
 - `meta_signal_filter.py` → `core.brains.online_mlp_model`, `core.features.schemas.microstructure_schema`
 - `micro_strategy.py` → `core.execution.strategy_line`
 - `mt5_broker_adapter.py` → (无内部依赖)
@@ -367,7 +369,7 @@
 - `execution_gateway_router.py` → `core.execution.gateway_contracts`
 - `execution_pipeline.py` → `core.contracts.ids`, `core.execution.quality_analyzer`, `core.execution.quality_contracts`, `core.runtime.execution_gateway_router`, `core.runtime.integration_contracts`, `core.runtime.schema_versions`, `core.runtime.signal_order_builder`, `core.strategies.registry`
 - `integration_contracts.py` → `core.execution.gateway_contracts`, `core.execution.quality_contracts`, `core.runtime.approval_contracts`, `core.strategies.contracts`
-- `live_cycle.py` → `core.brains.services.dynamic_brain_weighter`, `core.contracts.strategy_magic`, `core.deployment.feature_update_producer`, `core.execution.barrier_strategy`, `core.execution.capital_allocator`, `core.execution.correlation_sizer`, `core.execution.execution_queue`, `core.execution.live_order_sender`, `core.execution.market_efficiency`, `core.execution.micro_strategy`, `core.execution.portfolio_risk`, `core.execution.pre_trade_guards`, `core.execution.reentry_guard`, `core.execution.regime_gate`, `core.execution.statarb_strategy`, `core.execution.strategy_budget`, `core.execution.strategy_line`, `core.execution.swing_strategy`, `core.features.local_feature_store`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.governance.governance_service`, `core.infrastructure.distributed_lock`, `core.ledger.storage.jsonl_ledger_store`, `core.market.calendar`, `core.observability.message_broker`, `core.parliament.contract_groups`, `core.runtime.market_ingress`, `core.runtime.order_dispatch`, `core.runtime.shadow_recorder`, `core.runtime.signal_health`, `core.runtime.signal_pipeline`, `scripts.daily_ops`, `scripts.training.governance_scheduler`
+- `live_cycle.py` → `core.brains.brain_registry`, `core.brains.services.dynamic_brain_weighter`, `core.contracts.strategy_magic`, `core.deployment.feature_update_producer`, `core.execution.barrier_strategy`, `core.execution.capital_allocator`, `core.execution.correlation_sizer`, `core.execution.execution_queue`, `core.execution.live_order_sender`, `core.execution.market_efficiency`, `core.execution.meta_filter_gate`, `core.execution.micro_strategy`, `core.execution.portfolio_risk`, `core.execution.pre_trade_guards`, `core.execution.reentry_guard`, `core.execution.regime_gate`, `core.execution.statarb_strategy`, `core.execution.strategy_budget`, `core.execution.strategy_line`, `core.execution.swing_strategy`, `core.features.local_feature_store`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.governance.governance_service`, `core.infrastructure.distributed_lock`, `core.ledger.storage.jsonl_ledger_store`, `core.market.calendar`, `core.observability.message_broker`, `core.parliament.contract_groups`, `core.runtime.market_ingress`, `core.runtime.order_dispatch`, `core.runtime.shadow_recorder`, `core.runtime.signal_health`, `core.runtime.signal_pipeline`, `scripts.daily_ops`, `scripts.training.governance_scheduler`
 - `market_ingress.py` → (无内部依赖)
 - `order_dispatch.py` → `apps.engine.runtime_loop`, `core.brains.brain_registry`, `core.contracts.domain.decision_intent`, `core.contracts.domain.system_mode_state`, `core.contracts.enums`, `core.contracts.ids`, `core.state.schema_versions`
 - `schema_versions.py` → (无内部依赖)
@@ -466,6 +468,7 @@
 - `shadow_live_compare_report.py` → `scripts.trade_quality_report`
 - `shadow_pnl_loop.py` → `core.brains.services.brain_factory`, `core.deployment.feature_update_producer`, `core.features.adapters.microstructure_feature_adapter`, `core.features.adapters.v9_feature_adapter`, `core.features.computers.microstructure_computer`, `core.features.computers.v9_live_computer`, `core.features.local_feature_store`, `core.features.rolling_normalizer`, `core.features.schemas.microstructure_schema`, `core.features.schemas.v9_institutional_schema`, `core.features.store_contracts`, `core.feedback.brain_pnl_ledger`, `core.ledger.storage.jsonl_ledger_store`, `core.risk.regime_detector`, `scripts.shadow_decision_recorder`
 - `smoke_test_e2e.py` → `core.features.local_feature_store`, `core.features.store_contracts`, `core.feedback.brain_performance_tracker`, `core.governance.governance_service`, `core.ledger.storage.jsonl_ledger_store`, `scripts.daily_ops`, `scripts.feedback_loop`, `scripts.live_shadow_ensemble`, `scripts.shadow_decision_recorder`, `scripts.training.dataset_builder`, `scripts.training.governance_scheduler`
+- `test_meta_pipeline.py` → `core.execution.meta_signal_filter`
 - `trade_quality_report.py` → (无内部依赖)
 - `validate_blueprints.py` → (无内部依赖)
 - `validate_brain_before_deploy.py` → `core.brains.services.brain_factory`
@@ -480,6 +483,8 @@
 ### `scripts/backtest/`
 
 - `backtest_dynamic_exit.py` → (无内部依赖)
+- `backtest_high_recall_precision.py` → `core.brains.adapters.meta_filter_adapter`
+- `backtest_meta_filter.py` → `core.brains.adapters.meta_filter_adapter`
 - `backtest_regime_2d.py` → (无内部依赖)
 - `backtest_v3_combined.py` → (无内部依赖)
 
@@ -503,6 +508,7 @@
 - `build_calibrated_dataset.py` → (无内部依赖)
 - `build_live_labeled_dataset.py` → (无内部依赖)
 - `build_meta_features.py` → `core.contracts.training.training_contract`
+- `build_meta_labeling_dataset.py` → `core.alpha.ou_optimizer`, `scripts.training.build_calibrated_dataset`
 - `build_meta_labels.py` → (无内部依赖)
 - `build_meta_learner.py` → (无内部依赖)
 - `build_micro_barrier_dataset.py` → (无内部依赖)
@@ -541,10 +547,12 @@
 - `retraining_trigger.py` → `scripts.training.champion_challenger`
 - `run_promotion.py` → `core.brains.services.brain_promotion`
 - `run_train_batch.py` → (无内部依赖)
+- `scan_profitability_surface.py` → `core.training.profitability_calibrator`
 - `train.py` → `core.contracts.training.training_contract`, `core.deployment.brain_config_validator`, `core.deployment.brain_registration_gate`, `core.training.cpcv`, `core.training.custom_objectives`, `core.training.dataset`, `core.training.model_hashing`, `core.training.profitability_calibrator`, `core.training.training_registry`, `scripts.training.trainers.deep_res_mlp_trainer`, `scripts.training.trainers.lgb_trainer`, `scripts.training.trainers.online_mlp_trainer`, `scripts.training.trainers.transformer_trainer`, `scripts.training.trainers.xgb_trainer`
 - `train_daily_swing.py` → (无内部依赖)
 - `train_exit_metamodel.py` → (无内部依赖)
 - `train_from_csv.py` → `core.contracts.training.label_contract`, `core.contracts.training.training_recipe`
+- `train_meta_filter.py` → (无内部依赖)
 - `train_meta_model.py` → (无内部依赖)
 - `train_online_init.py` → (无内部依赖)
 - `train_stage2_lgb_pit.py` → (无内部依赖)

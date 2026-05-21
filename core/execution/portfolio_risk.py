@@ -17,6 +17,7 @@ think, it only controls how much risk the combined book can take.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -66,6 +67,7 @@ class PortfolioRiskController:
         max_same_direction: int = 2,
         netting_mode: str = "allow_coexist",
         min_hold_cycles: int = 6,  # minimum cycles before net_out can close a position
+        net_out_cooldown_seconds: float = 600.0,  # block new trades in net_out direction for N seconds
         # ── Notional conversion ──
         symbol_contract_size: float = 100.0,  # 100 oz per standard lot (XAUUSD)
         # ── VaR / CVaR ──
@@ -82,6 +84,7 @@ class PortfolioRiskController:
         self.max_same_dir = max_same_direction
         self.netting_mode = netting_mode  # "net_out" | "allow_coexist"
         self.min_hold_cycles = min_hold_cycles
+        self.net_out_cooldown_seconds = net_out_cooldown_seconds
         self.contract_size = symbol_contract_size
 
         # VaR / CVaR
@@ -96,6 +99,10 @@ class PortfolioRiskController:
 
         # Rolling returns buffer: strategy_name → list of P&L values (in account currency)
         self._returns_buffer: dict[str, list[float]] = {}
+
+        # Global Directional Cooldown — prevents cascading net-out whipsaw
+        self._last_net_out_timestamp: float = 0.0
+        self._last_net_out_direction: str = ""
 
     # ── Data feed ────────────────────────────────────────────────────────
 
@@ -213,6 +220,18 @@ class PortfolioRiskController:
                 reason=f"duplicate_strategy_{strategy}_already_holding",
             )
 
+        # ── 0.5 Global Directional Cooldown (net_out cascade prevention) ──
+        if self._last_net_out_direction and direction == self._last_net_out_direction:
+            _elapsed = time.time() - self._last_net_out_timestamp
+            if _elapsed < self.net_out_cooldown_seconds:
+                return RiskResult(
+                    RiskVerdict.REJECTED,
+                    reason=(
+                        f"net_out_cooldown_{direction}_"
+                        f"{_elapsed:.0f}s_lt_{self.net_out_cooldown_seconds:.0f}s"
+                    ),
+                )
+
         # ── 1. Gross exposure check ──
         if current_price is not None and current_price > 0:
             current_gross_n = sum(
@@ -304,6 +323,9 @@ class PortfolioRiskController:
             # Reduce the largest opposing position instead of adding new
             largest_name, largest_pos = max(opposite_positions, key=lambda x: x[1]["volume"])
             _opp_brain_ids = largest_pos.get("brain_ids", [])
+            # Global Directional Cooldown: block the CLOSED direction to prevent cascade
+            self._last_net_out_timestamp = time.time()
+            self._last_net_out_direction = opposite_dir
             if largest_pos["volume"] <= volume:
                 # New trade fully offsets existing → close existing, open reduced new
                 return RiskResult(

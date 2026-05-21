@@ -59,8 +59,10 @@ def _make_prop(
 def test_barrier_group_definition():
     assert BARRIER_GROUP["name"] == "barrier_12bar"
     assert BARRIER_GROUP["horizon_cycles"] == 12
-    assert "xgboost_v9" in BARRIER_GROUP["brain_types"]
     assert "lightgbm_v1" in BARRIER_GROUP["brain_types"]
+    assert "onnx_v9" in BARRIER_GROUP["brain_types"]
+    assert "online_sgd" in BARRIER_GROUP["brain_types"]
+    assert "xgboost_v9" not in BARRIER_GROUP["brain_types"]  # necrotic, removed
 
 
 def test_micro_group_definition():

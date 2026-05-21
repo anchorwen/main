@@ -470,61 +470,71 @@ def test_brain_reeval_interval(manager):
 # ── Layer 3: Time-based exit ──────────────────────────────────────────────
 
 
-def test_time_exit_when_stale_and_low_r(long_position, manager):
-    """Exit at phase 4 (>100% horizon) when R < 1.0."""
+def test_time_exit_stale_past_horizon(long_position, manager):
+    """Past expiry (t/T >= 1.0): must deliver full design R:R (3.5) to hold."""
     pos = manager._position = long_position
     pos.cycles_held = 65
-    manager.max_hold_cycles = 60  # effective_horizon via fallback
-    # mid=2501 → R ≈ 0.1, ratio=65/60=1.08 → phase 4, need >=1.0R
+    manager.max_hold_cycles = 60
+    # T_max=60, t_ratio=1.0, ev_floor=-0.5+4.0×1.0=3.5
+    # mid=2501 → R=0.1 < 3.5 → exit
     should_exit, reason = manager.should_exit_time_based(mid=2501.0)
     assert should_exit
-    assert "time_phase4" in reason
+    assert "ev_trajectory" in reason
+    assert "r0.10_lt_3.50" in reason
 
 
-def test_time_exit_spares_winner_phase4(long_position, manager):
-    """At phase 4, exit unless R >= 1.0."""
+def test_time_exit_past_horizon_spares_strong_winner(long_position, manager):
+    """Past expiry with R >= design R:R: horse is running, let it ride."""
     pos = manager._position = long_position
     pos.cycles_held = 65
     manager.max_hold_cycles = 60
-    # mid=2510 → R ≈ 1.0 → no exit (horse is running)
-    should_exit, _ = manager.should_exit_time_based(mid=2510.0)
+    # T_max=60, ev_floor=3.5; mid=2540 → R=4.0 >= 3.5 → spared
+    should_exit, _ = manager.should_exit_time_based(mid=2540.0)
     assert not should_exit
 
 
-def test_time_exit_not_triggered_phase1(long_position, manager):
-    """No exit in phase 1 (0-50% of horizon) regardless of R."""
+def test_time_exit_early_underwater_triggers(long_position, manager):
+    """Early position deeply underwater below EV floor → exit.
+
+    No hard grace period — gamma=1.0 linear curve with start_floor=-0.5R
+    means a -0.5R drawdown at 16.7% progress exits.
+    """
     pos = manager._position = long_position
     pos.cycles_held = 10
-    manager.max_hold_cycles = 60  # ratio = 10/60 = 0.17 → phase 1
-    should_exit, _ = manager.should_exit_time_based(mid=2495.0)  # negative R
-    assert not should_exit
-
-
-def test_time_exit_phase2_needs_min_r(long_position, manager):
-    """Phase 2 (50-80%): exit if R < require_min_r."""
-    pos = manager._position = long_position
-    pos.cycles_held = 36  # ratio = 36/60 = 0.60 → phase 2
-    manager.max_hold_cycles = 60
-    manager.require_min_r = 0.3
-    # R ≈ 0.1 at mid=2501
-    should_exit, _ = manager.should_exit_time_based(mid=2501.0)
+    manager.max_hold_cycles = 60  # t_ratio = 16.7%
+    # ev_floor = -0.5 + 4.0 × 0.167 = 0.167
+    # mid=2495 → R=-0.5 < 0.167 → exit
+    should_exit, reason = manager.should_exit_time_based(mid=2495.0)
     assert should_exit
-    # R ≈ 0.5 at mid=2505 → spared
-    should_exit2, _ = manager.should_exit_time_based(mid=2505.0)
+    assert "ev_trajectory" in reason
+
+
+def test_time_exit_mid_life_override_min_r(long_position, manager):
+    """override_min_r lowers the envelope endpoint — lenient early, tight late."""
+    pos = manager._position = long_position
+    pos.cycles_held = 36  # t/T = 60%
+    manager.max_hold_cycles = 60
+    # override_min_r=0.3: end_target=0.3 (instead of r_target=3.5)
+    # ev_floor at 60% = -0.5 + (0.3+0.5) × 0.6 = -0.02
+    # R=-0.1 (mid=2499) < -0.02 → exit
+    should_exit, _ = manager.should_exit_time_based(mid=2499.0, override_min_r=0.3)
+    assert should_exit
+    # R=0.5 (mid=2505) > -0.02 → spared
+    should_exit2, _ = manager.should_exit_time_based(mid=2505.0, override_min_r=0.3)
     assert not should_exit2
 
 
-def test_time_exit_phase3_needs_higher_r(long_position, manager):
-    """Phase 3 (80-100%): exit if R < require_min_r * 1.67 (~0.5R)."""
+def test_time_exit_late_stage_rising_bar(long_position, manager):
+    """Late stage (t/T=90%) bar rises: must show real progress to hold."""
     pos = manager._position = long_position
-    pos.cycles_held = 54  # ratio = 54/60 = 0.90 → phase 3
+    pos.cycles_held = 54  # t/T = 90%
     manager.max_hold_cycles = 60
-    manager.require_min_r = 0.3
-    # R ≈ 0.4 at mid=2504 (below ~0.5R threshold)
-    should_exit, _ = manager.should_exit_time_based(mid=2504.0)
+    # override_min_r=0.3: ev_floor at 90% = -0.5 + 0.8 × 0.9 = 0.22
+    # R=0.1 (mid=2501) < 0.22 → exit
+    should_exit, _ = manager.should_exit_time_based(mid=2501.0, override_min_r=0.3)
     assert should_exit
-    # R ≈ 0.6 at mid=2506 (above ~0.5R threshold)
-    should_exit2, _ = manager.should_exit_time_based(mid=2506.0)
+    # R=0.5 (mid=2505) > 0.22 → spared
+    should_exit2, _ = manager.should_exit_time_based(mid=2505.0, override_min_r=0.3)
     assert not should_exit2
 
 

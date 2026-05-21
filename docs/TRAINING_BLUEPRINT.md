@@ -222,7 +222,7 @@ Each cycle:
 ### Feature Pipeline
 
 40 features across 4 timeframes:
-- **M5**: Ret_1, Body_Ratio, ATR_14, RSI_14, MACD, Vol_ZScore, Macro1_Corr, Macro_Gold_Silver_Spread, OU_Theta, Hurst
+- **M5**: Ret_1, Body_Ratio, ATR_14, RSI_14, MACD, Vol_ZScore, Macro1_Corr, Price_ZScore, OU_Theta, Hurst
 - **M15**: Same 10 features
 - **M30**: Same 10 features
 - **H1**: Same 10 features

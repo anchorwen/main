@@ -168,31 +168,40 @@ def build_v9_shadow_container() -> ServiceContainer:
     container = ServiceContainer(config).build()
 
     repo_root = _repo_root()
-    # Use LightGBM V3 — the active institutional brain for barrier_12bar
-    brain_path = (
-        repo_root / "configs" / "brains" / "lgb_barrier_12bar_lightgbm_v3_20260517_084114.json"
-    )
     loader = BrainRegistryLoader()
-    brain_entry = loader.load_json(str(brain_path))
-    brain_entry["enable_onnxruntime"] = False
 
-    container.brain_registry.register(brain_entry)
+    # Use Online_MLP_V1 as primary — no ONNX dependency, artifact exists
+    online_brain_path = repo_root / "configs" / "brains" / "online_learner_v1.json"
+    online_entry = loader.load_json(str(online_brain_path))
+    # artifact_path from config is "data/models/online_mlp_v2.json"
+    online_artifact = repo_root / online_entry.get("artifact_path", "")
+    if not online_artifact.exists():
+        online_artifact = repo_root / "data" / "models" / "online_mlp_v2.json"
+    online_entry["artifact_path"] = str(online_artifact.resolve())
+
+    container.brain_registry.register(online_entry)
     container.governance_service.register_brain(
-        brain_entry.get("brain_id", "DeepResMLP_V2_New"),
+        online_entry.get("brain_id", "Online_MLP_V1"),
         "live",
     )
 
-    # Register Online SGD V1 if config and artifact exist
-    online_brain_path = repo_root / "configs" / "brains" / "online_learner_v1.json"
-    online_weights = repo_root / "data" / "models" / "online_learner_weights.json"
-    if online_brain_path.exists() and online_weights.exists():
-        online_entry = loader.load_json(str(online_brain_path))
-        online_entry["artifact_path"] = str(online_weights.resolve())
-        container.brain_registry.register(online_entry)
-        container.governance_service.register_brain(
-            online_entry.get("brain_id", "Online_SGD_V1"),
-            "candidate",
-        )
+    # DeepResMLP V1 is ONNX-based; only register if the ONNX model file
+    # is valid (not a Git LFS pointer).  The C++ ONNX runtime writes
+    # errors directly to the console, bypassing Python stderr capture.
+    deep_brain_path = repo_root / "configs" / "brains" / "deep_res_mlp_v1.json"
+    if deep_brain_path.exists():
+        deep_entry = loader.load_json(str(deep_brain_path))
+        deep_artifact = repo_root / deep_entry.get("artifact_path", "")
+        if deep_artifact.exists():
+            # Verify it's a binary ONNX file, not a text LFS pointer
+            with open(deep_artifact, "rb") as f:
+                header = f.read(8)
+            if header[:4] == b"\x08\x07\x10\x08" or header[:4] == b"\x08\x08\x10\x08":
+                container.brain_registry.register(deep_entry)
+                container.governance_service.register_brain(
+                    deep_entry.get("brain_id", "DeepResMLP_V1_Institutional"),
+                    "candidate",
+                )
 
     # ── Two-Stage Meta-Labeling: Stage 1 Huber + Stage 2 Filter ──
     _wire_meta_pipeline(container, repo_root)

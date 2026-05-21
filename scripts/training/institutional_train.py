@@ -87,24 +87,29 @@ ARCH_ADAPTER_MICRO: dict[str, dict[str, str]] = {
 
 # Default hyperparameter search spaces (Optuna suggest_* calls)
 XGBOOST_SEARCH_SPACE: dict[str, dict[str, Any]] = {
-    "max_depth": {"type": "int", "low": 3, "high": 7},
+    # Architect directive 2026-05-21: harden search space against overfitting.
+    # max_depth capped at 6 (hash-table effect beyond). subsample/colsample
+    # capped at 0.9 (no full-data pass). reg_alpha/reg_lambda floor 0.01
+    # (1e-8 indistinguishable from zero; TPE wastes trials on no-op territory).
+    "max_depth": {"type": "int", "low": 3, "high": 6},
     "learning_rate": {"type": "loguniform", "low": 0.01, "high": 0.3},
-    "subsample": {"type": "uniform", "low": 0.6, "high": 1.0},
-    "colsample_bytree": {"type": "uniform", "low": 0.6, "high": 1.0},
-    "min_child_weight": {"type": "int", "low": 1, "high": 15},
-    "reg_alpha": {"type": "loguniform", "low": 1e-8, "high": 1.0},
-    "reg_lambda": {"type": "loguniform", "low": 1e-8, "high": 10.0},
+    "subsample": {"type": "uniform", "low": 0.6, "high": 0.9},
+    "colsample_bytree": {"type": "uniform", "low": 0.6, "high": 0.9},
+    "min_child_weight": {"type": "int", "low": 1, "high": 20},
+    "reg_alpha": {"type": "loguniform", "low": 0.01, "high": 10.0},
+    "reg_lambda": {"type": "loguniform", "low": 0.01, "high": 10.0},
     "n_estimators": {"type": "int", "low": 100, "high": 500},
 }
 
 LIGHTGBM_SEARCH_SPACE: dict[str, dict[str, Any]] = {
+    # Architect directive 2026-05-21: same hardening as XGBoost.
     "num_leaves": {"type": "int", "low": 15, "high": 127},
     "learning_rate": {"type": "loguniform", "low": 0.01, "high": 0.3},
-    "subsample": {"type": "uniform", "low": 0.6, "high": 1.0},
-    "colsample_bytree": {"type": "uniform", "low": 0.6, "high": 1.0},
+    "subsample": {"type": "uniform", "low": 0.6, "high": 0.9},
+    "colsample_bytree": {"type": "uniform", "low": 0.6, "high": 0.9},
     "min_child_samples": {"type": "int", "low": 5, "high": 100},
-    "reg_alpha": {"type": "loguniform", "low": 1e-8, "high": 1.0},
-    "reg_lambda": {"type": "loguniform", "low": 1e-8, "high": 10.0},
+    "reg_alpha": {"type": "loguniform", "low": 0.01, "high": 10.0},
+    "reg_lambda": {"type": "loguniform", "low": 0.01, "high": 10.0},
     "n_estimators": {"type": "int", "low": 100, "high": 500},
 }
 
@@ -150,8 +155,13 @@ def _compute_balance_weights(y: np.ndarray) -> np.ndarray:
 # ── Data loading ────────────────────────────────────────────────────────────
 
 
-def load_dataset(data_path: Path) -> dict[str, Any]:
-    """Load training data from NPZ. Returns dict with X, y, optional pnl, feature_names."""
+def load_dataset(data_path: Path, *, target: str = "direction") -> dict[str, Any]:
+    """Load training data from NPZ. Returns dict with X, y, optional pnl, feature_names.
+
+    Args:
+        data_path: Path to .npz file.
+        target: "direction" for classification (-1/0/1), "regression" for PnL (y_reg).
+    """
     if not data_path.exists():
         raise FileNotFoundError(f"Dataset not found: {data_path}")
 
@@ -167,7 +177,15 @@ def load_dataset(data_path: Path) -> dict[str, Any]:
             X = X[:, -1, :]  # use last bar
 
     X = X.astype(np.float64)
-    y: np.ndarray = data["y"]
+
+    if target == "regression":
+        y_reg_raw = data.get("y_reg")
+        if y_reg_raw is not None:
+            y = y_reg_raw.astype(np.float64)
+        else:
+            y = data["y"].astype(np.float64)
+    else:
+        y = data["y"]
 
     # PnL array for Sharpe-based evaluation
     pnl: np.ndarray | None = data.get("pnl")
@@ -185,7 +203,7 @@ def load_dataset(data_path: Path) -> dict[str, Any]:
 
     return {
         "X": X,
-        "y": y.astype(np.int32),
+        "y": y if target == "regression" else y.astype(np.int32),
         "pnl": pnl,
         "feature_names": feature_names,
         "n_samples": X.shape[0],
@@ -346,21 +364,25 @@ def _objective_xgboost(
     pnl: np.ndarray | None,
     folds: list[tuple[np.ndarray, np.ndarray]],
     multi_class: bool,
+    target: str = "direction",
 ) -> float:
     import xgboost as xgb
 
     params = _build_xgboost_params(trial)
-    if multi_class:
+    if target == "regression":
+        params["objective"] = "reg:squarederror"
+    elif multi_class:
         params["objective"] = "multi:softmax"
         params["num_class"] = 3
 
     n_estimators = params.pop("n_estimators", 200)
-    fold_sharpes: list[float] = []
+    fold_scores: list[float] = []
 
     for train_idx, test_idx in folds:
         X_tr, y_tr = X[train_idx], y[train_idx]
         X_te, y_te = X[test_idx], y[test_idx]
-        w_tr = _compute_balance_weights(y_tr) if not multi_class else None
+        use_weights = not multi_class and target != "regression"
+        w_tr = _compute_balance_weights(y_tr) if use_weights else None
 
         dtrain = xgb.DMatrix(X_tr, label=y_tr, weight=w_tr)
         dtest = xgb.DMatrix(X_te, label=y_te)
@@ -374,17 +396,21 @@ def _objective_xgboost(
             verbose_eval=False,
         )
 
-        if multi_class:
+        if target == "regression":
+            y_pred = booster.predict(dtest).astype(np.float64)
+            rmse = float(np.sqrt(np.mean((y_te - y_pred) ** 2)))
+            fold_scores.append(-rmse)  # minimise RMSE
+        elif multi_class:
             y_score_raw = booster.predict(dtest)
             y_score = np.where(y_score_raw == 1, 1.0, 0.0).astype(np.float64)
+            pnl_fold = pnl[test_idx] if pnl is not None else None
+            fold_scores.append(compute_sharpe_from_signal(y_te, y_score, pnl_fold))
         else:
             y_score = booster.predict(dtest).astype(np.float64)
+            pnl_fold = pnl[test_idx] if pnl is not None else None
+            fold_scores.append(compute_sharpe_from_signal(y_te, y_score, pnl_fold))
 
-        pnl_fold = pnl[test_idx] if pnl is not None else None
-        sharpe = compute_sharpe_from_signal(y_te, y_score, pnl_fold)
-        fold_sharpes.append(sharpe)
-
-    return float(np.mean(fold_sharpes)) if fold_sharpes else -10.0
+    return float(np.mean(fold_scores)) if fold_scores else -10.0
 
 
 def _objective_lightgbm(
@@ -394,21 +420,26 @@ def _objective_lightgbm(
     pnl: np.ndarray | None,
     folds: list[tuple[np.ndarray, np.ndarray]],
     multi_class: bool,
+    target: str = "direction",
 ) -> float:
     import lightgbm as lgb
 
     params = _build_lightgbm_params(trial)
-    if multi_class:
+    if target == "regression":
+        params["objective"] = "regression"
+        params["metric"] = "rmse"
+    elif multi_class:
         params["objective"] = "multiclass"
         params["num_class"] = 3
 
     n_estimators = params.pop("n_estimators", 200)
-    fold_sharpes: list[float] = []
+    fold_scores: list[float] = []
 
     for train_idx, test_idx in folds:
         X_tr, y_tr = X[train_idx], y[train_idx]
         X_te, y_te = X[test_idx], y[test_idx]
-        w_tr = _compute_balance_weights(y_tr) if not multi_class else None
+        use_weights = not multi_class and target != "regression"
+        w_tr = _compute_balance_weights(y_tr) if use_weights else None
 
         booster = lgb.train(
             params,
@@ -418,17 +449,21 @@ def _objective_lightgbm(
             callbacks=[lgb.early_stopping(20), lgb.log_evaluation(0)],
         )
 
-        if multi_class:
+        if target == "regression":
+            y_pred = booster.predict(X_te).astype(np.float64)
+            rmse = float(np.sqrt(np.mean((y_te - y_pred) ** 2)))
+            fold_scores.append(-rmse)
+        elif multi_class:
             y_raw = booster.predict(X_te)
             y_score = np.where(np.argmax(y_raw, axis=1) == 1, 1.0, 0.0).astype(np.float64)
+            pnl_fold = pnl[test_idx] if pnl is not None else None
+            fold_scores.append(compute_sharpe_from_signal(y_te, y_score, pnl_fold))
         else:
             y_score = booster.predict(X_te).astype(np.float64)
+            pnl_fold = pnl[test_idx] if pnl is not None else None
+            fold_scores.append(compute_sharpe_from_signal(y_te, y_score, pnl_fold))
 
-        pnl_fold = pnl[test_idx] if pnl is not None else None
-        sharpe = compute_sharpe_from_signal(y_te, y_score, pnl_fold)
-        fold_sharpes.append(sharpe)
-
-    return float(np.mean(fold_sharpes)) if fold_sharpes else -10.0
+    return float(np.mean(fold_scores)) if fold_scores else -10.0
 
 
 # ── Single-seed training ────────────────────────────────────────────────────
@@ -441,13 +476,24 @@ def train_xgboost_single(
     val_data: tuple[np.ndarray, np.ndarray] | None = None,
     multi_class: bool = False,
     feature_names: list[str] | None = None,
+    target: str = "direction",
 ) -> tuple[Any, dict[str, Any]]:
     """Train a single XGBoost model. Returns (booster, metrics)."""
     import xgboost as xgb
 
+    if target == "regression":
+        obj = "reg:squarederror"
+        met = "rmse"
+    elif multi_class:
+        obj = "multi:softmax"
+        met = "mlogloss"
+    else:
+        obj = "binary:logistic"
+        met = "logloss"
+
     merged: dict[str, Any] = {
-        "objective": "multi:softmax" if multi_class else "binary:logistic",
-        "eval_metric": "mlogloss" if multi_class else "logloss",
+        "objective": obj,
+        "eval_metric": met,
         "random_state": params.get("random_state", 42),
         "n_jobs": -1,
     }
@@ -469,7 +515,8 @@ def train_xgboost_single(
     n_estimators = params.get("n_estimators", 200)
     merged.pop("early_stopping_rounds", None)
 
-    sample_weight = _compute_balance_weights(y) if not multi_class else None
+    use_weights = not multi_class and target != "regression"
+    sample_weight = _compute_balance_weights(y) if use_weights else None
     dtrain = xgb.DMatrix(X, label=y, weight=sample_weight)
     if feature_names:
         dtrain.feature_names = feature_names
@@ -505,13 +552,24 @@ def train_lightgbm_single(
     val_data: tuple[np.ndarray, np.ndarray] | None = None,
     multi_class: bool = False,
     feature_names: list[str] | None = None,
+    target: str = "direction",
 ) -> tuple[Any, dict[str, Any]]:
     """Train a single LightGBM model. Returns (booster, metrics)."""
     import lightgbm as lgb
 
+    if target == "regression":
+        obj = "regression"
+        met = "rmse"
+    elif multi_class:
+        obj = "multiclass"
+        met = "multi_logloss"
+    else:
+        obj = "binary"
+        met = "binary_logloss"
+
     merged: dict[str, Any] = {
-        "objective": "multiclass" if multi_class else "binary",
-        "metric": "multi_logloss" if multi_class else "binary_logloss",
+        "objective": obj,
+        "metric": met,
         "random_state": params.get("random_state", 42),
         "n_jobs": -1,
         "verbose": -1,
@@ -530,7 +588,8 @@ def train_lightgbm_single(
             merged[k] = params[k]
 
     n_estimators = params.get("n_estimators", 200)
-    sample_weight = _compute_balance_weights(y) if not multi_class else None
+    use_weights = not multi_class and target != "regression"
+    sample_weight = _compute_balance_weights(y) if use_weights else None
     dtrain = lgb.Dataset(X, label=y, weight=sample_weight)
     valid_sets = [dtrain]
     if val_data is not None:
@@ -691,30 +750,47 @@ def run_pipeline(
     n_seeds: int = 5,
     micro_tf: str | None = None,
     magic: int | None = None,
+    target: str = "direction",
 ) -> TrainResult:
     """Run the full institutional training pipeline for one architecture."""
 
     print(f"\n{'='*70}")
-    print(f"  INSTITUTIONAL TRAIN: {arch} | {contract_group}")
+    print(f"  INSTITUTIONAL TRAIN: {arch} | {contract_group} | target={target}")
     print(f"  Data: {data_path}")
     print(f"  Optuna trials: {optuna_trials} | Seeds: {n_seeds}")
     print(f"{'='*70}\n")
 
     # ── 1. Load data ────────────────────────────────────────────────────
-    dataset = load_dataset(data_path)
+    dataset = load_dataset(data_path, target=target)
     X, y_orig, pnl = dataset["X"], dataset["y"], dataset["pnl"]
     feature_names = dataset["feature_names"]
     print(f"[1/4] Loaded {dataset['n_samples']} samples × {dataset['n_features']} features")
 
     # Label remapping for multi-class: -1,0,1 → 0,1,2
     y = y_orig.copy()
-    if multi_class:
-        y = np.where(y_orig == -1, 2, y_orig)  # SL first → class 2
-        y = np.where(y_orig == 1, 1, y)  # TP first → class 1
+    if target == "regression":
+        pass  # y_reg is already float; no remapping needed
+    elif multi_class:
+        y = np.where(y_orig == -1, 2, y_orig)  # SL → class 2
+        y = np.where(y_orig == 1, 1, y)  # TP → class 1
         unique, counts = np.unique(y, return_counts=True)
         print(
             f"       Multi-class distribution: {dict(zip(['timeout','tp','sl'], counts, strict=False))}"
         )
+    else:
+        # Binary: drop timeout (0), remap SL -1→0, TP 1→1 for binary:logistic
+        binary_mask = y_orig != 0
+        y = np.where(y_orig == -1, 0, y_orig)
+        X = X[binary_mask]
+        y = y[binary_mask]
+        pnl = pnl[binary_mask]
+        n_dropped = int((~binary_mask).sum())
+        if n_dropped > 0:
+            unique_b, counts_b = np.unique(y, return_counts=True)
+            print(
+                f"       Binary: dropped {n_dropped} timeout rows, "
+                f"labels={dict(zip(unique_b.astype(int), counts_b, strict=False))}"
+            )
 
     # ── 2. Purged walk-forward folds ─────────────────────────────────────
     purge_bars = PURGE_HORIZON.get(contract_group, 12)
@@ -741,23 +817,32 @@ def run_pipeline(
         if arch == "xgboost":
 
             def obj(trial):
-                return _objective_xgboost(trial, X, y, pnl, search_folds, multi_class)
+                return _objective_xgboost(
+                    trial, X, y, pnl, search_folds, multi_class, target=target
+                )
         elif arch == "lightgbm":
 
             def obj(trial):
-                return _objective_lightgbm(trial, X, y, pnl, search_folds, multi_class)
+                return _objective_lightgbm(
+                    trial, X, y, pnl, search_folds, multi_class, target=target
+                )
         else:
             raise ValueError(f"Unsupported arch for Optuna: {arch}")
 
+        study_direction = "minimize" if target == "regression" else "maximize"
         study = optuna.create_study(
-            direction="maximize",
+            direction=study_direction,
             sampler=optuna.samplers.TPESampler(seed=42),
         )
         study.optimize(obj, n_trials=optuna_trials, show_progress_bar=True)
 
         best_params = study.best_params
         best_params["n_estimators"] = best_params.get("n_estimators", 200)
-        print(f"       Best trial #{study.best_trial.number}: " f"Sharpe={study.best_value:.4f}")
+        metric_name = "RMSE" if target == "regression" else "Sharpe"
+        print(
+            f"       Best trial #{study.best_trial.number}: "
+            f"{metric_name}={study.best_value:.4f}"
+        )
         print(f"       Best params: {json.dumps(best_params, indent=2, default=str)}")
     else:
         # Good defaults learned from prior training
@@ -768,8 +853,8 @@ def run_pipeline(
                 "learning_rate": 0.05,
                 "subsample": 0.8,
                 "colsample_bytree": 0.8,
-                "min_child_weight": 3,
-                "reg_alpha": 0.01,
+                "min_child_weight": 5,
+                "reg_alpha": 0.1,
                 "reg_lambda": 1.0,
                 "n_estimators": 200,
             }
@@ -780,7 +865,7 @@ def run_pipeline(
                 "subsample": 0.8,
                 "colsample_bytree": 0.8,
                 "min_child_samples": 20,
-                "reg_alpha": 0.01,
+                "reg_alpha": 0.1,
                 "reg_lambda": 1.0,
                 "n_estimators": 200,
             }
@@ -812,6 +897,7 @@ def run_pipeline(
                 val_data,
                 multi_class=multi_class,
                 feature_names=feature_names,
+                target=target,
             )
         elif arch == "lightgbm":
             model, fold_metrics = train_lightgbm_single(
@@ -821,6 +907,7 @@ def run_pipeline(
                 val_data,
                 multi_class=multi_class,
                 feature_names=feature_names,
+                target=target,
             )
         else:
             raise ValueError(f"Unsupported arch: {arch}")
@@ -849,28 +936,58 @@ def run_pipeline(
             else:
                 y_score_ho = y_score_raw.astype(np.float64)
 
-        ho_metrics = compute_metrics(y_holdout, y_score_ho, pnl_holdout)
+        if target == "regression":
+            rmse = float(np.sqrt(np.mean((y_holdout - y_score_ho) ** 2)))
+            r2 = float(
+                1.0
+                - np.sum((y_holdout - y_score_ho) ** 2)
+                / max(np.sum((y_holdout - y_holdout.mean()) ** 2), 1e-12)
+            )
+            ho_metrics = {"rmse": round(rmse, 6), "r2": round(r2, 4), "n_samples": len(y_holdout)}
+        else:
+            ho_metrics = compute_metrics(y_holdout, y_score_ho, pnl_holdout)
         elapsed = round(time.perf_counter() - t0, 2)
         fold_metrics["train_time_seconds"] = elapsed
 
-        entry = {
-            "seed": seed,
-            "val_sharpe": ho_metrics["sharpe"],
-            "val_win_rate": ho_metrics["win_rate"],
-            "val_profit_factor": ho_metrics["profit_factor"],
-            "val_max_drawdown": ho_metrics["max_drawdown"],
-            "metrics": {**fold_metrics, **ho_metrics},
-        }
+        if target == "regression":
+            entry = {
+                "seed": seed,
+                "val_rmse": ho_metrics["rmse"],
+                "val_r2": ho_metrics["r2"],
+                "metrics": {**fold_metrics, **ho_metrics},
+            }
+        else:
+            entry = {
+                "seed": seed,
+                "val_sharpe": ho_metrics["sharpe"],
+                "val_win_rate": ho_metrics["win_rate"],
+                "val_profit_factor": ho_metrics["profit_factor"],
+                "val_max_drawdown": ho_metrics["max_drawdown"],
+                "metrics": {**fold_metrics, **ho_metrics},
+            }
         seed_results.append(entry)
-        print(
-            f"       seed={seed}  sharpe={ho_metrics['sharpe']:.4f}  "
-            f"wr={ho_metrics['win_rate']:.4f}  pf={ho_metrics['profit_factor']:.4f}  "
-            f"dd={ho_metrics['max_drawdown']:.4f}  ({elapsed}s)"
-        )
+
+        if target == "regression":
+            print(
+                f"       seed={seed}  rmse={ho_metrics['rmse']:.6f}  "
+                f"r2={ho_metrics['r2']:.4f}  ({elapsed}s)"
+            )
+        else:
+            print(
+                f"       seed={seed}  sharpe={ho_metrics['sharpe']:.4f}  "
+                f"wr={ho_metrics['win_rate']:.4f}  pf={ho_metrics['profit_factor']:.4f}  "
+                f"dd={ho_metrics['max_drawdown']:.4f}  ({elapsed}s)"
+            )
 
     # ── 5. Select best seed ─────────────────────────────────────────────
-    best_seed = max(seed_results, key=lambda s: s["val_sharpe"])
-    print(f"\n       Best: seed={best_seed['seed']} sharpe={best_seed['val_sharpe']:.4f}")
+    if target == "regression":
+        best_seed = min(seed_results, key=lambda s: s["val_rmse"])
+        print(
+            f"\n       Best: seed={best_seed['seed']} rmse={best_seed['val_rmse']:.6f} r2={best_seed['val_r2']:.4f}"
+        )
+    else:
+        best_seed = max(seed_results, key=lambda s: s["val_sharpe"])
+        print(f"\n       Best: seed={best_seed['seed']} sharpe={best_seed['val_sharpe']:.4f}")
 
     # ── 6. Save artifacts ───────────────────────────────────────────────
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -924,10 +1041,14 @@ def run_pipeline(
         "best_params": best_params,
         "n_seeds": n_seeds,
         "best_seed": best_seed["seed"],
-        "best_sharpe": best_seed["val_sharpe"],
-        "best_win_rate": best_seed["val_win_rate"],
-        "best_profit_factor": best_seed["val_profit_factor"],
-        "seed_results": seed_results,
+        "best_rmse": best_seed.get("val_rmse") if target == "regression" else None,
+        "best_r2": best_seed.get("val_r2") if target == "regression" else None,
+        "best_sharpe": best_seed.get("val_sharpe") if target != "regression" else None,
+        "best_win_rate": best_seed.get("val_win_rate") if target != "regression" else None,
+        "best_profit_factor": best_seed.get("val_profit_factor")
+        if target != "regression"
+        else None,
+        "target": target,
         "model_path": str(model_path),
         "config_path": str(config_path),
         "brain_id": brain_id,
@@ -1009,6 +1130,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--magic", type=int, default=None, help="MT5 magic number (auto-generated if omitted)"
     )
+    p.add_argument(
+        "--target",
+        type=str,
+        default="direction",
+        choices=["direction", "regression"],
+        help="Training target: direction (binary:logistic) or regression (reg:squarederror, uses y_reg)",
+    )
 
     # Output
     p.add_argument("--register", action="store_true", help="Copy brain config to configs/brains/")
@@ -1032,6 +1160,7 @@ def main(argv: list[str] | None = None) -> int:
             arch=arch,
             contract_group=args.contract,
             output_dir=args.output_dir,
+            target=args.target,
             optuna_trials=args.optuna_trials,
             multi_class=args.multi_class,
             n_seeds=args.n_seeds,
@@ -1054,11 +1183,17 @@ def main(argv: list[str] | None = None) -> int:
     print("  TRAINING COMPLETE")
     print(f"{'='*70}")
     for r in results:
-        print(
-            f"  {r.brain_id:<35}  sharpe={r.metrics['val_sharpe']:>8.4f}  "
-            f"wr={r.metrics['val_win_rate']:>7.4f}  "
-            f"pf={r.metrics['val_profit_factor']:>7.4f}"
-        )
+        if "val_rmse" in r.metrics:
+            print(
+                f"  {r.brain_id:<35}  rmse={r.metrics['val_rmse']:>8.6f}  "
+                f"r2={r.metrics['val_r2']:>7.4f}"
+            )
+        else:
+            print(
+                f"  {r.brain_id:<35}  sharpe={r.metrics['val_sharpe']:>8.4f}  "
+                f"wr={r.metrics['val_win_rate']:>7.4f}  "
+                f"pf={r.metrics['val_profit_factor']:>7.4f}"
+            )
     print(f"\n  Models saved to: {args.output_dir}")
     print("  Next: review metrics, then promote with --register flag")
     print(f"{'='*70}")

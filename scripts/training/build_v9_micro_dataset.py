@@ -93,21 +93,34 @@ def main() -> None:
         v9_ts = np.asarray(v9_timestamps, dtype=np.float64)
         micro_ts = np.asarray(micro_timestamps, dtype=np.float64)
 
-        # For each V9 row, find the closest micro row
+        # For each V9 row, find the closest PAST micro row (backward-only).
+        # Using np.abs() would allow matching future micro data to past bars,
+        # leaking future information into training (look-ahead bias).
         kept_v9_indices: list[int] = []
         kept_micro_indices: list[int] = []
         dropped_missing = 0
+        future_leak_prevented = 0
 
         for i, ts in enumerate(v9_ts):
-            diffs = np.abs(micro_ts - ts)
-            best_j = int(np.argmin(diffs))
-            if diffs[best_j] <= args.max_time_gap:
+            valid_mask = micro_ts <= ts
+            if not np.any(valid_mask):
+                dropped_missing += 1
+                continue
+            diffs = ts - micro_ts[valid_mask]
+            best_valid_idx = int(np.argmin(diffs))
+            if diffs[best_valid_idx] <= args.max_time_gap:
+                actual_j = int(np.where(valid_mask)[0][best_valid_idx])
                 kept_v9_indices.append(i)
-                kept_micro_indices.append(best_j)
+                kept_micro_indices.append(actual_j)
+                # Detect whether the old np.abs() would have picked a future row
+                abs_diffs = np.abs(micro_ts - ts)
+                abs_best_j = int(np.argmin(abs_diffs))
+                if micro_ts[abs_best_j] > ts:
+                    future_leak_prevented += 1
             else:
                 dropped_missing += 1
 
-        if dropped_missing > 0:
+        if dropped_missing > 0 or future_leak_prevented > 0:
             print(
                 json.dumps(
                     {
@@ -116,6 +129,7 @@ def main() -> None:
                         "micro_rows": n_micro,
                         "kept": len(kept_v9_indices),
                         "dropped_missing_micro": dropped_missing,
+                        "future_leak_prevented": future_leak_prevented,
                     }
                 ),
                 flush=True,

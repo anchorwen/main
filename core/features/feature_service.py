@@ -1,4 +1,6 @@
+import json
 import logging
+import time
 from datetime import UTC, datetime
 
 import numpy as np
@@ -80,6 +82,7 @@ class FeatureService:
         self._default_symbol = default_symbol
         self._store_schema_name = store_schema_name
         self._store_timeframe = store_timeframe
+        self._last_known_vector: np.ndarray | None = None
 
     def build_snapshot(self, trigger: dict):
         from apps.engine.runtime_loop import SimpleFeatureSnapshot
@@ -95,7 +98,10 @@ class FeatureService:
         )
 
     def build_feature_vector(
-        self, trigger: dict | None = None, schema_name: str | None = None
+        self,
+        trigger: dict | None = None,
+        schema_name: str | None = None,
+        timeout_seconds: float = 3.0,
     ) -> np.ndarray:
         """Compute the normalized feature vector via tiered resolution.
 
@@ -104,10 +110,12 @@ class FeatureService:
           normalizes through self._adapter (when available) or builds a raw
           vector in the requested schema's feature order.
 
-        Tier 2 — Live MT5 computer:
-          Routes to V9LiveFeatureComputer (v9_institutional_40) or
-          V9MicroComputer (v9_micro_49) and normalizes through the
-          corresponding adapter.
+        Tier 2 — Live MT5 computer (timeout-guarded):
+          Runs ``compute_all()`` in a worker thread with a *timeout_seconds*
+          cap.  If the thread doesn't finish in time the main loop is never
+          blocked — the last known good vector (or zeros) is returned.
+          A ``feature_compute_timeout`` warning is logged so ops can track
+          degrading MT5 latency.
 
         Tier 3 — Zero-vector stub:
           Returns np.zeros(n_features) as a safe no-op.
@@ -157,13 +165,16 @@ class FeatureService:
                             _stale = True
                     if not _stale:
                         if self._adapter is not None:
-                            return self._adapter.build_model_input(record.values)[0]
+                            vec = self._adapter.build_model_input(record.values)[0]
+                            self._last_known_vector = np.asarray(vec, dtype=np.float64).copy()
+                            return self._last_known_vector
                         # Raw vector in schema feature order (no normalization)
                         feat_names = _schema_feature_names(schema)
                         raw = np.asarray(
                             [float(record.values.get(name, 0.0)) for name in feat_names],
                             dtype=np.float32,
                         )
+                        self._last_known_vector = np.asarray(raw, dtype=np.float64).copy()
                         return raw
             except Exception:
                 logging.exception(
@@ -171,11 +182,80 @@ class FeatureService:
                     symbol,
                 )
 
-        # ── Tier 2: Live MT5 computer + adapter ──
+        # ── Tier 2: Live MT5 computer + adapter (timeout-guarded) ──
         if self._computer is not None and self._adapter is not None:
-            try:
-                features = self._computer.compute_all()
+            import threading
 
+            _compute_result: list[dict[str, float] | None] = [None]
+            _compute_error: list[Exception | None] = [None]
+
+            def _run_compute() -> None:
+                try:
+                    _compute_result[0] = self._computer.compute_all()
+                except Exception as exc:
+                    _compute_error[0] = exc
+
+            _t = threading.Thread(target=_run_compute, daemon=True)
+            _t0 = time.monotonic()
+            _t.start()
+            _t.join(timeout=timeout_seconds)
+            _elapsed = time.monotonic() - _t0
+
+            if _t.is_alive():
+                # ── TIMEOUT: computation blocked too long — don't hold the main loop ──
+                logging.error(
+                    "FeatureService live compute TIMEOUT after %.1fs (limit=%.1fs) — "
+                    "returning %s",
+                    _elapsed,
+                    timeout_seconds,
+                    "last-known vector" if hasattr(self, "_last_known_vector") else "zeros",
+                )
+                _dur_ms = round(_elapsed * 1000)
+                print(
+                    json.dumps(
+                        {
+                            "event": "feature_compute_timeout",
+                            "time": datetime.now(UTC).isoformat(),
+                            "elapsed_ms": _dur_ms,
+                            "timeout_ms": round(timeout_seconds * 1000),
+                            "fallback": "last_known"
+                            if self._last_known_vector is not None
+                            else "zeros",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+                if self._last_known_vector is not None:
+                    return self._last_known_vector.copy()
+                return np.zeros(n_features, dtype=np.float64)
+
+            if _compute_error[0] is not None:
+                logging.exception(
+                    "FeatureService live compute failed: %s",
+                    _compute_error[0],
+                )
+                if self._last_known_vector is not None:
+                    return self._last_known_vector.copy()
+                return np.zeros(n_features, dtype=np.float64)
+
+            features = _compute_result[0]
+            if features is None:
+                if self._last_known_vector is not None:
+                    return self._last_known_vector.copy()
+                return np.zeros(n_features, dtype=np.float64)
+
+            # ── Log compute duration for ops visibility ──
+            _dur_ms = round(_elapsed * 1000)
+            if _dur_ms > 200:
+                logging.info(
+                    "FeatureService live compute: %.0f ms (%d features) for %s",
+                    _elapsed * 1000,
+                    len(features),
+                    symbol,
+                )
+
+            try:
                 # ── Write-back to LocalFeatureStore (best-effort, non-blocking) ──
                 if self._store is not None:
                     try:
@@ -267,7 +347,11 @@ class FeatureBrainRegistry:
         self._entries = [e for e in self._entries if e.get("brain_id") != brain_id]
 
     def list_active_entries(self) -> list[dict]:
-        return [e for e in self._entries if e.get("status", "live") not in {"retired", "frozen"}]
+        return [
+            e
+            for e in self._entries
+            if e.get("enabled", True) and e.get("status", "live") not in {"retired", "frozen"}
+        ]
 
     def list_all_entries(self) -> list[dict]:
         return list(self._entries)

@@ -113,7 +113,7 @@ def _feature_series_for_tf(
     """Compute all 10 V9 institutional features as full-length series for one timeframe.
 
     Features: Ret_1, Body_Ratio, ATR_14, RSI_14, MACD, Vol_ZScore,
-              Macro1_Corr, Macro_Gold_Silver_Spread, OU_Theta, Hurst
+              Macro1_Corr, Price_ZScore, OU_Theta, Hurst
     """
     n = len(c)
     if n < min_lookback:
@@ -128,7 +128,7 @@ def _feature_series_for_tf(
                 "MACD",
                 "Vol_ZScore",
                 "Macro1_Corr",
-                "Macro_Gold_Silver_Spread",
+                "Price_ZScore",
                 "OU_Theta",
                 "Hurst",
             ]
@@ -202,7 +202,7 @@ def _feature_series_for_tf(
             corr = np.corrcoef(win_r[:-1], win_r[1:])[0, 1]
             macro1[i] = corr if not np.isnan(corr) else 0.0
 
-    # ── Macro_Gold_Silver_Spread (20-bar price z-score) ──
+    # ── Price_ZScore (20-bar price z-score) ──
     macro_gs = np.zeros(n, dtype=np.float32)
     for i in range(20, n):
         win = c[i - 19 : i + 1]
@@ -242,7 +242,7 @@ def _feature_series_for_tf(
         "MACD": macd,
         "Vol_ZScore": vol_zscore,
         "Macro1_Corr": macro1,
-        "Macro_Gold_Silver_Spread": macro_gs,
+        "Price_ZScore": macro_gs,
         "OU_Theta": ou_theta,
         "Hurst": hurst,
     }
@@ -307,7 +307,7 @@ V9_FEATURE_NAMES = [
     "M5_MACD",
     "M5_Vol_ZScore",
     "M5_Macro1_Corr",
-    "M5_Macro_Gold_Silver_Spread",
+    "M5_Price_ZScore",
     # M15
     "M15_Ret_1",
     "M15_Body_Ratio",
@@ -316,7 +316,7 @@ V9_FEATURE_NAMES = [
     "M15_MACD",
     "M15_Vol_ZScore",
     "M15_Macro1_Corr",
-    "M15_Macro_Gold_Silver_Spread",
+    "M15_Price_ZScore",
     # M30
     "M30_Ret_1",
     "M30_Body_Ratio",
@@ -325,7 +325,7 @@ V9_FEATURE_NAMES = [
     "M30_MACD",
     "M30_Vol_ZScore",
     "M30_Macro1_Corr",
-    "M30_Macro_Gold_Silver_Spread",
+    "M30_Price_ZScore",
     # H1
     "H1_Ret_1",
     "H1_Body_Ratio",
@@ -334,7 +334,7 @@ V9_FEATURE_NAMES = [
     "H1_MACD",
     "H1_Vol_ZScore",
     "H1_Macro1_Corr",
-    "H1_Macro_Gold_Silver_Spread",
+    "H1_Price_ZScore",
     # Cross-timeframe
     "M5_OU_Theta",
     "M15_OU_Theta",
@@ -370,7 +370,7 @@ def build_features_from_csv(
         "MACD",
         "Vol_ZScore",
         "Macro1_Corr",
-        "Macro_Gold_Silver_Spread",
+        "Price_ZScore",
         "OU_Theta",
         "Hurst",
     )

@@ -40,7 +40,7 @@ def main() -> None:
             "M5_MACD": 0.0,
             "M5_Vol_ZScore": 0.0,
             "M5_Macro1_Corr": 0.3,
-            "M5_Macro_Gold_Silver_Spread": 4.0,
+            "M5_Price_ZScore": 4.0,
         }
     }
     proposals = brain_run_service.run_active_brains({}, {}, feature_blackboard)

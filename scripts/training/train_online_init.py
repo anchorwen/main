@@ -163,7 +163,7 @@ def compute_features(data: np.ndarray) -> np.ndarray:
         if len(w) > 1 and np.std(w) > 0:
             macro1_corr[i] = np.corrcoef(w[:-1], w[1:])[0, 1] if len(w) > 2 else 0.0
 
-    # Macro_Gold_Silver_Spread (20-bar price z-score)
+    # Price_ZScore (20-bar price z-score)
     macro_gold = np.zeros(n)
     for i in range(window, n):
         w = c[i - window : i]

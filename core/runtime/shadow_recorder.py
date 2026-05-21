@@ -116,7 +116,9 @@ def record_shadow_from_proposals(
         for p in proposals:
             d = _direction_to_side(p.prediction.get("direction_bias", "neutral"))
             direction_counts[d] = direction_counts.get(d, 0) + 1
-        majority = max(direction_counts, key=direction_counts.get) if direction_counts else "FLAT"
+        majority = (
+            max(direction_counts, key=lambda k: direction_counts[k]) if direction_counts else "FLAT"
+        )
         n = len(proposals)
         max_same = direction_counts.get(majority, 0)
         consensus = {
@@ -242,6 +244,10 @@ def record_brain_votes(
         bid = getattr(p, "brain_id", "unknown")
         bstatus = getattr(p, "brain_status", brain_status_map.get(bid, "unknown"))
 
+        # Collect raw_outputs (z_score, half_life, etc.) for diagnostic transparency
+        extensions = getattr(p, "extensions", {}) or {}
+        raw_outputs = extensions.get("raw_outputs", {}) if isinstance(extensions, dict) else {}
+
         entry = {
             "recorded_at": event_time.isoformat(),
             "cycle": cycle_iteration,
@@ -255,6 +261,14 @@ def record_brain_votes(
             "confidence": round(float(pred.get("confidence", 0.0)), 6),
             "consensus_direction": consensus_direction,
             "consensus_confidence": consensus_confidence,
+            "raw_outputs": {
+                k: round(float(v), 6)
+                if isinstance(v, int | float) and not isinstance(v, bool)
+                else v
+                for k, v in raw_outputs.items()
+            }
+            if raw_outputs
+            else None,
         }
         lines.append(json.dumps(entry, ensure_ascii=False) + "\n")
 

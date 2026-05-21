@@ -81,6 +81,21 @@ class ActivePosition:
     ou_handoff_active: bool = False  # True → use trail stop, NOT ou_exit
     ou_handoff_r: float = 0.0  # R-multiple at handoff time (for journal)
 
+    # v3.3: Strategy attribution for gamma-based EV trajectory dispatch
+    strategy_name: str = ""  # e.g. "statarb_dynamic", "barrier_12bar"
+
+    # v3.4: Expected remaining volume after legitimate reductions (partial_tp, net_out).
+    # Synced on every confirmed volume change; used for ghost-volume audit at close.
+    expected_remaining_volume: float = 0.0
+
+    # v3.5: Per-strategy exit parameters (FIX-20260520-026 — Dynamic Exit Manager)
+    # These override the ActivePositionManager globals so that a statarb mean-reversion
+    # position can use a tight 1.5 ATR trail while an H4 swing position uses 2.5 ATR.
+    trail_atr_mult: float = 2.0
+    trail_atr_mult_low: float = 1.5
+    trail_atr_mult_high: float = 3.0
+    breakeven_threshold_atr: float = 1.0
+
 
 # ── Manager ────────────────────────────────────────────────────────────────
 
@@ -108,7 +123,7 @@ class ActivePositionManager:
         confidence_drop_threshold: float = 0.10,
         max_hold_cycles: int = 60,
         require_min_r: float = 0.3,
-        min_step: float = 0.005,  # minimum SL change to fire modify (~0.5 pip XAUUSD)
+        min_step: float = 0.15,  # minimum SL change to fire modify (~15 pips XAUUSD)
         max_lock_atr: float = 4.0,  # max R to lock in via trailing (capped at original_SL + max_lock_atr × entry_atr)
         graduated_lock_enabled: bool = True,  # graduated profit locking: SL floor rises with R milestones
         graduated_lock_levels: tuple[tuple[float, float], ...] = (
@@ -154,6 +169,12 @@ class ActivePositionManager:
         self._last_state_path: str | None = None
         self._recovery_cycle: int = -1  # -1=normal, >=0=in grace period (increments each cycle)
 
+        # v3.2 Knife 2: Drift Lock — per-direction spatial lock after mean-drift exit
+        # Key: "long" or "short", Value: z-score threshold to unlock
+        # When OU exit triggers with PnL < 0 (mean drifted, not price reverted),
+        # same-direction re-entry is blocked until z crosses to the OPPOSITE side.
+        self._drift_lock: dict[str, float] = {}
+
     # ── Internal helpers ──────────────────────────────────────────────────
 
     def _get_pos(self, ticket: int | None = None) -> ActivePosition | None:
@@ -172,11 +193,11 @@ class ActivePositionManager:
         """Backward-compat property: returns primary position."""
         return self._get_pos()
 
-        # v3.2 Knife 2: Drift Lock — per-direction spatial lock after mean-drift exit
-        # Key: "long" or "short", Value: z-score threshold to unlock
-        # When OU exit triggers with PnL < 0 (mean drifted, not price reverted),
-        # same-direction re-entry is blocked until z crosses to the OPPOSITE side.
-        self._drift_lock: dict[str, float] = {}
+    @_position.setter
+    def _position(self, pos: ActivePosition) -> None:
+        """Backward-compat setter: registers a position by its ticket."""
+        self._positions[pos.ticket] = pos
+        self._primary_ticket = pos.ticket
 
     # ── Public API ──────────────────────────────────────────────────────
 
@@ -244,6 +265,11 @@ class ActivePositionManager:
         current_high: float | None = None,
         partial_tp_r: float = 0.0,
         partial_tp_ratio: float = 0.5,
+        strategy_name: str = "",
+        trail_atr_mult: float | None = None,
+        trail_atr_mult_low: float | None = None,
+        trail_atr_mult_high: float | None = None,
+        breakeven_threshold_atr: float | None = None,
     ) -> ActivePosition:
         """Record a newly-opened position (or recover one after restart).
 
@@ -253,6 +279,7 @@ class ActivePositionManager:
         high = current_high if current_high is not None else entry_price
         low = entry_price  # worst-case for a long; for short we'd swap
 
+        _trail = trail_atr_mult if trail_atr_mult is not None else self.trail_atr_mult
         pos = ActivePosition(
             ticket=ticket,
             side=side,
@@ -270,9 +297,21 @@ class ActivePositionManager:
             entry_consensus=dict(entry_consensus or {}),
             supporting_brain_ids=list(supporting_brain_ids or []),
             model_horizons=dict(model_horizons or {}),
-            trail_multiplier=self.trail_atr_mult,
+            trail_multiplier=_trail,
             partial_tp_r=partial_tp_r,
             partial_tp_ratio=partial_tp_ratio,
+            strategy_name=strategy_name,
+            expected_remaining_volume=volume,
+            trail_atr_mult=_trail,
+            trail_atr_mult_low=trail_atr_mult_low
+            if trail_atr_mult_low is not None
+            else self.trail_atr_mult_low,
+            trail_atr_mult_high=trail_atr_mult_high
+            if trail_atr_mult_high is not None
+            else self.trail_atr_mult_high,
+            breakeven_threshold_atr=breakeven_threshold_atr
+            if breakeven_threshold_atr is not None
+            else self.breakeven_threshold_atr,
         )
         self._entry_consensus_score = float(pos.entry_consensus.get("consensus_score", 0))
         # Seed EMA with entry confidence so first-cycle drop is measured
@@ -295,15 +334,39 @@ class ActivePositionManager:
         regime_info: dict[str, Any] | None = None,
         cycle_count: int = 0,
         ticket: int | None = None,
+        m5_high: float | None = None,
+        m5_low: float | None = None,
+        m5_spread_points: int = 0,
     ) -> dict[str, Any]:
         """Per-cycle update for one or all positions.  Returns aggregate info."""
+        _spread = m5_spread_points * 0.001 if m5_spread_points > 0 else (ask - bid)
         if ticket is not None:
-            return self._update_single_position(ticket, mid, bid, ask, current_atr, regime_info)
+            return self._update_single_position(
+                ticket,
+                mid,
+                bid,
+                ask,
+                current_atr,
+                regime_info,
+                m5_high=m5_high,
+                m5_low=m5_low,
+                spread=_spread,
+            )
 
         # Update all positions
         result: dict[str, Any] = {}
         for t in list(self._positions):
-            result = self._update_single_position(t, mid, bid, ask, current_atr, regime_info)
+            result = self._update_single_position(
+                t,
+                mid,
+                bid,
+                ask,
+                current_atr,
+                regime_info,
+                m5_high=m5_high,
+                m5_low=m5_low,
+                spread=_spread,
+            )
         return result
 
     def _update_single_position(
@@ -314,8 +377,17 @@ class ActivePositionManager:
         ask: float,
         current_atr: float,
         regime_info: dict[str, Any] | None = None,
+        m5_high: float | None = None,
+        m5_low: float | None = None,
+        spread: float = 0.0,
     ) -> dict[str, Any]:
-        """Update one position's cycle trackers and extremes."""
+        """Update one position's cycle trackers and extremes.
+
+        When M5 bar OHLC is available (m5_high/m5_low not None), uses
+        bar extremes with bid/ask spread calibration to capture intra-cycle
+        price extremes that instantaneous bid/ask would miss.  Otherwise
+        falls back to the legacy instantaneous path (graceful degradation).
+        """
         pos = self._positions.get(ticket)
         if pos is None:
             return {}
@@ -324,13 +396,30 @@ class ActivePositionManager:
         if self._recovery_cycle >= 0:
             self._recovery_cycle += 1
 
-        # Track extremes
-        pos.highest_high = max(pos.highest_high, bid if pos.side == "long" else ask)
-        pos.lowest_low = min(pos.lowest_low, ask if pos.side == "long" else bid)
-
-        # Track peak R
-        r_now = self._compute_r_multiple(mid, ticket=ticket)
-        pos.highest_r = max(pos.highest_r, r_now)
+        # Track extremes — Pillar 1: OHLC-calibrated with graceful degradation
+        if m5_high is not None and m5_low is not None:
+            _eff_spread = spread if spread > 0 else (ask - bid)
+            if pos.side == "long":
+                pos.highest_high = max(pos.highest_high, m5_high)
+                pos.lowest_low = min(pos.lowest_low, m5_low)
+            else:  # short: add spread for Ask-equivalent (actual close price)
+                pos.highest_high = max(pos.highest_high, m5_high + _eff_spread)
+                pos.lowest_low = min(pos.lowest_low, m5_low + _eff_spread)
+            # Update highest_r from OHLC-calibrated extremes
+            _risk = abs(pos.entry_price - pos.initial_sl)
+            if _risk > 1e-8:
+                if pos.side == "long":
+                    _extreme_r = (pos.highest_high - pos.entry_price) / _risk
+                else:
+                    _extreme_r = (pos.entry_price - pos.lowest_low) / _risk
+                pos.highest_r = max(pos.highest_r, _extreme_r)
+            r_now = self._compute_r_multiple(mid, ticket=ticket)
+        else:
+            # Graceful degradation: legacy instantaneous bid/ask
+            pos.highest_high = max(pos.highest_high, bid if pos.side == "long" else ask)
+            pos.lowest_low = min(pos.lowest_low, ask if pos.side == "long" else bid)
+            r_now = self._compute_r_multiple(mid, ticket=ticket)
+            pos.highest_r = max(pos.highest_r, r_now)
 
         # Adjust trail multiplier for regime
         self._adjust_trail_for_regime(current_atr, regime_info, ticket=ticket)
@@ -377,7 +466,8 @@ class ActivePositionManager:
             # Lock-in cap: trail cannot lock more than max_lock_atr × entry_atr profit
             max_lock_level = pos.entry_price + self.max_lock_atr * pos.entry_atr
             candidate = min(candidate, max_lock_level)
-            if candidate <= pos.current_sl:
+            # Ratchet rule: SL only moves in profit direction, minimum step enforced
+            if candidate <= pos.current_sl + self.min_step:
                 return None
             return round(candidate, 3)
         else:
@@ -395,7 +485,8 @@ class ActivePositionManager:
             # Lock-in cap
             max_lock_level = pos.entry_price - self.max_lock_atr * pos.entry_atr
             candidate = max(candidate, max_lock_level)
-            if candidate >= pos.current_sl:
+            # Ratchet rule: SL only moves in profit direction, minimum step enforced
+            if candidate >= pos.current_sl - self.min_step:
                 return None
             return round(candidate, 3)
 
@@ -405,7 +496,8 @@ class ActivePositionManager:
         if pos is None or pos.breakeven_triggered:
             return False
 
-        threshold = self.breakeven_threshold_atr * current_atr
+        threshold_atr = getattr(pos, "breakeven_threshold_atr", self.breakeven_threshold_atr)
+        threshold = threshold_atr * current_atr
         if pos.side == "long":
             return (pos.highest_high - pos.entry_price) >= threshold
         else:
@@ -467,11 +559,11 @@ class ActivePositionManager:
 
         regime = (regime_info or {}).get("regime", "normal")
         if regime == "low":
-            base = self.trail_atr_mult_low
+            base = getattr(pos, "trail_atr_mult_low", self.trail_atr_mult_low)
         elif regime == "high":
-            base = self.trail_atr_mult_high
+            base = getattr(pos, "trail_atr_mult_high", self.trail_atr_mult_high)
         else:
-            base = self.trail_atr_mult
+            base = getattr(pos, "trail_atr_mult", self.trail_atr_mult)
 
         # Volatility-adaptive K: widen in expanding vol (trend acceleration),
         # tighten in contracting vol (trend exhaustion).  Replaces the old
@@ -526,13 +618,13 @@ class ActivePositionManager:
             conf_ratio = 1.0
 
         if conf_ratio > 1.20:
-            conf_adj = 0.6  # confidence rising significantly → wide trail
+            conf_adj = 0.30  # confidence rising significantly → moderate widen (was 0.60)
         elif conf_ratio > 1.05:
-            conf_adj = 0.3  # confidence rising mildly
+            conf_adj = 0.15  # confidence rising mildly (was 0.30)
         elif conf_ratio < 0.70:
-            conf_adj = -0.5  # confidence collapsing → tighten sharply
+            conf_adj = -0.25  # confidence collapsing → moderate tighten (was -0.50)
         elif conf_ratio < 0.85:
-            conf_adj = -0.2  # confidence decaying → moderate tighten
+            conf_adj = -0.10  # confidence decaying → mild tighten (was -0.20)
         else:
             conf_adj = 0.0  # stable confidence → no adjustment
 
@@ -1192,9 +1284,8 @@ class ActivePositionManager:
             return None
 
         # Compute what the TP would be at current ATR
-        tp_distance = (
-            self.trail_atr_mult * current_atr * 1.75
-        )  # TP trail uses 1.75x the SL trail mult
+        _trail_mult = getattr(pos, "trail_atr_mult", self.trail_atr_mult)
+        tp_distance = _trail_mult * current_atr * 1.75  # TP trail uses 1.75x the SL trail mult
         if pos.side == "long":
             candidate = pos.entry_price + tp_distance
             if candidate < pos.current_tp:
@@ -1229,24 +1320,26 @@ class ActivePositionManager:
         override_min_r: float | None = None,
         ticket: int | None = None,
     ) -> tuple[bool, str]:
-        """Dynamic EV trajectory envelope — sqrt-law Alpha decay exit.
+        """Gamma-parameterised EV trajectory envelope — Alpha-trajectory-aware exit.
 
-        Replaces the old linear-phase time decay (50%→0.3R, 80%→0.5R, 100%→1.0R)
-        with a smooth sqrt-based expected-value curve per Triple-Barrier theory:
+        Replaces the old one-size-fits-all sqrt curve with a family of power-law
+        progress curves keyed by strategy archetype:
 
-            EV_min(t) = R_target × √(t/T_max) − tolerance
+            Progress = (t / T_max) ** gamma
+            EV_floor(t) = start_floor + (end_target − start_floor) × Progress
 
-        - Early cycles: curve starts negative (tolerance absorbs spread/slippage).
-        - Mid-life: curve rises non-linearly (Alpha must prove itself).
-        - Expiry: curve reaches R_target (must be at design R:R).
+        Gamma controls the early-vs-late distribution of the trajectory demand:
+          - Breakout / Momentum (barrier_*):     γ = 0.5  concave — demanding early
+          - Trend Following    (swing):          γ = 1.0  linear   — steady
+          - Mean Reversion     (statarb_*):      γ = 2.0  convex   — lenient early, sharp late
 
-        A grace period (first 10% of horizon or 2 cycles) prevents instant stop-out
-        from spread/slippage drag right after entry.
+        The hardcoded grace-period cliff (``t_ratio < 0.10``) is removed — the
+        continuous curve handles early-cycle tolerance naturally through
+        ``start_floor`` and ``gamma``.
 
-        FIX-20260518-036: replaces the four hard-coded linear phases with a
-        continuous sqrt trajectory.  The tolerance floor (0.5R) gives normal
-        price noise room to breathe; the grace period lets the position survive
-        the friction-cost recovery window.
+        ``override_min_r`` (YAML ``min_r_for_hold``) defines the envelope
+        endpoint: at expiry the position must deliver at least this R to
+        justify staying in.  When unset the design R:R (TP/SL) is used.
         """
         pos = self._get_pos(ticket)
         if pos is None:
@@ -1261,33 +1354,56 @@ class ActivePositionManager:
         T_max = max(effective_horizon, 1)
         t_ratio = pos.cycles_held / T_max
 
-        # ── Grace period: let the position survive friction recovery ──
-        if t_ratio < 0.10 or pos.cycles_held < 2:
-            return False, ""
+        # ── 1. Alpha trajectory signature (gamma) + start tolerance ──
+        _sname = (pos.strategy_name or "").lower()
+        if "statarb" in _sname:
+            gamma = 2.0  # convex — mean reversion needs room to converge
+            start_floor = -0.8  # allow early drawdown up to −0.8R
+        elif "barrier" in _sname:
+            gamma = 0.5  # concave — breakout must prove itself quickly
+            start_floor = -0.3  # only small tolerance for friction
+        else:
+            gamma = 1.0  # linear — default steady ramp
+            start_floor = -0.5
 
-        # ── Design R:R — the strategy's expected reward at horizon expiry ──
+        # ── 2. Envelope endpoint ──
+        # Design R:R (the strategy's aspirational reward)
         _sl_dist = abs(pos.entry_price - pos.initial_sl)
         _tp_dist = abs(pos.initial_tp - pos.entry_price)
         r_target = _tp_dist / _sl_dist if _sl_dist > 1e-8 else 1.75
 
-        # ── EV trajectory with tolerance floor ──
-        # sqrt(t_ratio) starts small and grows to 1.0.  Subtracting tolerance
-        # creates a curve that starts negative (absorbing friction) and rises
-        # to R_target − tolerance at expiry.
-        tolerance = 0.5  # 0.5R buffer for normal price noise
-        ev_floor = r_target * math.sqrt(min(t_ratio, 1.0)) - tolerance
+        # override_min_r (YAML min_r_for_hold) replaces the design R:R as the
+        # curve endpoint when configured — "I only need 0.3R to justify holding"
+        end_target = (
+            override_min_r if (override_min_r is not None and override_min_r > 0) else r_target
+        )
+
+        # ── 3. Continuous EV floor (no grace-period cliff) ──
+        progress = math.pow(min(t_ratio, 1.0), gamma)
+        ev_floor = start_floor + (end_target - start_floor) * progress
 
         if r_now < ev_floor:
             return True, (
-                f"ev_trajectory_t{t_ratio:.0%}_r{r_now:.2f}_lt_{ev_floor:.2f}" f"_h{T_max}c"
+                f"ev_trajectory_{pos.strategy_name}_gamma{gamma}"
+                f"_t{t_ratio:.0%}_r{r_now:.2f}_lt_{ev_floor:.2f}"
             )
         return False, ""
 
-    def should_exit_hesitation(self, ticket: int | None = None) -> tuple[bool, str]:
+    def should_exit_hesitation(
+        self, mid: float = 0.0, ticket: int | None = None
+    ) -> tuple[bool, str]:
         """Exit if position has not triggered breakeven within hesitation_cycles.
 
         Catches positions that never gain traction — the consensus said "trade"
         but the market did not follow through.  Returns (should_exit, reason).
+
+        Pillar 2 — Profit Pardon: if highest_r >= 0.15 (position had meaningful
+        profit but breakeven was missed due to sampling blind spot), grant
+        2× hesitation_cycles extended grace period.
+
+        Pillar 3 — Current-Profit Guard: if the position is currently profitable
+        (r_now > 0), do NOT kill it — the market IS following through, just
+        slower than the breakeven threshold expects.
         """
         if self.hesitation_cycles <= 0:
             return False, ""
@@ -1296,6 +1412,19 @@ class ActivePositionManager:
             return False, ""
         if pos.breakeven_triggered:
             return False, ""
+
+        # Pillar 3: Current-profit guard — a profitable position has traction
+        r_now = self._compute_r_multiple(mid, ticket=ticket)
+        if r_now > 0:
+            return False, ""
+
+        # Pillar 2: Profit Pardon — highest_r >= 0.15 gets 2× extension
+        if pos.highest_r >= 0.15:
+            extended_cycles = self.hesitation_cycles * 2
+            if pos.cycles_held < extended_cycles:
+                return False, ""
+            return True, (f"hesitation_{pos.cycles_held}c_pardon_expired" f"_r{pos.highest_r:.2f}")
+
         if pos.cycles_held >= self.hesitation_cycles:
             return True, f"hesitation_{pos.cycles_held}c_no_breakeven"
         return False, ""
@@ -1422,11 +1551,14 @@ class ActivePositionManager:
                         "r_milestones_hit": pos.r_milestones_hit,
                         "cycles_held": pos.cycles_held,
                         "highest_r": pos.highest_r,
+                        "prev_r": pos.prev_r,
                         "partial_tp_triggered": pos.partial_tp_triggered,
                         "partial_tp_r": pos.partial_tp_r,
                         "partial_tp_ratio": pos.partial_tp_ratio,
                         "ou_handoff_active": pos.ou_handoff_active,
                         "ou_handoff_r": pos.ou_handoff_r,
+                        "strategy_name": pos.strategy_name,
+                        "expected_remaining_volume": pos.expected_remaining_volume,
                     }
                 )
             payload: dict[str, Any] = {
@@ -1509,6 +1641,16 @@ class ActivePositionManager:
                 partial_tp_ratio=float(d.get("partial_tp_ratio", 0.5)),
                 ou_handoff_active=bool(d.get("ou_handoff_active", False)),
                 ou_handoff_r=float(d.get("ou_handoff_r", 0.0)),
+                strategy_name=str(d.get("strategy_name", "")),
+                expected_remaining_volume=float(
+                    d.get("expected_remaining_volume", d.get("volume", 0.0))
+                ),
+                trail_atr_mult=float(d.get("trail_atr_mult", self.trail_atr_mult)),
+                trail_atr_mult_low=float(d.get("trail_atr_mult_low", self.trail_atr_mult_low)),
+                trail_atr_mult_high=float(d.get("trail_atr_mult_high", self.trail_atr_mult_high)),
+                breakeven_threshold_atr=float(
+                    d.get("breakeven_threshold_atr", self.breakeven_threshold_atr)
+                ),
             )
 
         is_v2 = isinstance(data.get("version"), int) and data["version"] >= 2

@@ -1,12 +1,15 @@
 #!/usr/bin/env python
 """Build training dataset from calibrated labels + historically-computed features.
 
-Computes v9_institutional_40 features directly from OHLC CSV data at each
-label's entry bar. This bypasses the live feature store (which only contains
-recent data) and enables training across the full historical label period.
+Computes v9_institutional_40 features + 9 microstructural features (49-dim total)
+directly from OHLC CSV data at each label's entry bar.
 
-Features are computed identically to V9LiveFeatureComputer so the training
-distribution matches the live inference distribution.
+Features are computed identically to V9LiveFeatureComputer + MicrostructureFeatureComputer
+so the training distribution matches the live inference distribution.
+
+Micro features (9 dims):
+  tick_return, hl_ratio, co_ratio, avg_spread, OIM, tick_velocity,
+  XAGUSDc_return, EURUSDc_return, USDJPYc_return
 
 Usage:
   python scripts/training/build_calibrated_dataset.py \
@@ -24,6 +27,7 @@ import math
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 # ── Feature computation constants (must match v9_live_computer.py) ──────────
 ATR_PERIOD = 14
@@ -163,7 +167,7 @@ def _macro1_corr(price: np.ndarray, lookback: int = 20) -> float:
     return float(np.corrcoef(ret[:-1], ret[1:])[0, 1])
 
 
-def _macro_gold_silver_spread(price: np.ndarray, lookback: int = 20) -> float:
+def _price_zscore(price: np.ndarray, lookback: int = 20) -> float:
     if len(price) < lookback:
         return 0.0
     window = price[-lookback:]
@@ -251,7 +255,7 @@ def compute_features_at_bar(
                 "MACD",
                 "Vol_ZScore",
                 "Macro1_Corr",
-                "Macro_Gold_Silver_Spread",
+                "Price_ZScore",
                 "OU_Theta",
                 "Hurst",
             ]:
@@ -265,23 +269,42 @@ def compute_features_at_bar(
         result[f"{tf_name}_MACD"] = _macd(c_tf)
         result[f"{tf_name}_Vol_ZScore"] = _vol_zscore(v_tf)
         result[f"{tf_name}_Macro1_Corr"] = _macro1_corr(c_tf)
-        result[f"{tf_name}_Macro_Gold_Silver_Spread"] = _macro_gold_silver_spread(c_tf)
+        result[f"{tf_name}_Price_ZScore"] = _price_zscore(c_tf)
         result[f"{tf_name}_OU_Theta"] = _ou_theta(c_tf)
         result[f"{tf_name}_Hurst"] = _hurst(c_tf)
 
     return result
 
 
+# ── Micro feature names ─────────────────────────────────────────────────────
+
+MICRO_FEATURE_NAMES = [
+    "tick_return",
+    "hl_ratio",
+    "co_ratio",
+    "avg_spread",
+    "OIM",
+    "tick_velocity",
+    "XAGUSDc_return",
+    "EURUSDc_return",
+    "USDJPYc_return",
+]
+
+
 # ── Data loading ───────────────────────────────────────────────────────────
 
 
 def load_ohlc_arrays(csv_path: Path) -> dict[str, np.ndarray]:
-    """Load OHLC CSV into numpy arrays. Handles MT5 export format."""
+    """Load OHLC CSV into numpy arrays. Handles MT5 export format.
+
+    Returns arrays for: open, high, low, close, volume, spread, timestamp_epoch.
+    """
     if not csv_path.exists():
         raise FileNotFoundError(f"CSV not found: {csv_path}")
 
-    opens, highs, lows, closes, volumes = [], [], [], [], []
+    opens, highs, lows, closes, volumes, spreads = [], [], [], [], [], []
     timestamps: list[str] = []
+    timestamp_epochs: list[float] = []
 
     with open(csv_path, encoding="utf-8-sig") as f:
         sample = f.read(4096)
@@ -309,6 +332,7 @@ def load_ohlc_arrays(csv_path: Path) -> dict[str, np.ndarray]:
                 l = float(row[3])
                 c = float(row[4])
                 v = float(row[5]) if len(row) > 5 else 0.0
+                s = float(row[6]) if len(row) > 6 else 0.0
             except (ValueError, IndexError):
                 continue
             if h < l or c <= 0:
@@ -319,7 +343,15 @@ def load_ohlc_arrays(csv_path: Path) -> dict[str, np.ndarray]:
             lows.append(l)
             closes.append(c)
             volumes.append(v)
+            spreads.append(s)
             timestamps.append(ts)
+            try:
+                ts_dt = pd.Timestamp(ts)
+                if ts_dt.tzinfo is not None:
+                    ts_dt = ts_dt.tz_convert(None)
+                timestamp_epochs.append(ts_dt.timestamp())
+            except Exception:
+                timestamp_epochs.append(0.0)
 
     return {
         "open": np.array(opens, dtype=np.float64),
@@ -327,9 +359,117 @@ def load_ohlc_arrays(csv_path: Path) -> dict[str, np.ndarray]:
         "low": np.array(lows, dtype=np.float64),
         "close": np.array(closes, dtype=np.float64),
         "volume": np.array(volumes, dtype=np.float64),
+        "spread": np.array(spreads, dtype=np.float64),
         "timestamp": timestamps,
+        "timestamp_epoch": np.array(timestamp_epochs, dtype=np.float64),
         "n_bars": len(closes),
     }
+
+
+def load_cross_symbol_data(
+    csv_dir: Path,
+    xau_timestamps: list[str] | np.ndarray,
+) -> dict[str, np.ndarray]:
+    """Load EUR, JPY, XAG M5 close prices aligned to XAU timestamps.
+
+    Args:
+        csv_dir: Directory containing M5 CSVs.
+        xau_timestamps: List of XAU ISO-format timestamps (matching ohlc data).
+
+    Returns dict with keys: eur_close, jpy_close, xag_close
+    Each array is same length as XAU bars, with NaN where no data exists.
+    """
+    n = len(xau_timestamps)
+    # Parse XAU timestamps to numpy datetime64 for searchsorted
+    xau_dt = (
+        pd.to_datetime(xau_timestamps, utc=True).tz_convert(None).to_numpy(dtype="datetime64[ns]")
+    )
+
+    result: dict[str, np.ndarray] = {
+        "eur_close": np.full(n, np.nan, dtype=np.float64),
+        "jpy_close": np.full(n, np.nan, dtype=np.float64),
+        "xag_close": np.full(n, np.nan, dtype=np.float64),
+    }
+
+    for sym_key, csv_name in [
+        ("eur_close", "eurusdc_m5_merged.csv"),
+        ("jpy_close", "usdjpyc_m5_merged.csv"),
+        ("xag_close", "xagusdc_m5_merged.csv"),
+    ]:
+        sym_path = csv_dir / csv_name
+        if not sym_path.exists():
+            print(f"       [WARN] {csv_name} not found, skipping {sym_key}")
+            continue
+        df = pd.read_csv(sym_path, parse_dates=["time"])
+        if isinstance(df["time"].dtype, pd.DatetimeTZDtype):
+            df["time"] = df["time"].dt.tz_convert(None)
+        df = df.sort_values("time").reset_index(drop=True)
+
+        sym_ts = df["time"].to_numpy(dtype="datetime64[ns]")
+        sym_close = df["close"].to_numpy(dtype=np.float64)
+
+        # For each XAU bar, find the closest PAST cross-symbol bar (backward fill)
+        idxs = np.asarray(np.searchsorted(sym_ts, xau_dt, side="right") - 1)
+        valid: np.ndarray = (idxs >= 0) & (idxs < len(sym_close))
+        result[sym_key][valid] = sym_close[idxs[valid]]
+
+    return result
+
+
+def precompute_micro_features(
+    ohlc: dict[str, np.ndarray],
+    cross_data: dict[str, np.ndarray] | None = None,
+) -> np.ndarray:
+    """Precompute 9 micro features for all bars.
+
+    Returns (N, 9) float64 array. Features with insufficient data (e.g. first bar
+    of cross-symbol) will have NaN.
+    """
+    n = ohlc["n_bars"]
+    close = ohlc["close"]
+    high = ohlc["high"]
+    low = ohlc["low"]
+    open_ = ohlc["open"]
+    spread = ohlc["spread"]
+    volume = ohlc["volume"]
+
+    X_micro = np.full((n, 9), np.nan, dtype=np.float64)
+
+    # tick_return: close pct_change * 100
+    X_micro[1:, 0] = (np.diff(close) / close[:-1]) * 100.0
+
+    # hl_ratio: (high - low) / close
+    X_micro[:, 1] = (high - low) / np.clip(close, 1e-9, None)
+
+    # co_ratio: close / open
+    X_micro[:, 2] = close / np.clip(open_, 1e-9, None)
+
+    # avg_spread: spread / close
+    X_micro[:, 3] = spread / np.clip(close, 1e-9, None)
+
+    # OIM: (close - open) / (high - low)
+    hl_diff = high - low
+    oim_mask = hl_diff > 1e-12
+    X_micro[oim_mask, 4] = (close[oim_mask] - open_[oim_mask]) / hl_diff[oim_mask]
+    X_micro[~oim_mask, 4] = 0.0
+
+    # tick_velocity: tick_volume / 1000
+    X_micro[:, 5] = volume / 1000.0
+
+    if cross_data is not None:
+        for col_idx, key in enumerate(["xag_close", "eur_close", "jpy_close"], start=6):
+            sym_close = cross_data[key]
+            # Element-wise pct_change: ret[i] = (close[i] - close[i-1]) / close[i-1] * 100
+            sym_ret = np.full(n, np.nan, dtype=np.float64)
+            diff = sym_close[1:] - sym_close[:-1]
+            prev = sym_close[:-1]
+            valid = ~np.isnan(diff) & ~np.isnan(prev) & (prev > 1e-9)
+            rets = np.full(n - 1, np.nan, dtype=np.float64)
+            rets[valid] = (diff[valid] / prev[valid]) * 100.0
+            sym_ret[1:] = rets
+            X_micro[:, col_idx] = sym_ret
+
+    return X_micro
 
 
 # ── Dataset assembly ───────────────────────────────────────────────────────
@@ -338,39 +478,47 @@ def load_ohlc_arrays(csv_path: Path) -> dict[str, np.ndarray]:
 def pair_labels_with_computed_features(
     labels_path: Path,
     ohlc: dict[str, np.ndarray],
+    x_micro: np.ndarray,
     *,
     warmup_bars: int = 500,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[str]]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[str]]:
     """Join labels to historically-computed feature vectors.
 
-    Returns (X, y, pnl, side, feature_names).
+    Returns (X_49, y, pnl, side, timestamps, feature_names).
+    X_49 includes 40 v9_institutional + 9 microstructural features.
     side: 1=long, 0=short.
+    Rows with NaN in micro features are dropped.
     """
     o = ohlc["open"]
     h = ohlc["high"]
     l = ohlc["low"]
     c = ohlc["close"]
     v = ohlc["volume"]
+    ts_epoch = ohlc["timestamp_epoch"]
     n_bars = ohlc["n_bars"]
 
     feature_names = sorted(
         compute_features_at_bar(o, h, l, c, v, min(warmup_bars, n_bars - 1)).keys()
     )
+    all_feature_names = feature_names + MICRO_FEATURE_NAMES
 
     X_rows: list[list[float]] = []
     y_rows: list[int] = []
     pnl_rows: list[float] = []
     side_rows: list[int] = []
+    ts_rows: list[float] = []
     matched = 0
     skipped_warmup = 0
     unmatched = 0
+    dropped_nan = 0
 
     with open(labels_path, encoding="utf-8") as f:
         for i, line in enumerate(f):
             if (i + 1) % 10000 == 0:
                 print(
                     f"  ... {i + 1} labels processed ({matched} matched, "
-                    f"{skipped_warmup} warmup, {unmatched} unmatched)"
+                    f"{skipped_warmup} warmup, {unmatched} unmatched, "
+                    f"{dropped_nan} nan-dropped)"
                 )
 
             line = line.strip()
@@ -391,24 +539,46 @@ def pair_labels_with_computed_features(
                 skipped_warmup += 1
                 continue
 
+            # Check micro features for NaN
+            micro_vec = x_micro[entry_idx]
+            if np.any(np.isnan(micro_vec)):
+                dropped_nan += 1
+                continue
+
             feat_vec_dict = compute_features_at_bar(o, h, l, c, v, entry_idx)
             feat_vec = [float(feat_vec_dict.get(fn, 0.0)) for fn in feature_names]
+            feat_vec.extend(float(v) for v in micro_vec)
             X_rows.append(feat_vec)
 
-            numeric_label = lab.get("label", 0)
-            y_rows.append(1 if numeric_label == 1 else 0)
+            label_int_str = lab.get("label_int", lab.get("label", "0"))
+            try:
+                label_int = int(label_int_str)
+            except (ValueError, TypeError):
+                label_str = str(lab.get("label", "")).lower()
+                if "tp" in label_str or "win" in label_str:
+                    label_int = 1
+                elif "sl" in label_str or "loss" in label_str:
+                    label_int = -1
+                else:
+                    label_int = 0
+            y_rows.append(label_int)
 
             pnl_rows.append(float(lab.get("pnl_r", 0.0)))
             side_rows.append(1 if lab.get("side") == "long" else 0)
+            ts_rows.append(float(ts_epoch[entry_idx]))
             matched += 1
 
     X = np.array(X_rows, dtype=np.float64)
     y = np.array(y_rows, dtype=np.int32)
     pnl = np.array(pnl_rows, dtype=np.float64)
     side = np.array(side_rows, dtype=np.int8)
+    timestamps = np.array(ts_rows, dtype=np.float64)
 
-    print(f"  Total: {matched} matched, {skipped_warmup} warmup, {unmatched} unmatched")
-    return X, y, pnl, side, feature_names
+    print(
+        f"  Total: {matched} matched, {skipped_warmup} warmup, "
+        f"{unmatched} unmatched, {dropped_nan} nan-dropped"
+    )
+    return X, y, pnl, side, timestamps, all_feature_names
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────
@@ -433,14 +603,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=500,
         help="Skip first N bars (need lookback for feature computation)",
     )
+    p.add_argument(
+        "--purge-bars",
+        type=int,
+        default=0,
+        help="Purge N bars between train/val to prevent label overlap leakage "
+        "(de Prado purging). Should equal label horizon (e.g., 12 for 12-bar barrier).",
+    )
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    # ── Load OHLC data ─────────────────────────────────────────────────
-    print("[1/3] Loading OHLC data...")
+    # ── Load XAU OHLC data ────────────────────────────────────────────
+    print("[1/4] Loading XAU OHLC data...")
     try:
         ohlc = load_ohlc_arrays(args.price_data)
     except FileNotFoundError as e:
@@ -448,11 +625,27 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(f"       {ohlc['n_bars']} bars loaded")
 
-    # ── Compute features + pair with labels ─────────────────────────────
-    print("[2/3] Computing features and pairing with labels...")
-    X, y, pnl, side, feature_names = pair_labels_with_computed_features(
+    # ── Load cross-symbol data ────────────────────────────────────────
+    print("[2/4] Loading cross-symbol data (EUR, JPY, XAG M5)...")
+    csv_dir = args.price_data.parent
+    cross_data = load_cross_symbol_data(csv_dir, ohlc["timestamp"])
+    eur_valid: int = int(np.sum(~np.isnan(cross_data["eur_close"])))
+    jpy_valid: int = int(np.sum(~np.isnan(cross_data["jpy_close"])))
+    xag_valid: int = int(np.sum(~np.isnan(cross_data["xag_close"])))
+    print(f"       EUR: {eur_valid} bars with data, " f"JPY: {jpy_valid}, XAG: {xag_valid}")
+
+    # ── Precompute micro features ─────────────────────────────────────
+    print("[3/4] Precomputing 9 micro features for all bars...")
+    x_micro = precompute_micro_features(ohlc, cross_data)
+    valid_micro: int = int(np.sum(~np.any(np.isnan(x_micro), axis=1)))
+    print(f"       {valid_micro} / {ohlc['n_bars']} bars have complete micro features")
+
+    # ── Compute V9 features + pair with labels ────────────────────────
+    print("[4/4] Computing 40 V9 features + pairing with labels...")
+    X, y, pnl, side, timestamps, feature_names = pair_labels_with_computed_features(
         args.labels,
         ohlc,
+        x_micro,
         warmup_bars=args.warmup_bars,
     )
 
@@ -460,21 +653,34 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[ERROR] Only {len(X)} samples matched — insufficient for training")
         return 1
 
-    pos_rate = (y == 1).mean()
+    pos_rate = float((y == 1).mean())
+    neg_rate = float((y == -1).mean())
+    to_rate = float((y == 0).mean())
     avg_pnl = float(np.mean(pnl[pnl != 0])) if np.any(pnl != 0) else 0.0
     print(f"       Features: {X.shape[1]}, Samples: {X.shape[0]}")
-    print(f"       Pos rate: {pos_rate:.1%}, Avg PnL (nonzero): {avg_pnl:.4f}R")
+    print(
+        f"       TP: {pos_rate:.1%}, SL: {neg_rate:.1%}, "
+        f"Timeout: {to_rate:.1%}, Avg PnL (nonzero): {avg_pnl:.4f}R"
+    )
 
-    # ── Split and save ─────────────────────────────────────────────────
-    print("[3/3] Splitting and saving...")
+    # ── Split and save ────────────────────────────────────────────────
+    print("[5/5] Splitting (chronological, purged) and saving...")
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     split_idx = int(len(X) * (1 - args.val_split))
-    X_train, X_val = X[:split_idx], X[split_idx:]
-    y_train, y_val = y[:split_idx], y[split_idx:]
-    pnl_train, pnl_val = pnl[:split_idx], pnl[split_idx:]
-    side_train, side_val = side[:split_idx], side[split_idx:]
+    purge = args.purge_bars
+    if purge > 0:
+        train_end = max(0, split_idx - purge)
+        print(f"       Purge: {purge} bars removed between train[{train_end}] and val[{split_idx}]")
+    else:
+        train_end = split_idx
+
+    X_train, X_val = X[:train_end], X[split_idx:]
+    y_train, y_val = y[:train_end], y[split_idx:]
+    pnl_train, pnl_val = pnl[:train_end], pnl[split_idx:]
+    side_train, side_val = side[:train_end], side[split_idx:]
+    ts_train, ts_val = timestamps[:train_end], timestamps[split_idx:]
 
     np.savez_compressed(
         out_dir / "train.npz",
@@ -482,8 +688,9 @@ def main(argv: list[str] | None = None) -> int:
         y=y_train,
         pnl=pnl_train,
         side=side_train,
+        timestamps=ts_train,
         feature_names=np.array(feature_names),
-        schema="calibrated_barrier_v2",
+        schema="calibrated_barrier_v3_49dim",
     )
     np.savez_compressed(
         out_dir / "val.npz",
@@ -491,8 +698,9 @@ def main(argv: list[str] | None = None) -> int:
         y=y_val,
         pnl=pnl_val,
         side=side_val,
+        timestamps=ts_val,
         feature_names=np.array(feature_names),
-        schema="calibrated_barrier_v2",
+        schema="calibrated_barrier_v3_49dim",
     )
 
     train_pos = (y_train == 1).mean()
@@ -505,16 +713,25 @@ def main(argv: list[str] | None = None) -> int:
     print(f"       Saved to: {out_dir}")
 
     meta = {
-        "schema_version": "calibrated_dataset.v2",
+        "schema_version": "calibrated_dataset.v4",
         "n_samples": int(X.shape[0]),
         "n_features": int(X.shape[1]),
         "feature_names": feature_names,
         "train_samples": int(X_train.shape[0]),
         "val_samples": int(X_val.shape[0]),
-        "pos_rate": round(float(pos_rate), 4),
+        "pos_rate": round(pos_rate, 4),
+        "neg_rate": round(neg_rate, 4),
+        "timeout_rate": round(to_rate, 4),
         "avg_pnl_r": round(float(avg_pnl), 4),
-        "label_contract": "SL=3.0ATR, TP=1.0ATR, horizon=12",
-        "feature_source": "historical_OHLC_computed",
+        "label_contract": "Breakeven_Proxy_v1.0.0: SL=1.5ATR, TP=1.0ATR, horizon=12",
+        "feature_source": "historical_OHLC_49dim_V9_40+Micro_9",
+        "min_time": str(ts_train[0]) if len(ts_train) > 0 else None,
+        "max_time": str(ts_val[-1]) if len(ts_val) > 0 else None,
+        "train_min_time": str(ts_train[0]) if len(ts_train) > 0 else None,
+        "train_max_time": str(ts_train[-1]) if len(ts_train) > 0 else None,
+        "val_min_time": str(ts_val[0]) if len(ts_val) > 0 else None,
+        "val_max_time": str(ts_val[-1]) if len(ts_val) > 0 else None,
+        "purge_bars": purge,
     }
     with open(out_dir / "dataset_meta.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2, ensure_ascii=False)

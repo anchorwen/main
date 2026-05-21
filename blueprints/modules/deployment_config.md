@@ -61,12 +61,19 @@ environment_config.json → EnvironmentConfig → ServiceContainer
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260521-001 | 2026-05-21 | cursor-agent | — | High Recall + High Precision: barrier_12bar confidence_threshold 0.45→0.25 (loose upstream recall). MetaFilter as downstream precision gate compensates. Huber vote_weight 0.0→0.8 in brains config. | RC-09 |
+| FIX-20260520-027 | 2026-05-20 | cursor-agent | — | Institutional brain→live alignment (Layer 1): structured training_params added to all 14 brain registry entry JSONs — sl_atr_mult, tp_atr_mult, horizon_bars, min_rr_ratio. Parsed from training_contract strings (e.g. survival_barrier_2.0sl_3.5tp_12bar). BrainEntry + BrainRegistry updated. | RC-09 |
 | FIX-20260518-027 | 2026-05-18 | cursor-agent | — | Phase 2b: Added DAILY_OPS_WINDOW_HOUR=22 + DAILY_OPS_WINDOW_DURATION_HOURS=1 to core/constants.py for fixed UTC daily_ops scheduling window. | config-drift |
 | FIX-20260514-014 | 2026-05-14 | cursor-agent | a4a1005 | 按策略解耦出场配置：OU均值回归策略关闭confidence_decay_exit，趋势跟踪策略保留 | config-drift |
 | FIX-20260516-001 | 2026-05-16 | cursor-agent | — | statarb_dynamic threshold 0.40→0.25: live data shows OU signals at 0.28, 0.40 blocked all | config-drift |
 | FIX-20260517-001 | 2026-05-17 | cursor-agent | — | meta_stage2_runtime_59 schema (59-dim) added to SCHEMA_DIMENSIONS and feature name resolver in brain_config_validator.py | config-drift |
 | FIX-20260517-017 | 2026-05-17 | cursor-agent | — | Auditor→Executor wiring: scheduler_service governance_eval now chains BrainPromotionEvaluator.evaluate_all() → GovernanceRuleEngine.execute_transitions() instead of calling apply_promotion_decisions() directly. Single Executor eliminates dual-write conflict. | contract-violation |
 | FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: constants.py (DAILY_OPS_WINDOW) + path_defaults.py (brain switch) + scheduler_service.py (Auditor->Executor). Previously registered as FIX-20260518-027, FIX-20260517-017. | process-violation |
+| FIX-20260521-002 | 2026-05-21 | cursor-agent | — | ServiceContainer auto-registration lost enabled flag from live.yaml entries: brain_data loaded from JSON at path but entry['enabled'] not propagated. Added `brain_data["enabled"] = entry.get("enabled", True)` before register(). | RC-09 |
+| FIX-20260521-003 | 2026-05-21 | cursor-agent | — | 开单阈值精准化：(1) 禁用5个swing脑(xgboost d1/m15/m30/h1/h4) 100% LONG-only亏损；(2) barrier_12bar min_valid_brains 1→2 + confidence_threshold 0.25→0.45；(3) statarb_dynamic long_bias_discount 0.0→0.10 + hesitation_cycles 2→6 + confidence_threshold 0.20→0.35。 | RC-09 |
+| FIX-20260521-004 | 2026-05-21 | cursor-agent | — | Intent进程崩溃循环修复：live_intent_loop.py在multi-brain模式下仍强制加载--brain-entry指定的单一大脑配置文件，默认路径指向已删除的lgb_barrier_12bar配置。修复方案：(1) load_brain_entry()包裹在if not args.multi_brain条件中；(2) path_defaults.py DEFAULT_BRAIN_ENTRY更新为deep_res_mlp_v1.json。 | RC-09 |
+| FIX-20260521-005 | 2026-05-21 | cursor-agent | — | 全量类型注解清扫：v9_live_computer.py _returns()返回类型np.ndarray→float；main_v9_shadow.py 15个mypy错误→0(operator/vars-annotated/type-var/index/assignment/dict-item/unused-ignore)；label_builder.py变量trade遮蔽重命名为unlinked_trade。 | RC-02 |
+| FIX-20260521-006 | 2026-05-21 | cursor-agent | — | 状态清理+artifact修正：(1) governance_state.json清除16个僵尸脑条目(24→8)+27个transition_log条目；(2) live.yaml移除已删除的lightgbm_h1_swing引用；(3) deep_res_mlp_v1.json artifact_path指向现存v2模型。 | RC-09 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

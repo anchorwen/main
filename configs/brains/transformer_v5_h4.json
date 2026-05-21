@@ -25,6 +25,9 @@
   },
   "contract_group": "micro_h4",
   "training_horizon": 3,
+  "training_params": {
+    "horizon_bars": 3
+  },
   "feature_schema": "micro_9dim",
   "features": [
     "tick_return",

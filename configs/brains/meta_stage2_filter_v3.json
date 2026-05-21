@@ -7,7 +7,7 @@
   "mode": "binary",
   "ensemble_weights": [0.6, 0.4],
   "micro_scaler_path": "data/training/v9_micro_49_train.micro_scaler.json",
-  "stage1_brain_id": "Meta_Stage1_Huber_V1",
+  "stage1_brain_id": "OU_Params_V6_Sniper",
   "feature_schema": "meta_stage2_runtime_59",
   "calibrator_path": "data/models/institutional/meta_stage2_ensemble_pit_v3_calibrator.pkl",
   "calibration_method": "platt_scaling",

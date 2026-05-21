@@ -49,7 +49,7 @@ def _body_ratio(o: np.ndarray, h: np.ndarray, low: np.ndarray, c: np.ndarray) ->
     return np.clip((c - o) / denom, -1.0, 1.0)
 
 
-def _returns(c: np.ndarray) -> np.ndarray:
+def _returns(c: np.ndarray) -> float:
     """Percentage return: (c[-1] - c[-2]) / c[-2] * 100"""
     return (c[-1] - c[-2]) / c[-2] * 100.0 if len(c) >= 2 else 0.0
 
@@ -164,8 +164,8 @@ def _macro1_corr(price: np.ndarray, lookback: int = 20) -> float:
     return float(np.corrcoef(ret[:-1], ret[1:])[0, 1])
 
 
-def _macro_gold_silver_spread(price: np.ndarray, lookback: int = 20) -> float:
-    """Gold-Silver spread proxy: price deviation from 20-period MA, normalized."""
+def _price_zscore(price: np.ndarray, lookback: int = 20) -> float:
+    """Price z-score: deviation from 20-period MA, normalized by std."""
     if len(price) < lookback:
         return 0.0
     window = price[-lookback:]
@@ -230,7 +230,7 @@ class V9LiveFeatureComputer:
             result[f"{label}_MACD"] = _macd(c)
             result[f"{label}_Vol_ZScore"] = _vol_zscore(vol)
             result[f"{label}_Macro1_Corr"] = _macro1_corr(c)
-            result[f"{label}_Macro_Gold_Silver_Spread"] = _macro_gold_silver_spread(c)
+            result[f"{label}_Price_ZScore"] = _price_zscore(c)
             result[f"{label}_OU_Theta"] = _ou_theta(c)
             result[f"{label}_Hurst"] = _hurst(c)
 
@@ -272,7 +272,7 @@ class V9LiveFeatureComputer:
             f"{label}_MACD",
             f"{label}_Vol_ZScore",
             f"{label}_Macro1_Corr",
-            f"{label}_Macro_Gold_Silver_Spread",
+            f"{label}_Price_ZScore",
             f"{label}_OU_Theta",
             f"{label}_Hurst",
         ]:

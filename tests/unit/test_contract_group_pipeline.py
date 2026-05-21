@@ -257,17 +257,16 @@ def test_pipeline_atr_expansion_shrinks_volume():
 
 
 def test_pipeline_all_neutral_produces_trade_with_low_confidence():
-    """All proposals neutral → direction defaults to long with very low confidence.
+    """All proposals neutral → no trade, reason all_groups_neutral.
 
-    The contract-group system always produces a direction (when up >= down it's
-    "long") even when all direction_bias values are "neutral."  The low-confidence
-    gate downstream is responsible for filtering these out (typically threshold
-    ≥ 0.30).  This test verifies the signal is produced with appropriately low
-    conviction.
+    When all brain groups produce neutral signals, resolve_conflicts returns
+    should_trade=False with reason="all_groups_neutral".  The dual-track
+    architecture (OU oscillation + Huber probe) no longer defaults to a
+    direction when no group has conviction.
     """
     brain_proposals = [
         (
-            {"brain_type": "xgboost_v9", "contract_group": "barrier_12bar", "brain_id": "B1"},
+            {"brain_type": "lightgbm_v1", "contract_group": "barrier_12bar", "brain_id": "B1"},
             _make_prop(up=0.5, down=0.5, conf=0.5, direction="neutral", bid="B1"),
         ),
         (
@@ -279,10 +278,10 @@ def test_pipeline_all_neutral_produces_trade_with_low_confidence():
     group_signals = compute_all_group_signals(brain_proposals)
     allocation = resolve_conflicts(group_signals)
 
-    # Should produce a trade signal (direction resolved from weighted scores)
-    assert allocation.should_trade
-    # Confidence must be very low (< 0.30) so the confidence gate can filter it
-    assert allocation.confidence < 0.30
+    assert not allocation.should_trade
+    assert allocation.reason == "all_groups_neutral"
+    assert allocation.direction == "neutral"
+    assert allocation.confidence == 0.0
 
 
 # ── Pipeline + correlation tracker ──

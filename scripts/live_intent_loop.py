@@ -162,6 +162,7 @@ def _load_brain_entries_from_dir(brains_dir: str) -> list[dict[str, Any]]:
         try:
             entry = json.loads(f.read_text(encoding="utf-8"))
             if entry.get("schema_version") == "brain_registry_entry.v1":
+                entry["_source_path"] = str(f.resolve())
                 entries.append(entry)
         except (json.JSONDecodeError, OSError):
             pass
@@ -499,8 +500,11 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     # ── Build LiveCycleConfig from args ──
-    # ── Load strategy_lines overrides from live.yaml ──
+    # ── Load strategy_lines and live_trading overrides from live.yaml ──
     strategy_configs: dict[str, Any] = {}
+    _yaml_volume: float | None = None
+    _yaml_risk_budget: float | None = None
+    _yaml_equity_risk_pct: float | None = None
     if args.config:
         try:
             import yaml
@@ -508,6 +512,12 @@ def main(argv: list[str] | None = None) -> int:
             with open(args.config, encoding="utf-8") as fh:
                 full_cfg = yaml.safe_load(fh)
             strategy_configs = full_cfg.get("strategy_lines", {})
+            # Also read live_trading section for volume/risk wiring (FIX-20260519-009)
+            _lt = full_cfg.get("live_trading", {})
+            if isinstance(_lt, dict):
+                _yaml_volume = _lt.get("volume")
+                _yaml_risk_budget = _lt.get("risk_budget_usd")
+                _yaml_equity_risk_pct = _lt.get("equity_risk_pct")
             if strategy_configs:
                 print(
                     json.dumps(
@@ -521,6 +531,26 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
+
+            # Auto-scale human-readable exit parameters to M5-bar cycles
+            # Must run BEFORE validation so the validator sees scaled values
+            if strategy_configs:
+                try:
+                    from core.runtime.live_cycle import apply_timeframe_scaling
+
+                    apply_timeframe_scaling(strategy_configs)
+                except Exception as _ts_exc:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "timeframe_scaling_error",
+                                "time": _utc_iso(),
+                                "error": str(_ts_exc),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
 
             # Validate per-strategy exit configs for unknown keys (RC-09 config drift)
             if strategy_configs:
@@ -565,17 +595,40 @@ def main(argv: list[str] | None = None) -> int:
             integrity.missing_config_files
             or integrity.governance_orphans
             or integrity.hardcoded_path_mismatches
+            or integrity.alignment_hard_fails
+            or integrity.alignment_warnings
+            or integrity.alignment_ensemble_warnings
         ):
+            _event = (
+                "startup_integrity_error"
+                if integrity.alignment_hard_fails
+                else "startup_integrity_warning"
+            )
             print(
                 json.dumps(
                     {
-                        "event": "startup_integrity_warning",
+                        "event": _event,
                         "time": _utc_iso(),
                         "missing_config_files": integrity.missing_config_files,
                         "missing_yaml_entries": integrity.missing_yaml_entries,
                         "missing_artifacts": integrity.missing_artifacts,
                         "governance_orphans": integrity.governance_orphans,
                         "hardcoded_path_mismatches": integrity.hardcoded_path_mismatches,
+                        "alignment_hard_fails": integrity.alignment_hard_fails,
+                        "alignment_warnings": integrity.alignment_warnings,
+                        "alignment_ensemble_warnings": integrity.alignment_ensemble_warnings,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        else:
+            print(
+                json.dumps(
+                    {
+                        "event": "brain_live_alignment_ok",
+                        "time": _utc_iso(),
+                        "strategies_checked": len(strategy_configs),
                     },
                     ensure_ascii=False,
                 ),
@@ -601,7 +654,9 @@ def main(argv: list[str] | None = None) -> int:
         max_positions=args.max_positions,
         sl_atr_mult=args.sl_atr_mult,
         tp_atr_mult=args.tp_atr_mult,
-        volume=args.volume,
+        volume=_yaml_volume if _yaml_volume is not None else args.volume,
+        risk_budget_usd=_yaml_risk_budget if _yaml_risk_budget is not None else 10.0,
+        equity_risk_pct=_yaml_equity_risk_pct if _yaml_equity_risk_pct is not None else 0.0,
         no_mt5=args.no_mt5,
         once=args.once,
         ignore_protection_flag=args.ignore_protection_flag,
@@ -758,15 +813,15 @@ def main(argv: list[str] | None = None) -> int:
                 flush=True,
             )
 
-    try:
-        brain_entry = load_brain_entry(args.brain_entry)
-    except Exception as exc:
-        print(json.dumps({"error": "brain_entry_load_failed", "detail": str(exc)}, indent=2))
-        if mt5 is not None:
-            mt5.shutdown()
-        return 2
-
-    config.brain_entry = brain_entry
+    if not args.multi_brain:
+        try:
+            brain_entry = load_brain_entry(args.brain_entry)
+        except Exception as exc:
+            print(json.dumps({"error": "brain_entry_load_failed", "detail": str(exc)}, indent=2))
+            if mt5 is not None:
+                mt5.shutdown()
+            return 2
+        config.brain_entry = brain_entry
 
     # Apply overrides
     if args.onnx_artifact:
@@ -945,6 +1000,43 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.multi_brain:
         entries = _load_brain_entries_from_dir(args.brains_dir)
+
+        # ── Filter disabled brains (live.yaml brain_registry_entries enabled:false) ──
+        _disabled_paths: set[str] = set()
+        try:
+            import yaml as _yaml
+
+            _live_cfg_path = (
+                Path(args.config) if args.config else PROJECT_ROOT / "configs" / "live.yaml"
+            )
+            if _live_cfg_path.exists():
+                with open(_live_cfg_path, encoding="utf-8") as _fh:
+                    _live_cfg = _yaml.safe_load(_fh)
+                for _reg_entry in (_live_cfg.get("brains") or {}).get("registry_entries", []) or []:
+                    if not _reg_entry.get("enabled", True):
+                        _rp = Path(_reg_entry["path"])
+                        if not _rp.is_absolute():
+                            _rp = (PROJECT_ROOT / _rp).resolve()
+                        _disabled_paths.add(str(_rp.resolve()))
+        except Exception:
+            pass
+
+        if _disabled_paths:
+            _before = len(entries)
+            entries = [e for e in entries if e.get("_source_path", "") not in _disabled_paths]
+            print(
+                json.dumps(
+                    {
+                        "event": "disabled_brains_filtered",
+                        "time": _utc_iso(),
+                        "before_count": _before,
+                        "after_count": len(entries),
+                        "disabled_paths": sorted(_disabled_paths),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
 
         # ── Per-brain schema validation (Phase 1a) ──
         try:
@@ -1751,20 +1843,36 @@ def main(argv: list[str] | None = None) -> int:
             if bar_sync is not None:
                 new_bar = bar_sync.wait_for_new_bar(timeout_seconds=args.bar_sync_timeout)
                 if new_bar is None:
-                    # Timeout — MT5 may be down; fall back to interval
+                    # Timeout — MT5 bar not yet formed; synthesize from M1 bars
+                    synthetic = bar_sync.fetch_synthetic_bar(mt5)
                     sync_state = bar_sync.get_state()
-                    print(
-                        json.dumps(
-                            {
-                                "event": "bar_sync_timeout",
-                                "time": _utc_iso(),
-                                "state": sync_state,
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
-                    time.sleep(args.interval_seconds)
+                    if synthetic is not None:
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "bar_sync_synthetic",
+                                    "time": _utc_iso(),
+                                    "synthetic_bar_time": synthetic["time"],
+                                    "synthetic_close": round(synthetic["close"], 2),
+                                    "state": sync_state,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "bar_sync_timeout",
+                                    "time": _utc_iso(),
+                                    "state": sync_state,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                        time.sleep(args.interval_seconds)
             else:
                 time.sleep(args.interval_seconds)
     finally:

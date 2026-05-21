@@ -11,6 +11,12 @@
   "artifact_path": "data/models/online_mlp_v2.json",
   "feature_schema_id": "v9_institutional_40",
   "training_contract": "survival_barrier_2.0sl_3.5tp_12bar",
+  "training_params": {
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 3.5,
+    "horizon_bars": 12,
+    "min_rr_ratio": 1.75
+  },
   "normalization_config_path": "configs/brains/v9_institutional_01.normalization.json",
   "deployment_scope": {
     "symbols": [
@@ -36,7 +42,7 @@
     "M5_MACD",
     "M5_Vol_ZScore",
     "M5_Macro1_Corr",
-    "M5_Macro_Gold_Silver_Spread",
+    "M5_Price_ZScore",
     "M15_Ret_1",
     "M15_Body_Ratio",
     "M15_ATR_14",
@@ -44,7 +50,7 @@
     "M15_MACD",
     "M15_Vol_ZScore",
     "M15_Macro1_Corr",
-    "M15_Macro_Gold_Silver_Spread",
+    "M15_Price_ZScore",
     "M30_Ret_1",
     "M30_Body_Ratio",
     "M30_ATR_14",
@@ -52,7 +58,7 @@
     "M30_MACD",
     "M30_Vol_ZScore",
     "M30_Macro1_Corr",
-    "M30_Macro_Gold_Silver_Spread",
+    "M30_Price_ZScore",
     "H1_Ret_1",
     "H1_Body_Ratio",
     "H1_ATR_14",
@@ -60,7 +66,7 @@
     "H1_MACD",
     "H1_Vol_ZScore",
     "H1_Macro1_Corr",
-    "H1_Macro_Gold_Silver_Spread",
+    "H1_Price_ZScore",
     "M5_OU_Theta",
     "M15_OU_Theta",
     "M30_OU_Theta",

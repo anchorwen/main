@@ -205,6 +205,87 @@ class BarSyncPoller:
         )
         return None
 
+    def fetch_synthetic_bar(self, mt5: Any = None) -> dict[str, Any] | None:
+        """Fallback: aggregate last 6 M1 bars into a synthetic M5 bar.
+
+        Called when ``wait_for_new_bar`` times out — instead of sleeping the
+        main loop, we reconstruct the most recent 5-minute window from M1
+        bars.  This eliminates the 120s blind-wait and keeps the perception
+        layer aligned to real-time market conditions.
+
+        Accepts an optional *mt5* module reference from the caller (launcher)
+        to bypass any internal MT5 connection issues.  When None, imports
+        ``MetaTrader5`` directly.
+
+        Returns a dict with the same shape as ``wait_for_new_bar`` (time,
+        open, high, low, close, tick_volume, spread, real_volume), or None
+        if no M1 data is available.
+        """
+        _mt5: Any = mt5
+        if _mt5 is None:
+            try:
+                import MetaTrader5 as _mt5_mod
+
+                _mt5 = _mt5_mod
+            except Exception:
+                self._log_event("BAR_SYNTHETIC_FAILED", {"error": "import_error"})
+                return None
+
+        try:
+            m1_rates = _mt5.copy_rates_from_pos(
+                self.symbol,
+                _mt5.TIMEFRAME_M1,
+                0,
+                6,  # last 6 × M1 bars cover a full M5 window
+            )
+            if m1_rates is None or len(m1_rates) < 2:
+                return None
+
+            # Aggregate M1 bars into a synthetic M5 bar
+            highs = [float(r["high"]) for r in m1_rates]
+            lows = [float(r["low"]) for r in m1_rates]
+            closes = [float(r["close"]) for r in m1_rates]
+            opens = [float(r["open"]) for r in m1_rates]
+            volumes = [int(r.get("tick_volume", 0)) for r in m1_rates]
+            spreads = [int(r.get("spread", 0)) for r in m1_rates]
+            real_volumes = [int(r.get("real_volume", 0)) for r in m1_rates]
+
+            synthetic_time = int(m1_rates[-1]["time"])
+            synthetic_bar = {
+                "time": synthetic_time,
+                "open": opens[0],
+                "high": max(highs),
+                "low": min(lows),
+                "close": closes[-1],
+                "tick_volume": sum(volumes),
+                "spread": int(sum(spreads) / len(spreads)) if spreads else 0,
+                "real_volume": sum(real_volumes),
+                "_synthetic": True,
+            }
+
+            # Update sync state so lag detection doesn't fire spuriously
+            self._state.last_bar_time = synthetic_time
+            self._state.last_bar_open = synthetic_bar["open"]
+            self._state.last_bar_close = synthetic_bar["close"]
+            self._state.total_bars_seen += 1
+            self._state.last_sync_utc = datetime.now(UTC).isoformat()
+            self._save_state()
+
+            self._log_event(
+                "BAR_SYNTHETIC",
+                {
+                    "m1_bars_used": len(m1_rates),
+                    "synthetic_time": synthetic_time,
+                    "synthetic_close": synthetic_bar["close"],
+                },
+            )
+            return synthetic_bar
+
+        except Exception:
+            self._mt5_available = False
+            self._log_event("BAR_SYNTHETIC_FAILED", {"error": "mt5_unreachable"})
+            return None
+
     def get_state(self) -> dict[str, Any]:
         """Return current sync state for health monitoring."""
         return {

@@ -4,6 +4,39 @@
 
 ## Fix Details
 
+### FIX-20260520-027
+- **Date**: 2026-05-20
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: brains-schema, deployment-lifecycle, deployment-config, brains-services
+- **Files**: configs/brains/*.json (14 files), core/brains/brain_registry.py, core/deployment/brain_lifecycle_manager.py, scripts/live_intent_loop.py, blueprints/modules/deployment_lifecycle.md, blueprints/modules/deployment_config.md
+- **Description**: Institutional brain→live alignment validator — prevents silent parameter drift between model training contracts and live trading configuration.
+
+  **Layer 1 — Structured training_params (single source of truth)**:
+  - Added `training_params` field to all 14 brain registry entry JSONs with structured `sl_atr_mult`, `tp_atr_mult`, `horizon_bars`, `min_rr_ratio`
+  - Parsed from `training_contract` strings where possible (e.g. `survival_barrier_2.0sl_3.5tp_12bar` → `{sl: 2.0, tp: 3.5, horizon: 12, rr: 1.75}`)
+  - Swing models get `horizon_bars` from `training_horizon`; OU models get `horizon_bars: 0` (no horizon constraint)
+  - Updated `BrainEntry` dataclass + `BrainRegistry._load_all()` to parse `training_params`
+
+  **Layer 3 — Institutional startup validator**:
+  - New `BrainLifecycleManager.validate_brain_live_alignment()` with vertical + horizontal checks:
+
+  *Vertical checks (per brain→strategy line)*:
+  - **HARD FAIL**: SL_TIGHTENED — live `sl.base_atr_mult` < training `sl_atr_mult` (model drawdown tolerance amputated)
+  - **HARD FAIL**: HORIZON_TRUNCATED — live `time_exit_cycles` < training `horizon_bars` (prediction window amputated)
+  - **WARNING**: HORIZON_EXPANDED — live `time_exit_cycles` > training `horizon_bars` × 1.5 (prediction may have expired)
+  - **WARNING**: TP_DEVIATION — |live TP − train TP| / train TP > 15%
+
+  *Horizontal checks (cross-brain ensemble consistency)*:
+  - **WARNING**: ENSEMBLE_SL_MISMATCH / ENSEMBLE_TP_MISMATCH — brains in same contract_group have inconsistent training SL/TP
+
+  - Integrated into `verify_startup_integrity()` with alignment_hard_fails contributing to `report.valid = False`
+  - `live_intent_loop.py` surfaces alignment issues as `startup_integrity_error` (hard fails) or `startup_integrity_warning` (warnings), and `brain_live_alignment_ok` when clean
+
+- **Root Cause**: RC-09 — config-drift. `training_contract` string labels (e.g. `survival_barrier_2.0sl_3.5tp_12bar`) required human parsing to keep live.yaml in sync. No automated guard against silent parameter drift when models were retrained or configs modified.
+- **Prevention**: Every brain config now carries structured `training_params`. At startup, the institutional validator hard-blocks SL tightening and horizon truncation before any order can be sent. Ensemble cross-brain consistency is verified. New models must include `training_params` in their registry entry.
+- **Dependents Checked**: deployment_lifecycle.md, deployment_config.md blueprints updated. All 14 brain configs backfilled. verify.py --quick passes. Validator confirmed: 0 hard fails, 9 horizon expansion warnings (expected — max hold > prediction horizon by design), 0 ensemble mismatches.
+
 ### FIX-20260516-003
 - **Date**: 2026-05-16
 - **Author**: cursor-agent
@@ -976,6 +1009,575 @@
 - **Prevention**: All confidence threshold changes must reference actual signal distribution percentiles (not arbitrary values). Exit classification function must have an explicit "add new category here" comment before the `return "unknown"` fallback. Volume decay must validate that discretized volume < original volume — if not, hard block. Config changes that affect multiple strategies must check per-strategy signal distributions independently.
 - **Dependents Checked**: `live_cycle.py` (B4 caller, E1+E3), `strategy_line.py` (E2), `live.yaml` (A1-A4, D1). No breaking API changes — `apply_reentry_volume_scale` signature changed but only called from one site. `check_and_record_entry` return type changed but all callers updated.
 
+### FIX-20260519-006
+- **Date**: 2026-05-19
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: execution-orders, runtime-live
+- **Files**: `configs/live.yaml`, `core/runtime/live_cycle.py`
+- **Description**: 机构级参数校准 Wave 1+3:
+  - P1: barrier_12bar `hesitation_cycles` 2→4 — OU均值回归需要3-5根K线才能展现,2周期即斩仓过早导致Sniper(唯一盈利大脑+58.42)被过早止损杀死
+  - P3: `breakeven_threshold_atr` 1.0→1.5 — 原1.0ATR阈值过低,价格稍有波动即触发保本出,阻碍趋势发展; 提高到1.5ATR给仓位更多呼吸空间
+  - `min_sl_step` 0.005→0.15 — 原0.5pip阈值无效(几乎每次都触发MT5 modify),15pip提供真正的绝对防抖
+  - `LiveCycleConfig.exit_min_step` 默认值0.005→0.15 — 与live.yaml保持同步,确保CLI启动路径也使用正确的防抖阈值
+- **Root Cause**: RC-05 — boundary-error (阈值设置未参考实盘信号分布和业务逻辑, hesitation=2对均值回归策略杀伤力过大; breakeven_threshold_atr=1.0在XAUUSD典型日波动3-5ATR下过于敏感; min_step=0.5pip对XAUUSD无实际过滤效果)
+- **Prevention**: 参数调整前必须查阅策略的信号周期特征(OU均值回归需要3-5周期 vs 趋势跟踪2周期合理)和品种微观结构(XAUUSD典型滑点2-3pip,防抖至少需要5x=10-15pip)
+- **Dependents Checked**: `live.yaml` (barrier_12bar, exit_management sections), `live_cycle.py` (exit_min_step), `live_intent_loop.py` (CLI入口)
+
+### FIX-20260519-007
+- **Date**: 2026-05-19
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: execution-orders
+- **Files**: `core/execution/position_manager.py`, `core/runtime/live_cycle.py`
+- **Description**: Trail SL物理学增强:
+  1. **棘轮规则(Ratchet Rule)**: `compute_trail_stop()`集成`self.min_step`硬门槛 — long: `candidate ≤ current_sl + min_step`→不更新, short: `candidate ≥ current_sl - min_step`→不更新. 替换原`candidate ≤ current_sl`(仅防后退不防抖动),确保trail SL只在实际推进足够大时才触发MT5 modify
+  2. **Confidence Spring减半**: `_compute_adaptive_trail_k()` Layer-2置信度调节因子减半 — conf_adj: 0.6→0.30, 0.3→0.15, -0.5→-0.25, -0.2→-0.10. 原±0.6范围过于激进,置信度小幅波动即可将trail K推至极端造成过度收紧/过度放宽; 减半后保持响应性的同时显著降低情绪化振幅
+  3. **min_step默认值提升**: 0.005→0.15 (0.5pip→15pip for XAUUSD),与live.yaml同步
+  4. **LiveCycleConfig.exit_min_step提升**: 0.005→0.15,CLI启动路径一致
+- **Root Cause**: RC-05 — boundary-error (Confidence Spring的±0.6调节范围过大——alpha参数0.4时EMA半衰期仅2周期,短期conf波动可造成trail K剧烈摆动; min_step=0.5pip对XAUUSD(点值$0.01/pip)无实际过滤,几乎每个周期都触发MT5 modify导致retcode 10006 rejections)
+- **Prevention**: 自适应调节因子的范围设计应基于被调节变量的物理约束(trail K ∈ [1.0, 4.0]),单因子调节不应超过总范围的15%(0.6/3.0=20%→0.3/3.0=10%); 防抖阈值应以品种最小变动单位的5-10倍为底线
+- **Dependents Checked**: `position_manager.py` (compute_trail_stop, _compute_adaptive_trail_k), `live_cycle.py` (exit_min_step defaults), `live_intent_loop.py` (CLI入口)
+
+### FIX-20260519-008
+- **Date**: 2026-05-19
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: feat
+- **Module**: execution-orders
+- **Files**: `core/execution/portfolio_risk.py`
+- **Description**: Global Directional Cooldown — 阻断net_out死亡连锁:
+  1. `PortfolioRiskController`新增`net_out_cooldown_seconds`参数(默认600s=10分钟)
+  2. 新增`_last_net_out_timestamp`和`_last_net_out_direction`追踪字段
+  3. `check()`方法在策略重复检查之后(0.5步)检查全局方向冷却:若新开单方向与被net_out强制平仓方向相同且未过冷却期→`REJECTED`(reason:`net_out_cooldown_{direction}_{elapsed}s_lt_{cooldown}s`)
+  4. net_out/NET_OUT和REDUCED判决触发时记录被平仓方向(opposite_dir)和时间戳
+  5. 冷却键为被平仓方向(非触发方向):LONG触发net_out平掉SHORT→记录方向=short→冷却期拦截所有新SHORT开单,防止刚被平仓的空头立即被重新建立
+  逻辑: barrier_12bar止损(趋势失败→进入震荡)→此时statarb_dynamic(均值回归)本应进入做多,但若net_out刚平掉的多头仍在冷却期,则statarb_dynamic的多头会被cooldown拦截. 然而barrier_12bar止损≠net_out,只有net_out(REDUCED/NET_OUT判决)才会触发冷却,所以这个场景不受影响. 冷却仅拦截"刚被net_out平掉的方向立即重开"的连锁反应模式.
+- **Root Cause**: RC-12 — missing-feature (net_out强制平仓后无冷却机制,导致策略A触发net_out平掉策略B→策略C立即同向重开→触发反向net_out平掉策略A,形成连锁反应. 此前仅记录PnL不拦截,属于"头痛医头")
+- **Prevention**: 任何强制平仓操作(net_out, force_close_dd, liquidation)都应考虑冷却期设计,防止连锁反应. 冷却键应为`(被平仓方向)`而非`(触发策略,方向)`,确保跨策略有效.
+- **Dependents Checked**: `portfolio_risk.py` (__init__, check), `live_cycle.py` (portfolio_risk调用方). 新增参数有默认值,无破坏性变更. RiskVerdict枚举未变, RiskResult结构未变.
+
+### FIX-20260519-009
+- **Date**: 2026-05-19
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: `scripts/live_intent_loop.py`, `core/runtime/live_cycle.py`, `configs/live.yaml`
+- **Description**: config→code管道修复 — live.yaml顶层值从未流入LiveCycleConfig:
+  1. **根因**: `live_intent_loop.py`的`--config`加载仅提取`strategy_lines`段(→`strategy_configs`),完全忽略`live_trading`段. `LiveCycleConfig`使用硬编码默认值: `risk_budget_usd=5.0`, `volume=0.01`, `equity_risk_pct=0.0`
+  2. **修复**: `--config`加载时同步提取`live_trading.volume`, `live_trading.risk_budget_usd`, `live_trading.equity_risk_pct`,优先于CLI参数传入`LiveCycleConfig`
+  3. **默认值同步**: `LiveCycleConfig.risk_budget_usd` 5.0→10.0, `exit_breakeven_threshold_atr` 1.0→1.5, `exit_min_step` 0.005→0.15
+  4. **影响**: 之前无论live.yaml如何配置,vol-targeted sizing始终以$5×2.0ATR×100=$600/risk_lot计算→0.0083→0.01. 现在$10/600=0.0167→0.02. barrier_12bar.base_volume=0.02在risk_budget_usd=0时作为固定手数使用.
+- **Root Cause**: RC-09 — config-drift (`live.yaml`与`LiveCycleConfig`之间存在未经测试的管道断裂. `live_trading`顶层值缺乏从YAML到dataclass的传输机制,live.yaml的修改对实盘零影响. `strategy_lines`有管道,`live_trading`没有,不对称导致隐蔽的配置废弃)
+- **Prevention**: 新增live.yaml顶层参数时必须同步检查`live_intent_loop.py`的YAML→Config管道是否覆盖该参数. 配置参数应"默认值=dataclass字段=live.yaml值"三重一致,任何一层的修改都需验证管道通畅.
+- **Dependents Checked**: `live_intent_loop.py` (YAML加载+Config构造), `live_cycle.py` (LiveCycleConfig dataclass, vol-targeted sizing路径), `live.yaml` (live_trading/strategy_lines配置源). 无破坏性变更 — 仅当`--config`传入且live.yaml值非None时覆盖,CLI直接调用保持原有默认行为.
+
+### FIX-20260519-010
+- **Date**: 2026-05-19
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: feat
+- **Module**: feedback-pnl, brains-services, runtime-live, execution-orders
+- **Files**: `core/feedback/brain_pnl_ledger.py`, `core/brains/services/brain_attribution_service.py`, `core/runtime/live_cycle.py`, `core/execution/live_order_sender.py`, `core/execution/execution_queue.py`, `core/execution/strategy_line.py`
+- **Description**: 三轨制大脑归因体系 (Three-Track Attribution System) — 根治大脑成绩计算的结构性缺陷:
+
+  **Track 1 — Horizon-Matched Counterfactual PnL (视界匹配反事实PnL)**:
+  - `record_signal()`新增`expected_horizon`参数,每个信号携带TTL=训练视界
+  - `settle_all()`改为仅结算TTL=0的信号(非无条件全结算)
+  - barrier_12bar大脑(horizon=12)在12根K线后结算,而非1根→衡量真正的视界级预测准确率
+  
+  **Track 2 — MFE/MAE Profiling (最大顺/逆向偏移画像)**:
+  - 新增`update_pending(mid_price)`方法:每周期递减TTL+追踪最佳/最差价格
+  - `_settle()`从追踪价格计算MFE/MAE R-multiple
+  - 区分"方向对但被止损"vs"方向错但碰TP"的能力——当前系统完全缺失
+  
+  **Track 3 — Confidence-Weighted Marginal Attribution (置信度加权边际归因)**:
+  - Journal open entries新增`brain_votes: [{brain_id, direction_bias, confidence}]`
+  - `_attribute_trades()`拆分为sponsors(同向投票,按置信度加权分PnL)和dissenters(反向投票,豁免PnL)
+  - 投票细节通过`dispatch_live_open_order→execution_payload→journal`→`known_open_tickets`→`reconciliation close entries`完整链路透传
+  
+  **接线**: `live_cycle.py`新增`update_pending→settle_all`流程,`record_signal`从BrainRegistry获取training_horizon,dispatch时构建brain_votes并传入. `dispatch_live_open_order`新增`brain_votes`参数. `execution_queue.flush`新增`brain_votes`透传. `StrategyDecision`新增`brain_votes`字段.
+- **Root Cause**: RC-06 — contract-violation (现存双轨会计系统存在结构性缺口: 1) BrainPnLStore无条件在1-bar后结算→barrier_12bar大脑被用1-bar标准衡量12-bar预测能力; 2) MFE/MAE API存在但从未在实盘路径填充; 3) BrainAttributionService的"大锅饭"均分(第166行`split_pnl = pnl_val / len(brain_ids)`)使做空大脑因市场上涨被错杀、做多大脑因跟风被虚高)
+- **Prevention**: 任何新增大脑归因逻辑必须满足: (a) 结算视界匹配训练视界; (b) MFE/MAE在每周期更新而非结算时一次性计算; (c) PnL仅归因于赞助者(sponsors),反对者(dissenters)的投票记录但豁免财务后果. 新增归因维度时需同时更新三层(反事实/画像/实盘)而非单层修补.
+- **Dependents Checked**: `dynamic_brain_weighter.py` (依赖BrainPnLStore Sharper/win_rate, horizon修正后权重更准确), `shadow_recorder.py` (brain_votes格式兼容), `live_cycle.py` (3处接线点), `dispatch_live_open_order` (2个调用者+exec_queue), `send_live_order.py` (手动CLI不传brain_votes,向后兼容)
+
+### FIX-20260519-011
+- **Date**: 2026-05-19
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: feat
+- **Module**: execution-orders, runtime-live
+- **Files**: `configs/live.yaml`, `core/execution/strategy_line.py`, `core/execution/dynamic_sl_tp.py`, `core/runtime/live_cycle.py`, `scripts/live_intent_loop.py`
+- **Description**: 周期感知分层出场架构 (Timeframe-Aware Layered Exit Architecture — Waves A-D):
+
+  **Wave A — 自动周期缩放 (Auto-Scaler Pattern)**:
+  - `live_cycle.py`新增`TIMEFRAME_TO_M5`映射表(M5:1, M15:3, M30:6, H1:12, H4:48, D1:288)
+  - 新增`apply_timeframe_scaling()`函数—live_intent_loop.py加载YAML后立即调用,将人类可读的`hesitation_cycles`/`time_exit_cycles`自动乘以TF倍率
+  - YAML保持人类直觉:`hesitation_cycles:3`在H1策略永远代表"3根H1 K线"
+  - `StrategyLineConfig`新增`timeframe`字段+`timeframe_mult`属性,11个策略构造点全部传入
+  - `live.yaml`所有策略新增`timeframe`字段
+
+  **Wave B — √t ATR法则 (Square Root of Time Rule)**:
+  - `compute_dynamic_sl_tp()`新增`timeframe_mult`参数(默认1)
+  - ATR按`√(timeframe_mult)`缩放:方差随time线性增长(随机游走),stddev∝√time
+  - H1策略ATR=7.0×√12=24.2→SL=24.2×2.0=48.5 pips(原14pips→增加3.5×)
+  - 调用点`strategy_line.py`传入`self.config.timeframe_mult`
+
+  **Wave C — Meta Exit 维度隔离 (Dimensional Isolation)**:
+  - `_manage_position()`构建`meta_consensus`时按`_tf_mult`过滤`group_signals`
+  - 大周期仓位(≥H1)仅使用同级别+大脑的共识,M5涟漪不惊扰H4货轮
+  - 向后兼容:M5策略仍可见所有group_signals(_tf_mult=1)
+
+  **Wave D — 方向坍塌模型回退 (Directional Collapse Rollback)**:
+  - m30_swing/h1_swing/h4_swing→`enabled:false`(100% short bias—宏观偏见过拟合)
+  - 仅保留m15_swing(33单,21long/12short,有双向识别能力)
+  - 重训前不占用实盘预算
+- **Root Cause**: RC-05/RC-06 — (1) hesitation_cycles/time_exit_cycles在所有策略使用相同M5 bar单位,H1策略hesitation_cycles=3=15分钟即退出→67%退出率; (2) SL/TP未按√timeframe缩放,H1止损12pips=噪音级别; (3) Meta Exit混用全局共识,M5/M15反转信号错误触发H1/H4仓位退出; (4) xgboost_v9在大周期上宏观偏见过拟合→100%做空
+- **Prevention**: 任何新增策略必须在live.yaml声明`timeframe`字段; 新增出场参数必须考虑周期缩放; 跨周期共识只能向下兼容(短周期可用长周期信号,反之不可); 模型上线前检查方向分布偏差
+- **Dependents Checked**: `compute_dynamic_sl_tp()` (3个调用者兼容), `StrategyLineConfig` (29个测试构造点兼容), `live_intent_loop.py` (timeframe_scaling在validation之前运行)
+
+### FIX-20260519-012
+- **Date**: 2026-05-19
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: feat
+- **Module**: execution-orders
+- **Files**: `core/execution/dynamic_sl_tp.py`, `core/execution/strategy_line.py`, `core/runtime/live_cycle.py`, `configs/live.yaml`
+- **Description**: Absolute SL Distance Floor + RR Guard Synchronization:
+
+  **问题**:
+  - statarb_dynamic ATR塌陷至3.17时SL=1.5×3.17=4.76,减去2-3pip点差后净呼吸空间~2pip,等价于噪声触发
+  - 现有RR最低检查(tp/sl<1.2→reject)治标不治本,拦截信号而非解决问题
+
+  **修复 (两层保护)**:
+  1. **Absolute Distance Floor**: `compute_dynamic_sl_tp()`新增`min_sl_distance`参数(价格单位,默认0.0=禁用)。当`raw_sl_distance < min_sl_distance`时→`sl_distance = min_sl_distance`。保底值从YAML `sl.min_sl_distance`读取
+  2. **RR Guard Synchronization**: 新增`min_rr_ratio`参数(默认0.0=禁用)。当SL被保底抬升后,`tp_distance = max(raw_tp_distance, sl_distance × min_rr_ratio)`,确保TP同步拉伸维持最低盈亏比
+
+  **管道**:
+  - `StrategyLineConfig`新增`min_sl_distance`/`min_rr_ratio`字段
+  - `strategy_line.evaluate()`调用`compute_dynamic_sl_tp()`时透传
+  - `live_cycle.py`全部11策略构造点从YAML `sl`块读取并传入
+
+  **YAML配置**:
+  - barrier_12bar/micro_3bar/statarb_dynamic(M5策略): `min_sl_distance: 8.0`, `min_rr_ratio: 1.5`
+  - 更大周期策略(≥M15): 使用默认0.0(不启用—√t缩放已提供充分距离)
+
+  **受益**: SL不再因ATR塌陷而缩至点差级别,TP不再因SL保底而产生负偏斜盈亏比
+- **Root Cause**: RC-05 — boundary-error (原始设计只有multiplier clamping,无绝对距离保底。ATR塌陷时SL随ATR线性收缩→触及spread硬底→交易数学破产)
+- **Prevention**: 所有SL计算必须同时声明乘数保底(multiplier clamping)和距离保底(distance floor),二者组成完整的两层防御。新策略上线前需test ATR=0时的SL/TP行为。
+- **Dependents Checked**: `compute_dynamic_sl_tp()`向后兼容(新增参数默认0.0), `StrategyLineConfig`所有43个测试构造点兼容(默认0.0), 191 execution+consistency测试通过
+
+### FIX-20260519-013
+- **Date**: 2026-05-19
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: protocol-parliament
+- **Files**: `core/parliament/contract_groups.py`
+- **Description**: ContractGroupConsensus._compute_weighted() all-neutral group direction bug:
+
+  **问题**:
+  - statarb_dynamic组的OU_Params_V6_Sniper始终输出neutral(0.5/0.5)时,brain_votes显示consensus_direction="long",consensus_confidence=0.2486
+  - 根因: `_compute_weighted()`在`weighted_up >= weighted_down`时选"long"方向—全neutral脑组up==down==0.5触发此条件
+  - 0.2486来自: raw_score=0.5×0.85=0.425(neutral penalty), majority_ratio=0/1=0, consensus=0.425×0.65+0×0.35=0.276(实际因dynamic_weighter稍低)
+
+  **修复**:
+  - 在方向判断前新增early return: 当`neutral_count == total`时直接返回GroupSignal(direction="neutral", confidence=0.0)
+  - 删除了伪造的direction和confidence—neutral脑组不应产生任何方向信号
+
+  **受益**: statarb_dynamic组的共识不再虚假偏向long,下游gate检查的consensus_confidence正确反映0.0(而非0.2486),避免无方向信号通过极低置信度阈值
+
+- **Root Cause**: RC-06 — contract-violation (中性方向在`weighted_up>=weighted_down`的平局逻辑中未被作为独立状态处理,而是被隐式归类为"long")
+- **Prevention**: 共识计算的三种状态(long/short/neutral)必须在代码中显式建模,不应依赖浮点比较的平局退化为"long"
+- **Dependents Checked**: `compute_all_group_signals()`(caller)→`resolve_conflicts()`(downstream), `_compute_union()`(parallel path—already correctly handles all-neutral via separate branch)
+
+### FIX-20260519-014
+- **Date**: 2026-05-19
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: feat
+- **Module**: runtime-live
+- **Files**: `core/runtime/shadow_recorder.py`, `core/execution/strategy_line.py`
+- **Description**: Brain_votes diagnostic blind-spot — raw_outputs (z_score/theta/half_life) added to brain_votes JSONL:
+
+  **问题**:
+  - OU_Params_V6_Sniper输出0.5/0.5 neutral连续49分钟,无法从brain_votes确认是buffer饥饿还是趋势市场(theta≤0)
+  - `record_brain_votes()`仅记录prediction字段(direction/up/down/confidence),不记录`extensions.raw_outputs`中的z_score/theta/half_life/mu
+  - 诊断完全盲飞—每次OU冻结都需手工跟踪infer()调用链
+
+  **修复**:
+  - `record_brain_votes()`新增`raw_outputs`字段: 从proposal.extensions.raw_outputs提取z_score/theta/half_life/mu/buffer_len等
+  - 数值类型自动round到6位小数,bool/str保持原样
+  - brain_votes JSONL每行现在包含完整OU诊断数据
+
+  **受益**: 下次OU冻结时,一行brain_votes即可确认根因(z_score≈0→中性/z_score有值但未超threshold→阈值/buffer_len<window→饥饿),无需重新部署诊断代码
+
+- **Root Cause**: RC-06 — contract-violation (原始brain_votes schema只覆盖了prediction层,未透传adapter返回的raw_outputs诊断字段)
+- **Prevention**: 所有adapter的infer()返回的raw_outputs字段应在brain_votes schema中保留透传,以便adapter特定的诊断数据不被静默丢弃
+- **Dependents Checked**: `shadow_tracker.py`(reader—新字段为增量添加,旧读取代码无需修改), `brain_attribution_service.py`(不读取raw_outputs)
+
+### FIX-20260519-015
+- **Date**: 2026-05-19
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: execution-orders
+- **Files**: `core/execution/position_manager.py`, `core/runtime/live_cycle.py`
+- **Description**: Gamma-parameterised EV trajectory envelope — 基于Alpha轨迹特征的动态出场包络线重构:
+
+  **问题**:
+  - Ticket 3528724097 (statarb_dynamic LONG) 在持仓7分钟/4周期后被EV trajectory斩杀, R=-0.08 低于 ev_floor=0.13
+  - 根因1: 硬编码sqrt曲线 (γ=0.5凹函数) 要求所有策略在10%时间内产出31.6%目标利润 — 对均值回归物理上不可能
+  - 根因2: `override_min_r`参数被`should_exit_time_based()`接受但从未使用 — YAML `min_r_for_hold:0.3`完全被忽略
+  - 根因3: 硬编码宽限期悬崖 (t_ratio<10%完全不管, 10%时突然要求R≥0.13) — 无平滑过渡
+
+  **修复**:
+  - 引入γ形状因子非线性插值: `Progress = (t/T)^γ`, `EV_floor = start_floor + (end_target − start_floor) × Progress`
+  - 策略原型自动分发: statarb→γ=2.0凸(start_floor=-0.8), barrier→γ=0.5凹(start_floor=-0.3), 默认→γ=1.0线性(start_floor=-0.5)
+  - `override_min_r`接线: YAML min_r_for_hold→end_target, 未配置时回退到SL/TP设计盈亏比r_target
+  - 彻底删除硬编码宽限期悬崖 — 连续曲线通过start_floor自然吸收早期摩擦
+  - `ActivePosition`新增`strategy_name`字段, `register_position()`透传, `save_state()`持久化
+  - 还原: statarb在10%时间点 floor=-0.789R (vs 旧0.13R) — 给足接飞刀震荡筑底空间
+
+  **受益**: statarb_dynamic不再过早被kill; barrier_12bar保持凹函数早期严格验收; min_r_for_hold语义正确实现(到期时最低门槛); 退出原因包含strategy_name+gamma值便于日志诊断
+
+- **Root Cause**: RC-05 (sqrt曲线在10%时间点产出正数要求=边界错误) + RC-06 (override_min_r参数接受但未使用=合约违规)
+- **Prevention**: 所有时间衰减曲线必须通过gamma参数化,策略原型自动匹配曲线形状; 新增函数参数必须在函数体中使用,mypy `--warn-unused-ignores`虽不直接检测此模式但代码审查应验证
+- **Dependents Checked**: `execute_live_cycle()`(两个register_position调用点已透传strategy_name), `reentry_guard.py`(`_classify_exit_reason`仍匹配`ev_trajectory_`前缀—新格式保留此前缀), `save_state/load_state`(v2多仓位格式兼容新字段)
+
+### FIX-20260519-016
+- **Date**: 2026-05-19
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: feat
+- **Module**: brains-adapters
+- **Files**: `core/brains/adapters/params_brain_adapter.py`, `data/models/arb_params_v7.json`
+- **Description**: OU信号质量升级 — z_entry门槛 + half_life置信度折扣:
+
+  **问题**:
+  - z_entry=1.3σ: 正态分布下19%的样本落在外面, XAUUSD M5中过于常见 → 大量弱信号(p_win=0.489)
+  - confidence计算仅依赖|z|-z_entry的excess, 完全忽略half_life — 18-bar快回归和55-bar慢回归产生相同的置信度
+  - 实盘20个周期中仅1个(5%)|z|>1.3, 其余信号在灰色地带(1.0<|z|<1.3)产生weak_conf≈0.58
+
+  **修复A (artifact)**:
+  - `arb_params_v7.json`: z_entry 1.3→2.0 (2σ仅有4.6%样本落在外面—仅极端偏离才触发)
+  - z_exit维持1.0不变(退出逻辑不受影响)
+
+  **修复B (adapter)**:
+  - `_z_to_direction()`新增half_life折扣因子: `discount = 1.0 − half_life / max_half_life, clamped [0.3, 1.0]`
+  - 强信号分支: `confidence = min(0.95, (0.5 + sigmoid(excess) * 0.45) * discount)`
+  - 弱信号分支: `weak_conf = (0.5 + sigmoid(|z|/z_entry * 0.3) * 0.15) * discount`
+  - half_life=18: discount=0.69→置信度小幅打折; half_life=55: discount=0.30→置信度腰斩
+
+  **预期效果**: 交易频率显著下降(仅极端偏离触发), 但剩余信号质量大幅提升(2σ偏离+快回归=高置信)
+
+- **Root Cause**: RC-05 (z_entry=1.3对XAUUSD太宽松→边界错误) + RC-06 (half_life信息已计算但未参与confidence→合约违规)
+- **Prevention**: 模型超参数需按资产波动率校准(黄金日内波动~1.5-2σ, z_entry=2.0合理); adapter中已计算的诊断参数(half_life/theta)应参与决策而非仅输出到raw_outputs
+- **Dependents Checked**: `brain_votes`(raw_outputs仍输出z_score/half_life—诊断不受影响), `strategy_line`(conf<0.35时statarb_dynamic拒绝开仓—较低confidence自然被过滤), `contract_groups`(单脑组直接透传confidence—折扣生效)
+
+### FIX-20260520-022 — OU z_entry 回退：修正 FIX-20260519-016 过度修正
+- **Date**: 2026-05-20
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: brains-adapters
+- **Files**: `data/models/arb_params_v7.json`
+- **Description**: 撤销 FIX-20260519-016 中 z_entry 1.3→2.0 的修改，恢复 Optuna 验证值：
+
+  **发现过程**:
+  1. statarb_dynamic 实盘连续 16 小时 0 信号 (187 周期 neutral_consensus)
+  2. 追溯 brain_votes 发现 OU 大脑 Z-score 完全正常 (buffer=250, theta>0, mu 合理)，但从未触及 z_entry=2.0
+  3. May 19 上午 (z_entry=1.3 时期): |z| 达 6.27, 65 次非中性信号, |z|>2.0 仅 4 次 (1.3%)
+  4. May 19 傍晚 + May 20 (z_entry=2.0): |z| 最大 1.04, **0 次非中性信号**
+  5. FIX-20260519-016 声明 "仅 1/20 周期 |z|>1.3" 基于 20 周期观察，但 Optuna 300 次试验 × 34320 数据点全部 Top-10 收敛于 z_entry=1.3
+  6. z_entry=2.0 配合 window=250 (~21h) 均值估计，实际过滤了 99%+ 信号而非声称的 80%
+
+  **修复**:
+  - `arb_params_v7.json` optimal_params.z_entry: 2.0→1.3
+  - **保留** half_life 折扣 (FIX-20260519-016 的真正价值 — 慢回归信号被正确折扣)
+  - **保留** z_exit=1.0 (Optuna 验证)
+  - 不做 adapter 代码修改 (参数变化由 artifact 加载自动生效)
+
+  **预期效果**: 强 Z-score + 快回归 → 高置信度通关；弱 Z-score + 慢回归 → half_life 折扣后低于 confidence_threshold=0.35 被过滤；完全中性 (|z|<1.0) 正确返回 neutral
+
+- **Root Cause**: RC-05 (z_entry=2.0 对 XAUUSD M5 过于保守，实际 2σ 偏离在 21h 滚动窗口内极为罕见) + RC-09 (Optuna 验证值与 production 参数不一致 — FIX-20260519-016 基于 20 周期小样本推翻 34320 数据点搜索结果)
+- **Prevention**: 模型超参数修正必须引用 Optuna 搜索结果作为证据反方；若搜索结果与实盘观察矛盾，应先增加诊断日志收集 200+ 周期数据再决策，而非基于 20 周期即下结论
+- **Dependents Checked**: `brain_votes` (raw_outputs 诊断不受影响), `strategy_line._compute_consensus` (ContractGroupConsensus 透传 confidence), `StatArbStrategy._run_inference` (直接使用 adapter.inference() — 参数从 artifact 加载)
+- **Related**: [[FIX-20260519-016]] (本 fix 修正的原 fix), [[FIX-20260516-001]] (同一策略此前也被阈值完全静音 0.40→0.25), [[FIX-20260519-014]] (brain_votes raw_outputs — 本 fix 的诊断数据来源)
+
+### FIX-20260519-017
+- **Date**: 2026-05-19
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: execution-orders, runtime-live
+- **Files**: `core/execution/position_manager.py`, `core/runtime/live_cycle.py`
+- **Description**: Four-Pillar Architecture — 针对ticket 3530348428级联失效链(采样盲点→保本未触发→犹豫斩杀→幽灵手数)的机构级四柱修复:
+
+  **Pillar 1 — M5 bar OHLC极值校准**:
+  - `_execute_management_phase()`在`update_prices()`前通过`mt5.copy_rates_from_pos(M5, 0, 1)`获取当前M5 bar的high/low/spread
+  - M5 bar覆盖整个管理周期间窗口(0-5分钟), 消除瞬时bid/ask的采样盲点
+  - `_update_single_position()`增加`m5_high`/`m5_low`/`spread`参数
+  - 空头: `lowest_low = min(lowest_low, m5_low + spread)`, `highest_high = max(highest_high, m5_high + spread)`
+  - 多头: `highest_high = max(highest_high, m5_high)`, `lowest_low = min(lowest_low, m5_low)`
+  - 更新极端值后立即从极端价格计算`highest_r`(不再仅依赖mid)
+  - IPC失败/空值→优雅降级回瞬时bid/ask旧逻辑(None值判断)
+
+  **Pillar 2 — Profit Pardon (盈利赦免)**:
+  - `should_exit_hesitation()`: 若`highest_r >= 0.30`(曾有意义浮盈), 授予`2× hesitation_cycles`宽限期
+  - 仅当`cycles_held >= extended_cycles`才返回True, reason: `hesitation_{N}c_pardon_expired_r{X.XX}`
+  - 解决: 系统因采样盲点未识别breakeven但头寸实际盈利→被过早斩杀
+
+  **Pillar 3 — prev_r持久化补全**:
+  - `save_state()`新增`prev_r`字段序列化(已在`_build_position()`反序列化但未写入)
+  - 验证`highest_r`/`highest_high`/`lowest_low`/`strategy_name`持久化链路完整
+
+  **Pillar 4 — expected_remaining_volume + 幽灵手数硬阻断**:
+  - `ActivePosition`新增`expected_remaining_volume`字段(初始=volume, 每次合法减仓同步更新)
+  - 同步点: partial_tp执行后(`pos.volume = ptp_remain_vol` → `expected_remaining_volume`同步), net_out ticket reassign后
+  - `save_state()`/`_build_position()`持久化`expected_remaining_volume`
+  - `_dispatch_managed_close()`增加ghost-volume审计:
+    - 比较`pos.volume`与`expected_remaining_volume`
+    - 若非partial_tp/net_out且volume < expected → 查询`mt5.positions_get(ticket=pos.ticket)`获取MT5真实手数
+    - 以MT5 ground truth覆盖`payload["volume"]`, 避免`TRADE_RETCODE_INVALID_VOLUME`拒绝风暴
+    - `ghost_volume_audit`JSON事件记录审计轨迹
+
+  **设计防御**:
+  - Pillar 1: 不用`M1,0,1`而用`M5,0,1`→覆盖完整周期间窗口(5分钟), 防止多根M1 bar间极值遗漏
+  - Pillar 4: 不盲用`original_volume`或`expected_remaining_volume`→以MT5 `positions_get(ticket=)`为最终事实源
+
+  **实盘验证发现 (追加修复)**:
+  - m30_swing策略`enabled: false`在live.yaml中但今日仍开仓(3534236316, 12:31 UTC)
+  - 根因: `_build_strategy_lines()`从未读取策略级`enabled`标志—仅检查brain级`status in ("frozen","retired")`
+  - `shadow`状态大脑(非frozen非retired)继续投票→策略仍被创建→开仓
+  - 修复: strategy construction前枚举所有contract group, `_cfg(group_name, "enabled", True)`为False则清空brain list→策略不创建
+  - `strategy_disabled_by_config` JSON事件记录禁用动作
+
+- **Root Cause**: RC-06 — 管理周期瞬时bid/ask采样系统性丢失周期内极值; breakeven检查仅依赖漏检的lowest_low; 犹豫斩杀无浮盈赦免; 平仓手数无完整性校验; RC-09 — 策略级enabled标志未在_build_strategy_lines中强制
+- **Prevention**: 管理周期使用M5 bar OHLC覆盖完整窗口; 出场逻辑增加highest_r赦免门槛; 平仓前以MT5 positions_get核实手数; 策略构建前强制读取live.yaml enabled标志
+- **Dependents Checked**: `compute_trail_stop`(依赖lowest_low/highest_high—P1正确校准), `should_breakeven`(依赖lowest_low—同上), `graduated_lock`(依赖lowest_low/highest_high—同上), brain re-evaluation path(依赖highest_r—P1同步更新); `_build_strategy_lines`所有11个策略if-block(cfg enabled前置门控—禁用策略零影响)
+
+### FIX-20260519-018
+- **Date**: 2026-05-19
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: execution-orders, runtime-live
+- **Files**: `core/execution/position_manager.py`, `core/runtime/live_cycle.py`
+- **Description**: P1 回归修复 — `r_now` 未绑定导致整个 management phase 静默崩溃, trail SL / breakeven / trail TP 完全失效:
+
+  **Bug 发现过程**:
+  - 实盘监控发现 m15_swing 头寸 (ticket 3536099550) SL 冻结在 4522.125, 经历 19 个管理周期 (cycles_held=19) 从未移动
+  - `highest_r=1.92` 证明 Pillar 1 (M5 bar OHLC 极值追踪) 正常运作
+  - 但 `breakeven_triggered=false`, 且所有 session 日志中零条 `trail_stop_moved` 事件
+  - trail math 验证: `candidate = 4464.667 + 1.912 × 7.575 = 4479.151`, 距 `current_sl` 差 42.97 点, 远超 `min_step=0.15` → 理论应触发
+  - breakeven math 验证: `4502.445 - 4464.667 = 37.778 >= 1.5 × 7.575 = 11.363` → 理论应触发
+
+  **根因定位**:
+  - `_update_single_position()` 中 `r_now` 变量仅在 `else` 分支 (瞬时 bid/ask 降级) 赋值 (line 377)
+  - 但 `return` 语句 (lines 383-388) 在两个分支都会执行, 引用了 `r_now`
+  - 当 M5 bar 数据**可用**时 (Pillar 1 的正常路径, lines 357-372), `r_now` 从未定义 → `UnboundLocalError`
+  - 异常沿调用栈向上传播到 `execute_live_cycle()` line 3835: `except Exception: pass` → 静默吞掉
+  - 结果: `cycles_held` 和 `highest_r` 正常更新 (在崩溃前已写入 pos 对象), 但 trail/breakeven/trail-TP 代码 (lines 967-1049) 永远无法执行
+
+  **影响范围**:
+  - Pillar 1 自实现以来 (FIX-20260519-017), 每次 M5 bar 数据可用时 management phase 都静默崩溃
+  - 仅在 M5 bar 数据不可用时 (IPC 失败) 走 else 分支才正常——但此时 OHLC 极值追踪也不生效
+  - 受影响函数: `compute_trail_stop()`, `should_breakeven()`, `compute_trail_tp()`, `_dispatch_modify_trail()` — 全部被跳过
+
+  **修复**:
+  1. `position_manager.py`: M5 OHLC 分支 (line 372 后) 补上 `r_now = self._compute_r_multiple(mid, ticket=ticket)`
+  2. `live_cycle.py`: 在 trail/breakeven 决策后、dispatch 前新增 `management_phase_diag` JSON 事件:
+     - 输出所有关键变量: trail_sl_candidate, trail_fired, breakeven_fired, breakeven_improves, final_sl, final_tp, reasons, exit_min_step, pm_min_step
+     - 每个 cycle 打印一次, 为未来诊断提供可见性
+
+  **防御机制**:
+  - 双重保障: `config.exit_min_step` (LiveCycleConfig) + `pm.min_step` (ActivePositionManager) — 两个独立阈值均默认 0.15
+  - 诊断日志在每个管理周期强制执行, 无任何条件门槛
+  - 静默异常吞噬的可观测性: 若 `_dispatch_modify_trail` 失败 → `trail_dispatch_error` 事件; 若 trail 成功 → `trail_stop_moved` 事件
+
+- **Root Cause**: RC-06 — contract-violation (Pillar 1 M5分支未定义 `r_now` 违反函数内部contract: 所有分支必须为 return dict 填充所有key); regression (FIX-20260519-017 引入的缺陷, 仅else分支定义r_now)
+- **Prevention**: (1) 所有 `if-else` 分支共享的 `return` 语句中引用的局部变量, 必须在两个分支中显式赋值; (2) 管理周期关键路径禁止裸 `except Exception: pass` — 至少应记录 JSON 事件; (3) 新增功能必须搭配诊断日志 (类似 `management_phase_diag`), 以便在零外部可见性时快速定位
+- **Dependents Checked**: `compute_trail_stop()` (依赖 `update_prices` 成功执行后调用), `should_breakeven()` (同上), `should_exit_hesitation()` (依赖 `highest_r` — P1正确更新未受影响), `_dispatch_managed_close()` (ghost-volume审计路径独立, 不受影响)
+
+### FIX-20260519-019 — BarSyncPoller M1 合成K线异步滑窗采样
+- **Date**: 2026-05-19
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: protocol-services, runtime-live
+- **Files**: `core/protocol/event_bar_sync.py`, `scripts/live_intent_loop.py`
+- **Description**: 根治 bar_wait_timeout 92.8% 超时率 (14次采样13次超时) 导致的数据脱节 (Data Misalignment) 问题。
+
+  **问题**: BarSyncPoller.wait_for_new_bar() 在 M5 bar 未生成时同步等待最多 120s, 超时后仅 time.sleep(interval) 回到循环。在这 120s 窗口内, 主循环在用 5-10 分钟前的"僵尸特征"评估最新市场价格 — Pillar 1 的 M5 OHLC 极端追踪拿到的 rates[0] 是旧周期 K线, 采样盲区借尸还魂。若窗口内爆发宏观事件 (美联储决议/地缘政治), 黄金瞬间波动 $30, 系统完全无感知。
+
+  **修复**: 
+  1. BarSyncPoller 新增 `fetch_synthetic_bar()` 方法: 当 M5 bar 超时时, 不再空等, 而是立即调用 `mt5.copy_rates_from_pos(TIMEFRAME_M1, 0, 6)` 抓取最近 6 根 M1 K线, 在 Python 内存中聚合为合成 M5 OHLC(V):
+     - `open = M1[0].open`
+     - `high = max(M1[i].high)`
+     - `low = min(M1[i].low)`
+     - `close = M1[-1].close`
+     - `tick_volume = sum(M1[i].tick_volume)`
+  2. 合成 bar 标记 `_synthetic: true`, 更新 sync state 避免 lag detection 误报
+  3. 发射 `BAR_SYNTHETIC` 事件 (含 M1 bar 数量、合成时间、收盘价)
+  4. live_intent_loop.py 调用方: 超时时用合成 bar 替代 `time.sleep(interval)`, 仅在合成也失败 (MT5 完全不可达) 时才降级为 interval sleep
+
+  **物理效果**: 心跳永远控制在 M1 bar 聚合耗时 (<50ms) 内, 彻底消灭 bar_wait_timeout, 感知层实现真正的实时流式对齐。
+
+- **Root Cause**: RC-06 — data-misalignment, sampling-blind-spot: BarSyncPoller 的同步等待设计假设 MT5 会在新周期第一秒推送 M5 OHLC, 但 MT5 服务器/CST 时区对齐/缓存刷新延迟导致 M5 bar 实际延迟 30-120s 才可用。原有的 timeout→sleep 回退策略在 92.8% 的周期中让系统运行在完全脱节的数据上。
+- **Prevention**: (1) 任何时间框架的 bar 等待必须搭配 M1 级别的细粒度回退, 不能仅靠 sleep; (2) 数据新鲜度应在 bar sync 层自身保证, 而非依赖下游 feature freshness check; (3) 合成 bar 必须标记来源 (synthetic flag) 以便下游审计。
+- **Dependents Checked**: `execute_live_cycle()` 不直接消费 bar sync 结果 (通过 market_ingress 间接获取 MT5 数据), 不受影响; `_execute_management_phase()` 独立获取 M5 bar (已有 grace degradation), 不受影响; feature_service 的 MT5 数据拉取独立于 bar sync, 不受影响。
+
+### FIX-20260519-020 — FeatureService 特征计算超时保护
+- **Date**: 2026-05-19
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: features-service, runtime-live
+- **Files**: `core/features/feature_service.py`
+- **Description**: 隔离算力黑洞 — 防止 live_compute 同步阻塞主循环导致"隐形成交滑点"。
+
+  **问题**: FeatureService.build_feature_vector() 的 Tier 2 (live_compute) 在主线程中同步执行 V9LiveFeatureComputer.compute_all() (4个时间框架 × 每个10个特征 = 40个特征的完整计算, 包含多次 copy_rates_from_pos MT5调用 + numpy运算)。当特征缓存过期 (>300s) 触发 live_compute 时, 主循环被同步阻塞数百毫秒, statarb_dynamic 的 approved LONG 指令到达 MT5 时价格已漂移, 造成"实际成交价劣于信号入场价"的隐形成交滑点。
+
+  **修复**: 
+  1. FeatureService.build_feature_vector() 新增 `timeout_seconds` 参数 (默认 3.0s)
+  2. Tier 2 compute_all() 调用包装在 daemon thread 中, 主线程通过 `thread.join(timeout=3.0)` 等待
+  3. 超时时返回 `self._last_known_vector` (上一周期的成功计算结果), 若从未成功则返回 zeros
+  4. 发射 `feature_compute_timeout` 事件 (含 elapsed_ms, timeout_ms, fallback 类型)
+  5. compute_all() 耗时 >200ms 时发射 info 日志 (feature_compute_duration_ms)
+  6. `_last_known_vector` 在 Tier 1 缓存命中 / Tier 2 成功计算后更新
+
+  **MT5 线程安全性**: MT5 内部有全局锁, 多线程调用自动序列化。daemon thread 仅调用 copy_rates_from_pos (只读操作), 与主线程的 MT5 操作不冲突。
+
+  **物理效果**: 主循环绝不被特征计算拖入同步卡顿; 最坏情况下跳过 1 个 Tick 的特征更新 (使用 last_known), 而非跳过整个 Tick 的交易评估。
+
+- **Root Cause**: RC-06 — synchronous-block, latency-slippage: 设计时假设 computer.compute_all() 始终快速 (<50ms), 但 4 个 MT5 时间框架的串行 + numpy 运算在实际环境中可达 200-800ms, 与主循环的交易时机产生竞争。
+- **Prevention**: (1) 任何涉及外部 I/O (MT5/网络/磁盘) 的计算都应有 timeout 保护; (2) 关键路径上的 fallback 应返回"最近已知好值"而非 zeros (zeros 导致 brain 输出垃圾置信度); (3) 延迟指标 (elapsed_ms) 应作为一等公民记录在诊断日志中。
+- **Dependents Checked**: `execute_live_cycle()` 通过 feature_service 调用 build_feature_vector(), API 签名新增可选参数 (backward compatible); brain adapters 不直接调用 feature_service, 不受影响; management phase 独立使用 feature_service, 同样受益于 timeout 保护。
+
+### FIX-20260519-021 — 大脑合约失配强制熔断 (Hard Mute)
+- **Date**: 2026-05-19
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: `core/runtime/live_cycle.py`
+- **Description**: 斩断"僵尸决策"链 — 合约失配大脑 vote_weight 从软警告升级为强制归零。
+
+  **问题**: `_warn_contract_mismatch()` 之前仅记录 `brain_contract_mismatch_warning` 日志, 不阻止大脑投票。4 个 barrier 大脑每周期输出 mismatch warning (training_contract ≠ strategy_requires), 但它们的决策照常流入 Parliament 共识计算。XGBoost/LightGBM 不会因为特征 schema 错位而崩溃 — 它们强行把错位特征塞进树节点, 输出完全随机乱码的置信度得分。这 4 个大脑每周期都在投票, 但它们的投票实际上是"植物人的胡言乱语", 正是系统出现严重多头/空头偏见的底层催化剂。
+
+  **修复**: 
+  1. `_warn_contract_mismatch()` 重命名为硬熔断逻辑
+  2. 当 `training_contract` 不匹配 `strategy_requires` 时:
+     - 保存原始 `vote_weight` → `brain_info["vote_weight"] = 0.0`
+     - 标记 `brain_info["_contract_muted"] = True`
+  3. 发射 `brain_hard_muted_contract` 事件 (含 brain_id, previous_vote_weight, new_vote_weight=0.0, strategy_requires, action_required=retrain_or_reassign)
+  4. 由于 `_warn_contract_mismatch` 在 `_build_strategy_lines()` 中于 brain_info 被添加到 contract group 之前调用, 且所有 brain adapter 通过 `self._brain_entry.get("vote_weight", 1.0)` 读取同一 dict 对象, 因此修改立即在整个投票链中生效
+
+  **议会投票链验证**: brain_info["vote_weight"]=0.0 → adapter.self._brain_entry.get("vote_weight")=0.0 → BrainDecisionProposal.vote_weight=0.0 → parliament weight = 0.0 * confidence * runtime_factor = 0.0 → 大脑完全静音
+
+  **物理效果**: 只保留特征合约 100% 匹配的健康大脑参与投票, 从源头净化议会决策共识, 彻底止住偏见过拟合的血。
+
+- **Root Cause**: RC-06 — contract-violation, zombie-decision: 训练合约 (Training Contract) 定义模型的特征输入 schema (列顺序/缩放/标签定义)。当 brain 被分配到不匹配的策略时 (如 regression-contract brain 放入 barrier strategy), 特征矩阵 schema 与模型训练时不一致, 输出的置信度是随机乱码。之前的软警告设计低估了错误特征→随机输出的危害程度。
+- **Prevention**: (1) 合约失配应在 brain 加载阶段就阻止其进入 voting pool, 而非事后警告; (2) 任何 mismatch 都应有硬阻断 (vote_weight=0 或 brain 完全不加载); (3) 未来应添加 BrainConfigValidator 的合约检查作为 brain 注册的前置条件。
+- **Dependents Checked**: Parliament 通过 getattr(p, "vote_weight", 1.0) 读取 proposal 的 vote_weight — 为 0 时 weight=0 完全静音; 所有 5 个 brain adapter (xgboost/v9_onnx/transformer/params/lightgbm) 均通过 `self._brain_entry.get("vote_weight", 1.0)` 读取; online_learner_adapter 未传 vote_weight 使用 default 1.0 (不受影响, online learner 不在 barrier contract group)。
+
+### FIX-20260520-028 — Meta Pipeline Executive Veto (终结多数暴政)
+- **Date**: 2026-05-20
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: execution-guards, protocol-parliament
+- **Files**: `core/execution/strategy_line.py`
+- **Description**: 赋予 Meta_Stage1_Huber_V1 探针绝对优先审议权, 终结"多数暴政"。
+
+  **问题**: FIX-20260520-023 建立了双轨制路由 (Track 1 Parliament + Track 2 Meta Pipeline), 但 Track 2 的激活条件 `not parliament_passed` 使其从属于 Track 1 — 只有 Parliament 未达成共识时, Huber 探针才有机会被评估。当 8/11 大脑存在严重多头偏见 (100% LONG), 它们在行情高位仍投票做多, 在 Parliament 中制造出 LONG 的假象共识 (parliament_passed=True), 从而在第 472 行硬生生截断了 Huber 探针 (唯一看空且正确的模型) 呼叫 Meta Filter 的机会。
+
+  **修复**:
+  1. 移除 `not parliament_passed` 前置条件 — Meta Pipeline 现在**总是**为 barrier_12bar 率先运行
+  2. Huber 从 proposals 中提取 raw_score, 若 |raw_score| > 0.30, 映射 direction → 进入 Stage 2 审判 (LGB+MLP+Platt+Conformal)
+  3. 若 Stage 2 批准 (p_win 足够高) + RR 检查通过 + Kelly EV > 0 → return meta_decision, 绕过 Parliament 和 Counter-Trend Gate
+  4. 若 Meta Pipeline 未触发 (raw_score 不够极端, 或 Stage 2 否决) → 退回 Parliament 正常流程
+
+  **否决权不是无条件的**: Huber 必须依次通过五层审判才能开单:
+  - Gate 1: |raw_score| > 0.30 (信号极端性)
+  - Gate 2: Stage 2 LGB+MLP 集成预测 P(win)
+  - Gate 3: Platt 校准 + Conformal 阈值
+  - Gate 4: RR ratio ≥ min_rr_ratio
+  - Gate 5: Kelly EV > 0 (fractional_mult ≠ 0)
+
+  **影响范围**: 仅影响 barrier_12bar 策略 (name == "barrier_12bar" 硬编码)。swing/statarb/micro 策略不受影响 — 它们不经过 Meta Pipeline。
+
+- **Root Cause**: RC-06 — serial deadlock (串行死锁): Track 2 的激活条件 `not parliament_passed` 使其在架构上从属于 Track 1, 悖逆了双轨制"独立审判、相互制衡"的设计初衷。当 Track 1 被多数偏见大脑劫持产生虚假共识时, Track 2 连被评估的机会都没有, 形成结构性静音。
+- **Prevention**: (1) 双轨制必须是并行优先制 — 特种部队 (Meta Pipeline) 永远优先于常规部队 (Parliament) 获得开火权; (2) 任何新增策略的 Meta Pipeline 接入必须走相同的"优先审议"模式, 不得再设 parliament_passed 前置条件。
+- **Dependents Checked**: `_try_meta_pipeline()` 内部所有依赖 (Stage 2 filter, Platt, Conformal, Kelly, SL/TP) 均保持不变; `_counter_trend_action()` 不受影响 (Meta Pipeline 在 return 时绕过, Parliament 路径照常经过 counter-trend gate); swing/statarb/micro 策略完全不受影响。
+
+### FIX-20260520-029 — 微观特征未来数据泄露 (Look-Ahead Bias in Micro→V9 Merge)
+- **Date**: 2026-05-20
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: fix
+- **Module**: training
+- **Files**: `scripts/training/build_v9_micro_dataset.py`
+- **Description**: 修复微观特征→V9 数据集合并时的未来数据泄露漏洞。
+
+  **问题**: 第 101-103 行使用 `np.abs(micro_ts - ts)` 寻找最近微观时间戳。当最近微观特征的时间戳在 V9 bar 之后时, `abs()` 允许模型在 bar 收盘时刻提前"看到"未来的微观结构数据 (OIM, VPIN, 买卖价差, 到达率等 9 维高频特征)。在 49 维特征体系中, 即使是 1 秒钟的未来数据泄露也会在回测中产生虚假的高夏普比率, 实盘中因无"时光机"而失效。
+
+  **修复**: 
+  1. 强制向后看匹配: `valid_mask = micro_ts <= ts` — 只匹配过去或当前的微观数据
+  2. 若无有效历史微观数据 → 舍弃该行 (`dropped_missing += 1`)
+  3. 在有效历史中找最近时间戳: `diffs = ts - micro_ts[valid_mask]`, `argmin(diffs)`
+  4. 映射回原始索引: `actual_j = np.where(valid_mask)[0][best_valid_idx]`
+  5. 诊断计数器 `future_leak_prevented`: 统计旧 `np.abs()` 算法会选择未来时间戳的行数, 量化漏洞影响面
+
+  **与 FIX-20260515-011 的关系**: FIX-20260515-011 修复了 `dataset_builder.py/_find_nearest_in_index()` 中的同类漏洞 (使用 `bisect_left` + `idx-1` 只向后看), 但 `build_v9_micro_dataset.py` 在独立的对齐路径中遗漏了修复。这是同一漏洞族 (temporal leakage) 的第二个实例。
+
+- **Root Cause**: RC-03 — state-leak (时间泄露): 时间戳对齐算法未强制方向约束, 允许未来数据流入历史训练样本。
+- **Prevention**: (1) 所有时间戳对齐必须使用向后看匹配 (backward-only), 永不使用 `np.abs()` 或双向搜索; (2) 新增时间戳对齐代码应在 review 时检查方向约束; (3) `future_leak_prevented` 计数器在数据集构建时输出, 若 > 0 则标记为需重训。
+- **Dependents Checked**: `dataset_builder.py/_find_nearest_in_index()` — 已使用 `bisect_left` 向后看 (FIX-20260515-011), 无漏洞; `institutional_train.py` — 直接加载已合并 NPZ, 不自行对齐, 无漏洞。
+
+### FIX-20260520-030 — 回归训练目标支持
+- **Date**: 2026-05-20
+- **Author**: cursor-agent
+- **Commit**: —
+- **Type**: feat
+- **Module**: training
+- **Files**: `scripts/training/institutional_train.py`
+- **Description**: 为 `institutional_train.py` 添加 `--target regression` 训练目标。
+
+  **问题**: 数据集 NPZ 中一直包含 `y_reg` (PnL 值, 连续回归目标), 但训练脚本仅使用 `y` (方向分类标签 [-1,0,1]) + `binary:logistic` 目标函数。二分类强行抹平波动幅度 — 涨 150 pips 和涨 5 pips 在逻辑回归损失函数中等价, 迫使模型拟合高频噪音而非结构性拐点。
+
+  **修复内容**:
+  1. `load_dataset()`: 新增 `target="regression"` 参数, 加载 `y_reg` 作为浮点回归目标
+  2. `_objective_xgboost` / `_objective_lightgbm`: 回归模式使用 `reg:squarederror` / `regression` 目标函数, Optuna 最小化 RMSE
+  3. `train_xgboost_single` / `train_lightgbm_single`: 回归模式跳过类别平衡权重, 使用 RMSE loss
+  4. `run_pipeline()`: 回归模式使用 RMSE/R² 指标替代 Sharpe/WR/PF, 最优种子选择基于最低 RMSE
+  5. CLI: `--target {direction,regression}` 参数 (默认 `direction`, 向后兼容)
+
+  **配套数据集**: `v9_micro_49_clean.npz` — 使用修复后的 `build_v9_micro_dataset.py` 构建 (backward-only 时间戳匹配, future_leak_prevented=0), 42710 样本, 49 维 (40 V9 + 9 micro)。
+
+  **用法**:
+  ```
+  # 回归训练 (默认超参数)
+  python scripts/training/institutional_train.py \
+    --data data/training/v9_micro_49_clean.npz \
+    --arch xgboost --contract barrier_12bar \
+    --target regression --n-seeds 5
+
+  # 回归 + Optuna 超参搜索
+  python scripts/training/institutional_train.py \
+    --data data/training/v9_micro_49_clean.npz \
+    --arch xgboost --contract barrier_12bar \
+    --target regression --optuna-trials 50
+  ```
+
+- **Root Cause**: RC-12 — missing-feature: 数据集已有 `y_reg` 回归目标, 但训练管线不具备使用它的能力。
+- **Prevention**: 训练脚本设计时同时支持分类和回归两种训练目标, 所有未来新增架构都应实现两种目标的训练/评估路径。
+- **Dependents Checked**: `_objective_xgboost/_objective_lightgbm` — 回归模式跳过 balance_weights 和 Sharpe 评估; `train_xgboost_single/train_lightgbm_single` — 回归模式设置正确目标函数; `compute_metrics` — 回归模式不依赖 (使用 RMSE/R² 直接计算); 方向分类模式 (default) — 零影响, 所有逻辑保持不变。
+
 <!--
   Template for new fix entries — copy to the bottom of this file:
   ### FIX-YYYYMMDD-NNN
@@ -990,3 +1592,152 @@
   - **Prevention**: <how this class of bug is prevented from recurring>
   - **Dependents Checked**: <modules checked for impact>
 -->
+
+### FIX-20260521-001 — High Recall + High Precision 架构：Huber 投票权恢复 + MetaFilter 精密过滤
+
+- **Date**: 2026-05-21
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: brains-schema, deployment-config, runtime-live
+- **Files**: `configs/brains/meta_stage1_huber_v1.json`, `configs/live.yaml`, `core/runtime/live_cycle.py`, `scripts/backtest/backtest_high_recall_precision.py`
+
+- **Description**: 机构级双层架构改造 — 放宽上游召回，收紧下游精度
+
+  **背景**：
+  - V3 XGBoost/LightGBM 脑因 40 维特征无预测力（所有特征 |r|<0.02）坍缩为常数 0.49，产出 100% LONG 偏置
+  - 两个 V3 脑被禁用后，barrier_12bar 仅剩 Meta_Stage1_Huber_V1，但其 vote_weight=0.0 导致议会共识 total_weight=0 → 物理阻断所有开单
+  - Huber 回归模型（输出连续 BPS）能有效区分方向（94% SHORT，正常分布），仅是零权重被意外静音
+
+  **三个改动（一个架构改造）**：
+
+  1. **Huber vote_weight 0.0 → 0.8**（`configs/brains/meta_stage1_huber_v1.json`）
+     - 解除物理阻断。Huber 回归分 → direction + confidence → 议会投票 → 共识通过
+     - 0.8 而非 1.0：保留未来加入第二脑的权重空间
+
+  2. **barrier_12bar confidence_threshold 0.45 → 0.25**（`configs/live.yaml`）
+     - 放宽上游召回。arctanh(0.25) = 0.255，Huber 均值 -0.52 绝大多数能通过
+     - 让 Huber 多抓候选信号（包括噪音），由下游 MetaFilter 鉴伪
+
+  3. **MetaFilterGate threshold 0.50 → 0.60**（`core/runtime/live_cycle.py`）
+     - 收紧下游精度。47 维 LightGBM 预测 P(breakeven | signal, features) ≥ 0.60 才放行
+     - 验证集回测：盲眼 WR 54.1% → 过滤后 64.6%，PnL +15R → +29R（+93%）
+
+  **架构语义**：Huber（高召回探针）→ 议会（0.25 低门槛）→ MetaFilter（0.60 高门槛数字政委）→ 执行
+
+  **沙盒回测验证**（`scripts/backtest/backtest_high_recall_precision.py`）：
+  - 1217 信号验证集，MetaFilter 最优阈值 0.65（WR 64.6%, PF 1.83, PnL +29R）
+  - 训练集和验证集一致改善，无过拟合
+  - MetaFilter 不是做加法（不创造订单），是做减法（暗杀劣质订单）
+  - “频率悖论”处理：降低上游门槛增加候选池 → MetaFilter 过滤 → 净频率足够健康
+
+- **Root Cause**: RC-09 — config-drift。（1）Huber 被设计为 Stage 2 MetaFilter 探针，vote_weight=0.0 是架构过渡期的临时保护——当时 V3 双脑存活提供投票权重，探针不需直接投票。V3 脑被禁后，临时保护变成物理阻断。（2）0.45 置信门槛是针对多脑议会的标定，单脑场景下需重新标定。（3）MetaFilter 默认 0.50 阈值为保守启动值，回调数据支持提高。
+
+- **Prevention**: 
+  - 脑禁用前必须检查依赖该脑的其他脑的 vote_weight 总和是否 > 0
+  - 策略门槛参数必须与活跃脑数量和脑类型联动标定
+  - MetaFilter 阈值应定期通过沙盒回测重新标定（建议每月一次）
+
+- **Dependents Checked**: brains_schema.md, deployment_config.md, runtime_live.md blueprints updated. verify.py --quick passes (all mypy errors pre-existing).
+
+### FIX-20260521-002 — Brain enabled:false 标志无效：坏死 V3 脑仍在议会投票并污染共识
+
+- **Date**: 2026-05-21
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: features-service, deployment-config, runtime-live
+- **Files**: `scripts/live_intent_loop.py`, `core/features/feature_service.py`, `core/deployment/service_container.py`
+
+- **Description**: P0 阻断性 Bug — live.yaml 中 `enabled: false` 无效，坏死 V3 脑仍在投票
+
+  **背景**：
+  - 用户重启主程序后检查实盘，发现 `xgb_barrier_12bar_xgboost_v3` 和 `lgb_barrier_12bar_lightgbm_v3` 各投票 44 次，共识置信度被污染为 0.3563
+  - 两个 V3 脑在 live.yaml brains.registry_entries 中已设置 `enabled: false`
+  - 预期重启后只有 Huber（vote_weight 0.8）投票，实际 5 脑投票（含 2 个坏死 V3）
+
+  **根因追踪**（三处断链，两个加载路径互不知晓）：
+  1. **主加载路径（真正的绕过）**：【首次修复遗漏】`live_intent_loop.py:149`: `_load_brain_entries_from_dir()` 直接遍历 `configs/brains/*.json` 加载所有脑，完全绕过 FeatureBrainRegistry/BrainRegistryService。未查询 live.yaml 的 `enabled` 标志。
+  2. **副加载路径（service_container）**：`service_container.py:364` 注册时 `entry["enabled"]` 未传播到 `brain_data`。
+  3. **过滤缺失**：`feature_service.py:347` `list_active_entries()` 不检查 `enabled` 字段。
+
+  **数据流断链**：
+  ```
+  live_intent_loop.py: _load_brain_entries_from_dir() → 直接读 configs/brains/*.json → 所有 V3 脑被加载
+                         ↓                                           ↓
+                    BRAINS LIST (5 brains inc. V3)            service_container path (2 brains)
+                         ↓                                           ↓
+                  execute_live_cycle()                        FeatureBrainRegistry (separate system)
+                         ↓
+                  record_brain_votes → V3脑投票 → 议会共识污染
+  ```
+
+  **修复**（三处，覆盖两类加载路径）：
+  1. 【真正阻断】`live_intent_loop.py`: `_load_brain_entries_from_dir()` 新增 `_source_path` 追踪 + 加载后查询 live.yaml `brains.registry_entries` 构建 `disabled_paths` 集合并过滤
+  2. 【副路径加固】`service_container.py:364`: `brain_data["enabled"] = entry.get("enabled", True)`
+  3. 【副路径加固】`feature_service.py:347`: `list_active_entries()` 增加 `e.get("enabled", True)` 检查
+
+  **验证方法**：重启后检查 `data/brain_votes/` 中 V3 脑应无新投票记录，barrier_12bar 共识仅来自 Huber 单脑。同时 `disabled_brains_filtered` JSON 事件应出现在启动日志中。
+
+- **Root Cause**: RC-09 — config-drift。（1）存在两套脑加载系统——live_intent_loop 的直接文件加载和 service_container 的 FeatureBrainRegistry，各自独立运行，互不知晓对方的过滤逻辑。（2）live.yaml `enabled` 标志未被任意加载路径消费——是纯死代码。（3）FeatureBrainRegistry 和 BrainRegistryService（另一个独立类）能力不一致——架构漂移导致三个加载入口、零个完整过滤。（4）测试不足——第一次修复（FeatureBrainRegistry + service_container）未发现 live_intent_loop 绕过路径，因为端到端测试缺失。
+
+- **Prevention**:
+  - 脑加载必须经过单一入口（消除三套加载系统）
+  - FeatureBrainRegistry、BrainRegistryService、live_intent_loop 加载逻辑必须统一
+  - 脑禁用后应在下一周期验证 brain_votes 中该脑记录消失
+
+### FIX-20260521-003 — 开单阈值精准化 + 反向趋势过滤：实盘数据分析驱动的参数校准
+
+- **Date**: 2026-05-21
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-orders, deployment-config
+- **Files**: `configs/live.yaml`, `core/execution/strategy_line.py`
+
+- **Description**: 基于178笔已平仓交易和14,486条大脑投票数据的分析，实施三组参数调整：
+
+  **背景**：
+  - 90001 (barrier_12bar): 41.2% WR边际盈利(+0.27)，69%多头偏差。confidence_threshold=0.25过滤太少（50%大脑投票置信度在0.4-0.6区间）。
+  - 90003 (statarb_dynamic): 37.8% WR负收益(-0.20)，22单/天过度交易。68%退出原因为hesitation。OU空头W/L比0.92（多头1.23）—空头在上升趋势中被碾碎。
+  - Swing脑（d1/m15/m30/h1/h4）: 全部100% LONG-only，总PnL -981R，43% WR。
+
+  **修复内容**：
+
+  1. **禁用5个swing脑** (`configs/live.yaml`):
+     - `xgboost_d1_swing`: -31R/334 trades, 42.5% WR → `enabled: false`
+     - `xgboost_m15_swing`: -267R/1323 trades, 43.2% WR → `enabled: false`
+     - `xgboost_m30_swing`: -290R/1330 trades, 43.0% WR → `enabled: false`
+     - `xgboost_h1_swing`: -300R/1331 trades, 43.0% WR → `enabled: false`
+     - `xgboost_h4_swing`: -293R/1336 trades, 43.0% WR → `enabled: false`
+
+  2. **barrier_12bar 参数收紧** (`configs/live.yaml`):
+     - `min_valid_brains`: 1 → 2（两个barrier脑均已禁用，单脑开单太宽松）
+     - `confidence_threshold`: 0.25 → 0.45（50%投票在0.4-0.6区间，0.45过滤低置信度噪声）
+
+  3. **statarb_dynamic 反向趋势过滤** (`core/execution/strategy_line.py`):
+     - `_counter_trend_action()` statarb_dynamic阈值从全0.99（禁用）改为：
+       - H1: block≥0.55, penalise≥0.30 (conf_mult=0.70, vol_mult=0.75)
+       - H4: block≥0.35, penalise≥0.20 (h4_conf_mult=0.65, h4_vol_mult=0.70)
+     - 逻辑：均值回归本质是反向交易，但强趋势（H1≥0.55）中OU均值回归被碾碎，尤其空头。阈值仅在极端趋势时拦截。
+
+  **设计原则**：
+  - statarb_dynamic保持宽松（均值回归需要反向交易），仅在强趋势时过滤
+  - 冷却键为`(strategy_name, direction)`而非全局`direction`：barrier_12bar止损后仅barrier_12bar自己冷却，statarb_dynamic仍可按自己逻辑自由开单（barrier止损=趋势失败进入震荡→均值回归应发力）
+  - Meta_Stage1_Huber保持vote_weight=0.0（它是Stage 2 MetaFilter的专职探针，输出连续回归分数，非离散胜率概率）
+
+- **Root Cause**: RC-09 — config-drift。（1）开单阈值基于默认值未经实盘校准。（2）swing脑训练数据含宏观偏差导致100% LONG-only。（3）_counter_trend_action()框架已存在但statarb_dynamic从未启用。（4）缺乏基于实盘PnL数据的动态参数优化闭环。
+
+- **Prevention**:
+  - 新脑上线前必须在brain_pnl_ledger中累积≥50笔记录并通过WR/PnL检查
+  - _counter_trend_action()新策略默认使用default阈值(block=0.40)，不再使用0.99静默绕过
+  - 每周基于brain_pnl_ledger.json复评各策略confidence_threshold是否需要调整
+
+**重启验证发现 (2026-05-21 05:09 UTC)**：
+
+barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)。追踪发现三重死锁：
+
+1. **Meta_Stage1_Huber_V1 被 contract-mute**：`_warn_contract_mismatch()` 检测到 brain training_contract=`barrier_12bar_regression_huber` 不匹配 strategy requires=`survival_barrier`，强制 vote_weight=0.0
+2. **CRT + Online_MLP 输出 neutral**：两个脑的 direction="neutral"（CRT: up=0.24/down=0.0, Online: up=0.03/down=0.32），不贡献有效投票
+3. **Muted Huber 被计入有效投票者**：`_valid_voters` 统计不含 vote_weight 检查，Huber 虽 muted 但其 non-neutral 输出使 _valid_voters=1 → min_valid_brains=2 门控拦截
+
+**追加修复**：
+- `strategy_line.py:416-426`: `_valid_voters` 统计增加 `vote_weight <= 0.0` 跳过逻辑 → muted 脑既不能投票也不贡献投票计数 → 全 neutral 提案正常流到共识计算返回 neutral
+- `contract_groups.py:26-32`: BARRIER_GROUP brain_types 补全 `onnx_v9` + `online_sgd`（之前仅 `lightgbm_v1` 而 CRT/Online 脑类型不在此集合中）

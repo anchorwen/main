@@ -202,6 +202,8 @@ def dispatch_live_order(
         payload=body,
         deadline_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=30),
     )
+    if container.dispatcher is None:
+        raise RuntimeError("ServiceContainer.dispatcher not built — call build() first")
     result = container.dispatcher.dispatch(envelope)
     dispatched = str(result.status) not in ("failed", "degraded")
     return {
@@ -230,6 +232,7 @@ def dispatch_live_open_order(
     magic: int | None = None,
     hard_sl: float = 0.0,
     brain_ids: list[str] | None = None,
+    brain_votes: list[dict[str, Any]] | None = None,
     # ── Trade context (passthrough — logged to journal for later analysis) ──
     entry_context: dict[str, Any] | None = None,
 ) -> dict:
@@ -255,6 +258,8 @@ def dispatch_live_open_order(
         execution_payload["magic"] = int(magic)
     if brain_ids:
         execution_payload["brain_ids"] = list(brain_ids)
+    if brain_votes:
+        execution_payload["brain_votes"] = brain_votes
     if entry_context:
         execution_payload["entry_context"] = dict(entry_context)
 

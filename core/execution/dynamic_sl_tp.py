@@ -38,13 +38,16 @@ def compute_dynamic_sl_tp(
     min_sl_mult: float = 1.2,
     max_sl_mult: float = 3.0,
     max_tp_mult: float | None = None,
+    timeframe_mult: int = 1,
+    min_sl_distance: float = 0.0,
+    min_rr_ratio: float = 0.0,
 ) -> DynamicSLTP:
     """Compute volatility-normalized SL/TP distances.
 
     Args:
         base_sl_mult: Base SL multiplier at reference ATR (e.g. 2.0).
         base_tp_mult: Base TP multiplier at reference ATR (e.g. 3.5).
-        current_atr: Current ATR(14) value.
+        current_atr: Current ATR(14) value on the base (M5) timeframe.
         ref_atr: Reference ATR (median / long-run average), default 5.0 for XAUUSD M5.
         hard_sl_ratio: Hard SL = normal SL × this ratio (server-side disaster protection).
         min_sl_mult: Floor for effective SL/TP multiplier.
@@ -52,12 +55,32 @@ def compute_dynamic_sl_tp(
         max_tp_mult: Ceiling for effective TP multiplier.
                      Defaults to max(max_sl_mult, base_tp_mult) so the
                      training TP multiplier is never capped at normal vol.
+        timeframe_mult: M5-bar equivalent of the strategy timeframe (e.g. H1=12).
+                        ATR is scaled by √(timeframe_mult) to match the
+                        expected volatility over the strategy's horizon.
+                        Under √t (square-root-of-time) rule, variance grows
+                        linearly with time (random walk), so stddev ∝ √time.
+        min_sl_distance: Absolute price-distance floor for SL (e.g. 0.80 for
+                         8 pips on XAUUSD).  When ATR collapses the raw SL
+                         distance can drop below the spread, leaving no net
+                         breathing room.  This floor guarantees a minimum
+                         distance regardless of ATR.
+        min_rr_ratio: When SL is floored up by min_sl_distance, stretch TP
+                      to maintain at least this reward:risk ratio.  Prevents
+                      negative asymmetry from the absolute floor.
+                      0.0 = disabled.
 
     Returns:
         DynamicSLTP with absolute distances and effective multipliers.
     """
+    import math
+
     if current_atr <= 0:
         current_atr = ref_atr
+
+    # ── √t scaling: ATR grows with sqrt(time) for random-walk processes ──
+    if timeframe_mult > 1:
+        current_atr = current_atr * math.sqrt(timeframe_mult)
 
     vol_ratio = current_atr / ref_atr
 
@@ -76,6 +99,18 @@ def compute_dynamic_sl_tp(
 
     sl_distance = sl_mult * current_atr
     tp_distance = tp_mult * current_atr
+
+    # ── Absolute distance floor ──
+    # When ATR collapses (e.g. 3.17 on XAUUSD M5), raw SL can drop below the
+    # spread, leaving ~2 pips of net breathing room.  min_sl_distance guarantees
+    # a minimum absolute price distance regardless of ATR.
+    if min_sl_distance > 0 and sl_distance < min_sl_distance:
+        sl_distance = min_sl_distance
+
+    # ── RR guard: when SL is floored up, stretch TP to maintain min RR ──
+    if min_rr_ratio > 0 and tp_distance < sl_distance * min_rr_ratio:
+        tp_distance = sl_distance * min_rr_ratio
+
     hard_sl_distance = sl_distance * hard_sl_ratio
 
     # Envelope check: warn when vol_ratio drifts far from training distribution

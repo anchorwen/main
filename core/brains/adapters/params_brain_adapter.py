@@ -261,8 +261,14 @@ class ParamsBrainAdapter(BaseBrainAdapter):
         Confidence is a function of:
           - How far the Z-Score is beyond the entry threshold (excess)
           - How short the half-life is (faster reversion → higher confidence)
+
+        The half-life discount reduces confidence for slow mean-reversion:
+          discount = 1.0 − half_life / max_half_life, clamped to [0.3, 1.0].
+          A 18-bar half-life → 0.69× multiplier; a 55-bar half-life → 0.3× floor.
         """
-        # Check if OU process is valid (theta > theta_min ensures mean-reversion exists)
+        _max_hl = max(self._max_half_life, 1.0)
+        hl_discount = max(0.3, 1.0 - half_life / _max_hl)
+
         half_life_ok = half_life < self._max_half_life
         z_abs = abs(z_score)
 
@@ -272,12 +278,12 @@ class ParamsBrainAdapter(BaseBrainAdapter):
         if z_score < -self._z_entry:
             # Long signal: price below mean, expect reversion up
             excess = abs(z_score) - self._z_entry
-            confidence = min(0.95, 0.5 + _sigmoid(excess) * 0.45)
+            confidence = min(0.95, (0.5 + _sigmoid(excess) * 0.45) * hl_discount)
             return "long", confidence, max(0.0, 1.0 - confidence)
         elif z_score > self._z_entry:
             # Short signal: price above mean, expect reversion down
             excess = z_score - self._z_entry
-            confidence = min(0.95, 0.5 + _sigmoid(excess) * 0.45)
+            confidence = min(0.95, (0.5 + _sigmoid(excess) * 0.45) * hl_discount)
             return "short", max(0.0, 1.0 - confidence), confidence
         else:
             # Within neutral band or half_life too long
@@ -285,10 +291,12 @@ class ParamsBrainAdapter(BaseBrainAdapter):
                 return "neutral", 0.5, 0.5
             # Near exit threshold but not at entry — slight bias
             if z_score < 0:
-                weak_conf = 0.5 + _sigmoid(abs(z_score) / self._z_entry * 0.3) * 0.15
+                weak_conf = (
+                    0.5 + _sigmoid(abs(z_score) / self._z_entry * 0.3) * 0.15
+                ) * hl_discount
                 return "long", weak_conf, max(0.0, 1.0 - weak_conf)
             else:
-                weak_conf = 0.5 + _sigmoid(z_score / self._z_entry * 0.3) * 0.15
+                weak_conf = (0.5 + _sigmoid(z_score / self._z_entry * 0.3) * 0.15) * hl_discount
                 return "short", max(0.0, 1.0 - weak_conf), weak_conf
 
     @staticmethod

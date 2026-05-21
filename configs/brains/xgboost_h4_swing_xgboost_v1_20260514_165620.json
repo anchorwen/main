@@ -28,6 +28,9 @@
   },
   "contract_group": "h4_swing",
   "training_horizon": 18,
+  "training_params": {
+    "horizon_bars": 18
+  },
   "feature_schema": "swing_24",
   "_notes": "xgboost h4_swing — 18-bar barrier. train_sharpe=5.19, fw_sharpe=5.14, overfit_gap=0.06, hash=708a5e67fad4...",
   "_model_hash": "708a5e67fad45e9ff458f8b4b5527235d842d5ba0b7ece2d73e6232e392b00ae",

@@ -84,12 +84,13 @@ def run_mypy(targets: list[str] | None = None) -> tuple[bool, str]:
         result = subprocess.run(
             [sys.executable, "-m", "mypy", "--no-error-summary", *existing],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=str(ROOT),
             timeout=120,
         )
         passed = result.returncode == 0
-        output = (result.stdout.strip() + "\n" + result.stderr.strip()).strip()
+        output = ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
         return passed, output
     except subprocess.TimeoutExpired:
         return False, "mypy timed out"
@@ -108,12 +109,13 @@ def run_ruff(targets: list[str] | None = None) -> tuple[bool, str]:
         result = subprocess.run(
             [sys.executable, "-m", "ruff", "check", *existing],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=str(ROOT),
             timeout=60,
         )
         passed = result.returncode == 0
-        output = (result.stdout.strip() + "\n" + result.stderr.strip()).strip()
+        output = ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
         return passed, output
     except subprocess.TimeoutExpired:
         return False, "ruff timed out"
@@ -234,11 +236,13 @@ def main() -> int:
                 [sys.executable, str(ROOT / "scripts" / "validate_blueprints.py")],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 cwd=str(ROOT),
                 timeout=30,
             )
-            print(result.stdout.strip())
-            if result.stderr.strip():
+            print((result.stdout or "").strip())
+            if result.stderr and result.stderr.strip():
                 print(result.stderr.strip())
             return result.returncode
         except Exception as exc:
@@ -293,11 +297,13 @@ def main() -> int:
                     ],
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     cwd=str(ROOT),
                     timeout=30,
                 )
-                print(result.stdout.strip())
-                if result.stderr.strip():
+                print((result.stdout or "").strip())
+                if result.stderr and result.stderr.strip():
                     print(result.stderr.strip())
                 if result.returncode != 0:
                     all_passed = False
@@ -333,11 +339,13 @@ def main() -> int:
                 ],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 cwd=str(ROOT),
                 timeout=30,
             )
-            print(result.stdout.strip())
-            if result.stderr.strip():
+            print((result.stdout or "").strip())
+            if result.stderr and result.stderr.strip():
                 print(result.stderr.strip())
             if result.returncode != 0:
                 all_passed = False

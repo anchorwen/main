@@ -267,7 +267,7 @@ def build_trade_records(
         entry_price = _extract_entry_price(rec.get("detail"))
         volume = rec.get("effective_volume_hint") or rec.get("volume")
 
-        trade: dict[str, Any] = {
+        unlinked_trade: dict[str, Any] = {
             "schema_version": SCHEMA_VERSION,
             "label_id": f"label_unlinked_{rec.get('message_id', 'unknown')[:20]}",
             "position_ticket": None,
@@ -288,11 +288,11 @@ def build_trade_records(
             "tp": rec.get("tp"),
         }
         if contract is not None:
-            trade["label_contract_id"] = contract.contract_id
-            trade["sl_atr_mult"] = contract.sl_atr_mult
-            trade["tp_atr_mult"] = contract.tp_atr_mult
-            trade["horizon_bars"] = contract.horizon_bars
-        trades.append(trade)
+            unlinked_trade["label_contract_id"] = contract.contract_id
+            unlinked_trade["sl_atr_mult"] = contract.sl_atr_mult
+            unlinked_trade["tp_atr_mult"] = contract.tp_atr_mult
+            unlinked_trade["horizon_bars"] = contract.horizon_bars
+        trades.append(unlinked_trade)
 
     return trades
 
@@ -456,6 +456,20 @@ def generate_barrier_labels_from_prices(
             else "0"
         )
 
+        # Compute PnL in R-units for training
+        _raw_pnl = (
+            (result.tp_price - result.entry_price)
+            if result.label == "tp_hit_first"
+            else (result.sl_price - result.entry_price)
+            if result.label == "sl_hit_first"
+            else 0.0
+        )
+        _pnl_r = (
+            _raw_pnl / (result.atr_at_entry * contract.sl_atr_mult)
+            if result.atr_at_entry > 0
+            else 0.0
+        )
+
         label_entry: dict[str, Any] = {
             "schema_version": SCHEMA_VERSION,
             "label_id": f"barrier_{contract.contract_id}_{entry_idx:06d}",
@@ -463,6 +477,7 @@ def generate_barrier_labels_from_prices(
             "side": side,
             "entry_price": result.entry_price,
             "entry_time": timestamps[entry_idx] if entry_idx < len(timestamps) else "",
+            "entry_idx": entry_idx,
             "exit_price": result.hit_price,
             "hit_bar_index": result.hit_bar_index,
             "exit_time": (
@@ -471,14 +486,8 @@ def generate_barrier_labels_from_prices(
                 and entry_idx + result.hit_bar_index < len(timestamps)
                 else None
             ),
-            "pnl": round(
-                (result.tp_price - result.entry_price)
-                if result.label == "tp_hit_first"
-                else (result.sl_price - result.entry_price)
-                if result.label == "sl_hit_first"
-                else 0.0,
-                6,
-            ),
+            "pnl": round(_raw_pnl, 6),
+            "pnl_r": round(_pnl_r, 6),
             "label": result.label,
             "label_int": label_int,
             "sl": result.sl_price,

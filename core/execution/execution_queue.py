@@ -185,6 +185,10 @@ class ExecutionQueue:
                         "magic": decision.magic,
                         "side": "short" if decision.direction == "long" else "long",
                     }
+                    # Forward PnL if computed upstream
+                    _net_out_pnl = getattr(risk, "net_out_pnl", None)
+                    if _net_out_pnl is not None:
+                        _close_payload["pnl"] = _net_out_pnl
                     # Carry brain_ids from the position being closed (or aggressor as fallback)
                     _aggressor_brain_ids = getattr(queued.decision, "brain_ids", None)
                     _net_out_brain_ids = getattr(risk, "net_out_brain_ids", None)
@@ -283,6 +287,7 @@ class ExecutionQueue:
                         magic=decision.magic,
                         hard_sl=decision.hard_sl,
                         brain_ids=decision.brain_ids,
+                        brain_votes=getattr(decision, "brain_votes", None) or None,
                         entry_context=decision.entry_context if decision.entry_context else None,
                     )
                     _dispatched = True

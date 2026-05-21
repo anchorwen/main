@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import logging
+from typing import Any
 
 from core.brains.services.brain_factory import BrainFactory
 from core.brains.services.brain_run_service import BrainRunService
@@ -83,69 +86,79 @@ class ServiceContainer:
     """
 
     def __init__(self, config: EnvironmentConfig):
-        self.config = config
-        self.validation_mode = getattr(config, "validation_mode", None)
-        self._built = False
+        self.config: EnvironmentConfig = config
+        self.validation_mode: str | None = getattr(config, "validation_mode", None)
+        self._built: bool = False
 
-        self.ledger_store = None
-        self.communication_writer = None
-        self.communication_reader = None
-        self.execution_event_writer = None
-        self.execution_event_reader = None
-        self.reconciliation_service = None
-        self.inspection_service = None
-        self.replay_service = None
-        self.replay_gate = None
-        self.operations_service = None
-        self.dispatcher = None
-        self.message_builder = None
-        self.idempotency_store = None
-        self.risk_service = None
-        self.feedback_loop = None
-        self.metrics = None
-        self.audit_log = None
-        self.diagnostics = None
-        self.brain_tracker = None
-        self.governance_service = None
-        self.parliament_service = None
-        self.position_tracker = None
-        self.market_context = None
-        self.execution_manager = None
-        self.governance_rule_engine = None
-        self.dynamic_brain_weighter = None
-        self.orchestrator = None
-        self.health_check = None
-        self.feature_service = None
-        self.brain_registry = None
-        self.brain_run_service = None
-        self.override_resolver = None
-        self.decision_compiler = None
-        self.decision_record_writer = None
-        self.control_snapshot_service = None
-        self.runtime_loop = None
-        self.venue_router = None
-        self.alert_service = None
-        self.config_hot_reload = None
-        self.release_readiness = None
-        self.runbook_engine = None
-        self.slo_service = None
-        self.release_gate = None
-        self.evidence_bundle = None
-        self.deployment_plan = None
-        self.deployment_executor = None
-        self.rollback_drill = None
-        self.operations_timeline = None
-        self.postmortem_report = None
-        self.release_pipeline = None
-        self.release_certification = None
-        self.release_registry = None
-        self.compliance_audit = None
-        self.compliance_control_matrix = None
-        self.final_audit = None
-        self.ops_maturity = None
-        self.meta_signal_filter = None
+        # ── Ledger & Communication services ──
+        self.ledger_store: JsonlLedgerStore | None = None
+        self.communication_writer: CommunicationRecordWriter | None = None
+        self.communication_reader: CommunicationRecordReader | None = None
+        self.execution_event_writer: ExecutionEventWriter | None = None
+        self.execution_event_reader: ExecutionEventReader | None = None
+        self.reconciliation_service: ExecutionReconciliationService | None = None
+        self.inspection_service: CommunicationInspectionService | None = None
+        self.replay_service: CommunicationReplayService | None = None
+        self.replay_gate: CommunicationReplayGate | None = None
+        self.operations_service: CommunicationOperationsService | None = None
+        # ── Protocol services ──
+        self.dispatcher: CommunicationDispatcher | None = None
+        self.message_builder: IntentMessageBuilder | None = None
+        self.idempotency_store: IdempotencyStore | None = None
+        # ── Risk & Feedback services ──
+        self.risk_service: RiskEvaluationService | None = None
+        self.feedback_loop: FeedbackLoop | None = None
+        # ── Observability services ──
+        self.metrics: MetricsCollector | None = None
+        self.audit_log: StructuredAuditLog | None = None
+        self.diagnostics: DiagnosticsDashboard | None = None
+        # ── Brain & Governance services ──
+        self.brain_tracker: BrainPerformanceTracker | None = None
+        self.governance_service: GovernanceService | None = None
+        self.parliament_service: ParliamentService | None = None
+        self.position_tracker: PositionTracker | None = None
+        self.market_context: MarketContextProvider | None = None
+        self.execution_manager: ExecutionManager | None = None
+        self.governance_rule_engine: GovernanceRuleEngine | None = None
+        self.dynamic_brain_weighter: Any = None  # DynamicBrainWeighter, late-imported
+        # ── Orchestration ──
+        self.orchestrator: Any = None  # DecisionCycleOrchestrator, late-imported
+        self.health_check: HealthCheckService | None = None
+        # ── Feature & Brain runtime services ──
+        self.feature_service: FeatureService | None = None
+        self.brain_registry: FeatureBrainRegistry | None = None
+        self.brain_run_service: BrainRunService | None = None
+        self.override_resolver: OverrideResolver | None = None
+        self.decision_compiler: DecisionCompiler | None = None
+        self.decision_record_writer: DecisionRecordWriter | None = None
+        # ── State & Control services ──
+        self.control_snapshot_service: ControlSnapshotService | None = None
+        self.runtime_loop: Any = None  # RuntimeLoop, late-imported
+        self.venue_router: VenueRouter | None = None
+        self.alert_service: AlertService | None = None
+        self.config_hot_reload: ConfigHotReload | None = None
+        # ── Deployment pipeline services ──
+        self.release_readiness: ReleaseReadinessService | None = None
+        self.runbook_engine: RunbookEngine | None = None
+        self.slo_service: SloService | None = None
+        self.release_gate: ReleaseGateService | None = None
+        self.evidence_bundle: EvidenceBundleService | None = None
+        self.deployment_plan: DeploymentPlanService | None = None
+        self.deployment_executor: DeploymentExecutor | None = None
+        self.rollback_drill: RollbackDrillService | None = None
+        self.operations_timeline: OperationsTimelineService | None = None
+        self.postmortem_report: PostmortemReportService | None = None
+        self.release_pipeline: ReleasePipelineService | None = None
+        self.release_certification: ReleaseCertificationService | None = None
+        self.release_registry: ReleaseRegistryService | None = None
+        self.compliance_audit: ComplianceAuditService | None = None
+        self.compliance_control_matrix: ComplianceControlMatrixService | None = None
+        self.final_audit: FinalAuditService | None = None
+        self.ops_maturity: OpsMaturityService | None = None
+        # ── Meta signal filter (injected post-build) ──
+        self.meta_signal_filter: Any = None  # MetaSignalFilter, externally injected
 
-    def build(self) -> "ServiceContainer":
+    def build(self) -> ServiceContainer:
         if self._built:
             return self
         self._built = True
@@ -361,6 +374,7 @@ class ServiceContainer:
                     path = entry["path"]
                     with open(path, encoding="utf-8") as fh:
                         brain_data = json.load(fh)
+                    brain_data["enabled"] = entry.get("enabled", True)
                     self.brain_registry.register(brain_data)
                 elif isinstance(entry, dict) and "brain_id" in entry:
                     self.brain_registry.register(entry)
@@ -500,11 +514,12 @@ class ServiceContainer:
         self.config_hot_reload.register_listener(self._on_engine_config_changed)
 
     def _on_engine_config_changed(self, _changes: dict, new: dict) -> None:
-        self.config_hot_reload.apply_overrides(self, new)
+        if self.config_hot_reload is not None:
+            self.config_hot_reload.apply_overrides(self, new)
         if self.metrics is not None:
             self.metrics.inc(ENGINE_CONFIG_RELOAD_TOTAL)
         try:
-            if getattr(self, "operations_timeline", None) is not None:
+            if self.operations_timeline is not None:
                 self.operations_timeline.record(
                     TIMELINE_EVENT_ENGINE_CONFIG,
                     {

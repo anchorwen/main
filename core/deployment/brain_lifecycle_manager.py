@@ -76,6 +76,10 @@ class IntegrityReport:
     governance_orphans: list[str] = field(default_factory=list)
     pnl_ledger_orphans: list[str] = field(default_factory=list)
     hardcoded_path_mismatches: list[str] = field(default_factory=list)
+    # ── brain→live alignment (Layer 3 institutional validator) ──
+    alignment_hard_fails: list[str] = field(default_factory=list)
+    alignment_warnings: list[str] = field(default_factory=list)
+    alignment_ensemble_warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -480,6 +484,126 @@ class BrainLifecycleManager:
 
         return report
 
+    # ── brain→live alignment validator (Layer 3 institutional) ──────────
+
+    _HORIZON_EXPANSION_WARN_RATIO = 1.5
+    _TP_DEVIATION_WARN_PCT = 0.15
+
+    def validate_brain_live_alignment(self, report: IntegrityReport) -> None:
+        """Institutional Layer 3 validator: cross-validate brain training_params
+        against live.yaml strategy_line parameters.
+
+        **Vertical checks** (per brain→strategy):
+        - HARD FAIL: live SL tighter than training SL (model drawdown tolerance truncated)
+        - HARD FAIL: live horizon < training horizon (prediction window amputated)
+        - WARNING:   live horizon > training horizon × 1.5 (prediction expired)
+        - WARNING:   live TP deviates from training TP by > 15%
+
+        **Horizontal checks** (cross-brain ensemble):
+        - WARNING:   brains in same contract_group have inconsistent training SL/TP
+        """
+        if not self._live_yaml_path.exists():
+            return
+
+        live = self._load_live_yaml()
+        strategy_lines = live.get("strategy_lines", {})
+        if not strategy_lines:
+            return
+
+        disk_brains = self._scan_brain_configs(self._brains_dir)
+        if not disk_brains:
+            return
+
+        for sname, scfg in strategy_lines.items():
+            if not isinstance(scfg, dict):
+                continue
+            if not scfg.get("enabled", True):
+                continue
+
+            # ── live parameters ──
+            live_sl_cfg = scfg.get("sl", {})
+            live_sl = live_sl_cfg.get("base_atr_mult") if isinstance(live_sl_cfg, dict) else None
+            live_tp_cfg = scfg.get("tp", {})
+            live_tp = live_tp_cfg.get("base_atr_mult") if isinstance(live_tp_cfg, dict) else None
+            exit_cfg = scfg.get("exit", {})
+            live_exit_cycles = (
+                exit_cfg.get("time_exit_cycles") if isinstance(exit_cfg, dict) else None
+            )
+
+            # ── find brains in this contract_group ──
+            group_brains: list[dict] = []
+            for _bid, cfg in disk_brains.items():
+                if cfg.get("contract_group") == sname:
+                    group_brains.append(cfg)
+
+            if not group_brains:
+                continue
+
+            # ── Horizontal: cross-brain ensemble consistency ──
+            group_sl_values: set[float] = set()
+            group_tp_values: set[float] = set()
+            for cfg in group_brains:
+                tp = cfg.get("training_params", {})
+                if tp.get("sl_atr_mult") is not None:
+                    group_sl_values.add(float(tp["sl_atr_mult"]))
+                if tp.get("tp_atr_mult") is not None:
+                    group_tp_values.add(float(tp["tp_atr_mult"]))
+
+            if len(group_sl_values) > 1:
+                report.alignment_ensemble_warnings.append(
+                    f"ENSEMBLE_SL_MISMATCH:{sname}: brains have inconsistent "
+                    f"training SL: {sorted(group_sl_values)} — "
+                    f"consider splitting into separate strategy lines"
+                )
+            if len(group_tp_values) > 1:
+                report.alignment_ensemble_warnings.append(
+                    f"ENSEMBLE_TP_MISMATCH:{sname}: brains have inconsistent "
+                    f"training TP: {sorted(group_tp_values)}"
+                )
+
+            # ── Vertical: per-brain checks ──
+            for cfg in group_brains:
+                bid = cfg.get("brain_id", "?")
+                tp = cfg.get("training_params", {})
+                if not tp:
+                    continue
+
+                train_sl = tp.get("sl_atr_mult")
+                train_tp = tp.get("tp_atr_mult")
+                train_horizon = tp.get("horizon_bars")
+
+                # --- SL hard fail: live tighter than training ---
+                if train_sl is not None and live_sl is not None and live_sl < train_sl:
+                    report.alignment_hard_fails.append(
+                        f"SL_TIGHTENED:{sname}:{bid}: live SL={live_sl} < "
+                        f"training SL={train_sl}. Model drawdown tolerance amputated."
+                    )
+
+                # --- Horizon hard fail: live shorter than training ---
+                if train_horizon is not None and train_horizon > 0 and live_exit_cycles is not None:
+                    if live_exit_cycles < train_horizon:
+                        report.alignment_hard_fails.append(
+                            f"HORIZON_TRUNCATED:{sname}:{bid}: live time_exit_cycles="
+                            f"{live_exit_cycles} < training horizon={train_horizon}. "
+                            f"Prediction window amputated."
+                        )
+                    elif live_exit_cycles > train_horizon * self._HORIZON_EXPANSION_WARN_RATIO:
+                        report.alignment_warnings.append(
+                            f"HORIZON_EXPANDED:{sname}:{bid}: live time_exit_cycles="
+                            f"{live_exit_cycles} significantly exceeds training horizon="
+                            f"{train_horizon} (ratio={live_exit_cycles / train_horizon:.1f}x). "
+                            f"Model prediction may have expired before exit."
+                        )
+
+                # --- TP deviation warning ---
+                if train_tp is not None and live_tp is not None and train_tp > 0:
+                    tp_dev = abs(live_tp - train_tp) / train_tp
+                    if tp_dev > self._TP_DEVIATION_WARN_PCT:
+                        report.alignment_warnings.append(
+                            f"TP_DEVIATION:{sname}:{bid}: live TP={live_tp} deviates "
+                            f"from training TP={train_tp} by {tp_dev:.0%}"
+                        )
+
     # ── startup integrity ────────────────────────────────────────────────
 
     def verify_startup_integrity(self, *, fail_fast: bool = False) -> IntegrityReport:
@@ -673,6 +797,9 @@ class BrainLifecycleManager:
             if not exists:
                 report.hardcoded_path_mismatches.append(f"path_defaults.{name}")
 
+        # ── Layer 3: brain→live alignment (institutional validator) ──
+        self.validate_brain_live_alignment(report)
+
         # ── assess validity ──
         report.valid = not (
             report.missing_config_files
@@ -680,6 +807,7 @@ class BrainLifecycleManager:
             or report.missing_artifacts
             or report.missing_norm_configs
             or report.hardcoded_path_mismatches
+            or report.alignment_hard_fails
         )
 
         if fail_fast and not report.valid:

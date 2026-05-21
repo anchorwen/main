@@ -28,6 +28,9 @@
   },
   "contract_group": "m30_swing",
   "training_horizon": 12,
+  "training_params": {
+    "horizon_bars": 12
+  },
   "feature_schema": "swing_24",
   "_notes": "xgboost m30_swing — 12-bar barrier. train_sharpe=4.18, fw_sharpe=4.50, overfit_gap=0.32, hash=e23a3617817d...",
   "_model_hash": "e23a3617817d212ec77f86c8b21f5f6335f5bbfcd9e16f6a6689830ee258e6ac",

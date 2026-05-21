@@ -114,6 +114,7 @@ class StrategyDecision:
     tp: float
     hard_sl: float
     brain_ids: list[str] = field(default_factory=list)
+    brain_votes: list[dict[str, Any]] = field(default_factory=list)
     supporting_count: int = 0
     total_count: int = 0
     regime_mode: str = "full"  # "full" | "reduced" | "shadow"
@@ -160,8 +161,35 @@ class StrategyLineConfig:
     # Per-strategy exit overrides (wired from live.yaml exit.* block)
     exit_flip_enabled: bool = True
     exit_time_cycles: int | None = None  # None → use brain JSON training_horizon / max_hold_cycles
+    exit_hesitation_cycles: int = 0  # M5-bar scaled — breakeven-not-reached timeout
     exit_zscore_enabled: bool = False  # OU mean-reversion exit gate
     exit_min_r: float = 0.3  # minimum R to hold during time-decay phases
+
+    # Absolute SL/TP floors (in price units, e.g. 0.80 = 8 pips on XAUUSD)
+    min_sl_distance: float = 0.0  # 0.0 = disabled
+    min_rr_ratio: float = 0.0  # 0.0 = disabled; e.g. 1.5 maintains min 1.5:1 RR
+
+    # Timeframe for auto-scaling (M5/M15/M30/H1/H4/D1)
+    timeframe: str = "M5"
+
+    _TIMEFRAME_TO_M5: dict[str, int] = field(
+        default_factory=lambda: {
+            "M5": 1,
+            "M15": 3,
+            "M30": 6,
+            "H1": 12,
+            "H4": 48,
+            "D1": 288,
+        }
+    )
+
+    @property
+    def timeframe_mult(self) -> int:
+        """M5-bar multiplier derived from timeframe label (e.g. H1→12)."""
+        return self._TIMEFRAME_TO_M5.get(self.timeframe, 1)
+
+    # Lot granularity
+    lot_step: float = 0.01
 
     # Minimum number of brains that must produce valid (non-neutral) proposals
     # before the strategy line can generate an entry signal.  Prevents
@@ -243,6 +271,8 @@ class StrategyLine:
         micro_sequences: dict[str, Any] | None = None,
         daily_feature_vector: Any = None,
         meta_filter: Any = None,
+        meta_filter_gate: Any = None,
+        micro_feature_dict: dict[str, float] | None = None,
     ) -> StrategyDecision:
         """Run the full strategy evaluation for one cycle.
 
@@ -335,6 +365,42 @@ class StrategyLine:
                 reason="no_proposals",
             )
 
+        # ── 3a1. Huber BPS trapline (BEFORE any gate or consensus) ──
+        # Log every raw BPS prediction from regression-probe brains for
+        # distribution analysis.  This is the primary observability surface
+        # for shadow-mode barrier_12bar — without it, threshold calibration
+        # (0.75) is flying blind.
+        for p in proposals:
+            try:
+                _brain_id = str(getattr(p, "brain_id", ""))
+                # Match regression brains by training_contract in brain config
+                _b_entry = next((b for b in self.brains if b.get("brain_id") == _brain_id), None)
+                _contract = str(_b_entry.get("training_contract", "")) if _b_entry else ""
+                _is_regression = _brain_id == "Meta_Stage1_Huber_V1" or _contract.startswith(
+                    "barrier_12bar_regression"
+                )
+                if _is_regression:
+                    _raw = getattr(p, "extensions", {}).get("raw_outputs", {}).get("raw_score")
+                    if _raw is not None:
+                        import json as _json
+
+                        print(
+                            _json.dumps(
+                                {
+                                    "event": "huber_bps_trapline",
+                                    "time": __import__("datetime").datetime.utcnow().isoformat()
+                                    + "Z",
+                                    "brain_id": _brain_id,
+                                    "raw_bps": round(float(_raw), 6),
+                                    "price": round(float(mid_price or 0), 2),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+            except Exception:
+                pass
+
         # ── 3a2. Record counterfactual signals (BEFORE approval gates) ──
         # Counterfactual P&L must be recorded every cycle for every brain,
         # independent of whether the trade is later approved.  Per-proposal
@@ -385,13 +451,19 @@ class StrategyLine:
                 pass  # fallback to default weights (1.0)
 
         # ── 3c. Minimum valid brains gate ──
-        # Count brains that produced a non-neutral directional signal.
-        # If too few brains vote (but at least one did), the strategy line
-        # cannot form a valid consensus — prevents single-brain decision on
-        # multi-brain lines.  All-neutral proposals pass through to
-        # consensus computation (which will naturally return neutral).
+        # Count brains that produced a non-neutral directional signal AND
+        # have a positive vote_weight.  Brains with vote_weight=0.0 are
+        # contract-muted or governance-silenced — they cannot influence
+        # consensus, so counting them as "valid voters" creates a deadlock
+        # where (muted_brain_count > 0) < min_valid_brains but the muted
+        # brain can never actually vote.
+        # All-neutral proposals pass through to consensus computation
+        # (which will naturally return neutral).
         _valid_voters = 0
         for p in proposals:
+            _vw = float(getattr(p, "vote_weight", 1.0) or 1.0)
+            if _vw <= 0.0:
+                continue  # muted brain — cannot vote, don't count
             pred = getattr(p, "prediction", None) or {}
             if isinstance(pred, dict):
                 if pred.get("direction_bias", "neutral") != "neutral":
@@ -425,7 +497,9 @@ class StrategyLine:
         try:
             from core.runtime.shadow_recorder import record_brain_votes
 
-            _status_map = {b.get("brain_id"): b.get("status", "unknown") for b in self.brains}
+            _status_map: dict[str, str] = {
+                str(b.get("brain_id", "")): str(b.get("status", "unknown")) for b in self.brains
+            }
             record_brain_votes(
                 proposals=proposals,
                 strategy_name=name,
@@ -438,7 +512,80 @@ class StrategyLine:
         except Exception:
             pass
 
-        if direction == "neutral" or confidence < self.config.confidence_threshold:
+        parliament_passed = (
+            direction != "neutral" and confidence >= self.config.confidence_threshold
+        )
+
+        # ── Track 2: Meta Pipeline (Executive Veto) ──
+        # ALWAYS runs for barrier_12bar regardless of parliament consensus.
+        # When long-biased brains create a spurious LONG majority, the
+        # Meta_Stage1_Huber_V1 probe (the only short-biased brain) must have
+        # first-refusal to override parliament via the Stage 2 filter chain.
+        # The veto is not unconditional — Huber must clear |raw_score|>0.30,
+        # Stage 2 LGB+MLP+Platt+Conformal approval, RR check, and Kelly EV>0.
+        #   Track 1 (Parliament) — group consensus with 0.45 threshold
+        #   Track 2 (Meta Pipeline) — Huber probe → Stage 2 filter, executive veto
+        meta_decision = None
+        # max_volume > 0 gate: strategies with zero capital allocation
+        # (shadow mode, base_volume=0) must not generate real trades through
+        # ANY path — Parliament, Meta Pipeline, or otherwise.
+        if meta_filter is not None and name == "barrier_12bar" and self.config.max_volume > 0:
+            meta_decision = self._try_meta_pipeline(
+                proposals=proposals,
+                feature_vector=feature_vector,
+                micro_feature_vector=micro_feature_vector,
+                meta_filter=meta_filter,
+                current_atr=current_atr,
+                mid_price=mid_price,
+                entry_z_score=entry_z_score,
+                pnl_store=pnl_store,
+                trend_direction=trend_direction,
+                trend_strength=trend_strength,
+                h4_trend_strength=h4_trend_strength,
+                macro_regime=macro_regime,
+                risk_budget_usd=risk_budget_usd,
+                regime_info=regime_info,
+                regime_gate_mode=regime_gate_mode,
+                brain_ids=brain_ids,
+                support_count=support_count,
+                total_count=total_count,
+            )
+            if meta_decision is not None:
+                return meta_decision
+
+        # ── Track 3: LightGBM Meta-Filter Gate (OU signal quality) ──
+        # For OU-based strategies (statarb_dynamic, barrier_12bar), the
+        # 47-dim LightGBM meta-filter predicts P(breakeven | signal_fired).
+        # This is a Stage 2 precision filter trained on meta-labeling data —
+        # ML amplifies the weak alpha in the rule engine, not creates it.
+        if meta_filter_gate is not None and name in ("statarb_dynamic", "barrier_12bar"):
+            if meta_filter_gate.is_loaded and feature_vector is not None:
+                try:
+                    mf_result = meta_filter_gate.filter(
+                        feature_vector=feature_vector,
+                        micro_features=micro_feature_dict or {},
+                    )
+                    if not mf_result["passed"]:
+                        return StrategyDecision(
+                            strategy_name=name,
+                            magic=self.config.magic,
+                            should_trade=False,
+                            direction=direction,
+                            confidence=confidence,
+                            volume=0.0,
+                            sl=0.0,
+                            tp=0.0,
+                            hard_sl=0.0,
+                            brain_ids=brain_ids,
+                            supporting_count=support_count,
+                            total_count=total_count,
+                            regime_mode=regime_gate_mode,
+                            reason=mf_result["reason"],
+                        )
+                except Exception:
+                    pass  # Meta-filter failure is non-blocking
+
+        if not parliament_passed:
             return StrategyDecision(
                 strategy_name=name,
                 magic=self.config.magic,
@@ -635,6 +782,9 @@ class StrategyLine:
             current_atr=current_atr,
             ref_atr=self.config.ref_atr,
             hard_sl_ratio=self.config.hard_sl_ratio,
+            timeframe_mult=self.config.timeframe_mult,
+            min_sl_distance=self.config.min_sl_distance,
+            min_rr_ratio=self.config.min_rr_ratio,
         )
 
         entry_price = mid_price or 0.0
@@ -749,7 +899,8 @@ class StrategyLine:
         )
         # Apply counter-trend volume penalty (post-rounding — this is a discrete gate)
         volume *= _ct_vol_mult
-        volume = max(0.01, round(volume / 0.01) * 0.01)
+        _ticks2 = math.floor(volume / self.config.lot_step + 0.5)
+        volume = max(self.config.lot_step, round(_ticks2 * self.config.lot_step, 2))
 
         # Diagnostic: three-way volume distinction (raw vs stepped)
         _pre_kelly_raw = getattr(self, "_last_pre_kelly_size", volume)
@@ -825,6 +976,241 @@ class StrategyLine:
         )
 
     # ── Consensus computation ───────────────────────────────────────────
+
+    def _try_meta_pipeline(
+        self,
+        *,
+        proposals: list[Any],
+        feature_vector: Any,
+        micro_feature_vector: Any,
+        meta_filter: Any,
+        current_atr: float,
+        mid_price: float | None,
+        entry_z_score: float,
+        pnl_store: Any,
+        trend_direction: str,
+        trend_strength: float,
+        h4_trend_strength: float,
+        macro_regime: str,
+        risk_budget_usd: float,
+        regime_info: dict[str, Any] | None,
+        regime_gate_mode: str,
+        brain_ids: list[str],
+        support_count: int,
+        total_count: int,
+    ) -> StrategyDecision | None:
+        """Track 2: Meta Pipeline — Huber probe → Stage 2 filter, bypasses Parliament.
+
+        Extracts Meta_Stage1_Huber_V1 raw_score from proposals, maps it to a
+        directional signal (|raw_score| > 0.30), and runs the full Stage 2
+        LGB+MLP+Platt+Conformal filter chain.  Returns a StrategyDecision if
+        the filter approves, None otherwise.
+        """
+        import json as _json
+
+        # Defense-in-depth: max_volume=0 means shadow-only, no real capital.
+        # The call-site gate in evaluate() should catch this, but repeat here
+        # in case _try_meta_pipeline is ever called from a different path.
+        if self.config.max_volume <= 0:
+            return None
+
+        # 1. Extract Huber raw_score from proposals
+        s1_prediction: float | None = None
+        for p in proposals:
+            try:
+                raw_outputs = getattr(p, "extensions", {}).get("raw_outputs", {})
+                _s1 = raw_outputs.get("raw_score")
+                if _s1 is not None:
+                    s1_prediction = float(_s1)
+                    break
+            except (TypeError, ValueError, AttributeError):
+                pass
+
+        if s1_prediction is None:
+            return None
+
+        # 2. Map raw_score to direction (threshold ±0.30)
+        # Score range [-1, 1] maps bps regression output to directional intent.
+        if s1_prediction < -0.30:
+            meta_dir = "short"
+        elif s1_prediction > 0.30:
+            meta_dir = "long"
+        else:
+            return None  # No strong directional signal from Huber probe
+
+        # 3. Run Stage 2 filter (LGB + MLP + Platt + Conformal)
+        result = meta_filter.filter_arrays(
+            direction=meta_dir,
+            s1_prediction=s1_prediction,
+            v9_array=feature_vector,
+            micro_array=micro_feature_vector,
+        )
+        if not result.passed:
+            print(
+                _json.dumps(
+                    {
+                        "event": "kelly_diag",
+                        "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+                        "strategy": self.config.name,
+                        "stage": "meta_pipeline_rejected",
+                        "source": "track2_meta_pipeline",
+                        "s1_prediction": round(s1_prediction, 6),
+                        "meta_dir": meta_dir,
+                        "result_p_win": round(float(getattr(result, "p_win", 0)), 4),
+                        "passed": False,
+                        "reason": result.reason if result.reason else "threshold",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            return None
+
+        _meta_p_win = float(result.p_win)
+        print(
+            _json.dumps(
+                {
+                    "event": "kelly_diag",
+                    "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+                    "strategy": self.config.name,
+                    "stage": "meta_pipeline_approved",
+                    "source": "track2_meta_pipeline",
+                    "s1_prediction": round(s1_prediction, 6),
+                    "meta_dir": meta_dir,
+                    "result_p_win": round(_meta_p_win, 4),
+                    "passed": True,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+
+        # 4. Compute SL/TP (shared plumbing with Track 1)
+        from core.execution.dynamic_sl_tp import compute_dynamic_sl_tp, compute_sl_tp_levels
+
+        dsl = compute_dynamic_sl_tp(
+            base_sl_mult=self.config.base_sl_atr_mult,
+            base_tp_mult=self.config.base_tp_atr_mult,
+            current_atr=current_atr,
+            ref_atr=self.config.ref_atr,
+            hard_sl_ratio=self.config.hard_sl_ratio,
+            timeframe_mult=self.config.timeframe_mult,
+            min_sl_distance=self.config.min_sl_distance,
+            min_rr_ratio=self.config.min_rr_ratio,
+        )
+
+        entry_price = mid_price or 0.0
+        if entry_price <= 0:
+            return None
+        levels = compute_sl_tp_levels(meta_dir, entry_price, dsl)
+
+        # 5. RR check
+        entry_price = mid_price or 0.0
+        sl_dist = abs(levels["stop_loss"] - entry_price)
+        tp_dist = abs(levels["take_profit"] - entry_price)
+        _rr_ratio: float = 1.0
+        if sl_dist > 0:
+            _rr_ratio = tp_dist / sl_dist
+        if _rr_ratio < self.config.min_rr_ratio:
+            return None
+
+        # 6. Kelly sizing with Platt-calibrated P(TP|signal)
+        from core.execution.kelly_sizer import compute_kelly_mult
+
+        kelly_result = compute_kelly_mult(_meta_p_win, _rr_ratio)
+        if kelly_result.fractional_mult == 0.0:
+            return None  # Negative EV — hard veto
+        _kelly_mult = kelly_result.fractional_mult
+
+        # 7. Volume computation (barrier_12bar: no OU exhaustion/debt)
+        volume = self._compute_volume(
+            _meta_p_win,  # use meta_p_win as confidence proxy
+            current_atr,
+            regime_info,
+            regime_gate_mode,
+            macro_regime,
+            risk_budget_usd,
+            exhaustion_factor=1.0,  # barrier_12bar not OU
+            ou_regime_factor=1.0,
+            depth_penalty=z_depth_penalty(abs(entry_z_score)),
+            kelly_mult=_kelly_mult,
+        )
+        _ticks2 = math.floor(volume / self.config.lot_step + 0.5)
+        volume = max(self.config.lot_step, round(_ticks2 * self.config.lot_step, 2))
+
+        # 8. Diagnostic log
+        _pre_kelly_raw = getattr(self, "_last_pre_kelly_size", volume)
+        _raw_target = _pre_kelly_raw * _kelly_mult
+        print(
+            _json.dumps(
+                {
+                    "event": "kelly_sizing",
+                    "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+                    "strategy": self.config.name,
+                    "source": "track2_meta_pipeline",
+                    "p_win": round(_meta_p_win, 4),
+                    "rr_ratio": round(_rr_ratio, 4),
+                    "kelly_mult": round(_kelly_mult, 4),
+                    "sizing_label": kelly_result.sizing_label,
+                    "base_volume": round(_pre_kelly_raw, 4),
+                    "raw_target_volume": round(_raw_target, 4),
+                    "final_stepped_volume": volume,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+
+        # 9. Build entry context
+        _brain_preds: list[dict[str, Any]] = []
+        for p in proposals:
+            pred = getattr(p, "prediction", None) or {}
+            _brain_preds.append(
+                {
+                    "brain_id": getattr(p, "brain_id", "unknown"),
+                    "up_prob": round(float(pred.get("up_probability", 0.5)), 4),
+                    "down_prob": round(float(pred.get("down_probability", 0.5)), 4),
+                    "confidence": round(float(pred.get("confidence", 0.5)), 4),
+                    "direction_bias": pred.get("direction_bias", "neutral"),
+                }
+            )
+        entry_context: dict[str, Any] = {
+            "atr": round(current_atr, 4),
+            "regime": regime_info.get("regime", "normal") if regime_info else "normal",
+            "vol_regime": regime_info.get("regime", "normal") if regime_info else "normal",
+            "trend_direction": trend_direction,
+            "macro_regime": macro_regime,
+            "brain_predictions": _brain_preds,
+            "meta_pipeline_source": "track2",
+            "meta_p_win": round(_meta_p_win, 4),
+            "s1_prediction": round(s1_prediction, 6),
+        }
+
+        _venue = "shadow" if regime_gate_mode == "shadow" else "live"
+        _volume = 0.0 if regime_gate_mode == "shadow" else volume
+        _should_trade = regime_gate_mode != "shadow"
+
+        return StrategyDecision(
+            strategy_name=self.config.name,
+            magic=self.config.magic,
+            should_trade=_should_trade,
+            direction=meta_dir,
+            confidence=round(_meta_p_win, 4),
+            volume=_volume,
+            sl=levels["stop_loss"],
+            tp=levels["take_profit"],
+            hard_sl=levels["hard_sl"],
+            brain_ids=brain_ids,
+            supporting_count=support_count,
+            total_count=total_count,
+            regime_mode=regime_gate_mode,
+            venue=_venue,
+            reason=f"meta_pipeline_{meta_dir}",
+            entry_z_score=entry_z_score,
+            entry_context=entry_context,
+            p_win=round(_meta_p_win, 4),
+            kelly_mult=round(_kelly_mult, 4),
+        )
 
     def _compute_consensus(self, proposals: list[Any]) -> tuple[str, float, list[str], int, int]:
         """Within-group consensus — delegates to ContractGroupConsensus.
@@ -1027,8 +1413,13 @@ class StrategyLine:
         if size > 0 and size < base_volume * MVS_THRESHOLD:
             size = 0.0
 
-        # Round to 0.01 lot step (MT5 requirement)
-        return max(0.01, min(self.config.max_volume, round(size, 2)))
+        # Round to lot_step using floor-round (consistent with compute_position_size).
+        # Python's built-in round() uses banker's rounding which truncates 0.015→0.01
+        # due to float representation, causing volumes in the 0.011-0.014 range to
+        # always die at 0.01.
+        _lot_step = self.config.lot_step
+        _ticks = math.floor(size / _lot_step + 0.5)
+        return max(_lot_step, min(self.config.max_volume, round(_ticks * _lot_step, 2)))
 
 
 # ── Counter-trend gate helpers ─────────────────────────────────────────
@@ -1048,7 +1439,10 @@ def _counter_trend_action(
       - micro_*:       block at H1 >= 0.50, penalise at H1 >= 0.25
                        (moderate: short-horizon microstructure can trade
                        counter-trend, but with reduced conviction + volume)
-      - statarb_dynamic: never block (mean-reversion is counter-trend by design)
+      - statarb_dynamic: block at H1 >= 0.55 or H4 >= 0.35,
+                        penalise at H1 >= 0.30 or H4 >= 0.20
+                        (permissive: mean-reversion is counter-trend by design,
+                        but strong trends crush OU mean-reversion, especially shorts)
 
     Penalise now applies BOTH a confidence reduction AND a volume multiplier
     (vol_mult), making the penalty meaningful.  Previously only confidence was
@@ -1101,14 +1495,14 @@ def _counter_trend_action(
             "h4_vol_mult": 1.0,
         },
         "statarb_dynamic": {
-            "block": 0.99,
-            "penalise": 0.99,
-            "conf_mult": 1.0,
-            "vol_mult": 1.0,
-            "h4_block": 0.99,
-            "h4_penalise": 0.99,
-            "h4_conf_mult": 1.0,
-            "h4_vol_mult": 1.0,
+            "block": 0.55,
+            "penalise": 0.30,
+            "conf_mult": 0.70,
+            "vol_mult": 0.75,
+            "h4_block": 0.35,
+            "h4_penalise": 0.20,
+            "h4_conf_mult": 0.65,
+            "h4_vol_mult": 0.70,
         },
     }
     t = thresholds.get(

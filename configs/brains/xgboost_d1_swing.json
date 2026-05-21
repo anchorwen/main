@@ -28,6 +28,12 @@
   },
   "contract_group": "daily_swing",
   "training_horizon": 5,
+  "training_params": {
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 3.5,
+    "horizon_bars": 5,
+    "min_rr_ratio": 1.75
+  },
   "feature_schema": "daily_24dim",
   "_notes": "D1 daily swing model — 5-bar (1-week) barrier, SL=2.0xATR, TP=3.5xATR. v3: Sharpe=1.40, best D1 model. 10d/20d failed.",
   "features": [

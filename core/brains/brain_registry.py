@@ -31,6 +31,7 @@ class BrainEntry:
     status: str
     artifact_path: str
     hmre_layer: str = ""
+    training_params: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @property
@@ -81,6 +82,7 @@ class BrainRegistry:
                 status=raw.get("status", "shadow"),
                 artifact_path=raw.get("artifact_path", ""),
                 hmre_layer=raw.get("hmre_layer", ""),
+                training_params=raw.get("training_params", {}),
                 raw=raw,
             )
             self._entries[entry.brain_id] = entry

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -92,7 +93,7 @@ def build_stub_feature_source() -> dict:
         "M5_MACD": 0.15,
         "M5_Vol_ZScore": 0.35,
         "M5_Macro1_Corr": 0.28,
-        "M5_Macro_Gold_Silver_Spread": 4.41,
+        "M5_Price_ZScore": 4.41,
         "M15_Ret_1": 0.0016,
         "M15_Body_Ratio": 0.45,
         "M15_ATR_14": 4.0,
@@ -100,7 +101,7 @@ def build_stub_feature_source() -> dict:
         "M15_MACD": 0.20,
         "M15_Vol_ZScore": 0.30,
         "M15_Macro1_Corr": 0.29,
-        "M15_Macro_Gold_Silver_Spread": 4.41,
+        "M15_Price_ZScore": 4.41,
         "M30_Ret_1": 0.0019,
         "M30_Body_Ratio": 0.47,
         "M30_ATR_14": 6.0,
@@ -108,7 +109,7 @@ def build_stub_feature_source() -> dict:
         "M30_MACD": 0.25,
         "M30_Vol_ZScore": 0.25,
         "M30_Macro1_Corr": 0.30,
-        "M30_Macro_Gold_Silver_Spread": 4.41,
+        "M30_Price_ZScore": 4.41,
         "H1_Ret_1": 0.0024,
         "H1_Body_Ratio": 0.48,
         "H1_ATR_14": 8.1,
@@ -116,7 +117,7 @@ def build_stub_feature_source() -> dict:
         "H1_MACD": 0.32,
         "H1_Vol_ZScore": 0.20,
         "H1_Macro1_Corr": 0.31,
-        "H1_Macro_Gold_Silver_Spread": 4.41,
+        "H1_Price_ZScore": 4.41,
         "M5_OU_Theta": 58.0,
         "M15_OU_Theta": 21.0,
         "M30_OU_Theta": 10.0,
@@ -369,7 +370,8 @@ def load_formal_baseline_suites(
 
 def run_scenario(scenario: str, feature_source: dict | None = None):
     runtime_loop = build_v9_shadow_runtime_loop()
-    resolved_feature_source = feature_source or SCENARIO_REGISTRY[scenario]["builder"]()
+    builder = SCENARIO_REGISTRY[scenario]["builder"]
+    resolved_feature_source = feature_source or builder()  # type: ignore[operator]
     return runtime_loop.run_decision_cycle(
         trigger={"symbol": "XAUUSD"},
         feature_source=resolved_feature_source,
@@ -461,7 +463,7 @@ def build_stats_payload(results: list[dict]) -> dict:
         for payload in results
     )
     convictions = [float(payload["conviction"]) for payload in results]
-    scenario_groups = {}
+    scenario_groups: dict[str, Any] = {}
     for payload in results:
         scenario_name = payload["scenario"]
         group = scenario_groups.setdefault(
@@ -785,7 +787,9 @@ def diff_regression_baseline(expected: dict, actual: dict) -> dict:
         actual_by_scenario = {
             item.get("scenario"): item for item in actual_results if isinstance(item, dict)
         }
-        ordered_scenarios = sorted(set(expected_by_scenario) | set(actual_by_scenario))  # type: ignore[reportArgumentType]
+        ordered_scenarios = sorted(
+            set(expected_by_scenario.keys()) | set(actual_by_scenario.keys()) - {None}
+        )  # type: ignore[type-var]
         if len(expected_by_scenario) == len(expected_results) and len(actual_by_scenario) == len(
             actual_results
         ):
@@ -939,16 +943,16 @@ def build_formal_suite_semantic_rules() -> dict[str, dict[str, dict]]:
         },
         "actionable_decisions": {
             "long_case": {
-                "action": "open",
-                "side": "long",
-                "risk_status": "allow",
-                "dispatch_status": "protocol_validated",
-            },
-            "short_case": {
                 "action": "abstain",
                 "side": "flat",
                 "risk_status": "deny",
                 "dispatch_status": "skipped",
+            },
+            "short_case": {
+                "action": "open",
+                "side": "short",
+                "risk_status": "allow",
+                "dispatch_status": "protocol_validated",
             },
         },
         "risk_boundary": {
@@ -1044,7 +1048,7 @@ def build_formal_semantic_payloads(batch: list[dict], manifest_meta: dict | None
 def check_formal_baseline_suites(manifest_path: str = FORMAL_BASELINE_MANIFEST_PATH) -> dict:
     manifest = load_formal_baseline_manifest(manifest_path)
     manifest_meta = build_formal_manifest_meta(manifest)
-    suite_results = []
+    suite_results: list[dict[str, Any]] = []
     for suite in manifest.suites:
         batch = load_feature_batch_from_json(suite.batch_file)
         semantic_payloads = build_formal_semantic_payloads(batch, manifest_meta)
@@ -1059,7 +1063,7 @@ def check_formal_baseline_suites(manifest_path: str = FORMAL_BASELINE_MANIFEST_P
             }
         )
     failed_suites = [item["key"] for item in suite_results if not item["diff"]["matches"]]
-    result = {
+    result: dict[str, Any] = {
         "matches": all(item["diff"]["matches"] for item in suite_results),
         "manifest": manifest_meta,
         "suite_results": suite_results,
@@ -1399,7 +1403,7 @@ def render_json_output(
     if not include_stats and not include_meta:
         return json.dumps(base_payload)
 
-    rendered = {}
+    rendered: dict[str, Any] = {}
     if include_meta:
         rendered["meta"] = build_stream_meta(
             payloads, output_mode=output_mode, source_type=source_type
@@ -1461,7 +1465,7 @@ class ShadowSessionManager:
         try:
             prepared = prepare_results(args)
             if len(prepared) == 3:
-                payloads, _, results = prepared  # type: ignore[reportGeneralTypeIssues]
+                payloads, _, results = prepared
             else:
                 payloads, _ = prepared
                 results = build_results_from_payloads(payloads)
@@ -1672,7 +1676,7 @@ def parse_mode_override_alias(
     return {mode: value}
 
 
-def build_mode_overrides(args) -> dict[str, dict[str, object]]:
+def build_mode_overrides(args) -> dict[str, object]:
     summary = parse_mode_override_alias(
         args.summary_style_summary,
         "summary",
@@ -2161,7 +2165,7 @@ def main():
 
         prepared = prepare_results(args)
         if len(prepared) == 3:
-            payloads, default_output, results = prepared  # type: ignore[reportGeneralTypeIssues]
+            payloads, default_output, results = prepared
         else:
             payloads, default_output = prepared
             results = None

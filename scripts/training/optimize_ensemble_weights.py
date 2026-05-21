@@ -10,14 +10,14 @@ Usage::
         --lgb-oof data/training/meta_lgb_oof.npy \\
         --mlp-oof data/training/meta_mlp_oof.npy \\
         --y-true data/training/meta_features_runtime.npz \\
-        --output configs/brains/meta_stage2_filter_v1.json
+        --output configs/brains/meta_stage2_filter_v3.json
 
     # Or inline with raw probabilities:
     python scripts/training/optimize_ensemble_weights.py \\
         --lgb-probs data/training/lgb_val_probs.npy \\
         --mlp-probs data/training/mlp_val_probs.npy \\
         --y-true data/training/y_val.npy \\
-        --output configs/brains/meta_stage2_filter_v1.json
+        --output configs/brains/meta_stage2_filter_v3.json
 """
 
 from __future__ import annotations

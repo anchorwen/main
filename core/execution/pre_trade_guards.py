@@ -572,3 +572,266 @@ def check_feature_vector(feature_vector: Any, max_nan_ratio: float = 0.20) -> di
         "vector_len": total,
         "issues": issues,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Cut 1: Absolute Refractory Period — Cooldown Registry
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Strategy → native timeframe in seconds (used for cooldown scaling)
+_STRATEGY_TIMEFRAME_SEC: dict[str, int] = {
+    "barrier_12bar": 300,  # M5
+    "micro_3bar": 300,  # M5
+    "micro_m15": 300,  # M5
+    "micro_h1": 300,  # M5
+    "statarb_dynamic": 300,  # M5
+    "statarb_m15": 300,  # M5
+    "daily_swing": 900,  # M15
+    "m15_swing": 900,  # M15
+    "m30_swing": 1800,  # M30
+    "h1_swing": 3600,  # H1
+    "h4_swing": 14400,  # H4
+}
+
+# Exit reasons that trigger PASSIVE cooldown (1× timeframe)
+_PASSIVE_EXIT_PREFIXES = (
+    "sl_hit",
+    "hesitation",
+    "bleed_stop",
+    "ev_trajectory",
+    "confidence_decay",
+    "brain_flip",
+    "flip_exit",
+    "signal_reversal",
+    "zscore_exit",
+)
+
+# Exit reasons that trigger ACTIVE cooldown (60s micro-bounce guard)
+_ACTIVE_EXIT_PREFIXES = ("tp_hit", "net_out", "partial_tp")
+
+
+class CooldownRegistry:
+    """Global per-strategy cooldown tracker for the Absolute Refractory Period.
+
+    After a passive exit (SL / hesitation / bleed / EV / confidence decay),
+    the strategy enters a mandatory cooldown of 1× its native timeframe.
+    After an active exit (TP / net-out), the cooldown is 60 seconds to prevent
+    micro-death-loops where the same signal re-enters at the same price level.
+
+    Stored in ``state._cooldown_registry`` and persisted across cycles.
+    """
+
+    def __init__(self) -> None:
+        self._cooldowns: dict[str, dict[str, Any]] = {}
+
+    def record_exit(
+        self,
+        strategy: str,
+        direction: str,
+        reason: str,
+        timestamp: float,
+    ) -> dict[str, Any]:
+        """Register an exit and compute the cooldown deadline.
+
+        Returns the cooldown window dict written (for diagnostics).
+        """
+        tf_sec = _STRATEGY_TIMEFRAME_SEC.get(strategy, 300)
+        is_passive = any(reason.startswith(p) for p in _PASSIVE_EXIT_PREFIXES)
+        is_active = any(reason.startswith(p) for p in _ACTIVE_EXIT_PREFIXES)
+
+        if is_passive:
+            cooldown_sec = tf_sec
+            cooldown_type = "passive_1x_tf"
+        elif is_active:
+            cooldown_sec = 60  # TP micro-loop guard
+            cooldown_type = "active_60s"
+        else:
+            cooldown_sec = 60  # Unknown → conservative short cooldown
+            cooldown_type = "unknown_60s"
+
+        deadline = timestamp + cooldown_sec
+        entry = {
+            "deadline": deadline,
+            "cooldown_sec": cooldown_sec,
+            "type": cooldown_type,
+            "exit_reason": reason,
+            "exit_direction": direction,
+            "exit_timestamp": timestamp,
+        }
+        self._cooldowns[strategy] = entry
+        return entry
+
+    def check_cooldown(
+        self,
+        strategy: str,
+        direction: str,
+        now: float | None = None,
+        *,
+        override_reason: str = "",
+    ) -> tuple[bool, str]:
+        """Check whether a strategy is in cooldown and should be blocked.
+
+        Returns (allowed, reason).  ``allowed=True`` means the strategy may
+        evaluate.  ``allowed=False`` means it is still in its refractory period.
+
+        Reverse-direction signals (brain flip) can override passive cooldowns:
+        if the new direction is opposite the one that was exited, the cooldown
+        is waived — the flip itself confirms the regime has changed.
+        """
+        import time as _time
+
+        if now is None:
+            now = _time.time()
+
+        entry = self._cooldowns.get(strategy)
+        if entry is None:
+            return True, "no_recent_exit"
+
+        deadline = entry["deadline"]
+        if now >= deadline:
+            return True, "cooldown_expired"
+
+        remaining = deadline - now
+        exit_dir = entry.get("exit_direction", "")
+
+        # Reverse-direction override: brain flip breaks the cooldown
+        if exit_dir and direction and exit_dir != direction:
+            return True, (
+                f"cooldown_overridden_direction_flip"
+                f"_was_{exit_dir}_now_{direction}"
+                f"_remaining_{remaining:.0f}s"
+            )
+
+        cooldown_type = entry.get("type", "passive")
+        return False, (
+            f"cooldown_{cooldown_type}"
+            f"_remaining_{remaining:.0f}s"
+            f"_reason_{entry.get('exit_reason','unknown')}"
+        )
+
+    def get_state(self) -> dict[str, Any]:
+        """Return serializable state for diagnostics / persistence."""
+        return {
+            strategy: {
+                "deadline": e["deadline"],
+                "cooldown_sec": e["cooldown_sec"],
+                "type": e["type"],
+                "exit_reason": e["exit_reason"],
+                "exit_direction": e["exit_direction"],
+            }
+            for strategy, e in self._cooldowns.items()
+        }
+
+    def load_state(self, saved: dict[str, Any]) -> None:
+        """Restore cooldown state from a previously persisted snapshot."""
+        import time as _time
+
+        now = _time.time()
+        for strategy, e in saved.items():
+            deadline = float(e.get("deadline", 0))
+            if deadline <= now:
+                continue  # Expired, don't restore
+            self._cooldowns[strategy] = {
+                "deadline": deadline,
+                "cooldown_sec": float(e.get("cooldown_sec", 300)),
+                "type": str(e.get("type", "passive")),
+                "exit_reason": str(e.get("exit_reason", "")),
+                "exit_direction": str(e.get("exit_direction", "")),
+                "exit_timestamp": deadline - float(e.get("cooldown_sec", 300)),
+            }
+
+    def __repr__(self) -> str:
+        return f"CooldownRegistry({len(self._cooldowns)} active)"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Cut 2: Cross-Strategy Family Entry Spacing
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Swing family: these strategies share the same underlying signal source
+# (XGBoost swing models on different timeframes).  When one opens a position,
+# other family members must wait ≥ the shortest timeframe in the family
+# before entering the SAME direction.  This prevents the "collective trapping"
+# where a single large candle triggers all timeframes simultaneously.
+_SWING_FAMILY = frozenset({"m15_swing", "m30_swing", "h1_swing", "h4_swing"})
+_SWING_FAMILY_MIN_TF_SEC = 900  # M15 = 15 min — the shortest bar in the family
+
+
+class FamilyEntryTracker:
+    """Tracks the last entry timestamp per direction within a strategy family.
+
+    When a family member opens a position, other family members are blocked
+    from entering the same direction for ``min_gap_sec`` seconds.  This is a
+    soft TWAP-like spacing mechanism — it does NOT prevent opposite-direction
+    entries or entries in a different family.
+    """
+
+    def __init__(self) -> None:
+        # {family_key: {direction: last_entry_timestamp}}
+        self._last_entries: dict[str, dict[str, float]] = {}
+
+    def record_entry(
+        self,
+        family: str,
+        direction: str,
+        timestamp: float,
+    ) -> None:
+        """Record that a family member entered a direction."""
+        if family not in self._last_entries:
+            self._last_entries[family] = {}
+        self._last_entries[family][direction] = timestamp
+
+    def check_spacing(
+        self,
+        family: str,
+        direction: str,
+        strategy: str,
+        now: float | None = None,
+        min_gap_sec: float = _SWING_FAMILY_MIN_TF_SEC,
+    ) -> tuple[bool, str]:
+        """Check whether ``strategy`` may enter ``direction`` in ``family``.
+
+        Returns (allowed, reason).  A strategy is allowed if:
+        - No other family member entered the same direction recently, OR
+        - The minimum gap has elapsed since the last same-direction entry
+        """
+        import time as _time
+
+        if now is None:
+            now = _time.time()
+
+        entries = self._last_entries.get(family, {})
+        last_ts = entries.get(direction)
+        if last_ts is None:
+            return True, "no_recent_family_entry"
+
+        elapsed = now - last_ts
+        if elapsed >= min_gap_sec:
+            return True, f"family_spacing_ok_{elapsed:.0f}s"
+
+        remaining = min_gap_sec - elapsed
+        return False, (
+            f"family_spacing_blocked"
+            f"_same_{direction}"
+            f"_remaining_{remaining:.0f}s"
+            f"_gap_{min_gap_sec}s"
+        )
+
+    def get_state(self) -> dict[str, Any]:
+        return {family: dict(dirs) for family, dirs in self._last_entries.items()}
+
+    def load_state(self, saved: dict[str, Any]) -> None:
+        for family, dirs in saved.items():
+            self._last_entries[family] = {str(d): float(ts) for d, ts in dirs.items()}
+
+
+def strategy_to_family(strategy: str) -> str:
+    """Map a strategy name to its family key (or the strategy itself if standalone)."""
+    if strategy in _SWING_FAMILY:
+        return "swing"
+    return strategy
+
+
+def strategy_timeframe_sec(strategy: str) -> int:
+    """Return the native timeframe in seconds for a strategy."""
+    return _STRATEGY_TIMEFRAME_SEC.get(strategy, 300)

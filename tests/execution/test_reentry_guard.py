@@ -328,17 +328,29 @@ class TestReentryState:
 
 class TestVolumeDecay:
     def test_first_entry_full_volume(self):
-        assert apply_reentry_volume_scale(1.0, 0) == 1.0
+        vol, blocked = apply_reentry_volume_scale(1.0, 0)
+        assert vol == 1.0
+        assert blocked is False
 
-    def test_first_reentry_75pct(self):
-        assert apply_reentry_volume_scale(1.0, 1) == 0.75
+    def test_first_reentry_grace_period(self):
+        # Tiered decay: 1st re-entry = grace period (full volume, gated by cooldown)
+        vol, blocked = apply_reentry_volume_scale(1.0, 1)
+        assert vol == 1.0
+        assert blocked is False
 
     def test_second_reentry_50pct(self):
-        assert apply_reentry_volume_scale(1.0, 2) == 0.50
+        vol, blocked = apply_reentry_volume_scale(1.0, 2)
+        assert vol == 0.50
+        assert blocked is False
 
     def test_third_reentry_blocked(self):
-        assert apply_reentry_volume_scale(1.0, 3) == 0.0
-        assert apply_reentry_volume_scale(1.0, 99) == 0.0
+        vol, blocked = apply_reentry_volume_scale(1.0, 3)
+        assert vol == 0.0
+        assert blocked is True
+
+        vol, blocked = apply_reentry_volume_scale(1.0, 99)
+        assert vol == 0.0
+        assert blocked is True
 
 
 class TestEnsureReentryState:
