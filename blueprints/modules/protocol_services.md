@@ -47,6 +47,7 @@ DecisionIntent → DecisionCompiler → IntentMessageBuilder → CommunicationEn
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 | FIX-20260519-019 | 2026-05-19 | cursor-agent | — | BarSyncPoller 92.8% timeout rate fix: added `fetch_synthetic_bar()` — when M5 bar hasn't formed, aggregates last 6 M1 bars into synthetic M5 OHLC(V) instead of blind `time.sleep()`. Eliminates 120s data misalignment window where stale features were used against real-time prices. Caller in live_intent_loop.py uses synthetic bar on timeout instead of falling back to interval sleep. | RC-06 (data-misalignment, sampling-blind-spot) |
 | FIX-20260522-006 | 2026-05-22 | cursor-agent | — | BarSyncPoller MT5 transient error retry: copy_rates_from_pos() fails after ~104s of polling despite successful initialize(). Added MAX_MT5_ERROR_RETRIES=3 with re-init+retry loop before degrading to fallback_poll + synthetic bar. Resets error count on successful poll or new bar detection. | RC-05 (transient-error) |
+| FIX-20260522-010 | 2026-05-22 | cursor-agent | — | BarSyncPoller timeout 120s→360s: DEFAULT_TIMEOUT_SECONDS was shorter than M5 bar period (300s). Every polling window expired before next bar formed, forcing all cycles into fallback sleep mode. Now 360s = 300s bar period + 60s buffer. Also updated live.yaml, live_intent_loop.py, live_launcher.py defaults. | RC-05 (boundary-error) |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

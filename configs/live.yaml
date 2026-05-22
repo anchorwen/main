@@ -85,7 +85,7 @@ live_trading:
     magic: 90001
   base_dir: data
   bar_sync: true
-  bar_sync_timeout: 120
+  bar_sync_timeout: 360
   use_exit_watchdog: true
   use_limit_orders: true
 exit_management:

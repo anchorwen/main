@@ -279,7 +279,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
             [
                 "--bar-sync",
                 "--bar-sync-timeout",
-                str(cfg.get("bar_sync_timeout", 120)),
+                str(cfg.get("bar_sync_timeout", 360)),
             ]
         )
     if cfg.get("use_exit_watchdog"):

@@ -1972,3 +1972,23 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
 - **Prevention**: 任何从 `-> None` 改为 `-> bool` 的函数签名变更，必须搜索所有调用点并更新为门控调用模式。`verify.py --full` 的 mypy 检查不会捕获"忽略返回值"（Python 无此约束）——需要蓝图审查 + 人工代码审查覆盖。
 
 - **Dependents Checked**: `_execute_management_phase()` 的所有退出路径——7 个调用点已全部门控。`position_manager.clear_position()` 的行为——仅删除本地缓存（无网络调用），False 时跳过安全无副作用。
+
+### FIX-20260522-010 — BarSyncPoller 超时与 M5 K线周期不匹配
+
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: protocol-services, runtime-live, deployment-config
+- **Files**: `core/protocol/event_bar_sync.py`, `scripts/live_intent_loop.py`, `scripts/live_launcher.py`, `configs/live.yaml`
+
+- **Description**: 修复 bar_sync 超时窗口（120s）短于 M5 K线周期（300s）导致所有周期回退到盲睡眠模式的参数不匹配问题。
+
+  **症状**: 每次 `wait_for_new_bar()` 轮询在 120s 截止时间到达时超时，因为下一根 M5 K线还有 ~270s 才形成（K线刚在 ~30s 前形成）。MT5 API 功能完好（`copy_rates_from_pos()` 返回有效数据），但新 K线检测窗口太短，永远等不到下一根 K线。零次成功检测到新 K线——100% 超时率。
+
+  **修复**: `DEFAULT_TIMEOUT_SECONDS` 和所有配置默认值 120s → 360s（M5 300s 周期 + 60s 缓冲）。影响的点：`event_bar_sync.py:DEFAULT_TIMEOUT_SECONDS`、`live_intent_loop.py:--bar-sync-timeout default`、`live_launcher.py:fallback default`、`live.yaml:bar_sync_timeout`。
+
+- **Root Cause**: RC-05 — boundary-error。M5 周期（300s）大于超时窗口（120s）。窗口必须 ≥ 周期 + 缓冲以允许在 300s 周期内任一时刻捕获新 K线。
+
+- **Prevention**: 每当 bar_sync 用于不同时间周期的 K线，`DEFAULT_TIMEOUT_SECONDS` 应至少为 `timeframe_seconds * 1.2`。未来功能：基于 `self.timeframe` 动态计算 `_bar_seconds() * 1.2`。
+
+- **Dependents Checked**: 无——调用方（`live_intent_loop.py`）传入参数中的 `timeout_seconds`，超时对调用方透明。更长的等待时间由 FIX-008（崩溃保护）和 FIX-005（15s 超时包装器防止启动死锁）覆盖。

@@ -86,6 +86,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260522-007 | 2026-05-22 | runtime-live | Position count MT5 fallback: positions_total() returning < 0 (error code) caused entire cycle skip. Now falls back to position_manager cached count when MT5 unavailable. | RC-01 |
 | FIX-20260522-008 | 2026-05-22 | runtime-live | Intent loop bar_sync crash protection: unhandled exception in bar_sync wait section killed entire intent loop process. Wrapped in try/except with bar_sync_crash JSON event + interval-based fallback sleep. | RC-01 |
 | FIX-20260522-009 | 2026-05-22 | runtime-live | Unguarded clear_position() after close dispatch failure: all 7 managed-exit callers called pm.clear_position() unconditionally even when _dispatch_managed_close() returned False. Now all 7 callers check return value before clearing. | RC-06 |
+| FIX-20260522-010 | 2026-05-22 | protocol-services, runtime-live | Bar sync timeout 120s→360s: DEFAULT_TIMEOUT_SECONDS < M5 bar period (300s) caused every polling window to expire before next bar. MT5 API was functional but bar_sync never had enough window. | RC-05 |
 | FIX-20260515-001 | 2026-05-14 | training | LightGBM 4.6.0 removed fobj parameter: custom objective now passed via params[objective] | RC-06 |
 | FIX-20260515-002 | 2026-05-14 | training | Pre-split dataset support: pipeline auto-detects X_val/y_val/X_test in NPZ and uses them directly | RC-06 |
 | FIX-20260515-003 | 2026-05-14 | training | Max drawdown gate units fix: removed *100 multiplier, max_drawdown is already in absolute return units | RC-05 |
@@ -174,7 +175,7 @@ FIX-YYYYMMDD-NNN
 
 | Year | File | Count |
 |------|------|-------|
-| 2026 | [FIX_REGISTRY_2026.md](FIX_REGISTRY_2026.md) | 81 |
+| 2026 | [FIX_REGISTRY_2026.md](FIX_REGISTRY_2026.md) | 82 |
 
 > New fix entries should be added to the relevant year file.
 > Keep the Fix Index table above updated with every fix.

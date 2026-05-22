@@ -480,8 +480,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--bar-sync-timeout",
         type=float,
-        default=120.0,
-        help="Max seconds to wait for new bar before fallback to interval sleep",
+        default=360.0,
+        help="Max seconds to wait for new bar before fallback to interval sleep (must be > M5 period of 300s)",
     )
     p.add_argument(
         "--use-limit-orders",

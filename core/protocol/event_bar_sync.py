@@ -42,7 +42,7 @@ from typing import Any
 
 # -- Constants --
 
-DEFAULT_TIMEOUT_SECONDS = 120  # max wait for new bar before fallback
+DEFAULT_TIMEOUT_SECONDS = 360  # max wait for new bar before fallback (M5=300s + 60s buffer)
 DEFAULT_POLL_INTERVAL = 2.0  # seconds between MT5 rate checks
 DEFAULT_FALLBACK_INTERVAL = 60  # seconds when MT5 is unreachable
 MAX_LAG_BARS = 3  # consecutive missed bars before CRITICAL alert
