@@ -1989,6 +1989,10 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
 
 - **Root Cause**: RC-05 — boundary-error。M5 周期（300s）大于超时窗口（120s）。窗口必须 ≥ 周期 + 缓冲以允许在 300s 周期内任一时刻捕获新 K线。
 
-- **Prevention**: 每当 bar_sync 用于不同时间周期的 K线，`DEFAULT_TIMEOUT_SECONDS` 应至少为 `timeframe_seconds * 1.2`。未来功能：基于 `self.timeframe` 动态计算 `_bar_seconds() * 1.2`。
+  **⚠️ 回归分析 (REGRESSION)**: 此问题由 FIX-20260522-006 间接引发。修复前，MT5 `copy_rates_from_pos()` 在约 104s 后持续抛异常 → 旧代码立即 `fallback_to_poll` 返回 None → 轮询存活窗口被异常截断在 ~104s → 加上 60s 回退睡眠 + 60s 间隔睡眠 = 隐式 ~224s 窗口，偶尔能在 K 线偏移量有利时捕获新 K 线。FIX-006 修复了异常重试 → 轮询完整存活 120s → 硬截止时间暴露了 120s < 300s 的参数不匹配 → 100% 超时率。
+  
+  **教训**: 任何影响外部 API 轮询循环退出行为的修复，必须在合并前验证轮询窗口是否仍能达成目标事件检测。理想情况下，超时计算应基于目标 K 线周期（`_bar_seconds() * 1.2`）而非硬编码常量。
 
-- **Dependents Checked**: 无——调用方（`live_intent_loop.py`）传入参数中的 `timeout_seconds`，超时对调用方透明。更长的等待时间由 FIX-008（崩溃保护）和 FIX-005（15s 超时包装器防止启动死锁）覆盖。
+- **Prevention**: 每当 bar_sync 用于不同时间周期的 K线，`DEFAULT_TIMEOUT_SECONDS` 应至少为 `timeframe_seconds * 1.2`。未来功能：基于 `self.timeframe` 动态计算 `_bar_seconds() * 1.2`。修复后必须验证 bar_sync 在实际运行中成功检测到新 K线（`bar_sync_events.jsonl` 中应有非零成功检测记录）。
+
+- **Dependents Checked**: 无——调用方（`live_intent_loop.py`）传入参数中的 `timeout_seconds`，超时对调用方透明。更长的等待时间由 FIX-008（崩溃保护）和 FIX-005（15s 超时包装器防止启动死锁）覆盖。参见 `protocol_services.md` KI-001 获取完整的根因因果链文档。

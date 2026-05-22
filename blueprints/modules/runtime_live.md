@@ -70,6 +70,8 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Known Issues
 
+- **bar_sync timeout K线周期耦合** (`2026-05-22`): 参见 `protocol_services.md` KI-001。`live_intent_loop.py` 通过 `--bar-sync-timeout` 参数传递超时值——若小于目标 K 线周期，将导致 100% 超时率。当前硬编码 360s 对 M5 (300s) 安全，对 M15+ 安全，但对 H1+ 仍偏短。未来应将超时计算改为 `timeframe_seconds * 1.2`。
+
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 | FIX-20260521-001 | 2026-05-21 | cursor-agent | — | High Recall + High Precision: MetaFilterGate threshold 0.50→0.60. Loose upstream (Huber confidence 0.25) generates more candidates; tight downstream MetaFilter (0.60) filters noise. Validation: blind WR 54.1% → filtered 64.6%, PnL +15R → +29R. | RC-09 |

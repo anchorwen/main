@@ -49,6 +49,22 @@ DecisionIntent → DecisionCompiler → IntentMessageBuilder → CommunicationEn
 | FIX-20260522-006 | 2026-05-22 | cursor-agent | — | BarSyncPoller MT5 transient error retry: copy_rates_from_pos() fails after ~104s of polling despite successful initialize(). Added MAX_MT5_ERROR_RETRIES=3 with re-init+retry loop before degrading to fallback_poll + synthetic bar. Resets error count on successful poll or new bar detection. | RC-05 (transient-error) |
 | FIX-20260522-010 | 2026-05-22 | cursor-agent | — | BarSyncPoller timeout 120s→360s: DEFAULT_TIMEOUT_SECONDS was shorter than M5 bar period (300s). Every polling window expired before next bar formed, forcing all cycles into fallback sleep mode. Now 360s = 300s bar period + 60s buffer. Also updated live.yaml, live_intent_loop.py, live_launcher.py defaults. | RC-05 (boundary-error) |
 
+## Known Issues
+
+### KI-001: bar_sync timeout MUST exceed bar period (`2026-05-22`)
+**Discovery**: FIX-20260522-006（MT5 瞬时错误重试）修复后，bar_sync 轮询不再因 MT5 异常提前退出。这暴露了一个隐藏的前提条件：`DEFAULT_TIMEOUT_SECONDS`（原值 120s）必须大于目标 K 线周期（M5=300s）。
+
+**因果链**:
+1. 修复前：MT5 `copy_rates_from_pos()` 在约 104s 后持续抛异常 → 旧代码立即 `fallback_to_poll` 返回 None → 实际上轮询存活窗口被异常截断在 ~104s
+2. 修复前：异常截断 + 60s 回退睡眠 + 60s 间隔睡眠 = 隐式的 ~224s 窗口 → 偶尔能等到下一根 K 线（取决于 bar_sync 启动时的 K 线内偏移量）
+3. FIX-006 修复后：异常被重试逻辑吞没 → 轮询完整存活 120s → 严格在 120s 截止时间超时
+4. 120s < 300s → 若 bar_sync 在 K 线形成 30s 后启动，下一根 K 线需 270s → 永远在截止前超时 → 100% 超时率
+5. FIX-010 将超时延长至 360s（300s + 60s 缓冲）→ 恢复事件驱动检测
+
+**教训**: 任何影响外部 API 轮询循环退出行为的修复，必须验证轮询窗口是否仍能达成目标事件检测。当前超时计算是硬编码的——应转为 `_bar_seconds() * 1.2` 以适配不同时间周期。
+
+**影响范围**: `event_bar_sync.py`, `live_intent_loop.py`, `live_launcher.py`, `live.yaml`
+
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |
 |----------|-----------|----------|
