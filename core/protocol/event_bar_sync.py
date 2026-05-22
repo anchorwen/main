@@ -47,6 +47,7 @@ DEFAULT_POLL_INTERVAL = 1.0  # seconds between MT5 rate checks
 DEFAULT_FALLBACK_INTERVAL = 60  # seconds when MT5 is unreachable
 MAX_LAG_BARS = 3  # consecutive missed bars before CRITICAL alert
 MAX_MT5_ERROR_RETRIES = 3  # re-init + retry before returning None on transient MT5 errors
+MAX_CONSECUTIVE_EMPTY_POLLS = 5  # consecutive None/empty copy_rates before re-init attempt
 
 
 # -- Data types --
@@ -131,6 +132,7 @@ class BarSyncPoller:
             return None
 
         _error_count = 0
+        _consecutive_empty = 0  # consecutive empty poll counter for silent-failure recovery
         while time.monotonic() < deadline:
             try:
                 import MetaTrader5 as mt5
@@ -143,6 +145,37 @@ class BarSyncPoller:
                     2,  # count: 2 bars (current + previous)
                 )
                 if rates is None or len(rates) < 2:
+                    _consecutive_empty += 1
+                    # ── Silent-failure recovery ──
+                    # copy_rates can return None after MT5 IPC hiccups (e.g.
+                    # after shutdown+re-init) without throwing an exception.
+                    # Without recovery, the poll loop spins silently for the
+                    # remainder of the degraded window — never detecting the
+                    # new bar that forms minutes later.
+                    # Re-init MT5 after N consecutive empty polls, same as the
+                    # exception-handler path (FIX-20260522-028).
+                    if _consecutive_empty >= MAX_CONSECUTIVE_EMPTY_POLLS:
+                        self._log_event(
+                            "BAR_EMPTY_POLLS_REINIT",
+                            {
+                                "consecutive_empty": _consecutive_empty,
+                                "elapsed": round(time.monotonic() - _start, 1),
+                                "bar_period": _bar_secs,
+                                "mt5_available": self._mt5_available,
+                            },
+                        )
+                        self._mt5_available = False
+                        try:
+                            mt5.shutdown()
+                        except Exception:
+                            pass
+                        try:
+                            self._init_mt5()
+                        except Exception:
+                            pass
+                        _consecutive_empty = 0
+                        time.sleep(self.poll_interval * 2)
+                        continue
                     time.sleep(self.poll_interval)
                     if not _degraded and time.monotonic() >= _degraded_deadline:
                         _degraded = True
@@ -168,6 +201,9 @@ class BarSyncPoller:
                             "_degraded": True,
                         }
                     continue
+
+                # Valid poll — reset empty-poll counter
+                _consecutive_empty = 0
 
                 current_bar = rates[-1]
                 bar_time = int(current_bar["time"])

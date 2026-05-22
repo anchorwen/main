@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-22T15:50:32Z
+> **自动生成**: 2026-05-22T16:45:30Z
 > **扫描模块数**: 438
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -385,7 +385,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `event_bar_sync.py` | ✅ active | BarSyncState, BarSyncPoller | 12 | 516 | — | |
+| `event_bar_sync.py` | ✅ active | BarSyncState, BarSyncPoller | 12 | 552 | — | |
 | `live_execution_contract.py` | ✅ active | — | 5 | 74 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 8 | — | |
 

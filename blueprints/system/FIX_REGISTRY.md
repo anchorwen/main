@@ -98,6 +98,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260522-020 | 2026-05-22 | execution-orders | Layer 1 immutable contracts: QueuedDecision + DispatchResult converted to frozen dataclasses. dispatch_status rename protocol_validated→transport_delivered synced to tests, semantic rules, and disk baselines. v9_shadow SmokeTest rebuilt. | RC-06 |
 | FIX-20260522-021 | 2026-05-22 | brains-schema | Layer 1 immutable contracts: BrainSignal supersedes BrainDecisionProposal.prediction dict. Direction/TradeDirection Literal types from trading_contracts.py replace loose string direction fields. Schema version constant retained for backward compat. | RC-06 |
 | FIX-20260522-027 | 2026-05-22 | runtime-live | Bleed stop horizon-scaled hardening: bleed_bars now scales with strategy horizon (horizon//3, min 3) + min_hold_cycles protection prevents bleed stop from firing before position has reasonable time to develop. Enhanced bleed_stop_triggered JSON event with bleed_bars, cycles_held, min_hold_cycles, horizon_cycles. Root cause #2 of May 22 8-trade losing streak — positions killed after 3 bars (15min) with tiny losses, never given time to develop. | RC-05 |
+| FIX-20260522-028 | 2026-05-22 | protocol-services | BarSyncPoller silent-failure recovery: copy_rates_from_pos() returning None (not exception) after MT5 re-init caused infinite silent spin. Added BAR_EMPTY_POLLS_REINIT recovery — after 5 consecutive empty polls, re-inits MT5 and logs event instead of waiting 310s for degraded deadline. Fixes perpetual bar_sync_degraded_wakeup where new bars were never detected after the first MT5_ERROR. | RC-05 |
 | FIX-20260515-001 | 2026-05-14 | training | LightGBM 4.6.0 removed fobj parameter: custom objective now passed via params[objective] | RC-06 |
 | FIX-20260515-002 | 2026-05-14 | training | Pre-split dataset support: pipeline auto-detects X_val/y_val/X_test in NPZ and uses them directly | RC-06 |
 | FIX-20260515-003 | 2026-05-14 | training | Max drawdown gate units fix: removed *100 multiplier, max_drawdown is already in absolute return units | RC-05 |
@@ -479,3 +480,18 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-05 — boundary-error: hardcoded bleed_bars=3 was appropriate for micro strategies (15-min horizon) but destructive for barrier_12bar (60-min horizon). The parameter should have scaled with strategy horizon from the start.
 - **Prevention**: All time-based exit parameters now scale with strategy horizon. Adding a new strategy requires setting `horizon_cycles` in live.yaml, which automatically calibrates bleed_bars.
 - **Dependents Checked**: position_manager.py (should_exit_bleed signature unchanged — only caller changed). 2622 tests pass.
+
+### FIX-20260522-028
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: protocol-services
+- **Files**: core/protocol/event_bar_sync.py
+- **Description**: BarSyncPoller silent-failure recovery — fixes perpetual `bar_sync_degraded_wakeup` where the engine was stuck in management-only mode with no Alpha generation.
+  - **Problem**: After MT5_ERROR triggers `mt5.shutdown()` + `_init_mt5()`, `copy_rates_from_pos()` can return `None` or `<2` rates without throwing an exception. The `if rates is None` branch (line 145) had no recovery logic — it silently slept 1s and continued. This caused the poll loop to spin for the remaining ~75s (or up to 310s total) until the `_degraded_deadline` fired, never detecting the new bar that forms at the 5-minute boundary.
+  - **Evidence**: `data/reports/bar_sync_events.jsonl` showed an identical pattern every call: `MT5_ERROR` (count=1) → `MT5_INIT_OK` → 310.1s elapsed → `BAR_DEGRADED_WAKEUP`. Bar times WERE advancing (MT5 was delivering data) but the bar_sync never detected the new bar because `copy_rates` returned None after re-init, landing in the silent branch.
+  - **Solution**: Added `_consecutive_empty` counter (max 5, `MAX_CONSECUTIVE_EMPTY_POLLS`). After 5 consecutive empty polls, triggers `BAR_EMPTY_POLLS_REINIT` event + `mt5.shutdown()` + `_init_mt5()` — same recovery as the exception-handler path. Empty counter resets on successful poll.
+  - **Impact**: Without this fix, the engine was stuck in perpetual degraded mode since FIX-20260522-011 introduced the dual-deadline design — the silent-empty branch became the dominant path after every MT5 hiccup.
+- **Root Cause**: RC-05 — missing-recovery-path: the `rates is None` code path had no mechanism to recover from transient MT5 unavailability, unlike the exception path which had `MAX_MT5_ERROR_RETRIES` + re-init.
+- **Prevention**: Every code path that handles MT5 IPC failure must include a re-init escalation — silence is not an option. The `_consecutive_empty` counter pattern should be applied to any polling loop that depends on external IPC.
+- **Dependents Checked**: live_intent_loop.py (caller — handles _degraded sentinel, no changes needed). 2622 tests pass.
