@@ -70,6 +70,9 @@ from core.runtime.signal_pipeline import (  # noqa: F401 — re-export
 # Read from brain JSON ``training_horizon`` field — no hardcoded mapping.
 # Fallback: 12 cycles for barrier, 3 for micro, 0 for statarb.
 _DEFAULT_HORIZON = 12
+META_FILTER_GATE_THRESHOLD = (
+    0.40  # lowered from 0.60 — model trained on 1,217 samples, specificity 38%
+)
 
 
 @dataclass
@@ -176,6 +179,10 @@ class LiveCycleState:
     _cooldown_registry: Any = None  # CooldownRegistry (Cut 1: Absolute Refractory Period)
     _family_entry_tracker: Any = None  # FamilyEntryTracker (Cut 2: Cross-Strategy Spacing)
     _meta_filter_gate: Any = None  # MetaFilterGate (LightGBM 47-dim OU signal quality filter)
+
+    # Circuit breaker: 3 consecutive degraded cycles → management-only mode
+    _consecutive_degraded_cycles: int = 0
+    _circuit_breaker_tripped: bool = False
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -913,13 +920,37 @@ def _execute_management_phase(
                 _sname = "barrier_12bar"
 
     # ── 1. Fetch current prices & ATR ──
+    # FIX-20260522-014: a single price-fetch failure must not skip trail/
+    # breakeven/exit management for this position.  Use the position's own
+    # entry price as a fallback so the management phase can still evaluate
+    # emergency exit conditions.  The warning event ensures the operator
+    # sees the degradation.
+    _price_degraded = False
     try:
         if broker is not None:
             mid, bid, ask = broker.fetch_prices(config.symbol)
         else:
             mid, bid, ask = _mid_and_prices(mt5, config.symbol)
     except Exception:
-        return False
+        _price_degraded = True
+        mid = float(getattr(pos, "entry_price", 0.0) or 0.0)
+        bid = mid
+        ask = mid
+        print(
+            json.dumps(
+                {
+                    "event": "management_price_fetch_failed",
+                    "time": _utc_iso(),
+                    "ticket": pos.ticket,
+                    "fallback_entry_price": mid,
+                    "action": "continuing_management_with_fallback",
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        if mid <= 0:
+            return False  # truly hopeless — no price reference at all
 
     current_atr = (
         broker.fetch_current_atr(config.symbol)
@@ -1477,13 +1508,8 @@ def _execute_management_phase(
                     prop = b_info["adapter"].get_signal(raw)
 
                 if prop is not None:
-                    # Stamp brain_id for attribution
-                    bid = b_info.get("brain_id", "unknown")
-                    try:
-                        if not getattr(prop, "brain_id", None):
-                            prop.brain_id = bid
-                    except Exception:
-                        pass
+                    # BrainSignal always carries brain_id from the adapter.
+                    # No stamping needed — frozen objects reject mutation.
                     raw_proposals.append(prop)
             except Exception:
                 pass
@@ -1510,6 +1536,7 @@ def _execute_management_phase(
                 # brains, NOT the global 17-brain consensus.  Global drift
                 # is fed to Meta Exit (Layer 2.5) as a separate factor.
                 _entry_group_signal = group_signals.get(_sname) if _sname else None
+                _l2_direction: str
                 if _entry_group_signal is not None and _entry_group_signal.direction != "neutral":
                     _l2_direction = _entry_group_signal.direction
                     _l2_confidence = _entry_group_signal.confidence
@@ -1577,12 +1604,26 @@ def _execute_management_phase(
                 }
                 meta_supporting = list(set(_global_supporting))
 
-                # ── Opt3: Bleed stop (v3.2) ──
-                # Exit if 3 consecutive bars have negative PnL.
-                # Runs before OU exit because it saves ~1.55R vs hard_stop.
+                # ── Opt3: Bleed stop (v3.2, hardened v3.3) ──
+                # Exit if N consecutive bars have negative PnL, where N scales
+                # with the strategy's horizon.  barrier_12bar (60 min) → 4 bars,
+                # micro_3bar (15 min) → 3 bars.  min_hold_cycles prevents the
+                # bleed_stop from firing before the position has had reasonable
+                # time to develop (FIX-20260522-027).
                 if mid is not None and mid > 0:
-                    _r_now = pm._compute_r_multiple(mid, ticket=pos.ticket)
-                    _should_bleed, _bleed_reason = pm.should_exit_bleed(pos, _r_now)
+                    _strat_cfg = (config.strategy_configs or {}).get(_sname, {}) or {}
+                    _horizon = int(
+                        _strat_cfg.get("horizon_cycles", 0) or _strat_cfg.get("horizon", 0) or 0
+                    )
+                    _bleed_bars = max(3, _horizon // 3) if _horizon > 0 else 3
+                    _min_hold = max(2, _bleed_bars)
+                    if getattr(pos, "cycles_held", 0) < _min_hold:
+                        _should_bleed, _bleed_reason = False, ""
+                    else:
+                        _r_now = pm._compute_r_multiple(mid, ticket=pos.ticket)
+                        _should_bleed, _bleed_reason = pm.should_exit_bleed(
+                            pos, _r_now, bleed_bars=_bleed_bars
+                        )
                     if _should_bleed:
                         _dispatched = _dispatch_managed_close(
                             config,
@@ -1603,6 +1644,10 @@ def _execute_management_phase(
                                     "ticket": pos.ticket,
                                     "r_now": round(_r_now, 3),
                                     "reason": _bleed_reason,
+                                    "bleed_bars": _bleed_bars,
+                                    "cycles_held": getattr(pos, "cycles_held", 0),
+                                    "min_hold_cycles": _min_hold,
+                                    "horizon_cycles": _horizon,
                                     "dispatched": _dispatched,
                                 },
                                 ensure_ascii=False,
@@ -2386,12 +2431,7 @@ def _compute_contract_group_consensus(
     brain_proposal_pairs: list[tuple[dict[str, Any], Any]] = []
     for i, p in enumerate(raw_proposals):
         b_info = brains[i] if i < len(brains) else {}
-        bid = b_info.get("brain_id", "unknown")
-        try:
-            if not getattr(p, "brain_id", None):
-                p.brain_id = bid
-        except Exception:
-            pass
+        # BrainSignal always carries brain_id from the adapter.
         brain_proposal_pairs.append((b_info, p))
 
     # Apply dynamic vote weights (same weighter, but now used per-group)
@@ -2700,6 +2740,30 @@ def _build_strategy_lines(
     strategies: dict[str, Any] = {}
 
     if barrier_brains:
+        # Dictator Protocol (2026-05-22): filter by brain_type from BARRIER_GROUP.
+        # contract_group alone is too coarse — brain_type is the per-model gate.
+        barrier_brains = [
+            b for b in barrier_brains if b.get("brain_type", "") in BARRIER_GROUP["brain_types"]
+        ]
+    if barrier_brains:
+        # ── Auto-discover meta-probe specs from brain JSON roles ──
+        from core.execution.meta_pipeline import discover_probe_specs
+
+        _meta_probe_specs = discover_probe_specs(barrier_brains)
+        # live.yaml override (if configured):
+        _yaml_probes = _cfg("barrier_12bar", "meta_probes", None)
+        if _yaml_probes is not None:
+            from core.execution.meta_pipeline import MetaProbeSpec
+
+            _meta_probe_specs = [
+                MetaProbeSpec(
+                    brain_id=str(p.get("brain_id", "")),
+                    threshold=float(p.get("threshold", 0.30)),
+                    filter_stage=str(p.get("filter_stage", "stage2")),
+                )
+                for p in _yaml_probes
+            ]
+
         strategies["barrier_12bar"] = BarrierStrategy(
             StrategyLineConfig(
                 name="barrier_12bar",
@@ -2729,6 +2793,7 @@ def _build_strategy_lines(
                 min_valid_brains=_cfg("barrier_12bar", "min_valid_brains", 3),
                 timeframe=_cfg("barrier_12bar", "timeframe", "M5"),
                 exit_hesitation_cycles=_exit_cfg("barrier_12bar", "hesitation_cycles", 0),
+                meta_probe_specs=_meta_probe_specs,
             ),
             barrier_brains,
             budget=StrategyBudget(
@@ -3443,6 +3508,7 @@ def execute_live_cycle(
     exit_watchdog: Any = None,
     limit_monitor: Any = None,
     meta_signal_filter: Any = None,
+    degraded_wakeup: bool = False,
 ) -> tuple[LiveCycleState, bool]:
     """Execute one iteration of the live intent cycle.
 
@@ -3472,6 +3538,36 @@ def execute_live_cycle(
         ),
         flush=True,
     )
+
+    # ── Circuit breaker: 3 consecutive degraded cycles → management-only ──
+    if state._circuit_breaker_tripped:
+        print(
+            json.dumps(
+                {
+                    "event": "circuit_breaker_active",
+                    "time": _utc_iso(),
+                    "consecutive_degraded": state._consecutive_degraded_cycles,
+                    "mode": "management_only",
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+    # Reset on first non-degraded cycle
+    if not degraded_wakeup and state._consecutive_degraded_cycles > 0:
+        print(
+            json.dumps(
+                {
+                    "event": "circuit_breaker_reset",
+                    "time": _utc_iso(),
+                    "previous_consecutive_degraded": state._consecutive_degraded_cycles,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        state._consecutive_degraded_cycles = 0
+        state._circuit_breaker_tripped = False
 
     # ── Restart state bootstrap: replay recent journal closes ──
     # On restart, runtime state (_reentry_states, _pending_sl_records,
@@ -3512,6 +3608,67 @@ def execute_live_cycle(
             }
         except Exception:
             pass
+
+        # ── Startup orphan detection: MT5 vs active_position.json ──
+        try:
+            _ap_path = os.path.join(config.base_dir, config.position_state_path)
+            _ap_tickets: set[int] = set()
+            if os.path.exists(_ap_path):
+                with open(_ap_path) as _f:
+                    _ap = json.load(_f)
+                _ap_tickets = {
+                    int(t) for t in (_ap.get("tickets", []) if isinstance(_ap, dict) else [])
+                }
+            _mt5_positions = mt5.positions_get(symbol=config.symbol) or []
+            _mt5_tickets = {p.ticket for p in _mt5_positions}
+            _orphans = _mt5_tickets - _ap_tickets - set(state.known_open_tickets.keys())
+            if _orphans:
+                print(
+                    json.dumps(
+                        {
+                            "event": "orphan_position_mismatch",
+                            "time": _utc_iso(),
+                            "severity": "HARD_BLOCK",
+                            "orphan_tickets": sorted(_orphans),
+                            "mt5_tickets": sorted(_mt5_tickets),
+                            "active_position_tickets": sorted(_ap_tickets),
+                            "known_open_tickets": sorted(state.known_open_tickets.keys()),
+                            "action": "refusing_to_start",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+                return state, False  # refuse to start
+        except json.JSONDecodeError:
+            print(
+                json.dumps(
+                    {
+                        "event": "orphan_detection_json_error",
+                        "time": _utc_iso(),
+                        "severity": "ERROR",
+                        "file": _ap_path,
+                        "message": "active_position.json is corrupt or empty; "
+                        "treating as no tracked positions",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        except Exception as _exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "orphan_detection_failed",
+                        "time": _utc_iso(),
+                        "severity": "ERROR",
+                        "error": f"{type(_exc).__name__}: {_exc}",
+                        "message": "orphan detection skipped — manual review recommended",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
 
     # ── Reconcile closed positions ──
     # Run on every Nth cycle (reconciliation_interval), AND on the very first
@@ -4072,6 +4229,23 @@ def execute_live_cycle(
                 except Exception:
                     pass
 
+    # ── Degraded wakeup guard: skip Alpha computation, management only ──
+    if degraded_wakeup:
+        print(
+            json.dumps(
+                {
+                    "event": "bar_sync_degraded_alpha_skip",
+                    "time": _utc_iso(),
+                    "iteration": state.loop_iteration,
+                    "action": "skipping_feature_computation_and_strategy_eval",
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        _log_cycle_end(state.loop_iteration)
+        return state, True
+
     # ── Compute features ──
     # Moved BEFORE position-limit check so the feature store stays fresh even
     # when every strategy is at max positions.  A stale store silently degrades
@@ -4104,7 +4278,7 @@ def execute_live_cycle(
 
             _mg = MetaFilterGate(
                 model_dir="data/models/meta_filter_v3",
-                threshold=0.60,  # High Precision: tight downstream gate
+                threshold=META_FILTER_GATE_THRESHOLD,
             )
             _mg.load()
             if _mg.is_loaded:
@@ -4114,7 +4288,7 @@ def execute_live_cycle(
                         {
                             "event": "meta_filter_gate_init",
                             "time": _utc_iso(),
-                            "threshold": 0.60,
+                            "threshold": META_FILTER_GATE_THRESHOLD,
                             "model": "meta_filter_v3",
                         },
                         ensure_ascii=False,
@@ -4370,7 +4544,19 @@ def execute_live_cycle(
                 h4_trend_strength = regime_gate_result.get("h4_trend_strength", 0.0)
                 macro_regime = regime_gate_result.get("macro_regime", "mixed")
                 regime_modulation = regime_gate_result.get("modulation")
-            except Exception:
+            except Exception as _rg_exc:
+                print(
+                    json.dumps(
+                        {
+                            "event": "regime_gate_failed",
+                            "time": _utc_iso(),
+                            "error": str(_rg_exc),
+                            "action": "disabling_regime_gate_for_cycle",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
                 regime_gate = None
 
         # ── Pre-close check: stop new positions / flatten before market close ──
@@ -4609,8 +4795,8 @@ def execute_live_cycle(
                 if _mt5_positions:
                     for _mp in _mt5_positions:
                         _magic = int(getattr(_mp, "magic", 0))
-                        _sname = _MAGIC_TO_STRATEGY.get(_magic)
-                        if _sname:
+                        _mt5_sname = _MAGIC_TO_STRATEGY.get(_magic)
+                        if _mt5_sname:
                             _side = "long" if getattr(_mp, "type", 0) == 0 else "short"
                             _ticket = int(getattr(_mp, "ticket", 0))
                             _entry_cycle_from_pm = 0
@@ -4631,8 +4817,8 @@ def execute_live_cycle(
                                     _brain_ids_from_pm = getattr(
                                         _pm_pos, "supporting_brain_ids", []
                                     )
-                            current_positions[_sname] = {
-                                "strategy": _sname,
+                            current_positions[_mt5_sname] = {
+                                "strategy": _mt5_sname,
                                 "direction": _side,
                                 "volume": float(getattr(_mp, "volume", 0.01)),
                                 "ticket": _ticket,
@@ -4937,7 +5123,8 @@ def execute_live_cycle(
             dispatched_count = sum(1 for r in dispatch_results if r.dispatched)
             if dispatched_count > 0:
                 state.last_fire = time.monotonic()
-                state.cycle_count += 1
+                # state.cycle_count 由外层 live_intent_loop.py 统一递增，
+                # 避免重复递增导致状态保存间隔/对账触发/冷却计时偏移。
 
             for dr in dispatch_results:
                 print(
@@ -5438,8 +5625,8 @@ def execute_live_cycle(
             direction = "neutral"
             confidence = 0.0
         else:
-            direction = proposal.prediction.get("direction_bias", "neutral")
-            confidence = proposal.prediction.get("confidence", 0.0)
+            direction = getattr(proposal, "direction", "neutral")
+            confidence = getattr(proposal, "confidence", 0.0)
 
     # ── Record counterfactual signals for P&L tracking ──
     # Per-proposal try/except prevents one misbehaving brain from
@@ -5455,9 +5642,9 @@ def execute_live_cycle(
                     pnl_ledger.record_signal(
                         brain_id=_brain_id_str,
                         symbol=config.symbol,
-                        direction=p.prediction.get("direction_bias", "neutral"),
+                        direction=getattr(p, "direction", "neutral"),
                         entry_price=mid_price,
-                        confidence=p.prediction.get("confidence", 0.5),
+                        confidence=getattr(p, "confidence", 0.5),
                         expected_horizon=_horizon,
                         entry_spread=_live_spread,
                         entry_slippage=0.10,
@@ -5473,9 +5660,9 @@ def execute_live_cycle(
                 pnl_ledger.record_signal(
                     brain_id=_single_brain_id2,
                     symbol=config.symbol,
-                    direction=proposal.prediction.get("direction_bias", "neutral"),
+                    direction=getattr(proposal, "direction", "neutral"),
                     entry_price=mid_price,
-                    confidence=proposal.prediction.get("confidence", 0.5),
+                    confidence=getattr(proposal, "confidence", 0.5),
                     expected_horizon=_horizon,
                     entry_spread=_live_spread,
                     entry_slippage=0.10,
@@ -5853,12 +6040,11 @@ def execute_live_cycle(
             # Build per-brain vote details from raw_proposals for Track 3 attribution
             _votes: list[dict[str, Any]] = []
             for p in raw_proposals:
-                _pred = getattr(p, "prediction", {}) or {}
                 _votes.append(
                     {
                         "brain_id": getattr(p, "brain_id", "unknown"),
-                        "direction_bias": _pred.get("direction_bias", "neutral"),
-                        "confidence": _pred.get("confidence", 0.0),
+                        "direction_bias": getattr(p, "direction", "neutral"),
+                        "confidence": getattr(p, "confidence", 0.0),
                     }
                 )
             dispatch_brain_votes = _votes
@@ -6100,6 +6286,25 @@ def execute_live_cycle(
                     "composite_score": round(0.5 + confidence * 0.35, 4),
                     "execution_outcome": outcome,
                 },
+            )
+
+    # ── Circuit breaker: track consecutive degraded cycles ──
+    if degraded_wakeup:
+        state._consecutive_degraded_cycles += 1
+        if state._consecutive_degraded_cycles >= 3:
+            state._circuit_breaker_tripped = True
+            print(
+                json.dumps(
+                    {
+                        "event": "circuit_breaker_tripped",
+                        "time": _utc_iso(),
+                        "consecutive_degraded": state._consecutive_degraded_cycles,
+                        "action": "suspend_new_entries",
+                        "mode": "management_only",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
             )
 
     _log_cycle_end(state.loop_iteration)

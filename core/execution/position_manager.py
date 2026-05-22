@@ -1576,7 +1576,11 @@ class ActivePositionManager:
                     .isoformat()
                 ),
             }
-            p.write_text(_json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            import os as _os
+
+            tmp = p.with_suffix(p.suffix + ".tmp")
+            tmp.write_text(_json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            _os.replace(tmp, p)
         except OSError:
             pass  # Disk write failure is non-fatal
 

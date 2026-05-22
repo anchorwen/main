@@ -4,18 +4,19 @@ Implements BaseBrainAdapter.load() / infer() / get_signal().
 Wraps ONNX Runtime inference for the V9 institutional survival model.
 """
 
-from datetime import UTC, datetime
+from __future__ import annotations
+
 from time import perf_counter
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
-from core.contracts.ids import new_proposal_id
 from core.deployment.brain_alert import emit_brain_alert
 
-from ..schema_versions import SCHEMA_BRAIN_DECISION_PROPOSAL
 from .base_adapter import BaseBrainAdapter
+
+if TYPE_CHECKING:
+    from core.schemas.trading_contracts import BrainSignal, Direction
 
 
 class V9OnnxBrainAdapter(BaseBrainAdapter):
@@ -173,13 +174,9 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
             "fallback": self._backend != "onnxruntime",
         }
 
-    def get_signal(self, raw_output: dict[str, Any]) -> BrainDecisionProposal:
-        """Map ONNX outputs to BrainDecisionProposal.
+    def get_signal(self, raw_output: dict[str, Any]) -> BrainSignal:
+        from core.schemas.trading_contracts import BrainSignal
 
-        Supports two modes:
-        - Classification: out_dir (logits) → softmax → direction
-        - Regression: raw_score → _score_to_direction (same as XGBoost/LightGBM)
-        """
         out_risk = raw_output["out_risk"]
         out_vol = raw_output["out_vol"]
         runtime_ms = raw_output.get("runtime_ms", 0.0)
@@ -190,12 +187,7 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
             raw_score = raw_output["raw_score"]
             direction_bias, up_probability, down_probability = self._score_to_direction(raw_score)
             confidence = max(up_probability, down_probability)
-            raw_outputs_ext = {
-                "raw_score": raw_score,
-                "out_risk": out_risk,
-                "out_vol": out_vol,
-            }
-            reason_tags = ["v9_institutional_onnx", "regression"]
+            _raw_score = raw_score
         else:
             # Classification mode: logits → softmax → direction
             out_dir = raw_output["out_dir"]
@@ -205,55 +197,17 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
             direction_bias = self._map_direction(direction_idx)
             up_probability = float(probs[2])  # class 2 = long
             down_probability = float(probs[0])  # class 0 = short
-            raw_outputs_ext = {
-                "out_dir": out_dir.tolist() if hasattr(out_dir, "tolist") else list(out_dir),
-                "out_risk": out_risk,
-                "out_vol": out_vol,
-            }
-            reason_tags = ["v9_institutional_onnx"]
+            _raw_score = float(np.max(probs) - np.min(probs))  # proxy: max − min prob
 
-        warnings = []
-        if fallback_used:
-            warnings.append("onnxruntime_unavailable_using_stub")
-
-        return BrainDecisionProposal(
-            schema_version=SCHEMA_BRAIN_DECISION_PROPOSAL,
-            proposal_id=new_proposal_id(),
-            snapshot_id="",  # filled by BrainRunService
+        return BrainSignal(
             brain_id=self._brain_entry.get("brain_id", ""),
-            brain_role=self._brain_entry.get("brain_role", ""),
-            brain_status=self._brain_entry.get("status", ""),
-            model_version=self._brain_entry.get("model_version", "unknown"),
-            event_time=datetime.now(UTC).replace(tzinfo=None),
-            generated_at=datetime.now(UTC).replace(tzinfo=None),
-            prediction={
-                "direction_bias": direction_bias,
-                "up_probability": up_probability,
-                "down_probability": down_probability,
-                "confidence": confidence,
-                "uncertainty": 1.0 - confidence,
-                "expected_edge_bps": None,
-                "expected_hold_seconds": None,
-            },
-            applicability={
-                "regime_tags": self._brain_entry.get("deployment_scope", {}).get("regimes", []),
-                "symbol_tags": self._brain_entry.get("deployment_scope", {}).get("symbols", []),
-            },
-            rationale={
-                "reason_tags": reason_tags,
-                "warnings": warnings,
-            },
-            health={
-                "input_ok": True,
-                "fallback_used": fallback_used,
-                "runtime_ms": runtime_ms,
-                "risk_score": out_risk,
-                "volatility_score": out_vol,
-                "backend": self._backend,
-            },
-            vote_weight=self._brain_entry.get("vote_weight", 1.0),
-            extensions={
-                "raw_outputs": raw_outputs_ext,
+            direction=direction_bias,
+            confidence=confidence,
+            raw_score=_raw_score,
+            fallback=fallback_used,
+            runtime_ms=runtime_ms,
+            diagnostics={
+                k: v for k, v in raw_output.items() if k not in ("runtime_ms", "fallback")
             },
         )
 
@@ -261,7 +215,7 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
     # Convenience — full pipeline (used by tests and simple callers)
     # ------------------------------------------------------------------
 
-    def run(self, snapshot, feature_source: dict | None = None) -> BrainDecisionProposal:
+    def run(self, snapshot, feature_source: dict | None = None) -> BrainSignal:
         """Full pipeline: feature_source → feature_vector → infer → get_signal.
 
         ``snapshot`` is kept for interface compatibility but ignored here;
@@ -339,22 +293,26 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
         return V9OnnxBrainAdapter._softmax(logits)
 
     @staticmethod
-    def _score_to_direction(raw_score: float) -> tuple[str, float, float]:
+    def _score_to_direction(raw_score: float) -> tuple[Direction, float, float]:
         """Map regression score to (direction_bias, up_prob, down_prob).
 
-        Same logic as XGBoostBrainAdapter and LightGBMBrainAdapter.
-        Positive score → long bias; negative → short bias; near-zero → neutral.
+        Uses 0.5 ± confidence/2 anchoring so the predicted direction always
+        wins the up/down comparison in consensus (FIX-20260522-013, sign-flip bug).
         """
         confidence = float(np.tanh(abs(raw_score)))
         if raw_score > 0.1:
-            return "long", confidence, max(0.0, 1.0 - confidence)
+            up = 0.5 + confidence / 2.0
+            down = 1.0 - up
+            return "long", up, down
         elif raw_score < -0.1:
-            return "short", max(0.0, 1.0 - confidence), confidence
+            down = 0.5 + confidence / 2.0
+            up = 1.0 - down
+            return "short", up, down
         else:
             return "neutral", 0.5, 0.5
 
     @staticmethod
-    def _map_direction(idx: int) -> str:
+    def _map_direction(idx: int) -> Direction:
         # Label encoding from train_from_csv.py: sl_hit_first=-1→0, timeout=0→1, tp_hit_first=1→2
         if idx == 2:
             return "long"

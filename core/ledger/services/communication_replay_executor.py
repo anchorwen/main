@@ -280,9 +280,10 @@ class CommunicationReplayExecutor:
     def _build_message_block_entries(
         self, replay_plan: dict | None, gate_decision: dict
     ) -> list[dict]:
-        if plan_message_id(replay_plan) is None:
+        _msg_id = plan_message_id(replay_plan)
+        if _msg_id is None:
             return []
-        return self._build_blocked_entries([plan_message_id(replay_plan)], gate_decision)  # type: ignore[reportArgumentType]
+        return self._build_blocked_entries([_msg_id], gate_decision)
 
     def _build_blocked_entries(self, message_ids: list[str], gate_decision: dict) -> list[dict]:
         return [

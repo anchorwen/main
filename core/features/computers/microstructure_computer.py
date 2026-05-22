@@ -373,8 +373,8 @@ class MicrostructureFeatureComputer:
         result["avg_spread"] = float(np.mean(spreads)) if mid_mean else float(np.mean(spreads))
 
         price_deltas = np.diff(np.array([float(t[3]) for t in ticks], dtype=np.float64))
-        up_ticks = np.sum(price_deltas > 0)
-        down_ticks = np.sum(price_deltas < 0)
+        up_ticks: int = np.sum(price_deltas > 0)
+        down_ticks: int = np.sum(price_deltas < 0)
         total_directional = up_ticks + down_ticks
         result["OIM"] = (
             float((up_ticks - down_ticks) / total_directional) if total_directional > 0 else 0.0

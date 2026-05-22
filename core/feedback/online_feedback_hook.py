@@ -105,6 +105,7 @@ class OnlineFeedbackHook:
         pnl = entry.get("pnl")
         if pnl is None and isinstance(detail, dict):
             pnl = detail.get("pnl")
+        if pnl is not None:
             try:
                 pnl_f = float(pnl)
                 if pnl_f > 0:
@@ -122,7 +123,7 @@ class OnlineFeedbackHook:
 
     def _find_feature_vector(
         self, close_time_iso: str, symbol: str = "XAUUSDc"
-    ) -> list[float] | None:
+    ) -> dict[str, float] | None:
         """Load feature records for the given date and find the nearest in time."""
         try:
             dt = datetime.fromisoformat(close_time_iso.replace("Z", "+00:00"))

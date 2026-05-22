@@ -1,21 +1,40 @@
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
-from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
 from core.governance.governance_service import GovernanceService
 from core.parliament.parliament_service import ParliamentService
 
 
+@dataclass
+class TestProposal:
+    """Mutable BrainSignal-like for parliament tests."""
+
+    brain_id: str = ""
+    direction: str = "long"
+    confidence: float = 0.8
+    raw_score: float = 0.0
+    fallback: bool = False
+    runtime_ms: float = 0.0
+    vote_weight: float = 1.0
+    brain_role: str = "primary"
+    brain_status: str = "live"
+    model_version: str = "v1"
+    prediction: dict[str, Any] | None = None
+    health: dict[str, Any] | None = None
+
+
 def _proposal(brain_id, direction="long", confidence=0.8, up=0.8, down=0.2):
-    return BrainDecisionProposal(
-        schema_version="v1",
-        proposal_id=f"p_{brain_id}",
-        snapshot_id="s1",
+    return TestProposal(
         brain_id=brain_id,
+        direction=direction,
+        confidence=confidence,
+        raw_score=max(up, down),
+        fallback=False,
+        vote_weight=1.0,
         brain_role="primary",
         brain_status="live",
         model_version="v1",
-        event_time=datetime(2026, 4, 24, 12, 0, 0),
-        generated_at=datetime(2026, 4, 24, 12, 0, 1),
         prediction={
             "direction_bias": direction,
             "up_probability": up,

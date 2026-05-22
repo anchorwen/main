@@ -47,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
         raw = json.loads(args.jobs_file.read_text(encoding="utf-8"))
         if not isinstance(raw, list):
             raise SystemExit("jobs-file must be a JSON array")
-        jobs = raw  # type: ignore[assignment]
+        jobs = raw
     else:
         for seed in seeds:
             jobs.append({"seed": seed, "dataset_slice_id": f"slice_stub_seed_{seed}_v1"})

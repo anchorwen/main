@@ -84,7 +84,7 @@ def assert_single_result_completed_meta(
     stable_fields = extract_stable_summary_fields(payload)
     for key, value in payload.items():
         assert result_payload[key] == value
-    for key, value in stable_fields.items():  # type: ignore[reportOptionalMemberAccess]
+    for key, value in stable_fields.items():
         assert result_payload[key] == value
 
 

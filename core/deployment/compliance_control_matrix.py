@@ -371,7 +371,7 @@ class ComplianceControlMatrixService:
             for item in controls
             if item.get(PAYLOAD_KEY_CONTROL_ID) in focus_ids
         ]
-        focus.sort(key=lambda item: item[PAYLOAD_KEY_CONTROL_ID])  # type: ignore[reportArgumentType]
+        focus.sort(key=lambda item: str(item.get(PAYLOAD_KEY_CONTROL_ID, "")))
         return build_governance_summary(
             focus=focus,
         )

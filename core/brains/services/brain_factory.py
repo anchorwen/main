@@ -59,10 +59,10 @@ class BrainFactory:
             adapter = adapter_cls(brain_entry=brain_entry, feature_adapter=feat_adapter)
         elif brain_type in MICROSTRUCTURE_BRAIN_TYPES:
             scaler_path = brain_entry.get("normalization_artifact_path", "")
-            feat_adapter = (
+            mf_adapter = (
                 MicrostructureFeatureAdapter(scaler_path=scaler_path) if scaler_path else None
             )
-            adapter = adapter_cls(brain_entry=brain_entry, feature_adapter=feat_adapter)
+            adapter = adapter_cls(brain_entry=brain_entry, feature_adapter=mf_adapter)
         else:
             adapter = adapter_cls(brain_entry=brain_entry)
 

@@ -11,7 +11,7 @@ def _serialize(obj: Any) -> Any:
     if isinstance(obj, Enum):
         return obj.value
     if is_dataclass(obj):
-        return {k: _serialize(v) for k, v in asdict(obj).items()}  # type: ignore[reportArgumentType]
+        return {k: _serialize(v) for k, v in asdict(obj).items()}  # type: ignore[arg-type]
     if isinstance(obj, dict):
         return {k: _serialize(v) for k, v in obj.items()}
     if isinstance(obj, list | tuple):

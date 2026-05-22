@@ -81,8 +81,8 @@ class DuplicateDetector:
 
     def find_duplicates(self, *, date_key: str, target: str) -> list[dict]:
         records = self._reader.list_records(date_key=date_key, target=target)
-        seen_keys = {}
-        duplicates = []
+        seen_keys: dict[str, bool] = {}
+        duplicates: list[dict] = []
 
         for record in records:
             idem_key = record.get("envelope", {}).get("idempotency_key")

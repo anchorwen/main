@@ -33,7 +33,7 @@ def _container(tmp_path):
 class TestEvidenceBundleService:
     def test_build_bundle_creates_files(self, tmp_path):
         c = _container(tmp_path / "data")
-        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="rel1")  # type: ignore[reportOptionalMemberAccess]
+        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="rel1")
         assert result["schema_version"] == SCHEMA_EVIDENCE_BUNDLE
         assert result["label"] == "rel1"
         assert result["file_count"] == 10
@@ -54,7 +54,7 @@ class TestEvidenceBundleService:
 
     def test_build_bundle_accepts_fast_validation_mode(self, tmp_path):
         c = _container(tmp_path / "data")
-        result = c.evidence_bundle.build_bundle(  # type: ignore[reportOptionalMemberAccess]
+        result = c.evidence_bundle.build_bundle(
             str(tmp_path / "evidence"),
             label="rel_fast",
             validation_mode="fast",
@@ -67,7 +67,7 @@ class TestEvidenceBundleService:
 
     def test_manifest_normalizes_malformed_final_audit_governance_fields(self, tmp_path):
         c = _container(tmp_path / "data")
-        original_build_report = c.final_audit.build_report  # type: ignore[reportOptionalMemberAccess]
+        original_build_report = c.final_audit.build_report
 
         def _malformed_build_report(*, validation_mode=None):
             report = original_build_report(validation_mode=validation_mode)
@@ -75,15 +75,15 @@ class TestEvidenceBundleService:
             report["summary"]["governance_warning_count"] = "5"
             return report
 
-        c.final_audit.build_report = _malformed_build_report  # type: ignore[reportOptionalMemberAccess]
-        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="rel_norm")  # type: ignore[reportOptionalMemberAccess]
+        c.final_audit.build_report = _malformed_build_report
+        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="rel_norm")
         manifest = json.loads(Path(result["manifest_path"]).read_text(encoding="utf-8"))
         assert manifest["summary"][PAYLOAD_KEY_GOVERNANCE_FOCUS] == [{"name": "ok"}]
         assert manifest["summary"][PAYLOAD_KEY_GOVERNANCE_WARNING_COUNT] == 0
 
     def test_build_manifest_normalizes_malformed_governance_summary_input(self, tmp_path):
         c = _container(tmp_path / "data")
-        manifest = c.evidence_bundle._build_manifest(  # type: ignore[reportOptionalMemberAccess]
+        manifest = c.evidence_bundle._build_manifest(
             label="rel_manifest_norm",
             target_dir=tmp_path / "evidence",
             files=[],
@@ -98,7 +98,7 @@ class TestEvidenceBundleService:
 
     def test_build_manifest_derives_warning_count_from_focus(self, tmp_path):
         c = _container(tmp_path / "data")
-        manifest = c.evidence_bundle._build_manifest(  # type: ignore[reportOptionalMemberAccess]
+        manifest = c.evidence_bundle._build_manifest(
             label="rel_manifest_warn_derivation",
             target_dir=tmp_path / "evidence",
             files=[],
@@ -115,7 +115,7 @@ class TestEvidenceBundleService:
 
     def test_manifest_contains_checksums(self, tmp_path):
         c = _container(tmp_path / "data")
-        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="rel2")  # type: ignore[reportOptionalMemberAccess]
+        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="rel2")
         manifest = json.loads(Path(result["manifest_path"]).read_text(encoding="utf-8"))
         assert manifest["schema_version"] == SCHEMA_EVIDENCE_MANIFEST
         assert manifest["summary"]["file_count"] == 10
@@ -127,8 +127,8 @@ class TestEvidenceBundleService:
 
     def test_verify_bundle_success(self, tmp_path):
         c = _container(tmp_path / "data")
-        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="rel3")  # type: ignore[reportOptionalMemberAccess]
-        verify = c.evidence_bundle.verify_bundle(result["manifest_path"])  # type: ignore[reportOptionalMemberAccess]
+        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="rel3")
+        verify = c.evidence_bundle.verify_bundle(result["manifest_path"])
         assert verify["schema_version"] == SCHEMA_EVIDENCE_VERIFICATION
         assert verify[PAYLOAD_KEY_VALIDATION_MODE] == "deep"
         assert verify["verified"] is True
@@ -136,16 +136,16 @@ class TestEvidenceBundleService:
 
     def test_verify_bundle_detects_tamper(self, tmp_path):
         c = _container(tmp_path / "data")
-        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="rel4")  # type: ignore[reportOptionalMemberAccess]
+        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="rel4")
         readiness_path = Path(result["bundle_dir"]) / "readiness.json"
         readiness_path.write_text('{"tampered": true}', encoding="utf-8")
-        verify = c.evidence_bundle.verify_bundle(result["manifest_path"])  # type: ignore[reportOptionalMemberAccess]
+        verify = c.evidence_bundle.verify_bundle(result["manifest_path"])
         assert verify["verified"] is False
         assert verify["failed_count"] >= 1
 
     def test_bundle_summary_contains_gate_and_ready(self, tmp_path):
         c = _container(tmp_path / "data")
-        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="rel5")  # type: ignore[reportOptionalMemberAccess]
+        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="rel5")
         assert result["gate_decision"] in {"allow", "warn", "block"}
         assert isinstance(result["ready"], bool)
         assert "manifest_checksum" in result
@@ -166,7 +166,7 @@ class TestEvidenceBundleService:
                 }
             ],
         }
-        result = c.evidence_bundle.build_bundle(  # type: ignore[reportOptionalMemberAccess]
+        result = c.evidence_bundle.build_bundle(
             str(tmp_path / "evidence"),
             label="rel_alpha",
             alpha_budget_usage_report=alpha_report,
@@ -181,7 +181,7 @@ class TestEvidenceBundleService:
 
     def test_engine_config_section_shape(self, tmp_path):
         c = _container(tmp_path / "data")
-        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="ecfg1")  # type: ignore[reportOptionalMemberAccess]
+        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="ecfg1")
         payload = json.loads(
             (Path(result["bundle_dir"]) / "engine_config.json").read_text(encoding="utf-8"),
         )
@@ -194,7 +194,7 @@ class TestEvidenceBundleService:
         c = ServiceContainer(
             EnvironmentConfig.development(str(tmp_path / "data"), enable_metrics=False),
         ).build()
-        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="ecfg0m")  # type: ignore[reportOptionalMemberAccess]
+        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="ecfg0m")
         payload = json.loads(
             (Path(result["bundle_dir"]) / "engine_config.json").read_text(encoding="utf-8"),
         )
@@ -289,7 +289,7 @@ class TestEvidenceCLI:
     def test_cli_evidence_verify(self, tmp_path):
         out = tmp_path / "evidence"
         c = _container(tmp_path / "data")
-        built = c.evidence_bundle.build_bundle(str(out), label="cli2")  # type: ignore[reportOptionalMemberAccess]
+        built = c.evidence_bundle.build_bundle(str(out), label="cli2")
         rc = main(
             [
                 "--base-dir",
@@ -309,7 +309,7 @@ class TestEvidenceCLI:
     def test_cli_evidence_verify_tampered(self, tmp_path):
         out = tmp_path / "evidence"
         c = _container(tmp_path / "data")
-        built = c.evidence_bundle.build_bundle(str(out), label="cli3")  # type: ignore[reportOptionalMemberAccess]
+        built = c.evidence_bundle.build_bundle(str(out), label="cli3")
         (Path(built["bundle_dir"]) / "slo.json").write_text("{}", encoding="utf-8")
         rc = main(
             [
@@ -327,7 +327,7 @@ class TestEvidenceCLI:
 class TestEvidenceContent:
     def test_bundle_sections_are_json_objects(self, tmp_path):
         c = _container(tmp_path / "data")
-        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="rel6")  # type: ignore[reportOptionalMemberAccess]
+        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="rel6")
         bundle_dir = Path(result["bundle_dir"])
         for file_path in bundle_dir.glob("*.json"):
             payload = json.loads(file_path.read_text(encoding="utf-8"))
@@ -335,7 +335,7 @@ class TestEvidenceContent:
 
     def test_manifest_lists_all_sections(self, tmp_path):
         c = _container(tmp_path / "data")
-        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="rel7")  # type: ignore[reportOptionalMemberAccess]
+        result = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="rel7")
         manifest = json.loads(Path(result["manifest_path"]).read_text(encoding="utf-8"))
         sections = set(manifest["summary"]["sections"])
         assert sections == {

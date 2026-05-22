@@ -21,7 +21,7 @@ def _container(tmp_path):
 class TestDeploymentPlanService:
     def test_standard_plan_ready(self, tmp_path):
         c = _container(tmp_path)
-        plan = c.deployment_plan.build_plan(version="1.2.3", strategy="standard")  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(version="1.2.3", strategy="standard")
         assert plan["schema_version"] == SCHEMA_DEPLOYMENT_PLAN
         assert plan["status"] == "ready"
         assert plan["executable"] is True
@@ -30,13 +30,13 @@ class TestDeploymentPlanService:
 
     def test_plan_accepts_fast_validation_mode(self, tmp_path):
         c = _container(tmp_path)
-        plan = c.deployment_plan.build_plan(validation_mode="fast")  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(validation_mode="fast")
         assert plan["schema_version"] == SCHEMA_DEPLOYMENT_PLAN
         assert plan[PAYLOAD_KEY_VALIDATION_MODE] == "fast"
 
     def test_canary_plan_phases(self, tmp_path):
         c = _container(tmp_path)
-        plan = c.deployment_plan.build_plan(strategy="canary")  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(strategy="canary")
         names = [p["name"] for p in plan["phases"]]
         assert "deploy_canary_10pct" in names
         assert "promote_50pct" in names
@@ -44,14 +44,14 @@ class TestDeploymentPlanService:
 
     def test_shadow_plan_phases(self, tmp_path):
         c = _container(tmp_path)
-        plan = c.deployment_plan.build_plan(strategy="shadow")  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(strategy="shadow")
         names = [p["name"] for p in plan["phases"]]
         assert "shadow_deploy" in names
         assert "shadow_compare" in names
 
     def test_invalid_strategy(self, tmp_path):
         c = _container(tmp_path)
-        plan = c.deployment_plan.build_plan(strategy="bluegreen")  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(strategy="bluegreen")
         assert plan["status"] == "invalid"
         assert plan[PAYLOAD_KEY_VALIDATION_MODE] == "deep"
         assert "canary" in plan["available_strategies"]
@@ -59,7 +59,7 @@ class TestDeploymentPlanService:
     def test_plan_blocks_when_gate_blocks(self, tmp_path):
         c = _container(tmp_path)
         c.risk_service = None
-        plan = c.deployment_plan.build_plan()  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan()
         assert plan["status"] == "blocked"
         assert plan["executable"] is False
         assert plan["gate"]["decision"] == "block"
@@ -80,7 +80,7 @@ class TestDeploymentPlanService:
                 }
             ],
         }
-        plan = c.deployment_plan.build_plan(alpha_budget_usage_report=alpha_report)  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(alpha_budget_usage_report=alpha_report)
         assert plan["status"] == "blocked"
         assert plan["executable"] is False
         assert plan["gate"]["decision"] == "block"
@@ -102,7 +102,7 @@ class TestDeploymentPlanService:
                 }
             ],
         }
-        plan = c.deployment_plan.build_plan(  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(
             alpha_budget_usage_report=alpha_report, strict_gate=False
         )
         assert plan["status"] == "ready"
@@ -111,7 +111,7 @@ class TestDeploymentPlanService:
 
     def test_plan_with_evidence_bundle(self, tmp_path):
         c = _container(tmp_path / "data")
-        plan = c.deployment_plan.build_plan(  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(
             version="2.0.0", strategy="canary", evidence_dir=str(tmp_path / "evidence")
         )
         assert plan["evidence"] is not None
@@ -126,7 +126,7 @@ class TestDeploymentPlanService:
             "warning_count": 0,
             "warnings": [],
         }
-        plan = c.deployment_plan.build_plan(  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(
             version="5.0.0",
             strategy="standard",
             evidence_dir=str(tmp_path / "evidence"),
@@ -141,21 +141,21 @@ class TestDeploymentPlanService:
     def test_save_plan(self, tmp_path):
         c = _container(tmp_path)
         out = tmp_path / "deploy_plan.json"
-        saved = c.deployment_plan.save_plan(str(out), version="3.0.0", strategy="standard")  # type: ignore[reportOptionalMemberAccess]
+        saved = c.deployment_plan.save_plan(str(out), version="3.0.0", strategy="standard")
         assert saved == str(out)
         payload = json.loads(out.read_text(encoding="utf-8"))
         assert payload["version"] == "3.0.0"
 
     def test_checkpoints_present(self, tmp_path):
         c = _container(tmp_path)
-        plan = c.deployment_plan.build_plan(strategy="canary")  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(strategy="canary")
         checkpoint_names = {c["name"] for c in plan["checkpoints"]}
         assert {"readiness", "gate", "slo", "doctor"}.issubset(checkpoint_names)
         assert "canary_10pct_slo" in checkpoint_names
 
     def test_rollback_triggers_present(self, tmp_path):
         c = _container(tmp_path)
-        plan = c.deployment_plan.build_plan(strategy="canary")  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(strategy="canary")
         triggers = {t["name"] for t in plan["rollback"]}
         assert "release_gate_block" in triggers
         assert "slo_breach" in triggers
@@ -163,12 +163,12 @@ class TestDeploymentPlanService:
 
     def test_commands_include_version(self, tmp_path):
         c = _container(tmp_path)
-        plan = c.deployment_plan.build_plan(version="4.5.6")  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(version="4.5.6")
         assert any("4.5.6" in cmd for cmd in plan["commands"])
 
     def test_commands_include_effective_validation_mode(self, tmp_path):
         c = _container(tmp_path)
-        plan = c.deployment_plan.build_plan(version="4.5.7", validation_mode="fast")  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(version="4.5.7", validation_mode="fast")
         assert any("--validation-mode fast" in cmd for cmd in plan["commands"])
 
     def test_container_has_deployment_plan(self, tmp_path):

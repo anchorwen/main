@@ -429,7 +429,7 @@ class ComplianceAuditService:
             for item in checks
             if item.get(PAYLOAD_KEY_NAME) in focus_names
         ]
-        focus.sort(key=lambda item: item[PAYLOAD_KEY_NAME])  # type: ignore[reportArgumentType]
+        focus.sort(key=lambda item: str(item.get(PAYLOAD_KEY_NAME, "")))
         return build_governance_summary(
             focus=focus,
         )

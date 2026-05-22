@@ -245,7 +245,7 @@ class ExecutionReconciliationService:
         return payload.get(PAYLOAD_KEY_QUANTITY, 0)
 
     def _count_statuses(self, statuses: list[str]) -> dict:
-        counts = {}
+        counts: dict[str, int] = {}
         for s in statuses:
             counts[s] = counts.get(s, 0) + 1
         return counts

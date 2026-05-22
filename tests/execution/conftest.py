@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
 
 import pytest
 
-from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
 from core.execution.strategy_line import StrategyLineConfig
 
 
@@ -19,7 +20,7 @@ def mock_brain_adapter():
 
     Usage: adapter = mock_brain_adapter()
            adapter.infer(...) → None (caller should set return_value)
-           adapter.get_signal(...) → BrainDecisionProposal (caller should set)
+           adapter.get_signal(...) → BrainSignal (caller should set)
     """
 
     class _MockAdapter:
@@ -37,8 +38,31 @@ def mock_brain_adapter():
 
 
 # ---------------------------------------------------------------------------
-# Mock brain proposal builder
+# Test proposal — mutable BrainSignal-compatible stand-in
 # ---------------------------------------------------------------------------
+
+
+@dataclass
+class TestProposal:
+    """Mutable BrainSignal-compatible class for tests.
+
+    Has all BrainSignal attributes + vote_weight for weighted-voting tests.
+    Also carries legacy dict attrs for backward compat during migration.
+    """
+
+    brain_id: str = "test_brain_01"
+    direction: str = "long"
+    confidence: float = 0.80
+    raw_score: float = 0.0
+    fallback: bool = False
+    runtime_ms: float = 0.0
+    vote_weight: float = 1.0
+
+    # Legacy dict attrs (backward compat with tests still using old interface)
+    prediction: dict[str, Any] = field(default_factory=dict)
+    health: dict[str, Any] = field(default_factory=dict)
+
+
 def make_proposal(
     *,
     brain_id: str = "test_brain_01",
@@ -49,20 +73,15 @@ def make_proposal(
     vote_weight: float = 1.0,
     fallback_used: bool = False,
     event_time: datetime | None = None,
-) -> BrainDecisionProposal:
-    """Build a BrainDecisionProposal with controlled prediction values."""
-    if event_time is None:
-        event_time = datetime(2026, 1, 1, 9, 0, tzinfo=UTC)
-    return BrainDecisionProposal(
-        schema_version="1.0",
-        proposal_id=f"proposal_{brain_id}",
-        snapshot_id="snapshot_1",
+) -> TestProposal:
+    """Build a BrainSignal-compatible TestProposal with controlled values."""
+    return TestProposal(
         brain_id=brain_id,
-        brain_role="alpha_brain",
-        brain_status="live",
-        model_version="1.0.0",
-        event_time=event_time,
-        generated_at=event_time + timedelta(milliseconds=50),
+        direction=direction_bias,
+        confidence=confidence,
+        raw_score=max(up_probability, down_probability),
+        fallback=fallback_used,
+        vote_weight=vote_weight,
         prediction={
             "up_probability": up_probability,
             "down_probability": down_probability,
@@ -70,7 +89,6 @@ def make_proposal(
             "direction_bias": direction_bias,
         },
         health={"fallback_used": fallback_used},
-        vote_weight=vote_weight,
     )
 
 

@@ -8,23 +8,21 @@ from core.execution.capital_allocator import (
     compute_volume,
     resolve_conflicts,
 )
-from core.parliament.contract_groups import GroupSignal
+from core.parliament.contract_groups import ConsensusResult
 
 # ── Helpers ──
 
 
 def _gs(name="test_group", direction="long", confidence=0.8, supporting=3, total=3):
-    """Quick GroupSignal factory."""
-    return GroupSignal(
-        group_name=name,
+    """Quick ConsensusResult factory."""
+    return ConsensusResult(
         direction=direction,
         confidence=confidence,
-        consensus_score=confidence,
+        supporting_brains=[f"B{i}" for i in range(1, supporting + 1)],
+        dissenting_brains=[f"B{i}" for i in range(supporting + 1, total + 1)],
+        brain_ids=[f"B{i}" for i in range(1, total + 1)],
         supporting_count=supporting,
-        opposing_count=total - supporting,
-        neutral_count=0,
         total_count=total,
-        horizon_cycles=12,
     )
 
 
@@ -438,16 +436,14 @@ from core.execution.capital_allocator import GroupCorrelationTracker
 
 
 def _gs_corr(name="test_group", direction="long", confidence=0.8, supporting=3, total=3):
-    return GroupSignal(
-        group_name=name,
+    return ConsensusResult(
         direction=direction,
         confidence=confidence,
-        consensus_score=confidence,
+        supporting_brains=[f"B{i}" for i in range(1, supporting + 1)],
+        dissenting_brains=[f"B{i}" for i in range(supporting + 1, total + 1)],
+        brain_ids=[f"B{i}" for i in range(1, total + 1)],
         supporting_count=supporting,
-        opposing_count=total - supporting,
-        neutral_count=0,
         total_count=total,
-        horizon_cycles=12,
     )
 
 

@@ -40,7 +40,7 @@ class RetryPolicy:
         self._retryable = retryable_exceptions
 
     def execute(self, fn: Callable, *args, **kwargs):
-        last_exception = None
+        last_exception: Exception | None = None
         for attempt in range(self._max_retries + 1):
             try:
                 return fn(*args, **kwargs)
@@ -52,7 +52,8 @@ class RetryPolicy:
                         self._max_delay,
                     )
                     time.sleep(delay)
-        raise last_exception  # type: ignore[reportGeneralTypeIssues]
+        assert last_exception is not None
+        raise last_exception
 
     def get_config(self) -> dict:
         return {

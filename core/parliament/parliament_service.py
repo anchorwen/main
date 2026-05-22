@@ -1,5 +1,6 @@
 import warnings
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from core.contracts.domain.decision_candidate import DecisionCandidate
 from core.contracts.ids import new_candidate_id
@@ -94,6 +95,48 @@ class ParliamentService:
             return self._regime_detector.detect(feature_snapshot)
         return {"primary_regime": "trend", "regime_confidence": 0.70}
 
+    @staticmethod
+    def _normalize_proposal(p):
+        """Adapt BrainSignal to the legacy BrainDecisionProposal interface.
+
+        Phase 2 replaced ``BrainDecisionProposal`` (dict-based ``.prediction``
+        and ``.health``) with ``BrainSignal`` (frozen dataclass with
+        ``.direction``, ``.confidence``, ``.fallback``).  The v9 shadow
+        runtime still routes through the deprecated ``ParliamentService``,
+        so we map the new fields back to the old shape here.
+        """
+        if hasattr(p, "prediction"):
+            return p  # already old-style BrainDecisionProposal
+
+        direction = getattr(p, "direction", "neutral")
+        confidence = getattr(p, "confidence", 0.5)
+        fallback = getattr(p, "fallback", False)
+
+        if direction == "long":
+            up_prob = confidence
+            down_prob = 1.0 - confidence
+        elif direction == "short":
+            up_prob = 1.0 - confidence
+            down_prob = confidence
+        else:
+            up_prob = 0.5
+            down_prob = 0.5
+
+        return SimpleNamespace(
+            prediction={
+                "direction_bias": direction,
+                "confidence": confidence,
+                "up_probability": up_prob,
+                "down_probability": down_prob,
+            },
+            health={
+                "fallback_used": fallback,
+                "risk_score": None,
+            },
+            vote_weight=1.0,
+            brain_id=getattr(p, "brain_id", ""),
+        )
+
     def _compute_consensus(self, proposals: list) -> dict:
         if not proposals:
             return {
@@ -102,6 +145,8 @@ class ParliamentService:
                 "disagreement_score": 0.0,
                 "voter_count": 0,
             }
+
+        proposals = [self._normalize_proposal(p) for p in proposals]
 
         up_scores = []
         down_scores = []
@@ -174,6 +219,7 @@ class ParliamentService:
         supporting = []
         opposing = []
         for p in proposals:
+            p = self._normalize_proposal(p)
             direction = p.prediction.get("direction_bias", "neutral")
             if direction == bias:
                 supporting.append(p.brain_id)
@@ -195,6 +241,7 @@ class ParliamentService:
     def _build_risk_comments(self, proposals: list) -> dict:
         risk_scores = []
         for p in proposals:
+            p = self._normalize_proposal(p)
             h = p.health or {}
             r = h.get("risk_score")
             if r is not None:

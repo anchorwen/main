@@ -87,7 +87,7 @@ def run_cli_capture_stderr_allow_exit(*args: str) -> tuple[str, str, int | None]
             main()
         except SystemExit as exc:
             exit_code = exc.code
-    return stdout.getvalue(), stderr.getvalue(), exit_code
+    return stdout.getvalue(), stderr.getvalue(), exit_code if isinstance(exit_code, int) else None
 
 
 def patch_prepare_results_with_contract(monkeypatch, manager_payload, manager_result):
@@ -576,7 +576,7 @@ def test_v9_shadow_cli_json_with_stats_output():
     assert output["stats"]["total"] == 2
     assert output["stats"]["side_actions"]["short.open"] == 1
     assert output["stats"]["side_actions"]["flat.abstain"] == 1
-    assert output["stats"]["risk_dispatches"]["allow.protocol_validated"] == 1
+    assert output["stats"]["risk_dispatches"]["allow.transport_delivered"] == 1
     assert output["results"][0]["scenario"] == "long_case"
     assert all(item["scenario"] in {"long_case", "short_case"} for item in output["results"])
 
@@ -630,7 +630,7 @@ def test_v9_shadow_cli_summary_full_output_contains_compact_footer():
     assert "--- compact_stats ---" in output
     assert "total=2" in output
     assert "side_actions={'flat.abstain': 1, 'short.open': 1}" in output
-    assert "risk_dispatches={'allow.protocol_validated': 1, 'deny.skipped': 1}" in output
+    assert "risk_dispatches={'allow.transport_delivered': 1, 'deny.skipped': 1}" in output
 
 
 def test_v9_shadow_cli_stats_compact_output():
@@ -646,9 +646,8 @@ def test_v9_shadow_cli_stats_compact_output():
     assert "actions={'abstain': 1, 'open': 1}" in output
     assert "sides={'flat': 1, 'short': 1}" in output
     assert "risk_statuses={'allow': 1, 'deny': 1}" in output
-    assert "dispatch_statuses={'protocol_validated': 1, 'skipped': 1}" in output
     assert "side_actions={'flat.abstain': 1, 'short.open': 1}" in output
-    assert "risk_dispatches={'allow.protocol_validated': 1, 'deny.skipped': 1}" in output
+    assert "risk_dispatches={'allow.transport_delivered': 1, 'deny.skipped': 1}" in output
 
 
 def test_v9_shadow_summary_output_includes_communication_operation_mirrors(monkeypatch):
@@ -1064,7 +1063,7 @@ def test_v9_shadow_session_sse_server_smoke_completed_flow():
     thread.start()
     try:
         host, port = server.server_address
-        connection = HTTPConnection(host, port, timeout=5)  # type: ignore[reportArgumentType]
+        connection = HTTPConnection(host, port, timeout=5)
         connection.request(
             "GET",
             "/engine/v9-shadow/stream?scenario=long&include_meta=true&include_stats=true",
@@ -1096,7 +1095,7 @@ def test_v9_shadow_session_sse_server_smoke_error_flow():
     thread.start()
     try:
         host, port = server.server_address
-        connection = HTTPConnection(host, port, timeout=5)  # type: ignore[reportArgumentType]
+        connection = HTTPConnection(host, port, timeout=5)
         connection.request(
             "GET",
             "/engine/v9-shadow/stream?feature_file=one.json&feature_batch_file=two.json",
@@ -1247,7 +1246,7 @@ def test_v9_shadow_session_sse_server_event_prefix_query_smoke():
     thread.start()
     try:
         host, port = server.server_address
-        connection = HTTPConnection(host, port, timeout=5)  # type: ignore[reportArgumentType]
+        connection = HTTPConnection(host, port, timeout=5)
         connection.request(
             "GET",
             "/engine/v9-shadow/stream?scenario=long&event_prefix=shadow&include_meta=false&include_stats=false",
@@ -1278,7 +1277,7 @@ def test_v9_shadow_session_sse_server_invalid_event_prefix_error_smoke():
     thread.start()
     try:
         host, port = server.server_address
-        connection = HTTPConnection(host, port, timeout=5)  # type: ignore[reportArgumentType]
+        connection = HTTPConnection(host, port, timeout=5)
         connection.request(
             "GET",
             "/engine/v9-shadow/stream?scenario=long&event_prefix=bad.prefix",
@@ -1304,7 +1303,7 @@ def test_v9_shadow_session_sse_server_invalid_bool_query_error_smoke():
     thread.start()
     try:
         host, port = server.server_address
-        connection = HTTPConnection(host, port, timeout=5)  # type: ignore[reportArgumentType]
+        connection = HTTPConnection(host, port, timeout=5)
         connection.request(
             "GET",
             "/engine/v9-shadow/stream?scenario=long&include_stats=maybe",

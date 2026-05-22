@@ -5,7 +5,6 @@ from core.brains.adapters.transformer_brain_adapter import (
     NUM_FEATURES,
     TransformerBrainAdapter,
 )
-from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
 
 
 def _make_entry():
@@ -69,7 +68,7 @@ def test_transformer_brain_adapter_inference_after_buffer_full():
 
 
 def test_transformer_brain_adapter_get_signal():
-    """get_signal maps raw score to a valid BrainDecisionProposal."""
+    """get_signal maps raw score to a valid BrainSignal."""
     adapter = TransformerBrainAdapter(brain_entry=_make_entry())
     adapter.load()
 
@@ -82,13 +81,13 @@ def test_transformer_brain_adapter_get_signal():
     raw = adapter.infer(rng.randn(NUM_FEATURES).astype(np.float32))
     proposal = adapter.get_signal(raw)
 
-    assert isinstance(proposal, BrainDecisionProposal)
+    from core.schemas.trading_contracts import BrainSignal
+
+    assert isinstance(proposal, BrainSignal)
     assert proposal.brain_id == "Microstructure_Transformer_V5.0_H4"
-    assert "direction_bias" in proposal.prediction
-    assert proposal.prediction["direction_bias"] in ("long", "short", "neutral")
-    assert "v4_3_microstructure_transformer" in proposal.rationale["reason_tags"]
-    assert "raw_outputs" in proposal.extensions
-    assert "raw_score" in proposal.extensions["raw_outputs"]
+    assert proposal.direction in ("long", "short", "neutral")
+    assert proposal.confidence >= 0.0
+    assert proposal.raw_score != 0.0  # real inference happened
 
 
 def test_transformer_brain_adapter_score_to_direction():
@@ -168,9 +167,8 @@ def test_transformer_with_feature_adapter_e2e():
     proposal = adapter.get_signal(raw)
 
     assert proposal.brain_id == "Microstructure_Transformer_V5.0_H4"
-    assert proposal.prediction["direction_bias"] in ("long", "short", "neutral")
-    assert proposal.health["fallback_used"] is False
-    assert "v4_3_microstructure_transformer" in proposal.rationale["reason_tags"]
+    assert proposal.direction in ("long", "short", "neutral")
+    assert proposal.fallback is False
     assert float(raw["raw_score"]) != 0.0  # real inference happened
 
 
@@ -208,9 +206,11 @@ def test_xgboost_with_microstructure_feature_adapter():
     feature_source = {name: 0.01 for name in MICROSTRUCTURE_9_FEATURES}
     proposal = adapter.run(None, feature_source)
 
-    assert isinstance(proposal, BrainDecisionProposal)
+    from core.schemas.trading_contracts import BrainSignal
+
+    assert isinstance(proposal, BrainSignal)
     assert proposal.brain_id == "XGBoost_V4.5_Microstructure"
-    assert proposal.prediction["direction_bias"] in ("long", "short", "neutral")
+    assert proposal.direction in ("long", "short", "neutral")
 
     # Verify the adapter actually got 9 features (not 40)
     info = adapter.describe()

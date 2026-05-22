@@ -195,7 +195,7 @@ def decompose_pnl(
 
     # R-squared from weighted residuals
     y_w_mean = np.average(y_w, weights=W)
-    ss_total = np.sum(W * (sr - y_w_mean) ** 2)
+    ss_total: float = np.sum(W * (sr - y_w_mean) ** 2)
     ss_residual = float(residuals[0]) if len(residuals) > 0 else np.sum((y_w - X_w @ coeffs) ** 2)
     r_sq = 1.0 - ss_residual / ss_total if ss_total > 1e-12 else 0.0
 

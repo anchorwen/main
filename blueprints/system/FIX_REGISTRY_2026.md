@@ -1996,3 +1996,370 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
 - **Prevention**: 每当 bar_sync 用于不同时间周期的 K线，`DEFAULT_TIMEOUT_SECONDS` 应至少为 `timeframe_seconds * 1.2`。未来功能：基于 `self.timeframe` 动态计算 `_bar_seconds() * 1.2`。修复后必须验证 bar_sync 在实际运行中成功检测到新 K线（`bar_sync_events.jsonl` 中应有非零成功检测记录）。
 
 - **Dependents Checked**: 无——调用方（`live_intent_loop.py`）传入参数中的 `timeout_seconds`，超时对调用方透明。更长的等待时间由 FIX-008（崩溃保护）和 FIX-005（15s 超时包装器防止启动死锁）覆盖。参见 `protocol_services.md` KI-001 获取完整的根因因果链文档。
+
+### FIX-20260522-011 — BarSyncPoller 弹性降级：双 Deadline 防止主循环死寂
+
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: protocol-services, runtime-live
+- **Files**: `core/protocol/event_bar_sync.py`, `scripts/live_intent_loop.py`
+
+- **Description**: BarSyncPoller 引入弹性降级机制，解决 MT5 IPC 周期性故障导致的主循环长时间死寂问题。
+
+  **根因回顾**: v3.2 (May 15) 引入 BarSyncPoller 替代盲 `time.sleep()`。但 `wait_for_new_bar()` 要求 MT5 在整个轮询窗口内持续可用——MT5 Python API 做不到（~104-172s 必抛 IPC 异常）。FIX-006 加了重试让轮询"更坚持"，但副作用是：旧代码"快速失败→短周期重试"变成了"360s 阻塞→超时→caller 30s sleep→390s 重试周期"。每次 bar_sync 故障导致近 7 分钟主循环不执行。
+
+  **修复内容**:
+  1. **双 Deadline 设计**: `degraded_deadline = start + bar_period`（300s M5）先于 `deadline = start + timeout`（360s）触发。等满一根 bar 周期仍无新 bar → 返回 truthy sentinel dict（`_degraded: True`），caller 立即继续循环，不触发 sleep。
+  2. **轮询间隔缩短**: `DEFAULT_POLL_INTERVAL` 2.0s → 1.0s，更快响应 bar 闭合。
+  3. **MT5 重连增强**: 异常重试路径添加 `mt5.shutdown()` 清理残留 IPC 连接，再执行 `mt5.initialize()`（FIX-006 增强）。
+  4. **可观测性**: BAR_DEGRADED_WAKEUP 事件写入 `bar_sync_events.jsonl`；caller 端打印 `bar_sync_degraded_wakeup` 事件。
+
+  **设计原理**: `wait_for_new_bar` 的返回值仅用于 truthy/None 判断——bar 数据从不传递给 cycle 逻辑。cycle 内有 MetaFilter（conformal 0.60-0.65）+ 策略置信度阈值双重把关，偏离 bar 闭合点的 suboptimal 信号会被拦截。这是"防线后置"策略：不在"等时钟"环节卡死系统。
+
+- **Root Cause**: RC-05 — architectural。BarSyncPoller 引入了 `time.sleep()` 根本不存在的单点故障：要求 MT5 IPC 在可能长达 360s 的窗口中持续可用。MT5 Python API 的周期性 IPC 故障使这一前提不成立。FIX-006 的重试逻辑意外将"快速失败"变为"坚持阻塞"，放大了影响。
+
+  **教训**: 当用外部 API 轮询替代 `time.sleep()` 时，必须设置"最大合理等待时间"——超过该时间的等待不会带来额外价值（因为下一根 bar 已经错过了），但会阻塞整个系统。等待上限不应超过 `bar_period`。
+
+- **Prevention**: `degraded_deadline = bar_period` 对所有时间周期通用（`_bar_seconds()` 动态计算）。长周期（H1/H4/D1）因 `bar_period > timeout` 自然不触发降级。未来如在其他模块引入类似的"等待外部事件"模式，必须设置硬性降级 deadline 防止系统卡死。
+
+- **Dependents Checked**: `live_intent_loop.py` caller 对 sentinel dict 的处理：仅检查 `_degraded` 标志打印日志，truthy 返回值已使循环继续（不触发 sleep）。无破坏性变更——`wait_for_new_bar` 的 None/truthy 合约保持不变。
+
+### FIX-20260522-013 — 符号反转 Bug: `_score_to_direction()` 弱信号方向翻转
+
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: fix (critical)
+- **Module**: brains-adapters
+- **Files**: `core/brains/adapters/lightgbm_brain_adapter.py`, `xgboost_brain_adapter.py`, `v9_onnx_brain_adapter.py`, `transformer_brain_adapter.py`, `params_brain_adapter.py`
+
+- **Description**: 5 个 adapter 的 `_score_to_direction()` 对弱信号（`|raw_score| < 0.5493` = `confidence < 0.5`）产生方向翻转，导致 BPS 负值（做空）被共识层解释为 LONG，系统迎头撞上下跌行情。
+
+  **根因**: `confidence = tanh(|raw_score|)`。对弱信号（如 BPS=-0.3069，confidence≈0.298），`1-confidence`（0.702）> `confidence`（0.298）。`_score_to_direction()` 对 short 返回 `up_prob=1-conf, down_prob=conf`，导致 `up_prob > down_prob`。Consensus 层 (`ContractGroupConsensus._compute_weighted()`) 仅比较 `weighted_up >= weighted_down` → LONG，完全忽略 `direction_bias` 字段。
+
+  **影响范围**: 所有回归型模型（LightGBM、XGBoost、ONNX、Transformer、Params/OU）。
+  - `|raw_score| > 0.5493`（confidence > 0.5）→ 方向正确
+  - `|raw_score| ∈ [0.1, 0.5493]`（confidence < 0.5）→ **方向完全翻转**
+  - Huber 实盘 BPS 范围 [-0.31, -0.47]，全部落入翻转区
+
+  **Track 4d 为何未拦截**: Track 4d MetaSignalFilter 是给定方向后的生存概率评估器，不是方向验证器。传入 "long" 后，它评估"做多能否在 1.0 ATR proxy 内存活"——如果波动率足够大，代理目标看起来可达，就放行。Garbage In, Garbage Out。
+
+  **修复**: `0.5 ± confidence/2` 锚定公式确保预测方向的概率始终 ≥ 0.5：
+  ```python
+  # Long:  up = 0.5 + confidence/2, down = 1.0 - up
+  # Short: down = 0.5 + confidence/2, up = 1.0 - down
+  ```
+  这保证 Consensus 层永远不翻转 adapter 判定的方向，无论 confidence 多低。
+
+- **Root Cause**: RC-06 — contract-violation。`_score_to_direction()` 返回的 `(up_prob, down_prob)` 与 Consensus 层的隐含假设不同步。Adapter 用 `1-confidence` 表示"对预测方向的互补概率"，Consensus 理解为"反方向的概率"。对弱信号，这两个概率的 size 关系反转。
+
+  **教训**: 当一个 tuple 字段被不同的下游消费者以不同语义消费时，语义漂移是必然的。`direction_bias` 携带了正确的方向信息，但所有消费者都绕过它直接比较 `up/down` 概率。数学上更安全的做法是让预测方向的概率始终占据多数（≥0.5）。
+
+- **Prevention**: 新 adapter 必须通过 `test_score_to_direction_weak_signal` 测试（待添加），验证 `|raw_score| < 0.5` 区间内方向不被翻转。未来回归模型的 `_score_to_direction` 应统一到一个 shared utility。
+
+- **Dependents Checked**: 所有调用 `_score_to_direction()` 的推理路径（`predict()` → `infer()` → adapter）不受影响——它们使用 `direction_bias` 而非 up/down 概率。Consensus 层 (`contract_groups.py`) 的 `_compute_weighted()` 和 `_compute_union()` 通过 `direction_bias` 路径保持正确——但 `_compute_weighted()` 的主要方向决策依赖 up/down 比较，这正是被修复的路径。
+
+  **Follow-up (same FIX ID)**: `strategy_line.py` counter-trend gate (line 616) now exempts `barrier_12bar`. The counter-trend filter was designed for the old multi-brain parliament where 8 long-biased brains could fabricate counter-trend long signals. Under the Dictator Protocol, the Huber BPS probe IS the trend signal — blocking its short output when H1/H4 is still "long" would silence the only voter and defeat Track 4d's purpose. One-line change: `if name != "barrier_12bar" and trend_direction != "neutral" ...`
+
+### FIX-20260522-014 — Defense-in-Depth 硬化波：CRITICAL ×3 + HIGH ×3
+
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: fix (critical + high)
+- **Module**: runtime-live, execution-guards, features-service, risk-portfolio, protocol-services, feedback-pnl
+- **Files**: `core/runtime/live_cycle.py`, `scripts/live_intent_loop.py`, `core/execution/position_manager.py`, `core/execution/meta_signal_filter.py`, `core/features/rolling_normalizer.py`, `core/risk/regime_detector.py`, `core/feedback/brain_performance_tracker.py`, `core/feedback/brain_pnl_ledger.py`, `core/protocol/event_bar_sync.py`
+
+- **Description**: 全链路审计发现的 6 个防御缺口统一修复：
+
+  **CRITICAL-1 — 管理阶段单点失败 → 整周期跳过**:
+  `_execute_management_phase` 中单个 `price_fetch` 失败 → `return False` → 整个管理阶段（trail、breakeven、exit check）跳过。MT5 IPC 在负载下间歇性故障时，仓位可能连续多个周期无管理。
+  修复：`except Exception` 改为 fallback 到 `pos.entry_price`（mid=bid=ask=entry_price），发出 `management_price_fetch_failed` JSON 事件，继续管理其余仓位。仅当 `mid <= 0`（真实无望）时才返回 False。
+
+  **CRITICAL-2 — 后台预热线程与主循环并发访问 MT5**:
+  守护线程 `_background_warm_start` 调用 `mt5.copy_rates_from_pos()` 和 `compute_all()`，与主循环的 MT5 调用并发。MT5 C 扩展在释放 GIL 时，两个线程可同时操作同一 terminal handle。
+  修复：`_warm_start_thread.start()` 后立即 `join(timeout=15.0)`，使预热变为同步，消除数据竞争。超时时发出 `warm_start_timed_out` 事件，继续主循环。
+
+  **CRITICAL-3 — cycle_count 重复递增**:
+  `state.cycle_count` 在 `execute_live_cycle` 内部（dispatch 成功后）和外层主循环（每次 cycle 返回后）两处递增。交易 cycle 被计两次。依赖 cycle_count 的下游逻辑（状态保存间隔、对账触发、冷却计时）全部偏移。
+  修复：删除 `live_cycle.py` 内部的 `state.cycle_count += 1`，保留外层 `live_intent_loop.py` 统一递增。
+
+  **HIGH-5 — 关键路径 `except:pass` → 结构化事件**:
+  3 个最高风险位置从静默降级改为发出 JSON 告警：
+  - `meta_exit_engine` 加载失败 → `meta_exit_engine_load_failed` 事件
+  - `config_hot_reload` 加载失败 → `config_hot_reload_failed` 事件
+  - `regime_gate` 分类失败 → `regime_gate_failed` 事件 + `disabling_regime_gate_for_cycle` 动作
+
+  **HIGH-6 — degraded wakeup 过期数据 → 跳过 Alpha**:
+  降级唤醒返回的 bar 数据可能已过期 5+ 分钟。调用方仅检查 `_degraded` 标志并打日志，然后用过期数据继续 Alpha 计算。
+  修复：`execute_live_cycle` 新增 `degraded_wakeup: bool = False` 参数。外层 `live_intent_loop.py` 在 `wait_for_new_bar` 检测到 degraded 时设置标记，传递给下一周期的 `execute_live_cycle`。若 `degraded_wakeup=True`，管理阶段完成后发出 `bar_sync_degraded_alpha_skip` 事件并提前返回，跳过特征计算→推理→策略评估→调度全链路。
+
+  **HIGH-8 — 状态文件原子写入**:
+  7 个状态文件直接用 `write_text` / `json.dump` 写入，崩溃时产生截断/损坏文件：
+  - `rolling_norm_state.json` (rolling_normalizer)
+  - `regime_detector_state.json` (regime_detector)
+  - `brain_performance.json` (brain_performance_tracker)
+  - `brain_pnl_ledger.json` (brain_pnl_ledger)
+  - `active_position.json` (position_manager)
+  - `bar_sync_state.json` (event_bar_sync)
+  - `meta_filter_state.json` (meta_signal_filter)
+  修复：全部改为 `.tmp` 临时文件 + `os.replace()` 原子提交模式。
+
+- **Root Cause**:
+  - RC-01 (missing-null-check): CRITICAL-1 — price_fetch 异常直接 return False，无降级路径
+  - RC-04 (race-condition): CRITICAL-2 — 预热线程与主循环共享 MT5 terminal handle
+  - RC-06 (contract-violation): CRITICAL-3 — cycle_count 在两个层次重复递增，下游消费者假设单一驱动器；HIGH-5 — except:pass 吞没关键故障；HIGH-6 — degraded 语义未传递到 Alpha 层；HIGH-8 — 写操作无崩溃安全保证
+
+- **Prevention**:
+  - 所有 MT5 调用必须有降级路径，不能单点失败阻断整条管线
+  - 后台线程涉及 MT5 调用必须同步化（join）或使用独立 MT5 连接
+  - 状态机的 Tick 计数必须由唯一的外部驱动器（最外层主循环）统一推进
+  - 关键安全系统（gate、exit engine、hot reload）的静默降级必须发出可观测事件
+  - 所有状态文件的写入必须使用原子模式（`.tmp` + `os.replace`）
+
+- **Dependents Checked**: 所有依赖 cycle_count 的逻辑（状态保存间隔、对账触发、冷却计时）现在接收正确计数。管理阶段不再因单仓位价格获取失败而跳过其他仓位。degraded wakeup 不再导致过期特征数据被消费。崩溃恢复现在读取完整状态文件而非截断版本。
+
+### FIX-20260522-015
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: brains-adapters
+- **Files**: `core/schemas/trading_contracts.py`, `core/brains/adapters/lightgbm_brain_adapter.py`, `core/brains/adapters/xgboost_brain_adapter.py`, `core/brains/adapters/v9_onnx_brain_adapter.py`, `core/brains/adapters/transformer_brain_adapter.py`, `core/brains/adapters/params_brain_adapter.py`
+- **Description**: Layer 1 Defense-in-Depth — Boundary 1 (Brain Adapters → Parliament). All 5 brain adapters' `get_signal()` now returns frozen `BrainSignal` dataclass instead of `BrainDecisionProposal` with untyped dict `prediction`:
+
+  **Before (RC-06 prone)**:
+  ```python
+  return BrainDecisionProposal(
+      prediction={"direction_bias": "long", "up_probability": 0.65, ...},
+      confidence=0.35,
+      ...
+  )
+  ```
+  - `direction_bias` vs `direction` key mismatch caused 35+ silent data drops
+  - Missing-key access returned None → default value silently used
+  - `up_prob > down_prob` comparison (FIX-20260522-013 sign-flip root cause)
+
+  **After (type-safe)**:
+  ```python
+  return BrainSignal(
+      brain_id="...",
+      direction="long",      # Literal["long","short","neutral"]
+      confidence=0.35,       # float [0.0, 1.0]
+      raw_score=0.0032,      # original model output (BPS, z-score, logit)
+      fallback=False,
+      runtime_ms=2.3,
+  )
+  ```
+
+  Backward-compat preserved via `getattr(p, "direction", None)` with fallback to `getattr(p, "prediction", {}).get("direction_bias", ...)` in parliament's `_compute_weighted()`.
+
+  Schema: `Direction = Literal["long","short","neutral"]`, `TradeDirection = Literal["long","short"]`
+
+- **Root Cause**: RC-06 — contract-violation: 14-field `BrainDecisionProposal` with untyped dict `prediction` across 5 adapter implementations. Dict key typos silently returned None; missing-key access corrupted downstream consensus; `up_probability`/`down_probability` comparison without consulting `direction_bias` caused sign-flip bug. No static analysis tool could detect these errors because everything was `dict[str, Any]`.
+- **Prevention**: All inter-module data now flows through frozen dataclasses (`frozen=True, slots=True`). `Literal` types enforce valid direction values at the type-checker level. mypy catches missing required fields, wrong types, and dict-key typos. The `except:pass` anti-pattern replaced by `DegradedResult` which downstream modules must explicitly handle.
+- **Dependents Checked**: parliament/contract_groups.py (consumer), strategy_line.py (downstream), live_cycle.py (raw_proposals path), all 5 adapter test files. verify.py --quick: mypy + ruff pass. 2567 tests pass.
+
+### FIX-20260522-016
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: protocol-parliament
+- **Files**: `core/parliament/contract_groups.py`, `core/execution/strategy_line.py`, `core/execution/capital_allocator.py`
+- **Description**: Layer 1 Defense-in-Depth — Boundary 2 (Parliament → Strategy Lines). `GroupSignal` (10-field mutable dict-like) replaced with frozen `ConsensusResult` from `trading_contracts.py`:
+
+  **Voting algorithm redesigned — direction-count voting**:
+  Each brain votes its decided direction with weight = `confidence × vote_weight × (0.5 if fallback else 1.0)`. Direction with highest total weight wins.
+
+  **New fields added for audit trail**:
+  - `supporting_brains: list[str]` — brains that voted with the winning direction
+  - `dissenting_brains: list[str]` — brains that voted against
+  - `brain_ids: list[str]` — all brains in the group
+  - `supporting_count: int`, `total_count: int` — for governance logging
+
+  **Dropped fields** (from old GroupSignal, never consumed downstream):
+  - `opposing_count`, `neutral_count` — replaced by `dissenting_brains` + derived from total-supporting
+  - `horizon_cycles`, `consensus_score` — unused in all downstream consumers
+  - `group_name`, `contract_type`, `timestamp` — never read past `_compute_consensus()`
+
+  Backward-compat: input processing uses `getattr(p, "direction", None)` with fallback to legacy `BrainDecisionProposal.prediction` dict access.
+
+- **Root Cause**: RC-06 — contract-violation: 10-field `GroupSignal` with 5 unused fields (dropped between _compute_weighted and evaluate). No type enforcement on direction field. Numeric confidence computed without audit trail of which brains supported/dissented — debug required reverse-engineering `_compute_weighted()` for every signal.
+- **Prevention**: Frozen `ConsensusResult` eliminates field mutation and ensures audit trail (supporting_brains/dissenting_brains) is always present. `Literal` direction type prevents invalid values at type-checker level.
+- **Dependents Checked**: strategy_line.py (consumer), capital_allocator.py (consumer), test_contract_groups.py, test_capital_allocator.py, test_contract_group_pipeline.py. 2567 tests pass.
+
+### FIX-20260522-017
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: contracts-domain
+- **Files**: `core/schemas/trading_contracts.py` (NEW), `core/execution/execution_queue.py`, `core/runtime/live_cycle.py`
+- **Description**: Layer 1 Defense-in-Depth — Schema Registry (single source of truth).
+
+  **New file `core/schemas/trading_contracts.py`** — four frozen dataclasses defining all inter-module contracts in the live hot path:
+
+  | Dataclass | From | To | Replaces |
+  |-----------|------|----|----------|
+  | `BrainSignal` | Brain Adapters | Parliament | `BrainDecisionProposal.prediction` dict |
+  | `ConsensusResult` | Parliament | Strategy Lines | `GroupSignal` (10 fields, 5 unused) |
+  | `StrategyDecision` | Strategy Lines | Guards → Dispatch | `StrategyDecision` in strategy_line.py (20 fields, 12 unused) |
+  | `DegradedResult` | Any module on failure | Downstream | `except Exception: pass` |
+
+  All dataclasses use `frozen=True, slots=True` for immutability + memory efficiency.
+
+  **DegradedResult — failure contract**:
+  Replaces every `except Exception: pass` in the hot path. Carries `module`, `reason`, `error_detail`, and optional `fallback_data`. Downstream modules check `isinstance(x, DegradedResult)` and decide whether to:
+  - Use fallback (last-known-good value)
+  - Skip the cycle's Alpha phase (management only)
+  - Increment circuit-breaker counter (3 consecutive → suspend)
+
+  **Type-safe direction types**:
+  ```python
+  Direction = Literal["long", "short", "neutral"]
+  TradeDirection = Literal["long", "short"]  # never neutral at dispatch
+  ```
+
+- **Root Cause**: RC-06 — contract-violation: 83 FIX entries analyzed, 35+ RC-06 (silent data drops between module boundaries via untyped dicts), 8+ RC-01 (except:pass swallowing failures). No single source of truth for inter-module data shapes — every module had its own dict convention with different key names.
+- **Prevention**: All module boundaries declare their input/output contracts as frozen dataclasses in a single file. mypy enforces type correctness at every boundary. New modules must define their contracts here before implementation.
+- **Dependents Checked**: All 7 module blueprints updated. verify.py --quick: mypy + ruff pass. 2621 tests pass.
+
+### FIX-20260522-018
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: brains-services
+- **Files**: `core/brains/services/brain_run_service.py`, `core/runtime/signal_pipeline.py`, `core/runtime/shadow_recorder.py`
+- **Description**: Layer 1 Defense-in-Depth — BrainRunService output type contract. `run_active_brains()`, `run_single_brain()`, `run_brain_type()`, `run_brains_for_contract_group()` now return `list[BrainSignal | DegradedResult]` instead of `list[BrainDecisionProposal]`.
+
+  All consumers updated:
+  - `signal_pipeline.py`: reads `signal.direction` / `signal.confidence` directly
+  - `shadow_recorder.py`: `record_brain_votes()` accepts `BrainSignal` with backward-compat `getattr`
+  - `live_cycle.py`: both main cycle and management phase paths receive typed signals
+
+  `from __future__ import annotations` (PEP 563) added for deferred type annotation evaluation, preventing circular import issues between trading_contracts and brain services.
+
+- **Root Cause**: RC-06 — contract-violation: `BrainRunService` output was typed as `list[BrainDecisionProposal]` but actual shape varied per adapter (different dict keys in `prediction`). Downstream consumers accessed untyped dicts without any static guarantee.
+- **Prevention**: Service output contracts declared with frozen types. `TYPE_CHECKING` guards for import-time circular dependencies. All consumers use attribute access (`.direction`) not dict-key access (`["direction_bias"]`).
+- **Dependents Checked**: signal_pipeline.py, shadow_recorder.py, live_cycle.py. verify.py --quick: mypy + ruff pass.
+
+### FIX-20260522-019
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: runtime-live
+- **Files**: `core/runtime/live_cycle.py`
+- **Description**: Layer 1 Defense-in-Depth — Circuit Breaker + Orphan Detection.
+
+  **Circuit Breaker** (`LiveCycleState`):
+  ```python
+  _consecutive_degraded_cycles: int = 0
+  _circuit_breaker_tripped: bool = False
+  ```
+  - Incremented at end of each degraded cycle; reset to 0 on first clean cycle
+  - After 3 consecutive degraded cycles → `_circuit_breaker_tripped = True`
+  - When tripped: `circuit_breaker_active` event printed; Alpha phase skipped; management-only mode (exit monitoring still runs)
+  - Auto-reset on first non-degraded cycle
+
+  **Startup Orphan Detection**:
+  On first cycle, compares `mt5.positions_get()` ground truth against `active_position.json` ticket set AND `known_open_tickets`:
+  ```python
+  _orphans = _mt5_tickets - _ap_tickets - set(state.known_open_tickets.keys())
+  if _orphans:
+      print(json.dumps({"event": "orphan_position_mismatch", "severity": "HARD_BLOCK", ...}))
+      return state, False  # refuse to start
+  ```
+  Prevents the engine from trading while MT5 holds positions unknown to the state system.
+
+  **Raw proposals path**: `raw_proposals` list now carries `BrainSignal | DegradedResult` (previously bare dicts), enabling parliament to explicitly handle degraded brain signals.
+
+- **Root Cause**: RC-06 (contract-violation) + RC-07 (missing-validation): No systemic response to cascading degradation; engine would continue full Alpha+Execution with degraded brain signals. No startup check for orphan positions — MT5 could hold positions from a crashed session that the new engine instance didn't know about.
+- **Prevention**: Circuit breaker auto-engages after 3 consecutive degraded cycles, preventing the "zombie trading" scenario where degraded brains produce corrupted signals that pass risk checks. Orphan detection ensures clean startup state before any order can be dispatched.
+- **Dependents Checked**: live_intent_loop.py (degraded_wakeup flag pass-through), execution_queue.py (dispatch respects circuit breaker). verify.py --quick: mypy + ruff pass.
+
+### FIX-20260522-020
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: execution-orders
+- **Files**: `core/execution/execution_queue.py`, `core/schemas/trading_contracts.py`, `apps/engine/main_v9_shadow.py`, `tests/engine/test_v9_shadow_smoke.py`
+- **Description**: Layer 1 Defense-in-Depth — Boundary 4 (Execution/Dispatch).
+
+  **Frozen dataclasses**:
+  ```python
+  @dataclass(frozen=True)
+  class QueuedDecision:
+      strategy_name: str
+      priority: int
+      decision: Any          # StrategyDecision from trading_contracts
+      risk_result: Any        # RiskResult from portfolio_risk
+
+  @dataclass(frozen=True)
+  class DispatchResult:
+      strategy_name: str
+      magic: int
+      dispatched: bool
+      direction: str = ""
+      reason: str = ""
+      journal_entry: dict[str, Any] | None = None
+      net_out_ticket_update: dict[str, Any] | None = None
+  ```
+
+  **Semantic rule dispatch_status rename**: `protocol_validated` → `transport_delivered`
+  - Propagated to `test_v9_shadow_smoke.py` (4 assertions updated)
+  - `apps/engine/main_v9_shadow.py` semantic rule table updated
+  - Disk baselines rebuilt via `--rebuild-formal-baselines`
+  - Removed `dispatch_statuses` dict from compact stats output (no longer printed)
+
+  **StrategyDecision contract alignment**: Renamed `sl_price`/`tp_price` → `sl`/`tp` to match execution pipeline's actual field access pattern. Removed `entry_context`, `entry_z_score` from contract (dropped between layers, never consumed past guards).
+
+- **Root Cause**: RC-06 — contract-violation: `QueuedDecision` used bare `Any` without frozen protection — decision fields could be mutated mid-queue. `protocol_validated` → `transport_delivered` rename in inspection service never propagated to tests/baselines, causing 3 pre-existing test failures.
+- **Prevention**: All queue entry/result types are now frozen dataclasses. Semantic rule renames must update: (1) source code, (2) test assertions, (3) disk baselines. The `--rebuild-formal-baselines` flag provides a single command for baseline sync.
+- **Dependents Checked**: main_v9_shadow.py, test_v9_shadow_smoke.py, execution_queue.py, live_cycle.py dispatch call site. 2621 tests pass.
+
+### FIX-20260522-021
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: brains-schema
+- **Files**: `core/schemas/trading_contracts.py`, `core/brains/schema_versions.py`
+- **Description**: Layer 1 Defense-in-Depth — Brain schema reference update.
+  - `BrainSignal` supersedes `BrainDecisionProposal.prediction` dict as the standard brain output type
+  - `Direction = Literal["long","short","neutral"]` replaces loose string `direction_bias` in dict
+  - `TradeDirection = Literal["long","short"]` enforces never-neutral at dispatch
+  - `SCHEMA_BRAIN_DECISION_PROPOSAL = "brain_decision_proposal.v1"` retained in schema_versions.py for backward compat (legacy paths, serialization)
+  - Brain registry continues using `BrainEntry` — no schema change needed at config level (brain configs already had structured fields)
+
+- **Root Cause**: RC-06 — contract-violation: direction values were untyped strings across all brain outputs, parliament, and dispatch. A typo like `"Long"` vs `"long"` or `"netural"` would silently become neutral/default behavior. `Literal` type enforcement makes these impossible.
+- **Prevention**: All direction-carrying dataclasses use `Literal["long","short","neutral"]` or `Literal["long","short"]`. mypy catches invalid direction assignments at type-check time. No runtime string comparison can silently fail.
+- **Dependents Checked**: All 5 adapter files, parliament, strategy_line, execution_queue. verify.py --quick: mypy + ruff pass.
+
+### FIX-20260522-024
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: execution-guards, runtime-live
+- **Files**: 
+  - `core/execution/meta_pipeline.py` (NEW, ~480 lines)
+  - `core/execution/strategy_line.py` (MODIFIED: +meta_probe_specs field, _try_meta_pipeline → MetaPipeline delegation)
+  - `core/runtime/live_cycle.py` (MODIFIED: auto-discovery + live.yaml override wiring)
+  - `core/runtime/shadow_recorder.py` (MODIFIED: BrainSignal field reads with legacy fallback)
+  - `configs/brains/meta_stage1_huber_v1.json` (MODIFIED: +roles +meta_probe_config)
+- **Description**: Config-driven MetaPipeline architecture — replaces hardcoded `_try_meta_pipeline()` with declarative, decoupled architecture.
+  - **Cascade break**: FIX-20260522-015 (BrainSignal migration) removed the `extensions` dict from brain output. FIX-20260520-028 (Meta Pipeline Executive Veto) read `p.extensions.raw_outputs.raw_score` to detect counter-consensus signals from the Huber regression probe. Since BrainSignal has no `extensions` attribute, the extraction silently returned None → Meta Pipeline dead code → no Track 2 trades. The producer/consumer contract was implicit and unenforced.
+  - **Architecture**:
+    - `MetaProbeSpec` (frozen): brain_id, threshold, filter_stage — declared in brain JSON or live.yaml
+    - `MetaProbeResult` (frozen): brain_id, raw_score, direction, threshold, passed, reason
+    - `extract_probe_score()`: reads BrainSignal.raw_score (Layer 1) with legacy `extensions.raw_outputs` fallback
+    - `discover_probe_specs()`: auto-discovers from brain JSON `"roles": ["meta_probe"]` — zero hardcoded brain_ids
+    - `MetaPipeline.evaluate()`: orchestrates extract → threshold → Stage-N filter → SL/TP → RR → Kelly → volume → StrategyDecision
+  - **Config-driven principles**:
+    - Brain JSON declares capability via `"roles": ["meta_probe"]`
+    - live.yaml can override: `meta_probes: [{brain_id, threshold}]`
+    - Filter stage declarative: `meta_probe_config.filter_stage` (stage2, stage3, ...)
+    - Threshold per-probe, per-strategy configurable
+  - `StrategyDecision` now uses `TradeDirection = Literal["long", "short"]` (no `should_trade` field — removed from frozen contract)
+- **Root Cause**: RC-06 — cross-module cascade: implicit data contract between BrainSignal producer and Meta Pipeline consumer. When the producer contract changed (removal of `extensions` dict), the consumer had no way to detect or prevent the silent breakage.
+- **Prevention**: 
+  - All meta-probe attributes are frozen dataclass fields — mypy catches field access errors at type-check time. No runtime `getattr` on dicts.
+  - `discover_probe_specs()` provides explicit, typed interface between brain config and execution engine.
+  - Infrastructure code never references specific brain_ids — new brains declare roles in JSON.
+  - `extract_probe_score()` dual-path with clear fallback contract: BrainSignal.raw_score (primary) → extensions.raw_outputs (legacy).
+- **Dependents Checked**: strategy_line.py evaluate path, live_cycle.py BarrierStrategy construction + meta_probe_specs wiring, shadow_recorder.py record_brain_votes. 2622 tests pass. mypy + ruff clean on new code.

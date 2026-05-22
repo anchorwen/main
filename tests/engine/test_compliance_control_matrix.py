@@ -64,7 +64,7 @@ def _register_legacy_release(container, tmp_path, version="1.0.0"):
 class TestComplianceControlMatrixService:
     def test_empty_matrix_warns(self, tmp_path):
         c = _container(tmp_path)
-        report = c.compliance_control_matrix.generate()  # type: ignore[reportOptionalMemberAccess]
+        report = c.compliance_control_matrix.generate()
         assert report["schema_version"] == SCHEMA_COMPLIANCE_CONTROL_MATRIX
         assert report["status"] == "warn"
         assert report["warning_count"] >= 1
@@ -72,14 +72,14 @@ class TestComplianceControlMatrixService:
 
     def test_matrix_accepts_fast_validation_mode(self, tmp_path):
         c = _container(tmp_path)
-        report = c.compliance_control_matrix.generate(validation_mode="fast")  # type: ignore[reportOptionalMemberAccess]
+        report = c.compliance_control_matrix.generate(validation_mode="fast")
         assert report["schema_version"] == SCHEMA_COMPLIANCE_CONTROL_MATRIX
         assert report[PAYLOAD_KEY_VALIDATION_MODE] == "fast"
 
     def test_clean_release_matrix_passes(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_clean_release(c, tmp_path)
-        report = c.compliance_control_matrix.generate()  # type: ignore[reportOptionalMemberAccess]
+        report = c.compliance_control_matrix.generate()
         assert report["status"] == "pass"
         assert report["failed_count"] == 0
         assert all(control["status"] == "pass" for control in report["controls"])
@@ -89,7 +89,7 @@ class TestComplianceControlMatrixService:
     def test_governance_controls_pass_when_registry_clean(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_clean_release(c, tmp_path)
-        report = c.compliance_control_matrix.generate()  # type: ignore[reportOptionalMemberAccess]
+        report = c.compliance_control_matrix.generate()
         gov1 = next(cn for cn in report["controls"] if cn["control_id"] == "GOV-001")
         gov2 = next(cn for cn in report["controls"] if cn["control_id"] == "GOV-002")
         gov3 = next(cn for cn in report["controls"] if cn["control_id"] == "GOV-003")
@@ -107,7 +107,7 @@ class TestComplianceControlMatrixService:
         _register_alpha_release(
             c, tmp_path, version="1.3.0", warning_count=0, validation_mode="fast"
         )
-        report = c.compliance_control_matrix.generate()  # type: ignore[reportOptionalMemberAccess]
+        report = c.compliance_control_matrix.generate()
         gov3 = next(cn for cn in report["controls"] if cn["control_id"] == "GOV-003")
         assert gov3["status"] == "warn"
 
@@ -122,7 +122,7 @@ class TestComplianceControlMatrixService:
         _register_alpha_release(
             c, tmp_path, version="1.4.2", warning_count=0, validation_mode="fast"
         )
-        report = c.compliance_control_matrix.generate()  # type: ignore[reportOptionalMemberAccess]
+        report = c.compliance_control_matrix.generate()
         gov4 = next(cn for cn in report["controls"] if cn["control_id"] == "GOV-004")
         assert gov4["status"] == "warn"
         assert report["summary"][PAYLOAD_KEY_GOVERNANCE_WARNING_COUNT] >= 1
@@ -130,12 +130,12 @@ class TestComplianceControlMatrixService:
     def test_governance_ops_maturity_control_warns_low_score(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_clean_release(c, tmp_path)
-        reg_path = Path(c.release_registry.path)  # type: ignore[reportOptionalMemberAccess]
+        reg_path = Path(c.release_registry.path)
         records = json.loads(reg_path.read_text(encoding="utf-8"))
         for r in records:
             r["summary"]["ops_maturity_score"] = 40.0
         reg_path.write_text(json.dumps(records, indent=2, default=str), encoding="utf-8")
-        report = c.compliance_control_matrix.generate()  # type: ignore[reportOptionalMemberAccess]
+        report = c.compliance_control_matrix.generate()
         gov2 = next(cn for cn in report["controls"] if cn["control_id"] == "GOV-002")
         assert gov2["status"] == "warn"
         assert report["warning_count"] >= 1
@@ -146,12 +146,12 @@ class TestComplianceControlMatrixService:
             EnvironmentConfig.development(str(tmp_path / "data"), ops_maturity_min_score=30.0)
         ).build()
         _register_clean_release(c, tmp_path)
-        reg_path = Path(c.release_registry.path)  # type: ignore[reportOptionalMemberAccess]
+        reg_path = Path(c.release_registry.path)
         records = json.loads(reg_path.read_text(encoding="utf-8"))
         for r in records:
             r["summary"]["ops_maturity_score"] = 40.0
         reg_path.write_text(json.dumps(records, indent=2, default=str), encoding="utf-8")
-        report = c.compliance_control_matrix.generate()  # type: ignore[reportOptionalMemberAccess]
+        report = c.compliance_control_matrix.generate()
         gov2 = next(cn for cn in report["controls"] if cn["control_id"] == "GOV-002")
         assert gov2["status"] == "pass"
         assert gov2["evidence"]["min_score"] == 30.0
@@ -159,7 +159,7 @@ class TestComplianceControlMatrixService:
     def test_alpha_budget_controls_pass_when_evidence_clean(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_alpha_release(c, tmp_path, version="1.2.0", warning_count=0)
-        report = c.compliance_control_matrix.generate()  # type: ignore[reportOptionalMemberAccess]
+        report = c.compliance_control_matrix.generate()
         alpha1 = next(cn for cn in report["controls"] if cn["control_id"] == "ALPHA-001")
         alpha2 = next(cn for cn in report["controls"] if cn["control_id"] == "ALPHA-002")
         assert alpha1["status"] == "pass"
@@ -169,7 +169,7 @@ class TestComplianceControlMatrixService:
     def test_alpha_budget_missing_evidence_warns_control(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_legacy_release(c, tmp_path, version="1.2.1")
-        report = c.compliance_control_matrix.generate()  # type: ignore[reportOptionalMemberAccess]
+        report = c.compliance_control_matrix.generate()
         alpha1 = next(cn for cn in report["controls"] if cn["control_id"] == "ALPHA-001")
         assert alpha1["status"] == "warn"
         assert alpha1["evidence"]["missing_evidence_count"] == 1
@@ -178,7 +178,7 @@ class TestComplianceControlMatrixService:
     def test_alpha_budget_warnings_warn_control(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_alpha_release(c, tmp_path, version="1.2.2", warning_count=1)
-        report = c.compliance_control_matrix.generate()  # type: ignore[reportOptionalMemberAccess]
+        report = c.compliance_control_matrix.generate()
         alpha2 = next(cn for cn in report["controls"] if cn["control_id"] == "ALPHA-002")
         assert alpha2["status"] == "warn"
         assert alpha2["evidence"]["warning_total"] == 1
@@ -186,7 +186,7 @@ class TestComplianceControlMatrixService:
 
     def test_control_shape(self, tmp_path):
         c = _container(tmp_path)
-        report = c.compliance_control_matrix.generate()  # type: ignore[reportOptionalMemberAccess]
+        report = c.compliance_control_matrix.generate()
         control = report["controls"][0]
         assert set(control) == {
             "control_id",
@@ -202,8 +202,8 @@ class TestComplianceControlMatrixService:
     def test_failed_timeline_event_fails_control(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_clean_release(c, tmp_path)
-        c.operations_timeline.record("manual_failure", {"passed": False})  # type: ignore[reportOptionalMemberAccess]
-        report = c.compliance_control_matrix.generate()  # type: ignore[reportOptionalMemberAccess]
+        c.operations_timeline.record("manual_failure", {"passed": False})
+        report = c.compliance_control_matrix.generate()
         assert report["status"] == "fail"
         aud2 = next(cn for cn in report["controls"] if cn["control_id"] == "AUD-002")
         assert aud2["status"] == "fail"
@@ -212,27 +212,27 @@ class TestComplianceControlMatrixService:
     def test_slo_breach_fails_control(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_clean_release(c, tmp_path)
-        c.metrics.inc(CYCLES_TOTAL, 100)  # type: ignore[reportOptionalMemberAccess]
-        c.metrics.inc(CYCLES_ERRORS, 20)  # type: ignore[reportOptionalMemberAccess]
-        report = c.compliance_control_matrix.generate()  # type: ignore[reportOptionalMemberAccess]
+        c.metrics.inc(CYCLES_TOTAL, 100)
+        c.metrics.inc(CYCLES_ERRORS, 20)
+        report = c.compliance_control_matrix.generate()
         obs = next(cn for cn in report["controls"] if cn["control_id"] == "OBS-001")
         assert obs["status"] == "fail"
 
     def test_uncertified_registry_fails_control(self, tmp_path):
         c = _container(tmp_path / "data")
-        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
-        cert = c.release_certification.certify(pipeline_summary=pipeline)  # type: ignore[reportOptionalMemberAccess]
+        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))
+        cert = c.release_certification.certify(pipeline_summary=pipeline)
         cert["certified"] = False
         cert["status"] = "rejected"
-        c.release_registry.register(cert)  # type: ignore[reportOptionalMemberAccess]
-        report = c.compliance_control_matrix.generate()  # type: ignore[reportOptionalMemberAccess]
+        c.release_registry.register(cert)
+        report = c.compliance_control_matrix.generate()
         rel2 = next(cn for cn in report["controls"] if cn["control_id"] == "REL-002")
         assert rel2["status"] == "fail"
 
     def test_save_report(self, tmp_path):
         c = _container(tmp_path)
         out = tmp_path / "matrix.json"
-        report = c.compliance_control_matrix.generate(output=str(out))  # type: ignore[reportOptionalMemberAccess]
+        report = c.compliance_control_matrix.generate(output=str(out))
         assert report["output_path"] == str(out)
         payload = json.loads(out.read_text(encoding="utf-8"))
         assert payload["schema_version"] == SCHEMA_COMPLIANCE_CONTROL_MATRIX
@@ -261,7 +261,7 @@ class TestComplianceControlMatrixCLI:
     def test_cli_matrix_fail_returns_one(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_clean_release(c, tmp_path)
-        c.operations_timeline.record("manual_failure", {"passed": False})  # type: ignore[reportOptionalMemberAccess]
+        c.operations_timeline.record("manual_failure", {"passed": False})
         rc = main(["--base-dir", str(tmp_path / "data"), "compliance-matrix"])
         assert rc == 1
 

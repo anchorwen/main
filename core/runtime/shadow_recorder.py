@@ -240,13 +240,48 @@ def record_brain_votes(
     lines: list[str] = []
 
     for p in proposals:
-        pred = getattr(p, "prediction", {}) or {}
         bid = getattr(p, "brain_id", "unknown")
         bstatus = getattr(p, "brain_status", brain_status_map.get(bid, "unknown"))
 
-        # Collect raw_outputs (z_score, half_life, etc.) for diagnostic transparency
+        # ── Direction, confidence, probabilities ──
+        # Read from BrainSignal (Layer 1) first; fall back to legacy
+        # BrainDecisionProposal.prediction dict for backward compat.
+        _dir = getattr(p, "direction", None)
+        _conf: float
+        _up: float
+        _down: float
+        if _dir is not None:
+            # BrainSignal path
+            _conf = float(getattr(p, "confidence", 0.5))
+            if _dir == "long":
+                _up, _down = _conf, round(1.0 - _conf, 6)
+            elif _dir == "short":
+                _up, _down = round(1.0 - _conf, 6), _conf
+            else:
+                _up, _down = 0.5, 0.5
+        else:
+            # Legacy BrainDecisionProposal path
+            pred = getattr(p, "prediction", {}) or {}
+            _dir = pred.get("direction_bias", "neutral")
+            _up = round(float(pred.get("up_probability", 0.5)), 6)
+            _down = round(float(pred.get("down_probability", 0.5)), 6)
+            _conf = round(float(pred.get("confidence", 0.0)), 6)
+
+        # ── Raw outputs (z_score, theta, half_life, raw_score, etc.) ──
+        # Primary: BrainSignal.diagnostics (Layer 1 immutable contract).
+        # Fallback: BrainSignal.raw_score + legacy extensions.raw_outputs dict.
+        raw_outputs: dict[str, Any] = {}
+        diagnostics = getattr(p, "diagnostics", {}) or {}
+        if isinstance(diagnostics, dict):
+            raw_outputs.update(diagnostics)
+        raw_score = getattr(p, "raw_score", None)
+        if raw_score is not None and "raw_score" not in raw_outputs:
+            raw_outputs["raw_score"] = raw_score
         extensions = getattr(p, "extensions", {}) or {}
-        raw_outputs = extensions.get("raw_outputs", {}) if isinstance(extensions, dict) else {}
+        if isinstance(extensions, dict):
+            ext_ro = extensions.get("raw_outputs", {})
+            if isinstance(ext_ro, dict):
+                raw_outputs.update(ext_ro)
 
         entry = {
             "recorded_at": event_time.isoformat(),
@@ -255,10 +290,10 @@ def record_brain_votes(
             "strategy": strategy_name,
             "brain_id": bid,
             "brain_status": bstatus,
-            "direction": pred.get("direction_bias", "neutral"),
-            "up_prob": round(float(pred.get("up_probability", 0.5)), 6),
-            "down_prob": round(float(pred.get("down_probability", 0.5)), 6),
-            "confidence": round(float(pred.get("confidence", 0.0)), 6),
+            "direction": _dir,
+            "up_prob": round(float(_up), 6),
+            "down_prob": round(float(_down), 6),
+            "confidence": round(float(_conf), 6),
             "consensus_direction": consensus_direction,
             "consensus_confidence": consensus_confidence,
             "raw_outputs": {

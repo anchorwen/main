@@ -43,7 +43,7 @@ from typing import Any
 # -- Constants --
 
 DEFAULT_TIMEOUT_SECONDS = 360  # max wait for new bar before fallback (M5=300s + 60s buffer)
-DEFAULT_POLL_INTERVAL = 2.0  # seconds between MT5 rate checks
+DEFAULT_POLL_INTERVAL = 1.0  # seconds between MT5 rate checks
 DEFAULT_FALLBACK_INTERVAL = 60  # seconds when MT5 is unreachable
 MAX_LAG_BARS = 3  # consecutive missed bars before CRITICAL alert
 MAX_MT5_ERROR_RETRIES = 3  # re-init + retry before returning None on transient MT5 errors
@@ -106,14 +106,20 @@ class BarSyncPoller:
     # -- Public API --
 
     def wait_for_new_bar(self, timeout_seconds: float | None = None) -> dict[str, Any] | None:
-        """Block until a new bar forms, or timeout.
+        """Block until a new bar forms, timeout, or degraded wakeup.
 
-        Returns the new bar as a dict with keys: time, open, high, low, close,
-        tick_volume, spread, real_volume.  Returns None on timeout (caller
-        should use fallback interval).
+        Returns a bar dict (possibly with ``_degraded: True`` sentinel) on
+        success/degradation, or None on timeout.  Callers must treat any
+        truthy return as "run the next cycle now".
         """
         timeout = timeout_seconds if timeout_seconds is not None else self.timeout_seconds
-        deadline = time.monotonic() + timeout
+        _start = time.monotonic()
+        deadline = _start + timeout
+        _bar_secs = self._bar_seconds()
+        # Degrade only after bar_period + 10s buffer — ensures at least one
+        # poll after the bar boundary before giving up.
+        _degraded_deadline = _start + _bar_secs + 10.0
+        _degraded = False
 
         # Ensure MT5 is initialized
         if not self._mt5_available:
@@ -138,6 +144,29 @@ class BarSyncPoller:
                 )
                 if rates is None or len(rates) < 2:
                     time.sleep(self.poll_interval)
+                    if not _degraded and time.monotonic() >= _degraded_deadline:
+                        _degraded = True
+                        self._log_event(
+                            "BAR_DEGRADED_WAKEUP",
+                            {
+                                "elapsed": round(time.monotonic() - _start, 1),
+                                "bar_period": _bar_secs,
+                                "last_bar_time": self._state.last_bar_time,
+                                "mt5_available": self._mt5_available,
+                                "error_count": _error_count,
+                            },
+                        )
+                        return {
+                            "time": self._state.last_bar_time,
+                            "open": self._state.last_bar_open,
+                            "high": self._state.last_bar_close,
+                            "low": self._state.last_bar_close,
+                            "close": self._state.last_bar_close,
+                            "tick_volume": 0,
+                            "spread": 0,
+                            "real_volume": 0,
+                            "_degraded": True,
+                        }
                     continue
 
                 current_bar = rates[-1]
@@ -192,6 +221,31 @@ class BarSyncPoller:
                 # Same bar — wait and poll again
                 _error_count = 0  # successful poll, reset error streak
                 time.sleep(self.poll_interval)
+                # Degraded wakeup: poll succeeded but no new bar after bar_period + buffer.
+                # Check after the poll so the bar-boundary poll always runs first.
+                if not _degraded and time.monotonic() >= _degraded_deadline:
+                    _degraded = True
+                    self._log_event(
+                        "BAR_DEGRADED_WAKEUP",
+                        {
+                            "elapsed": round(time.monotonic() - _start, 1),
+                            "bar_period": _bar_secs,
+                            "last_bar_time": self._state.last_bar_time,
+                            "mt5_available": self._mt5_available,
+                            "error_count": _error_count,
+                        },
+                    )
+                    return {
+                        "time": self._state.last_bar_time,
+                        "open": self._state.last_bar_open,
+                        "high": self._state.last_bar_close,
+                        "low": self._state.last_bar_close,
+                        "close": self._state.last_bar_close,
+                        "tick_volume": 0,
+                        "spread": 0,
+                        "real_volume": 0,
+                        "_degraded": True,
+                    }
 
             except Exception:
                 _error_count += 1
@@ -206,8 +260,14 @@ class BarSyncPoller:
                     },
                 )
                 if _error_count <= MAX_MT5_ERROR_RETRIES:
-                    # Transient error — re-initialize and keep polling
+                    # Transient error — clean up stale connection and re-init
                     self._mt5_available = False
+                    try:
+                        import MetaTrader5 as _mt5_mod
+
+                        _mt5_mod.shutdown()
+                    except Exception:
+                        pass
                     try:
                         self._init_mt5()
                     except Exception:
@@ -416,7 +476,10 @@ class BarSyncPoller:
     def _save_state(self) -> None:
         try:
             self._state_path.parent.mkdir(parents=True, exist_ok=True)
-            self._state_path.write_text(
+            import os as _os
+
+            tmp_path = self._state_path.with_suffix(self._state_path.suffix + ".tmp")
+            tmp_path.write_text(
                 json.dumps(
                     {
                         "last_bar_time": self._state.last_bar_time,
@@ -431,6 +494,7 @@ class BarSyncPoller:
                 ),
                 encoding="utf-8",
             )
+            _os.replace(tmp_path, self._state_path)
         except OSError:
             pass
 

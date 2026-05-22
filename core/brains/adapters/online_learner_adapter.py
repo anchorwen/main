@@ -18,16 +18,15 @@ import json
 import logging
 import time
 from collections import deque
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.schemas.trading_contracts import BrainSignal
 
 import numpy as np
 
 from core.brains.adapters.base_adapter import BaseBrainAdapter
-from core.brains.schema_versions import SCHEMA_BRAIN_DECISION_PROPOSAL
-from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
-from core.contracts.ids import new_proposal_id
 from core.deployment.brain_alert import emit_brain_alert
 
 logger = logging.getLogger(__name__)
@@ -243,52 +242,35 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
             "total_updates": self._total_updates,
         }
 
-    def get_signal(self, raw_output: dict[str, Any]) -> BrainDecisionProposal:
+    def get_signal(self, raw_output: dict[str, Any]) -> BrainSignal:
+        from core.schemas.trading_contracts import BrainSignal, Direction
+
         probs = raw_output["probs"]
         classes = raw_output["classes"]
         best_idx = int(np.argmax(probs))
         class_label = int(classes[best_idx])
         confidence = float(probs[best_idx])
 
-        direction_map = {-1: "short", 0: "neutral", 1: "long"}
-        direction = direction_map.get(class_label, "neutral")
+        direction: Direction
+        if class_label == 1:
+            direction = "long"
+        elif class_label == -1:
+            direction = "short"
+        else:
+            direction = "neutral"
 
-        up_prob = float(probs[classes.tolist().index(1)] if 1 in classes else 0.0)
-        down_prob = float(probs[classes.tolist().index(-1)] if -1 in classes else 0.0)
+        runtime_ms = raw_output.get("runtime_ms", 0.0)
+        fallback = raw_output.get("fallback", self._backend == "online_sgd:zeros")
 
-        method = "online_mlp_v1" if self._use_mlp else "online_sgd_logistic_regression"
-
-        return BrainDecisionProposal(
-            schema_version=SCHEMA_BRAIN_DECISION_PROPOSAL,
-            proposal_id=new_proposal_id(),
-            snapshot_id="",
+        return BrainSignal(
             brain_id=self._brain_entry.get("brain_id", "online_sgd"),
-            brain_role=self._brain_entry.get("brain_role", "alpha_brain"),
-            brain_status=self._brain_entry.get("status", "shadow"),
-            model_version=self._backend,
-            event_time=datetime.now(UTC).replace(tzinfo=None),
-            generated_at=datetime.now(UTC).replace(tzinfo=None),
-            prediction={
-                "direction_bias": direction,
-                "up_probability": up_prob,
-                "down_probability": down_prob,
-                "confidence": confidence,
-                "uncertainty": round(1.0 - confidence, 3),
-                "expected_edge_bps": None,
-                "expected_hold_seconds": None,
-            },
-            applicability={
-                "regime_tags": self._brain_entry.get("deployment_scope", {}).get("regimes", []),
-                "symbol_tags": self._brain_entry.get("deployment_scope", {}).get("symbols", []),
-            },
-            rationale={"method": method, "updates": self._total_updates},
-            health={
-                "input_ok": True,
-                "fallback_used": raw_output.get("fallback", False),
-                "runtime_ms": raw_output.get("runtime_ms", 0.0),
-                "risk_score": 0.0,
-                "volatility_score": 0.0,
-                "backend": self._backend,
+            direction=direction,
+            confidence=confidence,
+            raw_score=float(probs[best_idx]),
+            fallback=fallback,
+            runtime_ms=runtime_ms,
+            diagnostics={
+                k: v for k, v in raw_output.items() if k not in ("runtime_ms", "fallback")
             },
         )
 

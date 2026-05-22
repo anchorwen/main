@@ -77,7 +77,7 @@ class TestExecutionApproval:
     def test_approval_to_dict(self):
         signal = _signal()
         order = _order(signal)
-        approval = ExecutionApproval.allow("a1", signal, order, "runtime_risk")  # type: ignore[reportArgumentType]
+        approval = ExecutionApproval.allow("a1", signal, order, "runtime_risk")
         assert approval.to_dict()["approved"] is True
 
 
@@ -86,7 +86,7 @@ class TestRuntimeRiskGate:
         signal = _signal(symbol="XAUUSD")
         order = _order(signal, quantity=10)
         gate = RuntimeRiskGate(max_quantity=5, allowed_symbols={"EURUSD"}, max_notional=500)
-        approval = gate.approve(signal, order, {"price": 100})  # type: ignore[reportArgumentType]
+        approval = gate.approve(signal, order, {"price": 100})
         assert approval.approved is False
         assert "quantity_limit_exceeded(10.0>5)" in approval.reasons
         assert "symbol_not_allowed(XAUUSD)" in approval.reasons
@@ -97,7 +97,7 @@ class TestRuntimeRiskGate:
         order = _order(signal, quantity=1)
         approval = RuntimeRiskGate(
             max_quantity=5, allowed_symbols={"XAUUSD"}, max_notional=500
-        ).approve(signal, order, {"price": 100})  # type: ignore[reportArgumentType]
+        ).approve(signal, order, {"price": 100})
         assert approval.approved is True
 
 
@@ -111,7 +111,7 @@ class TestRuntimeGovernanceGate:
             allowed_venues={"FIX"},
             system_halted=True,
         )
-        approval = gate.approve(signal, order, {})  # type: ignore[reportArgumentType]
+        approval = gate.approve(signal, order, {})
         assert approval.approved is False
         assert "system_halted" in approval.reasons
         assert "strategy_frozen(alpha1)" in approval.reasons
@@ -122,7 +122,7 @@ class TestRuntimeGovernanceGate:
         signal = _signal(strategy_id="alpha1")
         order = _order(signal, venue="PAPER")
         gate = RuntimeGovernanceGate(allowed_strategy_ids={"alpha1"}, allowed_venues={"PAPER"})
-        assert gate.approve(signal, order, {}).approved is True  # type: ignore[reportArgumentType]
+        assert gate.approve(signal, order, {}).approved is True
 
 
 class TestRuntimeExecutionApprovalChain:
@@ -135,7 +135,7 @@ class TestRuntimeExecutionApprovalChain:
                 RuntimeGovernanceGate(system_halted=True),
             ]
         )
-        approvals = chain.approve(signal, order, {"price": 100})  # type: ignore[reportArgumentType]
+        approvals = chain.approve(signal, order, {"price": 100})
         assert len(approvals) == 1
         assert approvals[0].gate == "runtime_risk"
         assert approvals[0].approved is False

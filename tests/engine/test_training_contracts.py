@@ -34,7 +34,7 @@ def _make_minimal_contract_dict(**overrides: object) -> dict:
         "label_classes": {"1": "tp_hit_first", "0": "timeout", "-1": "sl_hit_first"},
         "barriers": {"sl_atr_mult": 2.0, "tp_atr_mult": 3.5},
     }
-    d.update(overrides)  # type: ignore[arg-type]
+    d.update(overrides)
     return d
 
 
@@ -321,7 +321,7 @@ def _make_minimal_recipe_dict(**overrides: object) -> dict:
             "metrics": ["accuracy", "f1"],
         },
     }
-    d.update(overrides)  # type: ignore[arg-type]
+    d.update(overrides)
     return d
 
 

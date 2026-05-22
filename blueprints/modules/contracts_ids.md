@@ -29,6 +29,7 @@ Any producer needing an ID → contracts.ids.new_*_id() → uuid4-based string
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

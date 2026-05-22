@@ -952,7 +952,7 @@ def build_formal_suite_semantic_rules() -> dict[str, dict[str, dict]]:
                 "action": "open",
                 "side": "short",
                 "risk_status": "allow",
-                "dispatch_status": "protocol_validated",
+                "dispatch_status": "transport_delivered",
             },
         },
         "risk_boundary": {

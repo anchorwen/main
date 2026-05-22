@@ -52,10 +52,10 @@
     },
     "Meta_Stage1_Huber_V1": {
       "brain_id": "Meta_Stage1_Huber_V1",
-      "status": "probation",
+      "status": "live",
       "registered_at": "2026-05-17T08:00:00.000000",
-      "last_transition_at": "2026-05-17T20:59:32.555815",
-      "transition_count": 1,
+      "last_transition_at": "2026-05-22T00:00:00.000000",
+      "transition_count": 2,
       "freeze_count": 0
     },
     "Online_MLP_V1": {

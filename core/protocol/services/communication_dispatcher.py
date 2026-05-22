@@ -195,7 +195,7 @@ class CommunicationDispatcher:
         )
 
         try:
-            result = primary_adapter.dispatch(request, envelope)  # type: ignore[reportAttributeAccessIssue]
+            result = primary_adapter.dispatch(request, envelope)
             result.attempts = result.attempts or []
             result.attempts.append(
                 {
@@ -236,7 +236,7 @@ class CommunicationDispatcher:
                 fallback_adapter, "adapter_name", fallback_adapter.__class__.__name__
             )
             try:
-                fallback_result = fallback_adapter.dispatch(request, envelope)  # type: ignore[reportAttributeAccessIssue]
+                fallback_result = fallback_adapter.dispatch(request, envelope)
                 attempts.append(
                     {
                         "adapter_name": fallback_adapter_name,

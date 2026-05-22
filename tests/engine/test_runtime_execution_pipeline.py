@@ -36,11 +36,11 @@ class TestSignalOrderRequestBuilder:
             OrderSizingPolicy(base_quantity=10), default_venue="PAPER"
         )
         request = builder.build(_signal(strength=0.5, confidence=0.8), {"price": 2000})
-        assert request.symbol == "XAUUSD"  # type: ignore[reportOptionalMemberAccess]
-        assert request.side == "buy"  # type: ignore[reportOptionalMemberAccess]
-        assert request.quantity == 4.0  # type: ignore[reportOptionalMemberAccess]
-        assert request.venue == "PAPER"  # type: ignore[reportOptionalMemberAccess]
-        assert request.metadata["strategy_id"] == "alpha1"  # type: ignore[reportOptionalMemberAccess]
+        assert request.symbol == "XAUUSD"
+        assert request.side == "buy"
+        assert request.quantity == 4.0
+        assert request.venue == "PAPER"
+        assert request.metadata["strategy_id"] == "alpha1"
 
     def test_skips_hold_flat_and_below_threshold(self):
         builder = SignalOrderRequestBuilder(
@@ -57,8 +57,8 @@ class TestSignalOrderRequestBuilder:
             _signal(extensions={"order_type": "limit", "limit_price": 1999.0}), {}
         )
         fallback = builder.build(_signal(extensions={"order_type": "limit"}), {"price": 2000.0})
-        assert explicit.limit_price == 1999.0  # type: ignore[reportOptionalMemberAccess]
-        assert fallback.limit_price == 2000.0  # type: ignore[reportOptionalMemberAccess]
+        assert explicit.limit_price == 1999.0
+        assert fallback.limit_price == 2000.0
 
     def test_sizing_policy_validation(self):
         with pytest.raises(ValueError):
@@ -75,7 +75,7 @@ class TestExecutionGatewayRouter:
         gateway = PaperExecutionGateway()
         router.register("PAPER", gateway)
         request = SignalOrderRequestBuilder().build(_signal(), {"price": 2000})
-        order = router.submit_order(request, {"price": 2000})  # type: ignore[reportArgumentType]
+        order = router.submit_order(request, {"price": 2000})
         assert order.status == "filled"
         assert len(router.list_orders()) == 1
 
@@ -83,7 +83,7 @@ class TestExecutionGatewayRouter:
         router = ExecutionGatewayRouter()
         request = SignalOrderRequestBuilder().build(_signal(), {"price": 2000})
         with pytest.raises(ValueError):
-            router.submit_order(request, {"price": 2000})  # type: ignore[reportArgumentType]
+            router.submit_order(request, {"price": 2000})
 
 
 class TestRuntimeExecutionPipeline:

@@ -28,8 +28,8 @@ class TestDiagnosticsCLIHealth:
 class TestDiagnosticsCLIMetrics:
     def test_metrics_command(self, tmp_path):
         c = _build_container(tmp_path)
-        c.metrics.inc("test_counter", 5)  # type: ignore[reportOptionalMemberAccess]
-        c.metrics.gauge("test_gauge", 42)  # type: ignore[reportOptionalMemberAccess]
+        c.metrics.inc("test_counter", 5)
+        c.metrics.gauge("test_gauge", 42)
         cli = DiagnosticsCLI(c)
         output = json.loads(cli.run(["metrics"]))
         assert output["counters"]["test_counter"] == 5
@@ -45,15 +45,15 @@ class TestDiagnosticsCLIMetrics:
 class TestDiagnosticsCLIBrain:
     def test_brain_list(self, tmp_path):
         c = _build_container(tmp_path)
-        c.governance_service.register_brain("alpha_v1", "live")  # type: ignore[reportOptionalMemberAccess]
-        c.governance_service.register_brain("beta_v1", "candidate")  # type: ignore[reportOptionalMemberAccess]
+        c.governance_service.register_brain("alpha_v1", "live")
+        c.governance_service.register_brain("beta_v1", "candidate")
         cli = DiagnosticsCLI(c)
         output = json.loads(cli.run(["brain"]))
         assert output["count"] == 2
 
     def test_brain_detail(self, tmp_path):
         c = _build_container(tmp_path)
-        c.governance_service.register_brain("alpha_v1", "live")  # type: ignore[reportOptionalMemberAccess]
+        c.governance_service.register_brain("alpha_v1", "live")
         cli = DiagnosticsCLI(c)
         output = json.loads(cli.run(["brain", "--brain-id", "alpha_v1"]))
         assert output["governance_state"]["status"] == "live"
@@ -62,16 +62,16 @@ class TestDiagnosticsCLIBrain:
 class TestDiagnosticsCLIAudit:
     def test_audit_command(self, tmp_path):
         c = _build_container(tmp_path)
-        c.audit_log.log(event_type="test", severity="info")  # type: ignore[reportOptionalMemberAccess]
-        c.audit_log.log(event_type="test2", severity="warning")  # type: ignore[reportOptionalMemberAccess]
+        c.audit_log.log(event_type="test", severity="info")
+        c.audit_log.log(event_type="test2", severity="warning")
         cli = DiagnosticsCLI(c)
         output = json.loads(cli.run(["audit"]))
         assert output["count"] == 2
 
     def test_audit_filter_severity(self, tmp_path):
         c = _build_container(tmp_path)
-        c.audit_log.log(event_type="t1", severity="info")  # type: ignore[reportOptionalMemberAccess]
-        c.audit_log.log(event_type="t2", severity="warning")  # type: ignore[reportOptionalMemberAccess]
+        c.audit_log.log(event_type="t1", severity="info")
+        c.audit_log.log(event_type="t2", severity="warning")
         cli = DiagnosticsCLI(c)
         output = json.loads(cli.run(["audit", "--severity", "warning"]))
         assert output["count"] == 1
@@ -81,7 +81,7 @@ class TestDiagnosticsCLIAudit:
 class TestDiagnosticsCLISnapshot:
     def test_snapshot_command(self, tmp_path):
         c = _build_container(tmp_path)
-        c.metrics.inc("x")  # type: ignore[reportOptionalMemberAccess]
+        c.metrics.inc("x")
         cli = DiagnosticsCLI(c)
         output = json.loads(cli.run(["snapshot"]))
         assert "generated_at" in output
@@ -188,14 +188,14 @@ class TestContainerWithOrchestrator:
     def test_governance_rule_engine_built(self, tmp_path):
         c = _build_container(tmp_path)
         assert c.governance_rule_engine is not None
-        c.governance_service.register_brain("test_brain", "live")  # type: ignore[reportOptionalMemberAccess]
+        c.governance_service.register_brain("test_brain", "live")
         fired = c.governance_rule_engine.evaluate(
             {
                 "test_brain": {"health_signal": "critical", "sample_count": 20},
             }
         )
         assert len(fired) >= 1
-        assert c.governance_service.get_brain_state("test_brain")["status"] == "frozen"  # type: ignore[reportOptionalMemberAccess]
+        assert c.governance_service.get_brain_state("test_brain")["status"] == "frozen"
 
     def test_health_check_built(self, tmp_path):
         c = _build_container(tmp_path)

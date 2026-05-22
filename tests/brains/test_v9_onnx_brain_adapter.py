@@ -25,6 +25,5 @@ def test_v9_onnx_brain_adapter_inference_fallback():
     proposal = adapter.get_signal(raw)
 
     assert proposal.brain_id == "V9_Institutional_01"
-    assert "direction_bias" in proposal.prediction
-    assert "raw_outputs" in proposal.extensions
+    assert proposal.direction in ("long", "short", "neutral")
     assert isinstance(raw["runtime_ms"], float)

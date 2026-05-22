@@ -146,8 +146,8 @@ class TestStatePersistence:
     def test_save_all(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path / "data"))
         c = ServiceContainer(cfg).build()
-        c.governance_service.register_brain("test", "live")  # type: ignore[reportOptionalMemberAccess]
-        c.position_tracker.open_position(  # type: ignore[reportOptionalMemberAccess]
+        c.governance_service.register_brain("test", "live")
+        c.position_tracker.open_position(
             position_id="p1", symbol="X", side="long", quantity=1, entry_price=100
         )
 
@@ -191,7 +191,7 @@ class TestReplayIsolation:
             requested_at=datetime(2026, 4, 24, 12, 0, 1),
         )
         result = adapter.dispatch(req, env)
-        assert result.status.value == "protocol_validated"  # type: ignore[reportAttributeAccessIssue]
+        assert result.status.value == "protocol_validated"
         assert result.trace["replay_mode"] is True
         assert adapter.get_captured_count() == 1
 

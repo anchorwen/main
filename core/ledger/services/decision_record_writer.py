@@ -26,7 +26,9 @@ class DecisionRecordWriter:
                 "venue": feature_snapshot.venue,
             },
             inputs={
-                "proposal_ids": [p.proposal_id for p in proposals],
+                "proposal_ids": [
+                    getattr(p, "brain_id", getattr(p, "proposal_id", "unknown")) for p in proposals
+                ],
                 "candidate_id": candidate.candidate_id,
             },
             execution={

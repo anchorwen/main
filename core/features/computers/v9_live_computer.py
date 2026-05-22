@@ -126,8 +126,8 @@ def _ou_theta(price: np.ndarray, lookback: int = OU_LOOKBACK) -> float:
     x = window[:-1]
     x_mean = np.mean(x)
     y_mean = np.mean(y)
-    beta_num = np.sum((x - x_mean) * (y - y_mean))
-    beta_den = np.sum((x - x_mean) ** 2)
+    beta_num: float = np.sum((x - x_mean) * (y - y_mean))
+    beta_den: float = np.sum((x - x_mean) ** 2)
     if beta_den == 0:
         return 0.0
     beta = beta_num / beta_den
@@ -294,18 +294,18 @@ if __name__ == "__main__":
     terminal_path = sys.argv[2] if len(sys.argv) > 2 else None
 
     if terminal_path:
-        if not mt5.initialize(path=terminal_path):  # type: ignore[reportAttributeAccessIssue]
-            print(json.dumps({"error": "mt5_initialize_failed", "detail": str(mt5.last_error())}))  # type: ignore[reportAttributeAccessIssue]
+        if not mt5.initialize(path=terminal_path):
+            print(json.dumps({"error": "mt5_initialize_failed", "detail": str(mt5.last_error())}))
             sys.exit(2)
     else:
-        if not mt5.initialize():  # type: ignore[reportAttributeAccessIssue]
-            print(json.dumps({"error": "mt5_initialize_failed", "detail": str(mt5.last_error())}))  # type: ignore[reportAttributeAccessIssue]
+        if not mt5.initialize():
+            print(json.dumps({"error": "mt5_initialize_failed", "detail": str(mt5.last_error())}))
             sys.exit(2)
 
     computer = V9LiveFeatureComputer(mt5, symbol)
     features = computer.compute_all()
 
-    mt5.shutdown()  # type: ignore[reportAttributeAccessIssue]
+    mt5.shutdown()
 
     print(
         json.dumps(

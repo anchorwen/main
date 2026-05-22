@@ -135,8 +135,8 @@ class OperationsTimelineService:
 
     def summarize(self) -> dict:
         events = self._load_events()
-        by_type = {}
-        by_status = {}
+        by_type: dict[str, int] = {}
+        by_status: dict[str, int] = {}
         for event in events:
             by_type[event[PAYLOAD_KEY_EVENT_TYPE]] = (
                 by_type.get(event[PAYLOAD_KEY_EVENT_TYPE], 0) + 1

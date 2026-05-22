@@ -44,7 +44,7 @@ class TestAlphaPerformanceSnapshot:
         with pytest.raises(ValueError):
             AlphaPerformanceSnapshot("", {})
         with pytest.raises(ValueError):
-            AlphaPerformanceSnapshot("alpha1", [])  # type: ignore[reportArgumentType]
+            AlphaPerformanceSnapshot("alpha1", [])  # type: ignore[arg-type]
 
 
 class TestAlphaPerformanceStore:
@@ -120,7 +120,9 @@ class TestAlphaPerformanceStore:
             "alpha_x", report, journal_source_path="/data/j.jsonl"
         )
         assert snap.source == "live_bridge_report"
-        m = store.latest("alpha_x").metrics  # type: ignore[reportOptionalMemberAccess]
+        latest = store.latest("alpha_x")
+        assert latest is not None
+        m = latest.metrics
         assert m["live_bridge"] is True
         assert m["live_total"] == 4
         assert m["live_accepted"] == 2

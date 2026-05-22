@@ -75,7 +75,7 @@ def resolve_conflicts(
         - all neutral                                    → no trade
 
     Args:
-        signals: dict group_name → GroupSignal | None
+        signals: dict group_name → ConsensusResult | None
         require_unanimous: if True, only trade when ALL present groups agree.
 
     Returns:

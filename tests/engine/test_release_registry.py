@@ -59,7 +59,7 @@ class TestReleaseRegistryService:
     def test_register_certificate(self, tmp_path):
         c = _container(tmp_path / "data")
         cert = _certificate(c, tmp_path, version="1.0.0")
-        record = c.release_registry.register(cert, actor="qa")  # type: ignore[reportOptionalMemberAccess]
+        record = c.release_registry.register(cert, actor="qa")
         assert record["id"] == "rel_000001"
         assert record["actor"] == "qa"
         assert record["version"] == "1.0.0"
@@ -71,22 +71,22 @@ class TestReleaseRegistryService:
         cert = _certificate(c, tmp_path, version="1.0.1")
         cert_path = tmp_path / "cert.json"
         cert_path.write_text(json.dumps(cert), encoding="utf-8")
-        record = c.release_registry.register(str(cert_path))  # type: ignore[reportOptionalMemberAccess]
+        record = c.release_registry.register(str(cert_path))
         assert record["version"] == "1.0.1"
 
     def test_list_filter_latest(self, tmp_path):
         c = _container(tmp_path / "data")
-        c.release_registry.register(_certificate(c, tmp_path, version="1.0.0"))  # type: ignore[reportOptionalMemberAccess]
-        c.release_registry.register(_certificate(c, tmp_path, version="2.0.0"))  # type: ignore[reportOptionalMemberAccess]
-        assert len(c.release_registry.list_records()) == 2  # type: ignore[reportOptionalMemberAccess]
-        assert len(c.release_registry.list_records(version="1.0.0")) == 1  # type: ignore[reportOptionalMemberAccess]
-        assert c.release_registry.latest()["version"] == "2.0.0"  # type: ignore[reportOptionalMemberAccess]
-        assert c.release_registry.latest(version="1.0.0")["version"] == "1.0.0"  # type: ignore[reportOptionalMemberAccess]
+        c.release_registry.register(_certificate(c, tmp_path, version="1.0.0"))
+        c.release_registry.register(_certificate(c, tmp_path, version="2.0.0"))
+        assert len(c.release_registry.list_records()) == 2
+        assert len(c.release_registry.list_records(version="1.0.0")) == 1
+        assert c.release_registry.latest()["version"] == "2.0.0"
+        assert c.release_registry.latest(version="1.0.0")["version"] == "1.0.0"
 
     def test_summary(self, tmp_path):
         c = _container(tmp_path / "data")
-        c.release_registry.register(_certificate(c, tmp_path, version="1.0.0"))  # type: ignore[reportOptionalMemberAccess]
-        summary = c.release_registry.summarize()  # type: ignore[reportOptionalMemberAccess]
+        c.release_registry.register(_certificate(c, tmp_path, version="1.0.0"))
+        summary = c.release_registry.summarize()
         assert summary["schema_version"] == SCHEMA_RELEASE_REGISTRY_SUMMARY
         assert summary["record_count"] == 1
         assert summary["validation_mode"] == "fast"
@@ -105,7 +105,7 @@ class TestReleaseRegistryService:
     def test_register_records_governance_summary_fields(self, tmp_path):
         c = _container(tmp_path / "data")
         cert = _certificate(c, tmp_path, version="1.0.0")
-        record = c.release_registry.register(cert, actor="qa")  # type: ignore[reportOptionalMemberAccess]
+        record = c.release_registry.register(cert, actor="qa")
         assert record["summary"]["final_audit_present"] is True
         assert record["summary"]["final_audit_ready_for_production"] is True
         assert record["summary"]["ops_maturity_present"] is True
@@ -119,10 +119,10 @@ class TestReleaseRegistryService:
         cert = _certificate(c, tmp_path, version="1.0.2")
         cert["governance_focus"] = "invalid"
         cert["governance_warning_count"] = "3"
-        record = c.release_registry.register(cert, actor="qa")  # type: ignore[reportOptionalMemberAccess]
+        record = c.release_registry.register(cert, actor="qa")
         assert record["summary"]["governance_focus"] == []
         assert record["summary"]["governance_warning_count"] == 0
-        summary = c.release_registry.summarize()  # type: ignore[reportOptionalMemberAccess]
+        summary = c.release_registry.summarize()
         assert summary["governance_focus"] == []
         assert summary["governance_warning_count"] == 0
 
@@ -131,9 +131,9 @@ class TestReleaseRegistryService:
         cert = _certificate(c, tmp_path, version="1.0.3")
         cert["governance_focus"] = [{"name": "ok"}, "invalid", 1, {"level": "warn"}]
         cert["governance_warning_count"] = 2
-        record = c.release_registry.register(cert, actor="qa")  # type: ignore[reportOptionalMemberAccess]
+        record = c.release_registry.register(cert, actor="qa")
         assert record["summary"]["governance_focus"] == [{"name": "ok"}, {"level": "warn"}]
-        summary = c.release_registry.summarize()  # type: ignore[reportOptionalMemberAccess]
+        summary = c.release_registry.summarize()
         assert summary["governance_focus"] == [{"name": "ok"}, {"level": "warn"}]
 
     def test_register_derives_warning_count_from_focus(self, tmp_path):
@@ -141,28 +141,28 @@ class TestReleaseRegistryService:
         cert = _certificate(c, tmp_path, version="1.0.4")
         cert["governance_focus"] = [{"name": "a", "level": "pass"}, {"name": "b", "status": "warn"}]
         cert["governance_warning_count"] = 99
-        record = c.release_registry.register(cert, actor="qa")  # type: ignore[reportOptionalMemberAccess]
+        record = c.release_registry.register(cert, actor="qa")
         assert record["summary"]["governance_warning_count"] == 1
-        summary = c.release_registry.summarize()  # type: ignore[reportOptionalMemberAccess]
+        summary = c.release_registry.summarize()
         assert summary["governance_warning_count"] == 1
 
     def test_register_certificate_records_alpha_budget_summary(self, tmp_path):
         c = _container(tmp_path / "data")
         cert = _certificate_with_alpha_budget(c, tmp_path, version="1.2.0", warning_count=1)
-        record = c.release_registry.register(cert, actor="qa")  # type: ignore[reportOptionalMemberAccess]
+        record = c.release_registry.register(cert, actor="qa")
         assert record["summary"]["alpha_budget_evidence_present"] is True
         assert record["summary"]["alpha_budget_warning_count"] == 1
 
     def test_summary_includes_alpha_budget_counts(self, tmp_path):
         c = _container(tmp_path / "data")
-        c.release_registry.register(  # type: ignore[reportOptionalMemberAccess]
+        c.release_registry.register(
             _certificate_with_alpha_budget(c, tmp_path, version="1.2.1", warning_count=0)
         )
-        c.release_registry.register(  # type: ignore[reportOptionalMemberAccess]
+        c.release_registry.register(
             _certificate_with_alpha_budget(c, tmp_path, version="1.2.2", warning_count=1)
         )
-        c.release_registry.register(_certificate(c, tmp_path, version="1.2.3"))  # type: ignore[reportOptionalMemberAccess]
-        summary = c.release_registry.summarize()  # type: ignore[reportOptionalMemberAccess]
+        c.release_registry.register(_certificate(c, tmp_path, version="1.2.3"))
+        summary = c.release_registry.summarize()
         assert summary["alpha_budget"]["evidence_count"] == 2
         assert summary["alpha_budget"]["missing_evidence_count"] == 1
         assert summary["alpha_budget"]["warning_release_count"] == 1
@@ -172,18 +172,18 @@ class TestReleaseRegistryService:
     def test_verify_record_success(self, tmp_path):
         c = _container(tmp_path / "data")
         cert = _certificate(c, tmp_path, version="1.0.0")
-        record = c.release_registry.register(cert)  # type: ignore[reportOptionalMemberAccess]
-        verify = c.release_registry.verify_record(record["id"], cert)  # type: ignore[reportOptionalMemberAccess]
+        record = c.release_registry.register(cert)
+        verify = c.release_registry.verify_record(record["id"], cert)
         assert verify["schema_version"] == SCHEMA_RELEASE_REGISTRY_VERIFICATION
         assert verify["verified"] is True
 
     def test_verify_record_detects_tamper(self, tmp_path):
         c = _container(tmp_path / "data")
         cert = _certificate(c, tmp_path, version="1.0.0")
-        record = c.release_registry.register(cert)  # type: ignore[reportOptionalMemberAccess]
+        record = c.release_registry.register(cert)
         tampered = dict(cert)
         tampered["approver"] = "evil"
-        verify = c.release_registry.verify_record(record["id"], tampered)  # type: ignore[reportOptionalMemberAccess]
+        verify = c.release_registry.verify_record(record["id"], tampered)
         assert verify["verified"] is False
 
     def test_verify_missing_record(self, tmp_path):
@@ -194,15 +194,15 @@ class TestReleaseRegistryService:
 
     def test_export_and_clear(self, tmp_path):
         c = _container(tmp_path / "data")
-        c.release_registry.register(_certificate(c, tmp_path, version="1.0.0"))  # type: ignore[reportOptionalMemberAccess]
+        c.release_registry.register(_certificate(c, tmp_path, version="1.0.0"))
         out = tmp_path / "registry_export.json"
-        saved = c.release_registry.export(str(out))  # type: ignore[reportOptionalMemberAccess]
+        saved = c.release_registry.export(str(out))
         assert saved == str(out)
         payload = json.loads(out.read_text(encoding="utf-8"))
         assert payload["schema_version"] == SCHEMA_RELEASE_REGISTRY_EXPORT
-        cleared = c.release_registry.clear()  # type: ignore[reportOptionalMemberAccess]
+        cleared = c.release_registry.clear()
         assert cleared["cleared"] == 1
-        assert c.release_registry.list_records() == []  # type: ignore[reportOptionalMemberAccess]
+        assert c.release_registry.list_records() == []
 
     def test_container_has_registry(self, tmp_path):
         c = _container(tmp_path)
@@ -227,7 +227,7 @@ class TestReleaseRegistryCLI:
                 "qa",
             ]
         )
-        records = c.release_registry.list_records()  # type: ignore[reportOptionalMemberAccess]
+        records = c.release_registry.list_records()
         rc_list = main(["--base-dir", str(tmp_path / "data"), "release-registry", "list"])
         rc_summary = main(["--base-dir", str(tmp_path / "data"), "release-registry", "summary"])
         rc_latest = main(
@@ -354,7 +354,7 @@ class TestReleaseRegistryCLI:
 
     def test_cli_export_and_clear(self, tmp_path):
         c = _container(tmp_path / "data")
-        c.release_registry.register(_certificate(c, tmp_path, version="4.0.0"))  # type: ignore[reportOptionalMemberAccess]
+        c.release_registry.register(_certificate(c, tmp_path, version="4.0.0"))
         out = tmp_path / "export.json"
         rc_export = main(
             [

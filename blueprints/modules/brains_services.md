@@ -24,7 +24,7 @@ BrainRegistryService → brain_entries → BrainFactory → adapters
                                                       ↓
                                               BrainRunService.run()
                                                       ↓
-                                              BrainDecisionProposal[]
+                                              BrainSignal[]
                                                       ↓
                     ┌─────────────────────────────────┴──────────────────────┐
                     ↓                      ↓                                 ↓
@@ -39,6 +39,7 @@ BrainRegistryService → brain_entries → BrainFactory → adapters
 |--------|-----------------|-----|
 | brains/adapters | ADAPTER_REGISTRY, BRAIN_TYPE_MAP, BaseBrainAdapter | Factory construction |
 | contracts/domain | BrainDecisionProposal | Inference output |
+| schemas/trading_contracts | BrainSignal | Layer 1 output type |
 | features/adapters | V9FeatureAdapter, MicrostructureFeatureAdapter | Feature normalization |
 | feedback | BrainPerformanceTracker, BrainPnLStore, BrainQualityEngine | Quality/weight signals |
 
@@ -65,6 +66,7 @@ BrainRegistryService → brain_entries → BrainFactory → adapters
 | FIX-20260515-014 | 2026-05-15 | cursor-agent | — | 8 accidentally deleted brain configs restored, contract_group added, artifact_paths remapped to institutional models, 4 barrier_12bar brains re-enabled | stale-data |
 | FIX-20260514-009 | 2026-05-14 | cursor-agent | a4a1005 | Change resolve_ids_to_group fallback from barrier_12bar to unknown to prevent silent misattribution | contract-violation |
 | FIX-20260514-007 | 2026-05-14 | cursor-agent | a4a1005 | Add new-brain protection period (min_signals_active=100), graduated retirement path (active->frozen->retired instead of direct retire) | missing-validation |
+| FIX-20260522-018 | 2026-05-22 | cursor-agent | — | Layer 1 immutable contracts: BrainRunService output type updated from `BrainDecisionProposal[]` to `BrainSignal[]`. All consumers (live_cycle, shadow, verify) now receive typed frozen dataclasses with `direction`/`confidence`/`raw_score` fields instead of dict-based `prediction`. Backward-compat retained for callers expecting legacy dict access. | RC-06 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

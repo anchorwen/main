@@ -35,26 +35,26 @@ class TestOperationsTimelineService:
 
     def test_record_release_gate_summary(self, tmp_path):
         c = _container(tmp_path)
-        report = c.release_gate.evaluate()  # type: ignore[reportOptionalMemberAccess]
-        event = c.operations_timeline.record_release_gate(report)  # type: ignore[reportOptionalMemberAccess]
+        report = c.release_gate.evaluate()
+        event = c.operations_timeline.record_release_gate(report)
         assert event["event_type"] == TIMELINE_EVENT_RELEASE_GATE
         assert event["status"] == "passed"
         assert event["summary"]["decision"] == "allow"
 
     def test_record_deployment_execution_summary(self, tmp_path):
         c = _container(tmp_path)
-        result = c.deployment_executor.execute()  # type: ignore[reportOptionalMemberAccess]
-        event = c.operations_timeline.record_deployment_execution(result)  # type: ignore[reportOptionalMemberAccess]
+        result = c.deployment_executor.execute()
+        event = c.operations_timeline.record_deployment_execution(result)
         assert event["event_type"] == "deployment_execution"
         assert event["summary"]["strategy"] == "standard"
 
     def test_record_rollback_and_evidence(self, tmp_path):
         c = _container(tmp_path / "data")
-        rb = c.rollback_drill.run()  # type: ignore[reportOptionalMemberAccess]
-        ev = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="tl")  # type: ignore[reportOptionalMemberAccess]
-        c.operations_timeline.record_rollback_drill(rb)  # type: ignore[reportOptionalMemberAccess]
-        c.operations_timeline.record_evidence_bundle(ev)  # type: ignore[reportOptionalMemberAccess]
-        summary = c.operations_timeline.summarize()  # type: ignore[reportOptionalMemberAccess]
+        rb = c.rollback_drill.run()
+        ev = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="tl")
+        c.operations_timeline.record_rollback_drill(rb)
+        c.operations_timeline.record_evidence_bundle(ev)
+        summary = c.operations_timeline.summarize()
         assert summary["event_type_counts"][TIMELINE_EVENT_ROLLBACK_DRILL] == 1
         assert summary["event_type_counts"][TIMELINE_EVENT_EVIDENCE_BUNDLE] == 1
 
@@ -93,12 +93,12 @@ class TestOperationsTimelineService:
             "warning_count": 0,
             "warnings": [],
         }
-        result = c.release_pipeline.run(  # type: ignore[reportOptionalMemberAccess]
+        result = c.release_pipeline.run(
             output_dir=str(tmp_path / "pipeline"),
             alpha_budget_usage_report=alpha_report,
             actor="ci",
         )
-        events = c.operations_timeline.list_events(  # type: ignore[reportOptionalMemberAccess]
+        events = c.operations_timeline.list_events(
             event_type=TIMELINE_EVENT_ALPHA_BUDGET_GOVERNANCE
         )
         assert len(events) == 1
@@ -124,12 +124,12 @@ class TestOperationsTimelineService:
                 }
             ],
         }
-        result = c.release_pipeline.run(  # type: ignore[reportOptionalMemberAccess]
+        result = c.release_pipeline.run(
             output_dir=str(tmp_path / "pipeline"),
             strict_gate=False,
             alpha_budget_usage_report=alpha_report,
         )
-        events = c.operations_timeline.list_events(  # type: ignore[reportOptionalMemberAccess]
+        events = c.operations_timeline.list_events(
             event_type=TIMELINE_EVENT_ALPHA_BUDGET_GOVERNANCE
         )
         assert events[0]["status"] == "warning"
@@ -187,7 +187,7 @@ class TestOperationsTimelineCLI:
 
     def test_cli_record_gate(self, tmp_path):
         c = _container(tmp_path / "data")
-        report = c.release_gate.evaluate()  # type: ignore[reportOptionalMemberAccess]
+        report = c.release_gate.evaluate()
         inp = tmp_path / "gate.json"
         inp.write_text(json.dumps(report), encoding="utf-8")
         rc = main(
@@ -203,7 +203,7 @@ class TestOperationsTimelineCLI:
             ]
         )
         assert rc == 0
-        events = c.operations_timeline.list_events()  # type: ignore[reportOptionalMemberAccess]
+        events = c.operations_timeline.list_events()
         assert events[0]["actor"] == "ci"
 
     def test_cli_record_requires_input(self, tmp_path):
@@ -212,7 +212,7 @@ class TestOperationsTimelineCLI:
 
     def test_cli_list_and_export_clear(self, tmp_path):
         c = _container(tmp_path / "data")
-        c.operations_timeline.record("x", {"status": "ok"})  # type: ignore[reportOptionalMemberAccess]
+        c.operations_timeline.record("x", {"status": "ok"})
         rc_list = main(
             ["--base-dir", str(tmp_path / "data"), "ops-timeline", "list", "--limit", "1"]
         )

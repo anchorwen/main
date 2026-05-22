@@ -25,18 +25,18 @@ def _assert_governance_shape(payload: dict):
 
 def test_governance_contract_invariants_across_outputs(tmp_path):
     c = _container(tmp_path / "data")
-    pipeline = c.release_pipeline.run(version="9.0.0", output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
-    cert = c.release_certification.certify(pipeline_summary=pipeline)  # type: ignore[reportOptionalMemberAccess]
-    c.release_registry.register(cert)  # type: ignore[reportOptionalMemberAccess]
+    pipeline = c.release_pipeline.run(version="9.0.0", output_dir=str(tmp_path / "pipeline"))
+    cert = c.release_certification.certify(pipeline_summary=pipeline)
+    c.release_registry.register(cert)
 
-    readiness = c.release_readiness.build_report()  # type: ignore[reportOptionalMemberAccess]
-    ops_maturity = c.ops_maturity.evaluate()  # type: ignore[reportOptionalMemberAccess]
-    postmortem = c.postmortem_report.generate(incident_id="inv-1")  # type: ignore[reportOptionalMemberAccess]
-    final_audit = c.final_audit.build_report()  # type: ignore[reportOptionalMemberAccess]
-    compliance_audit = c.compliance_audit.generate()  # type: ignore[reportOptionalMemberAccess]
-    compliance_matrix = c.compliance_control_matrix.generate()  # type: ignore[reportOptionalMemberAccess]
-    registry_summary = c.release_registry.summarize()  # type: ignore[reportOptionalMemberAccess]
-    evidence = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="inv")  # type: ignore[reportOptionalMemberAccess]
+    readiness = c.release_readiness.build_report()
+    ops_maturity = c.ops_maturity.evaluate()
+    postmortem = c.postmortem_report.generate(incident_id="inv-1")
+    final_audit = c.final_audit.build_report()
+    compliance_audit = c.compliance_audit.generate()
+    compliance_matrix = c.compliance_control_matrix.generate()
+    registry_summary = c.release_registry.summarize()
+    evidence = c.evidence_bundle.build_bundle(str(tmp_path / "evidence"), label="inv")
 
     _assert_governance_shape(readiness["summary"])
     _assert_governance_shape(ops_maturity["summary"])
@@ -47,5 +47,5 @@ def test_governance_contract_invariants_across_outputs(tmp_path):
     _assert_governance_shape(registry_summary)
     _assert_governance_shape(cert)
 
-    manifest = c.evidence_bundle.verify_bundle(evidence["manifest_path"])  # type: ignore[reportOptionalMemberAccess]
+    manifest = c.evidence_bundle.verify_bundle(evidence["manifest_path"])
     assert manifest["verified"] is True

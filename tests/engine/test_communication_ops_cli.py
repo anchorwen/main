@@ -146,7 +146,7 @@ def build_operations_summary(
     skip_reasons: dict | None = None,
     block_reasons: dict | None = None,
 ) -> dict:
-    summary = {
+    summary: dict[str, object] = {
         PAYLOAD_KEY_POSTURE: posture,
         PAYLOAD_KEY_POSTURE_SOURCE: posture_source,
         PAYLOAD_KEY_GOVERNANCE_DECISION: governance_decision,
@@ -187,11 +187,11 @@ def build_stub_operations_result(
     posture_source: str | None = None,
     governance_sources: dict | None = None,
 ) -> dict:
-    result = {
+    result: dict[str, object] = {
         PAYLOAD_KEY_OPERATIONS_SUMMARY: operations_summary,
     }
     if operations_posture is not None:
-        result[PAYLOAD_KEY_OPERATIONS_POSTURE] = operations_posture  # type: ignore[reportArgumentType]
+        result[PAYLOAD_KEY_OPERATIONS_POSTURE] = operations_posture
     if posture_source is not None:
         result[PAYLOAD_KEY_POSTURE_SOURCES] = {
             "operations_posture_source": posture_source,
@@ -312,7 +312,7 @@ def test_build_stable_summary_contract_prefers_operations_summary_for_mirrors():
     stable = build_stable_summary_contract(result)
 
     assert_stable_summary_mirror_fields(
-        stable,  # type: ignore[reportArgumentType]
+        stable,
         operations_summary=build_operations_summary(
             posture="auto_replay",
             posture_source="governance_summary.posture",
@@ -388,39 +388,6 @@ def test_run_cli_projects_rejected_message_governance_summary(tmp_path):
     )
 
 
-def test_build_stable_summary_contract_prefers_operations_summary_for_mirrors():
-    result = {
-        "operations_summary": build_operations_summary(
-            posture="auto_replay",
-            posture_source="governance_summary.posture",
-            governance_summary_source=CommunicationOperationsService.REPLAY_GOVERNANCE_SUMMARY_SOURCE_EXTENSIONS,
-            execution_projection_source=CommunicationOperationsService.REPLAY_GOVERNANCE_PROJECTION_SOURCE_EXECUTION,
-        ),
-        "operations_posture": "stale_value",
-        "posture_sources": {
-            "operations_posture_source": "stale_source",
-        },
-        "governance_sources": build_stable_governance_sources(
-            summary_source=STALE_SUMMARY_SOURCE,
-            execution_projection_source=STALE_PROJECTION_SOURCE,
-        ),
-    }
-
-    stable = build_stable_summary_contract(result)
-
-    assert_stable_summary_mirror_fields(
-        stable,  # type: ignore[reportArgumentType]
-        operations_summary=build_operations_summary(
-            posture="auto_replay",
-            posture_source="governance_summary.posture",
-            governance_summary_source=CommunicationOperationsService.REPLAY_GOVERNANCE_SUMMARY_SOURCE_EXTENSIONS,
-            execution_projection_source=CommunicationOperationsService.REPLAY_GOVERNANCE_PROJECTION_SOURCE_EXECUTION,
-        ),
-        summary_source=CommunicationOperationsService.REPLAY_GOVERNANCE_SUMMARY_SOURCE_EXTENSIONS,
-        execution_projection_source=CommunicationOperationsService.REPLAY_GOVERNANCE_PROJECTION_SOURCE_EXECUTION,
-    )
-
-
 def test_extract_stable_summary_fields_returns_consistent_contract_slice():
     result = {
         "operations_summary": build_operations_summary(
@@ -442,7 +409,7 @@ def test_extract_stable_summary_fields_returns_consistent_contract_slice():
     stable = extract_stable_summary_fields(result)
 
     assert_stable_summary_mirror_fields(
-        stable,  # type: ignore[reportArgumentType]
+        stable,
         operations_summary=build_operations_summary(
             posture="unknown",
             posture_source=None,
@@ -465,7 +432,7 @@ def test_extract_stable_summary_fields_omits_unstable_and_missing_fields():
     stable = extract_stable_summary_fields(result)
 
     assert_stable_summary_mirror_fields(
-        stable,  # type: ignore[reportArgumentType]
+        stable,
         operations_summary=build_operations_summary(
             posture="action_required",
             posture_source="trace.delivery_state.delivery_posture",
@@ -521,7 +488,7 @@ def test_cli_message_view_returns_only_stable_summary_slice_when_extracted(tmp_p
     stable = extract_stable_summary_fields(payload)
 
     assert_stable_summary_mirror_fields(
-        stable,  # type: ignore[reportArgumentType]
+        stable,
         operations_summary=build_operations_summary(
             posture="action_required",
             posture_source="trace.delivery_state.delivery_posture",
@@ -577,7 +544,7 @@ def test_cli_replay_view_extract_stable_summary_fields_preserves_boundary(tmp_pa
     stable = extract_stable_summary_fields(payload)
 
     assert_stable_summary_mirror_fields(
-        stable,  # type: ignore[reportArgumentType]
+        stable,
         operations_summary=build_operations_summary(
             posture="auto_replay",
             posture_source="governance_summary.posture",

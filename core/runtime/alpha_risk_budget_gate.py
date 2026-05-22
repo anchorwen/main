@@ -35,13 +35,13 @@ class AlphaRiskBudgetGate:
                 reasons.append(f"alpha_budget_missing({alpha_id})")
             return self._approval(signal, order, reasons, constraints)
         constraints.update(
-            {  # type: ignore[reportArgumentType]
+            {
                 "enabled": budget.get("enabled", False),
                 "risk_tier": budget.get("risk_tier"),
                 "max_notional": budget.get("max_notional"),
                 "max_order_notional": budget.get("max_order_notional"),
                 "max_daily_orders": budget.get("max_daily_orders"),
-                "usage_count": self._count(alpha_id),
+                "usage_count": str(self._count(alpha_id)),
             }
         )
         if not budget.get("enabled", False):

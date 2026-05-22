@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -171,10 +172,12 @@ class RollingNormalizer:
         """Save normalizer state to a JSON file."""
         out = Path(path)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(
+        tmp = out.with_suffix(out.suffix + ".tmp")
+        tmp.write_text(
             json.dumps(self.to_dict(), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        os.replace(tmp, out)
         return out
 
     def load_state(self, path: str | Path) -> None:

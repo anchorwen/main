@@ -240,11 +240,10 @@ class PostmortemReportService:
             event.get(PAYLOAD_KEY_SUMMARY, {}).get(PAYLOAD_KEY_EVIDENCE_COUNT, 0)
             for event in events
         )
-        statuses = {}
+        statuses: dict[str, int] = {}
         for event in events:
-            statuses[event.get(PAYLOAD_KEY_STATUS)] = (
-                statuses.get(event.get(PAYLOAD_KEY_STATUS), 0) + 1
-            )
+            k = str(event.get(PAYLOAD_KEY_STATUS))
+            statuses[k] = statuses.get(k, 0) + 1
         return {
             PAYLOAD_KEY_EVENT_COUNT: len(events),
             PAYLOAD_KEY_STATUS_COUNTS: statuses,
@@ -286,7 +285,7 @@ class PostmortemReportService:
         return {
             PAYLOAD_KEY_FAILED_EVENT_COUNT: len(failed_events),
             PAYLOAD_KEY_FAILED_EVENT_TYPES: sorted(
-                {event.get(PAYLOAD_KEY_EVENT_TYPE) for event in failed_events}  # type: ignore[reportArgumentType]
+                {event.get(PAYLOAD_KEY_EVENT_TYPE) for event in failed_events}
             ),
             PAYLOAD_KEY_RELEASE_BLOCKED: gate.get(PAYLOAD_KEY_DECISION)
             == RELEASE_PIPELINE_GATE_DECISION_BLOCK,

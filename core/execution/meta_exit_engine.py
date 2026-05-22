@@ -225,7 +225,7 @@ class MetaExitEngine:
 
         # Clamp and identify primary reason
         urgency = max(0.0, min(1.0, urgency))
-        primary = max(factors, key=factors.get)
+        primary = max(factors, key=lambda k: factors[k])
 
         reason_map = {
             "pnl": f"pnl_urgency_r_{snap.current_r:.2f}",
@@ -377,6 +377,8 @@ class MetaExitEngine:
         Falls back to heuristic if model inference fails.
         """
         try:
+            if self._model is None:
+                raise RuntimeError("MetaExitEngine model not loaded")
             features = self._build_feature_vector(snap)
             p_win = float(self._model.predict([features])[0])
             urgency = 1.0 - p_win  # P(loss) ≈ urgency

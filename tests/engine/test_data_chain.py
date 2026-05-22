@@ -98,7 +98,7 @@ class TestLedgerPersistence:
         if outcome.decision_result and outcome.decision_result.communication_record:
             msg_id = outcome.decision_result.communication_record.message_id
             today = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
-            found = c.communication_reader.find_by_message_id(  # type: ignore[reportOptionalMemberAccess]
+            found = c.communication_reader.find_by_message_id(
                 date_key=today, target="exec_bridge", message_id=msg_id
             )
             assert found is not None
@@ -109,7 +109,7 @@ class TestFullDataChain:
     def test_signal_to_governance_chain(self, tmp_path):
         """Complete chain: decide → fill → feedback → governance."""
         c = _prod(tmp_path)
-        c.governance_service.register_brain("alpha", "live")  # type: ignore[reportOptionalMemberAccess]
+        c.governance_service.register_brain("alpha", "live")
 
         sp = StatePersistence(str(tmp_path / "state"))
         lm = LifecycleManager(c, sp)
@@ -142,12 +142,12 @@ class TestFullDataChain:
             assert len(exec_files) >= 1 or c.execution_manager is not None
 
         # Step 4: Verify metrics accumulated
-        assert c.metrics.get_counter(CYCLES_TOTAL) >= 10  # type: ignore[reportOptionalMemberAccess]
+        assert c.metrics.get_counter(CYCLES_TOTAL) >= 10
         if msg_ids:
-            assert c.metrics.get_counter(venue_events_metric("ack")) >= 1  # type: ignore[reportOptionalMemberAccess]
+            assert c.metrics.get_counter(venue_events_metric("ack")) >= 1
 
         # Step 5: Verify governance state
-        brain_state = c.governance_service.get_brain_state("alpha")  # type: ignore[reportOptionalMemberAccess]
+        brain_state = c.governance_service.get_brain_state("alpha")
         assert brain_state is not None
 
         # Step 6: Verify positions
@@ -180,7 +180,7 @@ class TestFullDataChain:
             )
 
             today = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
-            recon = c.reconciliation_service.reconcile_message(  # type: ignore[reportOptionalMemberAccess]
+            recon = c.reconciliation_service.reconcile_message(
                 date_key=today, target="exec_bridge", message_id=msg_id, correlation_id=record_id
             )
             assert recon["status"] in ("matched", "unmatched", "partial", "stale")
@@ -218,15 +218,15 @@ class TestFullDataChain:
 class TestSystemMetadata:
     def test_diagnostics_snapshot_complete(self, tmp_path):
         c = _prod(tmp_path)
-        c.governance_service.register_brain("a", "live")  # type: ignore[reportOptionalMemberAccess]
-        c.governance_service.register_brain("b", "candidate")  # type: ignore[reportOptionalMemberAccess]
-        c.brain_tracker.record_outcome("a", {"composite_score": 0.8})  # type: ignore[reportOptionalMemberAccess]
-        c.brain_tracker.record_outcome("b", {"composite_score": 0.6})  # type: ignore[reportOptionalMemberAccess]
+        c.governance_service.register_brain("a", "live")
+        c.governance_service.register_brain("b", "candidate")
+        c.brain_tracker.record_outcome("a", {"composite_score": 0.8})
+        c.brain_tracker.record_outcome("b", {"composite_score": 0.6})
         orch = c.build_orchestrator()
         for _ in range(5):
             orch.run_cycle({"symbol": "XAUUSD"}, {"f": 1.0})
 
-        snap = c.diagnostics.build_snapshot()  # type: ignore[reportOptionalMemberAccess]
+        snap = c.diagnostics.build_snapshot()
         assert snap["metrics"] is not None
         assert snap["metrics"]["counters"][CYCLES_TOTAL] == 5
         assert "brain_health" in snap
@@ -234,7 +234,7 @@ class TestSystemMetadata:
 
     def test_health_reflects_state(self, tmp_path):
         c = _prod(tmp_path)
-        h = c.health_check.readiness()  # type: ignore[reportOptionalMemberAccess]
+        h = c.health_check.readiness()
         assert h["status"] == "ready"
 
     def test_alert_service_fires_on_high_error_rate(self, tmp_path):
@@ -242,8 +242,8 @@ class TestSystemMetadata:
         from core.observability.alert_service import InMemoryAlertChannel
 
         channel = InMemoryAlertChannel()
-        c.alert_service._channels.append(channel)  # type: ignore[reportOptionalMemberAccess]
-        c.alert_service.evaluate({"error_rate": 0.6})  # type: ignore[reportOptionalMemberAccess]
+        c.alert_service._channels.append(channel)
+        c.alert_service.evaluate({"error_rate": 0.6})
         assert len(channel.get_alerts()) >= 1
 
     def test_venue_router_in_container(self, tmp_path):

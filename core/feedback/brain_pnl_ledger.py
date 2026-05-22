@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -689,7 +690,9 @@ class BrainPnLStore:
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         data = json.dumps(self.to_dict(), indent=2, ensure_ascii=False, default=str)
-        p.write_text(data, encoding="utf-8")
+        tmp = p.with_suffix(p.suffix + ".tmp")
+        tmp.write_text(data, encoding="utf-8")
+        os.replace(tmp, p)
         return p
 
     @classmethod

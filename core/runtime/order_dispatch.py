@@ -270,7 +270,7 @@ def _evaluate_risk(
 ) -> dict[str, Any]:
     """Run risk evaluation and return a lightweight verdict dict."""
     from core.contracts.domain.decision_intent import DecisionIntent
-    from core.contracts.enums import DecisionAction, RiskDecisionStatus
+    from core.contracts.enums import DecisionAction, DecisionSide, RiskDecisionStatus
     from core.contracts.ids import new_intent_id
 
     action = DecisionAction.OPEN
@@ -284,7 +284,7 @@ def _evaluate_risk(
         symbol=symbol,
         venue="live",
         action=action,
-        side=direction.upper(),
+        side=DecisionSide(direction.lower()),
         conviction=confidence,
         priority="normal",
     )

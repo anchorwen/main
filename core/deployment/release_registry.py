@@ -149,17 +149,17 @@ class ReleaseRegistryService:
 
     def summarize(self) -> dict:
         records = self._load_records()
-        by_status = {}
-        by_strategy = {}
-        by_validation_mode = {}
+        by_status: dict[str, int] = {}
+        by_strategy: dict[str, int] = {}
+        by_validation_mode: dict[str, int] = {}
         for record in records:
-            by_status[record.get(PAYLOAD_KEY_STATUS)] = (
-                by_status.get(record.get(PAYLOAD_KEY_STATUS), 0) + 1
+            by_status[str(record.get(PAYLOAD_KEY_STATUS))] = (
+                by_status.get(str(record.get(PAYLOAD_KEY_STATUS)), 0) + 1
             )
-            by_strategy[record.get(PAYLOAD_KEY_STRATEGY)] = (
-                by_strategy.get(record.get(PAYLOAD_KEY_STRATEGY), 0) + 1
+            by_strategy[str(record.get(PAYLOAD_KEY_STRATEGY))] = (
+                by_strategy.get(str(record.get(PAYLOAD_KEY_STRATEGY)), 0) + 1
             )
-            mode = record.get(PAYLOAD_KEY_VALIDATION_MODE)
+            mode = str(record.get(PAYLOAD_KEY_VALIDATION_MODE))
             by_validation_mode[mode] = by_validation_mode.get(mode, 0) + 1
         alpha_budget_evidence_count = len(
             [

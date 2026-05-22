@@ -56,7 +56,7 @@ def _register_legacy_release(container, tmp_path, version="1.0.0"):
 class TestRunbookEngine:
     def test_preflight_passes(self, tmp_path):
         c = _container(tmp_path)
-        result = c.runbook_engine.preflight()  # type: ignore[reportOptionalMemberAccess]
+        result = c.runbook_engine.preflight()
         assert result["schema_version"] == SCHEMA_RUNBOOK_RESULT
         assert result["runbook"] == "preflight"
         assert result["passed"] is True
@@ -71,14 +71,14 @@ class TestRunbookEngine:
 
     def test_doctor_passes_healthy(self, tmp_path):
         c = _container(tmp_path)
-        result = c.runbook_engine.doctor()  # type: ignore[reportOptionalMemberAccess]
+        result = c.runbook_engine.doctor()
         assert result["runbook"] == "doctor"
         assert result["passed"] is True
         assert result["payload"]["recommendations"][0]["action"] == "no_action"
 
     def test_postmortem_without_persistence(self, tmp_path):
         c = _container(tmp_path)
-        result = c.runbook_engine.postmortem(label="x")  # type: ignore[reportOptionalMemberAccess]
+        result = c.runbook_engine.postmortem(label="x")
         assert result["runbook"] == "postmortem"
         assert result["passed"] is True
         assert result["payload"]["state_snapshot"]["status"] == "not_configured"
@@ -94,34 +94,34 @@ class TestRunbookEngine:
     def test_postmortem_output(self, tmp_path):
         c = _container(tmp_path)
         out = tmp_path / "postmortem.json"
-        result = c.runbook_engine.postmortem(label="x", output=str(out))  # type: ignore[reportOptionalMemberAccess]
+        result = c.runbook_engine.postmortem(label="x", output=str(out))
         assert result["output_path"] == str(out)
         payload = json.loads(out.read_text(encoding="utf-8"))
         assert payload["runbook"] == "postmortem"
 
     def test_unknown_runbook(self, tmp_path):
         c = _container(tmp_path)
-        result = c.runbook_engine.run("missing")  # type: ignore[reportOptionalMemberAccess]
+        result = c.runbook_engine.run("missing")
         assert result["status"] == "unknown"
         assert "preflight" in result["available"]
 
     def test_preflight_detects_missing_service(self, tmp_path):
         c = _container(tmp_path)
         c.risk_service = None
-        result = c.runbook_engine.preflight()  # type: ignore[reportOptionalMemberAccess]
+        result = c.runbook_engine.preflight()
         assert result["passed"] is False
         assert "release_ready" in result["summary"]["failed_checks"]
 
     def test_doctor_recommends_on_alerts(self, tmp_path):
         c = _container(tmp_path)
-        c.metrics.inc(CYCLES_ERRORS, 1.0)  # type: ignore[reportOptionalMemberAccess]
-        result = c.runbook_engine.doctor()  # type: ignore[reportOptionalMemberAccess]
+        c.metrics.inc(CYCLES_ERRORS, 1.0)
+        result = c.runbook_engine.doctor()
         assert any(r["action"] == "inspect_alerts" for r in result["payload"]["recommendations"])
 
     def test_doctor_recommends_inspect_readiness_when_replay_services_missing(self, tmp_path):
         c = _container(tmp_path)
         c.replay_service = None
-        result = c.runbook_engine.doctor()  # type: ignore[reportOptionalMemberAccess]
+        result = c.runbook_engine.doctor()
         readiness_recommendations = [
             r for r in result["payload"]["recommendations"] if r["action"] == "inspect_readiness"
         ]
@@ -206,7 +206,7 @@ class TestRunbookEngine:
     def test_preflight_reports_alpha_budget_clean(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_alpha_release(c, tmp_path, warning_count=0)
-        result = c.runbook_engine.preflight()  # type: ignore[reportOptionalMemberAccess]
+        result = c.runbook_engine.preflight()
         assert result["passed"] is True
         assert result["payload"]["alpha_budget"]["evidence_count"] == 1
         checks = {check["name"]: check for check in result["checks"]}
@@ -216,7 +216,7 @@ class TestRunbookEngine:
     def test_preflight_fails_on_missing_alpha_budget_evidence(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_legacy_release(c, tmp_path)
-        result = c.runbook_engine.preflight()  # type: ignore[reportOptionalMemberAccess]
+        result = c.runbook_engine.preflight()
         assert result["passed"] is False
         assert "alpha_budget_evidence_registered" in result["summary"]["failed_checks"]
         assert result["payload"]["alpha_budget"]["missing_evidence_count"] == 1
@@ -224,7 +224,7 @@ class TestRunbookEngine:
     def test_doctor_recommends_alpha_budget_evidence_attachment(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_legacy_release(c, tmp_path)
-        result = c.runbook_engine.doctor()  # type: ignore[reportOptionalMemberAccess]
+        result = c.runbook_engine.doctor()
         assert "alpha_budget_evidence_registered" in result["summary"]["failed_checks"]
         assert any(
             r["action"] == "attach_alpha_budget_evidence"
@@ -234,7 +234,7 @@ class TestRunbookEngine:
     def test_preflight_fast_skips_alpha_budget_checks(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_legacy_release(c, tmp_path)
-        result = c.runbook_engine.preflight(validation_mode="fast")  # type: ignore[reportOptionalMemberAccess]
+        result = c.runbook_engine.preflight(validation_mode="fast")
         assert result[PAYLOAD_KEY_VALIDATION_MODE] == "fast"
         failed_checks = set(result["summary"]["failed_checks"])
         assert "alpha_budget_evidence_registered" not in failed_checks
@@ -243,7 +243,7 @@ class TestRunbookEngine:
     def test_doctor_fast_skips_alpha_budget_recommendations(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_legacy_release(c, tmp_path)
-        result = c.runbook_engine.doctor(validation_mode="fast")  # type: ignore[reportOptionalMemberAccess]
+        result = c.runbook_engine.doctor(validation_mode="fast")
         assert result[PAYLOAD_KEY_VALIDATION_MODE] == "fast"
         assert "alpha_budget_evidence_registered" not in result["summary"]["failed_checks"]
         assert not any(
@@ -254,7 +254,7 @@ class TestRunbookEngine:
     def test_doctor_recommends_alpha_budget_warning_review(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_alpha_release(c, tmp_path, warning_count=1)
-        result = c.runbook_engine.doctor()  # type: ignore[reportOptionalMemberAccess]
+        result = c.runbook_engine.doctor()
         assert "alpha_budget_warnings_clear" in result["summary"]["failed_checks"]
         assert any(
             r["action"] == "review_alpha_budget_warnings"
@@ -264,7 +264,7 @@ class TestRunbookEngine:
 
     def test_result_shape(self, tmp_path):
         c = _container(tmp_path)
-        result = c.runbook_engine.preflight()  # type: ignore[reportOptionalMemberAccess]
+        result = c.runbook_engine.preflight()
         assert set(result) == {
             "schema_version",
             "runbook",
@@ -385,5 +385,5 @@ class TestRunbookContainer:
     def test_run_dispatcher(self, tmp_path):
         c = _container(tmp_path)
         for name in ["preflight", "doctor", "postmortem"]:
-            result = c.runbook_engine.run(name)  # type: ignore[reportOptionalMemberAccess]
+            result = c.runbook_engine.run(name)
             assert result["runbook"] == name

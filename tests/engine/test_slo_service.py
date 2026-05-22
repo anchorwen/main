@@ -153,6 +153,6 @@ class TestSloContainerCLI:
         orch = c.build_orchestrator()
         for _ in range(10):
             orch.run_cycle({"symbol": "XAUUSD"}, {"f": 1.0})
-        report = c.slo_service.evaluate()  # type: ignore[reportOptionalMemberAccess]
+        report = c.slo_service.evaluate()
         assert report["raw_counters"][CYCLES_TOTAL] == 10
         assert "decision_success_rate" in report["objectives"]

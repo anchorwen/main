@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-05-22T01:40:25Z
+> **自动生成**: 2026-05-22T15:50:32Z
 
 ## Package-Level Dependencies
 
@@ -57,14 +57,14 @@
 
 ### `core/brains/adapters/`
 
-- `base_adapter.py` → `core.contracts.domain.brain_decision_proposal`
-- `lightgbm_brain_adapter.py` → `core.brains.adapters.base_adapter`, `core.brains.schema_versions`, `core.contracts.domain.brain_decision_proposal`, `core.contracts.ids`, `core.deployment.brain_alert`
+- `base_adapter.py` → `core.schemas.trading_contracts`
+- `lightgbm_brain_adapter.py` → `core.brains.adapters.base_adapter`, `core.deployment.brain_alert`, `core.schemas.trading_contracts`
 - `meta_filter_adapter.py` → (无内部依赖)
-- `online_learner_adapter.py` → `core.brains.adapters.base_adapter`, `core.brains.online_mlp_model`, `core.brains.schema_versions`, `core.contracts.domain.brain_decision_proposal`, `core.contracts.ids`, `core.deployment.brain_alert`
-- `params_brain_adapter.py` → `core.brains.adapters.base_adapter`, `core.brains.schema_versions`, `core.contracts.domain.brain_decision_proposal`, `core.contracts.ids`
-- `transformer_brain_adapter.py` → `core.brains.adapters.base_adapter`, `core.brains.schema_versions`, `core.brains.services.inference_guard`, `core.contracts.domain.brain_decision_proposal`, `core.contracts.ids`, `core.deployment.brain_alert`
-- `v9_onnx_brain_adapter.py` → `core.brains.services.inference_guard`, `core.contracts.domain.brain_decision_proposal`, `core.contracts.ids`, `core.deployment.brain_alert`
-- `xgboost_brain_adapter.py` → `core.brains.adapters.base_adapter`, `core.brains.schema_versions`, `core.contracts.domain.brain_decision_proposal`, `core.contracts.ids`, `core.deployment.brain_alert`
+- `online_learner_adapter.py` → `core.brains.adapters.base_adapter`, `core.brains.online_mlp_model`, `core.deployment.brain_alert`, `core.schemas.trading_contracts`
+- `params_brain_adapter.py` → `core.brains.adapters.base_adapter`, `core.schemas.trading_contracts`
+- `transformer_brain_adapter.py` → `core.brains.adapters.base_adapter`, `core.brains.services.inference_guard`, `core.deployment.brain_alert`, `core.schemas.trading_contracts`
+- `v9_onnx_brain_adapter.py` → `core.brains.services.inference_guard`, `core.deployment.brain_alert`, `core.schemas.trading_contracts`
+- `xgboost_brain_adapter.py` → `core.brains.adapters.base_adapter`, `core.deployment.brain_alert`, `core.schemas.trading_contracts`
 
 ### `core/brains/services/`
 
@@ -185,6 +185,7 @@
 - `market_impact.py` → (无内部依赖)
 - `meta_exit_engine.py` → (无内部依赖)
 - `meta_filter_gate.py` → `core.brains.adapters.meta_filter_adapter`, `core.features.schemas.microstructure_schema`, `core.features.schemas.v9_institutional_schema`
+- `meta_pipeline.py` → `core.execution.dynamic_sl_tp`, `core.execution.kelly_sizer`, `core.schemas.trading_contracts`
 - `meta_signal_filter.py` → `core.brains.online_mlp_model`, `core.features.schemas.microstructure_schema`
 - `micro_strategy.py` → `core.execution.strategy_line`
 - `mt5_broker_adapter.py` → (无内部依赖)
@@ -200,7 +201,7 @@
 - `schema_versions.py` → (无内部依赖)
 - `statarb_strategy.py` → `core.execution.strategy_line`
 - `strategy_budget.py` → (无内部依赖)
-- `strategy_line.py` → `core.brains.services.dynamic_brain_weighter`, `core.execution.dynamic_sl_tp`, `core.execution.kelly_sizer`, `core.execution.pre_trade_guards`, `core.parliament.contract_groups`, `core.runtime.shadow_recorder`
+- `strategy_line.py` → `core.brains.services.dynamic_brain_weighter`, `core.execution.dynamic_sl_tp`, `core.execution.kelly_sizer`, `core.execution.meta_pipeline`, `core.execution.pre_trade_guards`, `core.parliament.contract_groups`, `core.runtime.shadow_recorder`
 - `strategy_type.py` → (无内部依赖)
 - `swing_strategy.py` → `core.execution.strategy_line`
 - `trend_detector.py` → (无内部依赖)
@@ -320,7 +321,7 @@
 
 ### `core/parliament/`
 
-- `contract_groups.py` → `core.brains.brain_registry`, `core.brains.services.ab_test`
+- `contract_groups.py` → `core.brains.brain_registry`, `core.brains.services.ab_test`, `core.schemas.trading_contracts`
 - `parliament_service.py` → `core.contracts.domain.decision_candidate`, `core.contracts.ids`, `core.parliament.contract_groups`, `core.parliament.schema_versions`
 - `schema_versions.py` → (无内部依赖)
 
@@ -369,7 +370,7 @@
 - `execution_gateway_router.py` → `core.execution.gateway_contracts`
 - `execution_pipeline.py` → `core.contracts.ids`, `core.execution.quality_analyzer`, `core.execution.quality_contracts`, `core.runtime.execution_gateway_router`, `core.runtime.integration_contracts`, `core.runtime.schema_versions`, `core.runtime.signal_order_builder`, `core.strategies.registry`
 - `integration_contracts.py` → `core.execution.gateway_contracts`, `core.execution.quality_contracts`, `core.runtime.approval_contracts`, `core.strategies.contracts`
-- `live_cycle.py` → `core.brains.brain_registry`, `core.brains.services.dynamic_brain_weighter`, `core.contracts.strategy_magic`, `core.deployment.feature_update_producer`, `core.execution.barrier_strategy`, `core.execution.capital_allocator`, `core.execution.correlation_sizer`, `core.execution.execution_queue`, `core.execution.live_order_sender`, `core.execution.market_efficiency`, `core.execution.meta_filter_gate`, `core.execution.micro_strategy`, `core.execution.portfolio_risk`, `core.execution.pre_trade_guards`, `core.execution.reentry_guard`, `core.execution.regime_gate`, `core.execution.statarb_strategy`, `core.execution.strategy_budget`, `core.execution.strategy_line`, `core.execution.swing_strategy`, `core.features.local_feature_store`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.governance.governance_service`, `core.infrastructure.distributed_lock`, `core.ledger.storage.jsonl_ledger_store`, `core.market.calendar`, `core.observability.message_broker`, `core.parliament.contract_groups`, `core.runtime.market_ingress`, `core.runtime.order_dispatch`, `core.runtime.shadow_recorder`, `core.runtime.signal_health`, `core.runtime.signal_pipeline`, `scripts.daily_ops`, `scripts.training.governance_scheduler`
+- `live_cycle.py` → `core.brains.brain_registry`, `core.brains.services.dynamic_brain_weighter`, `core.contracts.strategy_magic`, `core.deployment.feature_update_producer`, `core.execution.barrier_strategy`, `core.execution.capital_allocator`, `core.execution.correlation_sizer`, `core.execution.execution_queue`, `core.execution.live_order_sender`, `core.execution.market_efficiency`, `core.execution.meta_filter_gate`, `core.execution.meta_pipeline`, `core.execution.micro_strategy`, `core.execution.portfolio_risk`, `core.execution.pre_trade_guards`, `core.execution.reentry_guard`, `core.execution.regime_gate`, `core.execution.statarb_strategy`, `core.execution.strategy_budget`, `core.execution.strategy_line`, `core.execution.swing_strategy`, `core.features.local_feature_store`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.governance.governance_service`, `core.infrastructure.distributed_lock`, `core.ledger.storage.jsonl_ledger_store`, `core.market.calendar`, `core.observability.message_broker`, `core.parliament.contract_groups`, `core.runtime.market_ingress`, `core.runtime.order_dispatch`, `core.runtime.shadow_recorder`, `core.runtime.signal_health`, `core.runtime.signal_pipeline`, `scripts.daily_ops`, `scripts.training.governance_scheduler`
 - `market_ingress.py` → (无内部依赖)
 - `order_dispatch.py` → `apps.engine.runtime_loop`, `core.brains.brain_registry`, `core.contracts.domain.decision_intent`, `core.contracts.domain.system_mode_state`, `core.contracts.enums`, `core.contracts.ids`, `core.state.schema_versions`
 - `schema_versions.py` → (无内部依赖)
@@ -378,6 +379,10 @@
 - `signal_order_builder.py` → `core.contracts.ids`, `core.execution.gateway_contracts`, `core.runtime.integration_contracts`, `core.strategies.contracts`
 - `signal_pipeline.py` → `core.brains.schema_versions`, `core.contracts.domain.brain_decision_proposal`, `core.contracts.ids`
 - `summary_service.py` → `core.runtime.evidence_reader`, `core.runtime.schema_versions`
+
+### `core/schemas/`
+
+- `trading_contracts.py` → (无内部依赖)
 
 ### `core/simulation/`
 
@@ -422,6 +427,7 @@
 ### `scripts/`
 
 - `_diag_cycle_stall.py` → `core.features.adapters.v9_feature_adapter`, `core.features.computers.v9_live_computer`, `core.features.feature_service`, `core.features.schemas.v9_schema`, `core.features.stores.local_feature_store`
+- `_fix_unused_ignores_v2.py` → (无内部依赖)
 - `analyze_deps.py` → (无内部依赖)
 - `backtest_runner.py` → `core.backtest.data_feed`, `core.backtest.engine`, `core.backtest.metrics`, `core.backtest.strategy_adapter`, `core.contracts.strategy_magic`, `core.metrics.brinson_attribution`, `core.metrics.factor_attribution`
 - `bridge_supervisor.py` → `scripts.mt5_bridge_worker`
@@ -464,7 +470,7 @@
 - `repair_brain_configs.py` → `core.features.schemas.daily_swing_schema`, `core.features.schemas.microstructure_schema`, `core.features.schemas.v9_institutional_schema`
 - `runtime_protection_guard.py` → `scripts.guards.journal_quality`
 - `send_live_order.py` → `core.execution.live_order_sender`, `core.execution.mt5_broker_adapter`
-- `shadow_decision_recorder.py` → `core.contracts.domain.brain_decision_proposal`, `core.contracts.domain.decision_record`, `core.contracts.enums`, `core.contracts.ids`, `core.ledger.storage.jsonl_ledger_store`, `core.runtime.shadow_recorder`
+- `shadow_decision_recorder.py` → `core.contracts.domain.decision_record`, `core.contracts.ids`, `core.ledger.storage.jsonl_ledger_store`, `core.runtime.shadow_recorder`, `core.schemas.trading_contracts`
 - `shadow_live_compare_report.py` → `scripts.trade_quality_report`
 - `shadow_pnl_loop.py` → `core.brains.services.brain_factory`, `core.deployment.feature_update_producer`, `core.features.adapters.microstructure_feature_adapter`, `core.features.adapters.v9_feature_adapter`, `core.features.computers.microstructure_computer`, `core.features.computers.v9_live_computer`, `core.features.local_feature_store`, `core.features.rolling_normalizer`, `core.features.schemas.microstructure_schema`, `core.features.schemas.v9_institutional_schema`, `core.features.store_contracts`, `core.feedback.brain_pnl_ledger`, `core.ledger.storage.jsonl_ledger_store`, `core.risk.regime_detector`, `scripts.shadow_decision_recorder`
 - `smoke_test_e2e.py` → `core.features.local_feature_store`, `core.features.store_contracts`, `core.feedback.brain_performance_tracker`, `core.governance.governance_service`, `core.ledger.storage.jsonl_ledger_store`, `scripts.daily_ops`, `scripts.feedback_loop`, `scripts.live_shadow_ensemble`, `scripts.shadow_decision_recorder`, `scripts.training.dataset_builder`, `scripts.training.governance_scheduler`

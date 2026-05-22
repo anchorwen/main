@@ -111,7 +111,7 @@ def evaluate_pre_close(
             delta = start - now_utc
             minutes = delta.total_seconds() / 60.0
             base["in_pre_close"] = True
-            base["minutes_to_close"] = round(minutes, 1)
+            base["minutes_to_close"] = str(round(minutes, 1))
             base["no_new_positions"] = True
             base["must_flatten"] = now_utc >= flatten_start
             base["close_label"] = str(window.get("label", "holiday_close"))
@@ -145,7 +145,7 @@ def evaluate_pre_close(
         delta = close_dt - now_utc
         minutes = delta.total_seconds() / 60.0
         base["in_pre_close"] = True
-        base["minutes_to_close"] = round(minutes, 1)
+        base["minutes_to_close"] = str(round(minutes, 1))
         base["no_new_positions"] = True
         base["must_flatten"] = now_utc >= flatten_start
         base["close_label"] = "weekly_close"

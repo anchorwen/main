@@ -98,7 +98,10 @@ class ExperimentTracker:
         """Log metrics for a given step."""
         run_dir = self._root / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
-        entry = {"timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"), "metrics": metrics}
+        entry: dict[str, Any] = {
+            "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "metrics": metrics,
+        }
         if step is not None:
             entry["step"] = step
         with open(run_dir / "metrics.jsonl", "a", encoding="utf-8") as f:

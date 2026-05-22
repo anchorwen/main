@@ -69,8 +69,8 @@ class DiagnosticsDashboard:
         if self._audit is None:
             return None
         entries = self._audit.read_entries(date_key=date_key)
-        severity_counts = {}
-        type_counts = {}
+        severity_counts: dict[str, int] = {}
+        type_counts: dict[str, int] = {}
         for e in entries:
             sev = e.get("severity", "info")
             severity_counts[sev] = severity_counts.get(sev, 0) + 1

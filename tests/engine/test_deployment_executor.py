@@ -17,8 +17,8 @@ def _container(tmp_path):
 class TestDeploymentExecutor:
     def test_execute_standard_plan_success(self, tmp_path):
         c = _container(tmp_path)
-        plan = c.deployment_plan.build_plan(version="1.0.0", strategy="standard")  # type: ignore[reportOptionalMemberAccess]
-        result = c.deployment_executor.execute(plan)  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(version="1.0.0", strategy="standard")
+        result = c.deployment_executor.execute(plan)
         assert result["schema_version"] == SCHEMA_DEPLOYMENT_EXECUTION
         assert result["status"] == "succeeded"
         assert result["passed"] is True
@@ -27,65 +27,65 @@ class TestDeploymentExecutor:
 
     def test_execute_accepts_fast_validation_mode(self, tmp_path):
         c = _container(tmp_path)
-        plan = c.deployment_plan.build_plan(validation_mode="fast")  # type: ignore[reportOptionalMemberAccess]
-        result = c.deployment_executor.execute(plan, validation_mode="fast")  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(validation_mode="fast")
+        result = c.deployment_executor.execute(plan, validation_mode="fast")
         assert result["schema_version"] == SCHEMA_DEPLOYMENT_EXECUTION
         assert result[PAYLOAD_KEY_VALIDATION_MODE] == "fast"
 
     def test_execute_canary_plan_success(self, tmp_path):
         c = _container(tmp_path)
-        plan = c.deployment_plan.build_plan(strategy="canary")  # type: ignore[reportOptionalMemberAccess]
-        result = c.deployment_executor.execute(plan)  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(strategy="canary")
+        result = c.deployment_executor.execute(plan)
         assert result["status"] == "succeeded"
         assert result["summary"]["phase_count"] >= 5
         assert result["summary"]["checkpoint_count"] >= 6
 
     def test_execute_shadow_plan_success(self, tmp_path):
         c = _container(tmp_path)
-        plan = c.deployment_plan.build_plan(strategy="shadow")  # type: ignore[reportOptionalMemberAccess]
-        result = c.deployment_executor.execute(plan)  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(strategy="shadow")
+        result = c.deployment_executor.execute(plan)
         assert result["status"] == "succeeded"
         phases = [p["phase"] for p in result["phase_results"]]
         assert "shadow_deploy" in phases
 
     def test_invalid_plan_fails(self, tmp_path):
         c = _container(tmp_path)
-        result = c.deployment_executor.execute({"status": "invalid", "version": "x"})  # type: ignore[reportOptionalMemberAccess]
+        result = c.deployment_executor.execute({"status": "invalid", "version": "x"})
         assert result["status"] == "failed"
         assert "invalid_plan" in result["summary"]["failures"]
 
     def test_blocked_plan_blocks(self, tmp_path):
         c = _container(tmp_path)
-        plan = c.deployment_plan.build_plan()  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan()
         plan["executable"] = False
-        result = c.deployment_executor.execute(plan)  # type: ignore[reportOptionalMemberAccess]
+        result = c.deployment_executor.execute(plan)
         assert result["status"] == "blocked"
         assert "plan_not_executable" in result["summary"]["failures"]
 
     def test_slo_breach_fails_execution(self, tmp_path):
         c = _container(tmp_path)
-        c.metrics.inc(CYCLES_TOTAL, 100)  # type: ignore[reportOptionalMemberAccess]
-        c.metrics.inc(CYCLES_ERRORS, 20)  # type: ignore[reportOptionalMemberAccess]
-        plan = c.deployment_plan.build_plan(strict_gate=False)  # type: ignore[reportOptionalMemberAccess]
-        result = c.deployment_executor.execute(plan)  # type: ignore[reportOptionalMemberAccess]
+        c.metrics.inc(CYCLES_TOTAL, 100)
+        c.metrics.inc(CYCLES_ERRORS, 20)
+        plan = c.deployment_plan.build_plan(strict_gate=False)
+        result = c.deployment_executor.execute(plan)
         assert result["passed"] is False
         assert result["rollback"]["fired_count"] >= 1
         assert result["rollback"]["recommendation"] == "rollback"
 
     def test_execute_from_file(self, tmp_path):
         c = _container(tmp_path)
-        plan = c.deployment_plan.build_plan(version="2.0.0")  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(version="2.0.0")
         pf = tmp_path / "plan.json"
         pf.write_text(json.dumps(plan), encoding="utf-8")
-        result = c.deployment_executor.execute_from_file(str(pf))  # type: ignore[reportOptionalMemberAccess]
+        result = c.deployment_executor.execute_from_file(str(pf))
         assert result["version"] == "2.0.0"
         assert result["passed"] is True
 
     def test_save_result(self, tmp_path):
         c = _container(tmp_path)
-        result = c.deployment_executor.execute()  # type: ignore[reportOptionalMemberAccess]
+        result = c.deployment_executor.execute()
         out = tmp_path / "exec.json"
-        saved = c.deployment_executor.save_result(result, str(out))  # type: ignore[reportOptionalMemberAccess]
+        saved = c.deployment_executor.save_result(result, str(out))
         assert saved == str(out)
         payload = json.loads(out.read_text(encoding="utf-8"))
         assert payload["schema_version"] == SCHEMA_DEPLOYMENT_EXECUTION
@@ -128,7 +128,7 @@ class TestDeploymentExecutorCLI:
 
     def test_cli_deploy_exec_from_plan(self, tmp_path):
         c = _container(tmp_path / "data")
-        plan = c.deployment_plan.build_plan(version="3.0.0", strategy="shadow")  # type: ignore[reportOptionalMemberAccess]
+        plan = c.deployment_plan.build_plan(version="3.0.0", strategy="shadow")
         pf = tmp_path / "plan.json"
         pf.write_text(json.dumps(plan), encoding="utf-8")
         rc = main(["--base-dir", str(tmp_path / "data"), "deploy-exec", "--plan", str(pf)])

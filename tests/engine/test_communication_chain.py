@@ -119,8 +119,8 @@ def test_communication_record_writer_persists_jsonl(tmp_path):
     record, ledger_path = writer.write_record(envelope, result)
 
     assert record.correlation_id == "corr_001"
-    assert ledger_path.exists()  # type: ignore[reportAttributeAccessIssue]
-    assert ledger_path.name == stream_jsonl_filename("exec_bridge", LEDGER_STREAM_COMMUNICATIONS)  # type: ignore[reportAttributeAccessIssue]
-    contents = ledger_path.read_text(encoding="utf-8")  # type: ignore[reportAttributeAccessIssue]
+    assert ledger_path.exists()
+    assert ledger_path.name == stream_jsonl_filename("exec_bridge", LEDGER_STREAM_COMMUNICATIONS)
+    contents = ledger_path.read_text(encoding="utf-8")
     assert SCHEMA_COMMUNICATION_RECORD in contents
     assert "message_001" in contents

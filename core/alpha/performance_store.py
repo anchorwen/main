@@ -84,7 +84,7 @@ class AlphaPerformanceStore:
                         "alpha_id": alpha_id,
                         "metric": metric,
                         "value": value,
-                        "snapshot": latest.to_dict(),  # type: ignore[reportOptionalMemberAccess]
+                        "snapshot": latest.to_dict() if latest is not None else {},
                     }
                 )
         return sorted(rows, key=lambda item: item["value"], reverse=descending)
@@ -118,7 +118,7 @@ class AlphaPerformanceStore:
                     alpha_id,
                     metrics,
                     source="runtime_summary",
-                    window="runtime_summary",  # type: ignore[reportArgumentType]
+                    window="runtime_summary",
                 )
             )
         return snapshots

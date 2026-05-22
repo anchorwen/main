@@ -90,7 +90,7 @@ def grouped_reasons(items: list[dict]) -> dict:
 
 def message_ids(items: list[dict]) -> list[str]:
     return [
-        item.get(PAYLOAD_KEY_MESSAGE_ID)
+        str(item.get(PAYLOAD_KEY_MESSAGE_ID, ""))
         for item in items
         if item.get(PAYLOAD_KEY_MESSAGE_ID) is not None
     ]

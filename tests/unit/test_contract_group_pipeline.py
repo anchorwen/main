@@ -24,10 +24,17 @@ from core.parliament.contract_groups import (
 
 @dataclass
 class FakeProposal:
+    """Minimal BrainSignal-compatible stand-in for pipeline tests."""
+
     brain_id: str = "B1"
+    direction: str = "neutral"
+    confidence: float = 0.5
+    raw_score: float = 0.0
+    fallback: bool = False
+    runtime_ms: float = 0.0
+    vote_weight: float = 1.0
     prediction: dict[str, Any] = field(default_factory=dict)
     health: dict[str, Any] = field(default_factory=dict)
-    vote_weight: float = 1.0
 
 
 def _make_prop(
@@ -35,6 +42,11 @@ def _make_prop(
 ) -> FakeProposal:
     return FakeProposal(
         brain_id=bid,
+        direction=direction,
+        confidence=conf,
+        raw_score=max(up, down),
+        fallback=fallback,
+        vote_weight=weight,
         prediction={
             "up_probability": up,
             "down_probability": down,
@@ -42,7 +54,6 @@ def _make_prop(
             "direction_bias": direction,
         },
         health={"fallback_used": fallback},
-        vote_weight=weight,
     )
 
 
@@ -198,9 +209,9 @@ def test_pipeline_only_one_group_active_reduced_confidence():
     assert allocation.should_trade
     assert allocation.direction == "long"
     assert allocation.agreement_level == "reduced"
-    # GroupSignal blends majority_ratio (1.0) with raw_score → ~0.87
-    # Then conf_mult=0.65 → ~0.5655
-    assert allocation.confidence == pytest.approx(0.5655, abs=0.01)
+    # Direction-count voting: single brain 0.85 conf → consensus_score 1.0
+    # Then conf_mult=0.65 → ~0.65
+    assert allocation.confidence == pytest.approx(0.65, abs=0.01)
 
 
 def test_pipeline_high_regime_reduces_volume():
@@ -459,7 +470,7 @@ def test_pipeline_consensus_extra_structure():
         elif gs.direction != "neutral":
             all_opposing.extend(gs.brain_ids)
 
-    consensus_extra = {
+    consensus_extra: dict[str, Any] = {
         "voter_count": total_voters,
         "majority_ratio": allocation.confidence,
         "disagreement_score": round(1.0 - allocation.confidence, 4),

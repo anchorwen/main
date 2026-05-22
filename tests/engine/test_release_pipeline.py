@@ -34,7 +34,7 @@ def _container(tmp_path):
 class TestReleasePipelineService:
     def test_run_standard_pipeline_passes(self, tmp_path):
         c = _container(tmp_path / "data")
-        result = c.release_pipeline.run(version="1.0.0", output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
+        result = c.release_pipeline.run(version="1.0.0", output_dir=str(tmp_path / "pipeline"))
         assert result["schema_version"] == SCHEMA_RELEASE_PIPELINE
         assert result["status"] == "passed"
         assert result["passed"] is True
@@ -43,7 +43,7 @@ class TestReleasePipelineService:
 
     def test_run_pipeline_accepts_fast_validation_mode(self, tmp_path):
         c = _container(tmp_path / "data")
-        result = c.release_pipeline.run(  # type: ignore[reportOptionalMemberAccess]
+        result = c.release_pipeline.run(
             version="1.0.0",
             output_dir=str(tmp_path / "pipeline"),
             validation_mode="fast",
@@ -70,7 +70,7 @@ class TestReleasePipelineService:
 
     def test_pipeline_summary_normalizes_malformed_final_audit_governance_fields(self, tmp_path):
         c = _container(tmp_path / "data")
-        original_build_report = c.final_audit.build_report  # type: ignore[reportOptionalMemberAccess]
+        original_build_report = c.final_audit.build_report
 
         def _malformed_build_report(*, validation_mode=None):
             report = original_build_report(validation_mode=validation_mode)
@@ -78,8 +78,8 @@ class TestReleasePipelineService:
             report["summary"]["governance_warning_count"] = "6"
             return report
 
-        c.final_audit.build_report = _malformed_build_report  # type: ignore[reportOptionalMemberAccess]
-        result = c.release_pipeline.run(version="1.0.3", output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
+        c.final_audit.build_report = _malformed_build_report
+        result = c.release_pipeline.run(version="1.0.3", output_dir=str(tmp_path / "pipeline"))
         assert result["summary"][PAYLOAD_KEY_GOVERNANCE_FOCUS] == [
             {"name": "ok"},
             {"status": "warn"},
@@ -88,20 +88,20 @@ class TestReleasePipelineService:
 
     def test_run_canary_pipeline_passes(self, tmp_path):
         c = _container(tmp_path / "data")
-        result = c.release_pipeline.run(strategy="canary", output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
+        result = c.release_pipeline.run(strategy="canary", output_dir=str(tmp_path / "pipeline"))
         assert result["strategy"] == "canary"
         assert result["passed"] is True
         assert result["summary"]["execution_status"] == "succeeded"
 
     def test_run_shadow_pipeline_passes(self, tmp_path):
         c = _container(tmp_path / "data")
-        result = c.release_pipeline.run(strategy="shadow", output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
+        result = c.release_pipeline.run(strategy="shadow", output_dir=str(tmp_path / "pipeline"))
         assert result["strategy"] == "shadow"
         assert result["passed"] is True
 
     def test_pipeline_creates_artifacts(self, tmp_path):
         c = _container(tmp_path / "data")
-        result = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
+        result = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))
         for key in [
             ARTIFACT_GATE,
             ARTIFACT_EVIDENCE_SUMMARY,
@@ -119,25 +119,25 @@ class TestReleasePipelineService:
 
     def test_pipeline_records_timeline_events(self, tmp_path):
         c = _container(tmp_path / "data")
-        result = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"), actor="ci")  # type: ignore[reportOptionalMemberAccess]
-        summary = c.operations_timeline.summarize()  # type: ignore[reportOptionalMemberAccess]
+        result = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"), actor="ci")
+        summary = c.operations_timeline.summarize()
         assert summary["event_count"] >= 4
         assert result["summary"]["timeline_event_count"] >= 4
-        assert c.operations_timeline.list_events()[0]["actor"] == "ci"  # type: ignore[reportOptionalMemberAccess]
+        assert c.operations_timeline.list_events()[0]["actor"] == "ci"
 
     def test_pipeline_blocks_on_gate(self, tmp_path):
         c = _container(tmp_path / "data")
         c.risk_service = None
-        result = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
+        result = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))
         assert result["status"] == "blocked"
         assert result["passed"] is False
         assert result["summary"]["gate_decision"] == "block"
 
     def test_pipeline_fails_on_slo_breach_non_strict(self, tmp_path):
         c = _container(tmp_path / "data")
-        c.metrics.inc(CYCLES_TOTAL, 100)  # type: ignore[reportOptionalMemberAccess]
-        c.metrics.inc(CYCLES_ERRORS, 20)  # type: ignore[reportOptionalMemberAccess]
-        result = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"), strict_gate=False)  # type: ignore[reportOptionalMemberAccess]
+        c.metrics.inc(CYCLES_TOTAL, 100)
+        c.metrics.inc(CYCLES_ERRORS, 20)
+        result = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"), strict_gate=False)
         assert result["status"] == "failed"
         assert result["passed"] is False
         assert result["summary"]["rollback_status"] == "failed"
@@ -158,7 +158,7 @@ class TestReleasePipelineService:
                 }
             ],
         }
-        result = c.release_pipeline.run(  # type: ignore[reportOptionalMemberAccess]
+        result = c.release_pipeline.run(
             output_dir=str(tmp_path / "pipeline"),
             alpha_budget_usage_report=alpha_report,
         )
@@ -188,7 +188,7 @@ class TestReleasePipelineService:
                 }
             ],
         }
-        result = c.release_pipeline.run(  # type: ignore[reportOptionalMemberAccess]
+        result = c.release_pipeline.run(
             output_dir=str(tmp_path / "pipeline"),
             strict_gate=False,
             alpha_budget_usage_report=alpha_report,
@@ -206,9 +206,9 @@ class TestReleasePipelineService:
 
     def test_save_result(self, tmp_path):
         c = _container(tmp_path / "data")
-        result = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
+        result = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))
         out = tmp_path / "summary.json"
-        saved = c.release_pipeline.save_result(result, str(out))  # type: ignore[reportOptionalMemberAccess]
+        saved = c.release_pipeline.save_result(result, str(out))
         assert saved == str(out)
         payload = json.loads(out.read_text(encoding="utf-8"))
         assert payload["schema_version"] == SCHEMA_RELEASE_PIPELINE

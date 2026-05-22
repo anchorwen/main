@@ -87,6 +87,17 @@ FIX-YYYYMMDD-NNN
 | FIX-20260522-008 | 2026-05-22 | runtime-live | Intent loop bar_sync crash protection: unhandled exception in bar_sync wait section killed entire intent loop process. Wrapped in try/except with bar_sync_crash JSON event + interval-based fallback sleep. | RC-01 |
 | FIX-20260522-009 | 2026-05-22 | runtime-live | Unguarded clear_position() after close dispatch failure: all 7 managed-exit callers called pm.clear_position() unconditionally even when _dispatch_managed_close() returned False. Now all 7 callers check return value before clearing. | RC-06 |
 | FIX-20260522-010 | 2026-05-22 | protocol-services, runtime-live | Bar sync timeout 120s→360s: DEFAULT_TIMEOUT_SECONDS < M5 bar period (300s) caused every polling window to expire before next bar. MT5 API was functional but bar_sync never had enough window. | RC-05 |
+| FIX-20260522-011 | 2026-05-22 | protocol-services, runtime-live | BarSyncPoller graceful degradation: dual-deadline design prevents "360s block + caller sleep" dead window. Returns truthy sentinel after bar_period elapses with no new bar, waking main loop immediately. Poll interval 2s→1s, mt5.shutdown() before re-init, BAR_DEGRADED_WAKEUP logging. | RC-05 |
+| FIX-20260522-013 | 2026-05-22 | brains-adapters | Sign-flip bug: _score_to_direction() in all 5 adapters (LGB/XGBoost/ONNX/Transformer/Params) mapped weak signals (|score| < 0.549, confidence < 0.5) to INVERTED direction — up_prob > down_prob even when model predicted SHORT. Consensus layer only compared up/down probabilities, ignoring direction_bias field. Result: every Huber BPS<0 signal opened LONG, crashing into the falling knife. Fixed with 0.5±confidence/2 anchoring. | RC-06 |
+| FIX-20260522-014 | 2026-05-22 | runtime-live, execution-guards, features-service, risk-portfolio, protocol-services, feedback-pnl | Defense-in-depth hardening: (CRIT-1) mgmt phase price-fetch failure now falls back to entry_price instead of skipping ALL positions; (CRIT-2) warm-start MT5 thread now synchronous join(15s) eliminating data race; (CRIT-3) cycle_count double increment deleted (inner); (HIGH-5) 3 critical except:pass paths emit structured JSON now; (HIGH-6) degraded bar_sync skips Alpha, runs management only; (HIGH-8) atomic file writes (.tmp+os.replace) for all 7 state files | RC-01, RC-04, RC-06 |
+| FIX-20260522-015 | 2026-05-22 | brains-adapters | Layer 1 immutable contracts: All 5 adapters' get_signal() now returns frozen BrainSignal dataclass (direction/confidence/raw_score/fallback/runtime_ms) instead of BrainDecisionProposal with untyped dict prediction. Eliminates dict-key typos, missing-key silent failures, and sign-flip class of bugs. | RC-06 |
+| FIX-20260522-016 | 2026-05-22 | protocol-parliament | Layer 1 immutable contracts: GroupSignal (10-field mutable dict-like) replaced with frozen ConsensusResult from trading_contracts.py. _compute_weighted() redesigned with direction-count voting: each brain votes its decided direction weighted by confidence×vote_weight×(0.5 if fallback), highest total wins. Added supporting_brains/dissenting_brains lists. | RC-06 |
+| FIX-20260522-017 | 2026-05-22 | contracts-domain | Layer 1 immutable contracts: Created core/schemas/trading_contracts.py — BrainSignal, ConsensusResult, StrategyDecision, DegradedResult, Direction, TradeDirection. Four frozen dataclasses (frozen=True, slots=True) replace untyped dicts at all 4 module boundaries. DegradedResult replaces every except:pass. | RC-06 |
+| FIX-20260522-018 | 2026-05-22 | brains-services | Layer 1 immutable contracts: BrainRunService output type updated from BrainDecisionProposal[] to BrainSignal[] — all consumers receive typed frozen dataclasses. Backward-compat retained via getattr for legacy dict access. | RC-06 |
+| FIX-20260522-019 | 2026-05-22 | runtime-live | Layer 1 immutable contracts: (1) Circuit breaker in LiveCycleState — _consecutive_degraded_cycles + _circuit_breaker_tripped, 3 consecutive degraded cycles→management-only mode, auto-reset on clean cycle. (2) Startup orphan detection — MT5 vs active_position.json comparison, mismatch→HARD_BLOCK. (3) raw_proposals paths carry BrainSignal|DegradedResult. | RC-06, RC-07 |
+| FIX-20260522-020 | 2026-05-22 | execution-orders | Layer 1 immutable contracts: QueuedDecision + DispatchResult converted to frozen dataclasses. dispatch_status rename protocol_validated→transport_delivered synced to tests, semantic rules, and disk baselines. v9_shadow SmokeTest rebuilt. | RC-06 |
+| FIX-20260522-021 | 2026-05-22 | brains-schema | Layer 1 immutable contracts: BrainSignal supersedes BrainDecisionProposal.prediction dict. Direction/TradeDirection Literal types from trading_contracts.py replace loose string direction fields. Schema version constant retained for backward compat. | RC-06 |
+| FIX-20260522-027 | 2026-05-22 | runtime-live | Bleed stop horizon-scaled hardening: bleed_bars now scales with strategy horizon (horizon//3, min 3) + min_hold_cycles protection prevents bleed stop from firing before position has reasonable time to develop. Enhanced bleed_stop_triggered JSON event with bleed_bars, cycles_held, min_hold_cycles, horizon_cycles. Root cause #2 of May 22 8-trade losing streak — positions killed after 3 bars (15min) with tiny losses, never given time to develop. | RC-05 |
 | FIX-20260515-001 | 2026-05-14 | training | LightGBM 4.6.0 removed fobj parameter: custom objective now passed via params[objective] | RC-06 |
 | FIX-20260515-002 | 2026-05-14 | training | Pre-split dataset support: pipeline auto-detects X_val/y_val/X_test in NPZ and uses them directly | RC-06 |
 | FIX-20260515-003 | 2026-05-14 | training | Max drawdown gate units fix: removed *100 multiplier, max_drawdown is already in absolute return units | RC-05 |
@@ -169,13 +180,33 @@ FIX-YYYYMMDD-NNN
 | FIX-20260519-011 | 2026-05-19 | execution-orders, runtime-live | 周期感知分层出场架构(Waves A-D): (A) live_intent_loop.py新增apply_timeframe_scaling()—YAML人类可读值→M5 bar自动换算,所有策略+timeframe字段,StrategyLineConfig+timeframe_mult属性; (B) compute_dynamic_sl_tp()新增timeframe_mult参数—ATR按√(timeframe_mult)缩放,例H1止损14→48.5pips; (C) Meta Exit维度隔离—_manage_position()构建meta_consensus时按_tf_mult过滤group_signals,大周期仓位仅用同级别+共识; (D) m30/h1/h4 swing→enabled:false,宏观偏见过拟合退回shadow | RC-05, RC-06 |
 | FIX-20260519-012 | 2026-05-19 | execution-orders | Absolute SL Distance Floor + RR Guard: compute_dynamic_sl_tp()新增min_sl_distance(绝对价格距离保底,防止ATR塌陷时SL<点差无净呼吸空间)和min_rr_ratio(当SL被保底抬升后拉伸TP维持最低盈亏比,防止负偏斜)。StrategyLineConfig透传+live_cycle.py全部11策略从YAML sl块接线。live.yaml为M5策略设置min_sl_distance:8.0 + min_rr_ratio:1.5 | RC-05 |
 | FIX-20260519-010 | 2026-05-19 | feedback-pnl, brains-services, runtime-live, execution-orders | 三轨制大脑归因体系: (Track 1) BrainPnLStore horizon-matched counterfactual PnL—record_signal接受expected_horizon+TTL,settle_all仅结算TTL=0信号,每大脑按训练视界结算非1-bar; (Track 2) update_pending()每周期更新MFE/MAE追踪价格+递减TTL,_settle()从追踪价格计算R-multiple; (Track 3) BrainAttributionService confidence-weighted marginal attribution—journal新增brain_votes,sponsors(同向)按置信度加权分PnL,dissenters(反向)豁免; live_cycle.py接线: update_pending→settle_all流程,record_signal传expected_horizon,dispatch传brain_votes | RC-06 |
+| FIX-20260522-022 | 2026-05-22 | contracts-domain | Phase 2b: ParliamentService _normalize_proposal adapter — maps BrainSignal frozen dataclass to legacy BrainDecisionProposal interface for v9 shadow compatibility | RC-06 |
+| FIX-20260522-022 | 2026-05-22 | protocol-parliament | Phase 2b: ParliamentService _normalize_proposal adapter — maps BrainSignal frozen dataclass to legacy BrainDecisionProposal interface for v9 shadow compatibility. Fixes 32 v9 shadow tests. | RC-06 |
+| FIX-20260522-024 | 2026-05-22 | execution-guards | Config-driven MetaPipeline architecture: replaces hardcoded `_try_meta_pipeline()` with declarative MetaPipeline class (frozen contracts, brain-id never hardcoded). Fixes cross-module cascade where FIX-20260522-015 silently broke FIX-20260520-028. | RC-06 |
+| FIX-20260522-024 | 2026-05-22 | runtime-live | Config-driven MetaPipeline wiring: live_cycle.py auto-discovers meta_probe_specs from brain JSON roles + live.yaml overrides. shadow_recorder.py reads BrainSignal fields directly. | RC-06 |
+| FIX-20260522-023 | 2026-05-22 | contracts-domain | Batch mypy type safety: annotation fixes, None guards, type narrowing, and suppressors for pre-existing pattern issues across all changed modules | RC-02 |
+| FIX-20260522-023 | 2026-05-22 | deployment-lifecycle | Batch mypy type safety: annotation fixes, None guards, type narrowing, and suppressors for pre-existing pattern issues | RC-02 |
+| FIX-20260522-023 | 2026-05-22 | deployment-config | Batch mypy type safety: annotation fixes, None guards, type narrowing | RC-02 |
+| FIX-20260522-023 | 2026-05-22 | execution-guards | Batch mypy type safety: annotation fixes, None guards, type narrowing | RC-02 |
+| FIX-20260522-023 | 2026-05-22 | features-service | Batch mypy type safety: annotation fixes, None guards, type narrowing | RC-02 |
+| FIX-20260522-023 | 2026-05-22 | features-rolling | Batch mypy type safety: annotation fixes, None guards, type narrowing | RC-02 |
+| FIX-20260522-023 | 2026-05-22 | feedback-performance | Batch mypy type safety: annotation fixes, None guards, type narrowing | RC-02 |
+| FIX-20260522-023 | 2026-05-22 | feedback-pnl | Batch mypy type safety: annotation fixes, None guards, type narrowing | RC-02 |
+| FIX-20260522-023 | 2026-05-22 | feedback-online | Batch mypy type safety: annotation fixes, None guards, type narrowing | RC-02 |
+| FIX-20260522-023 | 2026-05-22 | risk-regime | Batch mypy type safety: annotation fixes, None guards, type narrowing | RC-02 |
+| FIX-20260522-023 | 2026-05-22 | training | Batch mypy type safety: annotation fixes, None guards, type narrowing, and suppressors | RC-02 |
+| FIX-20260522-023 | 2026-05-22 | contracts-ids | Batch mypy type safety: annotation fixes, None guards, type narrowing | RC-02 |
+| FIX-20260522-023 | 2026-05-22 | risk-portfolio | Batch mypy type safety: annotation fixes, None guards, type narrowing | RC-02 |
+| FIX-20260522-023 | 2026-05-22 | monitor-dashboard | Batch mypy type safety: annotation fixes, None guards, type narrowing | RC-02 |
+| FIX-20260522-025 | 2026-05-22 | brains-adapters | Complete BrainSignal.diagnostics passthrough for all 6 adapters (v9_onnx, transformer, online_learner) + shadow_recorder BrainSignal.diagnostics read path | RC-06 |
+| FIX-20260522-026 | 2026-05-22 | runtime-live | Harden startup orphan detection: replace except:pass with explicit JSONDecodeError + generic error logging to prevent silent failure on corrupt/empty active_position.json | RC-01 |
 
 ---
 ## Fix Details by Year
 
 | Year | File | Count |
 |------|------|-------|
-| 2026 | [FIX_REGISTRY_2026.md](FIX_REGISTRY_2026.md) | 82 |
+| 2026 | [FIX_REGISTRY_2026.md](FIX_REGISTRY_2026.md) | 83 |
 
 > New fix entries should be added to the relevant year file.
 > Keep the Fix Index table above updated with every fix.
@@ -194,3 +225,257 @@ FIX-YYYYMMDD-NNN
   - **Prevention**: <how this class of bug is prevented from recurring>
   - **Dependents Checked**: <modules checked for impact>
 -->
+
+
+### FIX-20260522-022
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: contracts-domain
+- **Files**: core/parliament/parliament_service.py
+- **Description**: Phase 2b: ParliamentService _normalize_proposal adapter — maps BrainSignal frozen dataclass to legacy BrainDecisionProposal interface for v9 shadow compatibility
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-022
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: protocol-parliament
+- **Files**: core/parliament/parliament_service.py
+- **Description**: Phase 2b: ParliamentService _normalize_proposal adapter — maps BrainSignal frozen dataclass to legacy BrainDecisionProposal interface for v9 shadow compatibility. Fixes 32 v9 shadow tests.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-024
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: execution-guards
+- **Files**: core/execution/meta_pipeline.py (NEW), core/execution/strategy_line.py, core/runtime/live_cycle.py, core/runtime/shadow_recorder.py, configs/brains/meta_stage1_huber_v1.json
+- **Description**: Config-driven MetaPipeline architecture replaces hardcoded `_try_meta_pipeline()`.
+  - **Problem**: FIX-20260522-015 (BrainSignal migration) removed the `extensions` dict from brain output. FIX-20260520-028 (Executive Veto) read `p.extensions.raw_outputs.raw_score` — silently broken. The data contract between producer (BrainSignal) and consumer (Meta Pipeline) was implicit with no enforcement.
+  - **Solution**: Created `core/execution/meta_pipeline.py` with frozen dataclass contracts (`MetaProbeSpec`, `MetaProbeResult`) and a `MetaPipeline` orchestrator class. Brain JSON declares capability via `"roles": ["meta_probe"]`; code never hardcodes brain_ids.
+  - **Key design decisions**:
+    - `extract_probe_score()` reads `BrainSignal.raw_score` directly (Layer 1 contract) with legacy `extensions.raw_outputs` fallback
+    - `discover_probe_specs()` auto-discovers probes from brain config JSON `"roles"` field
+    - Per-bundle filter stage declarative (`stage2`, `stage3`, ...)
+    - Threshold per-probe, per-strategy configurable via `meta_probe_config` or live.yaml override
+    - Full chain: extract → threshold → Stage-N filter → SL/TP → RR → Kelly → volume → StrategyDecision
+  - `StrategyLineConfig` gained `meta_probe_specs: list[Any]` field; `_try_meta_pipeline()` (~245 lines) replaced with thin delegation to `MetaPipeline.evaluate()`
+  - `record_brain_votes()` in shadow_recorder.py now reads BrainSignal fields directly (direction, confidence, raw_score) with legacy fallback for `BrainDecisionProposal`
+  - `StrategyDecision` now uses `TradeDirection = Literal["long", "short"]` (no `should_trade` field — removed from contract)
+- **Root Cause**: RC-06 — cross-module cascade: implicit data contract between producer (BrainSignal) and consumer (Meta Pipeline) was not enforced. When the producer contract changed (FIX-20260522-015), the consumer continued to access non-existent attributes, silently returning None → no trades.
+- **Prevention**: All meta-probe attributes are now frozen dataclass fields. `discover_probe_specs()` + `extract_probe_score()` provide explicit, typed interfaces. mypy catches field access errors at type-check time. New brains declare `"roles"` in JSON — infrastructure code never references specific brain_ids.
+- **Dependents Checked**: strategy_line.py (evaluate path), live_cycle.py (BarrierStrategy construction site), shadow_recorder.py (brain_votes recording). 2622 tests pass. mypy clean on new code. ruff clean.
+
+### FIX-20260522-023
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: contracts-domain
+- **Files**: core/contracts/serialization/json_codec.py
+- **Description**: Batch mypy type safety: annotation fixes, None guards, type narrowing, and suppressors for pre-existing pattern issues across all changed modules
+- **Root Cause**: RC-02 — type-confusion
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-023
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: deployment-lifecycle
+- **Files**: core/deployment/compliance_audit.py,core/deployment/compliance_control_matrix.py,core/deployment/operational_support.py
+- **Description**: Batch mypy type safety: annotation fixes, None guards, type narrowing, and suppressors for pre-existing pattern issues
+- **Root Cause**: RC-02 — type-confusion
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-023
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: deployment-config
+- **Files**: core/deployment/environment_config.py
+- **Description**: Batch mypy type safety: annotation fixes, None guards, type narrowing
+- **Root Cause**: RC-02 — type-confusion
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-023
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: execution-guards
+- **Files**: core/execution/capital_allocator.py
+- **Description**: Batch mypy type safety: annotation fixes, None guards, type narrowing
+- **Root Cause**: RC-02 — type-confusion
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-023
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: features-service
+- **Files**: core/features/computers/v9_live_computer.py
+- **Description**: Batch mypy type safety: annotation fixes, None guards, type narrowing
+- **Root Cause**: RC-02 — type-confusion
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-023
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: features-rolling
+- **Files**: core/features/rolling_normalizer.py
+- **Description**: Batch mypy type safety: annotation fixes, None guards, type narrowing
+- **Root Cause**: RC-02 — type-confusion
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-023
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: feedback-performance
+- **Files**: core/feedback/brain_performance_tracker.py
+- **Description**: Batch mypy type safety: annotation fixes, None guards, type narrowing
+- **Root Cause**: RC-02 — type-confusion
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-023
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: feedback-pnl
+- **Files**: core/feedback/brain_pnl_ledger.py
+- **Description**: Batch mypy type safety: annotation fixes, None guards, type narrowing
+- **Root Cause**: RC-02 — type-confusion
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-023
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: feedback-online
+- **Files**: core/feedback/online_feedback_hook.py
+- **Description**: Batch mypy type safety: annotation fixes, None guards, type narrowing
+- **Root Cause**: RC-02 — type-confusion
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-023
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: risk-regime
+- **Files**: core/risk/regime_detector.py
+- **Description**: Batch mypy type safety: annotation fixes, None guards, type narrowing
+- **Root Cause**: RC-02 — type-confusion
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-023
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: training
+- **Files**: core/training/experiment_tracker.py,scripts/training/batch_train_skeleton.py,scripts/training/crt_manifest.py,scripts/training/trainers/sur_trainer.py
+- **Description**: Batch mypy type safety: annotation fixes, None guards, type narrowing, and suppressors
+- **Root Cause**: RC-02 — type-confusion
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-023
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: contracts-ids
+- **Files**: core/contracts/serialization/json_codec.py
+- **Description**: Batch mypy type safety: annotation fixes, None guards, type narrowing
+- **Root Cause**: RC-02 — type-confusion
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-023
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: risk-portfolio
+- **Files**: core/execution/capital_allocator.py
+- **Description**: Batch mypy type safety: annotation fixes, None guards, type narrowing
+- **Root Cause**: RC-02 — type-confusion
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-023
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: monitor-dashboard
+- **Files**: core/metrics/factor_attribution.py,core/observability/diagnostics_dashboard.py,core/observability/slo_service.py
+- **Description**: Batch mypy type safety: annotation fixes, None guards, type narrowing
+- **Root Cause**: RC-02 — type-confusion
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-025
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: brains-adapters
+- **Files**: core/brains/adapters/v9_onnx_brain_adapter.py,core/brains/adapters/transformer_brain_adapter.py,core/brains/adapters/online_learner_adapter.py,core/runtime/shadow_recorder.py
+- **Description**: Complete BrainSignal.diagnostics passthrough for all 6 adapters (v9_onnx, transformer, online_learner) + shadow_recorder BrainSignal.diagnostics read path
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-026
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Commit**: 24ff517
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: core/runtime/live_cycle.py
+- **Description**: Harden startup orphan detection: replace except:pass with explicit JSONDecodeError + generic error logging to prevent silent failure on corrupt/empty active_position.json
+- **Root Cause**: RC-01 — missing-null-check
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260522-027
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: core/runtime/live_cycle.py
+- **Description**: Bleed stop horizon-scaled hardening — one of three root causes for the May 22 8-trade losing streak.
+  - **Problem**: `should_exit_bleed()` used a hardcoded `bleed_bars=3` with zero min_hold protection for all strategies. A position could be killed after only 3 M5 bars (15 minutes) of negative bar-PnL, regardless of the strategy's intended horizon. barrier_12bar (60-min horizon) positions were being killed at 15 min — well before the brain signal had any time to play out.
+  - **Solution**: `bleed_bars` now scales with strategy horizon: `max(3, horizon_cycles // 3)`. barrier_12bar (horizon=12) gets bleed_bars=4; micro_3bar (horizon=3) gets bleed_bars=3. Added `min_hold_cycles = max(2, bleed_bars)` — positions held fewer cycles than min_hold are immune to bleed stop.
+  - **Enhanced diagnostics**: `bleed_stop_triggered` JSON event now includes `bleed_bars`, `cycles_held`, `min_hold_cycles`, `horizon_cycles` fields for post-mortem analysis.
+  - **Data**: Session 1 (05:45-06:17) had 4 trades killed by bleed_stop_3bars_neg — all with losses < 1R that could have recovered given more time. Session 2 (06:29+) had the fix deployed and 0 bleed_stop exits.
+- **Root Cause**: RC-05 — boundary-error: hardcoded bleed_bars=3 was appropriate for micro strategies (15-min horizon) but destructive for barrier_12bar (60-min horizon). The parameter should have scaled with strategy horizon from the start.
+- **Prevention**: All time-based exit parameters now scale with strategy horizon. Adding a new strategy requires setting `horizon_cycles` in live.yaml, which automatically calibrates bleed_bars.
+- **Dependents Checked**: position_manager.py (should_exit_bleed signature unchanged — only caller changed). 2622 tests pass.

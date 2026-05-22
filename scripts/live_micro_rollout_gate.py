@@ -78,7 +78,7 @@ def build_report(
         payload={"intent_id": "micro_live_probe_001", "symbol": symbol},
         deadline_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=30),
     )
-    dispatch_result = container.dispatcher.dispatch(envelope)  # type: ignore[reportOptionalMemberAccess]
+    dispatch_result = container.dispatcher.dispatch(envelope)
 
     checks = {
         "environment_is_production": cfg.is_live(),
@@ -88,7 +88,7 @@ def build_report(
         "max_open_positions_limited": cfg.max_open_positions <= 1,
         "max_notional_exposure_limited": cfg.max_notional_exposure <= 10_000.0,
         "mt5_terminal_exists": terminal_path.exists(),
-        "dispatcher_healthy": container.health_check.readiness().get("status") == "ready",  # type: ignore[reportOptionalMemberAccess]
+        "dispatcher_healthy": container.health_check.readiness().get("status") == "ready",
         "dispatch_probe_routed_to_mt5_adapter": dispatch_result.adapter_name == "mt5_adapter",
         "dispatch_probe_delivered": dispatch_result.status == DispatchStatus.TRANSPORT_DELIVERED,
     }

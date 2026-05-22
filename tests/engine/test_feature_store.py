@@ -118,7 +118,7 @@ class TestLocalFeatureStore:
             [_record(base, 1.0, 0.1), _record(base + timedelta(minutes=1), 2.0, 0.2)]
         )
         latest = store.latest("XAUUSD", "M1", schema_name="technical_v1")
-        assert latest.values["ema_bias"] == 2.0  # type: ignore[reportOptionalMemberAccess]
+        assert latest.values["ema_bias"] == 2.0
 
     def test_query_missing_partition_empty(self, tmp_path):
         store = LocalFeatureStore(str(tmp_path))

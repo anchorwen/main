@@ -14,8 +14,9 @@ weighted average.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
 from typing import Any
+
+from core.schemas.trading_contracts import ConsensusResult, DegradedResult, Direction
 
 # ── Contract group definitions ────────────────────────────────────────────
 
@@ -24,13 +25,13 @@ BARRIER_GROUP: dict[str, Any] = {
     "name": "barrier_12bar",
     "horizon_cycles": 12,
     "brain_types": {
-        "lightgbm_v1",  # Meta_Stage1_Huber_V1 (regression probe for MetaFilter)
-        "onnx_v9",  # CRT.sur.chlg.g2026.1 (survival barrier)
-        "online_sgd",  # Online_MLP_V1 (survival barrier)
-        # xgboost_v9 removed — necrotic 100% LONG bias (FIX-20260521)
+        "lightgbm_v1",  # Meta_Stage1_Huber_V1 — Dictator Protocol: sole voter
+        # onnx_v9 (CRT) and online_sgd (Online_MLP) evicted 2026-05-22 —
+        # Parliament consensus is meaningless for a shadow regression probe.
+        # Huber must deliver raw BPS signals to Track 4d unimpeded.
     },
     "contract": "survival_barrier_2.0sl_3.5tp_12bar",
-    "description": "Survival mode: CRT + Online_MLP + Huber. Predicts barrier hit in 60 min.",
+    "description": "Dictator Protocol: Huber solo. BPS regression probe → Track 4d MetaSignalFilter.",
 }
 
 # Group 2a: Micro M5 (5-bar, 1.5×ATR SL, 2.5×ATR TP, ~25 min)
@@ -245,25 +246,6 @@ def get_group_for_proposal(proposal: Any) -> dict[str, Any] | None:
     return _TYPE_TO_GROUP.get(brain_type) if brain_type else None
 
 
-# ── GroupSignal dataclass ─────────────────────────────────────────────────
-
-
-@dataclass
-class GroupSignal:
-    """Consensus output for a single contract group."""
-
-    group_name: str
-    direction: str  # "long", "short", or "neutral"
-    confidence: float  # group-level consensus confidence [0, 1]
-    consensus_score: float  # raw weighted score
-    supporting_count: int
-    opposing_count: int
-    neutral_count: int
-    total_count: int
-    horizon_cycles: int
-    brain_ids: list[str] = field(default_factory=list)
-
-
 # ── Per-group consensus computer ──────────────────────────────────────────
 
 
@@ -288,8 +270,8 @@ class ContractGroupConsensus:
         self,
         proposals: list[Any],
         dynamic_weighter: Any = None,
-    ) -> GroupSignal | None:
-        """Produce a GroupSignal from homogeneous proposals.
+    ) -> ConsensusResult | None:
+        """Produce a ConsensusResult from homogeneous proposals.
 
         Routes to union or weighted-average mode based on group's
         ``voting_mode`` key (default: weighted-average).
@@ -307,12 +289,16 @@ class ContractGroupConsensus:
         self,
         proposals: list[Any],
         dynamic_weighter: Any = None,
-    ) -> GroupSignal | None:
-        """Weighted-average consensus — original barrier/arb behaviour."""
+    ) -> ConsensusResult | None:
+        """Direction-count voting weighted by confidence × vote_weight.
 
-        up_scores: list[float] = []
-        down_scores: list[float] = []
-        weights: list[float] = []
+        Each BrainSignal casts a weighted vote for its decided direction.
+        No probability averaging — the adapter already resolved direction.
+        Weight = vote_weight × confidence × 0.5 (fallback) or 1.0 (healthy).
+        """
+
+        long_weight: float = 0.0
+        short_weight: float = 0.0
         directions: list[str] = []
         brain_ids: list[str] = []
         total = 0
@@ -325,15 +311,17 @@ class ContractGroupConsensus:
                 bid = "unknown"
             brain_ids.append(bid)
 
-            pred = getattr(p, "prediction", None) or {}
-            health = getattr(p, "health", None) or {}
+            # Check for degraded signal
+            if isinstance(p, DegradedResult):
+                directions.append("neutral")
+                continue
 
-            up = float(pred.get("up_probability", 0.5))
-            down = float(pred.get("down_probability", 0.5))
-            conf = float(pred.get("confidence", 0.5))
-            runtime_ok = not health.get("fallback_used", False)
+            direction_str = getattr(p, "direction", "neutral")
+            conf = float(getattr(p, "confidence", 0.5))
+            fallback = bool(getattr(p, "fallback", False))
 
-            vote_weight = float(getattr(p, "vote_weight", 1.0) or 1.0)
+            # Dynamic weight from weighter, or object attribute, or 1.0 default
+            vote_weight = 1.0
             if dynamic_weighter is not None:
                 try:
                     summary = dynamic_weighter.get_summary(bid)
@@ -341,77 +329,83 @@ class ContractGroupConsensus:
                         vote_weight = dynamic_weighter._compute_weight(summary)
                 except Exception:
                     pass
+            else:
+                vote_weight = float(getattr(p, "vote_weight", 1.0) or 1.0)
 
-            weight = vote_weight * conf * (1.0 if runtime_ok else 0.5)
-            up_scores.append(up * weight)
-            down_scores.append(down * weight)
-            weights.append(weight)
+            weight = vote_weight * conf * (0.5 if fallback else 1.0)
 
-            bias = pred.get("direction_bias", "neutral")
-            directions.append(bias if bias in ("long", "short") else "neutral")
+            if direction_str == "long":
+                long_weight += weight
+                directions.append("long")
+            elif direction_str == "short":
+                short_weight += weight
+                directions.append("short")
+            else:
+                directions.append("neutral")
 
-        total_weight = sum(weights)
+        total_weight = long_weight + short_weight
         if total_weight < 1e-9:
             return None
-
-        weighted_up = sum(up_scores) / total_weight
-        weighted_down = sum(down_scores) / total_weight
 
         neutral_count = directions.count("neutral")
         long_count = directions.count("long")
         short_count = directions.count("short")
 
         # When every brain says neutral, the group has no directional signal.
-        # Don't fabricate "long" just because up==down.
         if neutral_count == total:
-            return GroupSignal(
-                group_name=self.group["name"],
+            return ConsensusResult(
                 direction="neutral",
                 confidence=0.0,
-                consensus_score=0.0,
-                supporting_count=0,
-                opposing_count=0,
-                neutral_count=neutral_count,
-                total_count=total,
-                horizon_cycles=self.group["horizon_cycles"],
+                supporting_brains=[],
+                dissenting_brains=[],
                 brain_ids=brain_ids,
+                supporting_count=0,
+                total_count=total,
             )
 
-        # Determine direction
-        if weighted_up >= weighted_down:
+        # Direction from weighted vote count
+        direction: Direction
+        if long_weight >= short_weight:
             direction = "long"
-            raw_score = weighted_up
+            consensus_base = long_weight / total_weight
         else:
             direction = "short"
-            raw_score = weighted_down
+            consensus_base = short_weight / total_weight
 
         # Neutral penalty: if neutrals dominate, scale down
         if neutral_count > 0:
             neutral_ratio = neutral_count / total
-            raw_score *= max(0.35, 1.0 - neutral_ratio * 0.15)
+            consensus_base *= max(0.35, 1.0 - neutral_ratio * 0.2)
 
         # Majority agreement boost (within-group, so it's meaningful)
         majority_ratio = max(long_count, short_count) / max(total, 1)
-        consensus_score = raw_score * 0.65 + majority_ratio * 0.35
+        consensus_score = consensus_base * 0.5 + majority_ratio * 0.5
 
-        return GroupSignal(
-            group_name=self.group["name"],
+        # Build supporting/dissenting lists from parallel brain_ids + directions
+        supporting_brains = [
+            bid for bid, d in zip(brain_ids, directions, strict=False) if d == direction
+        ]
+        dissenting_brains = [
+            bid
+            for bid, d in zip(brain_ids, directions, strict=False)
+            if d not in (direction, "neutral")
+        ]
+
+        return ConsensusResult(
             direction=direction,
             confidence=round(float(consensus_score), 4),
-            consensus_score=round(float(consensus_score), 4),
-            supporting_count=max(long_count, short_count),
-            opposing_count=min(long_count, short_count) if direction != "neutral" else 0,
-            neutral_count=neutral_count,
-            total_count=total,
-            horizon_cycles=self.group["horizon_cycles"],
+            supporting_brains=supporting_brains,
+            dissenting_brains=dissenting_brains,
             brain_ids=brain_ids,
+            supporting_count=max(long_count, short_count),
+            total_count=total,
         )
 
     def _compute_union(
         self,
         proposals: list[Any],
         dynamic_weighter: Any = None,
-    ) -> GroupSignal | None:
+    ) -> ConsensusResult | None:
         """Union ensemble voting: any brain detecting TP → signal.
 
         Designed for microstructure (barrier) groups where XGBoost excels
@@ -422,8 +416,7 @@ class ContractGroupConsensus:
         Logic:
           - Any brain voting "long"  → group may signal long.
           - Any brain voting "short" → group may signal short.
-          - If both directions present: aggregate up/down probabilities
-            break the tie.
+          - If both directions present: confidence-weighted tie-break.
           - Confidence = max-voter confidence + small bonus per additional
             agreeing brain.
         """
@@ -431,8 +424,6 @@ class ContractGroupConsensus:
         short_voters: list[tuple[str, float]] = []
         neutral_voters: list[str] = []
         all_brain_ids: list[str] = []
-        up_probs: list[float] = []
-        down_probs: list[float] = []
 
         for p in proposals:
             try:
@@ -441,18 +432,17 @@ class ContractGroupConsensus:
                 bid = "unknown"
             all_brain_ids.append(bid)
 
-            pred = getattr(p, "prediction", None) or {}
-            bias = pred.get("direction_bias", "neutral")
-            conf = float(pred.get("confidence", 0.5))
+            # Check for degraded signal
+            if isinstance(p, DegradedResult):
+                neutral_voters.append(bid)
+                continue
 
-            up = float(pred.get("up_probability", 0.5))
-            down = float(pred.get("down_probability", 0.5))
-            up_probs.append(up)
-            down_probs.append(down)
+            direction_str = getattr(p, "direction", "neutral")
+            conf = float(getattr(p, "confidence", 0.5))
 
-            if bias == "long":
+            if direction_str == "long":
                 long_voters.append((bid, conf))
-            elif bias == "short":
+            elif direction_str == "short":
                 short_voters.append((bid, conf))
             else:
                 neutral_voters.append(bid)
@@ -465,12 +455,13 @@ class ContractGroupConsensus:
         # ── Union direction ──
         has_long = long_count > 0
         has_short = short_count > 0
+        direction: Direction = "neutral"  # narrowed per branch below
 
         if has_long and has_short:
-            # Tie-break: compare aggregate up vs down probability
-            avg_up = sum(up_probs) / total
-            avg_down = sum(down_probs) / total
-            if avg_up >= avg_down:
+            # Tie-break: compare aggregate confidence of each side
+            long_conf_sum = sum(c[1] for c in long_voters)
+            short_conf_sum = sum(c[1] for c in short_voters)
+            if long_conf_sum >= short_conf_sum:
                 direction = "long"
                 supporting = long_voters
                 opposing = short_voters
@@ -490,21 +481,18 @@ class ContractGroupConsensus:
             # All brains neutral: use avg brain confidence rather than 0.0
             # so confidence-drop exits are proportional to actual conviction
             # decline, not an artificial cliff from 0.90 → 0.00.
-            avg_conf = sum(float(pred.get("confidence", 0.5)) for p in proposals) / max(total, 1)
+            avg_conf = sum(float(getattr(p, "confidence", 0.5)) for p in proposals) / max(total, 1)
             # Dampen: neutral consensus is inherently lower-confidence than
             # directional consensus, but not zero.
             neutral_confidence = round(avg_conf * 0.55, 4)
-            return GroupSignal(
-                group_name=self.group["name"],
+            return ConsensusResult(
                 direction="neutral",
                 confidence=neutral_confidence,
-                consensus_score=neutral_confidence,
-                supporting_count=0,
-                opposing_count=0,
-                neutral_count=neutral_count,
-                total_count=total,
-                horizon_cycles=self.group["horizon_cycles"],
+                supporting_brains=[],
+                dissenting_brains=[],
                 brain_ids=all_brain_ids,
+                supporting_count=0,
+                total_count=total,
             )
 
         # ── Union confidence ──
@@ -521,17 +509,14 @@ class ContractGroupConsensus:
             0.35, min(0.95, max_conf + agreement_bonus - opposition_penalty - neutral_drag)
         )
 
-        return GroupSignal(
-            group_name=self.group["name"],
+        return ConsensusResult(
             direction=direction,
             confidence=round(confidence, 4),
-            consensus_score=round(confidence, 4),
-            supporting_count=len(supporting),
-            opposing_count=len(opposing),
-            neutral_count=neutral_count,
-            total_count=total,
-            horizon_cycles=self.group["horizon_cycles"],
+            supporting_brains=[bid for bid, _ in supporting],
+            dissenting_brains=[bid for bid, _ in opposing],
             brain_ids=all_brain_ids,
+            supporting_count=len(supporting),
+            total_count=total,
         )
 
 
@@ -668,7 +653,7 @@ def filter_proposals_for_ab(
 def compute_all_group_signals(
     brain_proposals: list[tuple[dict[str, Any], Any]],
     dynamic_weighter: Any = None,
-) -> dict[str, GroupSignal | None]:
+) -> dict[str, ConsensusResult | None]:
     """Group brain proposals by contract type and compute per-group consensus.
 
     Args:
@@ -676,7 +661,7 @@ def compute_all_group_signals(
         dynamic_weighter: optional DynamicBrainWeighter for vote weights.
 
     Returns:
-        dict mapping group_name → GroupSignal (or None if group had no proposals).
+        dict mapping group_name → ConsensusResult (or None if group had no proposals).
     """
     grouped: dict[str, list[Any]] = {g_name: [] for g_name in _GROUP_BY_NAME}
 
@@ -700,17 +685,12 @@ def compute_all_group_signals(
             )
             continue  # Skip brains with unrecognised contract_group
 
-        # Stamp brain_id onto proposal if not present
-        try:
-            if not getattr(prop, "brain_id", None):
-                prop.brain_id = b_info.get("brain_id", "unknown")
-        except Exception:
-            pass
-
+        # BrainSignal always carries brain_id from the adapter.
+        # Stamping is no longer needed (and would fail on frozen objects).
         grouped[group["name"]].append(prop)
 
     ContractGroupConsensus({})
-    result: dict[str, GroupSignal | None] = {}
+    result: dict[str, ConsensusResult | None] = {}
     for group_def in ALL_GROUPS:
         name = group_def["name"]
         props = grouped.get(name, [])

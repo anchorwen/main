@@ -78,7 +78,7 @@ def _register_legacy_release(container, tmp_path, version="1.0.0"):
 class TestReleaseReadinessService:
     def test_build_report_ready(self, tmp_path):
         c = _container(tmp_path)
-        report = c.release_readiness.build_report()  # type: ignore[reportOptionalMemberAccess]
+        report = c.release_readiness.build_report()
         assert report["schema_version"] == SCHEMA_RELEASE_READINESS
         assert report["ready"] is True
         assert report["summary"]["failed_check_count"] == 0
@@ -97,7 +97,7 @@ class TestReleaseReadinessService:
 
     def test_required_services_are_detailed(self, tmp_path):
         c = _container(tmp_path)
-        report = c.release_readiness.build_report()  # type: ignore[reportOptionalMemberAccess]
+        report = c.release_readiness.build_report()
         details = report["services"]["details"]
         assert details["runtime_loop"]["present"] is True
         assert details["inspection_service"]["present"] is True
@@ -118,7 +118,7 @@ class TestReleaseReadinessService:
 
     def test_report_includes_alpha_budget_governance_empty(self, tmp_path):
         c = _container(tmp_path)
-        report = c.release_readiness.build_report()  # type: ignore[reportOptionalMemberAccess]
+        report = c.release_readiness.build_report()
         assert report[PAYLOAD_KEY_ALPHA_BUDGET_GOVERNANCE]["record_count"] == 0
         assert report[PAYLOAD_KEY_ALPHA_BUDGET_GOVERNANCE]["missing_evidence_count"] == 0
         assert report["summary"]["alpha_budget_warning_total"] == 0
@@ -129,7 +129,7 @@ class TestReleaseReadinessService:
     def test_alpha_budget_clean_keeps_readiness_ready(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_alpha_release(c, tmp_path, warning_count=0)
-        report = c.release_readiness.build_report()  # type: ignore[reportOptionalMemberAccess]
+        report = c.release_readiness.build_report()
         assert report["ready"] is True
         assert report[PAYLOAD_KEY_ALPHA_BUDGET_GOVERNANCE]["evidence_count"] == 1
         assert report["summary"]["alpha_budget_timeline_event_count"] == 1
@@ -142,19 +142,19 @@ class TestReleaseReadinessService:
     def test_readiness_summary_normalizes_malformed_registry_governance_fields(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_alpha_release(c, tmp_path, warning_count=0)
-        registry_path = Path(c.release_registry.path)  # type: ignore[reportOptionalMemberAccess]
+        registry_path = Path(c.release_registry.path)
         records = json.loads(registry_path.read_text(encoding="utf-8"))
         records[0]["summary"]["governance_focus"] = "invalid"
         records[0]["summary"]["governance_warning_count"] = "9"
         registry_path.write_text(json.dumps(records, indent=2, default=str), encoding="utf-8")
-        report = c.release_readiness.build_report()  # type: ignore[reportOptionalMemberAccess]
+        report = c.release_readiness.build_report()
         assert report["summary"][PAYLOAD_KEY_GOVERNANCE_FOCUS] == []
         assert report["summary"][PAYLOAD_KEY_GOVERNANCE_WARNING_COUNT] == 0
 
     def test_alpha_budget_missing_evidence_blocks_readiness(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_legacy_release(c, tmp_path)
-        report = c.release_readiness.build_report()  # type: ignore[reportOptionalMemberAccess]
+        report = c.release_readiness.build_report()
         assert report["ready"] is False
         assert "alpha_budget_evidence_registered" in report["summary"]["failed_checks"]
         assert report["summary"]["alpha_budget_missing_evidence_count"] == 1
@@ -162,7 +162,7 @@ class TestReleaseReadinessService:
     def test_alpha_budget_warnings_block_readiness(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_alpha_release(c, tmp_path, warning_count=1)
-        report = c.release_readiness.build_report()  # type: ignore[reportOptionalMemberAccess]
+        report = c.release_readiness.build_report()
         assert report["ready"] is False
         assert "alpha_budget_warnings_clear" in report["summary"]["failed_checks"]
         assert report["summary"]["alpha_budget_warning_total"] == 1
@@ -170,7 +170,7 @@ class TestReleaseReadinessService:
     def test_save_report(self, tmp_path):
         c = _container(tmp_path / "data")
         out = tmp_path / "release" / "readiness.json"
-        saved = c.release_readiness.save_report(str(out))  # type: ignore[reportOptionalMemberAccess]
+        saved = c.release_readiness.save_report(str(out))
         assert saved == str(out)
         payload = json.loads(out.read_text(encoding="utf-8"))
         assert payload["ready"] is True
@@ -178,12 +178,12 @@ class TestReleaseReadinessService:
     def test_all_release_environments_ready(self, tmp_path):
         for env in ["development", "production"]:
             c = _container(tmp_path / env, env=env)
-            report = c.release_readiness.build_report()  # type: ignore[reportOptionalMemberAccess]
+            report = c.release_readiness.build_report()
             assert report["ready"] is True
 
     def test_test_environment_reports_degraded_profile(self, tmp_path):
         c = _container(tmp_path / "test", env="test")
-        report = c.release_readiness.build_report()  # type: ignore[reportOptionalMemberAccess]
+        report = c.release_readiness.build_report()
         assert report["ready"] is False
         assert "metrics" in report["services"]["missing"]
         assert "audit_log" in report["services"]["missing"]
@@ -191,7 +191,7 @@ class TestReleaseReadinessService:
     def test_fast_validation_uses_core_checks_only(self, tmp_path):
         c = _container(tmp_path / "data")
         _register_legacy_release(c, tmp_path)
-        report = c.release_readiness.build_report(validation_mode="fast")  # type: ignore[reportOptionalMemberAccess]
+        report = c.release_readiness.build_report(validation_mode="fast")
         assert report[PAYLOAD_KEY_VALIDATION_MODE] == "fast"
         names = [item["name"] for item in report["checks"]]
         assert "alpha_budget_evidence_registered" not in names
@@ -331,7 +331,7 @@ class TestReadinessCLI:
 class TestReadinessArchitecture:
     def test_capability_names_stable(self, tmp_path):
         c = _container(tmp_path)
-        report = c.release_readiness.build_report()  # type: ignore[reportOptionalMemberAccess]
+        report = c.release_readiness.build_report()
         expected = {
             READINESS_CAP_DECISION_CYCLE,
             READINESS_CAP_RISK_EVALUATION,
@@ -355,7 +355,7 @@ class TestReadinessArchitecture:
 
     def test_checks_are_machine_readable(self, tmp_path):
         c = _container(tmp_path)
-        report = c.release_readiness.build_report()  # type: ignore[reportOptionalMemberAccess]
+        report = c.release_readiness.build_report()
         for check in report["checks"]:
             assert set(check) == {"name", "passed", "detail"}
             assert isinstance(check["passed"], bool)
@@ -363,7 +363,7 @@ class TestReadinessArchitecture:
 
     def test_summary_matches_checks(self, tmp_path):
         c = _container(tmp_path)
-        report = c.release_readiness.build_report()  # type: ignore[reportOptionalMemberAccess]
+        report = c.release_readiness.build_report()
         failed = [item for item in report["checks"] if not item["passed"]]
         assert report["summary"]["failed_check_count"] == len(failed)
         assert report["ready"] == (len(failed) == 0)

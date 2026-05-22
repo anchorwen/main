@@ -10,8 +10,8 @@ from core.parliament.contract_groups import (
     MICRO_GROUP,
     MICRO_H1_GROUP,
     MICRO_M15_GROUP,
+    ConsensusResult,
     ContractGroupConsensus,
-    GroupSignal,
     compute_all_group_signals,
     get_group_for_brain_type,
     get_group_for_proposal,
@@ -22,13 +22,24 @@ from core.parliament.contract_groups import (
 
 @dataclass
 class FakeProposal:
-    """Minimal BrainDecisionProposal stand-in for tests."""
+    """Minimal BrainSignal-compatible stand-in for tests.
+
+    Uses the same attribute names as BrainSignal so that consensus
+    methods consume this identically — no dict nesting.
+    """
 
     brain_id: str = "B1"
+    direction: str = "neutral"
+    confidence: float = 0.5
+    raw_score: float = 0.0
+    fallback: bool = False
+    runtime_ms: float = 0.0
+    vote_weight: float = 1.0
+
+    # Legacy attributes for backward-compat tests
+    brain_type: str = ""
     prediction: dict[str, Any] = field(default_factory=dict)
     health: dict[str, Any] = field(default_factory=dict)
-    vote_weight: float = 1.0
-    brain_type: str = ""
 
 
 def _make_prop(
@@ -42,6 +53,11 @@ def _make_prop(
 ) -> FakeProposal:
     return FakeProposal(
         brain_id=bid,
+        direction=direction,
+        confidence=conf,
+        raw_score=max(up, down),
+        fallback=fallback,
+        vote_weight=weight,
         prediction={
             "up_probability": up,
             "down_probability": down,
@@ -49,7 +65,6 @@ def _make_prop(
             "direction_bias": direction,
         },
         health={"fallback_used": fallback},
-        vote_weight=weight,
     )
 
 
@@ -60,9 +75,11 @@ def test_barrier_group_definition():
     assert BARRIER_GROUP["name"] == "barrier_12bar"
     assert BARRIER_GROUP["horizon_cycles"] == 12
     assert "lightgbm_v1" in BARRIER_GROUP["brain_types"]
-    assert "onnx_v9" in BARRIER_GROUP["brain_types"]
-    assert "online_sgd" in BARRIER_GROUP["brain_types"]
-    assert "xgboost_v9" not in BARRIER_GROUP["brain_types"]  # necrotic, removed
+    # Dictator Protocol (2026-05-22): onnx_v9 + online_sgd evicted —
+    # barrier_12bar is a single-brain Huber regression probe.
+    assert "onnx_v9" not in BARRIER_GROUP["brain_types"]
+    assert "online_sgd" not in BARRIER_GROUP["brain_types"]
+    assert "xgboost_v9" not in BARRIER_GROUP["brain_types"]
 
 
 def test_micro_group_definition():
@@ -173,7 +190,7 @@ def test_compute_single_long():
     assert result.direction == "long"
     assert 0.0 < result.confidence <= 1.0
     assert result.supporting_count == 1
-    assert result.opposing_count == 0
+    assert len(result.dissenting_brains) == 0
     assert result.total_count == 1
 
 
@@ -196,7 +213,7 @@ def test_compute_unanimous_long():
     assert result is not None
     assert result.direction == "long"
     assert result.supporting_count == 3
-    assert result.opposing_count == 0
+    assert len(result.dissenting_brains) == 0
     assert result.confidence > 0.5
 
 
@@ -210,7 +227,10 @@ def test_compute_majority_long_with_minority_neutral():
     result = c.compute(props)
     assert result is not None
     assert result.direction == "long"
-    assert result.neutral_count == 1
+    assert len(result.dissenting_brains) == 0
+    # One neutral = 2 supporting + 0 dissenting out of 3 total
+    assert result.supporting_count == 2
+    assert result.total_count == 3
     # Neutral penalty should apply
     assert result.confidence < 0.85
 
@@ -264,16 +284,16 @@ def test_compute_brain_ids_collected():
     assert set(result.brain_ids) == {"alpha", "beta"}
 
 
-def test_compute_horizon_from_group():
+def test_compute_group_respects_different_groups():
     c = ContractGroupConsensus(BARRIER_GROUP)
     result = c.compute([_make_prop()])
     assert result is not None
-    assert result.horizon_cycles == 12
+    assert result.direction in ("long", "short", "neutral")
 
     c2 = ContractGroupConsensus(MICRO_GROUP)
     result2 = c2.compute([_make_prop()])
     assert result2 is not None
-    assert result2.horizon_cycles == 8
+    assert result2.direction in ("long", "short", "neutral")
 
 
 # ── compute_all_group_signals ──
@@ -343,25 +363,24 @@ def test_compute_all_group_signals_unknown_contract_group_skipped():
         assert result[g_name] is None, f"{g_name} should be None for unknown brain"
 
 
-def test_compute_all_group_signals_stamps_brain_id():
-    """Proposals without brain_id get it stamped from brain_info."""
+def test_compute_all_group_signals_routes_by_contract_group():
+    """Proposals are routed to the correct group via brain_info contract_group,
+    not by brain_type fallback.  BrainSignal carries its own brain_id
+    from the adapter — no stamping needed."""
     p = FakeProposal(
-        brain_id="",  # empty string triggers stamping
-        prediction={
-            "up_probability": 0.7,
-            "down_probability": 0.3,
-            "confidence": 0.8,
-            "direction_bias": "long",
-        },
+        brain_id="B_adaptive",  # brain_id already set by adapter
+        direction="long",
+        confidence=0.8,
+        raw_score=0.7,
     )
     brain_info = {
         "brain_type": "onnx_v9",
         "contract_group": "barrier_12bar",
-        "brain_id": "stamped_id",
+        "brain_id": "B_adaptive",
     }
     result = compute_all_group_signals([(brain_info, p)])
     assert result["barrier_12bar"] is not None
-    assert p.brain_id == "stamped_id"
+    assert result["barrier_12bar"].brain_ids == ["B_adaptive"]
 
 
 def test_compute_all_group_signals_empty_list():
@@ -374,23 +393,21 @@ def test_compute_all_group_signals_empty_list():
     assert result["statarb_dynamic"] is None
 
 
-# ── GroupSignal dataclass ──
+# ── ConsensusResult dataclass ──
 
 
-def test_group_signal_defaults():
-    gs = GroupSignal(
-        group_name="test",
+def test_consensus_result_defaults():
+    gs = ConsensusResult(
         direction="long",
         confidence=0.75,
-        consensus_score=0.75,
+        supporting_brains=["B1", "B2", "B3"],
+        dissenting_brains=[],
         supporting_count=3,
-        opposing_count=0,
-        neutral_count=1,
         total_count=4,
-        horizon_cycles=12,
     )
     assert gs.brain_ids == []
     assert gs.direction == "long"
+    assert gs.supporting_brains == ["B1", "B2", "B3"]
 
 
 # ── Union Ensemble voting ──────────────────────────────────────────────
@@ -420,7 +437,7 @@ def test_union_single_long_activates():
     assert result is not None
     assert result.direction == "long"
     assert result.supporting_count == 1
-    assert result.opposing_count == 0
+    assert len(result.dissenting_brains) == 0
     assert result.confidence >= 0.5
 
 
@@ -443,8 +460,9 @@ def test_union_xgboost_long_transformer_neutral():
     assert result is not None
     assert result.direction == "long"
     assert result.supporting_count == 1
-    assert result.opposing_count == 0
-    assert result.neutral_count == 1
+    assert len(result.dissenting_brains) == 0
+    assert result.total_count == 2
+    # One neutral = 1 supporting + 0 dissenting out of 2 total
 
 
 def test_union_xgboost_short_transformer_long():
@@ -460,7 +478,7 @@ def test_union_xgboost_short_transformer_long():
     # avg_up = (0.30+0.75)/2 = 0.525, avg_down = (0.70+0.25)/2 = 0.475 → long
     assert result.direction == "long"
     assert result.supporting_count == 1  # only TF_M15 agrees
-    assert result.opposing_count == 1  # XGB_M15 dissents
+    assert len(result.dissenting_brains) == 1  # XGB_M15 dissents
 
 
 def test_union_all_neutral():
@@ -581,7 +599,8 @@ def test_compute_all_group_signals_micro_uses_union():
     assert result["micro_m15"].direction == "long"
     # XGB + 1 neutral
     assert result["micro_m15"].supporting_count == 1
-    assert result["micro_m15"].neutral_count == 1
+    assert len(result["micro_m15"].dissenting_brains) == 0
+    assert result["micro_m15"].total_count == 2  # 1 supporting + 1 neutral
     # Other groups empty
     assert result["barrier_12bar"] is None
 

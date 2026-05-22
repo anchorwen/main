@@ -488,8 +488,12 @@ class MetaSignalFilter:
             "atr_buffer": list(self._atr_buffer),
             "micro_spread_buffer": list(self._micro_spread_buffer),
         }
-        with open(path, "w", encoding="utf-8") as fh:
+        import os as _os
+
+        tmp_path = path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as fh:
             _json.dump(state, fh)
+        _os.replace(tmp_path, path)
 
     def load_state(self, path: str) -> None:
         """Restore rolling buffers from a previously-saved state file.

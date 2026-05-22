@@ -80,8 +80,8 @@ class TestSchedulerService:
             feature_store_scheduled_update=False,
             ops_monitoring_enabled=False,
         )
-        c.governance_service.register_brain("t1", "live")  # type: ignore[reportOptionalMemberAccess]
-        c.brain_tracker.record_outcome("t1", {"composite_score": 0.8})  # type: ignore[reportOptionalMemberAccess]
+        c.governance_service.register_brain("t1", "live")
+        c.brain_tracker.record_outcome("t1", {"composite_score": 0.8})
         sp = StatePersistence(str(tmp_path / "state"))
         sched = SchedulerService.for_container(c, persistence=sp)
         results = sched.run_once()
@@ -106,7 +106,7 @@ class TestSystemFacade:
 
     def test_metrics(self, tmp_path):
         c = _container(tmp_path)
-        c.metrics.inc("test_x", 3)  # type: ignore[reportOptionalMemberAccess]
+        c.metrics.inc("test_x", 3)
         facade = SystemFacade(c)
         m = facade.metrics()
         assert m["counters"]["test_x"] == 3
@@ -120,15 +120,15 @@ class TestSystemFacade:
 
     def test_list_brains(self, tmp_path):
         c = _container(tmp_path)
-        c.governance_service.register_brain("a", "live")  # type: ignore[reportOptionalMemberAccess]
-        c.governance_service.register_brain("b", "candidate")  # type: ignore[reportOptionalMemberAccess]
+        c.governance_service.register_brain("a", "live")
+        c.governance_service.register_brain("b", "candidate")
         facade = SystemFacade(c)
         brains = facade.list_brains()
         assert len(brains) == 2
 
     def test_freeze_unfreeze(self, tmp_path):
         c = _container(tmp_path)
-        c.governance_service.register_brain("x", "live")  # type: ignore[reportOptionalMemberAccess]
+        c.governance_service.register_brain("x", "live")
         facade = SystemFacade(c)
         r = facade.freeze_brain("x", "test")
         assert r["status"] == "frozen"
@@ -145,7 +145,7 @@ class TestSystemFacade:
 
     def test_audit_recent(self, tmp_path):
         c = _container(tmp_path)
-        c.audit_log.log(event_type="test", severity="info")  # type: ignore[reportOptionalMemberAccess]
+        c.audit_log.log(event_type="test", severity="info")
         facade = SystemFacade(c)
         entries = facade.audit_recent()
         assert len(entries) >= 1
@@ -167,7 +167,7 @@ class TestSystemFacade:
 
     def test_full_workflow(self, tmp_path):
         c = _container(tmp_path, enable_idempotency=False)
-        c.governance_service.register_brain("alpha", "live")  # type: ignore[reportOptionalMemberAccess]
+        c.governance_service.register_brain("alpha", "live")
         orch = c.build_orchestrator()
         facade = SystemFacade(c, orchestrator=orch)
 
@@ -231,8 +231,8 @@ class TestSystemSelfTest:
 class TestFullServiceStack:
     def test_scheduler_facade_lifecycle_integration(self, tmp_path):
         c = _container(tmp_path, enable_idempotency=False)
-        c.governance_service.register_brain("alpha", "live")  # type: ignore[reportOptionalMemberAccess]
-        c.brain_tracker.record_outcome("alpha", {"composite_score": 0.7})  # type: ignore[reportOptionalMemberAccess]
+        c.governance_service.register_brain("alpha", "live")
+        c.brain_tracker.record_outcome("alpha", {"composite_score": 0.7})
 
         orch = c.build_orchestrator()
         sp = StatePersistence(str(tmp_path / "state"))

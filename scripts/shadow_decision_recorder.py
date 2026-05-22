@@ -11,11 +11,9 @@ rather than ``BrainDecisionProposal`` objects.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
 from core.contracts.domain.decision_record import DecisionRecord
-from core.contracts.enums import BrainRole, BrainStatus
 from core.contracts.ids import (
     new_intent_id,
     new_proposal_id,
@@ -23,6 +21,9 @@ from core.contracts.ids import (
     new_snapshot_id,
     new_verdict_id,
 )
+
+if TYPE_CHECKING:
+    from core.schemas.trading_contracts import BrainSignal
 from core.ledger.storage.jsonl_ledger_store import JsonlLedgerStore
 from core.runtime.shadow_recorder import record_shadow_from_proposals  # noqa: F401 — re-export
 
@@ -64,28 +65,19 @@ def _derive_side(consensus: str | dict[str, Any]) -> str:
 
 def _result_to_proposal(
     result: dict[str, Any], snapshot_id: str, event_time: datetime
-) -> BrainDecisionProposal | None:
+) -> BrainSignal | None:
     if result.get("status") != "ok":
         return None
 
-    return BrainDecisionProposal(
-        schema_version="brain_decision_proposal.v1",
-        proposal_id=new_proposal_id(),
-        snapshot_id=snapshot_id,
+    from core.schemas.trading_contracts import BrainSignal
+
+    return BrainSignal(
         brain_id=result.get("brain_id", "unknown"),
-        brain_role=BrainRole.ALPHA,
-        brain_status=BrainStatus.SHADOW,
-        model_version=result.get("brain_type", "unknown"),
-        event_time=event_time,
-        generated_at=event_time,
-        prediction={
-            "direction_bias": result.get("direction_bias", "neutral"),
-            "up_probability": result.get("up_probability", 0.5),
-            "down_probability": result.get("down_probability", 0.5),
-            "confidence": result.get("confidence", 0.0),
-        },
-        health={"runtime_ms": result.get("runtime_ms", 0.0)},
-        vote_weight=1.0,
+        direction=result.get("direction_bias", "neutral"),
+        confidence=result.get("confidence", 0.0),
+        raw_score=result.get("raw_score", 0.0),
+        fallback=result.get("fallback", False),
+        runtime_ms=result.get("runtime_ms", 0.0),
     )
 
 

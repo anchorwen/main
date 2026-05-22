@@ -131,7 +131,7 @@ class TestArchitectureInvariants:
         cfg = EnvironmentConfig.production(str(tmp_path))
         cfg.enable_idempotency = False
         c = ServiceContainer(cfg).build()
-        c.governance_service.register_brain("alpha", "live")  # type: ignore[reportOptionalMemberAccess]
+        c.governance_service.register_brain("alpha", "live")
 
         from apps.engine.system_facade import SystemFacade
         from core.deployment.lifecycle_manager import LifecycleManager
@@ -155,7 +155,7 @@ class TestArchitectureInvariants:
 
         h = facade.health()
         assert h["readiness"]["status"] == "ready"
-        assert c.metrics.get_counter(CYCLES_TOTAL) >= 5  # type: ignore[reportOptionalMemberAccess]
+        assert c.metrics.get_counter(CYCLES_TOTAL) >= 5
 
         lm.shutdown(save_state=True)
 

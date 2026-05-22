@@ -74,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
             # Heartbeat before each poll
             _log(f"Poll cycle {total_cycles + 1} — heartbeat", args.log_path)
 
-            from scripts.mt5_bridge_worker import run_worker  # type: ignore[import-not-found]
+            from scripts.mt5_bridge_worker import run_worker
 
             # Build an argparse.Namespace mimicking the worker CLI
             worker_args = argparse.Namespace(

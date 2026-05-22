@@ -101,19 +101,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _fetch_reference_price(*, mt5_terminal_path: str, symbol: str, side: str) -> float:
-    import MetaTrader5 as mt5  # type: ignore
+    import MetaTrader5 as mt5
 
-    if not mt5.initialize(path=mt5_terminal_path):  # type: ignore[reportAttributeAccessIssue]
-        raise RuntimeError(f"mt5 initialize failed: {mt5.last_error()}")  # type: ignore[reportAttributeAccessIssue]
+    if not mt5.initialize(path=mt5_terminal_path):
+        raise RuntimeError(f"mt5 initialize failed: {mt5.last_error()}")
     try:
-        tick = mt5.symbol_info_tick(symbol)  # type: ignore[reportAttributeAccessIssue]
+        tick = mt5.symbol_info_tick(symbol)
         if tick is None:
             raise RuntimeError(f"symbol tick unavailable: {symbol}")
         if side == "long":
             return float(tick.ask)
         return float(tick.bid)
     finally:
-        mt5.shutdown()  # type: ignore[reportAttributeAccessIssue]
+        mt5.shutdown()
 
 
 def main(argv: list[str] | None = None) -> int:

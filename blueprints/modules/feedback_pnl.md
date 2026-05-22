@@ -35,6 +35,7 @@ cycle N+H:   settle_all(mid_price)  → only ttl=0 settled at horizon bar
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |
 | FIX-20260519-010 | 2026-05-19 | cursor-agent | — | Track 1+2: Horizon-matched counterfactual PnL + MFE/MAE profiling. record_signal() accepts expected_horizon→TTL, update_pending() tracks MFE/MAE per cycle, settle_all() only settles ttl=0. _settle() computes MFE/MAE R-multiples from tracked prices. | RC-06 |
 | FIX-20260517-013 | 2026-05-17 | cursor-agent | — | shadow_pnl_loop.py: added slippage=0.10 to settle_all() and record_signal() calls. Previously slippage defaulted to 0.0, undercounting shadow PnL friction by 0.10 USD/side. | contract-violation |
 

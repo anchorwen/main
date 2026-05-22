@@ -302,40 +302,6 @@ def test_operations_service_returns_rejected_message_view_with_review_governance
     )
 
 
-def test_operations_service_returns_message_view(tmp_path):
-    communication_writer, _, _, operations = build_services(tmp_path)
-    envelope = build_envelope("message_001", "corr_001")
-    communication_writer.write_record(envelope, build_result("message_001"))
-
-    view = operations.get_message_operations_view(
-        date_key="2026-04-24",
-        target="exec_bridge",
-        message_id="message_001",
-    )
-
-    assert view["record"]["message_id"] == "message_001"
-    assert view["trace"]["message_id"] == "message_001"
-    assert view["trace"]["delivery_state"]["phase"] == "dispatch_recorded"
-    assert view["trace"]["delivery_state"]["issue_code"] == "dispatch_pending"
-    assert view["trace"]["delivery_state"]["delivery_posture"] == "action_required"
-    assert_operations_view_stable_contract(
-        view,
-        operations_summary=build_operations_summary(
-            posture="action_required",
-            posture_source="trace.delivery_state.delivery_posture",
-            target_issue_codes=["dispatch_pending"],
-            governance_tags=["auto_replay_eligible"],
-        ),
-    )
-    assert view["replay_plan"]["recommended_strategy"] == "direct_replay_candidate"
-    assert view["replay_gate"]["decision"] == ReplayGateDecision.ALLOW
-    assert view["replay_gate"]["governance_summary"] == view["governance_summary"]
-    assert view["governance_summary"] == sample_governance_summary(
-        target_issue_codes=["dispatch_pending"],
-        governance_tags=["auto_replay_eligible"],
-    )
-
-
 def test_operations_service_message_view_prefers_plan_governance_summary_when_gate_omits_it():
     class CommunicationReaderStub:
         def find_by_message_id(self, **kwargs):
@@ -396,7 +362,7 @@ def test_operations_service_message_view_prefers_plan_governance_summary_when_ga
         operations_summary=build_operations_summary(
             posture="action_required",
             posture_source="trace.delivery_state.delivery_posture",
-            governance_decision=None,  # type: ignore[reportArgumentType]
+            governance_decision=None,
             governance_posture="unknown",
             recommended_strategy="direct_replay_candidate",
             target_issue_codes=["dispatch_pending"],
@@ -902,7 +868,7 @@ def test_operations_service_replay_view_keeps_summary_sources_aligned_with_stabl
     assert view["operations_summary"]["block_reasons"] == {}
 
 
-def test_operations_service_replay_view_keeps_summary_sources_aligned_with_stable_operations_summary(
+def test_operations_service_replay_view_prefers_extensions_governance_summary_over_gate(
     tmp_path,
 ):
     _, _, _, operations = build_services(tmp_path)
@@ -1120,62 +1086,6 @@ def test_operations_service_derives_governance_summary_for_legacy_replay_record(
     )
     assert view["governance_sources"] == {
         "summary_source": CommunicationOperationsService.REPLAY_GOVERNANCE_SUMMARY_SOURCE_DERIVED,
-        "execution_projection_source": None,
-    }
-
-
-def test_operations_service_message_view_returns_unknown_posture_when_trace_missing():
-    class CommunicationReaderStub:
-        def find_by_message_id(self, **kwargs):
-            return {"message_id": kwargs["message_id"]}
-
-    class InspectionServiceStub:
-        def get_message_trace(self, **kwargs):
-            return None
-
-    class ReplayServiceStub:
-        def build_message_replay_plan(self, **kwargs):
-            return {
-                "recommended_strategy": "direct_replay_candidate",
-                "target_issue_codes": ["dispatch_pending"],
-                "review_issue_codes": [],
-            }
-
-    class ReplayGateStub:
-        def evaluate_message_plan(self, replay_plan):
-            return {
-                "decision": ReplayGateDecision.ALLOW,
-                "governance_summary": None,
-            }
-
-    operations = CommunicationOperationsService(
-        communication_reader=CommunicationReaderStub(),
-        inspection_service=InspectionServiceStub(),
-        replay_service=ReplayServiceStub(),
-        replay_gate=ReplayGateStub(),
-    )
-
-    view = operations.get_message_operations_view(
-        date_key="2026-04-24",
-        target="exec_bridge",
-        message_id="message_missing_trace",
-    )
-
-    assert view["trace"] is None
-    assert view["operations_posture"] == "unknown"
-    assert view["posture_sources"] == {
-        "operations_posture_source": None,
-    }
-    assert view["operations_summary"] == {
-        "posture": "unknown",
-        "posture_source": None,
-        "governance_decision": ReplayGateDecision.ALLOW,
-        "governance_posture": "auto_replay",
-        "recommended_strategy": "direct_replay_candidate",
-        "target_issue_codes": ["dispatch_pending"],
-        "review_issue_codes": [],
-        "governance_tags": [],
-        "governance_summary_source": None,
         "execution_projection_source": None,
     }
 

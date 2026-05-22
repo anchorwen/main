@@ -57,9 +57,19 @@ class FillSimulator:
             if request.side == "buy":
                 return self._first_price(ask, last, bid)
             return self._first_price(bid, last, ask)
-        if request.side == "buy" and ask is not None and float(ask) <= float(request.limit_price):  # type: ignore[reportArgumentType]
+        if (
+            request.side == "buy"
+            and ask is not None
+            and request.limit_price is not None
+            and float(ask) <= float(request.limit_price)
+        ):
             return float(ask)
-        if request.side == "sell" and bid is not None and float(bid) >= float(request.limit_price):  # type: ignore[reportArgumentType]
+        if (
+            request.side == "sell"
+            and bid is not None
+            and request.limit_price is not None
+            and float(bid) >= float(request.limit_price)
+        ):
             return float(bid)
         return None
 

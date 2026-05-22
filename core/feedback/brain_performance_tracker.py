@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -41,9 +42,11 @@ class BrainPerformanceTracker:
             "brain_ids": sorted(self._records.keys()),
             "records": self._records,
         }
-        out.write_text(
+        tmp = out.with_suffix(out.suffix + ".tmp")
+        tmp.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
         )
+        os.replace(tmp, out)
         return out
 
     @classmethod
@@ -73,7 +76,7 @@ class BrainPerformanceTracker:
 
         scores = [e["composite_score"] for e in entries]
         outcomes = [e.get("execution_outcome", "unknown") for e in entries]
-        outcome_dist = {}
+        outcome_dist: dict[str, int] = {}
         for o in outcomes:
             outcome_dist[o] = outcome_dist.get(o, 0) + 1
 

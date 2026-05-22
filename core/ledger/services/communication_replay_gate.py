@@ -1,3 +1,5 @@
+from typing import Any
+
 from core.contracts.domain_keys import (
     PAYLOAD_KEY_ATTEMPT_COUNT,
     PAYLOAD_KEY_ATTEMPT_SUMMARY,
@@ -262,7 +264,7 @@ class CommunicationReplayGate:
         reasons: list[str],
         governance_tags: list[str],
     ) -> dict:
-        gate_decision = {
+        gate_decision: dict[str, Any] = {
             PAYLOAD_KEY_DECISION: decision,
             PAYLOAD_KEY_REASONS: reasons,
             PAYLOAD_KEY_GOVERNANCE_TAGS: governance_tags,

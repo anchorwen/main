@@ -101,7 +101,7 @@ class OnlineMLP:
     def _to_torch(self):
         import torch
 
-        model = _TorchOnlineMLP(self.n_features, self.n_classes)
+        model: Any = _TorchOnlineMLP(self.n_features, self.n_classes)
         with torch.no_grad():
             model.W1.copy_(torch.from_numpy(self.W1))
             model.b1.copy_(torch.from_numpy(self.b1))

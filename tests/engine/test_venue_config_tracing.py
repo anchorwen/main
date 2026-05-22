@@ -187,12 +187,12 @@ class TestConfigHotReload:
         c = ServiceContainer(EnvironmentConfig.development(str(base))).build()
         time.sleep(0.05)
         f.write_text(json.dumps({"ops_maturity_min_score": 51.0}), encoding="utf-8")
-        changes = c.config_hot_reload.check_and_reload()  # type: ignore[reportOptionalMemberAccess]
+        changes = c.config_hot_reload.check_and_reload()
         assert changes is not None
         assert c.config.ops_maturity_min_score == 51.0
         assert c.metrics is not None
         assert c.metrics.get_counter(ENGINE_CONFIG_RELOAD_TOTAL) == 1.0
-        evs = c.operations_timeline.list_events(event_type=TIMELINE_EVENT_ENGINE_CONFIG)  # type: ignore[reportOptionalMemberAccess]
+        evs = c.operations_timeline.list_events(event_type=TIMELINE_EVENT_ENGINE_CONFIG)
         assert len(evs) == 1
         assert evs[0].get("actor") == TIMELINE_ACTOR_HOT_RELOAD
         assert "ops_maturity_min_score" in (evs[0].get("summary") or {}).get("changed_keys", [])

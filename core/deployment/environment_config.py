@@ -85,7 +85,7 @@ class EnvironmentConfig:
 
     @classmethod
     def development(cls, base_dir: str, **overrides) -> "EnvironmentConfig":
-        defaults = {
+        defaults: dict[str, Any] = {
             "environment": Environment.DEVELOPMENT,
             "base_dir": base_dir,
             "enable_feedback_loop": True,
@@ -96,7 +96,7 @@ class EnvironmentConfig:
 
     @classmethod
     def test(cls, base_dir: str, **overrides) -> "EnvironmentConfig":
-        defaults = {
+        defaults: dict[str, Any] = {
             "environment": Environment.TEST,
             "base_dir": base_dir,
             "enable_audit_log": False,
@@ -112,7 +112,7 @@ class EnvironmentConfig:
 
     @classmethod
     def production(cls, base_dir: str, **overrides) -> "EnvironmentConfig":
-        defaults = {
+        defaults: dict[str, Any] = {
             "environment": Environment.PRODUCTION,
             "base_dir": base_dir,
             "enable_feedback_loop": True,

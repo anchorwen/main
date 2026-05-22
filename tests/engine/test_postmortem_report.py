@@ -32,7 +32,7 @@ def _container(tmp_path):
 class TestPostmortemReportService:
     def test_generate_clean_report(self, tmp_path):
         c = _container(tmp_path)
-        report = c.postmortem_report.generate(incident_id="inc-1")  # type: ignore[reportOptionalMemberAccess]
+        report = c.postmortem_report.generate(incident_id="inc-1")
         assert report["schema_version"] == SCHEMA_POSTMORTEM_REPORT
         assert report["incident"]["id"] == "inc-1"
         assert report["incident"]["status"] == "closed"
@@ -40,7 +40,7 @@ class TestPostmortemReportService:
 
     def test_generate_accepts_fast_validation_mode(self, tmp_path):
         c = _container(tmp_path)
-        report = c.postmortem_report.generate(incident_id="inc-fast", validation_mode="fast")  # type: ignore[reportOptionalMemberAccess]
+        report = c.postmortem_report.generate(incident_id="inc-fast", validation_mode="fast")
         assert report["schema_version"] == SCHEMA_POSTMORTEM_REPORT
         assert report[PAYLOAD_KEY_VALIDATION_MODE] == "fast"
         assert PAYLOAD_KEY_GOVERNANCE_FOCUS in report["summary"]
@@ -48,7 +48,7 @@ class TestPostmortemReportService:
 
     def test_generate_normalizes_malformed_compliance_governance_fields(self, tmp_path):
         c = _container(tmp_path)
-        original_generate = c.compliance_audit.generate  # type: ignore[reportOptionalMemberAccess]
+        original_generate = c.compliance_audit.generate
 
         def _malformed_generate(*, output=None, validation_mode=None):
             report = original_generate(output=output, validation_mode=validation_mode)
@@ -56,32 +56,32 @@ class TestPostmortemReportService:
             report["summary"][PAYLOAD_KEY_GOVERNANCE_WARNING_COUNT] = "8"
             return report
 
-        c.compliance_audit.generate = _malformed_generate  # type: ignore[reportOptionalMemberAccess]
-        report = c.postmortem_report.generate(incident_id="inc-malformed", validation_mode="fast")  # type: ignore[reportOptionalMemberAccess]
+        c.compliance_audit.generate = _malformed_generate
+        report = c.postmortem_report.generate(incident_id="inc-malformed", validation_mode="fast")
         assert report["summary"][PAYLOAD_KEY_GOVERNANCE_FOCUS] == []
         assert report["summary"][PAYLOAD_KEY_GOVERNANCE_WARNING_COUNT] == 0
 
     def test_report_includes_timeline_events(self, tmp_path):
         c = _container(tmp_path)
-        gate = c.release_gate.evaluate()  # type: ignore[reportOptionalMemberAccess]
-        c.operations_timeline.record_release_gate(gate, actor="ci")  # type: ignore[reportOptionalMemberAccess]
-        report = c.postmortem_report.generate(incident_id="inc-2")  # type: ignore[reportOptionalMemberAccess]
+        gate = c.release_gate.evaluate()
+        c.operations_timeline.record_release_gate(gate, actor="ci")
+        report = c.postmortem_report.generate(incident_id="inc-2")
         assert report["timeline_summary"]["event_count"] == 1
         assert report["timeline"][0]["actor"] == "ci"
 
     def test_failed_timeline_event_creates_finding(self, tmp_path):
         c = _container(tmp_path)
-        c.operations_timeline.record("custom_failure", {"passed": False})  # type: ignore[reportOptionalMemberAccess]
-        report = c.postmortem_report.generate(incident_id="inc-3")  # type: ignore[reportOptionalMemberAccess]
+        c.operations_timeline.record("custom_failure", {"passed": False})
+        report = c.postmortem_report.generate(incident_id="inc-3")
         ids = {f["id"] for f in report["findings"]}
         assert "timeline_failures" in ids
         assert report["incident"]["status"] == "action_required"
 
     def test_slo_breach_creates_finding(self, tmp_path):
         c = _container(tmp_path)
-        c.metrics.inc(CYCLES_TOTAL, 100)  # type: ignore[reportOptionalMemberAccess]
-        c.metrics.inc(CYCLES_ERRORS, 20)  # type: ignore[reportOptionalMemberAccess]
-        report = c.postmortem_report.generate(incident_id="inc-4")  # type: ignore[reportOptionalMemberAccess]
+        c.metrics.inc(CYCLES_TOTAL, 100)
+        c.metrics.inc(CYCLES_ERRORS, 20)
+        report = c.postmortem_report.generate(incident_id="inc-4")
         ids = {f["id"] for f in report["findings"]}
         assert "slo_breach" in ids
         assert report["impact"]["slo_breaching"] is True
@@ -89,21 +89,21 @@ class TestPostmortemReportService:
     def test_gate_block_creates_critical_status(self, tmp_path):
         c = _container(tmp_path)
         c.risk_service = None
-        report = c.postmortem_report.generate(incident_id="inc-5")  # type: ignore[reportOptionalMemberAccess]
+        report = c.postmortem_report.generate(incident_id="inc-5")
         ids = {f["id"] for f in report["findings"]}
         assert "release_gate_blocked" in ids
         assert report["incident"]["status"] == "critical"
 
     def test_corrective_actions_generated(self, tmp_path):
         c = _container(tmp_path)
-        c.operations_timeline.record("custom_failure", {"passed": False})  # type: ignore[reportOptionalMemberAccess]
-        report = c.postmortem_report.generate(incident_id="inc-6")  # type: ignore[reportOptionalMemberAccess]
+        c.operations_timeline.record("custom_failure", {"passed": False})
+        report = c.postmortem_report.generate(incident_id="inc-6")
         assert report["corrective_actions"]
         assert report["corrective_actions"][0]["owner"] == "operations"
 
     def test_engine_config_in_postmortem_evidence(self, tmp_path):
         c = _container(tmp_path / "data")
-        c.operations_timeline.record(  # type: ignore[reportOptionalMemberAccess]
+        c.operations_timeline.record(
             TIMELINE_EVENT_ENGINE_CONFIG,
             {
                 "schema_version": SCHEMA_ENGINE_CONFIG_RELOAD_EVENT,
@@ -113,7 +113,7 @@ class TestPostmortemReportService:
             },
             actor=TIMELINE_ACTOR_HOT_RELOAD,
         )
-        report = c.postmortem_report.generate(incident_id="inc-ecfg")  # type: ignore[reportOptionalMemberAccess]
+        report = c.postmortem_report.generate(incident_id="inc-ecfg")
         ec = report["evidence"][EVIDENCE_SECTION_ENGINE_CONFIG]
         assert ec["timeline"]["event_count"] == 1
         assert ec["current"]["schema_version"] == SCHEMA_ENGINE_CONFIG_EVIDENCE
@@ -121,7 +121,7 @@ class TestPostmortemReportService:
 
     def test_alpha_budget_governance_clean_in_evidence(self, tmp_path):
         c = _container(tmp_path / "data")
-        c.operations_timeline.record_alpha_budget_governance(  # type: ignore[reportOptionalMemberAccess]
+        c.operations_timeline.record_alpha_budget_governance(
             {
                 "schema_version": SCHEMA_ALPHA_BUDGET_GOVERNANCE_EVENT,
                 "source": "test",
@@ -133,7 +133,7 @@ class TestPostmortemReportService:
                 "warning_release_count": 0,
             }
         )
-        report = c.postmortem_report.generate(incident_id="inc-alpha-clean")  # type: ignore[reportOptionalMemberAccess]
+        report = c.postmortem_report.generate(incident_id="inc-alpha-clean")
         alpha = report["evidence"][PAYLOAD_KEY_ALPHA_BUDGET_GOVERNANCE]
         assert alpha["event_count"] == 1
         assert alpha["evidence_count"] == 1
@@ -143,7 +143,7 @@ class TestPostmortemReportService:
 
     def test_alpha_budget_missing_evidence_creates_finding(self, tmp_path):
         c = _container(tmp_path / "data")
-        c.operations_timeline.record_alpha_budget_governance(  # type: ignore[reportOptionalMemberAccess]
+        c.operations_timeline.record_alpha_budget_governance(
             {
                 "schema_version": SCHEMA_ALPHA_BUDGET_GOVERNANCE_EVENT,
                 "source": "test",
@@ -155,7 +155,7 @@ class TestPostmortemReportService:
                 "warning_release_count": 0,
             }
         )
-        report = c.postmortem_report.generate(incident_id="inc-alpha-missing")  # type: ignore[reportOptionalMemberAccess]
+        report = c.postmortem_report.generate(incident_id="inc-alpha-missing")
         ids = {finding["id"] for finding in report["findings"]}
         assert "alpha_budget_evidence_missing" in ids
         assert report["impact"]["alpha_budget_missing_evidence"] == 1
@@ -163,7 +163,7 @@ class TestPostmortemReportService:
 
     def test_alpha_budget_warnings_create_finding(self, tmp_path):
         c = _container(tmp_path / "data")
-        c.operations_timeline.record_alpha_budget_governance(  # type: ignore[reportOptionalMemberAccess]
+        c.operations_timeline.record_alpha_budget_governance(
             {
                 "schema_version": SCHEMA_ALPHA_BUDGET_GOVERNANCE_EVENT,
                 "source": "test",
@@ -175,7 +175,7 @@ class TestPostmortemReportService:
                 "warning_release_count": 1,
             }
         )
-        report = c.postmortem_report.generate(incident_id="inc-alpha-warn")  # type: ignore[reportOptionalMemberAccess]
+        report = c.postmortem_report.generate(incident_id="inc-alpha-warn")
         ids = {finding["id"] for finding in report["findings"]}
         assert "alpha_budget_warnings_present" in ids
         assert report["evidence"][PAYLOAD_KEY_ALPHA_BUDGET_GOVERNANCE]["warning_total"] == 2
@@ -198,12 +198,12 @@ class TestPostmortemReportService:
                 }
             ],
         }
-        c.release_pipeline.run(  # type: ignore[reportOptionalMemberAccess]
+        c.release_pipeline.run(
             output_dir=str(tmp_path / "pipeline"),
             strict_gate=False,
             alpha_budget_usage_report=alpha_report,
         )
-        report = c.postmortem_report.generate(incident_id="inc-alpha-pipeline")  # type: ignore[reportOptionalMemberAccess]
+        report = c.postmortem_report.generate(incident_id="inc-alpha-pipeline")
         alpha = report["evidence"][PAYLOAD_KEY_ALPHA_BUDGET_GOVERNANCE]
         assert alpha["event_count"] == 1
         assert alpha["warning_total"] == 1
@@ -212,7 +212,7 @@ class TestPostmortemReportService:
     def test_save_report_output(self, tmp_path):
         c = _container(tmp_path)
         out = tmp_path / "postmortem.json"
-        report = c.postmortem_report.generate(incident_id="inc-7", output=str(out))  # type: ignore[reportOptionalMemberAccess]
+        report = c.postmortem_report.generate(incident_id="inc-7", output=str(out))
         assert report["output_path"] == str(out)
         payload = json.loads(out.read_text(encoding="utf-8"))
         assert payload["schema_version"] == SCHEMA_POSTMORTEM_REPORT
@@ -269,7 +269,7 @@ class TestPostmortemReportCLI:
     def test_cli_postmortem_report_critical_returns_one(self, tmp_path):
         c = _container(tmp_path)
         c.risk_service = None
-        c.operations_timeline.record("custom_failure", {"passed": False})  # type: ignore[reportOptionalMemberAccess]
+        c.operations_timeline.record("custom_failure", {"passed": False})
         rc = main(["--base-dir", str(tmp_path), "postmortem-report", "--incident-id", "inc-cli-3"])
         assert rc == 0
 

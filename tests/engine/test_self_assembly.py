@@ -57,10 +57,10 @@ class TestSelfAssembly:
                 venue="test",
             )
 
-        snap = c.diagnostics.build_snapshot()  # type: ignore[reportOptionalMemberAccess]
+        snap = c.diagnostics.build_snapshot()
         assert snap["metrics"] is not None
 
-        health = c.health_check.readiness()  # type: ignore[reportOptionalMemberAccess]
+        health = c.health_check.readiness()
         assert health["status"] == "ready"
 
     def test_production_config_self_assembly(self, tmp_path):
@@ -92,17 +92,17 @@ class TestSelfAssembly:
         cfg = EnvironmentConfig.development(str(tmp_path))
         c = ServiceContainer(cfg).build()
 
-        c.brain_registry.register(  # type: ignore[reportOptionalMemberAccess]
+        c.brain_registry.register(
             {
                 "brain_id": "test_brain",
                 "brain_type": "stub",
                 "status": "live",
             }
         )
-        c.governance_service.register_brain("test_brain", "live")  # type: ignore[reportOptionalMemberAccess]
+        c.governance_service.register_brain("test_brain", "live")
 
-        assert "test_brain" in c.governance_service.get_active_brain_ids()  # type: ignore[reportOptionalMemberAccess]
-        assert c.brain_registry.get_entry("test_brain") is not None  # type: ignore[reportOptionalMemberAccess]
+        assert "test_brain" in c.governance_service.get_active_brain_ids()
+        assert c.brain_registry.get_entry("test_brain") is not None
 
     def test_all_services_present_in_development(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path))

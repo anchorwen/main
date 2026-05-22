@@ -38,7 +38,7 @@ def build_snapshot(*, mt5_terminal_path: str | None, symbol: str | None) -> dict
         "error": None,
     }
     try:
-        import MetaTrader5 as mt5  # type: ignore[import-untyped]
+        import MetaTrader5 as mt5
     except Exception as exc:  # pragma: no cover
         payload["error"] = f"metaTrader5_import_failed:{exc}"
         return payload
@@ -52,12 +52,12 @@ def build_snapshot(*, mt5_terminal_path: str | None, symbol: str | None) -> dict
         kwargs["path"] = str(p)
 
     if not mt5.initialize(**kwargs):  # pragma: no cover  # type: ignore[reportAttributeAccessIssue]
-        payload["error"] = f"initialize_failed:{mt5.last_error()}"  # type: ignore[reportAttributeAccessIssue]
-        mt5.shutdown()  # type: ignore[reportAttributeAccessIssue]
+        payload["error"] = f"initialize_failed:{mt5.last_error()}"
+        mt5.shutdown()
         return payload
     payload["connected"] = True
     try:
-        raw = mt5.positions_get(symbol=symbol) if symbol else mt5.positions_get()  # type: ignore[reportAttributeAccessIssue]
+        raw = mt5.positions_get(symbol=symbol) if symbol else mt5.positions_get()
         rows = list(raw or [])
         positions = []
         for row in rows:
@@ -78,7 +78,7 @@ def build_snapshot(*, mt5_terminal_path: str | None, symbol: str | None) -> dict
         payload["position_count"] = len(positions)
         return payload
     finally:
-        mt5.shutdown()  # type: ignore[reportAttributeAccessIssue]
+        mt5.shutdown()
 
 
 def main(argv: list[str] | None = None) -> int:

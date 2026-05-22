@@ -95,7 +95,7 @@ def _run_shadow_inference(
         # Attempt to import the engine for live feature extraction
         sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
         from core.features.live_feature_source import (
-            snapshot_features,  # type: ignore[reportMissingImports]
+            snapshot_features,
         )
     except Exception:
         # Fallback: return abstain if live feature extraction unavailable

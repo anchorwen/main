@@ -129,7 +129,7 @@ strategy_lines:
     timeframe: M5
     magic: 90001
     min_valid_brains: 1  # Huber regression probe as sole voter (V9 classifiers purged)
-    confidence_threshold: 0.75  # Architect directive: 60 bar/day = structural probe frequency. BPS trapline captures ALL predictions regardless.
+    confidence_threshold: 0.40  # Dictator Protocol: single-brain Huber probe. Lowered from 0.75 for unblocked Track 4d delivery.
     brain_types:
     - lightgbm_v1  # Meta_Stage1_Huber_V1 — regression BPS probe, not binary classifier
     base_volume: 0.0   # ZERO real capital — shadow observation only

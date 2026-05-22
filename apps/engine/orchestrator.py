@@ -218,7 +218,7 @@ class DecisionCycleOrchestrator:
         filled_quantity: float = 0,
         price: float = 0,
     ) -> dict:
-        results = {"message_id": message_id, "event_type": event_type}
+        results: dict[str, object] = {"message_id": message_id, "event_type": event_type}
 
         if self._execution_manager:
             exec_result = self._execution_manager.process_venue_event(
@@ -250,10 +250,10 @@ class DecisionCycleOrchestrator:
         terminal_types = {"filled", "rejected", "cancelled", "expired"}
         if event_type in terminal_types:
             feedback_result = self._run_feedback(message_id)
-            results["feedback"] = feedback_result  # type: ignore[reportArgumentType]
+            results["feedback"] = feedback_result
             if feedback_result:
                 governance_actions = self._run_governance(feedback_result)
-                results["governance_actions"] = governance_actions  # type: ignore[reportArgumentType]
+                results["governance_actions"] = governance_actions
 
         return results
 

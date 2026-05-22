@@ -25,10 +25,8 @@ def test_result_to_proposal_ok():
     prop = _result_to_proposal(result, snapshot_id="s1", event_time=now)
     assert prop is not None
     assert prop.brain_id == "TestBrain"
-    assert prop.prediction["direction_bias"] == "long"
-    assert prop.prediction["confidence"] == 0.82
-    assert prop.brain_status == "shadow"
-    assert prop.vote_weight == 1.0
+    assert prop.direction == "long"
+    assert prop.confidence == 0.82
 
 
 def test_result_to_proposal_error_status():

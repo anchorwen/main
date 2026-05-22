@@ -29,12 +29,12 @@ def _container(tmp_path):
 class TestReleaseCertificationService:
     def test_certify_passed_pipeline(self, tmp_path):
         c = _container(tmp_path / "data")
-        pipeline = c.release_pipeline.run(  # type: ignore[reportOptionalMemberAccess]
+        pipeline = c.release_pipeline.run(
             version="1.0.0",
             output_dir=str(tmp_path / "pipeline"),
             validation_mode="fast",
         )
-        cert = c.release_certification.certify(pipeline_summary=pipeline, approver="qa")  # type: ignore[reportOptionalMemberAccess]
+        cert = c.release_certification.certify(pipeline_summary=pipeline, approver="qa")
         assert cert["schema_version"] == SCHEMA_RELEASE_CERTIFICATE
         assert cert["status"] == "certified"
         assert cert["certified"] is True
@@ -47,46 +47,46 @@ class TestReleaseCertificationService:
 
     def test_certify_from_file(self, tmp_path):
         c = _container(tmp_path / "data")
-        pipeline = c.release_pipeline.run(version="1.0.1", output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
+        pipeline = c.release_pipeline.run(version="1.0.1", output_dir=str(tmp_path / "pipeline"))
         pipeline_path = tmp_path / "pipeline.json"
         pipeline_path.write_text(json.dumps(pipeline), encoding="utf-8")
-        cert = c.release_certification.certify(pipeline_summary=str(pipeline_path))  # type: ignore[reportOptionalMemberAccess]
+        cert = c.release_certification.certify(pipeline_summary=str(pipeline_path))
         assert cert["version"] == "1.0.1"
         assert cert["certified"] is True
 
     def test_certify_normalizes_malformed_pipeline_governance_fields(self, tmp_path):
         c = _container(tmp_path / "data")
-        pipeline = c.release_pipeline.run(version="1.0.2", output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
+        pipeline = c.release_pipeline.run(version="1.0.2", output_dir=str(tmp_path / "pipeline"))
         pipeline["summary"]["governance_focus"] = [{"name": "ok"}, {"level": "warn"}, "bad", 3]
         pipeline["summary"]["governance_warning_count"] = "4"
-        cert = c.release_certification.certify(pipeline_summary=pipeline)  # type: ignore[reportOptionalMemberAccess]
+        cert = c.release_certification.certify(pipeline_summary=pipeline)
         assert cert[PAYLOAD_KEY_GOVERNANCE_FOCUS] == [{"name": "ok"}, {"level": "warn"}]
         assert cert[PAYLOAD_KEY_GOVERNANCE_WARNING_COUNT] == 1
 
     def test_certify_rejects_failed_pipeline(self, tmp_path):
         c = _container(tmp_path / "data")
-        c.metrics.inc(CYCLES_TOTAL, 100)  # type: ignore[reportOptionalMemberAccess]
-        c.metrics.inc(CYCLES_ERRORS, 20)  # type: ignore[reportOptionalMemberAccess]
-        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"), strict_gate=False)  # type: ignore[reportOptionalMemberAccess]
-        cert = c.release_certification.certify(pipeline_summary=pipeline)  # type: ignore[reportOptionalMemberAccess]
+        c.metrics.inc(CYCLES_TOTAL, 100)
+        c.metrics.inc(CYCLES_ERRORS, 20)
+        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"), strict_gate=False)
+        cert = c.release_certification.certify(pipeline_summary=pipeline)
         assert cert["status"] == "rejected"
         assert cert["certified"] is False
 
     def test_certify_rejects_missing_artifact(self, tmp_path):
         c = _container(tmp_path / "data")
-        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
+        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))
         Path(pipeline["artifacts"][ARTIFACT_GATE]).unlink()
-        cert = c.release_certification.certify(pipeline_summary=pipeline)  # type: ignore[reportOptionalMemberAccess]
+        cert = c.release_certification.certify(pipeline_summary=pipeline)
         assert cert["certified"] is False
         gate_check = next(item for item in cert["artifact_checks"] if item["name"] == ARTIFACT_GATE)
         assert gate_check["valid"] is False
 
     def test_certify_rejects_tampered_evidence(self, tmp_path):
         c = _container(tmp_path / "data")
-        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
+        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))
         slo_path = Path(pipeline["artifacts"][ARTIFACT_EVIDENCE_MANIFEST]).parent / "slo.json"
         slo_path.write_text("{}", encoding="utf-8")
-        cert = c.release_certification.certify(pipeline_summary=pipeline)  # type: ignore[reportOptionalMemberAccess]
+        cert = c.release_certification.certify(pipeline_summary=pipeline)
         assert cert["certified"] is False
         assert cert["evidence_verification"]["verified"] is False
 
@@ -99,12 +99,12 @@ class TestReleaseCertificationService:
             "warning_count": 0,
             "warnings": [],
         }
-        pipeline = c.release_pipeline.run(  # type: ignore[reportOptionalMemberAccess]
+        pipeline = c.release_pipeline.run(
             version="1.1.0",
             output_dir=str(tmp_path / "pipeline"),
             alpha_budget_usage_report=alpha_report,
         )
-        cert = c.release_certification.certify(pipeline_summary=pipeline)  # type: ignore[reportOptionalMemberAccess]
+        cert = c.release_certification.certify(pipeline_summary=pipeline)
         assert cert["certified"] is True
         assert cert["alpha_budget_evidence"]["present"] is True
         artifact = cert["alpha_budget_evidence"]["artifact"]
@@ -118,8 +118,8 @@ class TestReleaseCertificationService:
 
     def test_certify_without_alpha_budget_evidence_marks_absent(self, tmp_path):
         c = _container(tmp_path / "data")
-        pipeline = c.release_pipeline.run(version="1.1.1", output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
-        cert = c.release_certification.certify(pipeline_summary=pipeline)  # type: ignore[reportOptionalMemberAccess]
+        pipeline = c.release_pipeline.run(version="1.1.1", output_dir=str(tmp_path / "pipeline"))
+        cert = c.release_certification.certify(pipeline_summary=pipeline)
         assert cert["alpha_budget_evidence"]["present"] is False
         assert cert["alpha_budget_evidence"]["artifact"] is None
         assert cert["final_audit_evidence"]["present"] is True
@@ -134,48 +134,48 @@ class TestReleaseCertificationService:
             "warning_count": 0,
             "warnings": [],
         }
-        pipeline = c.release_pipeline.run(  # type: ignore[reportOptionalMemberAccess]
+        pipeline = c.release_pipeline.run(
             version="1.1.2",
             output_dir=str(tmp_path / "pipeline"),
             alpha_budget_usage_report=alpha_report,
         )
         out = tmp_path / "cert_alpha.json"
-        c.release_certification.certify(pipeline_summary=pipeline, output=str(out))  # type: ignore[reportOptionalMemberAccess]
-        verification = c.release_certification.verify_certificate(str(out))  # type: ignore[reportOptionalMemberAccess]
+        c.release_certification.certify(pipeline_summary=pipeline, output=str(out))
+        verification = c.release_certification.verify_certificate(str(out))
         assert verification["verified"] is True
 
     def test_verify_certificate_includes_validation_mode(self, tmp_path):
         c = _container(tmp_path / "data")
-        pipeline = c.release_pipeline.run(  # type: ignore[reportOptionalMemberAccess]
+        pipeline = c.release_pipeline.run(
             version="1.1.3",
             output_dir=str(tmp_path / "pipeline"),
             validation_mode="fast",
         )
         out = tmp_path / "cert_mode.json"
-        c.release_certification.certify(pipeline_summary=pipeline, output=str(out))  # type: ignore[reportOptionalMemberAccess]
-        verification = c.release_certification.verify_certificate(str(out))  # type: ignore[reportOptionalMemberAccess]
+        c.release_certification.certify(pipeline_summary=pipeline, output=str(out))
+        verification = c.release_certification.verify_certificate(str(out))
         assert verification["verified"] is True
         assert verification["validation_mode"] == "fast"
 
     def test_save_and_verify_certificate(self, tmp_path):
         c = _container(tmp_path / "data")
-        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
+        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))
         out = tmp_path / "cert.json"
-        cert = c.release_certification.certify(pipeline_summary=pipeline, output=str(out))  # type: ignore[reportOptionalMemberAccess]
+        cert = c.release_certification.certify(pipeline_summary=pipeline, output=str(out))
         assert cert["output_path"] == str(out)
-        verification = c.release_certification.verify_certificate(str(out))  # type: ignore[reportOptionalMemberAccess]
+        verification = c.release_certification.verify_certificate(str(out))
         assert verification["schema_version"] == SCHEMA_RELEASE_CERTIFICATE_VERIFICATION
         assert verification["verified"] is True
 
     def test_verify_detects_tampered_certificate(self, tmp_path):
         c = _container(tmp_path / "data")
-        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
+        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))
         out = tmp_path / "cert.json"
-        c.release_certification.certify(pipeline_summary=pipeline, output=str(out))  # type: ignore[reportOptionalMemberAccess]
+        c.release_certification.certify(pipeline_summary=pipeline, output=str(out))
         payload = json.loads(out.read_text(encoding="utf-8"))
         payload["approver"] = "tampered"
         out.write_text(json.dumps(payload), encoding="utf-8")
-        verification = c.release_certification.verify_certificate(str(out))  # type: ignore[reportOptionalMemberAccess]
+        verification = c.release_certification.verify_certificate(str(out))
         assert verification["verified"] is False
 
     def test_container_has_release_certification(self, tmp_path):
@@ -186,7 +186,7 @@ class TestReleaseCertificationService:
 class TestReleaseCertificationCLI:
     def test_cli_certify_and_verify(self, tmp_path):
         c = _container(tmp_path / "data")
-        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
+        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))
         pipeline_path = tmp_path / "pipeline.json"
         cert_path = tmp_path / "cert.json"
         pipeline_path.write_text(json.dumps(pipeline), encoding="utf-8")
@@ -227,9 +227,9 @@ class TestReleaseCertificationCLI:
 
     def test_cli_verify_tampered_certificate(self, tmp_path):
         c = _container(tmp_path / "data")
-        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
+        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))
         cert_path = tmp_path / "cert.json"
-        c.release_certification.certify(pipeline_summary=pipeline, output=str(cert_path))  # type: ignore[reportOptionalMemberAccess]
+        c.release_certification.certify(pipeline_summary=pipeline, output=str(cert_path))
         payload = json.loads(cert_path.read_text(encoding="utf-8"))
         payload["status"] = "tampered"
         cert_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -254,7 +254,7 @@ class TestReleaseCertificationCLI:
             "warning_count": 0,
             "warnings": [],
         }
-        pipeline = c.release_pipeline.run(  # type: ignore[reportOptionalMemberAccess]
+        pipeline = c.release_pipeline.run(
             output_dir=str(tmp_path / "pipeline"),
             alpha_budget_usage_report=alpha_report,
         )
@@ -282,7 +282,7 @@ class TestReleaseCertificationCLI:
 
     def test_cli_certify_and_verify_test_env_force_metrics(self, tmp_path):
         c = _container(tmp_path / "data")
-        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))  # type: ignore[reportOptionalMemberAccess]
+        pipeline = c.release_pipeline.run(output_dir=str(tmp_path / "pipeline"))
         pipeline_path = tmp_path / "pipeline_tfm.json"
         cert_path = tmp_path / "cert_tfm.json"
         pipeline_path.write_text(json.dumps(pipeline), encoding="utf-8")

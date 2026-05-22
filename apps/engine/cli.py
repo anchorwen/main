@@ -642,7 +642,7 @@ def cmd_config(args) -> int:
             json.dumps(
                 {
                     "schema_version": SCHEMA_ENGINE_CONFIG_STATUS,
-                    ENGINE_CONFIG_KEY_HOT_RELOAD: hr.get_status(),  # type: ignore[reportOptionalMemberAccess]
+                    ENGINE_CONFIG_KEY_HOT_RELOAD: hr.get_status(),
                     "effective": {
                         "ops_maturity_min_score": container.config.ops_maturity_min_score,
                         "max_open_positions": container.config.max_open_positions,
@@ -656,12 +656,12 @@ def cmd_config(args) -> int:
             )
         )
         return 0
-    changes = hr.check_and_reload()  # type: ignore[reportOptionalMemberAccess]
+    changes = hr.check_and_reload()
     out = {
         "schema_version": SCHEMA_ENGINE_CONFIG_RELOAD_RESULT,
         "reloaded": changes is not None,
         "changes": changes,
-        ENGINE_CONFIG_KEY_HOT_RELOAD: hr.get_status(),  # type: ignore[reportOptionalMemberAccess]
+        ENGINE_CONFIG_KEY_HOT_RELOAD: hr.get_status(),
         "effective": {
             "ops_maturity_min_score": container.config.ops_maturity_min_score,
             "max_open_positions": container.config.max_open_positions,
@@ -704,8 +704,8 @@ def cmd_backtest(args) -> int:
 
 def cmd_status(args) -> int:
     container = _build_container(args)
-    health = container.health_check.readiness()  # type: ignore[reportOptionalMemberAccess]
-    brains = container.governance_service.get_all_states()  # type: ignore[reportOptionalMemberAccess]
+    health = container.health_check.readiness()
+    brains = container.governance_service.get_all_states()
     metrics_snap = container.metrics.snapshot() if container.metrics else {}
 
     print(
@@ -715,7 +715,7 @@ def cmd_status(args) -> int:
                 "health": health,
                 "brains": {"count": len(brains), "states": brains},
                 "metrics": {k: v for k, v in metrics_snap.get("counters", {}).items()},
-                EVIDENCE_SECTION_ENGINE_CONFIG: container.evidence_bundle.engine_config_snapshot(),  # type: ignore[reportOptionalMemberAccess]
+                EVIDENCE_SECTION_ENGINE_CONFIG: container.evidence_bundle.engine_config_snapshot(),
             },
             indent=2,
             default=str,
@@ -726,10 +726,10 @@ def cmd_status(args) -> int:
 
 def cmd_readiness(args) -> int:
     container = _build_container(args)
-    report = container.release_readiness.build_report(validation_mode=args.validation_mode)  # type: ignore[reportOptionalMemberAccess]
+    report = container.release_readiness.build_report(validation_mode=args.validation_mode)
     print(json.dumps(report, indent=2, default=str))
     if args.output:
-        container.release_readiness.save_report(args.output, validation_mode=args.validation_mode)  # type: ignore[reportOptionalMemberAccess]
+        container.release_readiness.save_report(args.output, validation_mode=args.validation_mode)
         print(f"\nReadiness report saved to: {args.output}")
     return 0 if report["ready"] else 1
 
@@ -739,17 +739,17 @@ def cmd_runbook(args) -> int:
     kwargs = {"validation_mode": args.validation_mode}
     if args.name == "postmortem":
         kwargs.update({"label": args.label, "output": args.output})
-    result = container.runbook_engine.run(args.name, **kwargs)  # type: ignore[reportOptionalMemberAccess]
+    result = container.runbook_engine.run(args.name, **kwargs)
     print(json.dumps(result, indent=2, default=str))
     return 0 if result.get("passed") else 1
 
 
 def cmd_slo(args) -> int:
     container = _build_container(args)
-    report = container.slo_service.evaluate()  # type: ignore[reportOptionalMemberAccess]
+    report = container.slo_service.evaluate()
     print(json.dumps(report, indent=2, default=str))
     if args.output:
-        container.slo_service.save_report(args.output)  # type: ignore[reportOptionalMemberAccess]
+        container.slo_service.save_report(args.output)
         print(f"\nSLO report saved to: {args.output}")
     return 0 if report["status"] == "healthy" else 1
 
@@ -762,7 +762,7 @@ def cmd_gate(args) -> int:
         if args.alpha_budget_usage_report
         else None
     )
-    report = container.release_gate.evaluate(  # type: ignore[reportOptionalMemberAccess]
+    report = container.release_gate.evaluate(
         strict=strict,
         alpha_budget_usage_report=alpha_report,
         validation_mode=args.validation_mode,
@@ -783,7 +783,7 @@ def cmd_evidence(args) -> int:
             if args.alpha_budget_usage_report
             else None
         )
-        result = container.evidence_bundle.build_bundle(  # type: ignore[reportOptionalMemberAccess]
+        result = container.evidence_bundle.build_bundle(
             args.output_dir,
             label=args.label,
             alpha_budget_usage_report=alpha_report,
@@ -793,7 +793,7 @@ def cmd_evidence(args) -> int:
         if not args.manifest:
             print(json.dumps({"error": "--manifest is required for evidence verify"}, indent=2))
             return 1
-        result = container.evidence_bundle.verify_bundle(args.manifest)  # type: ignore[reportOptionalMemberAccess]
+        result = container.evidence_bundle.verify_bundle(args.manifest)
     print(json.dumps(result, indent=2, default=str))
     if args.action == "verify":
         return 0 if result.get("verified") else 1
@@ -815,10 +815,10 @@ def cmd_deploy_plan(args) -> int:
         "alpha_budget_usage_report": alpha_report,
         "validation_mode": args.validation_mode,
     }
-    plan = container.deployment_plan.build_plan(**kwargs)  # type: ignore[reportOptionalMemberAccess]
+    plan = container.deployment_plan.build_plan(**kwargs)
     print(json.dumps(plan, indent=2, default=str))
     if args.output:
-        container.deployment_plan.save_plan(args.output, **kwargs)  # type: ignore[reportOptionalMemberAccess]
+        container.deployment_plan.save_plan(args.output, **kwargs)
         print(f"\nDeployment plan saved to: {args.output}")
     return 0 if plan.get("executable") else 1
 
@@ -826,30 +826,30 @@ def cmd_deploy_plan(args) -> int:
 def cmd_deploy_exec(args) -> int:
     container = _build_container(args)
     if args.plan:
-        result = container.deployment_executor.execute_from_file(  # type: ignore[reportOptionalMemberAccess]
+        result = container.deployment_executor.execute_from_file(
             args.plan,
             dry_run=True,
             validation_mode=args.validation_mode,
         )
     else:
-        plan = container.deployment_plan.build_plan(  # type: ignore[reportOptionalMemberAccess]
+        plan = container.deployment_plan.build_plan(
             version=args.version,
             strategy=args.strategy,
             validation_mode=args.validation_mode,
         )
-        result = container.deployment_executor.execute(  # type: ignore[reportOptionalMemberAccess]
+        result = container.deployment_executor.execute(
             plan, dry_run=True, validation_mode=args.validation_mode
         )
     print(json.dumps(result, indent=2, default=str))
     if args.output:
-        container.deployment_executor.save_result(result, args.output)  # type: ignore[reportOptionalMemberAccess]
+        container.deployment_executor.save_result(result, args.output)
         print(f"\nDeployment execution result saved to: {args.output}")
     return 0 if result.get("passed") else 1
 
 
 def cmd_rollback_drill(args) -> int:
     container = _build_container(args)
-    result = container.rollback_drill.run(  # type: ignore[reportOptionalMemberAccess]
+    result = container.rollback_drill.run(
         version=args.version,
         reason=args.reason,
         evidence_manifest=args.evidence_manifest,
@@ -869,31 +869,31 @@ def cmd_ops_timeline(args) -> int:
             return 1
         payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
         if args.action == "record-gate":
-            result = tl.record_release_gate(payload, actor=args.actor)  # type: ignore[reportOptionalMemberAccess]
+            result = tl.record_release_gate(payload, actor=args.actor)
         elif args.action == "record-deploy-exec":
-            result = tl.record_deployment_execution(payload, actor=args.actor)  # type: ignore[reportOptionalMemberAccess]
+            result = tl.record_deployment_execution(payload, actor=args.actor)
         elif args.action == "record-rollback":
-            result = tl.record_rollback_drill(payload, actor=args.actor)  # type: ignore[reportOptionalMemberAccess]
+            result = tl.record_rollback_drill(payload, actor=args.actor)
         else:
-            result = tl.record_evidence_bundle(payload, actor=args.actor)  # type: ignore[reportOptionalMemberAccess]
+            result = tl.record_evidence_bundle(payload, actor=args.actor)
     elif args.action == "list":
-        result = {"events": tl.list_events(event_type=args.event_type, limit=args.limit)}  # type: ignore[reportOptionalMemberAccess]
+        result = {"events": tl.list_events(event_type=args.event_type, limit=args.limit)}
     elif args.action == "summary":
-        result = tl.summarize()  # type: ignore[reportOptionalMemberAccess]
+        result = tl.summarize()
     elif args.action == "export":
         if not args.output:
             print(json.dumps({"error": "--output is required for export"}, indent=2))
             return 1
-        result = {"output": tl.export(args.output)}  # type: ignore[reportOptionalMemberAccess]
+        result = {"output": tl.export(args.output)}
     else:
-        result = tl.clear()  # type: ignore[reportOptionalMemberAccess]
+        result = tl.clear()
     print(json.dumps(result, indent=2, default=str))
     return 0
 
 
 def cmd_postmortem_report(args) -> int:
     container = _build_container(args)
-    report = container.postmortem_report.generate(  # type: ignore[reportOptionalMemberAccess]
+    report = container.postmortem_report.generate(
         incident_id=args.incident_id,
         title=args.title,
         severity=args.severity,
@@ -911,7 +911,7 @@ def cmd_release_pipeline(args) -> int:
         if args.alpha_budget_usage_report
         else None
     )
-    result = container.release_pipeline.run(  # type: ignore[reportOptionalMemberAccess]
+    result = container.release_pipeline.run(
         version=args.version,
         strategy=args.strategy,
         output_dir=args.output_dir,
@@ -921,7 +921,7 @@ def cmd_release_pipeline(args) -> int:
         validation_mode=args.validation_mode,
     )
     if args.output:
-        container.release_pipeline.save_result(result, args.output)  # type: ignore[reportOptionalMemberAccess]
+        container.release_pipeline.save_result(result, args.output)
         result["artifacts"]["pipeline_summary_output"] = args.output
     print(json.dumps(result, indent=2, default=str))
     return 0 if result.get("passed") else 1
@@ -935,7 +935,7 @@ def cmd_release_cert(args) -> int:
                 json.dumps({"error": "--pipeline is required for release-cert certify"}, indent=2)
             )
             return 1
-        result = container.release_certification.certify(  # type: ignore[reportOptionalMemberAccess]
+        result = container.release_certification.certify(
             pipeline_summary=args.pipeline,
             approver=args.approver,
             output=args.output,
@@ -945,7 +945,7 @@ def cmd_release_cert(args) -> int:
     if not args.certificate:
         print(json.dumps({"error": "--certificate is required for release-cert verify"}, indent=2))
         return 1
-    result = container.release_certification.verify_certificate(args.certificate)  # type: ignore[reportOptionalMemberAccess]
+    result = container.release_certification.verify_certificate(args.certificate)
     print(json.dumps(result, indent=2, default=str))
     return 0 if result.get("verified") else 1
 
@@ -957,17 +957,17 @@ def cmd_release_registry(args) -> int:
         if not args.certificate:
             print(json.dumps({"error": "--certificate is required for register"}, indent=2))
             return 1
-        result = registry.register(args.certificate, actor=args.actor)  # type: ignore[reportOptionalMemberAccess]
+        result = registry.register(args.certificate, actor=args.actor)
     elif args.action == "list":
         result = {
-            "records": registry.list_records(  # type: ignore[reportOptionalMemberAccess]
+            "records": registry.list_records(
                 version=args.version, certified=True if args.certified else None
             )
         }
     elif args.action == "summary":
-        result = registry.summarize()  # type: ignore[reportOptionalMemberAccess]
+        result = registry.summarize()
     elif args.action == "latest":
-        result = registry.latest(version=args.version) or {}  # type: ignore[reportOptionalMemberAccess]
+        result = registry.latest(version=args.version) or {}
     elif args.action == "verify":
         if not args.record_id or not args.certificate:
             print(
@@ -976,23 +976,23 @@ def cmd_release_registry(args) -> int:
                 )
             )
             return 1
-        result = registry.verify_record(args.record_id, args.certificate)  # type: ignore[reportOptionalMemberAccess]
+        result = registry.verify_record(args.record_id, args.certificate)
         print(json.dumps(result, indent=2, default=str))
         return 0 if result.get("verified") else 1
     elif args.action == "export":
         if not args.output:
             print(json.dumps({"error": "--output is required for export"}, indent=2))
             return 1
-        result = {"output": registry.export(args.output)}  # type: ignore[reportOptionalMemberAccess]
+        result = {"output": registry.export(args.output)}
     else:
-        result = registry.clear()  # type: ignore[reportOptionalMemberAccess]
+        result = registry.clear()
     print(json.dumps(result, indent=2, default=str))
     return 0
 
 
 def cmd_compliance_audit(args) -> int:
     container = _build_container(args)
-    report = container.compliance_audit.generate(  # type: ignore[reportOptionalMemberAccess]
+    report = container.compliance_audit.generate(
         output=args.output, validation_mode=args.validation_mode
     )
     print(json.dumps(report, indent=2, default=str))
@@ -1001,7 +1001,7 @@ def cmd_compliance_audit(args) -> int:
 
 def cmd_compliance_matrix(args) -> int:
     container = _build_container(args)
-    report = container.compliance_control_matrix.generate(  # type: ignore[reportOptionalMemberAccess]
+    report = container.compliance_control_matrix.generate(
         output=args.output, validation_mode=args.validation_mode
     )
     print(json.dumps(report, indent=2, default=str))
@@ -1010,10 +1010,10 @@ def cmd_compliance_matrix(args) -> int:
 
 def cmd_final_audit(args) -> int:
     container = _build_container(args)
-    report = container.final_audit.build_report(validation_mode=args.validation_mode)  # type: ignore[reportOptionalMemberAccess]
+    report = container.final_audit.build_report(validation_mode=args.validation_mode)
     print(json.dumps(report, indent=2, default=str))
     if args.output:
-        container.final_audit.save_report(args.output, report=report)  # type: ignore[reportOptionalMemberAccess]
+        container.final_audit.save_report(args.output, report=report)
         print(f"\nFinal audit report saved to: {args.output}")
     return 0 if report.get("ready_for_production") else 1
 
@@ -1022,10 +1022,10 @@ def cmd_ops_maturity(args) -> int:
     container = _build_container(args)
     if getattr(args, "min_score", None) is not None:
         container.config.ops_maturity_min_score = float(args.min_score)
-    report = container.ops_maturity.evaluate(validation_mode=args.validation_mode)  # type: ignore[reportOptionalMemberAccess]
+    report = container.ops_maturity.evaluate(validation_mode=args.validation_mode)
     print(json.dumps(report, indent=2, default=str))
     if args.output:
-        container.ops_maturity.save_report(args.output, validation_mode=args.validation_mode)  # type: ignore[reportOptionalMemberAccess]
+        container.ops_maturity.save_report(args.output, validation_mode=args.validation_mode)
         print(f"\nOps maturity report saved to: {args.output}")
     min_s = float(getattr(container.config, "ops_maturity_min_score", 60.0))
     return 0 if report.get("maturity_score", 0) >= min_s else 1
@@ -1429,7 +1429,7 @@ def _save_alpha_performance(path: Path, store: AlphaPerformanceStore) -> None:
 
 
 def _parse_alpha_metrics(items: list[str]) -> dict:
-    metrics = {}
+    metrics: dict[str, float | str] = {}
     for item in items:
         if "=" not in item:
             raise ValueError(f"Invalid metric format, expected key=value: {item}")

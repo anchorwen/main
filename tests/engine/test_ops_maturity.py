@@ -198,7 +198,7 @@ class TestLifecycleManager:
     def test_state_save_on_shutdown(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path / "data"))
         c = ServiceContainer(cfg).build()
-        c.governance_service.register_brain("test", "live")  # type: ignore[reportOptionalMemberAccess]
+        c.governance_service.register_brain("test", "live")
         sp = StatePersistence(str(tmp_path / "state"))
         lm = LifecycleManager(c, state_persistence=sp)
 
@@ -211,7 +211,7 @@ class TestLifecycleManager:
     def test_state_restore_on_startup(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path / "data"))
         c1 = ServiceContainer(cfg).build()
-        c1.governance_service.register_brain("alpha", "live")  # type: ignore[reportOptionalMemberAccess]
+        c1.governance_service.register_brain("alpha", "live")
         sp = StatePersistence(str(tmp_path / "state"))
         sp.save_governance_state(c1.governance_service, "restore_test")
 
@@ -221,7 +221,7 @@ class TestLifecycleManager:
 
         restore_phase = [p for p in result["phases"] if p["phase"] == "state_restore"]
         assert restore_phase[0]["restored"] is True
-        assert c2.governance_service.get_brain_state("alpha") is not None  # type: ignore[reportOptionalMemberAccess]
+        assert c2.governance_service.get_brain_state("alpha") is not None
 
     def test_shutdown_hooks(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path))

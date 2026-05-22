@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
@@ -262,8 +263,8 @@ class BlueGreenManager:
         *,
         state_dir: str = "deployments/state",
         health_probe: HealthProbe | None = None,
-        pre_cutover_hooks: list[callable] | None = None,
-        post_cutover_hooks: list[callable] | None = None,
+        pre_cutover_hooks: list[Callable[..., Any]] | None = None,
+        post_cutover_hooks: list[Callable[..., Any]] | None = None,
     ) -> None:
         self._state_dir = Path(state_dir)
         self._state_dir.mkdir(parents=True, exist_ok=True)

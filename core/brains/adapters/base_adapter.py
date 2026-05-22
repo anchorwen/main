@@ -7,12 +7,15 @@ The `inference()` convenience method chains infer() → get_signal() into a sing
 call that main.py / BrainRunService can consume without knowing adapter internals.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
+if TYPE_CHECKING:
+    from core.schemas.trading_contracts import BrainSignal, Direction
 
 
 class BaseBrainAdapter(ABC):
@@ -76,26 +79,49 @@ class BaseBrainAdapter(ABC):
         ...
 
     @abstractmethod
-    def get_signal(self, raw_output: dict[str, Any]) -> BrainDecisionProposal:
-        """Convert raw inference output into a standard BrainDecisionProposal.
+    def get_signal(self, raw_output: dict[str, Any]) -> BrainSignal:
+        """Convert raw inference output into a standard BrainSignal.
 
         This is the single point where model-specific logic maps raw numbers
-        onto the unified ``{direction_bias, confidence, reason}`` contract consumed by
+        onto the unified ``{direction, confidence, raw_score}`` contract consumed by
         ParliamentService, DecisionCompiler, and the ledger.
         """
-        ...
+        from core.schemas.trading_contracts import BrainSignal
+
+        raw_score = raw_output.get("raw_score", 0.0)
+        runtime_ms = raw_output.get("runtime_ms", 0.0)
+        fallback = raw_output.get("fallback", False)
+        direction: Direction = (
+            "long" if raw_score > 0.1 else ("short" if raw_score < -0.1 else "neutral")
+        )
+        confidence = float(np.tanh(abs(raw_score))) if "raw_score" in raw_output else 0.5
+
+        # Preserve adapter-specific diagnostics for brain_votes recording.
+        _extra = {
+            k: v for k, v in raw_output.items() if k not in ("raw_score", "runtime_ms", "fallback")
+        }
+
+        return BrainSignal(
+            brain_id=self._brain_entry.get("brain_id", ""),
+            direction=direction,
+            confidence=confidence,
+            raw_score=raw_score,
+            fallback=fallback,
+            runtime_ms=runtime_ms,
+            diagnostics=_extra,
+        )
 
     # ------------------------------------------------------------------
     # Convenience — chains infer + get_signal (used by main.py pipeline)
     # ------------------------------------------------------------------
 
-    def inference(self, feature_vector: np.ndarray | None = None) -> BrainDecisionProposal:
+    def inference(self, feature_vector: np.ndarray | None = None) -> BrainSignal:
         """Run the full inference chain: produce features → infer → get_signal.
 
         If feature_vector is None, subclasses with internal state (e.g. OU buffer)
         may still produce output by calling infer() with a stub vector.
 
-        Returns a BrainDecisionProposal ready for ParliamentService / DecisionCompiler.
+        Returns a BrainSignal ready for ParliamentService / DecisionCompiler.
         """
         if feature_vector is None:
             # Subclasses that maintain internal state (e.g. ParamsBrainAdapter
@@ -122,7 +148,7 @@ class BaseBrainAdapter(ABC):
     # run — full pipeline (snapshot + feature_source → feature_vector → infer → signal)
     # ------------------------------------------------------------------
 
-    def run(self, snapshot, feature_source: dict | None = None) -> BrainDecisionProposal:
+    def run(self, snapshot, feature_source: dict | None = None) -> BrainSignal:
         """Full pipeline: feature_source dict → feature_vector → infer → get_signal.
 
         Metadata-driven extraction when ``features`` is present in the brain config:

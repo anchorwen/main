@@ -153,7 +153,7 @@ class TestBatchProcessor:
         assert result["total"] == 5
         assert result["completed"] == 5
         assert result["errors"] == 0
-        assert c.metrics.get_counter(BATCH_TOTAL_TRIGGERS) == 5  # type: ignore[reportOptionalMemberAccess]
+        assert c.metrics.get_counter(BATCH_TOTAL_TRIGGERS) == 5
 
     def test_batch_with_event_bus(self, tmp_path):
         cfg = EnvironmentConfig.development(str(tmp_path))
@@ -228,7 +228,7 @@ class TestOrchestratorErrorRecovery:
 
         assert outcome.decision_result is None
         assert any("cycle_error" in str(e) for e in outcome.audit_entries)
-        assert c.metrics.get_counter(CYCLES_ERRORS) == 1  # type: ignore[reportOptionalMemberAccess]
+        assert c.metrics.get_counter(CYCLES_ERRORS) == 1
 
 
 class TestFullSystemIntegration:
@@ -236,7 +236,7 @@ class TestFullSystemIntegration:
         """One-shot integration: build → cycle → venue events → feedback → governance → persist."""
         cfg = EnvironmentConfig.development(str(tmp_path))
         c = ServiceContainer(cfg).build()
-        c.governance_service.register_brain("alpha", "live")  # type: ignore[reportOptionalMemberAccess]
+        c.governance_service.register_brain("alpha", "live")
 
         loop = _build_loop(c, tmp_path)
         orch = c.build_orchestrator(loop)
@@ -258,18 +258,18 @@ class TestFullSystemIntegration:
         assert result["execution"]["new_status"] == "filled"
         assert result.get("feedback") is not None
 
-        assert c.position_tracker.get_risk_context()["open_position_count"] == 1  # type: ignore[reportOptionalMemberAccess]
-        assert c.metrics.get_counter(CYCLES_TOTAL) >= 1  # type: ignore[reportOptionalMemberAccess]
-        assert c.metrics.get_counter(execution_event_metric("filled")) >= 1  # type: ignore[reportOptionalMemberAccess]
+        assert c.position_tracker.get_risk_context()["open_position_count"] == 1
+        assert c.metrics.get_counter(CYCLES_TOTAL) >= 1
+        assert c.metrics.get_counter(execution_event_metric("filled")) >= 1
 
-        snap = c.diagnostics.build_snapshot()  # type: ignore[reportOptionalMemberAccess]
+        snap = c.diagnostics.build_snapshot()
         assert snap["metrics"] is not None
 
         sp = StatePersistence(str(tmp_path / "state"))
         save_result = sp.save_all(c)
         assert len(save_result["paths"]) == 3
 
-        health = c.health_check.readiness()  # type: ignore[reportOptionalMemberAccess]
+        health = c.health_check.readiness()
         assert health["status"] == "ready"
 
     def test_replay_environment_isolation(self, tmp_path):

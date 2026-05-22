@@ -110,16 +110,13 @@ def test_feature_service_to_brain_adapter(brain_entry: dict, norm_config: dict):
     raw = brain.infer(feature_vector)
     proposal = brain.get_signal(raw)
 
-    # Contract assertions
+    # Contract assertions — BrainSignal frozen dataclass
+    from core.schemas.trading_contracts import BrainSignal
+
+    assert isinstance(proposal, BrainSignal)
     assert proposal.brain_id == brain_entry.get("brain_id")
-    assert proposal.prediction["direction_bias"] in {"long", "short", "neutral"}
-    assert 0.0 <= proposal.prediction["confidence"] <= 1.0
-    assert proposal.prediction["uncertainty"] == pytest.approx(
-        1.0 - proposal.prediction["confidence"]
-    )
-    assert "raw_outputs" in proposal.extensions
-    assert isinstance(proposal.extensions["raw_outputs"]["out_risk"], float)
-    assert isinstance(proposal.extensions["raw_outputs"]["out_vol"], float)
-    assert "v9_institutional_onnx" in proposal.rationale["reason_tags"]
-    assert isinstance(proposal.health["runtime_ms"], float)
-    assert isinstance(proposal.health["fallback_used"], bool)
+    assert proposal.direction in {"long", "short", "neutral"}
+    assert 0.0 <= proposal.confidence <= 1.0
+    assert isinstance(proposal.runtime_ms, float)
+    assert isinstance(proposal.fallback, bool)
+    assert isinstance(proposal.raw_score, float)

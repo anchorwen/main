@@ -190,8 +190,12 @@ class ReleaseCertificationService:
                     PAYLOAD_KEY_NAME: name,
                     PAYLOAD_KEY_PATH: str(path) if path else None,
                     PAYLOAD_KEY_EXISTS: exists,
-                    PAYLOAD_KEY_SHA256: self._sha256(path) if exists else None,  # type: ignore[reportArgumentType]
-                    PAYLOAD_KEY_SIZE_BYTES: path.stat().st_size if exists else 0,  # type: ignore[reportOptionalMemberAccess]
+                    PAYLOAD_KEY_SHA256: self._sha256(path)
+                    if (path is not None and exists)
+                    else None,
+                    PAYLOAD_KEY_SIZE_BYTES: path.stat().st_size
+                    if (path is not None and exists)
+                    else 0,
                     PAYLOAD_KEY_VALID: exists,
                 }
             )

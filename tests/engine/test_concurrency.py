@@ -52,12 +52,12 @@ class TestContainerCompleteness:
             envelope=env,
             requested_at=datetime.now(UTC).replace(tzinfo=None),
         )
-        result = c.venue_router.route(req, env)  # type: ignore[reportOptionalMemberAccess]
+        result = c.venue_router.route(req, env)
         assert result.adapter_name == "stub_default"
 
     def test_alert_service_has_rules(self, tmp_path):
         c = _container(tmp_path)
-        fired = c.alert_service.evaluate({"error_rate": 0.5})  # type: ignore[reportOptionalMemberAccess]
+        fired = c.alert_service.evaluate({"error_rate": 0.5})
         assert len(fired) >= 1
 
     def test_service_count_38(self, tmp_path):
@@ -163,7 +163,7 @@ class TestConcurrencyEventBus:
         bus = EventBus()
         received = []
         lock = threading.Lock()
-        bus.subscribe("evt", lambda t, p: (lock.acquire(), received.append(p), lock.release()))
+        bus.subscribe("evt", lambda t, p: (lock.acquire(), received.append(p), lock.release()))  # type: ignore[func-returns-value]
 
         def publish():
             for i in range(50):

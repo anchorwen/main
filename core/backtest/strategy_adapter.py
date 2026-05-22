@@ -204,7 +204,7 @@ class StrategyLineAdapter:
         brain_adapters_map: dict[str, list[Any]] | None = None,
     ) -> StrategyLineAdapter:
         """Factory from strategy config dicts with pre-loaded brain adapters."""
-        from core.execution.strategy_line import (
+        from core.execution.strategy_line import (  # dynamically registered
             BarrierStrategy,
             MicroStrategy,
             StatArbStrategy,

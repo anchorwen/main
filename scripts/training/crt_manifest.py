@@ -140,7 +140,7 @@ def build_manifest(
     return CRTManifestV1(
         model_id=mid,
         lane=lane,
-        role=role,  # type: ignore[arg-type]
+        role=role,
         generation=generation,
         feature_contract_id=fc,
         iface_semver=iface_semver,

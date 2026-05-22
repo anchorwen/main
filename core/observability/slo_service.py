@@ -144,7 +144,7 @@ class SloService:
         evaluated = {}
         for name, spec in self._objectives.items():
             target = float(spec[PAYLOAD_KEY_TARGET])
-            direction = spec.get(PAYLOAD_KEY_DIRECTION, SLO_DIRECTION_ABOVE)
+            direction = str(spec.get(PAYLOAD_KEY_DIRECTION, SLO_DIRECTION_ABOVE))
             value = values.get(name, 0.0)
             met = value >= target if direction == SLO_DIRECTION_ABOVE else value <= target
             budget = self._error_budget(value=value, target=target, direction=direction)

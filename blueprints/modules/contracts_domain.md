@@ -6,7 +6,8 @@ Domain model dataclasses that form the message-passing backbone of the system. E
 ## Key Files
 | File | Role |
 |------|------|
-| `core/contracts/domain/brain_decision_proposal.py` | `BrainDecisionProposal` — uniform AI output |
+| `core/schemas/trading_contracts.py` | **Layer 1 immutable contracts**: `BrainSignal`, `ConsensusResult`, `StrategyDecision`, `DegradedResult`, `Direction`, `TradeDirection` — frozen dataclasses replacing dict-based communication |
+| `core/contracts/domain/brain_decision_proposal.py` | `BrainDecisionProposal` — uniform AI output (legacy, being phased out by BrainSignal) |
 | `core/contracts/domain/decision_intent.py` | `DecisionIntent` — compiled trading intent |
 | `core/contracts/domain/decision_candidate.py` | `DecisionCandidate` — parliament output |
 | `core/contracts/domain/risk_verdict.py` | `RiskVerdict` — risk evaluation result |
@@ -27,12 +28,18 @@ Domain model dataclasses that form the message-passing backbone of the system. E
 ## Data Flow
 ```
 All data flows through these dataclasses:
-  BrainDecisionProposal → DecisionCandidate → DecisionIntent → RiskVerdict
-       (AI output)         (parliament)        (compiled)       (risk check)
-                                                                    ↓
-                                                            DispatchRequest
-                                                                    ↓
-                                                            ExecutionEvent
+  BrainSignal → ConsensusResult → StrategyDecision → RiskVerdict
+  (AI output)    (parliament)     (strategy line)    (risk check)
+                                                                   ↓
+                                                           DispatchRequest
+                                                                   ↓
+                                                           ExecutionEvent
+
+Layer 1 immutable contracts (core/schemas/trading_contracts.py):
+  BrainAdapters ─BrainSignal→ Parliament ─ConsensusResult→ StrategyLines ─StrategyDecision→ Guards → Dispatch
+
+Failure contract: DegradedResult replaces every `except Exception: pass`
+so downstream modules can decide whether to degrade, skip, or circuit-break.
 ```
 
 ## Inbound Dependencies
@@ -49,6 +56,9 @@ All data flows through these dataclasses:
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing, and suppressors for pre-existing pattern issues across all changed modules | type-confusion |
+| FIX-20260522-022 | 2026-05-22 | cursor-agent | 24ff517 | Phase 2b: ParliamentService _normalize_proposal adapter — maps BrainSignal frozen dataclass to legacy BrainDecisionProposal interface for v9 shadow compatibility | contract-violation |
+| FIX-20260522-017 | 2026-05-22 | cursor-agent | — | Layer 1 immutable contracts: Created `core/schemas/trading_contracts.py` — single source of truth for inter-module data contracts. Four frozen dataclasses (`BrainSignal`, `ConsensusResult`, `StrategyDecision`, `DegradedResult`) replace untyped dicts at all 4 module boundaries. `DegradedResult` replaces every `except:pass` with explicit degradation signal enabling circuit breaker. All fields use `frozen=True, slots=True` for immutability. | RC-06 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

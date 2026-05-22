@@ -281,10 +281,10 @@ def run_backtest(
             if half_life < max_half_life and theta_smooth > theta_min and mute_factor > 0.3:
                 if z_score < -z_entry:
                     position = 1
-                    entry_price = current_price
+                    entry_price = float(current_price)
                 elif z_score > z_entry:
                     position = -1
-                    entry_price = current_price
+                    entry_price = float(current_price)
         elif position == 1:
             if z_score > -z_exit or z_score > z_entry * 0.3:
                 pnl = current_price - entry_price
@@ -503,7 +503,7 @@ def _grid_search_fallback(
     for params in param_grid:
         metrics = run_backtest(
             prices,
-            window=params["window"],
+            window=int(params["window"]),
             z_entry=params["z_entry"],
             z_exit=params["z_exit"],
             max_half_life=params["max_half_life"],

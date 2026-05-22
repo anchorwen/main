@@ -198,6 +198,11 @@ class StrategyLineConfig:
     # higher values per strategy line (e.g. 3 for barrier_12bar).
     min_valid_brains: int = 1
 
+    # Meta-probe specs — regression brains serving as directional probes for
+    # the Meta Pipeline (Track 2).  Declared per-strategy in live.yaml or
+    # auto-discovered from brain JSON ``"roles": ["meta_probe"]``.
+    meta_probe_specs: list[Any] = field(default_factory=list)
+
     # Budget
     daily_loss_limit_pct: float = -0.03
     max_consecutive_losses: int = 5
@@ -380,7 +385,7 @@ class StrategyLine:
                     "barrier_12bar_regression"
                 )
                 if _is_regression:
-                    _raw = getattr(p, "extensions", {}).get("raw_outputs", {}).get("raw_score")
+                    _raw = getattr(p, "raw_score", None)
                     if _raw is not None:
                         import json as _json
 
@@ -411,9 +416,13 @@ class StrategyLine:
                     pnl_ledger.record_signal(
                         brain_id=getattr(p, "brain_id", "unknown"),
                         symbol="XAUUSDc",
-                        direction=p.prediction.get("direction_bias", "neutral"),
+                        direction=p.direction
+                        if hasattr(p, "direction")
+                        else p.prediction.get("direction_bias", "neutral"),
                         entry_price=mid_price,
-                        confidence=p.prediction.get("confidence", 0.5),
+                        confidence=p.confidence
+                        if hasattr(p, "confidence")
+                        else p.prediction.get("confidence", 0.5),
                     )
                 except Exception:
                     pass
@@ -422,8 +431,7 @@ class StrategyLine:
         entry_z_score = 0.0
         for p in proposals:
             try:
-                raw_outputs = getattr(p, "extensions", {}).get("raw_outputs", {})
-                z = raw_outputs.get("z_score")
+                z = getattr(p, "raw_score", 0.0)
                 if z is not None and float(z) != 0.0:
                     entry_z_score = float(z)
                     break
@@ -437,10 +445,10 @@ class StrategyLine:
             try:
                 weighter = DynamicBrainWeighter(tracker, pnl_store=pnl_ledger)
                 for b_info in self.brains:
-                    bid = b_info.get("brain_id", "")
-                    if bid:
+                    brain_id = str(b_info.get("brain_id", ""))
+                    if brain_id:
                         weighter.set_brain_metadata(
-                            bid,
+                            brain_id,
                             {
                                 "contract_group": b_info.get("contract_group", ""),
                                 "feature_schema": b_info.get("feature_schema", ""),
@@ -464,11 +472,14 @@ class StrategyLine:
             _vw = float(getattr(p, "vote_weight", 1.0) or 1.0)
             if _vw <= 0.0:
                 continue  # muted brain — cannot vote, don't count
-            pred = getattr(p, "prediction", None) or {}
-            if isinstance(pred, dict):
-                if pred.get("direction_bias", "neutral") != "neutral":
-                    _valid_voters += 1
-            elif getattr(pred, "direction_bias", "neutral") != "neutral":
+            # BrainSignal attribute first, fall back to legacy dict
+            _dir = getattr(p, "direction", None)
+            if _dir is None:
+                _pred = getattr(p, "prediction", None) or {}
+                _dir = (
+                    _pred.get("direction_bias", "neutral") if isinstance(_pred, dict) else "neutral"
+                )
+            if _dir != "neutral":
                 _valid_voters += 1
         if _valid_voters > 0 and _valid_voters < self.config.min_valid_brains:
             return StrategyDecision(
@@ -554,11 +565,12 @@ class StrategyLine:
                 return meta_decision
 
         # ── Track 3: LightGBM Meta-Filter Gate (OU signal quality) ──
-        # For OU-based strategies (statarb_dynamic, barrier_12bar), the
-        # 47-dim LightGBM meta-filter predicts P(breakeven | signal_fired).
-        # This is a Stage 2 precision filter trained on meta-labeling data —
-        # ML amplifies the weak alpha in the rule engine, not creates it.
-        if meta_filter_gate is not None and name in ("statarb_dynamic", "barrier_12bar"):
+        # For OU-based strategies (statarb_dynamic), the 47-dim LightGBM
+        # meta-filter predicts P(breakeven | signal_fired).
+        # barrier_12bar was surgically removed from Track 3 (2026-05-22):
+        # Track 4d MetaSignalFilter (LGB+MLP+Platt+Conformal) fully subsumes
+        # this single-LGB gate with richer features (59 vs 47) and calibration.
+        if meta_filter_gate is not None and name in ("statarb_dynamic",):
             if meta_filter_gate.is_loaded and feature_vector is not None:
                 try:
                     mf_result = meta_filter_gate.filter(
@@ -609,10 +621,16 @@ class StrategyLine:
 
         # ── 4b. Counter-trend gate ──
         # Block trades that oppose the higher-timeframe trend.
-        # Threshold varies by strategy: barrier is strict (needs trend alignment),
-        # micro is moderate, statarb ignores trend (mean-reversion logic).
+        # Threshold varies by strategy: micro is moderate, statarb ignores trend
+        # (mean-reversion logic).  barrier_12bar is EXEMPT — Dictator Protocol:
+        # the Huber BPS probe IS the trend signal; a counter-trend block would
+        # silence the only voter and defeat Track 4d's purpose (FIX-20260522-013).
         _ct_vol_mult = 1.0
-        if trend_direction != "neutral" and direction != trend_direction:
+        if (
+            name != "barrier_12bar"
+            and trend_direction != "neutral"
+            and direction != trend_direction
+        ):
             ct_block = _counter_trend_action(name, trend_strength, h4_trend_strength)
             if ct_block["action"] == "block":
                 return StrategyDecision(
@@ -693,17 +711,30 @@ class StrategyLine:
         # through unchanged (scope isolation).
         _meta_p_win: float | None = None  # P(TP|signal) for Kelly sizing
         if meta_filter is not None and name == "barrier_12bar":
+            from core.execution.meta_pipeline import extract_probe_score
+
             _s1_prediction: float | None = None
-            for p in proposals:
-                try:
-                    raw_outputs = getattr(p, "extensions", {}).get("raw_outputs", {})
-                    # Meta_Stage1_Huber_V1 uses raw_score (regression bps)
-                    _s1 = raw_outputs.get("raw_score")
-                    if _s1 is not None:
-                        _s1_prediction = float(_s1)
+            for spec in self.config.meta_probe_specs:
+                _s1 = extract_probe_score(proposals, spec.brain_id)
+                if _s1 is not None:
+                    _s1_prediction = _s1
+                    break
+            # Fallback: if no meta_probe_specs configured, scan all proposals
+            if _s1_prediction is None:
+                for p in proposals:
+                    raw = getattr(p, "raw_score", None)
+                    if raw is not None:
+                        _s1_prediction = float(raw)
                         break
-                except (TypeError, ValueError, AttributeError):
-                    pass
+                    # Legacy fallback
+                    ext = getattr(p, "extensions", None)
+                    if ext and isinstance(ext, dict):
+                        ro = ext.get("raw_outputs", {})
+                        if isinstance(ro, dict):
+                            raw = ro.get("raw_score")
+                            if raw is not None:
+                                _s1_prediction = float(raw)
+                                break
 
             if _s1_prediction is not None:
                 result = meta_filter.filter_arrays(
@@ -929,14 +960,25 @@ class StrategyLine:
         # ── Build entry context for journal ──
         _brain_preds: list[dict[str, Any]] = []
         for p in proposals:
-            pred = getattr(p, "prediction", None) or {}
+            _dir = getattr(p, "direction", None)
+            _conf = float(getattr(p, "confidence", 0.5))
+            if _dir is None:
+                pred = getattr(p, "prediction", None) or {}
+                _dir = pred.get("direction_bias", "neutral")
+                _conf = float(pred.get("confidence", 0.5))
+            if _dir == "long":
+                _up, _down = _conf, round(1.0 - _conf, 4)
+            elif _dir == "short":
+                _up, _down = round(1.0 - _conf, 4), _conf
+            else:
+                _up, _down = 0.5, 0.5
             _brain_preds.append(
                 {
                     "brain_id": getattr(p, "brain_id", "unknown"),
-                    "up_prob": round(float(pred.get("up_probability", 0.5)), 4),
-                    "down_prob": round(float(pred.get("down_probability", 0.5)), 4),
-                    "confidence": round(float(pred.get("confidence", 0.5)), 4),
-                    "direction_bias": pred.get("direction_bias", "neutral"),
+                    "up_prob": _up,
+                    "down_prob": _down,
+                    "confidence": round(_conf, 4),
+                    "direction_bias": _dir,
                 }
             )
         entry_context = {
@@ -999,217 +1041,36 @@ class StrategyLine:
         support_count: int,
         total_count: int,
     ) -> StrategyDecision | None:
-        """Track 2: Meta Pipeline — Huber probe → Stage 2 filter, bypasses Parliament.
+        """Track 2: Meta Pipeline — config-driven probe → Stage-N filter.
 
-        Extracts Meta_Stage1_Huber_V1 raw_score from proposals, maps it to a
-        directional signal (|raw_score| > 0.30), and runs the full Stage 2
-        LGB+MLP+Platt+Conformal filter chain.  Returns a StrategyDecision if
-        the filter approves, None otherwise.
+        Delegates to :class:`MetaPipeline` which auto-discovers probe brains
+        from ``StrategyLineConfig.meta_probe_specs`` or brain JSON roles.
         """
-        import json as _json
-
-        # Defense-in-depth: max_volume=0 means shadow-only, no real capital.
-        # The call-site gate in evaluate() should catch this, but repeat here
-        # in case _try_meta_pipeline is ever called from a different path.
-        if self.config.max_volume <= 0:
+        if not self.config.meta_probe_specs:
             return None
 
-        # 1. Extract Huber raw_score from proposals
-        s1_prediction: float | None = None
-        for p in proposals:
-            try:
-                raw_outputs = getattr(p, "extensions", {}).get("raw_outputs", {})
-                _s1 = raw_outputs.get("raw_score")
-                if _s1 is not None:
-                    s1_prediction = float(_s1)
-                    break
-            except (TypeError, ValueError, AttributeError):
-                pass
+        from core.execution.meta_pipeline import MetaPipeline
 
-        if s1_prediction is None:
-            return None
-
-        # 2. Map raw_score to direction (threshold ±0.30)
-        # Score range [-1, 1] maps bps regression output to directional intent.
-        if s1_prediction < -0.30:
-            meta_dir = "short"
-        elif s1_prediction > 0.30:
-            meta_dir = "long"
-        else:
-            return None  # No strong directional signal from Huber probe
-
-        # 3. Run Stage 2 filter (LGB + MLP + Platt + Conformal)
-        result = meta_filter.filter_arrays(
-            direction=meta_dir,
-            s1_prediction=s1_prediction,
-            v9_array=feature_vector,
-            micro_array=micro_feature_vector,
+        pipeline = MetaPipeline(
+            specs=self.config.meta_probe_specs,
+            filter_registry={"stage2": meta_filter} if meta_filter is not None else {},
         )
-        if not result.passed:
-            print(
-                _json.dumps(
-                    {
-                        "event": "kelly_diag",
-                        "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
-                        "strategy": self.config.name,
-                        "stage": "meta_pipeline_rejected",
-                        "source": "track2_meta_pipeline",
-                        "s1_prediction": round(s1_prediction, 6),
-                        "meta_dir": meta_dir,
-                        "result_p_win": round(float(getattr(result, "p_win", 0)), 4),
-                        "passed": False,
-                        "reason": result.reason if result.reason else "threshold",
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-            return None
-
-        _meta_p_win = float(result.p_win)
-        print(
-            _json.dumps(
-                {
-                    "event": "kelly_diag",
-                    "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
-                    "strategy": self.config.name,
-                    "stage": "meta_pipeline_approved",
-                    "source": "track2_meta_pipeline",
-                    "s1_prediction": round(s1_prediction, 6),
-                    "meta_dir": meta_dir,
-                    "result_p_win": round(_meta_p_win, 4),
-                    "passed": True,
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
-
-        # 4. Compute SL/TP (shared plumbing with Track 1)
-        from core.execution.dynamic_sl_tp import compute_dynamic_sl_tp, compute_sl_tp_levels
-
-        dsl = compute_dynamic_sl_tp(
-            base_sl_mult=self.config.base_sl_atr_mult,
-            base_tp_mult=self.config.base_tp_atr_mult,
+        return pipeline.evaluate(
+            proposals=proposals,
+            feature_vector=feature_vector,
+            micro_feature_vector=micro_feature_vector,
+            parliament_direction="neutral",  # Meta Pipeline is direction-agnostic
             current_atr=current_atr,
-            ref_atr=self.config.ref_atr,
-            hard_sl_ratio=self.config.hard_sl_ratio,
-            timeframe_mult=self.config.timeframe_mult,
-            min_sl_distance=self.config.min_sl_distance,
-            min_rr_ratio=self.config.min_rr_ratio,
-        )
-
-        entry_price = mid_price or 0.0
-        if entry_price <= 0:
-            return None
-        levels = compute_sl_tp_levels(meta_dir, entry_price, dsl)
-
-        # 5. RR check
-        entry_price = mid_price or 0.0
-        sl_dist = abs(levels["stop_loss"] - entry_price)
-        tp_dist = abs(levels["take_profit"] - entry_price)
-        _rr_ratio: float = 1.0
-        if sl_dist > 0:
-            _rr_ratio = tp_dist / sl_dist
-        if _rr_ratio < self.config.min_rr_ratio:
-            return None
-
-        # 6. Kelly sizing with Platt-calibrated P(TP|signal)
-        from core.execution.kelly_sizer import compute_kelly_mult
-
-        kelly_result = compute_kelly_mult(_meta_p_win, _rr_ratio)
-        if kelly_result.fractional_mult == 0.0:
-            return None  # Negative EV — hard veto
-        _kelly_mult = kelly_result.fractional_mult
-
-        # 7. Volume computation (barrier_12bar: no OU exhaustion/debt)
-        volume = self._compute_volume(
-            _meta_p_win,  # use meta_p_win as confidence proxy
-            current_atr,
-            regime_info,
-            regime_gate_mode,
-            macro_regime,
-            risk_budget_usd,
-            exhaustion_factor=1.0,  # barrier_12bar not OU
-            ou_regime_factor=1.0,
-            depth_penalty=z_depth_penalty(abs(entry_z_score)),
-            kelly_mult=_kelly_mult,
-        )
-        _ticks2 = math.floor(volume / self.config.lot_step + 0.5)
-        volume = max(self.config.lot_step, round(_ticks2 * self.config.lot_step, 2))
-
-        # 8. Diagnostic log
-        _pre_kelly_raw = getattr(self, "_last_pre_kelly_size", volume)
-        _raw_target = _pre_kelly_raw * _kelly_mult
-        print(
-            _json.dumps(
-                {
-                    "event": "kelly_sizing",
-                    "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
-                    "strategy": self.config.name,
-                    "source": "track2_meta_pipeline",
-                    "p_win": round(_meta_p_win, 4),
-                    "rr_ratio": round(_rr_ratio, 4),
-                    "kelly_mult": round(_kelly_mult, 4),
-                    "sizing_label": kelly_result.sizing_label,
-                    "base_volume": round(_pre_kelly_raw, 4),
-                    "raw_target_volume": round(_raw_target, 4),
-                    "final_stepped_volume": volume,
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
-
-        # 9. Build entry context
-        _brain_preds: list[dict[str, Any]] = []
-        for p in proposals:
-            pred = getattr(p, "prediction", None) or {}
-            _brain_preds.append(
-                {
-                    "brain_id": getattr(p, "brain_id", "unknown"),
-                    "up_prob": round(float(pred.get("up_probability", 0.5)), 4),
-                    "down_prob": round(float(pred.get("down_probability", 0.5)), 4),
-                    "confidence": round(float(pred.get("confidence", 0.5)), 4),
-                    "direction_bias": pred.get("direction_bias", "neutral"),
-                }
-            )
-        entry_context: dict[str, Any] = {
-            "atr": round(current_atr, 4),
-            "regime": regime_info.get("regime", "normal") if regime_info else "normal",
-            "vol_regime": regime_info.get("regime", "normal") if regime_info else "normal",
-            "trend_direction": trend_direction,
-            "macro_regime": macro_regime,
-            "brain_predictions": _brain_preds,
-            "meta_pipeline_source": "track2",
-            "meta_p_win": round(_meta_p_win, 4),
-            "s1_prediction": round(s1_prediction, 6),
-        }
-
-        _venue = "shadow" if regime_gate_mode == "shadow" else "live"
-        _volume = 0.0 if regime_gate_mode == "shadow" else volume
-        _should_trade = regime_gate_mode != "shadow"
-
-        return StrategyDecision(
-            strategy_name=self.config.name,
-            magic=self.config.magic,
-            should_trade=_should_trade,
-            direction=meta_dir,
-            confidence=round(_meta_p_win, 4),
-            volume=_volume,
-            sl=levels["stop_loss"],
-            tp=levels["take_profit"],
-            hard_sl=levels["hard_sl"],
-            brain_ids=brain_ids,
-            supporting_count=support_count,
-            total_count=total_count,
-            regime_mode=regime_gate_mode,
-            venue=_venue,
-            reason=f"meta_pipeline_{meta_dir}",
+            mid_price=mid_price,
             entry_z_score=entry_z_score,
-            entry_context=entry_context,
-            p_win=round(_meta_p_win, 4),
-            kelly_mult=round(_kelly_mult, 4),
+            pnl_store=pnl_store,
+            risk_budget_usd=risk_budget_usd,
+            regime_info=regime_info,
+            regime_gate_mode=regime_gate_mode,
+            brain_ids=brain_ids,
+            support_count=support_count,
+            total_count=total_count,
+            config=self.config,
         )
 
     def _compute_consensus(self, proposals: list[Any]) -> tuple[str, float, list[str], int, int]:
@@ -1255,59 +1116,66 @@ class StrategyLine:
     def _compute_weighted_fallback(
         self, proposals: list[Any]
     ) -> tuple[str, float, list[str], int, int]:
-        """Original weighted-average consensus — used when no contract group matches."""
-        up_scores: list[float] = []
-        down_scores: list[float] = []
-        weights: list[float] = []
-        directions: list[str] = []
+        """Direction-count consensus — used when no contract group matches.
+
+        Each BrainSignal votes its *direction* weighted by *confidence*.
+        The up_prob/down_prob comparison from the old BrainDecisionProposal
+        is intentionally removed — it was the root cause of FIX-20260522-013
+        (sign-flip bug).  BrainSignal carries only the decided direction.
+        """
         brain_ids: list[str] = []
+        long_weight: float = 0.0
+        short_weight: float = 0.0
+        long_brains: list[str] = []
+        short_brains: list[str] = []
+        total = len(proposals)
 
         for p in proposals:
             bid = getattr(p, "brain_id", "unknown")
             brain_ids.append(bid)
 
-            pred = getattr(p, "prediction", None) or {}
-            health = getattr(p, "health", None) or {}
+            direction = getattr(p, "direction", None)
+            if direction is None:
+                direction = getattr(p, "prediction", {}).get("direction_bias", "neutral")
 
-            up = float(pred.get("up_probability", 0.5))
-            down = float(pred.get("down_probability", 0.5))
-            conf = float(pred.get("confidence", 0.5))
-            runtime_ok = not health.get("fallback_used", False)
+            confidence = getattr(p, "confidence", None)
+            if confidence is None:
+                confidence = float(getattr(p, "prediction", {}).get("confidence", 0.5))
 
-            vote_weight = float(getattr(p, "vote_weight", 1.0) or 1.0)
-            weight = vote_weight * conf * (1.0 if runtime_ok else 0.5)
-            up_scores.append(up * weight)
-            down_scores.append(down * weight)
-            weights.append(weight)
+            fallback = getattr(p, "fallback", None)
+            if fallback is None:
+                health = getattr(p, "health", None) or {}
+                fallback = health.get("fallback_used", False)
 
-            bias = pred.get("direction_bias", "neutral")
-            directions.append(bias if bias in ("long", "short") else "neutral")
+            weight = float(confidence) * (0.5 if fallback else 1.0)
 
-        total_weight = sum(weights)
-        if total_weight < 1e-9:
+            if direction == "long":
+                long_weight += weight
+                long_brains.append(bid)
+            elif direction == "short":
+                short_weight += weight
+                short_brains.append(bid)
+            # neutral: weight is discarded
+
+        long_count = len(long_brains)
+        short_count = len(short_brains)
+        total_weights = long_weight + short_weight
+        if total_weights < 1e-9:
             return "neutral", 0.0, brain_ids, 0, len(proposals)
 
-        weighted_up = sum(up_scores) / total_weight
-        weighted_down = sum(down_scores) / total_weight
-
-        if weighted_up > weighted_down:
+        if long_weight > short_weight:
             direction = "long"
-            raw_score = weighted_up
-        elif weighted_down > weighted_up:
+            supporting = long_brains
+        elif short_weight > long_weight:
             direction = "short"
-            raw_score = weighted_down
+            supporting = short_brains
         else:
             return "neutral", 0.0, brain_ids, 0, len(proposals)
 
-        neutral_count = directions.count("neutral")
-        total = len(proposals)
-        if neutral_count > 0:
-            raw_score *= max(0.50, 1.0 - (neutral_count / total) * 0.30)
-
-        long_count = directions.count("long")
-        short_count = directions.count("short")
-        majority_ratio = max(long_count, short_count) / max(total, 1)
-        confidence = raw_score * 0.65 + majority_ratio * 0.35
+        majority_ratio = max(long_weight, short_weight) / total_weights
+        confidence = round(
+            majority_ratio * 0.65 + (long_weight + short_weight) / max(len(proposals), 1) * 0.35, 4
+        )
 
         if direction == "long" and self.config.long_bias_discount > 0:
             confidence *= 1.0 - self.config.long_bias_discount

@@ -166,4 +166,4 @@ class TestExecutionEventWriterReader:
         )
         assert event.event_type == "filled"
         assert event.venue_order_id == "ord_123"
-        assert path.exists()  # type: ignore[reportAttributeAccessIssue]
+        assert path.exists()

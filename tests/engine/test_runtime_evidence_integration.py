@@ -66,8 +66,8 @@ class TestRuntimeEvidenceWriter:
         result = pipeline.run({"ema_bias": 2.0}, {"price": 2000.0}, {"runtime_cycle_id": "cycle_a"})
         record, path = writer.write_result(runtime_cycle_id="cycle_a", result=result)
         assert record.runtime_cycle_id == "cycle_a"
-        assert path.exists()  # type: ignore[reportAttributeAccessIssue]
-        payload = json.loads(path.read_text(encoding="utf-8").strip())  # type: ignore[reportAttributeAccessIssue]
+        assert path.exists()
+        payload = json.loads(path.read_text(encoding="utf-8").strip())
         assert payload["schema_version"] == SCHEMA_RUNTIME_EVIDENCE_RECORD
         assert payload["payload"]["quality_report"]["order_count"] == 1
 
@@ -99,7 +99,7 @@ class TestRuntimeEvidenceWriter:
         result = pipeline.run({"ema_bias": 2.0}, {"price": 2000.0}, {"runtime_cycle_id": "cycle_c"})
         files = list(tmp_path.rglob("*.jsonl"))
         payload = json.loads(files[0].read_text(encoding="utf-8").strip())
-        assert result.order_count if hasattr(result, "order_count") else len(result.orders) == 0  # type: ignore[reportAttributeAccessIssue]
+        assert result.order_count if hasattr(result, "order_count") else len(result.orders) == 0
         assert payload["runtime_cycle_id"] == "cycle_c"
         assert payload["order_count"] == 0
         assert payload["approval_count"] == 1

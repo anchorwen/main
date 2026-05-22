@@ -156,15 +156,17 @@ class CommunicationReplayService:
         )
         records = trace_records(trace)
         delivery_summary = trace_delivery_summary(trace)
-        message_plans = [
-            self.build_message_replay_plan(
-                date_key=date_key,
-                target=target,
-                message_id=trace_message_id(item),  # type: ignore[reportArgumentType]
-            )
-            for item in records
-            if trace_message_id(item) is not None
-        ]
+        message_plans: list[dict] = []
+        for item in records:
+            _mid = trace_message_id(item)
+            if _mid is not None:
+                _plan = self.build_message_replay_plan(
+                    date_key=date_key,
+                    target=target,
+                    message_id=_mid,
+                )
+                if _plan is not None:
+                    message_plans.append(_plan)
         message_plans = [item for item in message_plans if item is not None]
         plan = {
             PAYLOAD_KEY_SCOPE: REPLAY_TRACE_SCOPE_CORRELATION,

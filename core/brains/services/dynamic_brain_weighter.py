@@ -12,6 +12,7 @@ composite_score from BrainPerformanceTracker.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -94,12 +95,20 @@ class DynamicBrainWeighter:
         return weights
 
     def apply_weights(self, proposals: list) -> list:
-        """Set vote_weight on each proposal in-place and return the list."""
+        """Set vote_weight on each proposal in-place and return the list.
+
+        Frozen objects (e.g. BrainSignal) reject mutation — weights are
+        still available via get_summary() / get_weights() for downstream
+        consumers that accept a weighter reference.
+        """
         weights = self.get_weights()
         for p in proposals:
             brain_id = getattr(p, "brain_id", "")
             if brain_id in weights:
-                p.vote_weight = weights[brain_id]
+                try:
+                    p.vote_weight = weights[brain_id]
+                except Exception:
+                    pass  # frozen object — weight accessible via get_summary()
         return proposals
 
     def get_summary(self, brain_id: str) -> dict:
@@ -148,7 +157,7 @@ class DynamicBrainWeighter:
         """
         self._brain_meta[brain_id] = meta
 
-    def _detect_redundant_clusters(self, metrics_map: dict[str, object]) -> list[list[str]]:
+    def _detect_redundant_clusters(self, metrics_map: Mapping[str, object]) -> list[list[str]]:
         """Group brains whose PnL profiles are near-identical → likely redundant.
 
         Two brains are considered redundant when they share the same contract_group
@@ -220,7 +229,7 @@ class DynamicBrainWeighter:
         return True
 
     def _apply_redundancy_penalty(
-        self, weights: dict[str, float], metrics_map: dict[str, object]
+        self, weights: dict[str, float], metrics_map: Mapping[str, object]
     ) -> dict[str, float]:
         """Discount weights of redundant brains within each PnL-profile cluster.
 

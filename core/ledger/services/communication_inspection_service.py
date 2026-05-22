@@ -161,9 +161,9 @@ class CommunicationInspectionService:
         }
 
     def _summarize_correlation_delivery(self, message_traces: list[dict]) -> dict:
-        phase_counts = {}
-        issue_counts = {}
-        issue_message_ids = {}
+        phase_counts: dict[str, int] = {}
+        issue_counts: dict[str, int] = {}
+        issue_message_ids: dict[str, list[str]] = {}
         for item in message_traces:
             delivery_state = item[PAYLOAD_KEY_DELIVERY_STATE]
             phase = delivery_state[PAYLOAD_KEY_PHASE]
@@ -172,15 +172,14 @@ class CommunicationInspectionService:
             issue_counts[issue_code] = issue_counts.get(issue_code, 0) + 1
             issue_message_ids.setdefault(issue_code, []).append(item[PAYLOAD_KEY_MESSAGE_ID])
 
-        execution_timelines = [
-            item.get(PAYLOAD_KEY_EXECUTION_TIMELINE)
+        execution_timelines: list[dict] = [
+            item[PAYLOAD_KEY_EXECUTION_TIMELINE]
             for item in message_traces
             if item.get(PAYLOAD_KEY_EXECUTION_TIMELINE) is not None
         ]
-        terminal_count = sum(1 for t in execution_timelines if t.get(PAYLOAD_KEY_IS_TERMINAL))  # type: ignore[reportOptionalMemberAccess]
+        terminal_count = sum(1 for t in execution_timelines if t.get(PAYLOAD_KEY_IS_TERMINAL))
         total_filled_qty = sum(
-            t.get(PAYLOAD_KEY_TOTAL_FILLED_QUANTITY, 0)
-            for t in execution_timelines  # type: ignore[reportOptionalMemberAccess]
+            t.get(PAYLOAD_KEY_TOTAL_FILLED_QUANTITY, 0) for t in execution_timelines
         )
 
         return {

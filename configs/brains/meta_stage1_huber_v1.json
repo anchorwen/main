@@ -3,6 +3,12 @@
   "brain_id": "Meta_Stage1_Huber_V1",
   "brain_type": "lightgbm_v1",
   "brain_role": "alpha_brain",
+  "roles": ["voter", "meta_probe"],
+  "meta_probe_config": {
+    "score_type": "bps_regression",
+    "threshold": 0.30,
+    "filter_stage": "stage2"
+  },
   "model_version": "barrier_12bar_regression_huber",
   "status": "shadow",
   "vote_weight": 0.8,

@@ -18,6 +18,7 @@ Usage:
 from __future__ import annotations
 
 import bisect
+import os
 
 import numpy as np
 
@@ -271,7 +272,9 @@ class RegimeDetector:
 
         out = Path(path)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+        tmp = out.with_suffix(out.suffix + ".tmp")
+        tmp.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+        os.replace(tmp, out)
 
     def load_state(self, path):
         import json

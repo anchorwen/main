@@ -5,17 +5,18 @@ Computes OU process Z-Score deviation from a rolling window of prices and maps i
 onto BrainDecisionProposal via the optimal entry/exit thresholds discovered during backtesting.
 """
 
-from datetime import UTC, datetime
+from __future__ import annotations
+
 from math import log
 from time import perf_counter
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from core.brains.adapters.base_adapter import BaseBrainAdapter
-from core.brains.schema_versions import SCHEMA_BRAIN_DECISION_PROPOSAL
-from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
-from core.contracts.ids import new_proposal_id
+
+if TYPE_CHECKING:
+    from core.schemas.trading_contracts import BrainSignal, Direction
 
 
 class ParamsBrainAdapter(BaseBrainAdapter):
@@ -125,17 +126,9 @@ class ParamsBrainAdapter(BaseBrainAdapter):
             "fallback": False,
         }
 
-    def get_signal(self, raw_output: dict[str, Any]) -> BrainDecisionProposal:
-        """Map OU Z-Score to BrainDecisionProposal using the loaded entry/exit thresholds.
+    def get_signal(self, raw_output: dict[str, Any]) -> BrainSignal:
+        from core.schemas.trading_contracts import BrainSignal
 
-        Entry logic:
-          - Z < -z_entry  → long  (price below mean → revert up)
-          - Z >  z_entry  → short (price above mean → revert down)
-        Exit logic (handled externally by ParliamentService, but signaled here):
-          - Z > -z_exit or Z < z_exit  → flat/neutral
-
-        Confidence is derived from the half-life: shorter half_life → higher confidence.
-        """
         z_score = raw_output.get("z_score", 0.0)
         half_life = raw_output.get("half_life", float("inf"))
         runtime_ms = raw_output.get("runtime_ms", 0.0)
@@ -145,59 +138,17 @@ class ParamsBrainAdapter(BaseBrainAdapter):
         # Determine direction from Z-Score thresholds
         direction_bias, up_prob, down_prob = self._z_to_direction(z_score, half_life)
 
-        warnings = []
-        if fallback_used:
-            warnings.append("ou_params_unavailable_using_stub")
-        if buffer_len < self._window:
-            warnings.append(f"insufficient_buffer_{buffer_len}_of_{self._window}")
-
-        return BrainDecisionProposal(
-            schema_version=SCHEMA_BRAIN_DECISION_PROPOSAL,
-            proposal_id=new_proposal_id(),
-            snapshot_id="",  # filled by BrainRunService
+        return BrainSignal(
             brain_id=self._brain_entry.get("brain_id", ""),
-            brain_role=self._brain_entry.get("brain_role", ""),
-            brain_status=self._brain_entry.get("status", ""),
-            model_version=self._brain_entry.get("model_version", "unknown"),
-            event_time=datetime.now(UTC).replace(tzinfo=None),  # filled by BrainRunService
-            generated_at=datetime.now(UTC).replace(tzinfo=None),
-            prediction={
-                "direction_bias": direction_bias,
-                "up_probability": up_prob,
-                "down_probability": down_prob,
-                "confidence": max(up_prob, down_prob),
-                "uncertainty": 1.0 - max(up_prob, down_prob),
-                "expected_edge_bps": None,
-                "expected_hold_seconds": None,
-            },
-            applicability={
-                "regime_tags": self._brain_entry.get("deployment_scope", {}).get("regimes", []),
-                "symbol_tags": self._brain_entry.get("deployment_scope", {}).get("symbols", []),
-            },
-            rationale={
-                "reason_tags": ["v6_ou_statistical_arbitrage"],
-                "warnings": warnings,
-            },
-            health={
-                "input_ok": True,
-                "fallback_used": fallback_used,
-                "runtime_ms": runtime_ms,
-                "risk_score": self._risk_from_z(z_score),
-                "volatility_score": 0.5,
-                "backend": self._backend,
-            },
-            vote_weight=self._brain_entry.get("vote_weight", 1.0),
-            extensions={
-                "raw_outputs": {
-                    "z_score": z_score,
-                    "theta": raw_output.get("theta", 0.0),
-                    "mu": raw_output.get("mu", 0.0),
-                    "half_life": half_life,
-                    "buffer_len": buffer_len,
-                    "params_window": self._window,
-                    "params_z_entry": self._z_entry,
-                    "params_z_exit": self._z_exit,
-                }
+            direction=direction_bias,
+            confidence=max(up_prob, down_prob),
+            raw_score=z_score,
+            fallback=fallback_used,
+            runtime_ms=runtime_ms,
+            diagnostics={
+                k: v
+                for k, v in raw_output.items()
+                if k not in ("z_score", "half_life", "runtime_ms", "buffer_len", "fallback")
             },
         )
 
@@ -250,7 +201,7 @@ class ParamsBrainAdapter(BaseBrainAdapter):
 
         return theta, mu, half_life, z_score
 
-    def _z_to_direction(self, z_score: float, half_life: float) -> tuple[str, float, float]:
+    def _z_to_direction(self, z_score: float, half_life: float) -> tuple[Direction, float, float]:
         """Map Z-Score to direction using the optimal entry/exit thresholds.
 
         Entry criteria (also requires valid half_life < max_half_life):
@@ -279,12 +230,16 @@ class ParamsBrainAdapter(BaseBrainAdapter):
             # Long signal: price below mean, expect reversion up
             excess = abs(z_score) - self._z_entry
             confidence = min(0.95, (0.5 + _sigmoid(excess) * 0.45) * hl_discount)
-            return "long", confidence, max(0.0, 1.0 - confidence)
+            up = 0.5 + confidence / 2.0
+            down = 1.0 - up
+            return "long", up, down
         elif z_score > self._z_entry:
             # Short signal: price above mean, expect reversion down
             excess = z_score - self._z_entry
             confidence = min(0.95, (0.5 + _sigmoid(excess) * 0.45) * hl_discount)
-            return "short", max(0.0, 1.0 - confidence), confidence
+            down = 0.5 + confidence / 2.0
+            up = 1.0 - down
+            return "short", up, down
         else:
             # Within neutral band or half_life too long
             if -self._z_exit < z_score < self._z_exit:

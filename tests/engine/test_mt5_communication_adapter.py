@@ -89,7 +89,7 @@ def test_service_container_uses_mt5_adapter_when_configured(tmp_path):
         payload={"intent_id": "message_mt5_001", "symbol": "XAUUSD"},
     )
 
-    result = container.dispatcher.dispatch(envelope)  # type: ignore[reportOptionalMemberAccess]
+    result = container.dispatcher.dispatch(envelope)
 
     assert result.adapter_name == "mt5_adapter"
     assert result.status == DispatchStatus.TRANSPORT_DELIVERED

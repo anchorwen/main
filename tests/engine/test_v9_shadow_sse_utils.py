@@ -308,7 +308,7 @@ def test_runtime_summary_sse_server_returns_error_event_for_invalid_boolean_quer
         thread = threading.Thread(target=server.handle_request, daemon=True)
         thread.start()
 
-        conn = HTTPConnection(host, port, timeout=5)  # type: ignore[reportArgumentType]
+        conn = HTTPConnection(host, port, timeout=5)
         conn.request(
             "GET",
             "/engine/v9-shadow/stream?include_meta=maybe&event_prefix=shadowexec",
@@ -346,7 +346,7 @@ def test_runtime_summary_sse_server_falls_back_to_default_error_prefix_for_inval
         thread = threading.Thread(target=server.handle_request, daemon=True)
         thread.start()
 
-        conn = HTTPConnection(host, port, timeout=5)  # type: ignore[reportArgumentType]
+        conn = HTTPConnection(host, port, timeout=5)
         conn.request(
             "GET",
             "/engine/v9-shadow/stream?include_stats=nah&event_prefix=shadow.exec",
@@ -380,11 +380,11 @@ def test_runtime_summary_build_session_stream_args_from_query_maps_single_featur
         }
     )
 
-    assert args.scenario_flag == "long"  # type: ignore[reportAttributeAccessIssue]
-    assert args.scenario_positional is None  # type: ignore[reportAttributeAccessIssue]
-    assert args.feature_file == "D:/cursor/data/snapshots/custom_single.json"  # type: ignore[reportAttributeAccessIssue]
-    assert args.feature_batch_file is None  # type: ignore[reportAttributeAccessIssue]
-    assert args.feature_dir is None  # type: ignore[reportAttributeAccessIssue]
+    assert args.scenario_flag == "long"
+    assert args.scenario_positional is None
+    assert args.feature_file == "D:/cursor/data/snapshots/custom_single.json"
+    assert args.feature_batch_file is None
+    assert args.feature_dir is None
 
 
 def test_runtime_summary_build_session_stream_plan_from_query_defaults_and_custom_values():
@@ -404,23 +404,6 @@ def test_runtime_summary_build_session_stream_plan_from_query_defaults_and_custo
     assert custom_plan == SessionStreamPlan(
         include_meta=False, include_stats=True, event_name_prefix="shadowexec"
     )
-
-
-def test_runtime_summary_build_session_stream_plan_from_query_rejects_invalid_event_prefix():
-    for invalid_prefix, message in [
-        ("shadow exec", "event_prefix must not contain whitespace"),
-        ("shadow.exec", "event_prefix must not contain dots"),
-    ]:
-        try:
-            build_session_stream_plan_from_query(
-                {"event_prefix": [invalid_prefix]}, SessionStreamPlan
-            )
-        except SessionStreamQueryError as exc:
-            assert str(exc) == message
-        else:
-            raise AssertionError(
-                f"Expected SessionStreamQueryError for event_prefix={invalid_prefix!r}"
-            )
 
 
 def test_runtime_summary_build_session_stream_plan_from_query_rejects_invalid_event_prefix():
@@ -467,7 +450,7 @@ def test_runtime_summary_sse_server_returns_error_event_for_conflicting_feature_
         thread = threading.Thread(target=server.handle_request, daemon=True)
         thread.start()
 
-        conn = HTTPConnection(host, port, timeout=5)  # type: ignore[reportArgumentType]
+        conn = HTTPConnection(host, port, timeout=5)
         conn.request(
             "GET",
             "/engine/v9-shadow/stream?feature_file=one.json&feature_batch_file=batch.json&event_prefix=shadowexec",
@@ -506,7 +489,7 @@ def test_runtime_summary_sse_server_falls_back_to_default_error_prefix_when_plan
         thread = threading.Thread(target=server.handle_request, daemon=True)
         thread.start()
 
-        conn = HTTPConnection(host, port, timeout=5)  # type: ignore[reportArgumentType]
+        conn = HTTPConnection(host, port, timeout=5)
         conn.request(
             "GET",
             "/engine/v9-shadow/stream?feature_file=one.json&feature_dir=samples&event_prefix=shadow.exec",

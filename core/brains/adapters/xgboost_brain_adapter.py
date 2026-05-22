@@ -5,16 +5,19 @@ Implements BaseBrainAdapter.load() / infer() / get_signal().
 Maps raw XGBoost regression scores onto BrainDecisionProposal via score→direction conversion.
 """
 
+from __future__ import annotations
+
 import json
-from datetime import UTC, datetime
 from time import perf_counter
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from core.brains.adapters.base_adapter import BaseBrainAdapter
-from core.contracts.domain.brain_decision_proposal import BrainDecisionProposal
 from core.deployment.brain_alert import emit_brain_alert
+
+if TYPE_CHECKING:
+    from core.schemas.trading_contracts import BrainSignal, Direction
 
 
 class XGBoostBrainAdapter(BaseBrainAdapter):
@@ -34,7 +37,7 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
     # BaseBrainAdapter interface
     # ------------------------------------------------------------------
 
-    def run(self, snapshot, feature_source=None) -> BrainDecisionProposal:
+    def run(self, snapshot, feature_source=None) -> BrainSignal:
         """Override to handle dict, (n_bars, 9) sequence, or (288,) flat array.
 
         - dict → build_model_input → (9,) vector (backward-compat)
@@ -169,13 +172,8 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
             "fallback": False,
         }
 
-    def get_signal(self, raw_output: dict[str, Any]) -> BrainDecisionProposal:
-        """Convert XGBoost raw_score into BrainDecisionProposal.
-
-        Score > 0 → long bias; score < 0 → short bias.  Magnitude via tanh → confidence.
-        """
-        from core.brains.schema_versions import SCHEMA_BRAIN_DECISION_PROPOSAL
-        from core.contracts.ids import new_proposal_id
+    def get_signal(self, raw_output: dict[str, Any]) -> BrainSignal:
+        from core.schemas.trading_contracts import BrainSignal
 
         raw_score = raw_output.get("raw_score", 0.0)
         runtime_ms = raw_output.get("runtime_ms", 0.0)
@@ -184,47 +182,17 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
         # Map raw regression score to direction
         direction_bias, up_prob, down_prob = self._score_to_direction(raw_score)
 
-        return BrainDecisionProposal(
-            schema_version=SCHEMA_BRAIN_DECISION_PROPOSAL,
-            proposal_id=new_proposal_id(),
-            snapshot_id="",  # filled by BrainRunService
+        return BrainSignal(
             brain_id=self._brain_entry.get("brain_id", ""),
-            brain_role=self._brain_entry.get("brain_role", ""),
-            brain_status=self._brain_entry.get("status", ""),
-            model_version=self._brain_entry.get("model_version", "unknown"),
-            event_time=datetime.now(UTC).replace(tzinfo=None),  # filled by BrainRunService
-            generated_at=datetime.now(UTC).replace(tzinfo=None),
-            prediction={
-                "direction_bias": direction_bias,
-                "up_probability": up_prob,
-                "down_probability": down_prob,
-                "confidence": max(up_prob, down_prob),
-                "uncertainty": 1.0 - max(up_prob, down_prob),
-                "expected_edge_bps": None,
-                "expected_hold_seconds": None,
-            },
-            applicability={
-                "regime_tags": self._brain_entry.get("deployment_scope", {}).get("regimes", []),
-                "symbol_tags": self._brain_entry.get("deployment_scope", {}).get("symbols", []),
-            },
-            rationale={
-                "reason_tags": ["v4_5_microstructure_xgboost"],
-                "warnings": [] if not fallback_used else ["xgboost_unavailable_using_stub"],
-            },
-            health={
-                "input_ok": True,
-                "fallback_used": fallback_used,
-                "runtime_ms": runtime_ms,
-                "risk_score": abs(raw_score) * 0.1,  # proxy risk from score magnitude
-                "volatility_score": 0.5,
-                "backend": self._backend,
-            },
-            vote_weight=self._brain_entry.get("vote_weight", 1.0),
-            extensions={
-                "raw_outputs": {
-                    "raw_score": raw_score,
-                    "xgb_num_features": raw_output.get("feature_count"),
-                }
+            direction=direction_bias,
+            confidence=max(up_prob, down_prob),
+            raw_score=raw_score,
+            fallback=fallback_used,
+            runtime_ms=runtime_ms,
+            diagnostics={
+                k: v
+                for k, v in raw_output.items()
+                if k not in ("raw_score", "runtime_ms", "fallback")
             },
         )
 
@@ -233,20 +201,22 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _score_to_direction(raw_score: float) -> tuple[str, float, float]:
+    def _score_to_direction(raw_score: float) -> tuple[Direction, float, float]:
         """Map XGBoost regression score to (direction_bias, up_prob, down_prob).
 
-        Uses tanh to squash the raw score and derive pseudo-probabilities:
-          - score >  0.1 → long  (up_prob=conf, down_prob=1-conf)
-          - score < -0.1 → short (up_prob=1-conf, down_prob=conf)
-          - otherwise    → neutral (0.5, 0.5)
+        Uses 0.5 ± confidence/2 anchoring so the predicted direction always
+        wins the up/down comparison in consensus (FIX-20260522-013, sign-flip bug).
         """
         confidence = float(np.tanh(abs(raw_score)))
 
         if raw_score > 0.1:
-            return "long", confidence, max(0.0, 1.0 - confidence)
+            up = 0.5 + confidence / 2.0
+            down = 1.0 - up
+            return "long", up, down
         elif raw_score < -0.1:
-            return "short", max(0.0, 1.0 - confidence), confidence
+            down = 0.5 + confidence / 2.0
+            up = 1.0 - down
+            return "short", up, down
         else:
             return "neutral", 0.5, 0.5
 

@@ -190,7 +190,7 @@ class TestTracingContext:
         ctx = TracingContext()
         root = ctx.start_span("cycle")
         ctx.start_span("sub")
-        ctx.end_span(ctx.current_span)  # type: ignore[reportArgumentType]
+        ctx.end_span(ctx.current_span)
         ctx.end_span(root)
         summary = ctx.get_trace_summary()
         assert summary["span_count"] == 2

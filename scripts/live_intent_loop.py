@@ -1197,8 +1197,19 @@ def main(argv: list[str] | None = None) -> int:
                 model_path=meta_model or "data/models/meta_exit_model.txt",
                 urgency_threshold=getattr(args, "meta_exit_threshold", 0.65),
             )
-        except Exception:
-            pass
+        except Exception as _meta_exit_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "meta_exit_engine_load_failed",
+                        "time": _utc_iso(),
+                        "error": str(_meta_exit_exc),
+                        "action": "continuing_without_meta_exit",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
 
     # ── Initialize ActivePositionManager with restart recovery ──
     position_manager: Any = None
@@ -1573,8 +1584,19 @@ def main(argv: list[str] | None = None) -> int:
 
             hot_reload = ConfigHotReload(str(_hot_path))
             hot_reload.load()
-        except Exception:
-            pass
+        except Exception as _hot_reload_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "config_hot_reload_failed",
+                        "time": _utc_iso(),
+                        "error": str(_hot_reload_exc),
+                        "action": "continuing_without_hot_reload",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
 
     # ── Initialize BarSyncPoller (event-driven M5 bar detection) ──
     bar_sync: Any = None
@@ -1725,8 +1747,11 @@ def main(argv: list[str] | None = None) -> int:
             )
             sys.exit(0)
 
-        # ── Background warm-start: run deferred MT5 buffer fills without
-        # blocking the main trading loop (FIX-20260522-005).
+        # ── Synchronous warm-start: fill deferred MT5 buffers BEFORE the main
+        # trading loop to eliminate the data race between the warm-start daemon
+        # thread and the main loop's MT5 calls (FIX-20260522-014).
+        # A 15-second join timeout prevents startup deadlock if MT5 is
+        # unresponsive — the buffer fill is best-effort, not critical.
         if _warm_start_pending and mt5 is not None:
             import threading as _threading
 
@@ -1792,6 +1817,24 @@ def main(argv: list[str] | None = None) -> int:
                 target=_background_warm_start, daemon=True, name="warm-start"
             )
             _warm_start_thread.start()
+            _warm_start_thread.join(timeout=15.0)
+            if _warm_start_thread.is_alive():
+                print(
+                    json.dumps(
+                        {
+                            "event": "warm_start_timed_out",
+                            "time": _utc_iso(),
+                            "timeout_seconds": 15.0,
+                            "action": "proceeding_to_main_loop",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+
+        # ── Degraded-wakeup propagation: set by bar_sync at end of cycle N,
+        # consumed by execute_live_cycle at start of cycle N+1.
+        _degraded_wakeup = False
 
         while True:
             try:
@@ -1819,7 +1862,9 @@ def main(argv: list[str] | None = None) -> int:
                     exit_watchdog=exit_watchdog,
                     limit_monitor=limit_monitor,
                     meta_signal_filter=meta_signal_filter,
+                    degraded_wakeup=_degraded_wakeup,
                 )
+                _degraded_wakeup = False  # consumed, reset for next cycle
                 # Reload tracker if daily_ops enriched it with realized P&L
                 if state._tracker_reload_pending:
                     try:
@@ -1887,6 +1932,20 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 if bar_sync is not None:
                     new_bar = bar_sync.wait_for_new_bar(timeout_seconds=args.bar_sync_timeout)
+                    if new_bar is not None and new_bar.get("_degraded"):
+                        _degraded_wakeup = True
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "bar_sync_degraded_wakeup",
+                                    "time": _utc_iso(),
+                                    "last_bar_time": new_bar.get("time"),
+                                    "bar_sync_elapsed": ">=bar_period",
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
                     if new_bar is None:
                         # Timeout — MT5 bar not yet formed; synthesize from M1 bars
                         synthetic = bar_sync.fetch_synthetic_bar(mt5)

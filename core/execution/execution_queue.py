@@ -24,16 +24,20 @@ DEFAULT_PRIORITY = {
 }
 
 
-@dataclass
+@dataclass(frozen=True)
 class QueuedDecision:
+    """Immutable entry in the execution queue."""
+
     strategy_name: str
     priority: int
-    decision: Any  # StrategyDecision
-    risk_result: Any  # RiskResult
+    decision: Any  # StrategyDecision from strategy_line.py
+    risk_result: Any  # RiskResult from portfolio_risk.py
 
 
-@dataclass
+@dataclass(frozen=True)
 class DispatchResult:
+    """Immutable result of a dispatch attempt."""
+
     strategy_name: str
     magic: int
     dispatched: bool
@@ -41,8 +45,6 @@ class DispatchResult:
     reason: str = ""
     journal_entry: dict[str, Any] | None = None
     net_out_ticket_update: dict[str, Any] | None = None
-    # {"old_ticket": int, "new_ticket": int, "close_volume": float, "remaining_volume": float}
-    # Populated when NET_OUT partial close causes an MT5 ticket reassignment
 
 
 class ExecutionQueue:

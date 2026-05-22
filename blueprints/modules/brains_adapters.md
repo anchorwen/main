@@ -12,7 +12,7 @@ ALL consumers (live, shadow, backtest, verify)
     → adapter.run(feature_snapshot, feature_dict)     # metadata-driven extraction
       → feature_names = brain_entry["features"]        # from config (single source of truth)
       → feature_vector = [feature_dict[name] for name in feature_names]
-      → infer(feature_vector) → get_signal(raw_output) → BrainDecisionProposal
+      → infer(feature_vector) → get_signal(raw_output) → BrainSignal
 ```
 
 **Key principle**: Brain config JSON is the single source of truth for feature names, order, and dimensionality. No hardcoded schema imports in adapter code.
@@ -24,7 +24,7 @@ BrainRegistryService → brain_entries → BrainFactory → adapters
                                                      ↓
                                              BrainRunService.run_active_brains()
                                                      ↓
-                                             BrainDecisionProposal[]
+                                             BrainSignal[]
                                                      ↓
                                Parliament / StrategyLine / Consensus
 ```
@@ -158,7 +158,8 @@ All alerts are printed as single-line JSON to stderr: `{"event":"brain_alert","t
 
 | Module | What is imported | Why |
 |--------|-----------------|-----|
-| contracts/domain | BrainDecisionProposal | Output type for all adapters |
+| contracts/domain | BrainDecisionProposal | Legacy output type, still used for backward compat |
+| schemas/trading_contracts | BrainSignal | New immutable output type for all adapters (Layer 1) |
 | contracts/ids | new_proposal_id | Proposal ID generation |
 | deployment/brain_alert | emit_brain_alert | Structured alert on fallback |
 | deployment/brain_config_validator | BrainConfigError, get_validator | Load-time validation |
@@ -171,6 +172,7 @@ All alerts are printed as single-line JSON to stderr: `{"event":"brain_alert","t
 | brains/services/brain_run_service | BaseBrainAdapter | Unified inference entry point |
 | runtime/live_cycle | BrainRunService | Management phase brain re-eval |
 | execution/strategy_line | adapter.inference() | Per-strategy brain inference |
+| parliament/contract_groups | BrainSignal | Consensus computation input |
 
 ## Known Issues
 
@@ -182,6 +184,7 @@ All alerts are printed as single-line JSON to stderr: `{"event":"brain_alert","t
 
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |--------|------|--------|--------|---------|------------|
+| FIX-20260522-025 | 2026-05-22 | cursor-agent | 24ff517 | Complete BrainSignal.diagnostics passthrough for all 6 adapters (v9_onnx, transformer, online_learner) + shadow_recorder BrainSignal.diagnostics read path | contract-violation |
 | FIX-20260521-007 | 2026-05-21 | cursor-agent | — | MetaFilter adapter: integrate track 3 47-dim LightGBM adapter (meta_filter_adapter.py) for dual-track Meta Pipeline bridging Huber BPS regression to Stage 2 LGB+MLP+Platt+Conformal filter chain | RC-06 |
 | FIX-20260520-022 | 2026-05-20 | cursor-agent | — | OU z_entry revert 2.0→1.3: FIX-20260519-016 overcorrected — silenced OU brain for 16h. arb_params_v7.json restored to Optuna-validated z_entry=1.3 (all top-10 trials converged). Half-life discount retained. Data: May 19 AM (z_entry=1.3) 65 non-neutral signals; May 19 PM+20 (z_entry=2.0) 0 signals — yet Z-scores were correctly computed. | RC-05, RC-09 |
 | FIX-20260519-016 | 2026-05-19 | cursor-agent | — | OU signal quality upgrade: (A) z_entry 1.3→2.0 in arb_params_v7.json — only 4.6% of normal samples exceed 2σ, filtering ~80% of weak mean-reversion signals; (B) half_life discount in _z_to_direction() — fast reversion (hl=18) gets 0.69× multiplier, slow reversion (hl=55) floor-capped at 0.3×, making confidence reflect reversion speed | RC-05, RC-06 |
@@ -192,15 +195,17 @@ All alerts are printed as single-line JSON to stderr: `{"event":"brain_alert","t
 | FIX-20260517-009 | 2026-05-17 | cursor-agent | — | Zero-vector guard added to LightGBM, XGBoost, V9_ONNX, OnlineLearner infer(): np.max(np.abs(vec))<1e-10 → brain_alert + neutral fallback with fallback_reason="zero_feature_vector". Prevents silent frozen confidence when FeatureService Tier 3 returns np.zeros(). | RC-06 (contract-violation) |
 | FIX-20260518-029 | 2026-05-18 | cursor-agent | — | XGBoost adapter multi-class support: detect multi:softprob models via num_class in learner_model_param. Convert class probabilities → directional raw_score (P(LONG)−P(SHORT)). Previously float(pred[0]) failed when pred had shape (1,3) from 3-class classifier. Single-class regression path unchanged. | contract-violation |
 | FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: XGBoost multi-class support (num_class detection). Previously registered as FIX-20260518-029. | process-violation |
+| FIX-20260522-013 | 2026-05-22 | cursor-agent | — | Sign-flip bug: `_score_to_direction()` in all 5 adapters (LGB/XGBoost/ONNX/Transformer/Params) used `1-confidence` for the non-predicted direction, causing `up_prob > down_prob` for weak SHORT signals (confidence<0.5). Consensus layer only compared up/down probabilities, ignoring `direction_bias` field. Fixed with `0.5±confidence/2` anchoring. | RC-06 |
+| FIX-20260522-015 | 2026-05-22 | cursor-agent | — | Layer 1 immutable contracts: All 5 adapters' `get_signal()` now returns frozen `BrainSignal` dataclass instead of `BrainDecisionProposal` with untyped dict `prediction`. `BrainSignal` carries `direction`/`confidence`/`raw_score`/`fallback`/`runtime_ms` — eliminates dict-key typos, missing-key silent failures, and the sign-flip class of bugs. Backward-compat via `getattr(p, "direction", None)` fallback in parliament. | RC-06 |
 
 ## Cross-Module Contracts
 
 | Contract | Consumers | Stability |
 |----------|-----------|----------|
 | `BaseBrainAdapter.load()` → sets `self._backend` + `self._num_features` | BrainFactory, BrainConfigValidator | Stable |
-| `BaseBrainAdapter.run(snapshot, feature_dict)` → `BrainDecisionProposal` | BrainRunService | Stable |
-| `BaseBrainAdapter.inference(feature_vector)` → `BrainDecisionProposal` | Strategy files | Stable |
-| `BrainRunService.run_active_brains(snapshot, control, blackboard)` → `list[BrainDecisionProposal]` | live_cycle, shadow, verify | Stable |
+| `BaseBrainAdapter.run(snapshot, feature_dict)` → `BrainSignal` | BrainRunService | Stable (Layer 1) |
+| `BaseBrainAdapter.inference(feature_vector)` → `BrainSignal` | Strategy files | Stable (Layer 1) |
+| `BrainRunService.run_active_brains(snapshot, control, blackboard)` → `list[BrainSignal]` | live_cycle, shadow, verify | Stable (Layer 1) |
 | `BrainConfigValidator.validate(entry)` → `ValidationResult` | BrainFactory | Stable |
 | `ADAPTER_REGISTRY` dict format: `{registry_key: adapter_class}` | BrainFactory | Stable |
 

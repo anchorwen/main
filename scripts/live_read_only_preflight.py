@@ -58,8 +58,8 @@ def build_report(*, base_dir: str, mt5_terminal_path: str) -> dict:
     container = ServiceContainer(cfg).build()
 
     status = {
-        "health": container.health_check.readiness(),  # type: ignore[reportOptionalMemberAccess]
-        "brain_state_count": len(container.governance_service.get_all_states()),  # type: ignore[reportOptionalMemberAccess]
+        "health": container.health_check.readiness(),
+        "brain_state_count": len(container.governance_service.get_all_states()),
         "live_read_only": container.config.live_read_only,
         "mt5_terminal_path": container.config.extensions.get("mt5_terminal_path"),
     }
@@ -79,7 +79,7 @@ def build_report(*, base_dir: str, mt5_terminal_path: str) -> dict:
         payload={"intent_id": "live_read_only_probe_001"},
         deadline_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=30),
     )
-    dispatch_result = container.dispatcher.dispatch(envelope)  # type: ignore[reportOptionalMemberAccess]
+    dispatch_result = container.dispatcher.dispatch(envelope)
     guard = {
         "status": str(dispatch_result.status),
         "adapter_name": dispatch_result.adapter_name,

@@ -139,7 +139,7 @@ class RunbookEngine:
                 PAYLOAD_KEY_ERROR: f"Unknown runbook: {name}",
                 PAYLOAD_KEY_AVAILABLE: sorted(handlers),
             }
-        return handlers[name](**kwargs)
+        return handlers[name](**kwargs)  # type: ignore[operator]
 
     def preflight(self, validation_mode: str | None = None) -> dict:
         """Release gate: readiness + config + health + capabilities."""
@@ -567,7 +567,7 @@ class RunbookEngine:
         execution_plan = sorted(
             action_plan.keys(),
             key=lambda action: (
-                priority_rank.get(action_plan[action].get(PAYLOAD_KEY_PRIORITY), 99),  # type: ignore[reportArgumentType]
+                priority_rank.get(str(action_plan[action].get(PAYLOAD_KEY_PRIORITY)), 99),
                 action,
             ),
         )
