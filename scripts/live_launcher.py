@@ -361,9 +361,19 @@ def launch(config_path: str = "configs/live.yaml") -> int:
 
     # ── Launch subprocesses ──
     subprocess_env = {**dict(os.environ), "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"}
+
+    # ── Separate log files for bridge and intent subprocess stdout ──
+    # Writing directly to files avoids pipe-buffer deadlock: if the stream
+    # reader thread dies, the subprocess will block on a full pipe.
+    # (FIX-20260522-005 part B)
+    bridge_log_path = logs_dir / f"bridge_{_utc_compact()}.log"
+    intent_log_path = logs_dir / f"intent_{_utc_compact()}.log"
+    bridge_log_fh = open(bridge_log_path, "a", encoding="utf-8")
+    intent_log_fh = open(intent_log_path, "a", encoding="utf-8")
+
     bridge_proc = subprocess.Popen(
         bridge_cmd,
-        stdout=subprocess.PIPE,
+        stdout=bridge_log_fh,
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
@@ -376,7 +386,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
 
     intent_proc = subprocess.Popen(
         intent_cmd,
-        stdout=subprocess.PIPE,
+        stdout=intent_log_fh,
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
@@ -390,14 +400,36 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     # ── Stream output from both ──
     stop_event = threading.Event()
 
+    # No more pipe-based stream readers; subprocess output goes directly
+    # to dedicated log files.  The launcher tees each new line into the
+    # combined launcher log so nothing is lost from the unified view.
+    def _file_watcher(path: Path, prefix: str, stop_event: threading.Event, log_fh: TextIO):
+        """Tail *path* and tee each new line to the combined launcher log."""
+        try:
+            with open(path, encoding="utf-8") as fh:
+                fh.seek(0, 2)  # start at end
+                while not stop_event.is_set():
+                    line = fh.readline()
+                    if line:
+                        line = line.rstrip("\n")
+                        if line:
+                            output = f"[{prefix}] {line}"
+                            print(output, flush=True)
+                            log_fh.write(output + "\n")
+                            log_fh.flush()
+                    else:
+                        stop_event.wait(1.0)
+        except Exception:
+            pass
+
     bridge_thread = threading.Thread(
-        target=_stream_reader,
-        args=(bridge_proc, "bridge", stop_event, log_fh),
+        target=_file_watcher,
+        args=(bridge_log_path, "bridge", stop_event, log_fh),
         daemon=True,
     )
     intent_thread = threading.Thread(
-        target=_stream_reader,
-        args=(intent_proc, "intent", stop_event, log_fh),
+        target=_file_watcher,
+        args=(intent_log_path, "intent", stop_event, log_fh),
         daemon=True,
     )
     # ── Feedback loop thread (periodic learning from trade outcomes) ──
@@ -443,7 +475,11 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         print(msg4, flush=True)
         log_fh.write(msg4 + "\n")
         log_fh.flush()
-        log_fh.close()
+        for _fh in [bridge_log_fh, intent_log_fh, log_fh]:
+            try:
+                _fh.close()
+            except Exception:
+                pass
         sys.exit(0)
 
     signal.signal(signal.SIGINT, _on_signal)
@@ -700,7 +736,11 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     print(msg, flush=True)
     log_fh.write(msg + "\n")
     log_fh.flush()
-    log_fh.close()
+    for _fh in [bridge_log_fh, intent_log_fh, log_fh]:
+        try:
+            _fh.close()
+        except Exception:
+            pass
 
     return exit_code[0]
 

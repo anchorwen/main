@@ -233,6 +233,7 @@ def dispatch_live_open_order(
     hard_sl: float = 0.0,
     brain_ids: list[str] | None = None,
     brain_votes: list[dict[str, Any]] | None = None,
+    confidence: float | None = None,
     # ── Trade context (passthrough — logged to journal for later analysis) ──
     entry_context: dict[str, Any] | None = None,
 ) -> dict:
@@ -260,6 +261,8 @@ def dispatch_live_open_order(
         execution_payload["brain_ids"] = list(brain_ids)
     if brain_votes:
         execution_payload["brain_votes"] = brain_votes
+    if confidence is not None:
+        execution_payload["confidence"] = confidence
     if entry_context:
         execution_payload["entry_context"] = dict(entry_context)
 

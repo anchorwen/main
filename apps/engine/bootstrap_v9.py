@@ -158,12 +158,24 @@ def build_v9_shadow_runtime_loop():
 
 def build_v9_shadow_container() -> ServiceContainer:
     """Build a fully wired ServiceContainer for V9 shadow mode."""
+    import yaml
+
+    # Resolve adapter name from live.yaml so production deployments
+    # use the real MT5 adapter instead of the hardcoded stub fallback.
+    live_yaml_path = _repo_root() / "configs" / "live.yaml"
+    adapter_name = "stub"
+    if live_yaml_path.exists():
+        with open(live_yaml_path, encoding="utf-8") as f:
+            live_cfg = yaml.safe_load(f) or {}
+        adapter_name = live_cfg.get("adapter", {}).get("name", "stub")
+
     config = EnvironmentConfig.development(
         base_dir=_resolve_data_base_dir(),
         enable_feedback_loop=True,
         enable_audit_log=True,
         enable_metrics=True,
         enable_idempotency=False,
+        adapter_name=adapter_name,
     )
     container = ServiceContainer(config).build()
 

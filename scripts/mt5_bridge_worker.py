@@ -647,6 +647,8 @@ def process_one(
         "archive_path": str(archive_path),
         "receipt_path": str(receipt_path),
         "brain_ids": msg_payload.get("brain_ids"),
+        "brain_votes": msg_payload.get("brain_votes"),
+        "confidence": msg_payload.get("confidence"),
     }
     if _open_msg_id:
         journal_record["open_message_id"] = _open_msg_id

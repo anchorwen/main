@@ -195,7 +195,9 @@ class TestExecutionQueue:
         import sys
 
         # Create a mock for core.execution.live_order_sender.dispatch_live_order
-        mock_dispatch_live = MagicMock(return_value={"ok": True})
+        # FIX-20260522-001: close result must include dispatched=True when
+        # intent_id is empty, otherwise net-out close is treated as unconfirmed
+        mock_dispatch_live = MagicMock(return_value={"ok": True, "dispatched": True})
         # Patch where it's imported (inside flush())
         with patch.dict(
             sys.modules,
@@ -223,7 +225,7 @@ class TestExecutionQueue:
 
         import sys
 
-        mock_dispatch_live = MagicMock(return_value={"ok": True})
+        mock_dispatch_live = MagicMock(return_value={"ok": True, "dispatched": True})
         with patch.dict(
             sys.modules,
             {"core.execution.live_order_sender": MagicMock(dispatch_live_order=mock_dispatch_live)},

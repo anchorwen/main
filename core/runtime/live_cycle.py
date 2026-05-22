@@ -525,8 +525,11 @@ def _dispatch_managed_close(
     exit_confidence: float = 0.0,
     exit_watchdog: Any = None,
     mt5: Any = None,
-) -> None:
+) -> bool:
     """Issue a close order for a managed position and record exit for re-entry guard.
+
+    Returns True if the close was dispatched successfully, False otherwise.
+    Callers MUST only clear the position from the position manager when True.
 
     When *exit_watchdog* is provided, wraps the dispatch with heartbeat-protected
     retry and escalation (Pitfall 3 safeguard).
@@ -679,6 +682,7 @@ def _dispatch_managed_close(
             payload["open_message_id"] = _open_msg_id
 
     # ── Dispatch with optional watchdog protection ──
+    _close_dispatched = False
     if exit_watchdog is not None:
         try:
             wd_result = exit_watchdog.execute_exit(
@@ -717,6 +721,7 @@ def _dispatch_managed_close(
                     flush=True,
                 )
             elif state is not None and pnl is not None:
+                _close_dispatched = True
                 # Store engine-calculated PnL for reconciliation fallback
                 try:
                     _oe = state.known_open_tickets.get(pos.ticket, {})
@@ -750,6 +755,7 @@ def _dispatch_managed_close(
                 adapter_name="mt5",
                 extensions={"mt5_terminal_path": config.mt5_terminal_path},
             )
+            _close_dispatched = True
         except Exception as exc:
             print(
                 json.dumps(
@@ -767,7 +773,9 @@ def _dispatch_managed_close(
     # ── After successful close dispatch: remove from known_open_tickets ──
     # Prevents reconciliation from finding the position gone and creating
     # a ghost close entry (unknown_close) with no PnL data.
-    if state is not None and pos.ticket:
+    # Only remove tracking when the close was actually confirmed; otherwise
+    # the position is still open in MT5 and reconciliation must find it.
+    if _close_dispatched and state is not None and pos.ticket:
         state.known_open_tickets.pop(pos.ticket, None)
         # Record PnL for strategy budget tracking (managed exits bypass
         # reconciliation, so we must record here or budget stays stale).
@@ -788,6 +796,8 @@ def _dispatch_managed_close(
                         "timestamp": time.time(),
                     }
                 )
+
+    return _close_dispatched
 
 
 def _execute_management_phase(
@@ -1354,7 +1364,7 @@ def _execute_management_phase(
             _exit_cfg.get("grace_period_emergency_r", -1.0)
         )  # ↓ -1.5→-1.0: faster exit
         if _emergency_r < 0 and _gr_r < _emergency_r:
-            _dispatch_managed_close(
+            _dispatched = _dispatch_managed_close(
                 config,
                 pos,
                 reason="grace_period_emergency",
@@ -1373,12 +1383,14 @@ def _execute_management_phase(
                         "ticket": pos.ticket,
                         "r": _gr_r,
                         "emergency_threshold": _emergency_r,
+                        "dispatched": _dispatched,
                     },
                     ensure_ascii=False,
                 ),
                 flush=True,
             )
-            pm.clear_position(ticket=pos.ticket)
+            if _dispatched:
+                pm.clear_position(ticket=pos.ticket)
             return True
 
         print(
@@ -1572,7 +1584,7 @@ def _execute_management_phase(
                     _r_now = pm._compute_r_multiple(mid, ticket=pos.ticket)
                     _should_bleed, _bleed_reason = pm.should_exit_bleed(pos, _r_now)
                     if _should_bleed:
-                        _dispatch_managed_close(
+                        _dispatched = _dispatch_managed_close(
                             config,
                             pos,
                             reason=_bleed_reason,
@@ -1591,12 +1603,14 @@ def _execute_management_phase(
                                     "ticket": pos.ticket,
                                     "r_now": round(_r_now, 3),
                                     "reason": _bleed_reason,
+                                    "dispatched": _dispatched,
                                 },
                                 ensure_ascii=False,
                             ),
                             flush=True,
                         )
-                        pm.clear_position(ticket=pos.ticket)
+                        if _dispatched:
+                            pm.clear_position(ticket=pos.ticket)
                         return True
 
                 # ── OU mean-reversion exit (ARB brain) ──
@@ -1620,7 +1634,7 @@ def _execute_management_phase(
                                     ou_z, ticket=pos.ticket
                                 )
                                 if should_ou_exit:
-                                    _dispatch_managed_close(
+                                    _dispatched = _dispatch_managed_close(
                                         config,
                                         pos,
                                         reason=ou_reason,
@@ -1639,12 +1653,14 @@ def _execute_management_phase(
                                                 "ticket": pos.ticket,
                                                 "z_score": round(ou_z, 3),
                                                 "reason": ou_reason,
+                                                "dispatched": _dispatched,
                                             },
                                             ensure_ascii=False,
                                         ),
                                         flush=True,
                                     )
-                                    pm.clear_position(ticket=pos.ticket)
+                                    if _dispatched:
+                                        pm.clear_position(ticket=pos.ticket)
                                     return True
                             except Exception:
                                 pass
@@ -1660,7 +1676,7 @@ def _execute_management_phase(
                     _bf_confidence = float(
                         current_consensus.get("consensus_score", _exit_confidence)
                     )
-                    _dispatch_managed_close(
+                    _dispatched = _dispatch_managed_close(
                         config,
                         pos,
                         reason=exit_reason,
@@ -1678,12 +1694,14 @@ def _execute_management_phase(
                                 "time": _utc_iso(),
                                 "ticket": pos.ticket,
                                 "reason": exit_reason,
+                                "dispatched": _dispatched,
                             },
                             ensure_ascii=False,
                         ),
                         flush=True,
                     )
-                    pm.clear_position(ticket=pos.ticket)
+                    if _dispatched:
+                        pm.clear_position(ticket=pos.ticket)
                     return True
             except Exception as exc:
                 print(
@@ -1726,7 +1744,7 @@ def _execute_management_phase(
                 ticket=pos.ticket,
             )
             if should_meta_exit:
-                _dispatch_managed_close(
+                _dispatched = _dispatch_managed_close(
                     config,
                     pos,
                     reason=meta_reason,
@@ -1744,12 +1762,14 @@ def _execute_management_phase(
                             "time": _utc_iso(),
                             "ticket": pos.ticket,
                             "reason": meta_reason,
+                            "dispatched": _dispatched,
                         },
                         ensure_ascii=False,
                     ),
                     flush=True,
                 )
-                pm.clear_position(ticket=pos.ticket)
+                if _dispatched:
+                    pm.clear_position(ticket=pos.ticket)
                 return True
         except Exception as exc:
             print(
@@ -1769,7 +1789,7 @@ def _execute_management_phase(
             mid if mid is not None else 0.0, ticket=pos.ticket
         )
         if should_hesitate:
-            _dispatch_managed_close(
+            _dispatched = _dispatch_managed_close(
                 config,
                 pos,
                 reason=hesitate_reason,
@@ -1788,12 +1808,14 @@ def _execute_management_phase(
                         "ticket": pos.ticket,
                         "cycles_held": pos.cycles_held,
                         "hesitation_cycles": pm.hesitation_cycles,
+                        "dispatched": _dispatched,
                     },
                     ensure_ascii=False,
                 ),
                 flush=True,
             )
-            pm.clear_position(ticket=pos.ticket)
+            if _dispatched:
+                pm.clear_position(ticket=pos.ticket)
             return True
 
     # ── 8. Layer 3: Time-based exit ──
@@ -1809,7 +1831,7 @@ def _execute_management_phase(
             ticket=pos.ticket,
         )
         if should_time_exit:
-            _dispatch_managed_close(
+            _dispatched = _dispatch_managed_close(
                 config,
                 pos,
                 reason=exit_reason,
@@ -1828,12 +1850,14 @@ def _execute_management_phase(
                         "ticket": pos.ticket,
                         "cycles_held": pos.cycles_held,
                         "r": round(pm._compute_r_multiple(mid, ticket=pos.ticket), 2),
+                        "dispatched": _dispatched,
                     },
                     ensure_ascii=False,
                 ),
                 flush=True,
             )
-            pm.clear_position(ticket=pos.ticket)
+            if _dispatched:
+                pm.clear_position(ticket=pos.ticket)
             return True
 
     return False
@@ -2657,7 +2681,9 @@ def _build_strategy_lines(
     # has no config entry at all (backward compat).
     for _gname in list(_known_groups.keys()):
         if not _cfg(_gname, "enabled", True):
-            _known_groups[_gname] = []
+            _known_groups[
+                _gname
+            ].clear()  # in-place clear so local variable references see empty list
             print(
                 json.dumps(
                     {
@@ -3961,22 +3987,28 @@ def execute_live_cycle(
             except Exception:
                 pass
 
-        # Still unknown after reconnect — block trading for safety
+        # Still unknown after reconnect — fall back to position manager cache
+        # instead of skipping the cycle entirely.  MT5 connection is flaky on
+        # Windows multi-process setups; the position manager has authoritative
+        # local state and is always correct for positions we opened.
         if pos_count < 0:
-            if state.loop_iteration % 10 == 0:
+            _pm_count = 0
+            if state.position_manager is not None and state.position_manager.has_position():
+                _pm_count = len(state.position_manager.get_all_positions())
+            pos_count = _pm_count
+            if state.loop_iteration % 5 == 0:
                 print(
                     json.dumps(
                         {
-                            "event": "position_count_unavailable",
+                            "event": "position_count_fallback",
                             "time": _utc_iso(),
-                            "detail": "MT5 connection lost, blocking dispatch for safety",
+                            "detail": "MT5 connection lost, using position manager cache",
+                            "fallback_count": _pm_count,
                         },
                         ensure_ascii=False,
                     ),
                     flush=True,
                 )
-            _log_cycle_end(state.loop_iteration)
-            return state, True  # continue (skip this cycle)
 
         # ── Market-closed guard (before exit management and entry logic) ──
         if not config.no_mt5:
@@ -5852,6 +5884,7 @@ def execute_live_cycle(
             magic=dispatch_magic,
             brain_ids=dispatch_brain_ids,
             brain_votes=dispatch_brain_votes,
+            confidence=confidence,
         )
         state.last_fire = now
 

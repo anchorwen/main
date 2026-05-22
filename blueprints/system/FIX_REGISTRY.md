@@ -76,6 +76,16 @@ FIX-YYYYMMDD-NNN
 | FIX-20260521-006 | 2026-05-21 | deployment-config | 状态清理+artifact修正：(1) governance_state.json清除16个僵尸脑条目(24→8)+27个transition_log条目；(2) live.yaml移除已删除的lightgbm_h1_swing引用；(3) deep_res_mlp_v1.json artifact_path指向现存v2模型。 | RC-09 |
 | FIX-20260521-007 | 2026-05-21 | brains-adapters, execution-guards, execution-orders | Track 3 Meta Pipeline integration: meta_filter_adapter.py (47-dim LGB adapter), meta_filter_gate.py (dual-track gate), test_meta_pipeline.py (injection test validating Huber→LGB+MLP+Platt+Conformal chain) | RC-06 |
 | FIX-20260521-008 | 2026-05-21 | training, deployment-lifecycle | Meta labeling dataset + filter training: build_meta_labeling_dataset.py, scan_profitability_surface.py, train_meta_filter.py, backtest scripts. MODULE_SOURCE_MAP expansion for 5 orphan files. | RC-06 |
+| FIX-20260521-009 | 2026-05-21 | deployment-config, runtime-live | Stub adapter deadlock: bootstrap_v9.py now reads adapter.name from live.yaml and passes it to EnvironmentConfig. All 295 open signals previously routed to StubCommunicationAdapter (hardcoded "stub" default) instead of MT5. | RC-09 |
+| FIX-20260522-001 | 2026-05-22 | execution-orders | Net-out close confirmation blind spot: execution_queue.py treated empty intent_id as unconditional success, opening new positions against still-open opposing positions when ExitWatchdog failed. Now honours dispatched flag. | RC-06 |
+| FIX-20260522-002 | 2026-05-22 | runtime-live | _dispatch_managed_close silently lost position tracking on ExitWatchdog failure: known_open_tickets.pop() and clear_position() ran unconditionally, causing engine to lose track of still-open MT5 positions after failed close dispatch. | RC-06 |
+| FIX-20260522-003 | 2026-05-22 | runtime-live | Strategy-level enabled:false check in _build_strategy_lines used dict-key reassignment (_known_groups[name] = []) instead of in-place .clear(), making local variable references immune to the check. Latent bug — currently masked by brain-level filter. | RC-06 |
+| FIX-20260522-004 | 2026-05-22 | execution-orders, runtime-live | Journal confidence always null: (1) mt5_bridge_worker.py never extracted confidence/brain_votes from execution_payload, (2) dispatch_live_open_order had no confidence parameter, (3) execution_queue flush() never passed decision.confidence. Full pipeline wired end-to-end. | RC-06 |
+| FIX-20260522-005 | 2026-05-22 | runtime-live | Intent loop startup deadlock: warm-start brain buffer MT5 call (copy_rates_from_pos for OU brain) could block indefinitely, stalling the entire engine. Added thread-based 15s timeout wrapper for all warm-start MT5 calls. Timeout → logged error + graceful skip. | RC-05 |
+| FIX-20260522-006 | 2026-05-22 | protocol-services | BarSyncPoller MT5 transient error retry: copy_rates_from_pos() fails after ~104s of polling despite successful initialize(). Added MAX_MT5_ERROR_RETRIES=3 with re-init+retry before degrading to poll fallback. | RC-05 |
+| FIX-20260522-007 | 2026-05-22 | runtime-live | Position count MT5 fallback: positions_total() returning < 0 (error code) caused entire cycle skip. Now falls back to position_manager cached count when MT5 unavailable. | RC-01 |
+| FIX-20260522-008 | 2026-05-22 | runtime-live | Intent loop bar_sync crash protection: unhandled exception in bar_sync wait section killed entire intent loop process. Wrapped in try/except with bar_sync_crash JSON event + interval-based fallback sleep. | RC-01 |
+| FIX-20260522-009 | 2026-05-22 | runtime-live | Unguarded clear_position() after close dispatch failure: all 7 managed-exit callers called pm.clear_position() unconditionally even when _dispatch_managed_close() returned False. Now all 7 callers check return value before clearing. | RC-06 |
 | FIX-20260515-001 | 2026-05-14 | training | LightGBM 4.6.0 removed fobj parameter: custom objective now passed via params[objective] | RC-06 |
 | FIX-20260515-002 | 2026-05-14 | training | Pre-split dataset support: pipeline auto-detects X_val/y_val/X_test in NPZ and uses them directly | RC-06 |
 | FIX-20260515-003 | 2026-05-14 | training | Max drawdown gate units fix: removed *100 multiplier, max_drawdown is already in absolute return units | RC-05 |
@@ -164,7 +174,7 @@ FIX-YYYYMMDD-NNN
 
 | Year | File | Count |
 |------|------|-------|
-| 2026 | [FIX_REGISTRY_2026.md](FIX_REGISTRY_2026.md) | 77 |
+| 2026 | [FIX_REGISTRY_2026.md](FIX_REGISTRY_2026.md) | 81 |
 
 > New fix entries should be added to the relevant year file.
 > Keep the Fix Index table above updated with every fix.

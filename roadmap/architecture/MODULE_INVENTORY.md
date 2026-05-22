@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-21T14:59:19Z
+> **自动生成**: 2026-05-22T00:38:17Z
 > **扫描模块数**: 435
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -10,7 +10,7 @@
 |------|------|----|------|------|------|------|
 | `backtest_runner.py` | ✅ active | BacktestRunner, BacktestResult | 6 | 153 | — | |
 | `batch_processor.py` | ✅ active | BatchProcessor | 3 | 77 | — | |
-| `bootstrap_v9.py` | ✅ active | — | 6 | 215 | — | |
+| `bootstrap_v9.py` | ✅ active | — | 6 | 227 | — | |
 | `cli.py` | ✅ active | — | 42 | 1519 | — | |
 | `communication_ops_cli.py` | ✅ active | — | 7 | 133 | — | |
 | `communication_summary_contract.py` | ✅ active | — | 1 | 71 | — | |
@@ -198,7 +198,7 @@
 | `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 109 | — | |
 | `dynamic_sl_tp.py` | ✅ active | DynamicSLTP | 2 | 162 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 161 | — | |
-| `execution_queue.py` | ✅ active | QueuedDecision, DispatchResult, ExecutionQueue | 4 | 333 | — | |
+| `execution_queue.py` | ✅ active | QueuedDecision, DispatchResult, ExecutionQueue | 4 | 339 | — | |
 | `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 7 | 412 | — | |
 | `fill_simulator.py` | ✅ active | FillSimulationConfig, FillSimulator | 7 | 88 | — | |
 | `fix_contracts.py` | ✅ active | FixSessionConfig, FixMessage, FixExecutionReport | 4 | 69 | — | |
@@ -208,7 +208,7 @@
 | `gateway_contracts.py` | ✅ active | OrderRequest, Fill, OrderState, ExecutionGateway | 9 | 103 | — | |
 | `kelly_sizer.py` | ✅ active | KellyResult | 2 | 130 | — | |
 | `limit_order_monitor.py` | ✅ active | LimitOrderIntent, LimitFillResult, LimitOrderMonitor | 9 | 329 | — | |
-| `live_order_sender.py` | ✅ active | — | 6 | 307 | — | |
+| `live_order_sender.py` | ✅ active | — | 6 | 310 | — | |
 | `market_efficiency.py` | ✅ active | — | 2 | 67 | — | |
 | `market_impact.py` | ✅ active | MarketImpactEstimate | 3 | 168 | — | |
 | `meta_exit_engine.py` | ✅ active | ExitFeatureSnapshot, ExitEvaluation, MetaExitEngine | 13 | 507 | — | |
@@ -384,7 +384,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `event_bar_sync.py` | ✅ active | BarSyncState, BarSyncPoller | 12 | 428 | — | |
+| `event_bar_sync.py` | ✅ active | BarSyncState, BarSyncPoller | 12 | 452 | — | |
 | `live_execution_contract.py` | ✅ active | — | 5 | 74 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 8 | — | |
 
@@ -433,7 +433,7 @@
 | `execution_gateway_router.py` | ✅ active | ExecutionGatewayRouter | 5 | 30 | — | |
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 6073 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 6106 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 141 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 12 | 314 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
@@ -519,8 +519,8 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 369 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 12 | 1972 | — | |
-| `live_launcher.py` | ✅ active | — | 12 | 709 | — | |
+| `live_intent_loop.py` | ✅ active | — | 13 | 2030 | — | |
+| `live_launcher.py` | ✅ active | — | 13 | 749 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 136 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 484 | — | |
 | `live_read_only_preflight.py` | ✅ active | — | 5 | 139 | — | |
@@ -529,7 +529,7 @@
 | `live_stack_diagnostic.py` | ✅ active | — | 5 | 204 | — | |
 | `market_calendar.py` | ⬜ empty | — | 0 | 13 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 21 | 754 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 21 | 756 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 97 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 65 | — | |
 | `online_feedback_hook.py` | ✅ active | — | 2 | 119 | — | |

@@ -1130,54 +1130,30 @@ def main(argv: list[str] | None = None) -> int:
         parliament = ParliamentService()
 
         # ── Warm-start brain buffers from MT5 historical data ──
+        # DEFERRED: scheduled after main loop start to prevent MT5 API hangs
+        # from blocking the entire engine during initialization (FIX-20260522-005).
+        # Warm-start is an optimization — brains function normally without it,
+        # they just need a few bars of live data to fill internal buffers.
+        _warm_start_pending: list[dict[str, Any]] = []
         if not args.no_mt5 and mt5 is not None:
             for b_info in brains:
                 btype = b_info.get("brain_type", "")
-                adapter = b_info["adapter"]
-
-                if btype == "ou_params_v6":
-                    try:
-                        rates = mt5.copy_rates_from_pos(args.symbol, mt5.TIMEFRAME_M5, 0, 300)
-                        if rates is not None and len(rates) >= 30:
-                            prices = [float(r["close"]) for r in rates]
-                            adapter.bootstrap_buffer(prices)
-                            print(
-                                json.dumps(
-                                    {
-                                        "event": "ou_buffer_bootstrapped",
-                                        "time": _utc_iso(),
-                                        "brain_id": b_info["brain_id"],
-                                        "prices_loaded": len(prices),
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                                flush=True,
-                            )
-                    except Exception:
-                        pass
-
-                elif btype == "transformer_v4.3":
-                    try:
-                        if micro_feature_computer is not None and micro_feature_adapter is not None:
-                            micro_feats = micro_feature_computer.compute_all()
-                            fv = micro_feature_adapter.build_model_input(micro_feats).ravel()
-                            # Fill buffer with current features so model can
-                            # produce signals immediately; entries rotate out
-                            # as live data arrives over the next 32 cycles.
-                            adapter.bootstrap_buffer([fv] * 32)
-                            print(
-                                json.dumps(
-                                    {
-                                        "event": "transformer_buffer_bootstrapped",
-                                        "time": _utc_iso(),
-                                        "brain_id": b_info["brain_id"],
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                                flush=True,
-                            )
-                    except Exception:
-                        pass
+                if btype in ("ou_params_v6", "transformer_v4.3"):
+                    _warm_start_pending.append(dict(b_info))
+        if _warm_start_pending:
+            print(
+                json.dumps(
+                    {
+                        "event": "warm_start_deferred",
+                        "time": _utc_iso(),
+                        "brain_count": len(_warm_start_pending),
+                        "brain_ids": [b["brain_id"] for b in _warm_start_pending],
+                        "reason": "MT5 warm-start moved to background to prevent startup deadlock",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
     else:
         # Single-brain mode: check governance
         brain_id = brain_entry.get("brain_id", "unknown")
@@ -1749,6 +1725,74 @@ def main(argv: list[str] | None = None) -> int:
             )
             sys.exit(0)
 
+        # ── Background warm-start: run deferred MT5 buffer fills without
+        # blocking the main trading loop (FIX-20260522-005).
+        if _warm_start_pending and mt5 is not None:
+            import threading as _threading
+
+            def _background_warm_start() -> None:
+                for b_info in _warm_start_pending:
+                    btype = b_info.get("brain_type", "")
+                    adapter = b_info.get("adapter")
+                    if adapter is None:
+                        continue
+                    try:
+                        if btype == "ou_params_v6":
+                            rates = mt5.copy_rates_from_pos(args.symbol, mt5.TIMEFRAME_M5, 0, 300)
+                            if rates is not None and len(rates) >= 30:
+                                prices = [float(r["close"]) for r in rates]
+                                adapter.bootstrap_buffer(prices)
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "ou_buffer_bootstrapped",
+                                            "time": _utc_iso(),
+                                            "brain_id": b_info["brain_id"],
+                                            "prices_loaded": len(prices),
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
+                        elif btype == "transformer_v4.3":
+                            if (
+                                micro_feature_computer is not None
+                                and micro_feature_adapter is not None
+                            ):
+                                micro_feats = micro_feature_computer.compute_all()
+                                fv = micro_feature_adapter.build_model_input(micro_feats).ravel()
+                                adapter.bootstrap_buffer([fv] * 32)
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "transformer_buffer_bootstrapped",
+                                            "time": _utc_iso(),
+                                            "brain_id": b_info["brain_id"],
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
+                    except Exception as _wsexc:
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "warm_start_background_error",
+                                    "time": _utc_iso(),
+                                    "brain_id": b_info["brain_id"],
+                                    "brain_type": btype,
+                                    "error": str(_wsexc),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+
+            _warm_start_thread = _threading.Thread(
+                target=_background_warm_start, daemon=True, name="warm-start"
+            )
+            _warm_start_thread.start()
+
         while True:
             try:
                 state, should_continue = execute_live_cycle(
@@ -1840,40 +1884,54 @@ def main(argv: list[str] | None = None) -> int:
                         pass
 
             # ── Wait for next cycle: event-driven bar sync or interval sleep ──
-            if bar_sync is not None:
-                new_bar = bar_sync.wait_for_new_bar(timeout_seconds=args.bar_sync_timeout)
-                if new_bar is None:
-                    # Timeout — MT5 bar not yet formed; synthesize from M1 bars
-                    synthetic = bar_sync.fetch_synthetic_bar(mt5)
-                    sync_state = bar_sync.get_state()
-                    if synthetic is not None:
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "bar_sync_synthetic",
-                                    "time": _utc_iso(),
-                                    "synthetic_bar_time": synthetic["time"],
-                                    "synthetic_close": round(synthetic["close"], 2),
-                                    "state": sync_state,
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-                    else:
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "bar_sync_timeout",
-                                    "time": _utc_iso(),
-                                    "state": sync_state,
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-                        time.sleep(args.interval_seconds)
-            else:
+            try:
+                if bar_sync is not None:
+                    new_bar = bar_sync.wait_for_new_bar(timeout_seconds=args.bar_sync_timeout)
+                    if new_bar is None:
+                        # Timeout — MT5 bar not yet formed; synthesize from M1 bars
+                        synthetic = bar_sync.fetch_synthetic_bar(mt5)
+                        sync_state = bar_sync.get_state()
+                        if synthetic is not None:
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "bar_sync_synthetic",
+                                        "time": _utc_iso(),
+                                        "synthetic_bar_time": synthetic["time"],
+                                        "synthetic_close": round(synthetic["close"], 2),
+                                        "state": sync_state,
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                        else:
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "bar_sync_timeout",
+                                        "time": _utc_iso(),
+                                        "state": sync_state,
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                            time.sleep(args.interval_seconds)
+                else:
+                    time.sleep(args.interval_seconds)
+            except Exception as _bar_exc:
+                print(
+                    json.dumps(
+                        {
+                            "event": "bar_sync_crash",
+                            "time": _utc_iso(),
+                            "error": str(_bar_exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
                 time.sleep(args.interval_seconds)
     finally:
         # ── Release distributed lock ──

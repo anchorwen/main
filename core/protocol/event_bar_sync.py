@@ -46,6 +46,7 @@ DEFAULT_TIMEOUT_SECONDS = 120  # max wait for new bar before fallback
 DEFAULT_POLL_INTERVAL = 2.0  # seconds between MT5 rate checks
 DEFAULT_FALLBACK_INTERVAL = 60  # seconds when MT5 is unreachable
 MAX_LAG_BARS = 3  # consecutive missed bars before CRITICAL alert
+MAX_MT5_ERROR_RETRIES = 3  # re-init + retry before returning None on transient MT5 errors
 
 
 # -- Data types --
@@ -123,6 +124,7 @@ class BarSyncPoller:
             time.sleep(self.fallback_interval)
             return None
 
+        _error_count = 0
         while time.monotonic() < deadline:
             try:
                 import MetaTrader5 as mt5
@@ -174,6 +176,7 @@ class BarSyncPoller:
                     self._state.lag_count = max(0, self._state.lag_count - 1)
                     self._state.last_sync_utc = datetime.now(UTC).isoformat()
                     self._save_state()
+                    _error_count = 0  # reset on success
 
                     return {
                         "time": bar_time,
@@ -187,11 +190,32 @@ class BarSyncPoller:
                     }
 
                 # Same bar — wait and poll again
+                _error_count = 0  # successful poll, reset error streak
                 time.sleep(self.poll_interval)
 
             except Exception:
+                _error_count += 1
+                self._log_event(
+                    "MT5_ERROR",
+                    {
+                        "action": "retry"
+                        if _error_count <= MAX_MT5_ERROR_RETRIES
+                        else "fallback_to_poll",
+                        "error_count": _error_count,
+                        "max_retries": MAX_MT5_ERROR_RETRIES,
+                    },
+                )
+                if _error_count <= MAX_MT5_ERROR_RETRIES:
+                    # Transient error — re-initialize and keep polling
+                    self._mt5_available = False
+                    try:
+                        self._init_mt5()
+                    except Exception:
+                        pass
+                    time.sleep(self.poll_interval * 2)
+                    continue
+                # Persistent error — give up for this cycle
                 self._mt5_available = False
-                self._log_event("MT5_ERROR", {"action": "fallback_to_poll"})
                 time.sleep(self.fallback_interval)
                 return None
 

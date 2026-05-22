@@ -245,7 +245,12 @@ class ExecutionQueue:
                                     _time.sleep(0.5)
                                     _poll_iters += 1
                         else:
-                            _close_confirmed = True  # no intent_id: backward-compat / test mock
+                            # When intent_id is empty, honour the dispatched flag from the
+                            # close result.  Net-out closes routed through ExitWatchdog
+                            # return no intent_id even on successful dispatch; blind
+                            # confirmation would open a new position against a still-open
+                            # opposing position when the close actually failed.
+                            _close_confirmed = bool(_close_result.get("dispatched", False))
                 except Exception:
                     pass
 
@@ -288,6 +293,7 @@ class ExecutionQueue:
                         hard_sl=decision.hard_sl,
                         brain_ids=decision.brain_ids,
                         brain_votes=getattr(decision, "brain_votes", None) or None,
+                        confidence=getattr(decision, "confidence", None),
                         entry_context=decision.entry_context if decision.entry_context else None,
                     )
                     _dispatched = True

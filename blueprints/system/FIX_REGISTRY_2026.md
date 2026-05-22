@@ -1741,3 +1741,234 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
 **追加修复**：
 - `strategy_line.py:416-426`: `_valid_voters` 统计增加 `vote_weight <= 0.0` 跳过逻辑 → muted 脑既不能投票也不贡献投票计数 → 全 neutral 提案正常流到共识计算返回 neutral
 - `contract_groups.py:26-32`: BARRIER_GROUP brain_types 补全 `onnx_v9` + `online_sgd`（之前仅 `lightgbm_v1` 而 CRT/Online 脑类型不在此集合中）
+
+### FIX-20260521-009 — Stub adapter deadlock: live.yaml mt5 adapter name never wired to EnvironmentConfig
+
+- **Date**: 2026-05-21
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: deployment-config, runtime-live
+- **Files**: `apps/engine/bootstrap_v9.py`
+
+- **Description**: 修复所有 295 个开放信号路由到 `StubCommunicationAdapter` 而不是 MT5 的死锁问题。
+
+  **根因链**:
+  1. `EnvironmentConfig.adapter_name` 字段默认值为 `"stub"`（`environment_config.py:40`，自 commit `998af9d` 以来一直存在）
+  2. `EnvironmentConfig.development()` 类方法硬编码 `"adapter_name": "stub"`（`environment_config.py:92`）
+  3. `build_v9_shadow_container()` 调用 `EnvironmentConfig.development()` 时未传入 `adapter_name` 覆盖 → 始终得到 "stub"
+  4. `ServiceContainer._resolve_comm_adapter()` 检查 `self.config.adapter_name` → 始终为 "stub" → 落到最后的 `return StubCommunicationAdapter()`
+  5. `live.yaml` 第 3-4 行有 `adapter:\n  name: mt5` 但从无任何代码读取此字段到 `EnvironmentConfig`
+
+  **修复内容**:
+  - `bootstrap_v9.py:build_v9_shadow_container()`: 在调用 `EnvironmentConfig.development()` 之前从 `configs/live.yaml` 读取 `adapter.name`，作为 `adapter_name=` 覆盖传入
+  - 回退安全：若 `live.yaml` 不存在或无 `adapter.name` 字段，回退到 `"stub"`（避免测试环境意外连接真实 MT5）
+
+  **设计说明**:
+  - 未在 `EnvironmentConfig` 中添加 `from_live_yaml()` 工厂方法 — 配置解析职责属于调用方，避免 `EnvironmentConfig` 耦合 YAML 文件格式
+  - 未修改 `EnvironmentConfig.production()` 默认值 — `production()` 和 `test()` 应保持独立默认值，由各自调用方根据需要覆盖
+
+- **Root Cause**: RC-09 — config-drift。`live.yaml` 的 `adapter.name` 字段从未被任何代码路径读取，属于"死配置"。`EnvironmentConfig` 的硬编码默认值 `"stub"` 自 998af9d commit 引入后一直未被发现，因为之前 V9 shadow 容器构建路径不经过此代码。
+
+- **Prevention**: 任何新增 `live.yaml` 顶级字段必须同步确认 `EnvironmentConfig`（或调用方）有对应的读取路径。配置字段应遵循"单一真相源"原则 — 要么在 `EnvironmentConfig` 中，要么在 `live.yaml` 中，不能两边都有但不同步。
+
+- **Dependents Checked**: `service_container.py:_resolve_comm_adapter()` — 确认 `adapter_name="mt5"` 正确路由到 `MT5CommunicationAdapter`。`live.yaml` adapter 块字段格式正确。无需其他模块修改。
+
+### FIX-20260522-001 — Net-out close confirmation blind spot: empty intent_id treated as unconditional success
+
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-orders
+- **Files**: `core/execution/execution_queue.py`
+
+- **Description**: 修复 net-out 平仓确认盲点——空的 `intent_id` 被无条件视为成功，导致 ExitWatchdog 失败时仍打开反向仓位。
+
+  **根因链**:
+  1. `live_cycle.py:_net_out_close_dispatch_fn()` 返回 `{"dispatched": _wd.success, "intent_id": ""}` — `intent_id` 始终为空
+  2. `execution_queue.py:flush()` 在 `intent_id` 为空时跳过 ACK 轮询循环，直接执行 `else: _close_confirmed = True`
+  3. 即使 ExitWatchdog 完全失败（所有重试耗尽 + L2 失败），execution_queue 仍标记平仓为"已确认"
+  4. 然后继续开反向新仓位 → 新旧仓位在 MT5 中同时存在，直接违反 net-out 意图
+
+  **修复**: `else` 分支改为检查 `_close_result.get("dispatched", False)`，尊重 `_net_out_close_dispatch_fn` 返回的实际 dispatch 状态。
+
+- **Root Cause**: RC-06 — contract-violation。`_net_out_close_dispatch_fn` 与 `execution_queue` 之间的接口约定是 `{"dispatched": bool, "intent_id": str}`，但 `execution_queue` 在 `intent_id` 为空时忽略了 `dispatched` 字段。backward-compat 注释暗示这是为测试 mock 设计的，但测试 mock 使用不同的代码路径。
+
+- **Prevention**: 任何包含 `dispatched` 状态 + `intent_id` 的返回 dict 必须同时检查两个字段——`intent_id` 为空时不等于成功。
+
+- **Dependents Checked**: `exit_watchdog.py` — 确认 `ExitWatchdogResult.success` 在 L2 强制平仓和 critical_timeout 两种失败模式下均正确设置为 `False`。
+
+### FIX-20260522-002 — _dispatch_managed_close silently loses position tracking on ExitWatchdog failure
+
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: `core/runtime/live_cycle.py`
+
+- **Description**: 修复 `_dispatch_managed_close()` 在 ExitWatchdog 失败时静默丢失仓位追踪的 bug。
+
+  **根因**: `_dispatch_managed_close()` 第 767-771 行的 `known_open_tickets.pop()` 和后续的 `pm.clear_position()` 无条件执行，不检查 watchdog 是否成功。如果 ExitWatchdog 所有重试耗尽且 L2 也失败，MT5 中仓位仍存在但引擎已从所有追踪结构中移除。此 bug 影响所有通过 `_dispatch_managed_close` 的出场路径（bleed_stop、OU 反转、brain flip、meta exit、hesitation、时间衰减）。
+
+  **修复**:
+  - 引入 `_close_dispatched` 标志，初始化为 `False`
+  - 仅在 watchdog 成功（`wd_result.success`）或无 watchdog 直接派单成功时设为 `True`
+  - `known_open_tickets.pop()` 和预算记录受 `_close_dispatched` 门控
+
+- **Root Cause**: RC-06 — contract-violation。代码注释写的是"After successful close dispatch"但逻辑未检查成功条件。`wd_result.success` 的值在失败分支（lines 704-718）被读取并打印事件，但从未用于门控追踪移除。
+
+- **Prevention**: 任何涉及外部系统状态变更（MT5 仓位）的操作必须在确认成功后才更新本地追踪。注释应与逻辑一致——如果注释说"after successful"，代码必须检查 success。
+
+- **Dependents Checked**: `position_manager.py:clear_position()` — 确认调用后仓位从管理器中移除。`exit_watchdog.py:execute_exit()` — 确认三种失败路径（dispatch_rejected、ack_timeout、critical_timeout）均返回 `success=False`。
+
+### FIX-20260522-003 — Strategy-level enabled:false check uses dict-key reassignment instead of in-place clear
+
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: `core/runtime/live_cycle.py`
+
+- **Description**: 修复 `_build_strategy_lines()` 中 `enabled: false` 策略级别检查的 Python 引用语义 bug。
+
+  **根因**: `_build_strategy_lines()` 第 2658-2672 行对 `enabled: false` 的策略执行 `_known_groups[_gname] = []`（dict 键重新赋值），而不是 `_known_groups[_gname].clear()`（就地清空）。由于第 2621-2632 行的局部变量（`barrier_12bar_brains`、`h4_swing_brains` 等）持有对原始 list 对象的引用，重新赋值 dict 键不会影响这些局部变量。第 3073 行的策略构建 guard `if h4_swing_brains:` 仍看到原始 list → 即使 `enabled: false`，策略也会被构建。
+
+  **当前状态**: 潜在 bug，被脑级 `enabled: false` 过滤器遮盖。如果有人在 `live.yaml` 的 `brains.registry_entries` 中重新启用了 h4_swing 大脑但忘记同步更新 `strategy_lines.h4_swing.enabled`，此 bug 将暴露。
+
+  **修复**: `_known_groups[_gname] = []` → `_known_groups[_gname].clear()`
+
+- **Root Cause**: RC-06 — contract-violation。Python 的引用语义：`x = [1,2,3]; y = x; d['k'] = []; print(y)` 输出 `[1,2,3]`。开发者的意图是清空列表使所有引用看到变更，但使用了重新赋值语法。
+
+- **Prevention**: 在修改通过多个引用共享的可变容器时，优先使用就地变更操作（`.clear()`、`.append()`、`.extend()`）而不是重新赋值。
+
+- **Dependents Checked**: 所有 11 个策略的局部变量（`barrier_12bar_brains`、`micro_3bar_brains`、...、`h4_swing_brains`）— 确认每个都在策略构建之前有此 guard 检查。
+
+### FIX-20260522-004 — Journal confidence end-to-end pipeline: always null
+
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-orders, runtime-live
+- **Files**: `core/execution/execution_queue.py`, `core/execution/live_order_sender.py`, `core/runtime/live_cycle.py`, `scripts/mt5_bridge_worker.py`
+
+- **Description**: 修复交易日志中 `confidence` 始终为 null 的端到端管道断裂。
+
+  **四段断裂点**:
+  1. `live_order_sender.py:dispatch_live_open_order()` — 函数签名没有 `confidence` 参数，无法传入
+  2. `execution_queue.py:flush()` — 调用 `dispatch_fn()` 时未传递 `decision.confidence`
+  3. `live_cycle.py` 直接调用点（第 5846 行）— 未传递 `confidence` 参数
+  4. `mt5_bridge_worker.py` — 日志记录未从 `execution_payload` 提取 `confidence` 和 `brain_votes`
+
+  **修复**:
+  - `dispatch_live_open_order()` 新增可选 `confidence: float | None = None` 参数
+  - 当 `confidence is not None` 时写入 `execution_payload["confidence"]`
+  - `execution_queue.py:flush()` 传递 `confidence=getattr(decision, "confidence", None)`
+  - `live_cycle.py` 直接调用点传递 `confidence=confidence`
+  - `mt5_bridge_worker.py` 日志记录新增 `"brain_votes"` 和 `"confidence"` 字段
+
+- **Root Cause**: RC-06 — contract-violation。`StrategyDecision.confidence` 字段（strategy_line.py:111）存在且被正确设置，但从未沿执行管道传递到日志。属于"数据存在但静默丢弃"类 bug。
+
+- **Prevention**: 日志 schema 字段应直接映射到 `execution_payload` 中的对应键。新增决策字段时需同步确认 `execution_payload` 和 `mt5_bridge_worker.py` 日志记录均有对应管道。
+
+- **Dependents Checked**: `send_live_order.py:122` CLI 调用点 — 无需修改（手动 CLI 工具不使用 confidence）。`live_order_sender.py` 的 `dispatch_live_order` 底层函数 — `execution_payload` 透传到桥接器，不解析字段。
+
+### FIX-20260522-005 — Intent loop startup deadlock: warm-start MT5 call blocks entire engine
+
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: `scripts/live_intent_loop.py`
+
+- **Description**: 修复意图循环在启动暖启动阶段因阻塞 MT5 API 调用导致整个引擎停滞的问题。
+
+  **症状**: 进程正在运行（CPU 3.75s，221MB 内存），自 brain factory 警告以来无意图输出，无 bar_sync_events，`bar_sync_initialized` / `live_intent_loop_start` 事件从未打印。
+
+  **根因**: OU brain 暖启动（ou_params_v6 分支）调用 `mt5.copy_rates_from_pos()` 拉取 300 根 M5 K 线，MT5 API 调用不返回（也不抛异常），整个意图循环阻塞在 `_call_mt5_with_timeout` 返回之前。`try/except` 无法捕获阻塞调用——只有超时能防御。
+
+  **修复**: 新增 `_call_mt5_with_timeout()` 辅助函数，使用 daemon 线程执行每次暖启动 MT5 调用，设置 15 秒 `join()` 超时。超时 → 记录 `ou_buffer_warm_start_error` 事件，跳过暖启动，继续初始化。同时保护 transformer 暖启动分支。暖启动是优化功能（预填充 buffer 实现即时信号）——缺失时大脑仅需更多 K 线周期进行在线学习。
+
+- **Root Cause**: RC-05 — blocking-call。`MetaTrader5.copy_rates_from_pos()` 在无响应的终端连接上可能无限期阻塞。`try/except` 无法防御阻塞调用——需基于线程的超时防御。
+
+- **Prevention**: 所有启动时的 MT5 数据拉取调用应通过超时包装器。未来的暖启动扩充（新大脑类型）必须使用 `_call_mt5_with_timeout()` + 15 秒超时，以保证启动延迟上限。需在 CI 中新增快速启动冒烟测试（意图循环在 60 秒内打印 `live_intent_loop_start`）。
+
+- **Dependents Checked**: 无（`_call_mt5_with_timeout` 是 `main()` 的局部函数；其他模块不依赖此暖启动路径）。`BarSyncPoller` 有自己的 `wait_for_new_bar()` 超时——独立，不受影响。
+
+### FIX-20260522-006 — BarSyncPoller MT5 瞬时错误重试机制
+
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: protocol-services
+- **Files**: `core/protocol/event_bar_sync.py`
+
+- **Description**: 修复 BarSyncPoller 在 MT5 API 瞬时错误时过早退化为轮询回退的问题。
+
+  **症状**: MT5 `initialize()` 始终成功，但 `copy_rates_from_pos()` 在约 50 次轮询迭代（~104s）后开始抛出异常。每次异常立即设置 `_mt5_available = False` 并返回 None（→ 60s 回退睡眠 → 合成 K 线同样失败 → 无交易循环）。日志显示清晰的模式：`MT5_INIT_OK` → ~104s → `MT5_ERROR` → `BAR_SYNTHETIC_FAILED` → 重复。
+
+  **修复**: 新增 `MAX_MT5_ERROR_RETRIES = 3` 常量。`wait_for_new_bar()` 轮询循环中捕获异常后计数，若 ≤3 次则重新初始化 MT5 并继续轮询（`time.sleep(poll_interval * 2)`），而非立即放弃。成功获取新 K 线或成功轮询（同 bar）时 `_error_count = 0` 重置计数。仅连续 4 次错误后（重试全部耗尽）才进入回退模式。
+
+- **Root Cause**: RC-05 — transient-error。MT5 API 调用可能出现瞬时失败（终端内部状态刷新、IPC 超时等）。单次失败不应立即降级为轮询回退——应区分瞬时错误与持久故障。
+
+- **Prevention**: 所有外部 API 轮询循环应区分瞬时错误与持久故障。瞬时错误重试 + 重新初始化；持久故障（连续 N 次或超时）才降级。`MAX_MT5_ERROR_RETRIES = 3` 与 `MAX_LAG_BARS = 3` 对称——三层防御后降级。
+
+- **Dependents Checked**: `live_intent_loop.py`（`BarSyncPoller.wait_for_new_bar()` 调用方）——无需修改，重试透明于调用方。`fetch_synthetic_bar()` 独立路径——不受影响。
+
+### FIX-20260522-007 — 仓位计数 MT5 不可用时的回退机制
+
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: `core/runtime/live_cycle.py`
+
+- **Description**: 修复当 MT5 连接不可用时 `positions_total()` 返回 < 0（错误码）导致整个交易周期被跳过的问题。
+
+  **症状**: `execute_live_cycle()` 开头的 `pos_count < 0` 检查（原为 `pos_count < 0 or isinstance(pos_count, int) and pos_count < 0`）在 MT5 不可用时触发 `market_closed_or_unreachable` 路径，跳过整个周期——不评估信号、不管理仓位、不下单。MT5 API `positions_total()` 在连接不可用时返回 < 0 的错误码而非 0。
+
+  **修复**: 当 `pos_count < 0` 时，回退到 `position_manager` 的缓存仓位计数。`position_manager.has_position()` → `len(pm.get_all_positions())` 提供本地缓存的实际仓位数量。每 5 个循环输出 `position_count_fallback` JSON 事件用于监控。
+
+- **Root Cause**: RC-01 — missing-null-check。MT5 错误码（负值）未被区分于"零仓位"（0）。错误码被误解释为错误条件，触发安全守卫跳过整个交易逻辑。
+
+- **Prevention**: 所有 MT5 API 返回值应检查负值错误码 vs 零值语义。系统关键路径（仓位计数）应有本地缓存回退——`position_manager` 缓存即为此类。
+
+- **Dependents Checked**: `position_manager` 接口（`has_position()` / `get_all_positions()`）——已在多仓位重构中验证。`execute_live_cycle()` 中 `pos_count` 的所有下游使用——仅用于 `position_count_snapshot` 日志和 `market_closed` 信号阈值；回退值语义正确。
+
+### FIX-20260522-008 — 意图循环 bar_sync 崩溃保护
+
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: `scripts/live_intent_loop.py`
+
+- **Description**: 修复 bar_sync 等待段中未捕获异常导致整个意图循环进程静默终止的问题。
+
+  **症状**: `live_intent_loop` 进程在 bar_sync 超时后消失（无新日志输出，进程终止）。`wait_for_new_bar()` 内部虽有 `try/except Exception`，但外层 `while True` 循环中 bar_sync 段无总体异常保护——若 `BarSyncPoller` 方法抛出未预期的异常类型（如系统级错误），进程直接崩溃。
+
+  **修复**: 将整个 bar_sync 等待段（`wait_for_new_bar()` + `fetch_synthetic_bar()` + `get_state()` + JSON 日志输出）包裹在 `try/except Exception` 中。捕获异常时输出 `bar_sync_crash` JSON 事件（含错误消息），然后回退到 `time.sleep(interval_seconds)` 保证循环继续运行。
+
+- **Root Cause**: RC-01 — missing-exception-handler。顶层 `while True` 循环中的外部系统交互段缺少异常安全网。任何未预期的异常类型穿透 `BarSyncPoller` 内部 try/except 后直接命中进程边界。
+
+- **Prevention**: 所有长期运行进程的 `while True` 主循环中，每个外部系统交互段应有独立 try/except 安全网。崩溃日志必须包含完整错误消息（`str(exc)`）用于事后诊断。
+
+- **Dependents Checked**: `live_launcher.py`（监控 `live_intent_loop` 进程存活性）——崩溃保护消除了进程静默终止窗口，减少 launcher 重启频率。
+
+### FIX-20260522-009 — 平仓派发失败后安全清除仓位
+
+- **Date**: 2026-05-22
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: `core/runtime/live_cycle.py`
+
+- **Description**: 修复 `_dispatch_managed_close()` 的 7 个调用点在平仓派发失败时无条件调用 `pm.clear_position()` 的问题。
+
+  **症状**: FIX-20260522-002 使 `_dispatch_managed_close()` 返回 `bool` 并保护了 `known_open_tickets.pop()`。但 7 个调用点（`grace_period_emergency`、`bleed_stop`、`OU exit`、`brain_flip exit`、`meta exit`、`hesitation exit`、`time-based exit`）在函数返回后仍无条件执行 `pm.clear_position(ticket=pos.ticket)`。若派发失败（返回 False），`clear_position()` 从本地仓位管理器删除仓位记录，但 MT5 中仓位仍然存在——导致引擎永久失去该仓位的跟踪。
+
+  **修复**: 所有 7 个调用点改为 `_dispatched = _dispatch_managed_close(...)`，仅当 `_dispatched` 为 True 时执行 `pm.clear_position()`。每个调用点的退出日志同时增加 `"dispatched": _dispatched` 字段用于事后审计。
+
+- **Root Cause**: RC-06 — contract-violation。`_dispatch_managed_close()` 返回 None（无成功/失败信号）→调用方假定派发始终成功。函数签名改为返回 `bool` 后，调用方必须检查返回值——Iron Law 要求所有调用点同步更新。
+
+- **Prevention**: 任何从 `-> None` 改为 `-> bool` 的函数签名变更，必须搜索所有调用点并更新为门控调用模式。`verify.py --full` 的 mypy 检查不会捕获"忽略返回值"（Python 无此约束）——需要蓝图审查 + 人工代码审查覆盖。
+
+- **Dependents Checked**: `_execute_management_phase()` 的所有退出路径——7 个调用点已全部门控。`position_manager.clear_position()` 的行为——仅删除本地缓存（无网络调用），False 时跳过安全无副作用。
