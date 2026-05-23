@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-22T16:45:30Z
+> **自动生成**: 2026-05-23T03:28:05Z
 > **扫描模块数**: 438
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -198,7 +198,7 @@
 | `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 109 | — | |
 | `dynamic_sl_tp.py` | ✅ active | DynamicSLTP | 2 | 162 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 161 | — | |
-| `execution_queue.py` | ✅ active | QueuedDecision, DispatchResult, ExecutionQueue | 4 | 341 | — | |
+| `execution_queue.py` | ✅ active | QueuedDecision, DispatchResult, ExecutionQueue | 4 | 343 | — | |
 | `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 7 | 412 | — | |
 | `fill_simulator.py` | ✅ active | FillSimulationConfig, FillSimulator | 7 | 98 | — | |
 | `fix_contracts.py` | ✅ active | FixSessionConfig, FixMessage, FixExecutionReport | 4 | 69 | — | |
@@ -208,7 +208,7 @@
 | `gateway_contracts.py` | ✅ active | OrderRequest, Fill, OrderState, ExecutionGateway | 9 | 103 | — | |
 | `kelly_sizer.py` | ✅ active | KellyResult | 2 | 130 | — | |
 | `limit_order_monitor.py` | ✅ active | LimitOrderIntent, LimitFillResult, LimitOrderMonitor | 9 | 329 | — | |
-| `live_order_sender.py` | ✅ active | — | 6 | 310 | — | |
+| `live_order_sender.py` | ✅ active | — | 6 | 316 | — | |
 | `market_efficiency.py` | ✅ active | — | 2 | 67 | — | |
 | `market_impact.py` | ✅ active | MarketImpactEstimate | 3 | 168 | — | |
 | `meta_exit_engine.py` | ✅ active | ExitFeatureSnapshot, ExitEvaluation, MetaExitEngine | 13 | 509 | — | |
@@ -385,7 +385,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `event_bar_sync.py` | ✅ active | BarSyncState, BarSyncPoller | 12 | 552 | — | |
+| `event_bar_sync.py` | ✅ active | BarSyncState, BarSyncPoller | 12 | 557 | — | |
 | `live_execution_contract.py` | ✅ active | — | 5 | 74 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 8 | — | |
 
@@ -537,7 +537,7 @@
 | `live_stack_diagnostic.py` | ✅ active | — | 5 | 204 | — | |
 | `market_calendar.py` | ⬜ empty | — | 0 | 13 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 21 | 756 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 21 | 759 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 97 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 65 | — | |
 | `online_feedback_hook.py` | ✅ active | — | 2 | 119 | — | |

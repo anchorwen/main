@@ -297,6 +297,8 @@ class ExecutionQueue:
                         brain_votes=getattr(decision, "brain_votes", None) or None,
                         confidence=getattr(decision, "confidence", None),
                         entry_context=decision.entry_context if decision.entry_context else None,
+                        p_win=getattr(decision, "p_win", 0.0) or 0.0,
+                        kelly_mult=getattr(decision, "kelly_mult", 1.0) or 1.0,
                     )
                     _dispatched = True
                     break

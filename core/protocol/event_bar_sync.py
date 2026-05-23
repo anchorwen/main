@@ -233,26 +233,29 @@ class BarSyncPoller:
                                 },
                             )
 
-                    # Update state
+                    # Build bar data before updating state — if construction
+                    # fails, state stays unchanged so next poll retries cleanly.
+                    _bar_data = {
+                        "time": bar_time,
+                        "open": float(current_bar["open"]),
+                        "high": float(current_bar["high"]),
+                        "low": float(current_bar["low"]),
+                        "close": float(current_bar["close"]),
+                        "tick_volume": int(current_bar["tick_volume"]),
+                        "spread": int(current_bar["spread"]),
+                        "real_volume": int(current_bar["real_volume"]),
+                    }
+                    # Update state (only after bar_data built successfully)
                     self._state.last_bar_time = bar_time
-                    self._state.last_bar_open = float(current_bar["open"])
-                    self._state.last_bar_close = float(current_bar["close"])
+                    self._state.last_bar_open = _bar_data["open"]
+                    self._state.last_bar_close = _bar_data["close"]
                     self._state.total_bars_seen += 1
                     self._state.lag_count = max(0, self._state.lag_count - 1)
                     self._state.last_sync_utc = datetime.now(UTC).isoformat()
                     self._save_state()
                     _error_count = 0  # reset on success
 
-                    return {
-                        "time": bar_time,
-                        "open": float(current_bar["open"]),
-                        "high": float(current_bar["high"]),
-                        "low": float(current_bar["low"]),
-                        "close": float(current_bar["close"]),
-                        "tick_volume": int(current_bar.get("tick_volume", 0)),
-                        "spread": int(current_bar.get("spread", 0)),
-                        "real_volume": int(current_bar.get("real_volume", 0)),
-                    }
+                    return _bar_data
 
                 # Same bar — wait and poll again
                 _error_count = 0  # successful poll, reset error streak
@@ -283,7 +286,7 @@ class BarSyncPoller:
                         "_degraded": True,
                     }
 
-            except Exception:
+            except Exception as exc:
                 _error_count += 1
                 self._log_event(
                     "MT5_ERROR",
@@ -293,6 +296,8 @@ class BarSyncPoller:
                         else "fallback_to_poll",
                         "error_count": _error_count,
                         "max_retries": MAX_MT5_ERROR_RETRIES,
+                        "exception": str(exc),
+                        "exception_type": type(exc).__name__,
                     },
                 )
                 if _error_count <= MAX_MT5_ERROR_RETRIES:
@@ -366,9 +371,9 @@ class BarSyncPoller:
             lows = [float(r["low"]) for r in m1_rates]
             closes = [float(r["close"]) for r in m1_rates]
             opens = [float(r["open"]) for r in m1_rates]
-            volumes = [int(r.get("tick_volume", 0)) for r in m1_rates]
-            spreads = [int(r.get("spread", 0)) for r in m1_rates]
-            real_volumes = [int(r.get("real_volume", 0)) for r in m1_rates]
+            volumes = [int(r["tick_volume"]) for r in m1_rates]
+            spreads = [int(r["spread"]) for r in m1_rates]
+            real_volumes = [int(r["real_volume"]) for r in m1_rates]
 
             synthetic_time = int(m1_rates[-1]["time"])
             synthetic_bar = {

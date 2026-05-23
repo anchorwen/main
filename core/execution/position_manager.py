@@ -802,7 +802,7 @@ class ActivePositionManager:
     def should_enter_inflection(
         current_z: float,
         prev_z: float | None,
-        z_entry: float = 1.5,
+        z_entry: float = 1.3,
     ) -> tuple[bool, str]:
         """Z-score must be moving back toward zero after crossing threshold.
 
@@ -1026,7 +1026,7 @@ class ActivePositionManager:
         current_atr: float,
         bars_held: int | None = None,
         m1_candles: list[dict[str, float]] | None = None,
-        z_entry: float = 1.5,
+        z_entry: float = 1.3,
         z_exit: float = 0.3,
         max_hold: int = 8,
     ) -> tuple[bool, str]:

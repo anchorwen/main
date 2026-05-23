@@ -677,7 +677,7 @@ class StrategyLine:
         # the edge is strongest and mean-drift risk is lowest.
         if "statarb" in name or "ou" in name.lower():
             if entry_z_score != 0.0:
-                _z_entry = 2.0 if "statarb" in name else 1.5
+                _z_entry = 1.3 if "statarb" in name else 1.5
                 _inf_allow, _inf_reason = check_z_inflection(
                     entry_z_score,
                     self._last_entry_z,

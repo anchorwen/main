@@ -649,6 +649,9 @@ def process_one(
         "brain_ids": msg_payload.get("brain_ids"),
         "brain_votes": msg_payload.get("brain_votes"),
         "confidence": msg_payload.get("confidence"),
+        "p_win": msg_payload.get("p_win"),
+        "kelly_mult": msg_payload.get("kelly_mult"),
+        "entry_context": msg_payload.get("entry_context"),
     }
     if _open_msg_id:
         journal_record["open_message_id"] = _open_msg_id

@@ -50,22 +50,30 @@ DecisionIntent → DecisionCompiler → IntentMessageBuilder → CommunicationEn
 | FIX-20260522-010 | 2026-05-22 | cursor-agent | — | BarSyncPoller timeout 120s→360s: DEFAULT_TIMEOUT_SECONDS was shorter than M5 bar period (300s). Every polling window expired before next bar formed, forcing all cycles into fallback sleep mode. Now 360s = 300s bar period + 60s buffer. Also updated live.yaml, live_intent_loop.py, live_launcher.py defaults. | RC-05 (boundary-error) |
 | FIX-20260522-028 | 2026-05-22 | cursor-agent | — | BarSyncPoller silent-failure recovery: `copy_rates_from_pos()` returning None (not exception) after MT5 re-init caused infinite silent spin → perpetual `bar_sync_degraded_wakeup`. Added `BAR_EMPTY_POLLS_REINIT` — after 5 consecutive empty polls, re-inits MT5 and logs event. Empty counter resets on successful poll. Fixes engine stuck in management-only mode. | RC-05 (missing-recovery-path) |
 | FIX-20260522-011 | 2026-05-22 | cursor-agent | — | BarSyncPoller graceful degradation: added degraded deadline at `bar_period` (300s M5) that returns a truthy sentinel instead of blocking to full 360s timeout. Prevents the "360s block + 30s caller sleep = 390s dead window" cascade when MT5 is flaky. Also reduced poll_interval 2s→1s, added mt5.shutdown() before re-init for cleaner IPC recovery, and added BAR_DEGRADED_WAKEUP event logging. Caller now logs bar_sync_degraded_wakeup when sentinel received. | RC-05 (architectural: BarSyncPoller introduced a single point of failure that didn't exist with blind time.sleep — the polling loop required MT5 to be continuously available across the entire window, but MT5 IPC fails periodically) |
+| FIX-20260522-029 | 2026-05-22 | cursor-agent | — | **TRUE ROOT CAUSE** of all perpetual degradation: `mt5.copy_rates_from_pos()` returns numpy structured array → rows are `numpy.void` (not dict) → `.get("tick_volume", 0)` threw `AttributeError` at new-bar return-dict construction. State was updated BEFORE the fallible return-dict build, so after crash → re-init → last_bar_time already advanced → "new bar" never detected → degraded forever. All 6 `.get()` calls replaced with `[]` (works for both numpy.void and dict). Defense-in-depth: bar_data dict built BEFORE state mutation. | RC-02 (type-confusion: numpy.void ≠ dict) + RC-03 (state-leak: state mutation before fallible operation) |
+| FIX-20260523-003 | 2026-05-23 | cursor-agent | — | Meta Filter (Track 4d) threshold fix at 0.65: conformal prediction was computing `max(80th_pctile, 0.50, 0.65) = ~0.679` at runtime, rejecting 83% of proposals. Architecture decision: disable conformal prediction (`enabled: false` in meta_stage2_filter_v3.json) to fix effective threshold at base 0.65. This increases pass rate from 17% to ~28%, accelerating sample collection for precision-curve calibration. Conformal re-enabled once sufficient P(win)-vs-outcome data is accumulated. | RC-09 (config-drift: conformal percentile drifting threshold above intended base) |
 
 ## Known Issues
 
-### KI-001: bar_sync timeout MUST exceed bar period (`2026-05-22`)
-**Discovery**: FIX-20260522-006（MT5 瞬时错误重试）修复后，bar_sync 轮询不再因 MT5 异常提前退出。这暴露了一个隐藏的前提条件：`DEFAULT_TIMEOUT_SECONDS`（原值 120s）必须大于目标 K 线周期（M5=300s）。
+### KI-001: bar_sync timeout MUST exceed bar period (`2026-05-22`) — RESOLVED by FIX-029
 
-**因果链**:
-1. 修复前：MT5 `copy_rates_from_pos()` 在约 104s 后持续抛异常 → 旧代码立即 `fallback_to_poll` 返回 None → 实际上轮询存活窗口被异常截断在 ~104s
-2. 修复前：异常截断 + 60s 回退睡眠 + 60s 间隔睡眠 = 隐式的 ~224s 窗口 → 偶尔能等到下一根 K 线（取决于 bar_sync 启动时的 K 线内偏移量）
-3. FIX-006 修复后：异常被重试逻辑吞没 → 轮询完整存活 120s → 严格在 120s 截止时间超时
-4. 120s < 300s → 若 bar_sync 在 K 线形成 30s 后启动，下一根 K 线需 270s → 永远在截止前超时 → 100% 超时率
-5. FIX-010 将超时延长至 360s（300s + 60s 缓冲）→ 恢复事件驱动检测
+**Original diagnosis (WRONG)**: FIX-006 fixed MT5 transient errors, but this exposed that `DEFAULT_TIMEOUT_SECONDS` (120s) must exceed bar period (300s). The causal chain was:
+1. Pre-FIX-006: MT5 threw at ~104s → old code fell back → ~224s effective window → occasionally got bars
+2. Post-FIX-006: retry logic swallowed errors → 120s hard timeout → 100% timeout rate (< 300s bar period)
+3. FIX-010: timeout 120→360s, FIX-011: degraded deadline at 310s
 
-**教训**: 任何影响外部 API 轮询循环退出行为的修复，必须验证轮询窗口是否仍能达成目标事件检测。当前超时计算是硬编码的——应转为 `_bar_seconds() * 1.2` 以适配不同时间周期。
+**Corrected diagnosis (2026-05-22, FIX-029)**: The "MT5 transient error at ~104s" was NEVER an MT5 IPC error. It was always `AttributeError: 'numpy.void' object has no attribute 'get'` thrown at new-bar detection. The ~104s timing was the first M5 bar boundary after bar_sync start; the exact 300s spacing between all subsequent errors was the M5 bar period. The error count of 1 per cycle was because only ONE new bar forms per cycle. State corruption (update-before-return) made the crash self-perpetuating — after re-init, last_bar_time matched the current bar, so no "new" bar was ever found.
 
-**影响范围**: `event_bar_sync.py`, `live_intent_loop.py`, `live_launcher.py`, `live.yaml`
+**The real causal chain**:
+1. `copy_rates_from_pos()` returned numpy structured array (correct MT5 behavior)
+2. Row iteration yielded numpy.void (correct numpy behavior)
+3. `.get()` called on numpy.void → `AttributeError` (type confusion RC-02)
+4. State was updated BEFORE return-dict construction → last_bar_time already advanced (state leak RC-03)
+5. Exception handler caught it, re-inited MT5, continued polling
+6. After re-init, no bar newer than (already-updated) last_bar_time → degraded deadline fired
+7. FIX-006/010/011/028 were all treating symptoms of this single type-confusion bug
+
+**Prevention**: (1) Never use `.get()` on MT5 rate data — always `[]`. (2) Mutate state AFTER all fallible data construction. (3) Suspicious patterns: identical error spacing (= bar period), error count always 1 per cycle, "transient error" that always fires at the bar boundary.
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |
