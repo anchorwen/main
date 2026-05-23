@@ -19,19 +19,8 @@ brains:
     enabled: true
   - path: configs/brains/ou_params_v7_m15.json
     enabled: true
-  - path: configs/brains/xgboost_d1_swing.json
-    enabled: false  # FIX-20260521-003: 100% LONG-only, -31R/334 trades, 42.5% WR
   - path: configs/brains/meta_stage1_huber_v1.json
     enabled: true
-  - path: configs/brains/xgboost_m15_swing_xgboost_v1_20260514_165620.json
-    enabled: false  # FIX-20260521-003: 100% LONG-only, -267R/1323 trades, 43.2% WR
-  - path: configs/brains/xgboost_m30_swing_xgboost_v1_20260514_165620.json
-    enabled: false  # FIX-20260521-003: 100% LONG-only, -290R/1330 trades, 43.0% WR
-  - path: configs/brains/xgboost_h1_swing_xgboost_v1_20260514_165620.json
-    enabled: false  # FIX-20260521-003: 100% LONG-only, -300R/1331 trades, 43.0% WR
-  # lightgbm_h1_swing_lightgbm_v1 config deleted — 100% LONG-only, -149R/676 trades, anti-predictive
-  - path: configs/brains/xgboost_h4_swing_xgboost_v1_20260514_165620.json
-    enabled: false  # FIX-20260521-003: 100% LONG-only, -293R/1336 trades, 43.0% WR
   # ── V9 barrier classifier brains DELETED 2026-05-21 ──
   # xgb_barrier_12bar_xgboost_v3: blind OOS WR 39.6%, Total PnL -714R — anti-predictive
   # lgb_barrier_12bar_lightgbm_v3: blind OOS WR 34.9%, Total PnL -1211R — anti-predictive
@@ -323,7 +312,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.0
   daily_swing:
-    enabled: true
+    enabled: false  # FIX-20260523-006: graveyard cleanup — no active swing brains remain
     timeframe: D1
     magic: 90301
     brain_types:
@@ -354,7 +343,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.0
   m15_swing:
-    enabled: true
+    enabled: false  # FIX-20260523-006: graveyard cleanup — no active swing brains remain
     timeframe: M15
     magic: 90310
     brain_types:
@@ -389,7 +378,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.0
   m30_swing:
-    enabled: true  # Re-enabled: 72.7% WR / +$1.60 on 34 trades (May 18-20)
+    enabled: false  # FIX-20260523-006: graveyard cleanup — no active swing brains remain
     timeframe: M30
     magic: 90320
     brain_types:
@@ -419,7 +408,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.0
   h1_swing:
-    enabled: true  # FIX-20260520-025: Re-enabled with cooldown guard. Best WR (60%) in journal.
+    enabled: false  # FIX-20260523-006: graveyard cleanup — no active swing brains remain
     timeframe: H1
     magic: 90330
     brain_types:
@@ -505,11 +494,6 @@ regime_gate:
       micro_h1: full
       statarb_dynamic: false
       statarb_m15: false
-      daily_swing: full
-      m15_swing: full
-      m30_swing: full
-      h1_swing: full
-      h4_swing: full
     mild_trend:
       barrier_12bar: full
       micro_3bar: full
@@ -517,11 +501,6 @@ regime_gate:
       micro_h1: full
       statarb_dynamic: reduced
       statarb_m15: reduced
-      daily_swing: full
-      m15_swing: full
-      m30_swing: full
-      h1_swing: full
-      h4_swing: full
     ranging:
       barrier_12bar: reduced
       micro_3bar: reduced
@@ -529,11 +508,6 @@ regime_gate:
       micro_h1: reduced
       statarb_dynamic: full
       statarb_m15: full
-      daily_swing: reduced
-      m15_swing: reduced
-      m30_swing: reduced
-      h1_swing: reduced
-      h4_swing: reduced
     high_vol:
       barrier_12bar: false
       micro_3bar: full
@@ -541,11 +515,6 @@ regime_gate:
       micro_h1: reduced
       statarb_dynamic: reduced
       statarb_m15: reduced
-      daily_swing: reduced
-      m15_swing: reduced
-      m30_swing: reduced
-      h1_swing: reduced
-      h4_swing: reduced
     normal:
       barrier_12bar: full
       micro_3bar: full
@@ -553,11 +522,6 @@ regime_gate:
       micro_h1: full
       statarb_dynamic: full
       statarb_m15: full
-      daily_swing: full
-      m15_swing: full
-      m30_swing: full
-      h1_swing: full
-      h4_swing: full
 shadow:
   shadow_config: configs/live_shadow_config.json
   compare_report_dir: reports/shadow_compare

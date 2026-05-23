@@ -2395,3 +2395,30 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
   - M15-resampled bootstrapping ensures the brain buffer contains correctly-sampled prices from startup.
   - The `is_m15_boundary()` static method provides a single source of truth for M15 alignment checks.
 - **Dependents Checked**: live_cycle.py multi-strategy evaluation path, live_intent_loop.py warm-start, StatArbStrategy._run_inference (no changes needed — receives correct price from caller). All 2622 tests pass. mypy + ruff clean on new and modified code.
+
+### FIX-20260523-006
+- **Date**: 2026-05-23
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: deployment-config, execution-orders
+- **Files**:
+  - `core/execution/strategy_line.py` (MODIFIED: +statarb_m15 in MetaFilterGate gating at line 573)
+  - `core/deployment/config_hot_reload.py` (MODIFIED: JSONDecodeError try/except in load())
+  - `configs/live.yaml` (MODIFIED: 5 disabled swing brain registry entries removed, 5 swing strategy lines disabled, regime_map cleaned)
+  - `configs/brains/xgboost_d1_swing.json` → `archive_deprecated/`
+  - `configs/brains/xgboost_m15_swing_xgboost_v1_20260514_165620.json` → `archive_deprecated/`
+  - `configs/brains/xgboost_m30_swing_xgboost_v1_20260514_165620.json` → `archive_deprecated/`
+  - `configs/brains/xgboost_h1_swing_xgboost_v1_20260514_165620.json` → `archive_deprecated/`
+  - `configs/brains/xgboost_h4_swing_xgboost_v1_20260514_165620.json` → `archive_deprecated/`
+  - `data/governance_state.json` (MODIFIED: 13 frozen + 5 disabled swing brain_states removed, 6 active brain_states remaining)
+- **Description**: Day 1 hot fixes + graveyard cleanup. Three independent sub-tasks:
+  1. **Fix 1 — statarb_m15 MetaFilterGate coverage**: Added `"statarb_m15"` to the list of strategies gated by the 47-dim Track 3 LightGBM MetaFilterGate in strategy_line.py:573. Previously only `"statarb_dynamic"` was covered — statarb_m15 signals bypassed all Meta filtering, trading on raw OU z-scores without P(win) filtering.
+  2. **Fix 2 — Config hot reload resilience**: `ConfigHotReload.load()` now catches `json.JSONDecodeError` and returns the current config instead of crashing the system. Root cause: external editor truncating JSON mid-write → empty/partial file → crash. System now survives corrupted config files.
+  3. **Fix 3 — Graveyard cleanup**: (3a) governance_state.json: 13 frozen + 5 disabled swing brain_states removed (24→6). (3b) live.yaml brain registry: 5 disabled swing entries removed. (3c) 5 swing brain config JSONs moved to archive_deprecated/. (3d) 5 swing strategy lines disabled + regime_map entries cleaned from all 5 regimes. All swing brains were 100% LONG-only with deeply negative PnL (-31R to -300R) and no active voters remaining after brain removal.
+- **Root Cause**: RC-09 (config-drift): swing brains disabled weeks ago but configs, registry entries, and strategy lines accumulated as dead configuration. RC-06 (contract-violation): statarb_m15 was missing from MetaFilterGate despite being deployed for live trading — an implicit contract that "all production strategies should pass through MetaFilter."
+- **Prevention**:
+  - All swing brains and their configs now archived, not lingering as disabled cruft.
+  - MetaFilterGate strategy list is now explicitly documented (statarb_dynamic + statarb_m15).
+  - ConfigHotReload has structured error handling with JSON event logging.
+  - Governance state only contains active/probation brains (6), making orphan detection simpler.
+- **Dependents Checked**: statarb_m15→MetaFilterGate chain verified; config_hot_reload used by live_cycle.py and live_intent_loop.py, no API changes; 5 swing brains had no active dependents. All 2622 tests pass. mypy clean (pre-existing errors only).

@@ -10,46 +10,6 @@
       "freeze_count": 0,
       "exposure_limited": false
     },
-    "xgboost_m15_swing_xgboost_v1_20260514_165620": {
-      "brain_id": "xgboost_m15_swing_xgboost_v1_20260514_165620",
-      "status": "probation",
-      "registered_at": "2026-05-15T08:00:00.000000",
-      "last_transition_at": "2026-05-18T22:02:46.685039",
-      "transition_count": 1,
-      "freeze_count": 0
-    },
-    "xgboost_m30_swing_xgboost_v1_20260514_165620": {
-      "brain_id": "xgboost_m30_swing_xgboost_v1_20260514_165620",
-      "status": "candidate",
-      "registered_at": "2026-05-15T08:00:00.000000",
-      "last_transition_at": "2026-05-15T08:00:00.000000",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "xgboost_h1_swing_xgboost_v1_20260514_165620": {
-      "brain_id": "xgboost_h1_swing_xgboost_v1_20260514_165620",
-      "status": "candidate",
-      "registered_at": "2026-05-15T08:00:00.000000",
-      "last_transition_at": "2026-05-15T08:00:00.000000",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "xgboost_h4_swing_xgboost_v1_20260514_165620": {
-      "brain_id": "xgboost_h4_swing_xgboost_v1_20260514_165620",
-      "status": "candidate",
-      "registered_at": "2026-05-15T08:00:00.000000",
-      "last_transition_at": "2026-05-15T08:00:00.000000",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "XGBoost_D1_Swing_5d": {
-      "brain_id": "XGBoost_D1_Swing_5d",
-      "status": "probation",
-      "registered_at": "2026-05-16T03:21:51.278655",
-      "last_transition_at": "2026-05-19T22:02:45.301210",
-      "transition_count": 1,
-      "freeze_count": 0
-    },
     "Meta_Stage1_Huber_V1": {
       "brain_id": "Meta_Stage1_Huber_V1",
       "status": "probation",
@@ -87,110 +47,6 @@
       "status": "probation",
       "registered_at": "2026-05-22T22:02:19.006944",
       "last_transition_at": "2026-05-22T22:02:19.006944",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "ARB_Params_V8_M15_S53": {
-      "brain_id": "ARB_Params_V8_M15_S53",
-      "status": "frozen",
-      "registered_at": "2026-05-22T22:02:23.334916",
-      "last_transition_at": "2026-05-22T22:02:23.334916",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "ARB_Params_V8_M5_S53": {
-      "brain_id": "ARB_Params_V8_M5_S53",
-      "status": "frozen",
-      "registered_at": "2026-05-22T22:02:23.334916",
-      "last_transition_at": "2026-05-22T22:02:23.334916",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "LIGHTGBM_barrier_12bar": {
-      "brain_id": "LIGHTGBM_barrier_12bar",
-      "status": "frozen",
-      "registered_at": "2026-05-22T22:02:23.334916",
-      "last_transition_at": "2026-05-22T22:02:23.334916",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "LightGBM_D1_Swing_5d": {
-      "brain_id": "LightGBM_D1_Swing_5d",
-      "status": "frozen",
-      "registered_at": "2026-05-22T22:02:23.334916",
-      "last_transition_at": "2026-05-22T22:02:23.334916",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "LightGBM_M15_Swing_24bar": {
-      "brain_id": "LightGBM_M15_Swing_24bar",
-      "status": "frozen",
-      "registered_at": "2026-05-22T22:02:23.334916",
-      "last_transition_at": "2026-05-22T22:02:23.334916",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "Microstructure_Transformer_V5.0": {
-      "brain_id": "Microstructure_Transformer_V5.0",
-      "status": "frozen",
-      "registered_at": "2026-05-22T22:02:23.334916",
-      "last_transition_at": "2026-05-22T22:02:23.334916",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "Microstructure_Transformer_V5.0_H1": {
-      "brain_id": "Microstructure_Transformer_V5.0_H1",
-      "status": "frozen",
-      "registered_at": "2026-05-22T22:02:23.334916",
-      "last_transition_at": "2026-05-22T22:02:23.334916",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "Microstructure_Transformer_V5.0_M15": {
-      "brain_id": "Microstructure_Transformer_V5.0_M15",
-      "status": "frozen",
-      "registered_at": "2026-05-22T22:02:23.334916",
-      "last_transition_at": "2026-05-22T22:02:23.334916",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "XGBOOST_barrier_12bar": {
-      "brain_id": "XGBOOST_barrier_12bar",
-      "status": "frozen",
-      "registered_at": "2026-05-22T22:02:23.334916",
-      "last_transition_at": "2026-05-22T22:02:23.334916",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "XGBoost_V4.5_M15": {
-      "brain_id": "XGBoost_V4.5_M15",
-      "status": "frozen",
-      "registered_at": "2026-05-22T22:02:23.334916",
-      "last_transition_at": "2026-05-22T22:02:23.334916",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "lgb_barrier_12bar_lightgbm_v3_20260517_084114": {
-      "brain_id": "lgb_barrier_12bar_lightgbm_v3_20260517_084114",
-      "status": "frozen",
-      "registered_at": "2026-05-22T22:02:23.334916",
-      "last_transition_at": "2026-05-22T22:02:23.334916",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "lightgbm_h1_swing_lightgbm_v1_20260514_165620": {
-      "brain_id": "lightgbm_h1_swing_lightgbm_v1_20260514_165620",
-      "status": "frozen",
-      "registered_at": "2026-05-22T22:02:23.334916",
-      "last_transition_at": "2026-05-22T22:02:23.334916",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "xgb_barrier_12bar_xgboost_v3_20260517_084031": {
-      "brain_id": "xgb_barrier_12bar_xgboost_v3_20260517_084031",
-      "status": "frozen",
-      "registered_at": "2026-05-22T22:02:23.334916",
-      "last_transition_at": "2026-05-22T22:02:23.334916",
       "transition_count": 0,
       "freeze_count": 0
     }
@@ -584,6 +440,13 @@
       "to_status": "probation",
       "reason": "pnl:warning",
       "timestamp": "2026-05-22T22:02:23.334916"
+    },
+    {
+      "brain_id": "bulk_cleanup_20260523",
+      "from_status": "frozen/probation/candidate",
+      "to_status": "deleted",
+      "reason": "FIX-20260523-006: Graveyard pruning — removed 13 frozen brain_states (ARB_Params_V8_M15/M5_S53, LIGHTGBM_barrier_12bar, LightGBM_D1_Swing_5d, LightGBM_M15_Swing_24bar, Microstructure_Transformer_V5.0/M15/H1, XGBOOST_barrier_12bar, XGBoost_V4.5_M15, lgb_barrier_12bar_lightgbm_v3, lightgbm_h1_swing_lightgbm_v1, xgb_barrier_12bar_xgboost_v3) + 5 disabled swing brains (XGBoost_D1_Swing_5d, xgboost_m15/m30/h1/h4_swing) — all deeply negative P&L or 100% LONG-only bias",
+      "timestamp": "2026-05-23T12:00:00.000000"
     }
   ]
 }

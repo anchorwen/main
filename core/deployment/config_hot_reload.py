@@ -42,7 +42,14 @@ class ConfigHotReload:
         if self._path is None or not self._path.exists():
             return self._current
         with self._lock:
-            data = json.loads(self._path.read_text(encoding="utf-8"))
+            try:
+                data = json.loads(self._path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                logging.error(
+                    "ConfigHotReload: JSON decode failed for %s — keeping current config",
+                    self._path,
+                )
+                return self._current
             self._current = data
             self._last_modified = self._path.stat().st_mtime
             return data

@@ -61,6 +61,7 @@ environment_config.json → EnvironmentConfig → ServiceContainer
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260523-006 | 2026-05-23 | cursor-agent | — | Day 1 graveyard cleanup: (1) config_hot_reload.load() JSONDecodeError try/except wrapper keeping current config on file corruption; (2) live.yaml brain registry cleared of 5 disabled swing entries (xgboost_d1/m15/m30/h1/h4); (3) 5 swing brain config JSONs moved to archive_deprecated/ | RC-09, RC-06 |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |
 | FIX-20260521-001 | 2026-05-21 | cursor-agent | — | High Recall + High Precision: barrier_12bar confidence_threshold 0.45→0.25 (loose upstream recall). MetaFilter as downstream precision gate compensates. Huber vote_weight 0.0→0.8 in brains config. | RC-09 |
 | FIX-20260520-027 | 2026-05-20 | cursor-agent | — | Institutional brain→live alignment (Layer 1): structured training_params added to all 14 brain registry entry JSONs — sl_atr_mult, tp_atr_mult, horizon_bars, min_rr_ratio. Parsed from training_contract strings (e.g. survival_barrier_2.0sl_3.5tp_12bar). BrainEntry + BrainRegistry updated. | RC-09 |

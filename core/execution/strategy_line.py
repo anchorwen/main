@@ -570,7 +570,7 @@ class StrategyLine:
         # barrier_12bar was surgically removed from Track 3 (2026-05-22):
         # Track 4d MetaSignalFilter (LGB+MLP+Platt+Conformal) fully subsumes
         # this single-LGB gate with richer features (59 vs 47) and calibration.
-        if meta_filter_gate is not None and name in ("statarb_dynamic",):
+        if meta_filter_gate is not None and name in ("statarb_dynamic", "statarb_m15"):
             if meta_filter_gate.is_loaded and feature_vector is not None:
                 try:
                     mf_result = meta_filter_gate.filter(
