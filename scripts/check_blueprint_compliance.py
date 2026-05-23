@@ -74,6 +74,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/validate_brain_before_deploy.py",
     ],
     "execution_guards": [
+        "core/execution/conformal_calibrator.py",
         "core/execution/pre_trade_guards.py",
         "core/execution/meta_signal_filter.py",
         "core/execution/meta_filter_gate.py",

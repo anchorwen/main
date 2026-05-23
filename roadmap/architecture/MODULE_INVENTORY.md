@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-23T15:10:43Z
-> **扫描模块数**: 440
+> **自动生成**: 2026-05-23T17:03:45Z
+> **扫描模块数**: 441
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -195,6 +195,7 @@
 | `barrier_strategy.py` | ✅ active | BarrierStrategy | 1 | 60 | — | |
 | `broker_adapter.py` | ✅ active | BrokerAdapter | 9 | 68 | — | |
 | `capital_allocator.py` | ✅ active | AllocationDecision, GroupCorrelationTracker, CapitalAllocator | 9 | 464 | — | |
+| `conformal_calibrator.py` | ✅ active | ConformalCalibrator | 10 | 345 | — | |
 | `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 109 | — | |
 | `dynamic_sl_tp.py` | ✅ active | DynamicSLTP | 2 | 162 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 161 | — | |
@@ -212,7 +213,7 @@
 | `market_efficiency.py` | ✅ active | — | 2 | 67 | — | |
 | `market_impact.py` | ✅ active | MarketImpactEstimate | 3 | 168 | — | |
 | `meta_exit_engine.py` | ✅ active | ExitFeatureSnapshot, ExitEvaluation, MetaExitEngine | 13 | 509 | — | |
-| `meta_filter_gate.py` | ✅ active | MetaFilterGate | 7 | 187 | — | |
+| `meta_filter_gate.py` | ✅ active | MetaFilterGate | 7 | 220 | — | |
 | `meta_pipeline.py` | ✅ active | MetaProbeSpec, MetaProbeResult, MetaPipeline | 8 | 479 | — | |
 | `meta_signal_filter.py` | ✅ active | FilterResult, MetaSignalFilter | 19 | 878 | — | |
 | `micro_strategy.py` | ✅ active | MicroStrategy | 1 | 85 | — | |
@@ -282,7 +283,7 @@
 | `decision_scorer.py` | ✅ active | DecisionScorer | 5 | 120 | — | |
 | `experience_replay.py` | ✅ active | ExperienceReplayBuffer | 9 | 225 | — | |
 | `feedback_loop.py` | ✅ active | FeedbackLoop | 4 | 99 | — | |
-| `online_feedback_hook.py` | ✅ active | OnlineFeedbackHook | 8 | 355 | — | |
+| `online_feedback_hook.py` | ✅ active | OnlineFeedbackHook | 8 | 370 | — | |
 | `outcome_collector.py` | ✅ active | OutcomeCollector | 4 | 111 | — | |
 | `param_optimizer.py` | ✅ active | — | 5 | 283 | — | |
 | `performance_analytics.py` | ✅ active | PerformanceAnalytics | 11 | 162 | — | |
@@ -513,10 +514,10 @@
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 527 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 528 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 24 | 1065 | — | |
+| `daily_ops.py` | ✅ active | — | 24 | 1086 | — | |
 | `deploy_blue_green.py` | ✅ active | — | 7 | 126 | — | |
 | `feature_store_maintenance.py` | ✅ active | — | 8 | 275 | — | |
 | `feedback_loop.py` | ✅ active | — | 12 | 431 | — | |

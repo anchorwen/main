@@ -34,6 +34,7 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260523-008 | 2026-05-24 | cursor-agent | — | Track 3d Conformal OU Gate: ConformalCalibrator with Q10 FIFO quantile threshold for OU MetaFilterGate. Replaces fixed 0.40 threshold with adaptive [0.35, 0.70]. Cold-start from journal history, FIFO deque(maxlen=500), clamp-hit-rate monitoring. MetaFilterGate.filter() now uses adaptive threshold when calibrator is warm. | RC-09 (config-drift — fixed threshold doesn't adapt to regime changes) |
 | FIX-20260522-024 | 2026-05-22 | cursor-agent | — | Config-driven MetaPipeline architecture: replaces hardcoded `_try_meta_pipeline()` with declarative `MetaPipeline` class. Fixes cross-module cascade where FIX-20260522-015 (BrainSignal migration removed `extensions` attribute) silently broke FIX-20260520-028 (Executive Veto read `p.extensions.raw_outputs.raw_score`). Brain JSON declares `"roles": ["meta_probe"]`; MetaPipeline discovers, extracts, filters via stage-N registry. | RC-06 (cross-module cascade) |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |
 | FIX-20260521-007 | 2026-05-21 | cursor-agent | — | MetaFilter gate: integrate meta_filter_gate.py for dual-track Meta Pipeline — Huber BPS regression probe → Stage 2 LGB+MLP+Platt+Conformal binary classifier gate | RC-06 |

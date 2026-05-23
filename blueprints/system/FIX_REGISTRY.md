@@ -208,13 +208,14 @@ FIX-YYYYMMDD-NNN
 | FIX-20260523-004 | 2026-05-23 | runtime-live, market-mtf | M15 infrastructure assault: MTFPriceService for decoupled M15 bar reconstruction from M5 tick history, bar-boundary gating (00/15/30/45 only), OU brain config for statarb_m15, enabled statarb_m15 in live.yaml, M15-resampled OU buffer bootstrapping. Never feeds incomplete M15 bars to models. | RC-06, RC-07 |
 | FIX-20260523-006 | 2026-05-23 | deployment-config, execution-orders | Day 1 hot fixes + graveyard cleanup: (1) statarb_m15 added to MetaFilterGate Track 3 47-dim LGB gating in strategy_line.py; (2) config_hot_reload.load() JSONDecodeError resilience with try/except; (3) governance_state.json cleaned — 13 frozen + 5 disabled swing brain_states removed; (4) 5 swing brain configs moved to archive_deprecated/; (5) live.yaml brain registry entries removed; (6) 5 swing strategy lines disabled + regime_map cleaned | RC-09, RC-06 |
 | FIX-20260523-007 | 2026-05-23 | feedback-online, runtime-live | Mini-batch online learning: ExperienceReplayBuffer with EMA R-weighting, Fisher-Yates shuffle expansion, and class imbalance warning. Replaces single-sample partial_fit with shuffled mini-batches to prevent catastrophic forgetting from consecutive duplicate gradients. Wired into OnlineFeedbackHook + daily_ops pipeline. | RC-06, RC-12 |
+| FIX-20260523-008 | 2026-05-24 | execution-guards, feedback-online, runtime-live | Track 3d Conformal OU Gate: ConformalCalibrator with Q10 FIFO quantile adaptive threshold for OU MetaFilterGate. Cold-starts from journal, FIFO deque(maxlen=500), clamp [0.35, 0.70] with hit-rate monitoring. Integrated into MetaFilterGate.filter() for adaptive threshold, OnlineFeedbackHook for (p_win, label) updates, daily_ops for lifecycle. | RC-09 |
 
 ---
 ## Fix Details by Year
 
 | Year | File | Count |
 |------|------|-------|
-| 2026 | [FIX_REGISTRY_2026.md](FIX_REGISTRY_2026.md) | 84 |
+| 2026 | [FIX_REGISTRY_2026.md](FIX_REGISTRY_2026.md) | 85 |
 
 > New fix entries should be added to the relevant year file.
 > Keep the Fix Index table above updated with every fix.

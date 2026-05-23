@@ -205,9 +205,13 @@ def _step_online_feedback(base_dir: str, *, dry_run: bool = False) -> dict[str, 
     runs.  When buffer_size (20) is reached, samples are expanded by
     R-multiple weight, shuffled, and fed sequentially to avoid catastrophic
     forgetting from consecutive duplicate gradients.
+
+    Also maintains a ConformalCalibrator (Track 3d) for adaptive thresholding
+    of OU MetaFilterGate signals.
     """
     try:
         from core.brains.adapters.online_learner_adapter import OnlineLearnerAdapter
+        from core.execution.conformal_calibrator import ConformalCalibrator
         from core.feedback.experience_replay import ExperienceReplayBuffer
         from core.feedback.online_feedback_hook import OnlineFeedbackHook
 
@@ -231,6 +235,15 @@ def _step_online_feedback(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             buffer_size=20,
             state_path=str(replay_state_path),
         )
+
+        # ── Load or create conformal calibrator (Track 3d) ──
+        calibrator_state_path = base / "conformal_calibrator_state.json"
+        cal = ConformalCalibrator(
+            state_path=str(calibrator_state_path),
+        )
+        # Cold-start from journal on first run
+        live_journal_path = base / "live_trade_journal.jsonl"
+        cal.cold_start_from_journal(str(live_journal_path))
 
         if dry_run:
             journal_path = base / "live_trade_journal.jsonl"
@@ -270,6 +283,7 @@ def _step_online_feedback(base_dir: str, *, dry_run: bool = False) -> dict[str, 
                 journal_path=str(live_journal),
                 feature_store_dir=str(base / "feature_store" / "records"),
                 replay_buffer=replay,
+                calibrator=cal,
             )
             result = hook.process_new_trades(save_weights=False)
             total_collected += result.get("collected", 0)
@@ -287,6 +301,7 @@ def _step_online_feedback(base_dir: str, *, dry_run: bool = False) -> dict[str, 
                 feature_store_dir=str(base / "feature_store" / "records"),
                 last_processed_path=str(base / "paper_feedback_state.json"),
                 replay_buffer=replay,
+                calibrator=cal,
             )
             result = paper_hook.process_new_trades(save_weights=False)
             total_collected += result.get("collected", 0)
@@ -300,6 +315,7 @@ def _step_online_feedback(base_dir: str, *, dry_run: bool = False) -> dict[str, 
 
         updates_after = adapter._total_updates
         replay_diag = replay.describe()
+        cal_diag = cal.describe()
         return {
             "step": "online_feedback",
             "status": "ok",
@@ -314,6 +330,11 @@ def _step_online_feedback(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             "buffer_ready": replay.is_ready(),
             "running_r_mean": replay_diag["running_r_mean"],
             "class_dist": replay_diag["class_dist"],
+            "conformal_samples": cal_diag["sample_count"],
+            "conformal_warm": cal_diag["is_warm"],
+            "conformal_threshold": cal_diag["current_threshold"],
+            "conformal_q10": cal_diag["p_win_q10"],
+            "conformal_clamp_hits": cal_diag["clamp_hits_upper"],
         }
     except Exception as exc:
         return {"step": "online_feedback", "status": "error", "error": str(exc)[:500]}

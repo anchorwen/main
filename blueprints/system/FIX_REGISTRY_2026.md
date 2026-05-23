@@ -2465,3 +2465,45 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
   - Class imbalance ≥90% triggers WARNING before any gradient update
   - Buffer state persisted to disk — survives process restarts, accumulates across daily_ops invocations
 - **Dependents Checked**: OnlineFeedbackHook.process_new_trades() signature unchanged (backward compatible — replay_buffer defaults to None). daily_ops.py _step_online_feedback() return dict extended with new keys (additive, no breaking changes). All 2637 tests pass (15 new from test_experience_replay.py). mypy clean on new code. Blueprint compliance: check_blueprint_compliance.py MODULE_SOURCE_MAP updated (daily_ops.py→runtime_live, experience_replay.py→feedback_online).
+
+### FIX-20260523-008
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: execution-guards, feedback-online, runtime-live
+- **Files**:
+  - `core/execution/conformal_calibrator.py` (NEW: ConformalCalibrator class — 260 lines)
+  - `tests/test_conformal_calibrator.py` (NEW: 32 unit tests across 7 test classes)
+  - `core/execution/meta_filter_gate.py` (MODIFIED: calibrator parameter, adaptive threshold in filter())
+  - `core/feedback/online_feedback_hook.py` (MODIFIED: calibrator parameter, update on closed trades)
+  - `scripts/daily_ops.py` (MODIFIED: calibrator creation, cold-start, pass to hooks, diagnostics)
+  - `scripts/check_blueprint_compliance.py` (MODIFIED: conformal_calibrator.py→execution_guards)
+- **Description**: Track 3d Conformal OU Gate — adaptive conformal prediction threshold for OU MetaFilterGate.
+
+  **Problem**: MetaFilterGate (Track 3) gates statarb_dynamic/statarb_m15 with a fixed LightGBM threshold of 0.40. This has no adaptive capability — the same threshold is used in low-vol and high-vol regimes, ignoring distributional drift in the underlying model's P(win) output.
+
+  Track 4d (MetaSignalFilter for barrier_12bar) had conformal prediction with Q80 percentile thresholding, but it was disabled (FIX-20260523-003) because `max(80th_percentile, 0.50, 0.65)` self-inflated to ~0.679, silently rejecting 83% of proposals.
+
+  **Solution**: A lightweight ConformalCalibrator designed with 3 engineering guardrails from chief architect review:
+
+  1. **Q10 (not Q80) as target quantile** — counteracts survivorship bias. The journal only contains outcomes from signals that passed a prior threshold (left-truncated distribution). Using Q10 keeps the adaptive threshold near the base 0.40 rather than drifting upward like Track 4d's Q80.
+
+  2. **Simple FIFO deque(maxlen=500)** — no EMA-weighted quantiles for MVP. Time decay via oldest-sample eviction. `numpy.percentile()` for empirical quantile computation. Fast, robust, auditable.
+
+  3. **Clamp [0.35, 0.70] with hit-rate monitoring** — hard safety boundaries. If threshold is clamped at 0.70 for many consecutive computations, WARNING is logged — the base LGB model distribution has likely degraded and needs retraining.
+
+  **Key mechanics**:
+  - `compute_threshold()`: `clip(max(Q10, base=0.40), 0.35, 0.70)`
+  - Warmup: first 50 samples return `base_threshold` (no adaptation)
+  - Cold-start: `cold_start_from_journal()` seeds the rolling window from live_trade_journal.jsonl history
+  - `update(p_win, label)`: called by OnlineFeedbackHook on each closed trade
+  - JSON persistence: state file survives daily_ops restarts
+  - IPC: calibrator state file is the bridge between daily_ops (writer) and live_intent_loop/MetaFilterGate (reader)
+
+- **Root Cause**: RC-09 (config-drift): fixed threshold 0.40 does not adapt to volatility regime changes or base model distribution drift. Track 4d's conformal (Q80) was the wrong quantile choice — left-truncated distribution + high quantile = self-inflation death spiral.
+- **Prevention**:
+  - All OU signals now pass through adaptive conformal threshold when calibrator is warm
+  - Q10 percentile + base_threshold floor prevents threshold collapse
+  - Clamp hit-rate monitoring alerts on degraded base model
+  - Calibrator state persisted to disk — survives process restarts
+- **Dependents Checked**: MetaFilterGate.filter() return dict extended with `threshold_source` (backward compatible — all existing consumers check `passed`/`p_win`). OnlineFeedbackHook accepts optional calibrator (defaults to None — backward compatible). daily_ops return dict extended with conformal diagnostics (additive). All 2669 tests pass (+32 new from test_conformal_calibrator.py). mypy clean on new code.

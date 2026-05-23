@@ -41,6 +41,7 @@ class OnlineFeedbackHook:
         max_time_delta_seconds: int = 300,
         last_processed_path: str = "data/online_feedback_state.json",
         replay_buffer=None,  # ExperienceReplayBuffer | None
+        calibrator=None,  # ConformalCalibrator | None
     ):
         self._adapter = adapter
         self._journal_path = Path(journal_path)
@@ -49,6 +50,7 @@ class OnlineFeedbackHook:
         self._last_processed_path = Path(last_processed_path)
         self._last_processed_at: str | None = None
         self._replay = replay_buffer
+        self._calibrator = calibrator
         self._load_state()
 
     # ------------------------------------------------------------------
@@ -266,6 +268,17 @@ class OnlineFeedbackHook:
             matched += 1
             trade_id = str(entry.get("message_id", ""))
 
+            # ── Update conformal calibrator (Track 3d) ──
+            if self._calibrator is not None:
+                p_win = entry.get("p_win")
+                if p_win is None and isinstance(entry.get("detail"), dict):
+                    p_win = entry["detail"].get("p_win")
+                if p_win is not None:
+                    try:
+                        self._calibrator.update(float(p_win), label)
+                    except Exception:
+                        pass  # non-critical — calibrator update failure must not block feedback
+
             if self._replay is not None:
                 # ── Replay buffer path ──
                 try:
@@ -344,6 +357,7 @@ def run_online_feedback(
     *,
     save_weights: bool = True,
     replay_buffer=None,
+    calibrator=None,
 ) -> dict[str, Any]:
     """Convenience entry point — create a hook and process new trades."""
     hook = OnlineFeedbackHook(
@@ -351,5 +365,6 @@ def run_online_feedback(
         journal_path=f"{base_dir}/live_trade_journal.jsonl",
         feature_store_dir=f"{base_dir}/feature_store/records",
         replay_buffer=replay_buffer,
+        calibrator=calibrator,
     )
     return hook.process_new_trades(save_weights=save_weights)

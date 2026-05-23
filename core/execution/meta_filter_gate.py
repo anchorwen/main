@@ -97,6 +97,10 @@ class MetaFilterGate:
 
     Handles feature array construction from live pipeline outputs and
     delegates to MetaFilterAdapter for inference.
+
+    When a ConformalCalibrator is provided, the gate uses an adaptive
+    threshold computed from the empirical P(win) distribution instead of
+    a fixed threshold.  This is Track 3d — data-driven OU signal gating.
     """
 
     def __init__(
@@ -104,10 +108,12 @@ class MetaFilterGate:
         model_dir: str | Path = "data/models/meta_filter_v3",
         threshold: float = 0.50,
         ou_z_entry: float = 1.3,
+        calibrator=None,  # ConformalCalibrator | None
     ):
         self._model_dir = Path(model_dir)
         self._threshold = threshold
         self._ou_z_entry = ou_z_entry
+        self._calibrator = calibrator
         self._adapter: Any = None
         self._loaded = False
 
@@ -143,6 +149,10 @@ class MetaFilterGate:
         """Run meta-filter on live feature pipeline outputs.
 
         Returns dict with passed, p_win, threshold, reason.
+
+        When a ConformalCalibrator is present and warm, the threshold is
+        dynamically computed from the empirical P(win) distribution (Q10,
+        clamped [0.35, 0.70]).  Otherwise the fixed threshold is used.
         """
         if not self._loaded or self._adapter is None:
             return {
@@ -162,7 +172,28 @@ class MetaFilterGate:
             feature_names_path=fn_path,
         )
 
-        return self._adapter.filter_array(arr)
+        # ── Determine threshold (adaptive vs fixed) ──
+        if self._calibrator is not None and self._calibrator.is_warm:
+            effective_threshold = self._calibrator.compute_threshold()
+            threshold_source = "conformal_q10"
+        else:
+            effective_threshold = self._threshold
+            threshold_source = "fixed"
+
+        result = self._adapter.filter_array(arr)
+
+        # Re-evaluate with the adaptive threshold if the adapter used a
+        # different one internally.
+        p_win = float(result.get("p_win", 0.0))
+        passed = p_win >= effective_threshold
+
+        return {
+            "passed": passed,
+            "p_win": p_win,
+            "threshold": effective_threshold,
+            "threshold_source": threshold_source,
+            "reason": result.get("reason", "ok") if passed else "below_adaptive_threshold",
+        }
 
 
 # ── Module-level convenience ──
@@ -174,6 +205,7 @@ def get_meta_filter_gate(
     model_dir: str = "data/models/meta_filter_v3",
     threshold: float = 0.50,
     ou_z_entry: float = 1.3,
+    calibrator=None,  # ConformalCalibrator | None
 ) -> MetaFilterGate:
     """Get or create the global meta-filter gate (singleton pattern)."""
     global _global_gate
@@ -182,6 +214,7 @@ def get_meta_filter_gate(
             model_dir=model_dir,
             threshold=threshold,
             ou_z_entry=ou_z_entry,
+            calibrator=calibrator,
         )
         _global_gate.load()
     return _global_gate

@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-05-23T15:10:43Z
+> **自动生成**: 2026-05-23T17:03:45Z
 
 ## Package-Level Dependencies
 
@@ -167,6 +167,7 @@
 - `barrier_strategy.py` → `core.execution.strategy_line`
 - `broker_adapter.py` → (无内部依赖)
 - `capital_allocator.py` → `core.metrics.portfolio_optimizer`
+- `conformal_calibrator.py` → (无内部依赖)
 - `correlation_sizer.py` → (无内部依赖)
 - `dynamic_sl_tp.py` → (无内部依赖)
 - `execution_manager.py` → `core.contracts.exceptions`, `core.observability.metric_names`
@@ -436,7 +437,7 @@
 - `check_blueprint_compliance.py` → (无内部依赖)
 - `ci_prepare_v9_shadow_fixtures.py` → `apps.engine.main_v9_shadow`
 - `daily_cost_report.py` → (无内部依赖)
-- `daily_ops.py` → `core.alpha.lifecycle_service`, `core.alpha.performance_store`, `core.alpha.portfolio_allocator`, `core.alpha.promotion_gate`, `core.alpha.registry`, `core.brains.adapters.online_learner_adapter`, `core.contracts.training.label_contract`, `core.deployment.scheduled_task_registry`, `core.feedback.brain_performance_tracker`, `core.feedback.experience_replay`, `core.feedback.online_feedback_hook`, `core.feedback.param_optimizer`, `core.governance.governance_service`, `scripts.feature_store_maintenance`, `scripts.feedback_loop`, `scripts.live_daily_recap`, `scripts.live_shadow_ensemble`, `scripts.paper_trade_simulator`, `scripts.training.brain_leaderboard`, `scripts.training.champion_challenger`, `scripts.training.governance_scheduler`, `scripts.training.label_builder`, `scripts.training.retraining_trigger`
+- `daily_ops.py` → `core.alpha.lifecycle_service`, `core.alpha.performance_store`, `core.alpha.portfolio_allocator`, `core.alpha.promotion_gate`, `core.alpha.registry`, `core.brains.adapters.online_learner_adapter`, `core.contracts.training.label_contract`, `core.deployment.scheduled_task_registry`, `core.execution.conformal_calibrator`, `core.feedback.brain_performance_tracker`, `core.feedback.experience_replay`, `core.feedback.online_feedback_hook`, `core.feedback.param_optimizer`, `core.governance.governance_service`, `scripts.feature_store_maintenance`, `scripts.feedback_loop`, `scripts.live_daily_recap`, `scripts.live_shadow_ensemble`, `scripts.paper_trade_simulator`, `scripts.training.brain_leaderboard`, `scripts.training.champion_challenger`, `scripts.training.governance_scheduler`, `scripts.training.label_builder`, `scripts.training.retraining_trigger`
 - `deploy_blue_green.py` → `core.deployment.blue_green`
 - `feature_store_maintenance.py` → `core.deployment.feature_update_producer`, `core.deployment.scheduled_task_registry`, `core.features.computers.v9_live_computer`, `core.features.local_feature_store`, `core.features.update_job`
 - `feedback_loop.py` → `core.feedback.brain_performance_tracker`
