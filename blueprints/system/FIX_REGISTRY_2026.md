@@ -2422,3 +2422,46 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
   - ConfigHotReload has structured error handling with JSON event logging.
   - Governance state only contains active/probation brains (6), making orphan detection simpler.
 - **Dependents Checked**: statarb_m15→MetaFilterGate chain verified; config_hot_reload used by live_cycle.py and live_intent_loop.py, no API changes; 5 swing brains had no active dependents. All 2622 tests pass. mypy clean (pre-existing errors only).
+
+### FIX-20260523-007
+- **Date**: 2026-05-23
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: feedback-online, runtime-live
+- **Files**:
+  - `core/feedback/experience_replay.py` (NEW: ExperienceReplayBuffer class)
+  - `core/feedback/online_feedback_hook.py` (MODIFIED: replay_buffer wiring + _extract_pnl_volume)
+  - `scripts/daily_ops.py` (MODIFIED: buffer creation, pass to hooks, conditional save_weights)
+  - `tests/test_experience_replay.py` (NEW: 15 unit tests across 5 test classes)
+- **Description**: Mini-batch online learning with shuffled experience replay. Replaces single-sample `partial_fit(feat, label)` with a buffer-collect→expand→shuffle→discharge pipeline to prevent catastrophic forgetting in SGD.
+
+  **ExperienceReplayBuffer** (ring buffer, buffer_size=20):
+  - `add(feat, label, pnl, volume)` → computes R-approximate weight via EMA-smoothed running mean (α=0.05), appends to buffer
+  - `flush()` → expands each sample by integer weight `max(1, int(round(weight)))`, Fisher-Yates shuffles all expanded copies, returns `list[(feat, label)]` with no consecutive duplicates from the same trade
+  - Class imbalance diagnostic: warns if any label class exceeds 90% of buffer before flush
+  - JSON persistence: survives between daily_ops invocations
+
+  **R-multiple weight computation**:
+  - `r_abs = abs(pnl)` — PnL already reflects dollar outcome, no volume division needed
+  - EMA adaptive: `running_r_mean = 0.05 * r_abs + 0.95 * running_r_mean` tracks volatility regime shifts
+  - Weight = `clip(r_abs / running_r_mean, 0.3, 3.0)` — 3x max for high-R trades, 0.3x min for noise
+
+  **OnlineFeedbackHook changes**:
+  - `__init__` accepts optional `replay_buffer` parameter
+  - `process_new_trades()`: with buffer → collects trades into buffer, flushes shuffled mini-batch when ready; without buffer → legacy direct partial_fit
+  - New `_extract_pnl_volume()` static method for journal entry PnL/volume extraction
+
+  **daily_ops.py changes**:
+  - `_step_online_feedback()` creates ExperienceReplayBuffer, passes to both live and paper hooks
+  - Only calls `adapter.save_weights()` if buffer actually flushed (model was updated)
+  - Returns additional diagnostics: buffer_size, buffer_ready, running_r_mean, class_dist
+
+  **Fisher-Yates shuffle is the critical safety mechanism**: naively looping `for _ in range(int(weight*10)): partial_fit(feat, label)` on the SAME sample consecutively sends SGD into a local-optimum death spiral. The shuffle interleaves high-weight duplicates across the pass, smoothing gradient trajectory while preserving their increased contribution.
+
+- **Root Cause**: RC-06 (contract-violation): single-sample SGD ignored trade magnitude — every trade had equal gradient weight regardless of whether it was a 3R home run or a -0.5R noise exit. RC-12 (data-quality): consecutive high-weight duplicates from the same trade would catastrophically overfit without interleaved shuffling.
+- **Prevention**:
+  - All closed trades now pass through ExperienceReplayBuffer before partial_fit
+  - Shuffle-before-fit is enforced by buffer.flush() architecture
+  - Class imbalance ≥90% triggers WARNING before any gradient update
+  - Buffer state persisted to disk — survives process restarts, accumulates across daily_ops invocations
+- **Dependents Checked**: OnlineFeedbackHook.process_new_trades() signature unchanged (backward compatible — replay_buffer defaults to None). daily_ops.py _step_online_feedback() return dict extended with new keys (additive, no breaking changes). All 2637 tests pass (15 new from test_experience_replay.py). mypy clean on new code. Blueprint compliance: check_blueprint_compliance.py MODULE_SOURCE_MAP updated (daily_ops.py→runtime_live, experience_replay.py→feedback_online).

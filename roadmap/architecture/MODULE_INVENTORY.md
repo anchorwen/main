@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-23T14:25:50Z
-> **扫描模块数**: 439
+> **自动生成**: 2026-05-23T15:10:43Z
+> **扫描模块数**: 440
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -280,8 +280,9 @@
 | `brain_pnl_ledger.py` | ✅ active | BrainPnLMetrics, BrainPnLStore | 20 | 721 | — | |
 | `brain_quality_engine.py` | ✅ active | BrainQualityVerdict, BrainQualityEngine | 13 | 431 | — | |
 | `decision_scorer.py` | ✅ active | DecisionScorer | 5 | 120 | — | |
+| `experience_replay.py` | ✅ active | ExperienceReplayBuffer | 9 | 225 | — | |
 | `feedback_loop.py` | ✅ active | FeedbackLoop | 4 | 99 | — | |
-| `online_feedback_hook.py` | ✅ active | OnlineFeedbackHook | 7 | 271 | — | |
+| `online_feedback_hook.py` | ✅ active | OnlineFeedbackHook | 8 | 355 | — | |
 | `outcome_collector.py` | ✅ active | OutcomeCollector | 4 | 111 | — | |
 | `param_optimizer.py` | ✅ active | — | 5 | 283 | — | |
 | `performance_analytics.py` | ✅ active | PerformanceAnalytics | 11 | 162 | — | |
@@ -512,10 +513,10 @@
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 525 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 527 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 24 | 1034 | — | |
+| `daily_ops.py` | ✅ active | — | 24 | 1065 | — | |
 | `deploy_blue_green.py` | ✅ active | — | 7 | 126 | — | |
 | `feature_store_maintenance.py` | ✅ active | — | 8 | 275 | — | |
 | `feedback_loop.py` | ✅ active | — | 12 | 431 | — | |

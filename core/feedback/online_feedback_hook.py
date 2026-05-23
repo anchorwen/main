@@ -25,7 +25,12 @@ class OnlineFeedbackHook:
 
     Matching strategy: for each closed trade with a `close_recorded_at`
     timestamp, find the nearest feature record in LocalFeatureStore within
-    max_time_delta_seconds.  If a match is found, call adapter.partial_fit().
+    max_time_delta_seconds.  If a match is found, add to experience replay
+    buffer or call adapter.partial_fit() directly.
+
+    When an ExperienceReplayBuffer is provided and reaches buffer_size,
+    samples are expanded by R-multiple weight, shuffled, and fed sequentially
+    to avoid catastrophic forgetting from consecutive duplicate gradients.
     """
 
     def __init__(
@@ -35,6 +40,7 @@ class OnlineFeedbackHook:
         feature_store_dir: str = "data/feature_store/records",
         max_time_delta_seconds: int = 300,
         last_processed_path: str = "data/online_feedback_state.json",
+        replay_buffer=None,  # ExperienceReplayBuffer | None
     ):
         self._adapter = adapter
         self._journal_path = Path(journal_path)
@@ -42,6 +48,7 @@ class OnlineFeedbackHook:
         self._max_delta = max_time_delta_seconds
         self._last_processed_path = Path(last_processed_path)
         self._last_processed_at: str | None = None
+        self._replay = replay_buffer
         self._load_state()
 
     # ------------------------------------------------------------------
@@ -163,12 +170,45 @@ class OnlineFeedbackHook:
         return best_row
 
     # ------------------------------------------------------------------
+    # R-multiple extraction
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_pnl_volume(entry: dict[str, Any]) -> tuple[float, float]:
+        """Extract (pnl, volume) from a closed-trade journal entry.
+
+        PnL is the realised profit/loss in account currency.  Volume is the
+        position size in lots.  Used to compute approximate R-multiple for
+        sample weighting.
+        """
+        pnl = entry.get("pnl")
+        if pnl is None and isinstance(entry.get("detail"), dict):
+            pnl = entry["detail"].get("pnl")
+        try:
+            pnl_f = float(pnl) if pnl is not None else 0.0
+        except (ValueError, TypeError):
+            pnl_f = 0.0
+
+        try:
+            volume = float(entry.get("volume", 0.01))
+        except (ValueError, TypeError):
+            volume = 0.01
+
+        return pnl_f, max(volume, 0.01)
+
+    # ------------------------------------------------------------------
     # Main processing loop
     # ------------------------------------------------------------------
 
     def process_new_trades(self, *, save_weights: bool = True) -> dict[str, Any]:
-        """Scan journal for new closed trades since last_processed_at and
-        update the adapter for each one with a matchable feature vector.
+        """Scan journal for new closed trades since last_processed_at.
+
+        With a replay buffer: collects trades into buffer, flushes a shuffled
+        mini-batch when buffer_size is reached, then calls partial_fit
+        sequentially (shuffle prevents catastrophic forgetting).
+
+        Without a replay buffer: calls adapter.partial_fit() directly for each
+        trade (legacy single-sample behaviour).
 
         Returns a summary dict with counts.
         """
@@ -185,7 +225,8 @@ class OnlineFeedbackHook:
             except json.JSONDecodeError:
                 continue
 
-        updated = 0
+        collected = 0
+        matched = 0
         skipped = 0
         errors = 0
         latest_processed = self._last_processed_at
@@ -222,36 +263,77 @@ class OnlineFeedbackHook:
                 )
                 continue
 
-            try:
-                import numpy as np
+            matched += 1
+            trade_id = str(entry.get("message_id", ""))
 
-                feat_arr = np.array(list(features.values()), dtype=np.float64)
-                success = self._adapter.partial_fit(feat_arr, label)
-                if success:
-                    updated += 1
-                    logger.info(
-                        "OnlineFeedbackHook: updated adapter with label=%d (trade=%s)",
-                        label,
-                        entry.get("message_id", "?"),
-                    )
-                else:
+            if self._replay is not None:
+                # ── Replay buffer path ──
+                try:
+                    import numpy as np
+
+                    feat_arr = np.array(list(features.values()), dtype=np.float64)
+                    pnl, volume = self._extract_pnl_volume(entry)
+                    self._replay.add(feat_arr, label, pnl, volume, trade_id=trade_id)
+                    collected += 1
+                except Exception:
                     errors += 1
-            except Exception:
-                errors += 1
-                logger.exception(
-                    "OnlineFeedbackHook: update failed for trade %s", entry.get("message_id", "?")
-                )
+                    logger.exception("OnlineFeedbackHook: buffer add failed for trade %s", trade_id)
+            else:
+                # ── Legacy direct partial_fit path ──
+                try:
+                    import numpy as np
+
+                    feat_arr = np.array(list(features.values()), dtype=np.float64)
+                    success = self._adapter.partial_fit(feat_arr, label)
+                    if success:
+                        collected += 1
+                        logger.info(
+                            "OnlineFeedbackHook: updated adapter with label=%d (trade=%s)",
+                            label,
+                            trade_id,
+                        )
+                    else:
+                        errors += 1
+                except Exception:
+                    errors += 1
+                    logger.exception("OnlineFeedbackHook: update failed for trade %s", trade_id)
 
             if recorded_at > (latest_processed or ""):
                 latest_processed = recorded_at
 
+        # ── Flush replay buffer if ready ──
+        flushed_count = 0
+        if self._replay is not None and self._replay.is_ready():
+            try:
+                batch = self._replay.flush()
+                for feat, lbl in batch:
+                    self._adapter.partial_fit(feat, lbl)
+                flushed_count = len(batch)
+                logger.info(
+                    "OnlineFeedbackHook: flushed mini-batch — %d samples from %d trades",
+                    flushed_count,
+                    len(batch),
+                )
+            except Exception:
+                logger.exception("OnlineFeedbackHook: mini-batch flush failed")
+
         self._last_processed_at = latest_processed
         self._save_state()
 
+        updated = flushed_count if self._replay is not None else collected
         if save_weights and updated > 0:
             self._adapter.save_weights()
 
-        summary = {"status": "ok", "updated": updated, "skipped": skipped, "errors": errors}
+        summary = {
+            "status": "ok",
+            "collected": collected,
+            "matched": matched,
+            "skipped": skipped,
+            "errors": errors,
+            "flushed": flushed_count,
+            "updated": updated,
+            "buffer_size": self._replay.size if self._replay else 0,
+        }
         logger.info("OnlineFeedbackHook: %s", summary)
         return summary
 
@@ -261,11 +343,13 @@ def run_online_feedback(
     base_dir: str = "data",
     *,
     save_weights: bool = True,
+    replay_buffer=None,
 ) -> dict[str, Any]:
     """Convenience entry point — create a hook and process new trades."""
     hook = OnlineFeedbackHook(
         adapter=adapter,
         journal_path=f"{base_dir}/live_trade_journal.jsonl",
         feature_store_dir=f"{base_dir}/feature_store/records",
+        replay_buffer=replay_buffer,
     )
     return hook.process_new_trades(save_weights=save_weights)

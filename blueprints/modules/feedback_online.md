@@ -7,6 +7,7 @@ Bridges closed trades from the journal to the online learner for live model upda
 | File | Role |
 |------|------|
 | `core/feedback/online_feedback_hook.py` | `OnlineFeedbackHook` — journal→feature_store→partial_fit bridge |
+| `core/feedback/experience_replay.py` | `ExperienceReplayBuffer` — R-weighted shuffle buffer for mini-batch SGD |
 | `core/feedback/param_optimizer.py` | `suggest_parameters()` — hyperparameter tuning suggestions |
 
 ## Data Flow
@@ -15,7 +16,9 @@ Trade journal (closed trades) → OnlineFeedbackHook
     ↓
 LocalFeatureStore (get features at entry time)
     ↓
-OnlineLearnerAdapter.partial_fit(features, label)
+ExperienceReplayBuffer (collect 20 trades → R-weight → Fisher-Yates shuffle)
+    ↓
+OnlineLearnerAdapter.partial_fit(features, label) × N shuffled samples
     ↓
 Drift check → snapshot / rollback / freeze
 ```
@@ -35,6 +38,7 @@ Drift check → snapshot / rollback / freeze
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260523-007 | 2026-05-23 | cursor-agent | — | Mini-batch online learning: ExperienceReplayBuffer with EMA R-weighting, Fisher-Yates shuffle, class imbalance warning | single-sample SGD ignored trade magnitude; consecutive duplicates risked catastrophic forgetting |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |
 
 ## Cross-Module Contracts

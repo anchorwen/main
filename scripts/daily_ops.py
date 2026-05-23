@@ -199,9 +199,16 @@ def _step_feedback_loop(
 
 
 def _step_online_feedback(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
-    """Feed closed trade outcomes to OnlineLearnerAdapter via partial_fit."""
+    """Feed closed trade outcomes to OnlineLearnerAdapter via mini-batch partial_fit.
+
+    Uses ExperienceReplayBuffer to collect trades across multiple daily_ops
+    runs.  When buffer_size (20) is reached, samples are expanded by
+    R-multiple weight, shuffled, and fed sequentially to avoid catastrophic
+    forgetting from consecutive duplicate gradients.
+    """
     try:
         from core.brains.adapters.online_learner_adapter import OnlineLearnerAdapter
+        from core.feedback.experience_replay import ExperienceReplayBuffer
         from core.feedback.online_feedback_hook import OnlineFeedbackHook
 
         base = Path(base_dir)
@@ -217,6 +224,13 @@ def _step_online_feedback(base_dir: str, *, dry_run: bool = False) -> dict[str, 
         adapter = OnlineLearnerAdapter(brain_entry)
         adapter.load()
         updates_before = adapter._total_updates
+
+        # ── Load or create replay buffer ──
+        replay_state_path = base / "experience_replay_state.json"
+        replay = ExperienceReplayBuffer(
+            buffer_size=20,
+            state_path=str(replay_state_path),
+        )
 
         if dry_run:
             journal_path = base / "live_trade_journal.jsonl"
@@ -238,11 +252,15 @@ def _step_online_feedback(base_dir: str, *, dry_run: bool = False) -> dict[str, 
                 "dry_run": True,
                 "updates_before": updates_before,
                 "closed_trades_in_journals": closed_count,
+                "buffer_size": replay.size,
+                "buffer_ready": replay.is_ready(),
             }
 
-        total_updated = 0
+        total_collected = 0
+        total_matched = 0
         total_skipped = 0
         total_errors = 0
+        total_flushed = 0
 
         # 1. Process live trade journal
         live_journal = base / "live_trade_journal.jsonl"
@@ -251,11 +269,14 @@ def _step_online_feedback(base_dir: str, *, dry_run: bool = False) -> dict[str, 
                 adapter=adapter,
                 journal_path=str(live_journal),
                 feature_store_dir=str(base / "feature_store" / "records"),
+                replay_buffer=replay,
             )
             result = hook.process_new_trades(save_weights=False)
-            total_updated += result.get("updated", 0)
+            total_collected += result.get("collected", 0)
+            total_matched += result.get("matched", 0)
             total_skipped += result.get("skipped", 0)
             total_errors += result.get("errors", 0)
+            total_flushed += result.get("flushed", 0)
 
         # 2. Process paper trade journal
         paper_journal = base / "paper_trade_journal.jsonl"
@@ -265,24 +286,34 @@ def _step_online_feedback(base_dir: str, *, dry_run: bool = False) -> dict[str, 
                 journal_path=str(paper_journal),
                 feature_store_dir=str(base / "feature_store" / "records"),
                 last_processed_path=str(base / "paper_feedback_state.json"),
+                replay_buffer=replay,
             )
             result = paper_hook.process_new_trades(save_weights=False)
-            total_updated += result.get("updated", 0)
+            total_collected += result.get("collected", 0)
+            total_matched += result.get("matched", 0)
             total_skipped += result.get("skipped", 0)
             total_errors += result.get("errors", 0)
+            total_flushed += result.get("flushed", 0)
 
-        if total_updated > 0:
+        if total_flushed > 0:
             adapter.save_weights()
 
         updates_after = adapter._total_updates
+        replay_diag = replay.describe()
         return {
             "step": "online_feedback",
             "status": "ok",
             "updates_before": updates_before,
             "updates_after": updates_after,
-            "updated": total_updated,
+            "collected": total_collected,
+            "matched": total_matched,
             "skipped": total_skipped,
             "errors": total_errors,
+            "flushed": total_flushed,
+            "buffer_size": replay.size,
+            "buffer_ready": replay.is_ready(),
+            "running_r_mean": replay_diag["running_r_mean"],
+            "class_dist": replay_diag["class_dist"],
         }
     except Exception as exc:
         return {"step": "online_feedback", "status": "error", "error": str(exc)[:500]}

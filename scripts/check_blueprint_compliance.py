@@ -122,6 +122,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
     "feedback_online": [
         "core/feedback/online_feedback_hook.py",
         "core/feedback/param_optimizer.py",
+        "core/feedback/experience_replay.py",
     ],
     "protocol_governance": ["core/governance/"],
     "protocol_parliament": ["core/parliament/"],
@@ -189,6 +190,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
     ],
     "runtime_live": [
         "core/runtime/",
+        "scripts/daily_ops.py",
         "scripts/live_intent_loop.py",
         "scripts/live_launcher.py",
         "scripts/bridge_supervisor.py",
