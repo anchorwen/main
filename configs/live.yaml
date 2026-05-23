@@ -17,6 +17,8 @@ brains:
   registry_entries:
   - path: configs/brains/ou_params_v6.json
     enabled: true
+  - path: configs/brains/ou_params_v7_m15.json
+    enabled: true
   - path: configs/brains/xgboost_d1_swing.json
     enabled: false  # FIX-20260521-003: 100% LONG-only, -31R/334 trades, 42.5% WR
   - path: configs/brains/meta_stage1_huber_v1.json
