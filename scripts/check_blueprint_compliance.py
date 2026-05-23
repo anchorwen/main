@@ -178,6 +178,9 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/market/calendar.py",
         "scripts/features/feature_store_warmer.py",
     ],
+    "market_mtf": [
+        "core/market/mtf_price_service.py",
+    ],
     "monitor_dashboard": [
         "apps/monitor/live_trading_dashboard.py",
         "core/observability/diagnostics_dashboard.py",

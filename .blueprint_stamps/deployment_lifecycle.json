@@ -1,0 +1,24 @@
+{
+  "module": "deployment_lifecycle",
+  "acknowledged_at": 1779509146.2119532,
+  "files": {
+    "core/deployment/lifecycle_manager.py": "844d4fe5d4f0f059",
+    "core/deployment/state_persistence.py": "575b93466466e72a",
+    "core/deployment/health_check.py": "c1c760cc019ab2c4",
+    "core/deployment/capability_registry.py": "6b82886277883473",
+    "core/deployment/operational_support.py": "977ad18bfdef4d9f",
+    "core/deployment/brain_lifecycle_manager.py": "d3c13575f5e84bd5",
+    "core/deployment/blue_green.py": "db642d9e4b2fa33b",
+    "core/deployment/operations_timeline.py": "b69fb02c0bcb2b99",
+    "core/deployment/postmortem_report.py": "d4be20a8293b8f9a",
+    "core/deployment/release_certification.py": "1f84b88cc0bfa025",
+    "core/deployment/release_registry.py": "89658b03a4722f57",
+    "core/deployment/runbook_engine.py": "f290138e2e512767",
+    "scripts/verify.py": "9f4652e9362b5bb7",
+    "scripts/validate_blueprints.py": "c1a19b5c128824ed",
+    "scripts/check_blueprint_compliance.py": "c3bb933b15f8e12b",
+    "scripts/hook_blueprint_precheck.py": "043ef5e54a354458",
+    "scripts/hook_mypy_check.py": "a021761187d52ad4",
+    "scripts/_fix_unused_ignores_v2.py": "bb952c71a861fd98"
+  }
+}

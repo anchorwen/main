@@ -2363,3 +2363,35 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
   - Infrastructure code never references specific brain_ids — new brains declare roles in JSON.
   - `extract_probe_score()` dual-path with clear fallback contract: BrainSignal.raw_score (primary) → extensions.raw_outputs (legacy).
 - **Dependents Checked**: strategy_line.py evaluate path, live_cycle.py BarrierStrategy construction + meta_probe_specs wiring, shadow_recorder.py record_brain_votes. 2622 tests pass. mypy + ruff clean on new code.
+
+### FIX-20260523-004
+- **Date**: 2026-05-23
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: runtime-live, market-mtf
+- **Files**:
+  - `core/market/mtf_price_service.py` (NEW, ~160 lines)
+  - `core/runtime/live_cycle.py` (MODIFIED: +MTFPriceService integration, M15 bar-boundary gating, M15-resampled mid_price routing)
+  - `configs/brains/ou_params_v7_m15.json` (NEW — OU brain for statarb_m15)
+  - `configs/live.yaml` (MODIFIED: statarb_m15 enabled: true)
+  - `scripts/live_intent_loop.py` (MODIFIED: M15-resampled close bootstrap for statarb_m15 brains)
+- **Description**: M15 infrastructure assault — fills the M15 mid_price pipeline gap that prevented statarb_m15 from trading.
+  - **Architecture requirements satisfied**:
+    1. **No simple time slicing**: MTFPriceService reconstructs M15 OHLC bars from M5 tick mid_price history. Bars are only "closed" when the M15 boundary (00/15/30/45) has passed — never from an incomplete window.
+    2. **Down-sampling Alignment**: `_evaluate_strategy_lines` now gates M15 strategies — `continue` skipped on non-boundary M5 cycles. The M15 brain is only evaluated at 00/15/30/45.
+    3. **Compute Decoupling**: `MTFPriceService` is an independent service in `core/market/`, not inlined in live_cycle.py. It buffers tick mid_prices with timestamps, reconstructs OHLC on boundary crossings, and exposes `latest_m15_close`/`latest_m15_hl2`/`latest_m15_ohlc4` + `is_m15_boundary(minute)`.
+  - **M15 brain**: `ou_params_v7_m15.json` — same `brain_type: "ou_params_v6"` (ParamsBrainAdapter), same artifact (`arb_params_v7.json` with z_entry=1.3 from Optuna TPE), but `contract_group: "statarb_m15"`. The brain's ring buffer receives M15-bar-close prices at 15-minute intervals instead of M5 tick mid_prices.
+  - **Bootstrapping**: Warm-start code in `live_intent_loop.py` resamples M5 closes → M15 closes (`prices[2::3]`) for brains with `contract_group == "statarb_m15"`, pre-filling the OU buffer to avoid the 25-hour cold-start warmup.
+  - **MTFPriceService details**:
+    - `feed_tick(ts, mid_price)`: records each M5-cycle tick sample, auto-closes M15 bars on boundary crossing
+    - `bootstrap(m5_closes)`: pre-fills from historical M5 closes with synthetic timestamps
+    - `_close_bar(tf, boundary_ts)`: builds OHLC bar from ticks in `[boundary-bar_s, boundary)` window
+    - Supports M15 and H1 (extensible), max 200 completed bars retained
+  - The `mtf_price_service` is passed through to `_evaluate_strategy_lines` which performs per-strategy price routing: M15 strategies use `latest_m15_close`, all others use live tick `mid_price`.
+- **Root Cause**: RC-06 (contract-violation — missing infrastructure): statarb_m15 was declared in live.yaml and contract_groups.py with full SL/TP/budget config, but no M15 mid_price pipeline existed to feed it correctly-sampled price data. Feeding raw M5 tick prices to an M15 OU brain would estimate OU parameters on the wrong sampling frequency (5-min vs 15-min), silently producing different z-scores than backtest. The "disabled: requires M15 mid_price pipeline" comment from commit 6803d2a acknowledged the gap.
+- **Prevention**: 
+  - MTFPriceService is a standalone, testable service — no data flow coupling to live_cycle internals beyond `feed_tick()`.
+  - Bar-boundary gating is enforced at the evaluation loop level — the M15 brain physically cannot see incomplete bars.
+  - M15-resampled bootstrapping ensures the brain buffer contains correctly-sampled prices from startup.
+  - The `is_m15_boundary()` static method provides a single source of truth for M15 alignment checks.
+- **Dependents Checked**: live_cycle.py multi-strategy evaluation path, live_intent_loop.py warm-start, StatArbStrategy._run_inference (no changes needed — receives correct price from caller). All 2622 tests pass. mypy + ruff clean on new and modified code.

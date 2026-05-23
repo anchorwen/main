@@ -1766,6 +1766,11 @@ def main(argv: list[str] | None = None) -> int:
                             rates = mt5.copy_rates_from_pos(args.symbol, mt5.TIMEFRAME_M5, 0, 300)
                             if rates is not None and len(rates) >= 30:
                                 prices = [float(r["close"]) for r in rates]
+                                # For M15 brains, resample M5 closes → M15 closes
+                                # (every 3rd M5 close, starting from the 3rd bar)
+                                cg = b_info.get("contract_group", "")
+                                if cg == "statarb_m15":
+                                    prices = prices[2::3]
                                 adapter.bootstrap_buffer(prices)
                                 print(
                                     json.dumps(

@@ -65,6 +65,7 @@ EXPECTED_MODULES = [
     "runtime_live",
     "runtime_state",
     "training",
+    "market_mtf",
     "monitor_dashboard",
 ]
 

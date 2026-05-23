@@ -28,6 +28,9 @@ from core.execution.strategy_budget import StrategyBudget
 # ── Strategy line imports ──
 from core.execution.strategy_line import StrategyLineConfig
 from core.execution.swing_strategy import SwingStrategy
+
+# ── Extracted sub-modules (P2 refactor) ──
+from core.market.mtf_price_service import MTFPriceService
 from core.parliament.contract_groups import (
     ALL_GROUPS,
     ARB_GROUP,
@@ -38,8 +41,6 @@ from core.parliament.contract_groups import (
     MICRO_M15_GROUP,
     STATARB_M15_GROUP,
 )
-
-# ── Extracted sub-modules (P2 refactor) ──
 from core.runtime.market_ingress import (  # noqa: F401 — re-export
     _bootstrap_regime_gate,
     _feed_regime_gate_cycle,
@@ -179,6 +180,7 @@ class LiveCycleState:
     _cooldown_registry: Any = None  # CooldownRegistry (Cut 1: Absolute Refractory Period)
     _family_entry_tracker: Any = None  # FamilyEntryTracker (Cut 2: Cross-Strategy Spacing)
     _meta_filter_gate: Any = None  # MetaFilterGate (LightGBM 47-dim OU signal quality filter)
+    _mtf_price_service: Any = None  # MTFPriceService — M15 bar reconstruction from M5 tick history
 
     # Circuit breaker: 3 consecutive degraded cycles → management-only mode
     _consecutive_degraded_cycles: int = 0
@@ -3235,6 +3237,7 @@ def _evaluate_strategy_lines(
     micro_feature_dict: dict[str, float] | None = None,
     cooldown_registry: Any = None,
     family_entry_tracker: Any = None,
+    mtf_price_service: Any = None,
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue.
 
@@ -3260,6 +3263,20 @@ def _evaluate_strategy_lines(
             )
             continue
 
+        # ── M15 bar-boundary gating: only evaluate M15 strategies at 00/15/30/45 ──
+        _tf = getattr(getattr(strategy, "config", None), "timeframe", "M5")
+        if _tf == "M15" and mtf_price_service is not None:
+            _utc_minute = datetime.now(UTC).minute
+            if not mtf_price_service.is_m15_boundary(_utc_minute):
+                continue  # skip — M15 bar not yet complete, no future function leakage
+            _m15_price = mtf_price_service.latest_m15_close
+            if _m15_price is not None and _m15_price > 0:
+                _effective_mid = _m15_price
+            else:
+                _effective_mid = mid_price
+        else:
+            _effective_mid = mid_price
+
         # ── Cut 1: Absolute Refractory Period (cooldown check) ──
         if cooldown_registry is not None:
             _cd_allowed, _cd_reason = cooldown_registry.check_cooldown(
@@ -3283,7 +3300,7 @@ def _evaluate_strategy_lines(
         decision = strategy.evaluate(
             feature_vector=feature_vector,
             micro_feature_vector=micro_feature_vector,
-            mid_price=mid_price,
+            mid_price=_effective_mid,
             bid=bid,
             ask=ask,
             current_atr=current_atr,
@@ -3870,6 +3887,25 @@ def execute_live_cycle(
         state._recent_mid_prices.append(mid_price)
         if len(state._recent_mid_prices) > 50:
             state._recent_mid_prices.pop(0)
+
+    # ── MTF Price Service: M15 bar reconstruction from M5 tick history ──
+    if not hasattr(state, "_mtf_price_service") or state._mtf_price_service is None:
+        state._mtf_price_service = MTFPriceService()
+        # Bootstrap from historical M5 closes so M15 bars are available immediately
+        if not config.no_mt5 and mt5 is not None:
+            try:
+                _hist_rates = mt5.copy_rates_from_pos(config.symbol, mt5.TIMEFRAME_M5, 0, 200)
+                if _hist_rates is not None and len(_hist_rates) >= 6:
+                    _closes = [float(r[4]) for r in _hist_rates]
+                    state._mtf_price_service.bootstrap(_closes)
+            except Exception:
+                pass
+    if mid_price is not None and mid_price > 0 and state._mtf_price_service is not None:
+        try:
+            _now_s = int(datetime.now(UTC).timestamp())
+            state._mtf_price_service.feed_tick(_now_s, mid_price)
+        except Exception:
+            pass
 
     # ── Tick sanity check ──
     if _bid is not None and _ask is not None and _bid > 0:
@@ -4901,6 +4937,7 @@ def execute_live_cycle(
             micro_feature_dict=micro_feature_dict,
             cooldown_registry=state._cooldown_registry,
             family_entry_tracker=state._family_entry_tracker,
+            mtf_price_service=getattr(state, "_mtf_price_service", None),
         )
 
         # Log strategy evaluation results

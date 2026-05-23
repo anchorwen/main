@@ -205,6 +205,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260523-001 | 2026-05-23 | execution-orders | P(win) feedback loop: p_win + kelly_mult + entry_context now recorded in live_trade_journal. dispatch_live_open_order() → execution_payload → mt5_bridge_worker journal extraction. Enables empirical precision-curve calibration: compare P(win) predictions against realized trade outcomes. | RC-12 |
 | FIX-20260523-002 | 2026-05-23 | execution-orders | OU z_entry harmonized at Optuna 1.3: strategy_line.py inflection gate 2.0→1.3, position_manager.py defaults 1.5→1.3, matching artifact (arb_params_v7.json already 1.3). Eliminates effective bottleneck of max(1.3,2.0)=2.0 that silenced OU brain. | RC-09 |
 | FIX-20260523-003 | 2026-05-23 | protocol-services | Meta Filter (Track 4d) conformal prediction disabled to fix threshold at 0.65. Conformal was computing max(80th_pctile, 0.50, 0.65)=~0.679, rejecting 83% of barrier_12bar proposals. Pass rate increases 17%→~28%, accelerating sample collection for data-driven threshold calibration. | RC-09 |
+| FIX-20260523-004 | 2026-05-23 | runtime-live, market-mtf | M15 infrastructure assault: MTFPriceService for decoupled M15 bar reconstruction from M5 tick history, bar-boundary gating (00/15/30/45 only), OU brain config for statarb_m15, enabled statarb_m15 in live.yaml, M15-resampled OU buffer bootstrapping. Never feeds incomplete M15 bars to models. | RC-06, RC-07 |
 
 ---
 ## Fix Details by Year

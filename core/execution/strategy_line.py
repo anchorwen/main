@@ -1311,6 +1311,8 @@ def _counter_trend_action(
                         penalise at H1 >= 0.30 or H4 >= 0.20
                         (permissive: mean-reversion is counter-trend by design,
                         but strong trends crush OU mean-reversion, especially shorts)
+      - statarb_m15:    same as statarb_dynamic — M15 mean-reversion uses
+                        identical permissive thresholds
 
     Penalise now applies BOTH a confidence reduction AND a volume multiplier
     (vol_mult), making the penalty meaningful.  Previously only confidence was
@@ -1363,6 +1365,16 @@ def _counter_trend_action(
             "h4_vol_mult": 1.0,
         },
         "statarb_dynamic": {
+            "block": 0.55,
+            "penalise": 0.30,
+            "conf_mult": 0.70,
+            "vol_mult": 0.75,
+            "h4_block": 0.35,
+            "h4_penalise": 0.20,
+            "h4_conf_mult": 0.65,
+            "h4_vol_mult": 0.70,
+        },
+        "statarb_m15": {
             "block": 0.55,
             "penalise": 0.30,
             "conf_mult": 0.70,

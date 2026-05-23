@@ -64,6 +64,7 @@
 | **monitor/dashboard** | feedback, governance, observability |
 | **deployment/config** | contracts |
 | **deployment/lifecycle** | contracts, state |
+| **market/mtf** | — (self-contained, stdlib datetime only) |
 
 ## Apps → Core Dependencies
 

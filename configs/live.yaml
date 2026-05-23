@@ -290,7 +290,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.10
   statarb_m15:
-    enabled: false
+    enabled: true
     timeframe: M15
     magic: 90103
     brain_types:
