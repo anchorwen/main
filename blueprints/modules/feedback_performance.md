@@ -40,6 +40,8 @@ Execution events → OutcomeCollector → DecisionScorer → BrainPerformanceTra
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+|--------|------|--------|--------|---------|------------|
+| FIX-20260524-011 | 2026-05-24 | cursor-agent | — | Variable shadowing fix: renamed outcome→resolved in accepted/rejected label blocks. Mypy inferred outcome as str from earlier loop, breaking dict assignment. | RC-02 |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |
 | FIX-20260514-004 | 2026-05-14 | cursor-agent | a4a1005 | Add marginal tier (score 10-20), fix WR cliff with smooth ramp, fix DD component when PnL<=0, add marginal to all tier mappings | boundary-error |
 

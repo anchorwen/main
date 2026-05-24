@@ -305,24 +305,24 @@ def ingest_journal_to_tracker(
         for entry in accepted:
             ticket = entry.get("position_ticket")
             label = label_index.get(int(ticket)) if ticket is not None else None
-            outcome = _outcome_from_label(label, "accepted")
-            outcome["brain_id"] = brain_id
-            outcome["position_ticket"] = ticket
-            outcome["symbol"] = entry.get("symbol", "")
-            outcome["side"] = entry.get("side", "")
-            outcome["recorded_at"] = entry.get("recorded_at", "")
-            updates.append(outcome)
+            resolved = _outcome_from_label(label, "accepted")
+            resolved["brain_id"] = brain_id
+            resolved["position_ticket"] = ticket
+            resolved["symbol"] = entry.get("symbol", "")
+            resolved["side"] = entry.get("side", "")
+            resolved["recorded_at"] = entry.get("recorded_at", "")
+            updates.append(resolved)
             tracked_brain_ids.add(brain_id)
 
         rejected = [j for j in journals if j.get("ack_status") == "rejected"]
         for entry in rejected:
-            outcome = _outcome_from_label(None, "rejected")
-            outcome["brain_id"] = brain_id
-            outcome["position_ticket"] = entry.get("position_ticket")
-            outcome["symbol"] = entry.get("symbol", "")
-            outcome["side"] = entry.get("side", "")
-            outcome["recorded_at"] = entry.get("recorded_at", "")
-            updates.append(outcome)
+            resolved = _outcome_from_label(None, "rejected")
+            resolved["brain_id"] = brain_id
+            resolved["position_ticket"] = entry.get("position_ticket")
+            resolved["symbol"] = entry.get("symbol", "")
+            resolved["side"] = entry.get("side", "")
+            resolved["recorded_at"] = entry.get("recorded_at", "")
+            updates.append(resolved)
             tracked_brain_ids.add(brain_id)
 
     if not dry_run and updates:

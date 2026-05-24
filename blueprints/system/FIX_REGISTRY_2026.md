@@ -2905,3 +2905,24 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
   - New Torch-based trainers should annotate model variables with `nn.Module` at construction
   - Factory classes using `__new__` should add return type `-> nn.Module` if feasible
 - **Dependents Checked**: verify.py --quick passes (mypy + ruff). All three trainer files removed from mypy_baseline.json. Baseline: 127→91 errors (33 reduction).
+
+### FIX-20260524-011
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: feedback-performance, training
+- **Scope**: mypy, type-safety, variable-shadowing
+- **Files**:
+  - `scripts/feedback_loop.py` (MODIFIED: renamed `outcome` → `resolved` in accepted/rejected label blocks)
+  - `scripts/training/calibrate_sl_tp.py` (MODIFIED: renamed `r` → `res` in two result-printing loops)
+- **Description**: Batch C variable shadowing mypy cleanup. Fixed 22 pre-existing errors:
+  - feedback_loop.py: 14 errors → 0. Variable `outcome` was first assigned as `str` in the close-update loop, then reassigned as `dict[str, Any]` from `_outcome_from_label()` in the accepted/rejected blocks. Renamed the dict variable to `resolved`.
+  - calibrate_sl_tp.py: 8 errors → 0. Variable `r` was first assigned as `int` from `enumerate()` and `range()`, then reassigned as `dict[str, Any]` from `results[label]` in two print-formatting loops. Renamed the dict variable to `res`.
+
+  These are classic Python variable reuse across different scopes within the same function — mypy correctly infers the narrower type from first assignment.
+
+- **Root Cause**: RC-02 (type-confusion: same variable name reused for different types in different scopes within the same function body). Python's lack of block scope means loop variables leak into function scope.
+- **Prevention**:
+  - Avoid reusing short names (`r`, `outcome`) for values of different types within the same function
+  - Use descriptive names for dict/object values vs primitive loop counters
+- **Dependents Checked**: verify.py --quick passes (mypy + ruff). Both files removed from mypy_baseline.json. Baseline: 91→69 errors (22 reduction).

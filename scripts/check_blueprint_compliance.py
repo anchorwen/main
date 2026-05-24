@@ -119,6 +119,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/feedback/brain_performance_tracker.py",
         "core/feedback/brain_quality_engine.py",
         "core/feedback/decision_scorer.py",
+        "scripts/feedback_loop.py",
     ],
     "feedback_pnl": ["core/feedback/brain_pnl_ledger.py", "scripts/shadow_pnl_loop.py"],
     "feedback_online": [

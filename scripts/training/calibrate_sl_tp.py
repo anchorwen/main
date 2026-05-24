@@ -388,14 +388,14 @@ def main() -> int:
     print(f"  {'Regime':<10} {'SL':<8} {'TP':<8} {'PF':<10} {'WR':<8} {'RR':<8}")
     print(f"  {'-'*50}")
     for label in ["low", "normal", "high"]:
-        r = results[label]
-        if "error" in r:
-            print(f"  {label:<10} ERROR: {r['error']}")
+        res = results[label]
+        if "error" in res:
+            print(f"  {label:<10} ERROR: {res['error']}")
         else:
-            rr = r["tp_mult"] / r["sl_mult"] if r["sl_mult"] > 0 else 0
+            rr = res["tp_mult"] / res["sl_mult"] if res["sl_mult"] > 0 else 0
             print(
-                f"  {label:<10} {r['sl_mult']:<8.2f} {r['tp_mult']:<8.2f} "
-                f"{r['profit_factor']:<10.4f} {r['win_rate']:<8.2%} {rr:<8.2f}"
+                f"  {label:<10} {res['sl_mult']:<8.2f} {res['tp_mult']:<8.2f} "
+                f"{res['profit_factor']:<10.4f} {res['win_rate']:<8.2%} {rr:<8.2f}"
             )
 
     # ── Comparison with current defaults ──
@@ -408,9 +408,9 @@ def main() -> int:
     print(f"  {'-'*50}")
     for label in ["low", "normal", "high"]:
         cur_sl, cur_tp = cur_defaults[label]
-        r = results[label]
-        if "error" not in r:
-            new_sl, new_tp = r["sl_mult"], r["tp_mult"]
+        res = results[label]
+        if "error" not in res:
+            new_sl, new_tp = res["sl_mult"], res["tp_mult"]
             delta = f"SL{new_sl-cur_sl:+.2f} TP{new_tp-cur_tp:+.2f}"
             print(
                 f"  {label:<10} {cur_sl:<8.2f} {cur_tp:<8.2f} {new_sl:<8.2f} {new_tp:<8.2f} {delta}"

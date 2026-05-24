@@ -70,6 +70,7 @@ Dataset CPCV CustomObj  Trainer    EvaluationReport
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |--------|------|--------|--------|---------|------------|
+| FIX-20260524-011 | 2026-05-24 | cursor-agent | — | Variable shadowing fix in calibrate_sl_tp.py: renamed r→res in two result-printing loops. Mypy inferred r as int from earlier enumerate/range, breaking dict indexing. | RC-02 |
 | FIX-20260524-010 | 2026-05-24 | cursor-agent | — | Torch trainer mypy cleanup: fixed 33 errors across deep_res_mlp_trainer.py (17→0), transformer_trainer.py (15→0), xgb_trainer.py (1→0). Used nn.Module annotations at model construction sites — zero runtime changes. | RC-02 |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing, and suppressors | type-confusion |
 | FIX-20260521-008 | 2026-05-21 | cursor-agent | — | Meta labeling dataset + filter training pipeline: build_meta_labeling_dataset.py (OU-parameterized entry/exit), scan_profitability_surface.py (upstream×meta threshold grid search), train_meta_filter.py (Stage 2 LGB+MLP binary classifier), backtest scripts for high-recall/precision validation | RC-06 |
