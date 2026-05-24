@@ -10,44 +10,21 @@
       "freeze_count": 0,
       "exposure_limited": false
     },
+    "OU_Params_V7_M15": {
+      "brain_id": "OU_Params_V7_M15",
+      "status": "live",
+      "registered_at": "2026-05-24T22:00:00.000000",
+      "last_transition_at": "2026-05-24T22:00:00.000000",
+      "transition_count": 0,
+      "freeze_count": 0,
+      "exposure_limited": false
+    },
     "Meta_Stage1_Huber_V1": {
       "brain_id": "Meta_Stage1_Huber_V1",
       "status": "probation",
       "registered_at": "2026-05-17T08:00:00.000000",
       "last_transition_at": "2026-05-22T22:02:23.334916",
       "transition_count": 3,
-      "freeze_count": 0
-    },
-    "Online_MLP_V1": {
-      "brain_id": "Online_MLP_V1",
-      "status": "probation",
-      "registered_at": "2026-05-18T22:02:42.540108",
-      "last_transition_at": "2026-05-18T22:02:42.540108",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "LightGBM_V1_Institutional": {
-      "brain_id": "LightGBM_V1_Institutional",
-      "status": "probation",
-      "registered_at": "2026-05-22T22:02:19.006944",
-      "last_transition_at": "2026-05-22T22:02:19.006944",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "LightGBM_V3_New": {
-      "brain_id": "LightGBM_V3_New",
-      "status": "probation",
-      "registered_at": "2026-05-22T22:02:19.006944",
-      "last_transition_at": "2026-05-22T22:02:19.006944",
-      "transition_count": 0,
-      "freeze_count": 0
-    },
-    "XGBoost_V11_New": {
-      "brain_id": "XGBoost_V11_New",
-      "status": "probation",
-      "registered_at": "2026-05-22T22:02:19.006944",
-      "last_transition_at": "2026-05-22T22:02:19.006944",
-      "transition_count": 0,
       "freeze_count": 0
     }
   },
@@ -447,6 +424,20 @@
       "to_status": "deleted",
       "reason": "FIX-20260523-006: Graveyard pruning — removed 13 frozen brain_states (ARB_Params_V8_M15/M5_S53, LIGHTGBM_barrier_12bar, LightGBM_D1_Swing_5d, LightGBM_M15_Swing_24bar, Microstructure_Transformer_V5.0/M15/H1, XGBOOST_barrier_12bar, XGBoost_V4.5_M15, lgb_barrier_12bar_lightgbm_v3, lightgbm_h1_swing_lightgbm_v1, xgb_barrier_12bar_xgboost_v3) + 5 disabled swing brains (XGBoost_D1_Swing_5d, xgboost_m15/m30/h1/h4_swing) — all deeply negative P&L or 100% LONG-only bias",
       "timestamp": "2026-05-23T12:00:00.000000"
+    },
+    {
+      "brain_id": "bulk_cleanup_20260524_zombies",
+      "from_status": "probation",
+      "to_status": "deleted",
+      "reason": "FIX-20260524-003: P0-2 zombie brain removal — LightGBM_V3_New and XGBoost_V11_New have no config files, no model artifacts, no code references, 0% WR (8 trades, -0.01). Previously deleted in FIX-20260517-011, accidentally re-registered 2026-05-22 via batch registration.",
+      "timestamp": "2026-05-24T12:00:00.000000"
+    },
+    {
+      "brain_id": "OU_Params_V7_M15",
+      "from_status": "unregistered",
+      "to_status": "live",
+      "reason": "FIX-20260524-004: P2 OU governance gap — OU_Params_V7_M15 has config+live.yaml entry but was never registered in governance_state.json. Registered as live (active statarb_m15 brain with vote_weight=1.5).",
+      "timestamp": "2026-05-24T22:00:00.000000"
     }
   ]
 }

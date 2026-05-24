@@ -75,6 +75,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
     ],
     "execution_guards": [
         "core/execution/conformal_calibrator.py",
+        "core/execution/conformal_ou_gate.py",
         "core/execution/pre_trade_guards.py",
         "core/execution/meta_signal_filter.py",
         "core/execution/meta_filter_gate.py",
@@ -163,6 +164,8 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/hook_blueprint_precheck.py",
         "scripts/hook_mypy_check.py",
         "scripts/_fix_unused_ignores_v2.py",
+        "scripts/brain.py",
+        "scripts/training/register_brain.py",
     ],
     "features_rolling": [
         "core/features/rolling_normalizer.py",

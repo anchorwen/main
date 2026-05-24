@@ -277,6 +277,7 @@ class StrategyLine:
         daily_feature_vector: Any = None,
         meta_filter: Any = None,
         meta_filter_gate: Any = None,
+        conformal_ou_gate: Any = None,
         micro_feature_dict: dict[str, float] | None = None,
     ) -> StrategyDecision:
         """Run the full strategy evaluation for one cycle.
@@ -564,14 +565,46 @@ class StrategyLine:
             if meta_decision is not None:
                 return meta_decision
 
-        # ── Track 3: LightGBM Meta-Filter Gate (OU signal quality) ──
-        # For OU-based strategies (statarb_dynamic), the 47-dim LightGBM
-        # meta-filter predicts P(breakeven | signal_fired).
-        # barrier_12bar was surgically removed from Track 3 (2026-05-22):
-        # Track 4d MetaSignalFilter (LGB+MLP+Platt+Conformal) fully subsumes
-        # this single-LGB gate with richer features (59 vs 47) and calibration.
-        if meta_filter_gate is not None and name in ("statarb_dynamic", "statarb_m15"):
-            if meta_filter_gate.is_loaded and feature_vector is not None:
+        # ── Track 3d: Conformal OU Gate (OU physics-based signal quality) ──
+        # For OU strategies (statarb_dynamic M5, statarb_m15 M15), the
+        # ConformalOUGate replaces the generic 47-dim LightGBM MetaFilterGate
+        # with OU-specific physics features: Z-Depth, Z-Velocity, Half-life
+        # quality, Theta strength, and ADX trend penalty.
+        # Falls back to MetaFilterGate if ConformalOUGate is not available.
+        # barrier_12bar is EXEMPT — Track 4d MetaSignalFilter handles it.
+        if name in ("statarb_dynamic", "statarb_m15"):
+            if conformal_ou_gate is not None and conformal_ou_gate.is_loaded:
+                try:
+                    adx_approx = 15.0 + trend_strength * 40.0
+                    ou_result = conformal_ou_gate.filter(
+                        strategy_name=name,
+                        proposals=proposals,
+                        adx_value=adx_approx,
+                    )
+                    if not ou_result["passed"]:
+                        return StrategyDecision(
+                            strategy_name=name,
+                            magic=self.config.magic,
+                            should_trade=False,
+                            direction=direction,
+                            confidence=confidence,
+                            volume=0.0,
+                            sl=0.0,
+                            tp=0.0,
+                            hard_sl=0.0,
+                            brain_ids=brain_ids,
+                            supporting_count=support_count,
+                            total_count=total_count,
+                            regime_mode=regime_gate_mode,
+                            reason=ou_result["reason"],
+                        )
+                except Exception:
+                    pass  # OU gate failure is non-blocking
+            elif (
+                meta_filter_gate is not None
+                and meta_filter_gate.is_loaded
+                and feature_vector is not None
+            ):
                 try:
                     mf_result = meta_filter_gate.filter(
                         feature_vector=feature_vector,

@@ -180,6 +180,7 @@ class LiveCycleState:
     _cooldown_registry: Any = None  # CooldownRegistry (Cut 1: Absolute Refractory Period)
     _family_entry_tracker: Any = None  # FamilyEntryTracker (Cut 2: Cross-Strategy Spacing)
     _meta_filter_gate: Any = None  # MetaFilterGate (LightGBM 47-dim OU signal quality filter)
+    _conformal_ou_gate: Any = None  # ConformalOUGate (physics-based OU signal quality gate)
     _mtf_price_service: Any = None  # MTFPriceService — M15 bar reconstruction from M5 tick history
 
     # Circuit breaker: 3 consecutive degraded cycles → management-only mode
@@ -1068,10 +1069,16 @@ def _execute_management_phase(
     _be_dispatched = False
 
     # Layer 1: Chandelier trailing stop
+    # FIX-20260524-002: respect min_hold_cycles so trailing stop does not
+    # tighten the hard SL before the position has had reasonable time to
+    # develop.  Previously Layer 1 ran from cycle 1 with no protection,
+    # causing exits at 0.5-1.0R instead of the designed 2.0R SL for
+    # strategies whose breakeven threshold was not reached in time.
     _trail_sl = pm.compute_trail_stop(current_atr, ticket=pos.ticket)
     if _trail_sl is not None and abs(_trail_sl - pos.current_sl) >= config.exit_min_step:
-        _reasons.append("trail")
-        _final_sl = _trail_sl
+        if pos.cycles_held >= pm.min_hold_cycles:
+            _reasons.append("trail")
+            _final_sl = _trail_sl
 
     # Breakeven check — only fires once per position
     if not pos.breakeven_triggered and pm.should_breakeven(mid, current_atr, ticket=pos.ticket):
@@ -3234,6 +3241,7 @@ def _evaluate_strategy_lines(
     cycle_count: int = 0,
     meta_signal_filter: Any = None,
     meta_filter_gate: Any = None,
+    conformal_ou_gate: Any = None,
     micro_feature_dict: dict[str, float] | None = None,
     cooldown_registry: Any = None,
     family_entry_tracker: Any = None,
@@ -3318,6 +3326,7 @@ def _evaluate_strategy_lines(
             daily_feature_vector=daily_feature_vector,
             meta_filter=meta_signal_filter,
             meta_filter_gate=meta_filter_gate,
+            conformal_ou_gate=conformal_ou_gate,
             micro_feature_dict=micro_feature_dict,
         )
 
@@ -4307,18 +4316,36 @@ def execute_live_cycle(
         else:
             micro_feature_vector = np.zeros(9, dtype=np.float64)
 
-    # ── Meta-filter gate (lazy init on first live cycle) ──
+    # ── Meta-filter gate + Conformal OU Gate (lazy init on first live cycle) ──
+    # Both gates share one ConformalCalibrator so the empirical P(win)
+    # distribution benefits from all closed trades regardless of which
+    # gate approved the signal.
     if not config.no_mt5 and getattr(state, "_meta_filter_gate", None) is None:
+        # ── Shared calibrator (Track 3d: Q10 FIFO adaptive threshold) ──
+        _cal = None
         try:
             from core.execution.conformal_calibrator import ConformalCalibrator
-            from core.execution.meta_filter_gate import MetaFilterGate
 
-            # Track 3d: load calibrator so MetaFilterGate uses adaptive
-            # threshold (Q10, clamped [0.35, 0.70]) when warm.
             _cal = ConformalCalibrator(
                 state_path="data/conformal_calibrator_state.json",
             )
             _cal.cold_start_from_journal("data/live_trade_journal.jsonl")
+        except Exception as _cal_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "conformal_calibrator_init_error",
+                        "time": _utc_iso(),
+                        "error": str(_cal_exc),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+
+        # ── MetaFilterGate (47-dim LGB, for non-OU strategies if any) ──
+        try:
+            from core.execution.meta_filter_gate import MetaFilterGate
 
             _mg = MetaFilterGate(
                 model_dir="data/models/meta_filter_v3",
@@ -4328,7 +4355,7 @@ def execute_live_cycle(
             _mg.load()
             if _mg.is_loaded:
                 state._meta_filter_gate = _mg
-                cal_diag = _cal.describe()
+                cal_diag = _cal.describe() if _cal is not None else {}
                 print(
                     json.dumps(
                         {
@@ -4336,9 +4363,9 @@ def execute_live_cycle(
                             "time": _utc_iso(),
                             "threshold": META_FILTER_GATE_THRESHOLD,
                             "model": "meta_filter_v3",
-                            "conformal_samples": cal_diag["sample_count"],
-                            "conformal_warm": cal_diag["is_warm"],
-                            "conformal_threshold": cal_diag["current_threshold"],
+                            "conformal_samples": cal_diag.get("sample_count", 0),
+                            "conformal_warm": cal_diag.get("is_warm", False),
+                            "conformal_threshold": cal_diag.get("current_threshold"),
                         },
                         ensure_ascii=False,
                     ),
@@ -4351,6 +4378,53 @@ def execute_live_cycle(
                         "event": "meta_filter_gate_init_error",
                         "time": _utc_iso(),
                         "error": str(_mg_exc),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+
+        # ── Conformal OU Gate (physics-based, for OU strategies) ──
+        try:
+            from core.execution.conformal_ou_gate import ConformalOUGate
+
+            _ou_gate = ConformalOUGate(calibrator=_cal)
+            _ou_gate.load_ou_configs()
+            if _ou_gate.is_loaded:
+                state._conformal_ou_gate = _ou_gate
+                _ou_diag = _ou_gate.describe()
+                print(
+                    json.dumps(
+                        {
+                            "event": "conformal_ou_gate_init",
+                            "time": _utc_iso(),
+                            "strategies": _ou_diag.get("strategies", []),
+                            "ou_configs": _ou_diag.get("ou_configs", {}),
+                            "base_threshold": _ou_diag.get("base_threshold"),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+            else:
+                print(
+                    json.dumps(
+                        {
+                            "event": "conformal_ou_gate_init_warning",
+                            "time": _utc_iso(),
+                            "reason": "no OU brain configs found — gate disabled",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+        except Exception as _oug_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "conformal_ou_gate_init_error",
+                        "time": _utc_iso(),
+                        "error": str(_oug_exc),
                     },
                     ensure_ascii=False,
                 ),
@@ -4947,6 +5021,7 @@ def execute_live_cycle(
             meta_filter_gate=state._meta_filter_gate
             if hasattr(state, "_meta_filter_gate")
             else None,
+            conformal_ou_gate=getattr(state, "_conformal_ou_gate", None),
             micro_feature_dict=micro_feature_dict,
             cooldown_registry=state._cooldown_registry,
             family_entry_tracker=state._family_entry_tracker,
@@ -5449,6 +5524,7 @@ def execute_live_cycle(
                         micro_sequences=micro_sequences,
                         meta_filter=meta_signal_filter,
                         meta_filter_gate=getattr(state, "_meta_filter_gate", None),
+                        conformal_ou_gate=getattr(state, "_conformal_ou_gate", None),
                         micro_feature_dict=micro_feature_dict,
                     )
                     if decision.should_trade and mid_price is not None:

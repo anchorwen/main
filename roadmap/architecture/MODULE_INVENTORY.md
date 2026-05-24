@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-24T02:23:22Z
-> **扫描模块数**: 441
+> **自动生成**: 2026-05-24T05:47:56Z
+> **扫描模块数**: 443
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -90,7 +90,7 @@
 | `brain_leaderboard.py` | ✅ active | BrainRanking, BrainLeaderboard | 8 | 275 | — | |
 | `brain_promotion.py` | ✅ active | BrainPromotionDecision, BrainPromotionThresholds, BrainPromotionEvaluator | 8 | 432 | — | |
 | `brain_registry_loader.py` | ✅ active | BrainRegistryLoader | 1 | 7 | — | |
-| `brain_registry_service.py` | ✅ active | BrainRegistryService | 3 | 59 | — | |
+| `brain_registry_service.py` | ✅ active | BrainRegistryService | 7 | 117 | — | |
 | `brain_run_service.py` | ✅ active | BrainRunService | 15 | 267 | — | |
 | `dynamic_brain_weighter.py` | ✅ active | DynamicBrainWeighter | 13 | 412 | — | |
 | `inference_guard.py` | ✅ active | InferenceGuard | 11 | 222 | — | |
@@ -149,7 +149,7 @@
 | `blue_green.py` | ✅ active | SlotState, SlotColor, DeploymentSlot, DeploymentTopology, CutoverResult, HealthProbe, BlueGreenManager | 26 | 526 | — | |
 | `brain_alert.py` | ✅ active | — | 2 | 42 | — | |
 | `brain_config_validator.py` | ✅ active | BrainConfigError, ValidationResult, BrainConfigValidator | 12 | 305 | — | |
-| `brain_lifecycle_manager.py` | ✅ active | RetirementReport, RegistrationReport, IntegrityReport, ReferenceAuditReport, BrainLifecycleManager | 18 | 942 | — | |
+| `brain_lifecycle_manager.py` | ✅ active | RetirementReport, RegistrationReport, IntegrityReport, ReferenceAuditReport, BrainLifecycleManager | 18 | 1035 | — | |
 | `brain_registration_gate.py` | ✅ active | GateResult, BrainRegistrationGate | 18 | 356 | — | |
 | `capability_registry.py` | ✅ active | CapabilitySpec, CapabilityRegistry | 5 | 112 | — | |
 | `compliance_audit.py` | ✅ active | ComplianceAuditService | 9 | 567 | — | |
@@ -196,6 +196,7 @@
 | `broker_adapter.py` | ✅ active | BrokerAdapter | 9 | 68 | — | |
 | `capital_allocator.py` | ✅ active | AllocationDecision, GroupCorrelationTracker, CapitalAllocator | 9 | 464 | — | |
 | `conformal_calibrator.py` | ✅ active | ConformalCalibrator | 10 | 345 | — | |
+| `conformal_ou_gate.py` | ✅ active | ConformalOUGate | 14 | 491 | — | |
 | `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 109 | — | |
 | `dynamic_sl_tp.py` | ✅ active | DynamicSLTP | 2 | 162 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 161 | — | |
@@ -230,7 +231,7 @@
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 64 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 9 | 248 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 13 | 1421 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 13 | 1454 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 66 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 31 | 643 | — | |
@@ -437,7 +438,7 @@
 | `execution_gateway_router.py` | ✅ active | ExecutionGatewayRouter | 5 | 30 | — | |
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 6361 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 6437 | — | |
 | `market_ingress.py` | ✅ active | — | 8 | 141 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 12 | 314 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
@@ -513,11 +514,12 @@
 | `_fix_unused_ignores_v2.py` | 📄 config | — | 0 | 55 | — | |
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
+| `brain.py` | ✅ active | — | 11 | 542 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 528 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 531 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 24 | 1086 | — | |
+| `daily_ops.py` | ✅ active | — | 24 | 1112 | — | |
 | `deploy_blue_green.py` | ✅ active | — | 7 | 126 | — | |
 | `feature_store_maintenance.py` | ✅ active | — | 8 | 275 | — | |
 | `feedback_loop.py` | ✅ active | — | 12 | 431 | — | |
@@ -530,7 +532,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 369 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 13 | 2094 | — | |
+| `live_intent_loop.py` | ✅ active | — | 13 | 2100 | — | |
 | `live_launcher.py` | ✅ active | — | 13 | 749 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 136 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 484 | — | |

@@ -17,6 +17,7 @@ System lifecycle management: graceful startup/shutdown, state persistence, healt
 | `core/deployment/postmortem_report.py` | `PostmortemReportService` |
 | `core/deployment/feature_update_producer.py` | Feature update event producer |
 | `core/deployment/governance_summary.py` | Governance summary generation |
+| `scripts/brain.py` | Unified brain lifecycle CLI (register/list/validate/retire) |
 | `core/constants.py` | `DAILY_OPS_INTERVAL_SECONDS`, `MODE_STALE_SECONDS` |
 
 ## Data Flow
@@ -49,6 +50,8 @@ startup → LifecycleManager.initialize()
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 | FIX-20260523-004 | 2026-05-23 | cursor-agent | — | MODULE_SOURCE_MAP expansion: add market_mtf module mapping for core/market/mtf_price_service.py | RC-06 |
+| FIX-20260524-006 | 2026-05-24 | cursor-agent | — | SSOT Dictator Governance Engine: verify_startup_integrity(auto_repair=True) now enforces "physical files are law" — governance entries WITHOUT matching disk configs are physically deleted (key removed, not frozen/retired). 20 state contamination entries cleaned (2 zombies, 16 frozen, 1 orphan Online_MLP_V1, 1 LightGBM_V1_Institutional). governance_state.json: 23→3. | RC-11 (state-contamination) |
+| FIX-20260524-001 | 2026-05-24 | cursor-agent | — | Brain registration single source of truth: auto-governance registration in verify_startup_integrity(auto_repair=True), scripts/brain.py unified CLI for register/list/validate/retire, hardcoded DEFAULT_BRAIN_REGISTRATIONS replaced with auto-discovery | RC-09 |
 | FIX-20260523-008 | 2026-05-24 | cursor-agent | — | MODULE_SOURCE_MAP expansion: add core/execution/conformal_calibrator.py to execution_guards for Track 3d Conformal OU Gate compliance coverage | RC-09 |
 | FIX-20260523-007 | 2026-05-23 | cursor-agent | — | MODULE_SOURCE_MAP expansion: add scripts/daily_ops.py to runtime_live, core/feedback/experience_replay.py to feedback_online for mini-batch online learning compliance coverage | RC-06 |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing, and suppressors for pre-existing pattern issues | type-confusion |

@@ -34,13 +34,9 @@ PROJECT_ROOT = THIS_DIR.parent
 DEFAULT_TRACKER_PATH = "data/brain_performance.json"
 DEFAULT_GOVERNANCE_PATH = "data/governance_state.json"
 
-# Default brain registrations when creating a fresh governance service
-DEFAULT_BRAIN_REGISTRATIONS = {
-    "V9_Institutional_01": "candidate",
-    "XGBoost_V4.5_Microstructure": "candidate",
-    "OU_Params_V6_Sniper": "candidate",
-    "Online_SGD_V1": "candidate",
-}
+# Default brain registrations when creating a fresh governance service.
+# When empty, auto-discovers all brain_registry_entry.v1 configs from disk.
+DEFAULT_BRAIN_REGISTRATIONS: dict[str, str] = {}
 
 
 def _utc_now_iso() -> str:
@@ -69,7 +65,13 @@ def _load_or_create_tracker(base_dir: str) -> Any:
 
 
 def _load_or_create_governance(base_dir: str) -> Any:
-    """Load persisted governance state, or create a fresh one with defaults."""
+    """Load persisted governance state, or create a fresh one.
+
+    When creating a new governance service, auto-discovers brain configs from
+    ``configs/brains/`` and registers each as ``candidate``.  The hardcoded
+    DEFAULT_BRAIN_REGISTRATIONS dict (above) can still be used to pin specific
+    initial statuses, but the default empty dict triggers full auto-discovery.
+    """
     gov_path = Path(base_dir) / "governance_state.json"
     try:
         from core.governance.governance_service import GovernanceService
@@ -77,15 +79,39 @@ def _load_or_create_governance(base_dir: str) -> Any:
         if gov_path.exists():
             return GovernanceService.load(gov_path)
         gov = GovernanceService()
-        for brain_id, status in DEFAULT_BRAIN_REGISTRATIONS.items():
-            gov.register_brain(brain_id, status)
+        if DEFAULT_BRAIN_REGISTRATIONS:
+            for brain_id, status in DEFAULT_BRAIN_REGISTRATIONS.items():
+                gov.register_brain(brain_id, status)
+        else:
+            # Auto-discover from configs/brains/
+            brains_dir = PROJECT_ROOT / "configs" / "brains"
+            if brains_dir.is_dir():
+                import json as _json
+
+                for cfg_path in sorted(brains_dir.glob("*.json")):
+                    if "normalization" in cfg_path.name.lower():
+                        continue
+                    try:
+                        cfg = _json.loads(cfg_path.read_text(encoding="utf-8"))
+                    except Exception:
+                        continue
+                    if cfg.get("schema_version") != "brain_registry_entry.v1":
+                        continue
+                    bid = cfg.get("brain_id", "")
+                    if bid:
+                        cfg_status = cfg.get("status", "candidate")
+                        initial = (
+                            cfg_status if cfg_status in ("candidate", "shadow") else "candidate"
+                        )
+                        gov.register_brain(bid, initial)
         return gov
     except Exception:
         from core.governance.governance_service import GovernanceService
 
         gov = GovernanceService()
-        for brain_id, status in DEFAULT_BRAIN_REGISTRATIONS.items():
-            gov.register_brain(brain_id, status)
+        if DEFAULT_BRAIN_REGISTRATIONS:
+            for brain_id, status in DEFAULT_BRAIN_REGISTRATIONS.items():
+                gov.register_brain(brain_id, status)
         return gov
 
 

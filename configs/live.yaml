@@ -14,6 +14,11 @@ features:
   store_dir: data/feature_store
   update_interval_seconds: 60
 brains:
+  # registry_entries: optional allowlist (deprecated as mandatory).
+  # When empty or absent, all brain_registry_entry.v1 JSON files in
+  # configs/brains/ are auto-discovered by BrainRegistry at startup.
+  # Listing entries here acts as an allowlist: only listed brains are
+  # active.  Use 'scripts/brain.py register' to add entries.
   registry_entries:
   - path: configs/brains/ou_params_v6.json
     enabled: true
@@ -141,7 +146,7 @@ strategy_lines:
       trail_atr_mult: 2.0
       trail_atr_mult_low: 1.8
       trail_atr_mult_high: 3.0
-      breakeven_threshold_atr: 1.5
+      breakeven_threshold_atr: 1.0
       flip_exit_enabled: true
       flip_threshold: 0.5
       time_exit_cycles: 60

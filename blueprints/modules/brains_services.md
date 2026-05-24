@@ -8,7 +8,7 @@ Brain lifecycle services: factory construction, inference orchestration, leaderb
 |------|------|
 | `core/brains/services/brain_factory.py` | Builds adapter instances from brain_entry dicts |
 | `core/brains/services/brain_run_service.py` | Routes feature sources to correct adapters, runs inference |
-| `core/brains/services/brain_registry_service.py` | Loads active brain entries from live.yaml |
+| `core/brains/services/brain_registry_service.py` | Loads active brain entries (auto-discovery from disk, optional live.yaml allowlist) |
 | `core/brains/services/brain_leaderboard.py` | Composite scoring (Sharpe, WR, PF, PnL) for brain ranking |
 | `core/brains/services/brain_promotion.py` | Automated candidate→probation→active/retire lifecycle |
 | `core/brains/services/dynamic_brain_weighter.py` | Per-brain vote weights from P&L, redundancy penalty |
@@ -54,6 +54,11 @@ BrainRegistryService → brain_entries → BrainFactory → adapters
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260524-001 | 2026-05-24 | cursor-agent | — | Single source of truth: BrainRegistryService now auto-discovers brain configs from configs/brains/ when live.yaml registry_entries is empty. Redundant manual registration eliminated. | RC-09 |
+| FIX-20260524-003 | 2026-05-24 | cursor-agent | — | P0-2 zombie brain removal: deleted LightGBM_V3_New and XGBoost_V11_New from governance_state.json. No config files, no model artifacts, no code references, 0% WR (8t, -0.01). Previously deleted in FIX-20260517-011, accidentally re-registered 2026-05-22. | RC-11 (stale-data) |
+| FIX-20260524-004 | 2026-05-24 | cursor-agent | — | P2 OU governance gap: registered OU_Params_V7_M15 in governance_state.json. Brain had config+live.yaml entry but was never registered in governance — no transition tracking, no freeze count, no exposure limiting. Both V6+V7 share same artifact (arb_params_v7.json). Recent drawdown: V6 avg composite 0.472, V7 avg 0.483 (both below 0.50 breakeven). | RC-09 (config-drift) |
+| FIX-20260524-006 | 2026-05-24 | cursor-agent | — | SSOT Dictator Governance Engine: 20 state contamination entries cleaned from governance_state.json (23→3). Online_MLP_V1 deleted (evicted from barrier_12bar Dictator Protocol 2026-05-22, brain_type=online_sgd not in any enabled strategy's brain_types). LightGBM_V1_Institutional + XGBoost_D1_Swing_5d deleted (zombies: probation status but no config/model/code refs). 16 frozen graveyard entries deleted (all without configs, batch re-registered 2026-05-23). 5 stale disk configs deleted. | RC-11 (state-contamination: auto_repair was one-way door) |
+| FIX-20260524-005 | 2026-05-24 | cursor-agent | — | P2 OU timeframe parameter separation: created arb_params_v7_m5.json (Sharpe 3.27, theta_min=0.0027) and arb_params_v7_m15.json (Sharpe 2.76, theta_min=0.0186). Both brains previously shared arb_params_v7.json (M5-optimized, Sharpe 0.54). M15 theta_min is 6.9x higher — different timeframes need different OU parameters. V6→M5 artifact, V7→M15 artifact. | RC-05 (boundary-error: timeframe-invariant parameter assumption) |
 | FIX-20260519-010 | 2026-05-19 | cursor-agent | — | Track 3: Confidence-Weighted Marginal Attribution. _attribute_trades() now splits brains into sponsors (voted with trade, P&L weighted by confidence) vs dissenters (voted against, exempted). _split_sponsors_dissenters() helper. BrainAttribution新增sponsor_count/dissenter_count字段. | RC-06 |
 | FIX-20260517-017 | 2026-05-17 | cursor-agent | — | BrainPromotionEvaluator role reduction: class docstring updated to "Auditor". apply_promotion_decisions() deprecated (use GovernanceRuleEngine.execute_transitions() instead). No functional change to evaluation logic. | contract-violation |
 |--------|------|--------|--------|---------|------------|

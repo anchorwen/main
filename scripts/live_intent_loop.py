@@ -590,7 +590,7 @@ def main(argv: list[str] | None = None) -> int:
             project_root=PROJECT_ROOT,
             base_dir=args.base_dir,
         )
-        integrity = lifecycle.verify_startup_integrity()
+        integrity = lifecycle.verify_startup_integrity(auto_repair=True)
         if (
             integrity.missing_config_files
             or integrity.governance_orphans
@@ -598,10 +598,13 @@ def main(argv: list[str] | None = None) -> int:
             or integrity.alignment_hard_fails
             or integrity.alignment_warnings
             or integrity.alignment_ensemble_warnings
+            or integrity.auto_registered
+            or integrity.auto_deleted
+            or integrity.contract_violations
         ):
             _event = (
                 "startup_integrity_error"
-                if integrity.alignment_hard_fails
+                if integrity.alignment_hard_fails or integrity.contract_violations
                 else "startup_integrity_warning"
             )
             print(
@@ -617,6 +620,9 @@ def main(argv: list[str] | None = None) -> int:
                         "alignment_hard_fails": integrity.alignment_hard_fails,
                         "alignment_warnings": integrity.alignment_warnings,
                         "alignment_ensemble_warnings": integrity.alignment_ensemble_warnings,
+                        "auto_registered": integrity.auto_registered,
+                        "auto_deleted": integrity.auto_deleted,
+                        "contract_violations": integrity.contract_violations,
                     },
                     ensure_ascii=False,
                 ),

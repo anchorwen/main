@@ -14,6 +14,7 @@ Usage::
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -80,6 +81,11 @@ class IntegrityReport:
     alignment_hard_fails: list[str] = field(default_factory=list)
     alignment_warnings: list[str] = field(default_factory=list)
     alignment_ensemble_warnings: list[str] = field(default_factory=list)
+    # ── auto-repair tracking ──
+    auto_registered: list[str] = field(default_factory=list)
+    auto_deleted: list[str] = field(default_factory=list)
+    # ── SSOT enforcement ──
+    contract_violations: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -606,10 +612,25 @@ class BrainLifecycleManager:
 
     # ── startup integrity ────────────────────────────────────────────────
 
-    def verify_startup_integrity(self, *, fail_fast: bool = False) -> IntegrityReport:
+    def verify_startup_integrity(
+        self, *, fail_fast: bool = False, auto_repair: bool = False
+    ) -> IntegrityReport:
         """Cross-validate live.yaml, disk files, governance state, PnL ledger,
         transition_log coverage, ensemble references, capability handshake,
         and artifact hash integrity.
+
+        **SSOT Contract (Single Source of Truth):**
+        Physical files in ``configs/brains/`` are the absolute authority.
+        ``governance_state.json`` is a pure state vassal — it reflects disk,
+        never drives it.
+
+        When *auto_repair* is True:
+        - Brains on disk missing from governance → auto-registered as ``candidate``.
+        - Governance entries WITHOUT matching disk configs → **DELETED** (key removed).
+          No freeze, no retire — the entry is physically erased from the JSON dict.
+          This is the "governance must reflect disk" enforcement.
+        - ``missing_yaml_entries`` does NOT invalidate the report (auto-discovery
+          via BrainRegistry handles it).
 
         Raises RuntimeError if *fail_fast* is True and any mismatch is found.
         """
@@ -631,7 +652,7 @@ class BrainLifecycleManager:
         else:
             report.missing_config_files.append(f"live_yaml_missing: {self._live_yaml_path}")
 
-        # ── disk → live.yaml ──
+        # ── disk → live.yaml (informational only when auto-discovery is active) ──
         disk_brains = self._scan_brain_configs(self._brains_dir)
         if self._live_yaml_path.exists():
             live = self._load_live_yaml()
@@ -642,6 +663,13 @@ class BrainLifecycleManager:
                 yaml_names.add(Path(p).name)
             for cfg_name in sorted(self._brains_dir.glob("*.json")):
                 if "normalization" in cfg_name.name.lower():
+                    continue
+                # Skip non-brain configs (e.g., filter configs with "filter_id" instead of "brain_id")
+                try:
+                    data = json.loads(cfg_name.read_text(encoding="utf-8"))
+                    if not data.get("brain_id"):
+                        continue
+                except (json.JSONDecodeError, OSError):
                     continue
                 if cfg_name.name not in yaml_names:
                     report.missing_yaml_entries.append(
@@ -660,25 +688,88 @@ class BrainLifecycleManager:
                         else:
                             report.missing_artifacts.append(f"{_bid}: {val}")
 
-        # ── governance orphans ──
+        # ── governance: disk brains missing from governance → auto-register ──
         gov_data: dict = {}
         gov_path = self._base_dir / "governance_state.json"
         if gov_path.exists():
             try:
                 gov_data = json.loads(gov_path.read_text(encoding="utf-8"))
-                for bid in gov_data.get("brain_states", {}):
-                    found = bid in disk_brains
-                    if not found and self._retired_dir.exists():
-                        for rc in self._retired_dir.glob("*.json"):
-                            try:
-                                rc_data = json.loads(rc.read_text(encoding="utf-8"))
-                                if rc_data.get("brain_id") == bid:
-                                    found = True
-                                    break
-                            except (json.JSONDecodeError, OSError):
-                                continue
-                    if not found:
-                        report.governance_orphans.append(bid)
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        gov_brain_ids = set(gov_data.get("brain_states", {}).keys()) if gov_data else set()
+        missing_from_gov = set(disk_brains.keys()) - gov_brain_ids
+
+        if missing_from_gov and auto_repair:
+            gov = self._load_governance_service()
+            for bid in sorted(missing_from_gov):
+                cfg = disk_brains[bid]
+                cfg_status = cfg.get("status", "candidate")
+                # Use the config's declared status, but default to candidate
+                # for safety (never auto-promote to live)
+                initial = cfg_status if cfg_status in ("candidate", "shadow") else "candidate"
+                gov.register_brain(bid, initial_status=initial)
+                report.auto_registered.append(f"{bid}:{initial}")
+                logging.warning(
+                    "BrainLifecycleManager: auto-registered '%s' in governance as '%s'",
+                    bid,
+                    initial,
+                )
+            self._save_governance_service(gov)
+            # Reload gov_data for subsequent checks
+            try:
+                gov_data = json.loads(gov_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                pass
+        elif missing_from_gov:
+            for bid in sorted(missing_from_gov):
+                report.hardcoded_path_mismatches.append(
+                    f"{bid}: on disk but NOT in governance_state.json "
+                    f"(run with --auto-repair or use 'brain register')"
+                )
+
+        # ── governance orphans (in governance but not on disk) ──
+        # SSOT CONTRACT: Physical files are law.  governance_state.json is a
+        # pure state vassal.  If a brain exists in governance but has NO config
+        # on disk and NO retired config, it is state contamination and MUST be
+        # physically deleted from the JSON dict — not frozen, not retired.
+        if gov_data:
+            for bid in list(gov_data.get("brain_states", {}).keys()):
+                found = bid in disk_brains
+                if not found and self._retired_dir.exists():
+                    for rc in self._retired_dir.glob("*.json"):
+                        try:
+                            rc_data = json.loads(rc.read_text(encoding="utf-8"))
+                            if rc_data.get("brain_id") == bid:
+                                found = True
+                                break
+                        except (json.JSONDecodeError, OSError):
+                            continue
+                if not found:
+                    report.governance_orphans.append(bid)
+                    report.contract_violations.append(
+                        f"SSOT_VIOLATION:{bid}: in governance_state.json but "
+                        f"no config file on disk — state contamination"
+                    )
+
+        if report.governance_orphans and auto_repair:
+            # ── Dictator Governance Engine: physical deletion ──
+            # These entries have no config on disk and no retired config.
+            # The SSOT contract demands their keys be removed from governance.
+            gov = self._load_governance_service()
+            for bid in report.governance_orphans:
+                if bid in gov._brain_states:
+                    del gov._brain_states[bid]
+                    report.auto_deleted.append(bid)
+                    logging.warning(
+                        "BrainLifecycleManager: SSOT enforcement — deleted '%s' "
+                        "from governance_state.json (no config file on disk)",
+                        bid,
+                    )
+            self._save_governance_service(gov)
+            # Reload gov_data for subsequent checks
+            try:
+                gov_data = json.loads(gov_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 pass
 
@@ -694,6 +785,8 @@ class BrainLifecycleManager:
 
         # ── brain_id consistency (live.yaml path → config → brain_id) ──
         if self._live_yaml_path.exists():
+            live = self._load_live_yaml()
+            entries = live.get("brains", {}).get("registry_entries", [])
             for entry in entries:
                 path_str = entry.get("path", "")
                 cfg_path = Path(path_str)
@@ -703,7 +796,6 @@ class BrainLifecycleManager:
                     try:
                         cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
                         cfg_bid = cfg.get("brain_id", "")
-                        # Verify the config file name is consistent
                         expected_name = f"{cfg_bid}.json"
                         if cfg_path.name != expected_name:
                             report.hardcoded_path_mismatches.append(
@@ -801,9 +893,10 @@ class BrainLifecycleManager:
         self.validate_brain_live_alignment(report)
 
         # ── assess validity ──
+        # missing_yaml_entries is informational when auto-discovery is active
+        # (BrainRegistryService.list_active_entries() discovers from disk)
         report.valid = not (
             report.missing_config_files
-            or report.missing_yaml_entries
             or report.missing_artifacts
             or report.missing_norm_configs
             or report.hardcoded_path_mismatches
