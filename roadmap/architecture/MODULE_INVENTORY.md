@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-24T06:47:18Z
+> **自动生成**: 2026-05-24T06:53:11Z
 > **扫描模块数**: 443
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -516,7 +516,7 @@
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
 | `brain.py` | ✅ active | — | 11 | 542 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 532 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 533 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
 | `daily_ops.py` | ✅ active | — | 24 | 1112 | — | |
@@ -577,7 +577,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `backtest_dynamic_exit.py` | ✅ active | — | 10 | 571 | — | |
+| `backtest_dynamic_exit.py` | ✅ active | — | 10 | 586 | — | |
 | `backtest_high_recall_precision.py` | ✅ active | — | 5 | 326 | — | |
 | `backtest_meta_filter.py` | ✅ active | — | 5 | 318 | — | |
 | `backtest_regime_2d.py` | ✅ active | — | 9 | 515 | — | |

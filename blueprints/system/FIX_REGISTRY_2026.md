@@ -2952,3 +2952,25 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
   - Use explicit type annotations for numpy scalar computation results
   - Widen function parameter types to accept duck-type-compatible types (list | ndarray)
 - **Dependents Checked**: verify.py --quick passes (mypy + ruff). All 5 files removed from mypy_baseline.json. Baseline: 69→52 errors (17 reduction).
+
+### FIX-20260524-013
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: training
+- **Scope**: mypy, type-safety, backtest
+- **Files**:
+  - `scripts/backtest/backtest_dynamic_exit.py` (MODIFIED: 22 errors → 0)
+  - `scripts/check_blueprint_compliance.py` (MODIFIED: added backtest_dynamic_exit.py to training module map)
+- **Description**: Batch D mypy type-safety cleanup for backtest script. Fixed 22 pre-existing errors from two root causes:
+  
+  **Root Cause A — direction/side type mismatch (1 error)**: `_detect_toxic_flow_m5()` parameter `side` declared as `str` but called with `direction: int` (-1/1). Added `side = "long" if direction == 1 else "short"` conversion before the call.
+  
+  **Root Cause B — heterogeneous strategies dict (21 errors)**: The `strategies` dict at initialization had `pnl_aware_z` with an extra key `"mean_drifts": []` that the other two strategies lacked. This caused mypy to infer all dict values as `object`, cascading into 21 attr-defined/operator/index errors across all strategy accesses. Fix: (1) Added `"mean_drifts": []` to `fixed_tpsl` and `pure_z_exit` dicts for key homogeneity, (2) Added `dict[str, dict]` type annotation to `strategies`, `exit_breakdown`, and `exit_summary` variables, (3) Added `scripts/backtest/backtest_dynamic_exit.py` to MODULE_SOURCE_MAP under training module.
+
+- **Root Cause**: RC-02 (type-confusion: str/int parameter mismatch from refactored function signature; heterogeneous dict keys causing mypy to fall back to object type inference)
+- **Prevention**:
+  - When model functions have typed parameters, convert call-site values to the expected type before passing
+  - Keep homogeneous dict structures where possible; when not, use explicit type annotations (dict[str, dict]) to guide mypy
+  - Register all backtest scripts in MODULE_SOURCE_MAP under their owning module
+- **Dependents Checked**: verify.py --quick passes (mypy + ruff + blueprint). Backtest script removed from mypy_baseline.json. Baseline: 52→30 errors (22 reduction).

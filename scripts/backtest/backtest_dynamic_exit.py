@@ -197,7 +197,8 @@ def simulate_pnl_aware_z_exit(
 
         # Toxic flow check (bars 6+)
         if bars_in >= 6 and bars_in < max_hold:
-            if _detect_toxic_flow_m5(opens, highs, lows, closes, j, direction, entry_atr):
+            side = "long" if direction == 1 else "short"
+            if _detect_toxic_flow_m5(opens, highs, lows, closes, j, side, entry_atr):
                 return pnl, bars_in, f"toxic_flow_bar{bars_in}_r{pnl:.2f}"
 
     final = closes[end]
@@ -283,9 +284,23 @@ def run_backtest(ohlc: dict[str, np.ndarray]) -> dict:
     print("  Computing ATRs...")
     atrs = np.array([compute_atr(closes, i) for i in range(n)], dtype=np.float64)
 
-    strategies = {
-        "fixed_tpsl": {"trades": [], "pnls": [], "wins": 0, "total": 0, "equity": [0.0]},
-        "pure_z_exit": {"trades": [], "pnls": [], "wins": 0, "total": 0, "equity": [0.0]},
+    strategies: dict[str, dict] = {
+        "fixed_tpsl": {
+            "trades": [],
+            "pnls": [],
+            "wins": 0,
+            "total": 0,
+            "equity": [0.0],
+            "mean_drifts": [],
+        },
+        "pure_z_exit": {
+            "trades": [],
+            "pnls": [],
+            "wins": 0,
+            "total": 0,
+            "equity": [0.0],
+            "mean_drifts": [],
+        },
         "pnl_aware_z": {
             "trades": [],
             "pnls": [],
@@ -432,7 +447,7 @@ def run_backtest(ohlc: dict[str, np.ndarray]) -> dict:
             results[name]["n_mean_drifts"] = len(s["mean_drifts"])
 
     # ── Exit reason breakdown (pnl_aware_z) ──
-    exit_breakdown = {}
+    exit_breakdown: dict[str, dict] = {}
     for t in strategies["pnl_aware_z"]["trades"]:
         reason_type = t["reason"].split("_")[0]
         if reason_type not in exit_breakdown:
@@ -442,7 +457,7 @@ def run_backtest(ohlc: dict[str, np.ndarray]) -> dict:
         if t["pnl_r"] > 0:
             exit_breakdown[reason_type]["wins"] += 1
 
-    exit_summary = {}
+    exit_summary: dict[str, dict] = {}
     for key, data in sorted(exit_breakdown.items()):
         p = np.array(data["pnls"])
         exit_summary[key] = {

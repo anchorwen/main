@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 | FIX-20260524-011 | 2026-05-24 | cursor-agent | — | MODULE_SOURCE_MAP: add scripts/feedback_loop.py to feedback_performance module for Batch C variable shadowing fix | RC-02 |
+| FIX-20260524-013 | 2026-05-24 | cursor-agent | — | MODULE_SOURCE_MAP: add scripts/backtest/backtest_dynamic_exit.py to training module for Batch D backtest mypy cleanup | RC-02 |
 | FIX-20260523-004 | 2026-05-23 | cursor-agent | — | MODULE_SOURCE_MAP expansion: add market_mtf module mapping for core/market/mtf_price_service.py | RC-06 |
 | FIX-20260524-006 | 2026-05-24 | cursor-agent | — | SSOT Dictator Governance Engine: verify_startup_integrity(auto_repair=True) now enforces "physical files are law" — governance entries WITHOUT matching disk configs are physically deleted (key removed, not frozen/retired). 20 state contamination entries cleaned (2 zombies, 16 frozen, 1 orphan Online_MLP_V1, 1 LightGBM_V1_Institutional). governance_state.json: 23→3. | RC-11 (state-contamination) |
 | FIX-20260524-001 | 2026-05-24 | cursor-agent | — | Brain registration single source of truth: auto-governance registration in verify_startup_integrity(auto_repair=True), scripts/brain.py unified CLI for register/list/validate/retire, hardcoded DEFAULT_BRAIN_REGISTRATIONS replaced with auto-discovery | RC-09 |

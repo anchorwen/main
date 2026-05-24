@@ -2,7 +2,6 @@
   "apps/engine/v9_shadow_sse.py": 3,
   "core/ledger/services/communication_operations_service.py": 1,
   "scripts/_diag_cycle_stall.py": 2,
-  "scripts/backtest/backtest_dynamic_exit.py": 22,
   "scripts/feature_store_maintenance.py": 1,
   "scripts/features/feature_store_warmer.py": 1,
   "scripts/live_daily_recap.py": 1,
