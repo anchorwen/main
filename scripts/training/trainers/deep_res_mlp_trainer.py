@@ -31,7 +31,7 @@ import sys
 # Ensure UTF-8 stdout on Windows (torch.onnx prints emoji)
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
 import time
 from datetime import UTC, datetime
@@ -106,8 +106,8 @@ class DeepResMLP:
                 self.input_proj = nn.Linear(n_features, 128)
                 self.input_ln = nn.LayerNorm(128)
 
-                self.res_block_1 = ResBlock(128, 64)
-                self.res_block_2 = ResBlock(128, 64)
+                self.res_block_1: nn.Module = ResBlock(128, 64)
+                self.res_block_2: nn.Module = ResBlock(128, 64)
 
                 if regression:
                     self.head_regression = nn.Linear(128, 1)  # scalar P&L
@@ -222,7 +222,7 @@ def train_deep_res_mlp(
     X_train, y_train = X[idx[n_val:]], y[idx[n_val:]]
     X_val, y_val = X[idx[:n_val]], y[idx[:n_val]]
 
-    model = DeepResMLP(regression=regression)
+    model: torch.nn.Module = DeepResMLP(regression=regression)
     model.train()
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)

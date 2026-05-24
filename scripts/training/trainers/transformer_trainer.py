@@ -43,7 +43,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
 # ── Constants ──────────────────────────────────────────────────────────
 SEQ_LEN = 32
@@ -319,7 +319,7 @@ def train_transformer(
         )
         print(f"[transformer] Class weights: {cls_weights.tolist()}")
 
-    model = UpgradedQuantTransformer(
+    model: torch.nn.Module = UpgradedQuantTransformer(
         num_features=NUM_FEATURES,
         d_model=d_model,
         n_heads=n_heads,

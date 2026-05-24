@@ -2881,3 +2881,27 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
   - Any new config file passed to `ConfigHotReload` will auto-detect format by extension
   - JSON path preserved for backward compat with `engine_config.json`
 - **Dependents Checked**: `live_intent_loop.py` creates ConfigHotReload for `live.yaml`. ServiceContainer creates ConfigHotReload for `engine_config.json`. Both paths verified — YAML route for live.yaml, JSON route for engine_config.json. verify.py --quick passes (mypy + ruff).
+
+### FIX-20260524-010
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: training
+- **Scope**: mypy, type-safety, trainers
+- **Files**:
+  - `scripts/training/trainers/deep_res_mlp_trainer.py` (MODIFIED: sys.stderr.reconfigure union-attr ignore, ResBlock attributes typed as nn.Module, model annotated as torch.nn.Module)
+  - `scripts/training/trainers/transformer_trainer.py` (MODIFIED: sys.stderr.reconfigure union-attr ignore, model annotated as torch.nn.Module)
+  - `scripts/training/trainers/xgb_trainer.py` (MODIFIED: renamed duplicate val_acc → multi_val_acc in multi_class branch)
+- **Description**: Batch A mypy type-safety cleanup for Torch trainer scripts. Fixed 33 pre-existing mypy errors:
+  - deep_res_mlp_trainer.py: 17 errors → 0 (ResBlock/DeepResMLP __new__-based factory pattern invisible to mypy)
+  - transformer_trainer.py: 15 errors → 0 (UpgradedQuantTransformer same __new__ pattern)
+  - xgb_trainer.py: 1 error → 0 (val_acc redefinition in mutually exclusive branches)
+  - online_mlp_trainer.py: already clean (0 errors)
+
+  Fix strategy per user directive: annotate model variable at construction site with `nn.Module` (or `torch.nn.Module` where nn not imported). This satisfies mypy without modifying any base class inheritance structure or changing runtime logic. For sys.stderr.reconfigure, used `# type: ignore[union-attr]` — the `hasattr` guard ensures it only runs on Windows where reconfigure exists.
+
+- **Root Cause**: RC-02 (type-confusion: mypy cannot resolve `__new__` return types for factory-pattern classes like ResBlock/DeepResMLP/UpgradedQuantTransformer that return anonymous `_Model(nn.Module)` instances). The `model` variables had inferred type of the container class, not `nn.Module`.
+- **Prevention**:
+  - New Torch-based trainers should annotate model variables with `nn.Module` at construction
+  - Factory classes using `__new__` should add return type `-> nn.Module` if feasible
+- **Dependents Checked**: verify.py --quick passes (mypy + ruff). All three trainer files removed from mypy_baseline.json. Baseline: 127→91 errors (33 reduction).

@@ -319,8 +319,8 @@ def train_xgboost(
             if feature_names:
                 dval_post.feature_names = feature_names
             val_preds = booster.predict(dval_post).astype(np.int32)
-            val_acc = float((val_preds == val_data[1]).mean())
-            metrics["val_accuracy"] = round(val_acc, 6)
+            multi_val_acc = float((val_preds == val_data[1]).mean())
+            metrics["val_accuracy"] = round(multi_val_acc, 6)
             for cls_idx, cls_name in enumerate(["timeout", "tp_hit", "sl_hit"]):
                 mask = val_data[1] == cls_idx
                 if mask.sum() > 0:
