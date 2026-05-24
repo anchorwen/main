@@ -4310,15 +4310,25 @@ def execute_live_cycle(
     # ── Meta-filter gate (lazy init on first live cycle) ──
     if not config.no_mt5 and getattr(state, "_meta_filter_gate", None) is None:
         try:
+            from core.execution.conformal_calibrator import ConformalCalibrator
             from core.execution.meta_filter_gate import MetaFilterGate
+
+            # Track 3d: load calibrator so MetaFilterGate uses adaptive
+            # threshold (Q10, clamped [0.35, 0.70]) when warm.
+            _cal = ConformalCalibrator(
+                state_path="data/conformal_calibrator_state.json",
+            )
+            _cal.cold_start_from_journal("data/live_trade_journal.jsonl")
 
             _mg = MetaFilterGate(
                 model_dir="data/models/meta_filter_v3",
                 threshold=META_FILTER_GATE_THRESHOLD,
+                calibrator=_cal,
             )
             _mg.load()
             if _mg.is_loaded:
                 state._meta_filter_gate = _mg
+                cal_diag = _cal.describe()
                 print(
                     json.dumps(
                         {
@@ -4326,6 +4336,9 @@ def execute_live_cycle(
                             "time": _utc_iso(),
                             "threshold": META_FILTER_GATE_THRESHOLD,
                             "model": "meta_filter_v3",
+                            "conformal_samples": cal_diag["sample_count"],
+                            "conformal_warm": cal_diag["is_warm"],
+                            "conformal_threshold": cal_diag["current_threshold"],
                         },
                         ensure_ascii=False,
                     ),
