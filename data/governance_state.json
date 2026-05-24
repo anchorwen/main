@@ -26,6 +26,14 @@
       "last_transition_at": "2026-05-22T22:02:23.334916",
       "transition_count": 3,
       "freeze_count": 0
+    },
+    "Online_MLP_V1": {
+      "brain_id": "Online_MLP_V1",
+      "status": "shadow",
+      "registered_at": "2026-05-24T05:52:17.391062",
+      "last_transition_at": "2026-05-24T05:52:17.391062",
+      "transition_count": 0,
+      "freeze_count": 0
     }
   },
   "transition_log": [

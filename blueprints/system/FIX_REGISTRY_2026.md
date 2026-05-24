@@ -2855,3 +2855,29 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
   - Shared calibrator enables unified precision-curve calibration across both gates
   - MetaFilterGate retained as fallback when ConformalOUGate not loaded
 - **Dependents Checked**: `ConformalCalibrator` already existed. `MetaFilterGate` unchanged (backward compat). `strategy_line.py` OU gating path uses `conformal_ou_gate.is_loaded` guard with MetaFilterGate fallback. verify.py --quick passes (mypy + ruff). Online_MLP_V1 config restored (false positive deletion in FIX-20260524-006 — brain can't vote in barrier_12bar but is essential for online feedback pipeline).
+
+### FIX-20260524-009
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: deployment-config
+- **Scope**: config, hot-reload, startup
+- **Files**:
+  - `core/deployment/config_hot_reload.py` (MODIFIED: YAML auto-detection in load())
+- **Description**: ConfigHotReload hardcoded `json.loads()` for all config files, causing `live_intent_loop.py`'s hot reload watcher on `configs/live.yaml` to fail every poll cycle with "JSON decode failed" errors.
+
+  **Problem**:
+  `live_intent_loop.py:1591` creates `ConfigHotReload("configs/live.yaml")` to watch for live config changes at runtime. But `ConfigHotReload.load()` unconditionally calls `json.loads()`, which fails on YAML files — the `live.yaml` watcher had been silently broken since inception. The initial config load succeeded through `yaml.safe_load()` in the ServiceContainer, but runtime hot reload was dead.
+
+  **Solution**:
+  `load()` now detects file suffix:
+  - `.yaml` / `.yml` → `yaml.safe_load()`
+  - Everything else → `json.loads()` (backward compat for `engine_config.json`)
+
+  Also broadened exception catch from `json.JSONDecodeError` to `(json.JSONDecodeError, yaml.YAMLError)`.
+
+- **Root Cause**: RC-06 (contract-violation: `ConfigHotReload` assumed JSON-only input but was fed a YAML file by `live_intent_loop.py`). The error was previously known (FIX-20260523-006 added the try/except wrapper) but treated as "acceptable log noise" rather than fixing the parser.
+- **Prevention**:
+  - Any new config file passed to `ConfigHotReload` will auto-detect format by extension
+  - JSON path preserved for backward compat with `engine_config.json`
+- **Dependents Checked**: `live_intent_loop.py` creates ConfigHotReload for `live.yaml`. ServiceContainer creates ConfigHotReload for `engine_config.json`. Both paths verified — YAML route for live.yaml, JSON route for engine_config.json. verify.py --quick passes (mypy + ruff).

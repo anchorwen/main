@@ -3,6 +3,8 @@ import logging
 import threading
 from pathlib import Path
 
+import yaml
+
 from core.contracts.domain_keys import (
     PAYLOAD_KEY_CONFIG_PATH,
     PAYLOAD_KEY_CURRENT_KEYS,
@@ -43,10 +45,14 @@ class ConfigHotReload:
             return self._current
         with self._lock:
             try:
-                data = json.loads(self._path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
+                raw = self._path.read_text(encoding="utf-8")
+                if self._path.suffix in (".yaml", ".yml"):
+                    data = yaml.safe_load(raw) or {}
+                else:
+                    data = json.loads(raw)
+            except (json.JSONDecodeError, yaml.YAMLError):
                 logging.error(
-                    "ConfigHotReload: JSON decode failed for %s — keeping current config",
+                    "ConfigHotReload: decode failed for %s — keeping current config",
                     self._path,
                 )
                 return self._current

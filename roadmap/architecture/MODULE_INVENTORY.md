@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-24T05:47:56Z
+> **自动生成**: 2026-05-24T06:01:07Z
 > **扫描模块数**: 443
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -155,7 +155,7 @@
 | `compliance_audit.py` | ✅ active | ComplianceAuditService | 9 | 567 | — | |
 | `compliance_control_matrix.py` | ✅ active | ComplianceControlMatrixService | 11 | 424 | — | |
 | `compliance_export.py` | ✅ active | TradeRecord, ComplianceReport | 9 | 368 | — | |
-| `config_hot_reload.py` | ✅ active | ConfigHotReload | 7 | 123 | — | |
+| `config_hot_reload.py` | ✅ active | ConfigHotReload | 7 | 129 | — | |
 | `deployment_executor.py` | ✅ active | DeploymentExecutor | 8 | 329 | — | |
 | `deployment_plan.py` | ✅ active | DeploymentPlanService | 7 | 300 | — | |
 | `domain_keys.py` | ⬜ empty | — | 0 | 7 | — | |
