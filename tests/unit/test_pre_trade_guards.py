@@ -46,15 +46,15 @@ class TestComputePositionSize:
         )
         assert size == 0.01
 
-    def test_zero_atr_returns_min(self):
-        """Zero ATR should return min_lot as safe default"""
+    def test_zero_atr_returns_zero(self):
+        """Zero ATR should return 0.0 — cannot compute safe position size"""
         size = compute_position_size(risk_budget_usd=5.0, atr=0.0, sl_atr_mult=2.0)
-        assert size == 0.01
+        assert size == 0.0
 
-    def test_zero_sl_mult_returns_min(self):
-        """Zero SL mult should return min_lot"""
+    def test_zero_sl_mult_returns_zero(self):
+        """Zero SL mult should return 0.0 — cannot compute safe position size"""
         size = compute_position_size(risk_budget_usd=5.0, atr=5.0, sl_atr_mult=0.0)
-        assert size == 0.01
+        assert size == 0.0
 
     def test_risk_budget_increases_position(self):
         """Higher risk budget → proportionally larger position"""

@@ -8,6 +8,7 @@ rollback drill, operations timeline recording, and postmortem summary.
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from core.contracts.domain_keys import (
     ARTIFACT_BASE_DIR,
@@ -208,7 +209,7 @@ class ReleasePipelineService:
         )
 
         status = self._status(gate, plan, execution, rollback, postmortem)
-        result = {
+        result: dict[str, Any] = {
             PAYLOAD_KEY_SCHEMA_VERSION: SCHEMA_RELEASE_PIPELINE,
             PAYLOAD_KEY_VALIDATION_MODE: validation_mode,
             RELEASE_PIPELINE_KEY_STARTED_AT: started_at,

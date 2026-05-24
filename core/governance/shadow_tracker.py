@@ -120,7 +120,6 @@ def build_shadow_summary(
     for bid, m in metrics_map.items():
         summaries[bid] = {
             "brain_id": bid,
-            "current_status": "candidate",
             "shadow_signal_count": m.shadow_signal_count,
             "shadow_long_count": m.long_count,
             "shadow_short_count": m.short_count,

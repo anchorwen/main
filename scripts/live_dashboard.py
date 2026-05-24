@@ -211,7 +211,7 @@ def _collect_features(base_dir: Path) -> dict[str, Any]:
         return {
             "exists": True,
             "row_count": row_count,
-            "latest_event_time": latest.get("event_time", "") if latest else "",
+            "latest_event_time": getattr(latest, "event_time", "") if latest else "",
         }
     except Exception as exc:
         return {"exists": False, "error": str(exc)[:200]}

@@ -25,12 +25,20 @@ brains:
   - path: configs/brains/ou_params_v7_m15.json
     enabled: true
   - path: configs/brains/meta_stage1_huber_v1.json
-    enabled: true
+    enabled: false  # FROZEN 2026-05-24: SL=2.0/TP=3.5 unprofitable with corrected costs (30pt spread/10pt slippage). Regression approach collapsed — replaced by binary classifier.
+  - path: configs/brains/meta_stage1_binary_cls_v1.json
+    enabled: true   # NEW 2026-05-24: Binary classifier (drop-timeout), SL=3.0/TP=1.5, Stage 1 Sharpe 8.5, Stage 2 LGB Sharpe 43.3. Shadow mode — monitoring before live voting.
+  - path: configs/brains/meta_stage1_metalabel_binary_v1.json
+    enabled: true   # NEW 2026-05-24: Meta-Labeling binary classifier. OU signal (z_entry=1.3) → barrier SL=3.0/TP=1.5. 43-dim (40 V9 + 3 OU). PIT-aligned. Contract group: barrier_12bar_meta. Shadow mode — deployment requires OU signal engine integration.
   # ── V9 barrier classifier brains DELETED 2026-05-21 ──
   # xgb_barrier_12bar_xgboost_v3: blind OOS WR 39.6%, Total PnL -714R — anti-predictive
   # lgb_barrier_12bar_lightgbm_v3: blind OOS WR 34.9%, Total PnL -1211R — anti-predictive
   # Root cause: unconditional P(TP|Features) on every M5 bar = pure noise
   # Strategic pivot: Huber regression probe (Meta_Stage1_Huber_V1) as sole barrier_12bar voter
+  # Status: probation — live voting with PnL monitoring, auto-retire if Sharpe < 0 for 30+ days
+  # ── Online learner excluded from live voting ──
+  # Online_MLP_V1: not yet validated for live voting — insufficient OOS trade history
+  # To activate: add `- path: configs/brains/online_learner_v1.json` with `enabled: true`
 gate:
   gate_policy_config: configs/live_gate_policy.json
   auto_recovery:
@@ -121,6 +129,11 @@ correlation_tracker:
 strategy_lines:
   barrier_12bar:
     enabled: true
+    # ── DORMANT 2026-05-24: Meta_Stage1_Huber_V1 frozen (The Great Reset) ──
+    # SL=3.0/TP=1.5 retrained contract. Meta_Stage1_Binary_Cls_V1 active
+    # as lightgbm_v1 but vote_weight=0.0 (shadow monitoring — OOF bimodal,
+    # not safe for live voting). Strategy reactivates when a voting brain
+    # passes quality gates or Binary_Cls_V1 OOF distribution is fixed.
     mode: shadow  # SHADOW-ONLY: zero real capital, BPS prediction logging only
     timeframe: M5
     magic: 90001
@@ -131,16 +144,16 @@ strategy_lines:
     base_volume: 0.0   # ZERO real capital — shadow observation only
     max_volume: 0.0    # ZERO real capital — shadow observation only
     sl:
-      base_atr_mult: 2.0
+      base_atr_mult: 3.0   # FIX-20260524-036: aligned with training contract SL=3.0 (was 2.0)
       hard_sl_ratio: 1.5
       dynamic: true
       min_sl_distance: 8.0   # absolute floor — SL ≥$8 even when ATR collapses
-      min_rr_ratio: 1.5      # stretch TP to maintain ≥1.5:1 when SL is floored
+      min_rr_ratio: 0.5      # TP≥0.5R when SL is floored (TP=1.5, so min RR is low)
     tp:
-      base_atr_mult: 3.5
+      base_atr_mult: 1.5   # FIX-20260524-036: aligned with training contract TP=1.5 (was 3.5)
       partial_tp_enabled: true
       partial_tp_ratio: 0.5
-      partial_tp_r: 1.5
+      partial_tp_r: 1.0
     exit:
       trail_enabled: true
       trail_atr_mult: 2.0
@@ -153,6 +166,45 @@ strategy_lines:
       min_r_for_hold: 0.3
       confidence_decay_exit: true
       hesitation_cycles: 12  # 12 M5 bars = 60min = matches 12-bar training horizon
+    budget:
+      daily_loss_limit_pct: -0.03
+      max_consecutive_losses: 5
+    direction_balance:
+      long_bias_discount: 0.05
+  barrier_12bar_meta:
+    enabled: true
+    # ── NEW 2026-05-24: Meta-Labeling contract group ──
+    # OU signal engine triggers candidate entries; the meta-labeling binary
+    # classifier (Meta_Stage1_MetaLabel_Binary_V1) predicts P(TP|signal).
+    # This is fundamentally different from barrier_12bar which predicts
+    # unconditionally on every bar — here ML filters OU signals only.
+    # Promoted from shadow to probation 2026-05-24: z_entry clipping [1.3, 2.5]
+    # and OU feature augmentation wired in FeatureAdapter.
+    mode: probation  # probation voting with live capital at small size
+    timeframe: M5
+    magic: 90014
+    min_valid_brains: 1
+    confidence_threshold: 0.40
+    brain_types:
+    - lightgbm_v1  # Meta_Stage1_MetaLabel_Binary_V1 — meta-labeling binary classifier
+    base_volume: 0.01  # probation: minimal live capital
+    max_volume: 0.01   # probation: capped at 0.01
+    sl:
+      base_atr_mult: 3.0
+      hard_sl_ratio: 1.5
+      dynamic: true
+      min_sl_distance: 8.0
+      min_rr_ratio: 0.5
+    tp:
+      base_atr_mult: 1.5
+      partial_tp_enabled: false
+    exit:
+      trail_enabled: false
+      flip_exit_enabled: true
+      flip_threshold: 0.5
+      time_exit_cycles: 60
+      confidence_decay_exit: true
+      hesitation_cycles: 12
     budget:
       daily_loss_limit_pct: -0.03
       max_consecutive_losses: 5
@@ -494,6 +546,7 @@ regime_gate:
   regime_map:
     trending:
       barrier_12bar: full
+      barrier_12bar_meta: reduced
       micro_3bar: reduced
       micro_m15: reduced
       micro_h1: full
@@ -501,6 +554,7 @@ regime_gate:
       statarb_m15: false
     mild_trend:
       barrier_12bar: full
+      barrier_12bar_meta: reduced
       micro_3bar: full
       micro_m15: full
       micro_h1: full
@@ -508,6 +562,7 @@ regime_gate:
       statarb_m15: reduced
     ranging:
       barrier_12bar: reduced
+      barrier_12bar_meta: full
       micro_3bar: reduced
       micro_m15: reduced
       micro_h1: reduced
@@ -515,6 +570,7 @@ regime_gate:
       statarb_m15: full
     high_vol:
       barrier_12bar: false
+      barrier_12bar_meta: reduced
       micro_3bar: full
       micro_m15: full
       micro_h1: reduced
@@ -522,6 +578,7 @@ regime_gate:
       statarb_m15: reduced
     normal:
       barrier_12bar: full
+      barrier_12bar_meta: full
       micro_3bar: full
       micro_m15: full
       micro_h1: full

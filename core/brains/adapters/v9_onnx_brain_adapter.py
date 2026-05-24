@@ -293,25 +293,6 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
         return V9OnnxBrainAdapter._softmax(logits)
 
     @staticmethod
-    def _score_to_direction(raw_score: float) -> tuple[Direction, float, float]:
-        """Map regression score to (direction_bias, up_prob, down_prob).
-
-        Uses 0.5 ± confidence/2 anchoring so the predicted direction always
-        wins the up/down comparison in consensus (FIX-20260522-013, sign-flip bug).
-        """
-        confidence = float(np.tanh(abs(raw_score)))
-        if raw_score > 0.1:
-            up = 0.5 + confidence / 2.0
-            down = 1.0 - up
-            return "long", up, down
-        elif raw_score < -0.1:
-            down = 0.5 + confidence / 2.0
-            up = 1.0 - down
-            return "short", up, down
-        else:
-            return "neutral", 0.5, 0.5
-
-    @staticmethod
     def _map_direction(idx: int) -> Direction:
         # Label encoding from train_from_csv.py: sl_hit_first=-1→0, timeout=0→1, tp_hit_first=1→2
         if idx == 2:

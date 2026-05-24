@@ -10,10 +10,13 @@ All outputs are StandardScaler-normalised when a scaler is configured.
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 
 from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
 
+_logger = logging.getLogger(__name__)
 DEFAULT_SEQ_LEN = 32
 
 
@@ -27,6 +30,7 @@ class MicrostructureFeatureAdapter:
     def __init__(self, scaler_path: str | None = None):
         self._scaler = None
         self._scaler_path = scaler_path
+        self._scaler_warned: bool = False
         if scaler_path:
             import joblib
 
@@ -84,10 +88,20 @@ class MicrostructureFeatureAdapter:
                 self._scaler.transform(raw_vector.reshape(1, -1)).ravel(),
                 dtype=np.float32,
             )
+        if not self._scaler_warned:
+            _logger.warning(
+                "MicrostructureFeatureAdapter: no scaler loaded — returning raw features"
+            )
+            self._scaler_warned = True
         return np.asarray(raw_vector, dtype=np.float32)
 
     def _normalize_2d(self, arr: np.ndarray) -> np.ndarray:
         """Apply StandardScaler per-row, or return raw if no scaler."""
         if self._scaler is not None:
             return np.asarray(self._scaler.transform(arr), dtype=np.float32)
+        if not self._scaler_warned:
+            _logger.warning(
+                "MicrostructureFeatureAdapter: no scaler loaded — returning raw features"
+            )
+            self._scaler_warned = True
         return np.asarray(arr, dtype=np.float32)

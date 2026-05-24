@@ -86,21 +86,21 @@ class TestStressMaxedOut:
                 "volume": 0.01,
                 "ticket": 1,
             },
-            "micro_3bar": {
-                "strategy": "micro_3bar",
+            "barrier_12bar_meta": {
+                "strategy": "barrier_12bar_meta",
                 "direction": "long",
                 "volume": 0.01,
                 "ticket": 2,
             },
-            "statarb_dynamic": {
-                "strategy": "statarb_dynamic",
+            "barrier_H1": {
+                "strategy": "barrier_H1",
                 "direction": "long",
                 "volume": 0.01,
                 "ticket": 3,
             },
         }
         ctrl = PortfolioRiskController(max_same_direction=2)
-        dec = _make_decision(strategy="unknown_4th", direction="long", volume=0.01)
+        dec = _make_decision(strategy="barrier_unknown", direction="long", volume=0.01)
         result = ctrl.check(dec, positions)
         assert result.verdict == RiskVerdict.REJECTED
 

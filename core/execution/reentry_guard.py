@@ -25,7 +25,12 @@ def _classify_exit_reason(raw_reason: str) -> str:
     ``"time_expired"``, ``"ou_revert"``, ``"meta_exit"``, ``"unknown"``.
     """
     r = raw_reason.lower()
-    if "brain_flip" in r or "signal_reversal" in r or "confidence_drop" in r or "confidence_decay" in r:
+    if (
+        "brain_flip" in r
+        or "signal_reversal" in r
+        or "confidence_drop" in r
+        or "confidence_decay" in r
+    ):
         return "brain_flip"
     if "sl_hit" in r or "sl_stop" in r:
         return "sl_hit"
@@ -273,7 +278,7 @@ class ReentryState:
 
     last_exit: ExitRecord | None = None
     consecutive_same_direction: int = 0
-    last_direction: str = ""
+    last_direction: str | None = None  # None = no prior direction (was "" sentinel)
 
     def record_exit(self, record: ExitRecord) -> None:
         self.last_exit = record

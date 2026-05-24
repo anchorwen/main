@@ -122,6 +122,7 @@ Adapter fallback paths
 | FIX-20260517-012 | 2026-05-17 | cursor-agent | — | Magic uniqueness 放宽为 per-contract_group：同一策略线（barrier_12bar）的大脑共享同一 magic（如 90001），不再被 brain_registration_gate 拒绝。 | RC-06 |
 | FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: brain_registration_gate.py magic uniqueness per contract_group. Previously registered as FIX-20260517-012. | process-violation |
 | FIX-20260519-003 | 2026-05-19 | cursor-agent | — | New file: startup_validator.py — per-brain schema startup validator (Tier 1 registered schemas + Tier 2 live compute). Previously registered as FIX-20260518-025. | missing-feature |
+| FIX-20260524-029 | 2026-05-24 | cursor-agent | — | Perf: _check_magic_unique() O(n²)→O(n) — replaced per-entry re-read of all configs/brains/*.json files with lazy-built magic→[brain_id] reverse index. Single O(n) pre-pass builds index; O(1) lookup per validation. Eliminates n×n file reads on multi-brain validation. | RC-06 |
 
 ## Cross-Module Contracts
 

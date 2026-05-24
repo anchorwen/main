@@ -65,10 +65,11 @@ class ExposurePolicy(RiskPolicy):
 
     def _check(self, intent, control_snapshot, context: dict) -> dict:
         current = context.get("current_notional_exposure", 0.0)
-        if intent.is_open_intent() and current >= self._max_notional:
+        proposed = context.get("proposed_notional_exposure", 0.0)
+        if intent.is_open_intent() and (current + proposed) >= self._max_notional:
             return {
                 "status": RiskDecisionStatus.DENY,
-                "reason": f"notional_exposure_exceeded({current:.0f}/{self._max_notional:.0f})",
+                "reason": f"notional_exposure_exceeded({current + proposed:.0f}/{self._max_notional:.0f})",
                 "tier": "exposure",
             }
         return {"status": RiskDecisionStatus.ALLOW, "reason": None, "tier": "exposure"}

@@ -75,7 +75,7 @@ class TestExecutionQueue:
         monkeypatch.setattr("time.sleep", lambda s: None)
 
         eq = ExecutionQueue(stagger_seconds=0)
-        dispatch_order: list[str] = []
+        dispatch_order: list[int] = []
 
         def _dispatch(**kw):
             dispatch_order.append(kw["magic"])
@@ -92,7 +92,7 @@ class TestExecutionQueue:
 
         results = eq.flush(_dispatch)
         # micro (0) → barrier (1) → statarb (2)
-        assert dispatch_order == ["90002", "90001", "90003"]
+        assert dispatch_order == [90002, 90001, 90003]
         assert all(r.dispatched for r in results)
 
     def test_flush_skips_rejected_risk(self, monkeypatch):

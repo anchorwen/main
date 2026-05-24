@@ -6,7 +6,7 @@
   "model_version": "v7.0-m5",
   "status": "live",
   "vote_weight": 1.5,
-  "magic": 90010,
+  "magic": 90003,
   "artifact_path": "data/models/arb_params_v7_m5.json",
   "feature_schema_id": "v6_price_series_1",
   "training_contract": "ou_mean_reversion_zscore",

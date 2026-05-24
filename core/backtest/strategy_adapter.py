@@ -205,9 +205,7 @@ class StrategyLineAdapter:
     ) -> StrategyLineAdapter:
         """Factory from strategy config dicts with pre-loaded brain adapters."""
         from core.execution.strategy_line import (  # dynamically registered
-            BarrierStrategy,
-            MicroStrategy,
-            StatArbStrategy,
+            StrategyLine,
             StrategyLineConfig,
         )
 
@@ -229,15 +227,7 @@ class StrategyLineAdapter:
             )
 
             brains = adapters_map.get(name, [])
-
-            if name in ("barrier_12bar", "barrier"):
-                lines.append(BarrierStrategy(config=config, brains=brains))
-            elif name in ("micro_3bar", "micro"):
-                lines.append(MicroStrategy(config=config, brains=brains))
-            elif name in ("statarb_dynamic", "statarb"):
-                lines.append(StatArbStrategy(config=config, brains=brains))
-            else:
-                raise ValueError(f"Unknown strategy: {name}")
+            lines.append(StrategyLine(config=config, brains=brains))
 
         return cls(lines)
 

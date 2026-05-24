@@ -9,6 +9,7 @@ Usage:
 
 from __future__ import annotations
 
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -154,7 +155,13 @@ def dispatch_live_order(
     if not ignore_protection_flag:
         protection_flag = resolve_protection_flag_path(base_dir, protection_flag_path)
         if protection_flag.exists():
-            raise RuntimeError(f"protection guard active: {protection_flag}")
+            # Require the flag file to be at least 5 minutes old to prevent
+            # accidental triggering via stale or transient files.
+            _flag_age = time.time() - protection_flag.stat().st_mtime
+            if _flag_age >= 300:  # 5 min
+                raise RuntimeError(
+                    f"protection guard active: {protection_flag} (age={_flag_age:.0f}s)"
+                )
 
     body = attach_schema_metadata(dict(execution_payload))
     body.setdefault("symbol", symbol)

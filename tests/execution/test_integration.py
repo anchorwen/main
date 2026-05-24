@@ -92,7 +92,7 @@ class TestStrategyLineToRiskPipeline:
             },
         }
         risk_ctrl = PortfolioRiskController(max_gross_exposure=0.08)
-        risk_result = risk_ctrl.check(result, positions)
+        risk_result = risk_ctrl.check(result, positions, current_price=2000.0)
         assert risk_result.verdict == RiskVerdict.REJECTED
 
     def test_net_out_partial_close_flow(self):

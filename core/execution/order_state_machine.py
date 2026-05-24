@@ -89,7 +89,7 @@ class OrderStateMachine:
         mapping = {
             "acknowledged": "ack",
             "accepted": "accepted",
-            "working": "accepted",
+            "working": "working",
             "partial": "partially_filled",
             "filled": "filled",
             "cancelled": "cancelled",

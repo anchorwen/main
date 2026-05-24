@@ -14,6 +14,7 @@ Exports:
 
 from core.brains.adapters.base_adapter import BaseBrainAdapter
 from core.brains.adapters.lightgbm_brain_adapter import LightGBMBrainAdapter
+from core.brains.adapters.meta_filter_adapter import MetaFilterAdapter
 from core.brains.adapters.online_learner_adapter import OnlineLearnerAdapter
 from core.brains.adapters.params_brain_adapter import ParamsBrainAdapter
 from core.brains.adapters.transformer_brain_adapter import TransformerBrainAdapter
@@ -52,6 +53,7 @@ __all__ = [
     "V9OnnxBrainAdapter",
     "XGBoostBrainAdapter",
     "LightGBMBrainAdapter",
+    "MetaFilterAdapter",
     "ParamsBrainAdapter",
     "OnlineLearnerAdapter",
     "TransformerBrainAdapter",

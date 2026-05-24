@@ -599,7 +599,30 @@ class StrategyLine:
                             reason=ou_result["reason"],
                         )
                 except Exception:
-                    pass  # OU gate failure is non-blocking
+                    import logging
+
+                    _sl_logger = logging.getLogger(__name__)
+                    _sl_logger.warning(
+                        "OU gate evaluation failed for strategy=%s — BLOCKING trade",
+                        name,
+                        exc_info=True,
+                    )
+                    return StrategyDecision(
+                        strategy_name=name,
+                        magic=self.config.magic,
+                        should_trade=False,
+                        direction=direction,
+                        confidence=confidence,
+                        volume=0.0,
+                        sl=0.0,
+                        tp=0.0,
+                        hard_sl=0.0,
+                        brain_ids=brain_ids,
+                        supporting_count=support_count,
+                        total_count=total_count,
+                        regime_mode=regime_gate_mode,
+                        reason="ou_gate_exception_blocked",
+                    )
             elif (
                 meta_filter_gate is not None
                 and meta_filter_gate.is_loaded
@@ -628,7 +651,30 @@ class StrategyLine:
                             reason=mf_result["reason"],
                         )
                 except Exception:
-                    pass  # Meta-filter failure is non-blocking
+                    import logging
+
+                    _sl_logger = logging.getLogger(__name__)
+                    _sl_logger.warning(
+                        "Meta-filter gate evaluation failed for strategy=%s — BLOCKING trade",
+                        name,
+                        exc_info=True,
+                    )
+                    return StrategyDecision(
+                        strategy_name=name,
+                        magic=self.config.magic,
+                        should_trade=False,
+                        direction=direction,
+                        confidence=confidence,
+                        volume=0.0,
+                        sl=0.0,
+                        tp=0.0,
+                        hard_sl=0.0,
+                        brain_ids=brain_ids,
+                        supporting_count=support_count,
+                        total_count=total_count,
+                        regime_mode=regime_gate_mode,
+                        reason="meta_filter_gate_exception_blocked",
+                    )
 
         if not parliament_passed:
             return StrategyDecision(
@@ -1234,6 +1280,9 @@ class StrategyLine:
     ) -> float:
         """Compute dynamic volume with bandit sizing (v3.1 + v3.2 depth decay).
 
+        Core formula mirrors _compute_meta_volume in meta_pipeline.py —
+        keep these two implementations in sync.
+
         When risk_budget_usd > 0, uses vol-targeted sizing:
           base = risk_budget / (ATR × SL_mult × contract_size)
         Otherwise falls back to fixed base_volume.
@@ -1311,7 +1360,10 @@ class StrategyLine:
         # v3.1: MVS cut-off AFTER Kelly — kills micro-positions where final
         # multiplier (including Kelly) is too low.  Previously ran before Kelly,
         # which prevented Kelly amplification from saving marginal signals.
-        if size > 0 and size < base_volume * MVS_THRESHOLD:
+        # Uses config.base_volume (not risk-budget-computed base_volume) so the
+        # cutoff is stable regardless of risk_budget_usd.
+        _mvs_cutoff = self.config.base_volume * MVS_THRESHOLD
+        if size > 0 and size < _mvs_cutoff:
             size = 0.0
 
         # Round to lot_step using floor-round (consistent with compute_position_size).

@@ -127,7 +127,7 @@ class DynamicBrainWeighter:
                 return {
                     "brain_id": brain_id,
                     "health_signal": self.get_voting_tier(brain_id),
-                    "composite_mean": metrics.sharpe_ratio / max(5.0, 1.0),
+                    "composite_mean": min(max(metrics.sharpe_ratio, -5.0) / 5.0, 1.0),
                     "weight": self._compute_weight_from_metrics(metrics),
                 }
         summary = self._tracker.get_brain_summary(brain_id)
@@ -287,7 +287,7 @@ class DynamicBrainWeighter:
           - PnL < 0, trades < 100           → UNDER_REVIEW ×0.7
           - PnL < 0, trades >= 100          → NEGATIVE    ×0.5
 
-        Returns weight in [0.0, 1.5].  Weight=0 means the brain cannot vote.
+        Returns weight in [0.0, 3.0].  Weight=0 means the brain cannot vote.
         """
         trades = m.sample_count
         pnl = m.cumulative_pnl
@@ -297,7 +297,7 @@ class DynamicBrainWeighter:
 
         # ── Hard gate: auto-retirement (overrides all tiers) ──
         # Condition: trades >= 100, PnL < 0, AND (WR < 30% or PF < 0.60)
-        if trades >= 100 and pnl < 0 and (wr < 0.30 or (pf > 0 and pf < 0.60)):
+        if trades >= 100 and pnl < 0 and (wr < 0.30 or pf < 0.60):
             return 0.0
 
         # ── Health tier mapping (preserves original classification) ──
@@ -336,9 +336,13 @@ class DynamicBrainWeighter:
         sharpe_factor = math.tanh(sharpe / 5.0)
         sharpe_factor = max(0.0, sharpe_factor)
 
-        if health == "healthy":
+        if health == "exceptional":
+            weight = (base_weight * 2.5 + sharpe_factor * 2.5) * health_mult
+        elif health == "healthy":
             weight = (base_weight * 2.0 + sharpe_factor * 2.0) * health_mult
-        else:  # stable
+        elif health == "marginal":
+            weight = (base_weight * 0.5 + sharpe_factor * 1.0) * health_mult
+        else:  # stable, warning, degraded — or unclassified
             weight = (base_weight + sharpe_factor * 2.0) * health_mult
 
         # Win rate modifier: ±15%
@@ -372,7 +376,7 @@ class DynamicBrainWeighter:
         pf = metrics.profit_factor
 
         # Auto-retired
-        if trades >= 100 and pnl < 0 and (wr < 0.30 or (pf > 0 and pf < 0.60)):
+        if trades >= 100 and pnl < 0 and (wr < 0.30 or pf < 0.60):
             return "retired"
         # Probation
         if trades >= 100 and pnl < 0:

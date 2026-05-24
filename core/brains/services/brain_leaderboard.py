@@ -78,11 +78,11 @@ class BrainLeaderboard:
     when no engine is provided (backward compat).
 
     Score formula (0-100 scale):
-      score = 40 * tanh(sharpe / 3.0)              # Sharpe contribution
-            + 25 * (win_rate - 0.40) * 2.0          # win rate (40% baseline)
-            + 15 * min(pf / 3.0, 1.0)               # profit factor
-            + 10 * tanh(cum_pnl / 50.0)              # cumulative PnL
-            + 10 * (1.0 - dd_ratio)                  # drawdown penalty
+      score = 40 * tanh(sharpe / 3.0)                # Sharpe contribution
+            + 25 * clamp((wr - 0.35) / 0.55, 0, 1)    # win rate (35% baseline)
+            + 15 * min(pf / 3.0, 1.0)                  # profit factor (capped at 3.0)
+            + 10 * tanh(cum_pnl / 50.0)                # cumulative PnL
+            + 10 * (1.0 - dd_ratio)                    # drawdown penalty
     """
 
     def __init__(self, quality_engine: Any | None = None) -> None:

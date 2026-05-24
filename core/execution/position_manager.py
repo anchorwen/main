@@ -72,6 +72,7 @@ class ActivePosition:
     partial_tp_ratio: float = 0.5  # fraction of volume to close at partial TP
     confidence_ema: float = 0.0  # EMA-smoothed confidence for noise-immune exit
     confidence_alpha: float = 0.4  # EMA smoothing factor (0.4 ≈ 3 cycles to stabilise)
+    consecutive_flips: int = 0  # per-position flip confirmation counter
 
     # v3.2: Opt3 bleed-stop tracking — bar-level PnL since entry
     bar_pnls: list[float] = field(default_factory=list)
@@ -163,9 +164,6 @@ class ActivePositionManager:
         self._primary_ticket: int | None = None  # "primary" for backward compat
         self._last_brain_reeval_cycle: int = -1
         self._entry_consensus_score: float = 0.0
-        self._consecutive_flips: int = (
-            0  # for 2-confirmation flip exit (per-position, stored on ActivePosition)
-        )
         self._last_state_path: str | None = None
         self._recovery_cycle: int = -1  # -1=normal, >=0=in grace period (increments each cycle)
 
@@ -317,7 +315,7 @@ class ActivePositionManager:
         # Seed EMA with entry confidence so first-cycle drop is measured
         # against a warm start, not zero
         pos.confidence_ema = self._entry_consensus_score
-        self._consecutive_flips = 0
+        pos.consecutive_flips = 0
         self._recovery_cycle = -1  # normal entry, no grace period
 
         self._positions[ticket] = pos
@@ -356,7 +354,7 @@ class ActivePositionManager:
         # Update all positions
         result: dict[str, Any] = {}
         for t in list(self._positions):
-            result = self._update_single_position(
+            result[str(t)] = self._update_single_position(
                 t,
                 mid,
                 bid,
@@ -743,20 +741,20 @@ class ActivePositionManager:
 
         # ── Consecutive confirmation logic (flip only — reversal is immediate) ──
         if flip_detected:
-            self._consecutive_flips += 1
+            pos.consecutive_flips += 1
             _confirm_needed = self.flip_confirm_count + (1 if single_brain else 0)
             # Single-brain: never treat as "extreme" (100% is the only
             # possible flip_ratio for a single brain).  Always require
             # consecutive confirmation.
             if not single_brain and flip_ratio >= 0.70:
-                self._consecutive_flips = 0
+                pos.consecutive_flips = 0
                 return True, f"brain_flip_extreme_{int(flip_ratio*100)}pct"
             # Exit after required consecutive flips
-            if self._consecutive_flips >= _confirm_needed:
-                self._consecutive_flips = 0
+            if pos.consecutive_flips >= _confirm_needed:
+                pos.consecutive_flips = 0
                 return True, f"brain_flip_{int(flip_ratio*100)}pct_c{_confirm_needed}"
         else:
-            self._consecutive_flips = 0
+            pos.consecutive_flips = 0
 
         if self.confidence_decay_enabled and ema_drop > self.confidence_drop_threshold:
             return True, f"confidence_decay_ema_{ema_drop:.3f}"
@@ -1231,7 +1229,7 @@ class ActivePositionManager:
             # Regime state
             regime=reg.get("regime", "normal"),
             regime_confidence=float(reg.get("regime_confidence", 0.0)),
-            trend_aligned=self._is_trend_aligned(reg),
+            trend_aligned=self._is_trend_aligned(reg, position_side=pos.side),
             atr_current=current_atr,
             atr_entry=pos.entry_atr,
             atr_expansion=round((current_atr - pos.entry_atr) / max(pos.entry_atr, 0.001), 4),
@@ -1256,9 +1254,9 @@ class ActivePositionManager:
         return False, ""
 
     @staticmethod
-    def _is_trend_aligned(regime_info: dict[str, Any]) -> bool:
+    def _is_trend_aligned(regime_info: dict[str, Any], *, position_side: str = "") -> bool:
         """Check if the current regime's trend direction matches position side."""
-        pos_side = regime_info.get("_position_side", "")
+        pos_side = position_side or regime_info.get("_position_side", "")
         trend_dir = regime_info.get("trend_direction", "")
         if not pos_side or not trend_dir:
             return True  # unknown → assume aligned
@@ -1559,6 +1557,7 @@ class ActivePositionManager:
                         "ou_handoff_r": pos.ou_handoff_r,
                         "strategy_name": pos.strategy_name,
                         "expected_remaining_volume": pos.expected_remaining_volume,
+                        "consecutive_flips": pos.consecutive_flips,
                     }
                 )
             payload: dict[str, Any] = {
@@ -1566,7 +1565,6 @@ class ActivePositionManager:
                 "positions": positions_payload,
                 "_last_brain_reeval_cycle": self._last_brain_reeval_cycle,
                 "_entry_consensus_score": self._entry_consensus_score,
-                "_consecutive_flips": self._consecutive_flips,
                 "_recovery_cycle": self._recovery_cycle,
                 "_primary_ticket": self._primary_ticket,
                 "saved_at_utc": (
@@ -1649,6 +1647,7 @@ class ActivePositionManager:
                 expected_remaining_volume=float(
                     d.get("expected_remaining_volume", d.get("volume", 0.0))
                 ),
+                consecutive_flips=int(d.get("consecutive_flips", 0)),
                 trail_atr_mult=float(d.get("trail_atr_mult", self.trail_atr_mult)),
                 trail_atr_mult_low=float(d.get("trail_atr_mult_low", self.trail_atr_mult_low)),
                 trail_atr_mult_high=float(d.get("trail_atr_mult_high", self.trail_atr_mult_high)),
@@ -1676,7 +1675,10 @@ class ActivePositionManager:
             )
             self._last_brain_reeval_cycle = int(data.get("_last_brain_reeval_cycle", -1))
             self._entry_consensus_score = float(data.get("_entry_consensus_score", 0.0))
-            self._consecutive_flips = int(data.get("_consecutive_flips", 0))
+            # backward-compat: read legacy _consecutive_flips into primary position
+            _legacy_flips = int(data.get("_consecutive_flips", 0))
+            if primary_pos is not None and _legacy_flips:
+                primary_pos.consecutive_flips = _legacy_flips
             self._recovery_cycle = 0  # always start grace period on recovery
             return primary_pos
         else:
@@ -1688,6 +1690,8 @@ class ActivePositionManager:
             self._primary_ticket = pos.ticket
             self._last_brain_reeval_cycle = int(data.get("_last_brain_reeval_cycle", -1))
             self._entry_consensus_score = float(data.get("_entry_consensus_score", 0.0))
-            self._consecutive_flips = int(data.get("_consecutive_flips", 0))
+            _legacy_flips = int(data.get("_consecutive_flips", 0))
+            if _legacy_flips:
+                pos.consecutive_flips = _legacy_flips
             self._recovery_cycle = 0  # always start grace period on recovery
             return pos

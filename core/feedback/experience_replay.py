@@ -80,6 +80,23 @@ class ExperienceReplayBuffer:
     def size(self) -> int:
         return len(self._buffer)
 
+    def reset(self) -> int:
+        """Clear buffer and persisted state without training.
+
+        Returns the number of discarded samples.  Used after a data-pipeline
+        fix (e.g. look-ahead bias correction) to ensure old contaminated
+        samples don't mix with clean data.
+        """
+        discarded = len(self._buffer)
+        self._buffer.clear()
+        self._running_r_mean = 1.0
+        self._save_state()
+        logger.info(
+            "ExperienceReplayBuffer reset: discarded %d samples, running_r_mean reset to 1.0",
+            discarded,
+        )
+        return discarded
+
     def flush(self) -> list[tuple[np.ndarray, int]]:
         """Expand samples by integer weight, shuffle, and discharge.
 
@@ -119,6 +136,7 @@ class ExperienceReplayBuffer:
 
         # ── Discharge ──
         flushed_count = len(self._buffer)
+        avg_weight = sum(w for _, _, w, _ in self._buffer) / max(flushed_count, 1)
         self._buffer.clear()
         self._total_flushed += flushed_count
         self._save_state()
@@ -128,9 +146,7 @@ class ExperienceReplayBuffer:
             "class_dist=%s",
             flushed_count,
             len(expanded),
-            sum(w for _, _, w, _ in self._buffer) / max(flushed_count, 1)
-            if False  # buffer already cleared — use pre-clear snapshot
-            else len(expanded) / flushed_count,
+            avg_weight,
             class_counts,
         )
 
@@ -148,14 +164,19 @@ class ExperienceReplayBuffer:
 
         EMA (α=0.05) lets the mean track regime shifts over months while
         smoothing out single-trade outliers.
+
+        Weight is computed against the *previous* running mean, then the
+        mean is updated — avoids circular self-normalization where the
+        current trade pulls the mean toward itself.
         """
         # |PnL| is the realised dollar outcome — a direct proxy for trade
         # magnitude.  We don't divide by volume here because position risk
         # (SL distance × pip_value × volume) is not recorded in the journal.
         r_abs = abs(pnl)
-        # EMA update
-        self._running_r_mean = _EMA_ALPHA * r_abs + (1.0 - _EMA_ALPHA) * self._running_r_mean
-        weight = r_abs / max(self._running_r_mean, 1e-8)
+        # Use previous mean for weight, then update — prevents self-bias
+        prev_mean = self._running_r_mean
+        weight = r_abs / max(prev_mean, 1e-8)
+        self._running_r_mean = _EMA_ALPHA * r_abs + (1.0 - _EMA_ALPHA) * prev_mean
         return float(np.clip(weight, _MIN_WEIGHT, _MAX_WEIGHT))
 
     # ------------------------------------------------------------------

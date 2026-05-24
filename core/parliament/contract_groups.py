@@ -20,18 +20,20 @@ from core.schemas.trading_contracts import ConsensusResult, DegradedResult, Dire
 
 # ── Contract group definitions ────────────────────────────────────────────
 
-# Group 1: Trained on survival-barrier contract (2.0×ATR SL, 3.5×ATR TP, 12-bar M5)
+# Group 1: Trained on survival-barrier contract (3.0×ATR SL, 1.5×ATR TP, 12-bar M5)
+# FIX-20260524-036: SL/TP updated from 2.0/3.5 → 3.0/1.5 after calibration surface rebuild.
+# Meta_Stage1_Huber_V1 frozen (regression collapse with corrected costs).
+# Meta_Stage1_Binary_Cls_V1 active as lightgbm_v1 but vote_weight=0.0 (shadow monitoring).
 BARRIER_GROUP: dict[str, Any] = {
     "name": "barrier_12bar",
     "horizon_cycles": 12,
     "brain_types": {
-        "lightgbm_v1",  # Meta_Stage1_Huber_V1 — Dictator Protocol: sole voter
-        # onnx_v9 (CRT) and online_sgd (Online_MLP) evicted 2026-05-22 —
-        # Parliament consensus is meaningless for a shadow regression probe.
-        # Huber must deliver raw BPS signals to Track 4d unimpeded.
+        "lightgbm_v1",  # Meta_Stage1_Binary_Cls_V1 — shadow monitoring (vote_weight=0.0)
+        # Meta_Stage1_Huber_V1 frozen 2026-05-24 (The Great Reset).
+        # onnx_v9 (CRT) and online_sgd (Online_MLP) evicted 2026-05-22.
     },
-    "contract": "survival_barrier_2.0sl_3.5tp_12bar",
-    "description": "Dictator Protocol: Huber solo. BPS regression probe → Track 4d MetaSignalFilter.",
+    "contract": "survival_barrier_3.0sl_1.5tp_12bar",
+    "description": "Shadow monitoring: Binary_Cls_V1 vote_weight=0.0. Huber frozen. Strategy dormant until voting brain passes quality gates.",
 }
 
 # Group 2a: Micro M5 (5-bar, 1.5×ATR SL, 2.5×ATR TP, ~25 min)
@@ -151,6 +153,23 @@ H1_SWING_GROUP: dict[str, Any] = {
     "description": "H1 daily swing — 24-bar (~1d) barrier, SL=2.0xATR, TP=3.5xATR",
 }
 
+# Group 5: Meta-Labeling barrier_12bar (OU-triggered binary classification)
+# Unlike BARRIER_GROUP (unconditional barrier prediction on every bar),
+# this group ONLY evaluates OU signals — the meta-labeling binary classifier
+# answers: "Given this OU signal (z_score, half_life, theta) + V9 features,
+# will SL or TP hit first at 12-bar horizon?"
+# Vote weight 0.0 by default — promoted to probation when OU feature bridge is active.
+BARRIER_12BAR_META_GROUP: dict[str, Any] = {
+    "name": "barrier_12bar_meta",
+    "horizon_cycles": 12,
+    "brain_types": {
+        "lightgbm_v1",  # Meta_Stage1_MetaLabel_Binary_V1 — OU signal meta-labeler
+    },
+    "contract": "barrier_12bar_meta_binary_cls",
+    "voting_mode": "weighted",
+    "description": "OU-triggered meta-labeling: binary classifier on OU signal bars, SL=3.0/TP=1.5, 12-bar M5 horizon",
+}
+
 # Group 4e: H4 multi-day swing (18-bar H4, 2.0×ATR SL, 4.0×ATR TP, ~3d)
 H4_SWING_GROUP: dict[str, Any] = {
     "name": "h4_swing",
@@ -163,6 +182,7 @@ H4_SWING_GROUP: dict[str, Any] = {
 
 ALL_GROUPS: tuple[dict[str, Any], ...] = (
     BARRIER_GROUP,
+    BARRIER_12BAR_META_GROUP,
     MICRO_GROUP,
     MICRO_M15_GROUP,
     MICRO_H1_GROUP,

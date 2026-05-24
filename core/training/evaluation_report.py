@@ -57,6 +57,7 @@ def compute_financial_metrics(
     pnl: np.ndarray | None = None,
     *,
     annual_factor: int = 252,
+    threshold: float = 0.5,
 ) -> dict[str, float]:
     """Compute trading-aligned metrics from predictions.
 
@@ -65,6 +66,8 @@ def compute_financial_metrics(
         y_pred: Predicted probabilities or continuous scores.
         pnl: Optional P&L array for return-magnitude weighting.
         annual_factor: Annualization factor (252 for daily).
+        threshold: Decision threshold for binary classification.
+                   Must match the threshold used during training.
 
     Returns:
         Dict with sharpe_ratio, win_rate, profit_factor, max_drawdown, etc.
@@ -85,7 +88,7 @@ def compute_financial_metrics(
     if y_pred.ndim > 1 and y_pred.shape[1] > 1:
         pred_class = np.argmax(y_pred, axis=1)
     else:
-        pred_class = (np.asarray(y_pred).flatten() > 0.5).astype(np.int32)
+        pred_class = (np.asarray(y_pred).flatten() >= threshold).astype(np.int32)
 
     if pnl is not None and len(pnl) > 0:
         returns = np.where(pred_class == 1, np.abs(pnl), -np.abs(pnl))
@@ -93,6 +96,24 @@ def compute_financial_metrics(
         direction = 2.0 * y_true.astype(np.float64) - 1.0
         pos = 2.0 * pred_class.astype(np.float64) - 1.0
         returns = pos * direction
+
+    # Filter NaN before computing metrics
+    _nan_mask = np.isnan(returns)
+    if np.any(_nan_mask):
+        returns = returns[~_nan_mask]
+
+    if len(returns) == 0:
+        return {
+            "sharpe_ratio": 0.0,
+            "win_rate": 0.0,
+            "profit_factor": 0.0,
+            "max_drawdown": 0.0,
+            "expectancy": 0.0,
+            "sortino_ratio": 0.0,
+            "total_trades": 0,
+            "mean_return": 0.0,
+            "std_return": 0.0,
+        }
 
     mean_ret = float(np.mean(returns))
     std_ret = float(np.std(returns)) + 1e-10
@@ -118,11 +139,15 @@ def compute_financial_metrics(
     downside_std = float(np.std(downside)) + 1e-10 if len(downside) > 0 else 1e-10
     sortino = mean_ret / downside_std * np.sqrt(annual_factor)
 
+    annualized_return = mean_ret * annual_factor
+    calmar_ratio = annualized_return / max(max_drawdown, 1e-10)
+
     return {
         "sharpe_ratio": round(sharpe, 4),
         "win_rate": round(win_rate, 4),
         "profit_factor": round(profit_factor, 4),
         "max_drawdown": round(max_drawdown, 4),
+        "calmar_ratio": round(calmar_ratio, 4),
         "expectancy": round(expectancy, 6),
         "sortino_ratio": round(sortino, 4),
         "total_trades": total_trades,

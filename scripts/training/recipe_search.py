@@ -192,13 +192,13 @@ def _train_and_evaluate(
         return metrics
 
     elif architecture == "lightgbm":
-        from scripts.training.trainers.lgb_trainer import load_data as lgb_load
+        from scripts.training.trainers.lgb_trainer import load_training_data as lgb_load
         from scripts.training.trainers.lgb_trainer import train_lightgbm
 
-        X, y, feature_names = lgb_load(data_path)
+        X, y, _pnl, feature_names = lgb_load(data_path)
         val_data = None
         if val_data_path:
-            Xv, yv, _ = lgb_load(val_data_path)
+            Xv, yv, _, _ = lgb_load(val_data_path)
             val_data = (Xv, yv)
         lgb_params = {
             "n_estimators": params.get("n_estimators", 500),

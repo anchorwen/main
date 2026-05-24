@@ -12,6 +12,7 @@ import json
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 
 def _repo_root() -> Path:
@@ -56,10 +57,15 @@ def build_report(*, base_dir: str, mt5_terminal_path: str) -> dict:
         extensions={"mt5_terminal_path": str(terminal_path)},
     )
     container = ServiceContainer(cfg).build()
+    assert container.health_check is not None
+    assert container.governance_service is not None
+    assert container.dispatcher is not None
 
-    status = {
-        "health": container.health_check.readiness(),
-        "brain_state_count": len(container.governance_service.get_all_states()),
+    health_status = container.health_check.readiness()
+    governance_states = container.governance_service.get_all_states()
+    status: dict[str, Any] = {
+        "health": health_status,
+        "brain_state_count": len(governance_states),
         "live_read_only": container.config.live_read_only,
         "mt5_terminal_path": container.config.extensions.get("mt5_terminal_path"),
     }

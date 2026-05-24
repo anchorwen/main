@@ -106,7 +106,7 @@ def build_dataset(
     print(f"[dataset_builder_d1] Contract: {contract_id}, horizon={horizon_bars} bars")
 
     # ── Compute features ──
-    cross_assets: dict[str, str] = {}
+    cross_assets: dict[str, str | Path] = {}
     for sym, fname in [("XAGUSDc", "xagusdc_d1_merged.csv"), ("EURUSDc", "eurusdc_d1_merged.csv")]:
         p = d1_csv.parent / fname
         if p.exists():

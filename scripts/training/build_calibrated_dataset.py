@@ -481,13 +481,14 @@ def pair_labels_with_computed_features(
     x_micro: np.ndarray,
     *,
     warmup_bars: int = 500,
+    include_micro: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[str]]:
     """Join labels to historically-computed feature vectors.
 
-    Returns (X_49, y, pnl, side, timestamps, feature_names).
-    X_49 includes 40 v9_institutional + 9 microstructural features.
+    Returns (X, y, pnl, side, timestamps, feature_names).
+    If include_micro, X has 49 dims (40 v9 + 9 micro); otherwise 40 dims.
     side: 1=long, 0=short.
-    Rows with NaN in micro features are dropped.
+    Rows with NaN in micro features are dropped (when include_micro=True).
     """
     o = ohlc["open"]
     h = ohlc["high"]
@@ -500,7 +501,7 @@ def pair_labels_with_computed_features(
     feature_names = sorted(
         compute_features_at_bar(o, h, l, c, v, min(warmup_bars, n_bars - 1)).keys()
     )
-    all_feature_names = feature_names + MICRO_FEATURE_NAMES
+    all_feature_names = feature_names + MICRO_FEATURE_NAMES if include_micro else feature_names
 
     X_rows: list[list[float]] = []
     y_rows: list[int] = []
@@ -539,15 +540,17 @@ def pair_labels_with_computed_features(
                 skipped_warmup += 1
                 continue
 
-            # Check micro features for NaN
-            micro_vec = x_micro[entry_idx]
-            if np.any(np.isnan(micro_vec)):
-                dropped_nan += 1
-                continue
+            # Check micro features for NaN (only when including micro)
+            if include_micro:
+                micro_vec = x_micro[entry_idx]
+                if np.any(np.isnan(micro_vec)):
+                    dropped_nan += 1
+                    continue
 
             feat_vec_dict = compute_features_at_bar(o, h, l, c, v, entry_idx)
             feat_vec = [float(feat_vec_dict.get(fn, 0.0)) for fn in feature_names]
-            feat_vec.extend(float(v) for v in micro_vec)
+            if include_micro:
+                feat_vec.extend(float(v) for v in micro_vec)
             X_rows.append(feat_vec)
 
             label_int_str = lab.get("label_int", lab.get("label", "0"))
@@ -610,11 +613,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Purge N bars between train/val to prevent label overlap leakage "
         "(de Prado purging). Should equal label horizon (e.g., 12 for 12-bar barrier).",
     )
+    p.add_argument(
+        "--no-micro",
+        action="store_true",
+        help="Exclude 9 microstructural features (produce 40-dim v9 institutional only).",
+    )
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    include_micro = not args.no_micro
 
     # ── Load XAU OHLC data ────────────────────────────────────────────
     print("[1/4] Loading XAU OHLC data...")
@@ -625,28 +634,36 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(f"       {ohlc['n_bars']} bars loaded")
 
-    # ── Load cross-symbol data ────────────────────────────────────────
-    print("[2/4] Loading cross-symbol data (EUR, JPY, XAG M5)...")
-    csv_dir = args.price_data.parent
-    cross_data = load_cross_symbol_data(csv_dir, ohlc["timestamp"])
-    eur_valid: int = int(np.sum(~np.isnan(cross_data["eur_close"])))
-    jpy_valid: int = int(np.sum(~np.isnan(cross_data["jpy_close"])))
-    xag_valid: int = int(np.sum(~np.isnan(cross_data["xag_close"])))
-    print(f"       EUR: {eur_valid} bars with data, " f"JPY: {jpy_valid}, XAG: {xag_valid}")
+    # ── Load cross-symbol data (skip if no-micro) ────────────────────
+    if include_micro:
+        print("[2/4] Loading cross-symbol data (EUR, JPY, XAG M5)...")
+        csv_dir = args.price_data.parent
+        cross_data = load_cross_symbol_data(csv_dir, ohlc["timestamp"])
+        eur_valid: int = int(np.sum(~np.isnan(cross_data["eur_close"])))
+        jpy_valid: int = int(np.sum(~np.isnan(cross_data["jpy_close"])))
+        xag_valid: int = int(np.sum(~np.isnan(cross_data["xag_close"])))
+        print(f"       EUR: {eur_valid} bars with data, JPY: {jpy_valid}, XAG: {xag_valid}")
 
-    # ── Precompute micro features ─────────────────────────────────────
-    print("[3/4] Precomputing 9 micro features for all bars...")
-    x_micro = precompute_micro_features(ohlc, cross_data)
-    valid_micro: int = int(np.sum(~np.any(np.isnan(x_micro), axis=1)))
-    print(f"       {valid_micro} / {ohlc['n_bars']} bars have complete micro features")
+        # ── Precompute micro features ──────────────────────────────────
+        print("[3/4] Precomputing 9 micro features for all bars...")
+        x_micro = precompute_micro_features(ohlc, cross_data)
+        valid_micro: int = int(np.sum(~np.any(np.isnan(x_micro), axis=1)))
+        print(f"       {valid_micro} / {ohlc['n_bars']} bars have complete micro features")
+    else:
+        print("[2/4] Skipping cross-symbol data (--no-micro)")
+        print("[3/4] Skipping micro feature precomputation (--no-micro)")
+        cross_data = None
+        x_micro = np.zeros((ohlc["n_bars"], 9), dtype=np.float64)  # placeholder, not used
 
     # ── Compute V9 features + pair with labels ────────────────────────
-    print("[4/4] Computing 40 V9 features + pairing with labels...")
+    dim_label = "40" if args.no_micro else "49"
+    print(f"[4/4] Computing {dim_label}-dim V9 features + pairing with labels...")
     X, y, pnl, side, timestamps, feature_names = pair_labels_with_computed_features(
         args.labels,
         ohlc,
         x_micro,
         warmup_bars=args.warmup_bars,
+        include_micro=include_micro,
     )
 
     if len(X) < 100:
@@ -682,25 +699,28 @@ def main(argv: list[str] | None = None) -> int:
     side_train, side_val = side[:train_end], side[split_idx:]
     ts_train, ts_val = timestamps[:train_end], timestamps[split_idx:]
 
+    schema_str = "calibrated_barrier_v3_40dim" if args.no_micro else "calibrated_barrier_v3_49dim"
     np.savez_compressed(
         out_dir / "train.npz",
         X=X_train,
         y=y_train,
+        y_reg=pnl_train,
         pnl=pnl_train,
         side=side_train,
         timestamps=ts_train,
         feature_names=np.array(feature_names),
-        schema="calibrated_barrier_v3_49dim",
+        schema=schema_str,
     )
     np.savez_compressed(
         out_dir / "val.npz",
         X=X_val,
         y=y_val,
+        y_reg=pnl_val,
         pnl=pnl_val,
         side=side_val,
         timestamps=ts_val,
         feature_names=np.array(feature_names),
-        schema="calibrated_barrier_v3_49dim",
+        schema=schema_str,
     )
 
     train_pos = (y_train == 1).mean()
@@ -723,8 +743,10 @@ def main(argv: list[str] | None = None) -> int:
         "neg_rate": round(neg_rate, 4),
         "timeout_rate": round(to_rate, 4),
         "avg_pnl_r": round(float(avg_pnl), 4),
-        "label_contract": "Breakeven_Proxy_v1.0.0: SL=1.5ATR, TP=1.0ATR, horizon=12",
-        "feature_source": "historical_OHLC_49dim_V9_40+Micro_9",
+        "label_contract": "Triple_Barrier: SL=3.0ATR, TP=1.5ATR, horizon=12, spread=30pt, slippage=10pt",
+        "feature_source": "historical_OHLC_40dim_V9_institutional"
+        if args.no_micro
+        else "historical_OHLC_49dim_V9_40+Micro_9",
         "min_time": str(ts_train[0]) if len(ts_train) > 0 else None,
         "max_time": str(ts_val[-1]) if len(ts_val) > 0 else None,
         "train_min_time": str(ts_train[0]) if len(ts_train) > 0 else None,

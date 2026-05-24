@@ -1,5 +1,6 @@
 import argparse
 import json
+from typing import Any
 
 from apps.engine.communication_summary_contract import (
     build_summary_mirror_fields_from_operations_summary,
@@ -84,6 +85,7 @@ def run_cli(argv=None):
     args = parse_args(argv)
     operations = build_operations_service(args.base_dir, args.receipt_dir)
 
+    result: dict[str, Any] | None
     if args.command == "message":
         result = operations.get_message_operations_view(
             date_key=args.date,
@@ -104,6 +106,8 @@ def run_cli(argv=None):
         )
 
     result = _prefer_operations_summary(result)
+    if result is None:
+        return json.dumps({"error": "no data"}, ensure_ascii=False)
     return json.dumps(result, ensure_ascii=False, default=str)
 
 

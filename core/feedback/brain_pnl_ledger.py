@@ -347,98 +347,11 @@ class BrainPnLStore:
     # ── metrics ────────────────────────────────────────────────────────
 
     def get_metrics(self, brain_id: str, window: int | None = None) -> BrainPnLMetrics:
-        """Compute rolling performance metrics for a brain."""
-        outcomes = self._settled.get(brain_id, [])
-        if window is not None:
-            outcomes = outcomes[-window:]
+        """Compute rolling performance metrics for a brain.
 
-        n = len(outcomes)
-        if n < 5:
-            pnls = [o["pnl_per_unit"] for o in outcomes]
-            cumulative = sum(pnls)
-            win_count = sum(1 for o in outcomes if o["is_win"])
-            return BrainPnLMetrics(
-                brain_id=brain_id,
-                sample_count=n,
-                cumulative_pnl=round(cumulative, 6),
-                win_rate=round(win_count / n, 4) if n > 0 else 0.0,
-                long_count=sum(1 for o in outcomes if o["direction"] == "long"),
-                short_count=sum(1 for o in outcomes if o["direction"] == "short"),
-            )
-
-        pnls = [o["pnl_per_unit"] for o in outcomes]
-        cumulative = sum(pnls)
-        win_count = sum(1 for o in outcomes if o["is_win"])
-        win_rate = win_count / n
-        avg_return = cumulative / n
-
-        # Unbiased std (ddof=1) for small samples
-        variance = sum((p - avg_return) ** 2 for p in pnls) / max(1, n - 1)
-        std_return = math.sqrt(variance)
-
-        # Annualised Sharpe
-        if std_return > 1e-12:
-            sharpe = (avg_return / std_return) * math.sqrt(self.ANNUAL_FACTOR)
-        else:
-            sharpe = 0.0
-
-        # Max drawdown from cumulative P&L
-        cumsum = 0.0
-        peak = -1e18
-        max_dd = 0.0
-        for p in pnls:
-            cumsum += p
-            if cumsum > peak:
-                peak = cumsum
-            dd = peak - cumsum
-            if dd > max_dd:
-                max_dd = dd
-
-        # Profit factor
-        gross_profit = sum(p for p in pnls if p > 0)
-        gross_loss = abs(sum(p for p in pnls if p < 0))
-        profit_factor = gross_profit / gross_loss if gross_loss > 1e-12 else float("inf")
-
-        # Recent P&L (last 20)
-        recent_20 = sum(pnls[-20:]) if n >= 20 else cumulative
-
-        # Directional breakdown
-        long_outs = [o for o in outcomes if o["direction"] == "long"]
-        short_outs = [o for o in outcomes if o["direction"] == "short"]
-        long_wr = sum(1 for o in long_outs if o["is_win"]) / max(1, len(long_outs))
-        short_wr = sum(1 for o in short_outs if o["is_win"]) / max(1, len(short_outs))
-
-        health = self._assess_health(n, sharpe, win_rate, max_dd)
-
-        # Friction cost aggregation
-        total_spread = sum(
-            float(o.get("entry_spread", 0) or 0) + float(o.get("exit_spread", 0) or 0)
-            for o in outcomes
-        )
-        total_slippage = sum(
-            float(o.get("entry_slippage", 0) or 0) + float(o.get("exit_slippage", 0) or 0)
-            for o in outcomes
-        )
-
-        return BrainPnLMetrics(
-            brain_id=brain_id,
-            sample_count=n,
-            cumulative_pnl=round(cumulative, 6),
-            win_rate=round(win_rate, 4),
-            avg_return=round(avg_return, 6),
-            std_return=round(std_return, 6),
-            sharpe_ratio=round(sharpe, 2),
-            max_drawdown=round(max_dd, 6),
-            profit_factor=round(profit_factor, 2) if profit_factor != float("inf") else 999.0,
-            recent_pnl_20=round(recent_20, 6),
-            health_signal=health,
-            long_win_rate=round(long_wr, 4),
-            short_win_rate=round(short_wr, 4),
-            long_count=len(long_outs),
-            short_count=len(short_outs),
-            total_spread_cost=round(total_spread, 4),
-            total_slippage_cost=round(total_slippage, 4),
-        )
+        Delegates to get_metrics_calibrated() for unified health assessment.
+        """
+        return self.get_metrics_calibrated(brain_id, window)
 
     def get_all_metrics(self) -> dict[str, BrainPnLMetrics]:
         """Return metrics for every tracked brain."""

@@ -32,6 +32,9 @@ BrainQualityVerdict → GovernanceRuleEngine.evaluate() → lifecycle_action
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260524-037 | 2026-05-24 | cursor-agent | — | C2: build_shadow_summary() no longer outputs "current_status": "candidate" — was overriding real governance state via **summary spread in rule engine, permanently disabling all status-dependent rules. | RC-09 |
+| FIX-20260524-038 | 2026-05-24 | cursor-agent | — | H3: "shadow" added to VALID_TRANSITIONS (→{candidate, probation, frozen, retired}) — 2 brains were permanently stuck. H6: SHARPE_RETIRE_THRESHOLD -10.0→-2.0, SHARPE_FREEZE_THRESHOLD -10.0→-1.5 (aligned with BrainQualityEngine hard gates). | config-drift |
+| FIX-20260524-039 | 2026-05-24 | cursor-agent | — | M11: GovernanceRuleEngine now checks transition() return value (action==rejected) instead of silently ignoring failures. | missing-validation |
 | FIX-20260517-015 | 2026-05-17 | cursor-agent | — | health_signal unblock: ShadowTracker.build_shadow_summary() health_signal changed from hardcoded "unknown" to "healthy". The old value blocked GovernanceRuleEngine auto-promotion rules (auto_promote_healthy requires health_signal=="healthy"), preventing candidate→probation transitions. | missing-feature |
 | FIX-20260517-017 | 2026-05-17 | cursor-agent | — | Auditor/Executor separation: GovernanceRuleEngine.execute_transitions(report) added as single Executor. BrainPromotionEvaluator reduced to pure Auditor (evaluate_all returns report, no state writes). scheduler_service wired as: evaluator.evaluate_all() → engine.execute_transitions(). | contract-violation |
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
@@ -39,6 +42,7 @@ BrainQualityVerdict → GovernanceRuleEngine.evaluate() → lifecycle_action
 | FIX-20260514-015 | 2026-05-14 | cursor-agent | a4a1005 | 大脑批量复活脚本：用修复后的BrainQualityEngine重评退休大脑，score≥10恢复为probation，score≥50恢复为live | contract-violation |
 | FIX-20260514-006 | 2026-05-14 | cursor-agent | a4a1005 | Add max 1 retirement/cycle safety valve, map marginal tier to frozen, add insufficient_data skip logging | missing-validation |
 | FIX-20260514-005 | 2026-05-14 | cursor-agent | a4a1005 | Remove break-after-first-match, collect all matching rules per brain, apply most severe result, differentiate priorities (retire=110, freeze=100) | contract-violation |
+| FIX-20260524-040 | 2026-05-24 | cursor-agent | — | DEFERRED architecture debt: dual governance pipeline merge (BrainPromotionEvaluator vs GovernanceRuleEngine), leaderboard consumer gap, stability monitor unused, AB test framework not activated. No code changes — registered for future sprints. | RC-12 |
 | FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: governance_rule_engine.py (execute_transitions) + shadow_tracker.py (health_signal). Previously registered as FIX-20260517-017, FIX-20260517-015. | process-violation |
 
 ## Cross-Module Contracts

@@ -51,7 +51,7 @@ class BrainRegistry:
 
     def __init__(self, config_dir: str = "configs/brains"):
         self._entries: dict[str, BrainEntry] = {}
-        self._by_type: dict[str, BrainEntry] = {}
+        self._by_type: dict[str, list[BrainEntry]] = {}
         self._by_group: dict[str, list[BrainEntry]] = {}
         self._load_all(Path(config_dir))
 
@@ -87,7 +87,7 @@ class BrainRegistry:
             )
             self._entries[entry.brain_id] = entry
             if entry.brain_type:
-                self._by_type[entry.brain_type] = entry
+                self._by_type.setdefault(entry.brain_type, []).append(entry)
             if entry.contract_group:
                 self._by_group.setdefault(entry.contract_group, []).append(entry)
 
@@ -104,9 +104,18 @@ class BrainRegistry:
         """Look up a brain entry by brain_id."""
         return self._entries.get(brain_id)
 
-    def get_by_type(self, brain_type: str) -> BrainEntry | None:
-        """Look up a brain entry by brain_type."""
-        return self._by_type.get(brain_type)
+    def get_by_type(self, brain_type: str) -> list[BrainEntry]:
+        """List all brain entries with the given brain_type (may be empty)."""
+        return self._by_type.get(brain_type, [])
+
+    def get_first_by_type(self, brain_type: str) -> BrainEntry | None:
+        """Return the first (usually only) brain entry for a brain_type.
+
+        Convenience method for factory dispatch where brain_type is expected
+        to be unique (e.g., 'onnx', 'xgboost_json', 'lightgbm_txt').
+        """
+        entries = self._by_type.get(brain_type, [])
+        return entries[0] if entries else None
 
     def get_contract_group(self, brain_id: str) -> str:
         """Return the contract_group for a brain_id (default: 'barrier_12bar')."""

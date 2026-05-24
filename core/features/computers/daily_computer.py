@@ -23,10 +23,13 @@ Usage::
 from __future__ import annotations
 
 import csv
+import logging
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+
+_logger = logging.getLogger(__name__)
 
 from core.features.schemas.daily_swing_schema import DAILY_SWING_24_FEATURES
 
@@ -388,6 +391,11 @@ class DailyFeatureComputer:
                 self._h4_rsi_arr = _compute_rsi_array(h4_c, period=min(RSI_PERIOD, len(h4_c) - 1))
             if len(h4_c) > 24:
                 self._h4_momentum_24 = _compute_momentum_array(h4_c, 24)
+        else:
+            _logger.warning(
+                "H4 CSV not found at %s — H4-derived features will be zeroed",
+                h4_csv,
+            )
 
         # ── Load cross-asset data ──
         self._cross_closes: dict[str, np.ndarray] = {}

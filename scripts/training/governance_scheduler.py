@@ -38,8 +38,10 @@ MIN_TRADES_FOR_LIVE = 50  # ↑ 30→50: need at least 50 settled signals to pro
 MIN_TRADES_FOR_RETIRE = 50  # need at least 50 before retirement is allowed
 MIN_TRADES_FOR_FREEZE = 50  # need at least 50 shadow trades before auto-freeze
 MIN_TRADES_FOR_DEMOTE = 100  # minimum trades before auto-demoting a live brain
-SHARPE_RETIRE_THRESHOLD = -10.0  # Sharpe below this → retire (catastrophic only)
-SHARPE_FREEZE_THRESHOLD = -10.0  # Shadow brain: Sharpe below this + 50+ trades → freeze
+SHARPE_RETIRE_THRESHOLD = (
+    -2.0
+)  # Sharpe below this + 50+ trades → retire (aligned with BrainQualityEngine)
+SHARPE_FREEZE_THRESHOLD = -1.5  # Shadow brain: Sharpe below this + 50+ trades → freeze
 SHARPE_DEMOTE_THRESHOLD = -5.0  # Live brain: Sharpe below this + 100+ trades → probation
 SHARPE_PROBATION_THRESHOLD = 0.0  # Sharpe below this → probation
 WR_PROBATION_THRESHOLD = 0.45  # win rate below this → probation

@@ -163,8 +163,10 @@ class BrainAttributionService:
             # Resolve brain_ids and brain_votes from close or linked open
             open_entry = opens_by_id.get(open_msg_id, {})
             brain_ids = close.get("brain_ids") or open_entry.get("brain_ids") or []
+            _cv = close.get("brain_votes")
+            _ov = open_entry.get("brain_votes")
             brain_votes: list[dict[str, Any]] = (
-                close.get("brain_votes") or open_entry.get("brain_votes") or []
+                _cv if _cv is not None else (_ov if _ov is not None else [])
             )
 
             if not brain_ids:
@@ -266,7 +268,10 @@ class BrainAttributionService:
                 sponsors.append(v)
             elif vb_dir in ("long", "short"):
                 dissenters.append(v)
-            # neutral votes are excluded from both
+            # Neutral votes are intentionally excluded from both sponsors and
+            # dissenters: a neutral brain abstains rather than contradicting
+            # or endorsing, so its P&L attribution is neither rewarded nor
+            # penalized for this trade.
         return sponsors, dissenters
 
     def _compute_realized(self, report: AttributionReport) -> None:

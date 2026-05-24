@@ -101,16 +101,20 @@ def calibrate_horizon(
     *,
     symbol: str = "XAUUSDc",
     timeframe: str = "M5",
-    spread_pips: float = 0.3,
-    slippage_pips: float = 0.5,
-    pip_value: float = 0.01,
+    spread_points: float = 30,
+    slippage_points: float = 10,
+    tick_value: float = 0.01,
+    tick_size: float = 0.001,
+    volume: float = 0.01,
     entry_stride: int = 3,
 ) -> ProfitabilitySurface:
     """Run profitability surface scan for a single horizon."""
     print(f"\n{'='*60}")
     print(f"Horizon: {horizon_bars} bars ({timeframe})")
     print(f"Price data: {len(closes)} bars")
-    print(f"Cost model: spread={spread_pips}, slippage={slippage_pips}, pip_value={pip_value}")
+    print(
+        f"Cost model: spread={spread_points}pts, slippage={slippage_points}pts, tick_size={tick_size}"
+    )
     print(f"{'='*60}")
 
     surface = compute_profitability_surface(
@@ -123,9 +127,11 @@ def calibrate_horizon(
         symbol=symbol,
         timeframe=timeframe,
         entry_stride=entry_stride,
-        spread_pips=spread_pips,
-        slippage_pips=slippage_pips,
-        pip_value=pip_value,
+        spread_points=spread_points,
+        slippage_points=slippage_points,
+        tick_value=tick_value,
+        tick_size=tick_size,
+        volume=volume,
     )
 
     print(f"Entries simulated: {surface.entries_simulated}")
@@ -201,22 +207,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Horizon bars to calibrate (default: 3 12 24)",
     )
     p.add_argument(
-        "--spread-pips",
+        "--spread-points",
         type=float,
-        default=0.3,
-        help="Spread in pips (default: 0.3 for XAUUSD)",
+        default=30,
+        help="Spread in MT5 points (default: 30 for XAUUSDc, ~3 pips)",
     )
     p.add_argument(
-        "--slippage-pips",
+        "--slippage-points",
         type=float,
-        default=0.5,
-        help="Slippage in pips (default: 0.5)",
+        default=10,
+        help="Slippage in MT5 points (default: 10 for XAUUSDc)",
     )
     p.add_argument(
-        "--pip-value",
+        "--tick-value",
         type=float,
         default=0.01,
-        help="Value of 1 pip (default: 0.01 for XAUUSD)",
+        help="MT5 SYMBOL_TRADE_TICK_VALUE (default: 0.01 for XAUUSDc)",
+    )
+    p.add_argument(
+        "--tick-size",
+        type=float,
+        default=0.001,
+        help="MT5 SYMBOL_TRADE_TICK_SIZE (default: 0.001 for XAUUSDc)",
     )
     p.add_argument(
         "--output",
@@ -252,9 +264,10 @@ def main(argv: list[str] | None = None) -> int:
             horizon_bars=horizon,
             symbol=args.symbol,
             timeframe=args.timeframe,
-            spread_pips=args.spread_pips,
-            slippage_pips=args.slippage_pips,
-            pip_value=args.pip_value,
+            spread_points=args.spread_points,
+            slippage_points=args.slippage_points,
+            tick_value=args.tick_value,
+            tick_size=args.tick_size,
             entry_stride=args.stride,
         )
         results[str(horizon)] = surface_to_report(surface)
@@ -266,8 +279,10 @@ def main(argv: list[str] | None = None) -> int:
         report = {
             "symbol": args.symbol,
             "timeframe": args.timeframe,
-            "spread_pips": args.spread_pips,
-            "slippage_pips": args.slippage_pips,
+            "spread_points": args.spread_points,
+            "slippage_points": args.slippage_points,
+            "tick_value": args.tick_value,
+            "tick_size": args.tick_size,
             "horizons": results,
         }
         out_path.write_text(

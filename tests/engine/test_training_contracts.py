@@ -235,7 +235,7 @@ def test_build_barrier_labels_wrong_type_raises():
 
 
 def test_build_barrier_labels_atr_fallback():
-    """Very short price history → ATR fallback to 2.31 (training mean)."""
+    """Very short price history → ATR fallback to 2.31 (training mean for XAUUSD M5)."""
     h, l, c = _make_ohlc(10)  # not enough bars for ATR(14) + 1
     contract = LabelContract(
         schema_version=LC_SCHEMA_VERSION,
@@ -245,6 +245,7 @@ def test_build_barrier_labels_atr_fallback():
         label_classes={"1": "tp", "0": "timeout", "-1": "sl"},
         sl_atr_mult=2.0,
         tp_atr_mult=3.5,
+        fallback_atr=2.31,  # explicit fallback for XAUUSD M5
     )
     result = contract.build_barrier_labels(h, l, c, entry_idx=8, side="long")
     assert result.atr_at_entry == 2.31  # fallback

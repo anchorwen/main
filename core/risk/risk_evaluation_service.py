@@ -25,6 +25,12 @@ class RiskEvaluationService:
 
     def __init__(self, policies: list | None = None):
         self._policies = list(policies) if policies else []
+        # Register default minimum policy set — at least ModePolicy to enforce
+        # system-mode gating even when callers forget to wire policies.
+        if not self._policies:
+            from core.risk.risk_policies import ModePolicy, PositionLimitPolicy
+
+            self._policies = [ModePolicy(), PositionLimitPolicy()]
 
     def add_policy(self, policy) -> None:
         self._policies.append(policy)
@@ -75,6 +81,22 @@ class RiskEvaluationService:
     def _merge_results(
         self, *, intent, control_snapshot, policy_results: list[dict]
     ) -> RiskVerdict:
+        # 🚨 Hard assertion — fail CLOSED, not open.
+        # If no risk policies are active (init bypassed, corrupted state, etc.),
+        # REJECT everything.  Never silently allow all trades through an
+        # unguarded risk engine.
+        if len(self._policies) == 0:
+            return RiskVerdict(
+                schema_version=SCHEMA_RISK_VERDICT,
+                verdict_id=new_verdict_id(),
+                intent_id=intent.intent_id,
+                evaluated_at=datetime.now(UTC).replace(tzinfo=None),
+                status=RiskDecisionStatus.DENY,
+                mode=control_snapshot.mode_state.current_mode,
+                risk_tier="critical",
+                blocking_reasons=["no_risk_policies_active"],
+            )
+
         if not policy_results:
             return RiskVerdict(
                 schema_version=SCHEMA_RISK_VERDICT,

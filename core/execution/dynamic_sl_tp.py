@@ -33,7 +33,7 @@ def compute_dynamic_sl_tp(
     base_tp_mult: float,
     *,
     current_atr: float,
-    ref_atr: float = 7.0,
+    ref_atr: float = 5.0,  # keep in sync with StrategyLineConfig.ref_atr default
     hard_sl_ratio: float = 1.5,
     min_sl_mult: float = 1.2,
     max_sl_mult: float = 3.0,
@@ -79,10 +79,11 @@ def compute_dynamic_sl_tp(
         current_atr = ref_atr
 
     # ── √t scaling: ATR grows with sqrt(time) for random-walk processes ──
+    raw_atr = current_atr
     if timeframe_mult > 1:
         current_atr = current_atr * math.sqrt(timeframe_mult)
 
-    vol_ratio = current_atr / ref_atr
+    vol_ratio = raw_atr / ref_atr
 
     # Direct ATR multiplication — SL/TP scale proportionally with volatility.
     # At ATR=5: SL=2.0×5=10.0 (2.0 ATR). At ATR=8: SL=2.0×8=16.0 (still 2.0 ATR).

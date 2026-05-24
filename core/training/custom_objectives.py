@@ -83,6 +83,13 @@ def make_xgb_sharpe_obj(pnl: np.ndarray | None = None):
     We negate this for minimization.
     """
     _pnl = np.asarray(pnl, dtype=np.float64) if pnl is not None else None
+    # Pre-compute NaN mask — NaN in PnL propagates to gradient NaN,
+    # silently corrupting boosting weight updates.
+    if _pnl is not None:
+        _pnl_nan_mask = np.isnan(_pnl)
+        if np.any(_pnl_nan_mask):
+            _pnl = _pnl.copy()
+            _pnl[_pnl_nan_mask] = 0.0  # zero out NaN PnL — those samples contribute zero return
 
     def _obj(preds: np.ndarray, dtrain: Any) -> tuple[np.ndarray, np.ndarray]:
         y = dtrain.get_label().astype(np.float64)

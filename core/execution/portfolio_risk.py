@@ -17,12 +17,15 @@ think, it only controls how much risk the combined book can take.
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 class RiskVerdict(Enum):
@@ -104,6 +107,39 @@ class PortfolioRiskController:
         self._last_net_out_timestamp: float = 0.0
         self._last_net_out_direction: str = ""
 
+        # ── Symbol Quarantine — locks symbol after unconfirmed net-out close ──
+        # Maps symbol → monotonic timestamp when quarantine expires.
+        # When ExecutionQueue gets net_out_close_not_confirmed, the symbol is
+        # quarantined until an independent MT5 positions_get() confirms no
+        # position remains — preventing double-position scenarios.
+        self._symbol_quarantine_until: dict[str, float] = {}
+        self._quarantine_duration: float = 60.0  # seconds
+
+    # ── Symbol Quarantine ──────────────────────────────────────────────────
+
+    def quarantine_symbol(self, symbol: str, duration_seconds: float | None = None) -> None:
+        """Lock a symbol from new entries after unconfirmed net-out close.
+
+        ExecutionQueue calls this when a net-out close gets
+        ``net_out_close_not_confirmed`` — the close order may have succeeded
+        or failed; we don't know.  Until an independent MT5 positions_get()
+        confirms the position is gone, new entry orders for this symbol are
+        blocked.
+        """
+        dur = duration_seconds if duration_seconds is not None else self._quarantine_duration
+        until = time.monotonic() + dur
+        self._symbol_quarantine_until[symbol] = until
+
+    def is_symbol_quarantined(self, symbol: str) -> bool:
+        """Check whether a symbol is currently under quarantine."""
+        until = self._symbol_quarantine_until.get(symbol)
+        if until is None:
+            return False
+        if time.monotonic() >= until:
+            del self._symbol_quarantine_until[symbol]
+            return False
+        return True
+
     # ── Data feed ────────────────────────────────────────────────────────
 
     def update_returns(self, strategy_name: str, pnl: float) -> None:
@@ -151,7 +187,13 @@ class PortfolioRiskController:
         return sum(tail) / len(tail)
 
     def compute_correlation(self, s1: str, s2: str) -> float:
-        """Pearson correlation between two strategy return streams."""
+        """Pearson correlation between two strategy return streams.
+
+        NOTE: Aligns by index (last N entries), not by timestamp.  When
+        strategies trade at different frequencies (e.g. M5 vs H1), this
+        can pair returns from different time windows.  For production use,
+        consider timestamp-aware alignment via load_returns_history().
+        """
         r1 = self._returns_buffer.get(s1, [])
         r2 = self._returns_buffer.get(s2, [])
         n = min(len(r1), len(r2))
@@ -163,7 +205,13 @@ class PortfolioRiskController:
             corr = float(np.corrcoef(r1, r2)[0, 1])
             return corr if not np.isnan(corr) else 0.0
         except Exception:
-            return 0.0
+            logger.warning(
+                "Correlation computation failed for %s vs %s — assuming fully correlated",
+                s1,
+                s2,
+                exc_info=True,
+            )
+            return 1.0  # conservative: assume fully correlated on error
 
     def compute_correlation_matrix(self) -> dict[str, dict[str, float]]:
         """Pairwise correlation matrix across all tracked strategies."""
@@ -213,6 +261,14 @@ class PortfolioRiskController:
         volume = new_decision.volume
         strategy = new_decision.strategy_name
 
+        # ── -1. Symbol quarantine — block ALL entries on quarantined symbols ──
+        _symbol = getattr(new_decision, "symbol", "") or ""
+        if _symbol and self.is_symbol_quarantined(_symbol):
+            return RiskResult(
+                RiskVerdict.REJECTED,
+                reason=f"symbol_quarantined_{_symbol}",
+            )
+
         # ── 0. Per-strategy duplicate check ──
         if strategy in current_positions:
             return RiskResult(
@@ -244,14 +300,9 @@ class PortfolioRiskController:
                     RiskVerdict.REJECTED,
                     reason=f"gross_exposure_{new_gross_n:.0f}_gt_{max_gross_n:.0f}",
                 )
-        else:
-            current_gross = sum(p["volume"] for p in current_positions.values())
-            new_gross = current_gross + volume
-            if new_gross > self.max_gross:
-                return RiskResult(
-                    RiskVerdict.REJECTED,
-                    reason=f"gross_exposure_{new_gross:.3f}_gt_{self.max_gross}",
-                )
+        # When price is unavailable, skip exposure check — raw lot counts are
+        # dimensionally incompatible with max_gross (a notional percentage).
+        # Do NOT compare 0.10 lots against "10%" — the units don't match.
 
         # ── 2. Net exposure check ──
         if current_price is not None and current_price > 0:
@@ -274,29 +325,15 @@ class PortfolioRiskController:
                     RiskVerdict.REJECTED,
                     reason=f"net_exposure_{abs(new_net_n):.0f}_gt_{max_net_n:.0f}",
                 )
-        else:
-            net_long = sum(
-                p["volume"] for p in current_positions.values() if p["direction"] == "long"
-            )
-            net_short = sum(
-                p["volume"] for p in current_positions.values() if p["direction"] == "short"
-            )
-            current_net = net_long - net_short
-            if direction == "long":
-                new_net = current_net + volume
-            else:
-                new_net = current_net - volume
-            if abs(new_net) > self.max_net:
-                return RiskResult(
-                    RiskVerdict.REJECTED,
-                    reason=f"net_exposure_{abs(new_net):.3f}_gt_{self.max_net}",
-                )
 
-        # ── 3. Same-direction concentration check ──
+        # ── 3. Same-direction concentration check (per strategy family) ──
+        _family = strategy.split("_")[0] if "_" in strategy else strategy
         same_dir_count = sum(
             1
             for p in current_positions.values()
-            if p["direction"] == direction and p["strategy"] != strategy
+            if p["direction"] == direction
+            and p["strategy"] != strategy
+            and (p["strategy"].split("_")[0] if "_" in p["strategy"] else p["strategy"]) == _family
         )
         if same_dir_count >= self.max_same_dir:
             return RiskResult(
@@ -352,15 +389,32 @@ class PortfolioRiskController:
         var_value = 0.0
         cvar_value = 0.0
         try:
-            var_value = round(self.compute_var(strategy), 6)
-            cvar_value = round(self.compute_cvar(strategy), 6)
-            _equity = (
-                account_equity if (account_equity is not None and account_equity > 0) else 10_000
-            )
-            if cvar_value > self.var_max_pct * _equity:
+            _returns = self._returns_buffer.get(strategy, [])
+            if len(_returns) < self.correlation_min_samples:
+                # Insufficient data → conservative: assume risk at max allowed
+                _equity = (
+                    account_equity
+                    if (account_equity is not None and account_equity > 0)
+                    else 100_000
+                )
+                cvar_value = self.var_max_pct * _equity
                 var_warning = True
+            else:
+                var_value = round(self.compute_var(strategy), 6)
+                cvar_value = round(self.compute_cvar(strategy), 6)
+                _equity = (
+                    account_equity
+                    if (account_equity is not None and account_equity > 0)
+                    else 100_000
+                )
+                if cvar_value > self.var_max_pct * _equity:
+                    var_warning = True
         except Exception:
-            pass
+            logger.warning(
+                "VaR/CVaR computation failed for strategy=%s — risk check skipped",
+                strategy,
+                exc_info=True,
+            )
 
         # ── 6. Correlation penalty (continuous gradient) ──
         # Penalty scales linearly from 1.0 (at max_correlation) to
@@ -390,6 +444,13 @@ class PortfolioRiskController:
         if correlation_warning:
             correlation_penalty_applied = _worst_penalty
             adjusted_volume = round(volume * _worst_penalty, 4)
+            logger.warning(
+                "correlation_penalty applied: strategy=%s volume %.4f→%.4f (worst_penalty=%.3f)",
+                strategy,
+                volume,
+                adjusted_volume,
+                _worst_penalty,
+            )
 
         return RiskResult(
             RiskVerdict.APPROVED,
@@ -401,6 +462,35 @@ class PortfolioRiskController:
             correlation_warning=correlation_warning,
             correlation_penalty_applied=correlation_penalty_applied,
         )
+
+    def check_portfolio_stop_loss(
+        self,
+        aggregate_pnl: float,
+        account_equity: float,
+        *,
+        max_portfolio_loss_pct: float = 0.05,
+    ) -> RiskResult:
+        """Portfolio-level stop-loss: LIQUIDATE_ONLY when aggregate PnL drawdown exceeds threshold.
+
+        This is the LAST line of defense — when the entire book is bleeding,
+        all positions must be closed regardless of individual strategy state.
+        Returns LIQUIDATE_ONLY verdict; the caller should close ALL positions.
+        """
+        if account_equity <= 0:
+            return RiskResult(RiskVerdict.APPROVED, reason="no_equity_for_stop_loss_check")
+
+        loss_pct = abs(aggregate_pnl) / account_equity
+        if loss_pct >= max_portfolio_loss_pct:
+            return RiskResult(
+                RiskVerdict.REJECTED,
+                reason=(
+                    f"portfolio_stop_loss_breached"
+                    f"_pnl_{aggregate_pnl:.2f}"
+                    f"_loss_{loss_pct:.2%}"
+                    f"_gt_{max_portfolio_loss_pct:.2%}"
+                ),
+            )
+        return RiskResult(RiskVerdict.APPROVED, reason="ok")
 
     def get_portfolio_summary(self, current_positions: dict[str, dict[str, Any]]) -> dict[str, Any]:
         """Return a summary dict of current portfolio state including VaR/correlation."""

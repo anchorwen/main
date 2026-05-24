@@ -435,8 +435,8 @@ def _compute_meta_volume(
 ) -> float:
     """Compute volume for a meta-pipeline trade.
 
-    Shares the same formula as StrategyLine._compute_volume but is
-    self-contained so MetaPipeline doesn't need a StrategyLine instance.
+    Canonical shared volume formula — keep in sync with
+    StrategyLine._compute_volume in strategy_line.py.
     """
     import math
 

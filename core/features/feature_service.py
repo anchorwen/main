@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 
 import numpy as np
 
+_logger = logging.getLogger(__name__)
+
 from core.contracts.ids import new_snapshot_id
 from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
 from core.features.schemas.v9_micro_schema import V9_MICRO_49_FEATURES
@@ -40,6 +42,7 @@ def _schema_feature_names(schema_name: str) -> list[str]:
         return list(V9_INSTITUTIONAL_40_FEATURES)
     if schema_name == "v9_micro_49":
         return list(V9_MICRO_49_FEATURES)
+    _logger.warning("Unknown schema '%s' — falling back to v9_institutional_40", schema_name)
     return list(V9_INSTITUTIONAL_40_FEATURES)
 
 
@@ -166,7 +169,7 @@ class FeatureService:
                     if not _stale:
                         if self._adapter is not None:
                             vec = self._adapter.build_model_input(record.values)[0]
-                            self._last_known_vector = np.asarray(vec, dtype=np.float64).copy()
+                            self._last_known_vector = np.asarray(vec, dtype=np.float32).copy()
                             return self._last_known_vector
                         # Raw vector in schema feature order (no normalization)
                         feat_names = _schema_feature_names(schema)
@@ -174,7 +177,7 @@ class FeatureService:
                             [float(record.values.get(name, 0.0)) for name in feat_names],
                             dtype=np.float32,
                         )
-                        self._last_known_vector = np.asarray(raw, dtype=np.float64).copy()
+                        self._last_known_vector = np.asarray(raw, dtype=np.float32).copy()
                         return raw
             except Exception:
                 logging.exception(

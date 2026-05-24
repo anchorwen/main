@@ -75,6 +75,9 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260524-034 | 2026-05-24 | cursor-agent | — | Meta-labeler production deployment: barrier_12bar_meta strategy line (BarrierStrategy, magic=90014). OU feature augmentation via _build_meta_feature_vector (40 V9 raw + 3 OU with z_score clipped [1.3, 2.5]). _evaluate_strategy_lines accepts meta_feature_vector. LiveCycleState._last_ou_params for diagnostics. Brain config: status→probation, vote_weight→0.8. live.yaml: mode→probation, volume→0.01. | feature |
+| FIX-20260524-036 | 2026-05-24 | cursor-agent | — | Brain SL/TP audit: barrier_12bar SL/TP corrected 2.0/3.5→3.0/1.5 to match retrained calibration. Strategy Parameter Reference updated with current brain roster + barrier_12bar_meta section. Binary_Cls_V1 status comment clarified. | RC-09 |
+| FIX-20260524-033 | 2026-05-24 | cursor-agent | — | Batch mypy type safety: bootstrap_v9.py (6→0 — assert container services), live_micro_rollout_gate.py (2→0 — assert dispatcher/health_check), live_read_only_preflight.py (7→0 — assert services + dict[str, Any] annot), communication_ops_cli.py (2→0 — result annotation + None guard). MODULE_SOURCE_MAP: add communication_ops_cli.py to runtime_live. | type-confusion |
 | FIX-20260522-027 | 2026-05-22 | cursor-agent | — | Bleed stop horizon-scaled hardening: `bleed_bars` now scales with strategy horizon (`horizon//3`, min 3) + `min_hold_cycles` protection prevents bleed stop from firing before position has reasonable time to develop. Enhanced `bleed_stop_triggered` JSON event with bleed_bars, cycles_held, min_hold_cycles, horizon_cycles. Root cause #2 of May 22 8-trade losing streak. | RC-05 (boundary-error) |
 | FIX-20260524-014 | 2026-05-24 | cursor-agent | — | MODULE_SOURCE_MAP: add v9_shadow_sse.py, _diag_cycle_stall.py, live_daily_recap.py. Mypy fixes: v9_shadow_sse (3→0 — Generator annotations, data_lines: list[str]), _diag_cycle_stall (2→0 — result/exc_info list[int|None]/list[Exception|None]), live_daily_recap (1→0 — sys.stdout.reconfigure union-attr). Baseline 30→19. | RC-02 |
 | FIX-20260524-007 | 2026-05-24 | cursor-agent | — | Track 3d Conformal OU Gate wiring: ConformalOUGate initialized alongside MetaFilterGate with shared ConformalCalibrator. New LiveCycleState._conformal_ou_gate attribute. Gate passed to all evaluate_all_strategies() call sites (live + shadow). OU configs auto-discovered from configs/brains/. | RC-06, RC-12 |
@@ -82,6 +85,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 | FIX-20260524-002 | 2026-05-24 | cursor-agent | — | Layer 1 trailing stop premature exit fix: trailing stop now respects `min_hold_cycles` (previously ran from cycle 1 with no protection), breakeven_threshold_atr lowered 1.5→1.0 for barrier_12bar. Root cause of Meta_Stage1_Huber_V1 -369.65R loss: trailing stop tightened hard SL from cycle 1 causing exits at 0.5-1.0R instead of designed 2.0R SL. | RC-05 (boundary-error — protection gap in Layer 1) |
 | FIX-20260523-008 | 2026-05-24 | cursor-agent | — | Track 3d ConformalCalibrator full pipeline: live_cycle.py lazy-inits ConformalCalibrator alongside MetaFilterGate, cold-starts from journal, passes as calibrator. daily_ops.py creates calibrator, passes to both hooks, returns conformal diagnostics. End-to-end: journal → daily_ops → calibrator.update → state file → live_cycle → MetaFilterGate.filter(adaptive). | calibrator lifecycle for Track 3d |
 | FIX-20260523-007 | 2026-05-23 | cursor-agent | — | Mini-batch online learning integration: `_step_online_feedback()` now creates ExperienceReplayBuffer, passes to both live+paper hooks. Buffer collects 20 closed trades → R-weight expansion → Fisher-Yates shuffle → sequential partial_fit. Only calls adapter.save_weights() if buffer flushed. Returns buffer_size, buffer_ready, running_r_mean, class_dist diagnostics. | RC-06, RC-12 |
+| FIX-20260524-046 | 2026-05-24 | cursor-agent | — | DEFERRED: MT5 thread model architecture debt (T1-C1/C2/C3) — per-call daemon threads, repeated init/shutdown, non-thread-safe methods. Requires dedicated MT5 worker thread + session-level init. Short-term mitigations already in place. | RC-04, RC-06 |
 | FIX-20260522-026 | 2026-05-22 | cursor-agent | 24ff517 | Harden startup orphan detection: replace except:pass with explicit JSONDecodeError + generic error logging to prevent silent failure on corrupt/empty active_position.json | missing-null-check |
 | FIX-20260522-024 | 2026-05-22 | cursor-agent | — | Config-driven MetaPipeline: live_cycle.py now auto-discovers meta_probe specs from brain JSON `"roles": ["meta_probe"]` + live.yaml overrides. shadow_recorder.py `record_brain_votes` reads BrainSignal fields directly (direction, confidence, raw_score) with legacy fallback. | RC-06 (cross-module cascade) |
 | FIX-20260521-001 | 2026-05-21 | cursor-agent | — | High Recall + High Precision: MetaFilterGate threshold 0.50→0.60. Loose upstream (Huber confidence 0.25) generates more candidates; tight downstream MetaFilter (0.60) filters noise. Validation: blind WR 54.1% → filtered 64.6%, PnL +15R → +29R. | RC-09 |
@@ -148,35 +152,48 @@ The central live trading cycle orchestration. Wires together market data ingress
 | `signal_health.FeatureGate.check(snapshot)` → `GateResult` | LiveCycle | Stable |
 | `record_brain_votes(proposals, cycle_id)` → `None` | strategy_line | Stable |
 
-## Strategy Parameter Reference (DATA-BACKED, 2026-05-16)
+## Strategy Parameter Reference (DATA-BACKED, 2026-05-16, UPDATED 2026-05-24)
 
 > **Purpose**: Permanent reference for all strategy parameters, backed by live trading data analysis.
 > **Data sources**: `data/brain_votes/2026-05-15.jsonl` (7,216 records), `data/live_trade_journal.jsonl` (1,230 entries, Apr 29–May 16), `data/brain_pnl_ledger.json` (773 trades), `configs/brains/*.json` (training metrics).
 > **Update this section whenever thresholds, SL/TP, or exit logic are adjusted.**
+>
+> **⚠️ 2026-05-24 UPDATE (FIX-20260524-036)**: barrier_12bar SL/TP corrected from 2.0/3.5 → 3.0/1.5 to match retrained calibration surface (EV=0.2004R). Brain roster completely changed since 2026-05-16 — see current state below. Full section rewrite pending next data collection cycle.
 
 ### Active Strategy Parameters
 
-#### barrier_12bar (enabled, magic=90001)
+#### barrier_12bar (mode=shadow, magic=90001) — UPDATED 2026-05-24
+
+| Parameter | Old Value | New Value | Data Justification | Health |
+|-----------|-----------|-----------|-------------------|--------|
+| `mode` | live | **shadow** | All voting brains frozen/shadow; zero capital deployed | ⚠️ Dormant |
+| `sl.base_atr_mult` | 2.0 | **3.0** | FIX-20260524-036: aligned with retrained calibration (EV=0.2004R at SL=3.0/TP=1.5) | ✅ Matches training |
+| `tp.base_atr_mult` | 3.5 | **1.5** | FIX-20260524-036: TP=1.5 has positive EV; TP≥2.5 all negative at SL=3.0 | ✅ Matches training |
+| `confidence_threshold` | 0.40 | 0.40 | Dictator Protocol threshold; moot while shadow | — |
+| `min_valid_brains` | 1 | 1 | Only Binary_Cls_V1 active (vote_weight=0.0) | ⚠️ No voting brain |
+
+**Brain-level diagnostics (2026-05-24 — current)**:
+| Brain | Status | Directionality | Vote Weight | Issue |
+|-------|--------|---------------|-------------|-------|
+| Meta_Stage1_Huber_V1 | **frozen** | — | 0.0 | Regression collapse with corrected costs; SL=2.0/TP=3.5 unprofitable |
+| Meta_Stage1_Binary_Cls_V1 | shadow | TBD | 0.0 | OOF bimodal at [0.0, 0.7-0.8]; unsafe for live voting |
+| Online_MLP_V1 | shadow | — | — | Not in live.yaml allowlist; unvalidated for live voting |
+
+#### barrier_12bar_meta (mode=probation, magic=90014) — NEW 2026-05-24
 
 | Parameter | Value | Data Justification | Health |
 |-----------|-------|-------------------|--------|
-| `confidence_threshold` | 0.10 | 29.2% of cycles above 0.10; P50=0.0003, P90=0.1148, P95=0.6500 | ⚠️ Too many neutral brains (7/8) dilute consensus |
-| `sl.base_atr_mult` | 2.0 | Training contract uses 2.0 ATR SL; trade data: avg SL loss=-0.107, avg TP win=+0.152 | ✅ RR ratio ~1.4:1 per trade |
-| `tp.base_atr_mult` | 3.5 | Training contract uses 3.5 ATR TP | ✅ Consistent with training |
-| `tp.partial_tp_r` | 1.5 | Partial TP at 1.5R locks profit while leaving runner | ✅ |
-| `budget.max_consecutive_losses` | 5 | 116 trades, win_rate=38.8%, max observed consecutive loss=7 | ⚠️ May need 6–7 buffer |
-| `budget.daily_loss_limit_pct` | -0.03 | 3% daily cap on strategy drawdown | ✅ |
-| `exit.trail_atr_mult` | 2.0 | Trailing stop distance | ✅ Standard |
-| `exit.confidence_decay_exit` | true | Brain confidence naturally decays as barrier approaches | ✅ |
-| `min_valid_brains` | 1 | Only 1 brain is directional; higher value would block all trades | ⚠️ Symptom of frozen ML brains |
+| `mode` | probation | Promoted from shadow 2026-05-24; minimal capital (0.01) | ✅ Monitoring |
+| `sl.base_atr_mult` | 3.0 | Matches MetaLabel_Binary_V1 training contract | ✅ |
+| `tp.base_atr_mult` | 1.5 | Matches MetaLabel_Binary_V1 training contract | ✅ |
+| `confidence_threshold` | 0.40 | OU-triggered signals; binary classifier confidence | ✅ |
+| `base_volume` | 0.01 | Probation: minimal live capital | ✅ |
+| `brain_types` | [lightgbm_v1] | Meta_Stage1_MetaLabel_Binary_V1 — OU signal meta-labeler | ✅ |
 
-**Brain-level diagnostics (2026-05-15)**:
-| Brain | Status | Directionality | Confidence | Issue |
-|-------|--------|---------------|------------|-------|
-| LightGBM_V1_Institutional | probation | 100% LONG | **FROZEN at 0.552** | 🔴 ML inference pipeline broken |
-| DeepResMLP_V2_New | shadow | 0% (all neutral) | 0.876 (neutral conf) | 🔴 train_acc=0.841 but live=100% neutral |
-| Online_MLP_V1 | shadow | 0% (all neutral) | 0.908 (neutral conf) | 🔴 100% neutral |
-| CRT, V9, XGBoost, etc. | shadow | 0% (all neutral) | ~0.86–0.99 | 🔴 All dead |
+**Brain-level diagnostics (2026-05-24)**:
+| Brain | Status | Train Sharpe | CPCV Sharpe | Forward Sharpe | Health |
+|-------|--------|-------------|-------------|----------------|--------|
+| Meta_Stage1_MetaLabel_Binary_V1 | probation | 13.71 | 12.94 | 8.10 | ✅ Healthy; 43-dim (40 V9 + 3 OU) |
 
 #### statarb_dynamic (enabled, magic=90003)
 

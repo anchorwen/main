@@ -77,9 +77,11 @@ class LabelSpec:
     tp_atr_mult: float = 3.5
     horizon_bars: int = 12
     profitability_calibrated: bool = False
-    spread_pips: float = 0.3
-    slippage_pips: float = 1.0
-    pip_value: float = 0.01
+    label_mapping: str | None = None  # "drop_timeout_binary" for triple-barrier → binary
+    spread_points: float = 30
+    slippage_points: float = 10
+    tick_value: float = 0.01
+    tick_size: float = 0.001
     vol_scale_target: bool = False
     output_unit: str = (
         "bps"  # "bps" | "atr_multiple" — set to "atr_multiple" when vol_scale_target=True
@@ -99,10 +101,10 @@ class LabelSpec:
                 "SL/TP multipliers may produce negative expected value labels. "
                 "Run calibrate_label_contract() to verify and set profitability_calibrated=true."
             )
-        if self.spread_pips < 0:
-            issues.append("spread_pips must be >= 0")
-        if self.slippage_pips < 0:
-            issues.append("slippage_pips must be >= 0")
+        if self.spread_points < 0:
+            issues.append("spread_points must be >= 0")
+        if self.slippage_points < 0:
+            issues.append("slippage_points must be >= 0")
         if self.output_unit not in ("bps", "atr_multiple"):
             issues.append(
                 f"Invalid output_unit '{self.output_unit}'. Must be 'bps' or 'atr_multiple'."
@@ -311,9 +313,11 @@ class TrainingContract:
                 "tp_atr_mult": self.label.tp_atr_mult,
                 "horizon_bars": self.label.horizon_bars,
                 "profitability_calibrated": self.label.profitability_calibrated,
-                "spread_pips": self.label.spread_pips,
-                "slippage_pips": self.label.slippage_pips,
-                "pip_value": self.label.pip_value,
+                "label_mapping": self.label.label_mapping,
+                "spread_points": self.label.spread_points,
+                "slippage_points": self.label.slippage_points,
+                "tick_value": self.label.tick_value,
+                "tick_size": self.label.tick_size,
                 "vol_scale_target": self.label.vol_scale_target,
                 "output_unit": self.label.output_unit,
             },
@@ -390,9 +394,11 @@ class TrainingContract:
                 tp_atr_mult=lbl.get("tp_atr_mult", 3.5),
                 horizon_bars=lbl.get("horizon_bars", 12),
                 profitability_calibrated=lbl.get("profitability_calibrated", False),
-                spread_pips=lbl.get("spread_pips", 0.3),
-                slippage_pips=lbl.get("slippage_pips", 1.0),
-                pip_value=lbl.get("pip_value", 0.01),
+                label_mapping=lbl.get("label_mapping"),
+                spread_points=lbl.get("spread_points", lbl.get("spread_pips", 30)),
+                slippage_points=lbl.get("slippage_points", lbl.get("slippage_pips", 10)),
+                tick_value=lbl.get("tick_value", 0.01),
+                tick_size=lbl.get("tick_size", 0.001),
                 vol_scale_target=lbl.get("vol_scale_target", False),
                 output_unit=lbl.get("output_unit", "bps"),
             ),

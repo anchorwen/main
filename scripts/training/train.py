@@ -79,7 +79,7 @@ def load_dataset(contract: TrainingContract) -> TrainingDataset:
     if not ds_path.exists():
         raise FileNotFoundError(f"Dataset not found: {ds_path}")
 
-    ds = TrainingDataset.from_file(ds_path)
+    ds = TrainingDataset.from_file(ds_path, label_mapping=contract.label.label_mapping)
     print(f"[train] Loaded dataset: {ds.n_samples} samples, {ds.n_features} features")
 
     issues = ds.validate()
@@ -1101,8 +1101,8 @@ def calibrate_label_contract(
     )
     print(
         f"[calibrate] Price data: {len(closes_arr)} bars, "
-        f"spread={contract.label.spread_pips} pips, "
-        f"slippage={contract.label.slippage_pips} pips"
+        f"spread={contract.label.spread_points} pts, "
+        f"slippage={contract.label.slippage_points} pts"
     )
 
     surface = compute_profitability_surface(
@@ -1114,9 +1114,8 @@ def calibrate_label_contract(
         side="both",
         symbol=symbol,
         timeframe=timeframe,
-        spread_pips=contract.label.spread_pips,
-        slippage_pips=contract.label.slippage_pips,
-        pip_value=contract.label.pip_value,
+        spread_points=contract.label.spread_points,
+        slippage_points=contract.label.slippage_points,
     )
 
     if not surface.points:

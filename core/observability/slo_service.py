@@ -7,6 +7,7 @@ and error-budget burn information for operational decision making.
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from core.contracts.domain_keys import (
     PAYLOAD_KEY_COUNTERS,
@@ -79,9 +80,9 @@ class SloService:
         },
     }
 
-    def __init__(self, metrics_collector=None, objectives: dict | None = None):
+    def __init__(self, metrics_collector=None, objectives: dict[str, dict[str, Any]] | None = None):
         self._metrics = metrics_collector
-        self._objectives = objectives or self.DEFAULT_OBJECTIVES
+        self._objectives: dict[str, dict[str, Any]] = objectives or self.DEFAULT_OBJECTIVES
 
     def evaluate(self) -> dict:
         snapshot = self._snapshot()
@@ -143,7 +144,8 @@ class SloService:
 
         evaluated = {}
         for name, spec in self._objectives.items():
-            target = float(spec[PAYLOAD_KEY_TARGET])
+            raw_target = spec.get(PAYLOAD_KEY_TARGET, 0.0)
+            target = float(raw_target)
             direction = str(spec.get(PAYLOAD_KEY_DIRECTION, SLO_DIRECTION_ABOVE))
             value = values.get(name, 0.0)
             met = value >= target if direction == SLO_DIRECTION_ABOVE else value <= target

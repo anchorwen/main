@@ -1,7 +1,10 @@
+import logging
 from datetime import UTC, datetime
 
 from core.contracts.exceptions import OrderNotFoundError
 from core.observability.metric_names import EXECUTION_FILL_QUANTITY, execution_event_metric
+
+logger = logging.getLogger(__name__)
 
 
 class ExecutionManager:
@@ -82,7 +85,23 @@ class ExecutionManager:
                 order["average_price"] = round(
                     (prev_avg * prev_filled + price * filled_quantity) / new_total, 6
                 )
-            order["filled_quantity"] = new_total
+                order["filled_quantity"] = new_total
+            else:
+                logger.error(
+                    "execution_manager: new_total=%s from prev_filled=%s + filled_qty=%s "
+                    "for message_id=%s — filled_quantity not updated (upstream data corruption)",
+                    new_total,
+                    prev_filled,
+                    filled_quantity,
+                    message_id,
+                )
+        elif filled_quantity < 0:
+            logger.error(
+                "execution_manager: negative filled_quantity=%s for message_id=%s "
+                "— skipping update (upstream data corruption)",
+                filled_quantity,
+                message_id,
+            )
 
         event_record = {
             "event_type": event_type,

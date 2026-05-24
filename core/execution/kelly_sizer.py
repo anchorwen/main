@@ -32,6 +32,8 @@ def compute_kelly_mult(
     fractional_k: float = 0.5,
     floor: float = 0.5,
     cap: float = 1.5,
+    *,
+    epsilon: float = 0.02,
 ) -> KellyResult:
     """Compute the fractional Kelly multiplier for position sizing.
 
@@ -41,6 +43,7 @@ def compute_kelly_mult(
         fractional_k: Fraction of full Kelly to use (0.5 = half-Kelly, conservative).
         floor: Minimum multiplier when EV > 0 but kf is very small.
         cap: Maximum multiplier — prevents unbounded position amplification.
+        epsilon: kf below this threshold is treated as zero-EV (defensive floor).
 
     Returns:
         KellyResult with fractional_mult:
@@ -65,6 +68,16 @@ def compute_kelly_mult(
             kelly_fraction=round(kf, 4),
             fractional_mult=0.0,
             sizing_label="negative_ev_veto",
+        )
+
+    # Near-zero EV: clamp to floor to avoid treating noise as real edge
+    if kf < epsilon:
+        return KellyResult(
+            p_win=round(p_win, 4),
+            rr_ratio=round(rr_ratio, 4),
+            kelly_fraction=round(kf, 4),
+            fractional_mult=floor,
+            sizing_label="near_zero_ev_defensive",
         )
 
     mult = 1.0 + fractional_k * kf

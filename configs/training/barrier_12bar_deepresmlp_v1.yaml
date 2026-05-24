@@ -11,9 +11,11 @@ label:
   tp_atr_mult: 1.5
   horizon_bars: 12
   profitability_calibrated: true
-  spread_pips: 30
-  slippage_pips: 10
-  pip_value: 0.01
+  label_mapping: drop_timeout_binary
+  spread_points: 30
+  slippage_points: 10
+  tick_size: 0.001
+  tick_value: 0.01
 architecture:
   type: deep_res_mlp
   objective_function: binary_logloss

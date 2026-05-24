@@ -107,15 +107,19 @@ def compute_profitability_surface(
     atr_period: int = 14,
     sl_range: list[float] | None = None,
     tp_range: list[float] | None = None,
-    entry_stride: int = 1,
+    entry_stride: int = 1,  # NOTE: stride=1 creates overlapping trades, inflating
+    # sample count and overestimating win rate.  For conservative estimates use
+    # stride >= horizon_bars to avoid trade overlap.
     warmup_bars: int = 100,
     side: str = "long",
     symbol: str = "unknown",
     timeframe: str = "M5",
     min_profitability: float = 0.0,
-    spread_pips: float = 0.3,
-    slippage_pips: float = 0.5,
-    pip_value: float = 0.01,
+    spread_points: float = 30,
+    slippage_points: float = 10,
+    tick_value: float = 0.01,
+    tick_size: float = 0.001,
+    volume: float = 0.01,
 ) -> ProfitabilitySurface:
     """Compute the expected-value surface for a grid of (SL, TP) configurations.
 
@@ -133,6 +137,11 @@ def compute_profitability_surface(
         side: Entry direction ("long", "short", "both").
         symbol, timeframe: Metadata labels.
         min_profitability: Filter threshold for reporting.
+        spread_points: Raw MT5 spread in points (not pips). Default 30 for XAUUSDc.
+        slippage_points: Raw MT5 slippage in points. Default 10 for XAUUSDc.
+        tick_value: MT5 SYMBOL_TRADE_TICK_VALUE (monetary value of one tick).
+        tick_size: MT5 SYMBOL_TRADE_TICK_SIZE (price step per tick).
+        volume: Trade volume in lots (default 0.01 for cent accounts).
 
     Returns:
         ProfitabilitySurface with all computed grid points.
@@ -161,8 +170,8 @@ def compute_profitability_surface(
     atr_sum = 0.0
     atr_count = 0
 
-    spread_cost = spread_pips * pip_value
-    slippage_cost = slippage_pips * pip_value
+    spread_cost = spread_points * tick_size
+    slippage_cost = slippage_points * tick_size
 
     for entry_idx in entries:
         for entry_side in sides:
@@ -249,7 +258,9 @@ def compute_profitability_surface(
         tp_rate = tp_c / total
         sl_rate = sl_c / total
         to_rate = to_c / total
-        ev = tp_rate * tp - sl_rate * sl
+        # Deduct estimated spread + slippage cost from EV (in ATR-multiple units)
+        _cost_per_roundtrip = (spread_cost + 2.0 * slippage_cost) / max(mean_atr, 1e-8)
+        ev = tp_rate * (tp - _cost_per_roundtrip) - sl_rate * (sl + _cost_per_roundtrip)
 
         # Sharpe estimate: binary outcome with timeout=0
         outcomes = np.array([tp] * tp_c + [-sl] * sl_c + [0.0] * to_c)

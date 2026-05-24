@@ -34,6 +34,7 @@ from core.market.mtf_price_service import MTFPriceService
 from core.parliament.contract_groups import (
     ALL_GROUPS,
     ARB_GROUP,
+    BARRIER_12BAR_META_GROUP,
     BARRIER_GROUP,
     MICRO_GROUP,
     MICRO_H1_GROUP,
@@ -182,6 +183,7 @@ class LiveCycleState:
     _meta_filter_gate: Any = None  # MetaFilterGate (LightGBM 47-dim OU signal quality filter)
     _conformal_ou_gate: Any = None  # ConformalOUGate (physics-based OU signal quality gate)
     _mtf_price_service: Any = None  # MTFPriceService — M15 bar reconstruction from M5 tick history
+    _last_ou_params: dict[str, float] | None = None  # {z_score, half_life, theta} for meta labeler
 
     # Circuit breaker: 3 consecutive degraded cycles → management-only mode
     _consecutive_degraded_cycles: int = 0
@@ -2624,6 +2626,76 @@ def _warn_contract_mismatch(
         )
 
 
+def _build_meta_feature_vector(
+    *,
+    brains: list[dict[str, Any]],
+    feature_store: Any,
+    mid_price: float | None,
+    symbol: str,
+) -> tuple[Any, dict[str, float] | None]:
+    """Build 43-dim raw feature vector for meta-labeling binary classifier.
+
+    The meta labeler (Meta_Stage1_MetaLabel_Binary_V1) was trained on
+    40 raw V9 institutional features + 3 OU physics features WITHOUT
+    z-score normalization.  This function builds the same 43-dim raw
+    vector at inference time.
+
+    Returns (feature_vector, ou_params) where:
+      - feature_vector is a 1×43 np.ndarray (float32)
+      - ou_params is {z_score, half_life, theta} for diagnostic logging
+      - returns (None, None) if OU params cannot be computed
+    """
+    import numpy as np
+
+    from core.brains.adapters.params_brain_adapter import ParamsBrainAdapter
+
+    # ── Step 1: Compute OU params from statarb brain adapter ──
+    ou_params: dict[str, float] | None = None
+    _price = mid_price if mid_price is not None and mid_price > 0 else 0.0
+    for b_info in brains:
+        adapter = b_info.get("adapter")
+        if isinstance(adapter, ParamsBrainAdapter):
+            try:
+                raw = adapter.infer(np.array([_price], dtype=np.float32))
+                ou_params = {
+                    "z_score": float(raw.get("z_score", 0.0)),
+                    "half_life": float(raw.get("half_life", float("inf"))),
+                    "theta": float(raw.get("theta", 0.0)),
+                }
+                break
+            except Exception:
+                pass
+
+    if ou_params is None:
+        return None, None
+
+    # ── Step 2: Clip z_score to training boundary [1.3, 2.5] ──
+    z_clipped = max(1.3, min(2.5, ou_params["z_score"]))
+    hl = ou_params["half_life"] if ou_params["half_life"] != float("inf") else 999.0
+
+    # ── Step 3: Read raw V9 features from feature store ──
+    raw_features: dict[str, float] = {}
+    try:
+        record = feature_store.latest(symbol, "M5", schema_name="v9_institutional_40")
+        if record is not None and record.values:
+            raw_features = record.values
+    except Exception:
+        pass
+
+    # ── Step 4: Build 43-dim raw vector in training feature order ──
+    from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+
+    values: list[float] = []
+    for name in V9_INSTITUTIONAL_40_FEATURES:
+        values.append(float(raw_features.get(name, 0.0)))
+    values.append(z_clipped)
+    values.append(hl)
+    values.append(ou_params["theta"])
+
+    feature_vec = np.array(values, dtype=np.float32).reshape(1, -1)
+    return feature_vec, ou_params
+
+
 def _build_strategy_lines(
     brains: list[dict[str, Any]],
     config: LiveCycleConfig,
@@ -2635,6 +2707,7 @@ def _build_strategy_lines(
     # Contract type → strategy line mapping (for validation)
     _STRATEGY_CONTRACT_TYPES = {
         "barrier_12bar": "survival_barrier",
+        "barrier_12bar_meta": "barrier_12bar_meta_binary_cls",
         "micro_3bar": "label-micro-barrier",
         "micro_m15": "label-micro-barrier",
         "micro_h1": "label-micro-barrier",
@@ -2692,6 +2765,7 @@ def _build_strategy_lines(
             _unknown_brains.append(b_info)
 
     barrier_brains = _known_groups["barrier_12bar"]
+    barrier_12bar_meta_brains = _known_groups["barrier_12bar_meta"]
     micro_brains = _known_groups["micro_3bar"]
     micro_m15_brains = _known_groups["micro_m15"]
     micro_h1_brains = _known_groups["micro_h1"]
@@ -3013,6 +3087,43 @@ def _build_strategy_lines(
             ),
         )
 
+    if barrier_12bar_meta_brains:
+        strategies["barrier_12bar_meta"] = BarrierStrategy(
+            StrategyLineConfig(
+                name="barrier_12bar_meta",
+                magic=90014,
+                brain_types=BARRIER_12BAR_META_GROUP["brain_types"],
+                base_volume=_vol_cfg("barrier_12bar_meta"),
+                max_volume=_cfg("barrier_12bar_meta", "max_volume", 0.0),
+                base_sl_atr_mult=_cfg("barrier_12bar_meta", "sl", {}).get("base_atr_mult", 3.0),
+                base_tp_atr_mult=_cfg("barrier_12bar_meta", "tp", {}).get("base_atr_mult", 1.5),
+                hard_sl_ratio=_cfg("barrier_12bar_meta", "sl", {}).get("hard_sl_ratio", 1.5),
+                min_sl_distance=_cfg("barrier_12bar_meta", "sl", {}).get("min_sl_distance", 8.0),
+                min_rr_ratio=_cfg("barrier_12bar_meta", "sl", {}).get("min_rr_ratio", 0.5),
+                confidence_threshold=_cfg("barrier_12bar_meta", "confidence_threshold", 0.40),
+                long_bias_discount=_cfg("barrier_12bar_meta", "direction_balance", {}).get(
+                    "long_bias_discount", 0.05
+                ),
+                exit_flip_enabled=_exit_cfg("barrier_12bar_meta", "flip_exit_enabled", True),
+                exit_time_cycles=_exit_cfg("barrier_12bar_meta", "time_exit_cycles", 60),
+                exit_zscore_enabled=_exit_cfg("barrier_12bar_meta", "zscore_exit_enabled", False),
+                exit_min_r=_exit_cfg("barrier_12bar_meta", "min_r_for_hold", 0.3),
+                min_valid_brains=_cfg("barrier_12bar_meta", "min_valid_brains", 1),
+                timeframe=_cfg("barrier_12bar_meta", "timeframe", "M5"),
+                exit_hesitation_cycles=_exit_cfg("barrier_12bar_meta", "hesitation_cycles", 12),
+            ),
+            barrier_12bar_meta_brains,
+            budget=StrategyBudget(
+                "barrier_12bar_meta",
+                daily_loss_limit_pct=_cfg("barrier_12bar_meta", "budget", {}).get(
+                    "daily_loss_limit_pct", -0.03
+                ),
+                max_consecutive_losses=_cfg("barrier_12bar_meta", "budget", {}).get(
+                    "max_consecutive_losses", 5
+                ),
+            ),
+        )
+
     # ── Swing strategies (D1 features, TF-specific barrier contracts) ──
     from core.parliament.contract_groups import (
         DAILY_SWING_GROUP,
@@ -3246,6 +3357,7 @@ def _evaluate_strategy_lines(
     cooldown_registry: Any = None,
     family_entry_tracker: Any = None,
     mtf_price_service: Any = None,
+    meta_feature_vector: Any = None,
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue.
 
@@ -3305,8 +3417,13 @@ def _evaluate_strategy_lines(
                 # direction unknown pre-evaluate; check post-evaluate below
                 pass
 
+        # ── OU-augmented feature vector for meta-labeler strategy ──
+        _fv = feature_vector
+        if sname == "barrier_12bar_meta" and meta_feature_vector is not None:
+            _fv = meta_feature_vector
+
         decision = strategy.evaluate(
-            feature_vector=feature_vector,
+            feature_vector=_fv,
             micro_feature_vector=micro_feature_vector,
             mid_price=_effective_mid,
             bid=bid,
@@ -4951,6 +5068,15 @@ def execute_live_cycle(
             except Exception:
                 pass
 
+        # ── Quarantine auto-clear: MT5 confirms zero positions → safe to lift ──
+        if (
+            _mt5_ok
+            and not current_positions
+            and portfolio_risk is not None
+            and portfolio_risk.is_symbol_quarantined(config.symbol)
+        ):
+            portfolio_risk._symbol_quarantine_until.pop(config.symbol, None)
+
         # ── Fallback: only when MT5 query FAILED (not when it returned empty) ──
         if (
             not _mt5_ok
@@ -4987,6 +5113,18 @@ def execute_live_cycle(
                         "entry_cycle": pos.entry_cycle,
                         "brain_ids": pos.supporting_brain_ids,
                     }
+
+        # ── OU-augmented feature vector for meta-labeler strategy ──
+        _meta_feature_vector: Any = None
+        if "barrier_12bar_meta" in strategies and not config.no_mt5:
+            _meta_feature_vector, _ou_parms = _build_meta_feature_vector(
+                brains=brains,
+                feature_store=feature_store,
+                mid_price=mid_price,
+                symbol=config.symbol,
+            )
+            if _ou_parms is not None:
+                state._last_ou_params = _ou_parms
 
         # Evaluate all strategy lines
         eval_summary = _evaluate_strategy_lines(
@@ -5026,6 +5164,7 @@ def execute_live_cycle(
             cooldown_registry=state._cooldown_registry,
             family_entry_tracker=state._family_entry_tracker,
             mtf_price_service=getattr(state, "_mtf_price_service", None),
+            meta_feature_vector=_meta_feature_vector,
         )
 
         # Log strategy evaluation results
@@ -5204,6 +5343,27 @@ def execute_live_cycle(
                 broker=broker,
                 close_dispatch_fn=_net_out_close_dispatch_fn,
             )
+
+            # ── Quarantine check: block entries on symbols with unconfirmed net-out ──
+            _unconfirmed_close = any(
+                not dr.dispatched and dr.reason == "net_out_close_not_confirmed"
+                for dr in dispatch_results
+            )
+            if _unconfirmed_close and portfolio_risk is not None:
+                portfolio_risk.quarantine_symbol(config.symbol)
+                print(
+                    json.dumps(
+                        {
+                            "event": "symbol_quarantined",
+                            "time": _utc_iso(),
+                            "symbol": config.symbol,
+                            "reason": "net_out_close_not_confirmed",
+                            "duration_seconds": 60.0,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
 
             # ── NET_OUT ticket reassignment: partial close creates new MT5 ticket ──
             for dr in dispatch_results:

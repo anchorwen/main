@@ -49,6 +49,8 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260524-039 | 2026-05-24 | cursor-agent | — | M12: BrainLifecycleManager auto-repair now always registers brains as "candidate" — removed "shadow" registration which creates governance deadlock (shadow wasn't in VALID_TRANSITIONS before H3 fix). | RC-09 |
+| FIX-20260524-033 | 2026-05-24 | cursor-agent | — | Batch mypy type safety: postmortem_report.py (3→0 — dict[str, Any] annot), release_pipeline.py (1→0 — dict[str, Any] annot). MODULE_SOURCE_MAP: add release_pipeline.py to deployment_lifecycle. | type-confusion |
 | FIX-20260524-011 | 2026-05-24 | cursor-agent | — | MODULE_SOURCE_MAP: add scripts/feedback_loop.py to feedback_performance module for Batch C variable shadowing fix | RC-02 |
 | FIX-20260524-013 | 2026-05-24 | cursor-agent | — | MODULE_SOURCE_MAP: add scripts/backtest/backtest_dynamic_exit.py to training module for Batch D backtest mypy cleanup | RC-02 |
 | FIX-20260524-014 | 2026-05-24 | cursor-agent | — | MODULE_SOURCE_MAP expansion: 8 entries across 4 modules for Batch G non-test mypy cleanup (v9_shadow_sse, _diag_cycle_stall, live_daily_recap, feature_store_maintenance, journal_validator, trade_quality_report) | RC-02 |

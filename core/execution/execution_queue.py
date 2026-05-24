@@ -12,9 +12,12 @@ with a short stagger delay between dispatches.
 
 from __future__ import annotations
 
+import logging
 import time as _time
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Default priority: Micro > Barrier > StatArb (shortest hold time first)
 DEFAULT_PRIORITY = {
@@ -109,6 +112,10 @@ class ExecutionQueue:
                 _current_price = _mid
             except Exception:
                 _current_price = None
+        else:
+            logger.warning(
+                "ExecutionQueue.flush: no broker provided — price guard validation skipped"
+            )
 
         for i, queued in enumerate(self._queue):
             decision = queued.decision
@@ -161,8 +168,23 @@ class ExecutionQueue:
                             )
                             self._last_dispatch_time = _time.monotonic()
                             continue
-                except Exception:
-                    pass  # if price guard validation itself fails, let the order through
+                except Exception as _pg_exc:
+                    logger.error(
+                        "price_guard validation exception for strategy=%s: %s",
+                        queued.strategy_name,
+                        _pg_exc,
+                    )
+                    results.append(
+                        DispatchResult(
+                            strategy_name=queued.strategy_name,
+                            magic=decision.magic,
+                            dispatched=False,
+                            direction=decision.direction,
+                            reason=f"price_guard_exception:{_pg_exc}",
+                        )
+                    )
+                    self._last_dispatch_time = _time.monotonic()
+                    continue
 
             # If NET_OUT or REDUCED, handle opposing position first
             _net_out_ticket_update: dict[str, Any] | None = None
@@ -242,8 +264,12 @@ class ExecutionQueue:
                                                         "close_volume": _close_vol,
                                                     }
                                                 break
-                                        except Exception:
-                                            pass
+                                        except Exception as _ack_exc:
+                                            logger.warning(
+                                                "ACK poll read error for intent_id=%s: %s",
+                                                _intent_id,
+                                                _ack_exc,
+                                            )
                                     _time.sleep(0.5)
                                     _poll_iters += 1
                         else:
@@ -253,8 +279,13 @@ class ExecutionQueue:
                             # confirmation would open a new position against a still-open
                             # opposing position when the close actually failed.
                             _close_confirmed = bool(_close_result.get("dispatched", False))
-                except Exception:
-                    pass
+                except Exception as _net_out_exc:
+                    logger.error(
+                        "net-out close dispatch failed for strategy=%s ticket=%s: %s",
+                        queued.strategy_name,
+                        risk.net_out_ticket if hasattr(risk, "net_out_ticket") else "unknown",
+                        _net_out_exc,
+                    )
 
                 if not _close_confirmed:
                     results.append(
@@ -271,6 +302,10 @@ class ExecutionQueue:
 
             # Dispatch the actual order (price guard already validated above)
             # Retry once on transient MT5 failures (1.5 s delay)
+            # Stable intent_id across retries for idempotency
+            import uuid as _uuid
+
+            _intent_id = f"eq_{queued.strategy_name}_{_uuid.uuid4().hex[:12]}"
             _max_attempts = 2
             _dispatched = False
             _last_error = ""
@@ -285,7 +320,7 @@ class ExecutionQueue:
                         side=decision.direction,
                         stop_loss=decision.sl,
                         take_profit=decision.tp,
-                        skip_price_guard=True,
+                        intent_id=_intent_id,
                         ignore_protection_flag=ignore_protection_flag,
                         protection_flag_path=protection_flag_path,
                         volume=risk.adjusted_volume

@@ -446,7 +446,6 @@ def main(argv: list[str] | None = None) -> int:
                     dtype=np.float64,
                 )
                 if rolling_norm is not None:
-                    rolling_norm.update(raw_features)
                     normed_features = rolling_norm.normalize(raw_features)
                 else:
                     normed_features = (raw_features - mean) / std

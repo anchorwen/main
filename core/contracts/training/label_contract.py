@@ -61,9 +61,12 @@ def _build_barrier_labels_array(
     tp_atr_mult: float,
     horizon_bars: int,
     atr_period: int = 14,
-    spread_pips: float = 30.0,
-    slippage_pips: float = 10.0,
-    pip_value: float = 0.01,
+    fallback_atr: float | None = None,
+    spread_points: float = 30,
+    slippage_points: float = 10,
+    tick_value: float = 0.01,
+    tick_size: float = 0.001,
+    volume: float = 0.01,
 ) -> BarrierResult:
     """Build barrier labels for a single entry point.
 
@@ -84,24 +87,34 @@ def _build_barrier_labels_array(
         tp_atr_mult: Take-profit distance in ATR multiples.
         horizon_bars: Max bars to look forward.
         atr_period: ATR lookback period.
-        spread_pips: Spread in pips (Exness XAUUSDc ~30 pips = 0.30 USD).
-        slippage_pips: Slippage in pips (~10 pips conservative).
-        pip_value: Value of one pip (XAUUSD default 0.01).
+        spread_points: Raw MT5 spread in points. Default 30 for XAUUSDc.
+        slippage_points: Raw MT5 slippage in points. Default 10 for XAUUSDc.
+        tick_value: MT5 SYMBOL_TRADE_TICK_VALUE (monetary value of one tick).
+        tick_size: MT5 SYMBOL_TRADE_TICK_SIZE (price step per tick).
+        volume: Trade volume in lots.
 
     Returns:
         BarrierResult with label, hit info, and reference prices.
     """
     entry_price = float(c[entry_idx])
-    spread_cost = spread_pips * pip_value
-    slippage_cost = slippage_pips * pip_value
+    spread_cost = spread_points * tick_size
+    slippage_cost = slippage_points * tick_size
 
     # Compute ATR at entry (using data up to entry_idx)
     atr_val = _compute_atr(
         h[: entry_idx + 1], low[: entry_idx + 1], c[: entry_idx + 1], period=atr_period
     )
     if atr_val <= 0:
-        # Fallback: use training mean ATR if no usable ATR
-        atr_val = 2.31
+        if fallback_atr is not None and fallback_atr > 0:
+            atr_val = fallback_atr
+        else:
+            # Cannot compute meaningful barriers — reject label construction.
+            # 2.31 only works for XAUUSD M5; wrong for EURUSD (~0.001) or H1/M15.
+            raise ValueError(
+                f"ATR computation failed (atr_val={atr_val:.4f}) and no "
+                f"fallback_atr provided.  Hardcoded 2.31 is only valid for "
+                f"XAUUSD M5 — provide a symbol/timeframe-appropriate fallback."
+            )
 
     sl_dist = sl_atr_mult * atr_val
     tp_dist = tp_atr_mult * atr_val
@@ -237,10 +250,16 @@ class LabelContract:
     # For regression type
     regression_target: str | None = None  # "forward_return" | "log_return"
 
-    # Transaction cost modeling (Exness Standard Cent XAUUSDc: ~30 pips spread, ~10 pips slippage)
-    spread_pips: float = 30.0  # ~0.30 USD per oz (user confirmed avg spread)
-    slippage_pips: float = 10.0  # conservative estimate for normal market conditions
-    pip_value: float = 0.01
+    # ATR fallback for symbol/timeframe-aware label construction (T4-C1 fix).
+    # When None, label construction raises ValueError if ATR cannot be computed.
+    fallback_atr: float | None = None
+
+    # Transaction cost modeling (Exness Standard Cent XAUUSDc: ~30 points spread, ~10 points slippage)
+    # Cost formula: cost_in_price = points * tick_size (MT5-native, physics-grounded)
+    spread_points: float = 30  # raw MT5 points (not pips)
+    slippage_points: float = 10  # conservative estimate for normal market conditions
+    tick_value: float = 0.01  # SYMBOL_TRADE_TICK_VALUE for XAUUSDc
+    tick_size: float = 0.001  # SYMBOL_TRADE_TICK_SIZE for XAUUSDc
 
     # Metadata
     timeout_label: str = "timeout"
@@ -273,9 +292,11 @@ class LabelContract:
             atr_period=int(data.get("atr_config", {}).get("period", 14)),
             atr_timeframe=data.get("atr_config", {}).get("timeframe", "M5"),
             regression_target=data.get("regression_target"),
-            spread_pips=float(data.get("spread_pips", 0.3)),
-            slippage_pips=float(data.get("slippage_pips", 0.5)),
-            pip_value=float(data.get("pip_value", 0.01)),
+            spread_points=float(data.get("spread_points", data.get("spread_pips", 30))),
+            slippage_points=float(data.get("slippage_points", data.get("slippage_pips", 10))),
+            tick_value=float(data.get("tick_value", 0.01)),
+            tick_size=float(data.get("tick_size", 0.001)),
+            fallback_atr=float(data["fallback_atr"]) if "fallback_atr" in data else None,
             timeout_label=data.get("timeout_label", "timeout"),
             metadata=data.get("metadata", {}),
         )
@@ -306,9 +327,10 @@ class LabelContract:
                 "tp_atr_mult": self.tp_atr_mult,
             }
             d["timeout_label"] = self.timeout_label
-        d["spread_pips"] = self.spread_pips
-        d["slippage_pips"] = self.slippage_pips
-        d["pip_value"] = self.pip_value
+        d["spread_points"] = self.spread_points
+        d["slippage_points"] = self.slippage_points
+        d["tick_value"] = self.tick_value
+        d["tick_size"] = self.tick_size
         if self.regression_target:
             d["regression_target"] = self.regression_target
         if self.metadata:
@@ -349,12 +371,15 @@ class LabelContract:
             entry_idx=entry_idx,
             side=side,
             sl_atr_mult=self.sl_atr_mult,
+            fallback_atr=self.fallback_atr,
             tp_atr_mult=self.tp_atr_mult,
             horizon_bars=self.horizon_bars,
             atr_period=self.atr_period,
-            spread_pips=self.spread_pips,
-            slippage_pips=self.slippage_pips,
-            pip_value=self.pip_value,
+            spread_points=self.spread_points,
+            slippage_points=self.slippage_points,
+            tick_value=self.tick_value,
+            tick_size=self.tick_size,
+            volume=0.01,
         )
 
     # ── Regression label builder ──
@@ -375,7 +400,7 @@ class LabelContract:
 
         Formula:
             raw_bps = sign * log(close[t+H] / close[t]) * 10000
-            friction_bps = (spread_pips + slippage_pips) * pip_value
+            friction_bps = (spread_points + slippage_points) * tick_size
                            / entry_price * 10000
             label = apply_friction_deadband(raw_bps, friction_bps)
 
@@ -410,8 +435,8 @@ class LabelContract:
             raw_bps = float(np.log(entry_price / exit_price) * 10000)
 
         # Friction in basis points: (spread + slippage) / entry * 10000
-        friction_pips = self.spread_pips + self.slippage_pips
-        friction_bps = friction_pips * self.pip_value / entry_price * 10000
+        friction_points = self.spread_points + self.slippage_points
+        friction_bps = friction_points * self.tick_size / entry_price * 10000
 
         return float(apply_friction_deadband(np.array([raw_bps]), friction_bps)[0])
 
@@ -488,8 +513,8 @@ class LabelContract:
             return 0.0
 
         # Friction in ATR multiples
-        friction_pips = self.spread_pips + self.slippage_pips
-        friction_bps = friction_pips * self.pip_value / entry_price * 10000
+        friction_points = self.spread_points + self.slippage_points
+        friction_bps = friction_points * self.tick_size / entry_price * 10000
         friction_atr = friction_bps / atr_val
 
         # Scale return to ATR multiples

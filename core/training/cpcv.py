@@ -119,8 +119,16 @@ def _compute_group_boundaries(
     boundaries[0] = 0
     boundaries[-1] = n_samples
 
-    for g in range(1, n_groups):
-        boundaries[g] = int(n_samples * g / n_groups)
+    if timestamps is not None and len(timestamps) == n_samples:
+        # Split by timestamp quantiles to respect temporal ordering
+        quantiles = np.linspace(0, 1, n_groups + 1)
+        ts_values = np.asarray(timestamps, dtype=np.float64)
+        for g in range(1, n_groups):
+            threshold = np.quantile(ts_values, quantiles[g])
+            boundaries[g] = int(np.searchsorted(ts_values, threshold, side="right"))
+    else:
+        for g in range(1, n_groups):
+            boundaries[g] = int(n_samples * g / n_groups)
 
     return boundaries
 

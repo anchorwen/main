@@ -10,6 +10,7 @@ post-trade callback in the live intent loop.
 
 from __future__ import annotations
 
+import bisect
 import json
 import logging
 from datetime import UTC, datetime
@@ -51,6 +52,8 @@ class OnlineFeedbackHook:
         self._last_processed_at: str | None = None
         self._replay = replay_buffer
         self._calibrator = calibrator
+        # In-memory feature index: symbol → sorted list of (unix_ts, values_dict)
+        self._feature_cache: dict[str, list[tuple[float, dict[str, float]]]] = {}
         self._load_state()
 
     # ------------------------------------------------------------------
@@ -130,26 +133,14 @@ class OnlineFeedbackHook:
     # Feature lookup
     # ------------------------------------------------------------------
 
-    def _find_feature_vector(
-        self, close_time_iso: str, symbol: str = "XAUUSDc"
-    ) -> dict[str, float] | None:
-        """Load feature records for the given date and find the nearest in time."""
-        try:
-            dt = datetime.fromisoformat(close_time_iso.replace("Z", "+00:00"))
-        except (ValueError, TypeError):
-            return None
-
+    def _build_feature_index(self, symbol: str) -> None:
+        """Load and index features.jsonl for a symbol (cached in-memory)."""
         feat_dir = self._feature_store_dir / f"symbol={symbol}" / "timeframe=M5"
         feat_file = feat_dir / "features.jsonl"
-
         if not feat_file.exists():
-            logger.debug("OnlineFeedbackHook: feature file not found: %s", feat_file)
-            return None
-
-        best_row = None
-        best_delta = float("inf")
-        target_ts = dt.timestamp()
-
+            self._feature_cache[symbol] = []
+            return
+        rows: list[tuple[float, dict[str, float]]] = []
         for line in feat_file.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line:
@@ -165,11 +156,49 @@ class OnlineFeedbackHook:
                 et = datetime.fromisoformat(str(event_time).replace("Z", "+00:00"))
             except (ValueError, TypeError):
                 continue
-            delta = abs(et.timestamp() - target_ts)
-            if delta < best_delta and delta <= self._max_delta:
+            values = rec.get("values")
+            if isinstance(values, dict):
+                rows.append((et.timestamp(), values))
+        rows.sort(key=lambda x: x[0])
+        self._feature_cache[symbol] = rows
+
+    def _find_feature_vector(
+        self, close_time_iso: str, symbol: str = "XAUUSDc"
+    ) -> dict[str, float] | None:
+        """Find the nearest feature record using bisect on in-memory index."""
+        try:
+            dt = datetime.fromisoformat(close_time_iso.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            return None
+
+        if symbol not in self._feature_cache:
+            self._build_feature_index(symbol)
+
+        rows = self._feature_cache.get(symbol, [])
+        if not rows:
+            return None
+
+        target_ts = dt.timestamp()
+        timestamps = [r[0] for r in rows]
+        idx = bisect.bisect_left(timestamps, target_ts)
+
+        best_row = None
+        best_delta = float("inf")
+
+        # Check the insertion point and the one before it
+        candidates = []
+        if idx < len(rows):
+            candidates.append(rows[idx])
+        if idx > 0:
+            candidates.append(rows[idx - 1])
+
+        for ts, values in candidates:
+            delta = abs(ts - target_ts)
+            if delta < best_delta:
                 best_delta = delta
-                best_row = rec.get("values")
-        return best_row
+                best_row = values
+
+        return best_row if best_delta <= self._max_delta else None
 
     # ------------------------------------------------------------------
     # R-multiple extraction
@@ -202,6 +231,14 @@ class OnlineFeedbackHook:
     # Main processing loop
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _parse_dt(ts: str) -> datetime | None:
+        """Parse an ISO timestamp string to a UTC datetime, returning None on failure."""
+        try:
+            return datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            return None
+
     def process_new_trades(self, *, save_weights: bool = True) -> dict[str, Any]:
         """Scan journal for new closed trades since last_processed_at.
 
@@ -217,6 +254,7 @@ class OnlineFeedbackHook:
         if not self._journal_path.exists():
             return {"status": "no_journal", "updated": 0, "skipped": 0, "errors": 0}
 
+        # ── Parse all entries ──────────────────────────────────────────
         entries: list[dict[str, Any]] = []
         for line in self._journal_path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
@@ -227,16 +265,35 @@ class OnlineFeedbackHook:
             except json.JSONDecodeError:
                 continue
 
+        # ── Build open-order timestamp index (message_id → recorded_at) ─
+        open_order_times: dict[str, str] = {}
+        for entry in entries:
+            if str(entry.get("ack_status", "")) != "closed":
+                msg_id = str(entry.get("message_id", ""))
+                if msg_id:
+                    open_order_times[msg_id] = str(entry.get("recorded_at", ""))
+
+        # ── Parse last_processed_at for datetime comparison (C4 fix) ───
+        last_processed_dt: datetime | None = None
+        if self._last_processed_at:
+            last_processed_dt = self._parse_dt(self._last_processed_at)
+
         collected = 0
         matched = 0
         skipped = 0
         errors = 0
         latest_processed = self._last_processed_at
+        latest_processed_dt = last_processed_dt
 
         for entry in entries:
             recorded_at = str(entry.get("recorded_at", ""))
-            if self._last_processed_at and recorded_at <= self._last_processed_at:
-                continue
+            # ── C4: datetime comparison, not string comparison ──────────
+            entry_dt = self._parse_dt(recorded_at)
+            if last_processed_dt is not None and entry_dt is not None:
+                if entry_dt <= last_processed_dt:
+                    continue
+            elif self._last_processed_at and recorded_at and recorded_at <= self._last_processed_at:
+                continue  # fallback for non-standard timestamps
 
             ack_status = str(entry.get("ack_status", ""))
             if ack_status != "closed":
@@ -248,20 +305,25 @@ class OnlineFeedbackHook:
                 skipped += 1
                 continue
 
-            close_time = str(
-                entry.get("close_recorded_at")
-                or entry.get("close_time")
-                or entry.get("recorded_at", "")
-            )
+            # ── C1: use entry_time (open order recorded_at) not close_time ──
+            open_msg_id = str(entry.get("open_message_id", ""))
+            entry_time = open_order_times.get(open_msg_id, "")
+            if not entry_time:
+                # Fallback: use close recorded_at (suboptimal but best available)
+                entry_time = str(
+                    entry.get("close_recorded_at")
+                    or entry.get("close_time")
+                    or entry.get("recorded_at", "")
+                )
             symbol = str(entry.get("symbol", "XAUUSDc"))
-            features = self._find_feature_vector(close_time, symbol)
+            features = self._find_feature_vector(entry_time, symbol)
 
             if features is None:
                 skipped += 1
                 logger.debug(
                     "OnlineFeedbackHook: no feature match for trade %s at %s",
                     entry.get("message_id", "?"),
-                    close_time,
+                    entry_time,
                 )
                 continue
 
@@ -311,8 +373,14 @@ class OnlineFeedbackHook:
                     errors += 1
                     logger.exception("OnlineFeedbackHook: update failed for trade %s", trade_id)
 
-            if recorded_at > (latest_processed or ""):
+            # ── C4: datetime comparison for latest_processed tracking ──
+            if entry_dt is not None and (
+                latest_processed_dt is None or entry_dt > latest_processed_dt
+            ):
                 latest_processed = recorded_at
+                latest_processed_dt = entry_dt
+            elif entry_dt is None and recorded_at and recorded_at > (latest_processed or ""):
+                latest_processed = recorded_at  # fallback for non-standard timestamps
 
         # ── Flush replay buffer if ready ──
         flushed_count = 0

@@ -30,6 +30,8 @@ def _wire_meta_pipeline(container: ServiceContainer, repo_root: Path) -> None:
     — attached to the container for runtime signal filtering.
     """
     loader = BrainRegistryLoader()
+    assert container.brain_registry is not None
+    assert container.governance_service is not None
 
     # ── Stage 1: Register Huber regression brain ──
     stage1_config_path = repo_root / "configs" / "brains" / "meta_stage1_huber_v1.json"
@@ -178,6 +180,8 @@ def build_v9_shadow_container() -> ServiceContainer:
         adapter_name=adapter_name,
     )
     container = ServiceContainer(config).build()
+    assert container.brain_registry is not None
+    assert container.governance_service is not None
 
     repo_root = _repo_root()
     loader = BrainRegistryLoader()

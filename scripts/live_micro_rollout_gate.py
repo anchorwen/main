@@ -65,6 +65,8 @@ def build_report(
         extensions={"mt5_terminal_path": str(terminal_path)},
     )
     container = ServiceContainer(cfg).build()
+    assert container.dispatcher is not None
+    assert container.health_check is not None
     envelope = CommunicationEnvelope(
         schema_version=SCHEMA_COMMUNICATION_ENVELOPE,
         message_id="micro_live_probe_001",

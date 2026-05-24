@@ -100,9 +100,10 @@ def main() -> None:
         symbol="XAUUSDc",
         timeframe="M5",
         min_profitability=0.0,
-        spread_pips=0.3,
-        slippage_pips=0.5,
-        pip_value=0.01,
+        spread_points=30,
+        slippage_points=10,
+        tick_value=0.01,
+        tick_size=0.001,
     )
 
     # ── Classify each config ──

@@ -26,9 +26,13 @@ class PerformanceAnalytics:
         wins = [p for p in pnls if p > 0]
         losses = [p for p in pnls if p <= 0]
 
+        # Annualization factor from actual trade time span (not hardcoded 252).
+        # Returns are per-trade, not daily, so daily sqrt(252) would mis-scale.
+        annual_factor = self._annual_factor(trades)
+
         max_dd, max_dd_pct = self._max_drawdown(equity_curve)
-        sharpe = self._sharpe_ratio(returns)
-        sortino = self._sortino_ratio(returns)
+        sharpe = self._sharpe_ratio(returns, annual_factor)
+        sortino = self._sortino_ratio(returns, annual_factor)
         profit_factor = self._profit_factor(wins, losses)
         expectancy = total_pnl / len(trades)
 
@@ -83,6 +87,31 @@ class PerformanceAnalytics:
                 returns.append(0.0)
         return returns
 
+    def _annual_factor(self, trades: list[dict]) -> float:
+        """Derive annualization factor from actual trade time span.
+
+        Returns the estimated number of trades per year.  Falls back to 1.0
+        (no annualization) when timestamps are missing or span < 1 day.
+        """
+        timestamps = []
+        for t in trades:
+            for key in ("exit_time", "entry_time"):
+                ts = t.get(key)
+                if isinstance(ts, datetime):
+                    timestamps.append(ts)
+                    break
+        if len(timestamps) < 2:
+            return 1.0
+        try:
+            first = min(timestamps)
+            last = max(timestamps)
+            span_days = (last - first).total_seconds() / 86400.0
+            if span_days < 1.0:
+                return 1.0
+            return len(trades) / span_days * 365.0
+        except (TypeError, ValueError):
+            return 1.0
+
     def _max_drawdown(self, equity_curve: list[float]) -> tuple[float, float]:
         peak = equity_curve[0]
         max_dd = 0.0
@@ -98,17 +127,19 @@ class PerformanceAnalytics:
                 max_dd_pct = dd_pct
         return max_dd, max_dd_pct
 
-    def _sharpe_ratio(self, returns: list[float]) -> float:
+    def _sharpe_ratio(self, returns: list[float], annual_factor: float = 1.0) -> float:
         if len(returns) < 2:
             return 0.0
         mean_r = sum(returns) / len(returns)
         std_r = math.sqrt(sum((r - mean_r) ** 2 for r in returns) / (len(returns) - 1))
         if std_r == 0:
             return 0.0
-        excess = mean_r - self._risk_free_rate / 252
-        return excess / std_r * math.sqrt(252)
+        # Risk-free rate scaled to per-trade period
+        period_rf = self._risk_free_rate / max(annual_factor, 1.0)
+        excess = mean_r - period_rf
+        return excess / std_r * math.sqrt(annual_factor)
 
-    def _sortino_ratio(self, returns: list[float]) -> float:
+    def _sortino_ratio(self, returns: list[float], annual_factor: float = 1.0) -> float:
         if len(returns) < 2:
             return 0.0
         mean_r = sum(returns) / len(returns)
@@ -118,8 +149,9 @@ class PerformanceAnalytics:
         down_std = math.sqrt(sum(r**2 for r in downside) / len(downside))
         if down_std == 0:
             return 0.0
-        excess = mean_r - self._risk_free_rate / 252
-        return excess / down_std * math.sqrt(252)
+        period_rf = self._risk_free_rate / max(annual_factor, 1.0)
+        excess = mean_r - period_rf
+        return excess / down_std * math.sqrt(annual_factor)
 
     def _profit_factor(self, wins: list[float], losses: list[float]) -> float:
         total_wins = sum(wins)

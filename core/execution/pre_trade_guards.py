@@ -236,7 +236,7 @@ def compute_position_size(
     import math
 
     if atr <= 0 or sl_atr_mult <= 0:
-        return min_lot
+        return 0.0  # cannot compute safe position size — caller should reject
 
     sl_distance = atr * sl_atr_mult
     raw = risk_budget_usd / (sl_distance * contract_size)

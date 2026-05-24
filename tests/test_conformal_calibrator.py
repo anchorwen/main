@@ -200,6 +200,7 @@ class TestPersistence:
             cal._state_path = state_path
             for i in range(12):
                 cal.update(0.40 + i * 0.01, 1 if i % 2 == 0 else -1)
+            cal._save_state()  # flush batched persistence
             cal.compute_threshold()
 
             cal2 = ConformalCalibrator(

@@ -41,6 +41,9 @@ Execution events → OutcomeCollector → DecisionScorer → BrainPerformanceTra
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |--------|------|--------|--------|---------|------------|
+| FIX-20260524-037 | 2026-05-24 | cursor-agent | — | C3: Probation floor (0.5 cap) reordered to after Sharpe adjustment and drawdown penalty — previously Sharpe bonus could push weight above the 0.5 cap. | RC-03 |
+| FIX-20260524-038 | 2026-05-24 | cursor-agent | — | H7: Auto-retire hard gate fixed — pf==0 edge case (previously `pf > 0 and pf < 0.60` missed pf==0, now `pf < 0.60`). | boundary-error |
+| FIX-20260524-041 | 2026-05-24 | cursor-agent | — | Sharpe annualization fix: returns are per-trade not daily, but _sharpe_ratio/_sortino_ratio hardcoded *sqrt(252) and /252. Now derives annual_factor from actual trade timestamps (N/span_days*365); falls back to 1.0 without timestamps. | RC-06 |
 | FIX-20260524-014 | 2026-05-24 | cursor-agent | — | MODULE_SOURCE_MAP: add scripts/trade_quality_report.py. Mypy fix (1→0 — Counter[str] annotation for rejected_reasons). | RC-02 |
 | FIX-20260524-011 | 2026-05-24 | cursor-agent | — | Variable shadowing fix: renamed outcome→resolved in accepted/rejected label blocks. Mypy inferred outcome as str from earlier loop, breaking dict assignment. | RC-02 |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |

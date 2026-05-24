@@ -67,10 +67,21 @@ class FeedbackLoop:
         }
 
     def _invert_score(self, scored: dict) -> dict:
-        return {
-            **scored,
-            "composite_score": round(1.0 - scored["composite_score"], 4),
-        }
+        inverted = dict(scored)
+        inverted["composite_score"] = round(1.0 - scored["composite_score"], 4)
+        # Dimension scores are also inverted to keep them consistent with
+        # the flipped composite — otherwise the composite inversion implies a
+        # different quality judgment than the dimension scores suggest.
+        for key in (
+            "sharpe_component",
+            "wr_component",
+            "pf_component",
+            "pnl_component",
+            "dd_component",
+        ):
+            if key in inverted and isinstance(inverted[key], int | float):
+                inverted[key] = round(1.0 - inverted[key], 4)
+        return inverted
 
     def _extract_governance_signals(self, brain_summaries: dict) -> list[dict]:
         signals = []

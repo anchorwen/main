@@ -24,6 +24,7 @@ import json
 import sys
 from json import JSONDecodeError
 from pathlib import Path
+from typing import Any
 
 from apps.engine.backtest_runner import BacktestRunner
 from apps.engine.diagnostics_cli import DiagnosticsCLI
@@ -593,7 +594,7 @@ def cmd_run(args) -> int:
     sp = StatePersistence(str(Path(args.base_dir) / "state"))
     lm = LifecycleManager(container, sp)
 
-    channels = []
+    channels: list[Any] = []
     if container.audit_log:
         channels.append(LogAlertChannel(container.audit_log))
     alerts = AlertService.with_default_rules(channels=channels)
@@ -636,6 +637,7 @@ def cmd_validate(args) -> int:
 
 def cmd_config(args) -> int:
     container = _build_container(args)
+    assert container.config_hot_reload is not None
     hr = container.config_hot_reload
     if args.action == "status":
         print(
@@ -704,6 +706,9 @@ def cmd_backtest(args) -> int:
 
 def cmd_status(args) -> int:
     container = _build_container(args)
+    assert container.health_check is not None
+    assert container.governance_service is not None
+    assert container.evidence_bundle is not None
     health = container.health_check.readiness()
     brains = container.governance_service.get_all_states()
     metrics_snap = container.metrics.snapshot() if container.metrics else {}
@@ -726,6 +731,7 @@ def cmd_status(args) -> int:
 
 def cmd_readiness(args) -> int:
     container = _build_container(args)
+    assert container.release_readiness is not None
     report = container.release_readiness.build_report(validation_mode=args.validation_mode)
     print(json.dumps(report, indent=2, default=str))
     if args.output:
@@ -736,6 +742,7 @@ def cmd_readiness(args) -> int:
 
 def cmd_runbook(args) -> int:
     container = _build_container(args)
+    assert container.runbook_engine is not None
     kwargs = {"validation_mode": args.validation_mode}
     if args.name == "postmortem":
         kwargs.update({"label": args.label, "output": args.output})
@@ -746,6 +753,7 @@ def cmd_runbook(args) -> int:
 
 def cmd_slo(args) -> int:
     container = _build_container(args)
+    assert container.slo_service is not None
     report = container.slo_service.evaluate()
     print(json.dumps(report, indent=2, default=str))
     if args.output:
@@ -756,6 +764,7 @@ def cmd_slo(args) -> int:
 
 def cmd_gate(args) -> int:
     container = _build_container(args)
+    assert container.release_gate is not None
     strict = not args.non_strict
     alpha_report = (
         json.loads(Path(args.alpha_budget_usage_report).read_text(encoding="utf-8"))
@@ -777,6 +786,7 @@ def cmd_gate(args) -> int:
 
 def cmd_evidence(args) -> int:
     container = _build_container(args)
+    assert container.evidence_bundle is not None
     if args.action == "build":
         alpha_report = (
             json.loads(Path(args.alpha_budget_usage_report).read_text(encoding="utf-8"))
@@ -802,6 +812,7 @@ def cmd_evidence(args) -> int:
 
 def cmd_deploy_plan(args) -> int:
     container = _build_container(args)
+    assert container.deployment_plan is not None
     alpha_report = (
         json.loads(Path(args.alpha_budget_usage_report).read_text(encoding="utf-8"))
         if args.alpha_budget_usage_report
@@ -825,6 +836,8 @@ def cmd_deploy_plan(args) -> int:
 
 def cmd_deploy_exec(args) -> int:
     container = _build_container(args)
+    assert container.deployment_executor is not None
+    assert container.deployment_plan is not None
     if args.plan:
         result = container.deployment_executor.execute_from_file(
             args.plan,
@@ -849,6 +862,7 @@ def cmd_deploy_exec(args) -> int:
 
 def cmd_rollback_drill(args) -> int:
     container = _build_container(args)
+    assert container.rollback_drill is not None
     result = container.rollback_drill.run(
         version=args.version,
         reason=args.reason,
@@ -862,6 +876,7 @@ def cmd_rollback_drill(args) -> int:
 
 def cmd_ops_timeline(args) -> int:
     container = _build_container(args)
+    assert container.operations_timeline is not None
     tl = container.operations_timeline
     if args.action.startswith("record"):
         if not args.input:
@@ -893,6 +908,7 @@ def cmd_ops_timeline(args) -> int:
 
 def cmd_postmortem_report(args) -> int:
     container = _build_container(args)
+    assert container.postmortem_report is not None
     report = container.postmortem_report.generate(
         incident_id=args.incident_id,
         title=args.title,
@@ -906,6 +922,7 @@ def cmd_postmortem_report(args) -> int:
 
 def cmd_release_pipeline(args) -> int:
     container = _build_container(args)
+    assert container.release_pipeline is not None
     alpha_report = (
         json.loads(Path(args.alpha_budget_usage_report).read_text(encoding="utf-8"))
         if args.alpha_budget_usage_report
@@ -929,6 +946,7 @@ def cmd_release_pipeline(args) -> int:
 
 def cmd_release_cert(args) -> int:
     container = _build_container(args)
+    assert container.release_certification is not None
     if args.action == "certify":
         if not args.pipeline:
             print(
@@ -952,6 +970,7 @@ def cmd_release_cert(args) -> int:
 
 def cmd_release_registry(args) -> int:
     container = _build_container(args)
+    assert container.release_registry is not None
     registry = container.release_registry
     if args.action == "register":
         if not args.certificate:
@@ -992,6 +1011,7 @@ def cmd_release_registry(args) -> int:
 
 def cmd_compliance_audit(args) -> int:
     container = _build_container(args)
+    assert container.compliance_audit is not None
     report = container.compliance_audit.generate(
         output=args.output, validation_mode=args.validation_mode
     )
@@ -1001,6 +1021,7 @@ def cmd_compliance_audit(args) -> int:
 
 def cmd_compliance_matrix(args) -> int:
     container = _build_container(args)
+    assert container.compliance_control_matrix is not None
     report = container.compliance_control_matrix.generate(
         output=args.output, validation_mode=args.validation_mode
     )
@@ -1010,6 +1031,7 @@ def cmd_compliance_matrix(args) -> int:
 
 def cmd_final_audit(args) -> int:
     container = _build_container(args)
+    assert container.final_audit is not None
     report = container.final_audit.build_report(validation_mode=args.validation_mode)
     print(json.dumps(report, indent=2, default=str))
     if args.output:
@@ -1020,6 +1042,7 @@ def cmd_final_audit(args) -> int:
 
 def cmd_ops_maturity(args) -> int:
     container = _build_container(args)
+    assert container.ops_maturity is not None
     if getattr(args, "min_score", None) is not None:
         container.config.ops_maturity_min_score = float(args.min_score)
     report = container.ops_maturity.evaluate(validation_mode=args.validation_mode)
@@ -1098,7 +1121,7 @@ def _run_runtime_paper(args, ledger_dir: Path) -> dict:
     runner.warmup_all({})
     router = ExecutionGatewayRouter()
     router.register("PAPER", PaperExecutionGateway())
-    gates = []
+    gates: list[Any] = []
     if args.alpha_risk_budget:
         usage_store = (
             AlphaBudgetUsageStore(args.alpha_budget_usage) if args.alpha_budget_usage else None
@@ -1195,9 +1218,9 @@ def cmd_alpha(args) -> int:
         else:
             result = usage
     elif args.action == "budget-usage-reset":
-        usage = AlphaBudgetUsageStore(usage_path)
-        usage.reset()
-        result = usage.to_dict()
+        budget_store = AlphaBudgetUsageStore(usage_path)
+        budget_store.reset()
+        result = budget_store.to_dict()
     elif args.action == "register":
         if not args.alpha_id or not args.name:
             print(

@@ -157,9 +157,35 @@ class BrainConfigValidator:
     # for backward compatibility with brains trained before FIX-20260516-010.
     # The BrainRegistrationGate enforces them strictly at registration time.
 
+    def __init__(self) -> None:
+        # Lazy-built reverse index: magic → list of brain_ids (built once, O(n) reads)
+        self._magic_index: dict[int, list[str]] | None = None
+
+    def _build_magic_index(self) -> None:
+        """Pre-load all brain configs once and build magic → [brain_id] index."""
+        self._magic_index = {}
+        brains_dir = Path("configs/brains")
+        if not brains_dir.exists():
+            return
+        for cfg_path in brains_dir.glob("*.json"):
+            if "normalization" in cfg_path.name.lower():
+                continue
+            try:
+                data = json.loads(cfg_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            magic = data.get("magic")
+            brain_id = data.get("brain_id", "?")
+            if magic is not None:
+                self._magic_index.setdefault(magic, []).append(brain_id)
+
     def validate(self, brain_entry: dict) -> ValidationResult:
         brain_id = brain_entry.get("brain_id", "?")
         result = ValidationResult(brain_id=brain_id)
+
+        # Build magic index once (lazy, O(n) reads instead of O(n²))
+        if self._magic_index is None:
+            self._build_magic_index()
 
         self._check_required_fields(brain_entry, result)
         self._check_brain_type(brain_entry, result)
@@ -272,26 +298,15 @@ class BrainConfigValidator:
 
     def _check_magic_unique(self, entry: dict, result: ValidationResult) -> None:
         magic = entry.get("magic")
-        if magic is None:
+        if magic is None or self._magic_index is None:
             return
         brain_id = entry.get("brain_id", "?")
-        brains_dir = Path("configs/brains")
-        if not brains_dir.exists():
-            return
-        for cfg_path in brains_dir.glob("*.json"):
-            if "normalization" in cfg_path.name.lower():
-                continue
-            try:
-                data = json.loads(cfg_path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                continue
-            if data.get("brain_id") == brain_id:
-                continue
-            if data.get("magic") == magic:
-                result.warnings.append(
-                    f"brain_id={brain_id}: magic={magic} also used by "
-                    f"brain_id='{data.get('brain_id', '?')}' — may cause signal routing conflicts"
-                )
+        conflicts = [bid for bid in self._magic_index.get(magic, []) if bid != brain_id]
+        for conflict_bid in conflicts:
+            result.warnings.append(
+                f"brain_id={brain_id}: magic={magic} also used by "
+                f"brain_id='{conflict_bid}' — may cause signal routing conflicts"
+            )
 
 
 # Singleton for use by BrainFactory

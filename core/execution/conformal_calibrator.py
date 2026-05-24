@@ -86,6 +86,10 @@ class ConformalCalibrator:
         self._total_computations: int = 0
         self._cold_started: bool = False
 
+        # Batched persistence: save every N updates instead of per-update
+        self._save_interval: int = 10
+        self._updates_since_save: int = 0
+
         self._load_state()
 
     # ------------------------------------------------------------------
@@ -109,7 +113,10 @@ class ConformalCalibrator:
             timestamp_utc = datetime.now(UTC).replace(tzinfo=None).isoformat()
 
         self._history.append((float(p_win), int(label), str(timestamp_utc)))
-        self._save_state()
+        self._updates_since_save += 1
+        if self._updates_since_save >= self._save_interval:
+            self._save_state()
+            self._updates_since_save = 0
 
     def compute_threshold(self) -> float:
         """Return the adaptive conformal threshold.

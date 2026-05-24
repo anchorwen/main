@@ -1,4 +1,7 @@
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class GovernanceRule:
@@ -83,11 +86,18 @@ class GovernanceRuleEngine:
             chosen = self._most_severe(matches)
             assert chosen is not None, "matches non-empty → _most_severe always returns a result"
             if chosen.get("transition_to"):
-                self._governance.transition(
+                result = self._governance.transition(
                     brain_id,
                     chosen["transition_to"],
                     reason=f"rule:{chosen['rule_name']}",
                 )
+                if result.get("action") == "rejected":
+                    logger.warning(
+                        "GovernanceRuleEngine: transition(%s → %s) rejected by state machine: %s",
+                        brain_id,
+                        chosen["transition_to"],
+                        result.get("reason", "unknown"),
+                    )
 
             for result in matches:
                 if self._audit:

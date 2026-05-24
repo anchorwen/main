@@ -18,10 +18,13 @@ Usage:
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -207,6 +210,24 @@ class BrainPromotionEvaluator:
                     target_status=target,
                     approved=True,
                     reasons=[f"profit_factor({pf:.2f}) < {t.retire_pf:.2f}"],
+                    metrics_snapshot=metrics_snapshot,
+                )
+        else:
+            # ── Low-signal-count protection: < min_signals_candidate ──
+            # Too few signals for statistical confidence — never retire,
+            # only probation at worst.  Previously these brains fell through
+            # to state-specific logic with no universal protection.
+            if cons_losses > t.max_consecutive_losses:
+                return BrainPromotionDecision(
+                    brain_id=brain_id,
+                    current_status=status,
+                    action="throttle",
+                    target_status="probation",
+                    approved=True,
+                    reasons=[
+                        f"consecutive_losses({cons_losses}) > {t.max_consecutive_losses} "
+                        f"— probation (low-signal protected, {signal_count} < {t.min_signals_candidate})"
+                    ],
                     metrics_snapshot=metrics_snapshot,
                 )
 
@@ -400,6 +421,27 @@ def apply_promotion_decisions(
         old_status = brain_states[brain_id].get("status", "unknown")
         if old_status == d.target_status:
             continue
+
+        # Validate transition against the governance state machine
+        try:
+            from core.governance.governance_service import GovernanceService
+
+            valid_targets = GovernanceService.VALID_TRANSITIONS.get(old_status, set())
+            if d.target_status not in valid_targets:
+                logger.warning(
+                    "apply_promotion_decisions: rejected %s %s→%s (not in VALID_TRANSITIONS[%s]=%s)",
+                    brain_id,
+                    old_status,
+                    d.target_status,
+                    old_status,
+                    valid_targets,
+                )
+                changes.append(
+                    f"{brain_id}: rejected {old_status}→{d.target_status} — invalid transition"
+                )
+                continue
+        except Exception:
+            pass  # non-critical — state machine validation is best-effort
 
         brain_states[brain_id]["status"] = d.target_status
         brain_states[brain_id]["last_transition_at"] = d.evaluated_at

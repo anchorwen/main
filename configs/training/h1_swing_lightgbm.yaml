@@ -12,6 +12,8 @@ label:
   sl_atr_mult: 2.0
   tp_atr_mult: 2.0
   horizon_bars: 24
+  profitability_calibrated: false
+  label_mapping: drop_timeout_binary
 
 architecture:
   type: "lightgbm"

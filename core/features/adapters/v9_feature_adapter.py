@@ -17,6 +17,8 @@ class V9FeatureAdapter:
         self,
         normalization_config: dict | None = None,
         rolling_normalizer=None,
+        *,
+        normalization_strategy: str = "",
     ):
         """Initialize feature adapter.
 
@@ -25,11 +27,27 @@ class V9FeatureAdapter:
                 Used for fixed normalization (training-set statistics).
             rolling_normalizer: RollingNormalizer instance for online adaptive
                 normalization. When provided, takes precedence over static config.
-                The adapter calls normalizer.normalize() which also updates the
-                running estimates.
+            normalization_strategy: Expected normalization strategy from model
+                metadata (model_card.normalization_strategy). When provided,
+                validates consistency with the active strategy and warns on
+                mismatch to prevent silent train/inference distribution shifts.
         """
         self._normalization_config = normalization_config or {}
         self._rolling = rolling_normalizer
+
+        # Validate train/inference consistency
+        _actual = self.normalization_strategy
+        if normalization_strategy and _actual != normalization_strategy:
+            import logging
+
+            _logger = logging.getLogger(__name__)
+            _logger.warning(
+                "V9FeatureAdapter normalization mismatch: "
+                "model expects '%s' but adapter resolved to '%s'. "
+                "This causes train/inference feature distribution shift.",
+                normalization_strategy,
+                _actual,
+            )
 
     @property
     def normalization_strategy(self) -> str:

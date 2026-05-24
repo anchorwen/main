@@ -54,9 +54,9 @@ class TestPortfolioRiskController:
             "barrier_12bar": _make_position(volume=0.06),
             "micro_3bar": _make_position(strategy="micro_3bar", volume=0.03),
         }
-        # gross = 0.09, new 0.02 → 0.11 > 0.10 (statarb is not in positions → no duplicate)
+        # gross notional = 0.11 * 100 * 2000 = 22,000 > 20,000 = max_gross
         dec = _make_decision(strategy="statarb_dynamic", volume=0.02)
-        result = ctrl.check(dec, positions)
+        result = ctrl.check(dec, positions, current_price=2000.0)
         assert result.verdict == RiskVerdict.REJECTED
         assert "gross_exposure" in result.reason
 
@@ -75,9 +75,9 @@ class TestPortfolioRiskController:
         positions = {
             "barrier_12bar": _make_position(volume=0.04, direction="long"),
         }
-        # net = 0.04 long, +0.02 → 0.06 > 0.05 (statarb is not in positions)
+        # net notional = 0.06 * 100 * 2000 = 12,000 > 10,000 = max_net
         dec = _make_decision(strategy="statarb_dynamic", direction="long", volume=0.02)
-        result = ctrl.check(dec, positions)
+        result = ctrl.check(dec, positions, current_price=2000.0)
         assert result.verdict == RiskVerdict.REJECTED
         assert "net_exposure" in result.reason
 
@@ -106,13 +106,16 @@ class TestPortfolioRiskController:
     # ── Same-direction concentration ──
     def test_same_direction_limit_reached(self):
         ctrl = PortfolioRiskController(max_same_direction=2)
+        # Same-family strategies so per-family concentration check triggers
         positions = {
             "barrier_12bar": _make_position(
                 strategy="barrier_12bar", direction="long", volume=0.02
             ),
-            "micro_3bar": _make_position(strategy="micro_3bar", direction="long", volume=0.02),
+            "barrier_12bar_meta": _make_position(
+                strategy="barrier_12bar_meta", direction="long", volume=0.02
+            ),
         }
-        dec = _make_decision(strategy="statarb_dynamic", direction="long", volume=0.01)
+        dec = _make_decision(strategy="barrier_H1", direction="long", volume=0.01)
         result = ctrl.check(dec, positions)
         assert result.verdict == RiskVerdict.REJECTED
         assert "direction_concentration" in result.reason

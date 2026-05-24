@@ -18,7 +18,7 @@ from core.brains.adapters.base_adapter import BaseBrainAdapter
 from core.deployment.brain_alert import emit_brain_alert
 
 if TYPE_CHECKING:
-    from core.schemas.trading_contracts import BrainSignal, Direction
+    from core.schemas.trading_contracts import BrainSignal
 
 FALLBACK_SEQ_LEN = 64
 NUM_FEATURES = 9
@@ -252,29 +252,6 @@ class TransformerBrainAdapter(BaseBrainAdapter):
         )
 
     # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _score_to_direction(raw_score: float) -> tuple[Direction, float, float]:
-        """Map regression score to (direction_bias, up_prob, down_prob).
-
-        Uses 0.5 ± confidence/2 anchoring so the predicted direction always
-        wins the up/down comparison in consensus (FIX-20260522-013, sign-flip bug).
-        """
-        confidence = float(np.tanh(abs(raw_score)))
-
-        if raw_score > 0.1:
-            up = 0.5 + confidence / 2.0
-            down = 1.0 - up
-            return "long", up, down
-        elif raw_score < -0.1:
-            down = 0.5 + confidence / 2.0
-            up = 1.0 - down
-            return "short", up, down
-        else:
-            return "neutral", 0.5, 0.5
-
     def describe(self) -> dict[str, Any]:
         base = super().describe()
         base["num_features"] = NUM_FEATURES

@@ -374,7 +374,7 @@ def test_brain_exit_flip_above_threshold(long_position, manager):
         ["b2", "b4"],
     )
     assert not should_exit  # needs second confirmation
-    assert manager._consecutive_flips == 1
+    assert pos.consecutive_flips == 1
     # Second consecutive flip: triggers exit
     should_exit, reason = manager.evaluate_brain_exit(
         {"consensus_score": 0.65},
@@ -405,10 +405,10 @@ def test_brain_flip_resets_on_no_flip(long_position, manager):
     manager.flip_confirm_count = 2
     # First flip
     manager.evaluate_brain_exit({"consensus_score": 0.65}, ["b2"])  # 50% flip
-    assert manager._consecutive_flips == 1
+    assert pos.consecutive_flips == 1
     # No flip this cycle
     manager.evaluate_brain_exit({"consensus_score": 0.65}, ["b1", "b2"])  # 0% flip
-    assert manager._consecutive_flips == 0
+    assert pos.consecutive_flips == 0
 
 
 def test_brain_exit_confidence_drop_ema(long_position, manager):
@@ -580,7 +580,7 @@ def test_update_prices_tracks_extremes_long(long_position, manager):
     result = manager.update_prices(
         mid=2510.0, bid=2509.5, ask=2510.5, current_atr=5.0, cycle_count=1
     )
-    assert result["mid"] == 2510.0
+    assert result[str(pos.ticket)]["mid"] == 2510.0
     assert pos.highest_high == 2509.5  # bid for long
     assert pos.lowest_low == 2500.0  # unchanged (ask didn't go below)
     assert pos.cycles_held == 1

@@ -223,13 +223,44 @@ FIX-YYYYMMDD-NNN
 | FIX-20260523-006 | 2026-05-23 | deployment-config, execution-orders | Day 1 hot fixes + graveyard cleanup: (1) statarb_m15 added to MetaFilterGate Track 3 47-dim LGB gating in strategy_line.py; (2) config_hot_reload.load() JSONDecodeError resilience with try/except; (3) governance_state.json cleaned — 13 frozen + 5 disabled swing brain_states removed; (4) 5 swing brain configs moved to archive_deprecated/; (5) live.yaml brain registry entries removed; (6) 5 swing strategy lines disabled + regime_map cleaned | RC-09, RC-06 |
 | FIX-20260523-007 | 2026-05-23 | feedback-online, runtime-live | Mini-batch online learning: ExperienceReplayBuffer with EMA R-weighting, Fisher-Yates shuffle expansion, and class imbalance warning. Replaces single-sample partial_fit with shuffled mini-batches to prevent catastrophic forgetting from consecutive duplicate gradients. Wired into OnlineFeedbackHook + daily_ops pipeline. | RC-06, RC-12 |
 | FIX-20260523-008 | 2026-05-24 | execution-guards, feedback-online, runtime-live | Track 3d Conformal OU Gate: ConformalCalibrator with Q10 FIFO quantile adaptive threshold for OU MetaFilterGate. Cold-starts from journal, FIFO deque(maxlen=500), clamp [0.35, 0.70] with hit-rate monitoring. Integrated into MetaFilterGate.filter() for adaptive threshold, OnlineFeedbackHook for (p_win, label) updates, daily_ops for lifecycle. | RC-09 |
+| FIX-20260524-016 | 2026-05-24 | contracts-training, training, deployment-config | CRITICAL: Spread/slippage 100x mismatch — renamed spread_pips/slippage_pips/pip_value→spread_points/slippage_points/tick_value/tick_size. Replaced fragile pip_value/10 formula with MT5-native tick_value/tick_size cost model. Updated all 30 training YAMLs, calibrate_labels.py, scan_profitability_surface.py, label_contract.py, training_contract.py, profitability_calibrator.py. Backward-compat YAML parsing (spread_pips alias). | RC-06, RC-09 |
+| FIX-20260524-017 | 2026-05-24 | contracts-training, training | CRITICAL: 3-class labels with binary_logloss — dataset.py hard-filters label==0 (timeout) samples, remaps {-1→0, 1→1} for standard binary classification. Added label_mapping: drop_timeout_binary to all 28 barrier training YAMLs (2 regression configs set null). Forces model to answer "TP or SL first?" instead of predicting directional noise. | RC-06 |
+| FIX-20260524-018 | 2026-05-24 | training | HIGH: calmar_ratio added to compute_financial_metrics() — formula annualized_return / abs(max_drawdown). Previously checked in quality gates but never computed (default -999.0 always passed). | RC-12 |
+| FIX-20260524-019 | 2026-05-24 | training | HIGH: MLP bypasses quality gates — verified already resolved by FIX-20260515-011 (tiered quality gates). No code changes needed. | RC-06 |
+| FIX-20260524-020 | 2026-05-24 | deployment-config, brains-schema | MEDIUM: Meta_Stage1_Huber_V1 status aligned to probation (was shadow in config, live in comment). Updated configs/brains/meta_stage1_huber_v1.json + configs/live.yaml comment. | RC-09 |
+| FIX-20260524-021 | 2026-05-24 | deployment-config | MEDIUM: Online_MLP_V1 allowlist exclusion documented — added comment in live.yaml explaining intentional exclusion (online learner not yet validated for live voting). | RC-09 |
+| FIX-20260524-022 | 2026-05-24 | deployment-config, training | MEDIUM: profitability_calibrated: false added to 11 training configs missing the field. Explicit is better than implicit for pipeline behavior. | RC-09 |
+| FIX-20260524-023 | 2026-05-24 | brains-schema | MEDIUM: BrainRegistry._by_type changed from dict[str, BrainEntry] to dict[str, list[BrainEntry]] — multiple brains sharing same brain_type no longer overwrite each other. Added get_first_by_type() convenience method. Audited all downstream callers. | RC-06 |
+| FIX-20260524-024 | 2026-05-24 | brains-adapters | MEDIUM: DRY _score_to_direction — extracted duplicated static method from 4 adapters (XGBoost/LightGBM/ONNX/Transformer) into BaseBrainAdapter as shared utility. Return type annotated tuple[Direction, float, float] for Layer 1 contract compliance. | RC-06 |
+| FIX-20260524-025 | 2026-05-24 | brains-adapters | MEDIUM: MetaFilterAdapter added to core/brains/adapters/__init__.py exports (standalone class, NOT in ADAPTER_REGISTRY — has own load/filter/predict_proba API). | RC-06 |
+| FIX-20260524-026 | 2026-05-24 | brains-services | LOW: _compute_weight_from_metrics docstring fixed — claimed range [0.0, 1.5] but clamp was max(0.0, min(3.0, weight)) → actual [0.0, 3.0]. | RC-06 |
+| FIX-20260524-027 | 2026-05-24 | feedback-online | LOW: ExperienceReplayBuffer.flush() latent bug — computed avg_weight AFTER self._buffer.clear() (always 0). Moved before clear, removed dead if False guard. | RC-03 |
+| FIX-20260524-028 | 2026-05-24 | feedback-online | LOW: _find_feature_vector() O(n)→O(log n) — replaced per-trade full-file linear scan with pre-built in-memory index + bisect_left nearest-neighbor lookup. | RC-06 |
+| FIX-20260524-029 | 2026-05-24 | brains-validation | LOW: _check_magic_unique() O(n²)→O(n) — replaced per-entry re-read of all JSON files with lazy-built magic→[brain_id] reverse index in BrainConfigValidator.__init__(). | RC-06 |
+| FIX-20260524-030 | 2026-05-24 | training | Meta-Labeling Pivot: build_meta_labeling_dataset.py — barrier label mode (SL=3.0/TP=1.5), PIT feature alignment (entry_idx-1), OU process features (z_score/half_life/theta), deprecated parallel universe sampling (data leakage). 675 OU signals → 445 binary samples (230 timeout dropped). Single z_entry=1.3, 43-dim features (40 V9 + 3 OU). | RC-03, RC-06 |
+| FIX-20260524-031 | 2026-05-24 | training, deployment-config | Meta-Labeling Binary Classifier: training contract barrier_12bar_meta_binary_cls.yaml (max_depth=2, num_leaves=7, extreme L1/L2 regularization, 445 samples). Brain config meta_stage1_metalabel_binary_v1.json (magic=90013, shadow, vote_weight=0.0). Model trained: train_sharpe=13.7, forward_sharpe=8.1, CPCV=12.9. Guardrail 1 PASSED: smooth OOF distribution (std=0.18), no bimodal spike. True OOF calibration: [0.3-0.5)→21%TP, [0.7-0.8)→86%TP. | RC-06 |
+| FIX-20260524-032 | 2026-05-24 | deployment-config, governance | Contract group barrier_12bar_meta registered in live.yaml: strategy line (magic=90014, shadow, SL=3.0/TP=1.5), regime_map entries (ranging->full, normal->full), brain entry in registry_entries allowlist. Governance state entries for Meta_Stage1_Binary_Cls_V1 (shelved - prior probability overfitting) and Meta_Stage1_MetaLabel_Binary_V1 (shadow - awaiting OU signal engine integration). | RC-09 |
+| FIX-20260524-034 | 2026-05-24 | runtime-live, protocol-parliament, deployment-config | Meta-labeler production deployment: BARRIER_12BAR_META_GROUP to barrier_12bar_meta strategy line (BarrierStrategy, magic=90014). _build_meta_feature_vector generates raw 43-dim vector (40 V9 + 3 OU with z_score clipped [1.3, 2.5]). Brain promoted shadow to probation, vote_weight 0.0 to 0.8. verify.py --full passes. | RC-06 |
+| FIX-20260524-035 | 2026-05-24 | brains-services, deployment-lifecycle | Meta_Stage1_Huber_V1 status alignment: brain config status shadow→frozen to match governance_state.json (frozen) and live.yaml (enabled:false). Formal baselines rebuilt (5 files) to match new brain_count=1. All 2670 tests pass. | RC-09 |
+| FIX-20260524-036 | 2026-05-24 | runtime-live, protocol-parliament, brains-services, brains-schema | Brain SL/TP + magic audit: barrier_12bar SL/TP 2.0/3.5→3.0/1.5 in live.yaml to match retrained calibration. BARRIER_GROUP contract name updated. 4 brain magic numbers aligned to strategy magic (V6: 90010→90003, MetaLabel: 90013→90014, Huber: 90011→90001, Binary_Cls: 90012→90001). runtime_live.md Strategy Parameter Reference updated. | RC-09 |
+| FIX-20260524-037 | 2026-05-24 | feedback-online, feedback-performance, protocol-governance | CRITICAL audit fixes (C1-C4): look-ahead bias (entry_time not close_time for features), governance rule bypass (shadow_tracker current_status override), probation weight cap ordering (sharpe before cap), timestamp string→datetime comparison. | RC-03, RC-09 |
+| FIX-20260524-038 | 2026-05-24 | brains-services, feedback-performance, protocol-governance | HIGH audit fixes (H1-H4, H6-H7): health tier gaps (exceptional/marginal→stable), composite_mean nonsense formula, shadow in VALID_TRANSITIONS, low-signal protection, Sharpe thresholds -10→-2/-1.5, pf==0 retire gate. | RC-06, RC-05, RC-09 |
+| FIX-20260524-039 | 2026-05-24 | brains-services, feedback-online, feedback-pnl, feedback-performance, protocol-governance, deployment-lifecycle | MEDIUM audit fixes (M1-M4, M6-M7, M10-M12): score inversion dimensions, 50-line dedup→delegation, deprecated health→calibrated, docstring formula, neutral vote docs, `or []`→None check, transition validation, engine result check, auto-repair shadow→candidate. | RC-06, RC-09 |
+| FIX-20260524-040 | 2026-05-24 | brains-services, protocol-governance | DEFERRED architecture debt: dual governance pipeline merge (BrainPromotionEvaluator vs GovernanceRuleEngine), leaderboard consumer gap, stability monitor unused, AB test framework not activated. No code changes — registered for future sprints. | RC-12 |
+| FIX-20260524-041 | 2026-05-24 | feedback-online, feedback-performance | EMA circular reference fix: _compute_weight() now weights against previous running mean before update (was self-biasing). Sharpe annualization fix: _sharpe_ratio/_sortino_ratio now derive annual_factor from trade timestamps instead of hardcoded *sqrt(252). | RC-03, RC-06 |
+| FIX-20260524-042 | 2026-05-24 | execution-guards, execution-orders, risk-portfolio, runtime-live | Phase 1 Tier 1 HIGH fixes (5): T1-H1 Symbol Quarantine 60s lock after unconfirmed net-out close; T1-H2 vol_ratio envelope uses raw ATR; T1-H3 ConformalOUGate BrainRegistry contract_group verification; T1-H4 PositionManager per-ticket result collection; T1-H5 execution_manager filled_quantity > 0 guard | RC-06, RC-05, RC-07 |
+| FIX-20260524-043 | 2026-05-24 | risk-policies, execution-guards, risk-portfolio, execution-orders | Phase 2 Tier 2 CRITICAL+HIGH fixes (11): T2-C1 fail-closed hard assertion + default policies; T2-C2 price guard exception rejects; T2-H1 VaR/CVaR exception logged; T2-H2 correlation exception returns 1.0; T2-H3 OU/Meta gate exceptions block trades; T2-H4 portfolio stop-loss method; T2-H5 ExposurePolicy checks current+proposed; T2-H6 exposure check skipped when price unavailable; T2-H7 compute_position_size returns 0.0; T2-H8 skip_price_guard removed; T2-H9 VaR data insufficiency warns conservatively | RC-06, RC-05, RC-07 |
+| FIX-20260524-044 | 2026-05-24 | features-service, training, contracts-training | Phase 3-4 Tier 3-4 CRITICAL+HIGH fixes (7): T3-C1 reference_time parameter in MicrostructureComputer prevents look-ahead bias; T3-H1 NaN sentinel→0.0; T3-H2 normalization_strategy mismatch warning; T4-C1 hardcoded ATR 2.31→fallback_atr parameter; T4-H1 walk_forward()→purged_walk_forward() with mandatory purge gap; T4-H2 split(random) FutureWarning; T4-H3 NaN PnL zeroed before gradient computation | RC-03, RC-05, RC-06 |
+| FIX-20260524-046 | 2026-05-24 | execution-orders, runtime-live | DEFERRED: MT5 thread model architecture debt (T1-C1/C2/C3) — per-call daemon threads, repeated init/shutdown, non-thread-safe methods. Requires dedicated MT5 worker thread + session-level init. Short-term mitigations already in place. | RC-04, RC-06 |
+| FIX-20260524-033 | 2026-05-24 | multi-module (38 files) | Batch mypy type safety: 140→0 errors across all modules. ServiceContainer DI narrowing with assert blocks in 22 entry points, dict type annotations for heterogeneous literals, import/dependency fixes, MODULE_SOURCE_MAP expansion (3 entries), mypy_baseline.json → {}. verify.py --full passes with 0 mypy, 0 ruff, 2670 tests. | RC-02 |
+| FIX-20260525-045 | 2026-05-25 | multi-module (20 files) | Phase 5 MEDIUM+LOW batch fixes (33 items): T1 per-family direction cooling, batched persistence, sentinel cleanup; T2 kelly epsilon threshold, protection file age check; T3 CPCV timestamp alignment, Scaler warnings, dtype unification; T4 EV cost deduction, NaN filtering, embargo warnings. 4 tactical guardrails deployed. | RC-06, RC-09, RC-05 |
 
 ---
 ## Fix Details by Year
 
 | Year | File | Count |
 |------|------|-------|
-| 2026 | [FIX_REGISTRY_2026.md](FIX_REGISTRY_2026.md) | 85 |
+| 2026 | [FIX_REGISTRY_2026.md](FIX_REGISTRY_2026.md) | 108 |
 
 > New fix entries should be added to the relevant year file.
 > Keep the Fix Index table above updated with every fix.
@@ -576,3 +607,164 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-09 (config-drift) — conformal prediction interaction with base threshold not documented or tested. The `max(percentile, min, base)` formula can silently inflate the threshold when recent model outputs are high.
 - **Prevention**: Every adaptive threshold mechanism must log the computed effective threshold alongside the base threshold at initialization and periodically during operation. The gap between intended and effective must be visible.
 - **Dependents Checked**: meta_signal_filter.py (reads conformal config), bootstrap_v9.py (loads config), strategy_line.py (calls filter). verify.py --quick passes.
+
+### FIX-20260524-016
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: contracts-training, training, deployment-config
+- **Files**: core/training/profitability_calibrator.py, core/contracts/training/label_contract.py, core/contracts/training/training_contract.py, scripts/training/calibrate_labels.py, scripts/training/scan_profitability_surface.py, configs/training/*.yaml (30 files)
+- **Description**: CRITICAL — Spread/slippage 100x mismatch in transaction cost model.
+  - **Problem**: profitability_calibrator.py defaulted to `spread_pips=0.3, slippage_pips=0.5` but all training configs passed `spread_pips: 30, slippage_pips: 10`. The `spread_pips * pip_value / 10` conversion was ambiguous for gold cent accounts (XAUUSDc with 3 decimal places, where 1 point = 0.001). Net effect: actual transaction cost applied in calibration was ~100x too small.
+  - **Evidence**: barrier_12bar configs all specified `spread_pips: 30` (30 MT5 points = 0.030 in price terms for XAUUSDc), but calibrator defaulted to 0.3 points — a 100x understatement.
+  - **Solution**: (1) Renamed `spread_pips`→`spread_points`, `slippage_pips`→`slippage_points`, `pip_value`→`tick_value`+`tick_size` across all files. (2) Replaced fragile `spread_points * pip_value / 10` with MT5-native `spread_points * tick_size` for price adjustment and `spread_points * (tick_value / tick_size) * volume` for monetary cost. (3) Added backward-compat YAML parsing (`data.get("spread_points", data.get("spread_pips", 30))`). (4) Updated all 30 training YAMLs.
+  - **Impact**: Calibration cost model now correctly reflects MT5 price steps. Calibration surface JSONs should be regenerated to reflect corrected costs — most previously "profitable" EV surface points will collapse.
+- **Root Cause**: RC-09 (config-drift) + RC-06 (contract-violation) — parameter naming ambiguity (pips vs points) and hardcoded divide-by-10 assumption that only works for non-cent forex pairs.
+- **Prevention**: All MT5-derived parameters must use MT5-native naming (points, not pips). Cost formulas must use the fundamental relationship `tick_value / tick_size` instead of hardcoded constants.
+- **Dependents Checked**: label_contract.py, training_contract.py, calibrate_labels.py, scan_profitability_surface.py, train.py. verify.py --quick passes.
+
+### FIX-20260524-017
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: contracts-training, training
+- **Files**: core/training/dataset.py, core/contracts/training/training_contract.py, configs/training/*.yaml (30 files)
+- **Description**: CRITICAL — 3-class labels ({-1, 0, 1}) used with `binary_logloss` objective (expects {0, 1}).
+  - **Problem**: Triple-Barrier labels produce {-1 (SL hit), 0 (timeout), 1 (TP hit)}. Training contracts used `objective_function: binary_logloss` which expects {0, 1}. The timeout class (0) represents "neither barrier hit within horizon" — pure directional noise. Having the model try to predict this wastes capacity and explains prior performance degradation.
+  - **Evidence**: All 28 barrier training configs (barrier_12bar, h4_swing, h1_swing, m30_swing, m15_swing, daily_swing) specified `binary_logloss` with 3-class Triple-Barrier labels. 2 regression configs (reg_huber) correctly needed all samples.
+  - **Solution**: (1) In `dataset.py:from_file()`, added `label_mapping` parameter — when `"drop_timeout_binary"`, hard-filters `y_arr == 0`, remaps `{-1→0, 1→1}`. (2) Added `label_mapping: drop_timeout_binary` to all 28 barrier training YAMLs. (3) 2 regression configs set `label_mapping: null`. (4) Added `label_mapping` field to `LabelSpec` in `training_contract.py`.
+  - **Design rationale**: Multi-class (`multi_logloss`) splits model attention across 3 classes including noise, reducing TP/SL discrimination power. Dropping timeout samples and using binary classification is the standard Triple-Barrier best practice (De Prado 2018).
+- **Root Cause**: RC-06 (contract-violation) — label space and objective function were never validated for compatibility at training time.
+- **Prevention**: Add label-objective compatibility check to `TrainingContract.validate()` that warns/errors when label cardinality doesn't match objective function expectations.
+- **Dependents Checked**: evaluation_report.py (2-class metrics now correct), cpcv.py (fold splitting), SHAP explainer, train.py. verify.py --quick passes.
+
+### FIX-20260524-018
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: training
+- **Files**: core/training/evaluation_report.py
+- **Description**: HIGH — `calmar_ratio` checked in quality gates but never computed.
+  - **Problem**: `evaluation_report.py:374-375` checked `self.train_metrics.get("calmar_ratio", -999.0) >= gate_spec.min_calmar_ratio`, but `compute_financial_metrics()` never computed `calmar_ratio`. Default `-999.0` always passed gates using `min_calmar_ratio` with any reasonable threshold.
+  - **Solution**: Added `calmar_ratio = annualized_return / max(abs(max_drawdown), 1e-10)` to `compute_financial_metrics()`. `max_drawdown` was already computed; `annualized_return` computed from mean return × annual factor.
+- **Root Cause**: RC-12 (missing-feature) — metric was specified in the gate schema but never implemented.
+- **Prevention**: Quality gate schema should be generated from `compute_financial_metrics()` return dict keys — if a gate references a key not in the dict, it's a config error.
+- **Dependents Checked**: evaluation_report.py quality gate check. verify.py --quick passes.
+
+### FIX-20260524-019
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: verification
+- **Module**: training
+- **Files**: scripts/training/train.py
+- **Description**: HIGH — MLP bypasses quality gates. Verified already resolved by FIX-20260515-011 which added tiered quality gates (`deep_learning` and `online` tiers alongside `tree`). No code changes needed.
+- **Root Cause**: RC-12 (missing-feature) — originally only `xgboost` and `lightgbm` model types were gated. Already fixed.
+- **Dependents Checked**: train.py quality gate dispatch. verify.py --quick passes.
+
+### FIX-20260524-020
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: config
+- **Module**: deployment-config, brains-schema
+- **Files**: configs/brains/meta_stage1_huber_v1.json, configs/live.yaml
+- **Description**: MEDIUM — Meta_Stage1_Huber_V1 governance status inconsistency.
+  - **Problem**: config said `"status": "shadow"` but live.yaml comment said "sole barrier_12bar voter" (effectively live). governance_state.json said "probation".
+  - **Solution**: Aligned status to `"probation"` in config JSON (matches actual usage — voting in live pipeline but under monitoring). Updated live.yaml comment.
+- **Root Cause**: RC-09 (config-drift) — status field not kept in sync across config/live/governance.
+- **Dependents Checked**: brain_registry_service.py (reads status), governance_state.json. verify.py --quick passes.
+
+### FIX-20260524-021
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: docs
+- **Module**: deployment-config
+- **Files**: configs/live.yaml
+- **Description**: MEDIUM — Online_MLP_V1 not in live.yaml allowlist. Added comment explaining intentional exclusion: "online learner not yet validated for live voting — shadow-only until sufficient online learning history accumulated."
+- **Root Cause**: RC-09 (config-drift) — config exists but allowlist intent not documented.
+- **Dependents Checked**: live.yaml, brain_registry_service.py. verify.py --quick passes.
+
+### FIX-20260524-022
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: config
+- **Module**: deployment-config, training
+- **Files**: configs/training/*.yaml (11 files)
+- **Description**: MEDIUM — 11 training configs missing `profitability_calibrated` field. Pipeline's `calibrate_label_contract()` check may behave differently for missing vs explicit `false`. Added `profitability_calibrated: false` to all 11.
+- **Root Cause**: RC-09 (config-drift) — field added to schema but not backfilled to existing configs.
+- **Dependents Checked**: calibrate_label_contract() in train.py. verify.py --quick passes.
+
+### FIX-20260524-023
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: brains-schema
+- **Files**: core/brains/brain_registry.py
+- **Description**: MEDIUM — BrainRegistry._by_type dict overwrote entries when multiple brains shared the same brain_type (e.g., multiple lightgbm_v1 brains). Only the last loaded survived; get_by_type() returned only one entry.
+  - **Solution**: Changed `_by_type` from `dict[str, BrainEntry]` to `dict[str, list[BrainEntry]]`. Updated `get_by_type()` to return `list[BrainEntry]`. Added `get_first_by_type()` convenience method. Audited all downstream callers (BrainFactory adapter dispatch, consensus/voting pipeline, brain leaderboard, dynamic brain weighter) to iterate lists.
+- **Root Cause**: RC-06 (contract-violation) — data structure assumed 1:1 type-to-entry mapping but production has multiple brains of the same type.
+- **Prevention**: Data structures that aggregate by key should always use list values unless uniqueness is explicitly enforced at insert time.
+- **Dependents Checked**: BrainFactory, ParliamentService, StrategyLine, DynamicBrainWeighter, BrainLeaderboard. verify.py --quick passes.
+
+### FIX-20260524-024
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: brains-adapters
+- **Files**: core/brains/adapters/base_adapter.py, core/brains/adapters/xgboost_brain_adapter.py, core/brains/adapters/lightgbm_brain_adapter.py, core/brains/adapters/v9_onnx_brain_adapter.py, core/brains/adapters/transformer_brain_adapter.py
+- **Description**: MEDIUM — Identical `_score_to_direction()` static method duplicated in 4 adapters. Extracted to `BaseBrainAdapter._score_to_direction()` as shared utility. Return type annotated as `tuple[Direction, float, float]` to satisfy Layer 1 immutable contract mypy checks (BrainSignal.direction requires `Literal["long", "short", "neutral"]`, not plain `str`). Removed unused `Direction` imports from adapters.
+- **Root Cause**: RC-06 (contract-violation) — DRY violation; 4 identical copies diverging independently.
+- **Prevention**: Shared logic in BaseBrainAdapter should be extracted to the base class. Static analysis can detect identical method bodies across files.
+- **Dependents Checked**: All 4 adapters, BrainSignal contract. verify.py --quick passes.
+
+### FIX-20260524-025
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: brains-adapters
+- **Files**: core/brains/adapters/__init__.py
+- **Description**: MEDIUM — MetaFilterAdapter not in package exports, making it less discoverable. Added to `__init__.py` imports and `__all__` export. NOT added to `ADAPTER_REGISTRY` since it's a standalone class with its own `load/filter/filter_array/predict_proba` API (not a BaseBrainAdapter subclass).
+- **Root Cause**: RC-06 (contract-violation) — package exports incomplete.
+- **Dependents Checked**: meta_filter_gate.py, backtest scripts. verify.py --quick passes.
+
+### FIX-20260524-026
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: docs
+- **Module**: brains-services
+- **Files**: core/brains/services/dynamic_brain_weighter.py
+- **Description**: LOW — `_compute_weight_from_metrics` docstring claimed return range `[0.0, 1.5]` but clamp was `max(0.0, min(3.0, weight))` → actual range `[0.0, 3.0]`. Updated docstring.
+- **Root Cause**: RC-06 (contract-violation) — docstring stale after clamp range was widened.
+- **Dependents Checked**: DynamicBrainWeighter consumers. verify.py --quick passes.
+
+### FIX-20260524-027
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: feedback-online
+- **Files**: core/feedback/experience_replay.py
+- **Description**: LOW — Latent bug in `ExperienceReplayBuffer.flush()`: log message computed `avg_weight` AFTER `self._buffer.clear()`, always yielding 0. However, the computation was guarded by `if False` dead code. Fixed by moving `avg_weight` computation before `clear()` and removing dead `if False`.
+- **Root Cause**: RC-03 (state-leak) — clear-before-log ordering bug, masked by dead code.
+- **Prevention**: Code review checklist: any log/metrics that reference mutable state should compute values before mutating.
+- **Dependents Checked**: OnlineFeedbackHook (calls flush). verify.py --quick passes.
+
+### FIX-20260524-028
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: perf
+- **Module**: feedback-online
+- **Files**: core/feedback/online_feedback_hook.py
+- **Description**: LOW — `_find_feature_vector()` O(n) per trade: for every closed trade, read entire features.jsonl and linearly scan for nearest timestamp. With 100 trades and 10K-line file → 1M iterations.
+  - **Solution**: Load features.jsonl once at top of `process_new_trades()`, build in-memory index `dict[symbol, list[tuple[unix_ts, values_dict]]]` sorted by Unix float. `_find_feature_vector()` uses `bisect_left()` for O(log n) nearest-neighbor lookup. Timestamps converted to Unix float before bisect for consistent numeric comparison.
+- **Root Cause**: RC-06 (contract-violation) — hot loop performed redundant file I/O.
+- **Dependents Checked**: OnlineFeedbackHook, daily_ops pipeline. verify.py --quick passes.
+
+### FIX-20260524-029
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: perf
+- **Module**: brains-validation
+- **Files**: core/deployment/brain_config_validator.py
+- **Description**: LOW — `_check_magic_unique()` O(n²) file reads: re-read all JSON files in `configs/brains/` for each entry being validated.
+  - **Solution**: Added lazy-built `_magic_index: dict[int, list[str]]` in `BrainConfigValidator.__init__()`. `_build_magic_index()` pre-loads all brain configs in O(n) single pass, building magic→[brain_id] reverse index. `_check_magic_unique()` does O(1) dict lookup — zero file I/O in validation loop. Overall: O(n²) → O(n) file reads + O(1) validation per entry.
+- **Root Cause**: RC-06 (contract-violation) — validation method performed redundant I/O per entry.
+- **Dependents Checked**: BrainFactory, BrainConfigValidator. verify.py --quick passes.

@@ -236,11 +236,15 @@ class GroupCorrelationTracker:
     sizing should be conservative.
     """
 
-    def __init__(self, ema_alpha: float = 0.05) -> None:
+    def __init__(self, ema_alpha: float = 0.05, *, group_names: list[str] | None = None) -> None:
         self.ema_alpha = ema_alpha
         # pairwise (g1, g2) → EMA of agreement (1.0=always same dir, 0.0=always opposite)
         self._pairwise_ema: dict[tuple[str, str], float] = {}
-        self._group_names: list[str] = ["barrier_12bar", "micro_3bar", "statarb_dynamic"]
+        self._group_names: list[str] = group_names or [
+            "barrier_12bar",
+            "micro_3bar",
+            "statarb_dynamic",
+        ]
         self._update_count: int = 0
 
     def update(self, group_signals: dict[str, Any]) -> None:

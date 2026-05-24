@@ -380,24 +380,35 @@ class ConformalOUGate:
         """Find the OU brain's signal in proposals and extract physics diagnostics.
 
         Returns dict with brain_id, z_score, theta, half_life, direction,
-        or None if no OU brain signal is found.
+        or None if no OU brain signal is found for this strategy.
         """
         for p in proposals:
             brain_id = str(getattr(p, "brain_id", ""))
             brain_type = str(getattr(p, "brain_type", "") or "")
 
             # Identify OU brains by type prefix
-            if not brain_type.startswith("ou_"):
-                # Fallback: check diagnostics for OU indicators
-                diag = getattr(p, "diagnostics", None) or {}
-                if isinstance(diag, dict) and "theta" not in diag:
-                    continue
-                if not isinstance(diag, dict):
-                    continue
-            else:
+            if brain_type.startswith("ou_"):
                 diag = getattr(p, "diagnostics", None) or {}
                 if not isinstance(diag, dict):
                     diag = {}
+            else:
+                # Fallback: check diagnostics for OU indicators (theta + half_life)
+                diag = getattr(p, "diagnostics", None) or {}
+                if not isinstance(diag, dict):
+                    continue
+                if "theta" not in diag or "half_life" not in diag:
+                    continue
+
+            # ── Verify contract_group matches strategy via BrainRegistry ──
+            if strategy_name and brain_id:
+                try:
+                    from core.brains.brain_registry import BrainRegistry
+
+                    entry = BrainRegistry.instance().get(brain_id)
+                    if entry is not None and entry.contract_group != strategy_name:
+                        continue  # brain is for a different strategy line
+                except Exception:
+                    pass  # registry resolve failure is non-blocking
 
             z_score = float(getattr(p, "raw_score", 0.0) or 0.0)
             theta = float(diag.get("theta", 0.0))

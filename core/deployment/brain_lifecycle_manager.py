@@ -705,9 +705,12 @@ class BrainLifecycleManager:
             for bid in sorted(missing_from_gov):
                 cfg = disk_brains[bid]
                 cfg_status = cfg.get("status", "candidate")
-                # Use the config's declared status, but default to candidate
-                # for safety (never auto-promote to live)
-                initial = cfg_status if cfg_status in ("candidate", "shadow") else "candidate"
+                # Use the config's declared status, default to candidate
+                # for safety (never auto-promote to live).
+                # "shadow" is a valid config status but governance
+                # treats it as a substate of candidate; always register
+                # as "candidate" for governance consistency.
+                initial = "candidate"
                 gov.register_brain(bid, initial_status=initial)
                 report.auto_registered.append(f"{bid}:{initial}")
                 logging.warning(

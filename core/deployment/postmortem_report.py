@@ -7,6 +7,7 @@ current diagnostics, SLO status, and release gate evidence.
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from core.contracts.domain_keys import (
     ACTION_OWNER_ENGINEERING,
@@ -309,7 +310,7 @@ class PostmortemReportService:
         diagnostics: dict,
         alpha_budget: dict | None = None,
     ) -> list[dict]:
-        findings = []
+        findings: list[dict[str, Any]] = []
         failed_events = [
             event for event in timeline if event.get(PAYLOAD_KEY_STATUS) == TIMELINE_STATUS_FAILED
         ]

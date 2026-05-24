@@ -79,10 +79,11 @@ class V9MicroComputer:
         except Exception:
             logging.exception("V9MicroComputer: micro compute failed for %s", self._symbol)
 
-        # Fill micro slots — NaN sentinel when unavailable (not zero!)
+        # Fill micro slots — use 0.0 when unavailable (NaN propagates through
+        # feature vectors into model inference → NaN predictions → silent rejection)
         for name in MICROSTRUCTURE_9_FEATURES:
-            val = micro_features.get(name) if self.last_micro_ok else float("nan")
-            result[name] = float(val) if val is not None else float("nan")
+            val = micro_features.get(name) if self.last_micro_ok else 0.0
+            result[name] = float(val) if val is not None else 0.0
 
         return result
 

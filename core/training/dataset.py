@@ -102,6 +102,17 @@ class TrainingDataset:
         n = self.n_samples
 
         if method == "random":
+            import warnings
+
+            warnings.warn(
+                "split(method='random') shuffles time-series data — "
+                "future samples leak into training, past samples into test. "
+                "Use method='sequential' or purged_walk_forward() for "
+                "financial time-series. This option may be removed in a "
+                "future version.",
+                FutureWarning,
+                stacklevel=2,
+            )
             rng = np.random.RandomState(seed)
             idx = rng.permutation(n)
         else:
@@ -133,25 +144,27 @@ class TrainingDataset:
         train_ratio: float = 0.6,
         val_ratio: float = 0.15,
         min_train_size: int = 200,
+        purge_gap: int | None = None,
     ):
         """Generator yielding (train, val, test) folds for time-series CV.
 
-        Each fold extends the training window and slides the test window forward.
+        **护栏 4**: Now delegates to ``purged_walk_forward()`` internally.  When
+        ``purge_gap`` is None, a conservative default of ``max(10, n // (n_splits * 5))``
+        is used — the purge window must be ≥ the maximum barrier horizon to
+        prevent multi-bar label leakage across the train/test boundary.
+
+        Each fold extends the training window and slides the test window forward
+        with a mandatory purge gap between train and test.
         """
-        n = self.n_samples
-        fold_size = n // n_splits
+        if purge_gap is None:
+            purge_gap = max(10, self.n_samples // (n_splits * 5))
 
-        for i in range(n_splits):
-            test_end = min(n, int(n * (train_ratio + val_ratio)) + fold_size * (i + 1))
-            test_start = max(min_train_size, test_end - fold_size)
-            train_end = test_start
-
-            train_slice = self.X[:train_end], self.y[:train_end]
-            test_slice = (
-                self.X[test_start:test_end],
-                self.y[test_start:test_end],
-            )
-            yield train_slice, test_slice, i
+        yield from self.purged_walk_forward(
+            n_splits=n_splits,
+            train_ratio=train_ratio,
+            purge_gap=purge_gap,
+            min_train_size=min_train_size,
+        )
 
     def purged_walk_forward(
         self,
@@ -210,6 +223,18 @@ class TrainingDataset:
         chunk = (n - min_train_size - (purge_gap + embargo_gap) * n_splits) // n_splits
         if chunk < 10:
             chunk = max(10, n // (n_splits + 1))
+        if chunk < purge_gap + embargo_gap:
+            import logging
+
+            _logger = logging.getLogger(__name__)
+            _logger.warning(
+                "embargo_walk_forward: chunk=%d < purge_gap=%d + embargo_gap=%d — "
+                "gaps may not be fully respected on small dataset (n=%d)",
+                chunk,
+                purge_gap,
+                embargo_gap,
+                n,
+            )
 
         for i in range(n_splits):
             test_start = min_train_size + i * (chunk + purge_gap + embargo_gap)
@@ -229,11 +254,17 @@ class TrainingDataset:
     # ── Factory ──
 
     @classmethod
-    def from_file(cls, path: str | Path) -> TrainingDataset:
+    def from_file(cls, path: str | Path, *, label_mapping: str | None = None) -> TrainingDataset:
         """Load from NPZ or Parquet.
 
         When the NPZ contains a ``timestamps`` array (Unix epoch seconds),
         it is loaded into the dataset for temporal validation and CPCV.
+
+        Args:
+            path: Path to .npz or .parquet file.
+            label_mapping: If "drop_timeout_binary", filters out label==0
+                (timeout) samples and remaps {-1→0, 1→1} for binary classification.
+                None preserves original labels (backward-compatible).
         """
         path = Path(path)
         ext = path.suffix.lower()
@@ -283,13 +314,33 @@ class TrainingDataset:
         else:
             raise ValueError(f"Unsupported format: {ext}")
 
+        X_arr = np.asarray(X, dtype=np.float64)
+        y_arr = np.asarray(y, dtype=np.int64)
+
+        # ── Label mapping: drop_timeout_binary ──
+        # Triple-barrier labels are {-1 (SL), 0 (timeout), 1 (TP)}.
+        # Timeout samples carry no directional signal — drop them and
+        # remap to binary {0 (SL hit), 1 (TP hit)} for binary_logloss.
+        if label_mapping == "drop_timeout_binary":
+            keep_mask = y_arr != 0
+            X_arr = X_arr[keep_mask]
+            y_arr = np.where(y_arr[keep_mask] == -1, 0, 1).astype(np.int64)
+            if y_reg is not None:
+                y_reg = y_reg[keep_mask]
+            if ts is not None:
+                ts = ts[keep_mask]
+
         return cls(
-            X=np.asarray(X, dtype=np.float64),
-            y=np.asarray(y, dtype=np.int64),
+            X=X_arr,
+            y=y_arr,
             y_reg=y_reg,
             feature_names=feature_names,
             timestamps=ts,
-            metadata={"source_path": str(path.resolve()), "format": ext},
+            metadata={
+                "source_path": str(path.resolve()),
+                "format": ext,
+                "label_mapping": label_mapping or "none",
+            },
         )
 
     # ── Preprocessing ──

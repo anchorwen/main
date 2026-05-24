@@ -3038,3 +3038,755 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
   - Use `cast()` for untyped test case literals when full TypedDict migration would be overkill
   - Match list element types in test assertions to declared variable types
 - **Dependents Checked**: verify.py --quick passes. All 7 test files removed from mypy_baseline.json. **Baseline: 19→0 — ALL mypy errors cleared.** Total reduction: 140→0 across all batches (A-E, G-H).
+
+### FIX-20260524-016
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: contracts-training, training, deployment-config
+- **Scope**: critical, cost-model, transaction-cost
+- **Files**:
+  - `core/training/profitability_calibrator.py` (MODIFIED: renamed spread_pips/slippage_pips/pip_value to spread_points/slippage_points/tick_value/tick_size, replaced pip_value/10 with MT5-native tick_value/tick_size cost model)
+  - `core/contracts/training/label_contract.py` (MODIFIED: updated cost parameter names)
+  - `core/contracts/training/training_contract.py` (MODIFIED: updated cost parameter names)
+  - `scripts/training/calibrate_labels.py` (MODIFIED: tick_value/tick_size CLI args)
+  - `scripts/training/scan_profitability_surface.py` (MODIFIED: tick_value/tick_size CLI args)
+  - `configs/training/*.yaml` (30 files MODIFIED: spread_pips to spread_points, slippage_pips to slippage_points, added tick_value/tick_size)
+- **Description**: CRITICAL - Spread/slippage 100x mismatch in profitability calibrator. Root cause: profitability_calibrator.py defaulted spread_pips=0.3, slippage_pips=0.5 but all training configs passed spread_pips: 30, slippage_pips: 10. The calibrator's pip_value / 10 conversion was ambiguous for gold cent accounts (XAUUSDc with 3 decimal places, where 1 point = 0.001). Net effect: actual transaction cost applied in calibration was ~100x too small, making unprofitable strategies appear profitable.
+
+  Fix (physics-grounded approach):
+  1. Renamed parameters: spread_pips to spread_points, slippage_pips to slippage_points (these are raw MT5 points, not pips)
+  2. Replaced fragile spread_points * pip_value / 10 formula with MT5-native cost model: cost = spread_points * (tick_value / tick_size) * volume
+  3. Added tick_value and tick_size as calibrator parameters (defaults for XAUUSDc: tick_value=0.01, tick_size=0.001)
+  4. Backward-compat YAML parsing: spread_pips still accepted as alias
+  5. Updated all 30 training YAMLs, calibrate_labels.py, scan_profitability_surface.py
+
+  Expected validation signal: With 100x higher costs, most previously "profitable" EV surface points will collapse. Only configurations with genuine edge survive.
+- **Root Cause**: RC-06 (contract-violation: parameter name implied pips but values were MT5 points, conversion factor wrong for cent accounts), RC-09 (config-drift: calibrator defaults didn't match training config values)
+- **Prevention**:
+  - Use MT5-native units (tick_value/tick_size) instead of abstract "pip" conversions that differ by account type
+  - Never hardcode divide-by-10 for cent accounts - use SYMBOL_TRADE_TICK_VALUE / SYMBOL_TRADE_TICK_SIZE from MT5
+  - Parameter names must unambiguously reflect their units (points vs pips)
+- **Dependents Checked**: calibrate_labels.py, scan_profitability_surface.py, label_contract.py, training_contract.py. All 30 training YAMLs updated. verify.py --full passes.
+
+### FIX-20260524-017
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: contracts-training, training
+- **Scope**: critical, label-mapping, data-pipeline
+- **Files**:
+  - `core/training/dataset.py` (MODIFIED: hard-filter label==0 samples at load time, remap {-1: 0, 1: 1} for binary_logloss)
+  - `configs/training/*.yaml` (28 files MODIFIED: added label_mapping: drop_timeout_binary; 2 regression configs set null)
+- **Description**: CRITICAL - Triple-Barrier labels produce {-1, 0, 1} (hit SL, timeout, hit TP) but training contracts used objective_function: binary_logloss which expects {0, 1}. The timeout class (0) represents "neither barrier hit within horizon" - pure directional noise. Having the model try to predict this wastes capacity and explains prior performance degradation.
+
+  Fix (drop-timeout mapping, NOT multi-class):
+  1. In core/training/dataset.py: at data loading time, hard-filter out all label == 0 samples (timeout/no-touch). These carry no directional signal.
+  2. Remap remaining labels: -1 to 0, 1 to 1 for standard binary classification.
+  3. This forces the model to answer the only question that matters: "Given a trade entry, will TP or SL hit first?"
+  4. Added explicit label_mapping: drop_timeout_binary field to all 28 barrier training YAMLs (2 regression configs set null).
+
+  Design rationale: Multi-class (multi_logloss / multi:softmax) splits model attention across 3 classes including noise, reducing TP/SL discrimination power. Dropping timeout samples and using binary classification is the standard Triple-Barrier best practice (De Prado 2018).
+- **Root Cause**: RC-06 (contract-violation: 3-class labels fed to binary_logloss objective without explicit mapping)
+- **Prevention**:
+  - TrainingDataset constructor validates label cardinality against objective_function at load time
+  - New training configs must explicitly declare label_mapping
+  - verify.py --full runs dataset integrity check on all training contracts
+- **Dependents Checked**: evaluation_report.py (financial metrics), cpcv.py (cross-validation splits), train.py (pipeline entry). All verified to handle 2-class labels correctly. verify.py --full passes.
+
+### FIX-20260524-018
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: training
+- **Scope**: high, missing-metric, quality-gates
+- **Files**:
+  - `core/training/evaluation_report.py` (MODIFIED: added calmar_ratio to compute_financial_metrics())
+- **Description**: HIGH - calmar_ratio checked in quality gates (evaluation_report.py:374-375) via self.train_metrics.get("calmar_ratio", -999.0) >= gate_spec.min_calmar_ratio but compute_financial_metrics() never computed it. Default -999.0 always passed gates that used min_calmar_ratio with any reasonable threshold, rendering this quality gate useless.
+
+  Fix: Added calmar_ratio computation to compute_financial_metrics():
+    calmar_ratio = annualized_return / abs(max_drawdown)
+  where max_drawdown was already being computed. No new data dependencies.
+- **Root Cause**: RC-12 (missing-feature: metric was referenced in quality gate spec but never implemented in computation function)
+- **Prevention**:
+  - Quality gate specs should be co-located with their metric implementations
+  - Add runtime warning when quality gate references a metric key not present in metrics dict
+- **Dependents Checked**: train.py (quality gate check path). All training configs with min_calmar_ratio gates now correctly evaluated. verify.py --full passes.
+
+### FIX-20260524-019
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: training
+- **Scope**: high, quality-gates, already-resolved
+- **Files**: (none - no code changes needed)
+- **Description**: HIGH - MLP bypasses quality gates: train_single() in scripts/training/train.py wrapped quality gate check with if model_type in ("xgboost", "lightgbm") - deep learning models (deep_res_mlp, transformer, online_mlp) skipped gate enforcement entirely.
+
+  Verified already resolved by FIX-20260515-011 (tiered quality gates). The tiered quality gate system added deep_learning and online gate tiers, and the model_type filter was removed. No additional code changes needed.
+- **Root Cause**: RC-06 (originally; already resolved by FIX-20260515-011)
+- **Prevention**: Already in place - tiered quality gates cover all model types
+- **Dependents Checked**: train.py verified quality gates run for all model types. verify.py --full passes.
+
+### FIX-20260524-020
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: deployment-config, brains-schema
+- **Scope**: medium, config-alignment, governance
+- **Files**:
+  - `configs/brains/meta_stage1_huber_v1.json` (MODIFIED: status "shadow" to "probation")
+  - `configs/live.yaml` (MODIFIED: updated comment to reflect probation status)
+- **Description**: MEDIUM - Meta_Stage1_Huber_V1 status/gov mismatch. Config said status: "shadow" but configs/live.yaml comment said it's the "sole barrier_12bar voter" - effectively live. governance_state.json said "probation". Three sources of truth disagreed.
+
+  Fix: Aligned status to "probation" in meta_stage1_huber_v1.json (matches actual usage - voting in live pipeline but under monitoring). Updated configs/live.yaml comment to reflect probation status. governance_state.json already correct.
+- **Root Cause**: RC-09 (config-drift: three configuration sources diverged during iterative deployment)
+- **Prevention**: BrainLifecycleManager.validate_brain_live_alignment() now checks status consistency across configs/brains/ <-> live.yaml <-> governance_state.json
+- **Dependents Checked**: live_intent_loop.py (reads both sources), brain_lifecycle_manager.py (startup validation). verify.py --full passes.
+
+### FIX-20260524-021
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: deployment-config
+- **Scope**: medium, documentation, allowlist
+- **Files**:
+  - `configs/live.yaml` (MODIFIED: added comment explaining Online_MLP_V1 exclusion)
+- **Description**: MEDIUM - Online_MLP_V1 not in allowlist. configs/live.yaml registry_entries allowlist contained only ou_params_v6, ou_params_v7_m15, and meta_stage1_huber_v1. Online_MLP_V1 (configs/brains/online_learner_v1.json) existed but was excluded with no explanation.
+
+  Fix: Added comment explaining intentional exclusion: "online learner not yet validated for live voting - passes unit tests but has no forward-walk validation on XAUUSD". If Online_MLP_V1 should be active in the future, simply add it to the allowlist.
+- **Root Cause**: RC-09 (config-drift: missing documentation for intentional exclusion)
+- **Prevention**: All registry_entries exclusions should carry a brief "why" comment
+- **Dependents Checked**: live_intent_loop.py (reads allowlist). verify.py --full passes.
+
+### FIX-20260524-022
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: deployment-config, training
+- **Scope**: medium, config-consistency
+- **Files**:
+  - `configs/training/barrier_12bar_xgboost.yaml` (MODIFIED: added profitability_calibrated: false)
+  - `configs/training/barrier_12bar_lightgbm.yaml` (MODIFIED: added profitability_calibrated: false)
+  - `configs/training/h4_swing_xgboost.yaml` (MODIFIED: added profitability_calibrated: false)
+  - `configs/training/h4_swing_lightgbm.yaml` (MODIFIED: added profitability_calibrated: false)
+  - `configs/training/h1_swing_xgboost.yaml` (MODIFIED: added profitability_calibrated: false)
+  - `configs/training/h1_swing_lightgbm.yaml` (MODIFIED: added profitability_calibrated: false)
+  - `configs/training/m15_swing_xgboost.yaml` (MODIFIED: added profitability_calibrated: false)
+  - `configs/training/m15_swing_lightgbm.yaml` (MODIFIED: added profitability_calibrated: false)
+  - `configs/training/m30_swing_xgboost.yaml` (MODIFIED: added profitability_calibrated: false)
+  - `configs/training/m30_swing_lightgbm.yaml` (MODIFIED: added profitability_calibrated: false)
+  - `configs/training/daily_swing_xgboost.yaml` (MODIFIED: added profitability_calibrated: false)
+- **Description**: MEDIUM - 11 training configs missing profitability_calibrated field. 19 configs had profitability_calibrated: true but 11 configs were missing this field entirely. The pipeline's calibrate_label_contract() check could behave differently for missing vs explicit false.
+
+  Fix: Added profitability_calibrated: false to all 11 configs that didn't have it. Explicit is better than implicit for pipeline behavior consistency.
+- **Root Cause**: RC-09 (config-drift: field added to some configs but not backfilled to others)
+- **Prevention**: Training contract schema validation now requires profitability_calibrated field (explicit true/false)
+- **Dependents Checked**: train.py (reads profitability_calibrated), calibrate_labels.py. verify.py --full passes.
+
+### FIX-20260524-023
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: brains-schema
+- **Scope**: medium, data-structure, registry
+- **Files**:
+  - `core/brains/brain_registry.py` (MODIFIED: _by_type changed from dict[str, BrainEntry] to dict[str, list[BrainEntry]], get_by_type() returns list, added get_first_by_type())
+- **Description**: MEDIUM - BrainRegistry._by_type overwrites on same brain_type. _by_type[entry.brain_type] = entry was a dict, so if multiple brains share the same brain_type (e.g., multiple lightgbm_v1 brains), only the last loaded survived. get_by_type() returned only one entry, silently dropping brains.
+
+  Fix:
+  1. Changed _by_type to dict[str, list[BrainEntry]]
+  2. Updated get_by_type() to return list[BrainEntry]
+  3. Added get_first_by_type() convenience method for single-entry lookup (factory dispatch)
+  4. Audited all downstream callers of get_by_type() (BrainFactory adapter dispatch, consensus/voting pipeline, brain leaderboard, dynamic brain weighter) to ensure they iterate the list rather than assuming a single entry
+- **Root Cause**: RC-06 (contract-violation: dict data structure couldn't represent 1:N relationship between brain_type and brain entries)
+- **Prevention**: Registry data structures should model N:1 and 1:N relationships explicitly. Use list values for 1:N indices.
+- **Dependents Checked**: BrainFactory, ContractGroupConsensus, DynamicBrainWeighter, brain leaderboard. All callers updated to handle list return. verify.py --full passes.
+
+### FIX-20260524-024
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: brains-adapters
+- **Scope**: medium, dry, code-quality
+- **Files**:
+  - `core/brains/adapters/base_adapter.py` (MODIFIED: added shared _score_to_direction() static method)
+  - `core/brains/adapters/xgboost_brain_adapter.py` (MODIFIED: removed duplicate, calls base)
+  - `core/brains/adapters/lightgbm_brain_adapter.py` (MODIFIED: removed duplicate, calls base)
+  - `core/brains/adapters/v9_onnx_brain_adapter.py` (MODIFIED: removed duplicate, calls base)
+  - `core/brains/adapters/transformer_brain_adapter.py` (MODIFIED: removed duplicate, calls base)
+- **Description**: MEDIUM - Identical _score_to_direction() static method duplicated in 4 adapters (xgboost_brain_adapter.py:204, lightgbm_brain_adapter.py:206, v9_onnx_brain_adapter.py:296, transformer_brain_adapter.py:259). Each implementation handled the same sign-flip edge case and confidence anchoring logic.
+
+  Fix: Extracted shared implementation into BaseBrainAdapter._score_to_direction() as a static method. Return type annotated tuple[Direction, float, float] for Layer 1 contract compliance. Each adapter now calls the base implementation.
+- **Root Cause**: RC-06 (contract-violation: copy-paste duplication across adapters with no shared base implementation)
+- **Prevention**: When adding a new adapter, check if base adapter already has the needed utility before copy-pasting
+- **Dependents Checked**: All 4 adapters + OnlineLearnerAdapter (uses different direction logic - not affected). verify.py --full passes.
+
+### FIX-20260524-025
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: brains-adapters
+- **Scope**: medium, exports, discoverability
+- **Files**:
+  - `core/brains/adapters/__init__.py` (MODIFIED: added MetaFilterAdapter import and __all__ export)
+- **Description**: MEDIUM - MetaFilterAdapter not in package exports. It does NOT inherit from BaseBrainAdapter - it's a standalone Stage-2 filter with its own load/filter/filter_array/predict_proba API. Used via direct module imports (from core.brains.adapters.meta_filter_adapter import MetaFilterAdapter) in backtest scripts and MetaFilterGate. Not in __init__.py exports, making it less discoverable.
+
+  Fix: Added MetaFilterAdapter import and __all__ export to core/brains/adapters/__init__.py (NOT in ADAPTER_REGISTRY since it's not a BaseBrainAdapter subclass). This makes it discoverable as from core.brains.adapters import MetaFilterAdapter.
+- **Root Cause**: RC-06 (missing export for standalone class with different API surface)
+- **Prevention**: All public classes in adapters/ should be exported from __init__.py, with registry membership clearly separated
+- **Dependents Checked**: MetaFilterGate, backtest scripts, test_meta_pipeline.py. All imports still work. verify.py --full passes.
+
+### FIX-20260524-026
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: brains-services
+- **Scope**: low, documentation, clamp-range
+- **Files**:
+  - `core/brains/services/dynamic_brain_weighter.py` (MODIFIED: updated docstring)
+- **Description**: LOW - _compute_weight_from_metrics docstring said "Returns weight in [0.0, 1.5]" but clamp was max(0.0, min(3.0, weight)) so actual range is [0.0, 3.0]. Config vote_weight values were 0.8-1.5, so the 3.0 ceiling was never hit in practice, but the docstring was stale.
+
+  Fix: Updated docstring to match actual clamp range: [0.0, 3.0].
+- **Root Cause**: RC-06 (docstring not updated when clamp range was changed)
+- **Prevention**: Use constants for clamp bounds referenced in both code and docstring
+- **Dependents Checked**: No runtime impact. verify.py --full passes.
+
+### FIX-20260524-027
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: feedback-online
+- **Scope**: low, latent-bug, ordering
+- **Files**:
+  - `core/feedback/experience_replay.py` (MODIFIED: moved avg_weight computation before buffer.clear(), removed dead if False guard)
+- **Description**: LOW - ExperienceReplayBuffer.flush() logged after clear. self._buffer.clear() at line 122 ran before line 127-134 logged buffer stats. Line 131 computed sum(w for _, _, w, _ in self._buffer) on the already-cleared buffer (always 0), but the if False dead-code guard prevented it from executing. Latent bug: if someone removes if False, it silently reports 0.
+
+  Fix: Compute avg_weight BEFORE self._buffer.clear(), store in local variable, use in log message. Removed the if False dead code.
+- **Root Cause**: RC-03 (state-leak: buffer cleared before stats computed)
+- **Prevention**: Order of operations: compute summaries, then clear, then log. Dead code (if False) should never be committed.
+- **Dependents Checked**: OnlineFeedbackHook (caller of flush()). verify.py --full passes.
+
+### FIX-20260524-028
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: perf
+- **Module**: feedback-online
+- **Scope**: low, performance, algorithmic-complexity
+- **Files**:
+  - `core/feedback/online_feedback_hook.py` (MODIFIED: replaced per-trade full-file linear scan with pre-built in-memory index + bisect_left)
+- **Description**: LOW - _find_feature_vector() O(n) file reads: for EVERY closed trade, read the ENTIRE features.jsonl file and linearly scan for nearest timestamp. With 100 trades and a 10K-line features file, this was 100 x 10K = 1M iterations.
+
+  Fix:
+  1. Load features.jsonl once at the top of process_new_trades(), build in-memory index: dict[symbol, list[tuple[float, dict]]] sorted by Unix timestamp (float)
+  2. _find_feature_vector() uses bisect_left() on the pre-sorted timestamp array for O(log n) nearest-neighbor lookup
+  3. Timestamp consistency: convert both stored event_time and query close_time to Unix float (datetime.timestamp()) before bisect
+  4. Eliminated import json and feat_file.read_text() from the hot loop
+- **Root Cause**: RC-06 (O(n) per-call design for what should be O(log n))
+- **Prevention**: Hot-loop file I/O is a code smell. Pre-build in-memory indices at initialization.
+- **Dependents Checked**: OnlineFeedbackHook.process_new_trades(). verify.py --full passes.
+
+### FIX-20260524-029
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: perf
+- **Module**: brains-validation
+- **Scope**: low, performance, algorithmic-complexity
+- **Files**:
+  - `core/deployment/brain_config_validator.py` (MODIFIED: replaced per-entry file re-reads with pre-built magic-to-brain_id reverse index)
+- **Description**: LOW - _check_magic_unique() O(n^2) file reads: re-read ALL JSON files in configs/brains/ for EACH entry being validated. N entries means N^2 file reads.
+
+  Fix:
+  1. In BrainConfigValidator.__init__(), pre-load all brain configs once as dict[str, dict] keyed by brain_id
+  2. Build a reverse index magic to list[brain_id] in O(n) single pass
+  3. _check_magic_unique() receives the pre-built magic index and does O(1) lookup - no file I/O inside the validation loop
+  4. Overall complexity: O(n^2) file reads to O(n) file reads + O(1) validation per entry
+- **Root Cause**: RC-06 (unnecessary repeated I/O in validation loop)
+- **Prevention**: Validation functions should receive pre-built indices; never re-read config files inside loops
+- **Dependents Checked**: BrainConfigValidator.validate_all(). verify.py --full passes.
+
+### FIX-20260524-030
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: training
+- **Scope**: meta-labeling, dataset, pit-alignment
+- **Files**:
+  - `scripts/training/build_meta_labeling_dataset.py` (MODIFIED: major changes - barrier labels, PIT alignment, OU features, deprecated parallel universes)
+  - `data/training/meta_labeling_barrier/all.npz` (NEW: 675 samples, 43-dim features)
+  - `data/training/meta_labeling_barrier/dataset_meta.json` (NEW: metadata)
+- **Description**: Meta-Labeling Pivot - the unconditional binary classifier learned P(TP)~73.7% base rate instead of feature-to-outcome mapping (Prior Probability Overfitting). This fix restricts prediction to OU signal-triggered moments only.
+
+  Core changes to build_meta_labeling_dataset.py:
+  1. Barrier label mode: Added compute_barrier_labels() - walks forward bar-by-bar within 12-bar horizon, checks if TP (1.5 ATR) or SL (3.0 ATR) hits first. Returns {1=TP, -1=SL, 0=timeout}.
+  2. PIT feature alignment: Changed entry_idx to feature_bar = max(0, entry_idx - 1) - features computed at last COMPLETED bar before OU signal fires, preventing look-ahead bias.
+  3. OU process features: Appended ou_z_score, ou_half_life, ou_theta to feature vector - PIT-safe context from the same rolling window that triggered the signal.
+  4. Deprecated parallel universe sampling: Added WARN message about data leakage from overlapping feature windows across z_entry thresholds. Single z_entry=1.3.
+  5. Output: 675 OU signals to 445 binary samples after dropping 230 timeout (no-touch) samples. Base rate ex-timeout: 69.7%.
+
+  Guardrail 1 (PASSED): No parallel universe sampling - single z_entry, single window per signal.
+  Guardrail 2 (PASSED): PIT-aligned features at entry_idx-1 - no look-ahead.
+  Guardrail 3 (PASSED): OOF distribution smooth (std=0.18), not bimodal.
+- **Root Cause**: RC-03 (data leakage from unconditional sampling + parallel universes), RC-06 (contract violation: classifier trained on unconditional bars when it should only predict at OU signal moments)
+- **Prevention**: All future dataset builders must declare sampling strategy (unconditional vs conditional) and feature alignment point (bar index relative to signal)
+- **Dependents Checked**: train.py (reads NPZ), institutional_train.py. verify.py --full passes.
+
+### FIX-20260524-031
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: training, deployment-config
+- **Scope**: meta-labeling, model-training, brain-registry
+- **Files**:
+  - `configs/training/barrier_12bar_meta_binary_cls.yaml` (NEW: training contract with extreme regularization)
+  - `configs/brains/meta_stage1_metalabel_binary_v1.json` (NEW: brain registry entry, magic=90013, shadow)
+  - `data/models/institutional/barrier_12bar_meta_binary_cls_20260524_101947.txt` (NEW: trained LightGBM model)
+  - `data/models/institutional/barrier_12bar_meta_binary_cls_20260524_101947.meta.json` (NEW: normalization config)
+- **Description**: Meta-Labeling Binary Classifier - trained a LightGBM model on 445 binary samples (310 TP + 135 SL) with OU process features for signal-quality discrimination.
+
+  Training contract (barrier_12bar_meta_binary_cls.yaml):
+  - Architecture: LightGBM with extreme regularization for small-sample training
+  - max_depth=2, num_leaves=7, min_data_in_leaf=30 - prevents memorization
+  - lambda_l1=1.0, lambda_l2=1.0 - strong L1/L2 regularization
+  - learning_rate=0.02, feature_fraction=0.6, bagging_fraction=0.6 - aggressive subsampling
+  - Optuna disabled (would overfit on 445 samples)
+  - Quality gate max_overfit_gap: 8.0 - relaxed for small-sample meta-labeling
+
+  Brain config (meta_stage1_metalabel_binary_v1.json):
+  - brain_id: Meta_Stage1_MetaLabel_Binary_V1, magic: 90013
+  - contract_group: barrier_12bar_meta (isolated from barrier_12bar)
+  - 43 features: 40 V9 institutional + 3 OU process (ou_z_score, ou_half_life, ou_theta)
+  - Status: shadow, vote_weight: 0.0 (awaiting OU signal engine integration)
+  - meta_probe_config: score_type=probability, threshold=0.65, filter_stage=stage2
+
+  Training results:
+  - Train Sharpe: 13.71, Forward Sharpe: 8.10, CPCV Sharpe: 12.94 +/- 3.66
+  - Train accuracy: 86.5%, Validation accuracy: 83.3%
+  - True OOF calibration: [0.3-0.5) to 21.4% TP, [0.7-0.8) to 85.7% TP, [0.8-0.9) to 78.0% TP
+  - OOF pred_std=0.18, range [0.28, 0.89] - smooth, not bimodal
+  - OU features dominate importance: ou_z_score and ou_half_life are top features
+- **Root Cause**: RC-06 (new contract group and brain type needed for meta-labeling paradigm)
+- **Prevention**: Meta-labeling models always use contract_group distinct from unconditional models. Feature schemas include signal-quality dimensions.
+- **Dependents Checked**: live.yaml (strategy line), governance_state.json, MetaFilterGate. verify.py --full passes.
+
+### FIX-20260524-032
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: deployment-config, governance
+- **Scope**: integration, live-config, strategy-registration
+- **Files**:
+  - `configs/live.yaml` (MODIFIED: added barrier_12bar_meta strategy line + registry entry + regime_map)
+  - `data/governance_state.json` (MODIFIED: added Meta_Stage1_Binary_Cls_V1 + Meta_Stage1_MetaLabel_Binary_V1)
+- **Description**: Contract group barrier_12bar_meta registered in live configuration and governance state.
+
+  live.yaml changes:
+  1. Registry entry: meta_stage1_metalabel_binary_v1.json added to allowlist with enabled: true (shadow mode)
+  2. Strategy line: barrier_12bar_meta - magic=90014, shadow, SL=3.0/TP=1.5, brain_types=[lightgbm_v1], base_volume=0.0, max_volume=0.0
+  3. Regime map: barrier_12bar_meta entries added to all 5 regimes (ranging to full, normal to full, others to reduced)
+
+  Governance state:
+  - Meta_Stage1_Binary_Cls_V1: shadow, exposure_limited - Guardrail 1 failed (prior probability overfitting). Shelved for reference.
+  - Meta_Stage1_MetaLabel_Binary_V1: shadow, exposure_limited - Guardrail 1 PASSED. Awaiting OU signal engine integration for live voting.
+
+  Future integration: OU signal engine needs to provide ou_z_score, ou_half_life, ou_theta to FeatureAdapter when signal fires. Training z_entry=1.3 vs live z_entry=3.9 distribution shift needs addressing before promotion to live.
+- **Root Cause**: RC-09 (new paradigm requires explicit config and governance registration)
+- **Prevention**: New contract groups must be registered in live.yaml (strategy line + regime_map), governance_state.json, and brain allowlist before models can participate in trading
+- **Dependents Checked**: live_intent_loop.py (reads live.yaml), brain_lifecycle_manager.py (startup validation). verify.py --full passes.
+
+### FIX-20260524-033
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: multi-module (runtime-live, deployment-lifecycle, monitor-dashboard, feedback-pnl, training, brains-adapters, feedback-online, brains-schema, brains-services)
+- **Scope**: static-analysis, type-safety, blueprint-compliance
+- **Files**:
+  - `apps/engine/bootstrap_v9.py` (MODIFIED: 6→0 — assert container services)
+  - `apps/engine/cli.py` (MODIFIED: ~40→0 — assert container services in 19 cmd_* functions, annotate channels/gates/budget_store)
+  - `apps/engine/communication_ops_cli.py` (MODIFIED: 2→0 — result annotation + None guard)
+  - `core/backtest/strategy_adapter.py` (MODIFIED: 3→0 — use StrategyLine for all cases)
+  - `core/brains/adapters/__init__.py` (MODIFIED: add MetaFilterAdapter to exports)
+  - `core/brains/adapters/base_adapter.py` (MODIFIED: extract shared _score_to_direction)
+  - `core/brains/adapters/xgboost_brain_adapter.py` (MODIFIED: use shared _score_to_direction)
+  - `core/brains/adapters/lightgbm_brain_adapter.py` (MODIFIED: use shared _score_to_direction)
+  - `core/brains/adapters/v9_onnx_brain_adapter.py` (MODIFIED: use shared _score_to_direction)
+  - `core/brains/adapters/transformer_brain_adapter.py` (MODIFIED: use shared _score_to_direction)
+  - `core/brains/brain_registry.py` (MODIFIED: _by_type → dict[str, list] for multi-brain type support)
+  - `core/brains/services/dynamic_brain_weighter.py` (MODIFIED: docstring fix for vote_weight clamp range)
+  - `core/contracts/training/label_contract.py` (MODIFIED: add profitability_calibrated field)
+  - `core/contracts/training/training_contract.py` (MODIFIED: add label_mapping drop_timeout_binary)
+  - `core/deployment/brain_config_validator.py` (MODIFIED: O(n²)→O(n) _check_magic_unique)
+  - `core/deployment/postmortem_report.py` (MODIFIED: 3→0 — dict[str, Any] annot)
+  - `core/deployment/release_pipeline.py` (MODIFIED: 1→0 — dict[str, Any] annot)
+  - `core/feedback/experience_replay.py` (MODIFIED: flush log order fix)
+  - `core/feedback/online_feedback_hook.py` (MODIFIED: O(n)→O(log n) _find_feature_vector)
+  - `core/observability/slo_service.py` (MODIFIED: 1→0 — use dict[str, Any] type param for _objectives)
+  - `core/training/dataset.py` (MODIFIED: drop timeout binary label mapping)
+  - `core/training/evaluation_report.py` (MODIFIED: add calmar_ratio compute + gate)
+  - `core/training/profitability_calibrator.py` (MODIFIED: spread_points/slippage_points rename + MT5-native cost)
+  - `scripts/check_blueprint_compliance.py` (MODIFIED: MODULE_SOURCE_MAP add 3 entries)
+  - `scripts/live_dashboard.py` (MODIFIED: 1→0 — getattr for FeatureRecord)
+  - `scripts/live_micro_rollout_gate.py` (MODIFIED: 2→0 — assert dispatcher/health_check)
+  - `scripts/live_read_only_preflight.py` (MODIFIED: 7→0 — assert services + dict[str, Any] annot)
+  - `scripts/shadow_pnl_loop.py` (MODIFIED: 1→0 — remove nonexistent update() call)
+  - `scripts/training/build_calibrated_dataset.py` (MODIFIED: update spread_points param)
+  - `scripts/training/build_meta_features.py` (MODIFIED: update calibrator param names)
+  - `scripts/training/build_meta_labeling_dataset.py` (MODIFIED: update calibrator param names)
+  - `scripts/training/calibrate_labels.py` (MODIFIED: update calibrator param names)
+  - `scripts/training/dataset_builder_d1.py` (MODIFIED: 1→0 — cross_assets type fix)
+  - `scripts/training/recipe_search.py` (MODIFIED: 3→0 — fix load_training_data unpacking)
+  - `scripts/training/retraining_trigger.py` (MODIFIED: 1→0 — functio n signature consistency)
+  - `scripts/training/scan_profitability_surface.py` (MODIFIED: update calibrator param names)
+  - `scripts/training/train.py` (MODIFIED: extend quality gates to all model types)
+  - `scripts/training/trainers/online_mlp_trainer.py` (MODIFIED: 11→0 — model: Any annot)
+- **Description**: Batch cleanup of all pre-existing mypy type errors (140→0) across the full codebase. Combined fixes from the plan audit (issues #1–14) plus remaining pre-existing errors found during verification. All 38 changed files now pass mypy with zero errors. mypy_baseline.json updated to {} (previously tracked ~140 errors across multiple files).
+  
+  Key fix categories:
+  1. **ServiceContainer DI narrowing**: 19 CLI command functions + 3 boot/preflight scripts — added assert blocks after .build() to narrow Optional[Service] → Service for mypy
+  2. **Dict type annotations**: postmortem_report.py, release_pipeline.py, live_read_only_preflight.py, slo_service.py — heterogeneous dict literals need explicit dict[str, Any] to prevent union-attr errors
+  3. **Import/dependency fixes**: recipe_search.py (wrong function name), retraining_trigger.py (conditional function variant signatures), strategy_adapter.py (removed nonexistent class imports)
+  4. **MODULE_SOURCE_MAP expansion**: 3 new entries (communication_ops_cli.py → runtime_live, release_pipeline.py → deployment_lifecycle, live_dashboard.py → monitor_dashboard)
+  5. **Blueprint Fix History**: 4 module blueprints updated (runtime_live, deployment_lifecycle, monitor_dashboard, feedback_pnl)
+- **Root Cause**: RC-02 — type-confusion. ServiceContainer uses Optional[X] = None pattern for DI — mypy can't prove post-build non-None without asserts. Multiple files accumulated ad-hoc workarounds instead of systematic type narrowing.
+- **Prevention**: All new ServiceContainer-backed entry points must include assert blocks for services they consume. verify.py --full runs mypy on the entire codebase (not just per-file with follow_imports=skip) and must pass. mypy_baseline.json is now {} and any new error is a hard block.
+- **Dependents Checked**: All 4 affected module blueprints updated. verify.py --full passes (mypy 0 errors, ruff 0 errors, blueprint compliance, 2670 tests).
+
+### FIX-20260524-034
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: runtime-live, protocol-parliament, deployment-config
+- **Files**:
+  - `core/runtime/live_cycle.py` (MODIFIED: _build_strategy_lines adds barrier_12bar_meta BarrierStrategy; _build_meta_feature_vector builds raw 43-dim vector with OU params; _evaluate_strategy_lines accepts meta_feature_vector; LiveCycleState._last_ou_params)
+  - `core/parliament/contract_groups.py` (pre-existing: BARRIER_12BAR_META_GROUP + ALL_GROUPS)
+  - `configs/brains/meta_stage1_metalabel_binary_v1.json` (MODIFIED: status shadow→probation, vote_weight 0.0→0.8)
+  - `configs/live.yaml` (MODIFIED: barrier_12bar_meta mode shadow→probation, base_volume 0.0→0.01, max_volume 0.0→0.01)
+  - `data/governance_state.json` (MODIFIED: Meta_Stage1_MetaLabel_Binary_V1 shadow→probation, exposure_limited→false)
+  - `blueprints/modules/runtime_live.md` (MODIFIED: Fix History)
+  - `blueprints/modules/protocol_parliament.md` (MODIFIED: Fix History)
+- **Description**: Meta-labeler (Meta_Stage1_MetaLabel_Binary_V1) production deployment. The meta-labeling binary classifier, trained on OU-triggered barrier signals (z_entry=1.3, SL=3.0/TP=1.5, 12-bar M5 horizon), was in shadow mode with vote_weight=0.0 pending OU feature bridge integration.
+
+  **Architecture — Three integrated changes**:
+
+  1. **contract_groups.py**: BARRIER_12BAR_META_GROUP routes meta-labeler brain (brain_type=lightgbm_v1) to barrier_12bar_meta strategy line. Added to ALL_GROUPS.
+
+  2. **live_cycle.py — Strategy routing**:
+     - `_build_strategy_lines`: barrier_12bar_meta_brains → BarrierStrategy (magic=90014, min_valid_brains=1, confidence_threshold=0.40)
+     - `_build_meta_feature_vector`: reads raw V9 features from LocalFeatureStore + computes OU params (z_score, half_life, theta) via ParamsBrainAdapter.infer() → builds 43-dim raw vector (40 V9 + 3 OU, NO z-score normalization — matching training pipeline)
+     - `_evaluate_strategy_lines`: accepts meta_feature_vector param; swaps feature_vector for barrier_12bar_meta strategy
+     - LiveCycleState._last_ou_params: caches OU params for diagnostic logging
+
+  3. **z_entry Hard Clipping [1.3, 2.5]**: The meta labeler was trained on z_entry=1.3 signals (max observed z_score ≈ 2.5). In production, the statarb brain uses z_entry=3.9 for conservative signal generation. Tree models (LGB) cannot extrapolate beyond training boundaries — extreme z=4.0 signals hit boundary leaf nodes producing constant predictions. Conservative hard clipping keeps inference in interpolation space.
+
+  **Config changes**:
+  - Brain: status shadow→probation, vote_weight 0.0→0.8
+  - live.yaml: mode shadow→probation, base_volume 0.0→0.01, max_volume 0.0→0.01
+  - governance: shadow→probation, exposure_limited→false
+
+- **Root Cause**: RC-06 — contract-violation. The meta labeler's feature_schema ("v9_40dim_ou3", 43 features) differed from the standard V9 pipeline (40 features). The three OU physics features (ou_z_score, ou_half_life, ou_theta) were present in the training data but not computed by the live feature pipeline. Additionally, z_entry=3.9 production vs z_entry=1.3 training created a covariate shift that tree models cannot handle.
+- **Prevention**: All brain configs with feature_schema != "v9_institutional_40" must have a feature augmentation path in live_cycle.py. The brain config's `features` list is the single source of truth for feature names and order. verify.py --full must pass.
+- **Dependents Checked**: protocol_parliament.md (new BARRIER_12BAR_META_GROUP in Cross-Module Contracts). Two module blueprints updated. verify.py --full passes (mypy 0 errors, ruff 0 errors, blueprint compliance, 2670 tests).
+
+### FIX-20260524-035
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: brains-services, deployment-lifecycle
+- **Files**:
+  - `configs/brains/meta_stage1_huber_v1.json` (MODIFIED: status shadow→frozen)
+- **Description**: Meta_Stage1_Huber_V1 status consistency alignment. The brain's JSON config had `status: "shadow"` while governance_state.json had `status: "frozen"` and live.yaml had `enabled: false` with "FROZEN" annotation. This three-way inconsistency was a config-drift issue: the brain was functionally frozen (vote_weight=0.0, disabled in allowlist) but the config still claimed "shadow" status, implying it could vote.
+
+  **Root Cause Analysis**: After FIX-20260524-016 (The Great Reset), Meta_Stage1_Huber_V1 was frozen because its SL=2.0/TP=3.5 labels were proven unprofitable with corrected 30pt spread/10pt slippage costs. The governance_state.json and live.yaml were correctly updated to reflect frozen status, but the brain JSON config was left at "shadow" — a partial update gap.
+
+  **Additional**: The formal baseline check (v9_shadow smoke test) was failing because disabling Meta_Stage1_Huber_V1 (enabled:false in live.yaml allowlist) reduced brain_count from 2 to 1 in the barrier_12bar group. All 5 formal baselines (neutral_stability x1, actionable_decisions x2, risk_boundary x2) were rebuilt to match the new brain configuration.
+
+- **Root Cause**: RC-09 — config-drift. The brain config, governance state, and live config were desynchronized after a multi-file status change. Only 2 of 3 files were updated.
+- **Prevention**: Any brain status change that affects multiple files (brain JSON, live.yaml, governance_state.json) should update all three atomically. The brain.py CLI already supports `brain freeze/unfreeze` commands that atomically update all three locations — this manual edit bypassed that tool.
+- **Dependents Checked**: brains_services.md Fix History updated. verify.py --full passes (mypy 0 errors, ruff 0 errors, blueprint compliance, 2670 tests).
+
+### FIX-20260524-036
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live, protocol-parliament, brains-services, brains-schema
+- **Files**:
+  - `configs/live.yaml` (MODIFIED: barrier_12bar SL 2.0→3.0, TP 3.5→1.5; updated comments)
+  - `core/parliament/contract_groups.py` (MODIFIED: BARRIER_GROUP contract name + description)
+  - `configs/brains/ou_params_v6.json` (MODIFIED: magic 90010→90003)
+  - `configs/brains/meta_stage1_metalabel_binary_v1.json` (MODIFIED: magic 90013→90014)
+  - `configs/brains/meta_stage1_huber_v1.json` (MODIFIED: magic 90011→90001)
+  - `configs/brains/meta_stage1_binary_cls_v1.json` (MODIFIED: magic 90012→90001)
+  - `blueprints/modules/runtime_live.md` (MODIFIED: Strategy Parameter Reference updated)
+- **Description**: Comprehensive brain SL/TP audit and alignment following the 14-issue plan completion. Five findings from cross-referencing brain training contracts against live.yaml execution parameters:
+
+  **Finding #1 (HIGH) — barrier_12bar SL/TP mismatch**: Strategy line had SL=2.0/TP=3.5 but all brains in this contract_group were trained/retrained with SL=3.0/TP=1.5 after the calibration surface rebuild (FIX-20260524-016). The old 2.0/3.5 parameters were from the pre-correction era when spread/slippage costs were 100x too small. Currently masked by shadow mode (volume=0) and vote_weight=0.0 — would cause severe losses if activated without this fix.
+
+  **Finding #2 (MEDIUM) — Binary_Cls_V1 comment**: live.yaml comment claimed "No other lightgbm_v1 brains active" but Meta_Stage1_Binary_Cls_V1 IS active with contract_group=barrier_12bar. Updated comment to accurately reflect: Binary_Cls_V1 is active but vote_weight=0.0 (shadow monitoring, OOF bimodal unsafe for live voting).
+
+  **Finding #3 (MEDIUM) — BARRIER_GROUP description drift**: contract_groups.py description said "Dictator Protocol: Huber solo" but Huber has been frozen since The Great Reset. Contract name `survival_barrier_2.0sl_3.5tp_12bar` referenced obsolete parameters. Updated to `survival_barrier_3.0sl_1.5tp_12bar` with description reflecting Binary_Cls_V1 shadow monitoring.
+
+  **Finding #4 (HIGH) — Brain magic → MT5 dispatch misalignment**: Initial analysis assumed brain `magic` and strategy `magic` served different layers. Code trace disproved this: `live_cycle.py:6250` reads brain magic as `dispatch_magic`, passed to `dispatch_live_open_order(magic=dispatch_magic)` at line 6326, which writes it into `execution_payload["magic"]` → MT5 order magic. Brain magic IS the MT5 order magic. V7 already had correct alignment (magic=90103 matches statarb_m15 strategy magic), confirming this is the intended design. Fixed:
+  - OU_Params_V6: 90010 → 90003 (matches statarb_dynamic strategy magic)
+  - Meta_Stage1_MetaLabel_Binary_V1: 90013 → 90014 (matches barrier_12bar_meta strategy magic)
+  - Meta_Stage1_Huber_V1: 90011 → 90001 (SSOT consistency, frozen)
+  - Meta_Stage1_Binary_Cls_V1: 90012 → 90001 (SSOT consistency, shadow)
+
+  **Finding #5 (LOW) — Strategy Parameter Reference outdated**: runtime_live.md section from 2026-05-16 referenced brains that no longer exist (LightGBM_V1_Institutional, DeepResMLP_V2_New, etc.). Updated barrier_12bar table with new SL/TP, current brain diagnostics, and added barrier_12bar_meta section.
+
+- **Root Cause**: RC-09 — config-drift. (1) When calibration surface was rebuilt with corrected costs (FIX-20260524-016) and training contracts changed from SL=2.0/TP=3.5 to SL=3.0/TP=1.5, the live.yaml execution parameters were not updated in sync. The automated validator (FIX-20260520-027) only checks for SL tightening and horizon truncation — it does not detect SL/TP value mismatches where both values change. (2) Brain magic numbers were assigned without cross-referencing strategy magic numbers; `dispatch_magic` from brain config is the actual MT5 order magic, so misalignment causes trade attribution breaks.
+- **Prevention**: (1) The FIX-20260520-027 validator should be extended to detect SL/TP value drift (not just tightening/truncation). When a brain's training_params differ from the strategy line's execution params by >10%, a WARNING should be emitted regardless of direction. (2) Brain registration should validate magic against the target strategy line's magic at registration time.
+- **Dependents Checked**: runtime_live.md, brains_services.md, protocol_parliament.md blueprints updated. verify.py --full pending.
+
+### FIX-20260524-037
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: feedback-online, feedback-performance, protocol-governance
+- **Files**:
+  - `core/feedback/online_feedback_hook.py` (MODIFIED: C1 entry_time fix + C4 datetime comparison)
+  - `core/feedback/experience_replay.py` (MODIFIED: reset() method for buffer clearing)
+  - `core/governance/shadow_tracker.py` (MODIFIED: C2 removed current_status override)
+  - `core/feedback/brain_quality_engine.py` (MODIFIED: C3 probation floor reorder)
+- **Description**: CRITICAL audit fixes from 3-agent feedback/governance audit (43 bugs, 23 fixes). C1: `_find_feature_vector()` used `close_time` for feature lookup — model saw future price information during the trade lifespan. Fixed by building an open_order_times index (message_id→recorded_at) and using `entry_time` for feature lookup. `ExperienceReplayBuffer.reset()` added so old contaminated samples can be discarded — buffer trained with close_time features must be flushed. C2: `build_shadow_summary()` output contained `"current_status": "candidate"` which was merged into `summary_map` via `update()` in `scheduler_service.py`, then spread-into the rule engine context via `**summary`, overriding the real governance state. All status-dependent rules (`auto_demote_degraded`, `auto_promote_probation_to_live`, `unfreeze_recovered`) were permanently disabled. C3: Probation weight cap `min(weight, 0.5)` was applied BEFORE `weight += tanh(sharpe/3)*0.15`, allowing Sharpe bonus to push weight to 0.65. Reordered: Sharpe adjustment → Drawdown penalty → Candidate gate → Probation floor (last). C4: Timestamp comparison used string lexicographic ordering (`<=` and `>`), which breaks for Z-suffixed vs naive ISO timestamps. Upgraded to `datetime.fromisoformat()` comparison with string fallback.
+- **Root Cause**: RC-03 (look-ahead bias) for C1, RC-09 (config-drift) for C2.
+- **Prevention**: (1) Feature lookup must always use the timestamp at decision time, never outcome time. (2) Shadow summary should never carry governance status. (3) Weight gates must be the final step. (4) Timestamps must be compared as datetime objects.
+- **Dependents Checked**: feedback_online.md, feedback_performance.md, protocol_governance.md blueprints updated.
+
+### FIX-20260524-038
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: brains-services, feedback-performance, protocol-governance
+- **Files**:
+  - `core/brains/services/dynamic_brain_weighter.py` (MODIFIED: H1 health tiers + H2 composite_mean + H7 pf fix)
+  - `core/governance/governance_service.py` (MODIFIED: H3 shadow in VALID_TRANSITIONS)
+  - `core/brains/services/brain_promotion.py` (MODIFIED: H4 low-signal protection)
+  - `scripts/training/governance_scheduler.py` (MODIFIED: H6 Sharpe thresholds)
+  - `core/feedback/brain_quality_engine.py` (MODIFIED: H7 pf==0 edge case)
+- **Description**: HIGH audit fixes. H1: Health tier handling in `_compute_weight_from_metrics()` — `exceptional` and `marginal` tiers both fell through to the `else: stable` branch. Now `exceptional` gets base*2.5+sharpe*2.5 (higher than healthy's base*2+sharpe*2), and `marginal` gets base*0.5+sharpe*1.0. H2: `composite_mean = metrics.sharpe_ratio / max(5.0, 1.0)` — `max(5.0, 1.0)` is always 5.0, making the formula equivalent to `sharpe/5.0`. Fixed to `min(max(sharpe, -5.0)/5.0, 1.0)`. H3: "shadow" was missing from VALID_TRANSITIONS, permanently blocking 2 brains from any state change. Added `{"shadow": {"candidate", "probation", "frozen", "retired"}}`. H4: Low-signal-count brains (<min_signals_candidate=20) bypassed the universal retirement protection and fell through unprotected. Added else clause that catches bad performance (consecutive losses) with probation downgrade. H6: SHARPE_RETIRE_THRESHOLD -10.0→-2.0 and SHARPE_FREEZE_THRESHOLD -10.0→-1.5 — original values were so extreme they never triggered, aligned with BrainQualityEngine hard gates. H7: Auto-retire gate `pf > 0 and pf < 0.60` missed `pf == 0` edge case. Changed to `pf < 0.60` (also fixed in dynamic_brain_weighter duplicate).
+- **Root Cause**: RC-06 (contract-violation) for H1/H2/H4, RC-05 (boundary-error) for H7, RC-09 (config-drift) for H3/H6.
+- **Prevention**: (1) When adding new tier values, audit all match/if-elif chains for completeness. (2) Formula constants should always be validated with extreme input values. (3) New governance statuses must be added to VALID_TRANSITIONS. (4) Gate conditions with chained comparisons should include equality on boundary values.
+- **Dependents Checked**: brains_services.md, feedback_performance.md, protocol_governance.md blueprints updated.
+
+### FIX-20260524-039
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: brains-services, feedback-online, feedback-pnl, feedback-performance, protocol-governance, deployment-lifecycle
+- **Files**:
+  - `core/feedback/feedback_loop.py` (MODIFIED: M1 dimension score inversion)
+  - `core/feedback/brain_pnl_ledger.py` (MODIFIED: M2 dedup → delegation + M3 calibrated health)
+  - `core/brains/services/brain_leaderboard.py` (MODIFIED: M4 docstring formula)
+  - `core/brains/services/brain_attribution_service.py` (MODIFIED: M6 neutral vote docs + M7 None check)
+  - `core/brains/services/brain_promotion.py` (MODIFIED: M10 VALID_TRANSITIONS check)
+  - `core/governance/governance_rule_engine.py` (MODIFIED: M11 transition return check)
+  - `core/deployment/brain_lifecycle_manager.py` (MODIFIED: M12 shadow→candidate)
+- **Description**: MEDIUM audit fixes. M1: `_invert_score()` only inverted `composite_score`, leaving dimension scores (sharpe/wr/pf/pnl/dd) at their original values — composite inversion implied opposite quality but sub-scores disagreed. Now inverts all dimension scores consistently. M2: ~50-line duplicate metrics computation between `get_metrics()` and `get_metrics_calibrated()` eliminated — `get_metrics()` now delegates to `get_metrics_calibrated()`. M3: Deprecated `_assess_health()` (fixed thresholds) call replaced with `assess_health_calibrated()` (cross-brain percentile thresholds). M4: Leaderboard docstring formula `(win_rate - 0.40) * 2.0` updated to match actual code `clamp((wr - 0.35) / 0.55, 0, 1)`. M6: Neutral vote exclusion in `_split_sponsors_dissenters()` documented — neutral brain abstains rather than contradicting or endorsing. M7: `brain_votes = close.get("brain_votes") or open_entry.get("brain_votes") or []` changed to explicit `is None` checks — `or` on an empty list (valid value meaning "no votes recorded") was incorrectly falling through to the next source. M10: `apply_promotion_decisions()` now validates target_status against GovernanceService.VALID_TRANSITIONS before writing. M11: `GovernanceRuleEngine.evaluate()` now checks `transition()` return value (action=="rejected") and logs warnings instead of silently ignoring failures. M12: `BrainLifecycleManager` auto-repair changed from registering as "shadow" (not in VALID_TRANSITIONS) to "candidate".
+- **Root Cause**: RC-06 (contract-violation) for M1/M2/M7/M10, RC-09 (config-drift) for M3/M4/M6/M11/M12.
+- **Prevention**: (1) Score inversion must cover all sub-components. (2) Shared computation should not be copy-pasted. (3) Health assessment must use a single code path. (4) State writes must pass through the state machine validator.
+- **Dependents Checked**: brains_services.md, feedback_online.md, feedback_pnl.md, feedback_performance.md, protocol_governance.md, deployment_lifecycle.md blueprints updated.
+
+### FIX-20260524-040
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: deferred
+- **Module**: brains-services, protocol-governance
+- **Files**: None (architecture debt registration only)
+- **Description**: DEFERRED architecture debt from 3-agent audit. H5: Two independent governance pipelines (BrainPromotionEvaluator + GovernanceRuleEngine) with different thresholds — should be merged into single Auditor→Executor pipeline. Current dual-pipeline creates split-brain: evaluator approves a promotion but engine rejects it, or vice versa. M5: BrainLeaderboard ranking results not consumed by any downstream system — rankings computed but never read. M8: StabilityMonitor (PSI/CSI drift) defined but never called in any pipeline — drift events go undetected. M9: ABTest framework (ab_test.py) fully implemented but never activated — no experiments running despite infrastructure existing. These 4 items require significant architectural changes and are deferred to a dedicated governance refactor sprint.
+- **Root Cause**: RC-12 (missing-feature) for all deferred items.
+- **Prevention**: These will be addressed in a dedicated governance architecture sprint.
+- **Dependents Checked**: Registered in FIX_REGISTRY.md only. No code changes.
+
+### FIX-20260524-041
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: feedback-online, feedback-performance
+- **Files**:
+  - `core/feedback/experience_replay.py` (MODIFIED: EMA self-bias fix)
+  - `core/feedback/performance_analytics.py` (MODIFIED: Sharpe annualization fix)
+- **Description**: Two LOW-priority fixes from the original audit's "不修复项" list that were later approved for immediate fix.
+
+  **EMA circular reference**: `_compute_weight()` computed `r_abs = abs(pnl)`, updated `_running_r_mean` with `r_abs` via EMA, then computed `weight = r_abs / max(self._running_r_mean, 1e-8)`. The current trade's magnitude pulled the running mean toward itself, then was divided by that contaminated mean — a self-bias loop. For small buffers this was significant: a single large PnL trade would inflate the mean denominator, suppressing its own weight, and vice versa. Fixed: compute weight against `prev_mean` (snapshot before update), then EMA-update with `r_abs`. Order is now: snapshot → weight → update.
+
+  **Sharpe daily annualization**: `_sharpe_ratio()` and `_sortino_ratio()` hardcoded `* math.sqrt(252)` and `/ 252` (daily-frequency annualization), but `_compute_returns()` produces per-trade returns from the equity curve, not daily returns. A strategy with 10 trades over 3 days would incorrectly annualize with sqrt(252) instead of sqrt(10/3*365) ≈ sqrt(1217). Fixed: `_annual_factor()` derives `trades_per_year = N / span_days * 365` from actual trade entry/exit timestamps. Falls back to 1.0 (no annualization) when timestamps are missing or span < 1 day. Risk-free rate also scaled to per-trade period.
+
+- **Root Cause**: RC-03 (state-leak — self-bias in EMA) for the circular reference; RC-06 (contract-violation — hardcoded frequency assumption) for Sharpe.
+- **Prevention**: (1) EMA-based normalizers must compute weight against the pre-update mean. (2) Annualization factors must be derived from the actual return frequency, not hardcoded.
+- **Dependents Checked**: feedback_online.md, feedback_performance.md blueprints updated.
+
+### FIX-20260524-042
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-guards, execution-orders, risk-portfolio, runtime-live
+- **Files**:
+  - `core/execution/dynamic_sl_tp.py` (MODIFIED: T1-H2 — vol_ratio envelope check using raw ATR before timeframe scaling)
+  - `core/execution/conformal_ou_gate.py` (MODIFIED: T1-H3 — BrainRegistry contract_group verification in OU diagnostic fallback)
+  - `core/execution/position_manager.py` (MODIFIED: T1-H4 — per-ticket result collection instead of overwrite loop)
+  - `core/execution/execution_manager.py` (MODIFIED: T1-H5 — filled_quantity > 0 guard + negative quantity detection)
+  - `core/execution/portfolio_risk.py` (MODIFIED: T1-H1 — Symbol Quarantine mechanism with 60s duration)
+  - `core/execution/execution_queue.py` (MODIFIED: T1-H1 — upgraded bare except:pass to structured logging)
+  - `core/runtime/live_cycle.py` (MODIFIED: T1-H1 — quarantine trigger on unconfirmed close + auto-clear on MT5 zero-position)
+  - `tests/unit/test_position_manager.py` (MODIFIED: T1-H4 — per-ticket assertion format)
+- **Description**: Phase 1 Tier 1 HIGH fixes (5 items):
+
+  **T1-H1 (Quarantine 护栏)**: `net_out_close_not_confirmed` now triggers `symbol_quarantined` state via PortfolioRiskController, blocking ALL new entries on that symbol until MT5 independently confirms zero positions. Auto-clear on MT5 positions query returning empty. Upgraded two bare `except Exception: pass` blocks to structured logger.warning/logger.error.
+
+  **T1-H2 (vol_ratio 误报)**: Envelope warning used ATR already scaled by `sqrt(timeframe_mult)`, inflating vol_ratio 3.46× for H1. Now saves `raw_atr` before scaling and uses it for vol_ratio comparison.
+
+  **T1-H3 (ConformalOUGate 错误匹配)**: Fallback OU diagnostic matching now verifies `entry.contract_group == strategy_name` via BrainRegistry, and requires BOTH "theta" AND "half_life" in diagnostics (was just "theta").
+
+  **T1-H4 (PositionManager 结果覆盖)**: `update_prices()` now collects per-ticket results: `result[str(t)] = self._update_single_position(...)` instead of overwriting on every iteration.
+
+  **T1-H5 (均价负值保护)**: `execution_manager.py` `reconcile_fill()` now guards with `filled_quantity > 0` before updating `average_price`, and adds `filled_quantity < 0` detection. Added module-level logger.
+
+- **Root Cause**: RC-06 (contract-violation) for T1-H1/H3/H4; RC-05 (boundary-error) for T1-H2; RC-07 (missing-validation) for T1-H5.
+- **Prevention**: (1) Symbol Quarantine pattern: unconfirmed net-out close → lock symbol → MT5 independent re-verification before unlock. (2) ATR scaling must track raw vs. scaled variants separately. (3) Iteration accumulators must collect, not overwrite. (4) Financial quantity updates must validate sign and non-zero before state mutation.
+- **Dependents Checked**: execution_guards.md, execution_orders.md, risk_portfolio.md blueprints updated.
+
+### FIX-20260524-046
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: deferred
+- **Module**: execution-orders, runtime-live
+- **Files**: None (architecture debt registration only)
+- **Description**: DEFERRED architecture debt from Tier 1 audit. MT5 thread model requires architecture-level redesign — short-term workarounds only.
+
+  **T1-C1 (MT5 线程亲和性违规)**: `mt5_broker_adapter.py` spawns a new daemon thread per API call. MT5 requires `mt5.initialize()` and subsequent calls on the same thread. Child threads have no MT5 context. Non-threaded methods (`get_position_tickets`, `get_account_drawdown_pct`, `get_open_positions_detail`) access MT5 directly with no thread protection.
+
+  **T1-C2 (重复 initialize/shutdown)**: `dispatch_live_open_order()` calls `_mt5.initialize()` + `_mt5.shutdown()` on every order dispatch. 3 strategy lines = 3 serial init/shutdown cycles per tick (3-15s overhead). Concurrent calls race on `_mt5.initialize()`.
+
+  **T1-C3 (非线程安全方法)**: `get_position_tickets`/`get_account_drawdown_pct`/`get_open_positions_detail` directly access MT5 API with no thread protection, creating an inconsistent threading model when mixed with threaded methods.
+
+  Short-term mitigations already in place from prior fixes: single-threaded main loop, BarSyncPoller re-init on error, graceful degradation on MT5 unavailability. Full fix requires dedicated MT5 worker thread with task queue or session-level init, estimated 3-5 day effort.
+
+- **Root Cause**: RC-04 (race-condition) + RC-06 (contract-violation — MT5 Python API thread affinity contract not honored).
+- **Prevention**: Architecture decision: MT5 lifecycle should be application-level (init once at startup, shutdown once at exit). All MT5 access must go through a single dedicated worker thread or be protected by synchronization primitives.
+- **Dependents Checked**: Registered in FIX_REGISTRY.md only. No code changes. Dedicated MT5 architecture sprint required.
+
+### FIX-20260524-043
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: risk-policies, execution-guards, risk-portfolio, execution-orders
+- **Files**:
+  - `core/risk/risk_evaluation_service.py` (MODIFIED: T2-C1 — default policy set + hard assertion len(_policies)==0 → DENY)
+  - `core/risk/risk_policies.py` (MODIFIED: T2-H5 — ExposurePolicy checks current + proposed exposure)
+  - `core/execution/execution_queue.py` (MODIFIED: T2-C2 — price guard exception rejects; T2-H8 — removed skip_price_guard=True)
+  - `core/execution/portfolio_risk.py` (MODIFIED: T2-H1/H2/H4/H6/H9 — VaR/CVaR/correlation/stop-loss/exposure fixes)
+  - `core/execution/strategy_line.py` (MODIFIED: T2-H3 — OU/Meta gate exceptions block trades)
+  - `core/execution/pre_trade_guards.py` (MODIFIED: T2-H7 — compute_position_size returns 0.0 for invalid ATR)
+  - `tests/unit/test_pre_trade_guards.py` (MODIFIED: zero ATR/sl_mult tests expect 0.0)
+  - `tests/execution/test_portfolio_risk.py` (MODIFIED: exposure tests pass current_price)
+- **Description**: Phase 2 Tier 2 CRITICAL+HIGH fixes (11 items):
+
+  **T2-C1 (Fail Closed 护栏)**: `RiskEvaluationService.__init__` now registers default minimum policy set (ModePolicy + PositionLimitPolicy) when no policies provided. `_merge_results()` adds hard assertion: `len(self._policies) == 0` → `RiskDecisionStatus.DENY` with reason "no_risk_policies_active". This is the LAST LINE of defense — even if init is bypassed or corrupted, every evaluation checks that policies exist.
+
+  **T2-C2 (Price Guard Fail Closed)**: `execution_queue.py` price guard exception now logs the error and rejects the order, instead of silently passing with "let the order through". Fail closed — invalid SL/TP orders don't reach MT5.
+
+  **T2-H1 (VaR/CVaR Exception)**: Bare `except Exception: pass` upgraded to `logger.warning(..., exc_info=True)`. Equity fallback raised from 10_000 to 100_000 to avoid artificially lowering CVaR thresholds for accounts larger than $10k.
+
+  **T2-H2 (Correlation Exception Conservative)**: `compute_correlation()` now returns 1.0 (fully correlated = maximum penalty) on exception, instead of 0.0 (no correlation = no penalty). Data corruption no longer silently makes the system more risk-loving.
+
+  **T2-H3 (Gate Exception Blocking)**: ConformalOUGate and MetaFilterGate exceptions now return `StrategyDecision(should_trade=False)` with explicit exception reason. Previously both were `except Exception: pass` — ML quality filters could fail silently and trades would proceed unguarded.
+
+  **T2-H4 (Portfolio Stop-Loss)**: Added `check_portfolio_stop_loss(aggregate_pnl, account_equity)` to `PortfolioRiskController`. Returns REJECTED when aggregate PnL loss exceeds `max_portfolio_loss_pct` (default 5%). This is the last line of defense — when the entire book is bleeding, all positions must be closed.
+
+  **T2-H5 (ExposurePolicy Current+Proposed)**: `ExposurePolicy._check()` now evaluates `current + proposed >= max_notional` instead of `current >= max_notional`. Previously, at 999,999/1,000,000, any-size new trade could push exposure to 1,010,000+.
+
+  **T2-H6 (Exposure Dimensional Error)**: When `current_price` is unavailable, gross/net exposure checks are now skipped instead of comparing raw lot counts against notional percentages. Comparing 0.10 lots against "10%" was a dimensional error causing incorrect rejections/approvals.
+
+  **T2-H7 (ATR Invalid → 0.0)**: `compute_position_size()` now returns 0.0 when ATR ≤ 0 or SL_mult ≤ 0, instead of `min_lot` (0.01). Data feed failures should result in "cannot compute safe size", not a positive position.
+
+  **T2-H8 (skip_price_guard Removed)**: Hardcoded `skip_price_guard=True` removed from `execution_queue.flush()` dispatch_fn call. The queue's own price check now properly rejects on exception (T2-C2), and `dispatch_live_order` always performs its own validation as a backstop.
+
+  **T2-H9 (VaR Data Insufficiency)**: When returns buffer has < `correlation_min_samples` entries, the check method now sets `cvar_value = var_max_pct * account_equity` and `var_warning = True`. Previously, VaR=0.0 from insufficient data was treated as "zero risk", suppressing the warning entirely until enough history accumulated.
+
+- **Root Cause**: RC-06 (contract-violation) for T2-C1/C2/H1/H3/H5/H6/H8; RC-05 (boundary-error) for T2-H2/H4/H7/H9.
+- **Prevention**: (1) Risk engines must fail CLOSED — when uncertain, reject. Every evaluation must verify policies exist. (2) Exception handlers on safety checks must default to the conservative outcome (max penalty, max risk, blocked). (3) Financial calculations must check dimensional consistency before comparison. (4) Data insufficiency must signal "unknown risk", not "zero risk".
+- **Dependents Checked**: risk_policies.md, execution_guards.md, execution_orders.md, risk_portfolio.md blueprints updated. Tests updated for new behavior.
+
+### FIX-20260524-044
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: features-service, training, contracts-training
+- **Files**:
+  - `core/features/computers/microstructure_computer.py` (MODIFIED: T3-C1 — reference_time parameter with UTC fallback)
+  - `core/features/computers/v9_micro_computer.py` (MODIFIED: T3-H1 — NaN sentinel → 0.0)
+  - `core/features/adapters/v9_feature_adapter.py` (MODIFIED: T3-H2 — normalization_strategy validation)
+  - `core/contracts/training/label_contract.py` (MODIFIED: T4-C1 — hardcoded ATR 2.31 → fallback_atr param)
+  - `core/training/dataset.py` (MODIFIED: T4-H1 — walk_forward→purged_walk_forward; T4-H2 — random split FutureWarning)
+  - `core/training/custom_objectives.py` (MODIFIED: T4-H3 — NaN PnL zeroed before gradient)
+- **Description**: Phase 3-4 Tier 3-4 CRITICAL+HIGH fixes (7 items):
+
+  **T3-C1 (Look-ahead Bias 护栏)**: `MicrostructureComputer._compute_tick_features()` now accepts `reference_time: datetime | None` parameter. In backtest/historical mode, the caller passes the historical bar timestamp so tick features are computed from the correct time window. In live mode, `reference_time` defaults to None which falls back to `datetime.now(UTC)`. All callers (`compute_all`, `compute_sequence`, `compute_all_sequences`, `_compute_tick_features_dict`) pass the parameter through. Timezone consistency ensured: naive datetimes are `.replace(tzinfo=UTC)`, aware datetimes preserved as-is.
+
+  **T3-H1 (NaN Sentinel → 0.0)**: `V9MicroComputer` explicitly wrote `float("nan")` as sentinel when microstructure features were unavailable. These NaN values propagated through `FeatureService` persistence (line 280: `float(nan)→nan`), through `_last_known_vector` caching, and into model inference. Models receiving NaN inputs produce NaN predictions → signals silently rejected. Fixed: use 0.0 instead of NaN as sentinel for unavailable micro features.
+
+  **T3-H2 (Normalization Strategy Mismatch)**: `V9FeatureAdapter` now validates `normalization_strategy` from model metadata (`model_card.normalization_strategy`). When provided, warns if `"rolling_ewma"` inference is used with `"fixed"` training normalization (or vice versa) — this mismatch causes silent train/inference feature distribution shift. The warning helps detect misconfigured inference pipelines.
+
+  **T4-C1 (Hardcoded ATR Fallback)**: `_build_barrier_labels_array()` hardcoded `atr_val = 2.31` as ATR fallback. This value is only correct for XAUUSD M5 (ATR ≈ $2.31). For EURUSD (ATR ≈ $0.001), H1 bars, or any other instrument/timeframe, it produces severely distorted barrier distances. Fixed: added `fallback_atr: float | None` parameter. When ATR computation fails and no fallback is provided, raises `ValueError` with an explicit message requiring symbol/timeframe-appropriate fallback.
+
+  **T4-H1 (Purge Gap 护栏)**: `walk_forward()` had zero purge/embargo gap between training and test sets. When labels use 12-bar barrier windows, training labels look ahead into test data — "studying the exam answers before taking the test." Fixed: `walk_forward()` now delegates to `purged_walk_forward()` with a default purge gap of `max(10, n//(splits*5))`. Explicit `purge_gap` parameter can override for known barrier horizons.
+
+  **T4-H2 (Random Split Deprecation)**: `split(method="random")` used `np.random.permutation(n)` to shuffle financial time-series data, placing future samples in training and past samples in test. Added `FutureWarning` recommending `method="sequential"` or `purged_walk_forward()` for financial time-series. The random option remains available but explicitly warns about information leakage.
+
+  **T4-H3 (NaN Gradient Prevention)**: `sharpe_objective()` in `custom_objectives.py` passed NaN-containing PnL arrays directly into gradient computation via `returns = (2*p - 1) * _pnl`. NaN in PnL → NaN in returns → NaN in gradient → silent boosting weight corruption. Fixed: pre-compute NaN mask, zero out NaN PnL values so those samples contribute zero return rather than NaN gradients.
+
+- **Root Cause**: RC-03 (state-leak/look-ahead) for T3-C1/T4-H1/T4-H2; RC-05 (boundary-error) for T4-C1; RC-06 (contract-violation) for T3-H1/T3-H2/T4-H3.
+- **Prevention**: (1) All time-dependent feature computation must accept explicit `reference_time` for deterministic replay. (2) NaN is never an acceptable sentinel — use 0.0 with explicit availability flag. (3) Normalization strategy must travel with model metadata, not be independently configured. (4) Walk-forward validation MUST include purge gap ≥ barrier horizon. (5) Random shuffling is NEVER valid for financial time-series.
+- **Dependents Checked**: features_service.md, training.md, contracts_training.md blueprints updated.
+
+
+### FIX-20260525-045
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-orders, execution-guards, risk-portfolio, features-service, training, execution-reentry
+- **Files**: 20 source files, 4 test files, 1 blueprint checker
+- **Description**: Phase 5 MEDIUM+LOW batch fixes (33 items across all 4 tiers):
+
+  **Tier 1 MEDIUM (7 done, T1-M4 already fixed)**:
+  - **T1-M1**: Direction concentration check now groups by strategy family (first segment of name) instead of global — prevents unrelated strategies from blocking each other.
+  - **T1-M2**: Added cross-reference comments between `_compute_volume` (strategy_line.py) and `_compute_meta_volume` (meta_pipeline.py) documenting they share the same formula.
+  - **T1-M3**: `order_state_machine.py` "working" status now maps to "working" event type instead of "accepted".
+  - **T1-M5**: Retry loop in `execution_queue.py` now passes stable `intent_id` to `dispatch_fn` for idempotency across retries.
+  - **T1-M6**: `compute_correlation()` docstring notes index-based alignment limitation; recommends timestamp-aware loading for production.
+  - **T1-M7**: `_is_trend_aligned()` now accepts `position_side` as explicit keyword parameter instead of relying on opaque dict key.
+  - **T1-M8**: `_consecutive_flips` counter moved from `ActivePositionManager` to `ActivePosition` dataclass — each position now tracks its own flip confirmations independently.
+
+  **Tier 1 LOW (7)**:
+  - **T1-L1**: `replace(tzinfo=None)` anti-pattern documented as pervasive — deferred due to breadth (~100+ files).
+  - **T1-L2**: `dynamic_sl_tp.py` `ref_atr` default aligned from 7.0→5.0 to match `StrategyLineConfig.ref_atr`.
+  - **T1-L3/L5**: Hardcoded strategy name comparisons and counter-trend thresholds noted in existing docstrings.
+  - **T1-L4**: `last_direction` sentinel changed from `""` to `None` in `ReentryState`.
+  - **T1-L6**: `ConformalCalibrator.update()` now batches state persistence every 10 updates instead of per-update writes.
+  - **T1-L7**: `_group_names` in `capital_allocator.py` made a constructor parameter with backward-compat defaults.
+
+  **Tier 2 MEDIUM+LOW (6)**:
+  - **T2-M1**: `dispatch_live_order` protection flag now requires file age ≥ 5 minutes before raising RuntimeError — prevents accidental triggering via transient file creation.
+  - **T2-M2**: `PortfolioRiskController.check()` now logs `correlation_warning` when correlation penalty is applied.
+  - **T2-M3**: MVS cut-off in `_compute_volume()` now uses `config.base_volume` instead of risk-budget-computed `base_volume` — prevents overly strict cuts on tiny risk-budget volumes.
+  - **T2-M4**: √N discount noted as blind to correlation — requires cross-module refactor (deferred).
+  - **T2-L1**: `compute_kelly_mult()` adds `epsilon=0.02` threshold — near-zero EV treated as defensive floor instead of neutral sizing.
+  - **T2-L2**: `ExecutionQueue.flush()` logs WARNING when `broker=None` (no price validation available).
+
+  **Tier 3 MEDIUM+LOW (6)**:
+  - **T3-M1**: `_compute_group_boundaries()` in CPCV now uses timestamps for quantile-based group splitting when provided.
+  - **T3-M2**: `MicrostructureFeatureAdapter.normalize()` now warns (once) when no scaler is loaded.
+  - **T3-M3**: `DailyFeatureComputer` now logs WARNING when H4 CSV file is missing.
+  - **T3-M4**: `_schema_feature_names()` now warns on unknown schema fallback.
+  - **T3-M5**: `FeatureService` cached vector dtype unified to `float32` (was mixed float32/float64).
+
+  **Tier 4 MEDIUM+LOW (6)**:
+  - **T4-M1**: `compute_profitability_surface()` EV now deducts estimated spread+slippage cost in ATR-multiple units.
+  - **T4-M2**: `compute_financial_metrics()` now filters NaN from returns before computing metrics.
+  - **T4-M3**: `compute_financial_metrics()` adds `threshold` parameter (default 0.5) for consistent binary classification.
+  - **T4-M4**: `entry_stride=1` default documented with overestimation warning — recommends stride ≥ horizon_bars.
+  - **T4-M5**: `embargo_walk_forward()` warns when chunk size < purge_gap+embargo_gap for small datasets.
+
+- **Root Cause**: RC-05 (boundary-error) for T1-M3/M7/M8/L2/L4/L6, T2-M1/M3, T3-M1/M2/M3/M4/M5, T4-M1/M2/M3; RC-06 (contract-violation) for T1-M1/M5, T2-L1; RC-07 (noise/log-quality) for T1-M2/M6/L3/L5, T2-M2/L2, T3, T4-M4/M5.
+- **Prevention**: (1) Batch disk writes — don't save on every update. (2) Always validate sentinel values against their intended semantics (None vs ""). (3) Default parameter values must match across modules. (4) Financial metrics must filter NaN before computation. (5) Check family/lane for cross-strategy limits, not raw strategy name.
+- **Dependents Checked**: execution_guards.md, execution_orders.md, risk_portfolio.md, features_service.md, training.md, execution_reentry.md blueprints updated. Tests: test_portfolio_risk.py, test_integration.py, test_stress_portfolio_risk.py, test_conformal_calibrator.py, test_position_manager.py updated.
+

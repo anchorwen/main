@@ -178,7 +178,7 @@ try:
     from scripts.training.champion_challenger import _guess_lane as _guess_lane
 except ImportError:
     # Fallback for environments where champion_challenger isn't available
-    def _guess_lane(brain_id: str) -> str:
+    def _guess_lane(brain_id: str, *, configs_dir: str | None = None) -> str:
         upper = brain_id.upper()
         for prefix, lane in BRAIN_TO_LANE.items():
             if upper.startswith(prefix.upper()):

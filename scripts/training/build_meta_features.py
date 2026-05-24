@@ -163,7 +163,7 @@ def _compute_rolling_hit_rate(
 
 def _build_pit_oof_features(
     X: np.ndarray,
-    y_reg: np.ndarray,
+    y_target: np.ndarray,
     ts_array: np.ndarray | None,
     feature_names: list[str],
     fold_splits: list[tuple[list[int], list[int]]],
@@ -213,7 +213,7 @@ def _build_pit_oof_features(
         val_idx = np.asarray(val_idx, dtype=np.intp)
 
         # Train Stage 1 on this fold's train set
-        X_tr, y_tr = X[train_idx], y_reg[train_idx]
+        X_tr, y_tr = X[train_idx], y_target[train_idx]
         dtrain = lgb.Dataset(X_tr, label=y_tr)
         booster = lgb.train(
             dict(lgb_params),
@@ -336,11 +336,12 @@ def build_meta_features(
     purge_bars: int = 12,
     embargo_bars: int = 6,
     pit_cv: bool = False,
+    mode: str = "regression",
 ) -> None:
     """Build Stage 2 meta-feature dataset from Stage 1 OOF predictions.
 
     Args:
-        contract_path: Path to TrainingContract YAML (Stage 1 Huber config).
+        contract_path: Path to TrainingContract YAML (Stage 1 config).
         output_path: Where to save the Stage 2 feature NPZ.
         n_folds: Number of CV folds for OOF prediction generation.
         seed: Random seed for reproducibility.
@@ -351,6 +352,8 @@ def build_meta_features(
         pit_cv: Generate OOF features row-by-row with deque(maxlen=20),
             matching MetaSignalFilter's runtime behavior pixel-for-pixel.
             Requires purged_cv=True. Eliminates Training-Serving Skew.
+        mode: "regression" (default, Huber loss, continuous target) or
+            "binary" (binary_logloss, drop-timeout, probability output).
     """
     contract = TrainingContract.from_file(contract_path)
     ds_path = Path(contract.dataset.path)
@@ -359,33 +362,55 @@ def build_meta_features(
         print(f"[meta] ERROR: Dataset not found: {ds_path}")
         sys.exit(1)
 
-    print(f"[meta] Loading dataset: {ds_path}")
+    is_binary = mode == "binary"
+    print(f"[meta] Loading dataset: {ds_path} (mode={mode})")
     raw = np.load(ds_path, allow_pickle=True)
 
     X = np.asarray(raw["X"], dtype=np.float64)
     feature_names = list(raw.get("feature_names", [f"f_{i}" for i in range(X.shape[1])]))
 
-    # Stage 1 labels: regression (continuous, already in dataset)
-    y_reg = raw.get("y_reg")
-    if y_reg is None:
-        print("[meta] ERROR: Dataset missing 'y_reg' field (regression labels required)")
-        sys.exit(1)
-    y_reg = np.asarray(y_reg, dtype=np.float64).ravel()
-
-    # Stage 2 labels: binary TP/SL from directional labels
+    # Stage 1 labels
     y_dir = np.asarray(raw["y"], dtype=np.int32).ravel()
-    unique_labels = set(np.unique(y_dir))
-    if unique_labels == {-1, 0, 1}:
-        y_binary = np.where(y_dir == 1, 1, 0).astype(np.int32)
-        print(f"[meta] Binary labels: {np.sum(y_binary==1)} TP, {np.sum(y_binary==0)} non-TP")
-    else:
-        y_binary = y_dir  # already binary
-
     timestamps = raw.get("timestamps")
     ts_array = np.asarray(timestamps, dtype=np.float64).ravel() if timestamps is not None else None
 
-    print(f"[meta] X: {X.shape}, y_reg: {y_reg.shape}, y_binary: {y_binary.shape}")
-    print(f"[meta] y_reg stats: mean={float(np.mean(y_reg)):.4f}, std={float(np.std(y_reg)):.4f}")
+    if is_binary:
+        # ── Binary mode: drop timeout (y==0), remap {-1→0, 1→1} ──
+        keep_mask = y_dir != 0
+        X = X[keep_mask]
+        y_dir = y_dir[keep_mask]
+        if ts_array is not None:
+            ts_array = ts_array[keep_mask]
+        y_reg = None  # not used in binary mode
+        # Remap: -1 (SL) → 0, 1 (TP) → 1
+        y_binary = np.where(y_dir == -1, 0, 1).astype(np.int32)
+        y_target = y_binary.astype(np.float64)
+        print(
+            f"[meta] Binary mode: dropped {(~keep_mask).sum()} timeout samples, {X.shape[0]} remaining"
+        )
+        print(f"[meta] Binary labels: {np.sum(y_binary==1)} TP, {np.sum(y_binary==0)} SL")
+        collapse_target_std = float(np.std(y_target))
+    else:
+        # ── Regression mode: continuous PnL target ──
+        y_reg = raw.get("y_reg")
+        if y_reg is None:
+            print("[meta] ERROR: Dataset missing 'y_reg' field (regression labels required)")
+            sys.exit(1)
+        y_reg = np.asarray(y_reg, dtype=np.float64).ravel()
+        y_target = y_reg
+        # Stage 2 labels: binary TP/SL
+        unique_labels = set(np.unique(y_dir))
+        if unique_labels == {-1, 0, 1}:
+            y_binary = np.where(y_dir == 1, 1, 0).astype(np.int32)
+        else:
+            y_binary = y_dir
+        print(f"[meta] Binary labels: {np.sum(y_binary==1)} TP, {np.sum(y_binary==0)} non-TP")
+        collapse_target_std = float(np.std(y_target))
+
+    print(f"[meta] X: {X.shape}, y_target: {y_target.shape}")
+    print(
+        f"[meta] y_target stats: mean={float(np.mean(y_target)):.4f}, std={float(np.std(y_target)):.4f}"
+    )
 
     if pit_cv and not purged_cv:
         print("[meta] WARNING: --pit-cv requires --purged-cv. Enabling purged CV.")
@@ -397,33 +422,56 @@ def build_meta_features(
             f"[meta] Running PiT (Point-in-Time) OOF generation: {n_folds} folds, deque-based row-by-row..."
         )
     else:
-        print(f"[meta] Running {n_folds}-fold cross_val_predict with LightGBM native Huber...")
+        obj_name = "binary" if is_binary else "Huber"
+        print(f"[meta] Running {n_folds}-fold cross_val_predict with LightGBM native {obj_name}...")
 
     import lightgbm as lgb
 
-    huber_delta = (
-        huber_delta_override
-        if huber_delta_override is not None
-        else float(contract.architecture.custom_params.get("huber_delta", 1.0))
-    )
-    lgb_params: dict[str, object] = {
-        "objective": "huber",
-        "alpha": huber_delta,
-        "boosting_type": "gbdt",
-        "num_leaves": 31,
-        "learning_rate": 0.05,
-        "feature_fraction": 0.8,
-        "bagging_fraction": 0.8,
-        "bagging_freq": 5,
-        "min_data_in_leaf": 20,
-        "lambda_l1": 0.1,
-        "lambda_l2": 0.1,
-        "max_depth": -1,
-        "random_state": seed,
-        "n_jobs": -1,
-        "verbosity": -1,
-        "num_iterations": 500,
-    }
+    lgb_params: dict[str, object]
+    huber_delta: float
+    if is_binary:
+        lgb_params = {
+            "objective": "binary",
+            "boosting_type": "gbdt",
+            "num_leaves": 31,
+            "learning_rate": 0.05,
+            "feature_fraction": 0.8,
+            "bagging_fraction": 0.8,
+            "bagging_freq": 5,
+            "min_data_in_leaf": 20,
+            "lambda_l1": 0.1,
+            "lambda_l2": 0.1,
+            "max_depth": -1,
+            "random_state": seed,
+            "n_jobs": -1,
+            "verbosity": -1,
+            "num_iterations": 500,
+        }
+        huber_delta = 1.0  # unused in binary mode
+    else:
+        huber_delta = (
+            huber_delta_override
+            if huber_delta_override is not None
+            else float(contract.architecture.custom_params.get("huber_delta", 1.0))
+        )
+        lgb_params = {
+            "objective": "huber",
+            "alpha": huber_delta,
+            "boosting_type": "gbdt",
+            "num_leaves": 31,
+            "learning_rate": 0.05,
+            "feature_fraction": 0.8,
+            "bagging_fraction": 0.8,
+            "bagging_freq": 5,
+            "min_data_in_leaf": 20,
+            "lambda_l1": 0.1,
+            "lambda_l2": 0.1,
+            "max_depth": -1,
+            "random_state": seed,
+            "n_jobs": -1,
+            "verbosity": -1,
+            "num_iterations": 500,
+        }
 
     if purged_cv and ts_array is not None:
         print(
@@ -450,7 +498,7 @@ def build_meta_features(
         # ── PiT path: row-by-row deque, pixel mirror of runtime ──
         oof_preds, pit_meta = _build_pit_oof_features(
             X,
-            y_reg,
+            y_target,
             ts_array,
             feature_names,
             fold_splits,
@@ -460,15 +508,19 @@ def build_meta_features(
 
         # Collapse check
         pred_std = float(np.std(oof_preds))
-        target_std = float(np.std(y_reg)) + 1e-10
-        collapse_ratio = pred_std / target_std
+        target_std = collapse_target_std
+        collapse_ratio = pred_std / max(target_std, 1e-10)
         print(
             f"[meta] PiT OOF collapse ratio: {collapse_ratio:.4f} (pred_std={pred_std:.4f}, target_std={target_std:.4f})"
         )
-        if collapse_ratio < 0.1:
-            print(
-                "[meta] CRITICAL: PiT OOF predictions collapsed — Huber model failed to learn variance"
-            )
+        if is_binary:
+            if pred_std < 0.05:
+                print("[meta] WARNING: PiT OOF probabilities have very low variance — weak signal")
+        else:
+            if collapse_ratio < 0.1:
+                print(
+                    "[meta] CRITICAL: PiT OOF predictions collapsed — Huber model failed to learn variance"
+                )
 
         # ── Assemble meta-features from PiT arrays ──
         print("[meta] Assembling PiT meta-features...")
@@ -517,7 +569,7 @@ def build_meta_features(
             train_idx = np.asarray(train_idx, dtype=np.intp)
             val_idx = np.asarray(val_idx, dtype=np.intp)
             X_tr, X_val = X[train_idx], X[val_idx]
-            y_tr, y_val = y_reg[train_idx], y_reg[val_idx]
+            y_tr, y_val = y_target[train_idx], y_target[val_idx]
 
             dtrain = lgb.Dataset(X_tr, label=y_tr)
             dval = lgb.Dataset(X_val, label=y_val, reference=dtrain)
@@ -551,18 +603,22 @@ def build_meta_features(
 
         # Collapse check
         pred_std = float(np.std(oof_preds))
-        target_std = float(np.std(y_reg)) + 1e-10
-        collapse_ratio = pred_std / target_std
+        target_std = collapse_target_std
+        collapse_ratio = pred_std / max(target_std, 1e-10)
         print(
             f"[meta] OOF collapse ratio: {collapse_ratio:.4f} (pred_std={pred_std:.4f}, target_std={target_std:.4f})"
         )
-        if collapse_ratio < 0.1:
-            print(
-                "[meta] CRITICAL: OOF predictions collapsed — Huber model failed to learn variance"
-            )
-            print(
-                "[meta] Consider: reducing huber_delta, increasing num_iterations, or checking label quality"
-            )
+        if is_binary:
+            if pred_std < 0.05:
+                print("[meta] WARNING: OOF probabilities have very low variance — weak signal")
+        else:
+            if collapse_ratio < 0.1:
+                print(
+                    "[meta] CRITICAL: OOF predictions collapsed — Huber model failed to learn variance"
+                )
+                print(
+                    "[meta] Consider: reducing huber_delta, increasing num_iterations, or checking label quality"
+                )
 
         # ── Meta-feature engineering (post-hoc, legacy) ──
         print("[meta] Computing meta-features...")
@@ -612,7 +668,7 @@ def build_meta_features(
     # Skip when --no-rolling-hit-rate is set (not available at inference time)
     if not no_rolling_hit_rate:
         lag = contract.label.horizon_bars
-        hit_rate = _compute_rolling_hit_rate(oof_preds, y_reg, window=20, lag=lag).reshape(-1, 1)
+        hit_rate = _compute_rolling_hit_rate(oof_preds, y_target, window=20, lag=lag).reshape(-1, 1)
         meta_features.append(hit_rate)
         meta_names.append("rolling_hit_rate_20")
     else:
@@ -640,7 +696,7 @@ def build_meta_features(
         output_path,
         X=X_stage2,
         y=y_binary,
-        y_reg=y_reg,
+        y_reg=y_target if not is_binary else y_binary.astype(np.float64),
         oof_preds=oof_preds,
         meta_feature_names=np.array(meta_names, dtype=str),
         feature_names=np.array(stage2_feature_names, dtype=str),
@@ -681,6 +737,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Generate OOF features row-by-row with deque (PiT), mirroring runtime MetaSignalFilter exactly",
     )
+    ap.add_argument(
+        "--mode",
+        choices=["regression", "binary"],
+        default="regression",
+        help="Stage 1 mode: regression (Huber, continuous) or binary (drop-timeout, probability). Default: regression",
+    )
     args = ap.parse_args(argv)
 
     build_meta_features(
@@ -694,6 +756,7 @@ def main(argv: list[str] | None = None) -> int:
         purge_bars=args.purge_bars,
         embargo_bars=args.embargo_bars,
         pit_cv=args.pit_cv,
+        mode=args.mode,
     )
     return 0
 

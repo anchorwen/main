@@ -9,13 +9,15 @@ dataset:
 
 label:
   contract_id: "label-regression-barrier-2.0.0"
-  sl_atr_mult: 2.0
-  tp_atr_mult: 3.5
+  sl_atr_mult: 3.0
+  tp_atr_mult: 1.5
   horizon_bars: 12
-  profitability_calibrated: false
-  spread_pips: 30
-  slippage_pips: 10
-  pip_value: 0.01
+  profitability_calibrated: true
+  label_mapping: null  # regression — keep all samples including timeout
+  spread_points: 30
+  slippage_points: 10
+  tick_size: 0.001
+  tick_value: 0.01
 
 architecture:
   type: "lightgbm"

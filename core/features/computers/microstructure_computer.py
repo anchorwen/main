@@ -73,10 +73,14 @@ class MicrostructureFeatureComputer:
 
     # ── Backward-compatible single-bar API ──────────────────────────────
 
-    def compute_all(self) -> dict[str, float]:
+    def compute_all(self, *, reference_time: datetime | None = None) -> dict[str, float]:
         """Compute 9 features from the latest M5 bar + tick snapshot.
 
         Backward-compatible with existing code that expects a dict.
+
+        Args:
+            reference_time: Optional datetime for backtest/historical mode.
+                When None (default), uses datetime.now(UTC) for live trading.
         """
         result: dict[str, float] = {}
         rates = self._fetch_m5_rates(2)
@@ -85,18 +89,26 @@ class MicrostructureFeatureComputer:
         else:
             self._compute_ohlc_features_from_row(rates[-1], rates[-2][4], result)
 
-        self._compute_tick_features(result)
+        self._compute_tick_features(result, reference_time=reference_time)
         self._compute_cross_features(result)
         return result
 
     # ── Multi-bar sequence API ──────────────────────────────────────────
 
-    def compute_sequence(self, n_bars: int = DEFAULT_SEQ_LEN, timeframe: str = "M5") -> np.ndarray:
+    def compute_sequence(
+        self,
+        n_bars: int = DEFAULT_SEQ_LEN,
+        timeframe: str = "M5",
+        *,
+        reference_time: datetime | None = None,
+    ) -> np.ndarray:
         """Compute per-bar 9-feature sequence for model inference.
 
         Args:
             n_bars: Number of bars in the sequence (default 32).
             timeframe: "M5" | "M15" | "H1" | "H4" (M15/H1/H4 are M5-resampled).
+            reference_time: Optional datetime for backtest mode.
+                When None, uses datetime.now(UTC) for live trading.
 
         Returns:
             (n_bars, 9) float32 array in chronological order (oldest→newest).
@@ -133,7 +145,7 @@ class MicrostructureFeatureComputer:
         usable = min(requested_bars, max(1, available))
 
         # Tick features (single snapshot, replicated across bars)
-        tick_features = self._compute_tick_features_dict()
+        tick_features = self._compute_tick_features_dict(reference_time=reference_time)
 
         # Cross-asset per-bar returns
         cross_returns = self._compute_cross_sequence(usable, ratio)
@@ -157,11 +169,17 @@ class MicrostructureFeatureComputer:
 
     # ── Batch multi-TF sequence API ─────────────────────────────────────
 
-    def compute_all_sequences(self, n_bars: int = DEFAULT_SEQ_LEN) -> dict[str, np.ndarray]:
+    def compute_all_sequences(
+        self, n_bars: int = DEFAULT_SEQ_LEN, *, reference_time: datetime | None = None
+    ) -> dict[str, np.ndarray]:
         """Compute (n_bars, 9) sequences for M5, M15, H1, H4 in one shot.
 
         Fetches M5 bars once (max needed = n_bars*48 for H4), resamples
         per timeframe, and shares tick/cross-asset snapshots across TFs.
+
+        Args:
+            reference_time: Optional datetime for backtest mode.
+                When None, uses datetime.now(UTC) for live trading.
         """
         max_ratio = max(TF_BAR_RATIO.values())  # 48 for H4
         m5_needed = n_bars * max_ratio + 2
@@ -174,7 +192,7 @@ class MicrostructureFeatureComputer:
         highs = np.array([float(r[2]) for r in rates], dtype=np.float64)
         lows = np.array([float(r[3]) for r in rates], dtype=np.float64)
 
-        tick_features = self._compute_tick_features_dict()
+        tick_features = self._compute_tick_features_dict(reference_time=reference_time)
         cross_raw = self._compute_cross_raw(n_bars, max_ratio)
 
         result: dict[str, np.ndarray] = {}
@@ -352,9 +370,20 @@ class MicrostructureFeatureComputer:
     def _fill_ohlc_defaults(result: dict) -> None:
         result.update({"tick_return": 0.0, "hl_ratio": 0.0, "co_ratio": 0.0})
 
-    def _compute_tick_features(self, result: dict[str, float]) -> None:
+    def _compute_tick_features(
+        self, result: dict[str, float], *, reference_time: datetime | None = None
+    ) -> None:
+        # Use reference_time when provided (backtest/historical), fall back to
+        # datetime.now(UTC) in live mode.  Always timezone-aware to prevent
+        # naive/aware mixing (护栏 3: spatio-temporal consistency).
+        if reference_time is None:
+            _now = datetime.now(UTC)
+        elif reference_time.tzinfo is None:
+            _now = reference_time.replace(tzinfo=UTC)
+        else:
+            _now = reference_time
         try:
-            from_date = datetime.now() - timedelta(minutes=5)
+            from_date = _now - timedelta(minutes=5)
             ticks = self._mt5.copy_ticks_from(
                 self._symbol, from_date, 5000, self._mt5.COPY_TICKS_ALL
             )
@@ -385,9 +414,11 @@ class MicrostructureFeatureComputer:
         duration = t1 - t0
         result["tick_velocity"] = float(len(ticks) / duration) if duration > 0 else 0.0
 
-    def _compute_tick_features_dict(self) -> dict[str, float]:
+    def _compute_tick_features_dict(
+        self, *, reference_time: datetime | None = None
+    ) -> dict[str, float]:
         result: dict[str, float] = {}
-        self._compute_tick_features(result)
+        self._compute_tick_features(result, reference_time=reference_time)
         return result
 
     def _compute_cross_features(self, result: dict[str, float]) -> None:

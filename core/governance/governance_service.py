@@ -23,6 +23,7 @@ class GovernanceService:
     STATUS_RETIRED = "retired"
 
     VALID_TRANSITIONS = {
+        "shadow": {"candidate", "probation", "frozen", "retired"},
         "candidate": {"live", "probation", "retired"},
         "live": {"probation", "frozen", "retired"},
         "probation": {"live", "frozen", "retired"},

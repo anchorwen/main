@@ -387,7 +387,7 @@ class BrainQualityEngine:
         trades = sample_count
 
         # ── Hard gate: auto-retirement ──
-        if trades >= 100 and cumulative_pnl < 0 and (wr < 0.30 or (pf > 0 and pf < 0.60)):
+        if trades >= 100 and cumulative_pnl < 0 and (wr < 0.30 or pf < 0.60):
             return 0.0
 
         tier_weight = TIER_VOTE_WEIGHT.get(tier, 1.0)
@@ -412,14 +412,6 @@ class BrainQualityEngine:
         else:
             weight = 0.0
 
-        # ── Candidate gate: very low sample count → shadow vote ──
-        if trades < 10:
-            weight = min(weight, 0.5)
-
-        # Probation floor: lots of trades but negative PnL
-        if trades >= 100 and cumulative_pnl < 0:
-            weight = min(weight, 0.5)
-
         # Sharpe continuous adjustment: ±0.15 range
         sharpe_bend = math.tanh(sharpe / 3.0)
         weight += sharpe_bend * 0.15
@@ -427,5 +419,14 @@ class BrainQualityEngine:
         # Drawdown penalty
         if max_drawdown > 3.0:
             weight *= 0.85
+
+        # ── Candidate gate: very low sample count → shadow vote ──
+        if trades < 10:
+            weight = min(weight, 0.5)
+
+        # Probation floor: lots of trades but negative PnL (applies AFTER
+        # sharpe/drawdown so adjustments can't push weight above the cap)
+        if trades >= 100 and cumulative_pnl < 0:
+            weight = min(weight, 0.5)
 
         return round(max(0.0, min(3.0, weight)), 2)

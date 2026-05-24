@@ -124,7 +124,7 @@ def train_mlp(
 
     from core.brains.online_mlp_model import _TorchOnlineMLP
 
-    model = _TorchOnlineMLP(n_features, n_classes)
+    model: Any = _TorchOnlineMLP(n_features, n_classes)
     model.train()
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)

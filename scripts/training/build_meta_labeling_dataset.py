@@ -66,6 +66,17 @@ BREAKEVEN_ATR_MULT = 1.0
 STOP_ATR_MULT = 1.5
 PARALLEL_FEATURE_NAME = "ou_z_entry"  # 50th feature: z_entry threshold from signal universe
 
+# OU process features available at signal fire (PIT-safe — computed from
+# the same rolling window that triggered the signal, no look-ahead).
+OU_FEATURE_NAMES = ["ou_z_score", "ou_half_life", "ou_theta"]
+
+# Barrier meta-label config — calibrated SL=3.0/TP=1.5, 12-bar horizon
+# These are the same parameters as the calibrated barrier labels used in
+# train.npz, but applied ONLY at OU signal-trigger moments.
+BARRIER_SL_ATR_MULT = 3.0
+BARRIER_TP_ATR_MULT = 1.5
+BARRIER_HORIZON_BARS = 12
+
 
 def load_ou_params(params_path: Path | None) -> dict[str, float]:
     """Load optimized OU params from arb_params JSON, or use defaults."""
@@ -356,6 +367,71 @@ def compute_meta_labels(
     return labeled
 
 
+def compute_barrier_labels(
+    signals: list[dict],
+    highs: np.ndarray,
+    lows: np.ndarray,
+    closes: np.ndarray,
+    atr_values: np.ndarray,
+) -> list[dict]:
+    """Compute triple-barrier labels (SL=3.0/TP=1.5) at OU signal entry points.
+
+    For each signal, walks forward bar-by-bar within a 12-bar horizon:
+      - TP hit first → label = 1
+      - SL hit first → label = -1
+      - Neither hit within horizon → label = 0 (timeout — dropped in binary mode)
+
+    Labels are stored in sig["barrier_label"].
+    Uses the same calibrated SL/TP multipliers as the main barrier training pipeline.
+    """
+    labeled: list[dict] = []
+    n = len(closes)
+
+    for sig in signals:
+        entry_idx = sig["entry_idx"]
+        direction = sig["direction"]
+        entry_price = sig["entry_price"]
+        atr = float(atr_values[entry_idx]) if entry_idx < len(atr_values) else 5.0
+        if atr <= 0:
+            atr = 5.0
+
+        tp_level = entry_price + direction * BARRIER_TP_ATR_MULT * atr
+        sl_level = entry_price - direction * BARRIER_SL_ATR_MULT * atr
+        horizon_end = min(entry_idx + BARRIER_HORIZON_BARS + 1, n)
+
+        tp_hit = False
+        sl_hit = False
+
+        for j in range(entry_idx + 1, horizon_end):
+            bar_high = highs[j]
+            bar_low = lows[j]
+            if direction == 1:
+                if bar_high >= tp_level:
+                    tp_hit = True
+                    break
+                if bar_low <= sl_level:
+                    sl_hit = True
+                    break
+            else:
+                if bar_low <= tp_level:
+                    tp_hit = True
+                    break
+                if bar_high >= sl_level:
+                    sl_hit = True
+                    break
+
+        if tp_hit:
+            barrier_label = 1
+        elif sl_hit:
+            barrier_label = -1
+        else:
+            barrier_label = 0  # timeout
+
+        labeled.append({**sig, "barrier_label": barrier_label})
+
+    return labeled
+
+
 def build_meta_dataset(
     signals_labeled: list[dict],
     ohlc: dict[str, np.ndarray],
@@ -363,10 +439,30 @@ def build_meta_dataset(
     micro_feature_names: list[str],
     *,
     warmup_bars: int = 500,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[str]]:
+    label_mode: str = "breakeven",
+    include_micro: bool = True,
+    include_z_entry_feature: bool = False,
+    include_ou_features: bool = False,
+) -> tuple[
+    np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[str]
+]:
     """Build feature matrix and label vectors at signal-fire moments.
 
-    Returns (X, y_breakeven, y_mfe_12bar, signal_pnl_r, timestamps, feature_names).
+    PIT (Point-in-Time) alignment: features are computed at entry_idx - 1
+    (the last COMPLETED bar before the signal fires), ensuring no look-ahead
+    bias from the signal bar itself.
+
+    Args:
+        label_mode: "breakeven" for MFE/breakeven proxy labels,
+                    "barrier" for SL=3.0/TP=1.5 triple-barrier labels.
+        include_micro: If False, only V9 40-dim features (no micro).
+        include_z_entry_feature: If True, append ou_z_entry as a feature.
+        include_ou_features: If True, append ou_z_score, ou_half_life, ou_theta
+            (the OU process state at signal fire). These are PIT-safe because
+            they were computed from the same window that triggered the signal.
+
+    Returns (X, y_breakeven, y_mfe_12bar, signal_pnl_r, y_direction, y_barrier,
+             timestamps, feature_names).
     """
     o = ohlc["open"]
     h = ohlc["high"]
@@ -380,13 +476,21 @@ def build_meta_dataset(
     v9_feature_names = sorted(
         compute_features_at_bar(o, h, l, c, v, min(warmup_bars, n_bars - 1)).keys()
     )
-    all_feature_names = v9_feature_names + micro_feature_names + [PARALLEL_FEATURE_NAME]
+    if include_micro:
+        all_feature_names = v9_feature_names + micro_feature_names
+    else:
+        all_feature_names = list(v9_feature_names)
+    if include_z_entry_feature:
+        all_feature_names.append(PARALLEL_FEATURE_NAME)
+    if include_ou_features:
+        all_feature_names.extend(OU_FEATURE_NAMES)
 
     X_rows: list[list[float]] = []
     y_breakeven: list[int] = []
     y_mfe_12bar: list[float] = []
     y_signal_pnl: list[float] = []
     y_direction: list[int] = []
+    y_barrier: list[int] = []
     ts_rows: list[float] = []
     matched = 0
     dropped_nan = 0
@@ -394,28 +498,40 @@ def build_meta_dataset(
 
     for sig in signals_labeled:
         entry_idx = sig["entry_idx"]
-        if entry_idx < warmup_bars or entry_idx >= n_bars:
+        # PIT alignment: features at the last COMPLETED bar before signal fires.
+        # OU signal is computed from prices[entry_idx - window : entry_idx],
+        # which uses data up to bar entry_idx-1. Features must match this window.
+        feature_bar = max(0, entry_idx - 1)
+        if feature_bar < warmup_bars or entry_idx >= n_bars:
             skipped_warmup += 1
             continue
 
-        # Check micro features
-        micro_vec = x_micro[entry_idx]
-        if np.any(np.isnan(micro_vec)):
-            dropped_nan += 1
-            continue
+        # Check micro features (at feature_bar for PIT consistency)
+        if include_micro:
+            micro_vec = x_micro[feature_bar]
+            if np.any(np.isnan(micro_vec)):
+                dropped_nan += 1
+                continue
 
-        # Compute V9 features
-        feat_vec_dict = compute_features_at_bar(o, h, l, c, v, entry_idx)
+        # Compute V9 features at the PIT-aligned bar
+        feat_vec_dict = compute_features_at_bar(o, h, l, c, v, feature_bar)
         feat_vec = [float(feat_vec_dict.get(fn, 0.0)) for fn in v9_feature_names]
-        feat_vec.extend(float(mv) for mv in micro_vec)
-        feat_vec.append(float(sig.get("z_entry", 1.3)))  # 50th feature: z_entry threshold
+        if include_micro:
+            feat_vec.extend(float(mv) for mv in micro_vec)
+        if include_z_entry_feature:
+            feat_vec.append(float(sig.get("z_entry", 1.3)))
+        if include_ou_features:
+            feat_vec.append(float(sig.get("z_score", 0.0)))
+            feat_vec.append(float(sig.get("half_life", 0.0)))
+            feat_vec.append(float(sig.get("theta", 0.0)))
         X_rows.append(feat_vec)
 
-        y_breakeven.append(sig["hit_breakeven"])
-        y_mfe_12bar.append(sig["mfe_12bar"])
-        y_signal_pnl.append(sig["signal_pnl_r"])
+        y_breakeven.append(sig.get("hit_breakeven", 0))
+        y_mfe_12bar.append(sig.get("mfe_12bar", 0.0))
+        y_signal_pnl.append(sig.get("signal_pnl_r", 0.0))
         y_direction.append(sig["direction"])
-        ts_rows.append(float(ts_epoch[entry_idx]))
+        y_barrier.append(sig.get("barrier_label", -1))
+        ts_rows.append(float(ts_epoch[feature_bar]))
         matched += 1
 
     print(
@@ -428,9 +544,10 @@ def build_meta_dataset(
     y_mfe = np.array(y_mfe_12bar, dtype=np.float64)
     y_pnl = np.array(y_signal_pnl, dtype=np.float64)
     y_dir = np.array(y_direction, dtype=np.int8)
+    y_bar = np.array(y_barrier, dtype=np.int32)
     timestamps = np.array(ts_rows, dtype=np.float64)
 
-    return X, y_be, y_mfe, y_pnl, y_dir, timestamps, all_feature_names
+    return X, y_be, y_mfe, y_pnl, y_dir, y_bar, timestamps, all_feature_names
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────
@@ -462,7 +579,33 @@ def build_parser() -> argparse.ArgumentParser:
         "--z-entry-list",
         type=str,
         default=None,
-        help="Comma-separated z_entry values for parallel universe sampling (e.g. '1.9,1.95,2.0,2.05,2.1')",
+        help="Comma-separated z_entry values for parallel universe sampling (e.g. '1.9,1.95,2.0,2.05,2.1'). "
+        "DEPRECATED: parallel universes cause data leakage via overlapping feature windows.",
+    )
+    p.add_argument(
+        "--label-mode",
+        type=str,
+        default="breakeven",
+        choices=["breakeven", "barrier"],
+        help="Meta-label type: 'breakeven' (MFE/proxy, legacy) or 'barrier' (SL=3.0/TP=1.5, 12-bar, "
+        "triple-barrier binary labels for meta-labeling). Default: breakeven.",
+    )
+    p.add_argument(
+        "--no-micro",
+        action="store_true",
+        help="Skip ALL micro features (including XAU-local). Output pure 40-dim V9 features.",
+    )
+    p.add_argument(
+        "--no-z-entry-feature",
+        action="store_true",
+        help="Omit ou_z_entry from feature set (use when z_entry is constant).",
+    )
+    p.add_argument(
+        "--include-ou-features",
+        action="store_true",
+        default=False,
+        help="Include OU process features (z_score, half_life, theta) at signal fire. "
+        "These are PIT-safe and provide the model with signal-quality context.",
     )
     return p
 
@@ -489,13 +632,21 @@ def main(argv: list[str] | None = None) -> int:
     print(f"       {ohlc['n_bars']} bars loaded")
     closes = ohlc["close"]
 
+    use_micro = not args.no_micro
+    use_z_entry_feat = not args.no_z_entry_feature
+    is_barrier = args.label_mode == "barrier"
+
     # ── 3. Load cross-symbol data (optional) + precompute micro features ─
-    if args.no_cross_symbol:
+    if not use_micro:
+        print("[3/6] Skipping ALL micro features (--no-micro) — pure V9 40-dim")
+        print("[4/6] Skipping micro feature precomputation")
+        x_micro = np.zeros((ohlc["n_bars"], 0), dtype=np.float64)
+        micro_names: list[str] = []
+    elif args.no_cross_symbol:
         print("[3/6] Skipping cross-symbol data (--no-cross-symbol)")
         print("[4/6] Precomputing 6 XAU-local micro features...")
         cross_data = None
         x_micro_full = precompute_micro_features(ohlc, None)
-        # Only keep the 6 XAU-local micro features (first 6 columns)
         x_micro = x_micro_full[:, :6]
         micro_names = MICRO_FEATURE_NAMES_LOCAL
     else:
@@ -506,33 +657,22 @@ def main(argv: list[str] | None = None) -> int:
         x_micro = precompute_micro_features(ohlc, cross_data)
         micro_names = MICRO_FEATURE_NAMES
 
-    # ── 4. Extract OU signal trace (parallel universes or single) ──────
-    z_entry_list: list[float] | None = None
+    # ── 4. Extract OU signal trace (single universe ONLY) ───────────────
     if args.z_entry_list:
-        z_entry_list = [float(x.strip()) for x in args.z_entry_list.split(",")]
-        print(f"[5/6] Parallel Universe Sampling: z_entry ∈ {z_entry_list}")
-        signals = extract_parallel_universes(
-            closes,
-            ohlc["high"],
-            ohlc["low"],
-            ou_params,
-            z_entry_list,
-            use_kalman=not args.no_kalman,
-            use_trend_mute=not args.no_trend_mute,
+        print(
+            "[WARN] --z-entry-list is DEPRECATED. Parallel universe sampling causes "
+            "data leakage via overlapping feature windows across z_entry thresholds. "
+            "Use a single z_entry for clean, PIT-safe training data."
         )
-        for ze in z_entry_list:
-            n_ze = sum(1 for s in signals if abs(s["z_entry"] - ze) < 0.001)
-            print(f"       z_entry={ze}: {n_ze} signals")
-    else:
-        print("[5/6] Extracting OU signal trace (single universe)...")
-        signals = extract_signal_trace(
-            closes,
-            ohlc["high"],
-            ohlc["low"],
-            ou_params,
-            use_kalman=not args.no_kalman,
-            use_trend_mute=not args.no_trend_mute,
-        )
+    print("[5/6] Extracting OU signal trace (single universe, PIT-safe)...")
+    signals = extract_signal_trace(
+        closes,
+        ohlc["high"],
+        ohlc["low"],
+        ou_params,
+        use_kalman=not args.no_kalman,
+        use_trend_mute=not args.no_trend_mute,
+    )
     print(f"       {len(signals)} total signals")
 
     if len(signals) < 50:
@@ -554,31 +694,63 @@ def main(argv: list[str] | None = None) -> int:
         atr_values[i] = float(np.mean(tr_vals))
 
     # ── 5. Compute meta-labels ────────────────────────────────────────
-    signals_labeled = compute_meta_labels(signals, ohlc["high"], ohlc["low"], closes, atr_values)
-
-    be_hit = sum(1 for s in signals_labeled if s["hit_breakeven"])
-    sl_hit = sum(1 for s in signals_labeled if s["hit_sl"])
-    to = sum(1 for s in signals_labeled if s["timeout"])
-    print(f"       Breakeven hit: {be_hit} ({be_hit/len(signals_labeled):.1%})")
-    print(f"       SL hit: {sl_hit} ({sl_hit/len(signals_labeled):.1%})")
-    print(f"       Timeout: {to} ({to/len(signals_labeled):.1%})")
+    if is_barrier:
+        print("[5.1] Computing barrier labels (SL=3.0/TP=1.5, 12-bar horizon)...")
+        signals_labeled = compute_barrier_labels(
+            signals, ohlc["high"], ohlc["low"], closes, atr_values
+        )
+        tp_count = sum(1 for s in signals_labeled if s["barrier_label"] == 1)
+        sl_count = sum(1 for s in signals_labeled if s["barrier_label"] == -1)
+        to_count = sum(1 for s in signals_labeled if s["barrier_label"] == 0)
+        print(f"       TP hit: {tp_count} ({tp_count/len(signals_labeled):.1%})")
+        print(f"       SL hit: {sl_count} ({sl_count/len(signals_labeled):.1%})")
+        print(f"       Timeout: {to_count} ({to_count/len(signals_labeled):.1%})")
+    else:
+        signals_labeled = compute_meta_labels(
+            signals, ohlc["high"], ohlc["low"], closes, atr_values
+        )
+        be_hit = sum(1 for s in signals_labeled if s["hit_breakeven"])
+        sl_hit = sum(1 for s in signals_labeled if s["hit_sl"])
+        to = sum(1 for s in signals_labeled if s["timeout"])
+        print(f"       Breakeven hit: {be_hit} ({be_hit/len(signals_labeled):.1%})")
+        print(f"       SL hit: {sl_hit} ({sl_hit/len(signals_labeled):.1%})")
+        print(f"       Timeout: {to} ({to/len(signals_labeled):.1%})")
 
     # ── 6. Build feature matrix ───────────────────────────────────────
-    n_micro = len(micro_names)
-    print(f"[6/6] Building {40 + n_micro + 1}-dim features at signal-fire moments...")
-    X, y_be, y_mfe, y_pnl, y_dir, timestamps, feature_names = build_meta_dataset(
-        signals_labeled, ohlc, x_micro, micro_names, warmup_bars=args.warmup_bars
+    n_dim = 40 + (len(micro_names) if use_micro else 0) + (1 if use_z_entry_feat else 0)
+    print(f"[6/6] Building {n_dim}-dim features at signal-fire moments (PIT-aligned)...")
+    X, y_be, y_mfe, y_pnl, y_dir, y_bar, timestamps, feature_names = build_meta_dataset(
+        signals_labeled,
+        ohlc,
+        x_micro,
+        micro_names,
+        warmup_bars=args.warmup_bars,
+        label_mode=args.label_mode,
+        include_micro=use_micro,
+        include_z_entry_feature=use_z_entry_feat,
+        include_ou_features=args.include_ou_features,
     )
 
     if len(X) < 50:
         print(f"[ERROR] Only {len(X)} matched signals — insufficient for training")
         return 1
 
-    be_rate = float((y_be == 1).mean())
     print(f"       Features: {X.shape[1]}, Signals matched: {X.shape[0]}")
-    print(f"       Breakeven rate: {be_rate:.1%}")
-    print(f"       Mean MFE: {float(np.mean(y_mfe)):.4f} ATR")
     print(f"       Long/Short: {int(np.sum(y_dir == 1))}/{int(np.sum(y_dir == -1))}")
+
+    if is_barrier:
+        # barrier labels are {-1 (SL), 0 (timeout), 1 (TP)}
+        tp_rate = float((y_bar == 1).mean())
+        sl_rate = float((y_bar == -1).mean())
+        to_rate = float((y_bar == 0).mean())
+        win_rate_conditional = float((y_bar[y_bar != 0] == 1).mean()) if (y_bar != 0).any() else 0.0
+        print(f"       TP rate: {tp_rate:.1%}, SL rate: {sl_rate:.1%}, Timeout: {to_rate:.1%}")
+        print(f"       Win rate (ex-timeout): {win_rate_conditional:.1%}")
+        print(f"       Base rate P(TP|signal): {tp_rate:.1%} (target OOF center: 0.60-0.65)")
+    else:
+        be_rate = float((y_be == 1).mean())
+        print(f"       Breakeven rate: {be_rate:.1%}")
+        print(f"       Mean MFE: {float(np.mean(y_mfe)):.4f} ATR")
 
     # ── 7. Split and save ─────────────────────────────────────────────
     out_dir = Path(args.output_dir)
@@ -588,35 +760,55 @@ def main(argv: list[str] | None = None) -> int:
     split_idx = int(len(X) * (1 - args.val_split))
 
     for split_name, sl in [("train", slice(0, split_idx)), ("val", slice(split_idx, len(X)))]:
-        np.savez_compressed(
-            out_dir / f"{split_name}.npz",
-            X=X[sl],
-            y_breakeven=y_be[sl],
-            y_mfe_12bar=y_mfe[sl],
-            y_signal_pnl=y_pnl[sl],
-            y_direction=y_dir[sl],
-            timestamps=timestamps[sl],
-            feature_names=np.array(feature_names),
-            schema="meta_labeling_ou_sniper_v1",
-        )
+        save_kwargs: dict[str, object] = {
+            "X": X[sl],
+            "y": y_bar[
+                sl
+            ],  # barrier labels: {-1, 0, 1} — training pipeline applies drop_timeout_binary
+            "timestamps": timestamps[sl],
+            "feature_names": np.array(feature_names),
+            "schema": "meta_labeling_barrier_v1",
+        }
+        if not is_barrier:
+            save_kwargs["y_breakeven"] = y_be[sl]
+            save_kwargs["y_mfe_12bar"] = y_mfe[sl]
+            save_kwargs["y_signal_pnl"] = y_pnl[sl]
+            save_kwargs["y_direction"] = y_dir[sl]
+            save_kwargs["schema"] = "meta_labeling_ou_sniper_v1"
+        np.savez_compressed(out_dir / f"{split_name}.npz", **save_kwargs)
 
     print(f"       Train: {split_idx} signals")
     print(f"       Val:   {len(X) - split_idx} signals")
     print(f"       Saved to: {out_dir}")
 
     # ── 8. Meta ───────────────────────────────────────────────────────
-    meta = {
-        "schema_version": "meta_labeling_dataset.v1",
+    meta: dict[str, object] = {
+        "schema_version": "meta_labeling_dataset.v2",
         "base_alpha": "OU_Params_V6_Sniper",
         "ou_params": ou_params,
+        "label_mode": args.label_mode,
         "n_signals_raw": len(signals),
         "n_signals_matched": int(X.shape[0]),
         "n_features": int(X.shape[1]),
         "feature_names": feature_names,
-        "breakeven_rate": round(float(be_rate), 4),
-        "mean_mfe_12bar": round(float(np.mean(y_mfe)), 4),
-        "label_contract": "Meta-Label: OU signal → breakeven proxy within 12 bars",
+        "pit_aligned": True,
+        "pit_feature_bar": "entry_idx - 1",
     }
+    if is_barrier:
+        meta["label_contract"] = (
+            "Meta-Label Barrier: OU signal → SL=3.0/TP=1.5 triple-barrier binary label"
+        )
+        meta["barrier_sl_atr_mult"] = BARRIER_SL_ATR_MULT
+        meta["barrier_tp_atr_mult"] = BARRIER_TP_ATR_MULT
+        meta["barrier_horizon_bars"] = BARRIER_HORIZON_BARS
+        meta["tp_rate"] = round(tp_rate, 4)
+        meta["sl_rate"] = round(sl_rate, 4)
+        meta["timeout_rate"] = round(to_rate, 4)
+        meta["win_rate_ex_timeout"] = round(win_rate_conditional, 4)
+    else:
+        meta["label_contract"] = "Meta-Label: OU signal → breakeven proxy within 12 bars"
+        meta["breakeven_rate"] = round(float(be_rate), 4)
+        meta["mean_mfe_12bar"] = round(float(np.mean(y_mfe)), 4)
     with open(out_dir / "dataset_meta.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2, ensure_ascii=False)
 
