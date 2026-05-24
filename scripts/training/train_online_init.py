@@ -185,7 +185,7 @@ def compute_features(data: np.ndarray) -> np.ndarray:
     hurst = np.zeros(n)
     for i in range(window, n):
         w = c[i - window : i + 1]
-        r = np.max(w) - np.min(w)
+        r: float = np.max(w) - np.min(w)
         s = np.std(w) + eps
         hurst[i] = np.log(r / s) / np.log(window) if r > 0 else 0.0
 

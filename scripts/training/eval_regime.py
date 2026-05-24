@@ -28,7 +28,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -158,9 +158,13 @@ def evaluate_per_regime(
         return {"error": f"ATR feature index {atr_feature_index} >= n_features {X.shape[1]}"}
 
     atr_values = X[:, atr_feature_index]
-    p_low = np.percentile(atr_values, [bounds_low[0] * 100, bounds_low[1] * 100])
-    p_normal = np.percentile(atr_values, [bounds_normal[0] * 100, bounds_normal[1] * 100])
-    p_high = np.percentile(atr_values, [bounds_high[0] * 100, bounds_high[1] * 100])
+    p_low = cast(np.ndarray, np.percentile(atr_values, [bounds_low[0] * 100, bounds_low[1] * 100]))
+    p_normal = cast(
+        np.ndarray, np.percentile(atr_values, [bounds_normal[0] * 100, bounds_normal[1] * 100])
+    )
+    p_high = cast(
+        np.ndarray, np.percentile(atr_values, [bounds_high[0] * 100, bounds_high[1] * 100])
+    )
 
     mask_low = (atr_values >= p_low[0]) & (atr_values < p_low[1])
     mask_normal = (atr_values >= p_normal[0]) & (atr_values < p_normal[1])

@@ -70,6 +70,7 @@ Dataset CPCV CustomObj  Trainer    EvaluationReport
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |--------|------|--------|--------|---------|------------|
+| FIX-20260524-012 | 2026-05-24 | cursor-agent | — | Training scripts mypy cleanup: eval_regime.py cast(np.ndarray) for np.percentile (9 err), label_builder_d1.py widened h4 type annotation (2 err), train_from_csv.py numpy scalar annotations (4 err), train_online_init.py r type annotation (1 err), build_profitable_labels.py timestamp arg-type ignore (1 err). 17 errors → 0. | RC-02 |
 | FIX-20260524-011 | 2026-05-24 | cursor-agent | — | Variable shadowing fix in calibrate_sl_tp.py: renamed r→res in two result-printing loops. Mypy inferred r as int from earlier enumerate/range, breaking dict indexing. | RC-02 |
 | FIX-20260524-010 | 2026-05-24 | cursor-agent | — | Torch trainer mypy cleanup: fixed 33 errors across deep_res_mlp_trainer.py (17→0), transformer_trainer.py (15→0), xgb_trainer.py (1→0). Used nn.Module annotations at model construction sites — zero runtime changes. | RC-02 |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing, and suppressors | type-confusion |

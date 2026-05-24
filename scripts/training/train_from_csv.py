@@ -217,8 +217,8 @@ def _feature_series_for_tf(
         y = win[1:]
         x = win[:-1]
         xm, ym = np.mean(x), np.mean(y)
-        num = np.sum((x - xm) * (y - ym))
-        den = np.sum((x - xm) ** 2)
+        num: float = np.sum((x - xm) * (y - ym))
+        den: float = np.sum((x - xm) ** 2)
         if den > eps:
             beta = np.clip(num / den, 1e-8, 0.99999999)
             ou_theta[i] = -np.log(beta)
@@ -229,7 +229,7 @@ def _feature_series_for_tf(
         win = c[i - 19 : i + 1]
         dev = win - np.mean(win)
         cum = np.cumsum(dev)
-        r = np.max(cum) - np.min(cum)
+        r: float = np.max(cum) - np.min(cum)
         s = np.std(win)
         if s > eps:
             hurst[i] = np.log(r / s) / np.log(20)
@@ -624,7 +624,7 @@ def main() -> int:
     X, y = build_features_from_csv(opens, highs, lows, closes, volumes, labels)
 
     # NaN check
-    nan_count = np.sum(np.isnan(X))
+    nan_count = int(np.sum(np.isnan(X)))
     if nan_count > 0:
         print(f"  WARNING: {nan_count} NaN values in features — filling with 0")
         X = np.nan_to_num(X, nan=0.0)

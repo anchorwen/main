@@ -34,7 +34,7 @@ import argparse
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -407,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
         data["high"],
         data["low"],
         data["close"],
-        data["timestamp"],
+        cast(list[str], data["timestamp"]),
         sl_atr_mult=sl_sel,
         tp_atr_mult=tp_sel,
         horizon_bars=args.horizon,

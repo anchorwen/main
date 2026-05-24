@@ -2926,3 +2926,29 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
   - Avoid reusing short names (`r`, `outcome`) for values of different types within the same function
   - Use descriptive names for dict/object values vs primitive loop counters
 - **Dependents Checked**: verify.py --quick passes (mypy + ruff). Both files removed from mypy_baseline.json. Baseline: 91→69 errors (22 reduction).
+
+### FIX-20260524-012
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: training
+- **Scope**: mypy, type-safety, training-scripts
+- **Files**:
+  - `scripts/training/eval_regime.py` (MODIFIED: cast(np.ndarray) for np.percentile returning floating[Any])
+  - `scripts/training/label_builder_d1.py` (MODIFIED: widened h4_bars_for_this_day type to accept list[tuple] | ndarray)
+  - `scripts/training/train_from_csv.py` (MODIFIED: num/den/r float annotations, nan_count int() wrap)
+  - `scripts/training/train_online_init.py` (MODIFIED: r float annotation in Hurst computation)
+  - `scripts/training/build_profitable_labels.py` (MODIFIED: type: ignore[arg-type] for timestamp from heterogeneous dict)
+- **Description**: Batch E mypy type-safety cleanup for training scripts. Fixed 17 pre-existing errors:
+  - eval_regime.py: 9 errors → 0. np.percentile with list q parameter returns floating[Any] in numpy stubs instead of ndarray. Used cast(np.ndarray, ...) which has zero runtime overhead.
+  - label_builder_d1.py: 2 errors → 0. h4_by_date.get() returns list[tuple[float, float]] | None but _resolve_intra_bar_first expected np.ndarray | None. Widened type annotation — both types support len() and iteration.
+  - train_from_csv.py: 4 errors → 0. numpy scalar results from np.sum/np.max needed explicit type annotations. nan_count wrapped with int().
+  - train_online_init.py: 1 error → 0. np.max - np.min result needed float annotation.
+  - build_profitable_labels.py: 1 error → 0. Heterogeneous dict return from load_ohlc_csv caused mypy to infer timestamp type as ndarray | list | int. Suppressed with targeted type: ignore.
+
+- **Root Cause**: RC-02 (type-confusion: numpy stubs limitations with percentile/list combination, heterogeneous dict type inference, numpy scalar float/int ambiguity)
+- **Prevention**:
+  - Use cast() for numpy functions with ambiguous stubs (e.g. np.percentile with list q)
+  - Use explicit type annotations for numpy scalar computation results
+  - Widen function parameter types to accept duck-type-compatible types (list | ndarray)
+- **Dependents Checked**: verify.py --quick passes (mypy + ruff). All 5 files removed from mypy_baseline.json. Baseline: 69→52 errors (17 reduction).

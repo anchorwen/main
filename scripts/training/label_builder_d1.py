@@ -209,7 +209,7 @@ def _resolve_intra_bar_first(
     d1_bar_close: float,
     level_a: float,
     level_b: float,
-    h4_bars_for_this_day: np.ndarray | None = None,
+    h4_bars_for_this_day: np.ndarray | list[tuple[float, float]] | None = None,
 ) -> str:
     """Determine which of two barrier levels was hit first within a D1 bar.
 

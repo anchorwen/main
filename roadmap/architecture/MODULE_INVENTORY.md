@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-24T06:35:12Z
+> **自动生成**: 2026-05-24T06:47:18Z
 > **扫描模块数**: 443
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -630,7 +630,7 @@
 | `e2e_pipeline_validation.py` | ✅ active | — | 9 | 539 | — | |
 | `eval_alignment.py` | ✅ active | — | 9 | 318 | — | |
 | `eval_ensemble_baselines.py` | ✅ active | — | 2 | 147 | — | |
-| `eval_regime.py` | ✅ active | — | 8 | 357 | — | |
+| `eval_regime.py` | ✅ active | — | 8 | 361 | — | |
 | `eval_tf_comparison.py` | ✅ active | — | 11 | 253 | — | |
 | `export_mt5_data.py` | ✅ active | — | 2 | 143 | — | |
 | `generate_batch_plan.py` | ✅ active | — | 5 | 355 | — | |
