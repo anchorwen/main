@@ -44,7 +44,7 @@ class TestAlphaPerformanceSnapshot:
         with pytest.raises(ValueError):
             AlphaPerformanceSnapshot("", {})
         with pytest.raises(ValueError):
-            AlphaPerformanceSnapshot("alpha1", [])  # type: ignore[arg-type]
+            AlphaPerformanceSnapshot("alpha1", [])
 
 
 class TestAlphaPerformanceStore:

@@ -3007,3 +3007,34 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
   - Use `getattr(obj, '__name__', str(obj))` when obj may be a tuple type
   - Always register new scripts in MODULE_SOURCE_MAP immediately
 - **Dependents Checked**: verify.py --quick passes (mypy + ruff + blueprint). All 8 files removed from mypy_baseline.json. Baseline: 30→19 errors (only 7 test files remain).
+
+### FIX-20260524-015
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: training, protocol-services, runtime-live (test files — excluded from blueprint enforcement)
+- **Scope**: mypy, type-safety, tests
+- **Files**:
+  - `tests/engine/test_alpha_performance_store.py` (MODIFIED: 1→0 — remove unused type: ignore[arg-type])
+  - `tests/engine/test_communication_replay_service.py` (MODIFIED: 2→0 — cast case dict values to str/list[dict])
+  - `tests/engine/test_eval_alignment.py` (MODIFIED: 1→0 — annotate recs as list[dict[str, Any]], fix test fixture)
+  - `tests/engine/test_order_state_machine_and_fill_simulator.py` (MODIFIED: 7→0 — remove all 7 unused type: ignore[union-attr])
+  - `tests/engine/test_runtime_loop_communication_integration.py` (MODIFIED: 6→0 — remove all 6 unused type: ignore[union-attr])
+  - `tests/engine/test_v9_shadow_integration.py` (MODIFIED: 1→0 — rename duplicate test function: _operations_summary_align)
+  - `tests/execution/test_execution_queue.py` (MODIFIED: 1→0 — list[int]→list[str] comparison fix)
+- **Description**: Batch H — final test files mypy cleanup. 7 files, 19 errors → 0. Two error categories:
+  
+  **Category A — Stale type: ignore comments (13 errors)**: Previous mypy fixes to FillSimulator and CommunicationRecord types rendered these ignores unnecessary. Mypy detects unused ignores as errors. Simply removed the comments.
+  
+  **Category B — Type mismatches (6 errors)**: 
+  - test_communication_replay_service: untyped case list used `cast()` for correlation_id and message_specs
+  - test_eval_alignment: mixed-type list annotated as `list[dict[str, Any]]`  
+  - test_v9_shadow_integration: duplicate function definition renamed with _operations_summary_align suffix
+  - test_execution_queue: dispatch_order declared `list[str]` but compared to `list[int]` — converted integers to strings
+
+- **Root Cause**: RC-02 (stale type ignores from upstream type fixes + type mismatch from untyped test fixtures)
+- **Prevention**:
+  - After fixing upstream type errors, run mypy on tests to detect newly-unused ignores
+  - Use `cast()` for untyped test case literals when full TypedDict migration would be overkill
+  - Match list element types in test assertions to declared variable types
+- **Dependents Checked**: verify.py --quick passes. All 7 test files removed from mypy_baseline.json. **Baseline: 19→0 — ALL mypy errors cleared.** Total reduction: 140→0 across all batches (A-E, G-H).

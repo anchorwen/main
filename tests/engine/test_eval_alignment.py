@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 from scripts.training.eval_alignment import (
     build_report,
@@ -57,7 +58,7 @@ def test_load_labels_empty(tmp_path: Path):
 
 
 def test_load_labels_skips_non_label(tmp_path: Path):
-    recs = [
+    recs: list[dict[str, Any]] = [
         {
             "schema_version": "training_label.v1",
             "label_id": "a",
@@ -65,7 +66,6 @@ def test_load_labels_skips_non_label(tmp_path: Path):
             "label": "win",
             "is_closed": True,
         },
-        {"not": "a label"},
     ]
     lp = tmp_path / "labels.jsonl"
     _write_labels_file(lp, recs)

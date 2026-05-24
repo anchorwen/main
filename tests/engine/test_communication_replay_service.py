@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timedelta
+from typing import Any, cast
 
 from core.contracts.domain.communication_envelope import CommunicationEnvelope
 from core.contracts.domain.dispatch_result import DispatchResult
@@ -803,8 +804,8 @@ def test_communication_replay_service_priority_contract_matrix(tmp_path):
     for case in cases:
         plan = build_correlation_priority_fixture(
             tmp_path,
-            correlation_id=case["correlation_id"],
-            message_specs=case["message_specs"],
+            correlation_id=str(case["correlation_id"]),
+            message_specs=cast(list[dict[str, Any]], case["message_specs"]),
         )
 
         assert plan["recommended_strategy"] == case["recommended_strategy"]

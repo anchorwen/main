@@ -558,7 +558,7 @@ def test_v9_shadow_real_batch_json_manager_sse_mirror_fields_align(monkeypatch):
     assert json_results["operations_posture"] == "action_required"
 
 
-def test_v9_shadow_real_batch_json_manager_sse_terminal_message_receipt_mirror_fields_align(
+def test_v9_shadow_real_batch_json_manager_sse_terminal_message_receipt_operations_summary_align(
     monkeypatch,
 ):
     args = type(

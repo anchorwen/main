@@ -85,8 +85,8 @@ class TestFillSimulator:
         sm.acknowledge(state)
         sm.accept(state)
         fill = FillSimulator().simulate(request, state, {"bid": 1999.0, "ask": 2000.0})
-        assert fill.price == 2000.0  # type: ignore[union-attr]
-        assert fill.quantity == 10.0  # type: ignore[union-attr]
+        assert fill.price == 2000.0
+        assert fill.quantity == 10.0
 
     def test_market_sell_uses_bid(self):
         sm = OrderStateMachine()
@@ -95,7 +95,7 @@ class TestFillSimulator:
         sm.acknowledge(state)
         sm.accept(state)
         fill = FillSimulator().simulate(request, state, {"bid": 1999.0, "ask": 2000.0})
-        assert fill.price == 1999.0  # type: ignore[union-attr]
+        assert fill.price == 1999.0
 
     def test_limit_order_not_executable_returns_none(self):
         sm = OrderStateMachine()
@@ -114,7 +114,7 @@ class TestFillSimulator:
         fill = FillSimulator(FillSimulationConfig(max_fill_ratio=0.25)).simulate(
             request, state, {"price": 2000.0}
         )
-        assert fill.quantity == 2.5  # type: ignore[union-attr]
+        assert fill.quantity == 2.5
 
     def test_partial_fill_by_available_quantity(self):
         sm = OrderStateMachine()
@@ -123,7 +123,7 @@ class TestFillSimulator:
         sm.acknowledge(state)
         sm.accept(state)
         fill = FillSimulator().simulate(request, state, {"price": 2000.0, "available_quantity": 3})
-        assert fill.quantity == 3.0  # type: ignore[union-attr]
+        assert fill.quantity == 3.0
 
     def test_slippage_buy_and_sell(self):
         sm = OrderStateMachine()
@@ -136,8 +136,8 @@ class TestFillSimulator:
         sm.acknowledge(sell_state)
         sm.accept(sell_state)
         simulator = FillSimulator(FillSimulationConfig(slippage_bps=10))
-        assert simulator.simulate(buy, buy_state, {"price": 100.0}).price == 100.1  # type: ignore[union-attr]
-        assert simulator.simulate(sell, sell_state, {"price": 100.0}).price == 99.9  # type: ignore[union-attr]
+        assert simulator.simulate(buy, buy_state, {"price": 100.0}).price == 100.1
+        assert simulator.simulate(sell, sell_state, {"price": 100.0}).price == 99.9
 
     def test_min_liquidity_quantity_blocks_small_fill(self):
         sm = OrderStateMachine()
