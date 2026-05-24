@@ -63,7 +63,7 @@ def build_report(
         records.append(rec)
     counts = Counter(str(r.get("ack_status", "other")).lower() for r in records)
     total = len(records)
-    rejected_reasons = Counter()
+    rejected_reasons: Counter[str] = Counter()
     for r in records:
         if str(r.get("ack_status", "")).lower() == "rejected":
             detail = r.get("detail", {}) or {}

@@ -1,4 +1,5 @@
 import json
+from collections.abc import Generator
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -41,9 +42,9 @@ def parse_sse_messages(stream_text: str) -> list[dict]:
     return list(iter_sse_messages(stream_text.splitlines()))
 
 
-def iter_sse_messages(lines) -> list[dict]:
+def iter_sse_messages(lines) -> Generator[dict, None, None]:
     event_name = None
-    data_lines = []
+    data_lines: list[str] = []
 
     def emit_message() -> dict | None:
         if event_name is None and not data_lines:
@@ -102,7 +103,7 @@ def _can_parse_terminal_sse_buffer(buffer: str) -> bool:
     )
 
 
-def iter_sse_messages_from_chunks(chunks) -> list[dict]:
+def iter_sse_messages_from_chunks(chunks) -> Generator[dict, None, None]:
     buffer = ""
 
     for chunk in chunks:

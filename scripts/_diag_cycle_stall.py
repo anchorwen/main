@@ -37,8 +37,8 @@ import threading as th
 
 
 def _position_count(mt5_obj, symbol, timeout=5.0):
-    result = [None]
-    exc_info = [None]
+    result: list[int | None] = [None]
+    exc_info: list[Exception | None] = [None]
 
     def _target():
         try:

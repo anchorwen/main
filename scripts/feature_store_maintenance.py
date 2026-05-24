@@ -259,7 +259,8 @@ def main(argv: list[str] | None = None) -> int:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(text, encoding="utf-8")
 
-    if isinstance(report.get("errors"), int) and report["errors"] > 0:
+    errors_val = report.get("errors", 0)
+    if isinstance(errors_val, int) and errors_val > 0:
         return 2
     return 0
 

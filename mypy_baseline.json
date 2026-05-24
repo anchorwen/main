@@ -1,12 +1,4 @@
 {
-  "apps/engine/v9_shadow_sse.py": 3,
-  "core/ledger/services/communication_operations_service.py": 1,
-  "scripts/_diag_cycle_stall.py": 2,
-  "scripts/feature_store_maintenance.py": 1,
-  "scripts/features/feature_store_warmer.py": 1,
-  "scripts/live_daily_recap.py": 1,
-  "scripts/trade_quality_report.py": 1,
-  "scripts/validators/journal_validator.py": 1,
   "tests/engine/test_alpha_performance_store.py": 1,
   "tests/engine/test_communication_replay_service.py": 2,
   "tests/engine/test_eval_alignment.py": 1,

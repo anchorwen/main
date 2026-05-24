@@ -310,6 +310,7 @@ class CommunicationOperationsService:
                 self.OPERATIONS_POSTURE_REVIEW_REQUIRED,
                 self.OPERATIONS_POSTURE_BLOCKED,
             }:
+                assert posture is not None
                 return posture, {
                     PAYLOAD_KEY_OPERATIONS_POSTURE_SOURCE: (
                         OPERATIONS_POSTURE_SOURCE_GOVERNANCE_SUMMARY

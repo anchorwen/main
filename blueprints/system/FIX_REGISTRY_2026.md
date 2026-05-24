@@ -2974,3 +2974,36 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
   - Keep homogeneous dict structures where possible; when not, use explicit type annotations (dict[str, dict]) to guide mypy
   - Register all backtest scripts in MODULE_SOURCE_MAP under their owning module
 - **Dependents Checked**: verify.py --quick passes (mypy + ruff + blueprint). Backtest script removed from mypy_baseline.json. Baseline: 52→30 errors (22 reduction).
+
+### FIX-20260524-014
+- **Date**: 2026-05-24
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live, features-service, protocol-services, feedback-performance, deployment-lifecycle
+- **Scope**: mypy, type-safety, module-source-map
+- **Files**:
+  - `apps/engine/v9_shadow_sse.py` (MODIFIED: 3 errors → 0 — Generator return type annotations, `data_lines: list[str]` annotation)
+  - `core/ledger/services/communication_operations_service.py` (MODIFIED: 1 error → 0 — `assert posture is not None` before return)
+  - `scripts/_diag_cycle_stall.py` (MODIFIED: 2 errors → 0 — `result: list[int|None]`, `exc_info: list[Exception|None]` annotations)
+  - `scripts/feature_store_maintenance.py` (MODIFIED: 1 error → 0 — extract `errors_val` for isinstance narrowing)
+  - `scripts/features/feature_store_warmer.py` (MODIFIED: 1 error → 0 — `s_val = float(np.std(...))`, `r: float` annotations)
+  - `scripts/live_daily_recap.py` (MODIFIED: 1 error → 0 — `# type: ignore[union-attr]` on sys.stdout.reconfigure)
+  - `scripts/trade_quality_report.py` (MODIFIED: 1 error → 0 — `rejected_reasons: Counter[str]` annotation)
+  - `scripts/validators/journal_validator.py` (MODIFIED: 1 error → 0 — `getattr(expected_type, '__name__', str(expected_type))` for tuple types)
+  - `scripts/check_blueprint_compliance.py` (MODIFIED: 8 MODULE_SOURCE_MAP entries across runtime_live, features_service, protocol_services, feedback_performance)
+- **Description**: Batch G — final non-test scripts mypy cleanup. 8 files, 11 errors → 0. Each error type represented a different mypy pattern:
+  - Generator functions returning incorrect type (`-> list[dict]` on generator → `-> Generator[dict, None, None]`)
+  - Untyped empty list inferred as `list[None]` → annotated `list[int|None]` etc.
+  - numpy scalar assignment to float → explicit `float()` conversion
+  - Heterogeneous dict `.get()` return type for isinstance narrowing → extract intermediate variable
+  - `tuple` type having no `__name__` attribute → `getattr(..., '__name__', str(...))`
+  - Missing Counter type parameter → `Counter[str]`
+  - `Any | None` return where `str` expected → `assert ... is not None` guard
+- **Root Cause**: RC-02 (type-confusion across 8 distinct patterns: generator-vs-list return, untyped list inference, numpy scalar, dict union access, tuple has no __name__, untyped Counter, Optional[str] narrowing)
+- **Prevention**:
+  - Use `Generator[YieldT, SendT, ReturnT]` for all generator functions
+  - Explicitly annotate empty collections: `data_lines: list[str] = []`
+  - Convert numpy scalars with `float()` at assignment to `float`-typed variables
+  - Use `getattr(obj, '__name__', str(obj))` when obj may be a tuple type
+  - Always register new scripts in MODULE_SOURCE_MAP immediately
+- **Dependents Checked**: verify.py --quick passes (mypy + ruff + blueprint). All 8 files removed from mypy_baseline.json. Baseline: 30→19 errors (only 7 test files remain).

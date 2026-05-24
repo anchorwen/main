@@ -68,7 +68,7 @@ def validate_journal_record(rec: dict[str, Any]) -> tuple[bool, list[str]]:
             errors.append(f"{tag} missing required field: {field}")
         elif not isinstance(value, expected_type):
             errors.append(
-                f"{tag} {field}: expected {expected_type.__name__}, got {type(value).__name__}"
+                f"{tag} {field}: expected {getattr(expected_type, '__name__', str(expected_type))}, got {type(value).__name__}"
             )
 
     # Optional field type checks

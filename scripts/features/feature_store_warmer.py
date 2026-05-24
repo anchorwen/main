@@ -130,8 +130,8 @@ def _hurst(price_arr, max_lag=HURST_MAX_LAG):
             chunk = returns[s * lag : (s + 1) * lag]
             mean = np.mean(chunk)
             cum_dev = np.cumsum(chunk - mean)
-            r = np.max(cum_dev) - np.min(cum_dev)
-            s_val = np.std(chunk)
+            r: float = float(np.max(cum_dev) - np.min(cum_dev))
+            s_val = float(np.std(chunk))
             if s_val > 0:
                 rs += r / s_val
         rs_values.append(rs / max(segments, 1))

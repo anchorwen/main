@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-24T06:53:11Z
+> **自动生成**: 2026-05-24T07:23:26Z
 > **扫描模块数**: 443
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -19,7 +19,7 @@
 | `orchestrator.py` | ✅ active | CycleOutcome, DecisionCycleOrchestrator | 6 | 297 | — | |
 | `runtime_loop.py` | ✅ active | SimpleFeatureSnapshot, DecisionCycleResult, RuntimeLoop | 3 | 317 | — | |
 | `system_facade.py` | ✅ active | SystemFacade, SystemSelfTest | 27 | 236 | — | |
-| `v9_shadow_sse.py` | ✅ active | SessionStreamQueryError, SessionStreamResponseStartError, SessionSSEClientBuffer, ShadowSessionSSEHandler | 22 | 314 | — | |
+| `v9_shadow_sse.py` | ✅ active | SessionStreamQueryError, SessionStreamResponseStartError, SessionSSEClientBuffer, ShadowSessionSSEHandler | 22 | 315 | — | |
 | `v9_shadow_support.py` | ✅ active | StubFeatureService, V9ParliamentAdapter | 2 | 66 | — | |
 
 ## apps/monitor
@@ -316,7 +316,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `communication_inspection_service.py` | ✅ active | CommunicationInspectionService | 15 | 345 | — | |
-| `communication_operations_service.py` | ✅ active | CommunicationOperationsService | 13 | 445 | — | |
+| `communication_operations_service.py` | ✅ active | CommunicationOperationsService | 13 | 446 | — | |
 | `communication_record_reader.py` | ✅ active | CommunicationRecordReader | 6 | 46 | — | |
 | `communication_record_writer.py` | ✅ active | CommunicationRecordWriter | 2 | 22 | — | |
 | `communication_replay_executor.py` | ✅ active | CommunicationReplayExecutor | 9 | 382 | — | |
@@ -516,12 +516,12 @@
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
 | `brain.py` | ✅ active | — | 11 | 542 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 533 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 542 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
 | `daily_ops.py` | ✅ active | — | 24 | 1112 | — | |
 | `deploy_blue_green.py` | ✅ active | — | 7 | 126 | — | |
-| `feature_store_maintenance.py` | ✅ active | — | 8 | 275 | — | |
+| `feature_store_maintenance.py` | ✅ active | — | 8 | 276 | — | |
 | `feedback_loop.py` | ✅ active | — | 12 | 431 | — | |
 | `hook_blueprint_precheck.py` | ✅ active | — | 1 | 65 | — | |
 | `hook_mypy_check.py` | ✅ active | — | 1 | 94 | — | |
