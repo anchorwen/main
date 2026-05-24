@@ -296,28 +296,27 @@ def dispatch_live_open_order(
         _validate_ack_sl_tp(result, stop_loss, take_profit, base_dir=base_dir)
         return result
 
-    import MetaTrader5 as _mt5
+    from core.execution.mt5_broker_adapter import MT5BrokerAdapter
+    from core.execution.mt5_worker import get_mt5_worker
 
-    if not _mt5.initialize(path=mt5_terminal_path):
-        raise RuntimeError(f"mt5 initialize failed: {_mt5.last_error()}")
-    try:
-        from core.execution.mt5_broker_adapter import MT5BrokerAdapter
-
-        broker = MT5BrokerAdapter(_mt5)
-        result = dispatch_live_order(
-            base_dir=base_dir,
-            broker=broker,
-            symbol=symbol,
-            execution_payload=execution_payload,
-            intent_id=iid,
-            correlation_id=correlation_id,
-            skip_price_guard=skip_price_guard,
-            ignore_protection_flag=ignore_protection_flag,
-            protection_flag_path=protection_flag_path,
-            adapter_name="mt5",
-            extensions={"mt5_terminal_path": mt5_terminal_path},
+    worker = get_mt5_worker()
+    if worker is None:
+        raise RuntimeError(
+            "MT5Worker not initialised — call worker.start() before dispatching orders"
         )
-        _validate_ack_sl_tp(result, stop_loss, take_profit, base_dir=base_dir)
-        return result
-    finally:
-        _mt5.shutdown()
+    broker = MT5BrokerAdapter(worker)
+    result = dispatch_live_order(
+        base_dir=base_dir,
+        broker=broker,
+        symbol=symbol,
+        execution_payload=execution_payload,
+        intent_id=iid,
+        correlation_id=correlation_id,
+        skip_price_guard=skip_price_guard,
+        ignore_protection_flag=ignore_protection_flag,
+        protection_flag_path=protection_flag_path,
+        adapter_name="mt5",
+        extensions={"mt5_terminal_path": mt5_terminal_path},
+    )
+    _validate_ack_sl_tp(result, stop_loss, take_profit, base_dir=base_dir)
+    return result

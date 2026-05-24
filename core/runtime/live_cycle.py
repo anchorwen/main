@@ -536,7 +536,7 @@ def _dispatch_managed_close(
     strategy_name: str = "",
     exit_confidence: float = 0.0,
     exit_watchdog: Any = None,
-    mt5: Any = None,
+    mt5_worker: Any = None,
 ) -> bool:
     """Issue a close order for a managed position and record exit for re-entry guard.
 
@@ -637,9 +637,9 @@ def _dispatch_managed_close(
         and "net_out" not in reason
     ):
         _true_vol = _close_volume
-        if mt5 is not None:
+        if mt5_worker is not None:
             try:
-                _mt5_positions = mt5.positions_get(ticket=pos.ticket)
+                _mt5_positions = mt5_worker.positions_get(ticket=pos.ticket)
                 if _mt5_positions and len(_mt5_positions) > 0:
                     _true_vol = float(_mt5_positions[0].volume)
             except Exception:
@@ -816,7 +816,7 @@ def _execute_management_phase(
     config: LiveCycleConfig,
     state: LiveCycleState,
     *,
-    mt5: Any,
+    mt5_worker: Any,
     broker: Any,
     brains: list[dict[str, Any]],
     parliament: Any,
@@ -862,9 +862,9 @@ def _execute_management_phase(
     # Guard 2: verify position still exists in MT5 (catches closes between
     # reconciliation cycles — up to 10 min window). Single-ticket query is
     # lightweight and prevents position_not_found dispatches.
-    if mt5 is not None and not config.no_mt5:
+    if mt5_worker is not None and not config.no_mt5:
         try:
-            _mt5_pos = mt5.positions_get(ticket=pos.ticket)
+            _mt5_pos = mt5_worker.positions_get(ticket=pos.ticket)
             if not _mt5_pos:
                 pm.clear_position(ticket=pos.ticket)
                 state.known_open_tickets.pop(pos.ticket, None)
@@ -935,7 +935,7 @@ def _execute_management_phase(
         if broker is not None:
             mid, bid, ask = broker.fetch_prices(config.symbol)
         else:
-            mid, bid, ask = _mid_and_prices(mt5, config.symbol)
+            mid, bid, ask = _mid_and_prices(mt5_worker, config.symbol)
     except Exception:
         _price_degraded = True
         mid = float(getattr(pos, "entry_price", 0.0) or 0.0)
@@ -960,7 +960,7 @@ def _execute_management_phase(
     current_atr = (
         broker.fetch_current_atr(config.symbol)
         if broker is not None
-        else _get_current_atr(mt5, config.symbol)
+        else _get_current_atr(mt5_worker, config.symbol)
     )
     if current_atr <= 0:
         current_atr = 2.31
@@ -1036,9 +1036,9 @@ def _execute_management_phase(
     # Pillar 1: Fetch current M5 bar for OHLC-calibrated extreme tracking.
     # M5 covers the full inter-cycle window; graceful degradation on failure.
     _m5_high, _m5_low, _m5_spread = None, None, 0
-    if mt5 is not None:
+    if mt5_worker is not None:
         try:
-            _m5_rates = mt5.copy_rates_from_pos(config.symbol, mt5.TIMEFRAME_M5, 0, 1)
+            _m5_rates = mt5_worker.copy_rates_from_pos(config.symbol, 5, 0, 1)  # TIMEFRAME_M5
             if _m5_rates is not None and len(_m5_rates) > 0:
                 _m5_bar = _m5_rates[0]
                 _m5_high = float(_m5_bar["high"])
@@ -1415,7 +1415,7 @@ def _execute_management_phase(
                 strategy_name=_sname,
                 exit_confidence=_exit_confidence,
                 exit_watchdog=state.exit_watchdog,
-                mt5=mt5,
+                mt5_worker=mt5_worker,
             )
             print(
                 json.dumps(
@@ -1645,7 +1645,7 @@ def _execute_management_phase(
                             strategy_name=_sname,
                             exit_confidence=_exit_confidence,
                             exit_watchdog=state.exit_watchdog,
-                            mt5=mt5,
+                            mt5_worker=mt5_worker,
                         )
                         print(
                             json.dumps(
@@ -1699,7 +1699,7 @@ def _execute_management_phase(
                                         strategy_name=_sname,
                                         exit_confidence=_exit_confidence,
                                         exit_watchdog=state.exit_watchdog,
-                                        mt5=mt5,
+                                        mt5_worker=mt5_worker,
                                     )
                                     print(
                                         json.dumps(
@@ -1741,7 +1741,7 @@ def _execute_management_phase(
                         strategy_name=_sname,
                         exit_confidence=_bf_confidence,
                         exit_watchdog=state.exit_watchdog,
-                        mt5=mt5,
+                        mt5_worker=mt5_worker,
                     )
                     print(
                         json.dumps(
@@ -1809,7 +1809,7 @@ def _execute_management_phase(
                     strategy_name=_sname,
                     exit_confidence=_exit_confidence,
                     exit_watchdog=state.exit_watchdog,
-                    mt5=mt5,
+                    mt5_worker=mt5_worker,
                 )
                 print(
                     json.dumps(
@@ -1854,7 +1854,7 @@ def _execute_management_phase(
                 strategy_name=_sname,
                 exit_confidence=_exit_confidence,
                 exit_watchdog=state.exit_watchdog,
-                mt5=mt5,
+                mt5_worker=mt5_worker,
             )
             print(
                 json.dumps(
@@ -1896,7 +1896,7 @@ def _execute_management_phase(
                 strategy_name=_sname,
                 exit_confidence=_exit_confidence,
                 exit_watchdog=state.exit_watchdog,
-                mt5=mt5,
+                mt5_worker=mt5_worker,
             )
             print(
                 json.dumps(
@@ -2146,7 +2146,7 @@ def _bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None
 
 
 def _reconcile_closed_positions(
-    mt5: Any,
+    mt5_worker: Any,
     symbol: str,
     journal_path: str,
     known_tickets: dict[int, dict[str, Any]],
@@ -2157,18 +2157,13 @@ def _reconcile_closed_positions(
     Uses ThreadPoolExecutor (not daemon threads) so that MT5 timeouts can be
     logged with structured reason-codes and affected tickets.
     """
-    from concurrent.futures import Future, ThreadPoolExecutor
-
     closed_entries: list[dict[str, Any]] = []
-    if mt5 is None:
+    if mt5_worker is None:
         return closed_entries
 
-    _executor = ThreadPoolExecutor(max_workers=1)
-
-    # ── positions_get with timeout ──
-    _pos_future: Future = _executor.submit(mt5.positions_get, symbol=symbol)
+    # ── positions_get ──
     try:
-        current_positions = _pos_future.result(timeout=5.0)
+        current_positions = mt5_worker.positions_get(symbol=symbol)
     except Exception:
         print(
             json.dumps(
@@ -2182,7 +2177,6 @@ def _reconcile_closed_positions(
             ),
             flush=True,
         )
-        _executor.shutdown(wait=False)
         return closed_entries
 
     current_tickets = {p.ticket for p in (current_positions or [])}
@@ -2193,15 +2187,31 @@ def _reconcile_closed_positions(
 
         deals = None
         try:
-            _deal_future: Future = _executor.submit(mt5.history_deals_get, position=ticket)
+            deals = mt5_worker.history_deals_get(position=ticket)
+        except Exception:
+            print(
+                json.dumps(
+                    {
+                        "event": "reconciliation_timeout",
+                        "phase": "history_deals_get",
+                        "ticket": ticket,
+                        "reason_code": "EXEC_RECON_TIMEOUT",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+
+        if not deals:
+            time.sleep(0.2)
             try:
-                deals = _deal_future.result(timeout=5.0)
+                deals = mt5_worker.history_deals_get(position=ticket)
             except Exception:
                 print(
                     json.dumps(
                         {
                             "event": "reconciliation_timeout",
-                            "phase": "history_deals_get",
+                            "phase": "history_deals_get_retry",
                             "ticket": ticket,
                             "reason_code": "EXEC_RECON_TIMEOUT",
                         },
@@ -2209,27 +2219,6 @@ def _reconcile_closed_positions(
                     ),
                     flush=True,
                 )
-
-            if not deals:
-                time.sleep(0.2)
-                _retry_future: Future = _executor.submit(mt5.history_deals_get, position=ticket)
-                try:
-                    deals = _retry_future.result(timeout=5.0)
-                except Exception:
-                    print(
-                        json.dumps(
-                            {
-                                "event": "reconciliation_timeout",
-                                "phase": "history_deals_get_retry",
-                                "ticket": ticket,
-                                "reason_code": "EXEC_RECON_TIMEOUT",
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
-        except Exception:
-            deals = None
 
         close_price = None
         close_time = None
@@ -2411,7 +2400,6 @@ def _reconcile_closed_positions(
 
         del known_tickets[ticket]
 
-    _executor.shutdown(wait=False)
     return closed_entries
 
 
@@ -3630,7 +3618,7 @@ def execute_live_cycle(
     config: LiveCycleConfig,
     state: LiveCycleState,
     *,
-    mt5: Any,
+    mt5_worker: Any = None,
     broker: Any = None,
     feature_service: Any,
     feature_computer: Any,
@@ -3656,16 +3644,23 @@ def execute_live_cycle(
     """Execute one iteration of the live intent cycle.
 
     Args:
-        mt5: Raw MetaTrader5 module (for deal history queries; kept for
-            backward compat — prefer *broker* for new code).
+        mt5_worker: :class:`MT5Worker` singleton for all MT5 C++ calls.
+            When None, attempts to resolve via ``get_mt5_worker()``.
+            All MT5 operations execute on a single dedicated thread.
         broker: :class:`BrokerAdapter` for price/ATR/position queries.
-            When None, falls back to raw *mt5* calls.  This is the swap
+            When None, falls back to *mt5_worker* calls.  This is the swap
             point for future FIX / cloud brokers.
 
     Returns (updated_state, should_continue). The caller owns the ``while True``
     loop and the ``time.sleep()`` between iterations.
     """
     state.loop_iteration += 1
+
+    # ── Resolve MT5 worker (param takes priority, then global singleton) ──
+    if mt5_worker is None and not config.no_mt5:
+        from core.execution.mt5_worker import get_mt5_worker
+
+        mt5_worker = get_mt5_worker()
 
     # ── Stash safeguard modules on state for access by internal helpers ──
     if exit_watchdog is not None:
@@ -3744,7 +3739,7 @@ def execute_live_cycle(
     # Old tickets from previous sessions cause history_deals_get() to hang.
     if state.loop_iteration == 1 and state.known_open_tickets and not config.no_mt5:
         try:
-            _positions = mt5.positions_get(symbol=config.symbol) or []
+            _positions = mt5_worker.positions_get(symbol=config.symbol) or []
             _open_tickets = {p.ticket for p in _positions}
             state.known_open_tickets = {
                 t: r for t, r in state.known_open_tickets.items() if t in _open_tickets
@@ -3762,7 +3757,7 @@ def execute_live_cycle(
                 _ap_tickets = {
                     int(t) for t in (_ap.get("tickets", []) if isinstance(_ap, dict) else [])
                 }
-            _mt5_positions = mt5.positions_get(symbol=config.symbol) or []
+            _mt5_positions = mt5_worker.positions_get(symbol=config.symbol) or []
             _mt5_tickets = {p.ticket for p in _mt5_positions}
             _orphans = _mt5_tickets - _ap_tickets - set(state.known_open_tickets.keys())
             if _orphans:
@@ -3826,7 +3821,7 @@ def execute_live_cycle(
     if not config.no_mt5 and state.known_open_tickets and _run_reconciliation:
         try:
             _closed = _reconcile_closed_positions(
-                mt5, config.symbol, str(journal_path), state.known_open_tickets, state=state
+                mt5_worker, config.symbol, str(journal_path), state.known_open_tickets, state=state
             )
             if _closed:
                 from core.infrastructure.distributed_lock import FileLock
@@ -3893,7 +3888,7 @@ def execute_live_cycle(
                         # Convert dollar PnL to percentage of account equity
                         _pnl_pct = 0.0
                         try:
-                            _acc = mt5.account_info() if mt5 is not None else None
+                            _acc = mt5_worker.account_info() if mt5_worker is not None else None
                             _eq = float(getattr(_acc, "equity", 0)) if _acc is not None else 0.0
                             if _eq > 0:
                                 _pnl_pct = float(_pnl_val) / _eq
@@ -4004,7 +3999,7 @@ def execute_live_cycle(
         if broker is not None:
             mid_price, _bid, _ask = broker.fetch_prices(config.symbol)
         elif not config.no_mt5:
-            mid_price, _bid, _ask = _mid_and_prices(mt5, config.symbol)
+            mid_price, _bid, _ask = _mid_and_prices(mt5_worker, config.symbol)
     except Exception:
         pass
 
@@ -4018,9 +4013,11 @@ def execute_live_cycle(
     if not hasattr(state, "_mtf_price_service") or state._mtf_price_service is None:
         state._mtf_price_service = MTFPriceService()
         # Bootstrap from historical M5 closes so M15 bars are available immediately
-        if not config.no_mt5 and mt5 is not None:
+        if not config.no_mt5 and mt5_worker is not None:
             try:
-                _hist_rates = mt5.copy_rates_from_pos(config.symbol, mt5.TIMEFRAME_M5, 0, 200)
+                _hist_rates = mt5_worker.copy_rates_from_pos(
+                    config.symbol, 5, 0, 200
+                )  # TIMEFRAME_M5
                 if _hist_rates is not None and len(_hist_rates) >= 6:
                     _closes = [float(r[4]) for r in _hist_rates]
                     state._mtf_price_service.bootstrap(_closes)
@@ -4281,7 +4278,7 @@ def execute_live_cycle(
             pos_count = (
                 broker.count_positions(config.symbol)
                 if broker is not None
-                else _position_count(mt5, config.symbol)
+                else _position_count(mt5_worker, config.symbol)
             )
         except Exception as _pos_exc:
             print(
@@ -4296,12 +4293,12 @@ def execute_live_cycle(
         # -1 means MT5 connection is dead — attempt reconnect once
         if pos_count < 0:
             try:
-                if mt5 is not None:
-                    mt5.initialize()
+                if mt5_worker is not None:
+                    mt5_worker.reconnect()
                     pos_count = (
                         broker.count_positions(config.symbol)
                         if broker is not None
-                        else _position_count(mt5, config.symbol)
+                        else _position_count(mt5_worker, config.symbol)
                     )
             except Exception:
                 pass
@@ -4370,7 +4367,7 @@ def execute_live_cycle(
                     _execute_management_phase(
                         config,
                         state,
-                        mt5=mt5,
+                        mt5_worker=mt5_worker,
                         broker=broker,
                         brains=brains,
                         parliament=parliament,
@@ -4630,7 +4627,7 @@ def execute_live_cycle(
             current_atr = (
                 broker.fetch_current_atr(config.symbol)
                 if broker is not None
-                else _get_current_atr(mt5, config.symbol)
+                else _get_current_atr(mt5_worker, config.symbol)
             )
             if current_atr > 0:
                 regime_info = regime_detector.update(current_atr)
@@ -4686,8 +4683,8 @@ def execute_live_cycle(
     try:
         if broker is not None:
             _account_equity = broker.get_account_equity()
-        elif mt5 is not None:
-            _acc = mt5.account_info()
+        elif mt5_worker is not None:
+            _acc = mt5_worker.account_info()
             _account_equity = float(getattr(_acc, "equity", 0)) if _acc is not None else 0.0
     except Exception:
         pass
@@ -4757,7 +4754,7 @@ def execute_live_cycle(
         if state.regime_gate is None:
             state.regime_gate = RegimeGate()
             if not config.no_mt5:
-                _bootstrap_regime_gate(mt5, config.symbol, state.regime_gate)
+                _bootstrap_regime_gate(mt5_worker, config.symbol, state.regime_gate)
 
         regime_gate: RegimeGate | None = state.regime_gate
         regime_gate_result: dict[str, Any] = {}
@@ -4769,7 +4766,7 @@ def execute_live_cycle(
 
         if not config.no_mt5 and regime_gate is not None:
             try:
-                _feed_regime_gate_cycle(mt5, config.symbol, regime_gate)
+                _feed_regime_gate_cycle(mt5_worker, config.symbol, regime_gate)
                 atr_val = current_atr if current_atr > 0 else 5.0
                 atr_pct = regime_info.get("atr_pct", 0.5) if regime_info else 0.5
                 vol_pct = regime_info.get("vol_pct", 0.5) if regime_info else 0.5
@@ -4841,7 +4838,7 @@ def execute_live_cycle(
                                 force_close_pct=config.intraday_dd_force_close_pct,
                             )
                         # Fetch current equity from MT5 account
-                        _acc = mt5.account_info()
+                        _acc = mt5_worker.account_info()
                         if _acc is not None:
                             _eq = float(getattr(_acc, "equity", 0))
                             dd_result = state.intraday_dd_kill.update(_eq)
@@ -5026,11 +5023,11 @@ def execute_live_cycle(
         _mt5_ok: bool = False  # True when MT5 query succeeded (even if empty)
 
         # ── Query MT5 for ALL open positions (by magic → strategy mapping) ──
-        if not config.no_mt5 and mt5 is not None:
+        if not config.no_mt5 and mt5_worker is not None:
             try:
                 from core.contracts.strategy_magic import MAGIC_TO_STRATEGY as _MAGIC_TO_STRATEGY
 
-                _mt5_positions = mt5.positions_get(symbol=config.symbol)
+                _mt5_positions = mt5_worker.positions_get(symbol=config.symbol)
                 _mt5_ok = True  # query succeeded
                 if _mt5_positions:
                     for _mp in _mt5_positions:
@@ -5746,7 +5743,7 @@ def execute_live_cycle(
                                 force_close_enabled=config.intraday_dd_force_close,
                                 force_close_pct=config.intraday_dd_force_close_pct,
                             )
-                        _acc = mt5.account_info()
+                        _acc = mt5_worker.account_info()
                         if _acc is not None:
                             _eq = float(getattr(_acc, "equity", 0))
                             _dd = state.intraday_dd_kill.update(_eq)
@@ -6058,7 +6055,7 @@ def execute_live_cycle(
     risk_context = (
         _build_risk_context_from_broker(broker, config.symbol)
         if broker is not None
-        else _build_risk_context(mt5, config.symbol)
+        else _build_risk_context(mt5_worker, config.symbol)
     )
     risk_verdict = _evaluate_risk(
         risk_service,
@@ -6156,16 +6153,16 @@ def execute_live_cycle(
             if broker is not None:
                 mid, bid, ask = broker.fetch_prices(config.symbol)
             else:
-                mid, bid, ask = _mid_and_prices(mt5, config.symbol)
+                mid, bid, ask = _mid_and_prices(mt5_worker, config.symbol)
         except Exception as _price_exc:
             # MT5 connection may have gone stale during cooldown — attempt reconnect
             try:
                 if not config.no_mt5:
-                    mt5.initialize()
+                    mt5_worker.reconnect()
                 if broker is not None:
                     mid, bid, ask = broker.fetch_prices(config.symbol)
                 else:
-                    mid, bid, ask = _mid_and_prices(mt5, config.symbol)
+                    mid, bid, ask = _mid_and_prices(mt5_worker, config.symbol)
             except Exception:
                 print(
                     json.dumps(
@@ -6188,7 +6185,7 @@ def execute_live_cycle(
         current_atr = (
             broker.fetch_current_atr(config.symbol)
             if broker is not None
-            else _get_current_atr(mt5, config.symbol)
+            else _get_current_atr(mt5_worker, config.symbol)
         )
         if current_atr <= 0:
             current_atr = 2.31  # training-set M5_ATR mean as fallback

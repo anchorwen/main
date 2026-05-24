@@ -19,11 +19,17 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from core.features.computers.daily_computer import DailyFeatureComputer
+
+if TYPE_CHECKING:
+    from core.execution.mt5_worker import MT5Worker
+
+# MT5 constant — hardcoded to avoid requiring MetaTrader5 import
+MT5_TIMEFRAME_D1 = 16408
 
 
 class LiveDailyFeatureProvider:
@@ -39,12 +45,14 @@ class LiveDailyFeatureProvider:
         d1_csv: str | Path = "data/raw/xauusdc_d1_merged.csv",
         h4_csv: str | Path | None = "data/raw/xauusdc_h4_merged.csv",
         cross_assets: dict[str, str] | None = None,
+        mt5_worker: MT5Worker | None = None,
     ):
         self._mt5 = mt5_module
         self._symbol = symbol
         self._d1_csv = Path(d1_csv).resolve()
         self._h4_csv = Path(h4_csv).resolve() if h4_csv else None
         self._cross_assets = cross_assets or {}
+        self._worker = mt5_worker
 
         self._last_bar_time: int = 0  # unix timestamp of last known D1 bar
         self._computer: DailyFeatureComputer | None = None
@@ -74,7 +82,10 @@ class LiveDailyFeatureProvider:
     def _is_new_bar_available(self) -> bool:
         """Check if MT5 has a new D1 bar since last refresh."""
         try:
-            rates = self._mt5.copy_rates_from_pos(self._symbol, self._mt5.TIMEFRAME_D1, 0, 1)
+            if self._worker is not None:
+                rates = self._worker.copy_rates_from_pos(self._symbol, MT5_TIMEFRAME_D1, 0, 1)
+            else:
+                rates = self._mt5.copy_rates_from_pos(self._symbol, self._mt5.TIMEFRAME_D1, 0, 1)
             if rates is not None and len(rates) > 0:
                 latest = int(rates[-1]["time"])
                 return latest > self._last_bar_time
@@ -116,7 +127,10 @@ class LiveDailyFeatureProvider:
                                 existing_ts.add(t[:10])  # date-only keys
 
             # Fetch recent D1 bars from MT5
-            rates = self._mt5.copy_rates_from_pos(self._symbol, self._mt5.TIMEFRAME_D1, 0, 30)
+            if self._worker is not None:
+                rates = self._worker.copy_rates_from_pos(self._symbol, MT5_TIMEFRAME_D1, 0, 30)
+            else:
+                rates = self._mt5.copy_rates_from_pos(self._symbol, self._mt5.TIMEFRAME_D1, 0, 30)
             if rates is None or len(rates) == 0:
                 return
 

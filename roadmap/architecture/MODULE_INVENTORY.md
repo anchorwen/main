@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-24T17:05:36Z
-> **扫描模块数**: 443
+> **自动生成**: 2026-05-24T18:09:21Z
+> **扫描模块数**: 444
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -210,7 +210,7 @@
 | `gateway_contracts.py` | ✅ active | OrderRequest, Fill, OrderState, ExecutionGateway | 9 | 103 | — | |
 | `kelly_sizer.py` | ✅ active | KellyResult | 2 | 143 | — | |
 | `limit_order_monitor.py` | ✅ active | LimitOrderIntent, LimitFillResult, LimitOrderMonitor | 9 | 329 | — | |
-| `live_order_sender.py` | ✅ active | — | 6 | 323 | — | |
+| `live_order_sender.py` | ✅ active | — | 6 | 322 | — | |
 | `market_efficiency.py` | ✅ active | — | 2 | 67 | — | |
 | `market_impact.py` | ✅ active | MarketImpactEstimate | 3 | 168 | — | |
 | `meta_exit_engine.py` | ✅ active | ExitFeatureSnapshot, ExitEvaluation, MetaExitEngine | 13 | 509 | — | |
@@ -218,7 +218,8 @@
 | `meta_pipeline.py` | ✅ active | MetaProbeSpec, MetaProbeResult, MetaPipeline | 8 | 479 | — | |
 | `meta_signal_filter.py` | ✅ active | FilterResult, MetaSignalFilter | 19 | 878 | — | |
 | `micro_strategy.py` | ✅ active | MicroStrategy | 1 | 85 | — | |
-| `mt5_broker_adapter.py` | ✅ active | MT5BrokerAdapter | 15 | 210 | — | |
+| `mt5_broker_adapter.py` | ✅ active | MT5BrokerAdapter | 11 | 145 | — | |
+| `mt5_worker.py` | ✅ active | MT5Worker | 18 | 285 | — | |
 | `order_state_machine.py` | ✅ active | OrderStateMachine | 9 | 101 | — | |
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 141 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 521 | — | |
@@ -260,10 +261,10 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `daily_computer.py` | ✅ active | DailyFeatureComputer | 22 | 726 | — | |
-| `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 8 | 211 | — | |
-| `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 19 | 510 | — | |
-| `v9_live_computer.py` | ✅ active | V9LiveFeatureComputer | 15 | 320 | — | |
-| `v9_micro_computer.py` | ✅ active | V9MicroComputer | 3 | 93 | — | |
+| `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 8 | 225 | — | |
+| `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 20 | 527 | — | |
+| `v9_live_computer.py` | ✅ active | V9LiveFeatureComputer | 15 | 340 | — | |
+| `v9_micro_computer.py` | ✅ active | V9MicroComputer | 3 | 98 | — | |
 
 ## core/features/schemas
 
@@ -389,7 +390,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `event_bar_sync.py` | ✅ active | BarSyncState, BarSyncPoller | 12 | 557 | — | |
+| `event_bar_sync.py` | ✅ active | BarSyncState, BarSyncPoller | 12 | 612 | — | |
 | `live_execution_contract.py` | ✅ active | — | 5 | 74 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 8 | — | |
 
@@ -438,9 +439,9 @@
 | `execution_gateway_router.py` | ✅ active | ExecutionGatewayRouter | 5 | 30 | — | |
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 26 | 6597 | — | |
-| `market_ingress.py` | ✅ active | — | 8 | 141 | — | |
-| `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 12 | 314 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 26 | 6594 | — | |
+| `market_ingress.py` | ✅ active | — | 5 | 98 | — | |
+| `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 286 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
 | `shadow_recorder.py` | ✅ active | — | 8 | 313 | — | |
 | `signal_health.py` | ✅ active | GateResult, FeatureGate, _RollingStats, SignalHealthMonitor | 23 | 508 | — | |
@@ -516,7 +517,7 @@
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
 | `brain.py` | ✅ active | — | 11 | 542 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 550 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 552 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
 | `daily_ops.py` | ✅ active | — | 24 | 1112 | — | |
@@ -532,7 +533,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 369 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 13 | 2100 | — | |
+| `live_intent_loop.py` | ✅ active | — | 13 | 2104 | — | |
 | `live_launcher.py` | ✅ active | — | 13 | 749 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 484 | — | |

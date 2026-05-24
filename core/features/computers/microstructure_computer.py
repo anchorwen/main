@@ -13,8 +13,12 @@ Features computed per bar:
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from core.execution.mt5_worker import MT5Worker
 
 CROSS_SYMBOLS = ["XAGUSDc", "EURUSDc", "USDJPYc"]
 CROSS_FEATURE_NAMES = ["XAGUSDc_return", "EURUSDc_return", "USDJPYc_return"]
@@ -34,23 +38,26 @@ MIN_M5_BARS = 4
 MIN_TICKS = 10
 DEFAULT_SEQ_LEN = 32  # sequence length for Transformer / XGBoost 288-dim
 
-# ── MT5 timeframe constants ──
+# ── MT5 timeframe constants (hardcoded — no thread-affinity requirement) ──
+MT5_TIMEFRAME_M5 = 5
+MT5_TIMEFRAME_M15 = 15
+MT5_TIMEFRAME_M30 = 30
+MT5_TIMEFRAME_H1 = 16385
+MT5_TIMEFRAME_H4 = 16388
+MT5_COPY_TICKS_ALL = -1  # MetaTrader5 COPY_TICKS_ALL flag
+
 # M5 bars per higher-TF bar
 TF_BAR_RATIO = {"M5": 1, "M15": 3, "H1": 12, "H4": 48}
 
 
 def _mt5_timeframe(tf_str: str):
-    """Map timeframe string to MT5 constant."""
-    try:
-        import MetaTrader5 as mt5
-    except ImportError:
-        return None
+    """Map timeframe string to MT5 constant (hardcoded — no import needed)."""
     return {
-        "M5": mt5.TIMEFRAME_M5,
-        "M15": mt5.TIMEFRAME_M15,
-        "H1": mt5.TIMEFRAME_H1,
-        "H4": mt5.TIMEFRAME_H4,
-    }.get(tf_str, mt5.TIMEFRAME_M5)
+        "M5": MT5_TIMEFRAME_M5,
+        "M15": MT5_TIMEFRAME_M15,
+        "H1": MT5_TIMEFRAME_H1,
+        "H4": MT5_TIMEFRAME_H4,
+    }.get(tf_str, MT5_TIMEFRAME_M5)
 
 
 class MicrostructureFeatureComputer:
@@ -67,9 +74,10 @@ class MicrostructureFeatureComputer:
         seq_m15 = computer.compute_sequence(n_bars=32, timeframe="M15")
     """
 
-    def __init__(self, mt5_module, symbol: str):
+    def __init__(self, mt5_module, symbol: str, mt5_worker: MT5Worker | None = None):
         self._mt5 = mt5_module
         self._symbol = symbol
+        self._worker = mt5_worker
 
     # ── Backward-compatible single-bar API ──────────────────────────────
 
@@ -216,7 +224,7 @@ class MicrostructureFeatureComputer:
         raw: dict[str, np.ndarray] = {}
         for sym in CROSS_SYMBOLS:
             try:
-                rates = self._mt5.copy_rates_from_pos(sym, self._mt5.TIMEFRAME_M5, 0, m5_needed)
+                rates = self._copy_rates(sym, MT5_TIMEFRAME_M5, 0, m5_needed)
                 if rates is not None and len(rates) >= 2:
                     raw[sym] = np.array([float(r[4]) for r in rates], dtype=np.float64)
                 else:
@@ -308,9 +316,15 @@ class MicrostructureFeatureComputer:
 
     # ── Private helpers ─────────────────────────────────────────────────
 
+    def _copy_rates(self, symbol: str, timeframe: int, start_pos: int, count: int):
+        """Fetch rates — prefers worker when available, falls back to raw MT5 module."""
+        if self._worker is not None:
+            return self._worker.copy_rates_from_pos(symbol, timeframe, start_pos, count)
+        return self._mt5.copy_rates_from_pos(symbol, timeframe, start_pos, count)
+
     def _fetch_m5_rates(self, count: int):
         try:
-            return self._mt5.copy_rates_from_pos(self._symbol, self._mt5.TIMEFRAME_M5, 0, count)
+            return self._copy_rates(self._symbol, MT5_TIMEFRAME_M5, 0, count)
         except Exception:
             return None
 
@@ -320,7 +334,7 @@ class MicrostructureFeatureComputer:
             tf = _mt5_timeframe(tf_str)
             if tf is None:
                 return None
-            return self._mt5.copy_rates_from_pos(self._symbol, tf, 0, count)
+            return self._copy_rates(self._symbol, tf, 0, count)
         except Exception:
             return None
 
@@ -384,9 +398,12 @@ class MicrostructureFeatureComputer:
             _now = reference_time
         try:
             from_date = _now - timedelta(minutes=5)
-            ticks = self._mt5.copy_ticks_from(
-                self._symbol, from_date, 5000, self._mt5.COPY_TICKS_ALL
-            )
+            if self._worker is not None:
+                ticks = self._worker.copy_ticks_from(
+                    self._symbol, from_date.timestamp(), 5000, MT5_COPY_TICKS_ALL
+                )
+            else:
+                ticks = self._mt5.copy_ticks_from(self._symbol, from_date, 5000, MT5_COPY_TICKS_ALL)
         except Exception:
             ticks = None
 
@@ -424,7 +441,7 @@ class MicrostructureFeatureComputer:
     def _compute_cross_features(self, result: dict[str, float]) -> None:
         for sym, name in zip(CROSS_SYMBOLS, CROSS_FEATURE_NAMES, strict=False):
             try:
-                rates = self._mt5.copy_rates_from_pos(sym, self._mt5.TIMEFRAME_M5, 0, 2)
+                rates = self._copy_rates(sym, MT5_TIMEFRAME_M5, 0, 2)
             except Exception:
                 result[name] = 0.0
                 continue
@@ -441,7 +458,7 @@ class MicrostructureFeatureComputer:
         m5_needed = n_bars * ratio + 2
         for sym, name in zip(CROSS_SYMBOLS, CROSS_FEATURE_NAMES, strict=False):
             try:
-                rates = self._mt5.copy_rates_from_pos(sym, self._mt5.TIMEFRAME_M5, 0, m5_needed)
+                rates = self._copy_rates(sym, MT5_TIMEFRAME_M5, 0, m5_needed)
             except Exception:
                 cross[name] = [0.0] * n_bars
                 continue

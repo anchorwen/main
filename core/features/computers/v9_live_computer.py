@@ -10,14 +10,27 @@ from __future__ import annotations
 import logging
 import math
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-# ── MT5 timeframe constants (minutes) ──
+if TYPE_CHECKING:
+    from core.execution.mt5_worker import MT5Worker
+
+# ── MT5 timeframe constants (hardcoded — no thread-affinity requirement) ──
+# Logical minute identifiers (used as dict keys and loop values)
 MT5_TIMEFRAME_M5 = 5
 MT5_TIMEFRAME_M15 = 15
 MT5_TIMEFRAME_M30 = 30
 MT5_TIMEFRAME_H1 = 60
+
+# Actual MT5 timeframe constants (passed to copy_rates_from_pos)
+MT5_TF_MAP = {
+    5: 5,  # M5:  PERIOD_M5
+    15: 15,  # M15: PERIOD_M15
+    30: 30,  # M30: PERIOD_M30 (this is actually PERIOD_M30 = 30 in newer MT5 builds)
+    60: 16385,  # H1:  PERIOD_H1
+}
 
 TIMEFRAMES = [MT5_TIMEFRAME_M5, MT5_TIMEFRAME_M15, MT5_TIMEFRAME_M30, MT5_TIMEFRAME_H1]
 TF_LABELS = {5: "M5", 15: "M15", 30: "M30", 60: "H1"}
@@ -194,15 +207,19 @@ class V9LiveFeatureComputer:
         # model_input.shape == (1, 40)
     """
 
-    def __init__(self, mt5_module, symbol: str):
+    def __init__(self, mt5_module, symbol: str, mt5_worker: MT5Worker | None = None):
         self._mt5 = mt5_module
         self._symbol = symbol
-        self._tf_map = {
-            MT5_TIMEFRAME_M5: self._mt5.TIMEFRAME_M5,
-            MT5_TIMEFRAME_M15: self._mt5.TIMEFRAME_M15,
-            MT5_TIMEFRAME_M30: self._mt5.TIMEFRAME_M30,
-            MT5_TIMEFRAME_H1: self._mt5.TIMEFRAME_H1,
-        }
+        self._worker = mt5_worker
+        if mt5_worker is not None:
+            self._tf_map = dict(MT5_TF_MAP)
+        else:
+            self._tf_map = {
+                MT5_TIMEFRAME_M5: self._mt5.TIMEFRAME_M5,
+                MT5_TIMEFRAME_M15: self._mt5.TIMEFRAME_M15,
+                MT5_TIMEFRAME_M30: self._mt5.TIMEFRAME_M30,
+                MT5_TIMEFRAME_H1: self._mt5.TIMEFRAME_H1,
+            }
 
     def compute_all(self) -> dict[str, float]:
         """Compute all 40 features and return as {name: value} dict."""
@@ -239,7 +256,10 @@ class V9LiveFeatureComputer:
     def _fetch_rates(self, mt5_tf: int, count: int) -> list[dict] | None:
         """Fetch OHLC rates; returns list of dicts or None on failure."""
         try:
-            rates = self._mt5.copy_rates_from_pos(self._symbol, mt5_tf, 0, count)
+            if self._worker is not None:
+                rates = self._worker.copy_rates_from_pos(self._symbol, mt5_tf, 0, count)
+            else:
+                rates = self._mt5.copy_rates_from_pos(self._symbol, mt5_tf, 0, count)
             if rates is None or len(rates) == 0:
                 return None
             # Convert numpy structured array to list of dicts

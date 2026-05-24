@@ -45,6 +45,7 @@ DecisionIntent → DecisionCompiler → IntentMessageBuilder → CommunicationEn
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260525-009 | 2026-05-25 | cursor-agent | — | MT5 worker refactoring: event_bar_sync.py — BarSyncPoller accepts optional mt5_worker, hardcoded TF constants, worker-aware error recovery (reconnect instead of shutdown+init). | RC-04, RC-06 |
 | FIX-20260524-014 | 2026-05-24 | cursor-agent | — | MODULE_SOURCE_MAP: add scripts/validators/journal_validator.py. Mypy fixes: journal_validator (1→0 — getattr for tuple.__name__), communication_operations_service (1→0 — assert posture is not None). | RC-02 |
 | FIX-20260519-019 | 2026-05-19 | cursor-agent | — | BarSyncPoller 92.8% timeout rate fix: added `fetch_synthetic_bar()` — when M5 bar hasn't formed, aggregates last 6 M1 bars into synthetic M5 OHLC(V) instead of blind `time.sleep()`. Eliminates 120s data misalignment window where stale features were used against real-time prices. Caller in live_intent_loop.py uses synthetic bar on timeout instead of falling back to interval sleep. | RC-06 (data-misalignment, sampling-blind-spot) |
 | FIX-20260522-006 | 2026-05-22 | cursor-agent | — | BarSyncPoller MT5 transient error retry: copy_rates_from_pos() fails after ~104s of polling despite successful initialize(). Added MAX_MT5_ERROR_RETRIES=3 with re-init+retry loop before degrading to fallback_poll + synthetic bar. Resets error count on successful poll or new bar detection. | RC-05 (transient-error) |

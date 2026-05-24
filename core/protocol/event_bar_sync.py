@@ -13,6 +13,10 @@ Architecture:
   - ``BarSyncState``: persistent state (last known bar time, lag counter)
     stored as JSON on disk so restarts recover without re-syncing from
     scratch.
+  - When an ``MT5Worker`` is provided, all MT5 calls are delegated to the
+    worker thread — no second ``mt5.initialize()`` call competes with the
+    main loop's worker.  Without a worker, falls back to self-managed MT5
+    connection (standalone / testing).
 
 Usage (in live_cycle.py or live_launcher.py)::
 
@@ -38,7 +42,19 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.execution.mt5_worker import MT5Worker
+
+# -- MT5 timeframe constants (hardcoded — no thread-affinity requirement) --
+MT5_TIMEFRAME_M1 = 1
+MT5_TIMEFRAME_M5 = 5
+MT5_TIMEFRAME_M15 = 15
+MT5_TIMEFRAME_M30 = 30
+MT5_TIMEFRAME_H1 = 16385
+MT5_TIMEFRAME_H4 = 16388
+MT5_TIMEFRAME_D1 = 16408
 
 # -- Constants --
 
@@ -91,6 +107,7 @@ class BarSyncPoller:
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         poll_interval: float = DEFAULT_POLL_INTERVAL,
         fallback_interval: float = DEFAULT_FALLBACK_INTERVAL,
+        mt5_worker: MT5Worker | None = None,
     ) -> None:
         self.symbol = symbol
         self.timeframe = timeframe
@@ -98,10 +115,11 @@ class BarSyncPoller:
         self.timeout_seconds = timeout_seconds
         self.poll_interval = poll_interval
         self.fallback_interval = fallback_interval
+        self._mt5_worker = mt5_worker
 
         self._state_path = Path(state_dir) / "bar_sync_state.json"
         self._state = BarSyncState()
-        self._mt5_available = False
+        self._mt5_available = mt5_worker is not None  # worker pre-initialised by caller
         self._load_state()
 
     # -- Public API --
@@ -135,15 +153,23 @@ class BarSyncPoller:
         _consecutive_empty = 0  # consecutive empty poll counter for silent-failure recovery
         while time.monotonic() < deadline:
             try:
-                import MetaTrader5 as mt5
-
                 # Fetch the most recent 2 bars to detect new bar formation
-                rates = mt5.copy_rates_from_pos(
-                    self.symbol,
-                    self._timeframe_map(self.timeframe),
-                    0,  # start_pos: 0 = most recent
-                    2,  # count: 2 bars (current + previous)
-                )
+                if self._mt5_worker is not None:
+                    rates = self._mt5_worker.copy_rates_from_pos(
+                        self.symbol,
+                        self._timeframe_map(self.timeframe),
+                        0,  # start_pos: 0 = most recent
+                        2,  # count: 2 bars (current + previous)
+                    )
+                else:
+                    import MetaTrader5 as mt5
+
+                    rates = mt5.copy_rates_from_pos(
+                        self.symbol,
+                        self._timeframe_map(self.timeframe),
+                        0,
+                        2,
+                    )
                 if rates is None or len(rates) < 2:
                     _consecutive_empty += 1
                     # ── Silent-failure recovery ──
@@ -165,14 +191,21 @@ class BarSyncPoller:
                             },
                         )
                         self._mt5_available = False
-                        try:
-                            mt5.shutdown()
-                        except Exception:
-                            pass
-                        try:
-                            self._init_mt5()
-                        except Exception:
-                            pass
+                        if self._mt5_worker is not None:
+                            try:
+                                self._mt5_worker.reconnect()
+                                self._mt5_available = True
+                            except Exception:
+                                pass
+                        else:
+                            try:
+                                mt5.shutdown()
+                            except Exception:
+                                pass
+                            try:
+                                self._init_mt5()
+                            except Exception:
+                                pass
                         _consecutive_empty = 0
                         time.sleep(self.poll_interval * 2)
                         continue
@@ -303,16 +336,23 @@ class BarSyncPoller:
                 if _error_count <= MAX_MT5_ERROR_RETRIES:
                     # Transient error — clean up stale connection and re-init
                     self._mt5_available = False
-                    try:
-                        import MetaTrader5 as _mt5_mod
+                    if self._mt5_worker is not None:
+                        try:
+                            self._mt5_worker.reconnect()
+                            self._mt5_available = True
+                        except Exception:
+                            pass
+                    else:
+                        try:
+                            import MetaTrader5 as _mt5_mod
 
-                        _mt5_mod.shutdown()
-                    except Exception:
-                        pass
-                    try:
-                        self._init_mt5()
-                    except Exception:
-                        pass
+                            _mt5_mod.shutdown()
+                        except Exception:
+                            pass
+                        try:
+                            self._init_mt5()
+                        except Exception:
+                            pass
                     time.sleep(self.poll_interval * 2)
                     continue
                 # Persistent error — give up for this cycle
@@ -338,78 +378,86 @@ class BarSyncPoller:
         bars.  This eliminates the 120s blind-wait and keeps the perception
         layer aligned to real-time market conditions.
 
-        Accepts an optional *mt5* module reference from the caller (launcher)
-        to bypass any internal MT5 connection issues.  When None, imports
-        ``MetaTrader5`` directly.
+        Prefers the worker when available; falls back to the *mt5* module
+        reference or direct ``MetaTrader5`` import for standalone use.
 
         Returns a dict with the same shape as ``wait_for_new_bar`` (time,
         open, high, low, close, tick_volume, spread, real_volume), or None
         if no M1 data is available.
         """
-        _mt5: Any = mt5
-        if _mt5 is None:
+        m1_rates = None
+        if self._mt5_worker is not None:
             try:
-                import MetaTrader5 as _mt5_mod
-
-                _mt5 = _mt5_mod
+                m1_rates = self._mt5_worker.copy_rates_from_pos(self.symbol, MT5_TIMEFRAME_M1, 0, 6)
             except Exception:
-                self._log_event("BAR_SYNTHETIC_FAILED", {"error": "import_error"})
+                self._mt5_available = False
+                self._log_event("BAR_SYNTHETIC_FAILED", {"error": "mt5_unreachable"})
+                return None
+        else:
+            _mt5: Any = mt5
+            if _mt5 is None:
+                try:
+                    import MetaTrader5 as _mt5_mod
+
+                    _mt5 = _mt5_mod
+                except Exception:
+                    self._log_event("BAR_SYNTHETIC_FAILED", {"error": "import_error"})
+                    return None
+
+            try:
+                m1_rates = _mt5.copy_rates_from_pos(
+                    self.symbol,
+                    _mt5.TIMEFRAME_M1,
+                    0,
+                    6,  # last 6 × M1 bars cover a full M5 window
+                )
+            except Exception:
+                self._mt5_available = False
+                self._log_event("BAR_SYNTHETIC_FAILED", {"error": "mt5_unreachable"})
                 return None
 
-        try:
-            m1_rates = _mt5.copy_rates_from_pos(
-                self.symbol,
-                _mt5.TIMEFRAME_M1,
-                0,
-                6,  # last 6 × M1 bars cover a full M5 window
-            )
-            if m1_rates is None or len(m1_rates) < 2:
-                return None
-
-            # Aggregate M1 bars into a synthetic M5 bar
-            highs = [float(r["high"]) for r in m1_rates]
-            lows = [float(r["low"]) for r in m1_rates]
-            closes = [float(r["close"]) for r in m1_rates]
-            opens = [float(r["open"]) for r in m1_rates]
-            volumes = [int(r["tick_volume"]) for r in m1_rates]
-            spreads = [int(r["spread"]) for r in m1_rates]
-            real_volumes = [int(r["real_volume"]) for r in m1_rates]
-
-            synthetic_time = int(m1_rates[-1]["time"])
-            synthetic_bar = {
-                "time": synthetic_time,
-                "open": opens[0],
-                "high": max(highs),
-                "low": min(lows),
-                "close": closes[-1],
-                "tick_volume": sum(volumes),
-                "spread": int(sum(spreads) / len(spreads)) if spreads else 0,
-                "real_volume": sum(real_volumes),
-                "_synthetic": True,
-            }
-
-            # Update sync state so lag detection doesn't fire spuriously
-            self._state.last_bar_time = synthetic_time
-            self._state.last_bar_open = synthetic_bar["open"]
-            self._state.last_bar_close = synthetic_bar["close"]
-            self._state.total_bars_seen += 1
-            self._state.last_sync_utc = datetime.now(UTC).isoformat()
-            self._save_state()
-
-            self._log_event(
-                "BAR_SYNTHETIC",
-                {
-                    "m1_bars_used": len(m1_rates),
-                    "synthetic_time": synthetic_time,
-                    "synthetic_close": synthetic_bar["close"],
-                },
-            )
-            return synthetic_bar
-
-        except Exception:
-            self._mt5_available = False
-            self._log_event("BAR_SYNTHETIC_FAILED", {"error": "mt5_unreachable"})
+        if m1_rates is None or len(m1_rates) < 2:
             return None
+
+        # Aggregate M1 bars into a synthetic M5 bar
+        highs = [float(r["high"]) for r in m1_rates]
+        lows = [float(r["low"]) for r in m1_rates]
+        closes = [float(r["close"]) for r in m1_rates]
+        opens = [float(r["open"]) for r in m1_rates]
+        volumes = [int(r["tick_volume"]) for r in m1_rates]
+        spreads = [int(r["spread"]) for r in m1_rates]
+        real_volumes = [int(r["real_volume"]) for r in m1_rates]
+
+        synthetic_time = int(m1_rates[-1]["time"])
+        synthetic_bar = {
+            "time": synthetic_time,
+            "open": opens[0],
+            "high": max(highs),
+            "low": min(lows),
+            "close": closes[-1],
+            "tick_volume": sum(volumes),
+            "spread": int(sum(spreads) / len(spreads)) if spreads else 0,
+            "real_volume": sum(real_volumes),
+            "_synthetic": True,
+        }
+
+        # Update sync state so lag detection doesn't fire spuriously
+        self._state.last_bar_time = synthetic_time
+        self._state.last_bar_open = synthetic_bar["open"]
+        self._state.last_bar_close = synthetic_bar["close"]
+        self._state.total_bars_seen += 1
+        self._state.last_sync_utc = datetime.now(UTC).isoformat()
+        self._save_state()
+
+        self._log_event(
+            "BAR_SYNTHETIC",
+            {
+                "m1_bars_used": len(m1_rates),
+                "synthetic_time": synthetic_time,
+                "synthetic_close": synthetic_bar["close"],
+            },
+        )
+        return synthetic_bar
 
     def get_state(self) -> dict[str, Any]:
         """Return current sync state for health monitoring."""
@@ -430,7 +478,16 @@ class BarSyncPoller:
     # -- Internal --
 
     def _init_mt5(self) -> None:
-        """Attempt to initialize MT5 connection."""
+        """Attempt to initialize MT5 connection (standalone mode only).
+
+        When a worker is provided, the caller owns the MT5 lifecycle and this
+        method is not called — ``_mt5_available`` is set from the worker in
+        ``__init__``.
+        """
+        if self._mt5_worker is not None:
+            self._mt5_available = True
+            return
+
         try:
             import MetaTrader5 as mt5
 
@@ -468,19 +525,17 @@ class BarSyncPoller:
 
     @staticmethod
     def _timeframe_map(tf: str) -> int:
-        """Map string timeframe to MT5 constant."""
-        import MetaTrader5 as mt5
-
+        """Map string timeframe to MT5 constant (hardcoded — no import needed)."""
         mapping = {
-            "M1": mt5.TIMEFRAME_M1,
-            "M5": mt5.TIMEFRAME_M5,
-            "M15": mt5.TIMEFRAME_M15,
-            "M30": mt5.TIMEFRAME_M30,
-            "H1": mt5.TIMEFRAME_H1,
-            "H4": mt5.TIMEFRAME_H4,
-            "D1": mt5.TIMEFRAME_D1,
+            "M1": MT5_TIMEFRAME_M1,
+            "M5": MT5_TIMEFRAME_M5,
+            "M15": MT5_TIMEFRAME_M15,
+            "M30": MT5_TIMEFRAME_M30,
+            "H1": MT5_TIMEFRAME_H1,
+            "H4": MT5_TIMEFRAME_H4,
+            "D1": MT5_TIMEFRAME_D1,
         }
-        return mapping.get(tf, mt5.TIMEFRAME_M5)
+        return mapping.get(tf, MT5_TIMEFRAME_M5)
 
     @staticmethod
     def _bar_seconds_for(tf: str) -> int:

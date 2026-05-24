@@ -1,65 +1,50 @@
 """MT5 implementation of :class:`BrokerAdapter`.
 
-Wraps the MetaTrader5 Python API behind the broker-agnostic protocol so
-every consumer (live cycle, order dispatch, risk evaluation) talks to
-a ``BrokerAdapter`` instead of the raw MT5 library.
+Wraps :class:`MT5Worker` behind the broker-agnostic protocol so every
+consumer (live cycle, order dispatch, risk evaluation) talks to a
+``BrokerAdapter`` instead of the raw MT5 library.
+
+All MT5 C++ calls execute on the single dedicated MT5Worker thread.
+No daemon threads are spawned and no init/shutdown cycles are performed
+by this adapter — the caller (``live_intent_loop.py``) owns the worker
+lifecycle.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.execution.mt5_worker import MT5Worker
+
+# MT5 constants — pure integers, no thread-affinity requirement.
+# Hardcoded to avoid requiring MetaTrader5 to be importable.
+MT5_TIMEFRAME_M5 = 5
+MT5_TRADE_ACTION_DEAL = 1
+MT5_TRADE_RETCODE_DONE = 10009
 
 
 class MT5BrokerAdapter:
-    """BrokerAdapter backed by a long-lived MetaTrader5 connection.
-
-    The MT5 terminal must already be initialized (``mt5.initialize()``)
-    before constructing this adapter.  The caller owns the MT5 lifecycle;
-    this adapter does NOT call ``mt5.initialize()`` or ``mt5.shutdown()``.
+    """BrokerAdapter backed by the single-threaded :class:`MT5Worker`.
 
     Usage::
 
-        import MetaTrader5 as mt5
-        mt5.initialize(path="C:\\...")
-        broker = MT5BrokerAdapter(mt5)
+        worker = MT5Worker()
+        worker.start(terminal_path=r"C:\\...")
+        broker = MT5BrokerAdapter(worker)
         mid, bid, ask = broker.fetch_prices("XAUUSDc")
     """
 
     broker_name = "mt5"
 
-    def __init__(self, mt5_module: Any) -> None:
-        self._mt5 = mt5_module
+    def __init__(self, mt5_worker: MT5Worker) -> None:
+        self._worker: MT5Worker = mt5_worker
 
     # ── Required by BrokerAdapter ──
 
     def fetch_prices(self, symbol: str, timeout: float = 5.0) -> tuple[float, float, float]:
-        """Fetch bid/ask/mid with thread timeout to prevent MT5 hang."""
-        import threading
-
-        result: list[Any] = [None]
-        exc_info: list[Any] = [None]
-
-        def _target() -> None:
-            try:
-                tick = self._mt5.symbol_info_tick(symbol)
-                if tick is None:
-                    try:
-                        self._mt5.initialize()
-                        tick = self._mt5.symbol_info_tick(symbol)
-                    except Exception:
-                        pass
-                result[0] = tick
-            except Exception as e:
-                exc_info[0] = e
-
-        t = threading.Thread(target=_target, daemon=True)
-        t.start()
-        t.join(timeout=timeout)
-        if t.is_alive():
-            raise TimeoutError(f"symbol_info_tick timed out after {timeout}s")
-        if exc_info[0] is not None:
-            raise exc_info[0]
-        tick = result[0]
+        """Fetch bid/ask/mid — executed on the MT5 worker thread."""
+        tick = self._worker.symbol_info_tick(symbol, timeout=timeout)
         if tick is None:
             raise RuntimeError(f"tick unavailable for {symbol}")
         bid = float(tick.bid)
@@ -67,28 +52,13 @@ class MT5BrokerAdapter:
         mid = (bid + ask) / 2.0
         return mid, bid, ask
 
-    def fetch_current_atr(self, symbol: str, period: int = 14, timeout: float = 5.0) -> float:
-        """Compute current M5 ATR(14) with thread timeout to prevent MT5 hang."""
-        import threading
-
+    def fetch_current_atr(self, symbol: str, period: int = 14, timeout: float = 10.0) -> float:
+        """Compute current M5 ATR(*period*) — rates fetched on worker, math is local."""
         import numpy as np
 
-        result: list[Any] = [None]
-        exc_info: list[Any] = [None]
-
-        def _target() -> None:
-            try:
-                rates = self._mt5.copy_rates_from_pos(symbol, self._mt5.TIMEFRAME_M5, 0, period + 1)
-                result[0] = rates
-            except Exception as e:
-                exc_info[0] = e
-
-        t = threading.Thread(target=_target, daemon=True)
-        t.start()
-        t.join(timeout=timeout)
-        if t.is_alive() or exc_info[0] is not None:
-            return 0.0
-        rates = result[0]
+        rates = self._worker.copy_rates_from_pos(
+            symbol, MT5_TIMEFRAME_M5, 0, period + 1, timeout=timeout
+        )
         if rates is None or len(rates) < period + 1:
             return 0.0
         h = np.array([r["high"] for r in rates], dtype=np.float64)
@@ -104,88 +74,52 @@ class MT5BrokerAdapter:
         return float(np.mean(tr))
 
     def count_positions(self, symbol: str, timeout: float = 5.0) -> int:
-        """Count open MT5 positions with thread timeout to prevent hanging."""
-        import threading
+        """Count open MT5 positions — executed on the worker thread."""
+        pos = self._worker.positions_get(symbol=symbol, timeout=timeout)
+        return len(pos) if pos else 0
 
-        result: list[int | None] = [None]
-        exc_info: list[Any] = [None]
-
-        def _target() -> None:
-            try:
-                pos = self._mt5.positions_get(symbol=symbol)
-                result[0] = len(pos) if pos else 0
-            except Exception as e:
-                exc_info[0] = e
-
-        t = threading.Thread(target=_target, daemon=True)
-        t.start()
-        t.join(timeout=timeout)
-        if t.is_alive():
-            return -1  # timed out → signal caller to treat as unavailable
-        if exc_info[0] is not None:
-            return -1
-        return result[0] if result[0] is not None else -1
-
-    def get_position_tickets(self, symbol: str) -> list[int]:
-        pos = self._mt5.positions_get(symbol=symbol)
+    def get_position_tickets(self, symbol: str, timeout: float = 5.0) -> list[int]:
+        """Return open position tickets for *symbol*."""
+        pos = self._worker.positions_get(symbol=symbol, timeout=timeout)
         return [p.ticket for p in pos] if pos else []
 
-    def get_account_drawdown_pct(self) -> float:
-        try:
-            acc = self._mt5.account_info()
-            if acc is None:
-                return 0.0
-            equity = float(getattr(acc, "equity", 0))
-            balance = float(getattr(acc, "balance", 0))
-            if balance <= 0:
-                return 0.0
-            return round(max(0.0, (balance - equity) / balance) * 100, 2)
-        except Exception:
+    def get_account_drawdown_pct(self, timeout: float = 5.0) -> float:
+        """Compute drawdown % from account equity/balance."""
+        acc = self._worker.account_info(timeout=timeout)
+        if acc is None:
             return 0.0
+        equity = float(getattr(acc, "equity", 0))
+        balance = float(getattr(acc, "balance", 0))
+        if balance <= 0:
+            return 0.0
+        return round(max(0.0, (balance - equity) / balance) * 100, 2)
 
-    def close_position(self, ticket: int, slippage: int = 200) -> tuple[bool, str]:
-        """L2 forced liquidation: close a position by ticket directly via MT5.
+    def close_position(
+        self, ticket: int, slippage: int = 200, timeout: float = 10.0
+    ) -> tuple[bool, str]:
+        """L2 forced liquidation: close a position by ticket via MT5.
 
-        Returns (success, message).  Bypasses the bridge — use only when the
-        normal dispatch path has timed out or exhausted retries.
+        Returns (success, message).
         """
-        import threading
+        request = {
+            "action": MT5_TRADE_ACTION_DEAL,
+            "position": ticket,
+            "slippage": slippage,
+        }
+        resp = self._worker.order_send(request, timeout=timeout)
+        if resp is None:
+            return False, f"order_send returned None (ticket={ticket})"
+        if resp.retcode == MT5_TRADE_RETCODE_DONE:
+            return True, f"L2 close ok ticket={ticket} vol={resp.volume}"
+        return (
+            False,
+            f"L2 close failed ticket={ticket} retcode={resp.retcode} "
+            f"comment={getattr(resp, 'comment', '')}",
+        )
 
-        result: list[Any] = [None]
-        exc_info: list[Any] = [None]
-
-        def _target() -> None:
-            try:
-                request = {
-                    "action": self._mt5.TRADE_ACTION_DEAL,
-                    "position": ticket,
-                    "slippage": slippage,
-                }
-                resp = self._mt5.order_send(request)
-                if resp is None:
-                    result[0] = (False, f"order_send returned None (ticket={ticket})")
-                elif resp.retcode == self._mt5.TRADE_RETCODE_DONE:
-                    result[0] = (True, f"L2 close ok ticket={ticket} vol={resp.volume}")
-                else:
-                    result[0] = (
-                        False,
-                        f"L2 close failed ticket={ticket} retcode={resp.retcode} "
-                        f"comment={getattr(resp, 'comment', '')}",
-                    )
-            except Exception as e:
-                exc_info[0] = e
-
-        t = threading.Thread(target=_target, daemon=True)
-        t.start()
-        t.join(timeout=10.0)
-        if t.is_alive():
-            return False, f"L2 close timed out (ticket={ticket})"
-        if exc_info[0] is not None:
-            return False, f"L2 close exception: {exc_info[0]}"
-        return result[0] if result[0] is not None else (False, "L2 close: no result")
-
-    def get_open_positions_detail(self, symbol: str) -> list[dict[str, Any]]:
-        positions = self._mt5.positions_get(symbol=symbol) or []
+    def get_open_positions_detail(self, symbol: str, timeout: float = 5.0) -> list[dict[str, Any]]:
+        """Return detailed position dicts for *symbol*."""
+        positions = self._worker.positions_get(symbol=symbol, timeout=timeout)
         result: list[dict[str, Any]] = []
         for pos in positions:
             result.append(
@@ -198,13 +132,14 @@ class MT5BrokerAdapter:
             )
         return result
 
-    # ── Future extension points ──
+    # ── Connection state (delegated to worker) ──
 
     def connect(self) -> bool:
-        return True  # MT5 is already initialized by caller
+        """The worker manages connection — this is a no-op."""
+        return True
 
     def disconnect(self) -> None:
-        pass  # MT5 lifecycle is owned by caller
+        """The worker manages connection — this is a no-op."""
 
     def is_connected(self) -> bool:
         return True

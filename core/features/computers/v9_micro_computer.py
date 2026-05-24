@@ -17,10 +17,14 @@ Usage::
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from core.features.computers.microstructure_computer import MicrostructureFeatureComputer
 from core.features.computers.v9_live_computer import V9LiveFeatureComputer
 from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
+
+if TYPE_CHECKING:
+    from core.execution.mt5_worker import MT5Worker
 
 
 class V9MicroComputer:
@@ -32,11 +36,12 @@ class V9MicroComputer:
     (Imputation Ghosts fix).
     """
 
-    def __init__(self, mt5_module, symbol: str):
+    def __init__(self, mt5_module, symbol: str, mt5_worker: MT5Worker | None = None):
         self._mt5 = mt5_module
         self._symbol = symbol
-        self._v9 = V9LiveFeatureComputer(mt5_module, symbol)
-        self._micro = MicrostructureFeatureComputer(mt5_module, symbol)
+        self._worker = mt5_worker
+        self._v9 = V9LiveFeatureComputer(mt5_module, symbol, mt5_worker=mt5_worker)
+        self._micro = MicrostructureFeatureComputer(mt5_module, symbol, mt5_worker=mt5_worker)
         self.last_micro_ok: bool = False
 
     def compute_all(self) -> dict[str, float]:

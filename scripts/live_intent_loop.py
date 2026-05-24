@@ -75,7 +75,7 @@ def _resolve_consensus_side(consensus: dict[str, Any], min_confidence: float) ->
 
 
 def _bootstrap_regime_detector(
-    mt5: Any, symbol: str, detector: Any, *, bootstrap_bars: int = 200
+    mt5_worker: Any, symbol: str, detector: Any, *, bootstrap_bars: int = 200
 ) -> bool:
     """Warm-start regime detector from MT5 historical ATR data."""
     if detector.is_warmed_up and detector.atr_mean > 0.1:
@@ -84,7 +84,7 @@ def _bootstrap_regime_detector(
     try:
         import numpy as np
 
-        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 0, bootstrap_bars)
+        rates = mt5_worker.copy_rates_from_pos(symbol, 5, 0, bootstrap_bars)  # MT5_TIMEFRAME_M5
         if rates is None or len(rates) < 30:
             return False
 
@@ -685,34 +685,32 @@ def main(argv: list[str] | None = None) -> int:
         strategy_configs=strategy_configs,
     )
 
-    # ── Import MT5 ──
+    # ── Initialize MT5Worker (single-threaded engine — all MT5 calls on one thread) ──
     mt5: Any = None
+    mt5_worker: Any = None
     if not args.no_mt5:
-        try:
-            import MetaTrader5 as mt5_mod
+        from core.execution.mt5_worker import MT5Worker, set_mt5_worker
 
-            mt5 = mt5_mod
-        except Exception as exc:
-            print(
-                json.dumps({"error": "MetaTrader5 package required", "detail": str(exc)}, indent=2)
-            )
-            return 2
-
-        if not mt5.initialize(path=args.mt5_terminal_path):
+        mt5_worker = MT5Worker()
+        if not mt5_worker.start(terminal_path=args.mt5_terminal_path):
             print(
                 json.dumps(
-                    {"error": "mt5_initialize_failed", "detail": str(mt5.last_error())},
+                    {
+                        "error": "mt5_worker_start_failed",
+                        "detail": "MT5Worker could not initialize",
+                    },
                     indent=2,
                 )
             )
             return 2
+        set_mt5_worker(mt5_worker)
 
     # ── Build broker adapter (swap point for future FIX / cloud brokers) ──
     _broker: Any = None
-    if not args.no_mt5 and mt5 is not None:
+    if not args.no_mt5 and mt5_worker is not None:
         from core.execution.mt5_broker_adapter import MT5BrokerAdapter
 
-        _broker = MT5BrokerAdapter(mt5)
+        _broker = MT5BrokerAdapter(mt5_worker)
 
     # ── Load configs ──
     try:
@@ -721,8 +719,8 @@ def main(argv: list[str] | None = None) -> int:
         print(
             json.dumps({"error": "normalization_config_load_failed", "detail": str(exc)}, indent=2)
         )
-        if mt5 is not None:
-            mt5.shutdown()
+        if mt5_worker is not None:
+            mt5_worker.stop()
         return 2
 
     # ── Initialize rolling normalizer ──
@@ -802,7 +800,7 @@ def main(argv: list[str] | None = None) -> int:
 
         needs_bootstrap = not regime_detector.is_warmed_up or regime_detector.atr_mean < 0.1
         if needs_bootstrap:
-            bootstrapped = _bootstrap_regime_detector(mt5, args.symbol, regime_detector)
+            bootstrapped = _bootstrap_regime_detector(mt5_worker, args.symbol, regime_detector)
             print(
                 json.dumps(
                     {
@@ -824,8 +822,8 @@ def main(argv: list[str] | None = None) -> int:
             brain_entry = load_brain_entry(args.brain_entry)
         except Exception as exc:
             print(json.dumps({"error": "brain_entry_load_failed", "detail": str(exc)}, indent=2))
-            if mt5 is not None:
-                mt5.shutdown()
+            if mt5_worker is not None:
+                mt5_worker.stop()
             return 2
         config.brain_entry = brain_entry
 
@@ -847,7 +845,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_mt5:
         from core.features.computers.v9_live_computer import V9LiveFeatureComputer
 
-        feature_computer = V9LiveFeatureComputer(mt5, args.symbol)
+        feature_computer = V9LiveFeatureComputer(mt5, args.symbol, mt5_worker=mt5_worker)
 
         from core.features.adapters.v9_feature_adapter import V9FeatureAdapter
 
@@ -864,7 +862,9 @@ def main(argv: list[str] | None = None) -> int:
             MicrostructureFeatureComputer,
         )
 
-        micro_feature_computer = MicrostructureFeatureComputer(mt5, args.symbol)
+        micro_feature_computer = MicrostructureFeatureComputer(
+            mt5, args.symbol, mt5_worker=mt5_worker
+        )
         micro_feature_adapter = MicrostructureFeatureAdapter(
             scaler_path=None,
         )
@@ -901,6 +901,7 @@ def main(argv: list[str] | None = None) -> int:
 
             daily_feature_provider = LiveDailyFeatureProvider(
                 mt5_module=mt5,
+                mt5_worker=mt5_worker,
                 symbol=args.symbol,
                 d1_csv="data/raw/xauusdc_d1_merged.csv",
                 h4_csv="data/raw/xauusdc_h4_merged.csv",
@@ -1130,8 +1131,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
         if not brains:
             print(json.dumps({"error": "no_brains_loaded", "dir": args.brains_dir}, indent=2))
-            if mt5 is not None:
-                mt5.shutdown()
+            if mt5_worker is not None:
+                mt5_worker.stop()
             return 2
         parliament = ParliamentService()
 
@@ -1141,7 +1142,7 @@ def main(argv: list[str] | None = None) -> int:
         # Warm-start is an optimization — brains function normally without it,
         # they just need a few bars of live data to fill internal buffers.
         _warm_start_pending: list[dict[str, Any]] = []
-        if not args.no_mt5 and mt5 is not None:
+        if not args.no_mt5 and mt5_worker is not None:
             for b_info in brains:
                 btype = b_info.get("brain_type", "")
                 if btype in ("ou_params_v6", "transformer_v4.3"):
@@ -1166,8 +1167,8 @@ def main(argv: list[str] | None = None) -> int:
         gov_check = _check_single_brain_governance(brain_id, args.base_dir)
         if gov_check.get("blocked"):
             print(json.dumps(gov_check, ensure_ascii=False), flush=True)
-            if mt5 is not None:
-                mt5.shutdown()
+            if mt5_worker is not None:
+                mt5_worker.stop()
             return 2
         if gov_check.get("warning"):
             print(json.dumps(gov_check, ensure_ascii=False), flush=True)
@@ -1247,7 +1248,7 @@ def main(argv: list[str] | None = None) -> int:
                 # Verify ALL restored positions still exist on MT5.
                 for rt in position_manager.get_all_positions():
                     _rt_ticket = rt.ticket
-                    mt5_positions = mt5.positions_get(ticket=_rt_ticket)
+                    mt5_positions = mt5_worker.positions_get(ticket=_rt_ticket)
                     if mt5_positions and len(mt5_positions) > 0:
                         mp = mt5_positions[0]
                         managed_tickets.add(_rt_ticket)
@@ -1297,7 +1298,7 @@ def main(argv: list[str] | None = None) -> int:
                         ticket = pos_detail.get("ticket", 0)
                         if ticket <= 0:
                             continue
-                        mt5_positions = mt5.positions_get(ticket=ticket)
+                        mt5_positions = mt5_worker.positions_get(ticket=ticket)
                         if not mt5_positions or len(mt5_positions) == 0:
                             continue
                         mp = mt5_positions[0]
@@ -1376,7 +1377,7 @@ def main(argv: list[str] | None = None) -> int:
 
         # ── Post-recovery audit: detect all MT5 positions and report unmanaged ones ──
         try:
-            all_mt5_positions = mt5.positions_get(symbol=args.symbol)
+            all_mt5_positions = mt5_worker.positions_get(symbol=args.symbol)
             if all_mt5_positions:
                 for mp in all_mt5_positions:
                     ticket = mp.ticket
@@ -1606,7 +1607,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # ── Initialize BarSyncPoller (event-driven M5 bar detection) ──
     bar_sync: Any = None
-    if args.bar_sync and not args.no_mt5 and mt5 is not None:
+    if args.bar_sync and not args.no_mt5 and mt5_worker is not None:
         try:
             from core.protocol.event_bar_sync import BarSyncPoller
 
@@ -1616,6 +1617,7 @@ def main(argv: list[str] | None = None) -> int:
                 terminal_path=args.mt5_terminal_path,
                 state_dir=args.base_dir,
                 timeout_seconds=args.bar_sync_timeout,
+                mt5_worker=mt5_worker,
             )
             print(
                 json.dumps(
@@ -1758,7 +1760,7 @@ def main(argv: list[str] | None = None) -> int:
         # thread and the main loop's MT5 calls (FIX-20260522-014).
         # A 15-second join timeout prevents startup deadlock if MT5 is
         # unresponsive — the buffer fill is best-effort, not critical.
-        if _warm_start_pending and mt5 is not None:
+        if _warm_start_pending and mt5_worker is not None:
             import threading as _threading
 
             def _background_warm_start() -> None:
@@ -1769,7 +1771,9 @@ def main(argv: list[str] | None = None) -> int:
                         continue
                     try:
                         if btype == "ou_params_v6":
-                            rates = mt5.copy_rates_from_pos(args.symbol, mt5.TIMEFRAME_M5, 0, 300)
+                            rates = mt5_worker.copy_rates_from_pos(
+                                args.symbol, 5, 0, 300
+                            )  # MT5_TIMEFRAME_M5
                             if rates is not None and len(rates) >= 30:
                                 prices = [float(r["close"]) for r in rates]
                                 # For M15 brains, resample M5 closes → M15 closes
@@ -1852,7 +1856,7 @@ def main(argv: list[str] | None = None) -> int:
                 state, should_continue = execute_live_cycle(
                     config,
                     state,
-                    mt5=mt5,
+                    mt5_worker=mt5_worker,
                     broker=_broker,
                     feature_service=feature_service,
                     feature_computer=feature_computer,
@@ -1959,7 +1963,7 @@ def main(argv: list[str] | None = None) -> int:
                         )
                     if new_bar is None:
                         # Timeout — MT5 bar not yet formed; synthesize from M1 bars
-                        synthetic = bar_sync.fetch_synthetic_bar(mt5)
+                        synthetic = bar_sync.fetch_synthetic_bar()
                         sync_state = bar_sync.get_state()
                         if synthetic is not None:
                             print(
@@ -2086,8 +2090,8 @@ def main(argv: list[str] | None = None) -> int:
                 meta_signal_filter.save_state(str(_mf_state_path))
             except Exception:
                 pass
-        if mt5 is not None:
-            mt5.shutdown()
+        if mt5_worker is not None:
+            mt5_worker.stop()
         print(
             json.dumps({"event": "shutdown_complete", "time": _utc_iso()}, ensure_ascii=False),
             flush=True,

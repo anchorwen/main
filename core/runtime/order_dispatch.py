@@ -161,39 +161,24 @@ def _record_brain_outcomes(proposals, direction, execution_outcome, tracker):
         )
 
 
-def _build_risk_context(mt5: Any, symbol: str) -> dict[str, Any]:
-    """Query MT5 for risk metrics: positions, exposure, drawdown (with timeout)."""
-    import threading
+def _build_risk_context(mt5_worker: Any, symbol: str) -> dict[str, Any]:
+    """Query MT5 for risk metrics via MT5Worker (solves T1-C1 daemon-thread anti-pattern).
 
+    All MT5 calls are executed on the worker's dedicated thread with built-in
+    timeout handling — no ad-hoc daemon threads.
+    """
     ctx: dict[str, Any] = {
         "open_position_count": 0,
         "current_drawdown_pct": 0.0,
         "current_notional_exposure": 0.0,
         "positions_per_symbol": {},
     }
-    if mt5 is None:
+    if mt5_worker is None:
         ctx["_source"] = "no_mt5"
         return ctx
 
     try:
-        # positions_get with 5s timeout
-        _pos_result: list[Any] = [None]
-        _pos_exc: list[Any] = [None]
-
-        def _get_pos() -> None:
-            try:
-                _pos_result[0] = mt5.positions_get(symbol=symbol)
-            except Exception as e:
-                _pos_exc[0] = e
-
-        _pt = threading.Thread(target=_get_pos, daemon=True)
-        _pt.start()
-        _pt.join(timeout=5.0)
-        if _pt.is_alive() or _pos_exc[0] is not None:
-            ctx["_source"] = "mt5_timeout"
-            return ctx
-
-        positions = _pos_result[0] or []
+        positions = mt5_worker.positions_get(symbol=symbol, timeout=5.0)
         ctx["open_position_count"] = len(positions)
 
         per_sym: dict[str, int] = {}
@@ -205,21 +190,8 @@ def _build_risk_context(mt5: Any, symbol: str) -> dict[str, Any]:
             ctx["current_notional_exposure"] += vol * price
         ctx["positions_per_symbol"] = per_sym
 
-        # account_info with 5s timeout
-        _acc_result: list[Any] = [None]
-        _acc_exc: list[Any] = [None]
-
-        def _get_acc() -> None:
-            try:
-                _acc_result[0] = mt5.account_info()
-            except Exception as e:
-                _acc_exc[0] = e
-
-        _at = threading.Thread(target=_get_acc, daemon=True)
-        _at.start()
-        _at.join(timeout=5.0)
-        if not _at.is_alive() and _acc_exc[0] is None and _acc_result[0] is not None:
-            acc = _acc_result[0]
+        acc = mt5_worker.account_info(timeout=5.0)
+        if acc is not None:
             equity = float(getattr(acc, "equity", 0))
             balance = float(getattr(acc, "balance", 0))
             if balance > 0:

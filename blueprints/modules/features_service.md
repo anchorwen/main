@@ -50,6 +50,7 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260525-009 | 2026-05-25 | cursor-agent | — | MT5 worker refactoring: microstructure_computer.py, v9_live_computer.py, v9_micro_computer.py, live_daily_provider.py — optional mt5_worker param, hardcoded TF constants, _copy_rates helper routes through worker. | RC-04, RC-06 |
 | FIX-20260524-014 | 2026-05-24 | cursor-agent | — | MODULE_SOURCE_MAP: add feature_store_maintenance.py. Mypy fix (1→0 — extract errors_val for isinstance narrowing). Also feature_store_warmer mypy fix (1→0 — float(np.std()) annotation). | RC-02 |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |
 | FIX-20260518-045 | 2026-05-18 | cursor-agent | — | Commit catch-up: local_feature_store.resolve_version() schema lookup (previously documented under FIX-20260518-024 but never committed due to pre-commit deadlock). | process-violation |
