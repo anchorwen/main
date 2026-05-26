@@ -40,8 +40,10 @@ SCHEMA_DIMENSIONS: dict[str, int] = {
     "swing_24": 24,
     "v6_price_series_1": 1,
     "meta_stage2_runtime_47": 47,
+    "meta_stage2_runtime_48": 48,
     "meta_stage2_runtime_56": 56,
     "meta_stage2_runtime_59": 59,
+    "v9_40dim_ou3": 43,  # V9 Institutional 40 + OU physics (z_score, half_life, theta)
 }
 
 # Schema aliases that resolve to the same canonical schema
@@ -82,6 +84,12 @@ def _get_schema_feature_names(schema_id: str) -> list[str] | None:
             names = list(MICROSTRUCTURE_9_FEATURES) * 32
         elif canonical == "v6_price_series_1":
             names = ["price_return"]
+        elif canonical == "v9_40dim_ou3":
+            # 40 V9 institutional + 3 OU physics features (z_score, half_life, theta)
+            from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+
+            _OU_FEATURES = ["ou_z_score", "ou_half_life", "ou_theta"]
+            names = list(V9_INSTITUTIONAL_40_FEATURES) + _OU_FEATURES
         elif canonical == "meta_stage2_runtime_47":
             # 40 V9 institutional + 7 runtime-computable meta features (no rolling_hit_rate_20)
             from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
@@ -96,6 +104,22 @@ def _get_schema_feature_names(schema_id: str) -> list[str] | None:
                 "session_cos",
             ]
             names = list(V9_INSTITUTIONAL_40_FEATURES) + _META_FEATURES_RUNTIME
+        elif canonical == "meta_stage2_runtime_48":
+            # 40 V9 institutional + 8 runtime-computable meta features
+            # (7 base + rolling_hit_rate_20, no micro structure)
+            from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+
+            _META_FEATURES_RUNTIME_48 = [
+                "oof_pred",
+                "oof_pred_zscore_20",
+                "atr_percentile_100",
+                "vol_zscore",
+                "hurst_m5",
+                "session_sin",
+                "session_cos",
+                "rolling_hit_rate_20",
+            ]
+            names = list(V9_INSTITUTIONAL_40_FEATURES) + _META_FEATURES_RUNTIME_48
         elif canonical == "meta_stage2_runtime_56":
             # 40 V9 institutional + 9 microstructure + 7 runtime meta features
             from core.features.schemas.v9_micro_schema import V9_MICRO_49_FEATURES

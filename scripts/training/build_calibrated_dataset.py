@@ -498,9 +498,16 @@ def pair_labels_with_computed_features(
     ts_epoch = ohlc["timestamp_epoch"]
     n_bars = ohlc["n_bars"]
 
-    feature_names = sorted(
-        compute_features_at_bar(o, h, l, c, v, min(warmup_bars, n_bars - 1)).keys()
-    )
+    from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+
+    # Use canonical M5-first order matching runtime V9LiveFeatureComputer.
+    # sorted() would give H1-first alphabetically, causing train/serve feature skew.
+    _sample = compute_features_at_bar(o, h, l, c, v, min(warmup_bars, n_bars - 1))
+    _available = set(_sample.keys())
+    feature_names = [f for f in V9_INSTITUTIONAL_40_FEATURES if f in _available]
+    missing = [f for f in V9_INSTITUTIONAL_40_FEATURES if f not in _available]
+    if missing:
+        print(f"       [WARN] {len(missing)} canonical features missing: {missing[:5]}...")
     all_feature_names = feature_names + MICRO_FEATURE_NAMES if include_micro else feature_names
 
     X_rows: list[list[float]] = []

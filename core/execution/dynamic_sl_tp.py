@@ -13,6 +13,31 @@ Institutional reference:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
+
+# ── Strategy family discriminator ─────────────────────────────────────────
+
+
+class StrategyFamily(str, Enum):
+    """Strategy archetype for asymmetric volatility response.
+
+    Mean reversion (OU/StatArb): high vol → SL widens to survive noise,
+    TP tightens or stays flat (reversion profits shrink in turbulence).
+
+    Trend following (Barrier/Swing): high vol → SL and TP widen
+    synchronously (trend profits scale with volatility).
+    """
+
+    MEAN_REVERSION = "mean_reversion"
+    TREND_FOLLOWING = "trend_following"
+
+
+# ── Institutional hard clipping bounds ────────────────────────────────────
+
+MIN_SL_ATR = 0.8  # absolute floor — below this, noise triggers the stop
+MAX_SL_ATR = 4.0  # absolute ceiling — above this, one loss is too costly
+MIN_TP_ATR = 1.0  # reward:risk floor — TP must be at least 1.0 ATR
+MAX_TP_ATR = 6.0  # TP ceiling — beyond this the target is rarely hit
 
 
 @dataclass
@@ -28,6 +53,36 @@ class DynamicSLTP:
     envelope_warning: str = ""  # Non-empty when vol_ratio outside [0.6, 1.6]
 
 
+def _compute_regime_factors(
+    vol_ratio: float,
+    strategy_family: str,
+) -> tuple[float, float]:
+    """Asymmetric SL/TP regime factors from volatility ratio.
+
+    Returns (sl_factor, tp_factor) — multipliers applied to base_sl_mult
+    and base_tp_mult.  At vol_ratio=1.0 both factors equal 1.0.
+
+    Trend following: synchronous sqrt scaling — SL and TP widen together.
+    Mean reversion: SL widens (sqrt), TP tightens (inverse 4th root) —
+    reversion profits shrink in turbulence, don't chase them.
+
+    Empty strategy_family → (1.0, 1.0) — backward compatible no-op.
+    """
+    if not strategy_family:
+        return 1.0, 1.0
+
+    if strategy_family == StrategyFamily.TREND_FOLLOWING.value:
+        sl_factor = vol_ratio**0.5
+        tp_factor = vol_ratio**0.5
+    else:  # mean_reversion
+        sl_factor = vol_ratio**0.5
+        tp_factor = vol_ratio**-0.25
+
+    sl_factor = max(0.55, min(1.80, sl_factor))
+    tp_factor = max(0.55, min(2.00, tp_factor))
+    return sl_factor, tp_factor
+
+
 def compute_dynamic_sl_tp(
     base_sl_mult: float,
     base_tp_mult: float,
@@ -35,12 +90,13 @@ def compute_dynamic_sl_tp(
     current_atr: float,
     ref_atr: float = 5.0,  # keep in sync with StrategyLineConfig.ref_atr default
     hard_sl_ratio: float = 1.5,
-    min_sl_mult: float = 1.2,
-    max_sl_mult: float = 3.0,
+    min_sl_mult: float = MIN_SL_ATR,  # institutional floor — noise-proof
+    max_sl_mult: float = MAX_SL_ATR,  # institutional ceiling — loss budget
     max_tp_mult: float | None = None,
     timeframe_mult: int = 1,
     min_sl_distance: float = 0.0,
     min_rr_ratio: float = 0.0,
+    strategy_family: str = "",  # Phase 4: asymmetric regime response per archetype
 ) -> DynamicSLTP:
     """Compute volatility-normalized SL/TP distances.
 
@@ -85,18 +141,21 @@ def compute_dynamic_sl_tp(
 
     vol_ratio = raw_atr / ref_atr
 
-    # Direct ATR multiplication — SL/TP scale proportionally with volatility.
-    # At ATR=5: SL=2.0×5=10.0 (2.0 ATR). At ATR=8: SL=2.0×8=16.0 (still 2.0 ATR).
-    # Previous inverse formula (base_sl_mult / vol_ratio) mathematically cancelled
-    # to a fixed distance, causing SL to shrink to ~1.25 ATR in high vol → noise-triggered.
-    sl_mult = base_sl_mult
-    tp_mult = base_tp_mult
+    # ── Asymmetric regime scaling (Phase 4) ──
+    # vol_ratio-driven regime factors: widen/tighten SL/TP per strategy archetype.
+    # Mean reversion: SL widens to survive noise, TP tightens (don't chase).
+    # Trend following: SL and TP widen synchronously (trend profits scale with vol).
+    # Empty strategy_family → (1.0, 1.0) — backward compatible no-op.
+    sl_factor, tp_factor = _compute_regime_factors(vol_ratio, strategy_family)
 
-    # Clamp to reasonable bounds (SL and TP have separate ceilings)
+    sl_mult = base_sl_mult * sl_factor
+    tp_mult = base_tp_mult * tp_factor
+
+    # Clamp to institutional bounds (SL and TP have separate ceilings)
     if max_tp_mult is None:
-        max_tp_mult = max(max_sl_mult, base_tp_mult)
+        max_tp_mult = MAX_TP_ATR
     sl_mult = max(min_sl_mult, min(max_sl_mult, sl_mult))
-    tp_mult = max(min_sl_mult, min(max_tp_mult, tp_mult))
+    tp_mult = max(MIN_TP_ATR, min(max_tp_mult, tp_mult))
 
     sl_distance = sl_mult * current_atr
     tp_distance = tp_mult * current_atr

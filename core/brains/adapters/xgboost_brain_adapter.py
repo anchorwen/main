@@ -179,8 +179,11 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
         runtime_ms = raw_output.get("runtime_ms", 0.0)
         fallback_used = raw_output.get("fallback", self._backend.startswith("stub"))
 
-        # Map raw regression score to direction
-        direction_bias, up_prob, down_prob = self._score_to_direction(raw_score)
+        # Map raw score to direction (FIX-20260526-030: binary vs regression path)
+        direction_bias, up_prob, down_prob = self._score_to_direction(
+            raw_score,
+            objective=self._brain_entry.get("training_params", {}).get("objective", "regression"),
+        )
 
         return BrainSignal(
             brain_id=self._brain_entry.get("brain_id", ""),

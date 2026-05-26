@@ -106,13 +106,17 @@ def resolve_p_win_from_brains(
 ) -> float:
     """Resolve dynamic p_win for a strategy that does NOT use MetaFilter.
 
-    Uses rolling 100-trade win rate from BrainPnLStore.  Requires at least
-    10 settled trades before trusting the win rate.  Falls back to 0.5
-    (neutral — no Kelly amplification or dampening) when data is insufficient.
+    Uses rolling 100-trade win rate from BrainPnLStore (FIX-20260526-032:
+    window=100 explicitly passed to avoid all-time aggregation bias).
+    Requires at least 10 settled trades before trusting the win rate.
+
+    Falls back to 0.40 (Fail-Closed — FIX-20260526-031) when data is
+    insufficient.  With min_p_win=0.45 (statarb) or 0.50 (barrier),
+    0.40 < both → trades rejected when system lacks evidence.
 
     Trap 3 fix: Static historical win rate is a fixed multiplier in disguise.
     Rolling PnL win rate is dynamic and reflects current model performance.
-    Cold-start guard: empty list → 0.5 default (no crash, no false confidence).
+    Alpha decays, regimes shift — all-time WR drags stale history into today.
 
     Args:
         brains: List of brain info dicts with "brain_id" key (from StrategyLine.brains).
@@ -120,24 +124,40 @@ def resolve_p_win_from_brains(
         direction: "long" or "short" — for directional win rate lookup.
     """
     if pnl_store is None:
-        return 0.5
+        # FIX-20260526-031: Fail-Closed — when the system is blind (no PnL
+        # history), default 0.40 < min_p_win(0.45) so the trade is rejected
+        # rather than given a VIP pass on random signals.
+        return 0.40
 
     valid_rates: list[float] = []
+    skipped_reasons: list[str] = []
     for b in brains:
         brain_id = b.get("brain_id") if isinstance(b, dict) else getattr(b, "brain_id", None)
         if not brain_id:
+            skipped_reasons.append("no_brain_id")
             continue
         try:
-            m = pnl_store.get_metrics(str(brain_id))
-        except Exception:
+            m = pnl_store.get_metrics(str(brain_id), window=100)
+        except Exception as exc:
+            skipped_reasons.append(f"{brain_id}:get_metrics_error:{type(exc).__name__}")
             continue
-        if m is None or getattr(m, "sample_count", 0) < 10:
+        if m is None:
+            skipped_reasons.append(f"{brain_id}:metrics_none")
             continue
-        # Use direction-specific win rate when available and relevant
+        sc = getattr(m, "sample_count", 0)
+        if sc < 10:
+            skipped_reasons.append(f"{brain_id}:cold_start_samples={sc}")
+            continue
         wr = getattr(m, "win_rate", 0.0)
         if wr > 0:
             valid_rates.append(float(wr))
+        else:
+            skipped_reasons.append(f"{brain_id}:win_rate_zero")
 
     if valid_rates:
         return float(statistics.median(valid_rates))
-    return 0.5
+
+    # FIX-20260526-031: Fail-Closed — all fallback paths return 0.40.
+    # With min_p_win=0.45 (statarb) or 0.50 (barrier), 0.40 < both →
+    # trades are rejected when the system lacks historical evidence.
+    return 0.40

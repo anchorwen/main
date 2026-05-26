@@ -288,45 +288,8 @@ class PortfolioRiskController:
                     ),
                 )
 
-        # ── 1. Gross exposure check ──
-        if current_price is not None and current_price > 0:
-            current_gross_n = sum(
-                self._to_notional(p["volume"], current_price) for p in current_positions.values()
-            )
-            new_gross_n = current_gross_n + self._to_notional(volume, current_price)
-            max_gross_n = self._to_notional(self.max_gross, current_price)
-            if new_gross_n > max_gross_n:
-                return RiskResult(
-                    RiskVerdict.REJECTED,
-                    reason=f"gross_exposure_{new_gross_n:.0f}_gt_{max_gross_n:.0f}",
-                )
-        # When price is unavailable, skip exposure check — raw lot counts are
-        # dimensionally incompatible with max_gross (a notional percentage).
-        # Do NOT compare 0.10 lots against "10%" — the units don't match.
-
-        # ── 2. Net exposure check ──
-        if current_price is not None and current_price > 0:
-            net_long_n = sum(
-                self._to_notional(p["volume"], current_price)
-                for p in current_positions.values()
-                if p["direction"] == "long"
-            )
-            net_short_n = sum(
-                self._to_notional(p["volume"], current_price)
-                for p in current_positions.values()
-                if p["direction"] == "short"
-            )
-            current_net_n = net_long_n - net_short_n
-            vol_n = self._to_notional(volume, current_price)
-            new_net_n = current_net_n + vol_n if direction == "long" else current_net_n - vol_n
-            max_net_n = self._to_notional(self.max_net, current_price)
-            if abs(new_net_n) > max_net_n:
-                return RiskResult(
-                    RiskVerdict.REJECTED,
-                    reason=f"net_exposure_{abs(new_net_n):.0f}_gt_{max_net_n:.0f}",
-                )
-
-        # ── 3. Same-direction concentration check (per strategy family) ──
+        # ── 0.6 Same-direction concentration check (per strategy family) ──
+        # Does NOT use price — safe to run before the price guard.
         _family = strategy.split("_")[0] if "_" in strategy else strategy
         same_dir_count = sum(
             1
@@ -339,6 +302,51 @@ class PortfolioRiskController:
             return RiskResult(
                 RiskVerdict.REJECTED,
                 reason=f"direction_concentration_{same_dir_count}_max_{self.max_same_dir}",
+            )
+
+        # ── 0.7 Price feed guard — Fail-Closed ──
+        # FIX-20260525-025: When current_price is unavailable, notional
+        # exposure checks (gross/net) are blind.  Fail-Closed — reject
+        # entries rather than silently skipping the single most important
+        # risk check.  Non-price guards (duplicate, net_out cooldown,
+        # concentration) are checked above and unaffected.
+        if current_price is None or current_price <= 0:
+            return RiskResult(
+                RiskVerdict.REJECTED,
+                reason="price_unavailable_exposure_blind",
+            )
+
+        # ── 1. Gross exposure check ──
+        current_gross_n = sum(
+            self._to_notional(p["volume"], current_price) for p in current_positions.values()
+        )
+        new_gross_n = current_gross_n + self._to_notional(volume, current_price)
+        max_gross_n = self._to_notional(self.max_gross, current_price)
+        if new_gross_n > max_gross_n:
+            return RiskResult(
+                RiskVerdict.REJECTED,
+                reason=f"gross_exposure_{new_gross_n:.0f}_gt_{max_gross_n:.0f}",
+            )
+
+        # ── 2. Net exposure check ──
+        net_long_n = sum(
+            self._to_notional(p["volume"], current_price)
+            for p in current_positions.values()
+            if p["direction"] == "long"
+        )
+        net_short_n = sum(
+            self._to_notional(p["volume"], current_price)
+            for p in current_positions.values()
+            if p["direction"] == "short"
+        )
+        current_net_n = net_long_n - net_short_n
+        vol_n = self._to_notional(volume, current_price)
+        new_net_n = current_net_n + vol_n if direction == "long" else current_net_n - vol_n
+        max_net_n = self._to_notional(self.max_net, current_price)
+        if abs(new_net_n) > max_net_n:
+            return RiskResult(
+                RiskVerdict.REJECTED,
+                reason=f"net_exposure_{abs(new_net_n):.0f}_gt_{max_net_n:.0f}",
             )
 
         # ── 4. Opposite-direction netting ──

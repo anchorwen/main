@@ -180,12 +180,36 @@ class BaseBrainAdapter(ABC):
     # ── Shared score-to-direction mapping (avoids duplication across adapters) ──
 
     @staticmethod
-    def _score_to_direction(raw_score: float) -> tuple[Direction, float, float]:
-        """Map regression score to (direction_bias, up_prob, down_prob).
+    def _score_to_direction(
+        raw_score: float, objective: str = "regression"
+    ) -> tuple[Direction, float, float]:
+        """Map model output to (direction_bias, up_prob, down_prob).
 
-        Uses 0.5 ± confidence/2 anchoring so the predicted direction always
-        wins the up/down comparison in consensus (FIX-20260522-013, sign-flip bug).
+        FIX-20260526-030 — Two distinct paths based on model objective:
+
+        **Binary classifiers** (binary_logloss/binary):
+        - raw_score = P(TP-hit | features) ∈ [0, 1]
+        - These are trade-QUALITY classifiers, NOT directional classifiers.
+        - P > 0.55 → "LONG trade likely to succeed" → vote LONG
+        - P ≤ 0.55 → "uncertain / likely to fail" → ABSTAIN (NEUTRAL)
+        - NEVER vote SHORT — the model was trained on LONG-only trades and
+          has zero signal about SHORT trade outcomes.
+
+        **Regression** (Huber, squared_error, etc.):
+        - raw_score = signed regression output (e.g., BPS, z-score delta)
+        - > 0.1 → LONG, < -0.1 → SHORT, else NEUTRAL
+        - Uses 0.5 ± confidence/2 anchoring so the predicted direction
+          always wins the up/down comparison in consensus.
         """
+        if objective in ("binary_logloss", "binary"):
+            # Trade-quality classifier: P(TP-hit). Vote LONG or ABSTAIN.
+            if raw_score > 0.55:
+                up = float(raw_score)
+                down = 1.0 - float(raw_score)
+                return "long", up, down
+            return "neutral", 0.5, 0.5
+
+        # Regression path (Huber, etc.): signed score → directional vote
         confidence = float(np.tanh(abs(raw_score)))
 
         if raw_score > 0.1:

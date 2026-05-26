@@ -311,6 +311,26 @@ def main() -> int:
                 print(f"[FAIL] blueprint compliance check error: {exc}")
                 all_passed = False
 
+            print(">>> artifact parameter contract...")
+            try:
+                result = subprocess.run(
+                    [sys.executable, str(ROOT / "scripts" / "validate_artifacts.py")],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    cwd=str(ROOT),
+                    timeout=15,
+                )
+                print((result.stdout or "").strip())
+                if result.stderr and result.stderr.strip():
+                    print(result.stderr.strip())
+                if result.returncode != 0:
+                    all_passed = False
+            except Exception as exc:
+                print(f"[FAIL] artifact validation error: {exc}")
+                all_passed = False
+
     elif args.full:
         print(">>> mypy...")
         passed, output = run_mypy()
@@ -351,6 +371,26 @@ def main() -> int:
                 all_passed = False
         except Exception as exc:
             print(f"[FAIL] blueprint compliance check error: {exc}")
+            all_passed = False
+
+        print(">>> artifact parameter contract...")
+        try:
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "validate_artifacts.py")],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=str(ROOT),
+                timeout=15,
+            )
+            print((result.stdout or "").strip())
+            if result.stderr and result.stderr.strip():
+                print(result.stderr.strip())
+            if result.returncode != 0:
+                all_passed = False
+        except Exception as exc:
+            print(f"[FAIL] artifact validation error: {exc}")
             all_passed = False
 
         print(">>> pytest...")

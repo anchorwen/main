@@ -185,7 +185,12 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
         if "raw_score" in raw_output:
             # Regression mode: P&L score → direction via tanh threshold
             raw_score = raw_output["raw_score"]
-            direction_bias, up_probability, down_probability = self._score_to_direction(raw_score)
+            direction_bias, up_probability, down_probability = self._score_to_direction(
+                raw_score,
+                objective=self._brain_entry.get("training_params", {}).get(
+                    "objective", "regression"
+                ),
+            )
             confidence = max(up_probability, down_probability)
             _raw_score = raw_score
         else:

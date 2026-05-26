@@ -65,6 +65,78 @@ def z_depth_penalty(
     return 1.0 / (1.0 + strength * (abs_z - z_entry))
 
 
+def _adjust_p_win_for_regime(
+    p_win: float,
+    name: str,
+    regime_info: dict[str, object] | None,
+    entry_z_score: float | None,
+    trade_direction: str = "neutral",
+) -> float:
+    """Dynamically adjust p_win for OU strategies based on trend strength.
+
+    FIX-20260526-030: Historical p_win (rolling 100-trade WR ~0.49) is a static
+    average applied uniformly to all trades.  In trending regimes, high |z_score|
+    means momentum ignition (price is trending away from mean), NOT a mean-reversion
+    setup.  The model's "confidence" (z_score depth) is actually ANTI-informative
+    in trends — the more confident the brain, the worse the outcome.
+
+    FIX-20260526-035: Direction-aware asymmetric penalty.  With-trend pullbacks
+    ("千金难买牛回头") are the highest-quality OU setups — the trend is your
+    friend, not a risk factor.  Counter-trend signals (catching a falling knife
+    in a downtrend or shorting into an uptrend) receive the full penalty.
+
+    This function inversely maps z_score → p_win discount when ADX indicates
+    trending conditions.  Hard floor at 65% of original p_win prevents the
+    adjustment from ever being the sole veto (that's the p_win gate's job).
+
+    Non-OU strategies and non-trending regimes pass through unchanged.
+    """
+    if "statarb" not in name or not regime_info or entry_z_score is None:
+        return p_win
+
+    _rg: dict[str, Any] = {}
+    if isinstance(regime_info, dict):
+        _maybe_rg = regime_info.get("regime_gate")
+        if isinstance(_maybe_rg, dict):
+            _rg = _maybe_rg
+
+    _h1_adx = float(_rg.get("h1_adx") or 0.0)
+
+    # Only adjust when trend is significant (FIX-20260526-031: lowered from 20→15
+    # to match actual ADX distribution and prevent false negatives)
+    if _h1_adx < 15.0:
+        return p_win
+
+    # ── Direction-aware bypass: with-trend pullbacks are Alpha, not risk ──
+    _primary_dir = str(_rg.get("primary_trend") or "neutral")
+    _h1_dir = str(_rg.get("h1_trend_direction") or "neutral")
+    _ref_dir = _primary_dir if _primary_dir != "neutral" else _h1_dir
+
+    if trade_direction != "neutral" and _ref_dir != "neutral":
+        if trade_direction == _ref_dir:
+            return p_win  # 千金难买牛回头 — no penalty for with-trend pullbacks
+        # Counter-trend: continue to penalty logic below
+
+    abs_z = abs(entry_z_score)
+    # FIX-20260526-031: lowered from 1.5→0.8 — the old threshold was physically
+    # unreachable (actual OU |z| range 0.1-0.3).  Fix 3 (z_depth veto) filters
+    # |z|<0.325, so signals reaching here have |z|≥0.325.  The 0.8 threshold
+    # starts modest penalties for moderate deviations in trending markets.
+    if abs_z < 0.8:
+        return p_win
+
+    # Trending: inverse z_score effect on p_win
+    # At ADX=25, |z|=0.8: discount ≈ 0.97 (mild penalty at boundary)
+    # At ADX=30, |z|=1.5: discount ≈ 0.90 (moderate penalty)
+    # At ADX=40, |z|=2.5: discount ≈ 0.79 (strong penalty)
+    trend_penalty = min(0.90, (_h1_adx - 15.0) / 100.0)
+    z_amplification = min(1.0, (abs_z - 0.5) / 3.0)  # FIX-20260526-031: baseline 0.5→0.8→3.5 ramp
+    discount = 1.0 - trend_penalty * z_amplification
+
+    adjusted = p_win * max(discount, 0.65)  # floor at 65% of original
+    return round(adjusted, 4)
+
+
 def check_z_inflection(
     current_z: float,
     prev_z: float | None,
@@ -121,9 +193,11 @@ class StrategyDecision:
     venue: str = "live"  # "live" | "shadow"
     reason: str = ""
     entry_z_score: float = 0.0  # OU z-score at entry (0 = not an OU strategy or unknown)
+    entry_half_life: float = 0.0  # OU half-life at entry (0 = unknown / not OU)
     entry_context: dict[str, Any] = field(default_factory=dict)
     p_win: float = 0.5  # P(TP|signal) from MetaFilter or rolling PnL win rate
     kelly_mult: float = 1.0  # fractional Kelly multiplier (0.0 = EV veto)
+    gate_diag: dict[str, Any] = field(default_factory=dict)  # gate audit diagnostics
     # entry_context carries passthrough data for the journal:
     #   {"atr": float, "regime": str, "vol_regime": str, "trend_direction": str,
     #    "macro_regime": str, "brain_predictions": [dict, ...],
@@ -137,6 +211,7 @@ class StrategyLineConfig:
     name: str
     magic: int
     brain_types: set[str]
+    strategy_family: str = ""  # Phase 4: "mean_reversion" | "trend_following" | "" (auto-infer)
     base_volume: float = 0.01
     max_volume: float = 0.05
 
@@ -148,6 +223,11 @@ class StrategyLineConfig:
 
     # Confidence
     confidence_threshold: float = 0.40
+
+    # Hard p_win floor — intercepts signals without statistical advantage before Kelly sizing.
+    # Mean-reversion (statarb/OU) strategies need ≥0.50; trend strategies can use 0.48.
+    # Set per-strategy via live.yaml entry.* block, or 0.0 to disable.
+    min_p_win: float = 0.50
 
     # Volume regime factors
     regime_vol_mult_low: float = 1.20
@@ -297,6 +377,7 @@ class StrategyLine:
         Returns a StrategyDecision — may have should_trade=False.
         """
         name = self.config.name
+        _meta_p_win: float | None = None  # P(TP|signal) — resolved by MetaFilter or downstream
 
         # ── 1. Regime gate ──
         # "off" is deprecated (v3.0) — legacy guard, should never be reached
@@ -428,13 +509,18 @@ class StrategyLine:
                 except Exception:
                     pass
 
-        # ── 3a3. Capture entry_z_score from OU-style brains ──
+        # ── 3a3. Capture entry_z_score + entry_half_life from OU-style brains ──
         entry_z_score = 0.0
+        entry_half_life = 0.0
         for p in proposals:
             try:
                 z = getattr(p, "raw_score", 0.0)
                 if z is not None and float(z) != 0.0:
                     entry_z_score = float(z)
+                diag = getattr(p, "diagnostics", {}) or {}
+                hl = diag.get("half_life")
+                if hl is not None and isinstance(hl, int | float) and 0 < float(hl) < float("inf"):
+                    entry_half_life = float(hl)
                     break
             except (TypeError, ValueError, AttributeError):
                 pass
@@ -581,7 +667,27 @@ class StrategyLine:
                         proposals=proposals,
                         adx_value=adx_approx,
                     )
+                    # Capture for downstream volume override (COLD phase exploration safety)
+                    self._last_ou_result = ou_result
                     if not ou_result["passed"]:
+                        _gd: dict[str, Any] = {}
+                        _feat = ou_result.get("features", {})
+                        if _feat:
+                            _gd = {
+                                "gate": "conformal_ou",
+                                "composite_score": ou_result.get("score"),
+                                "threshold": ou_result.get("threshold"),
+                                "z_score": _feat.get("z_score"),
+                                "z_entry": _feat.get("z_entry"),
+                                "z_depth_q": _feat.get("z_depth_q"),
+                                "half_life": _feat.get("half_life"),
+                                "hl_q": _feat.get("hl_q"),
+                                "theta": _feat.get("theta"),
+                                "theta_q": _feat.get("theta_q"),
+                                "adx": _feat.get("adx"),
+                                "adx_q": _feat.get("adx_q"),
+                                "vel_q": _feat.get("vel_q"),
+                            }
                         return StrategyDecision(
                             strategy_name=name,
                             magic=self.config.magic,
@@ -597,6 +703,7 @@ class StrategyLine:
                             total_count=total_count,
                             regime_mode=regime_gate_mode,
                             reason=ou_result["reason"],
+                            gate_diag=_gd,
                         )
                 except Exception:
                     import logging
@@ -676,6 +783,144 @@ class StrategyLine:
                         reason="meta_filter_gate_exception_blocked",
                     )
 
+        # ── 4ab. MetaFilter experimental routing for statarb (FIX-20260526-041) ──
+        # EXPERIMENTAL: MetaFilter (48-dim LGB + Platt, Forward Sharpe 1.30) was
+        # trained on barrier_12bar trend/breakout logic.  Applying it to statarb
+        # mean-reversion signals is a domain-shift transfer-learning hack.
+        # entry_z_score * 12.5 serves as a proxy s1_prediction (|z|≤4 → |proxy|≤50,
+        # within the BPS training distribution).  The Platt calibrator + 47-dim
+        # context features provide partial domain-shift buffering.
+        #
+        # GUARDRAILS:
+        #   - Every 50 settled trades, evaluate corr(meta_p_win, realized_pnl).
+        #   - If corr < 0.05 for TWO consecutive periods → DISABLE this route
+        #     (revert to Fix 1C confidence mapping fallback).
+        #   - Long-term: collect 200+ OU settled trades → train OU-specific MetaFilter.
+        if meta_filter is not None and "statarb" in name and _meta_p_win is None:
+            try:
+                _z_proxy = entry_z_score * 12.5
+                _result = meta_filter.filter_arrays(
+                    direction=direction,
+                    s1_prediction=_z_proxy,
+                    v9_array=feature_vector,
+                    micro_array=micro_feature_vector,
+                )
+                if not _result.passed:
+                    import json as _json
+
+                    print(
+                        _json.dumps(
+                            {
+                                "event": "kelly_diag",
+                                "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+                                "strategy": name,
+                                "stage": "meta_filter_rejected_statarb",
+                                "z_score": round(entry_z_score, 4),
+                                "z_proxy": round(_z_proxy, 4),
+                                "result_p_win": round(float(getattr(_result, "p_win", 0)), 4),
+                                "passed": False,
+                                "reason": getattr(_result, "reason", None) or "threshold",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                    return StrategyDecision(
+                        strategy_name=name,
+                        magic=self.config.magic,
+                        should_trade=False,
+                        direction=direction,
+                        confidence=confidence,
+                        volume=0.0,
+                        sl=0.0,
+                        tp=0.0,
+                        hard_sl=0.0,
+                        brain_ids=brain_ids,
+                        supporting_count=support_count,
+                        total_count=total_count,
+                        regime_mode=regime_gate_mode,
+                        reason=f"meta_filter_rejected_statarb:{getattr(_result, 'reason', 'threshold')}",
+                    )
+                _meta_p_win = float(_result.p_win)
+                import json as _json
+
+                print(
+                    _json.dumps(
+                        {
+                            "event": "kelly_diag",
+                            "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+                            "strategy": name,
+                            "stage": "meta_filter_p_win_statarb",
+                            "z_score": round(entry_z_score, 4),
+                            "z_proxy": round(_z_proxy, 4),
+                            "result_p_win": round(_meta_p_win, 4),
+                            "passed": True,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "MetaFilter statarb routing failed for %s: fallthrough to p_win resolution",
+                    name,
+                    exc_info=True,
+                )
+
+        # ── 4aa. Direction-aware trend isolation gate (OU/statarb only) ──
+        # FIX-20260526-033: Replace symmetric ADX>25 block with direction-aware
+        # counter-trend gating.  Kalman fusion trend detection (no ADX lag) +
+        # primary_trend direction check via H4>H1>M5 priority chain.
+        #
+        # Physics: mean-reversion WITH the trend (pullback in uptrend, bounce
+        # in downtrend) has trend tailwind — the trend pulls price back toward
+        # the mean.  Counter-trend MR (fading the trend) is catching a falling
+        # knife — blocked.  This explains the LONG +44.2 vs SHORT -100.8 PnL
+        # asymmetry in OU_Params_V6_Sniper (1284 trades).
+        #
+        # Two-stage gating:
+        #   1. Trend detection: Kalman strength > 25 OR multi-TF consensus
+        #   2. Direction check: counter-trend → BLOCK; with-trend → ALLOW
+        if "statarb" in name and regime_info:
+            _rg = regime_info.get("regime_gate", {}) if isinstance(regime_info, dict) else {}
+            _trend_strength = float(_rg.get("h1_adx") or 0.0)  # Kalman fusion ×100
+            _h4_ts = float(_rg.get("h4_trend_strength") or 0.0)
+            _m5_ts = float(_rg.get("m5_trend_strength") or 0.0)
+            _h1_dir = str(_rg.get("h1_trend_direction") or "neutral")
+            _primary_dir = str(_rg.get("primary_trend") or "neutral")
+            _primary_source = str(_rg.get("primary_trend_source") or "h1")
+
+            _is_strong_trend = _trend_strength > 25.0
+            _mtf_consensus = _trend_strength > 20.0 and _h4_ts > 0.5 and _m5_ts > 0.5
+
+            if _is_strong_trend or _mtf_consensus:
+                # Direction-aware: ref_dir uses longest available timeframe
+                _ref_dir = _primary_dir if _primary_dir != "neutral" else _h1_dir
+                _is_counter_trend = (
+                    direction != "neutral" and _ref_dir != "neutral" and direction != _ref_dir
+                )
+
+                if _is_counter_trend:
+                    return StrategyDecision(
+                        strategy_name=name,
+                        magic=self.config.magic,
+                        should_trade=False,
+                        direction=direction,
+                        confidence=confidence,
+                        volume=0.0,
+                        sl=0.0,
+                        tp=0.0,
+                        hard_sl=0.0,
+                        brain_ids=brain_ids,
+                        supporting_count=support_count,
+                        total_count=total_count,
+                        regime_mode=regime_gate_mode,
+                        reason=f"counter_trend_blocked:{direction}_vs_{_ref_dir}({_primary_source})_ts={_trend_strength:.1f}",
+                    )
+                # With-trend MR → allowed (trend tailwind)
+
         if not parliament_passed:
             return StrategyDecision(
                 strategy_name=name,
@@ -696,17 +941,39 @@ class StrategyLine:
                     if direction != "neutral"
                     else "neutral_consensus"
                 ),
+                gate_diag={
+                    "gate": "parliament",
+                    "confidence": confidence,
+                    "threshold": self.config.confidence_threshold,
+                    "direction": direction,
+                    "supporting": support_count,
+                    "total": total_count,
+                    "brain_diag": [
+                        {
+                            "brain_id": getattr(p, "brain_id", "?"),
+                            "z_score": getattr(p, "raw_score", None),
+                            "half_life": getattr(p, "diagnostics", {}).get("half_life"),
+                            "buffer_len": getattr(p, "diagnostics", {}).get("buffer_len"),
+                            "theta": getattr(p, "diagnostics", {}).get("theta"),
+                        }
+                        for p in (proposals or [])
+                    ],
+                },
             )
 
         # ── 4b. Counter-trend gate ──
         # Block trades that oppose the higher-timeframe trend.
-        # Threshold varies by strategy: micro is moderate, statarb ignores trend
-        # (mean-reversion logic).  barrier_12bar is EXEMPT — Dictator Protocol:
-        # the Huber BPS probe IS the trend signal; a counter-trend block would
-        # silence the only voter and defeat Track 4d's purpose (FIX-20260522-013).
+        # barrier_12bar is EXEMPT — Dictator Protocol: the Huber BPS probe IS
+        # the trend signal; a counter-trend block would silence the only voter
+        # (FIX-20260522-013).
+        # statarb (mean-reversion) family is EXEMPT — mean-reversion is
+        # inherently counter-trend.  Blocking a statarb SHORT during a BULL
+        # trend is a category error: the strategy is *supposed* to fade the
+        # trend at extremes (FIX-20260526-028).
         _ct_vol_mult = 1.0
         if (
             name != "barrier_12bar"
+            and "statarb" not in name
             and trend_direction != "neutral"
             and direction != trend_direction
         ):
@@ -727,6 +994,13 @@ class StrategyLine:
                     total_count=total_count,
                     regime_mode=regime_gate_mode,
                     reason=f"counter_trend_blocked_{direction}_vs_{trend_direction}",
+                    gate_diag={
+                        "gate": "counter_trend",
+                        "signal_direction": direction,
+                        "trend_direction": trend_direction,
+                        "trend_strength": trend_strength,
+                        "h4_trend_strength": h4_trend_strength,
+                    },
                 )
             elif ct_block["action"] == "penalise":
                 confidence *= ct_block["confidence_mult"]
@@ -785,10 +1059,9 @@ class StrategyLine:
         # ── 4d. Meta-Labeling ML Gate (Stage 2) ──
         # Filters barrier_12bar signals through the LGB+MLP ensemble model.
         # Extracts Stage 1 raw prediction from the Huber brain, assembles the
-        # 49-dim named feature dict from the V9 + micro ndarrays, and applies
+        # 48-dim named feature dict from the V9 + micro ndarrays, and applies
         # Platt calibration + conformal thresholding.  Other strategies pass
         # through unchanged (scope isolation).
-        _meta_p_win: float | None = None  # P(TP|signal) for Kelly sizing
         if meta_filter is not None and name == "barrier_12bar":
             from core.execution.meta_pipeline import extract_probe_score
 
@@ -886,15 +1159,21 @@ class StrategyLine:
         # ── 5. Dynamic SL/TP ──
         from core.execution.dynamic_sl_tp import compute_dynamic_sl_tp, compute_sl_tp_levels
 
+        # Dynamic ref ATR: use live EWMA atr_mean when available (Phase 4)
+        _dynamic_ref_atr = self.config.ref_atr
+        if regime_info and regime_info.get("atr_mean", 0) > 0:
+            _dynamic_ref_atr = regime_info["atr_mean"]
+
         dsl = compute_dynamic_sl_tp(
             base_sl_mult=self.config.base_sl_atr_mult,
             base_tp_mult=self.config.base_tp_atr_mult,
             current_atr=current_atr,
-            ref_atr=self.config.ref_atr,
+            ref_atr=_dynamic_ref_atr,
             hard_sl_ratio=self.config.hard_sl_ratio,
             timeframe_mult=self.config.timeframe_mult,
             min_sl_distance=self.config.min_sl_distance,
             min_rr_ratio=self.config.min_rr_ratio,
+            strategy_family=self.config.strategy_family,
         )
 
         entry_price = mid_price or 0.0
@@ -921,7 +1200,8 @@ class StrategyLine:
         if regime_gate_mode != "shadow":
             tp_dist = abs(levels["take_profit"] - entry_price)
             sl_dist = abs(levels["stop_loss"] - entry_price)
-            if sl_dist > 0 and tp_dist / sl_dist < 1.2:
+            _min_rr = self.config.min_rr_ratio if self.config.min_rr_ratio > 0 else 1.2
+            if sl_dist > 0 and tp_dist / sl_dist < _min_rr:
                 return StrategyDecision(
                     strategy_name=name,
                     magic=self.config.magic,
@@ -943,13 +1223,79 @@ class StrategyLine:
         # ── 6. Volume ──
         # Resolve p_win for Tier 2 Kelly sizing
         _p_win: float = 0.5
+        _p_win_source: str = "neutral_default"
         if _meta_p_win is not None:
             _p_win = _meta_p_win  # Platt-calibrated P(TP|signal) from MetaFilter
+            _p_win_source = "meta_filter"
         elif pnl_store is not None:
             from core.execution.kelly_sizer import resolve_p_win_from_brains
 
             _p_win = resolve_p_win_from_brains(self.brains, pnl_store, direction)
+            _p_win_source = "rolling_wr"
+
+        # ── 6a. COLD phase exploration budget (FIX-20260526-041) ──
+        # When ConformalOUGate is in COLD phase (calibrator samples < 50),
+        # the p_win gate creates a chicken-and-egg deadlock: trading requires
+        # calibration, but calibration requires trades.  Forced Exploration
+        # Budget: override p_win=0.50 (Kelly mult=1.0, no amplification) and
+        # bypass the hard min_p_win gate.  Risk is bounded by the COLD volume
+        # cap at 0.01 lot enforced below.  Total exploration budget: ~$7.50-15.
+        _is_cold_explore: bool = False
+        if "statarb" in name or "ou" in name.lower():
+            _ou_gate = getattr(self, "_last_ou_result", None)
+            if _ou_gate is not None and _ou_gate.get("force_min_volume"):
+                _is_cold_explore = True
+                _p_win = 0.50
+                _p_win_source = "cold_explore_neutral"
+
+        # ── 6b. OU confidence → p_win monotonic fallback (FIX-20260526-041) ──
+        # Tier-3 fallback: when MetaFilter and PnLStore are both unavailable,
+        # map the OU brain's per-signal confidence to a p_win estimate.
+        # confidence ∈ [0.35, 1.0] → p_win ∈ [0.47, 0.60] — bounded to avoid
+        # extreme Kelly sizing while preserving signal quality gradient.
+        if _p_win_source == "neutral_default" and ("statarb" in name or "ou" in name.lower()):
+            _conf = max(0.0, min(1.0, confidence))
+            _p_win = 0.40 + _conf * 0.20
+            _p_win_source = "brain_confidence"
         # else: neutral 0.5 → Kelly mult = 1.0 (no amplification or dampening)
+
+        # ── 5f. Dynamic p_win adjustment for OU strategies (FIX-20260526-030) ──
+        # In trending regimes, high |z_score| is momentum ignition, not mean
+        # reversion.  Inversely discount p_win to prevent Kelly from sizing
+        # into anti-informative high-confidence OU signals.
+        _p_win = _adjust_p_win_for_regime(_p_win, name, regime_info, entry_z_score, direction)
+
+        # ── 5g. Hard p_win gate — physical isolation of Entry Conditions from Position Sizing ──
+        # Mean-reversion strategies with p_win < 0.50 have lost statistical advantage.
+        # Kelly formula alone produces "expected value illusion": theoretical RR is rarely
+        # fully captured in mean-reversion trades, but stop-loss is always real.
+        # This gate executes BEFORE Kelly sizing — if the model edge is gone, we don't size.
+        #
+        # COLD exploration bypass: when ConformalOUGate is accumulating its first 50
+        # calibration samples, p_win is overridden to 0.50 and this gate is skipped.
+        # Risk is bounded by the 0.01 lot volume cap enforced below.
+        if self.config.min_p_win > 0 and _p_win < self.config.min_p_win and not _is_cold_explore:
+            return StrategyDecision(
+                strategy_name=name,
+                magic=self.config.magic,
+                should_trade=False,
+                direction=direction,
+                confidence=round(confidence, 4),
+                volume=0.0,
+                sl=levels["stop_loss"],
+                tp=levels["take_profit"],
+                hard_sl=levels["hard_sl"],
+                brain_ids=brain_ids,
+                supporting_count=support_count,
+                total_count=total_count,
+                regime_mode=regime_gate_mode,
+                venue="live",
+                reason=f"p_win_below_min_{_p_win:.3f}_lt_{self.config.min_p_win}",
+                entry_z_score=entry_z_score,
+                entry_half_life=entry_half_life,
+                p_win=_p_win,
+                kelly_mult=0.0,
+            )
 
         # RR ratio from SL/TP levels (already computed in step 5)
         _rr_ratio: float = 1.0
@@ -981,6 +1327,7 @@ class StrategyLine:
                 venue="live",
                 reason=f"negative_kelly_ev:p_win={_p_win:.3f}_rr={_rr_ratio:.3f}_kf={kelly_result.kelly_fraction:.3f}",
                 entry_z_score=entry_z_score,
+                entry_half_life=entry_half_life,
                 p_win=_p_win,
                 kelly_mult=0.0,
             )
@@ -1012,6 +1359,23 @@ class StrategyLine:
         _ticks2 = math.floor(volume / self.config.lot_step + 0.5)
         volume = max(self.config.lot_step, round(_ticks2 * self.config.lot_step, 2))
 
+        # ── Layer 3 COLD phase exploration safety ──
+        # When the ConformalOUGate is in COLD phase (calibrator samples < 50),
+        # force-caps volume at min lot (0.01) regardless of Kelly/position sizer
+        # output.  This bounds exploration risk while the calibrator accumulates
+        # (p_win, label) samples to break the chicken-and-egg deadlock.
+        _ou_gate = getattr(self, "_last_ou_result", None)
+        if _ou_gate is not None and _ou_gate.get("force_min_volume"):
+            _pre_override = volume
+            volume = 0.01
+            import logging as _logging
+
+            _logging.getLogger(__name__).info(
+                "COLD phase volume override: %s → 0.01 (samples=%s, phase=%s)",
+                _pre_override,
+                _ou_gate.get("warmup_phase", "?"),
+            )
+
         # Diagnostic: three-way volume distinction (raw vs stepped)
         _pre_kelly_raw = getattr(self, "_last_pre_kelly_size", volume)
         _raw_target = _pre_kelly_raw * _kelly_mult
@@ -1024,12 +1388,14 @@ class StrategyLine:
                     "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
                     "strategy": name,
                     "p_win": round(_p_win, 4),
+                    "p_win_source": _p_win_source,
                     "rr_ratio": round(_rr_ratio, 4),
                     "kelly_mult": round(_kelly_mult, 4),
                     "sizing_label": kelly_result.sizing_label,
                     "base_volume": round(_pre_kelly_raw, 4),
                     "raw_target_volume": round(_raw_target, 4),
                     "final_stepped_volume": volume,
+                    "cold_explore": _is_cold_explore,
                 },
                 ensure_ascii=False,
             ),
@@ -1091,6 +1457,7 @@ class StrategyLine:
             venue=_venue,
             reason="approved",
             entry_z_score=entry_z_score,
+            entry_half_life=entry_half_life,
             entry_context=entry_context,
             p_win=_p_win,
             kelly_mult=kelly_result.fractional_mult,

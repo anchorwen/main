@@ -32,9 +32,27 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Known Issues
 
+### KI-003: Layer 3 Auto-Calibration (IN PROGRESS)
+
+**目标**: 激活 ConformalCalibrator Q10 FIFO 自适应阈值。
+
+**进度**: FIX-20260525-015 已解决全部三个阻塞条件：
+1. ~~Brain 层 `max_half_life=42`~~ → 已恢复为 58
+2. ~~Gate 层 5-way 乘法评分坍缩~~ → 已改为几何平均
+3. ~~数据闭环鸡生蛋~~ → 已实现 Explore-then-Commit 暖启调度
+
+**FIX-20260526-031 新增**: z_depth 硬否决权。几何平均评分存在"掩盖效应"——theta_q (0.95) 和 vel_q (1.0) 可拉高 composite_score 至 0.40+, 即使 z_depth_q 仅 0.12 (|z|≈0.16)。均值回归的物理基础是价格偏离; 无偏离=无利润空间。z_depth_q<0.25 → composite_score 归零, 任何其他维度无权拯救。效果: z_entry=1.3 → 实际 |z| 必须 > 0.325 才可能通过。
+
+**剩余工作**: 等待实盘累积 ≥50 个闭环样本后 calibrator 自动进入 WARM 阶段。
+
+**预估**: COLD→WARM 1-2 周, WARM→HOT 额外 2-3 周。
+
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
-| FIX-20260524-042 | 2026-05-24 | cursor-agent | — | T1-H2: vol_ratio envelope check now uses raw ATR before timeframe sqrt() scaling — prevents 3.46× inflation for H1. T1-H3: ConformalOUGate fallback OU diagnostic matching now verifies contract_group via BrainRegistry + requires BOTH theta AND half_life. | RC-05, RC-06 |
+| FIX-20260526-031 | 2026-05-26 | cursor-agent | — | Phase 6: (Fix 3) z_depth hard veto in ConformalOUGate.filter() — when z_depth_q<0.25, composite_score forced to 0.0 before geometric mean to cut masking effect; (Fix 2) resolve_p_win_from_brains() fallback 0.50→0.40 (Fail-Closed) + diagnostic skip logging; (Fix 1) _adjust_p_win_for_regime() thresholds: ADX 20→15, \|z\| 1.5→0.8, z_amplification baseline 1.0→0.5. Fix 3 centerpiece: mean-reversion physics demands deviation — |z| must exceed 0.325×z_entry before any trade can pass. | RC-05, RC-12 |
+| FIX-20260525-015 | 2026-05-25 | cursor-agent | — | Layer 3 bootstrap: break chicken-and-egg deadlock via (1) max_half_life 42→58 restore in M5 artifact, (2) geometric mean scoring replacing multiplicative product — `(∏ clip(c,0,1))^(1/5)` prevents dimensional collapse while preserving hard veto, (3) Explore-then-Commit warmup schedule: COLD phase (samples<50) fixed threshold=0.20 + force_min_volume=0.01, WARM (50≤n<100) Q10 floored at 0.20, HOT (n≥100) full Q10 [0.25,0.65]. | RC-05, RC-06, RC-12 |
+| FIX-20260525-012 | 2026-05-25 | cursor-agent | — | Phase 4 Dynamic SL/TP Calibration: `StrategyFamily` enum (mean_reversion | trend_following) for asymmetric volatility regime response. `_compute_regime_factors()`: MR → SL widens ×√vol_ratio, TP tightens ×vol_ratio^-0.25; TF → both widen ×√vol_ratio. Hard clipping: SL [0.8, 4.0], TP [1.0, 6.0]. Dynamic ref_atr from RegimeDetector EWMA. `compute_dynamic_sl_tp()` gains `strategy_family` param + new clamping defaults. 26 tests (14 new). | RC-12 |
+| FIX-20260524-042 |
 | FIX-20260524-043 | 2026-05-24 | cursor-agent | — | T2-H3: OU/Meta gate exceptions now block trades instead of non-blocking pass — ML quality filters failing silently was allowing trades through unguarded. T2-H7: compute_position_size returns 0.0 for invalid ATR (was min_lot) — data feed failure should not result in positive position size. | RC-06, RC-07 |
 | FIX-20260523-008 | 2026-05-24 | cursor-agent | — | Track 3d Conformal OU Gate: ConformalCalibrator with Q10 FIFO quantile threshold for OU MetaFilterGate. Replaces fixed 0.40 threshold with adaptive [0.35, 0.70]. Cold-start from journal history, FIFO deque(maxlen=500), clamp-hit-rate monitoring. MetaFilterGate.filter() now uses adaptive threshold when calibrator is warm. | RC-09 (config-drift — fixed threshold doesn't adapt to regime changes) |
 | FIX-20260522-024 | 2026-05-22 | cursor-agent | — | Config-driven MetaPipeline architecture: replaces hardcoded `_try_meta_pipeline()` with declarative `MetaPipeline` class. Fixes cross-module cascade where FIX-20260522-015 (BrainSignal migration removed `extensions` attribute) silently broke FIX-20260520-028 (Executive Veto read `p.extensions.raw_outputs.raw_score`). Brain JSON declares `"roles": ["meta_probe"]`; MetaPipeline discovers, extracts, filters via stage-N registry. | RC-06 (cross-module cascade) |

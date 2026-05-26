@@ -109,7 +109,7 @@ class TestStressEmptyEdgeCases:
     def test_empty_positions_always_approved(self):
         ctrl = PortfolioRiskController()
         dec = _make_decision(volume=0.05)
-        result = ctrl.check(dec, {})
+        result = ctrl.check(dec, {}, current_price=2000.0)
         assert result.verdict == RiskVerdict.APPROVED
 
     def test_zero_volume_decision(self):

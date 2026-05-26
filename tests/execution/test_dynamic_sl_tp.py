@@ -5,7 +5,13 @@ from __future__ import annotations
 import pytest
 
 from core.execution.dynamic_sl_tp import (
+    MAX_SL_ATR,
+    MAX_TP_ATR,
+    MIN_SL_ATR,
+    MIN_TP_ATR,
     DynamicSLTP,
+    StrategyFamily,
+    _compute_regime_factors,
     compute_dynamic_sl_tp,
     compute_sl_tp_levels,
 )
@@ -161,3 +167,160 @@ class TestComputeSLTPLevels:
         # Entry ± distances should be 5dp
         sl_str = f"{levels['stop_loss']:.5f}"
         assert sl_str == "1989.87654"
+
+
+# ── Phase 4: Asymmetric regime scaling ──────────────────────────────────
+
+
+class TestRegimeFactors:
+    """Tests for _compute_regime_factors — asymmetric SL/TP volatility response."""
+
+    def test_empty_family_returns_noop(self):
+        """Empty strategy_family → (1.0, 1.0) — backward compat."""
+        sl_f, tp_f = _compute_regime_factors(vol_ratio=2.0, strategy_family="")
+        assert sl_f == 1.0
+        assert tp_f == 1.0
+
+    def test_normal_vol_returns_noop(self):
+        """At vol_ratio=1.0, all families return (1.0, 1.0)."""
+        for fam in (StrategyFamily.TREND_FOLLOWING.value, StrategyFamily.MEAN_REVERSION.value):
+            sl_f, tp_f = _compute_regime_factors(vol_ratio=1.0, strategy_family=fam)
+            assert sl_f == pytest.approx(1.0)
+            assert tp_f == pytest.approx(1.0)
+
+    def test_trend_high_vol_widens_both(self):
+        """Trend following: both SL and TP widen with sqrt scaling."""
+        sl_f, tp_f = _compute_regime_factors(
+            vol_ratio=2.0, strategy_family=StrategyFamily.TREND_FOLLOWING.value
+        )
+        assert sl_f > 1.0
+        assert tp_f > 1.0
+        assert sl_f == pytest.approx(tp_f)  # synchronous
+
+    def test_mean_reversion_high_vol_widens_sl_tightens_tp(self):
+        """Mean reversion: SL widens (sqrt), TP tightens (inverse 4th root)."""
+        sl_f, tp_f = _compute_regime_factors(
+            vol_ratio=2.0, strategy_family=StrategyFamily.MEAN_REVERSION.value
+        )
+        assert sl_f > 1.0  # sqrt(2) = 1.414
+        assert tp_f < 1.0  # 2^-0.25 = 0.841
+
+    def test_mean_reversion_low_vol_tightens_sl_widens_tp(self):
+        """Mean reversion: low vol → SL tightens, TP widens."""
+        sl_f, tp_f = _compute_regime_factors(
+            vol_ratio=0.5, strategy_family=StrategyFamily.MEAN_REVERSION.value
+        )
+        assert sl_f < 1.0
+        assert tp_f > 1.0
+
+    def test_trend_low_vol_tightens_both(self):
+        """Trend following: low vol → both tighten together."""
+        sl_f, tp_f = _compute_regime_factors(
+            vol_ratio=0.5, strategy_family=StrategyFamily.TREND_FOLLOWING.value
+        )
+        assert sl_f < 1.0
+        assert tp_f < 1.0
+        assert sl_f == pytest.approx(tp_f)
+
+    def test_regime_factors_clamped(self):
+        """Extreme values are clamped to bounds."""
+        # Very high vol
+        sl_f, tp_f = _compute_regime_factors(
+            vol_ratio=100.0, strategy_family=StrategyFamily.TREND_FOLLOWING.value
+        )
+        assert sl_f <= 1.80  # SL_FACTOR_MAX
+        assert tp_f <= 2.00  # TP_FACTOR_MAX
+
+        # Very low vol
+        sl_f, tp_f = _compute_regime_factors(
+            vol_ratio=0.01, strategy_family=StrategyFamily.MEAN_REVERSION.value
+        )
+        assert sl_f >= 0.55  # SL_FACTOR_MIN
+        assert tp_f >= 0.55  # TP_FACTOR_MIN
+
+
+class TestPhase4DynamicSLTP:
+    """Integration tests: compute_dynamic_sl_tp with strategy_family."""
+
+    def test_default_empty_family_preserves_behavior(self):
+        """Without strategy_family, output matches pre-Phase-4 behavior."""
+        result = compute_dynamic_sl_tp(
+            base_sl_mult=2.0,
+            base_tp_mult=3.5,
+            current_atr=10.0,
+            ref_atr=5.0,
+            strategy_family="",  # default
+        )
+        # Multipliers unchanged at base (no regime factor applied)
+        assert result.sl_atr_mult == pytest.approx(2.0, rel=0.01)
+        assert result.tp_atr_mult == pytest.approx(3.5, rel=0.01)
+
+    def test_trend_following_high_vol_applies_regime(self):
+        """Trend following in high vol → both multipliers above base."""
+        result = compute_dynamic_sl_tp(
+            base_sl_mult=2.0,
+            base_tp_mult=3.5,
+            current_atr=10.0,
+            ref_atr=5.0,
+            strategy_family=StrategyFamily.TREND_FOLLOWING.value,
+        )
+        # vol_ratio=2.0 → sl_factor=tp_factor ≈ 1.414 → 2.0*1.414=2.828, 3.5*1.414=4.95
+        assert result.sl_atr_mult > 2.0
+        assert result.tp_atr_mult > 3.5
+
+    def test_mean_reversion_high_vol_sl_widens_tp_tightens(self):
+        """Mean reversion in high vol → SL widens, TP tightens."""
+        result = compute_dynamic_sl_tp(
+            base_sl_mult=1.5,
+            base_tp_mult=3.0,
+            current_atr=10.0,
+            ref_atr=5.0,
+            strategy_family=StrategyFamily.MEAN_REVERSION.value,
+        )
+        assert result.sl_atr_mult > 1.5  # widens
+        assert result.tp_atr_mult < 3.0  # tightens
+
+    def test_hard_clip_min_sl_atr(self):
+        """SL multiplier never drops below MIN_SL_ATR (0.8)."""
+        result = compute_dynamic_sl_tp(
+            base_sl_mult=0.3,  # very low base
+            base_tp_mult=1.0,
+            current_atr=5.0,
+            ref_atr=5.0,
+            strategy_family="",  # no regime factor → base=0.3 → clamped to 0.8
+        )
+        assert result.sl_atr_mult >= MIN_SL_ATR
+
+    def test_hard_clip_max_sl_atr(self):
+        """SL multiplier never exceeds MAX_SL_ATR (4.0)."""
+        result = compute_dynamic_sl_tp(
+            base_sl_mult=6.0,  # very high base
+            base_tp_mult=1.0,
+            current_atr=5.0,
+            ref_atr=5.0,
+            strategy_family="",
+        )
+        assert result.sl_atr_mult <= MAX_SL_ATR
+
+    def test_hard_clip_max_tp_atr(self):
+        """TP multiplier never exceeds MAX_TP_ATR (6.0)."""
+        result = compute_dynamic_sl_tp(
+            base_sl_mult=1.0,
+            base_tp_mult=10.0,  # very high base
+            current_atr=5.0,
+            ref_atr=5.0,
+            strategy_family="",
+            max_tp_mult=MAX_TP_ATR,
+        )
+        assert result.tp_atr_mult <= MAX_TP_ATR
+
+    def test_hard_clip_min_tp_atr(self):
+        """TP multiplier never drops below MIN_TP_ATR (1.0)."""
+        result = compute_dynamic_sl_tp(
+            base_sl_mult=1.0,
+            base_tp_mult=0.3,  # very low base
+            current_atr=5.0,
+            ref_atr=5.0,
+            strategy_family="",  # no regime factor → base=0.3 → clamped to 1.0
+        )
+        assert result.tp_atr_mult >= MIN_TP_ATR

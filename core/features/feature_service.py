@@ -15,6 +15,7 @@ from core.features.schemas.v9_micro_schema import V9_MICRO_49_FEATURES
 # Updated when new feature computer implementations are added.
 _IMPLEMENTED_SCHEMAS: set[str] = {
     "v9_institutional_40",  # V9LiveFeatureComputer → V9FeatureAdapter
+    "v9_40dim_ou3",  # V9 40 + 3 OU physics (assembled by _build_meta_feature_vector)
     "v9_micro_49",  # V9MicroComputer → 40 V9 + 9 micro
     "daily_swing_24",  # DailySwingFeatureComputer
     "swing_24",  # → daily_swing_24 alias
@@ -29,6 +30,7 @@ _IMPLEMENTED_SCHEMAS: set[str] = {
 _SCHEMA_DIMS: dict[str, int] = {
     "v9_institutional_40": 40,
     "v9_micro_49": 49,
+    "v9_40dim_ou3": 43,
 }
 
 
@@ -42,6 +44,9 @@ def _schema_feature_names(schema_name: str) -> list[str]:
         return list(V9_INSTITUTIONAL_40_FEATURES)
     if schema_name == "v9_micro_49":
         return list(V9_MICRO_49_FEATURES)
+    if schema_name == "v9_40dim_ou3":
+        # 40 V9 institutional + 3 OU physics (assembled by _build_meta_feature_vector)
+        return list(V9_INSTITUTIONAL_40_FEATURES) + ["ou_z_score", "ou_half_life", "ou_theta"]
     _logger.warning("Unknown schema '%s' — falling back to v9_institutional_40", schema_name)
     return list(V9_INSTITUTIONAL_40_FEATURES)
 

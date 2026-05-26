@@ -2,15 +2,15 @@ schema_version: "training_contract.v2.1"
 contract_id: "barrier_12bar_meta_binary_cls"
 
 dataset:
-  path: "data/training/meta_labeling_barrier/all.npz"
+  path: "data/training/barrier_stage1_v4/train.npz"
   feature_schema: "v9_institutional_40"
-  min_samples_per_class: 20
-  sample_weighting: "return_magnitude"
+  min_samples_per_class: 500
+  sample_weighting: "inverse_class_frequency"
 
 label:
   contract_id: "label-barrier-meta-1.0.0"
-  sl_atr_mult: 3.0
-  tp_atr_mult: 1.5
+  sl_atr_mult: 4.0       # calibrated: profitability surface scan on 67K-bar XAUUSD M5
+  tp_atr_mult: 1.5       # EV=0.34R, Sharpe=3.51, optimal for meta-label filtering
   horizon_bars: 12
   profitability_calibrated: true
   label_mapping: "drop_timeout_binary"
@@ -22,37 +22,39 @@ label:
 architecture:
   type: "lightgbm"
   objective_function: "binary_logloss"
-  search_space: "none"
-  optuna_trials: 0
+  search_space: "default"
+  optuna_trials: 30       # enabled for 30K+ sample dataset
   n_seeds: 5
   custom_params:
-    num_leaves: 7
-    max_depth: 2
-    learning_rate: 0.02
-    feature_fraction: 0.6
-    bagging_fraction: 0.6
-    bagging_freq: 3
-    min_data_in_leaf: 30
-    lambda_l1: 1.0
-    lambda_l2: 1.0
+    num_leaves: 31
+    max_depth: 6
+    learning_rate: 0.03
+    feature_fraction: 0.7
+    bagging_fraction: 0.7
+    bagging_freq: 5
+    min_data_in_leaf: 50
+    lambda_l1: 0.5
+    lambda_l2: 0.5
+    # scale_pos_weight omitted — sample_weighting handles class imbalance via
+    # inverse_class_frequency, avoiding double-penalty (Guardrail 2)
 
 validation:
   method: "cpcv"
-  n_groups: 5
-  n_test_groups: 1
+  n_groups: 6
+  n_test_groups: 2
   purge_bars: 12
-  embargo_bars: 5
+  embargo_bars: 6
 
 quality_gates:
   model_type: tree
-  min_train_sharpe: 0.0
-  min_train_win_rate: 0.50
-  min_sortino_ratio: 0.0
-  min_calmar_ratio: 0.0
+  min_train_sharpe: 0.3
+  min_train_win_rate: 0.52
+  min_sortino_ratio: 0.2
+  min_calmar_ratio: 0.15
   max_vol_scaled_dd_pct: 50.0
-  min_forward_sharpe: 0.0
-  min_forward_win_rate: 0.50
-  max_overfit_gap: 8.0
+  min_forward_sharpe: 0.3
+  min_forward_win_rate: 0.52
+  max_overfit_gap: 3.0
   require_shap_stability: false
 
 output:

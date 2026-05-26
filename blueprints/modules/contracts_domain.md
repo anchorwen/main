@@ -56,6 +56,7 @@ so downstream modules can decide whether to degrade, skip, or circuit-break.
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260525-014 | 2026-05-25 | cursor-agent | — | Gate audit observability: StrategyDecision.gate_diag field for per-gate diagnostics. ConformalOU gate captures z_score/theta/half_life/composite_score; parliament captures confidence/threshold; counter-trend captures trend info. Supports structured gate_audit JSONL recording. | RC-12 |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing, and suppressors for pre-existing pattern issues across all changed modules | type-confusion |
 | FIX-20260522-022 | 2026-05-22 | cursor-agent | 24ff517 | Phase 2b: ParliamentService _normalize_proposal adapter — maps BrainSignal frozen dataclass to legacy BrainDecisionProposal interface for v9 shadow compatibility | contract-violation |
 | FIX-20260522-017 | 2026-05-22 | cursor-agent | — | Layer 1 immutable contracts: Created `core/schemas/trading_contracts.py` — single source of truth for inter-module data contracts. Four frozen dataclasses (`BrainSignal`, `ConsensusResult`, `StrategyDecision`, `DegradedResult`) replace untyped dicts at all 4 module boundaries. `DegradedResult` replaces every `except:pass` with explicit degradation signal enabling circuit breaker. All fields use `frozen=True, slots=True` for immutability. | RC-06 |

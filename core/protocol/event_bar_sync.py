@@ -58,7 +58,7 @@ MT5_TIMEFRAME_D1 = 16408
 
 # -- Constants --
 
-DEFAULT_TIMEOUT_SECONDS = 360  # max wait for new bar before fallback (M5=300s + 60s buffer)
+DEFAULT_TIMEOUT_SECONDS = 360  # absolute floor — dynamic floor = max(this, int(bar_seconds×1.5))
 DEFAULT_POLL_INTERVAL = 1.0  # seconds between MT5 rate checks
 DEFAULT_FALLBACK_INTERVAL = 60  # seconds when MT5 is unreachable
 MAX_LAG_BARS = 3  # consecutive missed bars before CRITICAL alert
@@ -112,7 +112,11 @@ class BarSyncPoller:
         self.symbol = symbol
         self.timeframe = timeframe
         self.terminal_path = terminal_path
-        self.timeout_seconds = timeout_seconds
+        # Dynamic timeout floor: max(provided, int(bar_period_seconds × 1.5))
+        # M5=450s, M15=1350s, H1=5400s, H4=21600s — eliminates timeframe coupling
+        _bar_secs = self._bar_seconds_for(timeframe)
+        _dynamic_floor = max(DEFAULT_TIMEOUT_SECONDS, int(_bar_secs * 1.5))
+        self.timeout_seconds = max(timeout_seconds, _dynamic_floor)
         self.poll_interval = poll_interval
         self.fallback_interval = fallback_interval
         self._mt5_worker = mt5_worker

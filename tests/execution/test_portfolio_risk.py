@@ -66,7 +66,7 @@ class TestPortfolioRiskController:
             "micro_3bar": _make_position(strategy="micro_3bar", volume=0.02),
         }
         dec = _make_decision(strategy="barrier_12bar", volume=0.02)
-        result = ctrl.check(dec, positions)
+        result = ctrl.check(dec, positions, current_price=2000.0)
         assert result.verdict != RiskVerdict.REJECTED
 
     # ── Net exposure ──
@@ -88,7 +88,7 @@ class TestPortfolioRiskController:
         }
         # net = 0.04 long, short 0.01 → 0.03, within 0.10 limit (statarb is not in positions)
         dec = _make_decision(strategy="statarb_dynamic", direction="short", volume=0.01)
-        result = ctrl.check(dec, positions)
+        result = ctrl.check(dec, positions, current_price=2000.0)
         assert result.verdict in (RiskVerdict.APPROVED, RiskVerdict.NET_OUT, RiskVerdict.REDUCED)
 
     def test_net_exposure_short_causes_negative_net(self):
@@ -98,7 +98,7 @@ class TestPortfolioRiskController:
         }
         # net = +0.02, new short 0.04 → -0.02, |−0.02| ≤ 0.05 (statarb is not in positions)
         dec = _make_decision(strategy="statarb_dynamic", direction="short", volume=0.04)
-        result = ctrl.check(dec, positions)
+        result = ctrl.check(dec, positions, current_price=2000.0)
         # May be rejected by netting or approved, but NOT rejected by net exposure
         if result.verdict == RiskVerdict.REJECTED:
             assert "net_exposure" not in result.reason
@@ -153,7 +153,7 @@ class TestPortfolioRiskController:
             ),
         }
         dec = _make_decision(strategy="micro_3bar", direction="long", volume=0.01)
-        result = ctrl.check(dec, positions)
+        result = ctrl.check(dec, positions, current_price=2000.0)
         assert result.verdict == RiskVerdict.REDUCED
         assert result.net_out_ticket == 999
         assert result.adjusted_volume == pytest.approx(0.02)
@@ -166,7 +166,7 @@ class TestPortfolioRiskController:
             ),
         }
         dec = _make_decision(strategy="micro_3bar", direction="long", volume=0.03)
-        result = ctrl.check(dec, positions)
+        result = ctrl.check(dec, positions, current_price=2000.0)
         assert result.verdict == RiskVerdict.NET_OUT
         assert result.net_out_ticket == 777
         assert result.adjusted_volume == pytest.approx(0.02)
@@ -177,7 +177,7 @@ class TestPortfolioRiskController:
             "micro_3bar": _make_position(strategy="micro_3bar", direction="long"),
         }
         dec = _make_decision(strategy="statarb_dynamic", direction="long", volume=0.01)
-        result = ctrl.check(dec, positions)
+        result = ctrl.check(dec, positions, current_price=2000.0)
         assert result.verdict == RiskVerdict.APPROVED
 
     # ── Portfolio summary ──

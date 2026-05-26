@@ -1,5 +1,7 @@
 """Tests for ActivePositionManager — dynamic exit orchestration."""
 
+from dataclasses import replace
+
 import pytest
 
 from core.execution.position_manager import ActivePosition, ActivePositionManager
@@ -187,7 +189,9 @@ def test_trail_stop_above_breakeven_long(long_position, manager):
     pos.breakeven_triggered = True
     pos.highest_high = 2520.0
     pos.current_sl = 2500.0  # at breakeven
-    manager.max_lock_atr = 1.0
+    manager._trail_engine.default_policy = replace(
+        manager._trail_engine.default_policy, max_lock_atr=1.0
+    )
     new_sl = manager.compute_trail_stop(current_atr=5.0)
     # candidate = max(2500, 2520 - 10) = 2510, but capped at 2500 + 1.0*5 = 2505
     assert new_sl == 2505.0
@@ -199,7 +203,9 @@ def test_trail_stop_respects_max_lock_cap(long_position, manager):
     pos.breakeven_triggered = True
     pos.highest_high = 2540.0  # candidate = 2540 - 10 = 2530
     pos.current_sl = 2500.0
-    manager.max_lock_atr = 1.0
+    manager._trail_engine.default_policy = replace(
+        manager._trail_engine.default_policy, max_lock_atr=1.0
+    )
     new_sl = manager.compute_trail_stop(current_atr=5.0)
     # capped at 2500 + 1.0*5 = 2505, even though raw trail would be 2530
     assert new_sl == 2505.0
@@ -672,8 +678,8 @@ def test_ou_waiting_for_reversion(long_position, manager):
 
 def test_brain_specific_trail_no_pnl_store(long_position, manager):
     """Returns 1.0 when no PnL store is set."""
-    manager._position = long_position
-    scale = manager._compute_brain_specific_trail_scale()
+    pos = manager._position = long_position
+    scale = manager._trail_engine._compute_brain_specific_trail_scale(pos)
     assert scale == 1.0
 
 
@@ -689,12 +695,15 @@ def test_brain_specific_trail_high_sharpe(long_position, manager):
             return SimpleNamespace(sharpe_ratio=2.0, sample_count=10)
 
     manager.pnl_store = FakePnL()
-    scale = manager._compute_brain_specific_trail_scale()
+    manager._trail_engine.pnl_store = manager.pnl_store  # sync to engine
+    scale = manager._trail_engine._compute_brain_specific_trail_scale(pos)
     assert scale > 1.0  # wider trail for good performers
 
 
 def test_brain_specific_trail_negative_sharpe(long_position, manager):
-    """Negative Sharpe brains get tighter trail (scale < 1.0)."""
+    """Negative Sharpe brains no longer compress trail — floor is 1.0.
+    Phase A decoupling: poor brain performance triggers model exit, not trail tightening.
+    Trail compression created a death spiral: loss → tighter trail → easier stop-out."""
     from types import SimpleNamespace
 
     pos = manager._position = long_position
@@ -705,8 +714,9 @@ def test_brain_specific_trail_negative_sharpe(long_position, manager):
             return SimpleNamespace(sharpe_ratio=-2.0, sample_count=10)
 
     manager.pnl_store = FakePnL()
-    scale = manager._compute_brain_specific_trail_scale()
-    assert scale < 1.0  # tighter trail for poor performers
+    manager._trail_engine.pnl_store = manager.pnl_store  # sync to engine
+    scale = manager._trail_engine._compute_brain_specific_trail_scale(pos)
+    assert scale == 1.0  # no compression — floor at 1.0
 
 
 # ── Model horizons ────────────────────────────────────────────────────────

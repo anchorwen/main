@@ -10,10 +10,21 @@ Z-Depth (how deep in signal territory), Z-Velocity (signal momentum), Half-life
 (mean-reversion speed), Theta strength (reversion evidence), and ADX alignment
 (trend contamination).  Any factor can independently degrade the score.
 
-**Score Formula (multiplicative)**:
-    score = z_depth_q * hl_q * theta_q * adx_q * vel_q
-Each component is clamped [0.1, 1.0] (vel: [0.3, 1.5]) so no single factor can
-zero the score, but weak factors cumulatively suppress it.
+**Score Formula (geometric mean, default)**:
+    score = (∏ clip(component, 0.0, 1.0))^(1/5)
+Each component is clamped [0.0, 1.0] before the geometric mean so any component
+at zero (e.g. theta ≤ 0, no mean-reversion) vetoes the score.  The geometric
+mean is the correct central tendency for ratio-scale quality metrics — it
+preserves the veto property without the dimensional collapse of a raw product.
+
+**Warmup-Driven Threshold Schedule (Explore-then-Commit)**:
+    Phase COLD  (samples < 50):  threshold = 0.20, volume = 0.01 (exploration)
+    Phase WARM  (50 ≤ n < 100):  threshold = max(0.20, calibrator.Q10)
+    Phase HOT   (n ≥ 100):       threshold = calibrator.Q10, clamp [0.25, 0.65]
+During COLD phase, position sizing is force-capped at min lot to cap
+exploration risk while the calibrator accumulates samples.  This breaks
+the chicken-and-egg deadlock where the gate blocks trades → no samples →
+calibrator never warms up.
 
 **Integration**: The existing :class:`ConformalCalibrator` provides the adaptive
 threshold — the gate calls ``calibrator.compute_threshold()`` on each evaluation
@@ -38,6 +49,15 @@ DEFAULT_BASE_THRESHOLD = 0.35  # lenient base — physics score is conservative
 DEFAULT_MIN_THRESHOLD = 0.25
 DEFAULT_MAX_THRESHOLD = 0.65
 DEFAULT_OU_CONFIGS_PATH = "configs/brains/"
+
+# Scoring mode
+DEFAULT_SCORING_MODE = "geometric_mean"  # "geometric_mean" | "product"
+
+# Warmup-driven threshold schedule (Explore-then-Commit)
+COLD_PHASE_THRESHOLD = 0.20  # lenient fixed threshold for sample collection
+COLD_PHASE_MAX_SAMPLES = 50  # calibrator warmup boundary
+WARM_PHASE_MAX_SAMPLES = 100  # transition to fully adaptive Q10
+COLD_PHASE_FORCE_VOLUME = 0.01  # cent-account min lot during exploration
 
 
 # ── OU parameter loading ────────────────────────────────────────────────────
@@ -184,6 +204,42 @@ def _compute_adx_quality(adx_value: float) -> float:
     return float(np.clip(quality, 0.2, 1.0))
 
 
+# ── Composite scoring ────────────────────────────────────────────────────────
+
+
+def _compute_composite_score(components: dict[str, float], mode: str = "geometric_mean") -> float:
+    """Combine physics quality components into a single score.
+
+    **Geometric mean** (default): ``(∏ clip(c, 0, 1))^(1/n)``.
+    Every component is strictly clamped to [0.0, 1.0] before multiplication
+    to prevent negative values from causing complex roots or NaN propagation.
+    If any component is ≤ 0, the entire score is 0 (hard veto).
+
+    **Product** (legacy): ``∏ clip(c, 0.1, 1.0)`` with per-component floors.
+    Retained for A/B comparison; the geometric mean is the recommended mode
+    because it does not collapse with dimensionality.
+    """
+    if not components:
+        return 0.0
+
+    if mode == "geometric_mean":
+        # Safety: clip every component to [0.0, 1.0] before computing.
+        # This prevents negative numbers → complex roots, and NaN → infection.
+        vals = [float(np.clip(v, 0.0, 1.0)) for v in components.values()]
+        prod = 1.0
+        for v in vals:
+            prod *= v
+        if prod <= 0.0:
+            return 0.0
+        return float(prod ** (1.0 / len(vals)))
+
+    # Legacy product mode
+    score = 1.0
+    for v in components.values():
+        score *= float(np.clip(v, 0.1, 1.0))
+    return float(np.clip(score, 0.0, 1.0))
+
+
 # ── Gate ────────────────────────────────────────────────────────────────────
 
 
@@ -219,11 +275,17 @@ class ConformalOUGate:
         base_threshold: float = DEFAULT_BASE_THRESHOLD,
         min_threshold: float = DEFAULT_MIN_THRESHOLD,
         max_threshold: float = DEFAULT_MAX_THRESHOLD,
+        scoring_mode: str = DEFAULT_SCORING_MODE,
     ) -> None:
+        if scoring_mode not in ("geometric_mean", "product"):
+            raise ValueError(
+                f"scoring_mode must be 'geometric_mean' or 'product', got {scoring_mode!r}"
+            )
         self._calibrator = calibrator
         self._base_threshold = base_threshold
         self._min_threshold = min_threshold
         self._max_threshold = max_threshold
+        self._scoring_mode = scoring_mode
 
         # Strategy → OU params: populated by load_ou_configs()
         self._ou_configs: dict[str, dict[str, float]] = {}
@@ -256,6 +318,62 @@ class ConformalOUGate:
     @property
     def is_loaded(self) -> bool:
         return self._loaded
+
+    # ------------------------------------------------------------------
+    # Warmup-driven threshold schedule
+    # ------------------------------------------------------------------
+
+    def _resolve_warmup_threshold(self) -> dict[str, Any]:
+        """Resolve effective threshold and volume policy from calibrator state.
+
+        Explore-then-Commit schedule:
+
+        * **COLD**  (samples < 50):  fixed 0.20 threshold, force_min_volume=True.
+          The gate is intentionally lenient — we need trades to collect samples.
+          Volume is capped at min lot (0.01) to bound exploration risk.
+        * **WARM**  (50 ≤ n < 100):  Q10 from calibrator, floored at 0.20.
+          The calibrator is warm but the distribution may still be unstable.
+        * **HOT**   (n ≥ 100):       full Q10 from calibrator, clamped [0.25, 0.65].
+          Distribution is stable — adaptive threshold fully in control.
+
+        When no calibrator is attached, returns the fixed base threshold with
+        no volume override (backward-compatible behaviour).
+        """
+        if self._calibrator is None:
+            return {
+                "threshold": self._base_threshold,
+                "phase": "no_calibrator",
+                "force_min_volume": False,
+            }
+
+        n = self._calibrator.sample_count
+
+        if n < COLD_PHASE_MAX_SAMPLES:
+            return {
+                "threshold": COLD_PHASE_THRESHOLD,
+                "phase": "cold",
+                "force_min_volume": True,
+                "samples": n,
+                "warmup_target": COLD_PHASE_MAX_SAMPLES,
+            }
+
+        q10 = float(self._calibrator.compute_threshold())
+
+        if n < WARM_PHASE_MAX_SAMPLES:
+            return {
+                "threshold": max(COLD_PHASE_THRESHOLD, q10),
+                "phase": "warm",
+                "force_min_volume": False,
+                "samples": n,
+            }
+
+        # HOT: full Q10, bounded to gate's own safety range
+        return {
+            "threshold": float(np.clip(q10, self._min_threshold, self._max_threshold)),
+            "phase": "hot",
+            "force_min_volume": False,
+            "samples": n,
+        }
 
     # ------------------------------------------------------------------
     # Core filtering
@@ -325,9 +443,25 @@ class ConformalOUGate:
             ou_diag["brain_id"], ou_diag["z_score"], ou_diag["direction"], z_entry
         )
 
-        # ── 3. Multiplicative composite score ──
-        score = z_depth_q * hl_q * theta_q * adx_q * vel_q
-        score = float(np.clip(score, 0.0, 1.0))
+        # ── 3. z_depth hard veto (FIX-20260526-031) ──
+        # Mean-reversion physics demands price DEVIATION.  When |z| is tiny
+        # (price hugs the mean), theta and velocity are irrelevant — there is
+        # no profit space to revert through.  z_depth_q < 0.25 means the
+        # actual |z| is less than 0.25× z_entry: pure noise territory.
+        # The veto is applied BEFORE composite scoring so that no other
+        # dimension can "rescue" a signal whose physical basis is absent.
+        if z_depth_q < 0.25:
+            score = 0.0
+        else:
+            # ── 4. Composite score via geometric mean (default) or product ──
+            _components = {
+                "z_depth_q": z_depth_q,
+                "hl_q": hl_q,
+                "theta_q": theta_q,
+                "adx_q": adx_q,
+                "vel_q": vel_q,
+            }
+            score = _compute_composite_score(_components, mode=self._scoring_mode)
 
         features = {
             "z_score": round(ou_diag["z_score"], 4),
@@ -343,19 +477,14 @@ class ConformalOUGate:
             "adx": round(adx_value, 1),
             "adx_q": round(adx_q, 4),
             "vel_q": round(vel_q, 4),
+            "ou_confidence": round(ou_diag.get("ou_confidence", 0.5), 4),
         }
 
-        # ── 4. Conformal threshold ──
-        if self._calibrator is not None:
-            effective_threshold = self._calibrator.compute_threshold()
-            # Clamp to gate's own bounds
-            effective_threshold = float(
-                np.clip(effective_threshold, self._min_threshold, self._max_threshold)
-            )
-            threshold_source = "conformal_q10"
-        else:
-            effective_threshold = self._base_threshold
-            threshold_source = "fixed"
+        # ── 4. Warmup-driven threshold schedule ──
+        _warmup = self._resolve_warmup_threshold()
+        effective_threshold = float(_warmup["threshold"])
+        warmup_phase = str(_warmup["phase"])
+        force_min_volume = bool(_warmup.get("force_min_volume", False))
 
         passed = score >= effective_threshold
 
@@ -363,7 +492,9 @@ class ConformalOUGate:
             "passed": passed,
             "score": round(score, 4),
             "threshold": round(effective_threshold, 4),
-            "threshold_source": threshold_source,
+            "threshold_source": f"conformal_{warmup_phase}",
+            "warmup_phase": warmup_phase,
+            "force_min_volume": force_min_volume,
             "features": features,
             "reason": "ok"
             if passed
@@ -417,6 +548,7 @@ class ConformalOUGate:
                 half_life = 100.0  # cap for scoring
 
             direction = str(getattr(p, "direction", "neutral"))
+            ou_confidence = float(getattr(p, "confidence", 0.5) or 0.5)
 
             return {
                 "brain_id": brain_id,
@@ -424,6 +556,7 @@ class ConformalOUGate:
                 "theta": theta,
                 "half_life": half_life,
                 "direction": direction,
+                "ou_confidence": ou_confidence,
             }
 
         return None

@@ -154,6 +154,25 @@ class ExitWatchdog:
         attempts: list[ExitAttempt] = []
         alerts: list[str] = []
 
+        # ── Pre-flight: verify position still exists ──
+        # FIX-20260525-024: skip entire retry loop if position already closed
+        # in MT5 (MIA).  Otherwise the watchdog exhausts all retries against
+        # a nonexistent position and fires a false CRITICAL alert.
+        if get_position_open is not None:
+            try:
+                if not get_position_open(position_ticket):
+                    return ExitWatchdogResult(
+                        success=True,
+                        position_ticket=position_ticket,
+                        total_attempts=0,
+                        total_duration_ms=0,
+                        final_status="already_closed",
+                        attempts=[],
+                        alerts=[],
+                    )
+            except Exception:
+                pass  # verification failure → proceed with normal retry loop
+
         for attempt_n in range(1, self.max_retries + 1):
             elapsed = time.monotonic() - start
             if elapsed > self.max_total_duration:

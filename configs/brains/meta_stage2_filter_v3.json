@@ -1,14 +1,11 @@
 {
   "schema_version": "meta_filter_config.v1",
   "filter_id": "Meta_Stage2_Filter_V3",
-  "model_path": "data/models/institutional/meta_stage2_lgb_pit_v3.txt",
-  "mlp_model_path": "data/models/institutional/meta_stage2_mlp_pit_v3.json",
+  "model_path": "data/models/institutional/meta_stage2_lightgbm_20260526_121345.txt",
   "threshold": 0.65,
   "mode": "binary",
-  "ensemble_weights": [0.6, 0.4],
-  "micro_scaler_path": "data/training/v9_micro_49_train.micro_scaler.json",
   "stage1_brain_id": "OU_Params_V6_Sniper",
-  "feature_schema": "meta_stage2_runtime_59",
+  "feature_schema": "meta_stage2_runtime_48",
   "calibrator_path": "data/models/institutional/meta_stage2_ensemble_pit_v3_calibrator.pkl",
   "calibration_method": "platt_scaling",
   "conformal": {
@@ -18,5 +15,5 @@
     "min_threshold": 0.50,
     "max_age_days": 14.0
   },
-  "description": "Stage 2 P(TP|signal) filter V3 — LGB+MLP ensemble (0.6/0.4) on 59 PiT meta-features. LGB Val Sharpe 30.6/WR 68.2%, MLP Val Sharpe 18.8/WR 61.6%, ensemble calibrated Sharpe 25.9/WR 69.2%. Platt scaling + conformal prediction. Calibrated probs range [0.07, 0.96]."
+  "description": "Stage 2 P(TP|signal) filter V3 -- Full Pipeline Rebuild. Single LightGBM on 48 PiT meta-features (40 V9 + 8 meta). Train Sharpe 4.78, Forward Sharpe 1.30. Platt scaling calibrated. Rebuilt 2026-05-26 after fixing Stage 1 feature-order poisoning (FIX-20260525-026)."
 }

@@ -37,6 +37,11 @@ from typing import Any
 
 import numpy as np
 
+
+class ModelQualityException(RuntimeError):
+    """Hard veto: model failed mandatory quality thresholds and must not be deployed."""
+
+
 from core.contracts.training.training_contract import (
     TrainingContract,
 )
@@ -497,24 +502,66 @@ def compute_financial_metrics(
         positions = np.where(np.abs(y_pred) < 1e-8, 0, positions)
         returns = positions * y_true.astype(np.float64)
     else:
-        # Convert to binary predictions
+        # Guard: detect degenerate models with no discriminative power.
+        # When all predictions are near-identical (e.g. 0.5001–0.5036),
+        # the threshold-based classifier always picks one class and any
+        # "Sharpe" is pure class-imbalance artifact, not model skill.
+        prob_std = float(np.std(y_pred))
+        prob_range = float(np.max(y_pred) - np.min(y_pred))
+        if prob_range < 0.01 and prob_std < 0.005:
+            return {
+                "sharpe_ratio": -999.0,
+                "win_rate": 0.0,
+                "profit_factor": 0.0,
+                "max_drawdown": 999.0,
+                "expectancy": 0.0,
+                "sortino_ratio": -999.0,
+                "calmar_ratio": -999.0,
+                "max_vol_scaled_dd": 100.0,
+                "total_trades": 0,
+            }
+
+        # Convert to binary predictions using class-prior threshold.
+        # Fixed 0.5 fails under extreme class imbalance (e.g. 83.7% TP):
+        # the model mean clusters near the prior, so 0.5 always picks the
+        # majority class — zero edge over baseline.  The prior threshold
+        # asks: "is the model more confident than the base rate?"
         if y_pred.ndim > 1:
             pred_class = np.argmax(y_pred, axis=1)
         else:
-            pred_class = (y_pred > 0.5).astype(np.int32)
+            threshold = float(np.mean(y_true))
+            pred_class = (y_pred > threshold).astype(np.int32)
+
+        # Compute baseline: always-predict-majority-class returns
+        # Subtracting baseline isolates model skill from class-imbalance artifact
+        majority_class = int(np.bincount(y_true.astype(np.int32)).argmax())
+        baseline_preds = np.full_like(y_pred, majority_class, dtype=np.int32)
+        if y_pred.ndim > 1:
+            baseline_preds[:] = majority_class
 
         # Map to positions: 1 = long, -1 = short, 0 = flat
         if pnl is not None and len(pnl) > 0:
             returns = np.where(pred_class == 1, pnl, np.where(pred_class == 0, -pnl, 0.0))
+            baseline_returns = np.where(
+                baseline_preds == 1, pnl, np.where(baseline_preds == 0, -pnl, 0.0)
+            )
         else:
             direction = 2.0 * y_true.astype(np.float64) - 1.0
             pos = 2.0 * pred_class.astype(np.float64) - 1.0
             returns = pos * direction
+            baseline_pos = 2.0 * baseline_preds.astype(np.float64) - 1.0
+            baseline_returns = baseline_pos * direction
 
-    # Sharpe ratio
+    # Baseline Sharpe (always-predict-majority)
+    baseline_mean = float(np.mean(baseline_returns))
+    baseline_std = float(np.std(baseline_returns)) + 1e-10
+    baseline_sharpe = baseline_mean / baseline_std * np.sqrt(annual_factor)
+
+    # Sharpe ratio (excess over baseline isolates model skill)
     mean_ret = float(np.mean(returns))
     std_ret = float(np.std(returns)) + 1e-10
     sharpe = mean_ret / std_ret * np.sqrt(annual_factor)
+    excess_sharpe = sharpe - baseline_sharpe
 
     # Win rate
     wins = int(np.sum(returns > 0))
@@ -562,7 +609,9 @@ def compute_financial_metrics(
     max_vol_scaled_dd = float(np.abs(np.min(dd_vol)))
 
     return {
-        "sharpe_ratio": round(sharpe, 4),
+        "sharpe_ratio": round(excess_sharpe, 4),
+        "raw_sharpe": round(sharpe, 4),
+        "baseline_sharpe": round(baseline_sharpe, 4),
         "win_rate": round(win_rate, 4),
         "profit_factor": round(profit_factor, 4),
         "max_drawdown": round(max_drawdown, 4),
@@ -1715,10 +1764,12 @@ def run_pipeline(
         failed_gates = [k for k, v in gate_results.items() if not v]
         print(f"[train] QUALITY GATES FAILED: {failed_gates}")
         for g in failed_gates:
-            gv = gate_results[g]
-            print(f"  - {g}: {gv}")
-    else:
-        print("[train] All quality gates PASSED")
+            print(f"  - {g}: {gate_results[g]}")
+        raise ModelQualityException(
+            f"Hard veto: model {contract.contract_id} failed quality gates: {failed_gates}. "
+            f"Model must not be deployed. Fix data/features/hyperparams and retrain."
+        )
+    print("[train] All quality gates PASSED")
 
     # ── Save model ──
     model_dir = Path(contract.output.model_dir)

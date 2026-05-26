@@ -45,6 +45,7 @@ DecisionIntent → DecisionCompiler → IntentMessageBuilder → CommunicationEn
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260525-011 | 2026-05-25 | cursor-agent | — | BarSyncPoller timeout/timeframe decoupling: DEFAULT_TIMEOUT_SECONDS was hardcoded 360s safe for M5 but insufficient for H1+ (5400s bar period). Dynamic floor: `max(360, int(bar_seconds × 1.5))` — M5=450s, M15=1350s, H1=5400s, H4=21600s. Formula enforced in __init__ using existing `_bar_seconds_for()`. | RC-05 (boundary-error: timeout-timeframe coupling) |
 | FIX-20260525-009 | 2026-05-25 | cursor-agent | — | MT5 worker refactoring: event_bar_sync.py — BarSyncPoller accepts optional mt5_worker, hardcoded TF constants, worker-aware error recovery (reconnect instead of shutdown+init). | RC-04, RC-06 |
 | FIX-20260524-014 | 2026-05-24 | cursor-agent | — | MODULE_SOURCE_MAP: add scripts/validators/journal_validator.py. Mypy fixes: journal_validator (1→0 — getattr for tuple.__name__), communication_operations_service (1→0 — assert posture is not None). | RC-02 |
 | FIX-20260519-019 | 2026-05-19 | cursor-agent | — | BarSyncPoller 92.8% timeout rate fix: added `fetch_synthetic_bar()` — when M5 bar hasn't formed, aggregates last 6 M1 bars into synthetic M5 OHLC(V) instead of blind `time.sleep()`. Eliminates 120s data misalignment window where stale features were used against real-time prices. Caller in live_intent_loop.py uses synthetic bar on timeout instead of falling back to interval sleep. | RC-06 (data-misalignment, sampling-blind-spot) |
@@ -57,7 +58,7 @@ DecisionIntent → DecisionCompiler → IntentMessageBuilder → CommunicationEn
 
 ## Known Issues
 
-### KI-001: bar_sync timeout MUST exceed bar period (`2026-05-22`) — RESOLVED by FIX-029
+### KI-001: bar_sync timeout MUST exceed bar period (`2026-05-22`) — RESOLVED by FIX-029 / FIX-20260525-011
 
 **Original diagnosis (WRONG)**: FIX-006 fixed MT5 transient errors, but this exposed that `DEFAULT_TIMEOUT_SECONDS` (120s) must exceed bar period (300s). The causal chain was:
 1. Pre-FIX-006: MT5 threw at ~104s → old code fell back → ~224s effective window → occasionally got bars
@@ -65,6 +66,8 @@ DecisionIntent → DecisionCompiler → IntentMessageBuilder → CommunicationEn
 3. FIX-010: timeout 120→360s, FIX-011: degraded deadline at 310s
 
 **Corrected diagnosis (2026-05-22, FIX-029)**: The "MT5 transient error at ~104s" was NEVER an MT5 IPC error. It was always `AttributeError: 'numpy.void' object has no attribute 'get'` thrown at new-bar detection. The ~104s timing was the first M5 bar boundary after bar_sync start; the exact 300s spacing between all subsequent errors was the M5 bar period. The error count of 1 per cycle was because only ONE new bar forms per cycle. State corruption (update-before-return) made the crash self-perpetuating — after re-init, last_bar_time matched the current bar, so no "new" bar was ever found.
+
+**Final resolution (FIX-20260525-011)**: FIX-010 fixed M5 specifically (120→360s) but the timeout was still hardcoded — H1+ strategies would face the same issue. Dynamic floor: `max(360, int(bar_seconds × 1.5))` enforced in `BarSyncPoller.__init__` using existing `_bar_seconds_for()`. M5=450s, H1=5400s, H4=21600s. Timeout is now timeframe-decoupled by construction.
 
 **The real causal chain**:
 1. `copy_rates_from_pos()` returned numpy structured array (correct MT5 behavior)

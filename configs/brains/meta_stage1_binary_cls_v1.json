@@ -49,15 +49,13 @@
   "val_acc": 0.739,
   "output_unit": "probability",
   "features": [
-    "M5_Ret_1", "M5_Body_Ratio", "M5_ATR_14", "M5_RSI_14", "M5_MACD",
-    "M5_Vol_ZScore", "M5_Macro1_Corr", "M5_Price_ZScore",
-    "M15_Ret_1", "M15_Body_Ratio", "M15_ATR_14", "M15_RSI_14", "M15_MACD",
-    "M15_Vol_ZScore", "M15_Macro1_Corr", "M15_Price_ZScore",
-    "M30_Ret_1", "M30_Body_Ratio", "M30_ATR_14", "M30_RSI_14", "M30_MACD",
-    "M30_Vol_ZScore", "M30_Macro1_Corr", "M30_Price_ZScore",
-    "H1_Ret_1", "H1_Body_Ratio", "H1_ATR_14", "H1_RSI_14", "H1_MACD",
-    "H1_Vol_ZScore", "H1_Macro1_Corr", "H1_Price_ZScore",
-    "M5_OU_Theta", "M15_OU_Theta", "M30_OU_Theta", "H1_OU_Theta",
-    "M5_Hurst", "M15_Hurst", "M30_Hurst", "H1_Hurst"
+    "H1_ATR_14", "H1_Body_Ratio", "H1_Hurst", "H1_MACD", "H1_Macro1_Corr", "H1_OU_Theta",
+    "H1_Price_ZScore", "H1_RSI_14", "H1_Ret_1", "H1_Vol_ZScore",
+    "M15_ATR_14", "M15_Body_Ratio", "M15_Hurst", "M15_MACD", "M15_Macro1_Corr", "M15_OU_Theta",
+    "M15_Price_ZScore", "M15_RSI_14", "M15_Ret_1", "M15_Vol_ZScore",
+    "M30_ATR_14", "M30_Body_Ratio", "M30_Hurst", "M30_MACD", "M30_Macro1_Corr", "M30_OU_Theta",
+    "M30_Price_ZScore", "M30_RSI_14", "M30_Ret_1", "M30_Vol_ZScore",
+    "M5_ATR_14", "M5_Body_Ratio", "M5_Hurst", "M5_MACD", "M5_Macro1_Corr", "M5_OU_Theta",
+    "M5_Price_ZScore", "M5_RSI_14", "M5_Ret_1", "M5_Vol_ZScore"
   ]
 }

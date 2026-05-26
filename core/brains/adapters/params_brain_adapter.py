@@ -148,7 +148,7 @@ class ParamsBrainAdapter(BaseBrainAdapter):
             diagnostics={
                 k: v
                 for k, v in raw_output.items()
-                if k not in ("z_score", "half_life", "runtime_ms", "buffer_len", "fallback")
+                if k not in ("z_score", "runtime_ms", "fallback")
             },
         )
 

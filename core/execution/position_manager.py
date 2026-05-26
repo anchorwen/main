@@ -26,6 +26,8 @@ from typing import Any
 
 import numpy as np
 
+from core.execution.trail_stop_engine import TrailPolicy, TrailStopEngine
+
 # ── Data model ────────────────────────────────────────────────────────────
 
 
@@ -52,6 +54,7 @@ class ActivePosition:
     entry_atr: float
     entry_cycle: int
     entry_z_score: float = 0.0  # OU z-score at entry (0 = unknown / recovered position)
+    entry_half_life: float = 0.0  # OU half-life at entry (0 = unknown / not OU)
     entry_consensus: dict[str, Any] = field(default_factory=dict)
     supporting_brain_ids: list[str] = field(default_factory=list)
 
@@ -97,6 +100,11 @@ class ActivePosition:
     trail_atr_mult_high: float = 3.0
     breakeven_threshold_atr: float = 1.0
 
+    # Per-strategy immutable trail policy (Phase B: physical isolation of Risk Exit)
+    # When set, TrailStopEngine reads exclusively from this policy.
+    # When None, the engine falls back to its default policy.
+    trail_policy: TrailPolicy | None = None
+
 
 # ── Manager ────────────────────────────────────────────────────────────────
 
@@ -125,6 +133,7 @@ class ActivePositionManager:
         max_hold_cycles: int = 60,
         require_min_r: float = 0.3,
         min_step: float = 0.15,  # minimum SL change to fire modify (~15 pips XAUUSD)
+        min_trail_mult: float = 1.2,  # absolute floor on effective trail multiplier (prevents stop-hunting)
         max_lock_atr: float = 4.0,  # max R to lock in via trailing (capped at original_SL + max_lock_atr × entry_atr)
         graduated_lock_enabled: bool = True,  # graduated profit locking: SL floor rises with R milestones
         graduated_lock_levels: tuple[tuple[float, float], ...] = (
@@ -138,27 +147,51 @@ class ActivePositionManager:
         toxicity_velocity_mult: float = 3.0,  # tick-velocity multiplier for toxicity veto
         pnl_store: Any = None,  # BrainPnLStore for brain-specific trail tuning
         meta_exit_engine: Any = None,  # MetaExitEngine for multi-factor exit scoring
+        trail_policy: TrailPolicy | None = None,  # Phase C: default TrailPolicy for all positions
     ):
+        # Backward-compat: store individual trail params for direct access
         self.trail_atr_mult = trail_atr_mult
         self.trail_atr_mult_low = trail_atr_mult_low
         self.trail_atr_mult_high = trail_atr_mult_high
         self.breakeven_threshold_atr = breakeven_threshold_atr
+        self.min_step = min_step
+        self.min_trail_mult = min_trail_mult
+        self.max_lock_atr = max_lock_atr
+        self.graduated_lock_enabled = graduated_lock_enabled
+        self.graduated_lock_levels = graduated_lock_levels
+
+        # Model exit params
         self.brain_reeval_interval = brain_reeval_interval
         self.flip_exit_threshold = flip_exit_threshold
         self.confidence_drop_threshold = confidence_drop_threshold
         self.max_hold_cycles = max_hold_cycles
         self.require_min_r = require_min_r
-        self.min_step = min_step
-        self.max_lock_atr = max_lock_atr
-        self.graduated_lock_enabled = graduated_lock_enabled
-        self.graduated_lock_levels = graduated_lock_levels
         self.confidence_decay_enabled = confidence_decay_enabled
         self.hesitation_cycles = hesitation_cycles
         self.flip_confirm_count = flip_confirm_count
         self.min_hold_cycles = min_hold_cycles
         self.toxicity_velocity_mult = toxicity_velocity_mult
+
         self.pnl_store = pnl_store
         self.meta_exit_engine = meta_exit_engine
+
+        # Phase C: Risk Exit is a physically isolated subsystem
+        if trail_policy is None:
+            trail_policy = TrailPolicy(
+                trail_atr_mult=trail_atr_mult,
+                trail_atr_mult_low=trail_atr_mult_low,
+                trail_atr_mult_high=trail_atr_mult_high,
+                breakeven_threshold_atr=breakeven_threshold_atr,
+                min_step=min_step,
+                min_trail_mult=min_trail_mult,
+                max_lock_atr=max_lock_atr,
+                graduated_lock_enabled=graduated_lock_enabled,
+                graduated_lock_levels=graduated_lock_levels,
+            )
+        self._trail_engine = TrailStopEngine(
+            default_policy=trail_policy,
+            pnl_store=pnl_store,
+        )
 
         self._positions: dict[int, ActivePosition] = {}  # ticket → position
         self._primary_ticket: int | None = None  # "primary" for backward compat
@@ -257,6 +290,7 @@ class ActivePositionManager:
         entry_atr: float,
         entry_cycle: int,
         entry_z_score: float = 0.0,
+        entry_half_life: float = 0.0,
         entry_consensus: dict[str, Any] | None = None,
         supporting_brain_ids: list[str] | None = None,
         model_horizons: dict[str, int] | None = None,
@@ -268,16 +302,40 @@ class ActivePositionManager:
         trail_atr_mult_low: float | None = None,
         trail_atr_mult_high: float | None = None,
         breakeven_threshold_atr: float | None = None,
+        trail_policy: TrailPolicy | None = None,  # Phase B: preferred over scattered attrs
     ) -> ActivePosition:
         """Record a newly-opened position (or recover one after restart).
 
         Multi-position safe: each ticket gets its own slot.  If *ticket*
         already exists, its entry data is refreshed (idempotent).
+
+        Phase B: trail_policy, when provided, is stored on the ActivePosition
+        and becomes the single source of truth for all trail-related parameters.
+        Individual trail_* arguments are still accepted for backward compat
+        but are superseded by trail_policy when both are present.
         """
         high = current_high if current_high is not None else entry_price
         low = entry_price  # worst-case for a long; for short we'd swap
 
-        _trail = trail_atr_mult if trail_atr_mult is not None else self.trail_atr_mult
+        # Phase B: TrailPolicy is the preferred path
+        if trail_policy is not None:
+            _trail = trail_policy.trail_atr_mult
+            _trail_low = trail_policy.trail_atr_mult_low
+            _trail_high = trail_policy.trail_atr_mult_high
+            _breakeven = trail_policy.breakeven_threshold_atr
+        else:
+            _trail = trail_atr_mult if trail_atr_mult is not None else self.trail_atr_mult
+            _trail_low = (
+                trail_atr_mult_low if trail_atr_mult_low is not None else self.trail_atr_mult_low
+            )
+            _trail_high = (
+                trail_atr_mult_high if trail_atr_mult_high is not None else self.trail_atr_mult_high
+            )
+            _breakeven = (
+                breakeven_threshold_atr
+                if breakeven_threshold_atr is not None
+                else self.breakeven_threshold_atr
+            )
         pos = ActivePosition(
             ticket=ticket,
             side=side,
@@ -292,6 +350,7 @@ class ActivePositionManager:
             entry_atr=entry_atr,
             entry_cycle=entry_cycle,
             entry_z_score=entry_z_score,
+            entry_half_life=entry_half_life,
             entry_consensus=dict(entry_consensus or {}),
             supporting_brain_ids=list(supporting_brain_ids or []),
             model_horizons=dict(model_horizons or {}),
@@ -301,15 +360,10 @@ class ActivePositionManager:
             strategy_name=strategy_name,
             expected_remaining_volume=volume,
             trail_atr_mult=_trail,
-            trail_atr_mult_low=trail_atr_mult_low
-            if trail_atr_mult_low is not None
-            else self.trail_atr_mult_low,
-            trail_atr_mult_high=trail_atr_mult_high
-            if trail_atr_mult_high is not None
-            else self.trail_atr_mult_high,
-            breakeven_threshold_atr=breakeven_threshold_atr
-            if breakeven_threshold_atr is not None
-            else self.breakeven_threshold_atr,
+            trail_atr_mult_low=_trail_low,
+            trail_atr_mult_high=_trail_high,
+            breakeven_threshold_atr=_breakeven,
+            trail_policy=trail_policy,  # Phase B: stored for compute_trail_stop / should_breakeven
         )
         self._entry_consensus_score = float(pos.entry_consensus.get("consensus_score", 0))
         # Seed EMA with entry confidence so first-cycle drop is measured
@@ -429,84 +483,24 @@ class ActivePositionManager:
             "highest_r": pos.highest_r,
         }
 
-    # ── Layer 1: Chandelier trailing stop ───────────────────────────────
+    # ── Layer 1: Chandelier trailing stop (delegated to TrailStopEngine) ──
 
     def compute_trail_stop(self, current_atr: float, ticket: int | None = None) -> float | None:
-        """Return new SL if the trail has advanced, else None.
-
-        Long:  max(current_sl, highest_high - trail_mult × atr)
-        Short: min(current_sl, lowest_low + trail_mult × atr)
-
-        **Label-consistent constraint**: trail SL cannot exceed
-        original_SL + max_lock_atr × entry_atr.  This preserves the
-        model's original SL as a hard floor while allowing up to
-        max_lock_atr R of profit to be locked in by the trailing stop.
-        The original TP remains as the hard ceiling — never cancelled.
-        """
+        """Return new SL if the trail has advanced, else None.  Delegates to TrailStopEngine."""
         pos = self._get_pos(ticket)
         if pos is None:
             return None
-
-        max_lock_level: float
-        if pos.side == "long":
-            candidate = pos.highest_high - pos.trail_multiplier * current_atr
-            # Breakeven floor: never go below entry after breakeven
-            if pos.breakeven_triggered:
-                candidate = max(candidate, pos.entry_price)
-            # Never go below original SL (respect model training contract)
-            candidate = max(candidate, pos.initial_sl)
-            # Graduated lock floor: SL rises with R-milestones (e.g. +2R→lock 0.5R)
-            if self.graduated_lock_enabled and pos.entry_atr > 0:
-                current_r = (pos.highest_high - pos.entry_price) / pos.entry_atr
-                for r_threshold, lock_r in self.graduated_lock_levels:
-                    if current_r >= r_threshold:
-                        candidate = max(candidate, pos.entry_price + lock_r * pos.entry_atr)
-            # Lock-in cap: trail cannot lock more than max_lock_atr × entry_atr profit
-            max_lock_level = pos.entry_price + self.max_lock_atr * pos.entry_atr
-            candidate = min(candidate, max_lock_level)
-            # Ratchet rule: SL only moves in profit direction, minimum step enforced
-            if candidate <= pos.current_sl + self.min_step:
-                return None
-            return round(candidate, 3)
-        else:
-            candidate = pos.lowest_low + pos.trail_multiplier * current_atr
-            if pos.breakeven_triggered:
-                candidate = min(candidate, pos.entry_price)
-            # Never go above original SL
-            candidate = min(candidate, pos.initial_sl)
-            # Graduated lock floor: SL falls with R-milestones
-            if self.graduated_lock_enabled and pos.entry_atr > 0:
-                current_r = (pos.entry_price - pos.lowest_low) / pos.entry_atr
-                for r_threshold, lock_r in self.graduated_lock_levels:
-                    if current_r >= r_threshold:
-                        candidate = min(candidate, pos.entry_price - lock_r * pos.entry_atr)
-            # Lock-in cap
-            max_lock_level = pos.entry_price - self.max_lock_atr * pos.entry_atr
-            candidate = max(candidate, max_lock_level)
-            # Ratchet rule: SL only moves in profit direction, minimum step enforced
-            if candidate >= pos.current_sl - self.min_step:
-                return None
-            return round(candidate, 3)
+        return self._trail_engine.compute_trail_stop(pos, current_atr)
 
     def should_breakeven(self, mid: float, current_atr: float, ticket: int | None = None) -> bool:
-        """Return True when the favorable move exceeds the breakeven threshold."""
+        """Return True when the favorable move exceeds the breakeven threshold.  Delegates to TrailStopEngine."""
         pos = self._get_pos(ticket)
         if pos is None or pos.breakeven_triggered:
             return False
-
-        threshold_atr = getattr(pos, "breakeven_threshold_atr", self.breakeven_threshold_atr)
-        threshold = threshold_atr * current_atr
-        if pos.side == "long":
-            return (pos.highest_high - pos.entry_price) >= threshold
-        else:
-            return (pos.entry_price - pos.lowest_low) >= threshold
+        return self._trail_engine.should_breakeven(pos, current_atr)
 
     def should_partial_tp(self, mid: float, ticket: int | None = None) -> tuple[bool, float, float]:
-        """Return (trigger, close_volume, remaining_volume) if partial TP should fire.
-
-        Only fires once per position.  When mid reaches partial_tp_r × risk,
-        return the close_volume (= volume × partial_tp_ratio).
-        """
+        """Return (trigger, close_volume, remaining_volume) if partial TP should fire."""
         pos = self._get_pos(ticket)
         if pos is None or pos.partial_tp_triggered or pos.partial_tp_r <= 0:
             return False, 0.0, 0.0
@@ -549,117 +543,15 @@ class ActivePositionManager:
         regime_info: dict[str, Any] | None = None,
         ticket: int | None = None,
     ) -> None:
-        """Dynamically adjust trail multiplier based on volatility regime,
-        realised volatility expansion/contraction, and brain-specific P&L."""
+        """Dynamically adjust trail multiplier.  Delegates to TrailStopEngine."""
         pos = self._get_pos(ticket)
         if pos is None:
             return
+        self._trail_engine.adjust_trail_for_regime(pos, current_atr, regime_info)
 
-        regime = (regime_info or {}).get("regime", "normal")
-        if regime == "low":
-            base = getattr(pos, "trail_atr_mult_low", self.trail_atr_mult_low)
-        elif regime == "high":
-            base = getattr(pos, "trail_atr_mult_high", self.trail_atr_mult_high)
-        else:
-            base = getattr(pos, "trail_atr_mult", self.trail_atr_mult)
-
-        # Volatility-adaptive K: widen in expanding vol (trend acceleration),
-        # tighten in contracting vol (trend exhaustion).  Replaces the old
-        # R-milestone tightening which punished trades for being successful.
-        base = self._compute_adaptive_trail_k(current_atr, pos, base)
-
-        # Apply brain-specific adjustment based on live P&L performance
-        base *= self._compute_brain_specific_trail_scale(ticket=ticket)
-
-        pos.trail_multiplier = round(base, 3)
-
-    def _compute_adaptive_trail_k(
-        self, current_atr: float, pos: ActivePosition, base_k: float
-    ) -> float:
-        """Adjust trail multiplier based on realised volatility AND Layer-2 confidence.
-
-        Core principles:
-          - Confidence rising (model conviction growing) → widen trail, let profits run
-          - Confidence falling (model conviction decaying) → tighten trail, protect gains
-          - Volatility expanding (trend accelerating) → widen trail, give room
-          - Volatility contracting (trend exhausting) → tighten trail
-
-        Returns adjusted K in [1.0, 4.0].
-
-        FIX-20260518-036: Confidence Spring — Layer-2 confidence_ema now
-        dynamically modulates the mechanical Chandelier trail multiplier.
-        Previously Layer 1 (vol-based) and Layer 2 (model confidence) were
-        completely independent, causing the Chandelier trail to "assassinate"
-        positions that the ML brain still strongly supported.
-        """
-        if pos.entry_atr <= 0:
-            return base_k
-
-        # ── Volatility adjustment (original) ──
-        vol_ratio = current_atr / pos.entry_atr
-
-        if vol_ratio > 1.5:
-            vol_adj = 0.8  # strong trend acceleration — wide trail
-        elif vol_ratio > 1.2:
-            vol_adj = 0.4  # mild expansion — moderately wide
-        elif vol_ratio < 0.7:
-            vol_adj = -0.3  # volatility collapse — tighten
-        else:
-            vol_adj = 0.0  # stable — use regime base
-
-        # ── Confidence Spring adjustment (FIX-20260518-036) ──
-        confidence_ema = getattr(pos, "confidence_ema", 0.5)
-        entry_conf = getattr(self, "_entry_consensus_score", 0.5)
-        if entry_conf > 1e-6:
-            conf_ratio = confidence_ema / entry_conf
-        else:
-            conf_ratio = 1.0
-
-        if conf_ratio > 1.20:
-            conf_adj = 0.30  # confidence rising significantly → moderate widen (was 0.60)
-        elif conf_ratio > 1.05:
-            conf_adj = 0.15  # confidence rising mildly (was 0.30)
-        elif conf_ratio < 0.70:
-            conf_adj = -0.25  # confidence collapsing → moderate tighten (was -0.50)
-        elif conf_ratio < 0.85:
-            conf_adj = -0.10  # confidence decaying → mild tighten (was -0.20)
-        else:
-            conf_adj = 0.0  # stable confidence → no adjustment
-
-        k = base_k + vol_adj + conf_adj
-        return max(1.0, min(4.0, k))
-
-    def _compute_brain_specific_trail_scale(self, ticket: int | None = None) -> float:
-        """Scale trail multiplier by supporting brains' live Sharpe ratios.
-
-        High Sharpe → wider trail (let profits run).
-        Negative Sharpe → tighter trail (cut faster).
-        Returns a multiplier in [0.6, 1.5].
-        """
-        pos = self._get_pos(ticket)
-        if pos is None or not pos.supporting_brain_ids:
-            return 1.0
-        if self.pnl_store is None:
-            return 1.0
-
-        try:
-            sharpe_values: list[float] = []
-            for bid in pos.supporting_brain_ids:
-                metrics = self.pnl_store.get_metrics(bid)
-                if metrics and metrics.sample_count >= 5:
-                    s = float(metrics.sharpe_ratio)
-                    sharpe_values.append(s)
-
-            if not sharpe_values:
-                return 1.0
-
-            avg_sharpe = float(np.mean(sharpe_values))
-            # Map Sharpe to scale: Sharpe -2 → 0.6, Sharpe 0 → 1.0, Sharpe 2 → 1.5
-            # tanh((s + 0.2) * 0.8) maps nicely into [~0.6, ~1.4] for s ∈ [-2, 3]
-            scale = 1.0 + 0.25 * float(np.tanh(avg_sharpe * 1.2))
-            return float(np.clip(scale, 0.6, 1.5))
-        except Exception:
-            return 1.0
+    # Phase C: _compute_adaptive_trail_k and _compute_brain_specific_trail_scale
+    # moved to TrailStopEngine.  They are called internally by the engine's
+    # adjust_trail_for_regime() — manager no longer owns trail calculation logic.
 
     # ── Layer 2: Brain ensemble exit ────────────────────────────────────
 
@@ -1402,12 +1294,27 @@ class ActivePositionManager:
         Pillar 3 — Current-Profit Guard: if the position is currently profitable
         (r_now > 0), do NOT kill it — the market IS following through, just
         slower than the breakeven threshold expects.
+
+        Pillar 4 — Half-life Dynamic Patience (FIX-20260525-021): for mean-reversion
+        strategies (statarb/OU), the static hesitation_cycles is replaced by a
+        dynamic limit tied to the OU half-life at entry:
+          hesitation_limit = max(12, int(entry_half_life * 0.75))
+        Mean reversion is a rubber band — killing it after 30 min when the
+        half-life says 4 hours is a category error (trend exit on MR position).
         """
-        if self.hesitation_cycles <= 0:
-            return False, ""
         pos = self._get_pos(ticket)
         if pos is None:
             return False, ""
+
+        # Determine effective hesitation limit per strategy family
+        _sname = (pos.strategy_name or "").lower()
+        if "statarb" in _sname and pos.entry_half_life > 0:
+            _effective_limit = max(12, int(pos.entry_half_life * 0.75))
+        elif self.hesitation_cycles <= 0:
+            return False, ""
+        else:
+            _effective_limit = self.hesitation_cycles
+
         if pos.breakeven_triggered:
             return False, ""
 
@@ -1418,12 +1325,12 @@ class ActivePositionManager:
 
         # Pillar 2: Profit Pardon — highest_r >= 0.15 gets 2× extension
         if pos.highest_r >= 0.15:
-            extended_cycles = self.hesitation_cycles * 2
+            extended_cycles = _effective_limit * 2
             if pos.cycles_held < extended_cycles:
                 return False, ""
             return True, (f"hesitation_{pos.cycles_held}c_pardon_expired" f"_r{pos.highest_r:.2f}")
 
-        if pos.cycles_held >= self.hesitation_cycles:
+        if pos.cycles_held >= _effective_limit:
             return True, f"hesitation_{pos.cycles_held}c_no_breakeven"
         return False, ""
 

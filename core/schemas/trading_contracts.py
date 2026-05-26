@@ -103,6 +103,12 @@ class StrategyDecision:
     p_win: float = 0.0
     kelly_mult: float = 1.0
 
+    # Gate diagnostics — per-cycle gate audit (which gate blocked and why).
+    # Populated by strategy_line.evaluate() when should_trade=False.
+    # Dict is mutable even though the dataclass is frozen (the reference is
+    # frozen, not the contents).
+    gate_diag: dict[str, Any] = field(default_factory=dict)
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 1.2  Failure Contract — replaces every ``except Exception: pass``

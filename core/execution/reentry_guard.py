@@ -48,6 +48,8 @@ def _classify_exit_reason(raw_reason: str) -> str:
         return "bleed_stop"
     if "ev_trajectory" in r:
         return "time_expired"  # EV trajectory IS a time-based exit
+    if "mia_close" in r or "unknown_close" in r or "manual_close" in r or "manual" in r:
+        return "unknown_close"
     return "unknown"
 
 
@@ -198,8 +200,30 @@ def check_reentry_quality(
             return False, "bleed_stop_price_not_confirming_short"
         return True, "bleed_stop_recovery_allowed"
 
-    # Unknown — conservative: block same-direction
-    return False, f"unknown_exit_reason_blocked_{exit_reason_raw[:30]}"
+    # Unknown close (MIA, manual, unknown) — conservative timeout-based block.
+    # FIX-20260525-024: previously fell into catch-all "unknown" permanent block.
+    # Now: 900s timeout then allow with confidence check.  MIA/manual closes
+    # are not necessarily negative signals — we just don't know the reason.
+    if category == "unknown_close":
+        if elapsed < 900:
+            return False, f"unknown_close_too_soon_{elapsed:.0f}s_lt_900s"
+        if new_confidence < max(exit_confidence, 0.70):
+            return (
+                False,
+                f"unknown_close_confidence_insufficient_{new_confidence:.3f}",
+            )
+        return True, "unknown_close_timeout_allowed"
+
+    # Unknown — conservative: block same-direction with timeout
+    # FIX-20260525-024: previously permanent block. Now 900s timeout.
+    if elapsed < 900:
+        return False, f"unknown_exit_reason_blocked_{exit_reason_raw[:30]}_{elapsed:.0f}s_lt_900s"
+    if new_confidence < max(exit_confidence, 0.70):
+        return (
+            False,
+            f"unknown_exit_confidence_insufficient_{new_confidence:.3f}",
+        )
+    return True, "unknown_exit_timeout_allowed"
 
 
 # ── Volume decay ──────────────────────────────────────────────────────────

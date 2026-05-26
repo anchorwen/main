@@ -14,7 +14,7 @@
   "vote_weight": 0.8,
   "magic": 90014,
   "artifact_path": "data/models/institutional/barrier_12bar_meta_binary_cls_20260524_101947.txt",
-  "feature_schema_id": "v9_institutional_40",
+  "feature_schema_id": "v9_40dim_ou3",
   "training_contract": "barrier_12bar_meta_binary_cls",
   "normalization_config_path": "data/models/institutional/barrier_12bar_meta_binary_cls_20260524_101947.meta.json",
   "deployment_scope": {

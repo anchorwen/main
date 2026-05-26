@@ -24,10 +24,11 @@ from core.execution.portfolio_risk import PortfolioRiskController
 from core.execution.regime_gate import RegimeGate
 from core.execution.statarb_strategy import StatArbStrategy
 from core.execution.strategy_budget import StrategyBudget
-
-# ── Strategy line imports ──
 from core.execution.strategy_line import StrategyLineConfig
 from core.execution.swing_strategy import SwingStrategy
+
+# ── Strategy line imports ──
+from core.execution.trail_stop_engine import TrailPolicy
 
 # ── Extracted sub-modules (P2 refactor) ──
 from core.market.mtf_price_service import MTFPriceService
@@ -184,6 +185,8 @@ class LiveCycleState:
     _conformal_ou_gate: Any = None  # ConformalOUGate (physics-based OU signal quality gate)
     _mtf_price_service: Any = None  # MTFPriceService — M15 bar reconstruction from M5 tick history
     _last_ou_params: dict[str, float] | None = None  # {z_score, half_life, theta} for meta labeler
+    # MIA close entries collected by _execute_management_phase, consumed by caller
+    _pending_mia_closes: list[dict[str, Any]] = field(default_factory=list)
 
     # Circuit breaker: 3 consecutive degraded cycles → management-only mode
     _consecutive_degraded_cycles: int = 0
@@ -866,8 +869,32 @@ def _execute_management_phase(
         try:
             _mt5_pos = mt5_worker.positions_get(ticket=pos.ticket)
             if not _mt5_pos:
+                # ── Position closed in MT5 between reconciliation cycles ──
+                # FIX-20260525-024: previously just cleared and returned, which:
+                #   (a) left no close journal entry (ticket already gone from
+                #       known_open_tickets → reconciliation never sees it)
+                #   (b) left stale position_state file
+                #   (c) left reentry guard with unknown_exit → permanent block
+                # Now: collect close info, defer journal/state/reentry to caller.
+                _mia_entry = _build_mia_close_entry(
+                    pos,
+                    state.known_open_tickets.get(pos.ticket, {}),
+                )
+                # Try to enrich with MT5 deal history (close_price, reason)
+                try:
+                    _deals = mt5_worker.history_deals_get(position=pos.ticket)
+                    if _deals:
+                        _enrich_mia_from_deals(_mia_entry, _deals)
+                except Exception:
+                    pass
+                state._pending_mia_closes.append(_mia_entry)
                 pm.clear_position(ticket=pos.ticket)
                 state.known_open_tickets.pop(pos.ticket, None)
+                # Save position state immediately — don't wait for periodic save
+                try:
+                    pm.save_state(config.position_state_path)
+                except Exception:
+                    pass
                 print(
                     json.dumps(
                         {
@@ -875,6 +902,8 @@ def _execute_management_phase(
                             "time": _utc_iso(),
                             "ticket": pos.ticket,
                             "reason": "position_closed_in_mt5",
+                            "close_price": _mia_entry.get("detail", {}).get("close_price"),
+                            "pnl": _mia_entry.get("pnl"),
                         },
                         ensure_ascii=False,
                     ),
@@ -1621,7 +1650,14 @@ def _execute_management_phase(
                 # micro_3bar (15 min) → 3 bars.  min_hold_cycles prevents the
                 # bleed_stop from firing before the position has had reasonable
                 # time to develop (FIX-20260522-027).
-                if mid is not None and mid > 0:
+                #
+                # FIX-20260525-020: Mean-reversion (statarb/OU) strategies are
+                # EXEMPT from bleed_stop.  They enter at trend extremes — price
+                # continuing 3-5 bars in the same direction is normal "rubber band
+                # stretching," not thesis failure.  Killing during the stretch is
+                # a category error (trend exit applied to mean-reversion position).
+                _sname_lower = (_sname or "").lower()
+                if "statarb" not in _sname_lower and mid is not None and mid > 0:
                     _strat_cfg = (config.strategy_configs or {}).get(_sname, {}) or {}
                     _horizon = int(
                         _strat_cfg.get("horizon_cycles", 0) or _strat_cfg.get("horizon", 0) or 0
@@ -2403,6 +2439,148 @@ def _reconcile_closed_positions(
     return closed_entries
 
 
+def _build_mia_close_entry(pos: Any, known_entry: dict[str, Any]) -> dict[str, Any]:
+    """Build a close journal entry for a position detected MIA in MT5.
+
+    Called by _execute_management_phase when positions_get returns empty
+    for a tracked ticket.  Uses all available engine-side info since MT5
+    deal history may not be available yet (position just closed).
+    """
+    side = str(getattr(pos, "side", known_entry.get("side", "")))
+    entry_price = float(
+        getattr(pos, "entry_price", None) or known_entry.get("entry_price", 0.0) or 0.0
+    )
+    close_volume = float(
+        getattr(pos, "volume", None)
+        or known_entry.get("volume", 0.0)
+        or known_entry.get("effective_volume_hint", 0.0)
+    )
+    initial_sl = float(getattr(pos, "initial_sl", None) or known_entry.get("sl", 0.0) or 0.0)
+    initial_tp = float(getattr(pos, "initial_tp", None) or known_entry.get("tp", 0.0) or 0.0)
+    current_sl = float(getattr(pos, "current_sl", initial_sl) or initial_sl)
+    close_time_iso = _utc_iso()
+
+    # Estimate close_price: assume SL hit (most conservative).
+    # _enrich_mia_from_deals() will override with actual deal data.
+    close_price = current_sl
+
+    pnl = None
+    if entry_price > 0 and close_price > 0 and close_volume > 0:
+        if side == "long":
+            pnl = round((close_price - entry_price) * close_volume, 2)
+        elif side == "short":
+            pnl = round((entry_price - close_price) * close_volume, 2)
+
+    _resolved_strategy = known_entry.get("strategy", "")
+    _resolved_magic = known_entry.get("magic") or known_entry.get("detail", {}).get(
+        "request", {}
+    ).get("magic", 0)
+    if not _resolved_strategy and _resolved_magic:
+        try:
+            from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
+
+            _resolved_strategy = MAGIC_TO_STRATEGY.get(int(_resolved_magic), "")
+        except Exception:
+            pass
+
+    return {
+        "schema_version": "live_trade_journal.v2",
+        "recorded_at": close_time_iso,
+        "message_id": f"mia_close_{known_entry.get('message_id', 'unknown')}",
+        "target": "exec_bridge",
+        "ack_status": "closed",
+        "detail": {
+            "reason": "mia_close",
+            "close_price": close_price,
+            "pnl": pnl,
+            "mia_detected_at": close_time_iso,
+        },
+        "symbol": "XAUUSDc",
+        "action": "close",
+        "side": side,
+        "volume": close_volume,
+        "pnl": pnl,
+        "label": "loss"
+        if (pnl is not None and pnl < 0)
+        else ("win" if (pnl is not None and pnl > 0) else "breakeven"),
+        "position_ticket": pos.ticket,
+        "magic": _resolved_magic,
+        "strategy": _resolved_strategy,
+        "sl": initial_sl,
+        "tp": initial_tp,
+        "open_message_id": known_entry.get("message_id"),
+        "brain_ids": known_entry.get("brain_ids"),
+    }
+
+
+def _enrich_mia_from_deals(
+    mia_entry: dict[str, Any],
+    deals: list[Any],
+) -> None:
+    """Enrich an MIA close entry with actual MT5 deal history data.
+
+    Overrides the conservative SL-hit estimate in _build_mia_close_entry
+    with actual close_price and close_reason from deal history.
+    """
+    close_price = None
+    close_time = None
+    close_reason: int | None = None
+
+    for deal in deals:
+        deal_reason = getattr(deal, "reason", -1)
+        if deal_reason in (4, 5):  # DEAL_REASON_SL=4, DEAL_REASON_TP=5
+            close_price = getattr(deal, "price", None)
+            close_time = getattr(deal, "time", None)
+            close_reason = deal_reason
+
+    if close_price is None and deals and len(deals) >= 2:
+        exit_deals = [d for d in deals if getattr(d, "entry", -1) == 1]
+        if exit_deals:
+            last_exit = max(exit_deals, key=lambda d: getattr(d, "time", 0))
+            close_price = getattr(last_exit, "price", None)
+            close_time = getattr(last_exit, "time", None)
+        if close_price is None:
+            last_deal = max(deals, key=lambda d: getattr(d, "time", 0))
+            close_price = getattr(last_deal, "price", None)
+            close_time = getattr(last_deal, "time", None)
+
+    if close_price is not None:
+        mia_entry["detail"]["close_price"] = close_price
+        close_reason_str = {4: "sl_hit", 5: "tp_hit"}.get(close_reason or 0, "unknown_close")
+        mia_entry["detail"]["reason"] = close_reason_str
+
+        # Recompute PnL with actual close price
+        side = mia_entry.get("side", "")
+        entry_price = mia_entry.get("detail", {}).get("entry_price") or mia_entry.get(
+            "entry_price", 0
+        )
+        close_volume = mia_entry.get("volume", 0)
+        if entry_price and close_price and close_volume:
+            if isinstance(entry_price, int | float) and entry_price > 0:
+                if side == "long":
+                    mia_entry["pnl"] = round((close_price - entry_price) * close_volume, 2)
+                elif side == "short":
+                    mia_entry["pnl"] = round((entry_price - close_price) * close_volume, 2)
+            if mia_entry.get("pnl", 0) is not None:
+                pnl = mia_entry["pnl"]
+                if pnl < 0:
+                    mia_entry["label"] = "loss"
+                elif pnl > 0:
+                    mia_entry["label"] = "win"
+                else:
+                    mia_entry["label"] = "breakeven"
+
+        if close_reason == 4:
+            mia_entry["label"] = "sl_hit_first"
+        elif close_reason == 5:
+            mia_entry["label"] = "tp_hit_first"
+
+    if close_time is not None:
+        mia_entry["recorded_at"] = (
+            datetime.fromtimestamp(close_time, tz=UTC).isoformat().replace("+00:00", "Z")
+        )
+
+
 # ── Contract-group consensus helper ──────────────────────────────────────
 
 
@@ -2670,15 +2848,70 @@ def _build_meta_feature_vector(
     except Exception:
         pass
 
-    # ── Step 4: Build 43-dim raw vector in training feature order ──
-    from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+    # ── Step 4: Build 43-dim raw vector in TRAINING feature order ──
+    # FIX-20260525-026: The V9_INSTITUTIONAL_40_FEATURES schema order
+    # (M5→H1, OU_Theta/Hurst blocked at end) does NOT match the training
+    # order (H1→M5, OU_Theta/Hurst inline per-TF).  LightGBM uses
+    # position-based indexing — every single feature position was
+    # scrambled, making the model receive random noise.
+    # Fix: read the authoritative feature_names from the MetaLabel brain
+    # config or model metadata, then assemble in that exact order.
+    _feature_names: list[str] | None = None
 
-    values: list[float] = []
-    for name in V9_INSTITUTIONAL_40_FEATURES:
-        values.append(float(raw_features.get(name, 0.0)))
-    values.append(z_clipped)
-    values.append(hl)
-    values.append(ou_params["theta"])
+    # Source 1: brain config features field (authoritative — training order)
+    for b_info in brains:
+        _bid = str(b_info.get("brain_id", ""))
+        if (
+            "metalabel" in _bid.lower()
+            or "barrier_12bar_meta" in str(b_info.get("contract_group", "")).lower()
+        ):
+            _features = b_info.get("features")
+            if _features and isinstance(_features, list) and len(_features) == 43:
+                _feature_names = [str(f) for f in _features]
+                break
+
+    # Source 2: model metadata file (fallback)
+    if _feature_names is None:
+        _meta_path = None
+        for b_info in brains:
+            _bid = str(b_info.get("brain_id", ""))
+            if "metalabel" in _bid.lower():
+                _meta_path = b_info.get("normalization_config_path")
+                break
+        if _meta_path:
+            try:
+                _meta = json.loads(Path(_meta_path).read_text(encoding="utf-8"))
+                _names = _meta.get("feature_names")
+                if _names and isinstance(_names, list) and len(_names) == 43:
+                    _feature_names = [str(f) for f in _names]
+            except Exception:
+                pass
+
+    # Build full feature dict: raw V9 values + OU augmentation
+    _full_dict: dict[str, float] = dict(raw_features)
+    _full_dict["ou_z_score"] = z_clipped
+    _full_dict["ou_half_life"] = hl
+    _full_dict["ou_theta"] = ou_params["theta"]
+
+    if _feature_names is not None:
+        values = [float(_full_dict.get(name, 0.0)) for name in _feature_names]
+    else:
+        # Legacy fallback with a loud diagnostic — this path should
+        # never be reached in production, but preserves back-compat
+        # for environments where the brain config is unavailable.
+        import logging
+
+        _logger = logging.getLogger(__name__)
+        _logger.error(
+            "MetaLabel brain feature_names unavailable — "
+            "falling back to V9 schema order (TRAIN-SERVE SKEW LIKELY)"
+        )
+        from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+
+        values = [float(raw_features.get(name, 0.0)) for name in V9_INSTITUTIONAL_40_FEATURES]
+        values.append(z_clipped)
+        values.append(hl)
+        values.append(ou_params["theta"])
 
     feature_vec = np.array(values, dtype=np.float32).reshape(1, -1)
     return feature_vec, ou_params
@@ -2707,6 +2940,13 @@ def _build_strategy_lines(
         "m30_swing": "m30_swing",
         "h1_swing": "h1_swing",
         "h4_swing": "h4_swing",
+    }
+
+    # Phase 4: strategy family auto-inference — explicit YAML config wins over this map
+    _STRATEGY_FAMILY_MAP: dict[str, str] = {
+        "statarb_dynamic": "mean_reversion",
+        "statarb_m15": "mean_reversion",
+        # everything else defaults to trend_following
     }
 
     # Partition brains by contract_group (declared in brain JSON, not brain_type)
@@ -2838,6 +3078,8 @@ def _build_strategy_lines(
         strategies["barrier_12bar"] = BarrierStrategy(
             StrategyLineConfig(
                 name="barrier_12bar",
+                strategy_family=_cfg("barrier_12bar", "strategy_family", None)
+                or _STRATEGY_FAMILY_MAP.get("barrier_12bar", "trend_following"),
                 magic=90001,
                 brain_types=BARRIER_GROUP["brain_types"],
                 base_volume=_vol_cfg("barrier_12bar"),
@@ -2882,6 +3124,7 @@ def _build_strategy_lines(
         strategies["micro_3bar"] = MicroStrategy(
             StrategyLineConfig(
                 name="micro_3bar",
+                strategy_family=_STRATEGY_FAMILY_MAP.get("micro_3bar", "trend_following"),
                 magic=90002,
                 brain_types=MICRO_GROUP["brain_types"],
                 base_volume=_vol_cfg("micro_3bar"),
@@ -2921,6 +3164,7 @@ def _build_strategy_lines(
         strategies["micro_m15"] = MicroStrategy(
             StrategyLineConfig(
                 name="micro_m15",
+                strategy_family=_STRATEGY_FAMILY_MAP.get("micro_m15", "trend_following"),
                 magic=90101,
                 brain_types=MICRO_M15_GROUP["brain_types"],
                 base_volume=_vol_cfg("micro_m15"),
@@ -2960,6 +3204,7 @@ def _build_strategy_lines(
         strategies["micro_h1"] = MicroStrategy(
             StrategyLineConfig(
                 name="micro_h1",
+                strategy_family=_STRATEGY_FAMILY_MAP.get("micro_h1", "trend_following"),
                 magic=90201,
                 brain_types=MICRO_H1_GROUP["brain_types"],
                 base_volume=_vol_cfg("micro_h1"),
@@ -3001,6 +3246,8 @@ def _build_strategy_lines(
         strategies["statarb_dynamic"] = StatArbStrategy(
             StrategyLineConfig(
                 name="statarb_dynamic",
+                strategy_family=_cfg("statarb_dynamic", "strategy_family", None)
+                or _STRATEGY_FAMILY_MAP.get("statarb_dynamic", "trend_following"),
                 magic=90003,
                 brain_types=ARB_GROUP["brain_types"],
                 base_volume=_vol_cfg("statarb_dynamic"),
@@ -3023,6 +3270,7 @@ def _build_strategy_lines(
                 min_valid_brains=_cfg("statarb_dynamic", "min_valid_brains", 1),
                 timeframe=_cfg("statarb_dynamic", "timeframe", "M5"),
                 exit_hesitation_cycles=_exit_cfg("statarb_dynamic", "hesitation_cycles", 0),
+                min_p_win=_cfg("statarb_dynamic", "min_p_win", 0.50),
             ),
             statarb_brains,
             budget=StrategyBudget(
@@ -3040,6 +3288,8 @@ def _build_strategy_lines(
         strategies["statarb_m15"] = StatArbStrategy(
             StrategyLineConfig(
                 name="statarb_m15",
+                strategy_family=_cfg("statarb_m15", "strategy_family", None)
+                or _STRATEGY_FAMILY_MAP.get("statarb_m15", "trend_following"),
                 magic=90103,
                 brain_types=STATARB_M15_GROUP["brain_types"],
                 base_volume=_vol_cfg("statarb_m15"),
@@ -3062,6 +3312,7 @@ def _build_strategy_lines(
                 min_valid_brains=_cfg("statarb_m15", "min_valid_brains", 1),
                 timeframe=_cfg("statarb_m15", "timeframe", "M15"),
                 exit_hesitation_cycles=_exit_cfg("statarb_m15", "hesitation_cycles", 0),
+                min_p_win=_cfg("statarb_m15", "min_p_win", 0.50),
             ),
             statarb_m15_brains,
             budget=StrategyBudget(
@@ -3079,6 +3330,8 @@ def _build_strategy_lines(
         strategies["barrier_12bar_meta"] = BarrierStrategy(
             StrategyLineConfig(
                 name="barrier_12bar_meta",
+                strategy_family=_cfg("barrier_12bar_meta", "strategy_family", None)
+                or _STRATEGY_FAMILY_MAP.get("barrier_12bar_meta", "trend_following"),
                 magic=90014,
                 brain_types=BARRIER_12BAR_META_GROUP["brain_types"],
                 base_volume=_vol_cfg("barrier_12bar_meta"),
@@ -3125,6 +3378,7 @@ def _build_strategy_lines(
         strategies["daily_swing"] = SwingStrategy(
             StrategyLineConfig(
                 name="daily_swing",
+                strategy_family=_STRATEGY_FAMILY_MAP.get("daily_swing", "trend_following"),
                 magic=90301,
                 brain_types=DAILY_SWING_GROUP["brain_types"],
                 base_volume=_vol_cfg("daily_swing"),
@@ -3162,6 +3416,7 @@ def _build_strategy_lines(
         strategies["m15_swing"] = SwingStrategy(
             StrategyLineConfig(
                 name="m15_swing",
+                strategy_family=_STRATEGY_FAMILY_MAP.get("m15_swing", "trend_following"),
                 magic=90310,
                 brain_types=M15_SWING_GROUP["brain_types"],
                 base_volume=_vol_cfg("m15_swing"),
@@ -3199,6 +3454,7 @@ def _build_strategy_lines(
         strategies["m30_swing"] = SwingStrategy(
             StrategyLineConfig(
                 name="m30_swing",
+                strategy_family=_STRATEGY_FAMILY_MAP.get("m30_swing", "trend_following"),
                 magic=90320,
                 brain_types=M30_SWING_GROUP["brain_types"],
                 base_volume=_vol_cfg("m30_swing"),
@@ -3236,6 +3492,7 @@ def _build_strategy_lines(
         strategies["h1_swing"] = SwingStrategy(
             StrategyLineConfig(
                 name="h1_swing",
+                strategy_family=_STRATEGY_FAMILY_MAP.get("h1_swing", "trend_following"),
                 magic=90330,
                 brain_types=H1_SWING_GROUP["brain_types"],
                 base_volume=_vol_cfg("h1_swing"),
@@ -3273,6 +3530,7 @@ def _build_strategy_lines(
         strategies["h4_swing"] = SwingStrategy(
             StrategyLineConfig(
                 name="h4_swing",
+                strategy_family=_STRATEGY_FAMILY_MAP.get("h4_swing", "trend_following"),
                 magic=90340,
                 brain_types=H4_SWING_GROUP["brain_types"],
                 base_volume=_vol_cfg("h4_swing"),
@@ -3372,18 +3630,18 @@ def _evaluate_strategy_lines(
             continue
 
         # ── M15 bar-boundary gating: only evaluate M15 strategies at 00/15/30/45 ──
+        # The boundary check prevents future function leakage (incomplete M15 bars).
+        # _effective_mid MUST be the current spot mid_price, NOT latest_m15_close.
+        # Using a stale M15 bar close as the SL/TP entry reference creates a
+        # price-reference mismatch: SL computed from historical close (~4572) but
+        # fill executed at current spot (~4575) → effective SL cut by 2.5+ points.
+        # See FIX-20260525-023 for full root cause analysis.
         _tf = getattr(getattr(strategy, "config", None), "timeframe", "M5")
         if _tf == "M15" and mtf_price_service is not None:
             _utc_minute = datetime.now(UTC).minute
             if not mtf_price_service.is_m15_boundary(_utc_minute):
                 continue  # skip — M15 bar not yet complete, no future function leakage
-            _m15_price = mtf_price_service.latest_m15_close
-            if _m15_price is not None and _m15_price > 0:
-                _effective_mid = _m15_price
-            else:
-                _effective_mid = mid_price
-        else:
-            _effective_mid = mid_price
+        _effective_mid = mid_price
 
         # ── Cut 1: Absolute Refractory Period (cooldown check) ──
         if cooldown_registry is not None:
@@ -3506,6 +3764,17 @@ def _evaluate_strategy_lines(
         )
 
         if not decision.should_trade:
+            try:
+                from core.runtime.gate_audit_recorder import record_gate_block
+
+                record_gate_block(
+                    strategy_name=sname,
+                    direction=decision.direction,
+                    reason=decision.reason,
+                    gate_diag=getattr(decision, "gate_diag", None) or None,
+                )
+            except Exception:
+                pass
             continue
 
         # Portfolio risk check
@@ -3735,12 +4004,70 @@ def execute_live_cycle(
     except Exception:
         pass  # never let scheduling error disrupt the cycle
 
-    # ── On first cycle, filter known_open_tickets to only currently-open positions ──
-    # Old tickets from previous sessions cause history_deals_get() to hang.
+    # ── On first cycle, reconcile positions closed during downtime ──
+    # Positions in known_open_tickets that are no longer open in MT5 were closed
+    # (by SL/TP/external) while the process was down.  Run reconciliation BEFORE
+    # filtering so close journal entries are created — otherwise they are silently
+    # discarded and the trade journal has a permanent gap (no close entry).
     if state.loop_iteration == 1 and state.known_open_tickets and not config.no_mt5:
         try:
             _positions = mt5_worker.positions_get(symbol=config.symbol) or []
             _open_tickets = {p.ticket for p in _positions}
+            _gone_tickets = set(state.known_open_tickets.keys()) - _open_tickets
+            if _gone_tickets:
+                _gone_dict = {
+                    t: state.known_open_tickets[t]
+                    for t in _gone_tickets
+                    if t in state.known_open_tickets
+                }
+                try:
+                    _closed_entries = _reconcile_closed_positions(
+                        mt5_worker,
+                        config.symbol,
+                        str(journal_path),
+                        _gone_dict,
+                        state=state,
+                    )
+                    if _closed_entries:
+                        from core.infrastructure.distributed_lock import (
+                            FileLock,
+                        )
+
+                        _jlock = FileLock(
+                            "live_trade_journal",
+                            lock_dir=str(journal_path.parent / ".locks"),
+                            ttl_seconds=10,
+                        )
+                        _jacquired = _jlock.acquire(blocking=True, timeout_seconds=5)
+                        if _jacquired.acquired:
+                            try:
+                                _existing = (
+                                    journal_path.read_text(encoding="utf-8")
+                                    if journal_path.exists()
+                                    else ""
+                                )
+                                with open(journal_path, "a", encoding="utf-8") as _jf:
+                                    for _entry in _closed_entries:
+                                        _mid = _entry.get("message_id", "")
+                                        if _mid and _mid in _existing:
+                                            continue
+                                        _jf.write(json.dumps(_entry, ensure_ascii=False) + "\n")
+                            finally:
+                                _jlock.release()
+                        # Update per-strategy SL streak from reconciled closes
+                        for _entry in _closed_entries:
+                            _label = _entry.get("label", "")
+                            _strategy = _entry.get("strategy", "")
+                            if _strategy:
+                                _curr = state.consecutive_sl_hits.get(_strategy, 0)
+                                if _label in ("sl_hit_first", "loss"):
+                                    _curr += 1
+                                elif _label in ("tp_hit_first", "win"):
+                                    _curr = 0
+                                state.consecutive_sl_hits[_strategy] = _curr
+                except Exception:
+                    pass  # best-effort — don't block startup
+            # Filter to only currently-open positions AFTER reconciliation
             state.known_open_tickets = {
                 t: r for t, r in state.known_open_tickets.items() if t in _open_tickets
             }
@@ -4383,6 +4710,106 @@ def execute_live_cycle(
                 pass
             # Persist position state every N cycles (trail steps, breakeven, etc.)
             if state.loop_iteration % 5 == 0 and state.position_manager is not None:
+                try:
+                    state.position_manager.save_state(config.position_state_path)
+                except Exception:
+                    pass
+
+        # ── Process MIA close entries collected by _execute_management_phase ──
+        # FIX-20260525-024: When a position disappears from MT5 between
+        # reconciliation cycles, the management phase detects it and stores
+        # a close entry in _pending_mia_closes.  We must write these to the
+        # journal and record them for reentry guard, otherwise:
+        #   - Journal has no close entry → PnL hole
+        #   - Reentry guard gets unknown_exit → permanent block
+        #   - Position state file stays stale
+        if state._pending_mia_closes:
+            _mia_closed = state._pending_mia_closes
+            state._pending_mia_closes = []
+            # ── Write to journal (same FileLock pattern as reconciliation) ──
+            try:
+                from core.infrastructure.distributed_lock import FileLock
+
+                _jlock = FileLock(
+                    "live_trade_journal",
+                    lock_dir=str(journal_path.parent / ".locks"),
+                    ttl_seconds=10,
+                )
+                _jacquired = _jlock.acquire(blocking=True, timeout_seconds=5)
+                if _jacquired.acquired:
+                    try:
+                        _existing = (
+                            journal_path.read_text(encoding="utf-8")
+                            if journal_path.exists()
+                            else ""
+                        )
+                        with open(journal_path, "a", encoding="utf-8") as _jf:
+                            for _entry in _mia_closed:
+                                _mid = _entry.get("message_id", "")
+                                if _mid and _mid in _existing:
+                                    continue
+                                _jf.write(json.dumps(_entry, ensure_ascii=False) + "\n")
+                    finally:
+                        _jlock.release()
+            except Exception:
+                pass
+            # ── Record exit for reentry guard ──
+            for _entry in _mia_closed:
+                _exit_strategy = _entry.get("strategy", "")
+                _exit_side = _entry.get("side", "")
+                _exit_price = float(_entry.get("detail", {}).get("close_price", 0) or 0)
+                _exit_ts_str = _entry.get("recorded_at", "")
+                _exit_ts = time.time()
+                if _exit_ts_str:
+                    try:
+                        _parsed = datetime.fromisoformat(_exit_ts_str.replace("Z", "+00:00"))
+                        _exit_ts = _parsed.timestamp()
+                    except Exception:
+                        pass
+                _exit_confidence = (
+                    _entry.get("entry_consensus", {}).get("consensus_score", 0.5)
+                    if isinstance(_entry.get("entry_consensus"), dict)
+                    else 0.5
+                )
+                _exit_reason = _entry.get("detail", {}).get("reason", "mia_close")
+                if _exit_strategy and _exit_side in ("long", "short"):
+                    try:
+                        from core.execution.reentry_guard import (
+                            ExitRecord,
+                            ensure_reentry_state,
+                        )
+
+                        _mia_rec = ExitRecord(
+                            timestamp=_exit_ts,
+                            strategy_name=_exit_strategy,
+                            direction=_exit_side,
+                            reason=_exit_reason,
+                            confidence=float(_exit_confidence),
+                            price=_exit_price,
+                            ticket=_entry.get("position_ticket", 0),
+                        )
+                        _rs = ensure_reentry_state(state._reentry_states, _exit_strategy)
+                        _rs.record_exit(_mia_rec)
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "mia_close_reentry_recorded",
+                                    "time": _utc_iso(),
+                                    "ticket": _entry.get("position_ticket"),
+                                    "strategy": _exit_strategy,
+                                    "direction": _exit_side,
+                                    "reason": _exit_reason,
+                                    "close_price": _exit_price,
+                                    "pnl": _entry.get("pnl"),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                    except Exception:
+                        pass
+            # ── Save position state immediately ──
+            if state.position_manager is not None:
                 try:
                     state.position_manager.save_state(config.position_state_path)
                 except Exception:
@@ -5577,6 +6004,7 @@ def execute_live_cycle(
                             entry_atr=current_atr,
                             entry_cycle=state.loop_iteration,
                             entry_z_score=getattr(decision, "entry_z_score", 0.0),
+                            entry_half_life=getattr(decision, "entry_half_life", 0.0),
                             entry_consensus=entry_consensus,
                             supporting_brain_ids=decision.brain_ids,
                             model_horizons=model_horizons,
@@ -5584,10 +6012,15 @@ def execute_live_cycle(
                             partial_tp_r=_ptp_r,
                             partial_tp_ratio=_ptp_ratio,
                             strategy_name=dr.strategy_name,
-                            trail_atr_mult=_exit_cfg.get("trail_atr_mult"),
-                            trail_atr_mult_low=_exit_cfg.get("trail_atr_mult_low"),
-                            trail_atr_mult_high=_exit_cfg.get("trail_atr_mult_high"),
-                            breakeven_threshold_atr=_exit_cfg.get("breakeven_threshold_atr"),
+                            # Phase B: TrailPolicy from live.yaml exit.* — single source of truth for Risk Exit
+                            trail_policy=TrailPolicy(
+                                trail_atr_mult=_exit_cfg.get("trail_atr_mult", 2.0),
+                                trail_atr_mult_low=_exit_cfg.get("trail_atr_mult_low", 1.5),
+                                trail_atr_mult_high=_exit_cfg.get("trail_atr_mult_high", 3.0),
+                                breakeven_threshold_atr=_exit_cfg.get(
+                                    "breakeven_threshold_atr", 1.0
+                                ),
+                            ),
                         )
                         # Sync known_open_tickets so reconciliation can detect closes
                         state.known_open_tickets[ticket] = {

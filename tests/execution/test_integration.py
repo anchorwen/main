@@ -54,7 +54,7 @@ class TestStrategyLineToRiskPipeline:
         # Feed into risk controller
         risk_ctrl = PortfolioRiskController()
         # Use StrategyDecision-like dict for positions
-        risk_result = risk_ctrl.check(result, {})
+        risk_result = risk_ctrl.check(result, {}, current_price=2000.0)
         assert risk_result.verdict == RiskVerdict.APPROVED
 
     def test_risk_rejection_stops_trade(self):
@@ -123,7 +123,7 @@ class TestStrategyLineToRiskPipeline:
             },
         }
         risk_ctrl = PortfolioRiskController(netting_mode="net_out")
-        risk_result = risk_ctrl.check(result, positions)
+        risk_result = risk_ctrl.check(result, positions, current_price=2000.0)
         # Net-out closes the opposing and places the remainder
         assert risk_result.verdict in (RiskVerdict.NET_OUT, RiskVerdict.REDUCED)
 
@@ -153,7 +153,7 @@ class TestRiskToQueuePipeline:
         assert decision.should_trade is True
 
         risk_ctrl = PortfolioRiskController()
-        risk_result = risk_ctrl.check(decision, {})
+        risk_result = risk_ctrl.check(decision, {}, current_price=2000.0)
 
         eq = ExecutionQueue(stagger_seconds=0)
         eq.enqueue("barrier_12bar", decision, risk_result)

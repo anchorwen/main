@@ -430,6 +430,9 @@ def build_meta_features(
     lgb_params: dict[str, object]
     huber_delta: float
     if is_binary:
+        n_pos = int(np.sum(y_binary == 1))
+        n_neg = int(np.sum(y_binary == 0))
+        scale_pos_weight = n_neg / max(n_pos, 1)
         lgb_params = {
             "objective": "binary",
             "boosting_type": "gbdt",
@@ -446,7 +449,11 @@ def build_meta_features(
             "n_jobs": -1,
             "verbosity": -1,
             "num_iterations": 500,
+            "scale_pos_weight": scale_pos_weight,
         }
+        print(
+            f"[meta] Binary class weights: scale_pos_weight={scale_pos_weight:.4f} ({n_neg} neg / {n_pos} pos)"
+        )
         huber_delta = 1.0  # unused in binary mode
     else:
         huber_delta = (

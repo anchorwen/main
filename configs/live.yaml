@@ -129,20 +129,21 @@ correlation_tracker:
 strategy_lines:
   barrier_12bar:
     enabled: true
-    # ── DORMANT 2026-05-24: Meta_Stage1_Huber_V1 frozen (The Great Reset) ──
-    # SL=3.0/TP=1.5 retrained contract. Meta_Stage1_Binary_Cls_V1 active
-    # as lightgbm_v1 but vote_weight=0.0 (shadow monitoring — OOF bimodal,
-    # not safe for live voting). Strategy reactivates when a voting brain
-    # passes quality gates or Binary_Cls_V1 OOF distribution is fixed.
-    mode: shadow  # SHADOW-ONLY: zero real capital, BPS prediction logging only
+    # ── PROBATION 2026-05-26: Full Pipeline Rebuild complete (FIX-20260526-041) ──
+    # Meta_Stage2_Filter_V3 active (48-dim LGB + Platt, Forward Sharpe 1.30).
+    # Stage 1 Huber probe + Stage 2 MetaFilter wired through Track 4d gate chain.
+    # Promoted from shadow to probation at 0.01 lot to validate train-serve skew
+    # elimination. Budget: daily_loss -3%, max 5 consecutive losses.
+    mode: probation
     timeframe: M5
     magic: 90001
+    strategy_family: trend_following  # Phase 4: asymmetric vol response
     min_valid_brains: 1  # Huber regression probe as sole voter (V9 classifiers purged)
     confidence_threshold: 0.40  # Dictator Protocol: single-brain Huber probe. Lowered from 0.75 for unblocked Track 4d delivery.
     brain_types:
     - lightgbm_v1  # Meta_Stage1_Huber_V1 — regression BPS probe, not binary classifier
-    base_volume: 0.0   # ZERO real capital — shadow observation only
-    max_volume: 0.0    # ZERO real capital — shadow observation only
+    base_volume: 0.01
+    max_volume: 0.01
     sl:
       base_atr_mult: 3.0   # FIX-20260524-036: aligned with training contract SL=3.0 (was 2.0)
       hard_sl_ratio: 1.5
@@ -183,6 +184,7 @@ strategy_lines:
     mode: probation  # probation voting with live capital at small size
     timeframe: M5
     magic: 90014
+    strategy_family: trend_following  # Phase 4: asymmetric vol response
     min_valid_brains: 1
     confidence_threshold: 0.40
     brain_types:
@@ -193,8 +195,8 @@ strategy_lines:
       base_atr_mult: 3.0
       hard_sl_ratio: 1.5
       dynamic: true
-      min_sl_distance: 8.0
-      min_rr_ratio: 0.5
+      min_sl_distance: 3.0   # FIX-20260526-030: lowered from $8→$3 for meta-labeling high-prob/low-RR model
+      min_rr_ratio: 0.4      # FIX-20260526-030: relaxed from 0.5→0.4 (SL=3.0/TP=1.5 → RR=0.5 native)
     tp:
       base_atr_mult: 1.5
       partial_tp_enabled: false
@@ -305,6 +307,7 @@ strategy_lines:
     enabled: true
     timeframe: M5
     magic: 90003
+    strategy_family: mean_reversion  # Phase 4: asymmetric vol response — OU is mean-reverting
     brain_types:
     - ou_params_v6
     base_volume: 0.02
@@ -326,21 +329,29 @@ strategy_lines:
       trail_atr_mult: 1.5
       trail_atr_mult_low: 1.2
       trail_atr_mult_high: 2.5
-      breakeven_threshold_atr: 0.8
+      breakeven_threshold_atr: 0.5  # Phase A: 0.8→0.5 — mean-reversion profits are smaller, need faster breakeven lock
       flip_exit_enabled: false
       time_exit_cycles: 40
       zscore_exit_enabled: true
       confidence_decay_exit: false
       hesitation_cycles: 6
     budget:
-      daily_loss_limit_pct: -0.015
-      max_consecutive_losses: 4
+      # FIX-20260525-022: calibrated to 30% WR reality.
+      # P(4 consecutive losses) = 0.7^4 = 24% — normal variance, not a crisis.
+      # P(7 consecutive losses) = 0.7^7 = 8.2% — rare enough to warrant review.
+      # Daily loss limit relaxed from -1.5% to -3.0%: at 0.02 lot, 7 losses
+      # ≈ $4-6, which on a micro account ($200) is ~2-3%.  -1.5% would fire
+      # after just 2-3 losses — normal Tuesday for a 30% WR strategy.
+      daily_loss_limit_pct: -0.03
+      max_consecutive_losses: 7
     direction_balance:
       long_bias_discount: 0.10
+    min_p_win: 0.45  # FIX-20260525-016: OU empirical WR 49.7% at RR 2:1 → breakeven 33.3%. 0.45 provides margin while ending the 0.489-0.491 blockage.
   statarb_m15:
     enabled: true
     timeframe: M15
     magic: 90103
+    strategy_family: mean_reversion  # Phase 4: asymmetric vol response — OU is mean-reverting
     brain_types:
     - ou_params_v6
     base_volume: 0.01
@@ -364,10 +375,16 @@ strategy_lines:
       confidence_decay_exit: false
       hesitation_cycles: 3
     budget:
-      daily_loss_limit_pct: -0.01
-      max_consecutive_losses: 3
+      # FIX-20260525-022: calibrated to 30% WR reality.
+      # P(3 consecutive losses) = 0.7^3 = 34.3% — fires almost daily.
+      # P(7 consecutive losses) = 0.7^7 = 8.2% — rare enough to warrant review.
+      # Daily loss limit relaxed from -1.0% to -2.0%: at 0.01 lot, 7 losses
+      # ≈ $2-3, which on a micro account ($200) is ~1-1.5%.
+      daily_loss_limit_pct: -0.02
+      max_consecutive_losses: 7
     direction_balance:
       long_bias_discount: 0.0
+    min_p_win: 0.45  # FIX-20260525-016: OU empirical WR 49.7% at RR 2:1 → breakeven 33.3%
   daily_swing:
     enabled: false  # FIX-20260523-006: graveyard cleanup — no active swing brains remain
     timeframe: D1

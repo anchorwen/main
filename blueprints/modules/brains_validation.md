@@ -22,7 +22,7 @@ Load-time brain config validation and runtime alerting. Catches configuration er
 **Level**: ERROR.
 
 ### Rule 3: Feature Schema
-**Check**: `feature_schema_id` must be in `SCHEMA_DIMENSIONS` (8 known schemas + aliases).
+**Check**: `feature_schema_id` must be in `SCHEMA_DIMENSIONS` (9 known schemas + aliases).
 **Level**: ERROR.
 
 ### Rule 4: Artifact Path
@@ -56,6 +56,7 @@ Load-time brain config validation and runtime alerting. Catches configuration er
 | `meta_stage2_runtime_56` | meta_stage2_runtime_56 | 56 |
 | `meta_stage2_runtime_59` | meta_stage2_runtime_59 | 59 |
 | `v6_price_series_1` | v6_price_series_1 | 1 |
+| `v9_40dim_ou3` | v9_40dim_ou3 | 43 |
 
 ## Alert Types
 
@@ -115,6 +116,8 @@ Adapter fallback paths
 
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |--------|------|--------|--------|---------|------------|
+| FIX-20260526-028 | 2026-05-26 | cursor-agent | — | Binary_Cls_V1 brain config feature order corrected: `features` list changed from V9 canonical order (M5→H1, 8 core/TF + OU + Hurst blocks) to model training order (H1→M15→M30→M5, 10 metrics/TF inline). Training meta.json `feature_names` is the authoritative ground truth. Without this, `_reorder_for_brain()` would have no correct target order. | RC-06 |
+| FIX-20260525-027 | 2026-05-25 | cursor-agent | — | `v9_40dim_ou3` schema registration: MetaLabel brain (`Meta_Stage1_MetaLabel_Binary_V1`) legitimately requires 43 features (40 V9 institutional + 3 OU physics: `ou_z_score`, `ou_half_life`, `ou_theta`) but `BrainConfigValidator` only recognized the 40-dim `v9_institutional_40` schema. Result: `brain_build_skip` at startup → `barrier_12bar_meta` strategy had 0 brains → completely silent. Fix: (1) added `"v9_40dim_ou3": 43` to `SCHEMA_DIMENSIONS`; (2) added `_get_schema_feature_names()` branch returning V9 40 + 3 OU names (following the `meta_stage2_runtime_47` pattern); (3) changed brain config `feature_schema_id` from `"v9_institutional_40"` to `"v9_40dim_ou3"`. 11 unit tests validate schema acceptance, name validity, dimension mismatch rejection, and backward compat for existing v9_institutional_40 brains. | RC-06 (contract-violation — schema dimension mismatch blocked valid augmented config) |
 | FIX-20260518-025 | 2026-05-18 | cursor-agent | — | Phase 1a: Per-brain schema startup validator — validates each brain's feature_schema_id against registered schemas (Tier 1 cache) and implemented schemas (Tier 2 live compute). Drops individual mismatched brains instead of killing all strategy lines. | config-drift, contract-violation |
 | FIX-20260518-042 | 2026-05-18 | cursor-agent | — | Brain deployment quality gate: `validate_brain_before_deploy.py` catches direction bias (>90% one direction), NEUTRAL death (>80%), signal redundancy (>0.85 correlation), and output validity gaps BEFORE deployment. Fixed `_get_direction_and_confidence()` to read from `proposal.prediction` dict (direction_bias/confidence) instead of non-existent top-level attributes. Tested on all registered brains. | RC-09 |
 | FIX-20260516-009 | 2026-05-16 | cursor-agent | — | Added enable_onnxruntime:true to DeepResMLP_V2_New config (was missing, would cause stub mode). Deleted 4 stale configs for permanently retired brains. Registered 5 new shadow brains in governance_state. | RC-09 |

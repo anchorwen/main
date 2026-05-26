@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import sys
 import time
 from pathlib import Path
@@ -481,7 +482,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--bar-sync-timeout",
         type=float,
         default=360.0,
-        help="Max seconds to wait for new bar before fallback to interval sleep (must be > M5 period of 300s)",
+        help="Max seconds to wait for new bar before fallback (dynamic floor: max(360, bar_period_s×1.5) — M5=450s, H1=5400s))",
     )
     p.add_argument(
         "--use-limit-orders",
@@ -1115,6 +1116,8 @@ def main(argv: list[str] | None = None) -> int:
                         "training_horizon": entry.get("training_horizon", 12),
                         "feature_schema": entry.get("feature_schema", ""),
                         "status": entry.get("status", ""),
+                        "features": entry.get("features"),
+                        "normalization_config_path": entry.get("normalization_config_path"),
                     }
                 )
             except Exception as exc:
@@ -1771,16 +1774,22 @@ def main(argv: list[str] | None = None) -> int:
                         continue
                     try:
                         if btype == "ou_params_v6":
-                            rates = mt5_worker.copy_rates_from_pos(
-                                args.symbol, 5, 0, 300
-                            )  # MT5_TIMEFRAME_M5
-                            if rates is not None and len(rates) >= 30:
+                            cg = b_info.get("contract_group", "")
+                            if cg == "statarb_m15":
+                                # M15 OU needs 280 M15 bars (window=280).
+                                # Fetch directly from M15 timeframe — resampling
+                                # 300 M5 bars only yields ~100 M15 bars (缺口 180).
+                                rates = mt5_worker.copy_rates_from_pos(
+                                    args.symbol, 15, 0, 350
+                                )  # MT5_TIMEFRAME_M15
+                                min_required = 280
+                            else:
+                                rates = mt5_worker.copy_rates_from_pos(
+                                    args.symbol, 5, 0, 300
+                                )  # MT5_TIMEFRAME_M5
+                                min_required = 30
+                            if rates is not None and len(rates) >= min_required:
                                 prices = [float(r["close"]) for r in rates]
-                                # For M15 brains, resample M5 closes → M15 closes
-                                # (every 3rd M5 close, starting from the 3rd bar)
-                                cg = b_info.get("contract_group", "")
-                                if cg == "statarb_m15":
-                                    prices = prices[2::3]
                                 adapter.bootstrap_buffer(prices)
                                 print(
                                     json.dumps(
@@ -2020,76 +2029,90 @@ def main(argv: list[str] | None = None) -> int:
             flush=True,
         )
 
-        if position_manager is not None and position_manager.has_position():
-            try:
-                _pos_path = Path(args.base_dir) / "state" / "active_position.json"
-                position_manager.save_state(str(_pos_path))
-                print(
-                    json.dumps(
-                        {
-                            "event": "position_state_saved",
-                            "time": _utc_iso(),
-                            "ticket": position_manager.get_position().ticket
-                            if position_manager.get_position()
-                            else 0,
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-            except Exception:
-                pass
-
-        if rolling_norm is not None:
-            try:
-                _state_path = Path(args.base_dir) / "rolling_norm_state.json"
-                rolling_norm.save_state(_state_path)
-            except Exception:
-                pass
-        if regime_detector is not None:
-            try:
-                _regime_path = Path(args.base_dir) / "regime_detector_state.json"
-                regime_detector.save_state(_regime_path)
-            except Exception:
-                pass
+        # FIX-20260525-025: Temporarily ignore SIGINT during state save to
+        # prevent a second Ctrl+C from interrupting json.dumps()/write_text()
+        # inside pnl_ledger.save() and position state persistence.
+        # All saves use atomic tmp+replace, so even if the process is killed
+        # after the shield lifts, the original file is never corrupted.
+        _old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
         try:
-            save_path = Path(args.base_dir) / "brain_performance.json"
-            tracker.save(save_path)
-        except Exception as exc:
-            print(
-                json.dumps(
-                    {"event": "tracker_save_error", "time": _utc_iso(), "error": str(exc)},
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-        if pnl_ledger is not None:
+            if position_manager is not None and position_manager.has_position():
+                try:
+                    _pos_path = Path(args.base_dir) / "state" / "active_position.json"
+                    position_manager.save_state(str(_pos_path))
+                    print(
+                        json.dumps(
+                            {
+                                "event": "position_state_saved",
+                                "time": _utc_iso(),
+                                "ticket": position_manager.get_position().ticket
+                                if position_manager.get_position()
+                                else 0,
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                except Exception:
+                    pass
+
+            if rolling_norm is not None:
+                try:
+                    _state_path = Path(args.base_dir) / "rolling_norm_state.json"
+                    rolling_norm.save_state(_state_path)
+                except Exception:
+                    pass
+            if regime_detector is not None:
+                try:
+                    _regime_path = Path(args.base_dir) / "regime_detector_state.json"
+                    regime_detector.save_state(_regime_path)
+                except Exception:
+                    pass
             try:
-                pnl_ledger.save(pnl_ledger_path)
-                print(
-                    json.dumps(
-                        {
-                            "event": "pnl_ledger_saved",
-                            "time": _utc_iso(),
-                            "settled_count": pnl_ledger.total_settled,
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+                save_path = Path(args.base_dir) / "brain_performance.json"
+                tracker.save(save_path)
             except Exception as exc:
                 print(
                     json.dumps(
-                        {"event": "pnl_ledger_save_error", "time": _utc_iso(), "error": str(exc)},
+                        {"event": "tracker_save_error", "time": _utc_iso(), "error": str(exc)},
                         ensure_ascii=False,
                     ),
                     flush=True,
                 )
-        if meta_signal_filter is not None:
-            try:
-                meta_signal_filter.save_state(str(_mf_state_path))
-            except Exception:
-                pass
+            if pnl_ledger is not None:
+                try:
+                    pnl_ledger.save(pnl_ledger_path)
+                    print(
+                        json.dumps(
+                            {
+                                "event": "pnl_ledger_saved",
+                                "time": _utc_iso(),
+                                "settled_count": pnl_ledger.total_settled,
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                except Exception as exc:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "pnl_ledger_save_error",
+                                "time": _utc_iso(),
+                                "error": str(exc),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+            if meta_signal_filter is not None:
+                try:
+                    meta_signal_filter.save_state(str(_mf_state_path))
+                except Exception:
+                    pass
+        finally:
+            signal.signal(signal.SIGINT, _old_sigint)
+
         if mt5_worker is not None:
             mt5_worker.stop()
         print(

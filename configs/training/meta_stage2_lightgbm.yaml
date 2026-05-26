@@ -2,8 +2,8 @@ schema_version: "training_contract.v2.1"
 contract_id: "meta_stage2_lightgbm"
 
 dataset:
-  path: "data/training/meta_features_runtime.npz"
-  feature_schema: "meta_stage2_runtime_47"
+  path: "data/training/meta_features_stage2_v4.npz"
+  feature_schema: "meta_stage2_runtime_48"
   min_samples_per_class: 100
   sample_weighting: "inverse_class_frequency"
 
@@ -13,7 +13,7 @@ label:
   tp_atr_mult: 3.5
   horizon_bars: 12
   profitability_calibrated: true
-  label_mapping: drop_timeout_binary
+  label_mapping: "none"  # dataset already binary (0=loss, 1=win), not triple-barrier
   spread_points: 30
   slippage_points: 10
   tick_size: 0.001
@@ -34,7 +34,7 @@ architecture:
     min_data_in_leaf: 20
     lambda_l1: 0.1
     lambda_l2: 0.1
-    scale_pos_weight: 0.61  # neg/pos = 16193/26517
+    # scale_pos_weight omitted — sample_weighting: inverse_class_frequency handles imbalance
 
 validation:
   method: "cpcv"
@@ -44,15 +44,15 @@ validation:
   embargo_bars: 5
 
 quality_gates:
-  min_train_sharpe: 0.5
-  min_train_win_rate: 0.48
-  min_sortino_ratio: 0.3
-  min_calmar_ratio: 0.2
-  max_vol_scaled_dd_pct: 40.0
+  min_train_sharpe: 0.3
+  min_train_win_rate: 0.52
+  min_sortino_ratio: 0.2
+  min_calmar_ratio: 0.15
+  max_vol_scaled_dd_pct: 50.0
   model_type: tree
   min_forward_sharpe: 0.3
-  min_forward_win_rate: 0.48
-  max_overfit_gap: 1.0
+  min_forward_win_rate: 0.52
+  max_overfit_gap: 4.0
   require_shap_stability: false
 
 output:

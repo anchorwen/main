@@ -4,6 +4,692 @@
 
 ## Fix Details
 
+### FIX-20260526-043 — ConformalOUGate: OU confidence diagnostic
+
+- **Date**: 2026-05-26
+- **Author**: cursor-agent
+- **Root Cause**: RC-12 (missing-feature) — ConformalOUGate physics scoring had no visibility into the brain's per-signal confidence. OU brain outputs direction + confidence (from z_depth + half_life quality), but conformal features dict only captured physics dimensions (z_depth_q, hl_q, theta_q, adx_q, vel_q) — no way to correlate physics scores with brain confidence.
+- **Fix**: Added `ou_confidence` field from brain proposal (`getattr(p, "confidence", 0.5)`) to both `_extract_ou_diagnostics()` return dict and `filter()` features output. Enables downstream correlation analysis between OU physics scoring and brain confidence.
+- **Files changed**: `core/execution/conformal_ou_gate.py`
+
+### FIX-20260526-042 — barrier_12bar: shadow → probation activation
+
+- **Date**: 2026-05-26
+- **Author**: cursor-agent
+- **Root Cause**: RC-09 (config-drift), RC-06 (category error) — barrier_12bar (magic 90001) remained in shadow mode (zero capital) despite Full Pipeline Rebuild completing with Meta_Stage2_Filter_V3 (48-dim LGB + Platt, Forward Sharpe 1.30). Train-serve skew bugs (FIX-20260525-026, FIX-20260526-028, FIX-20260526-037) were all fixed — no reason to keep the model in shadow.
+- **Fix**: `configs/live.yaml` barrier_12bar strategy block: mode shadow→probation, base_volume 0.0→0.01, max_volume 0.0→0.01. Budget unchanged (daily_loss -3%, max_consecutive_losses 5). Comment updated with probation start date and activation rationale.
+- **Files changed**: `configs/live.yaml`
+
+### FIX-20260526-041 — Entry precision deep fix: COLD deadlock + MetaFilter statarb + confidence fallback
+
+- **Date**: 2026-05-26
+- **Author**: cursor-agent
+- **Root Cause**: RC-05 (missing-fallback), RC-06 (category error) — Three interlocking root causes for imprecise entry on magic 90001/90003:
+  1. **COLD deadlock (R3)**: ConformalOUGate COLD phase (samples<50) used threshold=0.20 for signal admission, but `resolve_p_win_from_brains()` returned 0.40 which failed min_p_win=0.45 → chicken-and-egg: trading needed calibration, calibration needed trades.
+  2. **No per-signal p_win (R1)**: OU brain (ParamsBrainAdapter) outputs direction + confidence but no p_win. `resolve_p_win_from_brains()` returns global rolling 100-trade WR — identical for ALL signals.
+  3. **MetaFilter unreachable (R2)**: MetaFilter (48-dim LGB+Platt, Forward Sharpe 1.30) outputs per-signal P(TP|signal) but was gated by `name == "barrier_12bar"` — statarb unreachable.
+- **Fix**: Three-tier solution:
+  1. **Fix 1A — Forced Exploration Budget**: `_is_cold_explore` flag detected from `_last_ou_result["force_min_volume"]`. During COLD: p_win=0.50 (Kelly mult=1.0), hard p_win gate bypassed. Risk bounded by 0.01 lot volume cap. Total exploration budget ~$7.50-15.
+  2. **Fix 1B — MetaFilter EXPERIMENTAL routing for statarb**: `_meta_p_win` scope moved from barrier_12bar block to global evaluate() scope. New block after ConformalOU gate: `entry_z_score * 12.5` as s1_prediction proxy (|z|≤4→|proxy|≤50, within BPS training distribution). Domain shift risk acknowledged — MetaFilter trained on trend/breakout, applied to mean-reversion. Auto-kill-switch criteria: corr(meta_p_win, PnL) < 0.05 for two consecutive 50-trade eval periods → disable route.
+  3. **Fix 1C — OU confidence monotonic fallback**: `p_win = 0.40 + confidence * 0.20` — bounded in [0.40, 0.60], preserves signal quality gradient.
+  4. **Fix 3A — p_win_source tracking**: kelly_sizing JSON now includes `p_win_source` (meta_filter/rolling_wr/brain_confidence/cold_explore_neutral) and `cold_explore` boolean.
+- **Degradation chain**: MetaFilter (best, per-signal ML) → PnLStore rolling WR → OU confidence mapping (fallback) → neutral 0.50 (last resort)
+- **Files changed**: `core/execution/strategy_line.py`, `core/execution/conformal_ou_gate.py`
+
+### FIX-20260526-040 — Full Pipeline Rebuild: schema registration & brain config update
+
+- **Date**: 2026-05-26
+- **Author**: cursor-agent
+- **Root Cause**: RC-09 (config-drift), RC-12 (missing-feature) — New Stage 2 model trained on 48 features (40 V9 + 8 meta) but no schema existed; old meta_stage2_filter_v3.json pointed to broken LGB+MLP ensemble on 59-dim schema.
+- **Fix**: Registered `meta_stage2_runtime_48` schema in `brain_config_validator.py` (SCHEMA_DIMENSIONS + feature name resolver with 8 meta features: oof_pred, oof_pred_zscore_20, atr_percentile_100, vol_zscore, hurst_m5, session_sin, session_cos, rolling_hit_rate_20). Updated `meta_stage2_filter_v3.json`: single LightGBM model, removed MLP ensemble, updated calibrator path, new description with rebuilt metrics.
+- **Model metrics**: Train Sharpe 4.78, Forward Sharpe 1.30, Overfit Gap 3.48, all quality gates PASSED.
+- **Files changed**: `core/deployment/brain_config_validator.py`, `configs/brains/meta_stage2_filter_v3.json`
+
+### FIX-20260526-039 — Full Pipeline Rebuild: financial metrics threshold & quality gate fix
+
+- **Date**: 2026-05-26
+- **Author**: cursor-agent
+- **Root Cause**: RC-01 (boundary-error), RC-04 (hallucination) — `compute_financial_metrics()` used fixed 0.5 classification threshold. With extreme class imbalance (83.7% TP), the model mean clustered near the class prior (~0.84), so 0.5 always predicted majority → zero edge over naive baseline → negative excess Sharpe masked real signal (AUC=0.69). Degenerate models (all preds ~0.5) passed quality gates with Sharpe 4.0 from class-imbalance artifact alone.
+- **Fix**: Three-part fix:
+  1. **Class-prior threshold**: `threshold = float(np.mean(y_true))` replaces fixed 0.5 — only predictions exceeding the base rate go long. This directly measures whether the model adds value over "always predict majority."
+  2. **Degenerate model detection**: If `prob_range < 0.01` AND `prob_std < 0.005`, return Sharpe=-999 to hard-fail quality gates.
+  3. **Baseline Sharpe subtraction**: `excess_sharpe = model_sharpe - baseline_sharpe` where baseline = "always predict majority class." Isolates real model skill from class imbalance artifact.
+  4. **ModelQualityException**: Hard veto (raises exception) when quality gates fail, preventing garbage model deployment.
+- **Files changed**: `scripts/training/train.py` (`compute_financial_metrics()`, `ModelQualityException` class, quality gate check site)
+
+### FIX-20260526-038 — Full Pipeline Rebuild: meta-features class imbalance & CV fix
+
+- **Date**: 2026-05-26
+- **Author**: cursor-agent
+- **Root Cause**: RC-03 (state-leak), RC-06 (category error) — `build_meta_features.py` binary mode had no `scale_pos_weight`, causing model to regress to class prior (AUC=0.52). Binary mode dataset (30K samples after dropping timeouts) had 83.7% TP extreme imbalance. Original regression mode OOF predictions collapsed (std 0.31 vs target std 1.71, ratio 0.18). **Architectural insight**: Stage 1 binary classifier cannot separate TP from SL from raw features alone — the 40 V9 features lack sufficient signal at 12-bar horizon. The meta-label architecture requires Stage 1 as a **regression** model (Huber loss, continuous PnL target) whose OOF predictions carry directional information through their sign, combined with Stage 2's richer feature set.
+- **Fix**: 
+  1. Added dynamic `scale_pos_weight = n_neg / n_pos` to binary mode params (for when binary mode is needed)
+  2. **Switched to regression mode** with full 53K sample dataset (including timeouts, 48/52 class balance) — this is the correct architecture: Stage 1 Huber regressor predicts continuous returns, Stage 2 uses all 48 features to make the final binary decision
+  3. OOF via purged walk-forward PiT CV with deque-based feature computation and cross-fold clearance
+- **Outcome**: OOF preds have non-zero class separation (0.035), collapse ratio 0.18. Stage 2 trained on these features achieves Forward Sharpe 1.30.
+- **Files changed**: `scripts/training/build_meta_features.py`
+
+### FIX-20260526-037 — Full Pipeline Rebuild: Stage 1 feature order fix
+
+- **Date**: 2026-05-26
+- **Author**: cursor-agent
+- **Root Cause**: RC-03 (state-leak) — `build_calibrated_dataset.py` line 501 used `sorted(feature_dict.keys())` to determine feature order. Alphabetical sort puts H1 features first: H1→M15→M30→M5. Canonical V9 order is M5→M15→M30→H1. LightGBM uses positional indexing, so inference with M5-first schema reads H1 features at M5 positions → garbage. Same exact bug class as FIX-20260525-026 (MetaLabel 43-dim skew) and FIX-20260526-028 (Binary_Cls_V1 frozen confidence).
+- **Fix**: Import `V9_INSTITUTIONAL_40_FEATURES` from `core.features.schemas.v9_institutional_schema` and use its order: `feature_names = [f for f in V9_INSTITUTIONAL_40_FEATURES if f in _available]`. This guarantees train/serve feature order alignment regardless of dictionary key enumeration order.
+- **Prevention**: This bug class now has a documented pattern — any `sorted()` on feature dict keys in a feature computation path is an immediate red flag. Three independent instances confirmed the same positional-indexing failure mode.
+- **Files changed**: `scripts/training/build_calibrated_dataset.py`
+
+### FIX-20260526-035 — Phase 8 (P1): 方向感知 p_win 校准
+
+- **Date**: 2026-05-26
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (category error) — `_adjust_p_win_for_regime()` applied identical trend penalties to with-trend and counter-trend signals. After FIX-033's direction-aware ADX gate, only with-trend signals pass through, but they were still penalized by ADX strength — a "double penalty" for signals whose direction actually benefits from the trend ("千金难买牛回头").
+- **Fix**: Added `trade_direction` parameter to `_adjust_p_win_for_regime()`. With-trend signals (trade_direction == primary_trend) bypass the entire penalty block and return `p_win` unchanged. Counter-trend and direction-unknown signals retain the existing 65%-floor harsh penalty.
+- **Architect directive**: "如果在强趋势下信号方向与趋势一致，绝不允许施加趋势衰减。这不是逆势接飞刀，这是千金难买牛回头。"
+- **Verification**: With-trend LONG in uptrend → p_win=0.51 passes through to min_p_win gate. Counter-trend SHORT in uptrend → p_win=0.51 × discount(floor 0.65) → still below 0.45 gate.
+- **Files changed**: `core/execution/strategy_line.py` (`_adjust_p_win_for_regime()` + call site L1138)
+
+### FIX-20260526-034 — Phase 8 (P0): MetaLabel 特征错位 HARD BUG
+
+- **Date**: 2026-05-26
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (contract-violation — data contract broken at boundary) — `scripts/live_intent_loop.py:1106-1119` constructs a runtime brains dict from the registry entry but dropped two critical metadata fields: `features` (authoritative training-order feature name list) and `normalization_config_path` (model metadata JSON path). `_build_meta_feature_vector()` in `live_cycle.py` tries both sources, fails both, and falls back to V9 institutional schema order (M5→H1), which differs from the training order (H1→M5). LightGBM uses positional indexing — 40 of the 43 feature positions were scrambled.
+- **Impact**: barrier_12bar_meta's MetaFilter gate received feature vectors with random noise in 40/43 positions. Every MetaLabel prediction was garbage. This explains why MetaFilter output appeared like random noise.
+- **Fix**: Two-line addition to the brains dict in `live_intent_loop.py`:
+  ```python
+  "features": entry.get("features"),
+  "normalization_config_path": entry.get("normalization_config_path"),
+  ```
+- **Graceful degradation**: If registry entries lack these fields, the existing fallback chain (Source 1 → Source 2 → V9 fallback + ERROR log) remains intact.
+- **Files changed**: `scripts/live_intent_loop.py`
+
+### FIX-20260526-033 — Phase 8: 方向感知 ADX 趋势隔离门
+
+- **Date**: 2026-05-26
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (category error) — FIX-20260526-030's symmetric ADX>25 gate treated all mean-reversion signals as equally dangerous in trending markets. Physics: with-trend MR (pullback buying in uptrend, bounce selling in downtrend) has trend tailwind — the trend pulls price back toward the mean. Counter-trend MR (fading the trend) is catching a falling knife. Blocking both is a category error that wastes the profitable direction (LONG +44.2 vs SHORT -100.8 in OU_Params_V6_Sniper 1284-trade history).
+- **Fix**: Replace `_h1_adx > 25.0 → BLOCK all` with direction-aware gating:
+  1. Trend detection: Kalman strength > 25 OR multi-TF consensus (unchanged)
+  2. Direction check: `is_counter_trend = direction != ref_dir` where `ref_dir = primary_trend (H4>H1>M5) or h1_trend_direction`
+  3. Counter-trend → BLOCK; With-trend → ALLOW
+- **Infrastructure**: Uses existing `RegimeGate.classify()` outputs already available in `regime_info["regime_gate"]` — `h1_trend_direction`, `primary_trend`, `primary_trend_source`. No new data dependencies. Kalman fusion avoids ADX(14) lag.
+- **Verification**: 5 scenario logic test passed (strong uptrend+LONG=ALLOW, strong uptrend+SHORT=BLOCK, MTF consensus+SHORT=BLOCK, ranging=ALLOW, strong downtrend+SHORT=ALLOW)
+- **Files changed**: `core/execution/strategy_line.py` (L769-799)
+
+### FIX-20260526-032 — Phase 7 (P0): resolve_p_win 滚动窗口修复
+
+- **Date**: 2026-05-26
+- **Author**: cursor-agent
+- **Root Cause**: RC-05 (non-stationary time series) — `resolve_p_win_from_brains()` called `pnl_store.get_metrics(brain_id)` without `window` parameter, defaulting to all-time aggregate. In non-stationary financial time series, 2-week-old trades contaminate current-regime win rate estimates. OU_Params_V6_Sniper: all-time 49.05% (1268 trades) vs R100=51.0%, R30=60.0%. Recent alpha improvement was invisible to Kelly sizing.
+- **Fix**: One-line change in `core/execution/kelly_sizer.py` line 136: `get_metrics(str(brain_id))` → `get_metrics(str(brain_id), window=100)`. Rolling 100-trade window (M5≈8.3 hours of trading) captures current regime without being jittery.
+- **Architect directive**: Execute P0 immediately. VETO P1 (MetaFilter threshold unchanged at 0.65 — model conf=0.7 has actual WR=40.8%, lowering threshold admits worse signals). P2/P3 deferred (MetaLabel overconfidence caught by MetaFilter; ADX trend isolation is physics).
+- **Verification**: OU_Params_V6_Sniper p_win +1.95% (49.05%→51.00%). MetaFilter/MetaLabel brains unchanged or slightly lower — still below their respective thresholds. Cold-start brains (n<100) gracefully use available subset.
+- **Files changed**: `core/execution/kelly_sizer.py`
+
+### FIX-20260526-031 — Phase 6: 掩盖效应斩断 + 回退陷阱闭合 + P1 阈值修复
+
+- **Date**: 2026-05-26
+- **Author**: cursor-agent
+- **Type**: fix
+- **Root Cause**: RC-05 (boundary-error — threshold physically unreachable), RC-12 (design-flaw — masking effect in multi-factor scoring)
+
+**Summary:** FIX-030's P1 fix (`_adjust_p_win_for_regime()`) had thresholds so high (|z|≥1.5, ADX≥20) that the function was physically unreachable (actual OU |z| range 0.1-0.3). But the deeper problem was that the ConformalOU gate's geometric mean scoring permitted "masking" — theta_q (0.95) and vel_q (1.0) could pull composite_score above 0.40 even when z_depth_q was 0.12 (|z|≈0.16, essentially noise). The mean-reversion edge requires price DEVIATION — without it, theta and velocity are meaningless.
+
+**Three-layer defense (architect-verified):**
+
+**Fix 3 (Centerpiece) — z_depth Hard Veto** (`conformal_ou_gate.py:filter()`): Before composite scoring, `if z_depth_q < 0.25: score = 0.0`. This is a hard kill — no other dimension can rescue a signal whose physical basis is absent. With z_entry=1.3 (V6 Sniper), effective |z| must exceed 1.3×0.25 = 0.325. Previously, noise-level deviations (|z|=0.1-0.3) could pass because theta and velocity components scored highly independent of deviation depth.
+
+**Fix 2 — Fail-Closed Fallback** (`kelly_sizer.py:resolve_p_win_from_brains()`): Three silent fallback paths all returned 0.50 — exactly AT the min_p_win threshold (0.45 for statarb), giving random signals a VIP pass when the system was blind (no PnL history, cold-start, or brain_id mismatch). Changed all fallbacks to 0.40 (Fail-Closed). 0.40 < min_p_win(0.45) → signals rejected when system lacks historical evidence. Added per-failure-mode diagnostic logging to distinguish pnl_store=None vs cold_start vs brain_id_mismatch.
+
+**Fix 1 — Reachable P1 Thresholds** (`strategy_line.py:_adjust_p_win_for_regime()`): ADX gate 20→15, |z| threshold 1.5→0.8, z_amplification baseline 1.0→0.5 (smooth ramp from z=0.5 to z=3.5). Fix 3 already filters |z|<0.325, so signals reaching P1 have genuine deviation. P1 now applies modest penalties at boundary (z=0.8, ADX=25 → discount≈0.97) escalating to strong at high z+ADX (z=2.5, ADX=40 → discount≈0.79).
+
+**Coherence**: Fix 3 (veto at z<0.325) → Fix 1 (penalty at z>0.8, ADX>15) → Fix 2 (if PnL blind → reject). The three layers form a progressive defense: physics veto → regime-aware discount → evidence-floor rejection.
+
+**Files:** `core/execution/conformal_ou_gate.py`, `core/execution/kelly_sizer.py`, `core/execution/strategy_line.py`
+
+### FIX-20260526-030 — May 25-26 Post-Mortem: 5-Priority Battle Surgery
+
+- **Date**: 2026-05-26
+- **Author**: cursor-agent
+- **Type**: fix
+- **Root Cause**: RC-06 (contract-violation), RC-05 (boundary-error)
+
+**Summary:** May 25-26 trades: 13 trades, 23% WR, -$0.14 PnL. Five structural failures identified and fixed:
+
+**P0 — ADX Trend Isolation Gate (strategy_line.py):** Hard-blocks OU statarb signals when H1_ADX > 25 or MTF trending (H1>20+H4>0.5+M5>0.5). Mean-reversion models systematically lose in trending markets — this is a mathematical axiom, not a parameter problem.
+
+**P5 — barrier_12bar_meta RR Conflict (live.yaml + strategy_line.py):** Two-layer fix: (1) Config: `min_sl_distance` 8.0→3.0, `min_rr_ratio` 0.5→0.4 to align with meta-labeling's high-prob/low-RR design (SL=3.0/TP=1.5, native RR=0.5). (2) **Code root cause**: `strategy_line.py:1075` had a hardcoded `tp_dist/sl_dist < 1.2` check that ignored `self.config.min_rr_ratio` entirely. All strategies were forced to pass RR≥1.2, making barrier_12bar_meta's RR=0.5 impossible. Fix: `1.2` → `self.config.min_rr_ratio` (with 1.2 fallback when config is 0). The config change alone could not work because the code never read `min_rr_ratio` for the gate check — it only used it in `dynamic_sl_tp.py` for TP stretching.
+
+**P4 — Dynamic SL/TP Calibration:** Already implemented in `dynamic_sl_tp.py`. Wiring verified complete: live.yaml `strategy_family` → live_cycle → StrategyLineConfig → `compute_dynamic_sl_tp()`.
+
+**P1 — Dynamic p_win Adjustment (strategy_line.py):** New `_adjust_p_win_for_regime()` — when trending (H1 ADX>20) and high |z_score| (>1.5), inversely discounts p_win. Floor at 65% of original. Prevents Kelly from sizing into anti-informative high-confidence OU signals.
+
+**P2 — Binary Classifier 100% LONG Fix (base_adapter.py + 4 adapters):** `_score_to_direction()` added `objective` param. Binary logloss path: P>0.55→LONG, P≤0.55→NEUTRAL. Regression path unchanged. Root cause: `raw_score < -0.1` check unreachable for LightGBM binary predict() output [0,1]. Binary classifiers are trade-quality predictors, not directional predictors — they can only vote LONG or ABSTAIN.
+
+**Files:** `core/execution/strategy_line.py` (P0 ADX gate + P1 p_win adj + **P5 RR hardcoded 1.2 fix**), `core/brains/adapters/base_adapter.py`, `core/brains/adapters/{lightgbm,xgboost,v9_onnx,transformer}_brain_adapter.py`, `configs/live.yaml`
+
+### FIX-20260525-027
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: brains-validation, brains-services, deployment-config
+- **Files**: core/deployment/brain_config_validator.py, configs/brains/meta_stage1_metalabel_binary_v1.json, tests/unit/test_brain_config_validator.py
+
+**Problem**: The MetaLabel brain (`Meta_Stage1_MetaLabel_Binary_V1`) was rejected at startup by `BrainConfigValidator`:
+```
+ERROR: features list length 43 != schema v9_institutional_40 expected 40
+ERROR: feature[40]='ou_z_score' not in schema v9_institutional_40
+ERROR: feature[41]='ou_half_life' not in schema v9_institutional_40
+ERROR: feature[42]='ou_theta' not in schema v9_institutional_40
+→ brain_build_skip → barrier_12bar_meta has 0 brains → completely silent
+```
+
+The brain legitimately requires 43 features (40 V9 institutional + 3 OU physics: `ou_z_score`, `ou_half_life`, `ou_theta`) but the validator only recognized the 40-dim `v9_institutional_40` schema. This was the **second layer** of the train-serve skew problem — FIX-20260525-026 fixed the feature assembly order in `_build_meta_feature_vector()`, but the brain factory validator blocked the brain from loading at all because the 43-dim feature list didn't match any registered schema.
+
+**Fix** (three changes, following the existing `meta_stage2_runtime_47` pattern):
+
+1. **Schema constant** (`brain_config_validator.py` line 45): Added `"v9_40dim_ou3": 43` to `SCHEMA_DIMENSIONS` dict.
+
+2. **Feature name registry** (`brain_config_validator.py` lines 73-77): Added `elif canonical == "v9_40dim_ou3"` branch in `_get_schema_feature_names()` that returns `list(V9_INSTITUTIONAL_40_FEATURES) + ["ou_z_score", "ou_half_life", "ou_theta"]`. Follows the exact same pattern as `meta_stage2_runtime_47` (V9 40 + N runtime features).
+
+3. **Brain config** (`meta_stage1_metalabel_binary_v1.json` line 17): Changed `"feature_schema_id": "v9_institutional_40"` → `"v9_40dim_ou3"`. The separate `"feature_schema": "v9_40dim_ou3"` metadata field (line 54) was already present — the validator only reads `feature_schema_id`.
+
+**Verification**: 11 unit tests (`tests/unit/test_brain_config_validator.py`):
+- `TestSchemaRegistration` (4 tests): schema constant present, feature names return 43 names with correct OU positions, v9_institutional_40 backward compat, unknown schema → None
+- `TestValidatorAccepts43DimSchema` (5 tests): valid 43 features accepted, wrong feature name rejected, 42 features rejected (dim mismatch), 44 features rejected (dim mismatch), v9_institutional_40 still validates
+- `TestModelDimensionValidation` (2 tests): 43 num_features matches schema, 40 mismatches v9_40dim_ou3
+
+**Architecture principle**: Schema expansion via inheritance (new schema variant), NOT by modifying the base schema. This preserves backward compatibility for all existing `v9_institutional_40` brains while allowing augmented schemas to coexist. The `meta_stage2_runtime_47/56/59` schemas established this pattern — `v9_40dim_ou3` is the fourth augmentation.
+
+- **Root Cause**: RC-06 (contract-violation — schema dimension mismatch blocked valid augmented config)
+- **Prevention**: Any future brain trained with augmented features (V9 base + domain-specific extras) can follow the same pattern: register new schema ID → add dimension to `SCHEMA_DIMENSIONS` → add `_get_schema_feature_names()` branch → set `feature_schema_id` in brain config. The validator is the gatekeeper — it correctly blocked an unrecognized schema. The fix was to teach it the new schema.
+
+### FIX-20260525-026
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: core/runtime/live_cycle.py, tests/unit/test_meta_feature_vector.py
+- **Description**: MetaLabel 43-dim train-serve feature order skew: `_build_meta_feature_vector()` built the 43-dim feature vector in V9 schema order instead of brain config training order.
+
+  **Problem**: The MetaLabel binary classifier (`Meta_Stage1_MetaLabel_Binary_V1`) was trained with 43 features in a specific order: H1_ATR_14, H1_Body_Ratio, H1_Hurst, ..., H1_Vol_ZScore, M15_ATR_14, ..., M5_Vol_ZScore, ou_z_score, ou_half_life, ou_theta. At inference time, `_build_meta_feature_vector()` assembled features in the `V9_INSTITUTIONAL_40_FEATURES` schema order: M5_Ret_1, M5_Body_Ratio, ..., H1_Price_ZScore, M5_OU_Theta, ..., H1_Hurst, then appended the 3 OU features.
+
+  Since LightGBM uses position-based indexing in `booster.predict()` (no name-based reordering), every single feature position (0-42) was scrambled. The model received random noise instead of properly ordered features, making shadow mode validation garbage and train-serve parity impossible.
+
+  **Fix**: Step 4 of `_build_meta_feature_vector()` now reads the authoritative `features` list from:
+
+  1. **Primary source**: MetaLabel brain entry's `features` field (from brain config JSON `configs/brains/meta_stage1_metalabel_binary_v1.json`), validated to have exactly 43 elements.
+  2. **Fallback source**: Model metadata JSON (`data/models/institutional/barrier_12bar_meta_binary_cls_20260524_101947.meta.json`) `feature_names` field.
+
+  Features are assembled by lookup from a combined dict (raw V9 values + `ou_z_score`, `ou_half_life`, `ou_theta`) in the exact training order. If neither source is available, a loud ERROR log is emitted and the legacy V9 schema fallback is used (preserving backward compatibility).
+
+  **Verification**: 6 unit tests in `tests/unit/test_meta_feature_vector.py` validate:
+  - Feature order matches brain config (positional check: pos[0]=H1_ATR_14(V9 idx 26), pos[10]=M15_ATR_14(V9 idx 10))
+  - Position[0] is NOT M5_Ret_1 (confirms V9 schema NOT in use)
+  - OU params returned correctly (z_score, half_life, theta)
+  - z_score clipping to [1.3, 2.5] in feature vector with raw value preserved in ou_params
+  - Missing V9 features default to 0.0 (not NaN)
+  - No OU adapter returns (None, None)
+
+- **Root Cause**: RC-06 (contract-violation — feature vector assembly order didn't match training contract)
+- **Prevention**: The brain config `features` field is now the single source of truth for feature order. Any future model trained with a different feature set will automatically use its own declared order — the V9 schema constant is no longer hardcoded for MetaLabel inference.
+- **Dependents Checked**: `core/execution/barrier_strategy.py` (calls `adapter.inference(feature_vector)` with position-based indexing), `core/brains/adapters/lightgbm_brain_adapter.py` (direct `booster.predict(vec.reshape(1,-1))` without name-based reordering). No other meta-labeler consumers.
+
+### FIX-20260525-023
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: core/runtime/live_cycle.py
+- **Description**: M15 strategies SL/TP instant stop-out caused by reference-frame mismatch between SL/TP computation price and actual execution price.
+
+  **Problem**: On 2026-05-25 at 11:45 UTC, a `statarb_m15` short position was opened and stopped out within 4 minutes. The MT5 native SL was hit at 4577.0572 — an effective distance of only 2.56 ATR points (1.07× raw M5 ATR) from the fill price of 4574.495, versus the designed 5.22 ATR points (2.09× raw M5 ATR, 1.26× scaled M15 ATR).
+
+  **Root Cause Trace**:
+
+  1. `_evaluate_strategy_lines()` in live_cycle.py (line 3413) set `_effective_mid = mtf_price_service.latest_m15_close` for M15 strategies, overriding the current spot `mid_price`.
+
+  2. `MTFPriceService.latest_m15_close` returns the close of the **most recently completed** M15 bar. At an M15 boundary (UTC minute 45), the bar that just completed spans [boundary-900s, boundary). The current M5 tick at boundary+1s is fed via `feed_tick()` BEFORE `_close_bar()` runs, but the `_close_bar` window `[start, boundary)` **excludes** the current tick (its timestamp ≥ boundary). Therefore the bar's close is the last M5 tick from ~5 minutes ago — in this case, ~4571.8 from the ~11:40 M5 cycle.
+
+  3. `strategy.evaluate(mid_price=_effective_mid=4571.8)` computes SL/TP levels from this stale reference:
+     - `dsl.sl_distance = 5.224` (Phase 4 dynamic calibration with √t M15 scaling)
+     - `levels["stop_loss"] = 4571.833 + 5.224 = 4577.057` ✓ (matches MT5 order)
+     - `levels["take_profit"] = 4571.833 - 20.968 = 4550.865` ✓
+     - `levels["hard_sl"] = 4571.833 + 7.837 = 4579.670` ✓
+
+  4. But the actual MT5 fill was at current spot ~4574.495 (XAUUSD rallied ~2.7 points during the 11:30-11:45 M15 bar). The SL price (4577.057) remained unchanged because it was embedded in the StrategyDecision sent to MT5.
+
+  5. Effective SL from fill: 4577.057 - 4574.495 = 2.562 points = 1.07× raw M5 ATR = 0.62× scaled M15 ATR. The position was killed by MT5's native SL within 4 minutes during normal price fluctuation.
+
+  **Fix**: Remove the `_effective_mid = _m15_price` override in `_evaluate_strategy_lines()`. The M15 boundary gating (`is_m15_boundary()` → `continue` at non-boundary minutes) already prevents future function leakage from incomplete M15 bars. The spot `mid_price` is the correct reference for SL/TP computation because the order will execute at current market prices, not at historical M15 bar closes.
+
+  **Before**:
+  ```python
+  if _tf == "M15" and mtf_price_service is not None:
+      _utc_minute = datetime.now(UTC).minute
+      if not mtf_price_service.is_m15_boundary(_utc_minute):
+          continue
+      _m15_price = mtf_price_service.latest_m15_close
+      if _m15_price is not None and _m15_price > 0:
+          _effective_mid = _m15_price
+      else:
+          _effective_mid = mid_price
+  else:
+      _effective_mid = mid_price
+  ```
+  **After**:
+  ```python
+  if _tf == "M15" and mtf_price_service is not None:
+      _utc_minute = datetime.now(UTC).minute
+      if not mtf_price_service.is_m15_boundary(_utc_minute):
+          continue
+  _effective_mid = mid_price
+  ```
+
+  **Verification**: Diagnostic script confirmed all three MT5 order levels (SL=4577.0572, TP=4550.86642, hard_sl=4579.6698) are exactly reproduced by `compute_dynamic_sl_tp` with `mid=4571.833`, `timeframe_mult=3`, `strategy_family=mean_reversion`. The 4571.833 reference matches `latest_m15_close` of the M15 bar closing at the 11:45 boundary, confirming the root cause.
+
+- **Root Cause**: RC-05 (reference-frame-mismatch — SL/TP computed from historical M15 bar close, executed at current spot mid)
+- **Prevention**: The M15 boundary gating (`is_m15_boundary` check) is the correct mechanism for preventing future function leakage. The SL/TP entry reference should always use the current spot price because MT5 execution happens at current market prices. The principle: "what the model sees for features ≠ what the order executes at for SL/TP."
+- **Dependents Checked**: No other timeframe uses a similar stale-price override. The `_effective_mid` variable is only used as `mid_price=` parameter to `strategy.evaluate()`. Counterfactual PnL recording (line 431 in strategy_line.py) now correctly uses spot mid_price, which is more accurate for tracking against actual market prices.
+
+### FIX-20260525-024
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Scope**: runtime-live, execution-orders, execution-reentry
+- **Commit**: —
+
+**Problem**: Three interconnected bugs causing (a) permanent journal gaps, (b) stale position state files, and (c) permanent same-direction reentry blocks after MIA/manual position closes.
+
+**Bug 1 — MIA close journal gap (runtime_live)**:
+`_execute_management_phase()` (line 869-884) detected positions closed in MT5 between reconciliation cycles via `mt5_worker.positions_get(ticket=pos.ticket)`. When the position was gone, it called `pm.clear_position()` and `state.known_open_tickets.pop(ticket)` but did NOT write a close journal entry. Since the ticket was already removed from `known_open_tickets`, `_reconcile_closed_positions()` (which iterates `known_tickets`) never saw it → permanent journal hole with no close record.
+
+**Bug 2 — Stale position state**: The position state was saved every 5 cycles and at shutdown. MIA detection removed the position from memory and saved immediately (new), but the state file was not updated until the next periodic save. If the session crashed between saves, the stale state persisted with `breakeven_triggered: false` and pre-breakeven SL values. Crash recovery would restore stale state.
+
+**Bug 3 — Reentry guard permanent block**: `_classify_exit_reason()` in `reentry_guard.py` had no pattern for `"mia_close"`, `"unknown_close"`, or `"manual_close"`. All three fell into the catch-all `"unknown"` category (line 201-202), which had NO timeout check — just `return False, f"unknown_exit_reason_blocked_{...}"`. This permanently blocked same-direction reentry with no decay or timeout. The 900+ second block observed in gate audit was actually permanent (would block forever).
+
+**Fix**:
+
+**(a)** `live_cycle.py`:
+- Added `_build_mia_close_entry(pos, known_entry)` — constructs a close journal entry using ActivePosition fields + known_open_tickets metadata. Conservative estimate: assumes SL-hit close price (overridden by deal history enrichment).
+- Added `_enrich_mia_from_deals(mia_entry, deals)` — queries MT5 deal history for the closed position to get actual close_price and close_reason (SL=4, TP=5). Overrides the SL estimate if data is available.
+- Modified `_execute_management_phase()` MIA detection: instead of just clearing, calls `_build_mia_close_entry()` → tries `history_deals_get()` → appends to `state._pending_mia_closes` → saves position state immediately.
+- Added `_pending_mia_closes: list[dict[str, Any]]` field to `LiveCycleState`.
+- Added MIA close processing at the call site (after management phase): writes close entries to journal (with FileLock, dedup check), records exits for reentry guard, saves position state immediately.
+- Variable renamed `_rec` → `_mia_rec` in ExitRecord construction to avoid mypy type shadowing with pre-existing `_rec` loops.
+
+**(b)** `reentry_guard.py`:
+- Added `"unknown_close"` category: pattern matches `"mia_close"`, `"unknown_close"`, `"manual_close"`, `"manual"`.
+- `"unknown_close"` category handler: 900s timeout + confidence check (new_confidence ≥ max(exit_confidence, 0.70)).
+- Catch-all `"unknown"` converted from permanent block to 900s timeout + confidence check.
+
+**(c)** `exit_watchdog.py`:
+- Added pre-flight `get_position_open(position_ticket)` check before the retry loop. If position is already closed (MIA), returns `ExitWatchdogResult(success=True, final_status="already_closed")` — skips all retries, no false CRITICAL alert.
+
+**Root Causes**: RC-05 (missing-close-journal — MIA detection removed from tracking without journaling), RC-06 (stale-state — state save not triggered on close), RC-07 (no-timeout — unknown exit category had permanent block with no decay).
+
+**Prevention**: The principle is: "any code path that removes a position from tracking MUST journal the close and record the exit for reentry guard." The MIA processing at the call site ensures this is centralized and consistent with reconciliation.
+
+### FIX-20260525-025
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Scope**: execution-orders, runtime-live
+- **Commit**: —
+
+**Problem**: Two independent live-system vulnerabilities discovered during the comprehensive live audit:
+
+**Bug 1 — PortfolioRisk blind entries (execution_orders)**:
+`PortfolioRiskController.check()` accepted `current_price: float | None` as an optional parameter. Gross and net exposure checks were wrapped in `if current_price is not None:` guards — when price was unavailable, exposure validation was silently skipped. A caller passing `current_price=None` (or the parameter being omitted entirely, as several test call sites demonstrated) would get exposure-blind approval: position count and concentration checks passed, but the critical gross/net notional limit enforcement was absent. The Fail-Closed risk principle demands: no price → no exposure awareness → no entry.
+
+**Bug 2 — Shutdown state corruption (runtime_live)**:
+`live_intent_loop.py` shutdown path saved 6 state files in a bare `finally` block: position state, rolling norm state, regime detector state, tracker state, PnL ledger, and meta signal filter. None had signal protection. A SIGINT (Ctrl+C) or SIGBREAK (Windows console close) arriving during any save would interrupt the write mid-stream, corrupting the state file. While individual save operations used atomic file writes (tmp → replace), the `replace` itself is an OS-level rename that cannot be interrupted, but a signal between saves leaves an inconsistent multi-file state — some files updated, others not.
+
+**Fix**:
+
+**(a)** `core/execution/portfolio_risk.py`:
+- Moved same-direction concentration check (line ~0.6: does not use `current_price`) BEFORE the price guard.
+- Added price guard at line ~0.7: if `current_price is None or current_price <= 0`, return `RiskResult(RiskVerdict.REJECTED, reason="price_unavailable_exposure_blind")`.
+- Removed now-redundant `if current_price is not None` wrappers from gross/net exposure check blocks — the price guard guarantees `current_price` is valid by the time those checks execute.
+- Concentration check (same-strategy duplicate, same-direction, per-family) continues to run before the guard since it operates on position counts, not notional values.
+
+**(b)** `scripts/live_intent_loop.py`:
+- Added `import signal` at module top.
+- Wrapped all 6 shutdown save operations in a SIGINT shield:
+  ```python
+  _old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
+  try:
+      if position_manager is not None and position_manager.has_position():
+          # ... save position state ...
+      if rolling_norm is not None:
+          # ... save rolling norm state ...
+      if regime_detector is not None:
+          # ... save regime detector state ...
+      # ... save tracker, pnl_ledger, meta_signal_filter ...
+  finally:
+      signal.signal(signal.SIGINT, _old_sigint)
+  ```
+- Windows only supports SIGINT and SIGBREAK — SIGINT is the correct signal to block.
+
+**(c)** `tests/execution/test_portfolio_risk.py`:
+- Added `current_price=2000.0` to 6 test calls that previously omitted the parameter.
+- `test_same_direction_limit_reached` and `test_same_strategy_duplicate_rejected` intentionally remain without price (they test non-price guards that execute before the price guard).
+
+**Root Causes**: RC-06 (contract-violation — `check()` contract allowed silent exposure bypass when `current_price=None`), RC-04 (race-condition — signal during save corrupts state).
+
+**Prevention**: 
+1. Fail-Closed principle codified: any risk check that depends on external data (price, ATR, volume) must reject when that data is unavailable. "I don't know" is treated as "no."
+2. The pattern for shutdown saves: `signal.SIG_IGN` shield around the entire save block + atomic `tmp → replace` per file = defense in depth. The outer shield prevents inter-file inconsistency; the inner atomic write prevents intra-file corruption.
+3. Test coverage: all `check()` test calls now explicitly pass `current_price`, making the contract explicit. Non-price guards are tested without price to validate the ordering.
+
+### FIX-20260525-011
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: protocol-services, runtime-live
+- **Files**: core/protocol/event_bar_sync.py, scripts/live_intent_loop.py
+- **Description**: BarSyncPoller timeout/timeframe decoupling. The hardcoded `DEFAULT_TIMEOUT_SECONDS=360` was safe for M5 (300s bar period) but would cause 100% timeout rate for H1+ (3600s bar period) strategies if re-enabled. Dynamic floor enforced in `__init__`: `max(360, int(bar_seconds × 1.5))` using existing `_bar_seconds_for()` static method. Result: M5=450s, M15=1350s, H1=5400s, H4=21600s. CLI help text updated to document the dynamic floor.
+
+  **Before**:
+  ```python
+  DEFAULT_TIMEOUT_SECONDS = 360  # M5=300s + 60s buffer
+  self.timeout_seconds = timeout_seconds
+  ```
+  **After**:
+  ```python
+  _bar_secs = self._bar_seconds_for(timeframe)
+  _dynamic_floor = max(DEFAULT_TIMEOUT_SECONDS, int(_bar_secs * 1.5))
+  self.timeout_seconds = max(timeout_seconds, _dynamic_floor)
+  ```
+  The floor formula ensures timeout is always ≥ 1.5× bar period, even if caller passes a lower value. Explicit `--bar-sync-timeout` values above the floor are still respected.
+
+- **Root Cause**: RC-05 (boundary-error — timeout was hardcoded to M5's bar period, creating a latent 100% timeout for any non-M5 timeframe)
+- **Prevention**: Timeout is now derived from timeframe by construction — `_bar_seconds_for()` is the single source of truth. Any new timeframe added to that mapping automatically receives a correct timeout floor. The `max(provided, dynamic_floor)` pattern ensures explicit user overrides still work.
+- **Dependents Checked**: protocol_services.md KI-001 updated with final resolution. runtime_live.md Known Issue removed (fixed). BarSyncPoller callers in live_intent_loop.py updated (CLI help text).
+
+### FIX-20260525-010
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-orders, runtime-live
+- **Files**: core/execution/strategy_line.py, core/execution/position_manager.py, core/execution/trail_stop_engine.py, core/runtime/live_cycle.py, configs/live.yaml, tests/unit/test_position_manager.py
+- **Description**: Phase A+B+C: Three-subsystem physical isolation — core architectural fix separating Entry Conditions, Position Sizing, and Exit Mechanisms per institutional quant architecture principles.
+
+  **Problem**: The system violated the principle of physical isolation between three subsystems:
+  1. Entry: statarb_dynamic had no minimum p_win gate — trades with p_win=0.4904 passed Kelly EV check despite having no statistical advantage.
+  2. Exit (Risk vs Model): Brain PnL loss compressed trail stop width (death spiral). Confidence changes modulated trail width (wrong subsystem). Both mixed Model Exit signals into Risk Exit mechanics.
+
+  **Phase A — Stop bleeding** (4 files, ~40 lines):
+  - A1: Hard p_win gate (`strategy_line.py`) — `StrategyLineConfig.min_p_win` field (default 0.50). After p_win resolution, before Kelly: `p_win < min_p_win` → hard reject.
+  - A2a: Death spiral severed (`position_manager.py`) — `_compute_brain_specific_trail_scale()` floor 0.6→1.0. Losing brains no longer compress trail.
+  - A2b: conf_adj removed from `_compute_adaptive_trail_k()` — confidence collapse is model exit, not trail width. Already handled by `evaluate_brain_exit()` → `confidence_decay_ema`.
+  - A3: `min_trail_mult=1.2` floor in `compute_trail_stop()` — absolute buffer against stop-hunting (both sides).
+  - A4: statarb `breakeven_threshold_atr` 0.8→0.5 — faster mean-reversion profit lock.
+
+  **Phase B — Decouple** (2 files, ~80 lines):
+  - B1: `TrailPolicy` frozen dataclass in `position_manager.py` — immutable Risk Exit config with 9 fields. Physically isolated from Model Exit. Stored on `ActivePosition.trail_policy`.
+  - B1b: `_adjust_trail_for_regime()` / `compute_trail_stop()` / `should_breakeven()` all read from `pos.trail_policy` when available. `register_position()` accepts `trail_policy` parameter.
+  - B1c: `live_cycle.py` constructs `TrailPolicy` from `live.yaml` exit.* block and passes to `register_position()`.
+
+  **Phase C — Physically isolate** (3 files, ~250 lines):
+  - C1: `trail_stop_engine.py` — new standalone file. `TrailPolicy` frozen dataclass moved here as canonical definition. `TrailStopEngine` class with 5 methods: `compute_trail_stop()`, `should_breakeven()`, `adjust_trail_for_regime()`, `_compute_adaptive_trail_k()`, `_compute_brain_specific_trail_scale()`. Uses TYPE_CHECKING to avoid circular import with position_manager.py.
+  - C1b: `ActivePositionManager` delegates all trail ops via thin wrappers → `self._trail_engine.compute_trail_stop(pos, atr)` etc. `_trail_engine` created in `__init__` with `TrailPolicy` built from manager params and `pnl_store` reference. Private methods `_compute_adaptive_trail_k` and `_compute_brain_specific_trail_scale` removed from manager.
+  - C1c: Tests updated — `TrailPolicy` imported from `trail_stop_engine`. `max_lock_atr` tests use `replace()` on engine's default_policy. Brain-specific trail tests call `_trail_engine._compute_brain_specific_trail_scale(pos)`.
+
+  **Architecture after Phase C**:
+  ```
+  Entry Conditions  → min_p_win gate (strategy_line.py)
+  Position Sizing   → Kelly sizing (kelly_sizer.py)
+  Exit: Risk        → TrailStopEngine (trail_stop_engine.py) — physically isolated file
+  Exit: Model       → evaluate_brain_exit() (position_manager.py)
+  ```
+  Risk Exit and Model Exit share no code path, no file, no data structure. TrailStopEngine operates exclusively on ActivePosition + ATR + TrailPolicy. It has zero knowledge of strategy, brain identity, model confidence, or consensus.
+
+- **Root Cause**: RC-05 (boundary-error — brain_scale 0.6 lower bound overly aggressive, no p_win floor for non-meta-filter strategies) + RC-12 (missing-feature — Entry Conditions had no p_win gate; Model Exit and Risk Exit were architecturally coupled; no TrailPolicy abstraction existed)
+- **Prevention**: Three subsystems physically isolated. Entry: hard p_win gate before Kelly. Risk Exit: TrailPolicy (volatility-only, immutable, per-strategy). Model Exit: evaluate_brain_exit() (confidence decay, consensus flip). No cross-contamination between Risk and Model exit paths.
+- **Dependents Checked**: execution_orders.md + runtime_live.md blueprints updated. FIX_REGISTRY.md + FIX_REGISTRY_2026.md updated. pytest 2670 passed. mypy: clean. ruff: clean.
+
+### FIX-20260525-017
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: core/runtime/live_cycle.py
+- **Description**: Startup reconciliation gap fix — prevent permanent journal gaps when positions are closed (SL/TP/external) during process downtime.
+
+  **Problem**: When the process restarts, `known_open_tickets` is filtered on the first cycle (line 3777-3783) to only include positions currently open in MT5. Positions that were closed during the downtime (SL hit, TP hit, or external close) are silently discarded. Reconciliation runs LATER (line 3858) but only scans the FILTERED list — the closed positions are already gone. The result: permanent gaps in the trade journal where positions have open + modify entries but no close entry.
+
+  **Evidence**: Order 3609962737 (statarb_dynamic LONG, opened May 24 23:25 UTC) had two journal entries — open and trail modify — but zero close entries. The SL was hit while the process was down, and the first-cycle filter discarded it before reconciliation could create a close entry.
+
+  **Fix**: Before filtering `known_open_tickets` on the first cycle, detect tickets that are no longer open in MT5 ("gone" tickets) and run reconciliation on them FIRST. This creates proper close journal entries with SL/TP/external close reason and PnL. Only after reconciliation succeeds are the tickets filtered from `known_open_tickets`. The reconciliation call reuses `_reconcile_closed_positions()` — no duplicated detection logic. Journal appends are deduplicated by `message_id` to prevent double-writes if reconciliation later re-scans. SL streak trackers are updated from the reconciled entries.
+
+  **Before**:
+  ```python
+  # First cycle: filter → silently discard closed positions
+  state.known_open_tickets = {t: r for t, r in state.known_open_tickets.items() if t in _open_tickets}
+  # Later: reconciliation → closed positions already gone, nothing to detect
+  ```
+
+  **After**:
+  ```python
+  # First cycle: detect gone positions → reconcile → create close entries → filter
+  _gone_tickets = set(state.known_open_tickets.keys()) - _open_tickets
+  if _gone_tickets:
+      _closed_entries = _reconcile_closed_positions(..., _gone_dict, ...)
+      # append _closed_entries to journal, update SL streaks
+  state.known_open_tickets = {t: r for t, r in ... if t in _open_tickets}
+  ```
+
+- **Root Cause**: RC-05 (boundary-error — the first-cycle filter was designed to prevent `history_deals_get()` from hanging on stale tickets, but the boundary was drawn too aggressively: it discarded BOTH stale tickets AND tickets that were recently closed during the downtime. The latter have valid history in MT5 and can be safely reconciled.) + RC-06 (contract-violation — the trade journal contract requires every open to have a corresponding close; the filter violated this contract by silently dropping positions without writing close entries.)
+- **Prevention**: (1) The startup reconciliation runs BEFORE the filter — by construction, no closed position can be discarded without first attempting reconciliation. (2) If reconciliation fails (timeout, no history), the position is still filtered — the system never blocks startup on reconciliation. (3) The `message_id` dedup check in journal appends prevents double-writes. (4) Gate audit JSONL (FIX-20260525-014) would have flagged that 3609962737 had 2 open-related events but no close — this kind of anomaly is now detectable.
+
+### FIX-20260525-016
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-orders, runtime-live
+- **Files**: core/execution/strategy_line.py, core/runtime/live_cycle.py, configs/live.yaml
+- **Description**: Per-strategy min_p_win gate calibration for OU/statarb strategies.
+
+  **Problem**: FIX-20260525-010 introduced the hard `min_p_win=0.50` gate as a blanket default for all strategies. The gate correctly blocked trades when brain PnL rolling win rate fell below 50%. However, the `min_p_win` parameter was (a) not wired from live.yaml → StrategyLineConfig in `_build_strategy_lines()`, so all strategies used the hardcoded 0.50 default regardless of strategy characteristics, and (b) the 0.50 threshold was too aggressive for OU physics-based strategies.
+
+  **Evidence** (2026-05-25 live audit):
+  - 12+ statarb_dynamic signals blocked at p_win 0.489-0.491 — just 1-2% below the 0.50 threshold
+  - OU_Params_V6 empirical win rate from training: 49.7% — the strategy's NATURAL win rate, not degraded performance
+  - RR ratio: 2:1 (TP=3.0/SL=1.5) → breakeven win rate = 33.3%
+  - At p_win=0.45, EV = 0.45×2 - 0.55×1 = +0.35R — still comfortably positive
+  - OU physics-based p_win is fundamentally different from ML classification confidence: it's a trailing empirical rate from BrainPnLStore rolling window (~100-200 trades), subject to ±3-5% sampling error
+  - The 0.50 threshold creates a systematic blockage for a strategy whose true win rate hovers around 50% by design
+
+  **Fix — Two changes**:
+
+  1. **`core/runtime/live_cycle.py`**: Wire `min_p_win=_cfg(name, "min_p_win", 0.50)` into StrategyLineConfig for both statarb_dynamic and statarb_m15. Default 0.50 preserved for backward compat — all other strategies unchanged.
+
+  2. **`configs/live.yaml`**: Add `min_p_win: 0.45` to `statarb_dynamic` and `statarb_m15` strategy blocks. The 0.45 threshold provides:
+     - 11.7 percentage points of safety margin above the 33.3% breakeven
+     - Tolerance for ±3% rolling window sampling noise (measured 0.49 could be true 0.52)
+     - Acknowledgement that OU strategies operate near 50% by physical design (mean-reversion is symmetric)
+
+  **Why not change the global default?** The 0.50 default is correct for ML classifier strategies where p_win represents model calibration confidence. For OU physics-based strategies, p_win from BrainPnLStore is a noisy trailing estimator of a fundamentally 49-51% strategy. Per-strategy override via YAML is the surgical fix.
+
+- **Root Cause**: RC-05 (boundary-error — the 0.50 threshold was designed for ML classification strategies where p_win < 0.50 means model degradation; OU strategies naturally operate near 0.50 by design, so the boundary was misapplied) + RC-12 (missing-feature — YAML→StrategyLineConfig wiring for min_p_win was never implemented, making per-strategy override impossible)
+- **Prevention**: (1) Gate audit JSONL (FIX-20260525-014) provides per-cycle visibility into blocked signals and their p_win values — without it, the systematic blockage would have remained invisible. (2) min_p_win is now YAML-configurable per strategy — future strategy additions can set the threshold appropriate to their win rate distribution. (3) The 11.7pp margin above breakeven (0.45 vs 0.333) is wide enough that random noise won't push a fundamentally unprofitable strategy into trading.
+- **Dependents Checked**: execution_orders.md blueprint updated. runtime_live.md blueprint updated. FIX_REGISTRY.md index updated.
+
+### FIX-20260525-015
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-guards, execution-orders, brains-adapters
+- **Files**: core/execution/conformal_ou_gate.py, core/execution/strategy_line.py, data/models/arb_params_v7_m5.json
+- **Description**: Layer 3 Bootstrap — break the chicken-and-egg deadlock preventing ConformalCalibrator from collecting (p_win, label) samples.
+
+  **Problem**: The Layer 3 ConformalCalibrator (FIX-20260523-008) was fully implemented but `total_computations=0` — it never computed an adaptive threshold because three cascading bottlenecks prevented trades from passing the ConformalOU gate:
+
+  1. **Brain layer** — `max_half_life=42` in `arb_params_v7_m5.json` (28% tighter than parent artifact's 58). OU signals with half-life in [42, 58) were forced neutral in `_z_to_direction()` before reaching the gate.
+  2. **Gate layer** — 5-way multiplicative scoring caused dimensional collapse. A typical signal (z_depth_q=0.39, hl_q=0.40, theta_q=0.72, adx_q=0.88, vel_q=0.50) scored 0.049 — two orders of magnitude below the 0.35 threshold. The product of N values in [0, 1] tends to zero as N grows.
+  3. **Data loop** — The calibrator needs closed-trade (p_win, label) pairs → trades only happen when the gate passes → gate uses fixed threshold → no trades → no samples → calibrator never warms up.
+
+  **Fix — Three coordinated changes**:
+
+  **1. max_half_life restoration** (`arb_params_v7_m5.json`):
+  - `max_half_life`: 42 → 58, matching the parent `arb_params_v7.json` Optuna-validated value.
+  - The cross-file drift check in `validate_artifacts.py` (FIX-20260525-013) now prevents this from regressing.
+
+  **2. Geometric mean scoring** (`conformal_ou_gate.py`):
+  - New `_compute_composite_score()` function with `scoring_mode` parameter (`"geometric_mean"` | `"product"`).
+  - Geometric mean: `(∏ clip(cᵢ, 0.0, 1.0))^(1/5)`. Every component is strictly clipped to [0.0, 1.0] before computing the product, preventing negative values from causing complex roots or NaN.
+  - The same typical signal now scores 0.547 — a 10× increase from the product-based 0.049.
+  - Preserves hard veto (any component at 0 → score 0) without dimensional collapse.
+  - The `scoring_mode` parameter allows A/B comparison; default is `"geometric_mean"`.
+
+  **3. Explore-then-Commit warmup schedule** (`conformal_ou_gate.py`):
+  - New `_resolve_warmup_threshold()` method implementing a 3-phase schedule:
+    - **COLD** (samples < 50): fixed threshold = 0.20, `force_min_volume = True`. Intentionally lenient — gate lets through signals that would be blocked at the normal threshold, but caps volume at 0.01 (cent-account min lot) to bound exploration risk.
+    - **WARM** (50 ≤ n < 100): Q10 from calibrator, floored at 0.20. Calibrator has enough samples but distribution may be unstable.
+    - **HOT** (n ≥ 100): Full Q10 from calibrator, clamped [0.25, 0.65]. Distribution is stable — adaptive threshold fully in control.
+  - Returns `force_min_volume` and `warmup_phase` in the gate result dict.
+
+  **4. COLD phase volume safety** (`strategy_line.py`):
+  - After volume computation and lot_step rounding, checks `self._last_ou_result.get("force_min_volume")`.
+  - When True: overrides volume to 0.01 regardless of Kelly/position sizer output. Logs the override with pre-override volume and warmup phase.
+  - This ensures the Kelly formula cannot amplify risk during exploration — the max loss per COLD-phase trade is 0.01 lots × SL distance.
+
+  **Design justification** (Garivier et al. 2016 "Explore-then-Commit", Angelopoulos & Bates 2023 "Adaptive Conformal Inference"):
+  - Rather than waiting indefinitely for samples to spontaneously appear, the system actively collects them at controlled cost.
+  - 50 exploration trades at 0.01 volume with typical SL ~1.5 ATR ≈ 15-20 pips per trade → max cumulative exploration cost < 10R — less than a single uncalibrated full-size stop-loss.
+  - The geometric mean is the correct central tendency for ratio-scale multi-attribute utility (Keeney & Raiffa).
+
+- **Root Cause**: RC-05 (boundary-error — `max_half_life=42` was a regression from artifact split, cutting off half-life 42-57 bar signals) + RC-06 (contract-violation — multiplicative product is dimensionally unstable for N>3 quality metrics; geometric mean is the contract-correct combiner) + RC-12 (missing-feature — no exploration mechanism for cold-start calibrator; warmup schedule is the standard solution from bandit literature)
+- **Prevention**: (1) `validate_artifacts.py` cross-file drift rules catch max_half_life regression at commit time. (2) `_compute_composite_score()` with explicit [0.0, 1.0] clipping prevents NaN/complex from negative components. (3) Warmup schedule is self-terminating — `force_min_volume` automatically disengages when calibrator reaches 50 samples. (4) `gate_audit/{date}.jsonl` (FIX-20260525-014) provides per-cycle visibility into score distribution and phase transitions.
+- **Dependents Checked**: execution_guards.md (KI-003 updated from DEFERRED to IN PROGRESS). execution_orders.md (strategy_line COLD phase volume override). FIX_REGISTRY.md + FIX_REGISTRY_2026.md updated.
+
+### FIX-20260525-014
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live, execution-orders, contracts-domain
+- **Files**: core/runtime/gate_audit_recorder.py, core/schemas/trading_contracts.py, core/execution/strategy_line.py, core/runtime/live_cycle.py
+- **Description**: Layer 2 Gate Audit Observability — structured per-cycle gate blocking diagnostics.
+
+  **Problem**: When gates blocked trades (ConformalOU, parliament confidence, counter_trend), there was zero structured audit trail. The only signal was missing trades — impossible to definitively diagnose WHY a specific cycle produced no trade. The 6-day z_entry=3.9 regression (FIX-20260525-013) went undetected partly because gate blocks were invisible.
+
+  **Fix — Four components**:
+
+  1. **`core/runtime/gate_audit_recorder.py`** (NEW): Thin JSONL recorder — `record_gate_block()` writes one line to `data/gate_audit/{date}.jsonl` with strategy_name, direction, reason, timestamp, and gate_diag. Best-effort (silent on error), thread-safe (append mode).
+
+  2. **`core/schemas/trading_contracts.py`**: `StrategyDecision.gate_diag: dict[str, Any]` field added to frozen dataclass. Dict reference is frozen but contents are mutable — populated by strategy_line.evaluate() when `should_trade=False`.
+
+  3. **`core/execution/strategy_line.py`** — 3 gate instrumentation points:
+     - **ConformalOU gate**: `composite_score`, `threshold`, `z_score`, `z_entry`, `z_depth_q`, `half_life`, `hl_q`, `theta`, `theta_q`, `adx`, `adx_q`, `vel_q`
+     - **Parliament gate**: `confidence`, `threshold`, `direction`, `supporting`, `total`
+     - **Counter-trend gate**: `signal_direction`, `trend_direction`, `trend_strength`, `h4_trend_strength`
+
+  4. **`core/runtime/live_cycle.py`**: After `evaluate_all_strategies()`, when `should_trade=False`, calls `record_gate_block()` with `gate_diag` from the decision before `continue`. Wrapped in try/except to never crash the main loop.
+
+  **Design principle**: Gate audit is purely observability — zero side effects on trading decisions. The recorder is best-effort (failure is logged but not propagated). The JSONL format supports streaming analysis (jq, pandas, etc.) for offline gate parameter tuning.
+
+- **Root Cause**: RC-07 (missing-validation — gate blocks were invisible with no structured diagnostics, making root-cause analysis of "why no trade?" purely speculative) + RC-12 (missing-feature — no per-cycle gate audit trail existed; the system could tell you THAT a trade didn't happen but never WHY)
+- **Prevention**: Every gate that can block a trade now records structured diagnostics. New gates must include gate_diag instrumentation as a design requirement (enforced by code review). The JSONL format is self-documenting — adding new diagnostic fields is backward-compatible. Daily gate_audit files provide the data foundation for automatic gate parameter calibration in a future phase.
+- **Dependents Checked**: contracts_domain.md blueprint updated (gate_diag field). execution_orders.md blueprint updated (ConformalOU/parliament/counter_trend instrumentation). runtime_live.md blueprint updated (record_gate_block call). FIX_REGISTRY.md index updated.
+
+### FIX-20260525-013
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: deployment-lifecycle, execution-guards
+- **Files**: scripts/validate_artifacts.py, scripts/verify.py, scripts/check_blueprint_compliance.py, blueprints/modules/deployment_lifecycle.md, blueprints/system/FIX_REGISTRY.md
+- **Description**: Artifact parameter contract validator — prevents silent parameter regression when OU artifact JSON files are split, rebased, or regenerated.
+
+  **Problem**: FIX-20260523-002 harmonized z_entry to 1.3 in arb_params_v7.json. Six days later, FIX-20260524-005 split the artifact into M5/M15 variants; the M5 artifact regressed to z_entry=3.9. Neither mypy, ruff, pytest, nor blueprint compliance checks caught this because none validate data files. The regression silently blocked all statarb_dynamic trades via ConformalOUGate z_depth_quality for 6 days until today's manual investigation.
+
+  **Fix**: Two-layer validation in `scripts/validate_artifacts.py`:
+  - **Layer 1 — Bounds**: Each OU parameter (z_entry, z_exit, max_half_life, theta_min, window) validated against hard bounds. Catches values outside physically meaningful ranges.
+  - **Layer 2 — Cross-file drift**: Split artifacts compared against their parent. If z_entry increases >1.5×, max_half_life decreases <0.70×, or z_exit decreases <0.10× from parent → violation flagged. The z_entry=3.9 regression (3.00× parent 1.3) would have been caught.
+
+  Integrated into verify.py --quick and --full as a subprocess step. Registered in check_blueprint_compliance.py MODULE_SOURCE_MAP under deployment_lifecycle module.
+
+- **Root Cause**: RC-07 (missing-validation — no parameter validation at data file boundaries. The verify pipeline validates Python code correctness but has zero data file checks)
+- **Prevention**: Any future artifact split or regeneration must pass parameter contract validation. The cross-file drift rules ensure child artifacts cannot silently diverge from parent. New artifacts can extend the PARENT_CHILD_MAP and CROSS_FILE_RULES in validate_artifacts.py.
+- **Dependents Checked**: validate_artifacts.py standalone test passes. Simulated regression (z_entry=3.9) correctly flagged as violation. Current artifacts (with z_entry=1.3 fix) all pass.
+
+### FIX-20260525-012
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: execution-orders, runtime-live, deployment-config
+- **Files**: core/execution/dynamic_sl_tp.py, core/execution/strategy_line.py, core/runtime/live_cycle.py, configs/live.yaml, tests/execution/test_dynamic_sl_tp.py
+- **Description**: Phase 4 Dynamic SL/TP Calibration — asymmetric volatility regime response per strategy family.
+
+  **Problem**: Current SL/TP multipliers (`base_sl_atr_mult`, `base_tp_atr_mult`) are static per-strategy. They do not adapt to volatility regime changes. A 1.5 ATR stop during NFP is physically tighter than a 1.5 ATR stop during Asian session. This causes unnecessary stop-outs in high vol and over-tightening in low vol.
+
+  **Architecture decisions**:
+  1. Regime boundary: `vol_ratio = current_atr / ref_atr` with dynamic ref_atr from `regime_info["atr_mean"]` (RegimeDetector EWMA)
+  2. Asymmetric scaling by strategy family (StrategyFamily enum, not fragile string matching)
+  3. Hard clipping: MIN_SL_ATR=0.8, MAX_SL_ATR=4.0, MIN_TP_ATR=1.0, MAX_TP_ATR=6.0
+
+  **Step 1 — StrategyFamily enum + constants** (`dynamic_sl_tp.py`):
+  ```python
+  class StrategyFamily(str, Enum):
+      MEAN_REVERSION = "mean_reversion"
+      TREND_FOLLOWING = "trend_following"
+
+  MIN_SL_ATR = 0.8   # absolute floor — below this, noise triggers the stop
+  MAX_SL_ATR = 4.0   # absolute ceiling — above this, one loss is too costly
+  MIN_TP_ATR = 1.0   # reward:risk floor — TP must be at least 1.0 ATR
+  MAX_TP_ATR = 6.0   # TP ceiling — beyond this the target is rarely hit
+  ```
+
+  **Step 2 — `_compute_regime_factors()`** (`dynamic_sl_tp.py`):
+  - Trend following: synchronous sqrt scaling — SL and TP widen together. `sl_factor = tp_factor = vol_ratio ** 0.5`
+  - Mean reversion: SL widens (sqrt), TP tightens (inverse 4th root). `sl_factor = vol_ratio ** 0.5`, `tp_factor = vol_ratio ** -0.25`
+  - Clamped to [0.55, 1.80] for SL, [0.55, 2.00] for TP
+  - Empty strategy_family → (1.0, 1.0) — backward compatible no-op
+
+  **Step 3 — Modified `compute_dynamic_sl_tp()`** (`dynamic_sl_tp.py`):
+  - New parameter: `strategy_family: str = ""`
+  - Updated defaults: `min_sl_mult=MIN_SL_ATR`, `max_sl_mult=MAX_SL_ATR`
+  - Regime factors applied before clamping: `sl_mult = base_sl_mult * sl_factor`, `tp_mult = base_tp_mult * tp_factor`
+  - TP uses `MIN_TP_ATR` for floor (was using same `min_sl_mult`)
+  - Default `max_tp_mult` is now `MAX_TP_ATR`
+
+  **Step 4 — StrategyLineConfig** (`strategy_line.py`):
+  - `strategy_family: str = ""` field added
+  - `evaluate()`: dynamic ref_atr from `regime_info["atr_mean"]` with fallback to `self.config.ref_atr`
+  - `compute_dynamic_sl_tp()` call passes `ref_atr=_dynamic_ref_atr` and `strategy_family=self.config.strategy_family`
+
+  **Step 5 — Auto-inference map** (`live_cycle.py`):
+  ```python
+  _STRATEGY_FAMILY_MAP: dict[str, str] = {
+      "statarb_dynamic": "mean_reversion",
+      "statarb_m15": "mean_reversion",
+      # everything else defaults to trend_following
+  }
+  ```
+  All 12 `StrategyLineConfig()` blocks now include `strategy_family=_cfg(name, "strategy_family", None) or _STRATEGY_FAMILY_MAP.get(name, "trend_following")`. YAML explicit config wins over auto-inference.
+
+  **Step 6 — live.yaml**:
+  - barrier_12bar → `strategy_family: trend_following`
+  - barrier_12bar_meta → `strategy_family: trend_following`
+  - statarb_dynamic → `strategy_family: mean_reversion`
+  - statarb_m15 → `strategy_family: mean_reversion`
+
+  **Step 7 — Tests** (`test_dynamic_sl_tp.py`):
+  - 14 new tests (7 TestRegimeFactors + 7 TestPhase4DynamicSLTP)
+  - 26 total tests passing (12 original + 14 new)
+  - Covers: empty family noop, trend high/low vol, mr high/low vol, clamping boundaries, backward compat
+
+  **Numeric Reference**:
+
+  | Scenario | Family | vol_ratio | sl_factor | tp_factor | Effective SL (base 2.0) | Effective TP (base 1.5) |
+  |----------|--------|-----------|-----------|-----------|------------------------|------------------------|
+  | Normal | any | 1.0 | 1.00 | 1.00 | 2.0 | 1.5 |
+  | High vol (2×) | trend | 2.0 | 1.41 | 1.41 | 2.83 | 2.12 |
+  | High vol (2×) | mr | 2.0 | 1.41 | 0.84 | 2.83 | 1.26 |
+  | Low vol (0.5×) | trend | 0.5 | 0.71 | 0.71 | 1.41 | 1.06 |
+  | Low vol (0.5×) | mr | 0.5 | 0.71 | 1.19 | 1.41 | 1.78 |
+
+- **Root Cause**: RC-12 — missing-feature (static SL/TP multipliers cannot adapt to changing volatility regimes, violating Grinold & Kahn's principle that position sizing/risk should be inversely proportional to recent volatility)
+- **Prevention**: All new strategies must declare `strategy_family` in live.yaml. Auto-inference map in `_build_strategy_lines()` provides safe default (trend_following) for unrecognized strategies. Hard clipping bounds prevent extreme regime factor blowout regardless of vol_ratio. Dynamic ref_atr from RegimeDetector ensures reference point tracks changing market conditions.
+- **Dependents Checked**: execution_orders.md, runtime_live.md blueprints updated. FIX_REGISTRY.md + FIX_REGISTRY_2026.md updated. 26 dynamic_sl_tp tests pass. backward compat preserved — empty strategy_family returns noop.
+
 ### FIX-20260520-027
 - **Date**: 2026-05-20
 - **Author**: cursor-agent
@@ -3739,6 +4425,49 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
 - **Dependents Checked**: features_service.md, training.md, contracts_training.md blueprints updated.
 
 
+### FIX-20260525-019
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**:
+  - `scripts/live_intent_loop.py` (MODIFIED: M15 OU warm-start fetch strategy — direct M15 bars instead of M5 resampling)
+- **Description**: M15 OU warm-start starvation — the OU brain for statarb_m15 requires 280 M15 bars (window=280 in arb_params_v7_m15.json), but the warm-start code at line 1773-1784 always fetched 300 M5 bars with `copy_rates_from_pos(symbol, 5, 0, 300)`. For statarb_m15, it then resampled `prices[2::3]` → ~100 M15 bars — a 180-bar (45-hour) shortfall.
+
+  After every restart, the M15 OU brain entered an invisible 45-hour cold-start deadlock:
+  - `buffer_len` (100) < `window` (280) → `infer()` returns z_score=0.0, theta=0.0, half_life=inf
+  - `_z_to_direction()` receives z_score=0.0 → neutral (within exit band ±0.6)
+  - Parliament gets a single neutral brain → `neutral_consensus` (confidence=0.0, supporting=0)
+  - ConformalOUGate scores z_score=0.0, theta=0.0, half_life=100 → composite 0.21 < 0.40 → blocks
+
+  **Fix**: For `contract_group == "statarb_m15"`, fetch 350 bars directly from MT5 M15 timeframe (`timeframe=15`) instead of resampling from M5. After restart, the buffer immediately has 350 bars ≥ 280 window → valid z_scores from the first M15 cycle.
+
+  This was the root cause of the statarb_m15 parliament deadlock reported in gate_audit — ALL 8 pre-fix neutral_consensus entries (07:15-09:15 UTC) were cold-start artifacts, not a parameter tuning issue.
+
+- **Root Cause**: RC-05 (boundary-error) — M5 bar count (300) chosen for M5 OU brain (window=100-120) was blindly applied to M15 OU brain (window=280) without considering the resampling ratio. The `prices[2::3]` resampling reduced effective bar count by 3×, but the M5 fetch was never increased to compensate.
+- **Prevention**: Warm-start bar counts must be parameterised by target timeframe requirements. When a brain's window exceeds the resampling yield from the default fetch, either increase the fetch count or switch to the brain's native timeframe.
+- **Dependents Checked**: ParamsBrainAdapter.bootstrap_buffer (accepts any list[float]), ConformalOUGate._extract_ou_diagnostics (reads brain output directly). verify.py --quick: mypy PASS, ruff PASS.
+
+### FIX-20260525-018
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: brains-adapters, execution-orders
+- **Files**:
+  - `core/brains/adapters/params_brain_adapter.py` (MODIFIED: removed half_life + buffer_len from diagnostics exclusion filter in get_signal())
+  - `core/execution/strategy_line.py` (MODIFIED: parliament gate_diag now includes brain_diag list)
+- **Description**: M15 parliament deadlock diagnostics — statarb_m15 was returning neutral_consensus on every cycle with zero observability into why. Two changes:
+
+  1. **ParamsBrainAdapter.get_signal()** (line 148-153): The diagnostics dict was filtering out `half_life` and `buffer_len` from the exclusion list — these two fields are essential for diagnosing why an OU brain returns neutral (half_life >= max_half_life → direction neutral; buffer_len < window → z_score=0.0). Removed both from the exclusion set so they flow into `BrainSignal.diagnostics`.
+
+  2. **StrategyLine.evaluate()** parliament gate_diag (line 727-735): Added `brain_diag` list to gate_diag containing per-brain `brain_id`, `z_score` (from raw_score), `half_life`, `buffer_len`, and `theta`. Previously the gate audit JSONL showed `confidence=0.0, supporting=0` with no visibility into WHY every brain was neutral.
+
+  After restart, gate_audit JSONL will contain brain-level diagnostic data for statarb_m15 proposals, enabling root cause determination: (A) buffer < 280 bars → cold-start, fix warm-start; (B) half_life >= 50 → max_half_life too tight for M15, fix artifact; (C) z_score never exceeds 1.2 → z_entry too high, fix artifact.
+
+- **Root Cause**: RC-06 (contract-violation) — BrainSignal.diagnostics field was designed to carry adapter-specific diagnostic data, but the ParamsBrainAdapter's get_signal() was filtering out the two most diagnostically valuable OU fields (half_life, buffer_len). The parliament gate_diag had no per-brain diagnostic visibility, creating a blind spot.
+- **Prevention**: Adapter diagnostics filters should be conservative — only exclude fields that are definitively noise. When a strategy returns permanent neutral, gate_diag must include per-brain fields sufficient to diagnose why, before another multi-hour debugging cycle.
+- **Dependents Checked**: strategy_line.py (parliament gate_diag consumers), gate_audit JSONL readers. verify.py --full: mypy PASS, ruff PASS, pytest 2684 passed.
+
 ### FIX-20260525-045
 - **Date**: 2026-05-25
 - **Author**: cursor-agent
@@ -3789,4 +4518,140 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
 - **Root Cause**: RC-05 (boundary-error) for T1-M3/M7/M8/L2/L4/L6, T2-M1/M3, T3-M1/M2/M3/M4/M5, T4-M1/M2/M3; RC-06 (contract-violation) for T1-M1/M5, T2-L1; RC-07 (noise/log-quality) for T1-M2/M6/L3/L5, T2-M2/L2, T3, T4-M4/M5.
 - **Prevention**: (1) Batch disk writes — don't save on every update. (2) Always validate sentinel values against their intended semantics (None vs ""). (3) Default parameter values must match across modules. (4) Financial metrics must filter NaN before computation. (5) Check family/lane for cross-strategy limits, not raw strategy name.
 - **Dependents Checked**: execution_guards.md, execution_orders.md, risk_portfolio.md, features_service.md, training.md, execution_reentry.md blueprints updated. Tests: test_portfolio_risk.py, test_integration.py, test_stress_portfolio_risk.py, test_conformal_calibrator.py, test_position_manager.py updated.
+
+### FIX-20260525-020
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live, execution-orders
+- **Files**: core/runtime/live_cycle.py, core/execution/position_manager.py
+- **Description**: Bleed stop abolished for OU/mean-reversion (statarb) strategies. The bleed_stop exit rule — "exit if N consecutive bars have negative PnL" — is designed for trend-following positions where the thesis is "price will continue in this direction." If price moves against the position for 3+ bars, the trend thesis is broken. But OU/mean-reversion enters at trend extremes — price continuing 3-5 bars in the same direction is normal "rubber band stretching" before reversion. Killing during the stretch is a **category error**: applying a trend-following exit heuristic to a mean-reversion position.
+
+  **Before**:
+  ```python
+  # All strategies, including statarb, get bleed_stop check:
+  _should_bleed, _bleed_reason = pm.should_exit_bleed(pos, _r_now, bleed_bars=_bleed_bars)
+  ```
+  **After**:
+  ```python
+  # statarb strategies skip bleed_stop entirely:
+  _sname_lower = (_sname or "").lower()
+  if "statarb" not in _sname_lower and mid is not None and mid > 0:
+      _should_bleed, _bleed_reason = pm.should_exit_bleed(...)
+  ```
+
+  The `should_exit_bleed()` method remains available on `ActivePositionManager` for trend-following strategies (barrier_12bar, barrier_12bar_meta, micro_3bar, etc.) which continue to use it.
+
+- **Root Cause**: RC-06 (contract-violation) — bleed_stop is a trend-following exit heuristic. Applying it to mean-reversion strategies violates the strategy family contract. OU positions need to "breathe" through the initial adverse excursion; the bleed_stop was prematurely killing positions that would have reverted.
+- **Prevention**: Exit watchdog rules are now strategy-family-aware. Before adding a new exit rule, verify it is compatible with all strategy families it will apply to. Use `_sname_lower` dispatch pattern for family-specific behavior.
+- **Dependents Checked**: runtime_live.md + execution_orders.md blueprints updated. FIX_REGISTRY.md index updated. verify.py --full: mypy PASS, ruff PASS, pytest 2684 passed.
+
+### FIX-20260525-021
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-orders
+- **Files**: core/execution/position_manager.py, core/execution/strategy_line.py, core/runtime/live_cycle.py
+- **Description**: Dynamic hesitation timeout tied to OU half-life instead of static `hesitation_cycles` config. The hesitation exit kills positions that haven't triggered breakeven within N cycles — but a static N makes no physical sense for mean-reversion: a position with 4-hour half-life needs much more patience than one with 30-min half-life.
+
+  **Data flow**:
+  ```
+  BrainSignal.diagnostics["half_life"]
+    → strategy_line.evaluate(): entry_half_life captured from proposals
+    → StrategyDecision.entry_half_life
+    → live_cycle._execute_decision(): register_position(entry_half_life=...)
+    → ActivePosition.entry_half_life
+    → should_exit_hesitation(): max(12, int(entry_half_life * 0.75))
+  ```
+
+  **Formula**: `hesitation_limit = max(12, int(entry_half_life * 0.75))`
+  - half_life=30 → limit=22 (was 6 for statarb_dynamic, 3 for statarb_m15)
+  - half_life=60 → limit=45
+  - half_life=16 → limit=12 (floor protection)
+  - Trend-following strategies: continue using static `hesitation_cycles` from YAML config
+
+  **Fields added**:
+  - `StrategyDecision.entry_half_life: float = 0.0`
+  - `ActivePosition.entry_half_life: float = 0.0`
+
+  The 0.75 factor means "wait 75% of the estimated reversion time before concluding the thesis is wrong." The max(12, ...) floor prevents the formula from being *less* patient than the original static setting for very fast-reverting processes.
+
+- **Root Cause**: RC-05 (boundary-error — static timeout applied across heterogeneous reversion timescales) + RC-06 (contract-violation — exit patience not derived from position physics)
+- **Prevention**: Time-based exit rules for mean-reversion strategies should be derived from the OU half-life parameter, which is the physically meaningful timescale of the process. Static timeouts are only appropriate for trend-following where the thesis has a fixed horizon.
+- **Dependents Checked**: execution_orders.md + runtime_live.md blueprints updated. FIX_REGISTRY.md index updated. verify.py --full: mypy PASS, ruff PASS, pytest 2684 passed.
+
+### FIX-20260525-022
+- **Date**: 2026-05-25
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: deployment-config, runtime-live
+- **Files**: configs/live.yaml
+- **Description**: Budget guard (StrategyBudget) calibration for low-WR (30%) mean-reversion strategies. The previous `max_consecutive_losses` settings were calibrated for 50%+ WR trend-following strategies, causing daily false-triggers for OU strategies.
+
+  **Math**: For a 30% WR strategy:
+  - P(3 consecutive losses) = 0.7³ = 34.3% — fires almost daily (was statarb_m15)
+  - P(4 consecutive losses) = 0.7⁴ = 24.0% — fires every ~4 trade sequences (was statarb_dynamic)
+  - P(7 consecutive losses) = 0.7⁷ = 8.2% — rare enough to warrant review, common enough not to be a crisis
+
+  **Changes**:
+  | Strategy | Parameter | Old | New | Reason |
+  |----------|-----------|-----|-----|--------|
+  | statarb_dynamic | max_consecutive_losses | 4 | 7 | P(4)=24%→false alarm; P(7)=8.2%→real signal |
+  | statarb_dynamic | daily_loss_limit_pct | -1.5% | -3.0% | 2-3 losses at 0.02 lot ≈ $2 — normal Tuesday |
+  | statarb_m15 | max_consecutive_losses | 3 | 7 | P(3)=34%→near-daily trigger; P(7)=8.2% |
+  | statarb_m15 | daily_loss_limit_pct | -1.0% | -2.0% | 0.01 lot micro losses are negligible in absolute terms |
+
+  The `StrategyBudget` class in `strategy_budget.py` already reads these from YAML config — no code changes needed. The budget guard still fires on genuine drawdowns; the thresholds now match the statistical reality of 30% WR strategies instead of falsely flagging normal variance as a crisis.
+
+- **Root Cause**: RC-05 (boundary-error — budget guard thresholds calibrated for 50%+ WR trend-following strategies, creating false-positive system pauses for 30% WR mean-reversion strategies)
+- **Prevention**: Budget guard thresholds must be calibrated per strategy family, accounting for the strategy's empirical win rate. Use binomial probability: `max_consecutive_losses` should be set where P(N consecutive losses) ≤ 10% for the strategy's observed WR.
+- **Dependents Checked**: runtime_live.md + execution_orders.md blueprints updated. FIX_REGISTRY.md index updated. verify.py --full: mypy PASS, ruff PASS, pytest 2684 passed.
+
+---
+
+### FIX-20260526-028 — P4+P1: May 25 Trade Analysis — Binary_Cls_V1 Feature Order + Counter-Trend StatArb Bypass
+
+- **Date**: 2026-05-26
+- **Author**: cursor-agent
+- **Category**: Fix (train-serve skew + gate exemption)
+- **Scope**: `core/execution/barrier_strategy.py`, `core/execution/strategy_line.py`, `configs/brains/meta_stage1_binary_cls_v1.json`, `tests/execution/test_barrier_strategy.py`
+- **Trigger**: May 25 live trade analysis — 315 gate blocks, only 10 trades (3.1% pass rate). barrier_12bar had ZERO trades. Binary_Cls_V1 brain: 785 votes 100% LONG, frozen confidence ~0.865. counter_trend gate: 93 statarb signals blocked (30% of all blocks).
+- **Root Cause 1 (P4)**: Binary_Cls_V1 train-serve feature order mismatch.
+  
+  **Training** (`barrier_12bar_binary_cls_20260524_093413.meta.json`): features in H1-first descending order with all 10 metrics per timeframe packed inline:
+  ```
+  H1_ATR_14, H1_Body_Ratio, H1_Hurst, H1_MACD, H1_Macro1_Corr, H1_OU_Theta,
+  H1_Price_ZScore, H1_RSI_14, H1_Ret_1, H1_Vol_ZScore,
+  M15(...10), M30(...10), M5(...10)
+  ```
+  
+  **Inference** (brain config `features` + `V9_INSTITUTIONAL_40_FEATURES`): M5-first ascending order with different metric grouping:
+  ```
+  M5_Ret_1, M5_Body_Ratio, M5_ATR_14, M5_RSI_14, M5_MACD, M5_Vol_ZScore, M5_Macro1_Corr, M5_Price_ZScore,
+  M15(...8), M30(...8), H1(...8),
+  M5_OU_Theta, M15_OU_Theta, M30_OU_Theta, H1_OU_Theta,
+  M5_Hurst, M15_Hurst, M30_Hurst, H1_Hurst
+  ```
+  
+  **Result**: 38 of 40 feature positions are wrong. LightGBM uses positional indexing — every tree split reads the wrong feature. Model sees scrambled data → maps to near-constant raw_score ~0.93 → confidence = 0.5 + tanh(0.93)/2 = 0.865 always LONG. This is NOT "model death" — it's a train-serve contract violation identical in nature to FIX-20260525-026 (MetaLabel).
+
+- **Root Cause 2 (P1)**: statarb strategies (mean-reversion) went through the counter_trend gate designed for trend-following strategies. barrier_12bar was exempted (Dictator Protocol, FIX-20260522-013) but statarb family was not. Mean-reversion IS inherently counter-trend.
+
+- **P0 Status**: bleed_stop exemption (FIX-20260525-020, line 1659 of live_cycle.py) is verified correct. `"statarb" not in _sname_lower` catches both `statarb_dynamic` and `statarb_m15`. Magic→strategy mapping (90003→"statarb_dynamic", 90103→"statarb_m15") also correct.
+
+- **Fix 1**: `_reorder_for_brain()` function in `barrier_strategy.py`. Builds name→value map from V9-ordered vector using `V9_INSTITUTIONAL_40_FEATURES` as canonical index, extracts in brain config `features` list order before `adapter.inference()`.
+
+- **Fix 2**: Brain config `features` list updated from V9 order to training order matching model meta.json `feature_names`.
+
+- **Fix 3**: Counter-trend gate extended from `name != "barrier_12bar"` to `name != "barrier_12bar" and "statarb" not in name`.
+
+- **Tests**: 5 new `TestFeatureReordering` tests. All 9 barrier_strategy + 45 strategy_line tests pass. verify.py --full: 2706 passed.
+
+- **Expected Impact**: Binary_Cls_V1 confidence should vary, direction should alternate. ~93 statarb signals/day unblocked. barrier_12bar should produce trades (frozen brain → bad RR was root cause of 0 trades).
+
+- **Root Cause**: RC-06 (contract-violation — feature order mismatch + counter-trend gate applied to mean-reversion family)
+- **Prevention**: 
+  1. New brain registrations must verify `features` list order against model artifact `feature_names` from meta.json.
+  2. Gate exemptions should key on `strategy_family` enum rather than string matching on strategy name.
+- **Dependents Checked**: execution_orders.md + brains_validation.md blueprints updated. FIX_REGISTRY.md index updated. verify.py --full: mypy PASS, ruff PASS, blueprint PASS, pytest 2706 passed.
 
