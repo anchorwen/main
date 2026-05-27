@@ -32,6 +32,19 @@
 - **Verification**: `python scripts/verify.py --quick` passed. 24 pytest tests passed.
 - **Risk**: Low. OFI=0.0 when MT5 tick data unavailable → fail-open (no false blocks). 100-bar buffer at M5 = ~8.3h context — sufficient for stable z-score estimation per engineer review.
 
+### FIX-20260527-009 — OFI tick index overflow: t[5]→t[6] for COPY_TICKS_ALL 8-field format
+
+- **Date**: 2026-05-27
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (contract-violation) — OFI code `int(t[5])` read wrong tick tuple field. MT5 `COPY_TICKS_ALL` returns 8-field ticks `(time, bid, ask, last, volume, time_msc, flags, volume_real)` where index 5 is `time_msc` (~1.78e12), not `flags`. `time_msc` value overflows `np.int32` (max 2.15e9), raising `OverflowError: Python int too large to convert to C long` on every cycle. The cycle-level exception handler at `live_intent_loop.py:1907` caught and suppressed it (logging only `str(exc)` without traceback), so the system continued running but the root cause was invisible until traceback logging was added.
+- **Fix**: Three-layer defense:
+  1. `microstructure_computer.py:441`: `t[5]`→`t[6]` (actual flags field) with `len(t) > 6` guard. Entire OFI block wrapped in fail-open `try/except` — OFI=0.0 on any error (gate skipped safely).
+  2. `live_cycle.py:4866`: `compute_all()` caller now wrapped in `try/except` with zeros fallback — prevents any future microstructure computer failure from escaping to outer cycle handler.
+  3. `live_intent_loop.py:1907`: cycle_error handler now captures `traceback.format_exc()` + `error_type` — eliminates invisible error masking for all future error classes.
+- **Files changed**: `core/features/computers/microstructure_computer.py`, `core/runtime/live_cycle.py`, `scripts/live_intent_loop.py`
+- **Verification**: `python scripts/verify.py --quick` passed. Live restart confirmed zero cycle_error (previous: 1-3 per run).
+- **Risk**: Low. OFI gate fails-open, compute_all() falls back to zeros, traceback logging is read-only.
+
 ### FIX-20260527-006 — COLD phase deadlock: ConformalOU + MetaFilter dual bypass unreachable
 
 - **Date**: 2026-05-27
