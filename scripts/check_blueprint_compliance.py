@@ -129,6 +129,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
     "feedback_pnl": ["core/feedback/brain_pnl_ledger.py", "scripts/shadow_pnl_loop.py"],
     "feedback_online": [
         "core/feedback/online_feedback_hook.py",
+        "scripts/online_feedback_hook.py",
         "core/feedback/param_optimizer.py",
         "core/feedback/experience_replay.py",
     ],

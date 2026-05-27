@@ -197,6 +197,9 @@ class StrategyDecision:
     entry_context: dict[str, Any] = field(default_factory=dict)
     p_win: float = 0.5  # P(TP|signal) from MetaFilter or rolling PnL win rate
     kelly_mult: float = 1.0  # fractional Kelly multiplier (0.0 = EV veto)
+    cold_explore: bool = (
+        False  # forced exploration budget — bypass trailing, collect uncensored labels
+    )
     gate_diag: dict[str, Any] = field(default_factory=dict)  # gate audit diagnostics
     # entry_context carries passthrough data for the journal:
     #   {"atr": float, "regime": str, "vol_regime": str, "trend_direction": str,
@@ -463,9 +466,7 @@ class StrategyLine:
                 # Match regression brains by training_contract in brain config
                 _b_entry = next((b for b in self.brains if b.get("brain_id") == _brain_id), None)
                 _contract = str(_b_entry.get("training_contract", "")) if _b_entry else ""
-                _is_regression = _brain_id == "Meta_Stage1_Huber_V1" or _contract.startswith(
-                    "barrier_12bar_regression"
-                )
+                _is_regression = _contract.startswith("barrier_12bar_regression")
                 if _is_regression:
                     _raw = getattr(p, "raw_score", None)
                     if _raw is not None:
@@ -1461,6 +1462,7 @@ class StrategyLine:
             entry_context=entry_context,
             p_win=_p_win,
             kelly_mult=kelly_result.fractional_mult,
+            cold_explore=_is_cold_explore,
         )
 
     # ── Consensus computation ───────────────────────────────────────────

@@ -260,32 +260,25 @@ def ingest_journal_to_tracker(
         close_updates = list(latest_cu.values())
 
     if close_updates:
-        decisions = (
-            _read_decision_records(decisions_dir, date_filter=date, symbol=symbol)
-            if brain_id is None
-            else []
-        )
         for cu in close_updates:
             if brain_id is not None:
                 brain_ids_for_trade = {brain_id}
             else:
-                supporting, opposing = _find_brains_by_time(
-                    decisions, cu.get("open_recorded_at", "")
-                )
-                all_brains = supporting + opposing
-                brain_ids_for_trade = (
-                    set(all_brains) if all_brains else {"V9_Institutional_01", "Online_SGD_V1"}
-                )
+                # ── Authoritative: use brain_ids from the open journal entry ──
+                # Each strategy's dispatch records the exact brains that voted for
+                # that trade.  Decision records are NOT used here because they group
+                # ALL brains from a consensus round, which would assign the same
+                # outcome to brains that never voted for that strategy's trade.
+                ticket_int = cu["position_ticket"]
+                open_entry = open_by_ticket.get(ticket_int) if isinstance(ticket_int, int) else None
+                open_brain_ids: list[str] = open_entry.get("brain_ids", []) if open_entry else []
+                brain_ids_for_trade = set(open_brain_ids) if open_brain_ids else set()
 
             for bid in brain_ids_for_trade:
                 score = cu["composite_score"]
                 outcome = cu["execution_outcome"]
-                # Reduce score for opposing brains
-                if brain_id is None:
-                    sup, opp = _find_brains_by_time(decisions, cu.get("open_recorded_at", ""))
-                    if bid in opp:
-                        score = round(max(0.10, score - 0.20), 4)
-                        outcome = "loss" if outcome == "win" else outcome
+                # No opposing-brain penalty: brain_ids are per-strategy from dispatch.
+                # Every brain in the list voted FOR the trade.
 
                 tracked_brain_ids.add(bid)
                 updates.append(

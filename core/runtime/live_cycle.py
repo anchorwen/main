@@ -130,6 +130,9 @@ class LiveCycleConfig:
     # ── live.yaml strategy_lines overrides ──
     strategy_configs: dict[str, Any] = field(default_factory=dict)
 
+    # ── live.yaml regime_gate.regime_map ──
+    regime_map: dict[str, dict[str, str]] | None = None
+
     # ── Vol-targeted position sizing ──
     risk_budget_usd: float = 10.0  # fixed USD risk per trade; 0 → use fixed volume
     equity_risk_pct: float = 0.0  # if >0, risk_budget = equity × equity_risk_pct (overrides fixed)
@@ -1105,11 +1108,18 @@ def _execute_management_phase(
     # develop.  Previously Layer 1 ran from cycle 1 with no protection,
     # causing exits at 0.5-1.0R instead of the designed 2.0R SL for
     # strategies whose breakeven threshold was not reached in time.
-    _trail_sl = pm.compute_trail_stop(current_atr, ticket=pos.ticket)
-    if _trail_sl is not None and abs(_trail_sl - pos.current_sl) >= config.exit_min_step:
-        if pos.cycles_held >= pm.min_hold_cycles:
-            _reasons.append("trail")
-            _final_sl = _trail_sl
+    #
+    # FIX-20260527-004: cold_explore bypass — forced exploration trades must
+    # run to hard SL or hard TP to collect uncensored labels for ConformalOU
+    # online calibration.  Trailing stops would produce truncated data.
+    if not getattr(pos, "cold_explore", False):
+        _trail_sl = pm.compute_trail_stop(current_atr, ticket=pos.ticket)
+        if _trail_sl is not None and abs(_trail_sl - pos.current_sl) >= config.exit_min_step:
+            if pos.cycles_held >= pm.min_hold_cycles:
+                _reasons.append("trail")
+                _final_sl = _trail_sl
+    else:
+        _trail_sl = None
 
     # Breakeven check — only fires once per position
     if not pos.breakeven_triggered and pm.should_breakeven(mid, current_atr, ticket=pos.ticket):
@@ -3616,11 +3626,13 @@ def _evaluate_strategy_lines(
     for sname, strategy in strategy_lines.items():
         gate_mode = "full"
         if regime_gate is not None:
-            # v3.0: prefer continuous modulation activation over discrete regime_map
+            base_mode = regime_gate.get_strategy_mode(sname)
             if regime_modulation is not None and hasattr(regime_modulation, "strategy_activation"):
-                gate_mode = regime_modulation.strategy_activation
+                from core.execution.regime_gate import get_stricter_mode
+
+                gate_mode = get_stricter_mode(base_mode, regime_modulation.strategy_activation)
             else:
-                gate_mode = regime_gate.get_strategy_mode(sname)
+                gate_mode = base_mode
 
         # ── Per-strategy SL streak block ──
         if sname in _blocked and time.time() < _blocked[sname]:
@@ -5179,7 +5191,22 @@ def execute_live_cycle(
 
         # ── Regime gate: persist across cycles, feed M5+H1 bars ──
         if state.regime_gate is None:
-            state.regime_gate = RegimeGate()
+            state.regime_gate = RegimeGate(regime_map=config.regime_map)
+            _rm_loaded = config.regime_map is not None
+            _rm_strategies = sorted({s for m in (config.regime_map or {}).values() for s in m})
+            print(
+                json.dumps(
+                    {
+                        "event": "regime_gate_init",
+                        "time": _utc_iso(),
+                        "regime_map_loaded": _rm_loaded,
+                        "strategies_in_map": _rm_strategies,
+                        "num_regimes": len(config.regime_map) if config.regime_map else 0,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
             if not config.no_mt5:
                 _bootstrap_regime_gate(mt5_worker, config.symbol, state.regime_gate)
 
@@ -5208,6 +5235,26 @@ def execute_live_cycle(
                 h4_trend_strength = regime_gate_result.get("h4_trend_strength", 0.0)
                 macro_regime = regime_gate_result.get("macro_regime", "mixed")
                 regime_modulation = regime_gate_result.get("modulation")
+                # ── Per-cycle regime gate diagnostic (FIX-20260527-004) ──
+                _global_act = (
+                    regime_modulation.strategy_activation
+                    if regime_modulation is not None
+                    and hasattr(regime_modulation, "strategy_activation")
+                    else None
+                )
+                print(
+                    json.dumps(
+                        {
+                            "event": "regime_gate_cycle",
+                            "time": _utc_iso(),
+                            "detected_regime": regime_gate_result.get("regime", "?"),
+                            "strategy_gates": regime_gate_result.get("strategy_gates", {}),
+                            "global_activation": _global_act,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
             except Exception as _rg_exc:
                 print(
                     json.dumps(
@@ -6021,6 +6068,7 @@ def execute_live_cycle(
                                     "breakeven_threshold_atr", 1.0
                                 ),
                             ),
+                            cold_explore=getattr(decision, "cold_explore", False),
                         )
                         # Sync known_open_tickets so reconciliation can detect closes
                         state.known_open_tickets[ticket] = {

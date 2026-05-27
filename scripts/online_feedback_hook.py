@@ -47,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Load brain config
     brain_entry = json.loads(config_path.read_text(encoding="utf-8"))
-    brain_id = brain_entry.get("brain_id", "Online_SGD_V1")
+    brain_id = brain_entry["brain_id"]
 
     # Resolve artifact path relative to project root
     artifact_path = brain_entry.get("artifact_path", "")

@@ -38,6 +38,7 @@ Drift check → snapshot / rollback / freeze
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260527-003 | 2026-05-27 | cursor-agent | — | Remove hardcoded brain ID fallback: `scripts/online_feedback_hook.py` `brain_entry.get("brain_id", "Online_SGD_V1")` → `brain_entry["brain_id"]` — direct key access. If config lacks required `brain_id` field, KeyError surfaces immediately. Also registered `scripts/online_feedback_hook.py` in MODULE_SOURCE_MAP under `feedback_online`. | RC-09 |
 | FIX-20260523-008 | 2026-05-24 | cursor-agent | — | Track 3d: OnlineFeedbackHook now accepts ConformalCalibrator — updates (p_win, label) on each closed trade to feed the adaptive OU threshold | calibrator data pipeline for Track 3d |
 | FIX-20260523-007 | 2026-05-23 | cursor-agent | — | Mini-batch online learning: ExperienceReplayBuffer with EMA R-weighting, Fisher-Yates shuffle, class imbalance warning | single-sample SGD ignored trade magnitude; consecutive duplicates risked catastrophic forgetting |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |

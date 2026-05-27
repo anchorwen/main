@@ -115,6 +115,27 @@ def _load_or_create_governance(base_dir: str) -> Any:
         return gov
 
 
+def _load_or_create_pnl_store(base_dir: str) -> Any:
+    """Load persisted PnL ledger, or create a fresh one.
+
+    BrainPnLStore tracks per-brain counterfactual P&L with horizon-matched
+    settlement.  Unlike BrainPerformanceTracker (which uses composite_score
+    from consensus-round attribution), the PnL ledger records per-brain
+    signals independently — no cross-brain contamination.
+    """
+    ledger_path = Path(base_dir) / "brain_pnl_ledger.json"
+    try:
+        from core.feedback.brain_pnl_ledger import BrainPnLStore
+
+        if ledger_path.exists():
+            return BrainPnLStore.load(ledger_path)
+        return BrainPnLStore()
+    except Exception:
+        from core.feedback.brain_pnl_ledger import BrainPnLStore
+
+        return BrainPnLStore()
+
+
 def _step_label_builder(
     base_dir: str, *, dry_run: bool = False, contract_path: Path | None = None
 ) -> dict[str, Any]:
@@ -389,7 +410,12 @@ def _step_paper_trade_simulation(base_dir: str, *, dry_run: bool = False) -> dic
 
 
 def _step_governance(
-    base_dir: str, *, dry_run: bool = False, tracker: Any = None, governance: Any = None
+    base_dir: str,
+    *,
+    dry_run: bool = False,
+    tracker: Any = None,
+    governance: Any = None,
+    pnl_store: Any = None,
 ) -> dict[str, Any]:
     """Run governance cycle and cross-validate against leaderboard data.
 
@@ -403,7 +429,9 @@ def _step_governance(
             tracker = _load_or_create_tracker(base_dir)
         if governance is None:
             governance = _load_or_create_governance(base_dir)
-        report = run_governance_cycle(tracker, governance, dry_run=dry_run)
+        if pnl_store is None:
+            pnl_store = _load_or_create_pnl_store(base_dir)
+        report = run_governance_cycle(tracker, governance, dry_run=dry_run, pnl_store=pnl_store)
 
         # ── Cross-validate against leaderboard ──
         cross_check = _cross_check_governance_with_leaderboard(base_dir, report)
@@ -915,13 +943,18 @@ def run_daily_ops(
     base_dir = _resolve_base_dir(base_dir)
     steps: list[dict[str, Any]] = []
 
-    # Shared tracker + governance: load persisted state so governance and champion
-    # see data accumulated by live_intent_loop, and brain registrations survive restarts.
+    # Shared tracker + governance + pnl_store: load persisted state so governance
+    # and champion see data accumulated by live_intent_loop, and brain registrations
+    # survive restarts.  PnL store provides per-brain counterfactual P&L with
+    # horizon-matched settlement — the preferred data source for governance decisions
+    # (no cross-brain contamination, unlike tracker composite_scores).
     shared_tracker: Any = None
     shared_governance: Any = None
+    shared_pnl_store: Any = None
     if not skip_feedback or not skip_governance or not skip_champion:
         shared_tracker = _load_or_create_tracker(base_dir)
         shared_governance = _load_or_create_governance(base_dir)
+        shared_pnl_store = _load_or_create_pnl_store(base_dir)
         brain_count = len(shared_tracker.get_all_summaries())
         gov_brain_count = len(shared_governance.get_all_states())
         if brain_count > 0 or gov_brain_count > 0:
@@ -959,7 +992,11 @@ def run_daily_ops(
     if not skip_governance:
         steps.append(
             _step_governance(
-                base_dir, dry_run=dry_run, tracker=shared_tracker, governance=shared_governance
+                base_dir,
+                dry_run=dry_run,
+                tracker=shared_tracker,
+                governance=shared_governance,
+                pnl_store=shared_pnl_store,
             )
         )
 

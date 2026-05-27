@@ -51,6 +51,7 @@ startup → LifecycleManager.initialize()
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 | FIX-20260525-013 | 2026-05-25 | cursor-agent | — | Artifact parameter contract validator: validate_artifacts.py with OU bounds + cross-file drift detection. Integrated into verify.py --quick/--full. Prevents parameter regression like z_entry 1.3→3.9. | RC-07 |
+| FIX-20260527-003 | 2026-05-27 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/online_feedback_hook.py` to `feedback_online` module (was unmapped → fatal compliance error). | RC-04 |
 | FIX-20260525-010 | 2026-05-25 | cursor-agent | — | MODULE_SOURCE_MAP: add trail_stop_engine.py to execution_orders module. | RC-04 |
 | FIX-20260525-009 | 2026-05-25 | cursor-agent | — | MODULE_SOURCE_MAP: add mt5_worker.py to execution_orders, live_daily_provider.py to features_service. | RC-04 |
 | FIX-20260524-039 | 2026-05-24 | cursor-agent | — | M12: BrainLifecycleManager auto-repair now always registers brains as "candidate" — removed "shadow" registration which creates governance deadlock (shadow wasn't in VALID_TRANSITIONS before H3 fix). | RC-09 |

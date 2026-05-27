@@ -105,6 +105,10 @@ class ActivePosition:
     # When None, the engine falls back to its default policy.
     trail_policy: TrailPolicy | None = None
 
+    # COLD exploration flag — bypass trailing stop to collect uncensored labels
+    # for ConformalOU online calibration (FIX-20260527-004 architect directive)
+    cold_explore: bool = False
+
 
 # ── Manager ────────────────────────────────────────────────────────────────
 
@@ -303,6 +307,7 @@ class ActivePositionManager:
         trail_atr_mult_high: float | None = None,
         breakeven_threshold_atr: float | None = None,
         trail_policy: TrailPolicy | None = None,  # Phase B: preferred over scattered attrs
+        cold_explore: bool = False,  # bypass trailing for uncensored calibration labels
     ) -> ActivePosition:
         """Record a newly-opened position (or recover one after restart).
 
@@ -364,6 +369,7 @@ class ActivePositionManager:
             trail_atr_mult_high=_trail_high,
             breakeven_threshold_atr=_breakeven,
             trail_policy=trail_policy,  # Phase B: stored for compute_trail_stop / should_breakeven
+            cold_explore=cold_explore,
         )
         self._entry_consensus_score = float(pos.entry_consensus.get("consensus_score", 0))
         # Seed EMA with entry confidence so first-cycle drop is measured

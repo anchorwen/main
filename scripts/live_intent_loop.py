@@ -506,6 +506,7 @@ def main(argv: list[str] | None = None) -> int:
     _yaml_volume: float | None = None
     _yaml_risk_budget: float | None = None
     _yaml_equity_risk_pct: float | None = None
+    _yaml_regime_map: dict[str, dict[str, str]] | None = None
     if args.config:
         try:
             import yaml
@@ -513,6 +514,10 @@ def main(argv: list[str] | None = None) -> int:
             with open(args.config, encoding="utf-8") as fh:
                 full_cfg = yaml.safe_load(fh)
             strategy_configs = full_cfg.get("strategy_lines", {})
+            # ── Regime map: per-strategy discrete hardware guard ──
+            _rg_cfg = full_cfg.get("regime_gate", {})
+            if isinstance(_rg_cfg, dict):
+                _yaml_regime_map = _rg_cfg.get("regime_map")
             # Also read live_trading section for volume/risk wiring (FIX-20260519-009)
             _lt = full_cfg.get("live_trading", {})
             if isinstance(_lt, dict):
@@ -684,6 +689,7 @@ def main(argv: list[str] | None = None) -> int:
         exit_max_hold_cycles=args.exit_max_hold_cycles,
         exit_require_min_r=args.exit_require_min_r,
         strategy_configs=strategy_configs,
+        regime_map=_yaml_regime_map,
     )
 
     # ── Initialize MT5Worker (single-threaded engine — all MT5 calls on one thread) ──
@@ -1915,6 +1921,12 @@ def main(argv: list[str] | None = None) -> int:
                 try:
                     changes = hot_reload.check_and_reload()
                     if changes:
+                        # ── Apply regime_map hot-reload ──
+                        _new_regime_cfg = changes.get("regime_gate", {})
+                        if isinstance(_new_regime_cfg, dict):
+                            _new_regime_map = _new_regime_cfg.get("regime_map")
+                            if isinstance(_new_regime_map, dict) and state.regime_gate is not None:
+                                state.regime_gate.regime_map = _new_regime_map
                         print(
                             json.dumps(
                                 {

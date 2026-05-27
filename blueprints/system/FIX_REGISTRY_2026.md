@@ -4,6 +4,101 @@
 
 ## Fix Details
 
+### FIX-20260527-003 — Remove hardcoded brain ID references
+
+- **Date**: 2026-05-27
+- **Author**: cursor-agent
+- **Root Cause**: RC-09 (config-drift) — 5 hardcoded brain ID strings across 3 files acted as silent fallback defaults. If a brain config file were renamed or its brain_id field changed without updating these strings, the system would silently operate with the wrong brain identity — wrong brain registered, wrong regression pipeline gated, wrong online feedback targeted.
+- **Fix**: Removed all 5 hardcoded brain ID references:
+  1. `core/execution/strategy_line.py:466`: `_brain_id == "Meta_Stage1_Huber_V1"` removed — regression detection now uses only `training_contract.startswith("barrier_12bar_regression")`, which reads from the actual brain config.
+  2. `apps/engine/bootstrap_v9.py:50`: `stage1_entry.get("brain_id", "Meta_Stage1_Huber_V1")` → `stage1_entry["brain_id"]` — direct key access.
+  3. `apps/engine/bootstrap_v9.py:200`: `online_entry.get("brain_id", "Online_MLP_V1")` → `online_entry["brain_id"]`.
+  4. `apps/engine/bootstrap_v9.py:218`: `deep_entry.get("brain_id", "DeepResMLP_V1_Institutional")` → `deep_entry["brain_id"]`.
+  5. `apps/engine/bootstrap_v9.py:139`: `"stage1_brain": "Meta_Stage1_Huber_V1"` → `stage1_entry.get("brain_id", "unknown")` — log now reads from config.
+  6. `scripts/online_feedback_hook.py:50`: `brain_entry.get("brain_id", "Online_SGD_V1")` → `brain_entry["brain_id"]`.
+  7. `scripts/check_blueprint_compliance.py`: Added `scripts/online_feedback_hook.py` to MODULE_SOURCE_MAP under `feedback_online`.
+  If any config file is corrupted and lacks the required `brain_id` field, a `KeyError` surfaces immediately instead of silently proceeding with a stale default.
+- **Files changed**: `core/execution/strategy_line.py`, `apps/engine/bootstrap_v9.py`, `scripts/online_feedback_hook.py`, `scripts/check_blueprint_compliance.py`
+- **Verification**: `python scripts/verify.py --full` — all checks passed, 2706 tests passing.
+
+### FIX-20260527-004 — P0: Regime modulation global override — per-strategy minimum-privilege gate fusion
+
+- **Date**: 2026-05-27
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (contract-violation) — `live_cycle.py:3620-3623` used `regime_modulation.strategy_activation` (a single global scalar from `compute_continuous_regime_modulation()`) for ALL strategies, completely bypassing the per-strategy `regime_map` from live.yaml. This meant: (1) barrier_12bar (should be "full" in trending) was downgraded to "reduced"; (2) statarb_dynamic/statarb_m15 (should be "false"/hard-locked in trending) were upgraded to "reduced" and could still trade. The continuous modulation's intent (smooth risk sizing) was sound, but applying a single global value to orthogonal strategy types (trend-following vs mean-reversion) violated the physical requirement that the same market state demands opposite gating decisions.
+
+  **Secondary**: `RegimeGate()` was constructed bare at line 5182 — live.yaml's `regime_map` was never loaded, so `get_strategy_mode()` always used the hardcoded default map (5 strategies only, missing statarb_m15, barrier_12bar_meta). The `classify()` method also hardcoded the strategy list.
+
+  **Tertiary**: YAML `false` (boolean) values in regime_map were not handled by `get_strategy_mode()` — a boolean `False` slipped through string comparisons uncaught.
+- **Fix**:
+  1. **`regime_gate.py`**: Added `get_stricter_mode(base_mode, global_mode)` — minimum-privilege fusion. If base (discrete) mode is `shadow`/`false`, continuous modulation is ignored entirely (hardware lock). Otherwise, the stricter of the two modes is returned (full → reduced → shadow). Strictness ordering: `{"full": 0, "reduced": 1, "shadow": 2, "false": 3}`.
+  2. **`regime_gate.py`**: `classify()` now auto-discovers strategy names from `self.regime_map` values instead of hardcoded list.
+  3. **`regime_gate.py`**: `get_strategy_mode()` now handles YAML booleans via `isinstance(mode, bool)` check — `False` → `"shadow"`, `True` → `"full"`.
+  4. **`live_cycle.py`**: `LiveCycleConfig` gains `regime_map` field. `RegimeGate(regime_map=config.regime_map)` at construction.
+  5. **`live_cycle.py`**: `_evaluate_strategy_lines()` gate_mode resolution now calls `get_stricter_mode(base_mode, global_mode)`.
+  6. **`live_intent_loop.py`**: Parses `regime_gate.regime_map` from live.yaml, passes to `LiveCycleConfig`. Hot-reload updates `state.regime_gate.regime_map`.
+- **Files changed**: `core/execution/regime_gate.py`, `core/runtime/live_cycle.py`, `scripts/live_intent_loop.py`
+- **Verification**: `python scripts/verify.py --full` — all checks passed, 2706 tests passing.
+
+### FIX-20260527-005 — Cold exploration trailing bypass + statarb_dynamic trail_atr_mult_low 1.2→1.8
+
+- **Date**: 2026-05-27
+- **Author**: cursor-agent (architect directive)
+- **Root Cause**: RC-9 (parameter-mismatch) + RC-12 (data-quality)
+  - **Sub-RC-A**: `trail_atr_mult_low=1.2` placed SL within 0.1 points of recent low for mean-reversion trades in low-vol regime. Low vol = sticky/persistent price; tight trail = decapitation by white noise.
+  - **Sub-RC-B**: Cold exploration trades (forced p_win=0.50, 0.01 lot) had their trailing stops tightening SL mid-trade, producing *censored labels* for ConformalOU online calibration. Truncated exit data poisons the Q10 adaptive threshold.
+- **Trigger**: Order 3658490236 (statarb_dynamic, 90003) — stopped out at 4499.288 (-$0.03), price surged immediately after. SL was trailed to 0.1 pts above the cycle-1 low.
+- **Fix**:
+  1. **`configs/live.yaml:330`**: `trail_atr_mult_low: 1.2 → 1.8` for statarb_dynamic. Low-vol mean-reversion needs WIDER trail to survive sticky noise.
+  2. **`core/execution/strategy_line.py`**: Added `cold_explore: bool = False` to `StrategyDecision`. Set from `_is_cold_explore` in evaluate().
+  3. **`core/execution/position_manager.py`**: Added `cold_explore: bool = False` to `ActivePosition`. Threaded through `register_position()`.
+  4. **`core/runtime/live_cycle.py`**: Trailing stop bypass — `if not getattr(pos, "cold_explore", False)` guards Layer 1 Chandelier trail. Cold explore trades run to hard SL or hard TP. Added `cold_explore` pass-through at position registration.
+- **Files changed**: `configs/live.yaml`, `core/execution/strategy_line.py`, `core/execution/position_manager.py`, `core/runtime/live_cycle.py`
+- **Verification**: `python scripts/verify.py --quick` — all checks passed.
+- **Architect notes**:
+  - P0: `trail_atr_mult_low` 1.2→1.8 APPROVED (anti-intuitive but correct for mean-reversion)
+  - P1: `breakeven_threshold_atr` 0.5→0.3 VETOED (0.3 ATR = friction death by spread/slippage)
+  - P2: Cold explore trailing bypass APPROVED (uncensored labels critical for ConformalOU)
+
+### FIX-20260527-002 — Brain performance data contamination: root cause fix and cleanup
+
+- **Date**: 2026-05-27
+- **Author**: cursor-agent
+- **Root Cause**: RC-11 (stale-data) — `scripts/feedback_loop.py` `ingest_journal_to_tracker()` used `_find_brains_by_time()` which read decision records to find ALL brains (supporting + opposing) from the nearest consensus round, then assigned the SAME trade outcome to every brain. This caused 5 brains (Meta_Stage1_Binary_Cls_V1, Meta_Stage1_Huber_V1, OU_Params_V6_Sniper, OU_Params_V7_M15, Online_MLP_V1) to share 100% identical 100-record windows with identical composite_scores, position_tickets, and outcomes. The downstream governance cycle (`run_governance_cycle`) fell back to tracker-based data (no `pnl_store` passed) and read these contaminated summaries → `_assess_health()` returned "critical" → `_recommend_action()` returned "freeze" → all 5 brains froze/retired simultaneously.
+
+  **Secondary issue**: `daily_ops.py` `_step_governance()` did not pass `BrainPnLStore` to `run_governance_cycle()`, so the clean per-brain P&L ledger was never consulted. The PnL ledger (`brain_pnl_ledger.json`) has properly isolated per-brain counterfactual P&L records — no cross-brain contamination — but was unused.
+
+  **Old consensus path** (`live_cycle.py:6136-6994`): Confirmed DEAD CODE — unreachable with default `multi_strategy_enabled=True`. The multi-strategy path at `live_cycle.py:5881-5893` does per-strategy brain recording correctly.
+
+  **Contamination mechanism** (before fix):
+  ```
+  journal close entry → open_by_ticket lookup → _find_brains_by_time()
+  → reads data/decisions/*.jsonl → ALL brains from nearest consensus round
+  → brain_ids_for_trade = set(supporting + opposing)  ← THE BUG
+  → same outcome assigned to ALL brains (opposing: -0.20 penalty only)
+  ```
+
+- **Fix**:
+  1. **(Fix A)** `scripts/feedback_loop.py:262-299`: Replaced `_find_brains_by_time()` + decision record lookup with direct `brain_ids` from the open journal entry. The open entry's `brain_ids` field is the authoritative source — it's written by the multi-strategy dispatch path at trade time and contains ONLY the brains that actually voted for that strategy's trade. Removed opposing-brain penalty (no longer applicable — all brains in the list voted FOR the trade). Removed hardcoded fallback `{"V9_Institutional_01", "Online_SGD_V1"}`.
+  2. **(Fix B)** `data/brain_performance.json`: Cleaned 500 contaminated records (100 each) from 5 brains. Backup saved to `brain_performance.json.contamination_backup`. Clean brains (39 remaining) and schema preserved.
+  3. **(Fix C)** `scripts/daily_ops.py`: Added `_load_or_create_pnl_store()`, wired `shared_pnl_store` into the main pipeline, and passed `pnl_store` to `_step_governance()` → `run_governance_cycle()`. This activates the PnL-first governance path using clean per-brain counterfactual P&L data.
+
+- **Files changed**: `scripts/feedback_loop.py`, `scripts/daily_ops.py`, `data/brain_performance.json`, `tests/engine/test_feedback_loop.py`
+- **Verification**: `python scripts/verify.py --full` — mypy PASS, ruff PASS, blueprint compliance PASS, 2706 tests passed (1 test updated for new behavior)
+- **Risk**: None. The journal `brain_ids` field has 96.4% coverage on accepted open entries. The 3.6% gap (entries without brain_ids) will result in no tracker update for those trades — safe neutral default. The PnL-first governance path uses `BrainPnLStore.get_all_metrics()` which has proper per-brain isolation.
+
+### FIX-20260527-001 — Governance auto-freeze recovery: restore barrier_12bar and statarb_dynamic voting brains
+
+- **Date**: 2026-05-27
+- **Author**: cursor-agent
+- **Root Cause**: RC-11 (stale-data), RC-09 (config-drift) — Daily governance cycle (2026-05-26 22:02 UTC) auto-froze Meta_Stage1_Binary_Cls_V1 and auto-retired OU_Params_V6_Sniper based on `pnl:critical` from brain_performance records. Investigation revealed all 6 barrier_12bar/OU brains share the SAME 84 records (36W/48L, 42.9% WR, identical composite_scores) — a data attribution contamination, not genuine per-brain PnL. Consequence: barrier_12bar (90001) had zero voters (only brain was frozen); statarb_dynamic (90003) had zero voters (only brain was retired). The entry precision deep fix (FIX-20260526-041) — MetaFilter statarb routing, COLD exploration, confidence→p_win fallback — was impossible to exercise.
+- **Fix**:
+  1. `data/governance_state.json`: Meta_Stage1_Binary_Cls_V1 frozen→probation (transition_count 3→4), OU_Params_V6_Sniper retired→probation (transition_count 5→6). Transition log entries added for both restorations with rationale.
+  2. `configs/brains/meta_stage1_binary_cls_v1.json`: vote_weight 0.0→0.8, status shadow→probation. Previous vote_weight=0.0 (set for Plan B shadow OOF accumulation) meant even after governance unfreeze, brain had zero voting power → barrier_12bar could not produce trades. Governance probation penalty (0.5×) will reduce effective weight to ~0.4.
+- **Files changed**: `data/governance_state.json`, `configs/brains/meta_stage1_binary_cls_v1.json`
+- **Verification**: After restart, brain_count 2→4. Active brains: Meta_Stage1_Binary_Cls_V1 (probation, wt 0.4), Meta_Stage1_MetaLabel_Binary_V1 (probation, wt 0.4), OU_Params_V6_Sniper (probation, wt 0.75), OU_Params_V7_M15 (live, wt 1.5). Only Online_MLP_V1 skipped (retired, correct).
+- **Risk**: If brain_performance attribution remains contaminated, daily governance may re-freeze/re-retire these brains at the next 22:02 UTC cycle. The root cause of shared brain_performance records needs separate investigation.
+
 ### FIX-20260526-043 — ConformalOUGate: OU confidence diagnostic
 
 - **Date**: 2026-05-26

@@ -10,8 +10,8 @@
     "filter_stage": "stage2"
   },
   "model_version": "barrier_12bar_binary_cls_sl3_tp1.5",
-  "status": "shadow",
-  "vote_weight": 0.0,
+  "status": "probation",
+  "vote_weight": 0.8,
   "magic": 90001,
   "artifact_path": "data/models/institutional/barrier_12bar_binary_cls_20260524_093413.txt",
   "feature_schema_id": "v9_institutional_40",

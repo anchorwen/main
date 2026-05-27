@@ -327,7 +327,7 @@ strategy_lines:
     exit:
       trail_enabled: true
       trail_atr_mult: 1.5
-      trail_atr_mult_low: 1.2
+      trail_atr_mult_low: 1.8  # 均值回归低波粘滞需要更宽trailing，紧=白噪音铡刀
       trail_atr_mult_high: 2.5
       breakeven_threshold_atr: 0.5  # Phase A: 0.8→0.5 — mean-reversion profits are smaller, need faster breakeven lock
       flip_exit_enabled: false

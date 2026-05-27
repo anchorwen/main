@@ -47,7 +47,8 @@ Execution events → OutcomeCollector → DecisionScorer → BrainPerformanceTra
 | FIX-20260524-014 | 2026-05-24 | cursor-agent | — | MODULE_SOURCE_MAP: add scripts/trade_quality_report.py. Mypy fix (1→0 — Counter[str] annotation for rejected_reasons). | RC-02 |
 | FIX-20260524-011 | 2026-05-24 | cursor-agent | — | Variable shadowing fix: renamed outcome→resolved in accepted/rejected label blocks. Mypy inferred outcome as str from earlier loop, breaking dict assignment. | RC-02 |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |
-| FIX-20260514-004 | 2026-05-14 | cursor-agent | a4a1005 | Add marginal tier (score 10-20), fix WR cliff with smooth ramp, fix DD component when PnL<=0, add marginal to all tier mappings | boundary-error |
+| FIX-20260514-004 | 2026-05-14 | cursor-agent | — | Add marginal tier (score 10-20), fix WR cliff with smooth ramp, fix DD component when PnL<=0, add marginal to all tier mappings. | RC-05 |
+| FIX-20260527-002 | 2026-05-27 | cursor-agent | — | Brain performance data contamination fix: `ingest_journal_to_tracker()` replaced `_find_brains_by_time()` (which grouped ALL consensus brains → identical records for 5 brains) with per-strategy `brain_ids` from open journal entries. Governance path upgraded to PnL-first via BrainPnLStore. Contaminated tracker records for 5 brains cleaned. | RC-11 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

@@ -47,7 +47,7 @@ def _wire_meta_pipeline(container: ServiceContainer, repo_root: Path) -> None:
         stage1_entry["artifact_path"] = str(stage1_model.resolve())
         container.brain_registry.register(stage1_entry)
         container.governance_service.register_brain(
-            stage1_entry.get("brain_id", "Meta_Stage1_Huber_V1"),
+            stage1_entry["brain_id"],
             "shadow",
         )
 
@@ -136,7 +136,7 @@ def _wire_meta_pipeline(container: ServiceContainer, repo_root: Path) -> None:
                     json.dumps(
                         {
                             "event": "meta_pipeline_wired",
-                            "stage1_brain": "Meta_Stage1_Huber_V1",
+                            "stage1_brain": stage1_entry.get("brain_id", "unknown"),
                             "stage2_filter": str(resolved_model),
                             "threshold": fc.get("threshold", 0.65),
                             "features": len(filt._feature_names),
@@ -197,7 +197,7 @@ def build_v9_shadow_container() -> ServiceContainer:
 
     container.brain_registry.register(online_entry)
     container.governance_service.register_brain(
-        online_entry.get("brain_id", "Online_MLP_V1"),
+        online_entry["brain_id"],
         "live",
     )
 
@@ -215,7 +215,7 @@ def build_v9_shadow_container() -> ServiceContainer:
             if header[:4] == b"\x08\x07\x10\x08" or header[:4] == b"\x08\x08\x10\x08":
                 container.brain_registry.register(deep_entry)
                 container.governance_service.register_brain(
-                    deep_entry.get("brain_id", "DeepResMLP_V1_Institutional"),
+                    deep_entry["brain_id"],
                     "candidate",
                 )
 

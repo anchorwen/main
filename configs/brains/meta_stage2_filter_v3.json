@@ -2,7 +2,7 @@
   "schema_version": "meta_filter_config.v1",
   "filter_id": "Meta_Stage2_Filter_V3",
   "model_path": "data/models/institutional/meta_stage2_lightgbm_20260526_121345.txt",
-  "threshold": 0.65,
+  "threshold": 0.55,
   "mode": "binary",
   "stage1_brain_id": "OU_Params_V6_Sniper",
   "feature_schema": "meta_stage2_runtime_48",

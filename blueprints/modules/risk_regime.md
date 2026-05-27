@@ -33,6 +33,8 @@ Market bars → RegimeDetector.update(bar) → regime_label (low/normal/high vol
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260527-005 | 2026-05-27 | cursor-agent | — | Cold exploration trailing bypass: Layer 1 Chandelier trail skipped when `pos.cold_explore=True`. Mean-reversion `trail_atr_mult_low` 1.2→1.8 — anti-intuitive: low vol = sticky noise, tight trail = decapitation by white noise. Breakeven ATR 0.5 defended (architect VETO on 0.3 — friction death). | RC-09, RC-12 |
+| FIX-20260527-004 | 2026-05-27 | cursor-agent | — | P0: Regime modulation override fixed — `_evaluate_strategy_lines()` now uses minimum-privilege gate fusion via `get_stricter_mode(base_mode, global_mode)`. Continuous modulation can only tighten (full→reduced→shadow), never relax a discrete hardware lock. `RegimeGate()` now receives live.yaml `regime_map` (was hardcoded default). `classify()` strategy list auto-discovered from regime_map keys (was hardcoded 5 strategies, missing statarb_m15/barrier_12bar_meta). `get_strategy_mode()` handles YAML booleans (false→shadow, true→full). Hot-reload applies regime_map updates to running RegimeGate. | RC-06 |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |
 
 ## Cross-Module Contracts

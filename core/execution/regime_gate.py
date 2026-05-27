@@ -54,6 +54,33 @@ class RegimeModulation:
     mr_risk: float  # [0, 1] mean-reversion risk
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Strictness ordering for minimum-privilege gate fusion
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_STRICTNESS: dict[str, int] = {"full": 0, "reduced": 1, "shadow": 2, "false": 3, "off": 3}
+
+
+def get_stricter_mode(base_mode: str, global_mode: str) -> str:
+    """Return the stricter of two strategy-activation modes.
+
+    Minimum-privilege principle: the discrete per-strategy ``regime_map``
+    (physics-derived: trend-following vs. mean-reversion hardware guard)
+    sets a floor that the continuous modulation can only tighten, never relax.
+
+    If the base (discrete) mode is ``"false"`` or ``"shadow"`` — the strategy
+    has no business trading in this regime — the continuous global modulation
+    is ignored entirely and the base mode is returned.
+    """
+    base_strict = _STRICTNESS.get(base_mode, 1)  # unknown → "reduced"
+    global_strict = _STRICTNESS.get(global_mode, 1)
+    if base_strict >= _STRICTNESS["shadow"]:
+        return base_mode  # hardware lock — continuous modulation cannot override
+    if global_strict > base_strict:
+        return global_mode
+    return base_mode
+
+
 def compute_continuous_regime_modulation(
     trend_strength: float,  # Kalman |velocity| / uncertainty  [0, 1]
     vol_pct: float,  # ATR rolling percentile           [0, 1]
@@ -233,7 +260,7 @@ class RegimeGate:
         adx_mild_threshold: float = 20.0,
         atr_high_vol_pct: float = 0.80,
         atr_low_vol_pct: float = 0.20,
-        regime_map: dict[str, dict[str, str]] | None = None,
+        regime_map: dict[str, dict[str, Any]] | None = None,
         adx_period: int = 14,
         di_period: int = 14,
     ):
@@ -634,7 +661,10 @@ class RegimeGate:
         #     continuous modulation (position_size_mult, confidence_threshold, etc.)
         #     is applied on top via strategy.evaluate() ──
         gates = {}
-        for sname in ["barrier_12bar", "micro_3bar", "micro_m15", "micro_h1", "statarb_dynamic"]:
+        _all_strategies: set[str] = set()
+        for _rmap in self.regime_map.values():
+            _all_strategies.update(_rmap.keys())
+        for sname in sorted(_all_strategies):
             gates[sname] = self.get_strategy_mode(sname)
 
         return {
@@ -673,13 +703,21 @@ class RegimeGate:
         }
 
     def get_strategy_mode(self, strategy_name: str) -> str:
-        """Return active mode: "full" | "reduced" | "shadow" (never "off")."""
+        """Return active mode: "full" | "reduced" | "shadow" (never "off").
+
+        Handles YAML booleans: ``false`` (Python ``False``) → ``"shadow"``
+        (hard lock — strategy has no business in this regime), ``true``
+        (Python ``True``) → ``"full"``.
+        """
         gates = self.regime_map.get(self._current_regime, {})
         mode = gates.get(strategy_name, "reduced")
-        # v3.0: remap any legacy "off" to "shadow"
-        if mode == "off":
+        if isinstance(mode, bool):
+            return "full" if mode else "shadow"
+        if mode == "off" or mode == "false":
             return "shadow"
-        return mode
+        if isinstance(mode, str):
+            return mode
+        return "reduced"
 
     def is_counter_trend(self, trade_direction: str) -> bool:
         if trade_direction == "neutral":

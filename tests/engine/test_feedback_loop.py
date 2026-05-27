@@ -642,8 +642,9 @@ class TestIngestJournalToTracker:
         base = tmp_path / "data"
         base.mkdir()
 
-        # New feedback_loop resolves close entries by matching open→close pairs.
-        # Create both open and close journal entries with detail.price for P&L calc.
+        # New feedback_loop resolves brain attribution from the open journal
+        # entry's brain_ids field (per-strategy dispatch), NOT from decision
+        # records.  The open entry must include brain_ids.
         journal = base / "live_trade_journal.jsonl"
         journal.write_text(
             json.dumps(
@@ -655,6 +656,7 @@ class TestIngestJournalToTracker:
                     "symbol": "XAUUSDc",
                     "side": "long",
                     "volume": 0.01,
+                    "brain_ids": ["V9", "XGB"],
                     "detail": {"request": {"price": 2600.0}},
                 }
             )
@@ -673,31 +675,18 @@ class TestIngestJournalToTracker:
             encoding="utf-8",
         )
 
-        dec_dir = base / "decisions" / "2026-05-04"
-        dec_dir.mkdir(parents=True)
-        decisions = dec_dir / "XAUUSDc.decisions.jsonl"
-        decisions.write_text(
-            json.dumps(
-                {
-                    "event_time": "2026-05-04T09:00:00Z",
-                    "labels": {"decision_side": "LONG"},
-                    "attribution": {"supporting_brains": ["V9", "XGB"], "opposing_brains": ["OU"]},
-                }
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-
         tracker = BrainPerformanceTracker(window_size=100)
         report = ingest_journal_to_tracker(tracker, base_dir=str(base), date_filter="2026-05-04")
 
         assert report["mode"] == "multi_brain"
-        # New code attributes to both supporting + opposing brains (OU gets penalty)
-        assert report["updates_applied"] == 3
-        assert set(report["brain_ids_updated"]) == {"V9", "XGB", "OU"}
+        # Only brains in the open entry's brain_ids list get outcomes.
+        # OU is not in brain_ids → no outcome recorded.
+        assert report["updates_applied"] == 2
+        assert set(report["brain_ids_updated"]) == {"V9", "XGB"}
         assert tracker.get_brain_summary("V9")["sample_count"] == 1
         assert tracker.get_brain_summary("XGB")["sample_count"] == 1
-        assert tracker.get_brain_summary("OU")["sample_count"] == 1
+        # OU was not dispatched for this trade → no tracker entry
+        assert tracker.get_brain_summary("OU")["sample_count"] == 0
 
     def test_multi_brain_no_decision_match(self, tmp_path: Path):
         from core.feedback.brain_performance_tracker import BrainPerformanceTracker
