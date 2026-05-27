@@ -670,7 +670,12 @@ class StrategyLine:
                     )
                     # Capture for downstream volume override (COLD phase exploration safety)
                     self._last_ou_result = ou_result
-                    if not ou_result["passed"]:
+                    if not ou_result["passed"] and not ou_result.get("force_min_volume"):
+                        # FIX-20260527-006: COLD phase exploration bypass.
+                        # When force_min_volume=True (ConformalOU calibrator < 50 samples),
+                        # the gate rejection is overridden — fall through to downstream
+                        # COLD exploration logic (p_win=0.50, 0.01 lot cap).
+                        # Only reject when the gate says no AND there is no exploration mandate.
                         _gd: dict[str, Any] = {}
                         _feat = ou_result.get("features", {})
                         if _feat:
@@ -807,41 +812,50 @@ class StrategyLine:
                     micro_array=micro_feature_vector,
                 )
                 if not _result.passed:
-                    import json as _json
+                    # FIX-20260527-006: COLD phase exploration bypass.
+                    # When the ConformalOU calibrator is in COLD phase
+                    # (force_min_volume=True), skip MetaFilter gate and
+                    # fall through to downstream COLD exploration logic.
+                    _ou_gate = getattr(self, "_last_ou_result", None)
+                    if _ou_gate and _ou_gate.get("force_min_volume"):
+                        _meta_p_win = None  # don't use MetaFilter p_win for cold explore
+                    else:
+                        import json as _json
 
-                    print(
-                        _json.dumps(
-                            {
-                                "event": "kelly_diag",
-                                "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
-                                "strategy": name,
-                                "stage": "meta_filter_rejected_statarb",
-                                "z_score": round(entry_z_score, 4),
-                                "z_proxy": round(_z_proxy, 4),
-                                "result_p_win": round(float(getattr(_result, "p_win", 0)), 4),
-                                "passed": False,
-                                "reason": getattr(_result, "reason", None) or "threshold",
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
-                    return StrategyDecision(
-                        strategy_name=name,
-                        magic=self.config.magic,
-                        should_trade=False,
-                        direction=direction,
-                        confidence=confidence,
-                        volume=0.0,
-                        sl=0.0,
-                        tp=0.0,
-                        hard_sl=0.0,
-                        brain_ids=brain_ids,
-                        supporting_count=support_count,
-                        total_count=total_count,
-                        regime_mode=regime_gate_mode,
-                        reason=f"meta_filter_rejected_statarb:{getattr(_result, 'reason', 'threshold')}",
-                    )
+                        print(
+                            _json.dumps(
+                                {
+                                    "event": "kelly_diag",
+                                    "time": __import__("datetime").datetime.utcnow().isoformat()
+                                    + "Z",
+                                    "strategy": name,
+                                    "stage": "meta_filter_rejected_statarb",
+                                    "z_score": round(entry_z_score, 4),
+                                    "z_proxy": round(_z_proxy, 4),
+                                    "result_p_win": round(float(getattr(_result, "p_win", 0)), 4),
+                                    "passed": False,
+                                    "reason": getattr(_result, "reason", None) or "threshold",
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                        return StrategyDecision(
+                            strategy_name=name,
+                            magic=self.config.magic,
+                            should_trade=False,
+                            direction=direction,
+                            confidence=confidence,
+                            volume=0.0,
+                            sl=0.0,
+                            tp=0.0,
+                            hard_sl=0.0,
+                            brain_ids=brain_ids,
+                            supporting_count=support_count,
+                            total_count=total_count,
+                            regime_mode=regime_gate_mode,
+                            reason=f"meta_filter_rejected_statarb:{getattr(_result, 'reason', 'threshold')}",
+                        )
                 _meta_p_win = float(_result.p_win)
                 import json as _json
 

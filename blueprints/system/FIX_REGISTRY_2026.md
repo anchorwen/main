@@ -4,6 +4,21 @@
 
 ## Fix Details
 
+### FIX-20260527-006 — COLD phase deadlock: ConformalOU + MetaFilter dual bypass unreachable
+
+- **Date**: 2026-05-27
+- **Author**: cursor-agent
+- **Root Cause**: RC-05 (boundary-error) — Two early return statements in `strategy_line.py` executed BEFORE the COLD exploration bypass logic at line 1237, making it unreachable:
+  1. ConformalOU gate rejection (line 673): `if not ou_result["passed"]` → return
+  2. MetaFilter statarb rejection (line 814): `if not result.passed` → return
+  ConformalOUGate.filter() in COLD phase returns `{passed: False, force_min_volume: True}` — the `force_min_volume=True` means "let this signal through to collect calibration data", but `passed=False` triggered the early return. Result: 22 cycles of zero trades for statarb_dynamic.
+- **Fix**:
+  1. **(Fix A)** ConformalOU rejection condition changed from `if not ou_result["passed"]` to `if not ou_result["passed"] and not ou_result.get("force_min_volume")`. When `force_min_volume=True`, skips the early return, falls through to downstream COLD exploration logic (p_win=0.50 neutral Kelly, 0.01 lot cap).
+  2. **(Fix B)** MetaFilter statarb rejection now checks `_last_ou_result.get("force_min_volume")` before returning. When cold exploration is active, sets `_meta_p_win = None` (skipping MetaFilter p_win) and continues to downstream COLD logic instead of returning rejected.
+- **Files changed**: `core/execution/strategy_line.py`
+- **Verification**: `python scripts/verify.py --quick` — all checks passed.
+- **Risk**: Low. Downstream COLD exploration safeguards remain in effect — p_win=0.50 neutral Kelly sizing, 0.01 lot hard cap, cold_explore trailing bypass (FIX-20260527-005). Total exploration budget: 50 trades × 0.01 lot × ~$0.15-0.30 = $7.50-15.
+
 ### FIX-20260527-003 — Remove hardcoded brain ID references
 
 - **Date**: 2026-05-27
