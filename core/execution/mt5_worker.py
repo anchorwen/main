@@ -16,8 +16,11 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 from concurrent.futures import Future
 from typing import Any
+
+from core.protocol.services.resilience import CircuitBreaker
 
 # ── Module-level singleton ──────────────────────────────────────────
 
@@ -59,6 +62,18 @@ class MT5Worker:
         self._thread: threading.Thread | None = None
         self._mt5: Any = None
         self._mt5_init_kwargs: dict[str, Any] = {}
+
+        # Per-command execution tracking (for hung-MT5 detection)
+        self._command_in_flight: str | None = None
+        self._last_command_start: float = 0.0
+        self._stuck_since: float | None = None  # set when first TimeoutError detected
+
+        # Circuit breaker: 3 consecutive failures → open for 60s
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=3,
+            cooldown_seconds=60.0,
+            half_open_max_calls=1,
+        )
 
     # ── Lifecycle ────────────────────────────────────────────────
 
@@ -187,6 +202,17 @@ class MT5Worker:
         """Send an order to MT5 (MT5 ``order_send`` return)."""
         return self._submit("order_send", request, timeout=timeout)
 
+    def is_stuck(self, threshold: float = 30.0) -> bool:
+        """Return True if the worker appears hung (command in-flight > *threshold* seconds)."""
+        if self._command_in_flight is None:
+            return False
+        return (time.monotonic() - self._last_command_start) > threshold
+
+    @property
+    def command_in_flight(self) -> str | None:
+        """The command currently executing on the worker thread, or None if idle."""
+        return self._command_in_flight
+
     # ── Internals ────────────────────────────────────────────────
 
     def _submit(
@@ -200,11 +226,30 @@ class MT5Worker:
         if not self._running:
             raise RuntimeError(f"MT5Worker._submit({command}): worker not running")
 
+        # Circuit breaker: fast-fail if MT5 connectivity is known-broken
+        if command not in ("_reconnect",) and not self.circuit_breaker.allow_request():
+            raise TimeoutError(
+                f"MT5Worker.{command} rejected: circuit OPEN "
+                f"(trips={self.circuit_breaker.get_status()['total_trips']})"
+            )
+
+        # Fast-fail: if the worker is already stuck on a hung C++ call,
+        # there is no point queuing.  The caller should use cached/stub data.
+        if self.is_stuck(threshold=max(timeout, 30.0)):
+            raise TimeoutError(
+                f"MT5Worker.{command} rejected: worker stuck on "
+                f"'{self._command_in_flight}' for "
+                f"{time.monotonic() - self._last_command_start:.0f}s"
+            )
+
         future: Future = Future()
         self._queue.put((future, command, args, _kwargs or {}))
         try:
             return future.result(timeout=timeout)
         except TimeoutError:
+            # Mark worker as stuck so future callers fast-fail
+            if self._stuck_since is None:
+                self._stuck_since = time.monotonic()
             raise TimeoutError(f"MT5Worker.{command} timed out after {timeout}s") from None
 
     # ── Worker loop (runs on the dedicated MT5 thread) ───────────
@@ -261,10 +306,21 @@ class MT5Worker:
                     future.set_exception(ValueError(f"Unknown MT5Worker command: {command}"))
                     continue
 
+                # Track command execution for hung-MT5 detection
+                self._command_in_flight = command
+                self._last_command_start = time.monotonic()
                 result = handler(args, kwargs)
                 future.set_result(result)
+                # Circuit breaker: only record business commands, not housekeeping
+                if command not in ("_reconnect",):
+                    self.circuit_breaker.record_success()
             except Exception as exc:
                 future.set_exception(exc)
+                if command not in ("_reconnect",):
+                    self.circuit_breaker.record_failure()
+            finally:
+                self._command_in_flight = None
+                self._stuck_since = None  # clear stuck marker on successful completion
 
         # ── Shutdown ──
         if self._mt5 is not None:

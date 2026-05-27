@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-05-27T11:54:08Z
+> **自动生成**: 2026-05-27T13:54:45Z
 
 ## Package-Level Dependencies
 
@@ -191,7 +191,7 @@
 - `meta_signal_filter.py` → `core.brains.online_mlp_model`, `core.features.schemas.microstructure_schema`
 - `micro_strategy.py` → `core.execution.strategy_line`
 - `mt5_broker_adapter.py` → `core.execution.mt5_worker`
-- `mt5_worker.py` → (无内部依赖)
+- `mt5_worker.py` → `core.protocol.services.resilience`
 - `order_state_machine.py` → `core.execution.gateway_contracts`
 - `paper_gateway.py` → `core.execution.fill_simulator`, `core.execution.gateway_contracts`, `core.execution.order_state_machine`, `core.observability.metric_names`
 - `portfolio_risk.py` → `core.execution.capital_allocator`

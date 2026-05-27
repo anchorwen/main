@@ -105,7 +105,9 @@
 
 | Monitor | What to check | Current state |
 |---------|--------------|---------------|
-| P0 deploy health | 24h of stable running with no regime-related dispatch errors | AWAITING DEPLOY |
+| P0 deploy health | 24h of stable running with no regime-related dispatch errors | DEPLOYED 2026-05-27 11:50 UTC — monitoring |
 | MetaLabel raw_score count | `count(live meta_label raw_score samples) >= 200` | 0 |
 | OU COLD phase exit | `ConformalCalibrator.sample_count >= 50` (exit COLD, enter WARM) | 0 |
 | statarb_m15 reentry timeout | `elapsed_since_exit for statarb_m15 sl_hit lock` | 13.7 days (should be ≤ 3 days with TTL) |
+| OFI toxicity threshold | Review OFI z-score distribution after 1 week live data → calibrate ±2.0 gate | 0 bars collected (need ~500+ for stable z-score) |
+| Phase 1 live verification | 24h monitoring: check `regime_gate_failed` count = 0, `circuit OPEN` count = 0, exit management continues for existing positions. If CircuitBreaker trips > 2× during normal hours → widen threshold. Verify `stale_counter` always resets to 0 after classify success. | DEPLOYED 2026-05-27 13:24 UTC — 3 cycles clean. Review 2026-05-28 |

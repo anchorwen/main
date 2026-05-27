@@ -32,6 +32,52 @@
 - **Verification**: `python scripts/verify.py --quick` passed. 24 pytest tests passed.
 - **Risk**: Low. OFI=0.0 when MT5 tick data unavailable → fail-open (no false blocks). 100-bar buffer at M5 = ~8.3h context — sufficient for stable z-score estimation per engineer review.
 
+### FIX-20260527-010 — Phase 1: Critical Fail-Open Fixes (Global Contract Audit Layer 3)
+
+- **Date**: 2026-05-27
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (contract-violation) — Three systemic fail-open patterns discovered during global contract audit of 22 runtime-live dependency modules:
+
+  1. **RegimeGate `regime_gate = None` on ANY exception** (live_cycle.py:5277): A single exception in `regime_gate.classify()` silently disabled ALL trend-based strategy guards for the cycle. `except Exception` caught everything including programming errors. The local variable override meant the damage was limited to one cycle, but within that cycle all strategies operated unguarded.
+
+  2. **MT5Worker no per-command execution tracking**: No way to detect a hung C++ call on the worker thread. After a `TimeoutError` on the caller side, subsequent callers had no mechanism to fast-fail — they queued into a blocked thread and waited for their own timeout.
+
+  3. **CircuitBreaker defined but unused**: `core/protocol/services/resilience.py:CircuitBreaker` class existed but was never wired into MT5Worker. live_cycle.py used an ad-hoc `_consecutive_degraded_cycles` counter + `_circuit_breaker_tripped` bool instead.
+
+- **Fix**: Three interlocking fixes under a single FIX ID:
+
+  **1A — RegimeGate fail-open→fail-closed with stale counter**:
+  - Added `_regime_gate_stale_counter` to `LiveCycleState` (increments on each classify() failure)
+  - ≤12 cycles (1 hour at M5): uses `state.regime_gate` (last valid) — continues with slightly stale but reasonable regime data
+  - >12 cycles: calls `RegimeGate.default_fail_closed()` — all strategies "shadow", blocks new entries
+  - Counter resets to 0 on successful classify()
+  - Architect guardrail: fail-closed only blocks new position entries; Exit Manager continues managing existing positions (stop-loss, take-profit, trailing stops)
+  - Added `error_type` to the diagnostic log entry
+
+  **1B — MT5Worker per-command execution tracking**:
+  - Added `_command_in_flight: str|None`, `_last_command_start: float`, `_stuck_since: float|None`
+  - Added `is_stuck(threshold)` public method and `command_in_flight` property
+  - `_submit()` fast-fails with `TimeoutError` when worker is stuck (avoids queuing into blocked thread)
+  - `_run()` sets `_command_in_flight`/`_last_command_start` before handler execution, clears in `finally`
+  - `_submit()` records `_stuck_since` on first `TimeoutError` for diagnostics
+
+  **1C — CircuitBreaker wired into MT5Worker**:
+  - MT5Worker.__init__() creates `CircuitBreaker(failure_threshold=3, cooldown_seconds=60.0, half_open_max_calls=1)`
+  - `_submit()` checks `circuit_breaker.allow_request()` before queuing (skip for `_reconnect` commands)
+  - `_run()` calls `record_success()` / `record_failure()` per business command (skip for `_reconnect`)
+  - After 3 consecutive MT5 call failures → circuit OPEN for 60s → all non-reconnect calls fast-fail
+  - After 60s cooldown → HALF_OPEN → allows 1 probe call → success resets to CLOSED, failure re-opens
+
+  **New method — RegimeGate.default_fail_closed()**:
+  - Static factory returning a RegimeGate with all strategies locked to "shadow" in all regimes
+  - Used by live_cycle.py when stale counter exceeds threshold
+  - Self-documenting: the name makes the intent explicit
+
+- **Files changed**: `core/runtime/live_cycle.py`, `core/execution/mt5_worker.py`, `core/execution/regime_gate.py`
+- **Blueprints updated**: `runtime_live.md`, `execution_orders.md`, `risk_regime.md`
+- **Verification**: `python scripts/verify.py --full` — mypy pass, ruff pass, 2706 tests passing
+- **Risk**: Low. RegimeGate stale counter defaults to fail-open (last valid) for 12 cycles before escalating to fail-closed. MT5Worker hung detection is diagnostic-only at the tracking level. Circuit breaker defaults match existing ad-hoc behavior (3 failures → block) but with proper state machine.
+
 ### FIX-20260527-009 — OFI tick index overflow: t[5]→t[6] for COPY_TICKS_ALL 8-field format
 
 - **Date**: 2026-05-27

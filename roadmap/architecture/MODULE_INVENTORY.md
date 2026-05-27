@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-27T11:54:08Z
+> **自动生成**: 2026-05-27T13:54:45Z
 > **扫描模块数**: 447
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -219,7 +219,7 @@
 | `meta_signal_filter.py` | ✅ active | FilterResult, MetaSignalFilter | 19 | 878 | — | |
 | `micro_strategy.py` | ✅ active | MicroStrategy | 1 | 85 | — | |
 | `mt5_broker_adapter.py` | ✅ active | MT5BrokerAdapter | 11 | 145 | — | |
-| `mt5_worker.py` | ✅ active | MT5Worker | 18 | 285 | — | |
+| `mt5_worker.py` | ✅ active | MT5Worker | 20 | 341 | — | |
 | `order_state_machine.py` | ✅ active | OrderStateMachine | 9 | 101 | — | |
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 141 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 529 | — | |
@@ -228,7 +228,7 @@
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
 | `quality_contracts.py` | ✅ active | ExecutionBenchmark, ExecutionQualityMetric, ImplementationShortfall, ExecutionQualityReport | 3 | 138 | — | |
 | `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 7 | 359 | — | |
-| `regime_gate.py` | ✅ active | RegimeModulation, OURegime2D, RegimeGate | 38 | 739 | — | |
+| `regime_gate.py` | ✅ active | RegimeModulation, OURegime2D, RegimeGate | 39 | 757 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 64 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 9 | 248 | — | |
@@ -441,7 +441,7 @@
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 28 | 7081 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 28 | 7097 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 98 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 286 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |

@@ -195,6 +195,9 @@ class LiveCycleState:
     _consecutive_degraded_cycles: int = 0
     _circuit_breaker_tripped: bool = False
 
+    # Regime gate fail-closed: stale counter for fail-open → fail-closed migration
+    _regime_gate_stale_counter: int = 0
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -5234,6 +5237,7 @@ def execute_live_cycle(
                 regime_gate_result = regime_gate.classify(
                     atr_val, atr_pct, vol_pct=vol_pct, vol_regime=vol_regime
                 )
+                state._regime_gate_stale_counter = 0  # successful classify resets stale counter
                 if regime_info:
                     regime_info["regime_gate"] = regime_gate_result
                 trend_direction = regime_gate_result.get("primary_trend", "neutral")
@@ -5262,19 +5266,31 @@ def execute_live_cycle(
                     flush=True,
                 )
             except Exception as _rg_exc:
+                state._regime_gate_stale_counter += 1
+                _stale_n = state._regime_gate_stale_counter
+                if _stale_n > 12:  # 1 hour at M5 — fail-closed
+                    regime_gate = RegimeGate.default_fail_closed()
+                    _action = "fail_closed_all_shadow"
+                elif state.regime_gate is not None:
+                    regime_gate = state.regime_gate
+                    _action = f"using_last_valid_stale_{_stale_n}"
+                else:
+                    regime_gate = RegimeGate.default_fail_closed()
+                    _action = "fail_closed_no_prior"
                 print(
                     json.dumps(
                         {
                             "event": "regime_gate_failed",
                             "time": _utc_iso(),
                             "error": str(_rg_exc),
-                            "action": "disabling_regime_gate_for_cycle",
+                            "error_type": type(_rg_exc).__name__,
+                            "action": _action,
+                            "stale_counter": _stale_n,
                         },
                         ensure_ascii=False,
                     ),
                     flush=True,
                 )
-                regime_gate = None
 
         # ── Pre-close check: stop new positions / flatten before market close ──
         pre_close = _check_pre_close(config, state)

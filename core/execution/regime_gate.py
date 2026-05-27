@@ -319,6 +319,24 @@ class RegimeGate:
         self._rv_buffer_max: int = 500
         self._m5_close_window: list[float] = []  # recent 12 M5 closes for RV calc
 
+    @staticmethod
+    def default_fail_closed() -> RegimeGate:
+        """Return a RegimeGate with all strategies locked to "shadow".
+
+        Blocks all new position entries while allowing Exit Manager to
+        continue managing existing positions (stop-loss movement, take-profit,
+        trailing stops).  Used when regime computation fails beyond the stale
+        tolerance — fail-closed for entries, fail-open for exits.
+        """
+        all_shadow: dict[str, dict[str, str]] = {}
+        for regime in ("trending", "mild_trend", "ranging", "high_vol", "normal"):
+            all_shadow[regime] = {
+                "barrier_12bar": "shadow",
+                "micro_3bar": "shadow",
+                "statarb_dynamic": "shadow",
+            }
+        return RegimeGate(regime_map=all_shadow)
+
     # ── Properties ──
 
     @property
