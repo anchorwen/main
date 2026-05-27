@@ -14,6 +14,7 @@ import json
 import signal
 import sys
 import time
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -1905,9 +1906,16 @@ def main(argv: list[str] | None = None) -> int:
                 if not should_continue:
                     break
             except Exception as exc:
+                _tb = traceback.format_exc()
                 print(
                     json.dumps(
-                        {"event": "cycle_error", "time": _utc_iso(), "error": str(exc)},
+                        {
+                            "event": "cycle_error",
+                            "time": _utc_iso(),
+                            "error": str(exc),
+                            "error_type": type(exc).__name__,
+                            "traceback": _tb,
+                        },
                         ensure_ascii=False,
                     ),
                     flush=True,

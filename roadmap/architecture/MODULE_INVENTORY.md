@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-27T11:16:52Z
+> **自动生成**: 2026-05-27T11:54:08Z
 > **扫描模块数**: 447
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -263,7 +263,7 @@
 |------|------|----|------|------|------|------|
 | `daily_computer.py` | ✅ active | DailyFeatureComputer | 22 | 726 | — | |
 | `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 8 | 225 | — | |
-| `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 20 | 546 | — | |
+| `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 20 | 552 | — | |
 | `v9_live_computer.py` | ✅ active | V9LiveFeatureComputer | 15 | 340 | — | |
 | `v9_micro_computer.py` | ✅ active | V9MicroComputer | 3 | 98 | — | |
 
@@ -441,7 +441,7 @@
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 28 | 7075 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 28 | 7081 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 98 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 286 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
@@ -535,7 +535,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 369 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 13 | 2139 | — | |
+| `live_intent_loop.py` | ✅ active | — | 13 | 2147 | — | |
 | `live_launcher.py` | ✅ active | — | 13 | 749 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 484 | — | |

@@ -4863,9 +4863,15 @@ def execute_live_cycle(
                 micro_sequences = micro_feature_computer.compute_all_sequences(32)
             except Exception:
                 pass
-            micro_features = micro_feature_computer.compute_all()
-            micro_feature_dict = micro_features
-            micro_feature_vector = micro_feature_adapter.build_model_input(micro_features).ravel()
+            try:
+                micro_features = micro_feature_computer.compute_all()
+                micro_feature_dict = micro_features
+                micro_feature_vector = micro_feature_adapter.build_model_input(
+                    micro_features
+                ).ravel()
+            except Exception:
+                micro_feature_dict = {}
+                micro_feature_vector = np.zeros(9, dtype=np.float64)
         else:
             micro_feature_vector = np.zeros(9, dtype=np.float64)
 

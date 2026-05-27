@@ -437,18 +437,24 @@ class MicrostructureFeatureComputer:
         # Computed from tick volume + flags (bid/ask direction).
         # Per-bar OFI raw → rolling z-score over 100-bar buffer.
         # NOT part of ML feature schema — consumed only by strategy_line toxicity gate.
-        _vols = np.array([float(t[4]) if len(t) > 4 else 1.0 for t in ticks], dtype=np.float64)
-        _flgs = np.array([int(t[5]) if len(t) > 5 else 4 for t in ticks], dtype=np.int32)
-        _bid_mask = (_flgs == 1) | (_flgs == 4)
-        _ask_mask = _flgs == 2
-        _bid_vol = float(np.sum(_vols[_bid_mask]))
-        _ask_vol = float(np.sum(_vols[_ask_mask]))
-        _total_vol = _bid_vol + _ask_vol
-        _ofi_raw = (_bid_vol - _ask_vol) / _total_vol if _total_vol > 0 else 0.0
-        self._ofi_buffer.append(_ofi_raw)
-        _ofi_mean = float(np.mean(self._ofi_buffer)) if self._ofi_buffer else 0.0
-        _ofi_std = float(np.std(self._ofi_buffer)) if len(self._ofi_buffer) > 1 else 1e-8
-        result["OFI"] = float((_ofi_raw - _ofi_mean) / _ofi_std) if _ofi_std > 1e-8 else 0.0
+        # Fail-open: if OFI computation fails for any reason, OFI=0.0 (gate skipped).
+        try:
+            _vols = np.array([float(t[4]) if len(t) > 4 else 1.0 for t in ticks], dtype=np.float64)
+            # COPY_TICKS_ALL returns 8-field ticks: (time, bid, ask, last, volume, time_msc, flags, volume_real)
+            # flags is at index 6; index 5 is time_msc (~1.78e12 → overflows np.int32).
+            _flgs = np.array([int(t[6]) if len(t) > 6 else 4 for t in ticks], dtype=np.int32)
+            _bid_mask = (_flgs == 1) | (_flgs == 4)
+            _ask_mask = _flgs == 2
+            _bid_vol = float(np.sum(_vols[_bid_mask]))
+            _ask_vol = float(np.sum(_vols[_ask_mask]))
+            _total_vol = _bid_vol + _ask_vol
+            _ofi_raw = (_bid_vol - _ask_vol) / _total_vol if _total_vol > 0 else 0.0
+            self._ofi_buffer.append(_ofi_raw)
+            _ofi_mean = float(np.mean(self._ofi_buffer)) if self._ofi_buffer else 0.0
+            _ofi_std = float(np.std(self._ofi_buffer)) if len(self._ofi_buffer) > 1 else 1e-8
+            result["OFI"] = float((_ofi_raw - _ofi_mean) / _ofi_std) if _ofi_std > 1e-8 else 0.0
+        except Exception:
+            result["OFI"] = 0.0
 
     def _compute_tick_features_dict(
         self, *, reference_time: datetime | None = None
