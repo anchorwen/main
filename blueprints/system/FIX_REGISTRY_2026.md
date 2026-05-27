@@ -4,6 +4,34 @@
 
 ## Fix Details
 
+### FIX-20260527-007 — Asymmetric R-multiple cost-sensitive sample weighting
+
+- **Date**: 2026-05-27
+- **Author**: cursor-agent
+- **Root Cause**: RC-12 (missing-feature) — Uniform sample weighting treats all training samples equally regardless of economic impact. A -0.5R loss and a -5R loss produce identical gradients, creating a model with no incentive to avoid catastrophic trades. Existing `return_magnitude` method symmetrically weights BOTH wins and losses by |PnL|, which causes the model to chase fat-tail wins at the expense of win rate.
+- **Fix**: Three-file implementation:
+  1. `core/training/custom_objectives.py`: Added `"loss_penalty"` branch to `compute_sample_weights()` — asymmetric cost-sensitive weighting where loss samples get `weight = 1.0 + |pnl| × penalty_factor` (default 2.0, clipped to 8.0) and win/neutral samples stay at 1.0. Forces the model to fear large-loss microstructures without chasing fat-tail wins.
+  2. `core/contracts/training/training_contract.py`: Registered `"loss_penalty"` in `VALID_SAMPLE_WEIGHTING` (line 44). Added `loss_penalty_factor: float = 2.0` field to `DatasetSpec` (line 58) for YAML-driven configuration.
+  3. `scripts/training/train.py`: Both `compute_sample_weights()` call sites now pass `loss_penalty_factor=contract.dataset.loss_penalty_factor` (kwargs).
+- **Design rationale**: Clip upper bound at 8.0 prevents single outlier samples (e.g. -15R black swan → weight=31) from dominating tree splits. Default penalty_factor=2.0 (engineer-approved) balances loss aversion against over-conservatism. YAML-overridable for strategy-specific tuning.
+- **Files changed**: `core/training/custom_objectives.py`, `core/contracts/training/training_contract.py`, `scripts/training/train.py`
+- **Verification**: `python scripts/verify.py --quick` passed. 24 pytest tests passed. `python -m pytest tests/ -k "sample_weight or custom_objectives" -q` passed.
+- **Risk**: Low. penalty_factor=2.0 with clip=8.0 is conservative. Optionally disabled by setting `sample_weighting: "none"` in training YAML.
+
+### FIX-20260527-008 — OFI (Order Flow Imbalance) toxicity gate
+
+- **Date**: 2026-05-27
+- **Author**: cursor-agent
+- **Root Cause**: RC-12 (missing-feature) — Mean-reversion strategies enter counter-trend during order-flow toxicity, where one-sided aggressive order flow signals liquidity vacuum. No existing mechanism to detect and block entry into these hostile conditions.
+- **Fix**: Two-file implementation:
+  1. `core/features/computers/microstructure_computer.py`: Added `_ofi_buffer: deque[float]` (maxlen=100, ~8.3h M5 context). `_compute_tick_features()` now computes per-bar raw OFI = (bid_vol - ask_vol) / total_vol from MT5 tick volume+flags, appends to rolling buffer, returns `OFI` as z-scored value. OFI deliberately NOT added to `FEATURE_NAMES` or any ML schema — it's a standalone risk signal.
+  2. `core/execution/strategy_line.py`: Added OFI Toxicity Gate for `statarb_dynamic` and `statarb_m15` strategies BEFORE the ConformalOU gate. When `OFI_Z > 2.0` and direction=short → hard block; when `OFI_Z < -2.0` and direction=long → hard block. Priority order: OFI toxicity → ConformalOU → MetaFilter.
+- **Critical design decision**: OFI is NOT an ML feature. Unlike Dual Assassin V2.5 which uses OFI for probability downgrading (p=0.5, distorting Kelly), this implementation uses OFI as a HARD physical gate. The model never sees OFI during training — zero train-serve skew risk (offline proxy vs online real tick PDF mismatch impossible). Hard blocks also avoid nonlinear Kelly distortions from probability manipulation.
+- **Files changed**: `core/features/computers/microstructure_computer.py`, `core/execution/strategy_line.py`
+- **Files NOT modified**: No schema files, no adapter files, no training scripts. OFI is invisible to ML pipeline.
+- **Verification**: `python scripts/verify.py --quick` passed. 24 pytest tests passed.
+- **Risk**: Low. OFI=0.0 when MT5 tick data unavailable → fail-open (no false blocks). 100-bar buffer at M5 = ~8.3h context — sufficient for stable z-score estimation per engineer review.
+
 ### FIX-20260527-006 — COLD phase deadlock: ConformalOU + MetaFilter dual bypass unreachable
 
 - **Date**: 2026-05-27

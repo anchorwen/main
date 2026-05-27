@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-27T08:11:13Z
+> **自动生成**: 2026-05-27T11:16:52Z
 > **扫描模块数**: 447
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -138,7 +138,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `label_contract.py` | ✅ active | BarrierResult, LabelContract | 11 | 549 | — | |
-| `training_contract.py` | ✅ active | DatasetSpec, LabelSpec, ArchitectureSpec, ValidationSpec, QualityGateSpec, OutputSpec, TrainingContract | 12 | 464 | — | |
+| `training_contract.py` | ✅ active | DatasetSpec, LabelSpec, ArchitectureSpec, ValidationSpec, QualityGateSpec, OutputSpec, TrainingContract | 12 | 471 | — | |
 | `training_recipe.py` | ✅ active | ModelIdentity, LabelContractRef, DataAugmentation, DataConfig, TrainingConfig, EvaluationConfig, TrainingRecipe | 6 | 386 | — | |
 
 ## core/deployment
@@ -232,7 +232,7 @@
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 64 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 9 | 248 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 14 | 1889 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 14 | 1933 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 66 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 7 | 227 | — | |
@@ -263,7 +263,7 @@
 |------|------|----|------|------|------|------|
 | `daily_computer.py` | ✅ active | DailyFeatureComputer | 22 | 726 | — | |
 | `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 8 | 225 | — | |
-| `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 20 | 527 | — | |
+| `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 20 | 546 | — | |
 | `v9_live_computer.py` | ✅ active | V9LiveFeatureComputer | 15 | 340 | — | |
 | `v9_micro_computer.py` | ✅ active | V9MicroComputer | 3 | 98 | — | |
 
@@ -498,7 +498,7 @@
 |------|------|----|------|------|------|------|
 | `checkpoint.py` | ✅ active | CheckpointInfo, CheckpointManager | 13 | 199 | — | |
 | `cpcv.py` | ✅ active | CPCVFold, CPCVResult | 9 | 252 | — | |
-| `custom_objectives.py` | ✅ active | — | 11 | 320 | — | |
+| `custom_objectives.py` | ✅ active | — | 11 | 338 | — | |
 | `dataset.py` | ✅ active | TrainingDataset | 17 | 429 | — | |
 | `evaluation_report.py` | ✅ active | SHAPReport, TrainingEvalReport | 11 | 456 | — | |
 | `experiment_tracker.py` | ✅ active | RunInfo, ExperimentTracker | 11 | 249 | — | |
@@ -655,7 +655,7 @@
 | `run_promotion.py` | ✅ active | — | 6 | 256 | — | |
 | `run_train_batch.py` | ✅ active | — | 6 | 274 | — | |
 | `scan_profitability_surface.py` | ✅ active | — | 3 | 180 | — | |
-| `train.py` | ✅ active | ModelQualityException, PipelineResult | 23 | 1985 | — | |
+| `train.py` | ✅ active | ModelQualityException, PipelineResult | 23 | 1989 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 640 | — | |
 | `train_exit_metamodel.py` | ✅ active | — | 7 | 343 | — | |
 | `train_from_csv.py` | ✅ active | MLP | 10 | 725 | — | |

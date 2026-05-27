@@ -1407,7 +1407,10 @@ def run_pipeline(
 
     if contract.dataset.sample_weighting != "none":
         sample_weight = compute_sample_weights(
-            ds.y, pnl=pnl_array, method=contract.dataset.sample_weighting
+            ds.y,
+            pnl=pnl_array,
+            method=contract.dataset.sample_weighting,
+            loss_penalty_factor=contract.dataset.loss_penalty_factor,
         )
         print(
             f"[train] Sample weights: {contract.dataset.sample_weighting} "
@@ -1457,6 +1460,7 @@ def run_pipeline(
                     y_train,
                     pnl=train_pnl,
                     method=contract.dataset.sample_weighting,
+                    loss_penalty_factor=contract.dataset.loss_penalty_factor,
                 )
             train_sw = sample_weight
 

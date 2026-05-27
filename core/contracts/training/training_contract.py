@@ -41,7 +41,13 @@ VALID_OBJECTIVE_FUNCTIONS = {
     "custom_profit_factor",
     "custom_weighted_logloss",
 }
-VALID_SAMPLE_WEIGHTING = {"none", "return_magnitude", "inverse_class_frequency", "abs_target"}
+VALID_SAMPLE_WEIGHTING = {
+    "none",
+    "return_magnitude",
+    "inverse_class_frequency",
+    "abs_target",
+    "loss_penalty",
+}
 VALID_STATUSES = {"shadow", "live", "retired", "failed"}
 
 
@@ -55,6 +61,7 @@ class DatasetSpec:
     date_range: tuple[str, str] | None = None
     min_samples_per_class: int = 100
     sample_weighting: str = "none"
+    loss_penalty_factor: float = 2.0  # used only when sample_weighting="loss_penalty"
 
     def validate(self) -> list[str]:
         issues: list[str] = []

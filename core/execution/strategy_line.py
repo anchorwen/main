@@ -652,6 +652,50 @@ class StrategyLine:
             if meta_decision is not None:
                 return meta_decision
 
+        # ── Track 3c: OFI Toxicity Gate ──
+        # Hard physical gate: when Order Flow Imbalance is extremely one-sided,
+        # physically block counter-trend mean-reversion signals. Mean-reversion
+        # against toxic order flow must surrender — the liquidity vacuum crushes
+        # any reversal attempt.
+        # OFI is NOT an ML feature — it's a standalone risk signal computed in
+        # MicrostructureFeatureComputer._compute_tick_features().
+        if name in ("statarb_dynamic", "statarb_m15") and micro_feature_dict:
+            _ofi_z = micro_feature_dict.get("OFI", 0.0)
+            if direction == "short" and _ofi_z > 2.0:
+                return StrategyDecision(
+                    strategy_name=name,
+                    magic=self.config.magic,
+                    should_trade=False,
+                    direction=direction,
+                    confidence=confidence,
+                    volume=0.0,
+                    sl=0.0,
+                    tp=0.0,
+                    hard_sl=0.0,
+                    brain_ids=brain_ids,
+                    supporting_count=support_count,
+                    total_count=total_count,
+                    regime_mode=regime_gate_mode,
+                    reason=f"ofi_toxicity_blocked_short:OFI_Z={_ofi_z:.2f}_gt_2.0",
+                )
+            if direction == "long" and _ofi_z < -2.0:
+                return StrategyDecision(
+                    strategy_name=name,
+                    magic=self.config.magic,
+                    should_trade=False,
+                    direction=direction,
+                    confidence=confidence,
+                    volume=0.0,
+                    sl=0.0,
+                    tp=0.0,
+                    hard_sl=0.0,
+                    brain_ids=brain_ids,
+                    supporting_count=support_count,
+                    total_count=total_count,
+                    regime_mode=regime_gate_mode,
+                    reason=f"ofi_toxicity_blocked_long:OFI_Z={_ofi_z:.2f}_lt_-2.0",
+                )
+
         # ── Track 3d: Conformal OU Gate (OU physics-based signal quality) ──
         # For OU strategies (statarb_dynamic M5, statarb_m15 M15), the
         # ConformalOUGate replaces the generic 47-dim LightGBM MetaFilterGate

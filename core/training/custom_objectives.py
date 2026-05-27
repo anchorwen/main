@@ -238,6 +238,7 @@ def compute_sample_weights(
     y: np.ndarray,
     pnl: np.ndarray | None = None,
     method: str = "return_magnitude",
+    **kwargs: float,
 ) -> np.ndarray:
     """Compute per-sample weights for training.
 
@@ -265,6 +266,23 @@ def compute_sample_weights(
         abs_pnl = np.clip(abs_pnl, 1e-8, None)
         weights = abs_pnl / abs_pnl.mean()
         weights = np.clip(weights, 0.1, 5.0)
+        return weights.astype(np.float64)
+
+    if method == "loss_penalty":
+        # Asymmetric cost-sensitive weighting:
+        #   - Loss samples: weight = 1.0 + |pnl| * penalty_factor
+        #   - Win samples:  weight = 1.0 (DO NOT weight wins)
+        #   - Neutral/zero: weight = 1.0
+        # Forces the model to fear large-loss microstructures
+        # without chasing fat-tail wins (which would erode win rate).
+        if pnl is None or len(pnl) == 0:
+            return np.ones(n, dtype=np.float64)
+        _penalty = float(kwargs.get("loss_penalty_factor", 2.0))
+        weights = np.ones(n, dtype=np.float64)
+        loss_mask = np.asarray(pnl, dtype=np.float64) < 0
+        abs_loss = np.abs(np.asarray(pnl, dtype=np.float64)[loss_mask])
+        weights[loss_mask] = 1.0 + abs_loss * _penalty
+        weights = np.clip(weights, 1.0, 8.0)
         return weights.astype(np.float64)
 
     if method == "abs_target":

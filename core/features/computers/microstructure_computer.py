@@ -12,6 +12,7 @@ Features computed per bar:
 
 from __future__ import annotations
 
+from collections import deque
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -78,6 +79,7 @@ class MicrostructureFeatureComputer:
         self._mt5 = mt5_module
         self._symbol = symbol
         self._worker = mt5_worker
+        self._ofi_buffer: deque[float] = deque(maxlen=100)  # 100 bars × 5min ≈ 8.3h OFI context
 
     # ── Backward-compatible single-bar API ──────────────────────────────
 
@@ -430,6 +432,23 @@ class MicrostructureFeatureComputer:
         t1 = float(ticks[-1][0])
         duration = t1 - t0
         result["tick_velocity"] = float(len(ticks) / duration) if duration > 0 else 0.0
+
+        # ── OFI (Order Flow Imbalance) for toxicity gate ──
+        # Computed from tick volume + flags (bid/ask direction).
+        # Per-bar OFI raw → rolling z-score over 100-bar buffer.
+        # NOT part of ML feature schema — consumed only by strategy_line toxicity gate.
+        _vols = np.array([float(t[4]) if len(t) > 4 else 1.0 for t in ticks], dtype=np.float64)
+        _flgs = np.array([int(t[5]) if len(t) > 5 else 4 for t in ticks], dtype=np.int32)
+        _bid_mask = (_flgs == 1) | (_flgs == 4)
+        _ask_mask = _flgs == 2
+        _bid_vol = float(np.sum(_vols[_bid_mask]))
+        _ask_vol = float(np.sum(_vols[_ask_mask]))
+        _total_vol = _bid_vol + _ask_vol
+        _ofi_raw = (_bid_vol - _ask_vol) / _total_vol if _total_vol > 0 else 0.0
+        self._ofi_buffer.append(_ofi_raw)
+        _ofi_mean = float(np.mean(self._ofi_buffer)) if self._ofi_buffer else 0.0
+        _ofi_std = float(np.std(self._ofi_buffer)) if len(self._ofi_buffer) > 1 else 1e-8
+        result["OFI"] = float((_ofi_raw - _ofi_mean) / _ofi_std) if _ofi_std > 1e-8 else 0.0
 
     def _compute_tick_features_dict(
         self, *, reference_time: datetime | None = None
