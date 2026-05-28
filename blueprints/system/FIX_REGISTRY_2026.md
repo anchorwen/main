@@ -57,6 +57,23 @@
 - **Verification**: `python scripts/verify.py --full` — mypy pass, ruff pass, 2706 tests passing
 - **Risk**: Low. TTL defaults to no-op when `entry_half_life=0` (non-OU strategies). For statarb_dynamic, TTL=12.1h is conservative — normal SL recovery should happen within 30-60 minutes. The TTL timeline sits well above the 180s minimum cooldown (unchanged) and below the "obvious regime shift" threshold (24h+). Existing confidence improvement + price confirmation checks remain active within the TTL window — they only get bypassed after TTL expiry.
 
+### FIX-20260528-014 — Config SSOT Hygiene: Brain Filename ↔ brain_id Alignment + Magic Collision Resolution
+
+- **Date**: 2026-05-28
+- **Author**: cursor-agent
+- **Root Cause**: RC-09 (config-drift) — 5 brain config filenames never matched their brain_id field (e.g., `ou_params_v6.json` → brain_id `OU_Params_V6_Sniper`). BrainLifecycleManager's SSOT enforcement logged 5 warnings at every startup. Magic 90001 was shared by Meta_Stage1_Huber_V1 (frozen, disabled) and Meta_Stage1_Binary_Cls_V1 (probation, active) — intentionally set by FIX-20260524-036 but functionally a collision. Neither issue affected runtime (brain_id read from JSON content, not filename; Huber disabled so no magic routing conflict) — but they produced noise that could mask real errors.
+
+- **Fix**:
+  1. Renamed 5 brain config files via `git mv` to match their brain_id
+  2. Updated `configs/live.yaml` registry_entries paths (5 entries)
+  3. Updated `apps/engine/bootstrap_v9.py` hardcoded path
+  4. Resolved magic collision: Meta_Stage1_Huber_V1 magic 90001→90011 (original pre-FIX-20260524-036 value)
+
+- **Files changed**: `configs/brains/*.json` (5 renamed), `configs/live.yaml`, `apps/engine/bootstrap_v9.py`
+- **Blueprints updated**: `runtime_live.md`
+- **Verification**: `python scripts/verify.py --full` — mypy pass, ruff pass, 2706 tests pass
+- **Risk**: Zero. Filename changes are cosmetic — system reads brain_id from JSON content. Huber is disabled — magic change has no effect on MT5 order routing.
+
 ### FIX-20260528-012 — ConformalCalibrator cold_start_from_journal: JOIN p_win from Accepted → Closed Entries
 
 - **Date**: 2026-05-28

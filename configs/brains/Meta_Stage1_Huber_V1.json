@@ -12,7 +12,7 @@
   "model_version": "barrier_12bar_regression_huber_retrained_sl3_tp1.5",
   "status": "frozen",
   "vote_weight": 0.0,
-  "magic": 90001,
+  "magic": 90011,
   "artifact_path": "data/models/institutional/barrier_12bar_regression_huber_20260524_092113.txt",
   "feature_schema_id": "v9_institutional_40",
   "training_contract": "barrier_12bar_regression_huber",

@@ -34,7 +34,7 @@ def _wire_meta_pipeline(container: ServiceContainer, repo_root: Path) -> None:
     assert container.governance_service is not None
 
     # ── Stage 1: Register Huber regression brain ──
-    stage1_config_path = repo_root / "configs" / "brains" / "meta_stage1_huber_v1.json"
+    stage1_config_path = repo_root / "configs" / "brains" / "Meta_Stage1_Huber_V1.json"
     stage1_model = (
         repo_root
         / "data"
