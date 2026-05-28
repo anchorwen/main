@@ -136,7 +136,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Evolution Roadmap (开单/止损/止盈 机构化路线图)
 
-> **状态**: Phase 1/2/3 已全部交付 (FIX-20260517-018 ~ 022)。仅剩 Phase 4 动态 SL/TP 校准。
+> **状态**: Phase 1/2/3/4 已全部交付 (FIX-20260517-018 ~ 022, FIX-20260525-012)。MetaExitEngine-Watchdog 紧急度集成已交付 (FIX-20260528-019)。
 
 | Phase | 范围 | 关键改动 | 依赖 |
 |-------|------|----------|------|
