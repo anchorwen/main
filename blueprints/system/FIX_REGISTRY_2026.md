@@ -112,6 +112,26 @@
 - **Risk**: This is a PREPARATORY config change. Full pipeline retraining (label rebuild → brain retrain → MetaFilter recalibration) still required before deploying new brains. Current barrier_12bar already blocked by MetaFilter (negative Kelly) — no live impact from config change alone.
 - **Pipeline required**: label_builder.py (SL=1.5/TP=1.5 labels) → train.py (retrain brains) → build_meta_features.py → train_meta_model.py (recalibrate MetaFilter) → deploy
 
+### FIX-20260528-016 — _build_meta_feature_vector 43→40 dim: Remove OU Augmentation from Feature Vector
+
+- **Date**: 2026-05-28
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (contract-violation) — `_build_meta_feature_vector()` at live_cycle.py:2808 was hardcoded to build 43-dim vectors (40 V9 institutional features + 3 OU physics features: ou_z_score, ou_half_life, ou_theta). The retrained Meta_Stage1_MetaLabel_Binary_V1 model was trained on 40 features (V9-only, no OU augmentation) — see FIX-20260528-013 (barrier_12bar RR symmetry rebuild) and FIX-20260528-015 (JSON config fix). The JSON config was corrected in FIX-20260528-015 (feature_schema v9_40dim_ou3→v9_40dim, features list 43→40), but the runtime still produced 43-dim vectors because the function concatenated OU features regardless of config. This caused `feature_dimension_mismatch: expected 40, got 43` at inference time, making the meta-labeler brain vote neutral on every cycle.
+
+- **Fix**:
+  - Removed OU feature concatenation (ou_z_score, ou_half_life, ou_theta) from feature vector assembly
+  - OU params still computed from statarb brain adapter and returned in the diagnostic dict
+  - Changed `len(_features) == 43` to `len(_features) == 40` in both Source 1 (brain config) and Source 2 (model metadata) feature name lookups
+  - Removed early return `if ou_params is None: return None, None` — OU params are now diagnostic-only, so their failure doesn't block the 40-dim vector build
+  - Added early return `if not raw_features: return None, None` — V9 features are the actual prerequisite
+  - Removed Step 2 (z_score clipping) — was only needed for OU features in the vector
+  - Legacy fallback path (V9_INSTITUTIONAL_40_FEATURES) no longer appends OU values
+
+- **Files changed**: `core/runtime/live_cycle.py`
+- **Blueprints updated**: `blueprints/modules/runtime_live.md`, `blueprints/system/FIX_REGISTRY.md`
+- **Verification**: `python scripts/verify.py --quick` — mypy pass, ruff pass, blueprint compliance pass
+- **Risk**: Low — this is a pure runtime fix aligning feature vector dimension with the already-deployed model config. The model was already trained on 40-dim V9 features; the runtime was the only outlier.
+
 ### FIX-20260527-010 — Phase 1: Critical Fail-Open Fixes (Global Contract Audit Layer 3)
 
 - **Date**: 2026-05-27

@@ -2812,17 +2812,16 @@ def _build_meta_feature_vector(
     mid_price: float | None,
     symbol: str,
 ) -> tuple[Any, dict[str, float] | None]:
-    """Build 43-dim raw feature vector for meta-labeling binary classifier.
+    """Build 40-dim raw feature vector for meta-labeling binary classifier.
 
     The meta labeler (Meta_Stage1_MetaLabel_Binary_V1) was trained on
-    40 raw V9 institutional features + 3 OU physics features WITHOUT
-    z-score normalization.  This function builds the same 43-dim raw
-    vector at inference time.
+    40 raw V9 institutional features WITHOUT z-score normalization.
+    This function builds the same 40-dim raw vector at inference time.
 
     Returns (feature_vector, ou_params) where:
-      - feature_vector is a 1×43 np.ndarray (float32)
+      - feature_vector is a 1×40 np.ndarray (float32)
       - ou_params is {z_score, half_life, theta} for diagnostic logging
-      - returns (None, None) if OU params cannot be computed
+      - returns (None, None) if V9 features cannot be read from feature store
     """
     import numpy as np
 
@@ -2845,14 +2844,9 @@ def _build_meta_feature_vector(
             except Exception:
                 pass
 
-    if ou_params is None:
-        return None, None
-
-    # ── Step 2: Clip z_score to training boundary [1.3, 2.5] ──
-    z_clipped = max(1.3, min(2.5, ou_params["z_score"]))
-    hl = ou_params["half_life"] if ou_params["half_life"] != float("inf") else 999.0
-
-    # ── Step 3: Read raw V9 features from feature store ──
+    # ═══════════════════════════════════════════════════════════════
+    # Step 2: Read raw V9 features from feature store (40-dim)
+    # ═══════════════════════════════════════════════════════════════
     raw_features: dict[str, float] = {}
     try:
         record = feature_store.latest(symbol, "M5", schema_name="v9_institutional_40")
@@ -2861,7 +2855,7 @@ def _build_meta_feature_vector(
     except Exception:
         pass
 
-    # ── Step 4: Build 43-dim raw vector in TRAINING feature order ──
+    # ── Step 3: Build 40-dim raw vector in TRAINING feature order ──
     # FIX-20260525-026: The V9_INSTITUTIONAL_40_FEATURES schema order
     # (M5→H1, OU_Theta/Hurst blocked at end) does NOT match the training
     # order (H1→M5, OU_Theta/Hurst inline per-TF).  LightGBM uses
@@ -2879,7 +2873,7 @@ def _build_meta_feature_vector(
             or "barrier_12bar_meta" in str(b_info.get("contract_group", "")).lower()
         ):
             _features = b_info.get("features")
-            if _features and isinstance(_features, list) and len(_features) == 43:
+            if _features and isinstance(_features, list) and len(_features) == 40:
                 _feature_names = [str(f) for f in _features]
                 break
 
@@ -2895,19 +2889,17 @@ def _build_meta_feature_vector(
             try:
                 _meta = json.loads(Path(_meta_path).read_text(encoding="utf-8"))
                 _names = _meta.get("feature_names")
-                if _names and isinstance(_names, list) and len(_names) == 43:
+                if _names and isinstance(_names, list) and len(_names) == 40:
                     _feature_names = [str(f) for f in _names]
             except Exception:
                 pass
 
-    # Build full feature dict: raw V9 values + OU augmentation
-    _full_dict: dict[str, float] = dict(raw_features)
-    _full_dict["ou_z_score"] = z_clipped
-    _full_dict["ou_half_life"] = hl
-    _full_dict["ou_theta"] = ou_params["theta"]
+    if not raw_features:
+        return None, None
 
+    # ── Step 3: Assemble 40-dim vector in TRAINING feature order ──
     if _feature_names is not None:
-        values = [float(_full_dict.get(name, 0.0)) for name in _feature_names]
+        values = [float(raw_features.get(name, 0.0)) for name in _feature_names]
     else:
         # Legacy fallback with a loud diagnostic — this path should
         # never be reached in production, but preserves back-compat
@@ -2922,9 +2914,6 @@ def _build_meta_feature_vector(
         from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
 
         values = [float(raw_features.get(name, 0.0)) for name in V9_INSTITUTIONAL_40_FEATURES]
-        values.append(z_clipped)
-        values.append(hl)
-        values.append(ou_params["theta"])
 
     feature_vec = np.array(values, dtype=np.float32).reshape(1, -1)
     return feature_vec, ou_params
