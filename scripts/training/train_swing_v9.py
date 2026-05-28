@@ -275,6 +275,7 @@ def main() -> None:
     brain_config = {
         "brain_id": brain_id,
         "brain_type": "xgboost_v9",
+        "contract_group": args.strategy,
         "feature_schema": feature_schema_id,
         "feature_schema_id": feature_schema_id,
         "model_path": str(model_path),

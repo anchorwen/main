@@ -1,6 +1,7 @@
 {
   "brain_id": "Swing_V9_M15_V1",
   "brain_type": "xgboost_v9",
+  "contract_group": "m15_swing",
   "feature_schema": "swing_enhanced_35",
   "feature_schema_id": "swing_enhanced_35",
   "model_path": "data\\models\\swing\\Swing_V9_M15_V1.json",
