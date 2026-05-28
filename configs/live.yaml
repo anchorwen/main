@@ -30,6 +30,10 @@ brains:
     enabled: true   # FIX-20260528-013: RR=1.0 retrained. Stage 1 signal generator — near-zero standalone Sharpe expected. MetaFilter provides edge.
   - path: configs/brains/Meta_Stage1_MetaLabel_Binary_V1.json
     enabled: true   # FIX-20260528-013: RR=1.0 retrained on train.npz (was barrier_stage1_v4). Stage 1 signal generator.
+  - path: configs/brains/Swing_V9_M30_V1.json
+    enabled: true   # 2026-05-28: Phase 2 swing revival. XGBoost v9 on 35-dim swing+micro features. Test WR 64%, PF 1.79.
+  - path: configs/brains/Swing_V9_M15_V1.json
+    enabled: true   # 2026-05-28: Phase 2 swing revival. XGBoost v9 on 35-dim swing+micro features. Test WR 62%, PF 1.60.
   # ── V9 barrier classifier brains DELETED 2026-05-21 ──
   # xgb_barrier_12bar_xgboost_v3: blind OOS WR 39.6%, Total PnL -714R — anti-predictive
   # lgb_barrier_12bar_lightgbm_v3: blind OOS WR 34.9%, Total PnL -1211R — anti-predictive
@@ -125,7 +129,7 @@ correlation_tracker:
   min_updates: 3
 strategy_lines:
   barrier_12bar:
-    enabled: true
+    enabled: false  # 2026-05-28: Architect directive — Sharp≈0, shut down to stop bleeding
     # ── FIX-20260528-013: Full pipeline retrained with RR=1.0 symmetric labels ──
     # Meta_Stage2_Filter_V3 retrained (47-dim LGB + Platt, CPCV Sharpe 8.49 ± 3.33).
     # Stage 1 Binary/MetaLabel + Stage 2 MetaFilter wired through Track 4d gate chain.
@@ -169,7 +173,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.05
   barrier_12bar_meta:
-    enabled: true
+    enabled: false  # 2026-05-28: Architect directive — Sharp≈0, shut down to stop bleeding
     # ── NEW 2026-05-24: Meta-Labeling contract group ──
     # OU signal engine triggers candidate entries; the meta-labeling binary
     # classifier (Meta_Stage1_MetaLabel_Binary_V1) predicts P(TP|signal).
@@ -413,7 +417,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.0
   m15_swing:
-    enabled: false  # FIX-20260523-006: graveyard cleanup — no active swing brains remain
+    enabled: true   # 2026-05-28: Phase 2 swing revival. Swing_V9_M15_V1 brain registered.
     timeframe: M15
     magic: 90310
     brain_types:
@@ -448,7 +452,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.0
   m30_swing:
-    enabled: false  # FIX-20260523-006: graveyard cleanup — no active swing brains remain
+    enabled: true   # 2026-05-28: Phase 2 swing revival. Swing_V9_M30_V1 brain registered.
     timeframe: M30
     magic: 90320
     brain_types:
@@ -563,8 +567,8 @@ regime_gate:
       micro_3bar: reduced
       micro_m15: reduced
       micro_h1: full
-      statarb_dynamic: false
-      statarb_m15: false
+      statarb_dynamic: reduced
+      statarb_m15: reduced
     mild_trend:
       barrier_12bar: full
       barrier_12bar_meta: reduced

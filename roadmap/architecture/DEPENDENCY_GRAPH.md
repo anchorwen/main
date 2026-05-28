@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-05-28T07:49:08Z
+> **自动生成**: 2026-05-28T09:42:38Z
 
 ## Package-Level Dependencies
 
@@ -237,7 +237,8 @@
 
 - `daily_swing_schema.py` → (无内部依赖)
 - `microstructure_schema.py` → `core.features.store_contracts`
-- `registry.py` → `core.features.schemas.daily_swing_schema`, `core.features.schemas.microstructure_schema`, `core.features.schemas.v9_institutional_schema`, `core.features.schemas.v9_micro_schema`
+- `registry.py` → `core.features.schemas.daily_swing_schema`, `core.features.schemas.microstructure_schema`, `core.features.schemas.swing_enhanced_schema`, `core.features.schemas.v9_institutional_schema`, `core.features.schemas.v9_micro_schema`
+- `swing_enhanced_schema.py` → `core.features.schemas.daily_swing_schema`
 - `v9_institutional_schema.py` → (无内部依赖)
 - `v9_micro_schema.py` → `core.features.schemas.microstructure_schema`, `core.features.schemas.v9_institutional_schema`, `core.features.store_contracts`
 
@@ -531,6 +532,7 @@
 - `build_micro_flat_features.py` → (无内部依赖)
 - `build_profitable_labels.py` → `core.contracts.training.label_contract`, `core.training.profitability_calibrator`
 - `build_s1_regression_dataset.py` → `scripts.training.build_calibrated_dataset`
+- `build_swing_enhanced_dataset.py` → (无内部依赖)
 - `build_v9_micro_dataset.py` → (无内部依赖)
 - `calibrate_labels.py` → `core.training.profitability_calibrator`
 - `calibrate_meta_filter.py` → `core.brains.online_mlp_model`
@@ -573,6 +575,7 @@
 - `train_online_init.py` → (无内部依赖)
 - `train_stage2_lgb_pit.py` → (无内部依赖)
 - `train_stage2_mlp_pit.py` → `core.brains.online_mlp_model`
+- `train_swing_v9.py` → (无内部依赖)
 - `write_manifest_stub.py` → `scripts.training.crt_manifest`
 - `your_trainer.py` → `scripts.training.crt_manifest`
 

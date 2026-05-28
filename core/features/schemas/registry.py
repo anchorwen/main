@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from core.features.schemas.daily_swing_schema import DAILY_SWING_24_FEATURES
 from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
+from core.features.schemas.swing_enhanced_schema import SWING_ENHANCED_35_FEATURES
 from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
 from core.features.schemas.v9_micro_schema import V9_MICRO_49_FEATURES
 
@@ -32,6 +33,7 @@ SCHEMA_DIMENSIONS: dict[str, int] = {
     "meta_stage2_runtime_56": 56,
     "meta_stage2_runtime_59": 59,
     "v9_40dim_ou3": 43,  # 40 V9 institutional + 3 OU physics (z_score, half_life, theta)
+    "swing_enhanced_35": 35,  # 24 swing macro + 9 micro + 2 TF-specific (OU_Theta, Hurst)
 }
 
 # Canonical name resolution (alias → canonical)
@@ -95,6 +97,8 @@ def get_schema_feature_names(schema_name: str) -> list[str]:
         names = list(V9_INSTITUTIONAL_40_FEATURES)
     elif canonical == "v9_micro_49":
         names = list(V9_MICRO_49_FEATURES)
+    elif canonical == "swing_enhanced_35":
+        names = list(SWING_ENHANCED_35_FEATURES)
     elif canonical in ("daily_swing_24",):
         names = list(DAILY_SWING_24_FEATURES)
     elif canonical in ("v4.5_microstructure_9", "v2_microstructure_9", "v4.3_microstructure_9"):

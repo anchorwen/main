@@ -1,0 +1,327 @@
+#!/usr/bin/env python
+"""Train XGBoost v9 swing brain from enhanced swing+micro dataset.
+
+Usage:
+  python scripts/training/train_swing_v9.py \
+    --dataset data/training/swing_m30_enhanced \
+    --strategy m30_swing \
+    --output-dir data/models/swing
+
+  python scripts/training/train_swing_v9.py \
+    --dataset data/training/swing_m15_enhanced \
+    --strategy m15_swing \
+    --output-dir data/models/swing
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import time
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+
+def load_dataset(data_dir: Path) -> dict[str, Any]:
+    """Load enhanced swing NPZ dataset."""
+    train_path = data_dir / "train.npz"
+    meta_path = data_dir / "meta.json"
+    if not train_path.exists():
+        raise FileNotFoundError(f"Train NPZ not found: {train_path}")
+
+    data = np.load(train_path, allow_pickle=True)
+    meta: dict[str, Any] = {}
+    if meta_path.exists():
+        with open(meta_path, encoding="utf-8") as f:
+            meta = json.load(f)
+
+    return {
+        "X_train": data["X"].astype(np.float64),
+        "y_train": data["y"].astype(np.int32),  # [0, 1, 2] for multi-class
+        "pnl_r_train": data.get("pnl_r", np.zeros(len(data["y"]), dtype=np.float32)),
+        "X_val": data["X_val"].astype(np.float64),
+        "y_val": data["y_val"].astype(np.int32),
+        "pnl_r_val": data.get("pnl_r_val", np.zeros(len(data["y_val"]), dtype=np.float32)),
+        "X_test": data["X_test"].astype(np.float64),
+        "y_test": data["y_test"].astype(np.int32),
+        "pnl_r_test": data.get("pnl_r_test", np.zeros(len(data["y_test"]), dtype=np.float32)),
+        "feature_names": data.get(
+            "feature_names", np.array([f"f_{i}" for i in range(data["X"].shape[1])])
+        ),
+        "meta": meta,
+    }
+
+
+def compute_metrics(
+    y_true: np.ndarray, y_pred: np.ndarray, pnl: np.ndarray | None = None
+) -> dict[str, Any]:
+    """Compute comprehensive metrics for multi-class swing predictions."""
+    correct = y_pred == y_true
+    wr = float(correct.mean())
+    n = len(y_true)
+
+    # Per-class accuracy
+    classes = np.unique(y_true)
+    per_class: dict[str, float] = {}
+    for c in classes:
+        mask = y_true == c
+        if mask.sum() > 0:
+            per_class[f"class_{c}_acc"] = float(correct[mask].mean())
+            per_class[f"class_{c}_count"] = int(mask.sum())
+
+    # Profit simulation: predict -1→SHORT, 1→LONG, 0→no trade
+    # Map [0,1,2] back to [-1,0,1]
+    y_true_dir = y_true - 1  # [0,1,2] → [-1,0,1]
+    y_pred_dir = y_pred - 1
+
+    # Only evaluate on directional trades
+    trade_mask = y_pred_dir != 0
+    if trade_mask.sum() > 0:
+        trade_correct = y_pred_dir[trade_mask] == y_true_dir[trade_mask]
+        trade_wr = float(trade_correct.mean())
+        trade_count = int(trade_mask.sum())
+
+        # Simulated PnL: correct direction = +1.5, wrong = -1.5
+        sim_pnl = np.empty(len(trade_correct), dtype=np.float64)
+        sim_pnl[:] = -1.5
+        sim_pnl[trade_correct] = 1.5
+        gross_profit = float(np.sum(sim_pnl[sim_pnl > 0]))
+        gross_loss = float(abs(np.sum(sim_pnl[sim_pnl < 0])))
+        profit_factor = gross_profit / max(gross_loss, 1e-12)
+
+        cumsum = np.cumsum(sim_pnl)
+        peak = np.maximum.accumulate(cumsum)
+        max_dd = float(np.max(peak - cumsum))
+
+        # Sharpe (annualized, assuming 252 trading days)
+        # M30: ~48 bars/day → ~12096 bars/year
+        # M15: ~96 bars/day → ~24192 bars/year
+        _annual_factor = float(np.sqrt(252 * 48))
+        _mean_val = float(np.mean(sim_pnl))
+        _std_val = float(np.std(sim_pnl))
+        sharpe = (_mean_val / max(_std_val, 1e-12)) * _annual_factor
+    else:
+        trade_wr = 0.0
+        trade_count = 0
+        profit_factor = 0.0
+        max_dd = 0.0
+        sharpe = 0.0
+
+    return {
+        "accuracy": round(wr, 4),
+        "trade_win_rate": round(trade_wr, 4),
+        "trade_count": trade_count,
+        "profit_factor": round(profit_factor, 4),
+        "max_drawdown": round(max_dd, 4),
+        "sharpe_annualized": round(sharpe, 4),
+        "n_samples": n,
+        "per_class": per_class,
+    }
+
+
+def train_xgboost_swing(
+    dataset: dict[str, Any],
+    *,
+    n_estimators: int = 300,
+    learning_rate: float = 0.05,
+    max_depth: int = 5,
+    subsample: float = 0.8,
+    colsample_bytree: float = 0.8,
+    min_child_weight: int = 5,
+    reg_alpha: float = 0.1,
+    reg_lambda: float = 0.1,
+    early_stopping_rounds: int = 30,
+    seed: int = 42,
+) -> tuple[Any, dict[str, Any]]:
+    """Train XGBoost multi-class classifier for swing trading."""
+    import xgboost as xgb
+
+    X_train = dataset["X_train"]
+    y_train = dataset["y_train"]  # [0, 1, 2]
+    X_val = dataset["X_val"]
+    y_val = dataset["y_val"]
+
+    # Class balancing weights
+    class_counts = np.bincount(y_train, minlength=3)
+    n = len(y_train)
+    sample_weight = np.ones(n, dtype=np.float64)
+    for c in range(3):
+        if class_counts[c] > 0:
+            sample_weight[y_train == c] = n / (3 * class_counts[c])
+
+    params: dict[str, Any] = {
+        "objective": "multi:softprob",
+        "num_class": 3,
+        "eval_metric": "mlogloss",
+        "max_depth": max_depth,
+        "learning_rate": learning_rate,
+        "subsample": subsample,
+        "colsample_bytree": colsample_bytree,
+        "min_child_weight": min_child_weight,
+        "reg_alpha": reg_alpha,
+        "reg_lambda": reg_lambda,
+        "random_state": seed,
+        "n_jobs": -1,
+    }
+
+    t0 = time.time()
+    dtrain = xgb.DMatrix(X_train, label=y_train, weight=sample_weight)
+    dval = xgb.DMatrix(X_val, label=y_val)
+
+    booster = xgb.train(
+        params,
+        dtrain,
+        num_boost_round=n_estimators,
+        evals=[(dtrain, "train"), (dval, "val")],
+        early_stopping_rounds=early_stopping_rounds,
+        verbose_eval=50,
+    )
+
+    train_time = time.time() - t0
+    best_iter = getattr(booster, "best_iteration", booster.num_boosted_rounds())
+
+    # Evaluate on val and test
+    y_val_pred = np.asarray(booster.predict(dval)).argmax(axis=1)
+    dtest = xgb.DMatrix(dataset["X_test"], label=dataset["y_test"])
+    y_test_pred = np.asarray(booster.predict(dtest)).argmax(axis=1)
+
+    val_metrics = compute_metrics(dataset["y_val"], y_val_pred, dataset["pnl_r_val"])
+    test_metrics = compute_metrics(dataset["y_test"], y_test_pred, dataset["pnl_r_test"])
+
+    return booster, {
+        "best_iteration": int(best_iter),
+        "train_time_seconds": round(train_time, 2),
+        "params": {k: v for k, v in params.items() if k not in ("n_jobs", "random_state")},
+        "val": val_metrics,
+        "test": test_metrics,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Train XGBoost swing brain")
+    parser.add_argument("--dataset", required=True, help="Path to enhanced dataset directory")
+    parser.add_argument(
+        "--strategy",
+        required=True,
+        choices=["m15_swing", "m30_swing", "h1_swing", "h4_swing", "daily_swing"],
+        help="Strategy name for brain registration",
+    )
+    parser.add_argument(
+        "--output-dir", default="data/models/swing", help="Output for model + config"
+    )
+    parser.add_argument("--n-estimators", type=int, default=300)
+    parser.add_argument("--lr", type=float, default=0.05)
+    parser.add_argument("--max-depth", type=int, default=5)
+    parser.add_argument("--seed", type=int, default=42)
+    args = parser.parse_args()
+
+    data_dir = Path(args.dataset)
+    print(f"=== Training {args.strategy} from {data_dir} ===")
+
+    # Load
+    dataset = load_dataset(data_dir)
+    n_train = len(dataset["y_train"])
+    n_val = len(dataset["y_val"])
+    n_test = len(dataset["y_test"])
+    n_features = dataset["X_train"].shape[1]
+    print(f"  Samples: train={n_train}, val={n_val}, test={n_test}")
+    print(f"  Features: {n_features}")
+    label_dist = np.bincount(dataset["y_train"], minlength=3)
+    print(f"  Train labels: [0]={label_dist[0]} [1]={label_dist[1]} [2]={label_dist[2]}")
+
+    # Train
+    model, metrics = train_xgboost_swing(
+        dataset,
+        n_estimators=args.n_estimators,
+        learning_rate=args.lr,
+        max_depth=args.max_depth,
+        seed=args.seed,
+    )
+
+    print(f"\n  Best iteration: {metrics['best_iteration']}")
+    print(f"  Train time: {metrics['train_time_seconds']}s")
+    print("\n  Val metrics:")
+    for k, v in metrics["val"].items():
+        print(f"    {k}: {v}")
+    print("\n  Test metrics:")
+    for k, v in metrics["test"].items():
+        print(f"    {k}: {v}")
+
+    # Save model
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    brain_id = f"Swing_V9_{args.strategy.split('_')[0].upper()}_V1"
+    model_path = output_dir / f"{brain_id}.json"
+    model.save_model(str(model_path))
+    print(f"\n  Model saved: {model_path}")
+
+    # Feature importance
+    importance = model.get_score(importance_type="gain")
+    feature_names = dataset["feature_names"]
+    if isinstance(feature_names, np.ndarray):
+        feature_names = feature_names.tolist()
+    top_features = sorted(importance.items(), key=lambda x: x[1], reverse=True)[:20]
+    print("\n  Top 10 features by gain:")
+    for i, (fname, gain) in enumerate(top_features[:10]):
+        feat_name = feature_names[int(fname.replace("f", ""))] if fname.startswith("f") else fname
+        print(f"    {i+1}. {feat_name}: {gain:.2f}")
+
+    # Generate brain config
+    feature_schema_id = f"swing_enhanced_{n_features}"
+    brain_config = {
+        "brain_id": brain_id,
+        "brain_type": "xgboost_v9",
+        "feature_schema": feature_schema_id,
+        "feature_schema_id": feature_schema_id,
+        "model_path": str(model_path),
+        "model_version": f"swing_{args.strategy}_v1",
+        "status": "shadow",
+        "vote_weight": 1.0,
+        "brain_role": "alpha_brain",
+        "strategy": args.strategy,
+        "timeframe": args.strategy.split("_")[0].upper(),
+        "training_params": {
+            "sl_atr_mult": 1.5,
+            "tp_atr_mult": 1.5,
+            "horizon": dataset["meta"].get("horizon", 12),
+            "n_estimators": args.n_estimators,
+            "learning_rate": args.lr,
+            "max_depth": args.max_depth,
+        },
+        "training_metrics": {
+            "train_accuracy": metrics["val"]["accuracy"],
+            "val_accuracy": metrics["val"]["accuracy"],
+            "test_accuracy": metrics["test"]["accuracy"],
+            "test_trade_win_rate": metrics["test"]["trade_win_rate"],
+            "test_profit_factor": metrics["test"]["profit_factor"],
+            "test_sharpe": metrics["test"]["sharpe_annualized"],
+        },
+        "features": dataset["feature_names"]
+        if isinstance(dataset["feature_names"], list)
+        else dataset["feature_names"].tolist(),
+        "n_features": n_features,
+        "n_train_samples": n_train,
+        "trained_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "governance": {
+            "min_confidence": 0.45,
+            "cooldown_cycles": 3,
+        },
+    }
+
+    config_path = output_dir / f"{brain_id}.json"
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(brain_config, f, indent=2, ensure_ascii=False)
+    print(f"  Config saved: {config_path}")
+
+    print(f"\n  === Training complete: {brain_id} ===")
+    print(f"  Test WR: {metrics['test']['trade_win_rate']:.1%}")
+    print(f"  Test PF: {metrics['test']['profit_factor']:.2f}")
+    print(f"  Test Sharpe: {metrics['test']['sharpe_annualized']:.2f}")
+
+
+if __name__ == "__main__":
+    main()

@@ -208,11 +208,11 @@ _OU_REGIME_MATRIX: dict[tuple[str, str], tuple[float, str]] = {
     # ── RV < 80% (Normal) ──
     ("ranging", "normal"): (1.0, "full"),
     ("mild", "normal"): (0.5, "reduced"),
-    ("trending", "normal"): (0.0, "off"),
+    ("trending", "normal"): (0.35, "reduced"),
     # ── RV 80-95% (Elevated) ──
     ("ranging", "elevated"): (0.5, "reduced"),
     ("mild", "elevated"): (0.5, "reduced"),
-    ("trending", "elevated"): (0.0, "off"),
+    ("trending", "elevated"): (0.25, "reduced"),
     # ── RV ≥ 95% (Extreme) — absolute firewall, all cells FORCE-OFF ──
     ("ranging", "extreme"): (0.0, "off"),
     ("mild", "extreme"): (0.0, "off"),
@@ -274,7 +274,7 @@ class RegimeGate:
             "trending": {
                 "barrier_12bar": "full",
                 "micro_3bar": "reduced",
-                "statarb_dynamic": "shadow",
+                "statarb_dynamic": "reduced",
             },
             "mild_trend": {
                 "barrier_12bar": "full",

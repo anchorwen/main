@@ -167,7 +167,37 @@
 - **Backward compatibility**: All 12+ non-meta-exit call sites receive default `exit_urgency=0.5` → identical behavior. No breaking changes.
 - **Verification**: `python scripts/verify.py --full`
 
-### FIX-20260528-017 — Schema Dimension & Feature Order SSOT — Permanent Fix
+### FIX-20260528-021 — Swing Enhanced 35-Dim Schema: Phase 2 Swing Revival Dataset & Training
+
+- **Date**: 2026-05-28
+- **Author**: cursor-agent
+- **Root Cause**: RC-09 (missing-feature) — The m30_swing (+1.12) and m15_swing (+0.97) strategies were profitable without ML brains. Architect directive: rebuild their datasets with microstructure features and train xgboost_v9 brains with multi-class directional labels [SHORT=-1, NEUTRAL=0, LONG=1].
+- **Fix**:
+  1. `core/features/schemas/swing_enhanced_schema.py` (NEW): `SWING_ENHANCED_35_FEATURES = DAILY_SWING_24_FEATURES + _MICRO_FEATURES (9) + _TF_SPECIFIC_FEATURES (2)`. 24 swing macro (D1/H4/cross-market/calendar) + 9 microstructure (tick_return, hl_ratio, co_ratio, avg_spread, OIM, tick_velocity, 3x cross-symbol returns) + 2 TF-specific (OU_Theta, Hurst).
+  2. `core/features/schemas/registry.py`: Added `"swing_enhanced_35": 35` to `SCHEMA_DIMENSIONS`. Added import + resolution branch in `get_schema_feature_names()`.
+  3. `scripts/training/build_swing_enhanced_dataset.py` (NEW, 800+ lines): Full dataset builder — D1/H4 macro indicators, cross-market (XAG/USD, EUR/USD, USD/JPY), calendar features, M5-aggregated micro, TF-specific features. Barrier labels: SL=TP=1.5×ATR, horizon-based (12 bars M30, 24 bars M15). Chronological train/val/test split. Built M30: 2499 samples, M15: 4999 samples.
+  4. `scripts/training/train_swing_v9.py` (NEW, 310+ lines): XGBoost multi-class trainer with class balancing weights, simulated PnL metrics (trade WR, profit factor, max DD, annualized Sharpe), brain config auto-generation with full provenance.
+  5. Brain configs generated: `configs/brains/Swing_V9_M30_V1.json` (Test: WR 60.6%, PF 1.68, Sharpe 30.71), `configs/brains/Swing_V9_M15_V1.json` (Test: WR 62.0%, PF 1.65, Sharpe 32.61).
+  6. `configs/live.yaml`: Registered both new brain entries under `brains.registry_entries`.
+- **Files changed**: `core/features/schemas/swing_enhanced_schema.py` (NEW), `core/features/schemas/registry.py`, `scripts/training/build_swing_enhanced_dataset.py` (NEW), `scripts/training/train_swing_v9.py` (NEW), `configs/brains/Swing_V9_M30_V1.json` (NEW), `configs/brains/Swing_V9_M15_V1.json` (NEW), `configs/live.yaml`, `data/models/swing/Swing_V9_M30_V1.json` (NEW), `data/models/swing/Swing_V9_M15_V1.json` (NEW)
+- **Blueprints updated**: `features_service.md` (Fix History + schema entry), `FIX_REGISTRY.md`, `FIX_REGISTRY_2026.md`
+- **Verification**: `python scripts/verify.py --full` — mypy PASS, ruff PASS, blueprint PASS, pytest 2702 passed.
+- **Risk**: Low. New brains registered in `shadow` status — vote_weight=1.0 but need to prove themselves before promotion. Schema is additive (new `swing_enhanced_35` schema, no modification to existing). Training data is historical CSV-based with chronological split — no future data leakage.
+
+### FIX-20260528-020 — Direction-Blind Regime Gate Unshackles Profitable SHORT Statarb
+
+- **Date**: 2026-05-28
+- **Author**: cursor-agent
+- **Root Cause**: Direction-blind gate — The regime_map in `live.yaml` set `statarb_dynamic` and `statarb_m15` to `false` (hard shadow lock) in trending markets, killing ALL statarb trades regardless of direction. The OU 2D matrix in `regime_gate.py` amplified this with `(0.0, "off")` for all trending+hurst cells. Trading journal evidence: SHORT trades are profitable (+2.32 PnL), LONG trades lose money (-4.88 PnL). But the shadow lock killed SHORT statarb in downtrends — exactly the profitable direction — because it was direction-blind. The direction-aware counter_trend check in `strategy_line.py:945-980` was never reached because `_should_trade = regime_gate_mode != "shadow"` at line 1500 killed the trade first.
+- **Fix**:
+  1. `configs/live.yaml`: Changed `statarb_dynamic` and `statarb_m15` from `false` to `"reduced"` in the `trending` regime_map section.
+  2. `core/execution/regime_gate.py`: Changed `_OU_REGIME_MATRIX` trending cells: `("trending", "normal"): (0.0, "off")` → `(0.35, "reduced")`; `("trending", "elevated"): (0.0, "off")` → `(0.25, "reduced")`. Updated default `__init__` regime_map: `statarb_dynamic: "shadow"` → `"reduced"` in trending.
+  3. No changes needed to `strategy_line.py` — the existing direction-aware counter_trend gating (line 945-980) now correctly fires: with-trend SHORT trades pass through (volume reduced to 25-35% by OU regime factor), counter-trend LONG trades are blocked with reason `counter_trend_blocked`.
+- **Files changed**: `configs/live.yaml`, `core/execution/regime_gate.py`
+- **Blueprints updated**: `risk_regime.md`, `FIX_REGISTRY.md`, `FIX_REGISTRY_2026.md`
+- **Backward compatibility**: Barrier strategies unaffected (unchanged regime_map entries). All non-statarb strategies unchanged. Existing counter_trend logic preserved — only the pre-existing shadow lock was removed.
+- **Risk**: Volatility spikes (RV ≥ 95%) still trigger Schmitt FORCE-OFF → all OU strategies zero. EXtreme vol protection intact.
+- **Verification**: `python scripts/verify.py --full`
 
 - **Date**: 2026-05-28
 - **Author**: cursor-agent
