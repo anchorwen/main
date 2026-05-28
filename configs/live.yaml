@@ -429,6 +429,7 @@ strategy_lines:
       base_atr_mult: 1.5
       hard_sl_ratio: 1.5
       dynamic: true
+      min_rr_ratio: 1.0   # B-fix: TP=1.5 aligns to training, RR=1.0 must clear default 1.2 gate
     tp:
       base_atr_mult: 1.5   # 2026-05-28: aligned to training TP=1.5 (was 3.0). Model trained with symmetric 1.5 labels — holding for 3.0 = sprinter running marathon.
       partial_tp_enabled: true
@@ -464,6 +465,7 @@ strategy_lines:
       base_atr_mult: 1.5
       hard_sl_ratio: 1.5
       dynamic: true
+      min_rr_ratio: 1.0   # B-fix: TP=1.5 aligns to training, RR=1.0 must clear default 1.2 gate
     tp:
       base_atr_mult: 1.5   # 2026-05-28: aligned to training TP=1.5 (was 3.0). Model trained with symmetric 1.5 labels.
       partial_tp_enabled: true
