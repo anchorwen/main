@@ -32,6 +32,31 @@
 - **Verification**: `python scripts/verify.py --quick` passed. 24 pytest tests passed.
 - **Risk**: Low. OFI=0.0 when MT5 tick data unavailable → fail-open (no false blocks). 100-bar buffer at M5 = ~8.3h context — sufficient for stable z-score estimation per engineer review.
 
+### FIX-20260528-011 — Reentry Guard TTL Hard Unlock: half_life × 2.5 Force Unlock
+
+- **Date**: 2026-05-28
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (contract-violation) — `check_reentry_quality()` `sl_hit` category (line 104) had NO maximum lock duration. The `sl_recovery_price_not_confirming_short` check compared `mid_price >= exit_price - 1.0` — if price continued moving against the exit direction (e.g., SHORT SL hit, then price kept rising), this condition was NEVER satisfied → permanent same-direction block. Live impact: after statarb_dynamic SHORT SL hit at 16:32 UTC, all 41+ subsequent SHORT signals were blocked for >4 hours (elapsed 8582s→15782s and still growing). Combined with barrier_12bar structural negative Kelly and statarb_m15 neutral_consensus, the entire system was effectively deadlocked — 44 `should_trade=true` events resulting in only 1 trade.
+
+  The TASK-20260527-002 (`statarb_m15 Reentry Guard TTL`) had documented this risk but been deferred.  The issue affected statarb_dynamic more severely than statarb_m15.
+
+- **Fix**: Three additions to `check_reentry_quality()`:
+  1. New parameters: `entry_half_life: float = 0.0`, `timeframe_minutes: float = 5.0`
+  2. TTL hard unlock at the TOP of `sl_hit` block: `ttl_s = entry_half_life * timeframe_minutes * 2.5 * 60.0` — when `elapsed > ttl_s`, return `True` with reason `sl_ttl_expired`
+  3. For statarb_dynamic (OU_Params_V6_Sniper half_life=58, M5=5min): TTL = 58 × 5 × 2.5 × 60 = 43,500s ≈ 12.1 hours
+
+  Supporting changes:
+  - `ReentryState.check_and_record_entry()` accepts `entry_half_life` + `timeframe_minutes`, forwards to `check_reentry_quality()`
+  - `live_cycle.py` passes `getattr(decision, "entry_half_life", 0.0)` + `timeframe_minutes=5.0`
+  - Added `entry_half_life` + `ttl_seconds` to `reentry_check` diagnostic log
+
+  The TTL multiplier 2.5 follows the architect directive: if 2.5 half-lives pass without price recovery, the mean has shifted to a new regime — the old exit reference is stale and continued blocking misses new-regime trading opportunities.
+
+- **Files changed**: `core/execution/reentry_guard.py`, `core/runtime/live_cycle.py`
+- **Blueprints updated**: `execution_reentry.md`, `runtime_live.md`
+- **Verification**: `python scripts/verify.py --full` — mypy pass, ruff pass, 2706 tests passing
+- **Risk**: Low. TTL defaults to no-op when `entry_half_life=0` (non-OU strategies). For statarb_dynamic, TTL=12.1h is conservative — normal SL recovery should happen within 30-60 minutes. The TTL timeline sits well above the 180s minimum cooldown (unchanged) and below the "obvious regime shift" threshold (24h+). Existing confidence improvement + price confirmation checks remain active within the TTL window — they only get bypassed after TTL expiry.
+
 ### FIX-20260527-010 — Phase 1: Critical Fail-Open Fixes (Global Contract Audit Layer 3)
 
 - **Date**: 2026-05-27

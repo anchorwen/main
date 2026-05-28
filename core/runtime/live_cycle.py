@@ -5707,9 +5707,13 @@ def execute_live_cycle(
                     direction=_d.direction,
                     confidence=_d.confidence,
                     mid=_entry_price,
+                    entry_half_life=getattr(_d, "entry_half_life", 0.0),
+                    timeframe_minutes=5.0,
                 )
                 # ── Diagnostic: log every re-entry check ──
                 _last_exit = _rs.last_exit
+                _hl = getattr(_d, "entry_half_life", 0.0)
+                _ttl_s = _hl * 5.0 * 2.5 * 60.0 if _hl > 0 else 0.0
                 print(
                     json.dumps(
                         {
@@ -5726,6 +5730,8 @@ def execute_live_cycle(
                             ),
                             "last_exit_category": _last_exit.category if _last_exit else "none",
                             "last_exit_reason": (_last_exit.reason[:60]) if _last_exit else "",
+                            "entry_half_life": round(_hl, 1),
+                            "ttl_seconds": round(_ttl_s, 0),
                         },
                         ensure_ascii=False,
                     ),

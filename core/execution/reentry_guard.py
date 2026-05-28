@@ -67,12 +67,20 @@ def check_reentry_quality(
     new_direction: str,
     new_confidence: float,
     mid_price: float,
+    entry_half_life: float = 0.0,
+    timeframe_minutes: float = 5.0,
 ) -> tuple[bool, str]:
     """Return ``(allowed, reason)`` for re-entering after a managed exit.
 
     Opposite-direction re-entries are always allowed (no guard).
     Same-direction re-entries are gated by exit-reason-specific criteria
     including minimum elapsed time, confidence improvement, and price confirmation.
+
+    *entry_half_life* enables TTL (time-to-live) hard unlock for time-based
+    categories.  When the elapsed time since exit exceeds
+    ``half_life * timeframe_minutes * 2.5 * 60`` seconds, the lock is
+    forcibly broken regardless of price confirmation — the mean has shifted,
+    the old exit reference is stale.
     """
     if new_direction not in ("long", "short"):
         return False, "neutral_signal"
@@ -102,6 +110,17 @@ def check_reentry_quality(
         return True, "brain_flip_reentry_confirmed"
 
     if category == "sl_hit":
+        # TTL hard unlock: if half_life × 2.5 has elapsed since exit,
+        # the mean has shifted — the old exit reference is stale and
+        # continued blocking would miss new-regime trading opportunities.
+        if entry_half_life > 0:
+            _ttl_s = entry_half_life * timeframe_minutes * 2.5 * 60.0
+            if elapsed > _ttl_s:
+                return (
+                    True,
+                    f"sl_ttl_expired_{elapsed:.0f}s_gt_{_ttl_s:.0f}s_half_life_{entry_half_life:.1f}",
+                )
+
         # Stop-loss — strictest requirements (SL streak breaker handles most)
         if elapsed < 180:
             return False, f"sl_too_soon_{elapsed:.0f}s_lt_180s"
@@ -313,9 +332,20 @@ class ReentryState:
             self.last_direction = record.direction
 
     def check_and_record_entry(
-        self, direction: str, confidence: float, mid: float
+        self,
+        direction: str,
+        confidence: float,
+        mid: float,
+        entry_half_life: float = 0.0,
+        timeframe_minutes: float = 5.0,
     ) -> tuple[bool, str, float]:
-        """Check re-entry quality and return (allowed, reason, volume_scale)."""
+        """Check re-entry quality and return (allowed, reason, volume_scale).
+
+        *entry_half_life* is forwarded to check_reentry_quality for TTL
+        (time-to-live) hard unlock — when elapsed time since the previous
+        exit exceeds half_life × timeframe_minutes × 2.5, the lock is
+        forcibly broken even if price confirmation hasn't occurred.
+        """
         if self.last_exit is None:
             # First entry ever — always allowed
             if direction == self.last_direction:
@@ -334,6 +364,8 @@ class ReentryState:
             new_direction=direction,
             new_confidence=confidence,
             mid_price=mid,
+            entry_half_life=entry_half_life,
+            timeframe_minutes=timeframe_minutes,
         )
         if not allowed:
             return False, reason, 0.0
