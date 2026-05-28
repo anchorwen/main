@@ -9,7 +9,7 @@ dataset:
 
 label:
   contract_id: "label-regression-barrier-2.0.0"
-  sl_atr_mult: 3.0
+  sl_atr_mult: 1.5  # FIX-20260528-013: RR=1.0 symmetric — requires p_win>50% for +EV
   tp_atr_mult: 1.5
   horizon_bars: 12
   profitability_calibrated: true

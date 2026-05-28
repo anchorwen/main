@@ -7,7 +7,7 @@ dataset:
   sample_weighting: return_magnitude
 label:
   contract_id: barrier_12bar_calibrated
-  sl_atr_mult: 3.0
+  sl_atr_mult: 1.5  # FIX-20260528-013: RR=1.0 symmetric
   tp_atr_mult: 1.5
   horizon_bars: 12
   profitability_calibrated: true

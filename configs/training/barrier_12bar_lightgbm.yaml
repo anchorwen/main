@@ -9,8 +9,8 @@ dataset:
 
 label:
   contract_id: "calibrated-barrier-3.0-1.0"
-  sl_atr_mult: 3.0
-  tp_atr_mult: 1.0
+  sl_atr_mult: 1.5  # FIX-20260528-013: RR=1.0 symmetric
+  tp_atr_mult: 1.5  # FIX-20260528-013: RR=1.0 symmetric
   horizon_bars: 12
   profitability_calibrated: false
   label_mapping: drop_timeout_binary

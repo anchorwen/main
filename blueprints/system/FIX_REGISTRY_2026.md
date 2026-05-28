@@ -76,6 +76,25 @@
 - **Verification**: `python scripts/verify.py --full` — mypy pass, ruff pass, 2706 tests passing
 - **Risk**: Low. The JOIN is deterministic (exact match on message_id). No p_win is fabricated — only verified (message_id, p_win) pairs from accepted entries are used. The `self._cold_started` guard prevents double-loading. Remaining 23-trade gap closes naturally via COLD exploration (~1 week at current rate).
 
+### FIX-20260528-013 — barrier_12bar RR Symmetry: SL/TP 3.0/1.5 → 1.5/1.5 (RR=0.50→1.0)
+
+- **Date**: 2026-05-28
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (contract-violation) — barrier_12bar's SL=3.0/TP=1.5 (RR=0.50) was mathematically impossible to profit from with honest ML predictions. The Kelly formula requires `p_win > 1/(1+RR) = 66.7%` for positive expectation at RR=0.50. MetaFilter honestly outputs 55-58% p_win — this is the true alpha ceiling for XAUUSD M5. At RR=0.50: `Kelly = 0.58 - 0.42/0.5 = -0.26` — structurally negative. The wide SL (3.0×ATR) and tight TP (1.5×ATR) were calibrated with 100× underestimated costs pre-FIX-20260524-016, and the subsequent SL/TP inversion (3.0/1.5) overcorrected — trading fees + slippage consume a larger share of TP than SL, so TP must be ≥ SL in multiplier terms for RR≥1.0.
+
+  With symmetric RR=1.0: `Kelly = 2×0.55 - 1 = +0.10` — positive expectation at MetaFilter's honest win rate.
+
+- **Fix**: Changed all 10 barrier_12bar training contracts + live.yaml (barrier_12bar + barrier_12bar_meta):
+  - Training: `sl_atr_mult: 3.0→1.5` (all), `tp_atr_mult: 1.0→1.5` (v1 lightgbm/xgboost), `sl_atr_mult: 4.0→1.5` (meta)
+  - live.yaml barrier_12bar: `sl.base_atr_mult: 3.0→1.5`, `min_rr_ratio: 0.5→1.0`
+  - live.yaml barrier_12bar_meta: `sl.base_atr_mult: 3.0→1.5`, `min_rr_ratio: 0.4→1.0`
+
+- **Files changed**: `configs/training/barrier_12bar_*.yaml` (10 files), `configs/live.yaml`
+- **Blueprints updated**: `contracts_training.md`
+- **Verification**: `python scripts/verify.py --quick` — mypy pass, ruff pass
+- **Risk**: This is a PREPARATORY config change. Full pipeline retraining (label rebuild → brain retrain → MetaFilter recalibration) still required before deploying new brains. Current barrier_12bar already blocked by MetaFilter (negative Kelly) — no live impact from config change alone.
+- **Pipeline required**: label_builder.py (SL=1.5/TP=1.5 labels) → train.py (retrain brains) → build_meta_features.py → train_meta_model.py (recalibrate MetaFilter) → deploy
+
 ### FIX-20260527-010 — Phase 1: Critical Fail-Open Fixes (Global Contract Audit Layer 3)
 
 - **Date**: 2026-05-27

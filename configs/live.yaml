@@ -145,13 +145,13 @@ strategy_lines:
     base_volume: 0.01
     max_volume: 0.01
     sl:
-      base_atr_mult: 3.0   # FIX-20260524-036: aligned with training contract SL=3.0 (was 2.0)
+      base_atr_mult: 1.5   # FIX-20260528-013: RR=1.0 symmetric (was 3.0)
       hard_sl_ratio: 1.5
       dynamic: true
       min_sl_distance: 8.0   # absolute floor — SL ≥$8 even when ATR collapses
-      min_rr_ratio: 0.5      # TP≥0.5R when SL is floored (TP=1.5, so min RR is low)
+      min_rr_ratio: 1.0      # FIX-20260528-013: maintain RR≥1.0 (was 0.5)
     tp:
-      base_atr_mult: 1.5   # FIX-20260524-036: aligned with training contract TP=1.5 (was 3.5)
+      base_atr_mult: 1.5   # FIX-20260528-013: RR=1.0 symmetric
       partial_tp_enabled: true
       partial_tp_ratio: 0.5
       partial_tp_r: 1.0
@@ -192,13 +192,13 @@ strategy_lines:
     base_volume: 0.01  # probation: minimal live capital
     max_volume: 0.01   # probation: capped at 0.01
     sl:
-      base_atr_mult: 3.0
+      base_atr_mult: 1.5   # FIX-20260528-013: RR=1.0 symmetric (was 3.0)
       hard_sl_ratio: 1.5
       dynamic: true
-      min_sl_distance: 3.0   # FIX-20260526-030: lowered from $8→$3 for meta-labeling high-prob/low-RR model
-      min_rr_ratio: 0.4      # FIX-20260526-030: relaxed from 0.5→0.4 (SL=3.0/TP=1.5 → RR=0.5 native)
+      min_sl_distance: 3.0   # FIX-20260526-030: floor $3 for meta-labeling
+      min_rr_ratio: 1.0      # FIX-20260528-013: maintain RR≥1.0 (was 0.4)
     tp:
-      base_atr_mult: 1.5
+      base_atr_mult: 1.5   # FIX-20260528-013: RR=1.0 symmetric
       partial_tp_enabled: false
     exit:
       trail_enabled: false

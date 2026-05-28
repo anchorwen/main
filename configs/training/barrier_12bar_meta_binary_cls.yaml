@@ -9,7 +9,7 @@ dataset:
 
 label:
   contract_id: "label-barrier-meta-1.0.0"
-  sl_atr_mult: 4.0       # calibrated: profitability surface scan on 67K-bar XAUUSD M5
+  sl_atr_mult: 1.5  # FIX-20260528-013: RR=1.0 symmetric (was 4.0 calibrated for meta-label)
   tp_atr_mult: 1.5       # EV=0.34R, Sharpe=3.51, optimal for meta-label filtering
   horizon_bars: 12
   profitability_calibrated: true
