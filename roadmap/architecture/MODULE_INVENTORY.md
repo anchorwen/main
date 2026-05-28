@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-28T01:35:24Z
+> **自动生成**: 2026-05-28T02:36:40Z
 > **扫描模块数**: 447
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -138,7 +138,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `label_contract.py` | ✅ active | BarrierResult, LabelContract | 11 | 549 | — | |
-| `training_contract.py` | ✅ active | DatasetSpec, LabelSpec, ArchitectureSpec, ValidationSpec, QualityGateSpec, OutputSpec, TrainingContract | 12 | 471 | — | |
+| `training_contract.py` | ✅ active | DatasetSpec, LabelSpec, ArchitectureSpec, ValidationSpec, QualityGateSpec, OutputSpec, TrainingContract | 12 | 474 | — | |
 | `training_recipe.py` | ✅ active | ModelIdentity, LabelContractRef, DataAugmentation, DataConfig, TrainingConfig, EvaluationConfig, TrainingRecipe | 6 | 386 | — | |
 
 ## core/deployment
@@ -216,7 +216,7 @@
 | `meta_exit_engine.py` | ✅ active | ExitFeatureSnapshot, ExitEvaluation, MetaExitEngine | 13 | 509 | — | |
 | `meta_filter_gate.py` | ✅ active | MetaFilterGate | 7 | 220 | — | |
 | `meta_pipeline.py` | ✅ active | MetaProbeSpec, MetaProbeResult, MetaPipeline | 8 | 479 | — | |
-| `meta_signal_filter.py` | ✅ active | FilterResult, MetaSignalFilter | 19 | 878 | — | |
+| `meta_signal_filter.py` | ✅ active | FilterResult, MetaSignalFilter | 19 | 879 | — | |
 | `micro_strategy.py` | ✅ active | MicroStrategy | 1 | 85 | — | |
 | `mt5_broker_adapter.py` | ✅ active | MT5BrokerAdapter | 11 | 145 | — | |
 | `mt5_worker.py` | ✅ active | MT5Worker | 20 | 341 | — | |
@@ -614,7 +614,7 @@
 | `brain_promotion_runner.py` | ✅ active | — | 6 | 196 | — | |
 | `build_calibrated_dataset.py` | ✅ active | — | 19 | 772 | — | |
 | `build_live_labeled_dataset.py` | ✅ active | — | 4 | 236 | — | |
-| `build_meta_features.py` | ✅ active | — | 7 | 772 | — | |
+| `build_meta_features.py` | ✅ active | — | 7 | 776 | — | |
 | `build_meta_labeling_dataset.py` | ✅ active | — | 8 | 819 | — | |
 | `build_meta_labels.py` | ✅ active | — | 6 | 379 | — | |
 | `build_meta_learner.py` | ✅ active | — | 7 | 481 | — | |
@@ -655,7 +655,7 @@
 | `run_promotion.py` | ✅ active | — | 6 | 256 | — | |
 | `run_train_batch.py` | ✅ active | — | 6 | 274 | — | |
 | `scan_profitability_surface.py` | ✅ active | — | 3 | 180 | — | |
-| `train.py` | ✅ active | ModelQualityException, PipelineResult | 23 | 1989 | — | |
+| `train.py` | ✅ active | ModelQualityException, PipelineResult | 23 | 1999 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 640 | — | |
 | `train_exit_metamodel.py` | ✅ active | — | 7 | 343 | — | |
 | `train_from_csv.py` | ✅ active | MLP | 10 | 725 | — | |

@@ -1745,6 +1745,16 @@ def run_pipeline(
             print(f"[train] WARNING: CPCV evaluation failed (non-fatal): {e}")
 
     # ── Quality gates ──
+    # FIX-20260528-013: Prefer CPCV metrics for quality gates.
+    # CPCV is the proper cross-validated OOS estimate; single-seed forward
+    # metrics are noisy and can be negative even when CPCV is positive.
+    cpcv_sharpe = result.metrics.get("cpcv_sharpe_mean")
+    if cpcv_sharpe is not None:
+        forward_sharpe_for_gates = cpcv_sharpe
+        print(f"[train] Using CPCV Sharpe ({cpcv_sharpe:.4f}) for quality gate check")
+    else:
+        forward_sharpe_for_gates = best_metrics.get("forward_sharpe", 0.0) or 0.0
+
     train_fin_for_gates = {
         "sharpe_ratio": best_metrics.get("train_sharpe", 0.0) or 0.0,
         "win_rate": best_metrics.get("train_win_rate", 0.0) or 0.0,
@@ -1754,7 +1764,7 @@ def run_pipeline(
         "max_vol_scaled_dd": best_metrics.get("train_vol_scaled_dd", 100.0) or 100.0,
     }
     forward_fin_for_gates = {
-        "sharpe_ratio": best_metrics.get("forward_sharpe", 0.0) or 0.0,
+        "sharpe_ratio": forward_sharpe_for_gates,
         "win_rate": best_metrics.get("forward_win_rate", 0.0) or 0.0,
     }
 

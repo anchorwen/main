@@ -1,12 +1,12 @@
 {
   "schema_version": "meta_filter_config.v1",
   "filter_id": "Meta_Stage2_Filter_V3",
-  "model_path": "data/models/institutional/meta_stage2_lightgbm_20260526_121345.txt",
+  "model_path": "data/models/institutional/meta_stage2_lightgbm_v2_20260528_015901.txt",
   "threshold": 0.55,
   "mode": "binary",
-  "stage1_brain_id": "OU_Params_V6_Sniper",
-  "feature_schema": "meta_stage2_runtime_48",
-  "calibrator_path": "data/models/institutional/meta_stage2_ensemble_pit_v3_calibrator.pkl",
+  "stage1_brain_id": "Meta_Stage1_Binary_Cls_V1",
+  "feature_schema": "meta_stage2_runtime_47",
+  "calibrator_path": "",
   "calibration_method": "platt_scaling",
   "conformal": {
     "enabled": false,
@@ -15,5 +15,5 @@
     "min_threshold": 0.50,
     "max_age_days": 14.0
   },
-  "description": "Stage 2 P(TP|signal) filter V3 -- Full Pipeline Rebuild. Single LightGBM on 48 PiT meta-features (40 V9 + 8 meta). Train Sharpe 4.78, Forward Sharpe 1.30. Platt scaling calibrated. Rebuilt 2026-05-26 after fixing Stage 1 feature-order poisoning (FIX-20260525-026)."
+  "description": "Stage 2 P(TP|signal) filter V3 — FIX-20260528-013 full pipeline rebuild. Single LightGBM on 47 PiT meta-features (40 V9 + 7 meta). RR=1.0 symmetric labels. CPCV Sharpe 8.49 ± 3.33, Forward Sharpe 5.01. Retrained 2026-05-28 with corrected Stage 1 brain predictions."
 }

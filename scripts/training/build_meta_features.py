@@ -21,6 +21,7 @@ import argparse
 import sys
 from collections import deque
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from sklearn.model_selection import KFold
@@ -699,19 +700,22 @@ def build_meta_features(
     # ── Save ──
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        output_path,
-        X=X_stage2,
-        y=y_binary,
-        y_reg=y_target if not is_binary else y_binary.astype(np.float64),
-        oof_preds=oof_preds,
-        meta_feature_names=np.array(meta_names, dtype=str),
-        feature_names=np.array(stage2_feature_names, dtype=str),
-        runtime_feature_names=np.array(runtime_feature_names, dtype=str),
-        contract_id=contract.contract_id,
-        n_folds=n_folds,
-        collapse_ratio=collapse_ratio,
-    )
+    save_kwargs: dict[str, Any] = {
+        "X": X_stage2,
+        "y": y_binary,
+        "y_reg": y_target if not is_binary else y_binary.astype(np.float64),
+        "oof_preds": oof_preds,
+        "meta_feature_names": np.array(meta_names, dtype=str),
+        "feature_names": np.array(stage2_feature_names, dtype=str),
+        "runtime_feature_names": np.array(runtime_feature_names, dtype=str),
+        "contract_id": contract.contract_id,
+        "n_folds": n_folds,
+        "collapse_ratio": collapse_ratio,
+    }
+    # FIX-20260528-013: Preserve timestamps for CPCV evaluation
+    if ts_array is not None:
+        save_kwargs["timestamps"] = ts_array
+    np.savez_compressed(output_path, **save_kwargs)
     print(f"[meta] Saved Stage 2 dataset to: {output_path}")
     print("[meta] Done.")
 

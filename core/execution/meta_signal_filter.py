@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import sys
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -222,14 +223,14 @@ class MetaSignalFilter:
         """
         if not self._calibrator_path or not os.path.exists(self._calibrator_path):
             if self._conformal_mode:
-                print(
+                sys.stderr.write(
                     json.dumps(
                         {
                             "event": "conformal_warning",
                             "message": "Conformal mode enabled but no calibrator loaded — falling back to fixed threshold",
                         }
-                    ),
-                    flush=True,
+                    )
+                    + "\n"
                 )
             return
         try:
@@ -237,15 +238,15 @@ class MetaSignalFilter:
 
             self._calibrator = joblib.load(self._calibrator_path)
         except Exception as e:
-            print(
+            sys.stderr.write(
                 json.dumps(
                     {
                         "event": "calibrator_load_error",
                         "path": self._calibrator_path,
                         "error": str(e),
                     }
-                ),
-                flush=True,
+                )
+                + "\n"
             )
             self._calibrator = None
 
@@ -864,15 +865,15 @@ def create_meta_filter(
     if model_path and enabled:
         loaded = filt.load()
         if not loaded:
-            print(
+            sys.stderr.write(
                 json.dumps(
                     {
                         "event": "meta_filter_unavailable",
                         "model_path": model_path,
                         "action": "disabled_stage2_all_signals_pass",
                     }
-                ),
-                flush=True,
+                )
+                + "\n"
             )
             return None
     return filt

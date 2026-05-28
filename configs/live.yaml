@@ -27,9 +27,9 @@ brains:
   - path: configs/brains/Meta_Stage1_Huber_V1.json
     enabled: false  # FROZEN 2026-05-24: SL=2.0/TP=3.5 unprofitable with corrected costs (30pt spread/10pt slippage). Regression approach collapsed — replaced by binary classifier.
   - path: configs/brains/Meta_Stage1_Binary_Cls_V1.json
-    enabled: true   # Binary classifier (drop-timeout), SL=3.0/TP=1.5. Probation — voting at reduced weight.
+    enabled: true   # FIX-20260528-013: RR=1.0 retrained. Stage 1 signal generator — near-zero standalone Sharpe expected. MetaFilter provides edge.
   - path: configs/brains/Meta_Stage1_MetaLabel_Binary_V1.json
-    enabled: true   # Meta-Labeling binary classifier. OU signal → barrier SL/TP. 43-dim. Probation — voting at reduced weight.
+    enabled: true   # FIX-20260528-013: RR=1.0 retrained on train.npz (was barrier_stage1_v4). Stage 1 signal generator.
   # ── V9 barrier classifier brains DELETED 2026-05-21 ──
   # xgb_barrier_12bar_xgboost_v3: blind OOS WR 39.6%, Total PnL -714R — anti-predictive
   # lgb_barrier_12bar_lightgbm_v3: blind OOS WR 34.9%, Total PnL -1211R — anti-predictive
@@ -129,11 +129,10 @@ correlation_tracker:
 strategy_lines:
   barrier_12bar:
     enabled: true
-    # ── PROBATION 2026-05-26: Full Pipeline Rebuild complete (FIX-20260526-041) ──
-    # Meta_Stage2_Filter_V3 active (48-dim LGB + Platt, Forward Sharpe 1.30).
-    # Stage 1 Huber probe + Stage 2 MetaFilter wired through Track 4d gate chain.
-    # Promoted from shadow to probation at 0.01 lot to validate train-serve skew
-    # elimination. Budget: daily_loss -3%, max 5 consecutive losses.
+    # ── FIX-20260528-013: Full pipeline retrained with RR=1.0 symmetric labels ──
+    # Meta_Stage2_Filter_V3 retrained (47-dim LGB + Platt, CPCV Sharpe 8.49 ± 3.33).
+    # Stage 1 Binary/MetaLabel + Stage 2 MetaFilter wired through Track 4d gate chain.
+    # Budget: daily_loss -3%, max 5 consecutive losses.
     mode: probation
     timeframe: M5
     magic: 90001

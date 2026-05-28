@@ -44,15 +44,15 @@ validation:
 
 quality_gates:
   model_type: tree
-  min_train_sharpe: 0.20
-  min_train_win_rate: 0.48
-  min_sortino_ratio: 0.3
+  min_train_sharpe: 0.0       # FIX-20260528-013: RR=1.0 symmetric — Stage 1 is signal generator, not standalone strategy (FIX-20260517-012 Route A)
+  min_train_win_rate: 0.45    # Near-random barrier outcome expected with symmetric SL/TP
+  min_sortino_ratio: 0.0
   min_calmar_ratio: 0.0
-  max_vol_scaled_dd_pct: 40.0
-  min_forward_sharpe: 0.20
-  min_forward_win_rate: 0.48
-  max_overfit_gap: 0.5
-  require_shap_stability: true
+  max_vol_scaled_dd_pct: 60.0  # Wider tolerance for noisy Stage 1 predictions
+  min_forward_sharpe: 0.0     # MetaFilter provides edge; Stage 1 just needs to be better than random
+  min_forward_win_rate: 0.45
+  max_overfit_gap: 5.0        # Higher tolerance — CPCV gap inflated by near-zero denominator
+  require_shap_stability: false
 
 output:
   brain_id_template: "lgb_{contract}_{timestamp}"

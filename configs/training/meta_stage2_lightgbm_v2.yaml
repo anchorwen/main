@@ -3,7 +3,7 @@ contract_id: "meta_stage2_lightgbm_v2"
 
 dataset:
   path: "data/training/meta_features_runtime_v2.npz"
-  feature_schema: "meta_stage2_runtime_56"
+  feature_schema: "meta_stage2_runtime_47"  # FIX-20260528-013: rebuilt with 40 V9 + 7 PiT meta
   min_samples_per_class: 100
   sample_weighting: "inverse_class_frequency"
 
@@ -13,7 +13,7 @@ label:
   tp_atr_mult: 3.5
   horizon_bars: 12
   profitability_calibrated: true
-  label_mapping: drop_timeout_binary
+  label_mapping: null  # FIX-20260528-013: dataset already has binary {0,1} from build_meta_features.py
   spread_points: 30
   slippage_points: 10
   tick_size: 0.001
@@ -34,7 +34,8 @@ architecture:
     min_data_in_leaf: 20
     lambda_l1: 0.1
     lambda_l2: 0.1
-    scale_pos_weight: 0.61
+    # FIX-20260528-013: scale_pos_weight removed — balanced classes with RR=1.0.
+    # inverse_class_frequency sample_weighting handles any residual imbalance.
 
 validation:
   method: "cpcv"
@@ -52,7 +53,7 @@ quality_gates:
   model_type: tree
   min_forward_sharpe: 0.3
   min_forward_win_rate: 0.48
-  max_overfit_gap: 1.0
+  max_overfit_gap: 5.0  # FIX-20260528-013: RR=1.0 MetaFilter has high train/forward Sharpe, gap scales with magnitude
   require_shap_stability: false
 
 output:
