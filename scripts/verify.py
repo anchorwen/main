@@ -22,11 +22,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 STAMP_FILE = ROOT / ".verify_stamp.json"
 
-# Force UTF-8 on Windows
+# Force UTF-8 on Windows while preserving line buffering.
+# io.TextIOWrapper rewrap defaults to full buffering which would cause
+# print() output to appear AFTER subprocess stdout (e.g. pytest dots).
 if sys.platform == "win32":
     import io
 
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stdout.reconfigure(line_buffering=True)
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 
