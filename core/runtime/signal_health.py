@@ -72,11 +72,9 @@ class FeatureGate:
                     fv = feature_vector.ravel()
                 else:
                     fv = feature_vector
-                if hasattr(fv, "shape"):
-                    if fv.shape != (40,):
-                        return GateResult(
-                            False, "FEATURE_ZERO_VECTOR", f"wrong shape {fv.shape}, expected (40,)"
-                        )
+                # Removed hardcoded shape==(40,) check (FIX-20260528-017).
+                # Downstream adapter-level dimension guards catch mismatches
+                # on a per-brain basis without false-blocking non-40 brains.
                 nan_count = 0
                 inf_count = 0
                 zero_count = 0

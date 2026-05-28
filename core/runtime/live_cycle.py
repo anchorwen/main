@@ -2847,11 +2847,11 @@ def _build_meta_feature_vector(
     # ═══════════════════════════════════════════════════════════════
     # Step 2: Read raw V9 features from feature store (40-dim)
     # ═══════════════════════════════════════════════════════════════
-    raw_features: dict[str, float] = {}
+    raw_features: dict[str, float] | None = None
     try:
         record = feature_store.latest(symbol, "M5", schema_name="v9_institutional_40")
-        if record is not None and record.values:
-            raw_features = record.values
+        if record is not None:
+            raw_features = dict(record.values) if record.values else {}
     except Exception:
         pass
 
@@ -2865,6 +2865,8 @@ def _build_meta_feature_vector(
     # config or model metadata, then assemble in that exact order.
     _feature_names: list[str] | None = None
 
+    from core.features.schemas.registry import get_schema_dimension
+
     # Source 1: brain config features field (authoritative — training order)
     for b_info in brains:
         _bid = str(b_info.get("brain_id", ""))
@@ -2873,9 +2875,12 @@ def _build_meta_feature_vector(
             or "barrier_12bar_meta" in str(b_info.get("contract_group", "")).lower()
         ):
             _features = b_info.get("features")
-            if _features and isinstance(_features, list) and len(_features) == 40:
-                _feature_names = [str(f) for f in _features]
-                break
+            if _features and isinstance(_features, list):
+                _schema_id = str(b_info.get("feature_schema_id", "v9_institutional_40"))
+                _expected_dim = get_schema_dimension(_schema_id)
+                if len(_features) == _expected_dim:
+                    _feature_names = [str(f) for f in _features]
+            break
 
     # Source 2: model metadata file (fallback)
     if _feature_names is None:
@@ -2889,12 +2894,19 @@ def _build_meta_feature_vector(
             try:
                 _meta = json.loads(Path(_meta_path).read_text(encoding="utf-8"))
                 _names = _meta.get("feature_names")
-                if _names and isinstance(_names, list) and len(_names) == 40:
-                    _feature_names = [str(f) for f in _names]
+                if _names and isinstance(_names, list):
+                    _meta_schema_id = (
+                        str(b_info.get("feature_schema_id", "v9_institutional_40"))
+                        if b_info
+                        else "v9_institutional_40"
+                    )
+                    _expected_dim = get_schema_dimension(_meta_schema_id)
+                    if len(_names) == _expected_dim:
+                        _feature_names = [str(f) for f in _names]
             except Exception:
                 pass
 
-    if not raw_features:
+    if raw_features is None:
         return None, None
 
     # ── Step 3: Assemble 40-dim vector in TRAINING feature order ──
@@ -4844,9 +4856,11 @@ def execute_live_cycle(
     # signal quality on the next cycle that DOES trade.
     micro_sequences: dict[str, np.ndarray] = {}
     micro_feature_dict: dict[str, float] | None = None
+    from core.features.schemas.registry import get_schema_dimension as _schema_dim
+
     if config.no_mt5:
-        feature_vector: Any = np.zeros(40, dtype=np.float64)
-        micro_feature_vector: Any = np.zeros(9, dtype=np.float64)
+        feature_vector: Any = np.zeros(_schema_dim("v9_institutional_40"), dtype=np.float64)
+        micro_feature_vector: Any = np.zeros(_schema_dim("v4.3_microstructure_9"), dtype=np.float64)
     else:
         trigger = {"symbol": config.symbol, "venue": "MT5"}
         feature_vector = feature_service.build_feature_vector(trigger)
@@ -4865,9 +4879,11 @@ def execute_live_cycle(
                 ).ravel()
             except Exception:
                 micro_feature_dict = {}
-                micro_feature_vector = np.zeros(9, dtype=np.float64)
+                micro_feature_vector = np.zeros(
+                    _schema_dim("v4.3_microstructure_9"), dtype=np.float64
+                )
         else:
-            micro_feature_vector = np.zeros(9, dtype=np.float64)
+            micro_feature_vector = np.zeros(_schema_dim("v4.3_microstructure_9"), dtype=np.float64)
 
     # ── Meta-filter gate + Conformal OU Gate (lazy init on first live cycle) ──
     # Both gates share one ConformalCalibrator so the empirical P(win)

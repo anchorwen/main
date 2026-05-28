@@ -14,44 +14,11 @@ import sys
 from pathlib import Path
 
 # Schema name → canonical feature name list
-SCHEMA_FEATURE_NAMES: dict[str, list[str]] = {}
-
-# Schema aliases
-SCHEMA_ALIASES: dict[str, str] = {
-    "swing_24": "daily_swing_24",
-    "v2_microstructure_9": "v4.3_microstructure_9",
-    "v4.5_microstructure_9": "v4.3_microstructure_9",
-}
-
-# Schema name → expected dimension
-SCHEMA_DIMENSIONS: dict[str, int] = {
-    "v9_institutional_40": 40,
-    "v4.5_microstructure_9": 9,
-    "v2_microstructure_9": 9,
-    "v2_microstructure_288": 288,
-    "v4.3_microstructure_9": 9,
-    "daily_swing_24": 24,
-    "swing_24": 24,
-    "v6_price_series_1": 1,
-}
-
-
-def _load_schemas() -> None:
-    """Lazy-load feature schemas from core."""
-    if SCHEMA_FEATURE_NAMES:
-        return
-    from core.features.schemas.daily_swing_schema import DAILY_SWING_24_FEATURES
-    from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
-    from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
-
-    SCHEMA_FEATURE_NAMES["v9_institutional_40"] = list(V9_INSTITUTIONAL_40_FEATURES)
-    SCHEMA_FEATURE_NAMES["daily_swing_24"] = list(DAILY_SWING_24_FEATURES)
-    SCHEMA_FEATURE_NAMES["swing_24"] = list(DAILY_SWING_24_FEATURES)
-    SCHEMA_FEATURE_NAMES["v4.3_microstructure_9"] = list(MICROSTRUCTURE_9_FEATURES)
-    SCHEMA_FEATURE_NAMES["v4.5_microstructure_9"] = list(MICROSTRUCTURE_9_FEATURES)
-    SCHEMA_FEATURE_NAMES["v2_microstructure_9"] = list(MICROSTRUCTURE_9_FEATURES)
-    SCHEMA_FEATURE_NAMES["v2_microstructure_288"] = list(MICROSTRUCTURE_9_FEATURES) * 32
-    SCHEMA_FEATURE_NAMES["v6_price_series_1"] = ["price_return"]
+from core.features.schemas.registry import (
+    SCHEMA_ALIASES,
+    SCHEMA_DIMENSIONS,
+    get_schema_feature_names,
+)
 
 
 def _resolve_schema(schema_id: str) -> str:
@@ -62,7 +29,9 @@ def _resolve_schema(schema_id: str) -> str:
 def _get_features(schema_id: str) -> list[str] | None:
     """Get canonical feature list for a schema, or None if unknown."""
     canonical = _resolve_schema(schema_id)
-    return SCHEMA_FEATURE_NAMES.get(canonical)
+    if canonical not in SCHEMA_DIMENSIONS:
+        return None
+    return get_schema_feature_names(canonical)
 
 
 def repair_config(config_path: str, write: bool = False) -> dict:
@@ -86,7 +55,7 @@ def repair_config(config_path: str, write: bool = False) -> dict:
 
     # Check schema is known
     canonical = _resolve_schema(schema_id) if schema_id else ""
-    if schema_id and canonical not in SCHEMA_FEATURE_NAMES:
+    if schema_id and canonical not in SCHEMA_DIMENSIONS:
         result["issues"].append(f"unknown feature_schema_id: {schema_id}")
         return result
 
@@ -136,8 +105,6 @@ def main() -> int:
     parser.add_argument("--write", action="store_true", help="Fill missing features fields + save")
     parser.add_argument("--check", action="store_true", help="Exit 1 if any issues found (CI mode)")
     args = parser.parse_args()
-
-    _load_schemas()
 
     config_dir = Path("configs/brains")
     configs = sorted(f for f in config_dir.glob("*.json") if ".normalization." not in f.name)

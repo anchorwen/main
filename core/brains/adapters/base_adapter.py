@@ -127,7 +127,7 @@ class BaseBrainAdapter(ABC):
             # Subclasses that maintain internal state (e.g. ParamsBrainAdapter
             # with a rolling price buffer) can still produce a signal.
             # Pass a zero-length vector as a signal to infer().
-            feature_vector = np.zeros(self._feature_dimension or 40, dtype=np.float64)
+            feature_vector = np.zeros(self._feature_dimension, dtype=np.float64)
 
         raw_output = self.infer(feature_vector)
         return self.get_signal(raw_output)

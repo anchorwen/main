@@ -54,6 +54,7 @@ BrainRegistryService → brain_entries → BrainFactory → adapters
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260528-017 | 2026-05-28 | cursor-agent | — | Schema Dimension & Feature Order SSOT: added strict-list feature order handshake in BrainFactory.build() — compares config `features` against model .meta.json `feature_names` using `!=` (NOT set()), raises BrainConfigError at first differing index. LightGBM uses positional indexing, scrambled features produce garbage predictions. | RC-06 |
 | FIX-20260527-001 | 2026-05-27 | cursor-agent | — | Meta_Stage1_Binary_Cls_V1 vote_weight 0.0→0.8 + status shadow→probation in brain config. Previous vote_weight=0.0 (set for Plan B shadow OOF accumulation) meant even after governance unfreeze, brain had zero voting power — barrier_12bar probation mode could not produce trades. Governance probation penalty (0.5×) will reduce effective weight to ~0.4. Part of governance auto-freeze recovery. | RC-09, RC-11 |
 | FIX-20260524-001 | 2026-05-24 | cursor-agent | — | Single source of truth: BrainRegistryService now auto-discovers brain configs from configs/brains/ when live.yaml registry_entries is empty. Redundant manual registration eliminated. | RC-09 |
 | FIX-20260524-003 | 2026-05-24 | cursor-agent | — | P0-2 zombie brain removal: deleted LightGBM_V3_New and XGBoost_V11_New from governance_state.json. No config files, no model artifacts, no code references, 0% WR (8t, -0.01). Previously deleted in FIX-20260517-011, accidentally re-registered 2026-05-22. | RC-11 (stale-data) |

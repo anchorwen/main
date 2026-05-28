@@ -6,6 +6,8 @@ Validates that the validator correctly accepts the augmented 43-dim schema
 
 from __future__ import annotations
 
+import pytest
+
 from core.deployment.brain_config_validator import (
     SCHEMA_DIMENSIONS,
     BrainConfigValidator,
@@ -104,8 +106,9 @@ class TestSchemaRegistration:
         assert len(names) == 40
         assert "ou_z_score" not in names
 
-    def test_unknown_schema_returns_none(self):
-        assert _get_schema_feature_names("nonexistent_schema_999") is None
+    def test_unknown_schema_raises_keyerror(self):
+        with pytest.raises(KeyError):
+            _get_schema_feature_names("nonexistent_schema_999")
 
 
 class TestValidatorAccepts43DimSchema:

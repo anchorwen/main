@@ -77,7 +77,7 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
            ``self._num_features`` (from ``booster.num_feature()``).
         """
         if feature_source is None:
-            return self.inference(np.zeros(self._num_features or 40, dtype=np.float64))
+            return self.inference(np.zeros(self._num_features, dtype=np.float64))
 
         # ── Defense Line 1: Metadata-driven feature extraction ──
         feature_names = self._brain_entry.get("features")
@@ -97,7 +97,7 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
                 "feature_missing",
                 {"message": "No feature names in config or booster — zero vector used"},
             )
-            return self.inference(np.zeros(self._num_features or 40, dtype=np.float64))
+            return self.inference(np.zeros(self._num_features, dtype=np.float64))
 
         raw_vector = np.array(
             [float(feature_source.get(name, 0.0)) for name in feature_names],

@@ -200,6 +200,7 @@ All alerts are printed as single-line JSON to stderr: `{"event":"brain_alert","t
 | FIX-20260524-024 | 2026-05-24 | cursor-agent | — | DRY _score_to_direction: extracted duplicated static method from 4 adapters (XGBoost/LightGBM/ONNX/Transformer) into BaseBrainAdapter as shared utility. Return type annotated as tuple[Direction, float, float] to satisfy Layer 1 immutable contract mypy checks. | RC-06 |
 | FIX-20260525-018 | 2026-05-25 | cursor-agent | — | M15 parliament deadlock diagnostics: removed half_life + buffer_len from diagnostics exclusion filter in ParamsBrainAdapter.get_signal() so they flow into BrainSignal.diagnostics. Parliament gate_diag now includes brain_diag list (z_score, half_life, buffer_len, theta) per brain for root cause identification of statarb_m15 neutral_consensus. | RC-06 |
 | FIX-20260524-025 | 2026-05-24 | cursor-agent | — | MetaFilterAdapter discoverability: added to core/brains/adapters/__init__.py exports (NOT in ADAPTER_REGISTRY — standalone class with its own load/filter/predict_proba API, not a BaseBrainAdapter subclass). | RC-06 |
+| FIX-20260528-017 | 2026-05-28 | cursor-agent | — | Schema Dimension & Feature Order SSOT: eliminated 3 silent `or 40` fallbacks in base_adapter.py, lightgbm_brain_adapter.py (2 sites), xgboost_brain_adapter.py — missing `_num_features` now raises RuntimeError instead of silently producing garbage predictions. | RC-06 |
 
 ## Cross-Module Contracts
 

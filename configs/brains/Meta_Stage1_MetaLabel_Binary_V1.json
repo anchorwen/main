@@ -3,7 +3,10 @@
   "brain_id": "Meta_Stage1_MetaLabel_Binary_V1",
   "brain_type": "lightgbm_v1",
   "brain_role": "alpha_brain",
-  "roles": ["voter", "meta_probe"],
+  "roles": [
+    "voter",
+    "meta_probe"
+  ],
   "meta_probe_config": {
     "score_type": "probability",
     "threshold": 0.65,
@@ -16,11 +19,21 @@
   "artifact_path": "data/models/institutional/barrier_12bar_meta_binary_cls_20260528_015153.txt",
   "feature_schema_id": "v9_institutional_40",
   "training_contract": "barrier_12bar_meta_binary_cls",
-  "normalization_config_path": "data/models/institutional/barrier_12bar_meta_binary_cls_20260524_101947.meta.json",
+  "normalization_config_path": "",
   "deployment_scope": {
-    "symbols": ["XAUUSDc", "XAUUSD"],
-    "sessions": ["all"],
-    "regimes": ["trend", "volatile_trend", "mean_reversion", "ranging"]
+    "symbols": [
+      "XAUUSDc",
+      "XAUUSD"
+    ],
+    "sessions": [
+      "all"
+    ],
+    "regimes": [
+      "trend",
+      "volatile_trend",
+      "mean_reversion",
+      "ranging"
+    ]
   },
   "contract_group": "barrier_12bar_meta",
   "training_horizon": 12,
@@ -47,17 +60,45 @@
   "val_acc": 0.833,
   "output_unit": "probability",
   "features": [
-    "H1_ATR_14", "H1_Body_Ratio", "H1_Hurst", "H1_MACD",
-    "H1_Macro1_Corr", "H1_OU_Theta", "H1_Price_ZScore",
-    "H1_RSI_14", "H1_Ret_1", "H1_Vol_ZScore",
-    "M15_ATR_14", "M15_Body_Ratio", "M15_Hurst", "M15_MACD",
-    "M15_Macro1_Corr", "M15_OU_Theta", "M15_Price_ZScore",
-    "M15_RSI_14", "M15_Ret_1", "M15_Vol_ZScore",
-    "M30_ATR_14", "M30_Body_Ratio", "M30_Hurst", "M30_MACD",
-    "M30_Macro1_Corr", "M30_OU_Theta", "M30_Price_ZScore",
-    "M30_RSI_14", "M30_Ret_1", "M30_Vol_ZScore",
-    "M5_ATR_14", "M5_Body_Ratio", "M5_Hurst", "M5_MACD",
-    "M5_Macro1_Corr", "M5_OU_Theta", "M5_Price_ZScore",
-    "M5_RSI_14", "M5_Ret_1", "M5_Vol_ZScore"
+    "M5_Ret_1",
+    "M5_Body_Ratio",
+    "M5_ATR_14",
+    "M5_RSI_14",
+    "M5_MACD",
+    "M5_Vol_ZScore",
+    "M5_Macro1_Corr",
+    "M5_Price_ZScore",
+    "M15_Ret_1",
+    "M15_Body_Ratio",
+    "M15_ATR_14",
+    "M15_RSI_14",
+    "M15_MACD",
+    "M15_Vol_ZScore",
+    "M15_Macro1_Corr",
+    "M15_Price_ZScore",
+    "M30_Ret_1",
+    "M30_Body_Ratio",
+    "M30_ATR_14",
+    "M30_RSI_14",
+    "M30_MACD",
+    "M30_Vol_ZScore",
+    "M30_Macro1_Corr",
+    "M30_Price_ZScore",
+    "H1_Ret_1",
+    "H1_Body_Ratio",
+    "H1_ATR_14",
+    "H1_RSI_14",
+    "H1_MACD",
+    "H1_Vol_ZScore",
+    "H1_Macro1_Corr",
+    "H1_Price_ZScore",
+    "M5_OU_Theta",
+    "M15_OU_Theta",
+    "M30_OU_Theta",
+    "H1_OU_Theta",
+    "M5_Hurst",
+    "M15_Hurst",
+    "M30_Hurst",
+    "H1_Hurst"
   ]
 }

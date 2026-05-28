@@ -449,18 +449,30 @@ class MetaSignalFilter:
         # Convert direction string to int
         dir_int = 1 if direction == "long" else -1 if direction == "short" else 0
 
-        # Build named feature dict from arrays
+        # Build named feature dict from arrays using feature-name-indexed lookup.
+        # V9 features are identified by timeframe prefix (M5_/M15_/M30_/H1_);
+        # everything else is a micro or meta feature.  This eliminates the
+        # hardcoded [:40]/[40:49] positional slices that assume a fixed ordering.
+        _V9_PREFIXES = ("M5_", "M15_", "M30_", "H1_")
+        v9_indices: list[int] = []
+        micro_indices: list[int] = []
+        for _i, _name in enumerate(self._feature_names):
+            if _name.startswith(_V9_PREFIXES):
+                v9_indices.append(_i)
+            else:
+                micro_indices.append(_i)
+
         v9_dict: dict[str, float] = {}
         if v9_array is not None:
             arr = np.asarray(v9_array, dtype=np.float64).ravel()
-            for i, name in enumerate(self._feature_names[:40]):
-                if i < len(arr):
-                    v9_dict[name] = float(arr[i])
+            for _vi, _fi in enumerate(v9_indices):
+                if _vi < len(arr):
+                    v9_dict[self._feature_names[_fi]] = float(arr[_vi])
         if micro_array is not None:
             arr = np.asarray(micro_array, dtype=np.float64).ravel()
-            for i, name in enumerate(self._feature_names[40:49]):
-                if i < len(arr):
-                    v9_dict[name] = float(arr[i])
+            for _vi, _fi in enumerate(micro_indices):
+                if _vi < len(arr):
+                    v9_dict[self._feature_names[_fi]] = float(arr[_vi])
 
         return self.filter(
             direction=dir_int,

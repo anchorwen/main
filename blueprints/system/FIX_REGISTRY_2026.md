@@ -132,6 +132,35 @@
 - **Verification**: `python scripts/verify.py --quick` — mypy pass, ruff pass, blueprint compliance pass
 - **Risk**: Low — this is a pure runtime fix aligning feature vector dimension with the already-deployed model config. The model was already trained on 40-dim V9 features; the runtime was the only outlier.
 
+### FIX-20260528-017 — Schema Dimension & Feature Order SSOT — Permanent Fix
+
+- **Date**: 2026-05-28
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (contract-violation), RC-09 (config-drift) — After 4 rounds of dimension mismatch fixes (FIX-20260525-026, FIX-20260528-013, FIX-20260528-015, FIX-20260528-016), comprehensive audit revealed the root cause is NOT a single wrong number — it's a **structural absence of single source of truth (SSOT)** across 22+ locations that define, check, or assume feature dimensions and feature order. Three independent "truth systems" (Config JSON, Model file, Runtime code) with zero cross-validation at startup. More critically, 3 barrier-stage-1 brains had config feature order swapped relative to model training order — LightGBM uses column-position indexing, so wrong order = every feature value delivered to wrong model input slot = silent garbage predictions.
+
+- **Fix**: Five-layer permanent structural fix with 3 architect-mandated guardrails:
+
+  **Layer 1 — SSOT Module**: Created `core/features/schemas/registry.py` — single source of truth for all 14 feature schemas. Exports `SCHEMA_DIMENSIONS`, `SCHEMA_ALIASES`, `get_schema_dimension()` (raises KeyError on unknown — no silent default), `get_schema_feature_names()`. Imported by brain_config_validator.py, feature_service.py, repair_brain_configs.py, generate_brain_config.py, institutional_train.py, live_cycle.py — replacing 5+ duplicate SCHEMA_DIMENSIONS copies.
+
+  **Layer 2 — Feature order handshake (Guardrail #1)**: `BrainFactory.build()` now compares config `features` list against model `.meta.json` `feature_names` using strict `!=` (NOT set() — set comparison would pass when order differs, exactly the bug we're fixing). Raises `BrainConfigError` with first differing index and both feature names. If no `.meta.json` → log warning, proceed.
+
+  **Layer 3 — Dynamic slicing by name prefix (Guardrail #2)**: MetaFilter's `[:40]`/`[40:49]` positional slices replaced with feature-name-indexed lookup. Features grouped by namespace prefix (`M5_`/`M15_`/`M30_`/`H1_` → V9, everything else → microstructure). Boundary discovered at runtime, not assumed.
+
+  **Layer 4 — Silent fallback elimination (Guardrail #3)**: Removed 4 `or 40`/`or N` silent defaults: base_adapter.py, lightgbm_brain_adapter.py (2 sites), xgboost_brain_adapter.py. Missing `_num_features` now raises RuntimeError. Removed hardcoded `np.zeros(40)`/`np.zeros(9)` in live_cycle.py → schema registry lookup. Removed hardcoded `fv.shape != (40,)` check in signal_health.py.
+
+  **Layer 5 — Brain config repair**: Fixed feature order in 3 brain configs to match model training order:
+  - `Meta_Stage1_Huber_V1.json`: M5-first → H1-first (match model)
+  - `Meta_Stage1_Binary_Cls_V1.json`: H1-first → M5-first (match model)
+  - `Meta_Stage1_MetaLabel_Binary_V1.json`: H1-first → M5-first + cleared normalization_config_path
+
+- **Files changed**: `core/features/schemas/registry.py` (NEW), `core/deployment/brain_config_validator.py`, `core/features/feature_service.py`, `scripts/repair_brain_configs.py`, `scripts/training/generate_brain_config.py`, `scripts/training/institutional_train.py`, `core/brains/adapters/base_adapter.py`, `core/brains/adapters/lightgbm_brain_adapter.py`, `core/brains/adapters/xgboost_brain_adapter.py`, `core/runtime/live_cycle.py`, `core/runtime/signal_health.py`, `core/execution/meta_signal_filter.py`, `core/brains/services/brain_factory.py`, `configs/brains/Meta_Stage1_Huber_V1.json`, `configs/brains/Meta_Stage1_Binary_Cls_V1.json`, `configs/brains/Meta_Stage1_MetaLabel_Binary_V1.json`, `tests/unit/test_meta_feature_vector.py`, `tests/unit/test_brain_config_validator.py`
+
+- **Blueprints updated**: `brains_adapters.md`, `brains_services.md`, `brains_validation.md`, `execution_guards.md`, `features_service.md`, `runtime_live.md`, `training.md`, `FIX_REGISTRY.md`, `FIX_REGISTRY_2026.md`
+
+- **Verification**: `python scripts/verify.py --full` — mypy pass, ruff pass, blueprint compliance pass, 2700+ pytest pass
+
+- **Risk**: Medium. Feature order fix changes live brain predictions — this is the POINT (current predictions were garbage due to scrambled features). BrainFactory will raise BrainConfigError on any remaining order mismatch at startup — monitor first 50 cycles after restart. Schema registry uses lazy caching for feature name resolution — no circular import risk (depends only on leaf schema modules).
+
 ### FIX-20260527-010 — Phase 1: Critical Fail-Open Fixes (Global Contract Audit Layer 3)
 
 - **Date**: 2026-05-27

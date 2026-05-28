@@ -60,7 +60,7 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
         elif feature_source is not None:
             feature_vector = np.asarray(list(feature_source.values()), dtype=np.float64)
         else:
-            feature_vector = np.zeros(40, dtype=np.float64)
+            feature_vector = np.zeros(self._num_features, dtype=np.float64)
         return self.inference(feature_vector)
 
     def load(self) -> None:

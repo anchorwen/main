@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 
 from core.brains.adapters import ADAPTER_REGISTRY, BRAIN_TYPE_MAP
 from core.deployment.brain_alert import emit_brain_alert
@@ -96,6 +97,69 @@ class BrainFactory:
             raise BrainConfigError(
                 f"Model dimension mismatch for {brain_id}: " + "; ".join(dim_result.errors)
             )
+
+        # ── Feature order validation (FIX-20260528-017) ──
+        # Compare brain config's features list against model's training-time
+        # feature_names in .meta.json.  LightGBM/XGBoost use positional indexing,
+        # so order mismatch = scrambled features = garbage predictions.
+        _config_features = brain_entry.get("features")
+        if _config_features and isinstance(_config_features, list):
+            _artifact_path = brain_entry.get("artifact_path", "")
+            if _artifact_path:
+                try:
+                    _meta_path = str(Path(_artifact_path).with_suffix("")) + ".meta.json"
+                    if Path(_meta_path).exists():
+                        _meta = json.loads(Path(_meta_path).read_text(encoding="utf-8"))
+                        _meta_features = _meta.get("feature_names")
+                        if _meta_features and isinstance(_meta_features, list):
+                            # STRICT LIST EQUALITY ONLY — set() is FORBIDDEN
+                            if _config_features != _meta_features:
+                                # Find first differing index for diagnostic
+                                _first_diff = None
+                                for _i, (_cfg, _meta_name) in enumerate(
+                                    zip(_config_features, _meta_features, strict=False)
+                                ):
+                                    if _cfg != _meta_name:
+                                        _first_diff = (_i, _cfg, _meta_name)
+                                        break
+                                _detail = (
+                                    f"Config has {len(_config_features)} features, "
+                                    f"model has {len(_meta_features)}. "
+                                )
+                                if _first_diff:
+                                    _detail += (
+                                        f"First mismatch at index {_first_diff[0]}: "
+                                        f"config={_first_diff[1]!r}, model={_first_diff[2]!r}"
+                                    )
+                                logger.error(
+                                    "BrainFactory feature order mismatch for %s: %s",
+                                    brain_id,
+                                    _detail,
+                                )
+                                emit_brain_alert(
+                                    brain_id,
+                                    "feature_order_mismatch",
+                                    {
+                                        "config_len": len(_config_features),
+                                        "model_len": len(_meta_features),
+                                        "first_diff_index": _first_diff[0] if _first_diff else None,
+                                        "config_name": _first_diff[1] if _first_diff else None,
+                                        "model_name": _first_diff[2] if _first_diff else None,
+                                    },
+                                )
+                                raise BrainConfigError(
+                                    f"brain_id={brain_id}: feature order mismatch. "
+                                    f"{_detail} LightGBM uses positional indexing — "
+                                    f"scrambled features produce garbage predictions."
+                                )
+                except BrainConfigError:
+                    raise
+                except Exception:
+                    # .meta.json missing or unreadable — not fatal, but log
+                    logger.debug(
+                        "BrainFactory: could not verify feature order for %s (no .meta.json)",
+                        brain_id,
+                    )
 
         logger.info(
             "BrainFactory built and loaded adapter brain_id=%s type=%s backend=%s",

@@ -618,33 +618,14 @@ def train_lightgbm_single(
 
 def _resolve_features_for_schema(feature_schema_id: str) -> list[str] | None:
     """Resolve canonical feature name list for a schema_id."""
-    if feature_schema_id in ("v9_institutional_40",):
-        from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+    try:
+        from core.features.schemas.registry import SCHEMA_DIMENSIONS, get_schema_feature_names
 
-        return list(V9_INSTITUTIONAL_40_FEATURES)
-    elif feature_schema_id == "v9_micro_49":
-        from core.features.schemas.v9_micro_schema import V9_MICRO_49_FEATURES
-
-        return list(V9_MICRO_49_FEATURES)
-    elif feature_schema_id in ("daily_swing_24", "swing_24"):
-        from core.features.schemas.daily_swing_schema import DAILY_SWING_24_FEATURES
-
-        return list(DAILY_SWING_24_FEATURES)
-    elif feature_schema_id in (
-        "v4.5_microstructure_9",
-        "v2_microstructure_9",
-        "v4.3_microstructure_9",
-    ):
-        from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
-
-        return list(MICROSTRUCTURE_9_FEATURES)
-    elif feature_schema_id == "v2_microstructure_288":
-        from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
-
-        return list(MICROSTRUCTURE_9_FEATURES) * 32
-    elif feature_schema_id == "v6_price_series_1":
-        return ["price_return"]
-    return None
+        if feature_schema_id not in SCHEMA_DIMENSIONS:
+            return None
+        return get_schema_feature_names(feature_schema_id)
+    except Exception:
+        return None
 
 
 def generate_brain_config(

@@ -8,8 +8,6 @@ import numpy as np
 _logger = logging.getLogger(__name__)
 
 from core.contracts.ids import new_snapshot_id
-from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
-from core.features.schemas.v9_micro_schema import V9_MICRO_49_FEATURES
 
 # Schemas that the current runtime environment can compute.
 # Updated when new feature computer implementations are added.
@@ -26,29 +24,8 @@ _IMPLEMENTED_SCHEMAS: set[str] = {
     "v6_price_series_1",  # OU Params Z-Score
 }
 
-# Schema name → feature count
-_SCHEMA_DIMS: dict[str, int] = {
-    "v9_institutional_40": 40,
-    "v9_micro_49": 49,
-    "v9_40dim_ou3": 43,
-}
-
-
-def _schema_dimension(schema_name: str) -> int:
-    return _SCHEMA_DIMS.get(schema_name, 40)
-
-
-def _schema_feature_names(schema_name: str) -> list[str]:
-    """Return the canonical feature name list for a schema."""
-    if schema_name == "v9_institutional_40":
-        return list(V9_INSTITUTIONAL_40_FEATURES)
-    if schema_name == "v9_micro_49":
-        return list(V9_MICRO_49_FEATURES)
-    if schema_name == "v9_40dim_ou3":
-        # 40 V9 institutional + 3 OU physics (assembled by _build_meta_feature_vector)
-        return list(V9_INSTITUTIONAL_40_FEATURES) + ["ou_z_score", "ou_half_life", "ou_theta"]
-    _logger.warning("Unknown schema '%s' — falling back to v9_institutional_40", schema_name)
-    return list(V9_INSTITUTIONAL_40_FEATURES)
+from core.features.schemas.registry import get_schema_dimension as _schema_dimension
+from core.features.schemas.registry import get_schema_feature_names as _schema_feature_names
 
 
 class FeatureService:
