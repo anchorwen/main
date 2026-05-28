@@ -137,6 +137,9 @@ def run_pytest() -> tuple[bool, str]:
         )
         passed = result.returncode == 0
         return passed, "pytest completed" if passed else f"pytest failed (exit {result.returncode})"
+    except KeyboardInterrupt:
+        print()  # newline after ^C
+        return False, "pytest interrupted (Ctrl+C)"
     except subprocess.TimeoutExpired:
         return False, "pytest timed out (300s)"
     except Exception as exc:

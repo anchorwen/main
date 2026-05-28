@@ -50,7 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
-| FIX-20260528-024b | 2026-05-28 | cursor-agent | — | verify.py `run_pytest()` silent hang: v1 `capture_output=True` → pipe buffer deadlock. v2 `tempfile.TemporaryFile` → no deadlock but swallowed output for 130s, user saw silence and pressed Ctrl+C. v3 (final): inherit stdout/stderr — pytest dots stream to terminal in real time, no capture means no pipe. Also removed unused `import tempfile`. | RC-06 |
+| FIX-20260528-024b | 2026-05-28 | cursor-agent | — | verify.py `run_pytest()` 3-iteration fix: v1 `capture_output=True` → pipe deadlock. v2 `tempfile` → no deadlock but swallowed output 130s. v3 (final): inherit stdout + catch `KeyboardInterrupt` — dots stream in real time, Ctrl+C exits cleanly without traceback. Removed `import tempfile`. | RC-06 |
 | FIX-20260528-021 | 2026-05-28 | cursor-agent | — | MODULE_SOURCE_MAP: add `core/features/schemas/swing_enhanced_schema.py` to `features_service` module (new swing enhanced 35-dim schema file). | RC-09 |
 | FIX-20260528-017 | 2026-05-28 | cursor-agent | — | MODULE_SOURCE_MAP: add `core/features/schemas/registry.py` to `features_service` module (new SSOT file). | RC-09 |
 | FIX-20260528-023 | 2026-05-28 | cursor-agent | — | `_REQUIRED_BRAIN_FIELDS` expanded from 4 to 6: added `contract_group` and `training_contract`. These fields were missing from Swing_V9 brain configs, causing `brain_hard_muted_contract` at startup. `brain.py register` now rejects any config lacking these fields before registration. | RC-09 |
