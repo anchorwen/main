@@ -61,6 +61,7 @@ environment_config.json → EnvironmentConfig → ServiceContainer
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260528-018 | 2026-05-28 | cursor-agent | — | Online_MLP_V1 path defaults cleanup: `ONLINE_BRAIN_PATH` → `None` in path_defaults.py. Brain retired 2026-05-25 (pnl:critical), config file retained for smoke test compatibility. Startup `missing_yaml_entries` warning is informational only (brain_lifecycle_manager.py:899 confirms auto-discovery handles it). | RC-09, RC-11 |
 | FIX-20260524-009 | 2026-05-24 | cursor-agent | — | ConfigHotReload YAML support: load() now detects .yaml/.yml suffix and routes to yaml.safe_load(). Previously hardcoded json.loads() causing live_intent_loop's hot_reload on configs/live.yaml to fail every poll cycle. JSON configs (engine_config.json) continue to use json.loads(). | RC-06 |
 | FIX-20260523-006 | 2026-05-23 | cursor-agent | — | Day 1 graveyard cleanup: (1) config_hot_reload.load() JSONDecodeError try/except wrapper keeping current config on file corruption; (2) live.yaml brain registry cleared of 5 disabled swing entries (xgboost_d1/m15/m30/h1/h4); (3) 5 swing brain config JSONs moved to archive_deprecated/ | RC-09, RC-06 |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |

@@ -132,6 +132,21 @@
 - **Verification**: `python scripts/verify.py --quick` — mypy pass, ruff pass, blueprint compliance pass
 - **Risk**: Low — this is a pure runtime fix aligning feature vector dimension with the already-deployed model config. The model was already trained on 40-dim V9 features; the runtime was the only outlier.
 
+### FIX-20260528-018 — Online_MLP_V1 Path Defaults Cleanup
+
+- **Date**: 2026-05-28
+- **Author**: cursor-agent
+- **Root Cause**: RC-09 (config-drift), RC-11 (stale-data) — `configs/brains/online_learner_v1.json` exists on disk (status=shadow) but governance has `Online_MLP_V1` as `retired` (2026-05-25, `pnl:critical`). FIX-20260524-006 claimed to delete the stale config but never executed the deletion (git log confirms no deletion commit). Three-way state: disk=shadow, governance=retired, live.yaml=excluded. Startup `missing_yaml_entries` warning is cosmetic (brain_lifecycle_manager.py:899 confirms it's informational when auto-discovery is active). The config file cannot be deleted because smoke tests (test_v9_shadow_smoke.py) depend on `Online_MLP_V1` being registered in the test container.
+
+- **Fix**:
+  1. `core/deployment/path_defaults.py` — `ONLINE_BRAIN_PATH` set to `None` (was `"configs/brains/online_learner_v1.json"`). The brain is retired — its config path should not be a system default. Hardcoded references in `daily_ops.py` and `online_feedback_hook.py` already check `.exists()` and skip gracefully.
+  2. Status audit documented: the config file is retained for test compatibility. The `missing_yaml_entries` warning is cosmetic (auto-discovery handles it). Full cleanup (file deletion + test update) deferred to when governance state and test baselines can be rebuilt together.
+- **Files changed**: `core/deployment/path_defaults.py`
+- **Files NOT changed**: `configs/brains/online_learner_v1.json` (retained — smoke test dependency), `apps/engine/bootstrap_v9.py` (unchanged — brain already registered by existing code path)
+- **Blueprints updated**: `deployment_config.md`, `FIX_REGISTRY.md`, `FIX_REGISTRY_2026.md`
+- **Verification**: `python scripts/verify.py --full` — path_defaults.py blueprint pass. 2 pre-existing smoke test failures (formal baselines need rebuild from FIX-20260528-017 feature order changes, unrelated).
+- **Risk**: None. Change only affects path defaults — the brain was already excluded from live voting via live.yaml and governance.
+
 ### FIX-20260528-017 — Schema Dimension & Feature Order SSOT — Permanent Fix
 
 - **Date**: 2026-05-28

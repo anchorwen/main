@@ -21,8 +21,9 @@ DEFAULT_FEATURE_STORE_DIR = "data/feature_store"
 # ── Microstructure adapter (no external scaler needed for H4 model) ──
 MICROSTRUCTURE_SCALER_PATH: str | None = None
 
-# ── Online learner (optional — only if online brain is deployed) ──
-ONLINE_BRAIN_PATH = "configs/brains/online_learner_v1.json"
+# ── Online learner (FIX-20260528-018: Online_MLP_V1 retired 2026-05-25, config deleted) ──
+# ONLINE_BRAIN_PATH = "configs/brains/online_learner_v1.json"
+ONLINE_BRAIN_PATH: str | None = None
 ONLINE_WEIGHTS_PATH = "data/models/online_learner_weights.json"
 
 # ── Meta exit model (trained on historical exits — optional) ──

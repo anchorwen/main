@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-28T05:06:32Z
+> **自动生成**: 2026-05-28T05:39:12Z
 > **扫描模块数**: 448
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -169,7 +169,7 @@
 | `operational_support.py` | ✅ active | RetryPolicy, ConfigValidator | 7 | 130 | — | |
 | `operations_timeline.py` | ✅ active | OperationsTimelineService | 16 | 262 | — | |
 | `ops_maturity.py` | ✅ active | OpsMaturityService | 4 | 164 | — | |
-| `path_defaults.py` | ✅ active | — | 2 | 80 | — | |
+| `path_defaults.py` | ✅ active | — | 2 | 81 | — | |
 | `permission_audit.py` | ✅ active | AuditEntry, PermissionMatrix, AuditTrail | 20 | 334 | — | |
 | `postmortem_report.py` | ✅ active | PostmortemReportService | 11 | 468 | — | |
 | `release_certification.py` | ✅ active | ReleaseCertificationService | 12 | 293 | — | |
