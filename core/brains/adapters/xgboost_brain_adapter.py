@@ -92,6 +92,9 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
                     .get("num_feature"),
                 )
                 self._num_features = int(raw) if raw is not None else None
+            # Update _feature_dimension from model not hardcoded default
+            if self._num_features is not None:
+                self._feature_dimension = self._num_features
             self._backend = "xgboost:json"
         except Exception as exc:
             self._backend = f"stub:{type(exc).__name__}"

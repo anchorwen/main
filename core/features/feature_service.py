@@ -21,6 +21,7 @@ _IMPLEMENTED_SCHEMAS: set[str] = {
     "v4.5_microstructure_9",  # → v4.3_microstructure_9 alias
     "v2_microstructure_9",  # → v4.3_microstructure_9 alias
     "v2_microstructure_288",  # MicrostructureFeatureComputer × 32
+    "swing_enhanced_35",  # 24 swing macro + 9 micro + 2 TF-specific (OU_Theta, Hurst)
     "v6_price_series_1",  # OU Params Z-Score
 }
 

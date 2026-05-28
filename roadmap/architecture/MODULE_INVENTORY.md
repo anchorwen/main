@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-28T09:42:38Z
+> **自动生成**: 2026-05-28T09:57:06Z
 > **扫描模块数**: 451
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -71,14 +71,14 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `base_adapter.py` | ✅ active | BaseBrainAdapter | 13 | 239 | — | |
+| `base_adapter.py` | ✅ active | BaseBrainAdapter | 13 | 240 | — | |
 | `lightgbm_brain_adapter.py` | ✅ active | LightGBMBrainAdapter | 6 | 209 | — | |
 | `meta_filter_adapter.py` | ✅ active | FeatureParityError, MetaFilterAdapter | 8 | 207 | — | |
 | `online_learner_adapter.py` | ✅ active | OnlineLearnerAdapter | 18 | 597 | — | |
 | `params_brain_adapter.py` | ✅ active | ParamsBrainAdapter | 9 | 269 | — | |
 | `transformer_brain_adapter.py` | ✅ active | TransformerBrainAdapter | 9 | 266 | — | |
 | `v9_onnx_brain_adapter.py` | ✅ active | V9OnnxBrainAdapter | 9 | 313 | — | |
-| `xgboost_brain_adapter.py` | ✅ active | XGBoostBrainAdapter | 6 | 211 | — | |
+| `xgboost_brain_adapter.py` | ✅ active | XGBoostBrainAdapter | 6 | 214 | — | |
 
 ## core/brains/services
 
@@ -234,7 +234,7 @@
 | `strategy_budget.py` | ✅ active | StrategyBudget | 9 | 248 | — | |
 | `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 14 | 1933 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
-| `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 66 | — | |
+| `swing_strategy.py` | ✅ active | SwingStrategy | 4 | 128 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 7 | 227 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 31 | 643 | — | |
 
@@ -243,7 +243,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `data_augmentation.py` | ✅ active | — | 4 | 141 | — | |
-| `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 13 | 361 | — | |
+| `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 13 | 362 | — | |
 | `feature_snapshot.py` | ✅ active | StoredFeatureSnapshot | 2 | 33 | — | |
 | `local_feature_store.py` | ✅ active | LocalFeatureStore | 18 | 267 | — | |
 | `rolling_normalizer.py` | ✅ active | RollingNormalizer | 15 | 234 | — | |
