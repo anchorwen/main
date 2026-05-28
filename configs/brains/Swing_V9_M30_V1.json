@@ -25,12 +25,12 @@
     "max_depth": 5
   },
   "training_metrics": {
-    "train_accuracy": 0.5912,
-    "val_accuracy": 0.5912,
-    "test_accuracy": 0.6016,
-    "test_trade_win_rate": 0.6412,
-    "test_profit_factor": 1.7869,
-    "test_sharpe": 32.3708
+    "train_accuracy": 0.485,
+    "val_accuracy": 0.485,
+    "test_accuracy": 0.5722,
+    "test_trade_win_rate": 0.6238,
+    "test_profit_factor": 1.6583,
+    "test_sharpe": 28.1126
   },
   "features": [
     "D1_Ret_1",
@@ -71,7 +71,7 @@
   ],
   "n_features": 35,
   "n_train_samples": 1626,
-  "trained_at": "2026-05-28T11:14:53.718938Z",
+  "trained_at": "2026-05-28T15:26:57.948666Z",
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3

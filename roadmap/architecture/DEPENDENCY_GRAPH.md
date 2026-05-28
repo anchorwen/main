@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-05-28T14:20:10Z
+> **自动生成**: 2026-05-28T15:32:56Z
 
 ## Package-Level Dependencies
 
@@ -532,7 +532,7 @@
 - `build_micro_flat_features.py` → (无内部依赖)
 - `build_profitable_labels.py` → `core.contracts.training.label_contract`, `core.training.profitability_calibrator`
 - `build_s1_regression_dataset.py` → `scripts.training.build_calibrated_dataset`
-- `build_swing_enhanced_dataset.py` → (无内部依赖)
+- `build_swing_enhanced_dataset.py` → `core.features.computers.daily_computer`
 - `build_v9_micro_dataset.py` → (无内部依赖)
 - `calibrate_labels.py` → `core.training.profitability_calibrator`
 - `calibrate_meta_filter.py` → `core.brains.online_mlp_model`

@@ -198,6 +198,28 @@
 - **Verification**: `python scripts/verify.py --full` — mypy PASS, ruff PASS, blueprint PASS, pytest 2702 passed.
 - **Risk**: Low. New brains registered in `shadow` status — vote_weight=1.0 but need to prove themselves before promotion. Schema is additive (new `swing_enhanced_35` schema, no modification to existing). Training data is historical CSV-based with chronological split — no future data leakage.
 
+### FIX-20260528-025 — Swing_V9 Train-Inference Feature Computation Skew (Systematic Wrong-Direction Trades)
+
+- **Date**: 2026-05-28
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (contract-violation / train-serve skew) — 12 of 24 macro features (~37% of total model information gain) were computed with completely different logic between training and inference paths:
+  - **Training** (`build_swing_enhanced_dataset.py` `compute_swing_macro_features()`): Computed all 24 macro features from TF (M30/M15) bar data — momentum was TF-bar momentum, vol regime was TF ATR ratio, cross-asset features were M5-aligned snapshots, H4_Trend_Strength was ADX/100
+  - **Inference** (`DailyFeatureComputer._gather_row()` at `core/features/computers/daily_computer.py`): Computes all 24 macro features from D1 (daily) bar data — momentum is D1-bar momentum, vol regime is ATR percentile over 63-day window, cross-asset features are D1-level, H4_Trend_Strength is H4 24-bar momentum
+  - **H4_vs_D1_Alignment** (4.8% gain): Training={0,1} binary; Inference={1,-1,0} trinary — SIGN FLIP for disagreement scenarios
+  - **Micro features**: Training aggregated over N M5 bars per TF bar; inference used single M5 bar snapshot
+  - **TF-specific OU/Hurst**: Training computed from TF bar closes (M30 20-bar = 10hr); inference computed from M5 mid_prices (20-bar = 100min)
+  - **Management phase**: Schema dispatch only recognized `daily_swing_24`/`swing_24`, not `swing_enhanced_35`
+- **Fix**:
+  1. `scripts/training/build_swing_enhanced_dataset.py`: Removed `compute_swing_macro_features()`, `_align_higher_tf_value()`, `load_higher_tf()`, and 8 unused helper functions. Dataset builder now imports `DailyFeatureComputer` from `core.features.computers.daily_computer` and calls `_gather_row(d1_idx)` for per-bar 24-dim macro features — identical computation to inference path with monotonic D1 index tracker (O(1) amortized).
+  2. `scripts/training/build_swing_enhanced_dataset.py`: Changed micro feature `compute_micro_features_at_bar()` from N-bar aggregation to single M5 bar snapshot, matching inference-side per-bar evaluation.
+  3. `scripts/training/build_swing_enhanced_dataset.py`: Changed TF-specific OU/Hurst computation from TF bar closes to M5 close prices (best available historical proxy for inference-side M5 mid_prices).
+  4. `core/runtime/live_cycle.py` (2 sites): Added `"swing_enhanced_35"` to schema dispatch at management phase re-evaluation and exit-driven re-evaluation. Both sites now assemble 35-dim vectors (24 daily + 9 micro + 2 zeros for OU/Hurst) instead of falling through to generic feature vector assembly.
+- **Files changed**: `scripts/training/build_swing_enhanced_dataset.py`, `core/runtime/live_cycle.py`
+- **Blueprints updated**: `training.md`, `features_service.md`, `runtime_live.md`, `FIX_REGISTRY.md`, `FIX_REGISTRY_2026.md`
+- **Verification**: `python scripts/verify.py --full` — mypy PASS, ruff PASS, blueprint PASS, pytest 2702 passed
+- **Risk**: HIGH. Both Swing_V9 models (M30, M15) MUST be retrained with the corrected dataset. The current models were trained on features computed from TF bars but evaluated on D1-bar features — the systematic LONG bias is a direct consequence of this mismatch. After retraining, the models should be evaluated as shadow brains before promotion.
+- **Follow-up required**: Rebuild datasets (`build_swing_enhanced_dataset.py --tf M30 --horizon 12` and `--tf M15 --horizon 24`), retrain both Swing_V9 models, update brain configs with new training metrics.
+
 ### FIX-20260528-024b — verify.py run_pytest() Output Capture → Silent Hang (3 Iterations)
 
 - **Date**: 2026-05-28

@@ -1546,11 +1546,15 @@ def _execute_management_phase(
                         prop = b_info["adapter"].get_signal(raw)
                     else:
                         prop = None
-                elif schema_id in ("daily_swing_24", "swing_24"):
-                    # Swing brains use D1 daily features
+                elif schema_id in ("daily_swing_24", "swing_24", "swing_enhanced_35"):
+                    # Swing brains use D1 daily features; swing_enhanced_35 adds micro+TF
                     if daily_feature_provider is not None:
                         try:
-                            fv = daily_feature_provider.get_latest()
+                            fv_24 = daily_feature_provider.get_latest()
+                            if schema_id == "swing_enhanced_35":
+                                fv = np.concatenate([fv_24[:24], np.zeros(11, dtype=np.float64)])
+                            else:
+                                fv = fv_24
                             raw = b_info["adapter"].infer(fv)
                             prop = b_info["adapter"].get_signal(raw)
                         except Exception:
@@ -6393,11 +6397,22 @@ def execute_live_cycle(
                             prop = None
                 else:
                     prop = None
-            elif schema_id in ("daily_swing_24", "swing_24"):
-                # Swing brains use D1 daily features
+            elif schema_id in ("daily_swing_24", "swing_24", "swing_enhanced_35"):
+                # Swing brains use D1 daily features; swing_enhanced_35 adds micro+TF
                 if daily_feature_vector is not None:
                     try:
-                        raw = b_info["adapter"].infer(daily_feature_vector)
+                        if schema_id == "swing_enhanced_35":
+                            daily_arr = np.asarray(daily_feature_vector, dtype=np.float64).ravel()
+                            if micro_feature_vector is not None:
+                                micro_arr = np.asarray(
+                                    micro_feature_vector, dtype=np.float64
+                                ).ravel()
+                            else:
+                                micro_arr = np.zeros(9, dtype=np.float64)
+                            fv = np.concatenate([daily_arr[:24], micro_arr[:9], [0.0, 0.0]])
+                        else:
+                            fv = daily_feature_vector
+                        raw = b_info["adapter"].infer(fv)
                         prop = b_info["adapter"].get_signal(raw)
                     except Exception:
                         prop = None

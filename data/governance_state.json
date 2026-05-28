@@ -50,17 +50,17 @@
     },
     "Swing_V9_M15_V1": {
       "brain_id": "Swing_V9_M15_V1",
-      "status": "candidate",
-      "registered_at": "2026-05-28T09:39:43.072476",
-      "last_transition_at": "2026-05-28T09:39:43.072476",
+      "status": "shadow",
+      "registered_at": "2026-05-28T15:27:15.676651",
+      "last_transition_at": "2026-05-28T15:27:15.676651",
       "transition_count": 0,
       "freeze_count": 0
     },
     "Swing_V9_M30_V1": {
       "brain_id": "Swing_V9_M30_V1",
-      "status": "candidate",
-      "registered_at": "2026-05-28T09:39:43.072476",
-      "last_transition_at": "2026-05-28T09:39:43.072476",
+      "status": "shadow",
+      "registered_at": "2026-05-28T15:27:15.543621",
+      "last_transition_at": "2026-05-28T15:27:15.543621",
       "transition_count": 0,
       "freeze_count": 0
     }
