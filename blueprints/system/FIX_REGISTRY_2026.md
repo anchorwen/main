@@ -57,6 +57,25 @@
 - **Verification**: `python scripts/verify.py --full` — mypy pass, ruff pass, 2706 tests passing
 - **Risk**: Low. TTL defaults to no-op when `entry_half_life=0` (non-OU strategies). For statarb_dynamic, TTL=12.1h is conservative — normal SL recovery should happen within 30-60 minutes. The TTL timeline sits well above the 180s minimum cooldown (unchanged) and below the "obvious regime shift" threshold (24h+). Existing confidence improvement + price confirmation checks remain active within the TTL window — they only get bypassed after TTL expiry.
 
+### FIX-20260528-012 — ConformalCalibrator cold_start_from_journal: JOIN p_win from Accepted → Closed Entries
+
+- **Date**: 2026-05-28
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (contract-violation) — Event Sourcing data orthogonality bug. The journal records p_win (prediction confidence) on `accepted` (open) entries and label (outcome) on `closed` entries, but `cold_start_from_journal()` only scanned closed entries — p_win was always None because closed entries never carry p_win. Result: ConformalCalibrator always cold-started with 0 samples, forcing perpetual COLD phase regardless of how many historical trades existed.
+
+  The `p_win` field was added to accepted entries per FIX-20260523-001 (2026-05-24), so only trades opened since then have it. Of 731 closed trades in the journal, 704 predate the field and cannot be recovered.
+
+- **Fix**: Two-pass journal scan in `cold_start_from_journal()`:
+  1. **Pass 1** — Build lookup: `{message_id: p_win}` from all `accepted` entries with non-null p_win
+  2. **Pass 2** — For each `closed` entry, recover p_win via JOIN: `closed.open_message_id` → `accepted.message_id` → p_win. Falls back to direct p_win on the closed entry itself (for entries that already have it), then to `detail.p_win`.
+
+  Result: 27 samples loaded (vs 0 before). Still below the 50-sample warmup threshold, but reduces the cold-start gap from 50 to 23 trades.
+
+- **Files changed**: `core/execution/conformal_calibrator.py`
+- **Blueprints updated**: `execution_guards.md`
+- **Verification**: `python scripts/verify.py --full` — mypy pass, ruff pass, 2706 tests passing
+- **Risk**: Low. The JOIN is deterministic (exact match on message_id). No p_win is fabricated — only verified (message_id, p_win) pairs from accepted entries are used. The `self._cold_started` guard prevents double-loading. Remaining 23-trade gap closes naturally via COLD exploration (~1 week at current rate).
+
 ### FIX-20260527-010 — Phase 1: Critical Fail-Open Fixes (Global Contract Audit Layer 3)
 
 - **Date**: 2026-05-27

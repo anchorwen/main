@@ -185,6 +185,11 @@ class ConformalCalibrator:
         pairs for all closed trades.  This lets the calibrator start
         with a meaningful distribution rather than waiting 50+ trades.
 
+        *p_win* is recorded on *accepted* (open) entries while *label*
+        is on *closed* entries.  This method JOINs the two via
+        ``open_message_id`` → ``message_id`` so closed trades inherit
+        the prediction confidence from their open order.
+
         Only entries with ack_status == "closed" and a valid label
         are included.
 
@@ -199,7 +204,8 @@ class ConformalCalibrator:
             logger.info("ConformalCalibrator: journal not found at %s", journal_path)
             return 0
 
-        loaded = 0
+        # ── Pass 1: build p_win lookup from accepted entries ──
+        p_win_by_msg_id: dict[str, float] = {}
         for line in jp.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line:
@@ -208,20 +214,42 @@ class ConformalCalibrator:
                 entry: dict[str, Any] = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if entry.get("ack_status") != "accepted":
+                continue
+            _pw = entry.get("p_win")
+            if _pw is None:
+                continue
+            _mid = entry.get("message_id")
+            if _mid:
+                p_win_by_msg_id[_mid] = float(_pw)
+
+        # ── Pass 2: JOIN closed entries → p_win via open_message_id ──
+        loaded = 0
+        for line in jp.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
 
             if entry.get("ack_status") != "closed":
                 continue
 
-            # Extract p_win from the journal entry (recorded per FIX-20260523-001)
+            # JOIN: closed.open_message_id → accepted.message_id
             p_win = entry.get("p_win")
             if p_win is None:
                 detail = entry.get("detail", {})
                 if isinstance(detail, dict):
                     p_win = detail.get("p_win")
             if p_win is None:
+                _open_mid = entry.get("open_message_id")
+                if _open_mid:
+                    p_win = p_win_by_msg_id.get(_open_mid)
+            if p_win is None:
                 continue
 
-            # Extract label
             label = _journal_entry_label(entry)
             if label is None:
                 continue

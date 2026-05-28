@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-28T00:31:19Z
+> **自动生成**: 2026-05-28T01:19:04Z
 > **扫描模块数**: 447
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -195,7 +195,7 @@
 | `barrier_strategy.py` | ✅ active | BarrierStrategy | 2 | 95 | — | |
 | `broker_adapter.py` | ✅ active | BrokerAdapter | 9 | 68 | — | |
 | `capital_allocator.py` | ✅ active | AllocationDecision, GroupCorrelationTracker, CapitalAllocator | 9 | 468 | — | |
-| `conformal_calibrator.py` | ✅ active | ConformalCalibrator | 10 | 352 | — | |
+| `conformal_calibrator.py` | ✅ active | ConformalCalibrator | 10 | 380 | — | |
 | `conformal_ou_gate.py` | ✅ active | ConformalOUGate | 16 | 635 | — | |
 | `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 109 | — | |
 | `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 222 | — | |
