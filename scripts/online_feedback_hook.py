@@ -25,8 +25,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--base-dir", default="data", help="Base data directory")
     p.add_argument(
         "--config",
-        default="configs/brains/online_learner_v1.json",
-        help="Brain config JSON path",
+        default=None,
+        help="Brain config JSON path (required)",
     )
     p.add_argument("--dry-run", action="store_true", help="Show what would be applied")
     p.add_argument(
@@ -37,6 +37,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.config is None:
+        print(
+            "[online_feedback_hook] ERROR: --config is required (Online_MLP_V1 retired)",
+            file=sys.stderr,
+        )
+        return 2
 
     config_path = (PROJECT_ROOT / args.config).resolve()
     base_dir_abs = (PROJECT_ROOT / args.base_dir).resolve()

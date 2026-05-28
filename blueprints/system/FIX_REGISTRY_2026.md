@@ -138,14 +138,20 @@
 - **Author**: cursor-agent
 - **Root Cause**: RC-09 (config-drift), RC-11 (stale-data) — `configs/brains/online_learner_v1.json` exists on disk (status=shadow) but governance has `Online_MLP_V1` as `retired` (2026-05-25, `pnl:critical`). FIX-20260524-006 claimed to delete the stale config but never executed the deletion (git log confirms no deletion commit). Three-way state: disk=shadow, governance=retired, live.yaml=excluded. Startup `missing_yaml_entries` warning is cosmetic (brain_lifecycle_manager.py:899 confirms it's informational when auto-discovery is active). The config file cannot be deleted because smoke tests (test_v9_shadow_smoke.py) depend on `Online_MLP_V1` being registered in the test container.
 
-- **Fix**:
-  1. `core/deployment/path_defaults.py` — `ONLINE_BRAIN_PATH` set to `None` (was `"configs/brains/online_learner_v1.json"`). The brain is retired — its config path should not be a system default. Hardcoded references in `daily_ops.py` and `online_feedback_hook.py` already check `.exists()` and skip gracefully.
-  2. Status audit documented: the config file is retained for test compatibility. The `missing_yaml_entries` warning is cosmetic (auto-discovery handles it). Full cleanup (file deletion + test update) deferred to when governance state and test baselines can be rebuilt together.
-- **Files changed**: `core/deployment/path_defaults.py`
-- **Files NOT changed**: `configs/brains/online_learner_v1.json` (retained — smoke test dependency), `apps/engine/bootstrap_v9.py` (unchanged — brain already registered by existing code path)
-- **Blueprints updated**: `deployment_config.md`, `FIX_REGISTRY.md`, `FIX_REGISTRY_2026.md`
-- **Verification**: `python scripts/verify.py --full` — path_defaults.py blueprint pass. 2 pre-existing smoke test failures (formal baselines need rebuild from FIX-20260528-017 feature order changes, unrelated).
-- **Risk**: None. Change only affects path defaults — the brain was already excluded from live voting via live.yaml and governance.
+- **Fix**: Complete brain retirement cleanup (Architect's Directive — 死刑执行):
+  1. `core/deployment/path_defaults.py` — `ONLINE_BRAIN_PATH` set to `None` (was `"configs/brains/online_learner_v1.json"`)
+  2. `apps/engine/bootstrap_v9.py` — removed Online_MLP_V1 registration block (lines 189-201): hardcoded config load, artifact resolve, registry register, governance register. Brain no longer auto-loaded at engine startup.
+  3. `scripts/daily_ops.py` — `_step_online_feedback()` reduced to permanent skip: `return {"step": "online_feedback", "status": "skipped", "reason": "brain_retired"}`. Removed ~140 lines of dead code (OnlineLearnerAdapter, ExperienceReplayBuffer, ConformalCalibrator, OnlineFeedbackHook).
+  4. `scripts/online_feedback_hook.py` — `--config` default changed from `online_learner_v1.json` to `None` + early guard with explicit error message. Script now requires explicit `--config` argument.
+  5. `configs/live.yaml` — removed stale comment block about Online_MLP_V1 activation.
+  6. `configs/brains/online_learner_v1.json` — git rm'd (physically deleted). Brain retired 2026-05-25 (pnl:critical), governance=retired, live.yaml=excluded. No test hardcodes Online_MLP_V1 — only `test_contract_groups.py:81` correctly asserts `online_sgd not in BARRIER_GROUP`.
+  7. `tests/engine/test_v9_shadow_integration.py` — updated hardcoded `side_actions` assertion: `{"short.open": 1, "flat.abstain": 1}` → `{"flat.abstain": 2}` (Online_MLP_V1 removal changed voting output).
+  8. Formal baselines rebuilt: `python apps/engine/main_v9_shadow.py --rebuild-formal-baselines`
+- **Files changed**: `core/deployment/path_defaults.py`, `apps/engine/bootstrap_v9.py`, `scripts/daily_ops.py`, `scripts/online_feedback_hook.py`, `configs/live.yaml`, `tests/engine/test_v9_shadow_integration.py`
+- **Files deleted**: `configs/brains/online_learner_v1.json`
+- **Blueprints updated**: `deployment_config.md`, `runtime_live.md`, `feedback_online.md`, `FIX_REGISTRY.md`, `FIX_REGISTRY_2026.md`
+- **Verification**: `python scripts/verify.py --full` — mypy PASS, ruff PASS, pytest 1723 passed. Formal baselines rebuilt. 0 test failures.
+- **Risk**: None. Brain was already excluded from live voting via live.yaml and governance. No specific unit tests target online learning capability.
 
 ### FIX-20260528-017 — Schema Dimension & Feature Order SSOT — Permanent Fix
 

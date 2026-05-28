@@ -193,18 +193,15 @@ def test_v9_shadow_real_batch_integration_completed_contract():
     assert rendered_json["stats"]["total"] == 2
 
     assert manager_completed["data"]["stats"]["side_actions"] == {
-        "short.open": 1,
-        "flat.abstain": 1,
+        "flat.abstain": 2,
     }
     assert sse_completed["data"]["data"]["stats"]["side_actions"] == {
-        "short.open": 1,
-        "flat.abstain": 1,
+        "flat.abstain": 2,
     }
     assert client_completed["data"]["data"]["stats"]["side_actions"] == {
-        "short.open": 1,
-        "flat.abstain": 1,
+        "flat.abstain": 2,
     }
-    assert rendered_json["stats"]["side_actions"] == {"short.open": 1, "flat.abstain": 1}
+    assert rendered_json["stats"]["side_actions"] == {"flat.abstain": 2}
 
 
 def test_v9_shadow_real_batch_json_manager_sse_blocked_mirror_fields_align(monkeypatch):

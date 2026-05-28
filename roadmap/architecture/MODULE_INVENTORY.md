@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-28T05:39:12Z
+> **自动生成**: 2026-05-28T06:34:29Z
 > **扫描模块数**: 448
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -10,7 +10,7 @@
 |------|------|----|------|------|------|------|
 | `backtest_runner.py` | ✅ active | BacktestRunner, BacktestResult | 6 | 153 | — | |
 | `batch_processor.py` | ✅ active | BatchProcessor | 3 | 77 | — | |
-| `bootstrap_v9.py` | ✅ active | — | 6 | 231 | — | |
+| `bootstrap_v9.py` | ✅ active | — | 6 | 216 | — | |
 | `cli.py` | ✅ active | — | 42 | 1542 | — | |
 | `communication_ops_cli.py` | ✅ active | — | 7 | 137 | — | |
 | `communication_summary_contract.py` | ✅ active | — | 1 | 71 | — | |
@@ -523,7 +523,7 @@
 | `check_blueprint_compliance.py` | ✅ active | — | 10 | 556 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 25 | 1149 | — | |
+| `daily_ops.py` | ✅ active | — | 25 | 1012 | — | |
 | `deploy_blue_green.py` | ✅ active | — | 7 | 126 | — | |
 | `feature_store_maintenance.py` | ✅ active | — | 8 | 276 | — | |
 | `feedback_loop.py` | ✅ active | — | 12 | 424 | — | |
@@ -549,7 +549,7 @@
 | `mt5_bridge_worker.py` | ✅ active | — | 21 | 759 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 97 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 65 | — | |
-| `online_feedback_hook.py` | ✅ active | — | 2 | 119 | — | |
+| `online_feedback_hook.py` | ✅ active | — | 2 | 126 | — | |
 | `optimize_sl_tp.py` | ✅ active | — | 5 | 272 | — | |
 | `paper_trade_simulator.py` | ✅ active | — | 13 | 783 | — | |
 | `position_query.py` | ✅ active | — | 6 | 194 | — | |

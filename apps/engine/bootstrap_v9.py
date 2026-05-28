@@ -186,21 +186,6 @@ def build_v9_shadow_container() -> ServiceContainer:
     repo_root = _repo_root()
     loader = BrainRegistryLoader()
 
-    # Use Online_MLP_V1 as primary — no ONNX dependency, artifact exists
-    online_brain_path = repo_root / "configs" / "brains" / "online_learner_v1.json"
-    online_entry = loader.load_json(str(online_brain_path))
-    # artifact_path from config is "data/models/online_mlp_v2.json"
-    online_artifact = repo_root / online_entry.get("artifact_path", "")
-    if not online_artifact.exists():
-        online_artifact = repo_root / "data" / "models" / "online_mlp_v2.json"
-    online_entry["artifact_path"] = str(online_artifact.resolve())
-
-    container.brain_registry.register(online_entry)
-    container.governance_service.register_brain(
-        online_entry["brain_id"],
-        "live",
-    )
-
     # DeepResMLP V1 is ONNX-based; only register if the ONNX model file
     # is valid (not a Git LFS pointer).  The C++ ONNX runtime writes
     # errors directly to the console, bypassing Python stderr capture.

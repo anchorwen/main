@@ -36,9 +36,6 @@ brains:
   # Root cause: unconditional P(TP|Features) on every M5 bar = pure noise
   # Strategic pivot: Huber regression probe (Meta_Stage1_Huber_V1) as sole barrier_12bar voter
   # Status: probation — live voting with PnL monitoring, auto-retire if Sharpe < 0 for 30+ days
-  # ── Online learner excluded from live voting ──
-  # Online_MLP_V1: not yet validated for live voting — insufficient OOS trade history
-  # To activate: add `- path: configs/brains/online_learner_v1.json` with `enabled: true`
 gate:
   gate_policy_config: configs/live_gate_policy.json
   auto_recovery:
