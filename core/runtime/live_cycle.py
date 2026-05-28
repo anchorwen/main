@@ -546,6 +546,8 @@ def _dispatch_managed_close(
     exit_confidence: float = 0.0,
     exit_watchdog: Any = None,
     mt5_worker: Any = None,
+    exit_urgency: float = 0.5,
+    factor_breakdown: dict[str, float] | None = None,
 ) -> bool:
     """Issue a close order for a managed position and record exit for re-entry guard.
 
@@ -725,6 +727,8 @@ def _dispatch_managed_close(
                 ),
                 brain_ids=_close_brain_ids,
                 pnl=pnl,
+                exit_urgency=exit_urgency,
+                factor_breakdown=factor_breakdown,
             )
             if not wd_result.success:
                 print(
@@ -1840,7 +1844,7 @@ def _execute_management_phase(
                 else ""
             )
 
-            should_meta_exit, meta_reason = pm.evaluate_meta_exit(
+            evaluation = pm.evaluate_meta_exit(
                 mid=mid,
                 current_atr=current_atr,
                 regime_info=_regime_with_side,
@@ -1848,7 +1852,8 @@ def _execute_management_phase(
                 current_supporting=_meta_sup,
                 ticket=pos.ticket,
             )
-            if should_meta_exit:
+            if evaluation is not None:
+                meta_reason = f"meta_exit_u{evaluation.exit_urgency:.2f}_{evaluation.exit_reason}"
                 _dispatched = _dispatch_managed_close(
                     config,
                     pos,
@@ -1859,6 +1864,8 @@ def _execute_management_phase(
                     exit_confidence=_exit_confidence,
                     exit_watchdog=state.exit_watchdog,
                     mt5_worker=mt5_worker,
+                    exit_urgency=evaluation.exit_urgency,
+                    factor_breakdown=evaluation.factor_breakdown,
                 )
                 print(
                     json.dumps(
@@ -1867,6 +1874,8 @@ def _execute_management_phase(
                             "time": _utc_iso(),
                             "ticket": pos.ticket,
                             "reason": meta_reason,
+                            "exit_urgency": round(evaluation.exit_urgency, 3),
+                            "p_win": evaluation.p_win,
                             "dispatched": _dispatched,
                         },
                         ensure_ascii=False,

@@ -130,6 +130,8 @@ class ExitWatchdog:
         get_position_open: Callable[[int], bool] | None = None,
         l2_broker: Any = None,
         pnl: float | None = None,
+        exit_urgency: float = 0.5,
+        factor_breakdown: dict[str, float] | None = None,
     ) -> ExitWatchdogResult:
         """Execute an exit order with full watchdog protection.
 
@@ -153,6 +155,7 @@ class ExitWatchdog:
         start = time.monotonic()
         attempts: list[ExitAttempt] = []
         alerts: list[str] = []
+        self._current_factor_breakdown = factor_breakdown
 
         # ── Pre-flight: verify position still exists ──
         # FIX-20260525-024: skip entire retry loop if position already closed
@@ -213,7 +216,7 @@ class ExitWatchdog:
                 )
 
             # Build payload with escalating slippage
-            slippage = self._slippage_for_attempt(attempt_n)
+            slippage = self._slippage_for_attempt(attempt_n, exit_urgency)
             payload = self._build_close_payload(
                 position_ticket=position_ticket,
                 volume=volume,
@@ -293,10 +296,10 @@ class ExitWatchdog:
             att.duration_ms = round((time.monotonic() - att_start) * 1000)
             attempts.append(att)
 
-            # Backoff before retry (exponential: 1s, 2s, 4s, 8s, 16s)
+            # Backoff before retry — urgency modulates the interval
             if attempt_n < self.max_retries:
-                backoff = RETRY_BACKOFF_BASE * (2 ** (attempt_n - 1))
-                time.sleep(min(backoff, 10.0))  # cap at 10s
+                backoff = self._backoff_seconds(attempt_n, exit_urgency)
+                time.sleep(backoff)
 
         # All retries exhausted — attempt L2 forced liquidation
         elapsed = time.monotonic() - start
@@ -356,14 +359,37 @@ class ExitWatchdog:
 
     # -- Internal --
 
-    def _slippage_for_attempt(self, attempt: int) -> int:
-        """Escalate slippage tolerance with each retry."""
+    def _slippage_for_attempt(self, attempt: int, exit_urgency: float = 0.5) -> int:
+        """Escalate slippage tolerance with each retry.
+
+        High-urgency exits start with wider slippage to avoid wasting retries
+        on tight spreads when the position is in distress.
+        """
+        # Critical urgency (>=0.9): max slippage from attempt 1 — pay the spread
+        if exit_urgency >= 0.9:
+            return self.max_slippage_points
+        # High urgency (>=0.8): skip the conservative tier, start at escalated
+        if exit_urgency >= 0.8:
+            if attempt <= 3:
+                return self.slippage_escalation
+            return self.max_slippage_points
+        # Default: existing behavior
         if attempt <= 2:
             return 20  # normal: 2 pips
         elif attempt <= 4:
             return self.slippage_escalation  # escalated: 5 pips
         else:
             return self.max_slippage_points  # emergency: 20 pips
+
+    @staticmethod
+    def _backoff_seconds(attempt: int, exit_urgency: float) -> float:
+        """Compute retry backoff, shortened for high-urgency exits."""
+        if exit_urgency >= 0.9:
+            return 0.5  # fixed short interval — every moment counts
+        base = RETRY_BACKOFF_BASE * (2 ** (attempt - 1))
+        if exit_urgency >= 0.8:
+            base *= 0.5  # half the normal backoff
+        return min(base, 10.0)
 
     @staticmethod
     def _build_close_payload(
@@ -418,13 +444,17 @@ class ExitWatchdog:
         """Log a CRITICAL/ESCALATED alert to persistent storage."""
         self._alerts.append(message)
         try:
-            record = {
+            record: dict[str, Any] = {
                 "event": "CRITICAL" if "CRITICAL" in message else "ESCALATED",
                 "message": message,
                 "ticket": ticket,
                 "reason": reason,
                 "timestamp_utc": datetime.now(UTC).isoformat(),
             }
+            fb = getattr(self, "_current_factor_breakdown", None)
+            if fb:
+                # Defensive numpy→float conversion (json.dumps crashes on numpy floats)
+                record["factor_breakdown"] = {k: float(v) for k, v in fb.items()}
             with open(self._alert_log_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
         except OSError:

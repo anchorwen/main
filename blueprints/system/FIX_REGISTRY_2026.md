@@ -153,6 +153,20 @@
 - **Verification**: `python scripts/verify.py --full` — mypy PASS, ruff PASS, pytest 1723 passed. Formal baselines rebuilt. 0 test failures.
 - **Risk**: None. Brain was already excluded from live voting via live.yaml and governance. No specific unit tests target online learning capability.
 
+### FIX-20260528-019 — MetaExitEngine-Watchdog Urgency Integration
+
+- **Date**: 2026-05-28
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (missing-integration) — MetaExitEngine computes multi-factor exit urgency scores but ExitWatchdog treats all exits identically. `position_manager.evaluate_meta_exit()` stripped `ExitEvaluation` (urgency, factor_breakdown, p_win) down to `(bool, str)`. The urgency never reached the Watchdog's retry strategy.
+- **Fix**:
+  1. `exit_watchdog.py`: `execute_exit()` now accepts `exit_urgency: float = 0.5` + `factor_breakdown: dict | None = None`. `_slippage_for_attempt()` modulated by urgency: >=0.9 → 200pts attempt 1; >=0.8 → 50pts attempt 1. `_backoff_seconds()` static method: >=0.9 → 0.5s fixed; >=0.8 → half exponential. `_fire_alert()` enriched with numpy-safe factor_breakdown.
+  2. `position_manager.py`: `evaluate_meta_exit()` return type `tuple[bool, str]` → `ExitEvaluation | None`. Early returns `(False, "")` → `None`. Success returns `ExitEvaluation` object instead of string.
+  3. `live_cycle.py`: `_dispatch_managed_close()` accepts `exit_urgency` + `factor_breakdown` (default 0.5). Layer 2.5 meta_exit block captures `ExitEvaluation`, builds `meta_reason` string with urgency, passes urgency+factor_breakdown to dispatch. `meta_exit_triggered` JSON log enriched with `exit_urgency` + `p_win`.
+- **Files changed**: `core/execution/exit_watchdog.py`, `core/execution/position_manager.py`, `core/runtime/live_cycle.py`
+- **Blueprints updated**: `execution_orders.md`, `runtime_live.md`, `FIX_REGISTRY.md`, `FIX_REGISTRY_2026.md`
+- **Backward compatibility**: All 12+ non-meta-exit call sites receive default `exit_urgency=0.5` → identical behavior. No breaking changes.
+- **Verification**: `python scripts/verify.py --full`
+
 ### FIX-20260528-017 — Schema Dimension & Feature Order SSOT — Permanent Fix
 
 - **Date**: 2026-05-28

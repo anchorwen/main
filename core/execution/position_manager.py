@@ -22,11 +22,14 @@ import math
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from core.execution.trail_stop_engine import TrailPolicy, TrailStopEngine
+
+if TYPE_CHECKING:
+    from core.execution.meta_exit_engine import ExitEvaluation
 
 # ── Data model ────────────────────────────────────────────────────────────
 
@@ -1087,21 +1090,21 @@ class ActivePositionManager:
         current_consensus: dict[str, Any] | None = None,
         current_supporting: list[str] | None = None,
         ticket: int | None = None,
-    ) -> tuple[bool, str]:
+    ) -> ExitEvaluation | None:
         """Multi-factor exit evaluation using MetaExitEngine.
 
         When a trained model is available, uses ML inference for P(win).
         Otherwise falls back to heuristic scoring (PnL + time + regime +
         consensus + volatility).
 
-        Returns (should_exit, reason).
+        Returns ExitEvaluation if the engine recommends exit, None otherwise.
         """
         if self.meta_exit_engine is None:
-            return False, ""
+            return None
 
         pos = self._get_pos(ticket)
         if pos is None:
-            return False, ""
+            return None
 
         from core.execution.meta_exit_engine import ExitFeatureSnapshot
 
@@ -1147,9 +1150,9 @@ class ActivePositionManager:
         pos.prev_r = round(r_now, 4)
 
         if evaluation.should_exit:
-            return True, f"meta_exit_u{evaluation.exit_urgency:.2f}_{evaluation.exit_reason}"
+            return evaluation
 
-        return False, ""
+        return None
 
     @staticmethod
     def _is_trend_aligned(regime_info: dict[str, Any], *, position_side: str = "") -> bool:
