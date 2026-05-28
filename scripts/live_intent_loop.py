@@ -849,6 +849,7 @@ def main(argv: list[str] | None = None) -> int:
     feature_store: Any = None
     micro_feature_adapter: Any = None
     micro_feature_computer: Any = None
+    daily_feature_provider: Any = None
 
     if not args.no_mt5:
         from core.features.computers.v9_live_computer import V9LiveFeatureComputer
@@ -903,7 +904,6 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         # Daily D1 feature provider for swing brain inference
-        daily_feature_provider: Any = None
         try:
             from core.features.computers.live_daily_provider import LiveDailyFeatureProvider
 

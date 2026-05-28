@@ -14,7 +14,7 @@
   "vote_weight": 0.5,
   "magic": 90014,
   "artifact_path": "data/models/institutional/barrier_12bar_meta_binary_cls_20260528_015153.txt",
-  "feature_schema_id": "v9_40dim_ou3",
+  "feature_schema_id": "v9_institutional_40",
   "training_contract": "barrier_12bar_meta_binary_cls",
   "normalization_config_path": "data/models/institutional/barrier_12bar_meta_binary_cls_20260524_101947.meta.json",
   "deployment_scope": {
@@ -41,7 +41,7 @@
     "label_mapping": "drop_timeout_binary"
   },
   "enable_onnxruntime": false,
-  "feature_schema": "v9_40dim_ou3",
+  "feature_schema": "v9_40dim",
   "generation": "g2026.3",
   "train_acc": 0.865,
   "val_acc": 0.833,
@@ -58,7 +58,6 @@
     "M30_RSI_14", "M30_Ret_1", "M30_Vol_ZScore",
     "M5_ATR_14", "M5_Body_Ratio", "M5_Hurst", "M5_MACD",
     "M5_Macro1_Corr", "M5_OU_Theta", "M5_Price_ZScore",
-    "M5_RSI_14", "M5_Ret_1", "M5_Vol_ZScore",
-    "ou_z_score", "ou_half_life", "ou_theta"
+    "M5_RSI_14", "M5_Ret_1", "M5_Vol_ZScore"
   ]
 }

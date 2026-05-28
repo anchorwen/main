@@ -12,7 +12,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # ── Brain entry defaults (required at startup) ──
-DEFAULT_BRAIN_ENTRY = "configs/brains/deep_res_mlp_v1.json"
+DEFAULT_BRAIN_ENTRY = "configs/brains/Meta_Stage1_Binary_Cls_V1.json"
 DEFAULT_NORM_CONFIG = "configs/brains/v9_institutional_01.normalization.json"
 
 # ── Feature store ──

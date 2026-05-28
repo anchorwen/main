@@ -3938,6 +3938,8 @@ def execute_live_cycle(
     Returns (updated_state, should_continue). The caller owns the ``while True``
     loop and the ``time.sleep()`` between iterations.
     """
+    import numpy as np  # ensure np available in all code paths (local imports at L4506/L6503 may not execute)
+
     state.loop_iteration += 1
 
     # ── Resolve MT5 worker (param takes priority, then global singleton) ──
