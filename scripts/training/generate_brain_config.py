@@ -299,8 +299,21 @@ def main(argv: list[str] | None = None) -> int:
         encoding="utf-8",
     )
     print(f"[generate_brain_config] {output_path}")
-
+    _print_register_reminder(output_path.name)
     return 0
+
+
+def _print_register_reminder(config_filename: str) -> None:
+    print("\n  ╔══════════════════════════════════════════════════════════════╗")
+    print("  ║  NEXT STEP: Register this brain with the one-click CLI:  ║")
+    print("  ║                                                            ║")
+    print(
+        f"  ║  python scripts/brain.py register configs/brains/{config_filename} --status shadow  ║"
+    )
+    print("  ║  python scripts/brain.py validate                          ║")
+    print("  ║                                                            ║")
+    print("  ║  DO NOT manually edit live.yaml or governance_state.json. ║")
+    print("  ╚══════════════════════════════════════════════════════════════╝")
 
 
 if __name__ == "__main__":

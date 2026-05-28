@@ -94,6 +94,19 @@ def register_brain(entry: dict[str, Any], output_dir: Path, *, skip_gate: bool =
     return out_path
 
 
+def _print_register_reminder(config_filename: str) -> None:
+    print("\n  ╔══════════════════════════════════════════════════════════════╗")
+    print("  ║  NEXT STEP: Register this brain with the one-click CLI:  ║")
+    print("  ║                                                            ║")
+    print(
+        f"  ║  python scripts/brain.py register configs/brains/{config_filename} --status shadow  ║"
+    )
+    print("  ║  python scripts/brain.py validate                          ║")
+    print("  ║                                                            ║")
+    print("  ║  DO NOT manually edit live.yaml or governance_state.json. ║")
+    print("  ╚══════════════════════════════════════════════════════════════╝")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="register_brain",
@@ -150,6 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  brain_id:   {entry['brain_id']}")
     print(f"  brain_type: {entry['brain_type']}")
     print(f"  lane:       {manifest.get('lane', '?')}")
+    _print_register_reminder(out_path.name)
     return 0
 
 

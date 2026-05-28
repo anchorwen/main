@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-05-28T10:00:57Z
+> **自动生成**: 2026-05-28T12:12:33Z
 
 ## Package-Level Dependencies
 

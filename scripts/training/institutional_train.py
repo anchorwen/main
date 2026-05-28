@@ -1158,6 +1158,7 @@ def main(argv: list[str] | None = None) -> int:
             config_dst = PROJECT_ROOT / "configs" / "brains" / config_src.name
             shutil.copy2(config_src, config_dst)
             print(f"  [REGISTER] {config_dst}")
+            _print_register_reminder(config_dst.name)
 
     # ── Summary ─────────────────────────────────────────────────────────
     print(f"\n{'='*70}")
@@ -1180,6 +1181,19 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{'='*70}")
 
     return 0
+
+
+def _print_register_reminder(config_filename: str) -> None:
+    print("\n  ╔══════════════════════════════════════════════════════════════╗")
+    print("  ║  NEXT STEP: Register this brain with the one-click CLI:  ║")
+    print("  ║                                                            ║")
+    print(
+        f"  ║  python scripts/brain.py register configs/brains/{config_filename} --status shadow  ║"
+    )
+    print("  ║  python scripts/brain.py validate                          ║")
+    print("  ║                                                            ║")
+    print("  ║  DO NOT manually edit live.yaml or governance_state.json. ║")
+    print("  ╚══════════════════════════════════════════════════════════════╝")
 
 
 if __name__ == "__main__":

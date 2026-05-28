@@ -167,6 +167,20 @@
 - **Backward compatibility**: All 12+ non-meta-exit call sites receive default `exit_urgency=0.5` → identical behavior. No breaking changes.
 - **Verification**: `python scripts/verify.py --full`
 
+### FIX-20260528-023 — Swing_V9 Brain Config Missing schema_version: Silently Skipped at Startup
+
+- **Date**: 2026-05-28
+- **Author**: cursor-agent
+- **Root Cause**: RC-09 (config-drift) — `train_swing_v9.py` generated brain configs without `schema_version: "brain_registry_entry.v1"` field. `_load_brain_entries_from_dir()` at `live_intent_loop.py:166` filters with `entry.get("schema_version") == "brain_registry_entry.v1"` — all files without this field are silently skipped. Both `Swing_V9_M30_V1.json` and `Swing_V9_M15_V1.json` were never loaded, explaining why `before_count` was 5 (instead of 7) in the `disabled_brains_filtered` event, and why swing brains never appeared in `live_intent_loop_start.brain_ids`. Also missing from generated configs: `magic` (required for MT5 dispatch to correct strategy), `artifact_path` (required for model integrity verification), `training_horizon` (required by BrainEntry dataclass for training horizon tracking).
+- **Fix**:
+  1. `configs/brains/Swing_V9_M30_V1.json`: Added `schema_version: "brain_registry_entry.v1"`, `magic: 90320`, `artifact_path: "data/models/swing/Swing_V9_M30_V1.json"`, `training_horizon: 12`.
+  2. `configs/brains/Swing_V9_M15_V1.json`: Added `schema_version: "brain_registry_entry.v1"`, `magic: 90310`, `artifact_path: "data/models/swing/Swing_V9_M15_V1.json"`, `training_horizon: 24`.
+  3. `scripts/training/train_swing_v9.py`: Added `schema_version`, `magic` (strategy-aware map: m15→90310, m30→90320, h1→90330, h4→90340, daily→90301), `artifact_path` (model file path), `training_horizon` (strategy-aware: m15→24, m30→12, h1→48, h4→192, daily→5) to generated brain config.
+- **Files changed**: `configs/brains/Swing_V9_M30_V1.json`, `configs/brains/Swing_V9_M15_V1.json`, `scripts/training/train_swing_v9.py`
+- **Blueprints updated**: `training.md` (Fix History), `brains_services.md` (Fix History), `FIX_REGISTRY.md`, `FIX_REGISTRY_2026.md`
+- **Verification**: `python scripts/verify.py --quick` — mypy PASS, ruff PASS. Full validation requires restart and checking `live_intent_loop_start` now shows brain_count≥5 with Swing_V9 brains in brain_ids.
+- **Risk**: Low. Change adds missing metadata fields — no logic change. Schema version gate is the same loading mechanism used by all 45+ other brain configs.
+
 ### FIX-20260528-021 — Swing Enhanced 35-Dim Schema: Phase 2 Swing Revival Dataset & Training
 
 - **Date**: 2026-05-28

@@ -1,14 +1,19 @@
 {
+  "schema_version": "brain_registry_entry.v1",
   "brain_id": "Swing_V9_M15_V1",
   "brain_type": "xgboost_v9",
   "contract_group": "m15_swing",
+  "training_contract": "m15_swing",
   "feature_schema": "swing_enhanced_35",
   "feature_schema_id": "swing_enhanced_35",
-  "model_path": "data\\models\\swing\\Swing_V9_M15_V1.json",
+  "model_path": "data\\models\\swing\\Swing_V9_M15_V1_model.json",
+  "artifact_path": "data\\models\\swing\\Swing_V9_M15_V1_model.json",
   "model_version": "swing_m15_swing_v1",
   "status": "shadow",
   "vote_weight": 1.0,
+  "magic": 90310,
   "brain_role": "alpha_brain",
+  "training_horizon": 24,
   "strategy": "m15_swing",
   "timeframe": "M15",
   "training_params": {
@@ -66,7 +71,7 @@
   ],
   "n_features": 35,
   "n_train_samples": 3251,
-  "trained_at": "2026-05-28T09:21:45.763484Z",
+  "trained_at": "2026-05-28T11:15:00.141382Z",
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3

@@ -250,12 +250,18 @@ def main() -> None:
     for k, v in metrics["test"].items():
         print(f"    {k}: {v}")
 
-    # Save model
+    # Save model and brain config to separate files
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    project_root = (
+        Path(__file__).resolve().parent.parent.parent
+    )  # scripts/training/train_swing_v9.py → repo root
+
     brain_id = f"Swing_V9_{args.strategy.split('_')[0].upper()}_V1"
-    model_path = output_dir / f"{brain_id}.json"
+    # Model file — must NOT collide with brain config filename
+    model_filename = f"{brain_id}_model.json"
+    model_path = output_dir / model_filename
     model.save_model(str(model_path))
     print(f"\n  Model saved: {model_path}")
 
@@ -270,19 +276,45 @@ def main() -> None:
         feat_name = feature_names[int(fname.replace("f", ""))] if fname.startswith("f") else fname
         print(f"    {i+1}. {feat_name}: {gain:.2f}")
 
+    # Map strategy to magic number and training horizon
+    _strategy_magic = {
+        "m15_swing": 90310,
+        "m30_swing": 90320,
+        "h1_swing": 90330,
+        "h4_swing": 90340,
+        "daily_swing": 90301,
+    }
+    _strategy_horizon = {
+        "m15_swing": 24,
+        "m30_swing": 12,
+        "h1_swing": 48,
+        "h4_swing": 192,
+        "daily_swing": 5,
+    }
+    magic = _strategy_magic.get(args.strategy, 0)
+    horizon = dataset["meta"].get("horizon", _strategy_horizon.get(args.strategy, 12))
+
     # Generate brain config
     feature_schema_id = f"swing_enhanced_{n_features}"
+    artifact_rel = (
+        str(model_path.relative_to(project_root)) if model_path.is_absolute() else str(model_path)
+    )
     brain_config = {
+        "schema_version": "brain_registry_entry.v1",
         "brain_id": brain_id,
         "brain_type": "xgboost_v9",
         "contract_group": args.strategy,
+        "training_contract": args.strategy,
         "feature_schema": feature_schema_id,
         "feature_schema_id": feature_schema_id,
         "model_path": str(model_path),
+        "artifact_path": artifact_rel,
         "model_version": f"swing_{args.strategy}_v1",
         "status": "shadow",
         "vote_weight": 1.0,
+        "magic": magic,
         "brain_role": "alpha_brain",
+        "training_horizon": horizon,
         "strategy": args.strategy,
         "timeframe": args.strategy.split("_")[0].upper(),
         "training_params": {
@@ -313,7 +345,7 @@ def main() -> None:
         },
     }
 
-    config_path = output_dir / f"{brain_id}.json"
+    config_path = project_root / "configs" / "brains" / f"{brain_id}.json"
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(brain_config, f, indent=2, ensure_ascii=False)
     print(f"  Config saved: {config_path}")
@@ -322,6 +354,16 @@ def main() -> None:
     print(f"  Test WR: {metrics['test']['trade_win_rate']:.1%}")
     print(f"  Test PF: {metrics['test']['profit_factor']:.2f}")
     print(f"  Test Sharpe: {metrics['test']['sharpe_annualized']:.2f}")
+    print("\n  ╔══════════════════════════════════════════════════════════════╗")
+    print("  ║  NEXT STEP: Register this brain with the one-click CLI:  ║")
+    print("  ║                                                            ║")
+    print(
+        f"  ║  python scripts/brain.py register configs/brains/{brain_id}.json --status shadow  ║"
+    )
+    print("  ║  python scripts/brain.py validate                          ║")
+    print("  ║                                                            ║")
+    print("  ║  DO NOT manually edit live.yaml or governance_state.json. ║")
+    print("  ╚══════════════════════════════════════════════════════════════╝")
 
 
 if __name__ == "__main__":

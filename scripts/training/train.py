@@ -791,6 +791,15 @@ def _auto_register_in_governance(brain_config: dict[str, Any]) -> None:
         print(f"[train] WARNING: Failed to update governance_state.json: {e}")
 
 
+def _print_register_reminder(config_filename: str) -> None:
+    print("\n  ╔══════════════════════════════════════════════════════════════╗")
+    print("  ║  Brain auto-registered. Verify with one-click CLI:       ║")
+    print("  ║                                                            ║")
+    print("  ║  python scripts/brain.py validate                          ║")
+    print("  ║  python scripts/brain.py list --group <group>              ║")
+    print("  ╚══════════════════════════════════════════════════════════════╝")
+
+
 def _write_model_meta_json(model_path: str | Path, contract: TrainingContract) -> None:
     """Write .meta.json alongside the model file for MetaSignalFilter consumers.
 
@@ -1899,6 +1908,7 @@ def run_pipeline(
             _auto_register_in_live_yaml(brain_config, config_path)
             # Auto-register in governance_state.json
             _auto_register_in_governance(brain_config)
+            _print_register_reminder(config_path.name)
         except Exception as e:
             print(f"[train] WARNING: Brain config generation failed: {e}")
 

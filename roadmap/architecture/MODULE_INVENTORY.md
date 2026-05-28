@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-28T10:00:57Z
+> **自动生成**: 2026-05-28T12:12:33Z
 > **扫描模块数**: 451
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -149,7 +149,7 @@
 | `blue_green.py` | ✅ active | SlotState, SlotColor, DeploymentSlot, DeploymentTopology, CutoverResult, HealthProbe, BlueGreenManager | 26 | 526 | — | |
 | `brain_alert.py` | ✅ active | — | 2 | 42 | — | |
 | `brain_config_validator.py` | ✅ active | BrainConfigError, ValidationResult, BrainConfigValidator | 13 | 226 | — | |
-| `brain_lifecycle_manager.py` | ✅ active | RetirementReport, RegistrationReport, IntegrityReport, ReferenceAuditReport, BrainLifecycleManager | 18 | 1038 | — | |
+| `brain_lifecycle_manager.py` | ✅ active | RetirementReport, RegistrationReport, IntegrityReport, ReferenceAuditReport, BrainLifecycleManager | 18 | 1045 | — | |
 | `brain_registration_gate.py` | ✅ active | GateResult, BrainRegistrationGate | 18 | 356 | — | |
 | `capability_registry.py` | ✅ active | CapabilitySpec, CapabilityRegistry | 5 | 112 | — | |
 | `compliance_audit.py` | ✅ active | ComplianceAuditService | 9 | 567 | — | |
@@ -641,9 +641,9 @@
 | `eval_tf_comparison.py` | ✅ active | — | 11 | 253 | — | |
 | `export_mt5_data.py` | ✅ active | — | 2 | 143 | — | |
 | `generate_batch_plan.py` | ✅ active | — | 5 | 355 | — | |
-| `generate_brain_config.py` | ✅ active | — | 7 | 307 | — | |
+| `generate_brain_config.py` | ✅ active | — | 8 | 320 | — | |
 | `governance_scheduler.py` | ✅ active | — | 5 | 369 | — | |
-| `institutional_train.py` | ✅ active | TrainResult | 20 | 1186 | — | |
+| `institutional_train.py` | ✅ active | TrainResult | 21 | 1200 | — | |
 | `label_builder.py` | ✅ active | — | 14 | 688 | — | |
 | `label_builder_d1.py` | ✅ active | D1BarrierContract | 9 | 591 | — | |
 | `monitor_training.py` | ✅ active | — | 18 | 421 | — | |
@@ -653,12 +653,12 @@
 | `reactivate_brains.py` | ✅ active | — | 4 | 230 | — | |
 | `recipe_diff.py` | ✅ active | — | 5 | 195 | — | |
 | `recipe_search.py` | ✅ active | — | 9 | 518 | — | |
-| `register_brain.py` | ✅ active | — | 5 | 157 | — | |
+| `register_brain.py` | ✅ active | — | 6 | 171 | — | |
 | `retraining_trigger.py` | ✅ active | — | 9 | 474 | — | |
 | `run_promotion.py` | ✅ active | — | 6 | 256 | — | |
 | `run_train_batch.py` | ✅ active | — | 6 | 274 | — | |
 | `scan_profitability_surface.py` | ✅ active | — | 3 | 180 | — | |
-| `train.py` | ✅ active | ModelQualityException, PipelineResult | 23 | 1999 | — | |
+| `train.py` | ✅ active | ModelQualityException, PipelineResult | 24 | 2009 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 640 | — | |
 | `train_exit_metamodel.py` | ✅ active | — | 7 | 343 | — | |
 | `train_from_csv.py` | ✅ active | MLP | 10 | 725 | — | |
@@ -667,7 +667,7 @@
 | `train_online_init.py` | ✅ active | — | 9 | 411 | — | |
 | `train_stage2_lgb_pit.py` | ✅ active | — | 4 | 187 | — | |
 | `train_stage2_mlp_pit.py` | ✅ active | — | 4 | 234 | — | |
-| `train_swing_v9.py` | ✅ active | — | 4 | 328 | — | |
+| `train_swing_v9.py` | ✅ active | — | 4 | 370 | — | |
 | `write_manifest_stub.py` | ✅ active | — | 2 | 60 | — | |
 | `your_trainer.py` | ✅ active | — | 7 | 223 | — | |
 

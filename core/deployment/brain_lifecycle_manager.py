@@ -99,7 +99,14 @@ class ReferenceAuditReport:
 
 # ── Manager ─────────────────────────────────────────────────────────────────
 
-_REQUIRED_BRAIN_FIELDS = {"brain_id", "brain_type", "artifact_path", "schema_version"}
+_REQUIRED_BRAIN_FIELDS = {
+    "brain_id",
+    "brain_type",
+    "artifact_path",
+    "schema_version",
+    "contract_group",
+    "training_contract",
+}
 
 
 class BrainLifecycleManager:
