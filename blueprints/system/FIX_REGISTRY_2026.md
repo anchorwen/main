@@ -198,16 +198,19 @@
 - **Verification**: `python scripts/verify.py --full` — mypy PASS, ruff PASS, blueprint PASS, pytest 2702 passed.
 - **Risk**: Low. New brains registered in `shadow` status — vote_weight=1.0 but need to prove themselves before promotion. Schema is additive (new `swing_enhanced_35` schema, no modification to existing). Training data is historical CSV-based with chronological split — no future data leakage.
 
-### FIX-20260528-024 — verify.py run_pytest() Pipe Buffer Deadlock on 2700+ Tests
+### FIX-20260528-024b — verify.py run_pytest() Output Capture → Silent Hang (3 Iterations)
 
 - **Date**: 2026-05-28
 - **Author**: cursor-agent
-- **Root Cause**: RC-06 (infrastructure/setup) — `run_pytest()` in verify.py used `capture_output=True` which opens OS pipes for stdout/stderr. With 2702 tests, pytest output exceeded the pipe buffer (64KB on Windows), causing `subprocess.communicate()` to deadlock waiting for the pipe to drain. The subprocess couldn't write more output, and the parent was waiting for the subprocess to finish — classic circular deadlock. Only manifested when running `verify.py --full` from certain terminals (VSCode integrated terminal + subprocess nesting). Running `pytest` directly was unaffected.
-- **Fix**: Replaced `capture_output=True` + `subprocess.PIPE` with `tempfile.TemporaryFile` passed as `stdout=out, stderr=subprocess.STDOUT`. Temp files have no buffer limit — pytest writes freely, parent reads back with `out.seek(0) + out.read()`. Also added `--no-header` flag to reduce pytest output volume.
-- **Files changed**: `scripts/verify.py` — `run_pytest()` function
+- **Root Cause**: RC-06 (infrastructure/setup) — Three attempts to capture pytest output all failed in user-facing scenarios:
+  1. **v1 `capture_output=True`**: OS pipe buffer (64KB) filled by 2702 tests → classic circular deadlock (`stdout_thread.join` hung).
+  2. **v2 `tempfile.TemporaryFile`**: No deadlock but swallowed ALL output for 130s. User saw zero feedback and pressed Ctrl+C — same UX failure, different mechanism.
+  3. **v3 (final)**: Don't capture at all. Let `subprocess.run()` inherit parent stdout/stderr. Pytest dots stream to terminal in real time. No pipe buffer, no temp file, no deadlock possible.
+- **Fix**: Changed `run_pytest()` to call `subprocess.run()` without `capture_output`, `stdout`, or `stderr` parameters. Removed `import tempfile`. Removed summary line parsing (cosmetic only). Return message is now `"pytest completed"` or `"pytest failed (exit N)"`.
+- **Files changed**: `scripts/verify.py` — `run_pytest()` function, removed `import tempfile`
 - **Blueprints updated**: `deployment_lifecycle.md` (Fix History), `FIX_REGISTRY.md`, `FIX_REGISTRY_2026.md`
-- **Verification**: `python scripts/verify.py --full` — mypy PASS, ruff PASS, blueprint PASS, pytest 2702 passed in 132s.
-- **Risk**: Zero. Temp file approach is strictly safer than pipes for large output volumes. No change to pytest behavior or test results — only output routing changes.
+- **Verification**: `python scripts/verify.py --full` — mypy PASS, ruff PASS, blueprint PASS, pytest 2702 passed in 130s with live progress dots.
+- **Risk**: Zero. Inheriting stdout is the default subprocess behavior — simplest possible approach. No capture means nothing can deadlock.
 
 ### FIX-20260528-020 — Direction-Blind Regime Gate Unshackles Profitable SHORT Statarb
 
