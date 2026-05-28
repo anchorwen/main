@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260528-024 | 2026-05-28 | cursor-agent | — | verify.py `run_pytest()` deadlock: `capture_output=True` fills OS pipe buffer with 2700+ test output → subprocess hangs on `communicate()`. Replaced with `tempfile.TemporaryFile` to avoid pipe buffer limit. Also added `--no-header` to reduce output volume. | RC-06 |
 | FIX-20260528-021 | 2026-05-28 | cursor-agent | — | MODULE_SOURCE_MAP: add `core/features/schemas/swing_enhanced_schema.py` to `features_service` module (new swing enhanced 35-dim schema file). | RC-09 |
 | FIX-20260528-017 | 2026-05-28 | cursor-agent | — | MODULE_SOURCE_MAP: add `core/features/schemas/registry.py` to `features_service` module (new SSOT file). | RC-09 |
 | FIX-20260528-023 | 2026-05-28 | cursor-agent | — | `_REQUIRED_BRAIN_FIELDS` expanded from 4 to 6: added `contract_group` and `training_contract`. These fields were missing from Swing_V9 brain configs, causing `brain_hard_muted_contract` at startup. `brain.py register` now rejects any config lacking these fields before registration. | RC-09 |

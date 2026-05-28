@@ -198,6 +198,17 @@
 - **Verification**: `python scripts/verify.py --full` — mypy PASS, ruff PASS, blueprint PASS, pytest 2702 passed.
 - **Risk**: Low. New brains registered in `shadow` status — vote_weight=1.0 but need to prove themselves before promotion. Schema is additive (new `swing_enhanced_35` schema, no modification to existing). Training data is historical CSV-based with chronological split — no future data leakage.
 
+### FIX-20260528-024 — verify.py run_pytest() Pipe Buffer Deadlock on 2700+ Tests
+
+- **Date**: 2026-05-28
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (infrastructure/setup) — `run_pytest()` in verify.py used `capture_output=True` which opens OS pipes for stdout/stderr. With 2702 tests, pytest output exceeded the pipe buffer (64KB on Windows), causing `subprocess.communicate()` to deadlock waiting for the pipe to drain. The subprocess couldn't write more output, and the parent was waiting for the subprocess to finish — classic circular deadlock. Only manifested when running `verify.py --full` from certain terminals (VSCode integrated terminal + subprocess nesting). Running `pytest` directly was unaffected.
+- **Fix**: Replaced `capture_output=True` + `subprocess.PIPE` with `tempfile.TemporaryFile` passed as `stdout=out, stderr=subprocess.STDOUT`. Temp files have no buffer limit — pytest writes freely, parent reads back with `out.seek(0) + out.read()`. Also added `--no-header` flag to reduce pytest output volume.
+- **Files changed**: `scripts/verify.py` — `run_pytest()` function
+- **Blueprints updated**: `deployment_lifecycle.md` (Fix History), `FIX_REGISTRY.md`, `FIX_REGISTRY_2026.md`
+- **Verification**: `python scripts/verify.py --full` — mypy PASS, ruff PASS, blueprint PASS, pytest 2702 passed in 132s.
+- **Risk**: Zero. Temp file approach is strictly safer than pipes for large output volumes. No change to pytest behavior or test results — only output routing changes.
+
 ### FIX-20260528-020 — Direction-Blind Regime Gate Unshackles Profitable SHORT Statarb
 
 - **Date**: 2026-05-28

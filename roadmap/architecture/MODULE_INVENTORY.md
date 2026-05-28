@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-28T12:12:33Z
+> **自动生成**: 2026-05-28T12:45:23Z
 > **扫描模块数**: 451
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -569,7 +569,7 @@
 | `validate_artifacts.py` | ✅ active | — | 4 | 196 | — | |
 | `validate_blueprints.py` | ✅ active | — | 7 | 292 | — | |
 | `validate_brain_before_deploy.py` | ✅ active | — | 12 | 394 | — | |
-| `verify.py` | ✅ active | — | 9 | 412 | — | |
+| `verify.py` | ✅ active | — | 9 | 421 | — | |
 | `verify_all_brains.py` | ✅ active | — | 1 | 91 | — | |
 
 ## scripts/audit

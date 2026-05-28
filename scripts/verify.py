@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -124,18 +125,26 @@ def run_ruff(targets: list[str] | None = None) -> tuple[bool, str]:
 
 
 def run_pytest() -> tuple[bool, str]:
-    """Run full test suite. Returns (passed, output summary)."""
+    """Run full test suite. Returns (passed, output summary).
+
+    Uses a temp file for stdout to avoid OS pipe buffer deadlock
+    (capture_output=True fills up on 2700+ tests).
+    """
     try:
-        result = subprocess.run(
-            [sys.executable, "-m", "pytest", "tests/", "-x", "-q", "--tb=short"],
-            capture_output=True,
-            text=True,
-            cwd=str(ROOT),
-            timeout=300,
-        )
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8", suffix=".txt") as out:
+            result = subprocess.run(
+                [sys.executable, "-m", "pytest", "tests/", "-x", "-q", "--tb=short", "--no-header"],
+                stdout=out,
+                stderr=subprocess.STDOUT,
+                text=True,
+                cwd=str(ROOT),
+                timeout=300,
+            )
+            out.seek(0)
+            output = out.read()
         passed = result.returncode == 0
-        lines = result.stdout.strip().split("\n")
-        summary = lines[-1] if lines else result.stdout.strip()
+        lines = output.strip().split("\n")
+        summary = lines[-1] if lines else output.strip()
         return passed, summary
     except subprocess.TimeoutExpired:
         return False, "pytest timed out"
