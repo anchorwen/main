@@ -44,7 +44,7 @@ from core.parliament.contract_groups import (
     MICRO_M15_GROUP,
     STATARB_M15_GROUP,
 )
-from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, log_and_continue
 from core.runtime.market_ingress import (  # noqa: F401 — re-export
     _bootstrap_regime_gate,
     _feed_regime_gate_cycle,
@@ -4808,12 +4808,10 @@ def execute_live_cycle(
             and mid_price > 0
             and pnl_ledger.pending_count > 0
         ):
-            try:
+            with log_and_continue(component="PnLLedger:settle"):
                 _live_spread = float(_ask - _bid) if (_bid and _ask and _ask > _bid) else 0.0
                 pnl_ledger.update_pending(mid_price)
                 pnl_ledger.settle_all(mid_price, spread=_live_spread, slippage=0.10)
-            except Exception:
-                pass
 
         # ── Dynamic exit management phase ──
         # Runs whenever positions are registered, regardless of position limit.
@@ -4844,10 +4842,8 @@ def execute_live_cycle(
                 pass
             # Persist position state every N cycles (trail steps, breakeven, etc.)
             if state.loop_iteration % 5 == 0 and state.position_manager is not None:
-                try:
+                with log_and_continue(component="PositionState:periodic_save"):
                     state.position_manager.save_state(config.position_state_path)
-                except Exception:
-                    pass
 
         # ── Process MIA close entries collected by _execute_management_phase ──
         # FIX-20260525-024: When a position disappears from MT5 between
@@ -6260,10 +6256,11 @@ def execute_live_cycle(
                             },
                         }
                         # Persist immediately after registration
-                        try:
+                        with FaultTolerantContext(
+                            level=FaultLevel.CRASH,
+                            component="PositionState:save_after_register",
+                        ):
                             state.position_manager.save_state(config.position_state_path)
-                        except Exception:
-                            pass
                         print(
                             json.dumps(
                                 {
@@ -6526,7 +6523,11 @@ def execute_live_cycle(
             elif schema_id in ("daily_swing_24", "swing_24", "swing_enhanced_35"):
                 # Swing brains use D1 daily features; swing_enhanced_35 adds micro+TF
                 if daily_feature_vector is not None:
-                    try:
+                    prop = None  # pre-initialise for DEGRADE
+                    with FaultTolerantContext(
+                        level=FaultLevel.DEGRADE,
+                        component="EntryBrain:SwingBrain",
+                    ):
                         if schema_id == "swing_enhanced_35":
                             daily_arr = np.asarray(daily_feature_vector, dtype=np.float64).ravel()
                             if micro_feature_vector is not None:
@@ -6541,8 +6542,6 @@ def execute_live_cycle(
                             fv = daily_feature_vector
                         raw = b_info["adapter"].infer(fv)
                         prop = b_info["adapter"].get_signal(raw)
-                    except Exception:
-                        prop = None
                 else:
                     prop = None
             else:
