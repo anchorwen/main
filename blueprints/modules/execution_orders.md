@@ -55,8 +55,11 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 ## Known Issues
 
 - **KI-004: p_win 静默回退陷阱** (2026-05-26) — `resolve_p_win_from_brains()` 有三个静默回退路径全部返回 0.40 (FIX-20260526-031 从 0.50 降为 Fail-Closed)。三个 failure mode: (1) pnl_store is None, (2) 所有 brain sample_count < 10 冷启动守卫, (3) brain_id 不匹配 PnL store key。当前已加诊断日志区分三个路径。若 future p_win 再次静态出现, 搜索 `resolve_p_win` 诊断日志排查。min_p_win=0.45 (statarb) / 0.50 (barrier_12bar) → 0.40 低于两者 → 确保盲区信号被拒。
+- **2026-05-29**: m15_swing/m30_swing counter_trend default-trap — 与FIX-20260523-004 (statarb_m15)相同模式：无`_counter_trend_action()`专属阈值→默认block=0.40→mild_trend中全部短线空头被硬阻断。Fixed by FIX-20260529-039 (Phase 2: strategy_line.py code change).
 
 ## Fix History
+| Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260529-039 | 2026-05-29 | cursor-agent | — | Swing zero-trade unfreeze (Phase 2): `_counter_trend_action()`添加m15_swing/m30_swing阈值(block=0.55/penalise=0.25)。Phase 1(config): live.yaml confidence_threshold 0.45→0.35, min_rr_ratio 1.0→0.85。 | RC-05, RC-09 |
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 | FIX-20260529-038 | 2026-05-29 | cursor-agent | — | Max_Spread_Gate: StrategyLineConfig新增max_spread_points字段；evaluate() Gate 1b插入点差熔断门（current_spread>threshold→should_trade=False）；live.yaml m15_swing(msp=60)/m30_swing(msp=70)。替代被架构师否决的H12/H22硬编码时段方案。 | RC-06 |
 | FIX-20260529-031 | 2026-05-29 | cursor-agent | — | FillSimulator slippage wiring: `apps/engine/cli.py` `PaperExecutionGateway(slippage_points=10)` — 10pt×0.01tick=0.10价格单位 ~0.5bps. | RC-06 |

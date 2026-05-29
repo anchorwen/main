@@ -3517,6 +3517,9 @@ def _build_strategy_lines(
                 confidence_threshold=_cfg("m15_swing", "confidence_threshold", 0.45),
                 spread_points=_cfg("m15_swing", "spread_points", 0.0),  # FIX-20260529-030
                 max_spread_points=_cfg("m15_swing", "max_spread_points", 0.0),  # FIX-20260529-038
+                min_p_win=_cfg(
+                    "m15_swing", "min_p_win", 0.50
+                ),  # FIX-20260529-039: allow trend swing to use 0.45
                 long_bias_discount=_cfg("m15_swing", "direction_balance", {}).get(
                     "long_bias_discount", 0.0
                 ),
@@ -3557,6 +3560,9 @@ def _build_strategy_lines(
                 confidence_threshold=_cfg("m30_swing", "confidence_threshold", 0.45),
                 spread_points=_cfg("m30_swing", "spread_points", 0.0),  # FIX-20260529-030
                 max_spread_points=_cfg("m30_swing", "max_spread_points", 0.0),  # FIX-20260529-038
+                min_p_win=_cfg(
+                    "m30_swing", "min_p_win", 0.50
+                ),  # FIX-20260529-039: allow trend swing to use 0.45
                 long_bias_discount=_cfg("m30_swing", "direction_balance", {}).get(
                     "long_bias_discount", 0.0
                 ),
@@ -4083,6 +4089,14 @@ def execute_live_cycle(
     # survive a restart.
     if state.loop_iteration == 1 and not config.no_mt5:
         _bootstrap_restart_state(state, str(journal_path), config)
+        # FIX-20260529-039: Bootstrap replays historical close entries to restore
+        # last_exit for each strategy, but record_exit() also increments
+        # consecutive_same_direction. After 20+ replayed entries all in the same
+        # direction, the volume decay check blocks the first live trade (volume
+        # decayed to 0). Reset the counter post-bootstrap — consecutive tracking
+        # is meaningful only within the current live session.
+        for _rs in state._reentry_states.values():
+            _rs.consecutive_same_direction = 0
 
     # ── Daily ops auto-scheduler (The Highlander Rule) ──
     # Fixed UTC 22:00–23:00 window (= 06:00–07:00 CST, post-market-close).

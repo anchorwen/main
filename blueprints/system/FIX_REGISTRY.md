@@ -322,6 +322,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260524-046 | 2026-05-24 | execution-orders, runtime-live | ~~DEFERRED~~ RESOLVED by FIX-20260525-009: MT5 thread model architecture debt (T1-C1/C2/C3) — per-call daemon threads, repeated init/shutdown, non-thread-safe methods. MT5Worker single-threaded engine now in place. | RC-04, RC-06 |
 | FIX-20260524-033 | 2026-05-24 | multi-module (38 files) | Batch mypy type safety: 140→0 errors across all modules. ServiceContainer DI narrowing with assert blocks in 22 entry points, dict type annotations for heterogeneous literals, import/dependency fixes, MODULE_SOURCE_MAP expansion (3 entries), mypy_baseline.json → {}. verify.py --full passes with 0 mypy, 0 ruff, 2670 tests. | RC-02 |
 | FIX-20260525-045 | 2026-05-25 | multi-module (20 files) | Phase 5 MEDIUM+LOW batch fixes (33 items): T1 per-family direction cooling, batched persistence, sentinel cleanup; T2 kelly epsilon threshold, protection file age check; T3 CPCV timestamp alignment, Scaler warnings, dtype unification; T4 EV cost deduction, NaN filtering, embargo warnings. 4 tactical guardrails deployed. | RC-06, RC-09, RC-05 |
+| FIX-20260529-039 | 2026-05-29 | deployment-config, execution-orders, runtime-live | Swing zero-trade unfreeze: 7 fixes (counter_trend block 0.40→0.70, confidence 0.45→0.35, min_rr 1.0→0.85, min_p_win 0.50→0.45, TP 1.5→2.0, reentry stale exit override, consecutive counter reset). m30_swing live position opened (ticket 3706933035). | RC-05, RC-09 |
 
 ---
 ## Fix Details by Year

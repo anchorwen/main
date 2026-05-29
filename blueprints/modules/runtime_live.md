@@ -71,7 +71,11 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Known Issues
 
+- **2026-05-29**: m15_swing/m30_swing zero-trade freeze — after statarb disablement (FIX-036), both swing strategies blocked by counter_trend penalise+confidence_threshold interaction and spread_points-induced rr_below_minimum. Fixed by FIX-20260529-039.
+
 ## Fix History
+| Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260529-039 | 2026-05-29 | cursor-agent | — | Swing zero-trade unfreeze: m15/m30_swing confidence_threshold 0.45→0.35, min_rr_ratio 1.0→0.85 in live.yaml. Counter_trend penalise (conf×0.60) drops 0.50→0.30 — was below old 0.45 gate. spread_points=30 pushes net RR below gross 1:1. | RC-05, RC-09 |
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 | FIX-20260529-038 | 2026-05-29 | cursor-agent | — | Max_Spread_Gate: live_cycle.py两处调point从`bid=None,ask=None`改为`bid=_bid,ask=_ask`。_bid/_ask已于line 4394通过broker.fetch_prices()获取。strategy_line.py中Gate 1b利用bid/ask计算current_spread并与max_spread_points比较。 | RC-06 |
 | FIX-20260529-035 | 2026-05-29 | cursor-agent | — | P0.1 live runtime injection: `_inject_performance_metrics()` added to `live_intent_loop.py` — every cycle computes `BrainPnLStore.get_all_metrics()` and writes win_rate/PF/Sharpe/total_trades/pnl_r to `governance_state.json` via `GovernanceService.set_performance_metrics()`. Closes the gap where scheduler_service governance pipeline wasn't active in live trading path. | RC-06 |

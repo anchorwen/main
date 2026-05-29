@@ -92,6 +92,15 @@ def check_reentry_quality(
     elapsed = (now_timestamp if now_timestamp is not None else _time.time()) - exit_timestamp
     category = _classify_exit_reason(exit_reason_raw)
 
+    # ── Stale exit override (FIX-20260529-039) ──
+    # Exits older than 24h are irrelevant — market microstructure, volatility
+    # regime, and trend have all shifted.  Blocking reentry on a stale record
+    # (e.g. unknown_close from 9.5 days ago) creates a permanent deadlock.
+    # 24h = one full session cycle including Asia/London/NY overlap.
+    _STALE_EXIT_SECONDS: float = 86400.0  # 24 hours
+    if elapsed > _STALE_EXIT_SECONDS:
+        return True, f"stale_exit_allowed_{elapsed:.0f}s_gt_{_STALE_EXIT_SECONDS:.0f}s"
+
     if category == "brain_flip":
         # Brain flipped against us — this is the most dangerous exit category
         # for churn.  Require: minimum elapsed time, significantly stronger
@@ -369,6 +378,17 @@ class ReentryState:
         )
         if not allowed:
             return False, reason, 0.0
+
+        # FIX-20260529-039: stale exit — the last_exit is >24h old and
+        # irrelevant.  Reset consecutive_same_direction to 0 before
+        # incrementing, otherwise 20+ replayed bootstrap entries all in
+        # the same direction cause volume_decay_blocked on the first live
+        # trade.  (Bootstrap sets timestamp=now so elapsed is small; the
+        # stale flag is the only reliable signal that the counter is
+        # counting replays, not actual live entries.)
+        if reason.startswith("stale_exit_allowed"):
+            self.consecutive_same_direction = 0
+            self.last_direction = None
 
         # Determine consecutive count for volume scaling.
         # The caller applies apply_reentry_volume_scale with the actual

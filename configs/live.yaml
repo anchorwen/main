@@ -392,16 +392,25 @@ strategy_lines:
     - xgboost_v9
     base_volume: 0.01
     max_volume: 0.03
-    confidence_threshold: 0.45
+    confidence_threshold: 0.35  # FIX-20260529-039: lowered from 0.45 — counter_trend penalise
+                                # (conf×0.60) drops 0.50→0.30, which was below old gate.
+                                # Now penalised signals survive to RR/MetaFilter checks.
+    min_p_win: 0.45          # FIX-20260529-039: lowered from default 0.50 — trend strategies
+                              # can use 0.48 (code comment). 0.45 allows brain cold-start
+                              # (current rolling WR=0.458) while blocking truly broken signals.
     max_spread_points: 60     # FIX-20260529-038: M15 swing — block when spread >= 60 pts
     spread_points: 30         # FIX-20260529-030: SL/TP spread cost alignment (XAUUSDc typical)
     sl:
       base_atr_mult: 1.5
       hard_sl_ratio: 1.5
       dynamic: true
-      min_rr_ratio: 1.0
+      min_rr_ratio: 0.85  # FIX-20260529-039: lowered from 1.0 — spread_points=30 pushes
+                           # net RR below gross 1:1. 0.85 allows post-spread RR ≥ 0.85
+                           # (breakeven=0.50, so this still filters strictly negative EV).
     tp:
-      base_atr_mult: 1.5
+      base_atr_mult: 2.0  # FIX-20260529-039: 1.5→2.0 — symmetric SL/TP + spread →
+                           # net_RR=0.935<1.0 makes Kelly always negative.
+                           # TP=2.0 gives net_RR=1.258, breakeven WR=44.3% < p_win=45.8%.
       partial_tp_enabled: true
       partial_tp_ratio: 0.5
       partial_tp_r: 1.5
@@ -430,16 +439,23 @@ strategy_lines:
     - xgboost_v9
     base_volume: 0.01
     max_volume: 0.03
-    confidence_threshold: 0.45
+    confidence_threshold: 0.35  # FIX-20260529-039: lowered from 0.45 — counter_trend penalise
+                                # (conf×0.60) drops 0.50→0.30, which was below old gate.
+                                # Now penalised signals survive to RR/MetaFilter checks.
+    min_p_win: 0.45          # FIX-20260529-039: lowered from default 0.50 — trend strategies
+                              # can use 0.48 (code comment). 0.45 allows brain cold-start
+                              # (current rolling WR=0.463) while blocking truly broken signals.
     max_spread_points: 70     # FIX-20260529-038: M30 swing — block when spread >= 70 pts
     spread_points: 30         # FIX-20260529-030: SL/TP spread cost alignment (XAUUSDc typical)
     sl:
       base_atr_mult: 1.5
       hard_sl_ratio: 1.5
       dynamic: true
-      min_rr_ratio: 1.0
+      min_rr_ratio: 0.85  # FIX-20260529-039: lowered from 1.0 — spread_points=30 pushes
+                           # net RR below gross 1:1. 0.85 allows post-spread RR ≥ 0.85
+                           # (breakeven=0.50, so this still filters strictly negative EV).
     tp:
-      base_atr_mult: 1.5
+      base_atr_mult: 2.0  # FIX-20260529-039: 1.5→2.0 (same rationale as m15_swing)
       partial_tp_enabled: true
       partial_tp_ratio: 0.5
       partial_tp_r: 1.5

@@ -1937,6 +1937,35 @@ def _counter_trend_action(
             "h4_conf_mult": 0.65,
             "h4_vol_mult": 0.70,
         },
+        # FIX-20260529-039: swing strategies were falling through to default
+        # (block=0.40, penalise=0.20).  Swing enters on pullbacks within a
+        # trend — counter-trend by design on short TF (M15/M30).
+        # H1 block=0.70: only block when H1 trend is dominant (>0.70);
+        # H1_TS 0.25-0.70 → penalise path (conf×0.65, vol×0.75).
+        # H4 block=0.60: multi-TF consensus required for hard block.
+        # Gate-audit evidence (2026-05-29): H1_TS=0.6, H4_TS=0.057 —
+        # single-TF trend, not MTF consensus.  Blocking M30 swing shorts
+        # on H1-alone trend is over-blocking for short-horizon strategies.
+        "m15_swing": {
+            "block": 0.70,
+            "penalise": 0.25,
+            "conf_mult": 0.65,
+            "vol_mult": 0.75,
+            "h4_block": 0.60,
+            "h4_penalise": 0.30,
+            "h4_conf_mult": 0.65,
+            "h4_vol_mult": 0.70,
+        },
+        "m30_swing": {
+            "block": 0.70,
+            "penalise": 0.25,
+            "conf_mult": 0.65,
+            "vol_mult": 0.75,
+            "h4_block": 0.60,
+            "h4_penalise": 0.30,
+            "h4_conf_mult": 0.65,
+            "h4_vol_mult": 0.70,
+        },
     }
     t = thresholds.get(
         strategy_name,
