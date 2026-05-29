@@ -1558,7 +1558,11 @@ def _execute_management_phase(
         for b_info in brains:
             schema_id = b_info.get("feature_schema_id", "")
             btype = b_info.get("brain_type", "")
-            try:
+            prop = None  # pre-initialise for DEGRADE
+            with FaultTolerantContext(
+                level=FaultLevel.DEGRADE,
+                component="ManagementBrainInference",
+            ):
                 if btype == "ou_params_v6":
                     fv: Any = np.array([mid], dtype=np.float32)
                     raw = b_info["adapter"].infer(fv)
@@ -1578,7 +1582,10 @@ def _execute_management_phase(
                 elif schema_id in ("daily_swing_24", "swing_24", "swing_enhanced_35"):
                     # Swing brains use D1 daily features; swing_enhanced_35 adds micro+TF
                     if daily_feature_provider is not None:
-                        try:
+                        with FaultTolerantContext(
+                            level=FaultLevel.DEGRADE,
+                            component="ManagementBrainInference:DailyFeature",
+                        ):
                             fv_24 = daily_feature_provider.get_latest()
                             if schema_id == "swing_enhanced_35":
                                 tf_ou, tf_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
@@ -1589,22 +1596,6 @@ def _execute_management_phase(
                                 fv = fv_24
                             raw = b_info["adapter"].infer(fv)
                             prop = b_info["adapter"].get_signal(raw)
-                        except Exception as _bio_exc:
-                            prop = None
-                            print(
-                                json.dumps(
-                                    {
-                                        "event": "management_brain_daily_feature_failed",
-                                        "time": _utc_iso(),
-                                        "brain_id": b_info.get("brain_id", ""),
-                                        "schema_id": schema_id,
-                                        "error": f"{type(_bio_exc).__name__}: {str(_bio_exc)[:200]}",
-                                        "level": "DEGRADE",
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                                flush=True,
-                            )
                     else:
                         prop = None
                 else:
@@ -1614,26 +1605,10 @@ def _execute_management_phase(
                     raw = b_info["adapter"].infer(fv)
                     prop = b_info["adapter"].get_signal(raw)
 
-                if prop is not None:
-                    # BrainSignal always carries brain_id from the adapter.
-                    # No stamping needed — frozen objects reject mutation.
-                    raw_proposals.append(prop)
-            except Exception as _bi_exc:
-                prop = None
-                print(
-                    json.dumps(
-                        {
-                            "event": "management_brain_inference_failed",
-                            "time": _utc_iso(),
-                            "brain_id": b_info.get("brain_id", ""),
-                            "schema_id": schema_id,
-                            "error": f"{type(_bi_exc).__name__}: {str(_bi_exc)[:200]}",
-                            "level": "DEGRADE",
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+            if prop is not None:
+                # BrainSignal always carries brain_id from the adapter.
+                # No stamping needed — frozen objects reject mutation.
+                raw_proposals.append(prop)
 
         if raw_proposals:
             try:
@@ -2690,7 +2665,10 @@ def _compute_contract_group_consensus(
     # ── Capacity-aware position sizing (P&L Phase 4) ──
     capacity_allocations: dict[str, float] = {}
     if total_budget > 0:
-        try:
+        with FaultTolerantContext(
+            level=FaultLevel.DEGRADE,
+            component="CapitalAllocator:allocate_capacity",
+        ):
             allocator = CapitalAllocator()
             brain_weights = weighter.get_weights()
             capacity_allocations = allocator.allocate_capacity(
@@ -2698,19 +2676,6 @@ def _compute_contract_group_consensus(
                 brain_weights=brain_weights,
                 lot_value=lot_value,
             )
-        except Exception as _cap_exc:
-            print(
-                json.dumps(
-                    {
-                        "event": "capital_allocator_failed",
-                        "time": _utc_iso(),
-                        "error": f"{type(_cap_exc).__name__}: {str(_cap_exc)[:200]}",
-                        "level": "DEGRADE",
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )  # fallback: capacity_allocations stays {} — volume computed without capacity constraint
 
     # Per-group consensus
     group_signals = compute_all_group_signals(brain_proposal_pairs, weighter)
