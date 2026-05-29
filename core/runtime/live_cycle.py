@@ -3999,7 +3999,7 @@ def execute_live_cycle(
     # Restore last-run state on first cycle; skip if already ran today.
     if state.loop_iteration == 1 and state._last_daily_ops_utc == 0:
         state._last_daily_ops_utc = _load_daily_ops_state(config.base_dir)
-    try:
+    with log_and_continue(component="DailyOps:scheduling"):
         _now_utc = datetime.now(UTC)
         _today_22z = _now_utc.replace(hour=22, minute=0, second=0, microsecond=0)
         _window_end = _today_22z + timedelta(hours=1)
@@ -4011,8 +4011,6 @@ def execute_live_cycle(
         _already_ran_today = _last_date == _now_utc.date()
         if _today_22z <= _now_utc < _window_end and not _already_ran_today:
             _run_scheduled_daily_ops(config, state)
-    except Exception:
-        pass  # never let scheduling error disrupt the cycle
 
     # ── On first cycle, reconcile positions closed during downtime ──
     # Positions in known_open_tickets that are no longer open in MT5 were closed
