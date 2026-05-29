@@ -585,8 +585,14 @@ class StrategyLine:
                             },
                         )
                 weighter.apply_weights(proposals)
-            except Exception:
-                pass  # fallback to default weights (1.0)
+            except Exception as _dw_exc:
+                import logging as _lg
+
+                _lg.getLogger(__name__).error(
+                    "dynamic_brain_weighter_failed strategy=%s error=%s level=DEGRADE",
+                    name,
+                    f"{type(_dw_exc).__name__}: {str(_dw_exc)[:200]}",
+                )  # fallback to default weights (1.0)
 
         # ── 3c. Minimum valid brains gate ──
         # Count brains that produced a non-neutral directional signal AND

@@ -37,6 +37,7 @@ BrainSignal[] → ContractGroupConsensus.compute_all_group_signals()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260529-048 | 2026-05-29 | cursor-agent | — | PR#3 Phase 2: contract_groups.py 4 sequential brain_group_resolution silent-pass handlers → LOG via structured logging (registry/brain_type/source_type/metadata_type probes). | RC-07 |
 | FIX-20260522-022 | 2026-05-22 | cursor-agent | 24ff517 | Phase 2b: ParliamentService _normalize_proposal adapter — maps BrainSignal frozen dataclass to legacy BrainDecisionProposal interface for v9 shadow compatibility. Fixes 32 v9 shadow tests. | contract-violation |
 | FIX-20260519-013 | 2026-05-19 | cursor-agent | — | Consensus direction bug: _compute_weighted()全neutral组(up==down==0.5)之前伪造direction="long"+confidence=0.2486。修复后全neutral→direction="neutral",confidence=0.0。brain_votes中statarb_dynamic组不再出现虚假long共识。 | contract-violation |
 | FIX-20260517-013 | 2026-05-17 | cursor-agent | — | BARRIER_GROUP brain_types trimmed: removed onnx_v9, deepresmlp, online_sgd, xgboost_v4.5 (no active brains of these types). Kept xgboost_v9 + lightgbm_v1. live.yaml synced. | stale-data |

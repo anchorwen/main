@@ -44,6 +44,7 @@ from core.parliament.contract_groups import (
     MICRO_M15_GROUP,
     STATARB_M15_GROUP,
 )
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
 from core.runtime.market_ingress import (  # noqa: F401 — re-export
     _bootstrap_regime_gate,
     _feed_regime_gate_cycle,
@@ -380,8 +381,20 @@ def _dispatch_modify_trail(
             _strat_magic = STRATEGY_TO_MAGIC.get(strategy_name, 0)
             if _strat_magic:
                 payload["magic"] = _strat_magic
-        except Exception:
-            pass
+        except Exception as _magic_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "trail_magic_attribution_failed",
+                        "time": _utc_iso(),
+                        "strategy_name": strategy_name,
+                        "error": f"{type(_magic_exc).__name__}: {str(_magic_exc)[:200]}",
+                        "level": "LOG",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
     if state is not None:
         _open_entry = state.known_open_tickets.get(pos.ticket, {})
         _open_msg_id = _open_entry.get("message_id", "")
@@ -603,8 +616,20 @@ def _dispatch_managed_close(
             _strat_magic = STRATEGY_TO_MAGIC.get(strategy_name, 0)
             if _strat_magic:
                 payload["magic"] = _strat_magic
-        except Exception:
-            pass
+        except Exception as _magic_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "close_magic_attribution_failed",
+                        "time": _utc_iso(),
+                        "strategy_name": strategy_name,
+                        "error": f"{type(_magic_exc).__name__}: {str(_magic_exc)[:200]}",
+                        "level": "LOG",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
     if state is not None:
         _open_entry = state.known_open_tickets.get(pos.ticket, {})
         _open_msg_id = _open_entry.get("message_id", "")
@@ -805,16 +830,29 @@ def _execute_management_phase(
                     _deals = mt5_worker.history_deals_get(position=pos.ticket)
                     if _deals:
                         _enrich_mia_from_deals(_mia_entry, _deals)
-                except Exception:
-                    pass
+                except Exception as _mia_exc:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "mia_deal_enrichment_failed",
+                                "time": _utc_iso(),
+                                "ticket": pos.ticket,
+                                "error": f"{type(_mia_exc).__name__}: {str(_mia_exc)[:200]}",
+                                "level": "LOG",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
                 state._pending_mia_closes.append(_mia_entry)
                 pm.clear_position(ticket=pos.ticket)
                 state.known_open_tickets.pop(pos.ticket, None)
                 # Save position state immediately — don't wait for periodic save
-                try:
+                with FaultTolerantContext(
+                    level=FaultLevel.CRASH,
+                    component="pos_state_save_mia_close",
+                ):
                     pm.save_state(config.position_state_path)
-                except Exception:
-                    pass
                 print(
                     json.dumps(
                         {
@@ -1024,20 +1062,53 @@ def _execute_management_phase(
                         _worst_wr = min(_worst_wr, _m.win_rate)
                     _ctx["strategy_pnl"] = round(_worst_pnl, 2)
                     _ctx["strategy_win_rate"] = round(_worst_wr, 4)
-                except Exception:
-                    pass
+                except Exception as _pnl_ctx_exc:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "pnl_alert_context_failed",
+                                "time": _utc_iso(),
+                                "error": f"{type(_pnl_ctx_exc).__name__}: {str(_pnl_ctx_exc)[:200]}",
+                                "level": "LOG",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
 
             _ah.evaluate_and_dispatch(_ctx)
-        except Exception:
-            pass  # alert failure never blocks trading (Guardrail 1 fail-safe)
+        except Exception as _alert_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "alert_hub_dispatch_failed",
+                        "time": _utc_iso(),
+                        "error": f"{type(_alert_exc).__name__}: {str(_alert_exc)[:200]}",
+                        "level": "LOG",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )  # alert failure never blocks trading (Guardrail 1 fail-safe)
 
     # ── 2. Update regime detector ──
     regime_info: dict[str, Any] = {}
     if regime_detector is not None:
         try:
             regime_info = regime_detector.update(current_atr)
-        except Exception:
-            pass
+        except Exception as _rd_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "regime_detector_update_failed",
+                        "time": _utc_iso(),
+                        "error": f"{type(_rd_exc).__name__}: {str(_rd_exc)[:200]}",
+                        "level": "LOG",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
 
     # ── 3. Update position tracking ──
     # Pillar 1: Fetch current M5 bar for OHLC-calibrated extreme tracking.
@@ -1528,8 +1599,22 @@ def _execute_management_phase(
                                 fv = fv_24
                             raw = b_info["adapter"].infer(fv)
                             prop = b_info["adapter"].get_signal(raw)
-                        except Exception:
+                        except Exception as _bio_exc:
                             prop = None
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "management_brain_daily_feature_failed",
+                                        "time": _utc_iso(),
+                                        "brain_id": b_info.get("brain_id", ""),
+                                        "schema_id": schema_id,
+                                        "error": f"{type(_bio_exc).__name__}: {str(_bio_exc)[:200]}",
+                                        "level": "DEGRADE",
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
                     else:
                         prop = None
                 else:
@@ -1543,8 +1628,22 @@ def _execute_management_phase(
                     # BrainSignal always carries brain_id from the adapter.
                     # No stamping needed — frozen objects reject mutation.
                     raw_proposals.append(prop)
-            except Exception:
-                pass
+            except Exception as _bi_exc:
+                prop = None
+                print(
+                    json.dumps(
+                        {
+                            "event": "management_brain_inference_failed",
+                            "time": _utc_iso(),
+                            "brain_id": b_info.get("brain_id", ""),
+                            "schema_id": schema_id,
+                            "error": f"{type(_bi_exc).__name__}: {str(_bi_exc)[:200]}",
+                            "level": "DEGRADE",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
 
         if raw_proposals:
             try:
@@ -2648,8 +2747,19 @@ def _compute_contract_group_consensus(
                 brain_weights=brain_weights,
                 lot_value=lot_value,
             )
-        except Exception:
-            pass
+        except Exception as _cap_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "capital_allocator_failed",
+                        "time": _utc_iso(),
+                        "error": f"{type(_cap_exc).__name__}: {str(_cap_exc)[:200]}",
+                        "level": "DEGRADE",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )  # fallback: capacity_allocations stays {} — volume computed without capacity constraint
 
     # Per-group consensus
     group_signals = compute_all_group_signals(brain_proposal_pairs, weighter)
@@ -2837,8 +2947,20 @@ def _build_meta_feature_vector(
                     "theta": float(raw.get("theta", 0.0)),
                 }
                 break
-            except Exception:
-                pass
+            except Exception as _ou_exc:
+                print(
+                    json.dumps(
+                        {
+                            "event": "ou_params_computation_failed",
+                            "time": _utc_iso(),
+                            "brain_id": getattr(adapter, "metadata", {}).get("brain_id", ""),
+                            "error": f"{type(_ou_exc).__name__}: {str(_ou_exc)[:200]}",
+                            "level": "LOG",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )  # ou_params stays None — diagnostic-only since FIX-016
 
     # ═══════════════════════════════════════════════════════════════
     # Step 2: Read raw V9 features from feature store (40-dim)
@@ -4131,14 +4253,36 @@ def execute_live_cycle(
                                 elif _label in ("tp_hit_first", "win"):
                                     _curr = 0
                                 state.consecutive_sl_hits[_strategy] = _curr
-                except Exception:
-                    pass  # best-effort — don't block startup
+                except Exception as _rec_inner_exc:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "startup_reconciliation_inner_failed",
+                                "time": _utc_iso(),
+                                "error": f"{type(_rec_inner_exc).__name__}: {str(_rec_inner_exc)[:200]}",
+                                "level": "LOG",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )  # best-effort — don't block startup
             # Filter to only currently-open positions AFTER reconciliation
             state.known_open_tickets = {
                 t: r for t, r in state.known_open_tickets.items() if t in _open_tickets
             }
-        except Exception:
-            pass
+        except Exception as _rec_outer_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "startup_reconciliation_outer_failed",
+                        "time": _utc_iso(),
+                        "error": f"{type(_rec_outer_exc).__name__}: {str(_rec_outer_exc)[:200]}",
+                        "level": "LOG",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
 
         # ── Startup orphan detection: MT5 vs active_position.json ──
         try:

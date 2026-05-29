@@ -173,8 +173,14 @@ class ExitWatchdog:
                         attempts=[],
                         alerts=[],
                     )
-            except Exception:
-                pass  # verification failure → proceed with normal retry loop
+            except Exception as _ver_exc:
+                import logging as _lg
+
+                _lg.getLogger(__name__).warning(
+                    "position_verification_failed ticket=%s error=%s",
+                    position_ticket,
+                    f"{type(_ver_exc).__name__}: {str(_ver_exc)[:200]}",
+                )  # verification failure → proceed with normal retry loop
 
         for attempt_n in range(1, self.max_retries + 1):
             elapsed = time.monotonic() - start
