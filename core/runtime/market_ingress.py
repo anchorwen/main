@@ -35,7 +35,12 @@ def _get_current_atr(
     """Compute current M5 ATR(*period*) — rates fetched on worker thread, math is local."""
     import numpy as np
 
-    rates = worker.copy_rates_from_pos(symbol, MT5_TIMEFRAME_M5, 0, count, timeout=timeout)
+    rates = None
+    with FaultTolerantContext(
+        level=FaultLevel.CRASH,
+        component="MT5_IPC:copy_rates_from_pos:get_current_atr",
+    ):
+        rates = worker.copy_rates_from_pos(symbol, MT5_TIMEFRAME_M5, 0, count, timeout=timeout)
     if rates is None or len(rates) < period + 1:
         return 0.0
     h = np.array([r["high"] for r in rates], dtype=np.float64)
@@ -50,7 +55,12 @@ def _get_current_atr(
 
 def _position_count(worker: MT5Worker, symbol: str, timeout: float = 5.0) -> int:
     """Count open MT5 positions — executed on the worker thread."""
-    pos = worker.positions_get(symbol=symbol, timeout=timeout)
+    pos = None
+    with FaultTolerantContext(
+        level=FaultLevel.CRASH,
+        component="MT5_IPC:positions_get:position_count",
+    ):
+        pos = worker.positions_get(symbol=symbol, timeout=timeout)
     return len(pos) if pos else 0
 
 
@@ -58,10 +68,15 @@ def _mid_and_prices(
     worker: MT5Worker, symbol: str, timeout: float = 5.0
 ) -> tuple[float, float, float]:
     """Fetch bid/ask/mid — executed on the worker thread."""
-    tick = worker.symbol_info_tick(symbol, timeout=timeout)
-    if tick is None:
-        worker.reconnect()
+    tick = None
+    with FaultTolerantContext(
+        level=FaultLevel.CRASH,
+        component="MT5_IPC:symbol_info_tick:mid_and_prices",
+    ):
         tick = worker.symbol_info_tick(symbol, timeout=timeout)
+        if tick is None:
+            worker.reconnect()
+            tick = worker.symbol_info_tick(symbol, timeout=timeout)
     if tick is None:
         raise RuntimeError("tick unavailable")
     bid = float(tick.bid)

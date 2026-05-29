@@ -375,26 +375,12 @@ def _dispatch_modify_trail(
         payload["brain_ids"] = brain_ids
     # Resolve magic from strategy name for correct journal attribution
     if strategy_name:
-        try:
+        with log_and_continue(component="MagicAttribution:trail"):
             from core.contracts.strategy_magic import STRATEGY_TO_MAGIC
 
             _strat_magic = STRATEGY_TO_MAGIC.get(strategy_name, 0)
             if _strat_magic:
                 payload["magic"] = _strat_magic
-        except Exception as _magic_exc:
-            print(
-                json.dumps(
-                    {
-                        "event": "trail_magic_attribution_failed",
-                        "time": _utc_iso(),
-                        "strategy_name": strategy_name,
-                        "error": f"{type(_magic_exc).__name__}: {str(_magic_exc)[:200]}",
-                        "level": "LOG",
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
     if state is not None:
         _open_entry = state.known_open_tickets.get(pos.ticket, {})
         _open_msg_id = _open_entry.get("message_id", "")
@@ -610,26 +596,12 @@ def _dispatch_managed_close(
         payload["brain_ids"] = _close_brain_ids
     # Resolve magic from strategy name and carry open_message_id for journal linkage
     if strategy_name:
-        try:
+        with log_and_continue(component="MagicAttribution:close"):
             from core.contracts.strategy_magic import STRATEGY_TO_MAGIC
 
             _strat_magic = STRATEGY_TO_MAGIC.get(strategy_name, 0)
             if _strat_magic:
                 payload["magic"] = _strat_magic
-        except Exception as _magic_exc:
-            print(
-                json.dumps(
-                    {
-                        "event": "close_magic_attribution_failed",
-                        "time": _utc_iso(),
-                        "strategy_name": strategy_name,
-                        "error": f"{type(_magic_exc).__name__}: {str(_magic_exc)[:200]}",
-                        "level": "LOG",
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
     if state is not None:
         _open_entry = state.known_open_tickets.get(pos.ticket, {})
         _open_msg_id = _open_entry.get("message_id", "")
@@ -1006,7 +978,7 @@ def _execute_management_phase(
     # ── 1c. Alert evaluation (FIX-20260529-040: LiveAlertHub wiring) ──
     _ah = getattr(state, "alert_hub", None)
     if _ah is not None:
-        try:
+        with log_and_continue(component="AlertHub:dispatch"):
             # Build context from in-memory state only (Guardrail 3)
             _ctx_error_rate = 0.0
             _ctx_frozen = 0
@@ -1039,7 +1011,7 @@ def _execute_management_phase(
 
             # ── Phase B: PnL fund-safety context injection ──
             if pnl_ledger is not None:
-                try:
+                with log_and_continue(component="AlertHub:PnL_context"):
                     _pnl_stats = pnl_ledger.get_quick_stats()
                     _ctx.update(_pnl_stats)
                     # Worst-performing strategy detection
@@ -1051,53 +1023,14 @@ def _execute_management_phase(
                         _worst_wr = min(_worst_wr, _m.win_rate)
                     _ctx["strategy_pnl"] = round(_worst_pnl, 2)
                     _ctx["strategy_win_rate"] = round(_worst_wr, 4)
-                except Exception as _pnl_ctx_exc:
-                    print(
-                        json.dumps(
-                            {
-                                "event": "pnl_alert_context_failed",
-                                "time": _utc_iso(),
-                                "error": f"{type(_pnl_ctx_exc).__name__}: {str(_pnl_ctx_exc)[:200]}",
-                                "level": "LOG",
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
 
             _ah.evaluate_and_dispatch(_ctx)
-        except Exception as _alert_exc:
-            print(
-                json.dumps(
-                    {
-                        "event": "alert_hub_dispatch_failed",
-                        "time": _utc_iso(),
-                        "error": f"{type(_alert_exc).__name__}: {str(_alert_exc)[:200]}",
-                        "level": "LOG",
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )  # alert failure never blocks trading (Guardrail 1 fail-safe)
 
     # ── 2. Update regime detector ──
     regime_info: dict[str, Any] = {}
     if regime_detector is not None:
-        try:
+        with log_and_continue(component="RegimeDetector:update"):
             regime_info = regime_detector.update(current_atr)
-        except Exception as _rd_exc:
-            print(
-                json.dumps(
-                    {
-                        "event": "regime_detector_update_failed",
-                        "time": _utc_iso(),
-                        "error": f"{type(_rd_exc).__name__}: {str(_rd_exc)[:200]}",
-                        "level": "LOG",
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
 
     # ── 3. Update position tracking ──
     # Pillar 1: Fetch current M5 bar for OHLC-calibrated extreme tracking.
@@ -2855,7 +2788,7 @@ def _build_meta_feature_vector(
     for b_info in brains:
         adapter = b_info.get("adapter")
         if isinstance(adapter, ParamsBrainAdapter):
-            try:
+            with log_and_continue(component="BrainInference:OU_params"):
                 raw = adapter.infer(np.array([_price], dtype=np.float32))
                 ou_params = {
                     "z_score": float(raw.get("z_score", 0.0)),
@@ -2863,20 +2796,6 @@ def _build_meta_feature_vector(
                     "theta": float(raw.get("theta", 0.0)),
                 }
                 break
-            except Exception as _ou_exc:
-                print(
-                    json.dumps(
-                        {
-                            "event": "ou_params_computation_failed",
-                            "time": _utc_iso(),
-                            "brain_id": getattr(adapter, "metadata", {}).get("brain_id", ""),
-                            "error": f"{type(_ou_exc).__name__}: {str(_ou_exc)[:200]}",
-                            "level": "LOG",
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )  # ou_params stays None — diagnostic-only since FIX-016
 
     # ═══════════════════════════════════════════════════════════════
     # Step 2: Read raw V9 features from feature store (40-dim)
@@ -4119,7 +4038,7 @@ def execute_live_cycle(
             component="MT5_IPC:positions_get:startup_reconciliation",
         ):
             _positions = mt5_worker.positions_get(symbol=config.symbol) or []
-        try:
+        with log_and_continue(component="StartupReconciliation"):
             _open_tickets = {p.ticket for p in _positions}
             _gone_tickets = set(state.known_open_tickets.keys()) - _open_tickets
             if _gone_tickets:
@@ -4128,7 +4047,7 @@ def execute_live_cycle(
                     for t in _gone_tickets
                     if t in state.known_open_tickets
                 }
-                try:
+                with log_and_continue(component="StartupReconciliation:journal_write"):
                     _closed_entries = _reconcile_closed_positions(
                         mt5_worker,
                         config.symbol,
@@ -4173,36 +4092,10 @@ def execute_live_cycle(
                                 elif _label in ("tp_hit_first", "win"):
                                     _curr = 0
                                 state.consecutive_sl_hits[_strategy] = _curr
-                except Exception as _rec_inner_exc:
-                    print(
-                        json.dumps(
-                            {
-                                "event": "startup_reconciliation_inner_failed",
-                                "time": _utc_iso(),
-                                "error": f"{type(_rec_inner_exc).__name__}: {str(_rec_inner_exc)[:200]}",
-                                "level": "LOG",
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )  # best-effort — don't block startup
             # Filter to only currently-open positions AFTER reconciliation
             state.known_open_tickets = {
                 t: r for t, r in state.known_open_tickets.items() if t in _open_tickets
             }
-        except Exception as _rec_outer_exc:
-            print(
-                json.dumps(
-                    {
-                        "event": "startup_reconciliation_outer_failed",
-                        "time": _utc_iso(),
-                        "error": f"{type(_rec_outer_exc).__name__}: {str(_rec_outer_exc)[:200]}",
-                        "level": "LOG",
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
 
         # ── Startup orphan detection: MT5 vs active_position.json ──
         try:
@@ -4734,34 +4627,21 @@ def execute_live_cycle(
 
     # ── Position limit check ──
     if not config.no_mt5:
-        try:
+        # _position_count internally wraps MT5 IPC in FTC(CRASH) — let it propagate
+        pos_count = (
+            broker.count_positions(config.symbol)
+            if broker is not None
+            else _position_count(mt5_worker, config.symbol)
+        )
+
+        # -1 means MT5 connection is dead — attempt reconnect once
+        if pos_count < 0 and mt5_worker is not None:
+            mt5_worker.reconnect()
             pos_count = (
                 broker.count_positions(config.symbol)
                 if broker is not None
                 else _position_count(mt5_worker, config.symbol)
             )
-        except Exception as _pos_exc:
-            print(
-                json.dumps(
-                    {"event": "position_count_error", "time": _utc_iso(), "error": str(_pos_exc)},
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-            pos_count = -1
-
-        # -1 means MT5 connection is dead — attempt reconnect once
-        if pos_count < 0:
-            try:
-                if mt5_worker is not None:
-                    mt5_worker.reconnect()
-                    pos_count = (
-                        broker.count_positions(config.symbol)
-                        if broker is not None
-                        else _position_count(mt5_worker, config.symbol)
-                    )
-            except Exception:
-                pass
 
         # Still unknown after reconnect — fall back to position manager cache
         # instead of skipping the cycle entirely.  MT5 connection is flaky on
@@ -5182,12 +5062,13 @@ def execute_live_cycle(
     # ── Market regime detection ──
     regime_info: dict[str, Any] = {}
     if not config.no_mt5 and regime_detector is not None:
+        # _get_current_atr internally wraps MT5 IPC in FTC(CRASH) — let it propagate
+        current_atr = (
+            broker.fetch_current_atr(config.symbol)
+            if broker is not None
+            else _get_current_atr(mt5_worker, config.symbol)
+        )
         try:
-            current_atr = (
-                broker.fetch_current_atr(config.symbol)
-                if broker is not None
-                else _get_current_atr(mt5_worker, config.symbol)
-            )
             if current_atr > 0:
                 regime_info = regime_detector.update(current_atr)
                 # Rolling ATR buffer for adaptive circuit breaker
