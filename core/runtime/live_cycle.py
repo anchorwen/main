@@ -555,12 +555,13 @@ def _dispatch_managed_close(
     ):
         _true_vol = _close_volume
         if mt5_worker is not None:
-            try:
+            with FaultTolerantContext(
+                level=FaultLevel.CRASH,
+                component="MT5_IPC:positions_get:ghost_volume_audit",
+            ):
                 _mt5_positions = mt5_worker.positions_get(ticket=pos.ticket)
                 if _mt5_positions and len(_mt5_positions) > 0:
                     _true_vol = float(_mt5_positions[0].volume)
-            except Exception:
-                pass
         print(
             json.dumps(
                 {
@@ -5080,7 +5081,7 @@ def execute_live_cycle(
 
     # ── Feature gate: block garbage-in before it becomes garbage-out ──
     if not config.no_mt5:
-        try:
+        with log_and_continue(component="FeatureGate:check"):
             from core.runtime.signal_health import FeatureGate
 
             _gate = FeatureGate.check(
@@ -5104,8 +5105,6 @@ def execute_live_cycle(
                 )
                 _log_cycle_end(state.loop_iteration)
                 return state, True
-        except Exception:
-            pass  # gate itself should never crash the cycle
 
     # ── Run inference ──
     raw_output: dict[str, Any] = {}
@@ -5470,7 +5469,7 @@ def execute_live_cycle(
                                 _log_cycle_end(state.loop_iteration)
                                 return state, True
                     except Exception:
-                        pass  # fail-open: don't block if MT5 unavailable
+                        pass  # force-close dispatch failure → skip, next cycle retries
 
                 # Feature vector quality check
                 fv_check = check_feature_vector(feature_vector)
@@ -6029,7 +6028,7 @@ def execute_live_cycle(
                                             if ticket is not None:
                                                 break  # found valid entry, stop scanning lines
                                     except Exception:
-                                        pass
+                                        pass  # malformed journal line → skip
                                 if ticket is not None:
                                     break  # got the ticket, stop retrying
                             _time2.sleep(0.5)
