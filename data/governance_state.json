@@ -12,19 +12,20 @@
     },
     "OU_Params_V7_M15": {
       "brain_id": "OU_Params_V7_M15",
-      "status": "retired",
+      "status": "probation",
       "registered_at": "2026-05-24T22:00:00.000000",
-      "last_transition_at": "2026-05-27T22:00:28.708902",
-      "transition_count": 1,
+      "last_transition_at": "2026-05-29T01:26:31.606962",
+      "transition_count": 3,
       "freeze_count": 0,
-      "exposure_limited": false
+      "exposure_limited": false,
+      "vote_weight": 0.8
     },
     "Meta_Stage1_Huber_V1": {
       "brain_id": "Meta_Stage1_Huber_V1",
-      "status": "retired",
+      "status": "candidate",
       "registered_at": "2026-05-17T08:00:00.000000",
-      "last_transition_at": "2026-05-24T22:01:35.499195",
-      "transition_count": 5,
+      "last_transition_at": "2026-05-29T01:29:30.094122+00:00",
+      "transition_count": 6,
       "freeze_count": 1,
       "freeze_reason": "The Great Reset: SL=2.0/TP=3.5 labels proven unprofitable with corrected 30pt spread/10pt slippage costs. EV surface collapse confirmed — TP>=2.5 all negative EV at SL=2.0. Retraining required with SL=3.0/TP=1.5 (EV=0.2004R). Stage 2 Meta Pipeline also pending retraining."
     },
@@ -48,20 +49,20 @@
       "exposure_limited": false,
       "note": "Meta-Labeling binary classifier. OU signal (z_entry=1.3) → barrier SL=3.0/TP=1.5. 43-dim (40 V9 + 3 OU). z_entry hard-clipped [1.3, 2.5] for tree model extrapolation safety. OU features (z_score, half_life, theta) wired via _build_meta_feature_vector. Deployed to probation 2026-05-24."
     },
-    "Swing_V9_M15_V1": {
-      "brain_id": "Swing_V9_M15_V1",
-      "status": "shadow",
-      "registered_at": "2026-05-28T15:27:15.676651",
-      "last_transition_at": "2026-05-28T15:27:15.676651",
-      "transition_count": 0,
+    "Swing_V9_M30_V2": {
+      "brain_id": "Swing_V9_M30_V2",
+      "status": "candidate",
+      "registered_at": "2026-05-29T01:11:26.276690",
+      "last_transition_at": "2026-05-29T01:26:55.001221",
+      "transition_count": 1,
       "freeze_count": 0
     },
-    "Swing_V9_M30_V1": {
-      "brain_id": "Swing_V9_M30_V1",
-      "status": "shadow",
-      "registered_at": "2026-05-28T15:27:15.543621",
-      "last_transition_at": "2026-05-28T15:27:15.543621",
-      "transition_count": 0,
+    "Swing_V9_M15_V2": {
+      "brain_id": "Swing_V9_M15_V2",
+      "status": "candidate",
+      "registered_at": "2026-05-29T01:11:26.413720",
+      "last_transition_at": "2026-05-29T01:26:55.001221",
+      "transition_count": 1,
       "freeze_count": 0
     }
   },
@@ -566,6 +567,75 @@
       "to_status": "retired",
       "reason": "pnl:critical",
       "timestamp": "2026-05-27T22:00:33.057879"
+    },
+    {
+      "brain_id": "OU_Params_V7_M15",
+      "from_status": "retired",
+      "to_status": "probation",
+      "reason": "FIX-20260529-032: manually restored from retired. statarb_m15 strategy is active and requires OU_Params_V7_M15 brain for M15 mean-reversion signals. Same restoration as OU_Params_V6_Sniper (FIX-20260526-041).",
+      "timestamp": "2026-05-28T17:07:20.634765+00:00"
+    },
+    {
+      "brain_id": "OU_Params_V7_M15",
+      "from_status": "probation",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-05-28T22:00:28.257840"
+    },
+    {
+      "brain_id": "ARB_Params_V8_M15_S53",
+      "from_status": "frozen",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-05-28T22:00:32.482790"
+    },
+    {
+      "brain_id": "OU_Params_V7_M15",
+      "from": "retired",
+      "to": "probation",
+      "reason": "FIX-20260529-034: manual restore + SSOT reconciliation guard",
+      "timestamp": "2026-05-29T01:26:31.606962",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Swing_V9_M15_V1",
+      "from": null,
+      "to": "shadow",
+      "reason": "FIX-20260529-034: backfill missing transition_log for existing brain",
+      "timestamp": "2026-05-29T01:26:55.001221",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Swing_V9_M15_V2",
+      "from": null,
+      "to": "candidate",
+      "reason": "FIX-20260529-034: backfill missing transition_log for existing brain",
+      "timestamp": "2026-05-29T01:26:55.001221",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Swing_V9_M30_V1",
+      "from": null,
+      "to": "shadow",
+      "reason": "FIX-20260529-034: backfill missing transition_log for existing brain",
+      "timestamp": "2026-05-29T01:26:55.001221",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Swing_V9_M30_V2",
+      "from": null,
+      "to": "candidate",
+      "reason": "FIX-20260529-034: backfill missing transition_log for existing brain",
+      "timestamp": "2026-05-29T01:26:55.001221",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Meta_Stage1_Huber_V1",
+      "from": "retired",
+      "to": "candidate",
+      "reason": "SSOT reconciliation: active config on disk overrides retired governance",
+      "timestamp": "2026-05-29T01:29:30.094122+00:00",
+      "fix_id": "FIX-20260529-034"
     }
   ]
 }

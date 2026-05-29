@@ -28,6 +28,13 @@ def compute_performance_from_ledger(
 ) -> dict[str, dict[str, Any]]:
     """Compute BrainPromotionEvaluator-compatible metrics from settled P&L records.
 
+    .. deprecated:: 2026-05-29 (FIX-20260529-035)
+        Use ``BrainPnLStore.get_all_metrics()`` instead — the SSOT for per-brain
+        P&L statistics.  This function reads raw JSON and computes a DIFFERENT
+        set of metrics than the canonical BrainPnLMetrics, violating the SSOT
+        principle.  Kept only for backward compat in manual ``run_promotion.py``
+        CLI usage; must not be called from automated governance pipelines.
+
     Args:
         pnl_ledger: Loaded brain_pnl_ledger.json dict.
         window: If set, only use last N signals per brain.
@@ -36,6 +43,13 @@ def compute_performance_from_ledger(
         Dict of brain_id → {win_rate, profit_factor, signal_count,
                             consecutive_losses, recent_win_rate}
     """
+    import warnings
+
+    warnings.warn(
+        "compute_performance_from_ledger is deprecated — use BrainPnLStore.get_all_metrics()",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     settled = pnl_ledger.get("settled", {})
     perf: dict[str, dict[str, Any]] = {}
 

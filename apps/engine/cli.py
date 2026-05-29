@@ -1120,7 +1120,7 @@ def _run_runtime_paper(args, ledger_dir: Path) -> dict:
     runner = StrategyPluginRunner(registry)
     runner.warmup_all({})
     router = ExecutionGatewayRouter()
-    router.register("PAPER", PaperExecutionGateway())
+    router.register("PAPER", PaperExecutionGateway(slippage_points=10))
     gates: list[Any] = []
     if args.alpha_risk_budget:
         usage_store = (

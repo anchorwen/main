@@ -292,6 +292,34 @@ def _check_single_brain_governance(brain_id: str, base_dir: str) -> dict[str, An
     return {"blocked": False, "warning": False, "status": status}
 
 
+def _inject_performance_metrics(pnl_store: Any, base_dir: str) -> None:
+    """P0.1: Inject per-brain performance metrics into governance state every cycle."""
+    from pathlib import Path as _P
+
+    _gov_path = _P(base_dir) / "governance_state.json"
+    if not _gov_path.exists():
+        return
+    try:
+        from core.governance.governance_service import GovernanceService
+
+        gov = GovernanceService.load(str(_gov_path))
+        all_metrics = pnl_store.get_all_metrics()
+        for brain_id, m in all_metrics.items():
+            gov.set_performance_metrics(
+                brain_id,
+                {
+                    "win_rate": m.win_rate,
+                    "profit_factor": m.profit_factor,
+                    "sharpe_ratio": m.sharpe_ratio,
+                    "total_trades": m.sample_count,
+                    "pnl_r": round(m.cumulative_pnl, 2),
+                },
+            )
+        gov.save(str(_gov_path))
+    except Exception:
+        pass  # Non-critical — don't crash the cycle for metrics injection
+
+
 def _init_risk_service() -> Any:
     """Create RiskEvaluationService with standard live trading policies."""
     from core.risk.risk_evaluation_service import RiskEvaluationService
@@ -1964,6 +1992,8 @@ def main(argv: list[str] | None = None) -> int:
                 if pnl_ledger is not None:
                     try:
                         pnl_ledger.save(pnl_ledger_path)
+                        # P0.1: inject performance_metrics into governance state
+                        _inject_performance_metrics(pnl_ledger, args.base_dir)
                     except Exception:
                         pass
                 if meta_signal_filter is not None:

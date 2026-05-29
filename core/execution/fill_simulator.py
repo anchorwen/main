@@ -22,6 +22,33 @@ class FillSimulationConfig:
         if self.min_liquidity_quantity is not None and self.min_liquidity_quantity <= 0:
             raise ValueError("min_liquidity_quantity must be positive")
 
+    @classmethod
+    def from_slippage_points(
+        cls,
+        slippage_points: float = 0.0,
+        approximate_price: float = 2000.0,
+        max_fill_ratio: float = 1.0,
+        min_liquidity_quantity: float | None = None,
+    ) -> "FillSimulationConfig":
+        """Create config from MT5 slippage_points (FIX-20260529-031).
+
+        10 points × 0.01 tick = 0.10 price units on XAUUSDc.
+        0.10 / 2000 * 10000 ≈ 0.5 bps.
+        """
+        if slippage_points <= 0 or approximate_price <= 0:
+            return cls(
+                max_fill_ratio=max_fill_ratio,
+                slippage_bps=0.0,
+                min_liquidity_quantity=min_liquidity_quantity,
+            )
+        slippage_price = slippage_points * 0.01  # XAUUSDc tick_size
+        slippage_bps = round((slippage_price / approximate_price) * 10000, 6)
+        return cls(
+            max_fill_ratio=max_fill_ratio,
+            slippage_bps=slippage_bps,
+            min_liquidity_quantity=min_liquidity_quantity,
+        )
+
 
 class FillSimulator:
     """Deterministic fill simulator for market and limit orders."""

@@ -105,6 +105,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/execution/mt5_broker_adapter.py",
         "core/execution/mt5_worker.py",
         "core/execution/execution_queue.py",
+        "core/execution/paper_gateway.py",
         "scripts/mt5_bridge_worker.py",
         "scripts/mt5_spread_probe.py",
         "scripts/test_meta_pipeline.py",

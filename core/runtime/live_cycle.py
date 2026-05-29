@@ -7,6 +7,7 @@ Extracted from scripts/live_intent_loop.py to keep the CLI script thin
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 from dataclasses import dataclass, field
@@ -220,6 +221,41 @@ def _log_cycle_end(iteration: int) -> None:
         ),
         flush=True,
     )
+
+
+def _compute_tf_ou_hurst(mid_prices: list[float]) -> tuple[float, float]:
+    """Compute TF_OU_Theta and TF_Hurst from rolling M5 mid prices.
+
+    Mirrors build_swing_enhanced_dataset.py:_ou_theta() and _hurst().
+    Uses the most recent 21 M5 close prices (≈105 min history).
+    Returns (ou_theta, hurst) — defaults (0.0, 0.5) on insufficient data.
+    """
+    if len(mid_prices) < 21:
+        return 0.0, 0.5
+    window = np.array(mid_prices[-21:], dtype=np.float64)
+    # OU Theta: AR(1) mean-reversion coefficient
+    y = window[1:]
+    x = window[:-1]
+    x_mean = float(np.mean(x))
+    y_mean = float(np.mean(y))
+    beta_num = float(np.sum((x - x_mean) * (y - y_mean)))
+    beta_den = float(np.sum((x - x_mean) ** 2))
+    if beta_den == 0:
+        ou_theta = 0.0
+    else:
+        beta = np.clip(beta_num / beta_den, 1e-8, 0.99999999)
+        ou_theta = float(-math.log(beta))
+    # Hurst: R/S exponent
+    s = float(np.std(window))
+    if s == 0:
+        hurst = 0.5
+    else:
+        mean_v = float(np.mean(window))
+        z = np.cumsum(window - mean_v)
+        r = float(np.max(z) - np.min(z))
+        rs = r / s
+        hurst = float(math.log(rs) / math.log(20)) if rs > 0 else 0.5
+    return ou_theta, hurst
 
 
 # ── Daily ops auto-scheduler ────────────────────────────────────────────
@@ -1552,7 +1588,10 @@ def _execute_management_phase(
                         try:
                             fv_24 = daily_feature_provider.get_latest()
                             if schema_id == "swing_enhanced_35":
-                                fv = np.concatenate([fv_24[:24], np.zeros(11, dtype=np.float64)])
+                                tf_ou, tf_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
+                                fv = np.concatenate(
+                                    [fv_24[:24], np.zeros(9, dtype=np.float64), [tf_ou, tf_hurst]]
+                                )
                             else:
                                 fv = fv_24
                             raw = b_info["adapter"].infer(fv)
@@ -3123,6 +3162,10 @@ def _build_strategy_lines(
                 confidence_threshold=_cfg(
                     "barrier_12bar", "confidence_threshold", config.confidence_threshold
                 ),
+                spread_points=_cfg("barrier_12bar", "spread_points", 0.0),  # FIX-20260529-030
+                max_spread_points=_cfg(
+                    "barrier_12bar", "max_spread_points", 0.0
+                ),  # FIX-20260529-038
                 long_bias_discount=_cfg("barrier_12bar", "direction_balance", {}).get(
                     "long_bias_discount", 0.05
                 ),
@@ -3164,6 +3207,8 @@ def _build_strategy_lines(
                 confidence_threshold=_cfg(
                     "micro_3bar", "confidence_threshold", config.confidence_threshold
                 ),
+                spread_points=_cfg("micro_3bar", "spread_points", 0.0),  # FIX-20260529-030
+                max_spread_points=_cfg("micro_3bar", "max_spread_points", 0.0),  # FIX-20260529-038
                 long_bias_discount=_cfg("micro_3bar", "direction_balance", {}).get(
                     "long_bias_discount", 0.03
                 ),
@@ -3204,6 +3249,8 @@ def _build_strategy_lines(
                 confidence_threshold=_cfg(
                     "micro_m15", "confidence_threshold", config.confidence_threshold
                 ),
+                spread_points=_cfg("micro_m15", "spread_points", 0.0),  # FIX-20260529-030
+                max_spread_points=_cfg("micro_m15", "max_spread_points", 0.0),  # FIX-20260529-038
                 long_bias_discount=_cfg("micro_m15", "direction_balance", {}).get(
                     "long_bias_discount", 0.03
                 ),
@@ -3244,6 +3291,8 @@ def _build_strategy_lines(
                 confidence_threshold=_cfg(
                     "micro_h1", "confidence_threshold", config.confidence_threshold
                 ),
+                spread_points=_cfg("micro_h1", "spread_points", 0.0),  # FIX-20260529-030
+                max_spread_points=_cfg("micro_h1", "max_spread_points", 0.0),  # FIX-20260529-038
                 long_bias_discount=_cfg("micro_h1", "direction_balance", {}).get(
                     "long_bias_discount", 0.0
                 ),
@@ -3287,6 +3336,10 @@ def _build_strategy_lines(
                 confidence_threshold=_cfg(
                     "statarb_dynamic", "confidence_threshold", config.confidence_threshold
                 ),
+                spread_points=_cfg("statarb_dynamic", "spread_points", 0.0),  # FIX-20260529-030
+                max_spread_points=_cfg(
+                    "statarb_dynamic", "max_spread_points", 0.0
+                ),  # FIX-20260529-038
                 long_bias_discount=_cfg("statarb_dynamic", "direction_balance", {}).get(
                     "long_bias_discount", 0.0
                 ),
@@ -3329,6 +3382,8 @@ def _build_strategy_lines(
                 confidence_threshold=_cfg(
                     "statarb_m15", "confidence_threshold", config.confidence_threshold
                 ),
+                spread_points=_cfg("statarb_m15", "spread_points", 0.0),  # FIX-20260529-030
+                max_spread_points=_cfg("statarb_m15", "max_spread_points", 0.0),  # FIX-20260529-038
                 long_bias_discount=_cfg("statarb_m15", "direction_balance", {}).get(
                     "long_bias_discount", 0.0
                 ),
@@ -3369,6 +3424,10 @@ def _build_strategy_lines(
                 min_sl_distance=_cfg("barrier_12bar_meta", "sl", {}).get("min_sl_distance", 8.0),
                 min_rr_ratio=_cfg("barrier_12bar_meta", "sl", {}).get("min_rr_ratio", 0.5),
                 confidence_threshold=_cfg("barrier_12bar_meta", "confidence_threshold", 0.40),
+                spread_points=_cfg("barrier_12bar_meta", "spread_points", 0.0),  # FIX-20260529-030
+                max_spread_points=_cfg(
+                    "barrier_12bar_meta", "max_spread_points", 0.0
+                ),  # FIX-20260529-038
                 long_bias_discount=_cfg("barrier_12bar_meta", "direction_balance", {}).get(
                     "long_bias_discount", 0.05
                 ),
@@ -3416,6 +3475,8 @@ def _build_strategy_lines(
                 min_sl_distance=_cfg("daily_swing", "sl", {}).get("min_sl_distance", 0.0),
                 min_rr_ratio=_cfg("daily_swing", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg("daily_swing", "confidence_threshold", 0.45),
+                spread_points=_cfg("daily_swing", "spread_points", 0.0),  # FIX-20260529-030
+                max_spread_points=_cfg("daily_swing", "max_spread_points", 0.0),  # FIX-20260529-038
                 long_bias_discount=_cfg("daily_swing", "direction_balance", {}).get(
                     "long_bias_discount", 0.0
                 ),
@@ -3454,6 +3515,8 @@ def _build_strategy_lines(
                 min_sl_distance=_cfg("m15_swing", "sl", {}).get("min_sl_distance", 0.0),
                 min_rr_ratio=_cfg("m15_swing", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg("m15_swing", "confidence_threshold", 0.45),
+                spread_points=_cfg("m15_swing", "spread_points", 0.0),  # FIX-20260529-030
+                max_spread_points=_cfg("m15_swing", "max_spread_points", 0.0),  # FIX-20260529-038
                 long_bias_discount=_cfg("m15_swing", "direction_balance", {}).get(
                     "long_bias_discount", 0.0
                 ),
@@ -3492,6 +3555,8 @@ def _build_strategy_lines(
                 min_sl_distance=_cfg("m30_swing", "sl", {}).get("min_sl_distance", 0.0),
                 min_rr_ratio=_cfg("m30_swing", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg("m30_swing", "confidence_threshold", 0.45),
+                spread_points=_cfg("m30_swing", "spread_points", 0.0),  # FIX-20260529-030
+                max_spread_points=_cfg("m30_swing", "max_spread_points", 0.0),  # FIX-20260529-038
                 long_bias_discount=_cfg("m30_swing", "direction_balance", {}).get(
                     "long_bias_discount", 0.0
                 ),
@@ -3530,6 +3595,8 @@ def _build_strategy_lines(
                 min_sl_distance=_cfg("h1_swing", "sl", {}).get("min_sl_distance", 0.0),
                 min_rr_ratio=_cfg("h1_swing", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg("h1_swing", "confidence_threshold", 0.45),
+                spread_points=_cfg("h1_swing", "spread_points", 0.0),  # FIX-20260529-030
+                max_spread_points=_cfg("h1_swing", "max_spread_points", 0.0),  # FIX-20260529-038
                 long_bias_discount=_cfg("h1_swing", "direction_balance", {}).get(
                     "long_bias_discount", 0.0
                 ),
@@ -3568,6 +3635,8 @@ def _build_strategy_lines(
                 min_sl_distance=_cfg("h4_swing", "sl", {}).get("min_sl_distance", 0.0),
                 min_rr_ratio=_cfg("h4_swing", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg("h4_swing", "confidence_threshold", 0.45),
+                spread_points=_cfg("h4_swing", "spread_points", 0.0),  # FIX-20260529-030
+                max_spread_points=_cfg("h4_swing", "max_spread_points", 0.0),  # FIX-20260529-038
                 long_bias_discount=_cfg("h4_swing", "direction_balance", {}).get(
                     "long_bias_discount", 0.0
                 ),
@@ -5645,8 +5714,8 @@ def execute_live_cycle(
             feature_vector=feature_vector,
             micro_feature_vector=micro_feature_vector,
             mid_price=mid_price,
-            bid=None,
-            ask=None,
+            bid=_bid,  # FIX-20260529-038: wire real bid price for Max_Spread_Gate
+            ask=_ask,  # FIX-20260529-038: wire real ask price for Max_Spread_Gate
             current_atr=current_atr,
             regime_info=regime_info,
             regime_gate=regime_gate,
@@ -6196,8 +6265,8 @@ def execute_live_cycle(
                         feature_vector=feature_vector,
                         micro_feature_vector=micro_feature_vector,
                         mid_price=mid_price,
-                        bid=None,
-                        ask=None,
+                        bid=_bid,  # FIX-20260529-038: wire real bid for Max_Spread_Gate
+                        ask=_ask,  # FIX-20260529-038: wire real ask for Max_Spread_Gate
                         current_atr=current_atr,
                         regime_info=regime_info,
                         regime_gate_mode="full",
@@ -6409,7 +6478,8 @@ def execute_live_cycle(
                                 ).ravel()
                             else:
                                 micro_arr = np.zeros(9, dtype=np.float64)
-                            fv = np.concatenate([daily_arr[:24], micro_arr[:9], [0.0, 0.0]])
+                            tf_ou, tf_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
+                            fv = np.concatenate([daily_arr[:24], micro_arr[:9], [tf_ou, tf_hurst]])
                         else:
                             fv = daily_feature_vector
                         raw = b_info["adapter"].infer(fv)

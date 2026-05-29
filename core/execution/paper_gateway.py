@@ -7,7 +7,7 @@ lifecycle expected by downstream reconciliation and analytics.
 from datetime import UTC, datetime
 from typing import Any
 
-from core.execution.fill_simulator import FillSimulator
+from core.execution.fill_simulator import FillSimulationConfig, FillSimulator
 from core.execution.gateway_contracts import OrderRequest, OrderState
 from core.execution.order_state_machine import OrderStateMachine
 from core.observability.metric_names import PAPER_EXECUTION_FILL_QUANTITY, PAPER_EXECUTION_FILLED
@@ -23,11 +23,23 @@ class PaperExecutionGateway:
         venue: str = "PAPER",
         fill_simulator: FillSimulator | None = None,
         state_machine: OrderStateMachine | None = None,
+        slippage_points: float = 0.0,
+        approximate_price: float = 2000.0,
     ):
         self._writer = execution_event_writer
         self._metrics = metrics
         self._venue = venue
-        self._simulator = fill_simulator or FillSimulator()
+        if fill_simulator:
+            self._simulator = fill_simulator
+        elif slippage_points > 0:
+            self._simulator = FillSimulator(
+                FillSimulationConfig.from_slippage_points(
+                    slippage_points=slippage_points,
+                    approximate_price=approximate_price,
+                )
+            )
+        else:
+            self._simulator = FillSimulator()
         self._state_machine = state_machine or OrderStateMachine()
         self._orders: dict[str, OrderState] = {}
         self._events: list[dict[str, Any]] = []

@@ -719,6 +719,24 @@ class BrainLifecycleManager:
                 # as "candidate" for governance consistency.
                 initial = "candidate"
                 gov.register_brain(bid, initial_status=initial)
+                # FIX-20260529-034: record transition for audit trail
+                try:
+                    ts = _utc_now_iso()
+                    gov._transition_log.append(
+                        {
+                            "brain_id": bid,
+                            "from": None,
+                            "to": initial,
+                            "reason": f"auto-registered from disk config (config status={cfg_status})",
+                            "timestamp": ts,
+                            "fix_id": "FIX-20260529-034",
+                        }
+                    )
+                    if bid in gov._brain_states:
+                        gov._brain_states[bid]["last_transition_at"] = ts
+                        gov._brain_states[bid]["transition_count"] = 1
+                except Exception:
+                    pass
                 report.auto_registered.append(f"{bid}:{initial}")
                 logging.warning(
                     "BrainLifecycleManager: auto-registered '%s' in governance as '%s'",
@@ -782,6 +800,54 @@ class BrainLifecycleManager:
                 gov_data = json.loads(gov_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 pass
+
+        # ── SSOT status reconciliation: config (law) → governance (vassal) ──
+        # FIX-20260529-034: When a brain has an active config on disk but its
+        # governance status is "retired", the config wins.  This prevents
+        # governance-state drift where a manually-restored brain reverts to
+        # "retired" after any governance save cycle (register_brain, orphan
+        # cleanup, etc.) that re-serializes the stale in-memory state.
+        if gov_data and auto_repair and disk_brains:
+            gov2 = self._load_governance_service()
+            reconciled = []
+            for bid, bs in list(gov2._brain_states.items()):
+                if bs.get("status") == "retired" and bid in disk_brains:
+                    cfg_status = disk_brains[bid].get("status", "candidate")
+                    if cfg_status != "retired":
+                        restored = "candidate"  # never auto-promote
+                        gov2._brain_states[bid]["status"] = restored
+                        gov2._brain_states[bid]["last_transition_at"] = _utc_now_iso()
+                        gov2._brain_states[bid]["transition_count"] = (
+                            gov2._brain_states[bid].get("transition_count", 0) + 1
+                        )
+                        gov2._transition_log.append(
+                            {
+                                "brain_id": bid,
+                                "from": "retired",
+                                "to": restored,
+                                "reason": "SSOT reconciliation: active config on disk overrides retired governance",
+                                "timestamp": _utc_now_iso(),
+                                "fix_id": "FIX-20260529-034",
+                            }
+                        )
+                        reconciled.append(f"{bid}:retired→{restored}")
+                        logging.warning(
+                            "BrainLifecycleManager: SSOT reconciliation — '%s' governance "
+                            "was 'retired' but active config exists on disk (status=%s). "
+                            "Restored to '%s'.",
+                            bid,
+                            cfg_status,
+                            restored,
+                        )
+            if reconciled:
+                report.hardcoded_path_mismatches.append(
+                    f"SSOT reconciled (config overrides retired governance): {reconciled}"
+                )
+                self._save_governance_service(gov2)
+                try:
+                    gov_data = json.loads(gov_path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    pass
 
         # ── transition_log coverage ──
         if gov_data:

@@ -171,6 +171,18 @@ def run_governance_cycle(
                 if current_status == "retired":
                     continue
 
+                # P0.1: Inject performance_metrics into governance state
+                governance.set_performance_metrics(
+                    brain_id,
+                    {
+                        "win_rate": metrics.win_rate,
+                        "profit_factor": metrics.profit_factor,
+                        "sharpe_ratio": metrics.sharpe_ratio,
+                        "total_trades": metrics.sample_count,
+                        "pnl_r": round(metrics.cumulative_pnl, 2),
+                    },
+                )
+
                 target_status, health = _compute_pnl_based_status(
                     metrics, quality_engine=quality_engine, current_status=current_status
                 )

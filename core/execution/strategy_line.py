@@ -252,6 +252,18 @@ class StrategyLineConfig:
     min_sl_distance: float = 0.0  # 0.0 = disabled
     min_rr_ratio: float = 0.0  # 0.0 = disabled; e.g. 1.5 maintains min 1.5:1 RR
 
+    # Spread cost alignment with training labels (FIX-20260529-030)
+    # Default 0.0 preserves backward compat. Set to 30 (XAUUSDc typical)
+    # once label_contract.py price basis (mid vs bid/ask) is confirmed.
+    spread_points: float = 0.0
+    tick_size: float = 0.01  # MT5 SYMBOL_TRADE_TICK_SIZE
+
+    # Per-strategy max allowed spread before trade is blocked (FIX-20260529-038)
+    # 0.0 = disabled. e.g. 50 = block when current spread >= 50 points.
+    # Physical cost gate — replaces hardcoded time-of-day / day-of-week filters.
+    # H22 rollover spread spike → naturally blocked. H12 lunch dead-zone → naturally blocked.
+    max_spread_points: float = 0.0
+
     # Timeframe for auto-scaling (M5/M15/M30/H1/H4/D1)
     timeframe: str = "M5"
 
@@ -399,6 +411,29 @@ class StrategyLine:
                 venue="live",
                 reason="regime_gate_off",
             )
+
+        # ── 1b. Spread gate (FIX-20260529-038) ──
+        # Physical cost gate: block when current spread exceeds per-strategy threshold.
+        # Replaces hardcoded time-of-day / day-of-week filters.
+        # H22 rollover spread spike → naturally blocked.  H12 lunch dead-zone → naturally blocked.
+        if self.config.max_spread_points > 0 and bid is not None and ask is not None and ask > bid:
+            _tick = self.config.tick_size if self.config.tick_size > 0 else 0.01
+            _current_spread = (ask - bid) / _tick
+            if _current_spread > self.config.max_spread_points:
+                return StrategyDecision(
+                    strategy_name=name,
+                    magic=self.config.magic,
+                    should_trade=False,
+                    direction="neutral",
+                    confidence=0.0,
+                    volume=0.0,
+                    sl=0.0,
+                    tp=0.0,
+                    hard_sl=0.0,
+                    regime_mode="spread_gate_blocked",
+                    venue="live",
+                    reason=f"spread_gate:{_current_spread:.1f}pts > {self.config.max_spread_points:.1f}pts",
+                )
 
         # ── 2. Budget check ──
         if self.budget is not None and self.budget.check_pause():
@@ -1253,7 +1288,13 @@ class StrategyLine:
                 regime_mode=regime_gate_mode,
                 reason="invalid_entry_price",
             )
-        levels = compute_sl_tp_levels(direction, entry_price, dsl)
+        levels = compute_sl_tp_levels(
+            direction,
+            entry_price,
+            dsl,
+            spread_points=self.config.spread_points,
+            tick_size=self.config.tick_size,
+        )
 
         # ── 5b. Minimum RR guard (skip for shadow — virtual tracking) ──
         if regime_gate_mode != "shadow":

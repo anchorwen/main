@@ -75,5 +75,6 @@
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
-  }
+  },
+  "artifact_hash": "f4a1208ff43b00e21afaa93950f000c4238f4fe1f3c58fca94bf921ebac74652"
 }

@@ -92,6 +92,15 @@ FIX-YYYYMMDD-NNN
 | FIX-20260525-009 | 2026-05-25 | execution-orders, runtime-live, features-service, protocol-services | MT5 single-threaded worker (T1-C1/C2/C3): MT5Worker class, refactored 11 files — all MT5 C++ calls now on one dedicated thread, zero daemon threads, session-level init. 2670 tests pass. | RC-04, RC-06 |
 | FIX-20260514-001 | 2026-05-14 | runtime-live | Blueprint mechanism upgrade: modular fix tracking with automated markers | RC-06 |
 | FIX-20260524-001 | 2026-05-24 | brains-services, deployment-lifecycle, runtime-live | Brain registration single source of truth: auto-discovery from configs/brains/ → governance auto-registration → unified brain CLI. Eliminates 5-place manual registration for new strategies. | RC-09 |
+| FIX-20260529-026 | 2026-05-29 | risk-regime | RegimeDetector FIFO buffer eviction bias: replaced `bisect.insort` sorted list with `collections.deque(maxlen=window)` + `numpy` percentile. `pop(0)` on sorted buffer removed smallest ATR instead of oldest, causing systematic upward vol-percentile drift and low-vol false-positive gating. | RC-06 |
+| FIX-20260529-027 | 2026-05-29 | brains-adapters, training | XGBoost feature name embedding + validation: `train_swing_v9.py` — `xgb.DMatrix()` now passes `feature_names`. `xgboost_brain_adapter.py` — `load()` validates `booster.feature_names` against brain config `features` list at every index (fail-fast `ValueError`). Legacy models without feature names get diagnostic `brain_alert`. | RC-06 |
+| FIX-20260529-028 | 2026-05-29 | runtime-live | Swing_V9 TF_OU/Hurst zero-drift at inference: added `_compute_tf_ou_hurst()` helper (mirrors training `_ou_theta()`/`_hurst()`). Both management-phase and entry-evaluation paths now compute real values from `state._recent_mid_prices` instead of zeros. Eliminates 2/35 feature train-serve skew for tree models. | RC-06 |
+| FIX-20260529-029 | 2026-05-29 | training | Swing dataset purge gap: labels look ahead `horizon` bars but train/val/test split with zero gap. Last training sample's label window overlaps first `horizon` validation bars (M30: 12, M15: 24) — label leakage inflating val/test metrics. Fixed with `purge_bars=horizon` purge zone matching `dataset_builder_d1.py` reference pattern. | RC-03 |
+| FIX-20260529-030 | 2026-05-29 | execution-orders | SL/TP spread cost mechanism: `compute_sl_tp_levels()` gains `spread_points`/`tick_size` kwargs. TP tightened by spread, SL widened — aligns live order placement with training `label_contract.py` barrier adjustments. Default `0.0` preserves backward compat; enable after price basis audit. | RC-06 |
+| FIX-20260529-031 | 2026-05-29 | execution-orders | FillSimulator zero-slippage: `from_slippage_points()` classmethod converts MT5 points to bps. `PaperExecutionGateway` + CLI wired `slippage_points=10`. Training used `slippage_points:10` but FillSimulator defaulted to `slippage_bps=0.0`. | RC-09 |
+| FIX-20260529-035 | 2026-05-29 | feedback-pnl, protocol-governance, deployment-config, deployment-lifecycle, runtime-live | **P0+P1 Visibility Fix**: (P0.1) `GovernanceService.set_performance_metrics()` injects win_rate/PF/Sharpe/total_trades/pnl_r into governance_state.json brain_states. `governance_scheduler.py` + `live_intent_loop.py` call it per-cycle. (P0.2) Silent assassin killed — `except Exception:pass` in scheduler_service replaced with `logger.exception` + `emit_brain_alert("pnl_pipeline_failure")`. (P1) SSOT enforced — `compute_performance_from_ledger()` deprecated, `BrainPnLStore.get_all_metrics()` as single math authority. BrainPnLMetrics extended with `recent_win_rate` + `consecutive_losses`. | RC-06, RC-09 |
+| FIX-20260529-034 | 2026-05-29 | protocol-governance, deployment-lifecycle | SSOT governance status reconciliation: `verify_startup_integrity()` reconciles retired→candidate when active config on disk. `GovernanceService.register_brain()` + auto-registration now populate transition_log. V1 Swing configs archived to resolve magic collision. Fixes retired-reversion loop. | RC-09, RC-11 |
+| FIX-20260529-033 | 2026-05-29 | training, deployment-config | Swing_V9 V2 full-cycle retrain: rebuilt M15+M30 datasets with purge-gap, trained models with embedded feature_names + artifact_hash. M30_V2: WR 62.9%, PF 1.70. M15_V2: WR 53.5%, PF 1.15. V1→V2 live.yaml swap. artifact_hash injected to 4 other active brain configs. `train_swing_v9.py` now auto-computes artifact_hash. | RC-06, RC-09 |
 | FIX-20260524-002 | 2026-05-24 | runtime-live | Layer 1 trailing stop premature exit fix: trailing stop now respects min_hold_cycles (previously ran from cycle 1 unprotected), breakeven_threshold_atr 1.5→1.0 for barrier_12bar. Root cause of Meta_Stage1_Huber_V1 -369.65R loss. | RC-05 |
 | FIX-20260524-003 | 2026-05-24 | brains-services | P0-2 zombie brain removal: deleted LightGBM_V3_New + XGBoost_V11_New from governance_state.json. No configs, no artifacts, no code refs, 0% WR. Recurrence of FIX-20260517-011. | RC-11 |
 | FIX-20260524-004 | 2026-05-24 | brains-services | P2 OU governance gap: registered OU_Params_V7_M15 in governance_state.json (had config+live.yaml but never governance). Both OU brains share arb_params_v7.json artifact. Recent drawdown analysis. | RC-09 |
@@ -827,3 +836,37 @@ FIX-YYYYMMDD-NNN
   - **Solution**: Added lazy-built `_magic_index: dict[int, list[str]]` in `BrainConfigValidator.__init__()`. `_build_magic_index()` pre-loads all brain configs in O(n) single pass, building magic→[brain_id] reverse index. `_check_magic_unique()` does O(1) dict lookup — zero file I/O in validation loop. Overall: O(n²) → O(n) file reads + O(1) validation per entry.
 - **Root Cause**: RC-06 (contract-violation) — validation method performed redundant I/O per entry.
 - **Dependents Checked**: BrainFactory, BrainConfigValidator. verify.py --quick passes.
+### FIX-20260529-036
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Type**: config
+- **Module**: deployment-config
+- **Files**: configs/live.yaml
+- **Description**: P0止血: 禁用statarb_dynamic + statarb_m15策略线。分析684笔实盘交易发现statarb_dynamic为失血大动脉（228笔/-$2.17, 35.5% WR）。OU mean-reversion在趋势市场中持续被止损（SL:TP命中比=4.7:1）。两个策略线从enabled:true→false，OU大脑保留用于MetaFilter辅助输入（z_score/half_life/theta特征），不独立开仓。
+- **Root Cause**: RC-06 — OU mean-reversion入场参数在趋势盲锁下逆势送死，SL:TP距离配置未考虑实盘摩擦成本。
+- **Verification**: live.yaml配置变更，无Python代码。verify.py --full: 2702 passed.
+
+### FIX-20260529-037
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Type**: config
+- **Module**: deployment-config
+- **Files**: configs/live.yaml
+- **Description**: P0波动率压缩门禁：在live.yaml regime_map中添加low_vol条目（ATR < 20百分位 × 3根确认）。替代被架构师否决的"周四过滤"方案（日历过滤器=数据挖掘偏差）。利用已有RegimeDetector基础设施——ATR百分位 × Schmitt触发器 × 速率限制（10cycles）已有完整防闪烁机制。当波动率塌陷时：barrier/swing→reduced, micro/daily→false, statarb→false（后两个已禁用)。零代码变更，仅配置。
+- **Root Cause**: RC-06 — 原方案使用DayOfWeek==Thursday硬编码日历过滤器，被架构师以Anti-Overfitting护栏否决。改为物理状态指标（volatility_regime==compression）。
+- **Verification**: RegimeDetector已输出low_vol regime, RegimeGate.get_strategy_mode()支持任意regime标签。verify.py --full: 2702 passed.
+
+### FIX-20260529-038
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-orders, runtime-live
+- **Files**: core/execution/strategy_line.py, core/runtime/live_cycle.py, configs/live.yaml
+- **Description**: P0点差熔断门（Max_Spread_Gate）：替代被架构师否决的"H12/H22时段过滤"方案（硬编码时段=数据挖掘偏差）。
+  - **Step A** (strategy_line.py): StrategyLineConfig新增max_spread_points字段（float, default 0.0=disabled）。evaluate()在Gate 1b插入点差门——当bid/ask非None且当前点差>策略阈值时返回should_trade=False（regime_mode="spread_gate_blocked"）。
+  - **Step B** (strategy_line.py): evaluate()中Gate 1b逻辑：if max_spread_points>0 and bid is not None and ask is not None and ask>bid: compute current_spread=(ask-bid)/tick_size; if current_spread>max_spread_points: return StrategyDecision(reason=f"spread_gate:{pts}pts>{threshold}pts").
+  - **Step C** (live_cycle.py): 两处_evaluate_strategy_lines()调用和strategy.evaluate()调用从bid=None,ask=None改为bid=_bid,ask=_ask。_bid/_ask已于line 4394通过broker.fetch_prices()获取，无新数据源。
+  - **Step D** (live.yaml): 12个StrategyLineConfig构造函数全部添加spread_points=_cfg()和max_spread_points=_cfg()。活跃策略(m15_swing:msp=60, m30_swing:msp=70, 均sp=30)。
+  - **物理语义**: H22展期点差飙升→自然阻断。H12流动性枯竭点差扩大→自然阻断。不依赖任何硬编码时间/日历规则。
+- **Root Cause**: RC-06 — 原方案使用H12/H22时段黑名单硬编码，被架构师以Anti-Overfitting护栏否决。改为物理成本门禁(current_spread > max_allowed_spread)。
+- **Verification**: verify.py --full: mypy + ruff + blueprint compliance + 2702 pytest all PASS.

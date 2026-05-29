@@ -65,15 +65,27 @@ class GovernanceService:
         return svc
 
     def register_brain(self, brain_id: str, initial_status: str = "candidate") -> dict:
+        ts = datetime.now(UTC).replace(tzinfo=None).isoformat()
         state = {
             "brain_id": brain_id,
             "status": initial_status,
-            "registered_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
-            "last_transition_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
-            "transition_count": 0,
+            "registered_at": ts,
+            "last_transition_at": ts,
+            "transition_count": 1,
             "freeze_count": 0,
         }
         self._brain_states[brain_id] = state
+        # FIX-20260529-034: append transition_log entry for audit trail
+        self._transition_log.append(
+            {
+                "brain_id": brain_id,
+                "from": None,
+                "to": initial_status,
+                "reason": "brain_registered",
+                "timestamp": ts,
+                "fix_id": "FIX-20260529-034",
+            }
+        )
         return state
 
     def get_brain_state(self, brain_id: str) -> dict | None:
@@ -81,6 +93,15 @@ class GovernanceService:
 
     def get_all_states(self) -> dict[str, dict]:
         return dict(self._brain_states)
+
+    def set_performance_metrics(self, brain_id: str, metrics: dict[str, Any]) -> None:
+        """Inject live performance metrics into governance state (P0 Visibility Fix).
+
+        Fields: win_rate, profit_factor, sharpe_ratio, total_trades, pnl_r.
+        """
+        state = self._brain_states.get(brain_id)
+        if state is not None:
+            state["performance_metrics"] = metrics
 
     def apply_recommendation(self, brain_id: str, recommendation: str, reason: str = "") -> dict:
         action_map = {

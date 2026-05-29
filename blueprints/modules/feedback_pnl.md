@@ -35,6 +35,7 @@ cycle N+H:   settle_all(mid_price)  → only ttl=0 settled at horizon bar
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260529-035 | 2026-05-29 | cursor-agent | — | P0+P1 Visibility Fix: BrainPnLMetrics extended with `recent_win_rate` + `consecutive_losses` fields, computed in `get_metrics_calibrated()`. `compute_performance_from_ledger()` deprecated in favor of `BrainPnLStore.get_all_metrics()` as SSOT. Fixes dual-pipeline metric divergence (Gap B). | RC-06, RC-09 |
 | FIX-20260524-039 | 2026-05-24 | cursor-agent | — | M2: Eliminated ~50-line duplicate metrics computation — get_metrics() now delegates to get_metrics_calibrated(). M3: Deprecated _assess_health() call replaced with assess_health_calibrated() for unified health tiering. | RC-06 |
 | FIX-20260524-033 | 2026-05-24 | cursor-agent | — | Batch mypy type safety: shadow_pnl_loop.py (1→0 — remove nonexistent rolling_norm.update() call, normalize() already does EWMA update internally). | api-confusion |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |

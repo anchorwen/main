@@ -27,7 +27,9 @@ class TestGovernanceService:
         gs.register_brain("brain_001", "live")
         result = gs.transition("brain_001", "frozen", "critical")
         assert result["action"] == "transitioned"
-        assert gs.get_brain_state("brain_001")["freeze_count"] == 1
+        state = gs.get_brain_state("brain_001")
+        assert state is not None
+        assert state["freeze_count"] == 1
 
     def test_invalid_transition_rejected(self):
         gs = GovernanceService()
@@ -40,7 +42,9 @@ class TestGovernanceService:
         gs.register_brain("brain_001", "live")
         result = gs.apply_recommendation("brain_001", "freeze", "critical_health")
         assert result["action"] == "transitioned"
-        assert gs.get_brain_state("brain_001")["status"] == "frozen"
+        state = gs.get_brain_state("brain_001")
+        assert state is not None
+        assert state["status"] == "frozen"
 
     def test_apply_recommendation_promote(self):
         gs = GovernanceService()
@@ -71,8 +75,12 @@ class TestGovernanceService:
         ]
         results = gs.process_feedback_signals(signals)
         assert len(results) == 2
-        assert gs.get_brain_state("brain_bad")["status"] == "frozen"
-        assert gs.get_brain_state("brain_good")["status"] == "live"
+        state_bad = gs.get_brain_state("brain_bad")
+        assert state_bad is not None
+        assert state_bad["status"] == "frozen"
+        state_good = gs.get_brain_state("brain_good")
+        assert state_good is not None
+        assert state_good["status"] == "live"
 
     def test_transition_log(self):
         gs = GovernanceService()
@@ -80,6 +88,14 @@ class TestGovernanceService:
         gs.transition("a", "live", "promote")
         gs.transition("a", "probation", "warning")
         log = gs.get_transition_log()
-        assert len(log) == 2
-        assert log[0]["from_status"] == "candidate"
-        assert log[1]["to_status"] == "probation"
+        # FIX-20260529-034: register_brain() now appends 1 entry + 2 transitions = 3
+        assert len(log) == 3
+        # Entry 0: registration
+        assert log[0]["from"] is None
+        assert log[0]["to"] == "candidate"
+        # Entry 1: candidate → live
+        assert log[1]["from_status"] == "candidate"
+        assert log[1]["to_status"] == "live"
+        # Entry 2: live → probation
+        assert log[2]["from_status"] == "live"
+        assert log[2]["to_status"] == "probation"

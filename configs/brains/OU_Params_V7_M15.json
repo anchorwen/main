@@ -32,5 +32,6 @@
   "feature_schema": "ou_price",
   "features": [
     "price_return"
-  ]
+  ],
+  "artifact_hash": "82fc2876bcd86369f3faae5102a004a28fe93276da10c58e0cea98f55b9d899f"
 }

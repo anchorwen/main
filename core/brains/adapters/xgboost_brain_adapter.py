@@ -84,7 +84,32 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
             feature_names = self._booster.feature_names
             if feature_names:
                 self._num_features = len(feature_names)
+                # ── Feature-name parity check (FIX-20260529-027) ──
+                expected = self._brain_entry.get("features")
+                if expected and isinstance(expected, list) and len(expected) == len(feature_names):
+                    for i, (got, want) in enumerate(zip(feature_names, expected, strict=False)):
+                        if got != want:
+                            raise ValueError(
+                                f"Feature name mismatch at index {i} in {artifact_path}: "
+                                f"model has '{got}', brain config has '{want}'"
+                            )
+                elif expected and len(expected) != len(feature_names):
+                    raise ValueError(
+                        f"Feature count mismatch in {artifact_path}: "
+                        f"model has {len(feature_names)} features, "
+                        f"brain config has {len(expected)}"
+                    )
             else:
+                # Backward compat: model trained without feature_names embedding.
+                # Dimension count is still checked by infer() at call time.
+                emit_brain_alert(
+                    self._brain_entry.get("brain_id", "unknown"),
+                    "model_lacks_feature_names",
+                    {
+                        "artifact": artifact_path,
+                        "note": "Retrain with feature_names in DMatrix to enable column-order validation",
+                    },
+                )
                 raw = lmp.get(
                     "num_feature",
                     learner_cfg.get("gradient_booster", {})

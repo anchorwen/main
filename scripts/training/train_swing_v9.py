@@ -167,9 +167,18 @@ def train_xgboost_swing(
         "n_jobs": -1,
     }
 
+    feature_names = dataset.get("feature_names")
+    if isinstance(feature_names, np.ndarray):
+        feature_names = feature_names.tolist()
+
     t0 = time.time()
-    dtrain = xgb.DMatrix(X_train, label=y_train, weight=sample_weight)
-    dval = xgb.DMatrix(X_val, label=y_val)
+    dtrain = xgb.DMatrix(
+        X_train,
+        label=y_train,
+        weight=sample_weight,
+        feature_names=feature_names,
+    )
+    dval = xgb.DMatrix(X_val, label=y_val, feature_names=feature_names)
 
     booster = xgb.train(
         params,
@@ -185,7 +194,7 @@ def train_xgboost_swing(
 
     # Evaluate on val and test
     y_val_pred = np.asarray(booster.predict(dval)).argmax(axis=1)
-    dtest = xgb.DMatrix(dataset["X_test"], label=dataset["y_test"])
+    dtest = xgb.DMatrix(dataset["X_test"], label=dataset["y_test"], feature_names=feature_names)
     y_test_pred = np.asarray(booster.predict(dtest)).argmax(axis=1)
 
     val_metrics = compute_metrics(dataset["y_val"], y_val_pred, dataset["pnl_r_val"])
@@ -258,12 +267,18 @@ def main() -> None:
         Path(__file__).resolve().parent.parent.parent
     )  # scripts/training/train_swing_v9.py → repo root
 
-    brain_id = f"Swing_V9_{args.strategy.split('_')[0].upper()}_V1"
-    # Model file — must NOT collide with brain config filename
+    # FIX-20260529-033: Bump to V2 for retrained models with purge-gap datasets,
+    # feature_names embedding, and artifact_hash integrity.
+    brain_id = f"Swing_V9_{args.strategy.split('_')[0].upper()}_V2"
     model_filename = f"{brain_id}_model.json"
     model_path = output_dir / model_filename
     model.save_model(str(model_path))
     print(f"\n  Model saved: {model_path}")
+
+    # SHA256 artifact_hash for model integrity verification
+    import hashlib
+
+    artifact_hash = hashlib.sha256(model_path.read_bytes()).hexdigest()
 
     # Feature importance
     importance = model.get_score(importance_type="gain")
@@ -310,7 +325,8 @@ def main() -> None:
         "model_path": str(model_path),
         "artifact_path": artifact_rel,
         "model_version": f"swing_{args.strategy}_v1",
-        "status": "shadow",
+        "artifact_hash": artifact_hash,
+        "status": "candidate",
         "vote_weight": 1.0,
         "magic": magic,
         "brain_role": "alpha_brain",

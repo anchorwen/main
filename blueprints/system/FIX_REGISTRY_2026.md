@@ -5096,3 +5096,161 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
   2. Gate exemptions should key on `strategy_family` enum rather than string matching on strategy name.
 - **Dependents Checked**: execution_orders.md + brains_validation.md blueprints updated. FIX_REGISTRY.md index updated. verify.py --full: mypy PASS, ruff PASS, blueprint PASS, pytest 2706 passed.
 
+### FIX-20260529-026 — RegimeDetector FIFO Buffer Eviction Bias: Smallest vs Oldest ATR
+
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (contract-violation) — `bisect.insort()` maintains a sorted list, but `pop(0)` removes the smallest element instead of the oldest. The comment "oldest ≈ smallest index in a growing sequence" is mathematically false — ATR values do not monotonically increase. The sorted buffer [5, 10, 12, 15, 18] evicts 5 (smallest) on overflow instead of 10 (oldest), causing systematic upward drift in volatility percentile estimates. This creates "low vol false-positive" regime gating — the detector overestimates volatility, incorrectly classifying normal markets as high-vol.
+- **Fix**: Replaced `bisect` sorted list with `collections.deque(maxlen=window)` for true FIFO time-order. `_percentile_rank()` now uses `np.sum(arr < value)` vectorized scan instead of `bisect.bisect_left()` on sorted list. For 500 elements, the C-level vectorized scan is ≈3 µs — well within the 5-min M5 bar budget.
+- **Files changed**: `core/risk/regime_detector.py`
+- **Verification**: `python -c "from core.risk.regime_detector import RegimeDetector; det = RegimeDetector(rolling_window=5); [det.update(v) for v in [10,15,12,18,5]]; r=det.update(20); assert 10.0 not in det._buffer"` — oldest value correctly evicted. `verify.py --quick` passed.
+- **Risk**: Low. 500-element vectorized scan costs ≈3 µs per call. Deque FIFO behavior is identical to the original design intent.
+
+### FIX-20260529-027 — XGBoost Feature Name Embedding: Gene-Sequence Validation
+
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (contract-violation) — XGBoost models were trained with bare `xgb.DMatrix(X)` without `feature_names`, resulting in `booster.feature_names` returning `None`. The adapter's `load()` method silently accepted this, leaving zero defense against column-order skew. If any feature assembly code in the inference path deviated from the training order, predictions would be silently wrong with no alert. Combined with the lack of feature name embedding, there was no automated way to verify column parity at startup.
+- **Fix**: Two-fold:
+  1. **Training**: `train_swing_v9.py` — all `xgb.DMatrix()` constructors now pass `feature_names` from the dataset.
+  2. **Inference**: `xgboost_brain_adapter.py` — `load()` validates that `booster.feature_names` matches the brain config's `features` list at every index. Mismatch → `ValueError` (fail-fast). For legacy models without embedded feature names, emits `brain_alert` with diagnostic guidance.
+- **Files changed**: `scripts/training/train_swing_v9.py`, `core/brains/adapters/xgboost_brain_adapter.py`
+- **Verification**: `verify.py --quick` passed. `strict=False` on `zip()` per ruff B905.
+- **Risk**: Low for new models (fail-fast on mismatch). Existing models without feature names continue to work (alert-only mode).
+
+### FIX-20260529-028 — Swing_V9 TF_OU/Hurst Zero-Drift at Inference: Half-Brain Execution
+
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (contract-violation) — The swing_enhanced_35 schema includes `TF_OU_Theta` and `TF_Hurst` (35th and 36th features), computed from M5 close prices during training. At inference, both sites in `live_cycle.py` hardcoded `np.zeros(11)` and `[0.0, 0.0]` for these features. For tree models (XGBoost), a hardcoded zero on a split node like `Hurst > 0.45` routes ALL samples into the same branch — equivalent to surgically removing half the model's decision tree. This is a 5.7% feature-dimension-level train-serve skew that affects every prediction at runtime.
+- **Fix**: Added `_compute_tf_ou_hurst()` helper that mirrors the training-side `_ou_theta()` and `_hurst()` functions from `build_swing_enhanced_dataset.py`. Uses `state._recent_mid_prices` (50-element rolling M5 mid-price buffer, already maintained for circuit breaker/ER calc) as input. Both management-phase (Site 1) and entry-evaluation (Site 2) paths now compute real OU/Hurst values instead of zeros.
+- **Files changed**: `core/runtime/live_cycle.py`
+- **Verification**: `verify.py --quick` passed. Minimum 21 M5 bars needed for computation — falls back to (0.0, 0.5) during cold start.
+- **Risk**: Low. Uses existing `state._recent_mid_prices` buffer — no new state required. Graceful fallback to defaults when buffer is cold (len < 21).
+
+
+### FIX-20260529-029 -- Swing Dataset Purge Gap: Label Leakage Across Chronological Splits
+
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Root Cause**: RC-03 (state-leak) -- Labels look ahead `horizon` bars from the sample bar. Without a purge gap between chronological splits, the last training sample's label window overlaps with the first `horizon` validation bars. For M30 (horizon=12): 12 bars of overlap (~6 hours). For M15 (horizon=24): 24 bars of overlap (~6 hours). This is the most classic and fatal mistake in financial ML -- validation/test metrics are systematically inflated because price action from the validation period leaks into training labels.
+- **Fix**: Replaced naive `[:N]` chronological split with purged split: `train_end = max(0, n_train_init - horizon)`, `val_end = n_train_init + max(0, n_val_init - horizon)`. Purged samples are logged and recorded in metadata (`purge_bars`, `n_train_init`, `n_val_init`, `n_test_init`). Reference implementation: `dataset_builder_d1.py:198-237`.
+- **Files changed**: `scripts/training/build_swing_enhanced_dataset.py`
+- **Verification**: Dataset rebuild output shows purge zone size and purged sample counts.
+- **Risk**: Swing models trained on un-purged datasets will show lower real-world performance than reported metrics. Retraining with purged datasets is strongly recommended.
+
+### FIX-20260529-030 -- SL/TP Spread Cost Mechanism: Live-Training Barrier Asymmetry
+
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (contract-violation) -- Training labels in `label_contract.py` model spread/slippage costs: TP is tightened by `spread_cost` (LP: `effective_tp = tp_price - spread_cost`) and SL is widened by `slippage_cost` (LP: `effective_sl = sl_price - slippage_cost`). However, `compute_sl_tp_levels()` in live trading computed clean mid-price levels without any spread adjustment. This creates a systematic asymmetry: live trading expects mid-price fills that are more optimistic than what the model was trained to expect.
+- **Fix**: Added `spread_points`/`tick_size` keyword-only parameters to `compute_sl_tp_levels()`. When `spread_points > 0`: TP is tightened by spread cost (exit fills at bid/ask, not mid), SL is widened by spread cost (stop fills suffer adverse slippage in fast moves). `StrategyLineConfig` gains `spread_points: float = 0.0` and `tick_size: float = 0.01` fields. Both call sites (`strategy_line.py:1256`, `meta_pipeline.py:316`) pass config-driven values. Default `0.0` preserves backward compatibility until price basis audit (mid vs bid/ask in `label_contract.py`) confirms no double-counting.
+- **Files changed**: `core/execution/dynamic_sl_tp.py`, `core/execution/strategy_line.py`, `core/execution/meta_pipeline.py`
+- **Verification**: `tests/execution/test_dynamic_sl_tp.py` -- all 26 tests pass. Existing SL/TP behavior unchanged at default `spread_points=0.0`.
+- **Risk**: Low at default (disabled). When enabled, verify against MT5 real spread data to avoid double-penalization (training already uses bar close as mid proxy + spread adjustment).
+
+### FIX-20260529-031 -- FillSimulator Zero-Slippage: Paper Trading Understates Execution Costs
+
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Root Cause**: RC-09 (config-drift) -- All 22 training YAML configs use `slippage_points: 10`, but `FillSimulationConfig.slippage_bps` defaults to `0.0`. `PaperExecutionGateway()` was always created with no arguments, producing a `FillSimulator()` with zero additional slippage beyond spread crossing (buy=ask, sell=bid). Paper trading systematically understated execution costs relative to what models were trained to expect.
+- **Fix**: Added `FillSimulationConfig.from_slippage_points()` classmethod: 10 points x 0.01 tick = 0.10 price units on XAUUSD, 0.10 / 2000 x 10000 = 0.5 bps. `PaperExecutionGateway.__init__()` now accepts optional `slippage_points`/`approximate_price` params -- when `slippage_points > 0`, creates `FillSimulator` with converted config. CLI wired `slippage_points=10` at `apps/engine/cli.py:1123`.
+- **Files changed**: `core/execution/fill_simulator.py`, `core/execution/paper_gateway.py`, `apps/engine/cli.py`
+- **Verification**: `tests/engine/test_order_state_machine_and_fill_simulator.py` -- all 14 tests pass. `from_slippage_points(10, 2000)` produces `slippage_bps=0.5`.
+- **Risk**: Minimal -- only affects paper/backtest simulation path. MT5 live trading has its own hardcoded slippage values.
+
+### FIX-20260529-033 -- Swing_V9 V2 Full-Cycle Retrain: Purge-Gap + Feature Names + Artifact Hash
+
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (missing-integration) + RC-09 (config-drift) -- 3 gaps converged on Swing_V9 models: (1) datasets built 2026-05-28 lacked purge-gap (FIX-20260529-029 fix applied to builder but datasets not rebuilt), (2) feature_names not embedded in XGBoost booster files (FIX-20260529-027 fix applied to training script but old models didn't benefit), (3) all 6 active brain configs missing artifact_hash for model integrity verification.
+- **Fix**:
+  1. Rebuilt M30 dataset (`swing_m30_enhanced_v3`): 1614 train / 487 val / 374 test with 12-bar purge gap. M15 dataset (`swing_m15_enhanced_v3`): 3227 train / 975 val / 749 test with 24-bar purge gap.
+  2. Trained `Swing_V9_M30_V2` (Test WR 62.9%, PF 1.70, Sharpe 29.49) and `Swing_V9_M15_V2` (Test WR 53.5%, PF 1.15, Sharpe 7.67). Both XGBoost models have `feature_names` embedded in booster — downstream `xgboost_brain_adapter.load()` can now validate column-order at load time.
+  3. Injected `artifact_hash` (SHA256 of model file) into all 6 active brain configs: OU_Params_V6_Sniper, OU_Params_V7_M15, Meta_Stage1_Binary_Cls_V1, Meta_Stage1_MetaLabel_Binary_V1 + 2 new V2 configs.
+  4. Updated `train_swing_v9.py`: auto-computes `artifact_hash` after model save, bumps `brain_id` to `_V2`, sets status to `candidate`.
+  5. `live.yaml`: disabled V1 Swing brains (superseded), enabled V2 Swing brains.
+- **Files changed**: `configs/brains/Swing_V9_M30_V2.json`, `configs/brains/Swing_V9_M15_V2.json`, `configs/brains/OU_Params_V6_Sniper.json`, `configs/brains/OU_Params_V7_M15.json`, `configs/brains/Meta_Stage1_Binary_Cls_V1.json`, `configs/brains/Meta_Stage1_MetaLabel_Binary_V1.json`, `configs/live.yaml`, `scripts/training/train_swing_v9.py`
+- **Verification**: `verify.py --quick` PASS (mypy + ruff + blueprint compliance). 40/40 unit tests pass.
+- **V1 vs V2 metric comparison**: V1 metrics (WR 62-64%, PF 1.60-1.79) were inflated by label leakage across train/val/test boundary. V2 metrics are honest post-purge. M15_V2 PF 1.15 is borderline but still positive — monitor in shadow before promoting to live voting.
+- **Risk**: M15_V2 PF 1.15 is close to breakeven. Recommend shadow-only until PnL validation confirms profitability. M30_V2 PF 1.70 is solid for live voting.
+
+### FIX-20260529-034 -- SSOT Governance Status Reconciliation: Retired-Reversion Loop + Transition Log Integrity
+
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Root Cause**: RC-09 (config-drift) + RC-11 (state-contamination) -- Three sub-problems converged:
+  1. **Retired-reversion loop**: `verify_startup_integrity()` synced config→governance only for MISSING brains (auto-register as candidate) and governance→config only for ORPHAN entries (delete from governance). When a brain existed in BOTH governance and on disk but had conflicting statuses (governance="retired", config="live"), NO reconciliation occurred. Every governance save cycle (triggered by `brain.py register`, orphan cleanup, etc.) re-serialized the stale "retired" status from the in-memory `GovernanceService` object, reverting any manual fixes.
+  2. **Empty transition_log**: `GovernanceService.register_brain()` set `transition_count=0` and never appended to `self._transition_log`. Auto-registration in `verify_startup_integrity` had the same gap. Result: all 9 brain states had empty transition_log, producing `brain_states without transition_log` warnings at every startup.
+  3. **Magic collision**: V1 Swing configs (`Swing_V9_M15_V1.json`, `Swing_V9_M30_V1.json`) remained on disk after V2 superseded them, sharing magic numbers 90310/90320 with V2 brains.
+- **Fix**:
+  1. **SSOT status reconciliation** (`brain_lifecycle_manager.py:786-814`): After orphan cleanup, if `auto_repair=True`, iterates all governance brain states. Any brain with `status=retired` that has an active config on disk (`status != retired`) is restored to `candidate` with transition_log entry. The config file is SSOT — governance must reflect it.
+  2. **Transition_log integrity** (`governance_service.py:67-84`): `register_brain()` now sets `transition_count=1`, appends transition_log entry with `from=None, to=<status>`. Auto-registration path (`brain_lifecycle_manager.py:721-733`) mirrors this.
+  3. **Magic collision resolution**: V1 Swing configs archived to `configs/brains/archive_deprecated/`. V1 entries removed from `live.yaml`. V2 models now have exclusive magic ownership.
+  4. **Manual cleanup**: OU_Params_V7_M15 governance restored to `probation` with transition_log backfill. 4 Swing brain states backfilled.
+- **Files changed**: `core/deployment/brain_lifecycle_manager.py`, `core/governance/governance_service.py`, `configs/live.yaml`, `data/governance_state.json`
+- **Config files archived**: `configs/brains/Swing_V9_M15_V1.json` → `configs/brains/archive_deprecated/`, `configs/brains/Swing_V9_M30_V1.json` → `configs/brains/archive_deprecated/`
+- **Verification**: `verify.py --quick` PASS. Blueprint compliance PASS (14 files mapped, 0 violations).
+- **Risk**: The config→governance status reconciliation only triggers when governance says "retired" and config does not. Other status mismatches (e.g. governance="frozen", config="live") are not reconciled — they are intentionally left to the governance rule engine to resolve through the normal promotion/demotion cycle. Only "retired" is special because it causes the brain to be completely excluded from voting (brain_governance_skip).
+
+### FIX-20260529-035 -- P0+P1 Visibility Fix: State Injection + Silent Assassin + SSOT Enforcement
+
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Architect Directive**: Three-tier campaign (P0→P1→P2) to fix the PnL data feedback gap:
+  - **P0.1 State Injection**: Add `performance_metrics` dict to governance_state.json brain_states
+  - **P0.2 Kill Silent Assassin**: Replace `except Exception: pass` in scheduler_service with Fail-Loud
+  - **P1 SSOT Enforcement**: Deprecate `compute_performance_from_ledger()`, unify on `BrainPnLStore.get_all_metrics()`
+  - **P2 Friction Alignment**: Deferred — entry spread must be read from MT5 at order generation time
+- **Root Cause**: RC-06 (contract-violation) + RC-09 (config-drift):
+  1. **Invisible PnL**: 16,903 settled trades in `brain_pnl_ledger.json` with full per-brain statistics, but governance_state.json had zero `performance_metrics` fields. Operators could not see which models were profitable/unprofitable from governance state. PnL metrics were computed for decisions but never persisted.
+  2. **Silent killer**: `scheduler_service.py:197-198` had `except Exception: pass` — any failure in the PnL→promotion pipeline was silently swallowed. If `compute_performance_from_ledger()` raised for any reason, no alert, no log, no recovery.
+  3. **Dual pipeline divergence**: `scheduler_service.py` used `compute_performance_from_ledger()` (simple: WR/PF/signal_count from raw JSON), while `daily_ops.py→governance_scheduler.py` used `BrainPnLStore.get_all_metrics()` (full: Sharpe/drawdown/friction from BrainPnLMetrics). Two different formulas from the same data — contradictory governance signals possible.
+- **Fix**:
+  1. **BrainPnLMetrics extended** (`core/feedback/brain_pnl_ledger.py`): Added `recent_win_rate` (last 20 trades) and `consecutive_losses` (trailing) fields to the dataclass. Computed in `get_metrics_calibrated()`. Updated `to_dict()`.
+  2. **GovernanceService.set_performance_metrics()** (`core/governance/governance_service.py`): New method that injects `{win_rate, profit_factor, sharpe_ratio, total_trades, pnl_r}` into the brain's state dict. Called from both governance pipelines.
+  3. **Scheduler_service P0.2+P1** (`core/deployment/scheduler_service.py`):
+     - Replaced `import compute_performance_from_ledger` + `json.loads(pnl_ledger)` + `compute_performance_from_ledger(pnl_ledger)` with `BrainPnLStore.load()` + `get_all_metrics()` + bridge mapping.
+     - Added `set_performance_metrics()` call for every brain with settled trades.
+     - Replaced `except Exception: pass` with `logger.exception()` + `emit_brain_alert("pnl_pipeline_failure")`.
+  4. **Governance_scheduler P0.1** (`scripts/training/governance_scheduler.py`): PnL-first path now calls `governance.set_performance_metrics()` for every assessed brain.
+  5. **compute_performance_from_ledger() deprecated** (`scripts/training/run_promotion.py`): Added `DeprecationWarning` + docstring deprecation notice. Kept for manual CLI backward compat only.
+- **Files changed**: `core/feedback/brain_pnl_ledger.py`, `core/governance/governance_service.py`, `core/deployment/scheduler_service.py`, `scripts/training/governance_scheduler.py`, `scripts/training/run_promotion.py`
+- **Performance metrics schema**: `{"win_rate": float 0-1, "profit_factor": float, "sharpe_ratio": float (annualized 72576), "total_trades": int, "pnl_r": float (cumulative PnL in R-units)}`
+- **Verification**: `python -c "from core.feedback.brain_pnl_ledger import BrainPnLStore; ..."` — all 31 tracked brains computed correctly with new fields.
+- **Risk**: `scheduler_service.py` now calls `BrainPnLStore.load()` + `get_all_metrics()` every 60s instead of `json.loads()` + `compute_performance_from_ledger()`. The store computes Sharpe (with sqrt, variance, cumulative math) for every brain — marginally more CPU but well within 60s budget. The governance state `performance_metrics` is written to in-memory service; persisted on next `state_snapshot` (every 300s) or `governance_service.save()` (at shutdown).
+
+### FIX-20260529-036
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Type**: config
+- **Module**: deployment-config
+- **Files**: configs/live.yaml
+- **Description**: P0止血: 禁用statarb_dynamic + statarb_m15策略线。分析684笔实盘交易发现statarb_dynamic为失血大动脉（228笔/-$2.17, 35.5% WR）。OU mean-reversion在趋势市场中持续被止损（SL:TP命中比=4.7:1）。两个策略线从enabled:true→false，OU大脑保留用于MetaFilter辅助输入（z_score/half_life/theta特征），不独立开仓。
+- **Root Cause**: RC-06 — OU mean-reversion入场参数在趋势盲锁下逆势送死，SL:TP距离配置未考虑实盘摩擦成本。
+- **Verification**: live.yaml配置变更，无Python代码。verify.py --full: 2702 passed.
+
+### FIX-20260529-037
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Type**: config
+- **Module**: deployment-config
+- **Files**: configs/live.yaml
+- **Description**: P0波动率压缩门禁：在live.yaml regime_map中添加low_vol条目（ATR < 20百分位 × 3根确认）。替代被架构师否决的"周四过滤"方案（日历过滤器=数据挖掘偏差）。利用已有RegimeDetector基础设施——ATR百分位 × Schmitt触发器 × 速率限制（10cycles）已有完整防闪烁机制。当波动率塌陷时：barrier/swing→reduced, micro/daily→false, statarb→false（后两个已禁用)。零代码变更，仅配置。
+- **Root Cause**: RC-06 — 原方案使用DayOfWeek==Thursday硬编码日历过滤器，被架构师以Anti-Overfitting护栏否决。改为物理状态指标（volatility_regime==compression）。
+- **Verification**: RegimeDetector已输出low_vol regime, RegimeGate.get_strategy_mode()支持任意regime标签。verify.py --full: 2702 passed.
+
+### FIX-20260529-038
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-orders, runtime-live
+- **Files**: core/execution/strategy_line.py, core/runtime/live_cycle.py, configs/live.yaml
+- **Description**: P0点差熔断门（Max_Spread_Gate）：替代被架构师否决的"H12/H22时段过滤"方案（硬编码时段=数据挖掘偏差）。
+  - **Step A** (strategy_line.py): StrategyLineConfig新增max_spread_points字段（float, default 0.0=disabled）。evaluate()在Gate 1b插入点差门——当bid/ask非None且当前点差>策略阈值时返回should_trade=False（regime_mode="spread_gate_blocked"）。
+  - **Step B** (strategy_line.py): evaluate()中Gate 1b逻辑：if max_spread_points>0 and bid is not None and ask is not None and ask>bid: compute current_spread=(ask-bid)/tick_size; if current_spread>max_spread_points: return StrategyDecision(reason=f"spread_gate:{pts}pts>{threshold}pts").
+  - **Step C** (live_cycle.py): 两处_evaluate_strategy_lines()调用和strategy.evaluate()调用从bid=None,ask=None改为bid=_bid,ask=_ask。_bid/_ask已于line 4394通过broker.fetch_prices()获取，无新数据源。
+  - **Step D** (live.yaml): 12个StrategyLineConfig构造函数全部添加spread_points=_cfg()和max_spread_points=_cfg()。活跃策略(m15_swing:msp=60, m30_swing:msp=70, 均sp=30)。
+  - **物理语义**: H22展期点差飙升→自然阻断。H12流动性枯竭点差扩大→自然阻断。不依赖任何硬编码时间/日历规则。
+- **Root Cause**: RC-06 — 原方案使用H12/H22时段黑名单硬编码，被架构师以Anti-Overfitting护栏否决。改为物理成本门禁(current_spread > max_allowed_spread)。
+- **Verification**: verify.py --full: mypy + ruff + blueprint compliance + 2702 pytest all PASS.

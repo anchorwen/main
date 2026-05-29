@@ -171,31 +171,61 @@ class SchedulerService:
                 if summary_map:
                     container.governance_rule_engine.evaluate(summary_map)
 
-                # ── Auditor→Executor pipeline (护栏三: 报告驱动模型) ──
+                # ── Auditor→Executor pipeline (SSOT: BrainPnLStore) ──
                 if container.governance_service and container.governance_rule_engine:
+                    import logging
+                    from pathlib import Path as _Path
+
+                    from core.brains.services.brain_promotion import (
+                        BrainPromotionEvaluator,
+                    )
+                    from core.deployment.brain_alert import emit_brain_alert
+                    from core.feedback.brain_pnl_ledger import BrainPnLStore
+
+                    _logger = logging.getLogger(__name__)
+
                     try:
-                        import json
-                        from pathlib import Path as _Path
-
-                        from core.brains.services.brain_promotion import (
-                            BrainPromotionEvaluator,
-                        )
-                        from scripts.training.run_promotion import (
-                            compute_performance_from_ledger,
-                        )
-
                         pnl_path = _Path("data") / "brain_pnl_ledger.json"
                         if pnl_path.exists():
-                            pnl_ledger = json.loads(pnl_path.read_text(encoding="utf-8"))
-                            perf = compute_performance_from_ledger(pnl_ledger)
+                            pnl_store = BrainPnLStore.load(str(pnl_path))
+                            all_metrics = pnl_store.get_all_metrics()
+
+                            # Bridge: BrainPnLMetrics → evaluator-compatible dict
+                            perf: dict[str, dict] = {}
+                            for bid, m in all_metrics.items():
+                                perf[bid] = {
+                                    "win_rate": m.win_rate,
+                                    "profit_factor": m.profit_factor,
+                                    "signal_count": m.sample_count,
+                                    "consecutive_losses": m.consecutive_losses,
+                                    "recent_win_rate": m.recent_win_rate,
+                                }
+                                # P0.1: Inject performance_metrics into governance state
+                                container.governance_service.set_performance_metrics(
+                                    bid,
+                                    {
+                                        "win_rate": m.win_rate,
+                                        "profit_factor": m.profit_factor,
+                                        "sharpe_ratio": m.sharpe_ratio,
+                                        "total_trades": m.sample_count,
+                                        "pnl_r": round(m.cumulative_pnl, 2),
+                                    },
+                                )
+
                             brain_states = container.governance_service.get_all_states()
-                            # Auditor: generate report only (no state writes)
                             evaluator = BrainPromotionEvaluator()
                             decisions = evaluator.evaluate_all(brain_states, perf)
-                            # Executor: apply transitions through the single authority
                             container.governance_rule_engine.execute_transitions(decisions)
                     except Exception:
-                        pass  # Promotion evaluation is non-critical, don't crash scheduler
+                        _logger.exception(
+                            "CRITICAL: PnL-based governance evaluation failed — "
+                            "brain promotion decisions will be skipped this cycle"
+                        )
+                        emit_brain_alert(
+                            "__system__",
+                            "pnl_pipeline_failure",
+                            {"error": "PnL governance evaluation raised exception"},
+                        )
 
             svc.add_task("governance_evaluation", governance_eval, interval_seconds=60)
 

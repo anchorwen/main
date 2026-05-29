@@ -79,11 +79,18 @@ def test_governance_save_load_roundtrip(tmp_path: Path):
     assert path.exists()
 
     loaded = GovernanceService.load(path)
-    assert loaded.get_brain_state("V9")["status"] == "live"
-    assert loaded.get_brain_state("XGB")["status"] == "live"
-    assert len(loaded.get_transition_log()) == 1
-    assert loaded.get_transition_log()[0]["from_status"] == "candidate"
-    assert loaded.get_transition_log()[0]["to_status"] == "live"
+    v9 = loaded.get_brain_state("V9")
+    assert v9 is not None
+    assert v9["status"] == "live"
+    xgb = loaded.get_brain_state("XGB")
+    assert xgb is not None
+    assert xgb["status"] == "live"
+    # FIX-20260529-034: register_brain() appends 2 entries + 1 transition = 3
+    log = loaded.get_transition_log()
+    assert len(log) == 3
+    # Entry 2 (last): candidate → live transition
+    assert log[2]["from_status"] == "candidate"
+    assert log[2]["to_status"] == "live"
 
 
 def test_governance_load_file_not_found(tmp_path: Path):

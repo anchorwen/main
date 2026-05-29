@@ -1,15 +1,16 @@
 {
   "schema_version": "brain_registry_entry.v1",
-  "brain_id": "Swing_V9_M15_V1",
+  "brain_id": "Swing_V9_M15_V2",
   "brain_type": "xgboost_v9",
   "contract_group": "m15_swing",
   "training_contract": "m15_swing",
   "feature_schema": "swing_enhanced_35",
   "feature_schema_id": "swing_enhanced_35",
-  "model_path": "data\\models\\swing\\Swing_V9_M15_V1_model.json",
-  "artifact_path": "data\\models\\swing\\Swing_V9_M15_V1_model.json",
+  "model_path": "data\\models\\swing\\Swing_V9_M15_V2_model.json",
+  "artifact_path": "data\\models\\swing\\Swing_V9_M15_V2_model.json",
   "model_version": "swing_m15_swing_v1",
-  "status": "shadow",
+  "artifact_hash": "b7d8881052001ff2a453146b03d2b7a983888251649dbbb56406b804d6ab20fa",
+  "status": "candidate",
   "vote_weight": 1.0,
   "magic": 90310,
   "brain_role": "alpha_brain",
@@ -25,12 +26,12 @@
     "max_depth": 5
   },
   "training_metrics": {
-    "train_accuracy": 0.4725,
-    "val_accuracy": 0.4725,
-    "test_accuracy": 0.534,
-    "test_trade_win_rate": 0.5391,
-    "test_profit_factor": 1.1696,
-    "test_sharpe": 8.6233
+    "train_accuracy": 0.4636,
+    "val_accuracy": 0.4636,
+    "test_accuracy": 0.5247,
+    "test_trade_win_rate": 0.5348,
+    "test_profit_factor": 1.1496,
+    "test_sharpe": 7.6708
   },
   "features": [
     "D1_Ret_1",
@@ -70,8 +71,8 @@
     "TF_Hurst"
   ],
   "n_features": 35,
-  "n_train_samples": 3251,
-  "trained_at": "2026-05-28T15:27:05.208297Z",
+  "n_train_samples": 3227,
+  "trained_at": "2026-05-29T01:11:02.203277Z",
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3

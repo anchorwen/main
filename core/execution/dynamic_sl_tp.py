@@ -203,11 +203,33 @@ def compute_sl_tp_levels(
     side: str,
     entry_price: float,
     dsl: DynamicSLTP,
+    *,
+    spread_points: float = 0.0,
+    tick_size: float = 0.01,
 ) -> dict[str, float]:
     """Convert distances to absolute price levels for MT5 order placement.
 
-    Returns dict with keys: stop_loss, take_profit, hard_sl.
+    When spread_points > 0, TP is tightened by spread cost (exit fills at bid
+    for long / ask for short) and SL is widened by spread cost (stop fills
+    suffer adverse slippage in fast moves).  This aligns live order placement
+    with training-label barrier adjustments in label_contract.py.
+
+    Default spread_points=0.0 preserves backward-compatible behaviour.
     """
+    if spread_points > 0 and tick_size > 0:
+        spread_cost = spread_points * tick_size
+        if side == "long":
+            return {
+                "stop_loss": round(entry_price - dsl.sl_distance - spread_cost, 5),
+                "take_profit": round(entry_price + dsl.tp_distance - spread_cost, 5),
+                "hard_sl": round(entry_price - dsl.hard_sl_distance - spread_cost, 5),
+            }
+        else:
+            return {
+                "stop_loss": round(entry_price + dsl.sl_distance + spread_cost, 5),
+                "take_profit": round(entry_price - dsl.tp_distance + spread_cost, 5),
+                "hard_sl": round(entry_price + dsl.hard_sl_distance + spread_cost, 5),
+            }
     if side == "long":
         return {
             "stop_loss": round(entry_price - dsl.sl_distance, 5),

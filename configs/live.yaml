@@ -14,32 +14,22 @@ features:
   store_dir: data/feature_store
   update_interval_seconds: 60
 brains:
-  # registry_entries: optional allowlist (deprecated as mandatory).
-  # When empty or absent, all brain_registry_entry.v1 JSON files in
-  # configs/brains/ are auto-discovered by BrainRegistry at startup.
-  # Listing entries here acts as an allowlist: only listed brains are
-  # active.  Use 'scripts/brain.py register' to add entries.
   registry_entries:
   - path: configs/brains/OU_Params_V6_Sniper.json
     enabled: true
   - path: configs/brains/OU_Params_V7_M15.json
     enabled: true
   - path: configs/brains/Meta_Stage1_Huber_V1.json
-    enabled: false  # FROZEN 2026-05-24: SL=2.0/TP=3.5 unprofitable with corrected costs (30pt spread/10pt slippage). Regression approach collapsed — replaced by binary classifier.
+    enabled: false
   - path: configs/brains/Meta_Stage1_Binary_Cls_V1.json
-    enabled: true   # FIX-20260528-013: RR=1.0 retrained. Stage 1 signal generator — near-zero standalone Sharpe expected. MetaFilter provides edge.
+    enabled: true
   - path: configs/brains/Meta_Stage1_MetaLabel_Binary_V1.json
-    enabled: true   # FIX-20260528-013: RR=1.0 retrained on train.npz (was barrier_stage1_v4). Stage 1 signal generator.
-  - path: configs/brains/Swing_V9_M30_V1.json
-    enabled: true   # 2026-05-28: Phase 2 swing revival. XGBoost v9 on 35-dim swing+micro features. Test WR 64%, PF 1.79.
-  - path: configs/brains/Swing_V9_M15_V1.json
-    enabled: true   # 2026-05-28: Phase 2 swing revival. XGBoost v9 on 35-dim swing+micro features. Test WR 62%, PF 1.60.
-  # ── V9 barrier classifier brains DELETED 2026-05-21 ──
-  # xgb_barrier_12bar_xgboost_v3: blind OOS WR 39.6%, Total PnL -714R — anti-predictive
-  # lgb_barrier_12bar_lightgbm_v3: blind OOS WR 34.9%, Total PnL -1211R — anti-predictive
-  # Root cause: unconditional P(TP|Features) on every M5 bar = pure noise
-  # Strategic pivot: Huber regression probe (Meta_Stage1_Huber_V1) as sole barrier_12bar voter
-  # Status: probation — live voting with PnL monitoring, auto-retire if Sharpe < 0 for 30+ days
+    enabled: true
+  # Swing_V9 V1 configs archived to archive_deprecated/ (FIX-20260529-034: magic collision resolution)
+  - path: configs/brains/Swing_V9_M30_V2.json
+    enabled: true
+  - path: configs/brains/Swing_V9_M15_V2.json
+    enabled: true
 gate:
   gate_policy_config: configs/live_gate_policy.json
   auto_recovery:
@@ -129,29 +119,25 @@ correlation_tracker:
   min_updates: 3
 strategy_lines:
   barrier_12bar:
-    enabled: false  # 2026-05-28: Architect directive — Sharp≈0, shut down to stop bleeding
-    # ── FIX-20260528-013: Full pipeline retrained with RR=1.0 symmetric labels ──
-    # Meta_Stage2_Filter_V3 retrained (47-dim LGB + Platt, CPCV Sharpe 8.49 ± 3.33).
-    # Stage 1 Binary/MetaLabel + Stage 2 MetaFilter wired through Track 4d gate chain.
-    # Budget: daily_loss -3%, max 5 consecutive losses.
+    enabled: false
     mode: probation
     timeframe: M5
     magic: 90001
-    strategy_family: trend_following  # Phase 4: asymmetric vol response
-    min_valid_brains: 1  # Huber regression probe as sole voter (V9 classifiers purged)
-    confidence_threshold: 0.40  # Dictator Protocol: single-brain Huber probe. Lowered from 0.75 for unblocked Track 4d delivery.
+    strategy_family: trend_following
+    min_valid_brains: 1
+    confidence_threshold: 0.4
     brain_types:
-    - lightgbm_v1  # Meta_Stage1_Huber_V1 — regression BPS probe, not binary classifier
+    - lightgbm_v1
     base_volume: 0.01
     max_volume: 0.01
     sl:
-      base_atr_mult: 1.5   # FIX-20260528-013: RR=1.0 symmetric (was 3.0)
+      base_atr_mult: 1.5
       hard_sl_ratio: 1.5
       dynamic: true
-      min_sl_distance: 8.0   # absolute floor — SL ≥$8 even when ATR collapses
-      min_rr_ratio: 1.0      # FIX-20260528-013: maintain RR≥1.0 (was 0.5)
+      min_sl_distance: 8.0
+      min_rr_ratio: 1.0
     tp:
-      base_atr_mult: 1.5   # FIX-20260528-013: RR=1.0 symmetric
+      base_atr_mult: 1.5
       partial_tp_enabled: true
       partial_tp_ratio: 0.5
       partial_tp_r: 1.0
@@ -166,39 +152,32 @@ strategy_lines:
       time_exit_cycles: 60
       min_r_for_hold: 0.3
       confidence_decay_exit: true
-      hesitation_cycles: 12  # 12 M5 bars = 60min = matches 12-bar training horizon
+      hesitation_cycles: 12
     budget:
       daily_loss_limit_pct: -0.03
       max_consecutive_losses: 5
     direction_balance:
       long_bias_discount: 0.05
   barrier_12bar_meta:
-    enabled: false  # 2026-05-28: Architect directive — Sharp≈0, shut down to stop bleeding
-    # ── NEW 2026-05-24: Meta-Labeling contract group ──
-    # OU signal engine triggers candidate entries; the meta-labeling binary
-    # classifier (Meta_Stage1_MetaLabel_Binary_V1) predicts P(TP|signal).
-    # This is fundamentally different from barrier_12bar which predicts
-    # unconditionally on every bar — here ML filters OU signals only.
-    # Promoted from shadow to probation 2026-05-24: z_entry clipping [1.3, 2.5]
-    # and OU feature augmentation wired in FeatureAdapter.
-    mode: probation  # probation voting with live capital at small size
+    enabled: false
+    mode: probation
     timeframe: M5
     magic: 90014
-    strategy_family: trend_following  # Phase 4: asymmetric vol response
+    strategy_family: trend_following
     min_valid_brains: 1
-    confidence_threshold: 0.40
+    confidence_threshold: 0.4
     brain_types:
-    - lightgbm_v1  # Meta_Stage1_MetaLabel_Binary_V1 — meta-labeling binary classifier
-    base_volume: 0.01  # probation: minimal live capital
-    max_volume: 0.01   # probation: capped at 0.01
+    - lightgbm_v1
+    base_volume: 0.01
+    max_volume: 0.01
     sl:
-      base_atr_mult: 1.5   # FIX-20260528-013: RR=1.0 symmetric (was 3.0)
+      base_atr_mult: 1.5
       hard_sl_ratio: 1.5
       dynamic: true
-      min_sl_distance: 3.0   # FIX-20260526-030: floor $3 for meta-labeling
-      min_rr_ratio: 1.0      # FIX-20260528-013: maintain RR≥1.0 (was 0.4)
+      min_sl_distance: 3.0
+      min_rr_ratio: 1.0
     tp:
-      base_atr_mult: 1.5   # FIX-20260528-013: RR=1.0 symmetric
+      base_atr_mult: 1.5
       partial_tp_enabled: false
     exit:
       trail_enabled: false
@@ -226,8 +205,8 @@ strategy_lines:
       base_atr_mult: 1.5
       hard_sl_ratio: 1.5
       dynamic: true
-      min_sl_distance: 8.0   # absolute floor — SL ≥$8 even when ATR collapses
-      min_rr_ratio: 1.5      # stretch TP to maintain ≥1.5:1 when SL is floored
+      min_sl_distance: 8.0
+      min_rr_ratio: 1.5
     tp:
       base_atr_mult: 2.5
       partial_tp_enabled: true
@@ -304,10 +283,10 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.0
   statarb_dynamic:
-    enabled: true
+    enabled: false  # FIX-20260529-036: disabled — 228 trades/-$2.17, 35.5% WR, bleeding artery
     timeframe: M5
     magic: 90003
-    strategy_family: mean_reversion  # Phase 4: asymmetric vol response — OU is mean-reverting
+    strategy_family: mean_reversion
     brain_types:
     - ou_params_v6
     base_volume: 0.02
@@ -317,8 +296,8 @@ strategy_lines:
       base_atr_mult: 1.5
       hard_sl_ratio: 1.5
       dynamic: true
-      min_sl_distance: 8.0   # absolute floor — SL ≥$8 even when ATR collapses
-      min_rr_ratio: 1.5      # stretch TP to maintain ≥1.5:1 when SL is floored
+      min_sl_distance: 8.0
+      min_rr_ratio: 1.5
     tp:
       base_atr_mult: 3.0
       partial_tp_enabled: true
@@ -327,31 +306,25 @@ strategy_lines:
     exit:
       trail_enabled: true
       trail_atr_mult: 1.5
-      trail_atr_mult_low: 1.8  # 均值回归低波粘滞需要更宽trailing，紧=白噪音铡刀
+      trail_atr_mult_low: 1.8
       trail_atr_mult_high: 2.5
-      breakeven_threshold_atr: 0.5  # Phase A: 0.8→0.5 — mean-reversion profits are smaller, need faster breakeven lock
+      breakeven_threshold_atr: 0.5
       flip_exit_enabled: false
       time_exit_cycles: 40
       zscore_exit_enabled: true
       confidence_decay_exit: false
       hesitation_cycles: 6
     budget:
-      # FIX-20260525-022: calibrated to 30% WR reality.
-      # P(4 consecutive losses) = 0.7^4 = 24% — normal variance, not a crisis.
-      # P(7 consecutive losses) = 0.7^7 = 8.2% — rare enough to warrant review.
-      # Daily loss limit relaxed from -1.5% to -3.0%: at 0.02 lot, 7 losses
-      # ≈ $4-6, which on a micro account ($200) is ~2-3%.  -1.5% would fire
-      # after just 2-3 losses — normal Tuesday for a 30% WR strategy.
       daily_loss_limit_pct: -0.03
       max_consecutive_losses: 7
     direction_balance:
-      long_bias_discount: 0.10
-    min_p_win: 0.45  # FIX-20260525-016: OU empirical WR 49.7% at RR 2:1 → breakeven 33.3%. 0.45 provides margin while ending the 0.489-0.491 blockage.
+      long_bias_discount: 0.1
+    min_p_win: 0.45
   statarb_m15:
-    enabled: true
+    enabled: false  # FIX-20260529-036: disabled — paired with statarb_dynamic. OU brains retained for MetaFilter input only
     timeframe: M15
     magic: 90103
-    strategy_family: mean_reversion  # Phase 4: asymmetric vol response — OU is mean-reverting
+    strategy_family: mean_reversion
     brain_types:
     - ou_params_v6
     base_volume: 0.01
@@ -375,18 +348,13 @@ strategy_lines:
       confidence_decay_exit: false
       hesitation_cycles: 3
     budget:
-      # FIX-20260525-022: calibrated to 30% WR reality.
-      # P(3 consecutive losses) = 0.7^3 = 34.3% — fires almost daily.
-      # P(7 consecutive losses) = 0.7^7 = 8.2% — rare enough to warrant review.
-      # Daily loss limit relaxed from -1.0% to -2.0%: at 0.01 lot, 7 losses
-      # ≈ $2-3, which on a micro account ($200) is ~1-1.5%.
       daily_loss_limit_pct: -0.02
       max_consecutive_losses: 7
     direction_balance:
       long_bias_discount: 0.0
-    min_p_win: 0.45  # FIX-20260525-016: OU empirical WR 49.7% at RR 2:1 → breakeven 33.3%
+    min_p_win: 0.45
   daily_swing:
-    enabled: false  # FIX-20260523-006: graveyard cleanup — no active swing brains remain
+    enabled: false
     timeframe: D1
     magic: 90301
     brain_types:
@@ -417,7 +385,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.0
   m15_swing:
-    enabled: true   # 2026-05-28: Phase 2 swing revival. Swing_V9_M15_V1 brain registered.
+    enabled: true
     timeframe: M15
     magic: 90310
     brain_types:
@@ -425,13 +393,15 @@ strategy_lines:
     base_volume: 0.01
     max_volume: 0.03
     confidence_threshold: 0.45
+    max_spread_points: 60     # FIX-20260529-038: M15 swing — block when spread >= 60 pts
+    spread_points: 30         # FIX-20260529-030: SL/TP spread cost alignment (XAUUSDc typical)
     sl:
       base_atr_mult: 1.5
       hard_sl_ratio: 1.5
       dynamic: true
-      min_rr_ratio: 1.0   # B-fix: TP=1.5 aligns to training, RR=1.0 must clear default 1.2 gate
+      min_rr_ratio: 1.0
     tp:
-      base_atr_mult: 1.5   # 2026-05-28: aligned to training TP=1.5 (was 3.0). Model trained with symmetric 1.5 labels — holding for 3.0 = sprinter running marathon.
+      base_atr_mult: 1.5
       partial_tp_enabled: true
       partial_tp_ratio: 0.5
       partial_tp_r: 1.5
@@ -446,14 +416,14 @@ strategy_lines:
       time_exit_cycles: 72
       confidence_decay_exit: true
       min_r_for_hold: 0.15
-      hesitation_cycles: 4  # 4 M15 bars = 60min — swing needs time to develop
+      hesitation_cycles: 4
     budget:
       daily_loss_limit_pct: -0.015
       max_consecutive_losses: 4
     direction_balance:
       long_bias_discount: 0.0
   m30_swing:
-    enabled: true   # 2026-05-28: Phase 2 swing revival. Swing_V9_M30_V1 brain registered.
+    enabled: true
     timeframe: M30
     magic: 90320
     brain_types:
@@ -461,13 +431,15 @@ strategy_lines:
     base_volume: 0.01
     max_volume: 0.03
     confidence_threshold: 0.45
+    max_spread_points: 70     # FIX-20260529-038: M30 swing — block when spread >= 70 pts
+    spread_points: 30         # FIX-20260529-030: SL/TP spread cost alignment (XAUUSDc typical)
     sl:
       base_atr_mult: 1.5
       hard_sl_ratio: 1.5
       dynamic: true
-      min_rr_ratio: 1.0   # B-fix: TP=1.5 aligns to training, RR=1.0 must clear default 1.2 gate
+      min_rr_ratio: 1.0
     tp:
-      base_atr_mult: 1.5   # 2026-05-28: aligned to training TP=1.5 (was 3.0). Model trained with symmetric 1.5 labels.
+      base_atr_mult: 1.5
       partial_tp_enabled: true
       partial_tp_ratio: 0.5
       partial_tp_r: 1.5
@@ -477,14 +449,14 @@ strategy_lines:
       flip_exit_enabled: true
       flip_threshold: 0.4
       time_exit_cycles: 36
-      hesitation_cycles: 3  # 3 M30 bars = 90min — longer swing needs more patience
+      hesitation_cycles: 3
     budget:
       daily_loss_limit_pct: -0.015
       max_consecutive_losses: 4
     direction_balance:
       long_bias_discount: 0.0
   h1_swing:
-    enabled: false  # FIX-20260523-006: graveyard cleanup — no active swing brains remain
+    enabled: false
     timeframe: H1
     magic: 90330
     brain_types:
@@ -520,7 +492,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.0
   h4_swing:
-    enabled: false  # Wave D: 100% short bias — macro-bias overfitting, shadow until retrained
+    enabled: false
     timeframe: H4
     magic: 90340
     brain_types:
@@ -595,6 +567,19 @@ regime_gate:
       micro_h1: reduced
       statarb_dynamic: reduced
       statarb_m15: reduced
+    low_vol:                           # FIX-20260529-037: ATR < 20th percentile — liquidity vacuum gate
+      barrier_12bar: reduced
+      barrier_12bar_meta: reduced
+      micro_3bar: false
+      micro_m15: false
+      micro_h1: false
+      statarb_dynamic: false
+      statarb_m15: false
+      m15_swing: reduced
+      m30_swing: reduced
+      h1_swing: reduced
+      h4_swing: reduced
+      daily_swing: false
     normal:
       barrier_12bar: full
       barrier_12bar_meta: full

@@ -488,23 +488,43 @@ def build_swing_dataset(
     for u, c in zip(unique, counts, strict=False):
         print(f"    Label {u}: {c} ({100*c/valid_count:.1f}%)")
 
-    # ── Chronological split ──
-    n_val = int(valid_count * val_ratio)
-    n_test = int(valid_count * test_ratio)
-    n_train = valid_count - n_val - n_test
+    # ── Purged chronological split (FIX-20260529-029) ──
+    # Labels look ahead `horizon` bars. Without purge, the last training
+    # sample's label window overlaps the first `horizon` validation bars,
+    # causing label leakage and inflated val/test metrics.
+    purge_bars = horizon
 
-    X_train = X[:n_train]
-    y_train = y[:n_train]
-    X_val = X[n_train : n_train + n_val]
-    y_val = y[n_train : n_train + n_val]
-    X_test = X[n_train + n_val :]
-    y_test = y[n_train + n_val :]
+    n_val_init = int(valid_count * val_ratio)
+    n_test_init = int(valid_count * test_ratio)
+    n_train_init = valid_count - n_val_init - n_test_init
+
+    train_end = max(0, n_train_init - purge_bars)
+    val_start = n_train_init
+    val_end = n_train_init + max(0, n_val_init - purge_bars)
+    test_start = n_train_init + n_val_init
+
+    purged_train = n_train_init - train_end
+    purged_val = n_val_init - (val_end - val_start) if val_end > val_start else n_val_init
+
+    X_train = X[:train_end]
+    y_train = y[:train_end]
+    X_val = X[val_start:val_end]
+    y_val = y[val_start:val_end]
+    X_test = X[test_start:]
+    y_test = y[test_start:]
+
+    n_train = len(y_train)
+    n_val = len(y_val)
+    n_test = len(y_test)
+
+    print(f"  Purge zone: {purge_bars} bars (horizon={horizon})")
+    print(f"  Purged: {purged_train} train + {purged_val} val samples")
 
     # Dummy PnL (synthetic: 1.5 for TP, -1.5 for SL, 0 for timeout)
     pnl_r = np.where(y == 1, 1.5, np.where(y == -1, -1.5, 0.0)).astype(np.float32)
-    pnl_r_train = pnl_r[:n_train]
-    pnl_r_val = pnl_r[n_train : n_train + n_val]
-    pnl_r_test = pnl_r[n_train + n_val :]
+    pnl_r_train = pnl_r[:train_end]
+    pnl_r_val = pnl_r[val_start:val_end]
+    pnl_r_test = pnl_r[test_start:]
     y_train_shifted = y_train + 1  # [-1,0,1] → [0,1,2] for multi-class
     y_val_shifted = y_val + 1
     y_test_shifted = y_test + 1
@@ -533,9 +553,13 @@ def build_swing_dataset(
         "horizon": horizon,
         "n_features": N_FEATURES,
         "feature_names": ALL_FEATURE_NAMES,
-        "n_train": int(n_train),
-        "n_val": int(n_val),
-        "n_test": int(n_test),
+        "n_train": n_train,
+        "n_val": n_val,
+        "n_test": n_test,
+        "purge_bars": purge_bars,
+        "n_train_init": n_train_init,
+        "n_val_init": n_val_init,
+        "n_test_init": n_test_init,
         "sl_atr_mult": 1.5,
         "tp_atr_mult": 1.5,
         "label_dist": {str(k): int(v) for k, v in zip(unique, counts, strict=False)},
@@ -545,8 +569,8 @@ def build_swing_dataset(
         json.dump(meta, f, indent=2)
 
     print(f"  Saved to {output_dir}/")
-    print(f"    train: {n_train} samples")
-    print(f"    val:   {n_val} samples")
+    print(f"    train: {n_train} samples (purged {purged_train})")
+    print(f"    val:   {n_val} samples (purged {purged_val})")
     print(f"    test:  {n_test} samples")
 
     return meta

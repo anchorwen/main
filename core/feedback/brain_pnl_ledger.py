@@ -58,6 +58,8 @@ class BrainPnLMetrics:
     max_drawdown: float = 0.0  # max peak-to-trough in price units
     profit_factor: float = 0.0  # gross profit / gross loss
     recent_pnl_20: float = 0.0  # sum of last 20 settled outcomes
+    recent_win_rate: float = 0.0  # win rate over last 20 settled outcomes
+    consecutive_losses: int = 0  # trailing consecutive losses
     health_signal: str = "insufficient_data"
     # Breakdowns
     long_win_rate: float = 0.0
@@ -80,6 +82,8 @@ class BrainPnLMetrics:
             "max_drawdown": self.max_drawdown,
             "profit_factor": self.profit_factor,
             "recent_pnl_20": self.recent_pnl_20,
+            "recent_win_rate": self.recent_win_rate,
+            "consecutive_losses": self.consecutive_losses,
             "health_signal": self.health_signal,
             "long_win_rate": self.long_win_rate,
             "short_win_rate": self.short_win_rate,
@@ -552,6 +556,19 @@ class BrainPnLStore:
 
         recent_20 = sum(pnls[-20:]) if n >= 20 else cumulative
 
+        # Recent win rate: last 20 settled outcomes
+        recent_n = min(20, n)
+        recent_wins = sum(1 for o in outcomes[-recent_n:] if o["is_win"])
+        recent_wr = recent_wins / recent_n if recent_n > 0 else win_rate
+
+        # Consecutive losses (trailing)
+        consecutive_losses = 0
+        for o in reversed(outcomes):
+            if not o["is_win"]:
+                consecutive_losses += 1
+            else:
+                break
+
         long_outs = [o for o in outcomes if o["direction"] == "long"]
         short_outs = [o for o in outcomes if o["direction"] == "short"]
         long_wr = sum(1 for o in long_outs if o["is_win"]) / max(1, len(long_outs))
@@ -580,6 +597,8 @@ class BrainPnLStore:
             max_drawdown=round(max_dd, 6),
             profit_factor=round(profit_factor, 2) if profit_factor != float("inf") else 999.0,
             recent_pnl_20=round(recent_20, 6),
+            recent_win_rate=round(recent_wr, 4),
+            consecutive_losses=consecutive_losses,
             health_signal=health,
             long_win_rate=round(long_wr, 4),
             short_win_rate=round(short_wr, 4),

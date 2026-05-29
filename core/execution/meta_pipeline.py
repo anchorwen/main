@@ -313,7 +313,13 @@ class MetaPipeline:
         entry_price = mid_price or 0.0
         if entry_price <= 0:
             return None
-        levels = compute_sl_tp_levels(meta_dir, entry_price, dsl)
+        levels = compute_sl_tp_levels(
+            meta_dir,
+            entry_price,
+            dsl,
+            spread_points=float(getattr(config, "spread_points", 0.0)),
+            tick_size=float(getattr(config, "tick_size", 0.01)),
+        )
 
         # 5. RR check
         sl_dist = abs(levels["stop_loss"] - entry_price)
