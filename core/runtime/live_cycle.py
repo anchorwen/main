@@ -4857,7 +4857,7 @@ def execute_live_cycle(
             _mia_closed = state._pending_mia_closes
             state._pending_mia_closes = []
             # ── Write to journal (same FileLock pattern as reconciliation) ──
-            try:
+            with log_and_continue(component="MIA_Close:journal_write"):
                 from core.infrastructure.distributed_lock import FileLock
 
                 _jlock = FileLock(
@@ -4881,8 +4881,6 @@ def execute_live_cycle(
                                 _jf.write(json.dumps(_entry, ensure_ascii=False) + "\n")
                     finally:
                         _jlock.release()
-            except Exception:
-                pass
             # ── Record exit for reentry guard ──
             for _entry in _mia_closed:
                 _exit_strategy = _entry.get("strategy", "")
@@ -4903,7 +4901,7 @@ def execute_live_cycle(
                 )
                 _exit_reason = _entry.get("detail", {}).get("reason", "mia_close")
                 if _exit_strategy and _exit_side in ("long", "short"):
-                    try:
+                    with log_and_continue(component="MIA_Close:reentry_guard"):
                         from core.execution.reentry_guard import (
                             ExitRecord,
                             ensure_reentry_state,
@@ -4936,14 +4934,13 @@ def execute_live_cycle(
                             ),
                             flush=True,
                         )
-                    except Exception:
-                        pass
             # ── Save position state immediately ──
             if state.position_manager is not None:
-                try:
+                with FaultTolerantContext(
+                    level=FaultLevel.CRASH,
+                    component="PositionState:save_after_mia_close",
+                ):
                     state.position_manager.save_state(config.position_state_path)
-                except Exception:
-                    pass
 
     # ── Degraded wakeup guard: skip Alpha computation, management only ──
     if degraded_wakeup:
