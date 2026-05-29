@@ -825,25 +825,14 @@ def _execute_management_phase(
                     pos,
                     state.known_open_tickets.get(pos.ticket, {}),
                 )
-                # Try to enrich with MT5 deal history (close_price, reason)
-                try:
+                # Enrich with MT5 deal history (close_price, reason)
+                with FaultTolerantContext(
+                    level=FaultLevel.CRASH,
+                    component="MT5_IPC:history_deals_get:MIA_enrich",
+                ):
                     _deals = mt5_worker.history_deals_get(position=pos.ticket)
                     if _deals:
                         _enrich_mia_from_deals(_mia_entry, _deals)
-                except Exception as _mia_exc:
-                    print(
-                        json.dumps(
-                            {
-                                "event": "mia_deal_enrichment_failed",
-                                "time": _utc_iso(),
-                                "ticket": pos.ticket,
-                                "error": f"{type(_mia_exc).__name__}: {str(_mia_exc)[:200]}",
-                                "level": "LOG",
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
                 state._pending_mia_closes.append(_mia_entry)
                 pm.clear_position(ticket=pos.ticket)
                 state.known_open_tickets.pop(pos.ticket, None)
@@ -1115,15 +1104,16 @@ def _execute_management_phase(
     # M5 covers the full inter-cycle window; graceful degradation on failure.
     _m5_high, _m5_low, _m5_spread = None, None, 0
     if mt5_worker is not None:
-        try:
+        with FaultTolerantContext(
+            level=FaultLevel.CRASH,
+            component="MT5_IPC:copy_rates_from_pos:M5_OHLC_tracking",
+        ):
             _m5_rates = mt5_worker.copy_rates_from_pos(config.symbol, 5, 0, 1)  # TIMEFRAME_M5
             if _m5_rates is not None and len(_m5_rates) > 0:
                 _m5_bar = _m5_rates[0]
                 _m5_high = float(_m5_bar["high"])
                 _m5_low = float(_m5_bar["low"])
                 _m5_spread = int(_m5_bar.get("spread", 0))
-        except Exception:
-            pass
     pm.update_prices(
         mid,
         bid,
@@ -4422,15 +4412,17 @@ def execute_live_cycle(
                     #     strategies are built, since budgets live on StrategyLine) ──
                     _pnl_val = _entry.get("pnl")
                     if _pnl_val is not None:
+                        # Fetch equity from MT5 (must succeed or crash)
+                        _eq = 0.0
+                        if mt5_worker is not None:
+                            with FaultTolerantContext(
+                                level=FaultLevel.CRASH,
+                                component="MT5_IPC:account_info:PnL_to_equity",
+                            ):
+                                _acc = mt5_worker.account_info()
+                                _eq = float(getattr(_acc, "equity", 0)) if _acc is not None else 0.0
                         # Convert dollar PnL to percentage of account equity
-                        _pnl_pct = 0.0
-                        try:
-                            _acc = mt5_worker.account_info() if mt5_worker is not None else None
-                            _eq = float(getattr(_acc, "equity", 0)) if _acc is not None else 0.0
-                            if _eq > 0:
-                                _pnl_pct = float(_pnl_val) / _eq
-                        except Exception:
-                            _pnl_pct = float(_pnl_val) / 1000.0  # fallback: assume $1k account
+                        _pnl_pct = float(_pnl_val) / _eq if _eq > 0 else 0.0
                         state._pending_budget_records.append(
                             {
                                 "strategy": _strategy,
@@ -4551,15 +4543,16 @@ def execute_live_cycle(
         state._mtf_price_service = MTFPriceService()
         # Bootstrap from historical M5 closes so M15 bars are available immediately
         if not config.no_mt5 and mt5_worker is not None:
-            try:
+            with FaultTolerantContext(
+                level=FaultLevel.CRASH,
+                component="MT5_IPC:copy_rates_from_pos:MTF_bootstrap",
+            ):
                 _hist_rates = mt5_worker.copy_rates_from_pos(
                     config.symbol, 5, 0, 200
                 )  # TIMEFRAME_M5
                 if _hist_rates is not None and len(_hist_rates) >= 6:
                     _closes = [float(r[4]) for r in _hist_rates]
                     state._mtf_price_service.bootstrap(_closes)
-            except Exception:
-                pass
     if mid_price is not None and mid_price > 0 and state._mtf_price_service is not None:
         try:
             _now_s = int(datetime.now(UTC).timestamp())
@@ -5331,11 +5324,15 @@ def execute_live_cycle(
     try:
         if broker is not None:
             _account_equity = broker.get_account_equity()
-        elif mt5_worker is not None:
-            _acc = mt5_worker.account_info()
-            _account_equity = float(getattr(_acc, "equity", 0)) if _acc is not None else 0.0
     except Exception:
         pass
+    if _account_equity is None and mt5_worker is not None:
+        with FaultTolerantContext(
+            level=FaultLevel.CRASH,
+            component="MT5_IPC:account_info:equity_risk_budget",
+        ):
+            _acc = mt5_worker.account_info()
+            _account_equity = float(getattr(_acc, "equity", 0)) if _acc is not None else 0.0
 
     # ── Equity-based risk budget: overrides fixed risk_budget_usd when equity_risk_pct > 0 ──
     _effective_risk_budget = config.risk_budget_usd
@@ -5524,6 +5521,12 @@ def execute_live_cycle(
 
                 # Intraday drawdown kill switch — tracks equity peak-to-trough
                 if config.intraday_drawdown_kill_enabled:
+                    # Fetch current equity from MT5 account (must succeed or crash)
+                    with FaultTolerantContext(
+                        level=FaultLevel.CRASH,
+                        component="MT5_IPC:account_info:drawdown_kill",
+                    ):
+                        _acc = mt5_worker.account_info()
                     try:
                         from core.execution.pre_trade_guards import IntradayDrawdownKill
 
@@ -5533,8 +5536,6 @@ def execute_live_cycle(
                                 force_close_enabled=config.intraday_dd_force_close,
                                 force_close_pct=config.intraday_dd_force_close_pct,
                             )
-                        # Fetch current equity from MT5 account
-                        _acc = mt5_worker.account_info()
                         if _acc is not None:
                             _eq = float(getattr(_acc, "equity", 0))
                             dd_result = state.intraday_dd_kill.update(_eq)
@@ -5720,7 +5721,10 @@ def execute_live_cycle(
 
         # ── Query MT5 for ALL open positions (by magic → strategy mapping) ──
         if not config.no_mt5 and mt5_worker is not None:
-            try:
+            with FaultTolerantContext(
+                level=FaultLevel.CRASH,
+                component="MT5_IPC:positions_get:portfolio_risk",
+            ):  # fmt: skip
                 from core.contracts.strategy_magic import MAGIC_TO_STRATEGY as _MAGIC_TO_STRATEGY
 
                 _mt5_positions = mt5_worker.positions_get(symbol=config.symbol)
@@ -5758,8 +5762,6 @@ def execute_live_cycle(
                                 "entry_cycle": _entry_cycle_from_pm,
                                 "brain_ids": _brain_ids_from_pm,
                             }
-            except Exception:
-                pass
 
         # ── Quarantine auto-clear: MT5 confirms zero positions → safe to lift ──
         if (

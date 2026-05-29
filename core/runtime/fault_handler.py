@@ -20,7 +20,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# ── Crask-loop constants ────────────────────────────────────────────────
+# ── Crash-loop constants ────────────────────────────────────────────────
 
 _CRASH_WINDOW_SECONDS = 60.0
 _CRASH_MAX_IN_WINDOW = 3
@@ -135,6 +135,27 @@ class FaultTolerantContext:
     IGNORE:
         Silently swallows the exception.  Requires an explicit
         ``allow_ignore_reason`` to document why this is safe.
+
+    .. warning::
+
+        **Variable scope leakage (Python semantics).**  When the block body
+        contains an assignment and the right-hand side raises, the variable
+        name is **never bound** in the local namespace — even though FTC
+        swallows the exception.  Always pre-initialise variables before the
+        ``with`` block::
+
+            # ✅ Correct — variable is bound regardless of exception
+            result = None  # pre-initialise with fallback value
+            with degrade_with_fallback("Brain#7", fallback=None):
+                result = brain.predict(features)
+
+            # ❌ Wrong — UnboundLocalError if brain.predict raises
+            with degrade_with_fallback("Brain#7", fallback=None):
+                result = brain.predict(features)
+
+        CRASH-level blocks are exempt (the exception is re-raised and the
+        process terminates), but pre-initialisation is still recommended for
+        consistency and to simplify future level changes.
     """
 
     def __init__(
