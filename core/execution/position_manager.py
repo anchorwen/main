@@ -18,6 +18,8 @@ mt5_bridge_worker pipeline; the bridge already supports ``modify_sltp`` and
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import time
 from dataclasses import dataclass, field
@@ -111,6 +113,9 @@ class ActivePosition:
     # COLD exploration flag — bypass trailing stop to collect uncensored labels
     # for ConformalOU online calibration (FIX-20260527-004 architect directive)
     cold_explore: bool = False
+
+    # v3 SSOT: consensus hash from persisted intent-state for reconciliation
+    _v3_consensus_hash: str = ""
 
 
 # ── Manager ────────────────────────────────────────────────────────────────
@@ -1425,10 +1430,19 @@ class ActivePositionManager:
 
     _SAVE_INTERVAL_CYCLES = 5  # persist every N cycles to limit disk I/O
 
-    def save_state(self, save_path: str | Path) -> None:
-        """Persist all tracked positions + manager state to JSON.
+    @staticmethod
+    def _compute_consensus_hash(pos: ActivePosition) -> str:
+        """SHA256 of sorted brain IDs + consensus keys for integrity verification."""
+        h = hashlib.sha256()
+        h.update(",".join(sorted(pos.supporting_brain_ids)).encode())
+        h.update(json.dumps(pos.entry_consensus, sort_keys=True).encode())
+        return h.hexdigest()[:16]
 
-        Called from the main loop every N cycles.  Skipped if no positions.
+    def save_state(self, save_path: str | Path) -> None:
+        """Persist intent-state only (v3 SSOT — 4 fields per position).
+
+        MT5 is the authoritative source for physical state (price, SL, TP, volume).
+        Python persists only intent-state that cannot be recovered from MT5.
         """
         import json as _json
         from pathlib import Path as _Path
@@ -1445,39 +1459,14 @@ class ActivePositionManager:
                 positions_payload.append(
                     {
                         "ticket": pos.ticket,
-                        "side": pos.side,
-                        "entry_price": pos.entry_price,
-                        "volume": pos.volume,
-                        "initial_sl": pos.initial_sl,
-                        "initial_tp": pos.initial_tp,
-                        "current_sl": pos.current_sl,
-                        "current_tp": pos.current_tp,
-                        "highest_high": pos.highest_high,
-                        "lowest_low": pos.lowest_low,
-                        "entry_atr": pos.entry_atr,
-                        "entry_cycle": pos.entry_cycle,
-                        "entry_z_score": pos.entry_z_score,
-                        "entry_consensus": pos.entry_consensus,
-                        "supporting_brain_ids": pos.supporting_brain_ids,
-                        "model_horizons": pos.model_horizons,
-                        "breakeven_triggered": pos.breakeven_triggered,
-                        "trail_multiplier": pos.trail_multiplier,
-                        "r_milestones_hit": pos.r_milestones_hit,
                         "cycles_held": pos.cycles_held,
-                        "highest_r": pos.highest_r,
-                        "prev_r": pos.prev_r,
-                        "partial_tp_triggered": pos.partial_tp_triggered,
-                        "partial_tp_r": pos.partial_tp_r,
-                        "partial_tp_ratio": pos.partial_tp_ratio,
-                        "ou_handoff_active": pos.ou_handoff_active,
-                        "ou_handoff_r": pos.ou_handoff_r,
-                        "strategy_name": pos.strategy_name,
-                        "expected_remaining_volume": pos.expected_remaining_volume,
-                        "consecutive_flips": pos.consecutive_flips,
+                        "breakeven_triggered": pos.breakeven_triggered,
+                        "partial_tp_done": pos.partial_tp_triggered,
+                        "brain_consensus_hash": self._compute_consensus_hash(pos),
                     }
                 )
             payload: dict[str, Any] = {
-                "version": 2,  # multi-position format
+                "version": 3,  # SSOT intent-state only; MT5 holds physical state
                 "positions": positions_payload,
                 "_last_brain_reeval_cycle": self._last_brain_reeval_cycle,
                 "_entry_consensus_score": self._entry_consensus_score,
@@ -1501,9 +1490,10 @@ class ActivePositionManager:
     def load_state(
         self, save_path: str | Path, max_age_hours: float = 24.0
     ) -> ActivePosition | None:
-        """Restore all positions + manager state from JSON, if fresh enough.
+        """Restore intent-state from JSON, if fresh enough.
 
-        Handles both v1 (single-position) and v2 (multi-position array) formats.
+        Handles v1 (single-position), v2 (multi-position full state), and
+        v3 (SSOT intent-only — 4 fields per position, MT5 is physical truth).
         Returns the primary restored position (for backward compat), or None.
         """
         import json as _json
@@ -1530,7 +1520,12 @@ class ActivePositionManager:
         except (_json.JSONDecodeError, OSError):
             return None
 
-        def _build_position(d: dict[str, Any]) -> ActivePosition:
+        data_version = data.get("version", 1)
+        is_v3 = isinstance(data_version, int) and data_version >= 3
+        is_v2 = isinstance(data_version, int) and data_version >= 2
+
+        def _build_position_full(d: dict[str, Any]) -> ActivePosition:
+            """Full reconstruction (v1/v2) — all fields present in JSON."""
             return ActivePosition(
                 ticket=int(d["ticket"]),
                 side=str(d["side"]),
@@ -1572,17 +1567,65 @@ class ActivePositionManager:
                 ),
             )
 
-        is_v2 = isinstance(data.get("version"), int) and data["version"] >= 2
+        def _build_position_v3(d: dict[str, Any]) -> ActivePosition | None:
+            """Minimal reconstruction from v3 intent-state.
 
-        if is_v2:
+            Only 4 intent fields + ticket are persisted. Physical state
+            (entry_price, volume, SL, TP, side) must be synced from MT5
+            by the caller (live_intent_loop.py recovery path).
+            """
+            ticket = int(d["ticket"])
+            pos = ActivePosition(
+                ticket=ticket,
+                side="unknown",  # filled by MT5 recovery
+                entry_price=0.0,  # filled by MT5 recovery
+                volume=0.0,  # filled by MT5 recovery
+                initial_sl=0.0,
+                initial_tp=0.0,
+                current_sl=0.0,
+                current_tp=0.0,
+                highest_high=0.0,  # filled by MT5 recovery
+                lowest_low=0.0,  # filled by MT5 recovery
+                entry_atr=2.0,
+                entry_cycle=0,
+                cycles_held=int(d.get("cycles_held", 0)),
+                breakeven_triggered=bool(d.get("breakeven_triggered", False)),
+                partial_tp_triggered=bool(d.get("partial_tp_done", False)),
+            )
+            # Stash v3 fields for downstream reconciliation
+            pos._v3_consensus_hash = str(d.get("brain_consensus_hash", ""))
+            return pos
+
+        if is_v3:
             position_list: list[dict[str, Any]] = data.get("positions", [])
             if not position_list:
                 return None
             primary_pos = None
             for pd in position_list:
+                if "ticket" not in pd:
+                    continue
+                pos = _build_position_v3(pd)
+                if pos is None:
+                    continue
+                self._positions[pos.ticket] = pos
+                if primary_pos is None:
+                    primary_pos = pos
+            self._primary_ticket = int(data.get("_primary_ticket", 0)) or (
+                primary_pos.ticket if primary_pos else None
+            )
+            self._last_brain_reeval_cycle = int(data.get("_last_brain_reeval_cycle", -1))
+            self._entry_consensus_score = float(data.get("_entry_consensus_score", 0.0))
+            self._recovery_cycle = 0
+            return primary_pos
+        elif is_v2:
+            pos_list: list[dict[str, Any]] = data.get("positions", [])
+            if not pos_list:
+                return None
+            primary_pos = None
+            for pd in pos_list:
                 if not all(k in pd for k in ("ticket", "side", "entry_price", "volume")):
                     continue
-                pos = _build_position(pd)
+                pos = _build_position_full(pd)
                 self._positions[pos.ticket] = pos
                 if primary_pos is None:
                     primary_pos = pos
@@ -1601,7 +1644,7 @@ class ActivePositionManager:
             # v1 format: single position
             if not all(k in data for k in ("ticket", "side", "entry_price", "volume")):
                 return None
-            pos = _build_position(data)
+            pos = _build_position_full(data)
             self._positions[pos.ticket] = pos
             self._primary_ticket = pos.ticket
             self._last_brain_reeval_cycle = int(data.get("_last_brain_reeval_cycle", -1))

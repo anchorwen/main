@@ -196,8 +196,20 @@ class ExitWatchdog:
                                 attempts=attempts,
                                 alerts=alerts,
                             )
-                    except Exception:
-                        pass
+                    except Exception as _l2_exc:
+                        import logging as _lg
+
+                        _lg.getLogger(__name__).critical(
+                            "L2 forced liquidation FAILED: ticket=%s reason=%s error=%s",
+                            position_ticket,
+                            reason,
+                            _l2_exc,
+                            exc_info=True,
+                        )
+                        alerts.append(
+                            f"CRITICAL: l2_forced_close_failed ticket={position_ticket} "
+                            f"error={type(_l2_exc).__name__}"
+                        )
                 alert = (
                     f"CRITICAL: exit_watchdog_timeout ticket={position_ticket} "
                     f"reason={reason} elapsed={elapsed:.1f}s attempts={attempt_n - 1}"
@@ -318,8 +330,20 @@ class ExitWatchdog:
                         attempts=attempts,
                         alerts=alerts,
                     )
-            except Exception:
-                pass
+            except Exception as _l2f_exc:
+                import logging as _lg
+
+                _lg.getLogger(__name__).critical(
+                    "ESCALATED L2 forced liquidation FAILED: ticket=%s reason=%s error=%s",
+                    position_ticket,
+                    reason,
+                    _l2f_exc,
+                    exc_info=True,
+                )
+                alerts.append(
+                    f"EMERGENCY: l2_exhausted_close_failed ticket={position_ticket} "
+                    f"error={type(_l2f_exc).__name__}"
+                )
         alert = (
             f"ESCALATED: exit_watchdog_exhausted ticket={position_ticket} "
             f"reason={reason} attempts={self.max_retries} elapsed={elapsed:.1f}s"

@@ -273,6 +273,31 @@ def launch(config_path: str = "configs/live.yaml") -> int:
             ]
         )
 
+    # ── Alert hub (FIX-20260529-040) ──
+    # alert is a top-level key in live.yaml, not under live_trading
+    import yaml as _yaml
+
+    _full_cfg = _yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
+    alert_cfg = _full_cfg.get("alert", {}) if isinstance(_full_cfg, dict) else {}
+    if alert_cfg.get("enabled", False):
+        intent_cmd.append("--alert")
+        # Forward webhook URLs: try config first, then env var
+        _slack_url = alert_cfg.get("channels", {}).get("slack_webhook_url", "") or os.getenv(
+            "QUANTOS_SLACK_WEBHOOK_URL", ""
+        )
+        if _slack_url:
+            intent_cmd.extend(["--slack-webhook", _slack_url])
+        _ding_url = alert_cfg.get("channels", {}).get("dingtalk_webhook_url", "") or os.getenv(
+            "QUANTOS_DINGTALK_WEBHOOK_URL", ""
+        )
+        if _ding_url:
+            intent_cmd.extend(["--dingtalk-webhook", _ding_url])
+            _ding_secret = alert_cfg.get("channels", {}).get("dingtalk_secret", "") or os.getenv(
+                "QUANTOS_DINGTALK_SECRET", ""
+            )
+            if _ding_secret:
+                intent_cmd.extend(["--dingtalk-secret", _ding_secret])
+
     # ── Safeguard modules (Pitfall 1-3) ──
     if cfg.get("bar_sync"):
         intent_cmd.extend(
@@ -314,6 +339,8 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         _safeguards.append("exit-watchdog")
     if cfg.get("use_limit_orders"):
         _safeguards.append("limit-monitor")
+    if alert_cfg.get("enabled", False):
+        _safeguards.append("alert-hub")
     if _safeguards:
         _echo(f"  Safeguards: {', '.join(_safeguards)}")
 

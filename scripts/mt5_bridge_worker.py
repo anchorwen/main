@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import shutil
+import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -666,6 +667,66 @@ def process_one(
     return result
 
 
+# ── Heartbeat + reconnection ───────────────────────────────────────────
+
+_HEARTBEAT_INTERVAL = 30.0
+_MAX_RECONNECT_ATTEMPTS = 5
+_RECONNECT_BACKOFF_SEQUENCE = [1.0, 2.0, 4.0, 8.0, 16.0, 30.0]
+
+
+def _check_mt5_heartbeat(mt5: Any) -> bool:
+    """Return True if MT5 terminal responds to terminal_info()."""
+    try:
+        info = mt5.terminal_info()
+        return info is not None
+    except Exception:
+        return False
+
+
+def _reconnect_mt5(mt5_module: Any, terminal_path: str) -> bool:
+    """Reconnect to MT5 with exponential backoff.  Returns True on success."""
+    for attempt, delay in enumerate(_RECONNECT_BACKOFF_SEQUENCE, start=1):
+        print(
+            json.dumps(
+                {
+                    "event": "bridge_mt5_reconnect_attempt",
+                    "attempt": attempt,
+                    "delay": delay,
+                    "time": _utc_now(),
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        time.sleep(delay)
+        try:
+            mt5_module.shutdown()
+        except Exception:
+            pass
+        try:
+            if mt5_module.initialize(path=terminal_path):
+                print(
+                    json.dumps(
+                        {
+                            "event": "bridge_mt5_reconnect_success",
+                            "attempt": attempt,
+                            "time": _utc_now(),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+                # Re-select symbol after reconnect
+                try:
+                    mt5_module.symbol_select("XAUUSDc", True)
+                except Exception:
+                    pass
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def run_worker(args: argparse.Namespace) -> int:
     outbox_dir = Path(args.outbox_dir)
     receipt_dir = Path(args.receipt_dir)
@@ -691,6 +752,8 @@ def run_worker(args: argparse.Namespace) -> int:
     health_path = Path(args.receipt_dir).parent / "reports" / "mt5_bridge_health.json"
     health_path.parent.mkdir(parents=True, exist_ok=True)
     _last_health_write = 0.0
+    _last_heartbeat_check = 0.0
+    _consecutive_hb_failures = 0
 
     try:
         while True:
@@ -737,6 +800,56 @@ def run_worker(args: argparse.Namespace) -> int:
                     _last_health_write = _now
                 except Exception:
                     pass
+
+            # ── MT5 heartbeat + exponential backoff reconnect ──
+            if _now - _last_heartbeat_check > _HEARTBEAT_INTERVAL:
+                _last_heartbeat_check = _now
+                if mt5 is not None:
+                    if _check_mt5_heartbeat(mt5):
+                        _consecutive_hb_failures = 0
+                    else:
+                        _consecutive_hb_failures += 1
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "bridge_mt5_heartbeat_lost",
+                                    "consecutive_failures": _consecutive_hb_failures,
+                                    "time": _utc_now(),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                        if _consecutive_hb_failures >= _MAX_RECONNECT_ATTEMPTS:
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "bridge_mt5_fatal",
+                                        "consecutive_failures": _consecutive_hb_failures,
+                                        "action": "exiting",
+                                        "time": _utc_now(),
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                            sys.exit(1)
+                        terminal_path = args.mt5_terminal_path
+                        if terminal_path:
+                            if _reconnect_mt5(mt5, str(terminal_path)):
+                                _consecutive_hb_failures = 0
+                            else:
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "bridge_mt5_reconnect_failed",
+                                            "consecutive_failures": _consecutive_hb_failures,
+                                            "time": _utc_now(),
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
 
             if args.once:
                 return 0

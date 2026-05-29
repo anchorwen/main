@@ -33,6 +33,7 @@ class CircuitBreaker:
         self._last_failure_time: float = 0
         self._half_open_calls = 0
         self._total_trips = 0
+        self._last_trip_reason: str = ""
 
     def _maybe_transition(self) -> CircuitState:
         with self._lock:
@@ -76,6 +77,21 @@ class CircuitBreaker:
             elif self._failure_count >= self._failure_threshold:
                 self._state = CircuitState.OPEN
                 self._total_trips += 1
+
+    def trip(self, reason: str = "") -> None:
+        """Forcibly open the circuit (used by alert→kill-switch loop).
+
+        Unlike :meth:`record_failure` which requires reaching the failure
+        threshold, this immediately opens the circuit regardless of the
+        current failure count.  Used when a CRITICAL alert fires (e.g.
+        daily_loss_limit breached) and trading must be halted now.
+        """
+        with self._lock:
+            self._state = CircuitState.OPEN
+            self._failure_count = self._failure_threshold
+            self._last_failure_time = time.monotonic()
+            self._total_trips += 1
+            self._last_trip_reason = reason
 
     def reset(self) -> None:
         with self._lock:

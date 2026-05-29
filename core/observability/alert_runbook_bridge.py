@@ -239,6 +239,149 @@ DEFAULT_SOP_LIBRARY: dict[str, RunbookSOP] = {
             ),
         ],
     ),
+    "daily_loss_exceeded": RunbookSOP(
+        alert_name="daily_loss_exceeded",
+        title="Daily Loss Limit Exceeded",
+        severity="critical",
+        summary="Daily PnL has breached the loss limit threshold. Immediate risk control required.",
+        actions=[
+            RunbookAction(
+                1,
+                "CLOSE_ALL_POSITIONS",
+                "Immediately close all open positions to prevent further losses",
+                priority="P0",
+                verify="All positions closed, MT5 shows zero exposure",
+            ),
+            RunbookAction(
+                2,
+                "SUSPEND_TRADING",
+                "Pause automated trading for the remainder of the day",
+                priority="P0",
+                verify="Trading flag set to blocked, no new orders firing",
+            ),
+            RunbookAction(
+                3,
+                "NOTIFY_RISK_OFFICER",
+                "Alert risk management team with PnL summary",
+                priority="P0",
+                verify="Risk officer acknowledged receipt",
+            ),
+            RunbookAction(
+                4,
+                "POST_MORTEM",
+                "Review trade journal to identify loss drivers",
+                priority="P1",
+                verify="Root cause identified and documented",
+            ),
+        ],
+        escalation_path=["risk_officer", "lead_engineer", "ceo"],
+        diagnostic_commands=[
+            "python scripts/live_daily_recap.py",
+            "python main.py status",
+        ],
+        rollback_steps=[
+            RunbookAction(
+                1, "MANUAL_RESUME", "Risk officer manually clears trading block", priority="P0"
+            ),
+        ],
+    ),
+    "win_rate_collapse": RunbookSOP(
+        alert_name="win_rate_collapse",
+        title="Win Rate Collapse Detected",
+        severity="critical",
+        summary="Rolling win rate has dropped below critical threshold. Strategy may be broken.",
+        actions=[
+            RunbookAction(
+                1,
+                "FREEZE_ALL_BRAINS",
+                "Freeze all active trading brains to prevent further degraded signals",
+                priority="P0",
+                verify="All brains status set to frozen in governance",
+            ),
+            RunbookAction(
+                2,
+                "TRIGGER_RETRAIN",
+                "Initiate brain retraining pipeline with recent data",
+                priority="P0",
+                verify="Retraining job started, check training logs",
+            ),
+            RunbookAction(
+                3,
+                "NOTIFY_ML_ENGINEER",
+                "Alert ML engineer to investigate model degradation",
+                priority="P0",
+                verify="Engineer acknowledged and investigating",
+            ),
+            RunbookAction(
+                4,
+                "ASSESS_MARKET_REGIME",
+                "Check if market regime shift caused the collapse",
+                priority="P1",
+                verify="Regime analysis documented",
+            ),
+        ],
+        escalation_path=["ml_engineer", "lead_engineer", "ceo"],
+        diagnostic_commands=[
+            "python main.py status",
+            "python scripts/live_daily_recap.py",
+            "python scripts/brain.py --diagnose",
+        ],
+        rollback_steps=[
+            RunbookAction(
+                1,
+                "RESTORE_PREVIOUS_BRAIN",
+                "Roll back to last known good brain version",
+                priority="P0",
+            ),
+            RunbookAction(2, "RESUME_TRADING", "Unfreeze brains after validation", priority="P1"),
+        ],
+    ),
+    "strategy_degradation": RunbookSOP(
+        alert_name="strategy_degradation",
+        title="Strategy Performance Degradation",
+        severity="warning",
+        summary="A specific strategy is underperforming — both PnL negative and win rate below threshold.",
+        actions=[
+            RunbookAction(
+                1,
+                "IDENTIFY_STRATEGY",
+                "Identify which specific strategy/brain is degraded",
+                priority="P1",
+                verify="Degraded strategy brain_id confirmed",
+            ),
+            RunbookAction(
+                2,
+                "REDUCE_WEIGHT",
+                "Reduce vote weight of degraded brain in Parliament",
+                priority="P1",
+                verify="Brain weight reduced, governance state updated",
+            ),
+            RunbookAction(
+                3,
+                "MARK_FOR_REVIEW",
+                "Flag brain for manual review in governance",
+                priority="P2",
+                verify="Brain status set to probation",
+            ),
+            RunbookAction(
+                4,
+                "MONITOR",
+                "Continue monitoring — escalate if degradation worsens",
+                priority="P2",
+                verify="Alert cleared or escalated within 24h",
+            ),
+        ],
+        escalation_path=["oncall_quant", "ml_engineer"],
+        diagnostic_commands=[
+            "python main.py status",
+            "python scripts/brain.py --diagnose",
+        ],
+        rollback_steps=[
+            RunbookAction(
+                1, "RESTORE_WEIGHT", "Restore brain weight after review clearance", priority="P2"
+            ),
+        ],
+    ),
     "position_limit_near": RunbookSOP(
         alert_name="position_limit_near",
         title="Near Position Limit",

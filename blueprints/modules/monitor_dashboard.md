@@ -51,6 +51,8 @@ Web-based real-time monitoring dashboard for the live trading system. Single-fil
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |--------|------|--------|--------|---------|------------|
+| FIX-20260529-044 | 2026-05-29 | cursor-agent | — | PR#2 CB→AlertHub cross-propagation: LiveAlertHub.send_critical(reason, detail) added — direct injection API for external infrastructure components (e.g. MT5Worker) to enqueue critical alerts outside the normal evaluate-and-dispatch cycle. Trips hub circuit breaker + enqueues alert for async delivery. | RC-06 |
+| FIX-20260529-040 | 2026-05-29 | cursor-agent | — | Phase A alert infrastructure: DingTalkAlertChannel (HMAC-SHA256), CircuitBreaker.trip(), LiveAlertHub (6-layer pipeline: rules→circuit breaker→Slack/DingTalk/Log). BackgroundDeliveryWorker with per-rule dedup. live_alert_hub.py (~260行) + alert_channels.py (+100行). | RC-12 |
 | FIX-20260524-033 | 2026-05-24 | cursor-agent | — | Batch mypy type safety: slo_service.py (1→0 — type: ignore[arg-type] for float cast), live_dashboard.py (1→0 — getattr fix). MODULE_SOURCE_MAP: add live_dashboard.py to monitor_dashboard. | type-confusion |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |
 | FIX-20260518-028 | 2026-05-18 | cursor-agent | — | Phase 3: Unified health aggregator — _build_unified_health() reads 7 data sources, /api/health/full endpoint with 10s cache, overall_status: healthy|degraded|critical, frontend single-request rendering with fallback to individual endpoints. | missing-feature, observability-gap |

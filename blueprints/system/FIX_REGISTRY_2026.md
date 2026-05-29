@@ -4,6 +4,60 @@
 
 ## Fix Details
 
+### FIX-20260529-040 — Phase A alert infrastructure: LiveAlertHub + DingTalk + CircuitBreaker.trip()
+
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Root Cause**: RC-12 (missing-feature) — Five production-grade alerting modules (AlertService, SlackAlertChannel, AlertRunbookBridge, CircuitBreaker, EventBus) were fully built but never wired into the live trading path. The live trading pipeline had no system-level situational awareness or risk control closed-loop — only per-trade safeguards (ExitWatchdog, reentry_guard) were active but no PnL anomaly detection, bridge heartbeat monitoring, or circuit breaker kill-switch existed.
+- **Fix**: Six-layer event→alert pipeline with 6 mandatory guardrails:
+  1. `live_alert_hub.py` (NEW, ~260 lines): `LiveAlertHub` — unified alerting entry point. `BackgroundDeliveryWorker` — non-daemon thread with per-rule dedup cache (Opt3). `_QueueChannel` — thin adapter preventing sync I/O on main thread (G1).
+  2. `alert_channels.py`: Added `DingTalkAlertChannel` (~100 lines) with HMAC-SHA256 signing (G4), Markdown message format with severity prefixes, `_sign_url()` static method.
+  3. `resilience.py`: Added `CircuitBreaker.trip(reason)` — forcibly sets state to OPEN on CRITICAL alert (G2). Added `_last_trip_reason` field.
+  4. `live_cycle.py`: Context collection per cycle — error_rate, frozen_brain_count, position_utilization, bridge heartbeat (time since last ack), cycle_duration. Added `LiveCycleState.alert_hub`, `_last_bridge_ack_time`, `_last_cycle_start_time` fields. Bridge heartbeat updated after successful `broker.fetch_prices()`.
+  5. `live_intent_loop.py`: Hub initialization with 5 CLI args (`--alert`, `--slack-webhook`, `--dingtalk-webhook`, `--dingtalk-secret`). Per-cycle `evaluate_and_dispatch()` call. Graceful shutdown with `alert_hub.shutdown()` in cleanup block (G6).
+  6. `live_launcher.py`: Forward `--alert` flag to intent subprocess when `alert.enabled` is true in live.yaml. Banner display includes "alert-hub" safeguard indicator.
+  7. `live.yaml`: New `alert` config section with `enabled` flag, `thresholds` (daily_loss_limit, consecutive_losers, win_rate_collapse, strategy_degradation_loss/_wr), and `channels` (slack, dingtalk, log).
+- **Guardrails satisfied**:
+  - G1: No sync I/O on main thread (queue.Queue + BackgroundDeliveryWorker)
+  - G2: CRITICAL alert → circuit_breaker.trip() kill-switch
+  - G3: All context values are in-memory (no disk reads during evaluate)
+  - G4: DingTalkAlertChannel auto-wired via env var
+  - G5: Configurable thresholds in live.yaml
+  - G6: Graceful shutdown drains queue (blocking, with timeout) + fallback JSONL
+  - Opt3: BackgroundDeliveryWorker per-rule dedup cache (belt-and-suspenders)
+- **Files changed**: `core/observability/live_alert_hub.py` (NEW), `core/observability/alert_channels.py` (MODIFIED), `core/protocol/services/resilience.py` (MODIFIED), `core/runtime/live_cycle.py` (MODIFIED), `scripts/live_intent_loop.py` (MODIFIED), `scripts/live_launcher.py` (MODIFIED), `scripts/check_blueprint_compliance.py` (MODIFIED), `configs/live.yaml` (MODIFIED)
+- **Verification**: `python scripts/verify.py --quick` passed (mypy + ruff + blueprint). 2702 pytest tests passed.
+- **Next phases**: Phase B (PnL rules + get_quick_stats O(1) accumulator), Phase C (bridge/system health: cycle_stall, no_signal_period), Phase D (CircuitBreaker in dispatch + state persistence tombstone), Phase E (EventBus→AlertService bridge).
+
+### FIX-20260529-041 — Phase B PnL fund-safety rules + O(1) accumulators + queue backpressure
+
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Root Cause**: RC-12 (missing-feature) — Phase A alert infrastructure had 6 system-level rules but zero PnL/fund-safety rules. No daily loss limit, win rate collapse detection, or strategy degradation monitoring existed. BrainPnLStore required O(N) scan per cycle for PnL stats. Alert queue was unbounded (queue.Queue() without maxsize) — risk of OOM during network partition.
+- **Fix**: Five-component implementation:
+  1. `brain_pnl_ledger.py`: O(1) event-driven accumulators in BrainPnLStore — `_running_daily_pnl`, `_running_consecutive_losses`, `_running_win_count`, `_running_trade_count` updated in `_settle()` path. `_update_accumulators()` handles midnight reset from `close_time` date. Window trim on deque `pop(0)` reverses accumulator counts. `get_quick_stats()` returns `{daily_pnl_usd, consecutive_losses, rolling_win_rate, total_trades_window}` in O(1).
+  2. `live_alert_hub.py`: Queue backpressure — `queue.Queue(maxsize=1000)` hard cap, `put_nowait()` non-blocking put, `_write_fallback_alert()` emergency JSONL on `queue.Full`. 4 PnL alert rules: `daily_loss_exceeded` (critical, 300s), `consecutive_losses` (warning, 600s), `win_rate_collapse` (critical, 600s, requires ≥20 trades), `strategy_degradation` (warning, 1800s, AND gate: PnL + WR both below threshold). Thresholds from `_DEFAULT_THRESHOLDS` merged with per-instance `thresholds` parameter.
+  3. `live_cycle.py`: PnL context injection in `_execute_management_phase` alert block — `pnl_ledger.get_quick_stats()` merged into context dict. Worst-strategy detection via `get_all_metrics()` scanning all brains for min `cumulative_pnl` and `win_rate`.
+  4. `alert_channels.py`: Chinese translations for 4 PnL rules (`RULE_NAME_CN`) and 6 PnL context keys (`CONTEXT_KEY_CN`).
+  5. `alert_runbook_bridge.py`: 3 new SOPs — `daily_loss_exceeded` (P0: close all→suspend→notify risk→post-mortem), `win_rate_collapse` (P0: freeze brains→retrain→notify ML→assess regime), `strategy_degradation` (P1: identify→reduce weight→mark review→monitor).
+  6. `live_intent_loop.py`: Reads `alert.thresholds` from full YAML config, passes to `LiveAlertHub(thresholds=...)`.
+- **Files changed**: `core/feedback/brain_pnl_ledger.py`, `core/observability/live_alert_hub.py`, `core/runtime/live_cycle.py`, `core/observability/alert_channels.py`, `core/observability/alert_runbook_bridge.py`, `scripts/live_intent_loop.py`
+- **Verification**: `python scripts/verify.py --full` passed (mypy + ruff + blueprint compliance + 2702 pytest tests).
+- **Deferred**: MT5 equity reconciliation (ghost position PnL divergence detection) — Phase C or standalone task.
+
+### FIX-20260529-042 — Phase C Swing三刀手术: Hard Trend Filter + Dynamic Breakeven p_win + Price-Confirmation Shield
+
+- **Date**: 2026-05-29
+- **Author**: cursor-agent
+- **Root Cause**: RC-06 (contract-violation) — 90320 (Swing_V9_M30_V2) 最近3笔交易暴露三个结构性缺陷: (1) 趋势盲区 — trend_direction=long 时持续做空，counter-trend gate 仅惩罚不硬挡; (2) 弱EV陷阱 — min_p_win=0.45 静态值不考虑点差摩擦，真实盈亏平衡点被抬升; (3) 信心早泄 — confidence_decay_ema 在 Layer 2 触发后立即关仓，无视价格已按预期方向运动且 SL 正在正确 trail。
+- **Fix**: 三文件三修复 (按架构师指定顺序执行):
+  1. Fix 3: `live_cycle.py` `_evaluate_position_exit()` — Price-Confirmation Shield: 当 confidence_decay 触发但 position R-multiple > 0.5 且 SL 正在有利方向 trail 时，拒绝时间衰减出场，将控制权交还给 Trailing SL。价格确认保护在 Layer 2 brain exit 和 dispatch 之间插入。
+  2. Fix 1: `strategy_line.py` — Hard multi-TF trend filter (Gate 4b): 对 swing 家族 (m30/m15/h1/h4_swing)，当 H4 和 H1 趋势方向一致时，物理阻断所有逆势信号。H4+H1 共振替代 M30 趋势检测 (避免新增完整 TrendDetector 的复杂度)。
+  3. Fix 2: `strategy_line.py` — Friction-adjusted dynamic breakeven p_win (Gate 5g): 从已含点差的 net SL/TP 距离计算真实盈亏平衡胜率 `sl_dist / (tp_dist + sl_dist)`，加 2% 安全边际，与静态 min_p_win 取 max 作为动态最低胜率门槛。消除"期望值幻觉"。
+- **Files changed**: `core/runtime/live_cycle.py`, `core/execution/strategy_line.py`
+- **Verification**: `python scripts/verify.py --full` passed (mypy + ruff + blueprint compliance + 2702 pytest tests).
+- **Risk**: Fix 3 仅在 R>0.5 且 SL trail 时屏蔽 — 不阻止真正应退出的弱仓位。Fix 1 H4+H1 共识条件严格 — 仅在双TF共振时生效，不引入误杀。Fix 2 动态门槛可能严格高于静态 0.45 — m30_swing 当前 rolling WR=46.3%，与 breakeven+0.02 接近，需观察实盘。
+
 ### FIX-20260527-007 — Asymmetric R-multiple cost-sensitive sample weighting
 
 - **Date**: 2026-05-27

@@ -342,11 +342,57 @@ class BrainPnLStore:
             self._settled[brain_id] = []
         self._settled[brain_id].append(outcome)
 
+        # ── O(1) accumulator update (Phase B: PnL alert rules) ──
+        self._update_accumulators(outcome, brain_id)
+
         # Keep only the most recent window_size outcomes
         if len(self._settled[brain_id]) > self._window_size:
-            self._settled[brain_id] = self._settled[brain_id][-self._window_size :]
+            popped = self._settled[brain_id].pop(0)
+            if popped.get("is_win"):
+                self._running_win_count = max(0, self._running_win_count - 1)
+            self._running_trade_count = max(0, self._running_trade_count - 1)
 
         return outcome
+
+    # ── O(1) accumulators (Phase B) ─────────────────────────────────────
+
+    def _update_accumulators(self, outcome: dict[str, Any], brain_id: str) -> None:
+        """Update O(1) running stats after each settled trade.
+
+        Called from _settle() on every new closed trade.  Midnight reset
+        re-zeros daily accumulators when the close date changes.
+        """
+        close_time = outcome.get("close_time", "")
+        trade_date = close_time[:10]  # "YYYY-MM-DD"
+        is_win = bool(outcome.get("is_win", False))
+        pnl = float(outcome.get("pnl_per_unit", 0.0))
+
+        # Midnight reset: new trading day
+        if trade_date and trade_date != self._current_date:
+            self._running_daily_pnl = 0.0
+            self._current_date = trade_date
+
+        self._running_daily_pnl += pnl
+        if is_win:
+            self._running_consecutive_losses = 0
+            self._running_win_count += 1
+        else:
+            self._running_consecutive_losses += 1
+        self._running_trade_count += 1
+
+    def get_quick_stats(self) -> dict[str, Any]:
+        """O(1) access to pre-computed accumulators for alert rules.
+
+        Returns a dict suitable for direct injection into the alert context.
+        No disk I/O, no iteration over _settled (护栏3 compliance).
+        """
+        trades = max(1, self._running_trade_count)
+        return {
+            "daily_pnl_usd": round(self._running_daily_pnl, 2),
+            "consecutive_losses": self._running_consecutive_losses,
+            "rolling_win_rate": round(self._running_win_count / trades, 4),
+            "total_trades_window": self._running_trade_count,
+        }
 
     # ── metrics ────────────────────────────────────────────────────────
 
@@ -382,6 +428,13 @@ class BrainPnLStore:
         "healthy": {"sharpe": 1.0, "win_rate": 0.55},
     }
 
+    # Phase B O(1) accumulator type declarations (forward ref for methods before __init__)
+    _running_daily_pnl: float
+    _running_consecutive_losses: int
+    _running_win_count: int
+    _running_trade_count: int
+    _current_date: str
+
     def __init__(self, window_size: int = 100) -> None:
         self._window_size = window_size
         self._pending: dict[str, dict[str, Any]] = {}
@@ -389,6 +442,12 @@ class BrainPnLStore:
         # Rolling quantile thresholds (recalibrated from cross-brain distribution)
         self._calibrated_thresholds: dict[str, dict[str, float]] | None = None
         self._last_calibration_n: int = 0
+        # ── Phase B O(1) event-driven accumulators (护栏3 + 提升1) ──
+        self._running_daily_pnl = 0.0
+        self._running_consecutive_losses = 0
+        self._running_win_count = 0
+        self._running_trade_count = 0
+        self._current_date = ""
 
     @staticmethod
     def _assess_health(

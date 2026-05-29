@@ -6,10 +6,21 @@ for all MT5 C++ calls — no daemon threads, no direct ``mt5.*`` access.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.execution.mt5_worker import MT5Worker
+
+# XAUUSDc physical bounds — gold CFD in cents, 3 decimal places.
+# Physical extreme: gold has never traded below $250 or above $3,500
+# in inflation-adjusted terms; 1000-4000 gives a 10x safety margin.
+_GOLD_PRICE_MIN = 1000.0
+_GOLD_PRICE_MAX = 4000.0
+# Max allowed spread in price units before we treat it as a data error.
+# For XAUUSDc (cents), 0.50 = 50 cents = 500 points — well above any
+# reasonable market spread even during news events.
+_DEFAULT_MAX_SPREAD = 0.50
 
 # MT5 timeframe constants — pure integers, no thread-affinity requirement.
 MT5_TIMEFRAME_M5 = 5
@@ -53,6 +64,23 @@ def _mid_and_prices(
         raise RuntimeError("tick unavailable")
     bid = float(tick.bid)
     ask = float(tick.ask)
+
+    # ── Physical sanity checks (crash on bad data — crash-only philosophy) ──
+    if not (math.isfinite(bid) and math.isfinite(ask)):
+        raise ValueError(f"Price NaN/Inf: bid={bid} ask={ask}")
+    if bid <= 0 or ask <= 0:
+        raise ValueError(f"Price zero/negative: bid={bid} ask={ask}")
+    if bid < _GOLD_PRICE_MIN or bid > _GOLD_PRICE_MAX:
+        raise ValueError(
+            f"Bid out of physical bounds [{_GOLD_PRICE_MIN}, {_GOLD_PRICE_MAX}]: {bid}"
+        )
+    if ask < _GOLD_PRICE_MIN or ask > _GOLD_PRICE_MAX:
+        raise ValueError(
+            f"Ask out of physical bounds [{_GOLD_PRICE_MIN}, {_GOLD_PRICE_MAX}]: {ask}"
+        )
+    if (ask - bid) > _DEFAULT_MAX_SPREAD:
+        raise ValueError(f"Spread explosion: bid={bid} ask={ask} spread={ask - bid:.5f}")
+
     return (bid + ask) / 2.0, bid, ask
 
 

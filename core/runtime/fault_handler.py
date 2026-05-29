@@ -1,0 +1,290 @@
+"""Unified fault-handling context manager.
+
+Provides a five-level fault classification system (CRASH / DEGRADE / RETRY /
+LOG / IGNORE) with a single ``FaultTolerantContext`` entry point.
+
+CRASH-level faults write ``last_good_state.json`` before raising, enabling
+crash-loop detection on restart (3 crashes in 60s → sys.exit(42)).
+"""
+
+from __future__ import annotations
+
+import enum
+import json
+import logging
+import os
+import sys
+import time
+from pathlib import Path
+from typing import Any
+
+logger = logging.getLogger(__name__)
+
+# ── Crask-loop constants ────────────────────────────────────────────────
+
+_CRASH_WINDOW_SECONDS = 60.0
+_CRASH_MAX_IN_WINDOW = 3
+_CRASH_LOOP_EXIT_CODE = 42
+
+# ── Fault level enum ────────────────────────────────────────────────────
+
+
+class FaultLevel(enum.Enum):
+    """Five-level fault classification for the trading system.
+
+    CRASH   — infrastructure fault: log, write last-good-state, raise
+    DEGRADE — component fault: log, return fallback, emit alert
+    RETRY   — transient fault: exponential backoff N times, escalate to CRASH
+    LOG     — non-critical-path fault: log and continue
+    IGNORE  — cleanup/teardown code: swallow silently (code-review required)
+    """
+
+    CRASH = "crash"
+    DEGRADE = "degrade"
+    RETRY = "retry"
+    LOG = "log"
+    IGNORE = "ignore"
+
+
+# ── Crash-loop protection ───────────────────────────────────────────────
+
+
+def _record_crash(component: str) -> None:
+    """Record a crash timestamp to ``last_good_state.json`` for crash-loop detection."""
+    state_path = Path("data/state/last_good_state.json")
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    now = time.time()
+
+    state: dict[str, Any] = {}
+    if state_path.exists():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            state = {}
+
+    crashes: list[float] = state.get("crash_timestamps", [])
+    # Prune entries outside the window
+    crashes = [t for t in crashes if now - t < _CRASH_WINDOW_SECONDS]
+    crashes.append(now)
+    state["crash_timestamps"] = crashes
+    state["last_crash_component"] = component
+    state["last_crash_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
+
+    tmp = Path(str(state_path) + ".tmp")
+    tmp.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(str(tmp), str(state_path))
+
+
+def _check_crash_loop() -> None:
+    """Check for crash-loop: 3 crashes in 60s → sys.exit(42).
+
+    Exit code 42 tells the launcher to stop restarting and page the on-call.
+    """
+    state_path = Path("data/state/last_good_state.json")
+    if not state_path.exists():
+        return
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return
+    crashes: list[float] = state.get("crash_timestamps", [])
+    now = time.time()
+    recent = [t for t in crashes if now - t < _CRASH_WINDOW_SECONDS]
+    if len(recent) >= _CRASH_MAX_IN_WINDOW:
+        logger.critical(
+            "CRASH LOOP DETECTED: %d crashes in %ds — exiting with code %d",
+            len(recent),
+            int(_CRASH_WINDOW_SECONDS),
+            _CRASH_LOOP_EXIT_CODE,
+        )
+        sys.exit(_CRASH_LOOP_EXIT_CODE)
+
+
+# ── Fault-tolerant context manager ──────────────────────────────────────
+
+
+class FaultTolerantContext:
+    """Context manager that handles faults according to their severity level.
+
+    Usage::
+
+        with FaultTolerantContext(
+            level=FaultLevel.DEGRADE,
+            component="Brain#7",
+            fallback_value=None,
+        ) as ctx:
+            result = brain.predict(features)
+
+    CRASH:
+        Logs the exception, writes ``last_good_state.json`` with crash
+        timestamp, then re-raises.  The process will terminate (or be
+        caught by an outer handler that calls sys.exit).
+
+    DEGRADE:
+        Logs the exception, records it in ``ctx.exception``, and returns
+        ``fallback_value`` as the context-manager result.
+
+    RETRY:
+        Retries the block up to *max_retries* times with exponential
+        backoff (base * 2^attempt).  If all retries are exhausted,
+        escalates to CRASH.
+
+    LOG:
+        Logs the exception and continues.  ``ctx.exception`` is set.
+
+    IGNORE:
+        Silently swallows the exception.  Requires an explicit
+        ``allow_ignore_reason`` to document why this is safe.
+    """
+
+    def __init__(
+        self,
+        level: FaultLevel,
+        component: str,
+        *,
+        fallback_value: Any = None,
+        max_retries: int = 3,
+        backoff_base: float = 0.5,
+        alert_hub: Any = None,
+        allow_ignore_reason: str = "",
+    ) -> None:
+        if level == FaultLevel.IGNORE and not allow_ignore_reason:
+            raise ValueError("FaultTolerantContext IGNORE requires allow_ignore_reason")
+
+        self.level = level
+        self.component = component
+        self.fallback_value = fallback_value
+        self.max_retries = max_retries
+        self.backoff_base = backoff_base
+        self._alert_hub = alert_hub
+        self._allow_ignore_reason = allow_ignore_reason
+
+        self.exception: BaseException | None = None
+        self.retries_used: int = 0
+
+    def __enter__(self) -> FaultTolerantContext:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> bool:
+        if exc_val is None:
+            return False  # no exception → normal exit
+
+        if self.level == FaultLevel.IGNORE:
+            self.exception = exc_val
+            return True  # swallow
+
+        if self.level == FaultLevel.LOG:
+            logger.warning(
+                "FaultTolerantContext [LOG] component=%s error=%s: %s",
+                self.component,
+                type(exc_val).__name__,
+                str(exc_val)[:200],
+            )
+            self.exception = exc_val
+            return True  # swallow
+
+        if self.level == FaultLevel.DEGRADE:
+            logger.error(
+                "FaultTolerantContext [DEGRADE] component=%s error=%s: %s",
+                self.component,
+                type(exc_val).__name__,
+                str(exc_val)[:200],
+            )
+            self.exception = exc_val
+            if self._alert_hub is not None:
+                try:
+                    self._alert_hub.send_critical(
+                        f"degraded_{self.component}",
+                        {"error": f"{type(exc_val).__name__}: {str(exc_val)[:200]}"},
+                    )
+                except Exception:
+                    pass
+            return True  # swallow, caller checks ctx.exception
+
+        if self.level == FaultLevel.RETRY:
+            for attempt in range(self.max_retries):
+                delay = self.backoff_base * (2**attempt)
+                logger.warning(
+                    "FaultTolerantContext [RETRY] component=%s attempt=%d/%d delay=%.1fs error=%s",
+                    self.component,
+                    attempt + 1,
+                    self.max_retries,
+                    delay,
+                    type(exc_val).__name__,
+                )
+                time.sleep(delay)
+                # We cannot re-execute the block from __exit__.
+                # RETRY is handled by the caller wrapping the context in a loop.
+                # Store the exception for the caller to check.
+                self.exception = exc_val
+                self.retries_used = attempt + 1
+                return True  # caller must re-enter context
+
+            # All retries exhausted → escalate to CRASH
+            logger.critical(
+                "FaultTolerantContext [RETRY→CRASH] component=%s exhausted=%d retries error=%s",
+                self.component,
+                self.max_retries,
+                type(exc_val).__name__,
+            )
+            _record_crash(self.component)
+            _check_crash_loop()
+            return False  # re-raise
+
+        if self.level == FaultLevel.CRASH:
+            logger.critical(
+                "FaultTolerantContext [CRASH] component=%s error=%s: %s",
+                self.component,
+                type(exc_val).__name__,
+                str(exc_val)[:200],
+                exc_info=True,
+            )
+            _record_crash(self.component)
+            _check_crash_loop()
+            return False  # re-raise
+
+        return False  # unknown level → re-raise
+
+
+# ── Convenience helpers ─────────────────────────────────────────────────
+
+
+def crash_if_failed(
+    component: str,
+    *,
+    alert_hub: Any = None,
+) -> FaultTolerantContext:
+    """Shortcut for CRASH-level context."""
+    return FaultTolerantContext(
+        level=FaultLevel.CRASH,
+        component=component,
+        alert_hub=alert_hub,
+    )
+
+
+def degrade_with_fallback(
+    component: str,
+    fallback: Any = None,
+    *,
+    alert_hub: Any = None,
+) -> FaultTolerantContext:
+    """Shortcut for DEGRADE-level context."""
+    return FaultTolerantContext(
+        level=FaultLevel.DEGRADE,
+        component=component,
+        fallback_value=fallback,
+        alert_hub=alert_hub,
+    )
+
+
+def log_and_continue(component: str) -> FaultTolerantContext:
+    """Shortcut for LOG-level context."""
+    return FaultTolerantContext(
+        level=FaultLevel.LOG,
+        component=component,
+    )

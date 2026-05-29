@@ -183,6 +183,9 @@ class LiveCycleState:
     _tracker_reload_pending: bool = False  # set after daily_ops enriches tracker on disk
     exit_watchdog: Any = None  # ExitWatchdog instance (Pitfall 3 safeguard)
     limit_monitor: Any = None  # LimitOrderMonitor instance (Pitfall 1 safeguard)
+    alert_hub: Any = None  # LiveAlertHub instance (FIX-20260529-040)
+    _last_bridge_ack_time: float = 0.0  # Unix ts of last successful broker.fetch_prices()
+    _last_cycle_start_time: float = 0.0  # wall clock at start of current cycle
     _cooldown_registry: Any = None  # CooldownRegistry (Cut 1: Absolute Refractory Period)
     _family_entry_tracker: Any = None  # FamilyEntryTracker (Cut 2: Cross-Strategy Spacing)
     _meta_filter_gate: Any = None  # MetaFilterGate (LightGBM 47-dim OU signal quality filter)
@@ -271,178 +274,20 @@ def _load_daily_ops_state(base_dir: str) -> float:
             with open(state_path) as f:
                 data = json.load(f)
             return float(data.get("last_daily_ops_utc", 0.0))
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _logging
+
+        _logging.getLogger(__name__).warning(
+            "Failed to read daily_ops_state: %s", _exc, exc_info=True
+        )
     return 0.0
-
-
-def _save_daily_ops_state(base_dir: str, ts: float) -> None:
-    """Persist last daily_ops timestamp to disk."""
-    try:
-        state_dir = os.path.join(base_dir, "state")
-        os.makedirs(state_dir, exist_ok=True)
-        state_path = os.path.join(state_dir, "daily_ops_state.json")
-        with open(state_path, "w") as f:
-            json.dump({"last_daily_ops_utc": ts}, f)
-    except Exception:
-        pass
 
 
 def _run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> None:
     """Execute daily_ops pipeline synchronously within the current cycle."""
-    print(
-        json.dumps({"event": "daily_ops_scheduled", "time": _utc_iso()}, ensure_ascii=False),
-        flush=True,
-    )
+    from core.runtime.daily_ops_scheduler import run_scheduled_daily_ops
 
-    # ── Persist "decided to execute" BEFORE running to prevent edge reentry ──
-    # If the process crashes mid-execution, the persisted timestamp ensures
-    # the post-restart date-based check skips re-trigger for the same day.
-    state._last_daily_ops_utc = datetime.now(UTC).timestamp()
-    _save_daily_ops_state(config.base_dir, state._last_daily_ops_utc)
-
-    try:
-        from scripts.daily_ops import run_daily_ops
-
-        result = run_daily_ops(
-            base_dir=config.base_dir,
-            skip_shadow=True,
-            skip_recap=True,
-            mt5_terminal_path=config.mt5_terminal_path,
-        )
-        state._tracker_reload_pending = True  # daily_ops wrote enriched tracker to disk
-
-        # Persist the full report to disk (CLI uses --output, API path doesn't)
-        _report_path = os.path.join(config.base_dir, "reports", "ops_logs", "p1_daily_run.log")
-        try:
-            os.makedirs(os.path.dirname(_report_path), exist_ok=True)
-            with open(_report_path, "a", encoding="utf-8") as _f:
-                _f.write(json.dumps(result, indent=2, ensure_ascii=False, default=str) + "\n")
-        except OSError as _exc:
-            print(
-                json.dumps(
-                    {
-                        "event": "daily_ops_report_write_failed",
-                        "path": _report_path,
-                        "error": str(_exc),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-
-        print(
-            json.dumps(
-                {
-                    "event": "daily_ops_complete",
-                    "time": _utc_iso(),
-                    "steps": len(result.get("steps", [])),
-                    "errors": result.get("errors", 0),
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
-
-        # ── Resource cleanup: force GC + compact feature store ──
-        _cleanup_started = time.perf_counter()
-        try:
-            import gc
-
-            gc.collect()
-            # Compact local feature store to prevent unbounded JSONL growth
-            try:
-                from core.features.local_feature_store import LocalFeatureStore
-
-                _store = LocalFeatureStore(base_dir=config.base_dir)
-                _store.compact(retention_days=7)
-            except Exception:
-                pass
-            _cleanup_ms = (time.perf_counter() - _cleanup_started) * 1000.0
-            print(
-                json.dumps(
-                    {"event": "resource_cleanup_complete", "cleanup_ms": round(_cleanup_ms, 1)},
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-        except Exception as _cleanup_exc:
-            print(
-                json.dumps(
-                    {"event": "resource_cleanup_failed", "error": str(_cleanup_exc)},
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-
-        # ── Re-run governance after daily_ops refreshes PnL data ──
-        try:
-            from core.feedback.brain_pnl_ledger import BrainPnLStore
-            from core.governance.governance_service import GovernanceService
-            from scripts.training.governance_scheduler import run_governance_cycle
-
-            _pnl_path = os.path.join(config.base_dir, "brain_pnl_ledger.json")
-            _gov_path = os.path.join(config.base_dir, "governance_state.json")
-
-            _pnl_store = BrainPnLStore.load(_pnl_path) if os.path.exists(_pnl_path) else None
-            _governance = (
-                GovernanceService.load(_gov_path)
-                if os.path.exists(_gov_path)
-                else GovernanceService()
-            )
-
-            if _pnl_store is not None:
-                from core.feedback.brain_performance_tracker import BrainPerformanceTracker
-
-                _tracker = BrainPerformanceTracker(window_size=100)
-                _gov_report = run_governance_cycle(
-                    _tracker, _governance, dry_run=False, pnl_store=_pnl_store
-                )
-                _governance.save(_gov_path)
-
-                _applied = len(_gov_report.get("actions_applied", []))
-                _flagged = len(_gov_report.get("actions_flagged", []))
-                if _applied or _flagged:
-                    print(
-                        json.dumps(
-                            {
-                                "event": "daily_governance_cycle",
-                                "time": _utc_iso(),
-                                "actions_applied": _applied,
-                                "actions_flagged": _flagged,
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
-            else:
-                print(
-                    json.dumps(
-                        {
-                            "event": "daily_governance_skip",
-                            "reason": "no_pnl_ledger",
-                            "time": _utc_iso(),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-        except Exception as _gov_exc:
-            print(
-                json.dumps(
-                    {"event": "daily_governance_error", "time": _utc_iso(), "error": str(_gov_exc)},
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-    except Exception as exc:
-        print(
-            json.dumps(
-                {"event": "daily_ops_error", "time": _utc_iso(), "error": str(exc)},
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
+    run_scheduled_daily_ops(config, state)
 
 
 def _check_pre_close(config: LiveCycleConfig, state: LiveCycleState) -> dict[str, Any]:
@@ -561,7 +406,8 @@ def _dispatch_modify_trail(
                 {
                     "event": "trail_dispatch_error",
                     "time": _utc_iso(),
-                    "error": str(exc),
+                    "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+                    "level": "DEGRADE",
                     "reason": reason,
                     "new_sl": new_sl,
                 },
@@ -666,10 +512,35 @@ def _dispatch_managed_close(
                         ),
                         flush=True,
                     )
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as _cd_exc:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "cooldown_record_failed",
+                                "time": _utc_iso(),
+                                "strategy": strategy_name,
+                                "error": f"{type(_cd_exc).__name__}: {str(_cd_exc)[:200]}",
+                                "level": "LOG",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+        except Exception as _ew_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "exit_recording_failed",
+                        "time": _utc_iso(),
+                        "strategy": strategy_name,
+                        "reason": reason[:80],
+                        "error": f"{type(_ew_exc).__name__}: {str(_ew_exc)[:200]}",
+                        "level": "LOG",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
 
     # ── Pillar 4: Ghost-volume audit ──
     # If pos.volume < expected_remaining_volume and this isn't a legitimate
@@ -796,8 +667,9 @@ def _dispatch_managed_close(
                     {
                         "event": "exit_watchdog_exception",
                         "time": _utc_iso(),
-                        "error": str(_wd_exc),
+                        "error": f"{type(_wd_exc).__name__}: {str(_wd_exc)[:200]}",
                         "reason": reason,
+                        "level": "CRASH",
                     },
                     ensure_ascii=False,
                 ),
@@ -823,7 +695,8 @@ def _dispatch_managed_close(
                     {
                         "event": "close_dispatch_error",
                         "time": _utc_iso(),
-                        "error": str(exc),
+                        "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+                        "level": "CRASH",
                         "reason": reason,
                     },
                     ensure_ascii=False,
@@ -875,6 +748,7 @@ def _execute_management_phase(
     micro_feature_computer: Any,
     micro_feature_adapter: Any,
     daily_feature_provider: Any = None,
+    pnl_ledger: Any = None,
     ticket: int | None = None,
 ) -> Any:
     """Manage open position: trail stop, re-evaluate brains, check exits.
@@ -1009,8 +883,11 @@ def _execute_management_phase(
     try:
         if broker is not None:
             mid, bid, ask = broker.fetch_prices(config.symbol)
+            state._last_bridge_ack_time = time.time()  # bridge liveness heartbeat
         else:
             mid, bid, ask = _mid_and_prices(mt5_worker, config.symbol)
+            if mid > 0:
+                state._last_bridge_ack_time = time.time()
     except Exception:
         _price_degraded = True
         mid = float(getattr(pos, "entry_price", 0.0) or 0.0)
@@ -1098,6 +975,61 @@ def _execute_management_phase(
                     ),
                     flush=True,
                 )
+
+    # ── 1c. Alert evaluation (FIX-20260529-040: LiveAlertHub wiring) ──
+    _ah = getattr(state, "alert_hub", None)
+    if _ah is not None:
+        try:
+            # Build context from in-memory state only (Guardrail 3)
+            _ctx_error_rate = 0.0
+            _ctx_frozen = 0
+            _ctx_pos_util = 0.0
+            _ctx_bridge_last_ack = time.time() - getattr(
+                state, "_last_bridge_ack_time", time.time()
+            )
+
+            # Position utilization
+            if pm.has_position() if pos is not None else False:
+                _ctx_pos_util = min(
+                    1.0,
+                    len(getattr(pm, "positions", []) if hasattr(pm, "positions") else [])
+                    / max(1, config.max_positions),
+                )
+
+            # Cycle duration
+            _ctx_cycle_duration = time.time() - getattr(
+                state, "_last_cycle_start_time", time.time()
+            )
+
+            _ctx: dict[str, Any] = {
+                "error_rate": _ctx_error_rate,
+                "circuit_state": _ah.circuit_breaker.state.value,
+                "frozen_brain_count": _ctx_frozen,
+                "position_utilization": _ctx_pos_util,
+                "bridge_last_ack_seconds": _ctx_bridge_last_ack,
+                "cycle_duration_seconds": _ctx_cycle_duration,
+            }
+
+            # ── Phase B: PnL fund-safety context injection ──
+            if pnl_ledger is not None:
+                try:
+                    _pnl_stats = pnl_ledger.get_quick_stats()
+                    _ctx.update(_pnl_stats)
+                    # Worst-performing strategy detection
+                    _all_m = pnl_ledger.get_all_metrics()
+                    _worst_pnl = 0.0
+                    _worst_wr = 1.0
+                    for _m in _all_m.values():
+                        _worst_pnl = min(_worst_pnl, _m.cumulative_pnl)
+                        _worst_wr = min(_worst_wr, _m.win_rate)
+                    _ctx["strategy_pnl"] = round(_worst_pnl, 2)
+                    _ctx["strategy_win_rate"] = round(_worst_wr, 4)
+                except Exception:
+                    pass
+
+            _ah.evaluate_and_dispatch(_ctx)
+        except Exception:
+            pass  # alert failure never blocks trading (Guardrail 1 fail-safe)
 
     # ── 2. Update regime detector ──
     regime_info: dict[str, Any] = {}
@@ -1824,6 +1756,18 @@ def _execute_management_phase(
                     should_exit, exit_reason = pm.evaluate_brain_exit(
                         current_consensus, current_supporting, mid=mid, ticket=pos.ticket
                     )
+                # ── Phase C Fix 3: Price-Confirmation Shield ──
+                # When confidence_decay triggers but price action confirms the
+                # trade direction, veto the time-based exit and let Trailing SL
+                # manage the position.
+                if should_exit and "confidence_decay" in exit_reason and mid is not None:
+                    _r_now = pm._compute_r_multiple(mid, ticket=pos.ticket)
+                    _sl_trailing = (pos.side == "short" and pos.current_sl < pos.initial_sl) or (
+                        pos.side == "long" and pos.current_sl > pos.initial_sl
+                    )
+                    if _r_now > 0.5 and _sl_trailing:
+                        should_exit = False
+                        exit_reason = f"confidence_decay_shielded_r{_r_now:.2f}_trailing"
                 if should_exit:
                     _bf_confidence = float(
                         current_consensus.get("consensus_score", _exit_confidence)
@@ -4012,6 +3956,7 @@ def execute_live_cycle(
     exit_watchdog: Any = None,
     limit_monitor: Any = None,
     meta_signal_filter: Any = None,
+    alert_hub: Any = None,
     degraded_wakeup: bool = False,
 ) -> tuple[LiveCycleState, bool]:
     """Execute one iteration of the live intent cycle.
@@ -4042,8 +3987,11 @@ def execute_live_cycle(
         state.exit_watchdog = exit_watchdog
     if limit_monitor is not None:
         state.limit_monitor = limit_monitor
+    if alert_hub is not None:
+        state.alert_hub = alert_hub
 
     # ── Cycle-start heartbeat (every iteration — catches freeze location) ──
+    _cycle_start_wall = time.time()
     print(
         json.dumps(
             {"event": "cycle_start", "time": _utc_iso(), "iteration": state.loop_iteration},
@@ -4051,6 +3999,10 @@ def execute_live_cycle(
         ),
         flush=True,
     )
+    # Track cycle start time for bridge liveness proxy + cycle stall detection
+    state._last_cycle_start_time = _cycle_start_wall
+    if getattr(state, "_last_bridge_ack_time", 0) == 0:
+        state._last_bridge_ack_time = _cycle_start_wall
 
     # ── Circuit breaker: 3 consecutive degraded cycles → management-only ──
     if state._circuit_breaker_tripped:
@@ -4818,6 +4770,7 @@ def execute_live_cycle(
                         micro_feature_computer=micro_feature_computer,
                         micro_feature_adapter=micro_feature_adapter,
                         daily_feature_provider=daily_feature_provider,
+                        pnl_ledger=pnl_ledger,
                         ticket=_pm_pos.ticket,
                     )
             except Exception:
@@ -6067,8 +6020,20 @@ def execute_live_cycle(
                             mid_price,
                         )
                         _record_brain_outcomes(strategy_proposals, dr.direction, "pending", tracker)
-                    except Exception:
-                        pass
+                    except Exception as _bi_exc:
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "brain_inference_failed",
+                                    "time": _utc_iso(),
+                                    "strategy": dr.strategy_name,
+                                    "error": f"{type(_bi_exc).__name__}: {str(_bi_exc)[:200]}",
+                                    "level": "DEGRADE",
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
 
             # ── Register opened positions for dynamic exit management ──
             if (
@@ -6471,7 +6436,9 @@ def execute_live_cycle(
                         # XGBoost adapters: use infer() with flat ravel (model expects 288-dim).
                         try:
                             if hasattr(b_info["adapter"], "infer_sequence"):
-                                seq_batch = seq.astype(np.float32).reshape(1, seq.shape[0], 9)
+                                seq_batch: np.ndarray = seq.astype(np.float32).reshape(
+                                    1, seq.shape[0], 9
+                                )
                                 raw = b_info["adapter"].infer_sequence(seq_batch)
                             else:
                                 raw = b_info["adapter"].infer(seq.ravel().astype(np.float64))

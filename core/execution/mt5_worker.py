@@ -55,8 +55,8 @@ class MT5Worker:
     # Seconds the worker loop waits on an empty queue before checking _running.
     _QUEUE_POLL_INTERVAL = 1.0
 
-    def __init__(self) -> None:
-        self._queue: queue.Queue = queue.Queue()
+    def __init__(self, alert_hub: Any = None) -> None:
+        self._queue: queue.Queue = queue.Queue(maxsize=1000)
         self._running = False
         self._ready = threading.Event()
         self._thread: threading.Thread | None = None
@@ -67,6 +67,14 @@ class MT5Worker:
         self._command_in_flight: str | None = None
         self._last_command_start: float = 0.0
         self._stuck_since: float | None = None  # set when first TimeoutError detected
+
+        # Exponential backoff for reconnect
+        self._reconnect_attempt: int = 0
+        self._reconnect_max_attempts: int = 5
+        self._reconnect_backoff: list[float] = [1.0, 2.0, 4.0, 8.0, 30.0]
+
+        # Alert hub for circuit breaker cross-propagation
+        self._alert_hub = alert_hub
 
         # Circuit breaker: 3 consecutive failures → open for 60s
         self.circuit_breaker = CircuitBreaker(
@@ -107,14 +115,29 @@ class MT5Worker:
         self._thread = None
 
     def reconnect(self, timeout: float = 15.0) -> bool:
-        """Re-initialise MT5 on the worker thread (defensive reconnect).
+        """Re-initialise MT5 on the worker thread with exponential backoff.
 
         Safe to call when the worker is running — ``mt5.initialize()``
         supports being called multiple times from the same thread.
+
+        Backoff sequence: 1s → 2s → 4s → 8s → 30s. Max 5 retries.
+        Resets backoff counter on success.
         """
         if not self._running or self._thread is None:
             return False
-        return self._submit("_reconnect", self._mt5_init_kwargs, timeout=timeout)
+
+        while self._reconnect_attempt < self._reconnect_max_attempts:
+            delay = self._reconnect_backoff[
+                min(self._reconnect_attempt, len(self._reconnect_backoff) - 1)
+            ]
+            time.sleep(delay)
+            ok = self._submit("_reconnect", self._mt5_init_kwargs, timeout=timeout)
+            if ok:
+                self._reconnect_attempt = 0
+                return True
+            self._reconnect_attempt += 1
+
+        return False
 
     # ── Public data API ──────────────────────────────────────────
 
@@ -243,7 +266,12 @@ class MT5Worker:
             )
 
         future: Future = Future()
-        self._queue.put((future, command, args, _kwargs or {}))
+        try:
+            self._queue.put_nowait((future, command, args, _kwargs or {}))
+        except queue.Full as err:
+            raise RuntimeError(
+                f"MT5Worker command queue full (1000) — " f"rejected {command} to prevent OOM"
+            ) from err
         try:
             return future.result(timeout=timeout)
         except TimeoutError:
@@ -317,7 +345,33 @@ class MT5Worker:
             except Exception as exc:
                 future.set_exception(exc)
                 if command not in ("_reconnect",):
+                    was_open = (
+                        self.circuit_breaker.state.value == "open"
+                        if hasattr(self.circuit_breaker, "state")
+                        else False
+                    )
                     self.circuit_breaker.record_failure()
+                    # Detect CB transition to OPEN → alert hub
+                    if not was_open and self._alert_hub is not None:
+                        try:
+                            is_open = (
+                                self.circuit_breaker.state.value == "open"
+                                if hasattr(self.circuit_breaker, "state")
+                                else False
+                            )
+                            if is_open:
+                                self._alert_hub.send_critical(
+                                    "mt5_circuit_open",
+                                    {
+                                        "command": command,
+                                        "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+                                        "total_trips": self.circuit_breaker.get_status().get(
+                                            "total_trips", 0
+                                        ),
+                                    },
+                                )
+                        except Exception:
+                            pass
             finally:
                 self._command_in_flight = None
                 self._stuck_since = None  # clear stuck marker on successful completion
@@ -328,7 +382,11 @@ class MT5Worker:
             self._mt5 = None
 
     def _mt5_initialize(self, kwargs: dict[str, Any]) -> bool:
-        """Re-initialise MT5 from within the worker thread."""
+        """Re-initialise MT5 from within the worker thread.
+
+        Automatically re-selects XAUUSDc after successful re-init so that
+        tick data and symbol info are immediately available to all callers.
+        """
         import MetaTrader5 as mt5
 
         if self._mt5 is not None:
@@ -336,6 +394,10 @@ class MT5Worker:
         ok = mt5.initialize(**kwargs)
         if ok:
             self._mt5 = mt5
+            try:
+                self._mt5.symbol_select("XAUUSDc", True)
+            except Exception:
+                pass
         else:
             self._mt5 = None
         return ok

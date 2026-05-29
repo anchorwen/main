@@ -413,12 +413,21 @@ class MetaSignalFilter:
                 threshold=round(effective_threshold, 4),
                 reason=reason,
             )
-        except Exception:
+        except Exception as _exc:
+            import logging
+
+            _logger = logging.getLogger(__name__)
+            _logger.critical(
+                "MetaFilter crashed — blocking trade (fail-closed): threshold=%.4f error=%s",
+                self.threshold,
+                _exc,
+                exc_info=True,
+            )
             return FilterResult(
-                passed=True,
-                p_win=0.5,
+                passed=False,
+                p_win=0.0,
                 threshold=self.threshold,
-                reason="filter_error_fallback",
+                reason=f"filter_error_fail_closed:{type(_exc).__name__}",
                 exhaustion_factor=1.0,
             )
 

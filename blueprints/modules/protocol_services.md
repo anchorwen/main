@@ -45,6 +45,7 @@ DecisionIntent → DecisionCompiler → IntentMessageBuilder → CommunicationEn
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260529-040 | 2026-05-29 | cursor-agent | — | CircuitBreaker.trip(reason) + _last_trip_reason field: enables instant OPEN on CRITICAL alert (not gradual failure_count accumulation). Used by LiveAlertHub for alert→kill-switch loop. | RC-12 |
 | FIX-20260525-011 | 2026-05-25 | cursor-agent | — | BarSyncPoller timeout/timeframe decoupling: DEFAULT_TIMEOUT_SECONDS was hardcoded 360s safe for M5 but insufficient for H1+ (5400s bar period). Dynamic floor: `max(360, int(bar_seconds × 1.5))` — M5=450s, M15=1350s, H1=5400s, H4=21600s. Formula enforced in __init__ using existing `_bar_seconds_for()`. | RC-05 (boundary-error: timeout-timeframe coupling) |
 | FIX-20260525-009 | 2026-05-25 | cursor-agent | — | MT5 worker refactoring: event_bar_sync.py — BarSyncPoller accepts optional mt5_worker, hardcoded TF constants, worker-aware error recovery (reconnect instead of shutdown+init). | RC-04, RC-06 |
 | FIX-20260524-014 | 2026-05-24 | cursor-agent | — | MODULE_SOURCE_MAP: add scripts/validators/journal_validator.py. Mypy fixes: journal_validator (1→0 — getattr for tuple.__name__), communication_operations_service (1→0 — assert posture is not None). | RC-02 |

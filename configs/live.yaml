@@ -95,6 +95,21 @@ exit_management:
   max_hold_cycles: 60
   require_min_r: 0.3
   min_sl_step: 0.15
+alert:
+  # Phase A: LiveAlertHub wiring (FIX-20260529-040)
+  # Controls the 6-layer alert pipeline: rules → circuit breaker → Slack/DingTalk/Log
+  enabled: true   # LiveAlertHub active (FIX-20260529-040): DingTalk webhook configured
+  thresholds:
+    daily_loss_limit: -5.0          # USD, trip circuit breaker when daily realized PnL exceeds
+    consecutive_losers: 8           # warning when consecutive losses exceed this
+    win_rate_collapse: 0.30         # trip circuit breaker when rolling 100-trade WR drops below
+    strategy_degradation_loss: -3.0 # warning when single-strategy PnL drops below
+    strategy_degradation_wr: 0.30   # warning when single-strategy WR drops below
+  channels:
+    slack: true                     # enable Slack (requires QUANTOS_SLACK_WEBHOOK_URL)
+    dingtalk: true                  # enable DingTalk
+    dingtalk_webhook_url: "https://oapi.dingtalk.com/robot/send?access_token=f33f64c01a0323ee7859fab62495addd0ad75c02182425f91b5ffe4ffbf9ce46"
+    log: true                       # always enabled (writes to data/logs/alert_audit.jsonl)
 capital_allocator:
   base_volume: 0.01
   min_volume: 0.01

@@ -63,13 +63,16 @@ class TestAlertRunbookBridge:
         return AlertRunbookBridge.with_default_mappings()
 
     def test_default_mappings_cover_all_five(self, bridge):
-        """All 5 default alert rules should have SOP coverage."""
+        """All 8 default alert rules should have SOP coverage."""
         expected = {
             "high_error_rate",
             "circuit_breaker_open",
             "high_throttle_rate",
             "brain_frozen",
             "position_limit_near",
+            "daily_loss_exceeded",
+            "win_rate_collapse",
+            "strategy_degradation",
         }
         assert set(bridge.sop_names) == expected
 

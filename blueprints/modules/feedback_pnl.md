@@ -35,6 +35,7 @@ cycle N+H:   settle_all(mid_price)  → only ttl=0 settled at horizon bar
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260529-041 | 2026-05-29 | cursor-agent | — | Phase B: O(1) event-driven accumulators (_running_daily_pnl/_running_consecutive_losses/_running_win_count/_running_trade_count with midnight reset). get_quick_stats() method for alert context injection. Window trim on deque pop() updates accumulators reversely. Type safety: class-level type declarations for forward reference resolution. | RC-12 |
 | FIX-20260529-035 | 2026-05-29 | cursor-agent | — | P0+P1 Visibility Fix: BrainPnLMetrics extended with `recent_win_rate` + `consecutive_losses` fields, computed in `get_metrics_calibrated()`. `compute_performance_from_ledger()` deprecated in favor of `BrainPnLStore.get_all_metrics()` as SSOT. Fixes dual-pipeline metric divergence (Gap B). | RC-06, RC-09 |
 | FIX-20260524-039 | 2026-05-24 | cursor-agent | — | M2: Eliminated ~50-line duplicate metrics computation — get_metrics() now delegates to get_metrics_calibrated(). M3: Deprecated _assess_health() call replaced with assess_health_calibrated() for unified health tiering. | RC-06 |
 | FIX-20260524-033 | 2026-05-24 | cursor-agent | — | Batch mypy type safety: shadow_pnl_loop.py (1→0 — remove nonexistent rolling_norm.update() call, normalize() already does EWMA update internally). | api-confusion |

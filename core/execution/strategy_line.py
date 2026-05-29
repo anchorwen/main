@@ -542,8 +542,15 @@ class StrategyLine:
                         if hasattr(p, "confidence")
                         else p.prediction.get("confidence", 0.5),
                     )
-                except Exception:
-                    pass
+                except Exception as _rec_exc:
+                    import logging as _lg
+
+                    _lg.getLogger(__name__).debug(
+                        "PnL record_signal failed for brain=%s: %s",
+                        getattr(p, "brain_id", "?"),
+                        _rec_exc,
+                        exc_info=True,
+                    )
 
         # ── 3a3. Capture entry_z_score + entry_half_life from OU-style brains ──
         entry_z_score = 0.0
@@ -1055,7 +1062,50 @@ class StrategyLine:
                 },
             )
 
-        # ── 4b. Counter-trend gate ──
+        # ── 4b. Hard multi-TF trend filter (Phase C Fix 1) ──
+        # When H4 and H1 agree on direction, swing strategies are physically
+        # blocked from counter-trend entries.  This is stricter than the
+        # strength-based counter-trend gate below — alignment alone is enough.
+        # barrier_12bar and statarb families are EXEMPT.
+        _h4_dir = "neutral"
+        if regime_info is not None:
+            _rg = regime_info.get("regime_gate", {})
+            if isinstance(_rg, dict):
+                _h4_dir = str(_rg.get("h4_trend_direction", "neutral"))
+        _h1_dir = trend_direction  # primary_trend: H4 > H1 > M5 hierarchy
+        _is_swing = name in ("m30_swing", "m15_swing", "h1_swing", "h4_swing")
+        if (
+            _is_swing
+            and direction is not None
+            and _h1_dir != "neutral"
+            and _h4_dir != "neutral"
+            and _h1_dir == _h4_dir
+            and direction != _h1_dir
+        ):
+            return StrategyDecision(
+                strategy_name=name,
+                magic=self.config.magic,
+                should_trade=False,
+                direction=direction,
+                confidence=confidence,
+                volume=0.0,
+                sl=0.0,
+                tp=0.0,
+                hard_sl=0.0,
+                brain_ids=brain_ids,
+                supporting_count=support_count,
+                total_count=total_count,
+                regime_mode=regime_gate_mode,
+                reason=f"hard_trend_filter_{direction}_vs_h1h4_{_h1_dir}",
+                gate_diag={
+                    "gate": "hard_trend_filter",
+                    "signal_direction": direction,
+                    "h1_trend": _h1_dir,
+                    "h4_trend": _h4_dir,
+                },
+            )
+
+        # ── 4c. Counter-trend gate ──
         # Block trades that oppose the higher-timeframe trend.
         # barrier_12bar is EXEMPT — Dictator Protocol: the Huber BPS probe IS
         # the trend signal; a counter-trend block would silence the only voter
@@ -1117,7 +1167,7 @@ class StrategyLine:
                         reason=f"counter_trend_penalised_{direction}_vs_{trend_direction}",
                     )
 
-        # ── 4c. Z-score inflection gate (v3.2) ──
+        # ── 4d. Z-score inflection gate (v3.2) ──
         # For OU/statarb strategies: require z-score turning back toward mean.
         # Prevents catching falling knives when z is still accelerating away.
         # Knife 1: z_entry raised to 2.0 — only trade extreme reversions where
@@ -1150,7 +1200,7 @@ class StrategyLine:
                         reason=_inf_reason,
                     )
 
-        # ── 4d. Meta-Labeling ML Gate (Stage 2) ──
+        # ── 4e. Meta-Labeling ML Gate (Stage 2) ──
         # Filters barrier_12bar signals through the LGB+MLP ensemble model.
         # Extracts Stage 1 raw prediction from the Huber brain, assembles the
         # 48-dim named feature dict from the V9 + micro ndarrays, and applies
@@ -1297,9 +1347,9 @@ class StrategyLine:
         )
 
         # ── 5b. Minimum RR guard (skip for shadow — virtual tracking) ──
+        tp_dist = abs(levels["take_profit"] - entry_price)
+        sl_dist = abs(levels["stop_loss"] - entry_price)
         if regime_gate_mode != "shadow":
-            tp_dist = abs(levels["take_profit"] - entry_price)
-            sl_dist = abs(levels["stop_loss"] - entry_price)
             _min_rr = self.config.min_rr_ratio if self.config.min_rr_ratio > 0 else 1.2
             if sl_dist > 0 and tp_dist / sl_dist < _min_rr:
                 return StrategyDecision(
@@ -1374,7 +1424,17 @@ class StrategyLine:
         # COLD exploration bypass: when ConformalOUGate is accumulating its first 50
         # calibration samples, p_win is overridden to 0.50 and this gate is skipped.
         # Risk is bounded by the 0.01 lot volume cap enforced below.
-        if self.config.min_p_win > 0 and _p_win < self.config.min_p_win and not _is_cold_explore:
+        #
+        # Phase C Fix 2: friction-adjusted dynamic breakeven floor.
+        # The net SL/TP distances already include spread_points.  Compute the true
+        # breakeven win rate and add a 2% safety margin so the model must provably
+        # beat the spread cost before taking a position.
+        _effective_min_p_win = self.config.min_p_win
+        if sl_dist > 0 and tp_dist > 0:
+            _breakeven_p_win = sl_dist / (tp_dist + sl_dist)
+            _dynamic_floor = _breakeven_p_win + 0.02
+            _effective_min_p_win = max(self.config.min_p_win, _dynamic_floor)
+        if _effective_min_p_win > 0 and _p_win < _effective_min_p_win and not _is_cold_explore:
             return StrategyDecision(
                 strategy_name=name,
                 magic=self.config.magic,
@@ -1390,7 +1450,7 @@ class StrategyLine:
                 total_count=total_count,
                 regime_mode=regime_gate_mode,
                 venue="live",
-                reason=f"p_win_below_min_{_p_win:.3f}_lt_{self.config.min_p_win}",
+                reason=f"p_win_below_dynamic_floor_{_p_win:.3f}_lt_{_effective_min_p_win:.3f}",
                 entry_z_score=entry_z_score,
                 entry_half_life=entry_half_life,
                 p_win=_p_win,

@@ -523,6 +523,26 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Wrap all exit dispatches with heartbeat watchdog (retry + escalation)",
     )
+    p.add_argument(
+        "--alert",
+        action="store_true",
+        help="Enable LiveAlertHub (rules→circuit breaker→Slack/DingTalk/Log pipeline)",
+    )
+    p.add_argument(
+        "--slack-webhook",
+        default="",
+        help="Slack incoming webhook URL (overrides QUANTOS_SLACK_WEBHOOK_URL env var)",
+    )
+    p.add_argument(
+        "--dingtalk-webhook",
+        default="",
+        help="DingTalk incoming webhook URL (overrides QUANTOS_DINGTALK_WEBHOOK_URL env var)",
+    )
+    p.add_argument(
+        "--dingtalk-secret",
+        default="",
+        help="DingTalk HMAC-SHA256 signing secret (overrides QUANTOS_DINGTALK_SECRET env var)",
+    )
     return p
 
 
@@ -1282,14 +1302,21 @@ def main(argv: list[str] | None = None) -> int:
         try:
             restored = position_manager.load_state(_pos_state_path)
             if restored is not None:
-                # load_state now returns the primary restored position (v2 multi-position format).
                 # Verify ALL restored positions still exist on MT5.
+                # For v3 SSOT positions, backfill physical-state fields from MT5 ground truth.
                 for rt in position_manager.get_all_positions():
                     _rt_ticket = rt.ticket
                     mt5_positions = mt5_worker.positions_get(ticket=_rt_ticket)
                     if mt5_positions and len(mt5_positions) > 0:
                         mp = mt5_positions[0]
                         managed_tickets.add(_rt_ticket)
+                        # Backfill physical-state from MT5 (v3 has side="unknown", entry=0.0)
+                        if rt.side == "unknown" or rt.entry_price == 0.0:
+                            rt.side = "long" if mp.type == 0 else "short"
+                            rt.entry_price = float(mp.price_open)
+                            rt.volume = float(mp.volume)
+                            rt.initial_sl = float(mp.sl) if mp.sl > 0 else float(mp.price_open)
+                            rt.initial_tp = float(mp.tp) if mp.tp > 0 else 0.0
                         # Sync current SL/TP from MT5 (ground truth)
                         rt.current_sl = float(mp.sl) if mp.sl > 0 else rt.current_sl
                         rt.current_tp = float(mp.tp) if mp.tp > 0 else rt.current_tp
@@ -1310,6 +1337,7 @@ def main(argv: list[str] | None = None) -> int:
                                     "highest_r": round(rt.highest_r, 4),
                                     "current_sl": rt.current_sl,
                                     "current_tp": rt.current_tp,
+                                    "format_version": "v3" if rt._v3_consensus_hash else "v2",
                                 },
                                 ensure_ascii=False,
                             ),
@@ -1743,6 +1771,58 @@ def main(argv: list[str] | None = None) -> int:
                 flush=True,
             )
 
+    # ── Initialize LiveAlertHub (unified alerting: rules → circuit breaker → Slack/DingTalk/Log) ──
+    alert_hub: Any = None
+    if args.alert:
+        try:
+            from core.observability.live_alert_hub import LiveAlertHub
+
+            # Read alert thresholds from full YAML config (Phase B: PnL fund-safety)
+            _thresholds: dict[str, float] = {}
+            if args.config:
+                try:
+                    import yaml as _yaml_full
+
+                    with open(args.config, encoding="utf-8") as _fh_full:
+                        _full_cfg = _yaml_full.safe_load(_fh_full)
+                    _alert_cfg = _full_cfg.get("alert", {}) if isinstance(_full_cfg, dict) else {}
+                    _thresholds = (
+                        _alert_cfg.get("thresholds", {}) if isinstance(_alert_cfg, dict) else {}
+                    )
+                except Exception:
+                    pass
+
+            alert_hub = LiveAlertHub(
+                base_dir=args.base_dir,
+                slack_url=args.slack_webhook or "",
+                dingtalk_url=args.dingtalk_webhook or "",
+                dingtalk_secret=args.dingtalk_secret or "",
+                thresholds=_thresholds or None,
+            )
+            print(
+                json.dumps(
+                    {
+                        "event": "alert_hub_initialized",
+                        "time": _utc_iso(),
+                        "circuit_state": alert_hub.circuit_breaker.state.value,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        except Exception as _ah_exc:
+            print(
+                json.dumps(
+                    {
+                        "event": "alert_hub_init_failed",
+                        "time": _utc_iso(),
+                        "error": str(_ah_exc),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+
     # ── Global crash hook: capture ALL exits including C-level crashes ──
     import sys as _sys
     import traceback as _traceback
@@ -1895,7 +1975,40 @@ def main(argv: list[str] | None = None) -> int:
         # consumed by execute_live_cycle at start of cycle N+1.
         _degraded_wakeup = False
 
+        # ── Signal handlers for graceful shutdown (SIGINT / SIGTERM) ──
+        # Registered in main thread per CPython requirement.
+        _shutdown_flag = [False]  # mutable container for nested scope access
+
+        def _on_shutdown_signal(signum: int, frame: Any) -> None:
+            sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
+            if not _shutdown_flag[0]:
+                _shutdown_flag[0] = True
+                print(
+                    json.dumps(
+                        {
+                            "event": "shutdown_signal_received",
+                            "time": _utc_iso(),
+                            "signal": sig_name,
+                            "action": "draining_current_cycle_then_exit",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+
+        _old_sigint_handler = signal.signal(signal.SIGINT, _on_shutdown_signal)
+        _old_sigterm_handler = signal.signal(signal.SIGTERM, _on_shutdown_signal)
+
         while True:
+            if _shutdown_flag[0]:
+                print(
+                    json.dumps(
+                        {"event": "shutdown_graceful_break", "time": _utc_iso()},
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+                break
             try:
                 state, should_continue = execute_live_cycle(
                     config,
@@ -1921,6 +2034,7 @@ def main(argv: list[str] | None = None) -> int:
                     exit_watchdog=exit_watchdog,
                     limit_monitor=limit_monitor,
                     meta_signal_filter=meta_signal_filter,
+                    alert_hub=alert_hub,
                     degraded_wakeup=_degraded_wakeup,
                 )
                 _degraded_wakeup = False  # consumed, reset for next cycle
@@ -2079,12 +2193,12 @@ def main(argv: list[str] | None = None) -> int:
             flush=True,
         )
 
-        # FIX-20260525-025: Temporarily ignore SIGINT during state save to
-        # prevent a second Ctrl+C from interrupting json.dumps()/write_text()
-        # inside pnl_ledger.save() and position state persistence.
-        # All saves use atomic tmp+replace, so even if the process is killed
-        # after the shield lifts, the original file is never corrupted.
+        # FIX-20260525-025 / P0-1: Temporarily ignore SIGINT/SIGTERM during
+        # state save to prevent a second signal from interrupting atomic writes.
+        # All saves use tmp+replace, so even if the process is killed after the
+        # shield lifts, the original file is never corrupted.
         _old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        _old_sigterm = signal.signal(signal.SIGTERM, signal.SIG_IGN)
         try:
             if position_manager is not None and position_manager.has_position():
                 try:
@@ -2162,6 +2276,14 @@ def main(argv: list[str] | None = None) -> int:
                     pass
         finally:
             signal.signal(signal.SIGINT, _old_sigint)
+            signal.signal(signal.SIGTERM, _old_sigterm)
+
+        # ── Shutdown alert hub (护栏6: graceful drain of queued alerts) ──
+        if alert_hub is not None:
+            try:
+                alert_hub.shutdown()
+            except Exception:
+                pass
 
         if mt5_worker is not None:
             mt5_worker.stop()
