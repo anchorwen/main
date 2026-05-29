@@ -879,33 +879,22 @@ def _execute_management_phase(
     # entry price as a fallback so the management phase can still evaluate
     # emergency exit conditions.  The warning event ensures the operator
     # sees the degradation.
-    _price_degraded = False
-    try:
-        if broker is not None:
+    _price_degraded = True  # pre-init: assume degraded
+    mid = bid = ask = float(getattr(pos, "entry_price", 0.0) or 0.0)  # fallback prices
+    if broker is not None:
+        with FaultTolerantContext(
+            level=FaultLevel.DEGRADE,
+            component="ManagementPhase:price_fetch",
+        ):
             mid, bid, ask = broker.fetch_prices(config.symbol)
             state._last_bridge_ack_time = time.time()  # bridge liveness heartbeat
-        else:
-            mid, bid, ask = _mid_and_prices(mt5_worker, config.symbol)
-            if mid > 0:
-                state._last_bridge_ack_time = time.time()
-    except Exception:
-        _price_degraded = True
-        mid = float(getattr(pos, "entry_price", 0.0) or 0.0)
-        bid = mid
-        ask = mid
-        print(
-            json.dumps(
-                {
-                    "event": "management_price_fetch_failed",
-                    "time": _utc_iso(),
-                    "ticket": pos.ticket,
-                    "fallback_entry_price": mid,
-                    "action": "continuing_management_with_fallback",
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
+            _price_degraded = False
+    else:
+        # _mid_and_prices has internal FTC(CRASH) — let it propagate
+        mid, bid, ask = _mid_and_prices(mt5_worker, config.symbol)
+        if mid > 0:
+            state._last_bridge_ack_time = time.time()
+        _price_degraded = False
         if mid <= 0:
             return False  # truly hopeless — no price reference at all
 
@@ -4347,13 +4336,15 @@ def execute_live_cycle(
     mid_price: float | None = None
     _bid: float | None = None
     _ask: float | None = None
-    try:
-        if broker is not None:
+    if broker is not None:
+        with FaultTolerantContext(
+            level=FaultLevel.DEGRADE,
+            component="PriceFetch:broker",
+        ):
             mid_price, _bid, _ask = broker.fetch_prices(config.symbol)
-        elif not config.no_mt5:
-            mid_price, _bid, _ask = _mid_and_prices(mt5_worker, config.symbol)
-    except Exception:
-        pass
+    elif not config.no_mt5:
+        # _mid_and_prices has internal FTC(CRASH) — let it propagate
+        mid_price, _bid, _ask = _mid_and_prices(mt5_worker, config.symbol)
 
     # ── Rolling mid-price buffer (circuit breaker & ER calc) ──
     if mid_price is not None and mid_price > 0:
@@ -5138,7 +5129,10 @@ def execute_live_cycle(
 
     # Vol-targeted position sizing — override fixed volume when risk_budget_usd > 0
     if _effective_risk_budget > 0 and current_atr > 0:
-        try:
+        with FaultTolerantContext(
+            level=FaultLevel.DEGRADE,
+            component="VolumeTarget:compute_position_size",
+        ):
             from core.execution.pre_trade_guards import compute_position_size
 
             dynamic_volume = compute_position_size(
@@ -5150,8 +5144,6 @@ def execute_live_cycle(
                 lot_step=config.lot_step,
             )
             _vol_targeted = True
-        except Exception:
-            pass  # fallback to fixed volume
 
     if config.multi_brain and config.multi_strategy_enabled:
         # ── NEW: Multi-strategy independent evaluation ──
