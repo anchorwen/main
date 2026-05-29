@@ -653,12 +653,10 @@ def _dispatch_managed_close(
             elif state is not None and pnl is not None:
                 _close_dispatched = True
                 # Store engine-calculated PnL for reconciliation fallback
-                try:
+                with log_and_continue(component="ExitWatchdog:PnL_store"):
                     _oe = state.known_open_tickets.get(pos.ticket, {})
                     if _oe:
                         _oe["_engine_close_pnl"] = pnl
-                except Exception:
-                    pass
         except Exception as _wd_exc:
             print(
                 json.dumps(
@@ -4368,15 +4366,13 @@ def execute_live_cycle(
                     _closes = [float(r[4]) for r in _hist_rates]
                     state._mtf_price_service.bootstrap(_closes)
     if mid_price is not None and mid_price > 0 and state._mtf_price_service is not None:
-        try:
+        with log_and_continue(component="MTFPrice:feed_tick"):
             _now_s = int(datetime.now(UTC).timestamp())
             state._mtf_price_service.feed_tick(_now_s, mid_price)
-        except Exception:
-            pass
 
     # ── Tick sanity check ──
     if _bid is not None and _ask is not None and _bid > 0:
-        try:
+        with log_and_continue(component="TickSanity:check"):
             from core.execution.pre_trade_guards import check_tick_sanity
 
             tick_ok = check_tick_sanity(_bid, _ask, config.symbol)
@@ -4395,8 +4391,6 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except Exception:
-            pass
 
     # ── Limit order monitor: check pending orders for spread-aware fills ──
     if state.limit_monitor is not None and state.limit_monitor.has_pending():
@@ -6883,7 +6877,7 @@ def execute_live_cycle(
         state.last_fire = now
 
         # ── Publish dispatch event to message broker (best-effort) ──
-        try:
+        with log_and_continue(component="MessageBroker:publish"):
             from core.observability.message_broker import get_broker
 
             _broker = get_broker("auto")
@@ -6899,8 +6893,6 @@ def execute_live_cycle(
                     "intent_id": out.get("intent_id", ""),
                 },
             )
-        except Exception:
-            pass
 
         # ── Register position for dynamic exit management ──
         dispatch_ok = out.get("status", "") not in ("error", "rejected", "timeout")
