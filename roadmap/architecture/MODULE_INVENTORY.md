@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-29T16:02:58Z
+> **自动生成**: 2026-05-29T16:07:26Z
 > **扫描模块数**: 454
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -446,7 +446,7 @@
 | `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 8 | 317 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 28 | 7331 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 28 | 7296 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 126 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 286 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |

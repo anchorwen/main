@@ -2296,22 +2296,11 @@ def _reconcile_closed_positions(
         return closed_entries
 
     # ── positions_get ──
-    try:
+    with FaultTolerantContext(
+        level=FaultLevel.CRASH,
+        component="MT5_IPC:positions_get:reconciliation",
+    ):
         current_positions = mt5_worker.positions_get(symbol=symbol)
-    except Exception:
-        print(
-            json.dumps(
-                {
-                    "event": "reconciliation_timeout",
-                    "phase": "positions_get",
-                    "symbol": symbol,
-                    "reason_code": "EXEC_RECON_TIMEOUT",
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
-        return closed_entries
 
     current_tickets = {p.ticket for p in (current_positions or [])}
 
@@ -2320,39 +2309,11 @@ def _reconcile_closed_positions(
             continue
 
         deals = None
-        try:
+        with FaultTolerantContext(
+            level=FaultLevel.CRASH,
+            component="MT5_IPC:history_deals_get:reconciliation",
+        ):
             deals = mt5_worker.history_deals_get(position=ticket)
-        except Exception:
-            print(
-                json.dumps(
-                    {
-                        "event": "reconciliation_timeout",
-                        "phase": "history_deals_get",
-                        "ticket": ticket,
-                        "reason_code": "EXEC_RECON_TIMEOUT",
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-
-        if not deals:
-            time.sleep(0.2)
-            try:
-                deals = mt5_worker.history_deals_get(position=ticket)
-            except Exception:
-                print(
-                    json.dumps(
-                        {
-                            "event": "reconciliation_timeout",
-                            "phase": "history_deals_get_retry",
-                            "ticket": ticket,
-                            "reason_code": "EXEC_RECON_TIMEOUT",
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
 
         close_price = None
         close_time = None
@@ -4188,8 +4149,12 @@ def execute_live_cycle(
     # filtering so close journal entries are created — otherwise they are silently
     # discarded and the trade journal has a permanent gap (no close entry).
     if state.loop_iteration == 1 and state.known_open_tickets and not config.no_mt5:
-        try:
+        with FaultTolerantContext(
+            level=FaultLevel.CRASH,
+            component="MT5_IPC:positions_get:startup_reconciliation",
+        ):
             _positions = mt5_worker.positions_get(symbol=config.symbol) or []
+        try:
             _open_tickets = {p.ticket for p in _positions}
             _gone_tickets = set(state.known_open_tickets.keys()) - _open_tickets
             if _gone_tickets:
