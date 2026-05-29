@@ -9,6 +9,8 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING, Any
 
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
+
 if TYPE_CHECKING:
     from core.execution.mt5_worker import MT5Worker
 
@@ -92,18 +94,23 @@ def _bootstrap_regime_gate(
     Called once on first cycle to fill the ADX buffer. Returns True if
     enough bars were loaded for M5 ADX.
     """
-    try:
+    m5_rates = None
+    with FaultTolerantContext(
+        level=FaultLevel.CRASH, component="MT5_IPC:copy_rates_from_pos:bootstrap_regime_m5"
+    ):
         m5_rates = worker.copy_rates_from_pos(symbol, MT5_TIMEFRAME_M5, 0, 50, timeout=timeout)
-        if m5_rates is not None and len(m5_rates) >= 15:
-            gate.feed_m5_bars_batch(m5_rates)
+    if m5_rates is not None and len(m5_rates) >= 15:
+        gate.feed_m5_bars_batch(m5_rates)
 
+    h1_rates = None
+    with FaultTolerantContext(
+        level=FaultLevel.CRASH, component="MT5_IPC:copy_rates_from_pos:bootstrap_regime_h1"
+    ):
         h1_rates = worker.copy_rates_from_pos(symbol, MT5_TIMEFRAME_H1, 0, 60, timeout=timeout)
-        if h1_rates is not None and len(h1_rates) >= 20:
-            gate.feed_h1_bars_batch(h1_rates)
+    if h1_rates is not None and len(h1_rates) >= 20:
+        gate.feed_h1_bars_batch(h1_rates)
 
-        return gate.is_ready
-    except Exception:
-        return False
+    return gate.is_ready
 
 
 def _feed_regime_gate_cycle(
@@ -114,13 +121,18 @@ def _feed_regime_gate_cycle(
     Called every cycle. Only the most recent bar is added; duplicates are
     harmless because ADX uses the full buffer.
     """
-    try:
+    m5_bar = None
+    with FaultTolerantContext(
+        level=FaultLevel.CRASH, component="MT5_IPC:copy_rates_from_pos:feed_regime_m5"
+    ):
         m5_bar = worker.copy_rates_from_pos(symbol, MT5_TIMEFRAME_M5, 0, 1, timeout=timeout)
-        if m5_bar is not None and len(m5_bar) == 1:
-            gate.feed_m5_bar(m5_bar[0]["high"], m5_bar[0]["low"], m5_bar[0]["close"])
+    if m5_bar is not None and len(m5_bar) == 1:
+        gate.feed_m5_bar(m5_bar[0]["high"], m5_bar[0]["low"], m5_bar[0]["close"])
 
+    h1_bar = None
+    with FaultTolerantContext(
+        level=FaultLevel.CRASH, component="MT5_IPC:copy_rates_from_pos:feed_regime_h1"
+    ):
         h1_bar = worker.copy_rates_from_pos(symbol, MT5_TIMEFRAME_H1, 0, 1, timeout=timeout)
-        if h1_bar is not None and len(h1_bar) == 1:
-            gate.feed_h1_bar(h1_bar[0]["high"], h1_bar[0]["low"], h1_bar[0]["close"])
-    except Exception:
-        pass
+    if h1_bar is not None and len(h1_bar) == 1:
+        gate.feed_h1_bar(h1_bar[0]["high"], h1_bar[0]["low"], h1_bar[0]["close"])

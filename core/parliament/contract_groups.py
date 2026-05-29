@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from core.runtime.fault_handler import log_and_continue
 from core.schemas.trading_contracts import ConsensusResult, DegradedResult, Direction
 
 # ── Contract group definitions ────────────────────────────────────────────
@@ -234,56 +235,27 @@ def get_group_for_proposal(proposal: Any) -> dict[str, Any] | None:
     # 2. brain_id → BrainRegistry → contract_group
     bid = getattr(proposal, "brain_id", None)
     if bid:
-        try:
+        with log_and_continue(component="brain_group_resolution:registry_probe"):
             from core.brains.brain_registry import BrainRegistry
 
             registry = BrainRegistry.instance()
             entry = registry.get(bid)
             if entry and entry.contract_group in _GROUP_BY_NAME:
                 return _GROUP_BY_NAME[entry.contract_group]
-        except Exception as _reg_exc:
-            import logging as _lg
-
-            _lg.getLogger(__name__).warning(
-                "brain_group_resolution_registry_failed brain_id=%s error=%s",
-                bid,
-                f"{type(_reg_exc).__name__}: {str(_reg_exc)[:200]}",
-            )
 
     # 3. Legacy brain_type probe
     brain_type = ""
-    try:
+    with log_and_continue(component="brain_group_resolution:brain_type_probe"):
         brain_type = getattr(proposal, "brain_type", "")
-    except Exception as _bt1_exc:
-        import logging as _lg
-
-        _lg.getLogger(__name__).warning(
-            "brain_group_resolution_brain_type_failed error=%s",
-            f"{type(_bt1_exc).__name__}: {str(_bt1_exc)[:200]}",
-        )
     if not brain_type:
-        try:
+        with log_and_continue(component="brain_group_resolution:source_type_probe"):
             src = getattr(proposal, "source", None)
             if src is not None:
                 brain_type = getattr(src, "brain_type", "")
-        except Exception as _bt2_exc:
-            import logging as _lg
-
-            _lg.getLogger(__name__).warning(
-                "brain_group_resolution_source_type_failed error=%s",
-                f"{type(_bt2_exc).__name__}: {str(_bt2_exc)[:200]}",
-            )
     if not brain_type:
-        try:
+        with log_and_continue(component="brain_group_resolution:metadata_type_probe"):
             meta = getattr(proposal, "metadata", None) or {}
             brain_type = meta.get("model_type", "")
-        except Exception as _bt3_exc:
-            import logging as _lg
-
-            _lg.getLogger(__name__).warning(
-                "brain_group_resolution_metadata_type_failed error=%s",
-                f"{type(_bt3_exc).__name__}: {str(_bt3_exc)[:200]}",
-            )
     return _TYPE_TO_GROUP.get(brain_type) if brain_type else None
 
 

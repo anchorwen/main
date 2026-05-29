@@ -37,6 +37,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260529-042 | 2026-05-29 | execution-orders, runtime-live | Phase C Swing三刀手术: Fix 1 hard multi-TF trend filter (H4+H1 aligned→block counter-trend for swing family). Fix 2 friction-adjusted dynamic breakeven p_win (sl_dist/(tp_dist+sl_dist)+0.02 safety margin replacing static min_p_win). Fix 3 Price-Confirmation Shield (R>0.5+SL trailing→veto confidence_decay exit). | RC-06 |
 | FIX-20260529-043 | 2026-05-29 | runtime-live, execution-orders, protocol-governance | PR#1 Life Support: (1) SIGTERM graceful shutdown + warm-start buffer serialization in live_intent_loop.py (signal registered in main thread per CPython requirement, SIGTERM shield during atomic writes). (2) XAUUSDc physical price validation in market_ingress.py (NaN/Inf/zero/bounds 1000-4000/spread explosion detection, crash-on-bad-data). (3) MetaSignalFilter fail-closed: filter crash now returns passed=False/p_win=0.0 instead of passed=True/p_win=0.5. (4) GovernanceService thread-safety: RLock protecting all _brain_states/_transition_log mutations, atomic tmp+os.replace save. | RC-04, RC-07 |
 | FIX-20260529-044 | 2026-05-29 | execution-orders, monitor-dashboard | PR#2 Reconnection & Zombie Defense: (1) mt5_bridge_worker.py — MT5 heartbeat via terminal_info() every 30s, exponential backoff reconnect (1s→2s→4s→8s→16s→30s), 5 consecutive heartbeat failures → sys.exit(1), auto symbol_select after reconnect. (2) mt5_worker.py — reconnect() exponential backoff with retry counter + reset on success. (3) mt5_worker.py — command queue bounded to maxsize=1000, put_nowait with RuntimeError on Full. (4) mt5_worker.py + live_alert_hub.py — CB→AlertHub cross-propagation: MT5Worker CB OPEN → alert_hub.send_critical("mt5_circuit_open"). LiveAlertHub.send_critical() added as direct injection API. mt5_worker._mt5_initialize() auto-selects XAUUSDc after reconnect. | RC-04, RC-06 |
+| FIX-20260529-051 | 2026-05-30 | runtime-live, execution-orders, protocol-parliament | Last Mile Protocol Phase 2 — small-file FTC conversion: contract_groups.py (4 LOG → log_and_continue), exit_watchdog.py (1 LOG → log_and_continue), strategy_line.py (1 DEGRADE → FTC), market_ingress.py (4 MT5 IPC → FTC(CRASH)), mt5_bridge_worker.py (1 MT5 IPC → FTC(CRASH)). ~25 sites now use FTC across 8 files. | RC-07 |
 | FIX-20260529-050 | 2026-05-29 | runtime-live, execution-orders | Last Mile Protocol — FTC paradigm unification: (1) live_cycle.py MT5 IPC sites (positions_get, account_info, copy_rates_from_pos, history_deals_get) → FTC(CRASH) with variable pre-initialization guard. (2) fault_handler.py: variable scope leakage warning added to docstring, "Crask-loop" typo fixed. (3) live_intent_loop.py MT5 IPC recovery/reconstruction/audit sites → FTC(CRASH) with pre-init. (4) FIX-047 blueprint gap closed in execution_orders.md. | RC-07 |
 | FIX-20260529-049 | 2026-05-29 | runtime-live, execution-orders | Architect Defense: (1) FaultTolerantContext.__exit__ never swallows KeyboardInterrupt/SystemExit. (2) Jitter (random 0-1s) added to MT5 reconnect backoff sleep to prevent synchronized retry bursts. (3) Verified v2→v3 backward compatibility — .get() throughout load_state. | RC-07, RC-04 |
 | FIX-20260529-048 | 2026-05-29 | runtime-live, execution-orders, protocol-parliament | PR#3 Phase 2: 19 remaining CRITICAL exception sites classified — live_cycle.py (1 CRASH + 3 DEGRADE + 8 LOG), strategy_line.py (1 DEGRADE), contract_groups.py (4 LOG), exit_watchdog.py (1 LOG). The most dangerous silent-pass sites now emit structured events. | RC-07 |
@@ -976,6 +977,22 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-07 (missing-validation — 19 exception sites silently swallowing errors on critical paths with no traceback, no event emission, and no fault-level classification. Same class as PR#3 Phase 1 sites.)
 - **Verification**: verify.py --full: mypy + ruff + blueprint compliance + 2702 pytest all PASS. Remaining ~40 CRITICAL + ~150 MEDIUM/LOW sites deferred — see [[deferred-resilience-remaining]].
 - **Remaining gap**: ~40 additional CRITICAL sites in live_cycle.py (MT5 IPC retry paths, remaining brain inference loops, a few position management handlers) still use silent pass. These are tracked in [[deferred-resilience-remaining]] and should be classified the next time those code paths are touched.
+
+### FIX-20260529-051
+
+- **Date**: 2026-05-30
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live, execution-orders, protocol-parliament
+- **Files**: core/parliament/contract_groups.py, core/execution/exit_watchdog.py, core/execution/strategy_line.py, core/runtime/market_ingress.py, scripts/mt5_bridge_worker.py
+- **Description**: Last Mile Protocol Phase 2 — small-file FTC paradigm conversion:
+  - contract_groups.py: 4 LOG sites (registry_probe, brain_type_probe, source_type_probe, metadata_type_probe) → `log_and_continue()`
+  - exit_watchdog.py: 1 LOG site (position_verification) → `log_and_continue()`
+  - strategy_line.py: 1 DEGRADE site (DynamicBrainWeighter.apply_weights) → `FaultTolerantContext(DEGRADE)`
+  - market_ingress.py: 4 MT5 IPC sites (bootstrap_regime M5/H1, feed_regime M5/H1) → `FaultTolerantContext(CRASH)` with pre-init
+  - mt5_bridge_worker.py: 1 MT5 IPC site (verify_position_exists) → `FaultTolerantContext(CRASH)` with pre-init
+- **Root Cause**: RC-07 — 4 different exception handling styles (FTC, print/json, logging.error, logging.warning) across the codebase create confusion and make it impossible to audit fault handling globally. Unifying on FTC as the sole pattern enables machine-parseable fault events.
+- **Verification**: verify.py --quick: mypy + ruff PASS. All modules maintain zero mypy baseline.
 
 ### FIX-20260529-050
 

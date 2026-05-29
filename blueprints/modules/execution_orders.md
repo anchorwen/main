@@ -59,6 +59,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260529-051 | 2026-05-30 | cursor-agent | — | Last Mile Protocol Phase 2: exit_watchdog.py LOG → log_and_continue(), strategy_line.py DEGRADE → FTC(DEGRADE), mt5_bridge_worker.py MT5 IPC → FTC(CRASH), market_ingress.py 4 MT5 IPC → FTC(CRASH). | RC-07 |
 | FIX-20260529-049 | 2026-05-29 | cursor-agent | — | Architect Defense 2: jitter added to MT5 reconnect backoff sleep (random.uniform(0,1.0)s) in mt5_worker.py + mt5_bridge_worker.py — prevents synchronized retry bursts that trigger broker-side DDoS rate limiting. | RC-04 |
 | FIX-20260529-048 | 2026-05-29 | cursor-agent | — | PR#3 Phase 2: strategy_line.py DynamicBrainWeighter DEGRADE (weight fallback→1.0 logged) + exit_watchdog.py position_verification LOG (MT5 verify failure logged before retry loop). | RC-07 |
 | FIX-20260529-047 | 2026-05-29 | cursor-agent | — | Day 5+ Strangler Fig: extracted `_run_scheduled_daily_ops` (~155 lines) from live_cycle.py → core/runtime/daily_ops_scheduler.py. Thin 3-line delegation wrapper left in live_cycle.py. Orphaned _save_daily_ops_state removed. | RC-08 |

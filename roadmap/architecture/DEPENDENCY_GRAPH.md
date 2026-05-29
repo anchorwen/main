@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-05-29T16:07:26Z
+> **自动生成**: 2026-05-29T16:27:49Z
 
 ## Package-Level Dependencies
 
@@ -173,7 +173,7 @@
 - `dynamic_sl_tp.py` → (无内部依赖)
 - `execution_manager.py` → `core.contracts.exceptions`, `core.observability.metric_names`
 - `execution_queue.py` → `core.execution.live_order_sender`
-- `exit_watchdog.py` → (无内部依赖)
+- `exit_watchdog.py` → `core.runtime.fault_handler`
 - `fill_simulator.py` → `core.contracts.ids`, `core.execution.gateway_contracts`
 - `fix_contracts.py` → (无内部依赖)
 - `fix_execution_mapper.py` → `core.contracts.ids`, `core.execution.fix_contracts`, `core.execution.gateway_contracts`, `core.execution.order_state_machine`
@@ -204,7 +204,7 @@
 - `schema_versions.py` → (无内部依赖)
 - `statarb_strategy.py` → `core.execution.strategy_line`
 - `strategy_budget.py` → (无内部依赖)
-- `strategy_line.py` → `core.brains.services.dynamic_brain_weighter`, `core.execution.dynamic_sl_tp`, `core.execution.kelly_sizer`, `core.execution.meta_pipeline`, `core.execution.pre_trade_guards`, `core.parliament.contract_groups`, `core.runtime.shadow_recorder`
+- `strategy_line.py` → `core.brains.services.dynamic_brain_weighter`, `core.execution.dynamic_sl_tp`, `core.execution.kelly_sizer`, `core.execution.meta_pipeline`, `core.execution.pre_trade_guards`, `core.parliament.contract_groups`, `core.runtime.fault_handler`, `core.runtime.shadow_recorder`
 - `strategy_type.py` → (无内部依赖)
 - `swing_strategy.py` → `core.execution.strategy_line`
 - `trail_stop_engine.py` → `core.execution.position_manager`
@@ -330,7 +330,7 @@
 
 ### `core/parliament/`
 
-- `contract_groups.py` → `core.brains.brain_registry`, `core.brains.services.ab_test`, `core.schemas.trading_contracts`
+- `contract_groups.py` → `core.brains.brain_registry`, `core.brains.services.ab_test`, `core.runtime.fault_handler`, `core.schemas.trading_contracts`
 - `parliament_service.py` → `core.contracts.domain.decision_candidate`, `core.contracts.ids`, `core.parliament.contract_groups`, `core.parliament.schema_versions`
 - `schema_versions.py` → (无内部依赖)
 
@@ -383,7 +383,7 @@
 - `gate_audit_recorder.py` → (无内部依赖)
 - `integration_contracts.py` → `core.execution.gateway_contracts`, `core.execution.quality_contracts`, `core.runtime.approval_contracts`, `core.strategies.contracts`
 - `live_cycle.py` → `core.brains.adapters.params_brain_adapter`, `core.brains.brain_registry`, `core.brains.services.dynamic_brain_weighter`, `core.contracts.strategy_magic`, `core.deployment.feature_update_producer`, `core.execution.barrier_strategy`, `core.execution.capital_allocator`, `core.execution.conformal_calibrator`, `core.execution.conformal_ou_gate`, `core.execution.correlation_sizer`, `core.execution.execution_queue`, `core.execution.live_order_sender`, `core.execution.market_efficiency`, `core.execution.meta_filter_gate`, `core.execution.meta_pipeline`, `core.execution.micro_strategy`, `core.execution.mt5_worker`, `core.execution.portfolio_risk`, `core.execution.pre_trade_guards`, `core.execution.reentry_guard`, `core.execution.regime_gate`, `core.execution.statarb_strategy`, `core.execution.strategy_budget`, `core.execution.strategy_line`, `core.execution.swing_strategy`, `core.execution.trail_stop_engine`, `core.features.schemas.registry`, `core.features.schemas.v9_institutional_schema`, `core.infrastructure.distributed_lock`, `core.ledger.storage.jsonl_ledger_store`, `core.market.calendar`, `core.market.mtf_price_service`, `core.observability.message_broker`, `core.parliament.contract_groups`, `core.runtime.daily_ops_scheduler`, `core.runtime.fault_handler`, `core.runtime.gate_audit_recorder`, `core.runtime.market_ingress`, `core.runtime.order_dispatch`, `core.runtime.shadow_recorder`, `core.runtime.signal_health`, `core.runtime.signal_pipeline`
-- `market_ingress.py` → `core.execution.mt5_worker`
+- `market_ingress.py` → `core.execution.mt5_worker`, `core.runtime.fault_handler`
 - `order_dispatch.py` → `apps.engine.runtime_loop`, `core.brains.brain_registry`, `core.contracts.domain.decision_intent`, `core.contracts.domain.system_mode_state`, `core.contracts.enums`, `core.contracts.ids`, `core.state.schema_versions`
 - `schema_versions.py` → (无内部依赖)
 - `shadow_recorder.py` → `core.contracts.domain.decision_record`, `core.contracts.ids`, `core.ledger.schema_versions`, `core.ledger.storage.jsonl_ledger_store`
@@ -470,7 +470,7 @@
 - `live_stack_diagnostic.py` → `scripts.live_dispatch_policy`, `scripts.send_live_order`
 - `market_calendar.py` → `core.market.calendar`
 - `mt5_bridge_healthcheck.py` → (无内部依赖)
-- `mt5_bridge_worker.py` → `core.contracts.strategy_magic`, `core.infrastructure.distributed_lock`, `core.protocol.live_execution_contract`
+- `mt5_bridge_worker.py` → `core.contracts.strategy_magic`, `core.infrastructure.distributed_lock`, `core.protocol.live_execution_contract`, `core.runtime.fault_handler`
 - `mt5_positions_snapshot.py` → (无内部依赖)
 - `mt5_spread_probe.py` → (无内部依赖)
 - `online_feedback_hook.py` → `core.brains.adapters.online_learner_adapter`, `core.feedback.online_feedback_hook`

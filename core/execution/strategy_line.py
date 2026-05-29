@@ -17,6 +17,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
+
 # ── Bandit sizing constants (v3.1) ──
 
 SIGMOID_Z_MID = 1.75  # Z-score midpoint for sigmoid
@@ -572,27 +574,22 @@ class StrategyLine:
         if tracker is not None:
             from core.brains.services.dynamic_brain_weighter import DynamicBrainWeighter
 
-            try:
-                weighter = DynamicBrainWeighter(tracker, pnl_store=pnl_ledger)
-                for b_info in self.brains:
-                    brain_id = str(b_info.get("brain_id", ""))
-                    if brain_id:
-                        weighter.set_brain_metadata(
-                            brain_id,
-                            {
-                                "contract_group": b_info.get("contract_group", ""),
-                                "feature_schema": b_info.get("feature_schema", ""),
-                            },
-                        )
+            weighter = DynamicBrainWeighter(tracker, pnl_store=pnl_ledger)
+            for b_info in self.brains:
+                brain_id = str(b_info.get("brain_id", ""))
+                if brain_id:
+                    weighter.set_brain_metadata(
+                        brain_id,
+                        {
+                            "contract_group": b_info.get("contract_group", ""),
+                            "feature_schema": b_info.get("feature_schema", ""),
+                        },
+                    )
+            with FaultTolerantContext(
+                level=FaultLevel.DEGRADE,
+                component="DynamicBrainWeighter:apply_weights",
+            ):
                 weighter.apply_weights(proposals)
-            except Exception as _dw_exc:
-                import logging as _lg
-
-                _lg.getLogger(__name__).error(
-                    "dynamic_brain_weighter_failed strategy=%s error=%s level=DEGRADE",
-                    name,
-                    f"{type(_dw_exc).__name__}: {str(_dw_exc)[:200]}",
-                )  # fallback to default weights (1.0)
 
         # ── 3c. Minimum valid brains gate ──
         # Count brains that produced a non-neutral directional signal AND

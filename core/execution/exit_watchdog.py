@@ -36,6 +36,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import log_and_continue
+
 # -- Constants --
 
 MAX_RETRIES = 5  # total retry attempts before escalation
@@ -162,7 +164,7 @@ class ExitWatchdog:
         # in MT5 (MIA).  Otherwise the watchdog exhausts all retries against
         # a nonexistent position and fires a false CRITICAL alert.
         if get_position_open is not None:
-            try:
+            with log_and_continue(component="ExitWatchdog:position_verification"):
                 if not get_position_open(position_ticket):
                     return ExitWatchdogResult(
                         success=True,
@@ -173,14 +175,6 @@ class ExitWatchdog:
                         attempts=[],
                         alerts=[],
                     )
-            except Exception as _ver_exc:
-                import logging as _lg
-
-                _lg.getLogger(__name__).warning(
-                    "position_verification_failed ticket=%s error=%s",
-                    position_ticket,
-                    f"{type(_ver_exc).__name__}: {str(_ver_exc)[:200]}",
-                )  # verification failure → proceed with normal retry loop
 
         for attempt_n in range(1, self.max_retries + 1):
             elapsed = time.monotonic() - start

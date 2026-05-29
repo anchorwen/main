@@ -24,6 +24,7 @@ from core.protocol.live_execution_contract import (
     execution_route,
     normalize_action,
 )
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -193,11 +194,13 @@ def _should_retry(retcode: int, reason: str) -> bool:
 
 def _verify_position_exists(mt5: Any, ticket: int) -> bool:
     """Post-fill check: confirm the position actually exists after mt5.order_send()."""
-    try:
+    positions = None
+    with FaultTolerantContext(
+        level=FaultLevel.CRASH,
+        component="MT5_IPC:positions_get:verify_exists",
+    ):
         positions = mt5.positions_get(ticket=ticket)
-        return positions is not None and len(positions) > 0
-    except Exception:
-        return False
+    return positions is not None and len(positions) > 0
 
 
 def _normalize_side(value: Any) -> str:

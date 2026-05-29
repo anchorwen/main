@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-29T16:07:26Z
+> **自动生成**: 2026-05-29T16:27:49Z
 > **扫描模块数**: 454
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -201,7 +201,7 @@
 | `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 244 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 180 | — | |
 | `execution_queue.py` | ✅ active | QueuedDecision, DispatchResult, ExecutionQueue | 4 | 378 | — | |
-| `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 8 | 491 | — | |
+| `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 8 | 485 | — | |
 | `fill_simulator.py` | ✅ active | FillSimulationConfig, FillSimulator | 8 | 125 | — | |
 | `fix_contracts.py` | ✅ active | FixSessionConfig, FixMessage, FixExecutionReport | 4 | 69 | — | |
 | `fix_execution_mapper.py` | ✅ active | FixExecutionReportMapper | 5 | 75 | — | |
@@ -232,7 +232,7 @@
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 64 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 9 | 248 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 14 | 2069 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 14 | 2066 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 4 | 128 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 7 | 227 | — | |
@@ -386,7 +386,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `contract_groups.py` | ✅ active | ContractGroupConsensus, ABGroupRouter | 15 | 744 | — | |
+| `contract_groups.py` | ✅ active | ContractGroupConsensus, ABGroupRouter | 15 | 716 | — | |
 | `parliament_service.py` | ✅ active | ParliamentService | 11 | 299 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 
@@ -447,7 +447,7 @@
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 28 | 7296 | — | |
-| `market_ingress.py` | ✅ active | — | 5 | 126 | — | |
+| `market_ingress.py` | ✅ active | — | 5 | 138 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 286 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
 | `shadow_recorder.py` | ✅ active | — | 8 | 313 | — | |
@@ -550,7 +550,7 @@
 | `live_stack_diagnostic.py` | ✅ active | — | 5 | 204 | — | |
 | `market_calendar.py` | ⬜ empty | — | 0 | 13 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 23 | 873 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 23 | 876 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 97 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 65 | — | |
 | `online_feedback_hook.py` | ✅ active | — | 2 | 126 | — | |
