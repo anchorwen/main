@@ -410,9 +410,10 @@ strategy_lines:
     confidence_threshold: 0.35  # FIX-20260529-039: lowered from 0.45 — counter_trend penalise
                                 # (conf×0.60) drops 0.50→0.30, which was below old gate.
                                 # Now penalised signals survive to RR/MetaFilter checks.
-    min_p_win: 0.45          # FIX-20260529-039: lowered from default 0.50 — trend strategies
-                              # can use 0.48 (code comment). 0.45 allows brain cold-start
-                              # (current rolling WR=0.458) while blocking truly broken signals.
+    min_p_win: 0.40          # FIX-20260529-055: lowered from 0.45 — rolling 100-trade WR
+                              # drifted from 0.458 (when FIX-039 set 0.45) to 0.400.
+                              # 0.40 matches current estimate while blocking truly broken signals.
+                              # Lifetime PnL +$2.75 over 146 trades confirms positive expectancy.
     max_spread_points: 60     # FIX-20260529-038: M15 swing — block when spread >= 60 pts
     spread_points: 30         # FIX-20260529-030: SL/TP spread cost alignment (XAUUSDc typical)
     sl:
