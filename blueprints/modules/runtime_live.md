@@ -75,6 +75,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260529-049 | 2026-05-29 | cursor-agent | — | Architect Defense 1+3: FaultTolerantContext.__exit__ KeyboardInterrupt/SystemExit guard (never swallow system signals), verified v2→v3 backward compatibility (.get() throughout load_state). | RC-07 |
 | FIX-20260529-048 | 2026-05-29 | cursor-agent | — | PR#3 Phase 2: 12 remaining CRITICAL exception sites classified in live_cycle.py — 1 CRASH (pos_state_save_mia_close), 3 DEGRADE (management_brain_inference, daily_feature_provider, capital_allocator), 8 LOG (magic attribution x2, mia_deal_enrichment, pnl_alert_context, alert_hub_dispatch, regime_detector_update, ou_params_computation, reconciliation x2). | RC-07 |
 | FIX-20260529-047 | 2026-05-29 | cursor-agent | — | PR#5 Strangler Fig: extracted _run_scheduled_daily_ops (~155 lines) → core/runtime/daily_ops_scheduler.py. live_cycle.py wrapper reduced to 3-line delegation. Removed orphaned _save_daily_ops_state. | RC-06 |
 | FIX-20260529-046 | 2026-05-29 | cursor-agent | — | PR#4 SSOT State Slimming: live_intent_loop.py v3 recovery — when restored positions have side="unknown"/entry_price=0.0 (v3 intent-only), backfills physical-state fields from MT5 ground truth (side/entry_price/volume/initial_sl/initial_tp). JSON log includes format_version field. | RC-06 |

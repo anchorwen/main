@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import shutil
 import sys
 import time
@@ -698,7 +699,7 @@ def _reconnect_mt5(mt5_module: Any, terminal_path: str) -> bool:
             ),
             flush=True,
         )
-        time.sleep(delay)
+        time.sleep(delay + random.uniform(0, 1.0))  # jitter: break rate-limit sync
         try:
             mt5_module.shutdown()
         except Exception:

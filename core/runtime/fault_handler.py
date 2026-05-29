@@ -174,6 +174,12 @@ class FaultTolerantContext:
         if exc_val is None:
             return False  # no exception → normal exit
 
+        # Absolute guard: never swallow system exit signals.
+        # KeyboardInterrupt (SIGINT) and SystemExit (sys.exit) must always
+        # propagate so SIGTERM graceful shutdown and crash-loop exit(42) work.
+        if isinstance(exc_val, KeyboardInterrupt | SystemExit):
+            return False
+
         if self.level == FaultLevel.IGNORE:
             self.exception = exc_val
             return True  # swallow

@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-29T14:22:49Z
+> **自动生成**: 2026-05-29T14:44:14Z
 > **扫描模块数**: 454
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -219,7 +219,7 @@
 | `meta_signal_filter.py` | ✅ active | FilterResult, MetaSignalFilter | 19 | 900 | — | |
 | `micro_strategy.py` | ✅ active | MicroStrategy | 1 | 85 | — | |
 | `mt5_broker_adapter.py` | ✅ active | MT5BrokerAdapter | 11 | 145 | — | |
-| `mt5_worker.py` | ✅ active | MT5Worker | 20 | 403 | — | |
+| `mt5_worker.py` | ✅ active | MT5Worker | 20 | 404 | — | |
 | `order_state_machine.py` | ✅ active | OrderStateMachine | 9 | 101 | — | |
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 529 | — | |
@@ -443,7 +443,7 @@
 | `execution_gates.py` | ✅ active | RuntimeRiskGate, RuntimeGovernanceGate, RuntimeExecutionApprovalChain | 6 | 107 | — | |
 | `execution_gateway_router.py` | ✅ active | ExecutionGatewayRouter | 5 | 30 | — | |
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
-| `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 8 | 290 | — | |
+| `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 8 | 296 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 28 | 7329 | — | |
@@ -550,7 +550,7 @@
 | `live_stack_diagnostic.py` | ✅ active | — | 5 | 204 | — | |
 | `market_calendar.py` | ⬜ empty | — | 0 | 13 | — | |
 | `mt5_bridge_healthcheck.py` | ✅ active | — | 6 | 153 | — | |
-| `mt5_bridge_worker.py` | ✅ active | — | 23 | 872 | — | |
+| `mt5_bridge_worker.py` | ✅ active | — | 23 | 873 | — | |
 | `mt5_positions_snapshot.py` | ✅ active | — | 4 | 97 | — | |
 | `mt5_spread_probe.py` | ✅ active | — | 1 | 65 | — | |
 | `online_feedback_hook.py` | ✅ active | — | 2 | 126 | — | |

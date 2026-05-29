@@ -59,6 +59,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260529-049 | 2026-05-29 | cursor-agent | — | Architect Defense 2: jitter added to MT5 reconnect backoff sleep (random.uniform(0,1.0)s) in mt5_worker.py + mt5_bridge_worker.py — prevents synchronized retry bursts that trigger broker-side DDoS rate limiting. | RC-04 |
 | FIX-20260529-048 | 2026-05-29 | cursor-agent | — | PR#3 Phase 2: strategy_line.py DynamicBrainWeighter DEGRADE (weight fallback→1.0 logged) + exit_watchdog.py position_verification LOG (MT5 verify failure logged before retry loop). | RC-07 |
 | FIX-20260529-046 | 2026-05-29 | cursor-agent | — | PR#4 SSOT State Slimming: position_manager.py save_state() v3 — 4 intent fields (cycles_held/breakeven_triggered/partial_tp_done/brain_consensus_hash) replacing ~27-field v2. MT5 authoritative for physical state. load_state() supports v1/v2/v3 backward-compat. live_intent_loop.py v3 recovery backfills physical fields from MT5 positions_get. | RC-06 |
 | FIX-20260529-045 | 2026-05-29 | cursor-agent | — | PR#3 Layered Crash: (1) strategy_line.py — PnL record_signal silent pass→logger.debug with traceback. (2) exit_watchdog.py — 2× L2 forced liquidation failures: silent pass→logger.critical + alert.append. Both sites now capture exception type + full traceback. | RC-06, RC-07 |

@@ -15,6 +15,7 @@ Usage::
 from __future__ import annotations
 
 import queue
+import random
 import threading
 import time
 from concurrent.futures import Future
@@ -130,7 +131,7 @@ class MT5Worker:
             delay = self._reconnect_backoff[
                 min(self._reconnect_attempt, len(self._reconnect_backoff) - 1)
             ]
-            time.sleep(delay)
+            time.sleep(delay + random.uniform(0, 1.0))  # jitter: break rate-limit sync
             ok = self._submit("_reconnect", self._mt5_init_kwargs, timeout=timeout)
             if ok:
                 self._reconnect_attempt = 0
