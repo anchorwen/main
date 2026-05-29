@@ -4976,21 +4976,25 @@ def execute_live_cycle(
 
         # Compute microstructure 9-feature vector for Transformer/XGBoost brains
         if micro_feature_computer is not None and micro_feature_adapter is not None:
-            try:
+            micro_sequences = {}
+            with FaultTolerantContext(
+                level=FaultLevel.DEGRADE,
+                component="FeatureCompute:micro_sequences",
+            ):
                 micro_sequences = micro_feature_computer.compute_all_sequences(32)
-            except Exception:
-                pass
-            try:
+            micro_feature_dict = {}
+            micro_feature_vector = np.zeros(
+                _schema_dim("v4.3_microstructure_9"), dtype=np.float64
+            )
+            with FaultTolerantContext(
+                level=FaultLevel.DEGRADE,
+                component="FeatureCompute:micro_features",
+            ):
                 micro_features = micro_feature_computer.compute_all()
                 micro_feature_dict = micro_features
                 micro_feature_vector = micro_feature_adapter.build_model_input(
                     micro_features
                 ).ravel()
-            except Exception:
-                micro_feature_dict = {}
-                micro_feature_vector = np.zeros(
-                    _schema_dim("v4.3_microstructure_9"), dtype=np.float64
-                )
         else:
             micro_feature_vector = np.zeros(_schema_dim("v4.3_microstructure_9"), dtype=np.float64)
 
@@ -5110,34 +5114,27 @@ def execute_live_cycle(
             )
 
     # ── Daily D1 features for swing brains ──
-    daily_feature_vector: Any = None
+    daily_feature_vector: Any = None  # pre-initialised for DEGRADE
     if daily_feature_provider is not None:
-        try:
+        with FaultTolerantContext(
+            level=FaultLevel.DEGRADE,
+            component="FeatureCompute:daily_feature",
+        ):
             daily_feature_vector = daily_feature_provider.get_latest()
-        except Exception:
-            daily_feature_vector = None
 
     # ── Persist features to LocalFeatureStore ──
     if not config.disable_feature_store and not config.no_mt5:
-        try:
+        with log_and_continue(component="FeatureStore:write"):
             from core.deployment.feature_update_producer import produce_from_live_computer
 
             for record in produce_from_live_computer(
                 feature_computer, feature_schema, config.symbol
             ):
                 feature_store.write_records([record])
-        except Exception as exc:
-            print(
-                json.dumps(
-                    {"event": "feature_store_write_error", "time": _utc_iso(), "error": str(exc)},
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
 
     # ── Feature freshness check (cycle-level visible alert) ──
     if not config.no_mt5 and feature_store is not None:
-        try:
+        with log_and_continue(component="FeatureCheck:freshness"):
             from core.execution.pre_trade_guards import check_feature_freshness
 
             latest_record = feature_store.latest(config.symbol, "M5")
@@ -5164,8 +5161,6 @@ def execute_live_cycle(
                             ),
                             flush=True,
                         )
-        except Exception:
-            pass
 
     if pos_count >= config.max_positions:
         if state.loop_iteration % 10 == 0:
