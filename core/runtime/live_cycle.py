@@ -2623,10 +2623,8 @@ def _compute_contract_group_consensus(
 
         # Update group correlation tracker
         if correlation_tracker is not None:
-            try:
+            with log_and_continue(component="CorrelationTracker:update"):
                 correlation_tracker.update(group_signals)
-            except Exception:
-                pass
 
         # Compute dynamic volume with correlation penalty
         vol_atr = current_atr if current_atr > 0 else None
@@ -2639,11 +2637,12 @@ def _compute_contract_group_consensus(
 
         # Apply correlation penalty from group history
         if correlation_tracker is not None:
-            try:
+            with FaultTolerantContext(
+                level=FaultLevel.DEGRADE,
+                component="CorrelationTracker:penalty",
+            ):
                 corr_penalty = correlation_tracker.get_correlation_penalty(group_signals)
                 dynamic_volume = round(raw_volume * corr_penalty, 3)
-            except Exception:
-                dynamic_volume = raw_volume
         else:
             dynamic_volume = raw_volume
 
@@ -5167,10 +5166,8 @@ def execute_live_cycle(
                 _sname = _rec["strategy"]
                 _strat = strategies.get(_sname)
                 if _strat is not None and _strat.budget is not None:
-                    try:
+                    with log_and_continue(component="Budget:record_trade"):
                         _strat.budget.record_trade(_rec["pnl"], _rec["is_win"])
-                    except Exception:
-                        pass
             state._pending_budget_records.clear()
 
         # ── Feed pending SL records for graduated per-SL cooldown ──
@@ -5179,15 +5176,13 @@ def execute_live_cycle(
                 _sname = _rec["strategy"]
                 _strat = strategies.get(_sname)
                 if _strat is not None and _strat.budget is not None:
-                    try:
+                    with log_and_continue(component="Budget:record_sl"):
                         _result = _strat.budget.record_sl(_rec.get("timestamp"))
                         if _result.get("event") != "sl_recorded":
                             print(
                                 json.dumps(_result, ensure_ascii=False),
                                 flush=True,
                             )
-                    except Exception:
-                        pass
             state._pending_sl_records.clear()
         elif len(state._pending_sl_records) > 100:
             # Safety valve: prevent unbounded growth in single-brain / no-strategy mode
