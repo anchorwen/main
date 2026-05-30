@@ -1,0 +1,39 @@
+schema_version: "training_contract.v2.1"
+contract_id: "brain_trend_m30_v1"
+
+dataset:
+  path: "data/training/swing_m30_enhanced_sl1p5_tp2p5/train.npz"
+  val_path: "data/training/swing_m30_enhanced_sl1p5_tp2p5/val.npz"
+  test_path: "data/training/swing_m30_enhanced_sl1p5_tp2p5/test.npz"
+  feature_schema: "swing_enhanced_35"
+  min_samples_per_class: 50
+  sample_weighting: "return_magnitude"
+
+label:
+  contract_id: "label-trend-1.0.0"
+  sl_atr_mult: 1.5
+  tp_atr_mult: 2.5
+  horizon_bars: 12
+  label_mapping: drop_timeout_binary
+
+architecture:
+  type: "xgboost"
+  objective_function: "binary_logloss"
+  search_space: "default"
+  optuna_trials: 50
+  n_seeds: 5
+  custom_params:
+    max_depth: 5
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_weight: 1.0
+    reg_lambda: 1.0
+
+purge:
+  bars: 12
+  enabled: true
+
+output:
+  model_dir: "data/models/brains"
+  brain_id_prefix: "Brain_Trend_M30_V1"

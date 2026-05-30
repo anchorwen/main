@@ -1,0 +1,28 @@
+{
+  "schema_version": "label_contract.v1",
+  "contract_id": "label-reversion-1.0.0",
+  "type": "survival_barrier",
+  "horizon_bars": 12,
+  "bar_timeframe": "M30",
+  "barriers": {
+    "sl_atr_mult": 2.5,
+    "tp_atr_mult": 0.7
+  },
+  "atr_config": {
+    "timeframe": "M30",
+    "period": 14
+  },
+  "label_classes": {
+    "1": "tp_hit_first",
+    "0": "timeout",
+    "-1": "sl_hit_first"
+  },
+  "timeout_label": "timeout",
+  "metadata": {
+    "author": "quant-os",
+    "rationale": "Mean-reversion contract: wide SL (2.5×ATR) gives price room to revert. Tight TP (0.7×ATR) captures quick snap-backs before mean reversion fades. Higher hit rate from small targets compensates wider SL. Designed for Brain_Rev assigned to OU/statarb strategies.",
+    "design_notes": "Asymmetric label for mean-reversion models. TP=0.7×ATR targets the mean reversion sweet spot (half-life distance). SL=2.5×ATR prevents premature stop-out during reversion drawdown. Contract pairs with label-trend-1.0.0 in the dual-track training scheme.",
+    "applicable_lanes": ["brain_rev", "statarb", "ou"],
+    "created_at": "2026-05-30"
+  }
+}

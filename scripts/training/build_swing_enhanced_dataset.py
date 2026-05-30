@@ -275,12 +275,20 @@ def compute_barrier_labels(
     ohlc: dict[str, np.ndarray],
     atr_mult: float = 1.5,
     horizon: int = 12,
+    *,
+    sl_atr_mult: float | None = None,
+    tp_atr_mult: float | None = None,
 ) -> np.ndarray:
     """Compute barrier labels: -1=SL, 0=timeout, 1=TP.
 
     For each bar, look ahead `horizon` bars. If price hits SL first → -1,
     TP first → 1, neither → 0.
+
+    When sl_atr_mult/tp_atr_mult are provided, they override atr_mult
+    for asymmetric SL/TP (dual-track label generation).
     """
+    _sl_mult = sl_atr_mult if sl_atr_mult is not None else atr_mult
+    _tp_mult = tp_atr_mult if tp_atr_mult is not None else atr_mult
     n = ohlc["n_bars"]
     close = ohlc["close"]
     high = ohlc["high"]
@@ -297,8 +305,8 @@ def compute_barrier_labels(
         if atr_i <= 0:
             continue
 
-        sl_dist = atr_mult * atr_i
-        tp_dist = atr_mult * atr_i  # symmetric RR=1:1
+        sl_dist = _sl_mult * atr_i
+        tp_dist = _tp_mult * atr_i
         sl_level = entry - sl_dist
         tp_level = entry + tp_dist
 
@@ -327,6 +335,9 @@ def build_swing_dataset(
     val_ratio: float = 0.2,
     test_ratio: float = 0.15,
     raw_dir: Path | None = None,
+    *,
+    sl_atr_mult: float | None = None,
+    tp_atr_mult: float | None = None,
 ) -> dict[str, Any]:
     """Build enhanced swing dataset.
 
@@ -399,8 +410,12 @@ def build_swing_dataset(
     m5_ts_arr = np.array([ts.timestamp() for ts in m5_ohlc["timestamp"]], dtype=np.float64)
 
     # ── Compute labels ──
-    print(f"  Computing barrier labels (horizon={horizon}, SL=TP=1.5xATR)...")
-    labels = compute_barrier_labels(tf_ohlc, atr_mult=1.5, horizon=horizon)
+    _sl = sl_atr_mult if sl_atr_mult is not None else 1.5
+    _tp = tp_atr_mult if tp_atr_mult is not None else 1.5
+    print(f"  Computing barrier labels (horizon={horizon}, SL={_sl}xATR, TP={_tp}xATR)...")
+    labels = compute_barrier_labels(
+        tf_ohlc, atr_mult=1.5, horizon=horizon, sl_atr_mult=sl_atr_mult, tp_atr_mult=tp_atr_mult
+    )
 
     # ── Build feature matrix ──
     n_bars = tf_ohlc["n_bars"]
@@ -596,7 +611,40 @@ def main() -> None:
         help="Output directory for NPZ files",
     )
     parser.add_argument("--raw-dir", default="data/raw", help="Directory containing raw CSV data")
+    parser.add_argument(
+        "--label-contract",
+        default=None,
+        help="Path to Label Contract JSON for asymmetric SL/TP (dual-track training)",
+    )
+    parser.add_argument(
+        "--sl-atr-mult",
+        type=float,
+        default=None,
+        help="SL ATR multiplier override (requires --tp-atr-mult)",
+    )
+    parser.add_argument(
+        "--tp-atr-mult",
+        type=float,
+        default=None,
+        help="TP ATR multiplier override (requires --sl-atr-mult)",
+    )
     args = parser.parse_args()
+
+    # Resolve asymmetric SL/TP from label contract or CLI flags
+    _sl_mult: float | None = args.sl_atr_mult
+    _tp_mult: float | None = args.tp_atr_mult
+    if args.label_contract:
+        import json as _json
+        with open(args.label_contract) as _f:
+            _lc = _json.load(_f)
+        barriers = _lc.get("barriers", {})
+        _sl_mult = _sl_mult or barriers.get("sl_atr_mult")
+        _tp_mult = _tp_mult or barriers.get("tp_atr_mult")
+        if _sl_mult and _tp_mult:
+            print(
+                f"[label_contract] {_lc['contract_id']}: "
+                f"sl_atr={_sl_mult}, tp_atr={_tp_mult}"
+            )
 
     # Auto-adjust horizon defaults
     if args.horizon == 12 and args.tf == "M15":
@@ -605,12 +653,17 @@ def main() -> None:
 
     output = Path(args.output_dir)
     if output.name == "swing_enhanced":
-        output = Path(f"data/training/swing_{args.tf.lower()}_enhanced")
+        _suffix = ""
+        if _sl_mult and _tp_mult:
+            _suffix = f"_sl{_sl_mult}_tp{_tp_mult}".replace(".", "p")
+        output = Path(f"data/training/swing_{args.tf.lower()}_enhanced{_suffix}")
 
     build_swing_dataset(
         tf=args.tf,
         horizon=args.horizon,
         output_dir=output,
+        sl_atr_mult=_sl_mult,
+        tp_atr_mult=_tp_mult,
         raw_dir=Path(args.raw_dir),
     )
 

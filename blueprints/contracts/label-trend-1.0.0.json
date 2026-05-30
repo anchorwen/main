@@ -1,0 +1,28 @@
+{
+  "schema_version": "label_contract.v1",
+  "contract_id": "label-trend-1.0.0",
+  "type": "survival_barrier",
+  "horizon_bars": 12,
+  "bar_timeframe": "M30",
+  "barriers": {
+    "sl_atr_mult": 1.5,
+    "tp_atr_mult": 2.5
+  },
+  "atr_config": {
+    "timeframe": "M30",
+    "period": 14
+  },
+  "label_classes": {
+    "1": "tp_hit_first",
+    "0": "timeout",
+    "-1": "sl_hit_first"
+  },
+  "timeout_label": "timeout",
+  "metadata": {
+    "author": "quant-os",
+    "rationale": "Trend-following contract: tight SL (1.5×ATR) maximizes RR ratio (1:1.67). Wider TP (2.5×ATR) lets trend runners capture extended moves. Lower hit rate compensated by higher reward per win. Designed for Brain_Trend assigned to barrier_12bar/m15_swing/m30_swing.",
+    "design_notes": "Asymmetric label for trend-following models. SL=1.5×ATR prevents noise stop-outs while TP=2.5×ATR captures directional persistence. Contract pairs with label-reversion-1.0.0 in the dual-track training scheme.",
+    "applicable_lanes": ["brain_trend", "barrier_12bar", "swing_trend"],
+    "created_at": "2026-05-30"
+  }
+}
