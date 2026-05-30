@@ -3,7 +3,7 @@
   "brain_states": {
     "OU_Params_V6_Sniper": {
       "brain_id": "OU_Params_V6_Sniper",
-      "status": "probation",
+      "status": "live",
       "registered_at": "2026-05-04T10:51:17.123332",
       "last_transition_at": "2026-05-27T00:00:00.000000",
       "transition_count": 6,
@@ -19,13 +19,13 @@
     },
     "OU_Params_V7_M15": {
       "brain_id": "OU_Params_V7_M15",
-      "status": "candidate",
+      "status": "live",
       "registered_at": "2026-05-24T22:00:00.000000",
       "last_transition_at": "2026-05-30T02:20:26.472988+00:00",
       "transition_count": 5,
       "freeze_count": 0,
       "exposure_limited": false,
-      "vote_weight": 0.8,
+      "vote_weight": 1.5,
       "performance_metrics": {
         "win_rate": 0.5208,
         "profit_factor": 0.81,
@@ -36,7 +36,7 @@
     },
     "Meta_Stage1_Huber_V1": {
       "brain_id": "Meta_Stage1_Huber_V1",
-      "status": "candidate",
+      "status": "frozen",
       "registered_at": "2026-05-17T08:00:00.000000",
       "last_transition_at": "2026-05-30T02:20:26.472988+00:00",
       "transition_count": 8,
@@ -52,7 +52,7 @@
     },
     "Meta_Stage1_Binary_Cls_V1": {
       "brain_id": "Meta_Stage1_Binary_Cls_V1",
-      "status": "frozen",
+      "status": "shadow",
       "registered_at": "2026-05-24T09:34:13.000000",
       "last_transition_at": "2026-05-30T00:45:44.436120",
       "transition_count": 5,
@@ -69,7 +69,7 @@
     },
     "Meta_Stage1_MetaLabel_Binary_V1": {
       "brain_id": "Meta_Stage1_MetaLabel_Binary_V1",
-      "status": "frozen",
+      "status": "shadow",
       "registered_at": "2026-05-24T10:19:47.000000",
       "last_transition_at": "2026-05-30T00:45:44.498134",
       "transition_count": 2,

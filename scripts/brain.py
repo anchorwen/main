@@ -437,6 +437,176 @@ def cmd_demote(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# reconcile
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def cmd_reconcile(
+    *,
+    auto_fix: bool = False,
+    cleanup_ledger: bool = False,
+    project_root: Path = PROJECT_ROOT,
+) -> int:
+    """One-click SSOT reconciliation: align governance + live.yaml + ledger with configs."""
+    import json
+    import os
+
+    brains_dir = project_root / "configs" / "brains"
+    gov_path = project_root / "data" / "governance_state.json"
+    live_path = project_root / "configs" / "live.yaml"
+    ledger_path = project_root / "data" / "brain_pnl_ledger.json"
+    perf_path = project_root / "data" / "brain_performance.json"
+
+    mode = "AUTO-FIX" if auto_fix else "DRY-RUN"
+    print(f"[reconcile] Mode: {mode} (config is SSOT)")
+    issues_fixed = 0
+
+    # ── Load all sources ──
+    brain_configs: dict[str, dict] = {}
+    for fname in sorted(os.listdir(brains_dir)):
+        if not fname.endswith(".json") or "normalization" in fname:
+            continue
+        path = brains_dir / fname
+        try:
+            cfg = json.loads(path.read_text(encoding="utf-8"))
+            # Only process brain registry entries (skip meta filter configs etc.)
+            if cfg.get("schema_version") != "brain_registry_entry.v1":
+                continue
+            bid = cfg.get("brain_id", fname)
+            brain_configs[bid] = {"config": cfg, "path": str(path), "fname": fname}
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"  [SKIP] {fname}: {exc}")
+            continue
+
+    gov_data = {}
+    if gov_path.exists():
+        gov_data = json.loads(gov_path.read_text(encoding="utf-8"))
+    gov_states = gov_data.get("brain_states", {})
+
+    live_yaml = ""
+    if live_path.exists():
+        live_yaml = live_path.read_text(encoding="utf-8")
+
+    ledger_data = {}
+    if ledger_path.exists():
+        ledger_data = json.loads(ledger_path.read_text(encoding="utf-8"))
+
+    perf_data = {}
+    if perf_path.exists():
+        perf_data = json.loads(perf_path.read_text(encoding="utf-8"))
+
+    # ── 1. Config → Governance status alignment ──
+    print("\n── 1. Governance status alignment ──")
+    for bid, info in brain_configs.items():
+        cfg = info["config"]
+        cfg_status = cfg.get("status", "shadow")
+        cfg_vw = cfg.get("vote_weight", 0.5)
+        gov_state = gov_states.get(bid, {})
+        gov_status = gov_state.get("status")
+        gov_vw = gov_state.get("vote_weight")
+
+        if gov_status is None:
+            print(f"  MISSING: {bid} not in governance — registering as {cfg_status}")
+            if auto_fix:
+                gov_states[bid] = {"status": cfg_status, "vote_weight": cfg_vw}
+                issues_fixed += 1
+        elif gov_status != cfg_status:
+            print(f"  DRIFT: {bid} config={cfg_status} gov={gov_status} → align to {cfg_status}")
+            if auto_fix:
+                gov_states[bid]["status"] = cfg_status
+                issues_fixed += 1
+
+        if gov_vw is not None and gov_vw != cfg_vw:
+            print(f"  VOTE_DRIFT: {bid} config={cfg_vw} gov={gov_vw} → align to {cfg_vw}")
+            if auto_fix:
+                gov_states[bid]["vote_weight"] = cfg_vw
+                issues_fixed += 1
+
+    # ── 2. Frozen/retired brains → disable in live.yaml ──
+    print("\n── 2. live.yaml enabled status ──")
+    for bid, info in brain_configs.items():
+        cfg_status = info["config"].get("status", "")
+        fname = info["fname"]
+        if cfg_status in ("frozen", "retired"):
+            is_enabled = f"configs/brains/{fname}" in live_yaml and "enabled: true" in live_yaml.split(f"configs/brains/{fname}")[1][:30] if f"configs/brains/{fname}" in live_yaml else False
+            should_be = "enabled: false"
+            if auto_fix and is_enabled:
+                print(f"  FIX: {bid} ({cfg_status}) → setting enabled: false")
+                old_entry = f"  - path: configs/brains/{fname}\n    enabled: true"
+                new_entry = f"  - path: configs/brains/{fname}\n    enabled: false"
+                live_yaml = live_yaml.replace(old_entry, new_entry)
+                issues_fixed += 1
+
+    # ── 3. Archived brains → remove from governance ──
+    print("\n── 3. Governance orphan cleanup ──")
+    archive_dir = brains_dir / "archive_deprecated"
+    if archive_dir.exists():
+        for fname in sorted(os.listdir(str(archive_dir))):
+            if not fname.endswith(".json"):
+                continue
+            try:
+                cfg = json.loads((archive_dir / fname).read_text(encoding="utf-8"))
+                bid = cfg.get("brain_id", "")
+                if bid and bid in gov_states:
+                    print(f"  ORPHAN: {bid} archived but in governance → removing")
+                    if auto_fix:
+                        del gov_states[bid]
+                        issues_fixed += 1
+            except (json.JSONDecodeError, OSError):
+                pass
+
+    # ── 4. Ledger zombie cleanup ──
+    if cleanup_ledger:
+        print("\n── 4. PnL Ledger zombie cleanup ──")
+        active_bids = set(brain_configs.keys()) | set(gov_states.keys())
+        settled = ledger_data.get("settled", {})
+        zombies = [b for b in settled if b not in active_bids]
+        print(f"  Zombies in ledger: {len(zombies)}/{len(settled)}")
+        for bid in zombies[:5]:
+            print(f"    {bid} ({len(settled[bid])} entries)")
+        if auto_fix and zombies:
+            retired_dir = project_root / "data" / "ledger" / "retired"
+            retired_dir.mkdir(parents=True, exist_ok=True)
+            retired_path = retired_dir / "brain_pnl_ledger_retired.json"
+            retired_data = {}
+            if retired_path.exists():
+                retired_data = json.loads(retired_path.read_text(encoding="utf-8"))
+            for bid in zombies:
+                retired_data[bid] = settled.pop(bid)
+            if auto_fix:
+                retired_path.write_text(json.dumps(retired_data, indent=2, ensure_ascii=False), encoding="utf-8")
+                ledger_data["settled"] = settled
+                print(f"  Moved {len(zombies)} zombie brains to {retired_path}")
+
+        # Performance contamination
+        perf_bids = list(perf_data.keys())
+        perf_zombies = [b for b in perf_bids if b not in active_bids and b != "schema_version"]
+        print(f"\n  Zombies in brain_performance: {len(perf_zombies)}/{len(perf_bids)}")
+        if auto_fix and perf_zombies:
+            for bid in perf_zombies:
+                if bid in perf_data:
+                    del perf_data[bid]
+            print(f"  Removed {len(perf_zombies)} zombies from brain_performance")
+
+    # ── 5. Save ──
+    if auto_fix and issues_fixed > 0:
+        print(f"\n[reconcile] Saving {issues_fixed} fixes...")
+        gov_path.write_text(json.dumps({**gov_data, "brain_states": gov_states}, indent=2, ensure_ascii=False), encoding="utf-8")
+        live_path.write_text(live_yaml, encoding="utf-8")
+        if cleanup_ledger:
+            ledger_path.write_text(json.dumps(ledger_data, indent=2, ensure_ascii=False), encoding="utf-8")
+            perf_path.write_text(json.dumps(perf_data, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"[reconcile] DONE: {issues_fixed} issue(s) fixed.")
+    elif not auto_fix:
+        print(f"\n[reconcile] DRY-RUN complete. {issues_fixed} issue(s) would be fixed.")
+        print("  Re-run with --auto-fix to apply changes.")
+    else:
+        print("\n[reconcile] No issues found. System is consistent.")
+
+    return 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # CLI
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -507,6 +677,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ret.add_argument("--dry-run", action="store_true", help="Preview only, no changes")
 
+    # reconcile
+    rec = sub.add_parser(
+        "reconcile",
+        help="Auto-align governance, live.yaml, and ledger with brain configs (config is SSOT)",
+    )
+    rec.add_argument(
+        "--auto-fix",
+        action="store_true",
+        help="Apply fixes (default: dry-run, report only)",
+    )
+    rec.add_argument(
+        "--cleanup-ledger",
+        action="store_true",
+        help="Also remove zombie brain PnL records from ledger",
+    )
+
     return p
 
 
@@ -533,6 +719,8 @@ def main(argv: list[str] | None = None) -> int:
             dry_run=args.dry_run,
             archive_artifacts=args.archive_artifacts,
         )
+    elif args.command == "reconcile":
+        return cmd_reconcile(auto_fix=args.auto_fix, cleanup_ledger=args.cleanup_ledger)
     else:
         print(f"[ERROR] Unknown command: {args.command}", file=sys.stderr)
         return 2
