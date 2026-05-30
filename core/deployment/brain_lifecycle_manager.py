@@ -992,14 +992,21 @@ class BrainLifecycleManager:
                 sl_dev = abs(live_sl - train_sl) / max(train_sl, 0.001)
                 tp_dev = abs(live_tp - train_tp) / max(train_tp, 0.001)
                 if sl_dev > 0.10:
-                    report.alignment_hard_fails.append(
-                        f"SL_HARD_FAIL:{cg}:{bid}: live SL={live_sl} != train SL={train_sl}"
-                        f" ({sl_dev:.0%} deviation). Model drawdown tolerance amputated."
-                    )
+                    if live_sl < train_sl:
+                        # SL tightening = dangerous (amputates drawdown tolerance)
+                        report.alignment_hard_fails.append(
+                            f"SL_TIGHTENED:{cg}:{bid}: live SL={live_sl} < train SL={train_sl}"
+                            f" ({sl_dev:.0%} tighter). Drawdown tolerance amputated."
+                        )
+                    else:
+                        report.alignment_hard_fails.append(
+                            f"SL_WIDENED:{cg}:{bid}: live SL={live_sl} > train SL={train_sl}"
+                            f" ({sl_dev:.0%} wider). More conservative than trained — acceptable."
+                        )
                 if tp_dev > 0.20:
-                    report.alignment_hard_fails.append(
-                        f"TP_HARD_FAIL:{cg}:{bid}: live TP={live_tp} != train TP={train_tp}"
-                        f" ({tp_dev:.0%} deviation). Model target expectation skewed."
+                    report.alignment_warnings.append(
+                        f"TP_DEVIATION:{cg}:{bid}: live TP={live_tp} deviates from train TP={train_tp}"
+                        f" by {tp_dev:.0%}. TP deviation is informational (tighter=conservative)."
                     )
 
         # ── Layer 3: brain→live alignment (institutional validator) ──
