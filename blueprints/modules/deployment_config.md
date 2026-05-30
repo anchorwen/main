@@ -61,6 +61,8 @@ environment_config.json → EnvironmentConfig → ServiceContainer
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260530-057 | 2026-05-30 | cursor-agent | — | C3.2 Meta brain demotion: Meta_Stage1_Huber_V1→retired, Binary_Cls_V1→frozen, MetaLabel_Binary_V1→frozen. All three structurally negative expectancy. | RC-09 |
+| FIX-20260529-055 | 2026-05-29 | cursor-agent | — | C3.1 m15_swing min_p_win 0.45→0.40: rolling 100-trade WR drifted from 0.458 to 0.400. Lifetime PnL +$2.75. | RC-05 |
 | FIX-20260529-037 | 2026-05-29 | cursor-agent | — | low_vol regime gate: live.yaml regime_map新增low_vol条目（ATR<20百分位×3根确认）。barrier/swing→reduced, micro/daily→false。架构师护栏：替代被否决的"周四过滤"硬编码。零Python变更。 | RC-06 |
 | FIX-20260529-036 | 2026-05-29 | cursor-agent | — | 禁用statarb_dynamic+statarb_m15: live.yaml enabled:false。684笔分析：228笔/-$2.17, 35.5% WR — OU mean-reversion在趋势市场中失血。架构师护栏：批准切除。 | RC-06 |
 | FIX-20260529-035 | 2026-05-29 | cursor-agent | — | P0.2+P1: scheduler_service Auditor→Executor pipeline migrated from `compute_performance_from_ledger()` to `BrainPnLStore.get_all_metrics()` (SSOT). Silent assassin `except Exception: pass` replaced with `logger.exception` + `emit_brain_alert("pnl_pipeline_failure")`. Performance metrics injected into governance state via `set_performance_metrics()`. | RC-06 |

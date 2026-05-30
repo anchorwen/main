@@ -59,6 +59,9 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260530-068 | 2026-05-30 | cursor-agent | — | entry_features injection point: moved from live_cycle.py to strategy_line.py entry_context dict (fixes execution_queue override). 40-dim V9 vector with schema_version + NaN safety. | RC-06 |
+| FIX-20260530-065 | 2026-05-30 | cursor-agent | — | Phase 1: 40-dim V9 feature vector → journal entry_context on every open order. 3 data contract guardrails (schema_version, tuple immutability, NaN safety). Injected at both dispatch call sites. | RC-06 |
+| FIX-20260530-059 | 2026-05-30 | cursor-agent | — | P2 entry_spread: strategy_line.py record_signal() now passes real ask-bid spread. All 4 call sites now consistent. | RC-06 |
 | FIX-20260529-051 | 2026-05-30 | cursor-agent | — | Last Mile Protocol Phase 2: exit_watchdog.py LOG → log_and_continue(), strategy_line.py DEGRADE → FTC(DEGRADE), mt5_bridge_worker.py MT5 IPC → FTC(CRASH), market_ingress.py 4 MT5 IPC → FTC(CRASH). | RC-07 |
 | FIX-20260529-049 | 2026-05-29 | cursor-agent | — | Architect Defense 2: jitter added to MT5 reconnect backoff sleep (random.uniform(0,1.0)s) in mt5_worker.py + mt5_bridge_worker.py — prevents synchronized retry bursts that trigger broker-side DDoS rate limiting. | RC-04 |
 | FIX-20260529-048 | 2026-05-29 | cursor-agent | — | PR#3 Phase 2: strategy_line.py DynamicBrainWeighter DEGRADE (weight fallback→1.0 logged) + exit_watchdog.py position_verification LOG (MT5 verify failure logged before retry loop). | RC-07 |
