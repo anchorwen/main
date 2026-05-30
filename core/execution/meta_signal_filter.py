@@ -545,8 +545,6 @@ class MetaSignalFilter:
         with log_and_continue(component="MetaFilter:restore_spread_buffer"):
             for item in _state.get("micro_spread_buffer", [])[-100:]:
                 self._micro_spread_buffer.append(float(item))
-        except Exception:
-            pass
 
     def _predict_proba(self, feat_vec: list[float]) -> float:
         """Compute ensemble P(TP|signal) = w_lgb * prob_lgb + w_mlp * prob_mlp.
