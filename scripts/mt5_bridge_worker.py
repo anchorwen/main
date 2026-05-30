@@ -24,7 +24,7 @@ from core.protocol.live_execution_contract import (
     execution_route,
     normalize_action,
 )
-from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, log_and_continue
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -143,7 +143,7 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
                     if mid in line:
                         return  # duplicate, skip
             except Exception:
-                pass
+                pass  # journal dedup is best-effort — skip malformed lines
         with journal_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
     finally:
@@ -619,12 +619,10 @@ def process_one(
     _label = _derive_label(action, msg_payload, detail)
     _magic = order_magic
     _strategy = ""
-    try:
+    with log_and_continue(component="Bridge:magic_resolve"):
         from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
 
         _strategy = MAGIC_TO_STRATEGY.get(_magic, "")
-    except Exception:
-        pass
     _open_msg_id = msg_payload.get("open_message_id", "")
     position_ticket = detail.get("order") or coerce_position_ticket(msg_payload)
     journal_record = {
@@ -704,9 +702,8 @@ def _reconnect_mt5(mt5_module: Any, terminal_path: str) -> bool:
         )
         time.sleep(delay + random.uniform(0, 1.0))  # jitter: break rate-limit sync
         try:
-            mt5_module.shutdown()
-        except Exception:
-            pass
+            with log_and_continue(component="Bridge:shutdown"):
+                mt5_module.shutdown()
         try:
             if mt5_module.initialize(path=terminal_path):
                 print(
@@ -721,10 +718,8 @@ def _reconnect_mt5(mt5_module: Any, terminal_path: str) -> bool:
                     flush=True,
                 )
                 # Re-select symbol after reconnect
-                try:
+                with log_and_continue(component="Bridge:symbol_select"):
                     mt5_module.symbol_select("XAUUSDc", True)
-                except Exception:
-                    pass
                 return True
         except Exception:
             pass
@@ -800,10 +795,9 @@ def run_worker(args: argparse.Namespace) -> int:
                         "mt5_connected": mt5 is not None,
                         "outbox_pending": len(_list_pending(outbox_dir)),
                     }
-                    health_path.write_text(json.dumps(_hb, ensure_ascii=False), encoding="utf-8")
+                    with log_and_continue(component="Bridge:health_write"):
+                        health_path.write_text(json.dumps(_hb, ensure_ascii=False), encoding="utf-8")
                     _last_health_write = _now
-                except Exception:
-                    pass
 
             # ── MT5 heartbeat + exponential backoff reconnect ──
             if _now - _last_heartbeat_check > _HEARTBEAT_INTERVAL:
@@ -860,11 +854,9 @@ def run_worker(args: argparse.Namespace) -> int:
             time.sleep(args.poll_seconds)
     finally:
         if mt5 is not None:
-            try:
+            with log_and_continue(component="Bridge:final_shutdown"):
                 mt5.shutdown()
                 print("[bridge] MT5 shutdown", flush=True)
-            except Exception:
-                pass
 
 
 def main(argv: list[str] | None = None) -> int:
