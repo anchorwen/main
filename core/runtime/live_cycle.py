@@ -12,6 +12,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -4411,6 +4412,15 @@ def execute_live_cycle(
         else:
             micro_feature_vector = np.zeros(_schema_dim("v4.3_microstructure_9"), dtype=np.float64)
 
+    # ── Build entry_context for journal (Phase 1: 40-dim feature snapshot) ──
+    # Guardrail 1: schema versioning — V9 vs future V10 prevents feature drift
+    # Guardrail 2: immutability — tuple deep-copy prevents async mutation
+    # Guardrail 3: NaN safety — nan_to_num prevents JSON serialization failures
+    _entry_features_snapshot: dict[str, Any] = {
+        "schema_version": "v9_institutional",
+        "vector": tuple(np.nan_to_num(np.asarray(feature_vector, dtype=np.float64)).tolist()),
+    }
+
     # ── Meta-filter gate + Conformal OU Gate (lazy init on first live cycle) ──
     # Both gates share one ConformalCalibrator so the empirical P(win)
     # distribution benefits from all closed trades regardless of which
@@ -5361,7 +5371,7 @@ def execute_live_cycle(
                 _net_out_close_dispatch_fn = _net_out_close_dispatch_fn
 
             dispatch_results = exec_queue.flush(
-                dispatch_live_open_order,
+                partial(dispatch_live_open_order, entry_context=_entry_features_snapshot),
                 journal_path=str(journal_path),
                 mt5_terminal_path=config.mt5_terminal_path,
                 symbol=config.symbol,
@@ -6427,6 +6437,7 @@ def execute_live_cycle(
             brain_ids=dispatch_brain_ids,
             brain_votes=dispatch_brain_votes,
             confidence=confidence,
+            entry_context=_entry_features_snapshot,
         )
         state.last_fire = now
 
