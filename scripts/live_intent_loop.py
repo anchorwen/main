@@ -323,7 +323,11 @@ def _inject_performance_metrics(pnl_store: Any, base_dir: str) -> None:
             )
         gov.save(str(_gov_path))
     except Exception:
-        pass  # Non-critical — don't crash the cycle for metrics injection
+        import logging as _inj_log
+
+        _inj_log.getLogger(__name__).warning(
+            "performance_metrics_injection_failed — governance metrics will be stale"
+        )
 
 
 def _init_risk_service() -> Any:
@@ -2151,7 +2155,11 @@ def main(argv: list[str] | None = None) -> int:
                         # P0.1: inject performance_metrics into governance state
                         _inject_performance_metrics(pnl_ledger, args.base_dir)
                     except Exception:
-                        pass
+                        import logging as _sv_log
+
+                        _sv_log.getLogger(__name__).warning(
+                            "pnl_ledger_save_or_metrics_injection_failed — retry next cycle"
+                        )
                 if meta_signal_filter is not None:
                     try:
                         meta_signal_filter.save_state(str(_mf_state_path))

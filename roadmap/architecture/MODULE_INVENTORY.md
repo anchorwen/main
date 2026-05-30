@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-05-29T18:09:40Z
+> **自动生成**: 2026-05-30T00:35:07Z
 > **扫描模块数**: 454
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -446,7 +446,7 @@
 | `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 8 | 317 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 28 | 7111 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 28 | 7109 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 153 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 286 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
@@ -540,7 +540,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 369 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 15 | 2341 | — | |
+| `live_intent_loop.py` | ✅ active | — | 15 | 2349 | — | |
 | `live_launcher.py` | ✅ active | — | 13 | 776 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 484 | — | |
