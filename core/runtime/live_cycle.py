@@ -4257,7 +4257,7 @@ def execute_live_cycle(
 
     # ── Limit order monitor: check pending orders for spread-aware fills ──
     if state.limit_monitor is not None and state.limit_monitor.has_pending():
-        try:
+        with log_and_continue(component="LimitMonitor:check_fill"):
             _lom_bid = _bid if _bid else 0.0
             _lom_ask = _ask if _ask else 0.0
             _lom_low = None  # bar low not tracked cycle-by-cycle; fill uses bid/ask
@@ -4298,42 +4298,39 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except Exception:
-            pass
 
     # ── Shadow verification: settle previous cycle's consensus decision ──
     if mid_price is not None and mid_price > 0 and state.shadow_verification_pending:
         try:
-            pending = state.shadow_verification_pending
-            entry_price = pending["entry_price"]
-            direction = pending["direction"]
-            if direction == "long":
-                ctf_pnl = round(mid_price - entry_price, 6)
-            elif direction == "short":
-                ctf_pnl = round(entry_price - mid_price, 6)
-            else:
-                ctf_pnl = 0.0
-            ctf_bps = round((ctf_pnl / entry_price) * 10000, 2) if entry_price > 0 else 0.0
-            print(
-                json.dumps(
-                    {
-                        "event": "shadow_verified",
-                        "time": _utc_iso(),
-                        "direction": direction,
-                        "entry_price": round(entry_price, 2),
-                        "exit_price": round(mid_price, 2),
-                        "counterfactual_pnl": ctf_pnl,
-                        "counterfactual_bps": ctf_bps,
-                        "consensus_score": pending.get("consensus_score", 0),
-                        "supporting_brains": pending.get("supporting_brains", []),
-                        "opposing_brains": pending.get("opposing_brains", []),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-        except Exception:
-            pass
+            with log_and_continue(component="ShadowVerify"):
+                pending = state.shadow_verification_pending
+                entry_price = pending["entry_price"]
+                direction = pending["direction"]
+                if direction == "long":
+                    ctf_pnl = round(mid_price - entry_price, 6)
+                elif direction == "short":
+                    ctf_pnl = round(entry_price - mid_price, 6)
+                else:
+                    ctf_pnl = 0.0
+                ctf_bps = round((ctf_pnl / entry_price) * 10000, 2) if entry_price > 0 else 0.0
+                print(
+                    json.dumps(
+                        {
+                            "event": "shadow_verified",
+                            "time": _utc_iso(),
+                            "direction": direction,
+                            "entry_price": round(entry_price, 2),
+                            "exit_price": round(mid_price, 2),
+                            "counterfactual_pnl": ctf_pnl,
+                            "counterfactual_bps": ctf_bps,
+                            "consensus_score": pending.get("consensus_score", 0),
+                            "supporting_brains": pending.get("supporting_brains", []),
+                            "opposing_brains": pending.get("opposing_brains", []),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
         finally:
             state.shadow_verification_pending = None
 
@@ -4516,15 +4513,13 @@ def execute_live_cycle(
 
         # ── Market-closed guard (before exit management and entry logic) ──
         if not config.no_mt5:
-            try:
+            with log_and_continue(component="MarketGuard:session_detect"):
                 from core.execution.pre_trade_guards import detect_session
 
                 _pre_session = detect_session()
                 if _pre_session.get("risk_tier") == "off":
                     _log_cycle_end(state.loop_iteration)
                     return state, True  # market closed — skip entire cycle
-            except Exception:
-                pass
 
         # ── Global P&L settlement anchor (护栏二: 唯一结算点) ──
         # All safety guards have passed.
