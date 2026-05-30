@@ -27,8 +27,6 @@ from __future__ import annotations
 import json
 import math
 import os
-
-from core.runtime.fault_handler import log_and_continue
 import sys
 import time
 from collections import deque
@@ -38,6 +36,7 @@ from typing import Any
 import numpy as np
 
 from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
+from core.runtime.fault_handler import log_and_continue
 
 
 @dataclass
