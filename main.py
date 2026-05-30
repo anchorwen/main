@@ -740,14 +740,12 @@ def cmd_live(args: argparse.Namespace) -> int:
         print(f"[hub] ERROR: launcher not found: {launcher}", file=sys.stderr)
         return 2
 
-    # ── Signal isolation: prevent Ctrl+C from reaching child processes ──
-    # On Windows, Ctrl+C in the terminal propagates to all processes in the
-    # console group.  CREATE_NEW_PROCESS_GROUP gives each launcher its own
-    # group so Ctrl+C only arrives at the hub.
+    # ── Signal isolation: Ctrl+C stops the hub, which then stops all children ──
+    # CREATE_NEW_PROCESS_GROUP prevents Ctrl+C from propagating to launchers.
+    # The hub catches KeyboardInterrupt and shuts down all children cleanly.
     _creation_flags = 0
     if sys.platform == "win32":
         _creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
-    _signal.signal(_signal.SIGINT, lambda sig, frame: None)  # hub handles its own Ctrl+C
 
     # ── Multi-symbol support: auto-detect BTC config ──
     # FIX-083: if configs/live_btc.yaml exists, launch it alongside the primary
