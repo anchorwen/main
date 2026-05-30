@@ -70,6 +70,7 @@ Dataset CPCV CustomObj  Trainer    EvaluationReport
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |--------|------|--------|--------|---------|------------|
+| FIX-20260530-074 | 2026-05-30 | cursor-agent | — | Blind spot #2: removed nan_to_num(nan=0.0) from feature matrix. XGBoost natively handles NaN via `missing` param. FeatureGate verfied compatible (≤5 NaN allowed). | RC-06 |
 | FIX-20260530-073 | 2026-05-30 | cursor-agent | — | Barrier brain restoration: recovered deleted configs from git, registered, but both failed schema validation (Macro_Gold_Silver_Spread renamed to Macro1_Corr). Retrained Barrier_V9_12B_V1 on M5 swing_enhanced_35 schema. Brain_Rev disproven (PF=0.46 with correct eval). | RC-06, RC-09 |
 | FIX-20260530-072 | 2026-05-30 | cursor-agent | — | Training pipeline fixes: (1) compute_metrics evaluation skew — hardcoded ±1.5 → reads sl/tp from meta.json. Brain_Trend PF corrected 2.10→3.50. (2) meta.json hardcoded 1.5/1.5 → uses actual params. (3) barrier_12bar + M5 support in train_swing_v9.py + build_swing_enhanced_dataset.py. | RC-06 |
 | FIX-20260530-067 | 2026-05-30 | cursor-agent | — | Dual-track asymmetric labels: label-trend-1.0.0 (sl=1.5/tp=2.5) + label-reversion-1.0.0 (sl=2.5/tp=0.7). Modified build_swing_enhanced_dataset.py (sl_atr_mult/tp_atr_mult + --label-contract). Trained Brain_Trend_M30_V1 (Test WR 67.7%/PF 2.10) + Brain_Rev_M30_V1 (Test WR 62.3%/PF 1.65). | RC-09 |
