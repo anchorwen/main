@@ -1594,6 +1594,18 @@ class StrategyLine:
                     "direction_bias": _dir,
                 }
             )
+        # ── Build entry_features snapshot (Phase 1: 40-dim V9 vector) ──
+        # Guardrail 1: schema_version for future V10 compatibility
+        # Guardrail 2: tuple() deep-copy for immutability
+        # Guardrail 3: np.nan_to_num for JSON serialization safety
+        _entry_features: dict[str, Any] | None = None
+        if feature_vector is not None:
+            import numpy as np
+            _fv_arr = np.asarray(feature_vector, dtype=np.float64).ravel()
+            _entry_features = {
+                "schema_version": "v9_institutional",
+                "vector": tuple(np.nan_to_num(_fv_arr).tolist()),
+            }
         entry_context = {
             "atr": round(current_atr, 4),
             "regime": regime_info.get("regime", "normal") if regime_info else "normal",
@@ -1601,6 +1613,7 @@ class StrategyLine:
             "trend_direction": trend_direction,
             "macro_regime": macro_regime,
             "brain_predictions": _brain_preds,
+            "entry_features": _entry_features,
         }
 
         # ── Determine venue ──
