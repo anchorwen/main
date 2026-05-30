@@ -12,7 +12,7 @@
   "artifact_hash": "",
   "status": "shadow",
   "vote_weight": 0.5,
-  "magic": 90320,
+  "magic": 90340,
   "brain_role": "alpha_brain",
   "training_horizon": 12,
   "strategy": "m30_swing",
