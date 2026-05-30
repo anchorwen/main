@@ -4,7 +4,7 @@
   "brain_type": "xgboost_v9",
   "brain_role": "alpha_brain",
   "model_version": "barrier_12bar_xgboost_v3",
-  "status": "shadow",
+  "status": "retired",
   "vote_weight": 0.5,
   "magic": 90001,
   "artifact_path": "data\\models\\institutional\\barrier_12bar_xgboost_v3_20260517_084031.json",

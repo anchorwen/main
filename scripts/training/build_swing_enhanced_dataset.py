@@ -49,7 +49,7 @@ MIN_BARS = (
 )
 
 # Number of M5 bars per higher timeframe (for micro aggregation)
-M5_PER_TF: dict[str, int] = {"M15": 3, "M30": 6}
+M5_PER_TF: dict[str, int] = {"M5": 1, "M15": 3, "M30": 6}
 
 # Feature order (must match training schema)
 SWING_MACRO_FEATURES = [

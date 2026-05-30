@@ -34,8 +34,10 @@ brains:
   - path: configs/brains/Brain_Rev_M30_V1.json
     enabled: true
   - path: configs/brains/lgb_barrier_12bar_lightgbm_v3_20260517_084114.json
-    enabled: true
+    enabled: false
   - path: configs/brains/xgb_barrier_12bar_xgboost_v3_20260517_084031.json
+    enabled: false
+  - path: configs/brains/Barrier_V9_12B_V1.json
     enabled: true
 gate:
   gate_policy_config: configs/live_gate_policy.json
@@ -139,7 +141,7 @@ correlation_tracker:
   min_updates: 3
 strategy_lines:
   barrier_12bar:
-    enabled: true  # FIX-20260530: re-enabled — restored brain configs, +$2.67/395 trades
+    enabled: true
     mode: probation
     timeframe: M5
     magic: 90001
@@ -148,7 +150,7 @@ strategy_lines:
     confidence_threshold: 0.4
     brain_types:
     - lightgbm_v1
-    - xgboost_v9  # FIX-20260530: restored barrier config
+    - xgboost_v9
     base_volume: 0.01
     max_volume: 0.01
     sl:

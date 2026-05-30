@@ -132,7 +132,7 @@
     },
     "lgb_barrier_12bar_lightgbm_v3_20260517_084114": {
       "brain_id": "lgb_barrier_12bar_lightgbm_v3_20260517_084114",
-      "status": "shadow",
+      "status": "retired",
       "registered_at": "2026-05-30T05:14:23.400380",
       "last_transition_at": "2026-05-30T05:14:23.400380",
       "transition_count": 1,
@@ -140,9 +140,17 @@
     },
     "xgb_barrier_12bar_xgboost_v3_20260517_084031": {
       "brain_id": "xgb_barrier_12bar_xgboost_v3_20260517_084031",
-      "status": "shadow",
+      "status": "retired",
       "registered_at": "2026-05-30T05:14:23.546413",
       "last_transition_at": "2026-05-30T05:14:23.546413",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "Barrier_V9_12B_V1": {
+      "brain_id": "Barrier_V9_12B_V1",
+      "status": "candidate",
+      "registered_at": "2026-05-30T05:30:18.291074",
+      "last_transition_at": "2026-05-30T05:30:18.291074",
       "transition_count": 1,
       "freeze_count": 0
     }
@@ -967,6 +975,14 @@
       "to": "shadow",
       "reason": "brain_registered",
       "timestamp": "2026-05-30T05:14:23.546413",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Barrier_V9_12B_V1",
+      "from": null,
+      "to": "shadow",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-30T05:30:18.291074",
       "fix_id": "FIX-20260529-034"
     }
   ]
