@@ -19,6 +19,14 @@ if TYPE_CHECKING:
 # in inflation-adjusted terms; 1000-4000 gives a 10x safety margin.
 _GOLD_PRICE_MIN = 1000.0
 _GOLD_PRICE_MAX = 4000.0
+# BTCUSDc physical bounds — crypto CFD, 2 decimal places.
+# BTC has traded between ~$3,000 and ~$110,000 in its history.
+# 2000-200000 gives a wide safety margin for the cent account.
+_BTC_PRICE_MIN = 2000.0
+_BTC_PRICE_MAX = 200000.0
+# Default max spread in price units before treating as data error.
+_DEFAULT_MAX_SPREAD = 0.50  # XAUUSDc
+_BTC_MAX_SPREAD = 2000.0     # BTCUSDc — spread is naturally larger (~$14)
 # Max allowed spread in price units before we treat it as a data error.
 # For XAUUSDc (cents), 0.50 = 50 cents = 500 points — well above any
 # reasonable market spread even during news events.
@@ -83,19 +91,21 @@ def _mid_and_prices(
     ask = float(tick.ask)
 
     # ── Physical sanity checks (crash on bad data — crash-only philosophy) ──
+    # FIX-083: symbol-aware bounds — BTC prices are ~74k (vs gold ~4.5k)
+    if "BTC" in symbol.upper():
+        _price_min, _price_max, _max_spread = _BTC_PRICE_MIN, _BTC_PRICE_MAX, _BTC_MAX_SPREAD
+    else:
+        _price_min, _price_max, _max_spread = _GOLD_PRICE_MIN, _GOLD_PRICE_MAX, _DEFAULT_MAX_SPREAD
+
     if not (math.isfinite(bid) and math.isfinite(ask)):
         raise ValueError(f"Price NaN/Inf: bid={bid} ask={ask}")
     if bid <= 0 or ask <= 0:
         raise ValueError(f"Price zero/negative: bid={bid} ask={ask}")
-    if bid < _GOLD_PRICE_MIN or bid > _GOLD_PRICE_MAX:
-        raise ValueError(
-            f"Bid out of physical bounds [{_GOLD_PRICE_MIN}, {_GOLD_PRICE_MAX}]: {bid}"
-        )
-    if ask < _GOLD_PRICE_MIN or ask > _GOLD_PRICE_MAX:
-        raise ValueError(
-            f"Ask out of physical bounds [{_GOLD_PRICE_MIN}, {_GOLD_PRICE_MAX}]: {ask}"
-        )
-    if (ask - bid) > _DEFAULT_MAX_SPREAD:
+    if bid < _price_min or bid > _price_max:
+        raise ValueError(f"Bid out of physical bounds [{_price_min}, {_price_max}]: {bid}")
+    if ask < _price_min or ask > _price_max:
+        raise ValueError(f"Ask out of physical bounds [{_price_min}, {_price_max}]: {ask}")
+    if (ask - bid) > _max_spread:
         raise ValueError(f"Spread explosion: bid={bid} ask={ask} spread={ask - bid:.5f}")
 
     return (bid + ask) / 2.0, bid, ask

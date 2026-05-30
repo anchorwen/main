@@ -181,6 +181,16 @@ H4_SWING_GROUP: dict[str, Any] = {
     "description": "H4 multi-day swing — 18-bar (~3d) barrier, SL=2.0xATR, TP=4.0xATR",
 }
 
+# Group 5e: BTC swing (M30 12-bar, isolated 904xx magic, crypto 24/7)
+BTC_SWING_GROUP: dict[str, Any] = {
+    "name": "btc_swing",
+    "horizon_cycles": 36,
+    "brain_types": {"xgboost_v9"},
+    "contract": "btc_swing_12bar",
+    "voting_mode": "weighted",
+    "description": "BTC M30 swing — 12-bar barrier, SL=2.0xATR, TP=2.5xATR",
+}
+
 ALL_GROUPS: tuple[dict[str, Any], ...] = (
     BARRIER_GROUP,
     BARRIER_12BAR_META_GROUP,
@@ -195,6 +205,7 @@ ALL_GROUPS: tuple[dict[str, Any], ...] = (
     M30_SWING_GROUP,
     H1_SWING_GROUP,
     H4_SWING_GROUP,
+    BTC_SWING_GROUP,
 )
 
 # Primary lookup: contract_group name → group definition

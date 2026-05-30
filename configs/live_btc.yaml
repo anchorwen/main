@@ -1,0 +1,139 @@
+schema_version: live_config.v2
+description: Quant OS live — BTCUSDc (Cent account, isolated from XAUUSDc)
+adapter:
+  name: mt5
+mt5:
+  terminal_path: D:\MetaTrader 5\terminal64.exe
+  default_symbol: BTCUSDc
+  normalization_config: configs/brains_btc/v9_institutional_01.normalization.json
+features:
+  store_dir: data_btc/feature_store
+  update_interval_seconds: 60
+brains:
+  registry_entries: []
+gate:
+  gate_policy_config: configs/live_gate_policy.json
+  auto_recovery:
+    enabled: false
+    consecutive_pass_cycles: 5
+pipeline:
+  staging_dir: data_btc/staging
+  data_dir: data_btc
+  default_mode: shadow
+training:
+  plan_generator: scripts/training/generate_batch_plan.py
+  lanes_config: scripts/training/lane_trainers.json
+live_trading:
+  mt5_terminal_path: D:\MetaTrader 5\terminal64.exe
+  symbol: BTCUSDc
+  volume: 0.01
+  interval_seconds: 60
+  confidence_threshold: 0.35
+  risk_budget_usd: 30.0
+  equity_risk_pct: 0.0
+  min_lot: 0.01
+  max_lot: 0.1
+  lot_step: 0.01
+  intraday_drawdown_kill:
+    enabled: true
+    kill_pct: 0.03
+    reset_hour_utc: 0
+  sl_atr_mult: 2.0
+  tp_atr_mult: 2.5
+  cooldown_seconds: 300
+  max_positions: 2
+  multi_brain: true
+  brains_dir: configs/brains_btc
+  normalization_config: configs/brains_btc/v9_institutional_01.normalization.json
+  feature_store_dir: data_btc/feature_store
+  bridge:
+    poll_seconds: 3
+    deviation: 20
+    magic: 90401
+  base_dir: data_btc
+  bar_sync: true
+  bar_sync_timeout: 360
+  use_exit_watchdog: true
+  use_limit_orders: false
+  market_type: crypto_24_7  # FIX-082: never skip weekend cycles
+  session_detect_override: crypto_24_7
+  price_bounds:
+    min: 5000
+    max: 200000
+  spread_guard_max: 2000
+exit_management:
+  enabled: true
+  trail_atr_mult: 2.0
+  trail_atr_mult_low: 1.5
+  trail_atr_mult_high: 3.0
+  breakeven_threshold_atr: 1.5
+  brain_reeval_interval: 5
+  flip_exit_threshold: 0.5
+  confidence_drop_threshold: 0.1
+  max_hold_cycles: 60
+  require_min_r: 0.3
+  min_sl_step: 1.0
+alert:
+  enabled: true
+  thresholds:
+    daily_loss_limit: -5.0
+    consecutive_losers: 8
+    win_rate_collapse: 0.3
+    strategy_degradation_loss: -3.0
+    strategy_degradation_wr: 0.3
+  channels:
+    slack: true
+    dingtalk: true
+    dingtalk_webhook_url: https://oapi.dingtalk.com/robot/send?access_token=f33f64c01a0323ee7859fab62495addd0ad75c02182425f91b5ffe4ffbf9ce46
+    log: true
+capital_allocator:
+  base_volume: 0.01
+  min_volume: 0.01
+  max_volume: 0.1
+  require_unanimous: false
+  regime:
+    low_vol_mult: 1.2
+    normal_mult: 1.0
+    high_vol_mult: 0.7
+  vol_reference_atr: 100.0
+correlation_tracker:
+  ema_alpha: 0.05
+  min_updates: 3
+strategy_lines:
+  btc_swing:
+    enabled: false
+    mode: probation
+    timeframe: M30
+    magic: 90410
+    strategy_family: trend_following
+    min_valid_brains: 1
+    confidence_threshold: 0.35
+    brain_types:
+    - xgboost_v9
+    base_volume: 0.01
+    max_volume: 0.05
+    min_p_win: 0.45
+    spread_points: 1400
+    max_spread_points: 2500
+    sl:
+      base_atr_mult: 2.0
+      hard_sl_ratio: 1.5
+      dynamic: true
+      min_sl_distance: 200.0
+      min_rr_ratio: 0.85
+    tp:
+      base_atr_mult: 2.5
+      partial_tp_enabled: false
+    exit:
+      trail_enabled: true
+      trail_atr_mult: 2.0
+      flip_exit_enabled: true
+      flip_threshold: 0.5
+      time_exit_cycles: 36
+      confidence_decay_exit: true
+      hesitation_cycles: 3
+    budget:
+      daily_loss_limit_pct: -0.03
+      max_consecutive_losses: 5
+    direction_balance:
+      long_bias_discount: 0.0

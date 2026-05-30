@@ -24,6 +24,8 @@ MAGIC_TO_STRATEGY: dict[int, str] = {
     90321: "m30_reversion",
     90330: "h1_swing",
     90340: "h4_swing",
+    # BTC strategies (isolated 904xx range — zero collision with gold 900xx/903xx)
+    90410: "btc_swing",
 }
 
 # Reverse lookup
