@@ -350,6 +350,20 @@ class StrategyLine:
         raise NotImplementedError
 
     # ── Main evaluation ─────────────────────────────────────────────────
+    #
+    # STRANGLER FIG TRIGGER (FIX-079): This function is 1293 lines with 8 logical phases:
+    #   1. Regime gate  2. Spread gate  3. Budget  4. Brain inference (3a-3c)
+    #   5. Group consensus + gates (4-4e)  6. Trend gates (4aa-4e)
+    #   7. Dynamic SL/TP  8. Volume + Kelly
+    #
+    # WHEN ANY PHASE IS NEXT MODIFIED, extract that phase as a private method:
+    #   Phase 3a-3c → _run_brain_inference()
+    #   Phase 4-4e  → _apply_entry_gates()
+    #   Phase 7     → _compute_sl_tp_levels()
+    #   Phase 8     → _compute_position_size()
+    #
+    # Each extraction should be ~100 lines, tested by the new feature being added.
+    # DO NOT extract all at once — one phase per modification, feature-driven.
 
     def evaluate(
         self,
