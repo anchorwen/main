@@ -739,56 +739,87 @@ def cmd_live(args: argparse.Namespace) -> int:
         print(f"[hub] ERROR: launcher not found: {launcher}", file=sys.stderr)
         return 2
 
+    # ── Multi-symbol support: auto-detect BTC config ──
+    # FIX-083: if configs/live_btc.yaml exists, launch it alongside the primary
+    # config.  Each launcher runs independently with its own crash monitoring.
+    # Missing BTC config = zero impact on existing gold-only deployment.
+    configs_to_launch: list[str] = [args.config]
+    _btc_config = PROJECT_ROOT / "configs" / "live_btc.yaml"
+    if _btc_config.exists() and str(_btc_config) != str(args.config):
+        configs_to_launch.append(str(_btc_config))
+
     print("[hub] Starting live trading pipeline...")
-    print(f"[hub] Config: {args.config}")
+    for _cfg in configs_to_launch:
+        print(f"[hub]   Config: {_cfg}")
     print()
 
     RESTART_COOLDOWN = 10  # seconds between launcher restarts
     MAX_CONSECUTIVE_CRASHES = 3  # fast crashes within 60s trigger escalation
     ESCALATION_SLEEP = 300  # 5 min pause after fast-crash burst
-    crash_times: list[float] = []
 
-    while True:
-        proc = subprocess.Popen(
-            [sys.executable, str(launcher), args.config],
+    # Track crash times per config
+    _crash_times: dict[str, list[float]] = {c: [] for c in configs_to_launch}
+    _procs: dict[str, subprocess.Popen] = {}
+
+    # Launch all configs
+    for _cfg in configs_to_launch:
+        _procs[_cfg] = subprocess.Popen(
+            [sys.executable, str(launcher), _cfg],
             stdout=None,
             stderr=None,
         )
-        print(f"[hub] Launcher started (pid={proc.pid})", flush=True)
+        print(f"[hub] Launcher[{_cfg}] started (pid={_procs[_cfg].pid})", flush=True)
 
+    while True:
         try:
-            retcode = proc.wait()
+            # Monitor all processes; wait for any to exit
+            for _cfg, _proc in list(_procs.items()):
+                _retcode = _proc.poll()
+                if _retcode is None:
+                    continue  # still running
+
+                print(
+                    f"[hub] Launcher[{_cfg}] exited code={_retcode} at {_time.strftime('%H:%M:%S')}",
+                    flush=True,
+                )
+
+                _now = _time.time()
+                _ct = _crash_times[_cfg]
+                _ct.append(_now)
+                _ct[:] = [t for t in _ct if _now - t < 60]
+
+                if len(_ct) >= MAX_CONSECUTIVE_CRASHES:
+                    print(
+                        f"[hub] {MAX_CONSECUTIVE_CRASHES} crashes in 60s for {_cfg} — "
+                        f"cooling down {ESCALATION_SLEEP}s...",
+                        flush=True,
+                    )
+                    _time.sleep(ESCALATION_SLEEP)
+                    _ct.clear()
+                else:
+                    _time.sleep(RESTART_COOLDOWN)
+
+                # Restart this config
+                _procs[_cfg] = subprocess.Popen(
+                    [sys.executable, str(launcher), _cfg],
+                    stdout=None,
+                    stderr=None,
+                )
+                print(f"[hub] Launcher[{_cfg}] restarted (pid={_procs[_cfg].pid})", flush=True)
+
+            _time.sleep(1.0)  # prevent busy-wait
+
         except KeyboardInterrupt:
-            print("[hub] KeyboardInterrupt — shutting down launcher...", flush=True)
-            proc.terminate()
-            try:
-                proc.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-            print("[hub] Launcher terminated.", flush=True)
+            print("[hub] KeyboardInterrupt — shutting down all launchers...", flush=True)
+            for _proc in _procs.values():
+                _proc.terminate()
+                try:
+                    _proc.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    _proc.kill()
+                    _proc.wait()
+            print("[hub] All launchers terminated.", flush=True)
             return 0
-
-        now = _time.time()
-        crash_times.append(now)
-        # Keep only crashes within last 60s
-        crash_times = [t for t in crash_times if now - t < 60]
-
-        print(
-            f"[hub] Launcher exited with code {retcode} at {_time.strftime('%H:%M:%S')}", flush=True
-        )
-
-        if crash_times and len(crash_times) >= MAX_CONSECUTIVE_CRASHES:
-            print(
-                f"[hub] {MAX_CONSECUTIVE_CRASHES} crashes in 60s — "
-                f"cooling down {ESCALATION_SLEEP}s...",
-                flush=True,
-            )
-            _time.sleep(ESCALATION_SLEEP)
-            crash_times.clear()
-        else:
-            print(f"[hub] Restarting launcher in {RESTART_COOLDOWN}s...", flush=True)
-            _time.sleep(RESTART_COOLDOWN)
 
 
 # ---------------------------------------------------------------------------
