@@ -531,6 +531,9 @@ class StrategyLine:
         # independent of whether the trade is later approved.  Per-proposal
         # try/except prevents one misbehaving brain from silencing others.
         if pnl_ledger is not None and mid_price is not None and mid_price > 0:
+            _entry_spread = (
+                float(ask - bid) if (bid is not None and ask is not None and ask > bid) else 0.0
+            )
             for p in proposals:
                 try:
                     pnl_ledger.record_signal(
@@ -543,6 +546,8 @@ class StrategyLine:
                         confidence=p.confidence
                         if hasattr(p, "confidence")
                         else p.prediction.get("confidence", 0.5),
+                        entry_spread=_entry_spread,
+                        entry_slippage=0.10,
                     )
                 except Exception as _rec_exc:
                     import logging as _lg
