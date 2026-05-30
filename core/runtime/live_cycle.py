@@ -111,6 +111,7 @@ class LiveCycleConfig:
     exit_max_hold_cycles: int = 60
     exit_require_min_r: float = 0.3
     exit_min_step: float = 0.15
+    market_type: str = "forex_24_5"  # FIX-082: "crypto_24_7" for BTC, "forex_24_5" for gold
 
     # ── Multi-strategy mode ──
     multi_strategy_enabled: bool = True  # False → fallback to old CapitalAllocator
@@ -2857,7 +2858,9 @@ def execute_live_cycle(
             with log_and_continue(component="MarketGuard:session_detect"):
                 from core.execution.pre_trade_guards import detect_session
 
-                _pre_session = detect_session()
+                _pre_session = detect_session(
+                    market_type=getattr(config, "market_type", "forex_24_5")
+                )
                 if _pre_session.get("risk_tier") == "off":
                     _log_cycle_end(state.loop_iteration)
                     return state, True  # market closed — skip entire cycle
@@ -3499,7 +3502,9 @@ def execute_live_cycle(
             try:
                 from core.execution.pre_trade_guards import check_feature_vector, detect_session
 
-                session_info = detect_session()
+                session_info = detect_session(
+                    market_type=getattr(config, "market_type", "forex_24_5")
+                )
                 if session_info.get("risk_tier") == "off":
                     _log_cycle_end(state.loop_iteration)
                     return state, True  # market closed, skip cycle
@@ -4469,7 +4474,9 @@ def execute_live_cycle(
             try:
                 from core.execution.pre_trade_guards import check_feature_vector, detect_session
 
-                _s = detect_session()
+                _s = detect_session(
+                    market_type=getattr(config, "market_type", "forex_24_5")
+                )
                 if _s.get("risk_tier") == "off":
                     _log_cycle_end(state.loop_iteration)
                     return state, not config.once

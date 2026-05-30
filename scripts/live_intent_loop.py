@@ -298,6 +298,7 @@ def main(argv: list[str] | None = None) -> int:
     _yaml_volume: float | None = None
     _yaml_risk_budget: float | None = None
     _yaml_equity_risk_pct: float | None = None
+    _yaml_market_type: str = "forex_24_5"  # FIX-082: read from live.yaml
     _yaml_regime_map: dict[str, dict[str, str]] | None = None
     if args.config:
         try:
@@ -316,6 +317,7 @@ def main(argv: list[str] | None = None) -> int:
                 _yaml_volume = _lt.get("volume")
                 _yaml_risk_budget = _lt.get("risk_budget_usd")
                 _yaml_equity_risk_pct = _lt.get("equity_risk_pct")
+                _yaml_market_type = str(_lt.get("market_type", "forex_24_5"))
             if strategy_configs:
                 print(
                     json.dumps(
@@ -461,6 +463,7 @@ def main(argv: list[str] | None = None) -> int:
         volume=_yaml_volume if _yaml_volume is not None else args.volume,
         risk_budget_usd=_yaml_risk_budget if _yaml_risk_budget is not None else 10.0,
         equity_risk_pct=_yaml_equity_risk_pct if _yaml_equity_risk_pct is not None else 0.0,
+        market_type=_yaml_market_type,
         no_mt5=args.no_mt5,
         once=args.once,
         ignore_protection_flag=args.ignore_protection_flag,
