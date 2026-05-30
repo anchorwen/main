@@ -29,15 +29,11 @@ from core.execution.trail_stop_engine import TrailPolicy
 # ── Extracted sub-modules (P2 refactor) ──
 from core.market.mtf_price_service import MTFPriceService
 from core.parliament.contract_groups import (
-    ALL_GROUPS,
     ARB_GROUP,
-    BARRIER_12BAR_META_GROUP,
-    BARRIER_GROUP,
     MICRO_GROUP,
     MICRO_H1_GROUP,
     MICRO_H4_GROUP,
     MICRO_M15_GROUP,
-    STATARB_M15_GROUP,
 )
 from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, log_and_continue
 from core.runtime.market_ingress import (  # noqa: F401 — re-export
