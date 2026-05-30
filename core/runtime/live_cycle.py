@@ -1764,144 +1764,10 @@ def validate_strategy_exit_configs(strategy_configs: dict) -> list[str]:
 
 
 def _bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
-    """Replay recent journal close entries to restore runtime guard state.
+    """Replay recent journal close entries to restore runtime guard state."""
+    from core.runtime.restart_state import bootstrap_restart_state as _impl
 
-    Called once on the first cycle after restart.  Scans the last 30 min
-    of journal closes and populates:
-      - _reentry_states  (most recent exit per strategy)
-      - _pending_sl_records  (all SL/loss events for graduated cooldown)
-      - consecutive_sl_hits  (per-strategy SL streak counter)
-    """
-    import json as _json
-    from pathlib import Path as _Path
-
-    _jp = _Path(journal_path)
-    if not _jp.exists():
-        return
-
-    now = time.time()
-    cutoff = now - 1800.0  # 30 min lookback
-    _close_entries: list[dict[str, Any]] = []
-
-    # Build set of message_ids for currently-open positions so we skip
-    # their closes (those will be handled by normal reconciliation).
-    _active_open_mids: set[str] = {
-        _v.get("message_id", "")
-        for _v in state.known_open_tickets.values()
-        if _v.get("message_id", "")
-    }
-
-    try:
-        for _line in _jp.read_text(encoding="utf-8").splitlines():
-            _line = _line.strip()
-            if not _line:
-                continue
-            try:
-                _entry = _json.loads(_line)
-            except _json.JSONDecodeError:
-                continue
-
-            _action = _entry.get("action", "")
-            if _action not in ("close",):
-                continue
-
-            # Skip closes whose open is still tracked (will be reconciled normally)
-            _open_mid = _entry.get("open_message_id", "")
-            if _open_mid and _open_mid in _active_open_mids:
-                continue
-
-            # Check timestamp
-            _ts_str = _entry.get("recorded_at", "")
-            try:
-                if _ts_str:
-                    _ts = datetime.fromisoformat(_ts_str.replace("Z", "+00:00")).timestamp()
-                else:
-                    continue
-            except Exception:
-                continue
-
-            if _ts < cutoff:
-                continue
-
-            _close_entries.append(_entry)
-    except Exception:
-        return
-
-    if not _close_entries:
-        return
-
-    # Sort by timestamp ascending
-    _close_entries.sort(key=lambda e: e.get("recorded_at", ""))
-
-    from core.execution.reentry_guard import ExitRecord, ensure_reentry_state
-
-    for _entry in _close_entries:
-        _strategy = _entry.get("strategy", "")
-        if not _strategy:
-            # Fallback: resolve from magic
-            _magic = _entry.get("magic", 0)
-            if _magic:
-                from core.contracts.strategy_magic import MAGIC_TO_STRATEGY as _M
-
-                _strategy = _M.get(_magic, "")
-        if not _strategy:
-            continue
-
-        _side = _entry.get("side", "")
-        _label = _entry.get("label", "")
-        _close_price = _entry.get("detail", {}).get("close_price") or 0.0
-        _ticket = _entry.get("position_ticket", 0)
-        _reason = _entry.get("detail", {}).get("reason", "unknown_close")
-
-        # ── Record exit for re-entry guard ──
-        if _side in ("long", "short"):
-            try:
-                _rec = ExitRecord(
-                    timestamp=now,  # use now — we only care about "has recent exit"
-                    strategy_name=_strategy,
-                    direction=_side,
-                    reason=_reason,
-                    confidence=0.5,  # unknown, conservative
-                    price=float(_close_price) if _close_price else 0.0,
-                    ticket=int(_ticket) if _ticket else 0,
-                )
-                _rs = ensure_reentry_state(state._reentry_states, _strategy)
-                _rs.record_exit(_rec)
-            except Exception:
-                pass
-
-        # ── Count SL/loss for streak tracker ──
-        if _label in ("sl_hit_first", "loss"):
-            _curr = state.consecutive_sl_hits.get(_strategy, 0) + 1
-            state.consecutive_sl_hits[_strategy] = _curr
-            # Also feed graduated SL cooldown
-            state._pending_sl_records.append(
-                {
-                    "strategy": _strategy,
-                    "timestamp": now,
-                }
-            )
-            # If streak >= 3, apply per-strategy block
-            if _curr >= 3:
-                state.sl_streak_blocked_until[_strategy] = now + 1800
-        elif _label in ("tp_hit_first", "win"):
-            state.consecutive_sl_hits[_strategy] = 0
-
-    if state._pending_sl_records:
-        print(
-            _json.dumps(
-                {
-                    "event": "restart_state_bootstrapped",
-                    "time": datetime.now(UTC).isoformat(),
-                    "close_entries_replayed": len(_close_entries),
-                    "sl_records": len(state._pending_sl_records),
-                    "reentry_strategies": list(state._reentry_states.keys()),
-                    "sl_streaks": dict(state.consecutive_sl_hits),
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
+    _impl(state=state, journal_path=journal_path, config=config)
 
 
 def _reconcile_closed_positions(
@@ -2171,281 +2037,46 @@ def _evaluate_strategy_lines(
     mtf_price_service: Any = None,
     meta_feature_vector: Any = None,
 ) -> dict[str, Any]:
-    """Run independent strategy evaluations + portfolio risk + execution queue.
+    """Run independent strategy evaluations + portfolio risk + execution queue."""
+    from core.runtime.strategy_evaluator import evaluate_strategy_lines as _impl
 
-    Returns a summary dict for logging.
-    """
-    decisions: list[Any] = []
-    _blocked = sl_streak_blocked_until or {}
-    strategy_results: list[dict[str, Any]] = []
-
-    for sname, strategy in strategy_lines.items():
-        gate_mode = "full"
-        if regime_gate is not None:
-            base_mode = regime_gate.get_strategy_mode(sname)
-            if regime_modulation is not None and hasattr(regime_modulation, "strategy_activation"):
-                from core.execution.regime_gate import get_stricter_mode
-
-                gate_mode = get_stricter_mode(base_mode, regime_modulation.strategy_activation)
-            else:
-                gate_mode = base_mode
-
-        # ── Per-strategy SL streak block ──
-        if sname in _blocked and time.time() < _blocked[sname]:
-            strategy_results.append(
-                {"strategy": sname, "action": "blocked_sl_streak", "blocked_until": _blocked[sname]}
-            )
-            continue
-
-        # ── M15 bar-boundary gating: only evaluate M15 strategies at 00/15/30/45 ──
-        # The boundary check prevents future function leakage (incomplete M15 bars).
-        # _effective_mid MUST be the current spot mid_price, NOT latest_m15_close.
-        # Using a stale M15 bar close as the SL/TP entry reference creates a
-        # price-reference mismatch: SL computed from historical close (~4572) but
-        # fill executed at current spot (~4575) → effective SL cut by 2.5+ points.
-        # See FIX-20260525-023 for full root cause analysis.
-        _tf = getattr(getattr(strategy, "config", None), "timeframe", "M5")
-        if _tf == "M15" and mtf_price_service is not None:
-            _utc_minute = datetime.now(UTC).minute
-            if not mtf_price_service.is_m15_boundary(_utc_minute):
-                continue  # skip — M15 bar not yet complete, no future function leakage
-        _effective_mid = mid_price
-
-        # ── Cut 1: Absolute Refractory Period (cooldown check) ──
-        if cooldown_registry is not None:
-            _cd_allowed, _cd_reason = cooldown_registry.check_cooldown(
-                sname,
-                "long",  # direction unknown until evaluate runs; check both
-            )
-            if not _cd_allowed:
-                # Cooldown may be direction-specific; still run evaluate but
-                # reject the decision afterwards if direction matches
-                pass
-
-        # ── Cut 2: Family entry spacing check (pre-evaluate) ──
-        if family_entry_tracker is not None:
-            from core.execution.pre_trade_guards import strategy_to_family
-
-            _fam = strategy_to_family(sname)
-            if _fam != sname:  # only check family members
-                # direction unknown pre-evaluate; check post-evaluate below
-                pass
-
-        # ── OU-augmented feature vector for meta-labeler strategy ──
-        _fv = feature_vector
-        if sname == "barrier_12bar_meta" and meta_feature_vector is not None:
-            _fv = meta_feature_vector
-
-        decision = strategy.evaluate(
-            feature_vector=_fv,
-            micro_feature_vector=micro_feature_vector,
-            mid_price=_effective_mid,
-            bid=bid,
-            ask=ask,
-            current_atr=current_atr,
-            regime_info=regime_info,
-            regime_gate_mode=gate_mode,
-            trend_direction=trend_direction,
-            trend_strength=trend_strength,
-            h4_trend_strength=h4_trend_strength,
-            macro_regime=macro_regime,
-            risk_budget_usd=risk_budget_usd,
-            tracker=tracker,
-            pnl_ledger=pnl_ledger,
-            pnl_store=pnl_ledger,
-            micro_sequences=micro_sequences,
-            daily_feature_vector=daily_feature_vector,
-            meta_filter=meta_signal_filter,
-            meta_filter_gate=meta_filter_gate,
-            conformal_ou_gate=conformal_ou_gate,
-            micro_feature_dict=micro_feature_dict,
-        )
-
-        # ── Cut 1: Post-evaluate cooldown check (direction known) ──
-        if decision.should_trade and cooldown_registry is not None:
-            _cd_allowed, _cd_reason = cooldown_registry.check_cooldown(sname, decision.direction)
-            if not _cd_allowed:
-                decision.should_trade = False
-                decision.reason = _cd_reason
-                print(
-                    json.dumps(
-                        {
-                            "event": "cooldown_blocked",
-                            "time": _utc_iso(),
-                            "strategy": sname,
-                            "direction": decision.direction,
-                            "reason": _cd_reason,
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-
-        # ── Cut 2: Post-evaluate family spacing check (direction known) ──
-        if decision.should_trade and family_entry_tracker is not None:
-            from core.execution.pre_trade_guards import strategy_to_family
-
-            _fam = strategy_to_family(sname)
-            if _fam != sname:  # family member
-                _fs_allowed, _fs_reason = family_entry_tracker.check_spacing(
-                    _fam, decision.direction, sname
-                )
-                if not _fs_allowed:
-                    decision.should_trade = False
-                    decision.reason = _fs_reason
-                    print(
-                        json.dumps(
-                            {
-                                "event": "family_spacing_blocked",
-                                "time": _utc_iso(),
-                                "strategy": sname,
-                                "family": _fam,
-                                "direction": decision.direction,
-                                "reason": _fs_reason,
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
-
-        # Apply session + health volume multipliers
-        if decision.should_trade:
-            combined_mult = session_volume_mult * health_volume_mult
-            if combined_mult != 1.0:
-                decision.volume = max(0.01, round(decision.volume * combined_mult, 2))
-
-        strategy_results.append(
-            {
-                "strategy": sname,
-                "should_trade": decision.should_trade,
-                "direction": decision.direction,
-                "confidence": decision.confidence,
-                "volume": decision.volume,
-                "p_win": getattr(decision, "p_win", 0.5),
-                "kelly_mult": getattr(decision, "kelly_mult", 1.0),
-                "regime_mode": gate_mode,
-                "venue": getattr(decision, "venue", "live"),
-                "reason": decision.reason,
-                "supporting": decision.supporting_count,
-                "total": decision.total_count,
-            }
-        )
-
-        if not decision.should_trade:
-            try:
-                from core.runtime.gate_audit_recorder import record_gate_block
-
-                record_gate_block(
-                    strategy_name=sname,
-                    direction=decision.direction,
-                    reason=decision.reason,
-                    gate_diag=getattr(decision, "gate_diag", None) or None,
-                )
-            except Exception:
-                pass
-            continue
-
-        # Portfolio risk check
-        risk_result = portfolio_risk.check(
-            decision,
-            current_positions,
-            current_price=mid_price,
-            account_equity=account_equity,
-            current_cycle=cycle_count,
-        )
-
-        if risk_result.verdict.value == "rejected":
-            strategy_results[-1]["risk"] = "rejected"
-            strategy_results[-1]["risk_reason"] = risk_result.reason
-            continue
-
-        # Queue for execution
-        execution_queue.enqueue(sname, decision, risk_result)
-        decisions.append(decision)
-        strategy_results[-1]["risk"] = risk_result.verdict.value
-        if risk_result.adjusted_volume != decision.volume:
-            strategy_results[-1]["adjusted_volume"] = risk_result.adjusted_volume
-
-        # Update current_positions snapshot so subsequent strategies see this
-        # pending decision for same-direction concentration checks (H3 fix)
-        current_positions[sname] = {
-            "strategy": sname,
-            "direction": decision.direction,
-            "volume": risk_result.adjusted_volume
-            if risk_result.adjusted_volume > 0
-            else decision.volume,
-            "ticket": 0,  # 0 = pending, not yet in MT5
-            "entry_cycle": cycle_count,  # entry in current cycle
-            "brain_ids": getattr(decision, "brain_ids", []),
-        }
-
-    # ── Tier 3: √N correlation discount ─────────────────────────────
-    # When N strategies signal same direction on same symbol, total
-    # position is discounted by 1/√N to prevent linear risk concentration.
-    from core.execution.correlation_sizer import apply_sqrt_n_discount
-    from core.execution.portfolio_risk import RiskVerdict
-
-    _, sqrt_n_clusters = apply_sqrt_n_discount(decisions)
-
-    # Update queued items for dropped strategies so flush() skips them
-    dropped_names = {
-        d.strategy_name
-        for d in decisions
-        if not d.should_trade and "sqrt_n_dropped" in getattr(d, "reason", "")
-    }
-    if dropped_names:
-        for qd in execution_queue._queue:
-            if qd.strategy_name in dropped_names:
-                qd.risk_result.verdict = RiskVerdict.REJECTED
-                qd.risk_result.reason = getattr(qd.decision, "reason", "sqrt_n_dropped")
-        # Remove dropped strategies from current_positions snapshot
-        for sname in list(current_positions.keys()):
-            if sname in dropped_names:
-                del current_positions[sname]
-        # Update strategy_results entries for dropped strategies
-        for sr in strategy_results:
-            if sr.get("strategy", "") in dropped_names:
-                for d in decisions:
-                    if d.strategy_name == sr["strategy"]:
-                        sr["should_trade"] = False
-                        sr["reason"] = d.reason
-                        sr["volume"] = 0.0
-                        break
-
-    # Log √N discount clusters for audit
-    for cluster in sqrt_n_clusters:
-        if cluster.dropped_strategies:
-            print(
-                json.dumps(
-                    {
-                        "event": "sqrt_n_discount",
-                        "time": _utc_iso(),
-                        "direction": cluster.direction,
-                        "n_same_direction": cluster.n_same_direction,
-                        "raw_total": cluster.raw_total_volume,
-                        "discounted_total": cluster.discounted_volume,
-                        "dropped": cluster.dropped_strategies,
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-
-    # Summary
-    len([d for d in decisions if d.should_trade])
-    decisions_map: dict[str, Any] = {}
-    for sname in strategy_lines:
-        for d in decisions:
-            if d.strategy_name == sname:
-                decisions_map[sname] = d
-                break
-    return {
-        "strategy_results": strategy_results,
-        "trade_decisions": len(decisions),
-        "queued": execution_queue.queue_size,
-        "active_strategies": list(strategy_lines.keys()),
-        "decisions_map": decisions_map,
-    }
+    return _impl(
+        strategy_lines=strategy_lines,
+        feature_vector=feature_vector,
+        micro_feature_vector=micro_feature_vector,
+        mid_price=mid_price,
+        bid=bid,
+        ask=ask,
+        current_atr=current_atr,
+        regime_info=regime_info,
+        regime_gate=regime_gate,
+        regime_modulation=regime_modulation,
+        trend_direction=trend_direction,
+        trend_strength=trend_strength,
+        h4_trend_strength=h4_trend_strength,
+        macro_regime=macro_regime,
+        risk_budget_usd=risk_budget_usd,
+        sl_streak_blocked_until=sl_streak_blocked_until,
+        portfolio_risk=portfolio_risk,
+        execution_queue=execution_queue,
+        tracker=tracker,
+        pnl_ledger=pnl_ledger,
+        current_positions=current_positions,
+        session_volume_mult=session_volume_mult,
+        health_volume_mult=health_volume_mult,
+        micro_sequences=micro_sequences,
+        daily_feature_vector=daily_feature_vector,
+        account_equity=account_equity,
+        cycle_count=cycle_count,
+        meta_signal_filter=meta_signal_filter,
+        meta_filter_gate=meta_filter_gate,
+        conformal_ou_gate=conformal_ou_gate,
+        micro_feature_dict=micro_feature_dict,
+        cooldown_registry=cooldown_registry,
+        family_entry_tracker=family_entry_tracker,
+        mtf_price_service=mtf_price_service,
+        meta_feature_vector=meta_feature_vector,
+    )
 
 
 # ── Cycle execution ──────────────────────────────────────────────────────
