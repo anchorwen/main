@@ -2,7 +2,7 @@
   "schema_version": "brain_registry_entry.v1",
   "brain_id": "Brain_Trend_M30_V1",
   "brain_type": "xgboost_v9",
-  "contract_group": "barrier_12bar",
+  "contract_group": "m30_swing",
   "training_contract": "barrier_12bar",
   "feature_schema": "swing_enhanced_35",
   "feature_schema_id": "swing_enhanced_35",
