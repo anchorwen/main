@@ -776,62 +776,66 @@ def cmd_live(args: argparse.Namespace) -> int:
 
     _heartbeat_interval = 60.0
     _last_heartbeat = 0.0
-    while True:
-        try:
-            # Periodic heartbeat so user knows hub is alive
-            _now = _time.time()
-            if _now - _last_heartbeat > _heartbeat_interval:
-                _last_heartbeat = _now
-                print(f"[hub] alive — {len(_procs)} launcher(s) running", flush=True)
+    _shutdown_requested = False
+    while not _shutdown_requested:
+        # Periodic heartbeat so user knows hub is alive
+        _now = _time.time()
+        if _now - _last_heartbeat > _heartbeat_interval:
+            _last_heartbeat = _now
+            print(f"[hub] alive — {len(_procs)} launcher(s) running", flush=True)
 
-            # Monitor all processes; wait for any to exit
-            for _cfg, _proc in list(_procs.items()):
-                _retcode = _proc.poll()
-                if _retcode is None:
-                    continue  # still running
+        # Monitor all processes; wait for any to exit
+        for _cfg, _proc in list(_procs.items()):
+            _retcode = _proc.poll()
+            if _retcode is None:
+                continue  # still running
 
+            print(
+                f"[hub] Launcher[{_cfg}] exited code={_retcode} at {_time.strftime('%H:%M:%S')}",
+                flush=True,
+            )
+
+            _now2 = _time.time()
+            _ct = _crash_times[_cfg]
+            _ct.append(_now2)
+            _ct[:] = [t for t in _ct if _now2 - t < 60]
+
+            if len(_ct) >= MAX_CONSECUTIVE_CRASHES:
                 print(
-                    f"[hub] Launcher[{_cfg}] exited code={_retcode} at {_time.strftime('%H:%M:%S')}",
+                    f"[hub] {MAX_CONSECUTIVE_CRASHES} crashes in 60s for {_cfg} — "
+                    f"cooling down {ESCALATION_SLEEP}s...",
                     flush=True,
                 )
+                _time.sleep(ESCALATION_SLEEP)
+                _ct.clear()
+            else:
+                _time.sleep(RESTART_COOLDOWN)
 
-                _now = _time.time()
-                _ct = _crash_times[_cfg]
-                _ct.append(_now)
-                _ct[:] = [t for t in _ct if _now - t < 60]
+            # Restart this config
+            _procs[_cfg] = subprocess.Popen(
+                [sys.executable, str(launcher), _cfg],
+                stdout=None,
+                stderr=None,
+            )
+            print(f"[hub] Launcher[{_cfg}] restarted (pid={_procs[_cfg].pid})", flush=True)
 
-                if len(_ct) >= MAX_CONSECUTIVE_CRASHES:
-                    print(
-                        f"[hub] {MAX_CONSECUTIVE_CRASHES} crashes in 60s for {_cfg} — "
-                        f"cooling down {ESCALATION_SLEEP}s...",
-                        flush=True,
-                    )
-                    _time.sleep(ESCALATION_SLEEP)
-                    _ct.clear()
-                else:
-                    _time.sleep(RESTART_COOLDOWN)
-
-                # Restart this config
-                _procs[_cfg] = subprocess.Popen(
-                    [sys.executable, str(launcher), _cfg],
-                    stdout=None,
-                    stderr=None,
-                )
-                print(f"[hub] Launcher[{_cfg}] restarted (pid={_procs[_cfg].pid})", flush=True)
-
+        try:
             _time.sleep(1.0)  # prevent busy-wait
-
         except KeyboardInterrupt:
-            print("[hub] KeyboardInterrupt — shutting down all launchers...", flush=True)
-            for _proc in _procs.values():
-                _proc.terminate()
-                try:
-                    _proc.wait(timeout=30)
-                except subprocess.TimeoutExpired:
-                    _proc.kill()
-                    _proc.wait()
-            print("[hub] All launchers terminated.", flush=True)
-            return 0
+            _shutdown_requested = True
+        except Exception:
+            pass  # Windows console events can interrupt sleep — ignore
+
+    print("[hub] Shutting down all launchers...", flush=True)
+    for _proc in _procs.values():
+        _proc.terminate()
+        try:
+            _proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            _proc.kill()
+            _proc.wait()
+    print("[hub] All launchers terminated.", flush=True)
+    return 0
 
 
 # ---------------------------------------------------------------------------
