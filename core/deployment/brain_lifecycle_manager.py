@@ -973,6 +973,35 @@ class BrainLifecycleManager:
             if not exists:
                 report.hardcoded_path_mismatches.append(f"path_defaults.{name}")
 
+        # ── Hard SL/TP assertion (Architect Directive 2) ──
+        # FIX-20260530-069: Train-serve skew hard-block.  A brain trained with
+        # SL=2.5 must not run on a strategy with SL=1.5 — the 40% tighter stop
+        # amputates drawdown tolerance and turns positive expectancy negative.
+        if self._live_yaml_path.exists():
+            live = self._load_live_yaml()
+            strategy_lines = live.get("strategy_lines", {})
+            for bid, cfg in disk_brains.items():
+                cg = cfg.get("contract_group", "")
+                sl_cfg = strategy_lines.get(cg, {})
+                if not sl_cfg or not sl_cfg.get("enabled", False):
+                    continue  # skip disabled strategies
+                live_sl = float(sl_cfg.get("sl", {}).get("base_atr_mult", 1.5))
+                live_tp = float(sl_cfg.get("tp", {}).get("base_atr_mult", 1.5))
+                train_sl = float(cfg.get("training_params", {}).get("sl_atr_mult", live_sl))
+                train_tp = float(cfg.get("training_params", {}).get("tp_atr_mult", live_tp))
+                sl_dev = abs(live_sl - train_sl) / max(train_sl, 0.001)
+                tp_dev = abs(live_tp - train_tp) / max(train_tp, 0.001)
+                if sl_dev > 0.10:
+                    report.alignment_hard_fails.append(
+                        f"SL_HARD_FAIL:{cg}:{bid}: live SL={live_sl} != train SL={train_sl}"
+                        f" ({sl_dev:.0%} deviation). Model drawdown tolerance amputated."
+                    )
+                if tp_dev > 0.20:
+                    report.alignment_hard_fails.append(
+                        f"TP_HARD_FAIL:{cg}:{bid}: live TP={live_tp} != train TP={train_tp}"
+                        f" ({tp_dev:.0%} deviation). Model target expectation skewed."
+                    )
+
         # ── Layer 3: brain→live alignment (institutional validator) ──
         self.validate_brain_live_alignment(report)
 

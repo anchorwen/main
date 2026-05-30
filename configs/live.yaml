@@ -418,7 +418,8 @@ strategy_lines:
       dynamic: true
       min_rr_ratio: 0.85
     tp:
-      base_atr_mult: 2.0
+      base_atr_mult: 1.5  # FIX-20260530-069: 2.0→1.5 — align with training labels
+                           # Swing models trained with tp_atr=1.5, live 2.0 creates 33% skew.
       partial_tp_enabled: true
       partial_tp_ratio: 0.5
       partial_tp_r: 1.5
@@ -457,7 +458,7 @@ strategy_lines:
       dynamic: true
       min_rr_ratio: 0.85
     tp:
-      base_atr_mult: 2.0
+      base_atr_mult: 1.5  # FIX-20260530-069: 2.0→1.5 — align with training labels
       partial_tp_enabled: true
       partial_tp_ratio: 0.5
       partial_tp_r: 1.5
@@ -473,6 +474,40 @@ strategy_lines:
       max_consecutive_losses: 4
     direction_balance:
       long_bias_discount: 0.0
+  m30_reversion:
+    enabled: false  # FIX-20260530-069: new strategy for Brain_Rev — wide SL, tight TP
+    mode: probation
+    timeframe: M30
+    magic: 90321
+    strategy_family: mean_reversion
+    brain_types:
+    - xgboost_v9
+    base_volume: 0.01
+    max_volume: 0.03
+    confidence_threshold: 0.35
+    min_p_win: 0.45
+    spread_points: 30
+    max_spread_points: 70
+    sl:
+      base_atr_mult: 2.5  # matches Brain_Rev training (sl=2.5×ATR)
+      hard_sl_ratio: 1.5
+      dynamic: true
+      min_rr_ratio: 0.5  # lower for reversion (tight TP means lower RR)
+    tp:
+      base_atr_mult: 0.7  # matches Brain_Rev training (tp=0.7×ATR)
+      partial_tp_enabled: false
+    exit:
+      trail_enabled: false
+      flip_exit_enabled: true
+      flip_threshold: 0.5
+      time_exit_cycles: 36
+      confidence_decay_exit: true
+      hesitation_cycles: 3
+    budget:
+      daily_loss_limit_pct: -0.015
+      max_consecutive_losses: 4
+    direction_balance:
+      long_bias_discount: 0.1
   h1_swing:
     enabled: false
     timeframe: H1
