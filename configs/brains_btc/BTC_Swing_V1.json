@@ -10,7 +10,7 @@
   "artifact_path": "data_btc/models/BTC_Swing_V1_model.json",
   "model_version": "btc_swing_v1",
   "artifact_hash": "87b207d2f0a8e976807d116883b50b39d12e58a39c572f85c326ee422debcf54",
-  "status": "shadow",
+  "status": "probation",
   "vote_weight": 0.5,
   "magic": 90410,
   "brain_role": "alpha_brain",

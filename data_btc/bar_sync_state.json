@@ -1,8 +1,8 @@
 {
-  "last_bar_time": 1780157100,
-  "last_bar_open": 73779.0,
-  "last_bar_close": 73793.91,
+  "last_bar_time": 1780157400,
+  "last_bar_open": 73813.3,
+  "last_bar_close": 73813.3,
   "lag_count": 0,
-  "total_bars_seen": 3,
-  "last_sync_utc": "2026-05-30T16:04:54.519819+00:00"
+  "total_bars_seen": 4,
+  "last_sync_utc": "2026-05-30T16:09:57.075994+00:00"
 }

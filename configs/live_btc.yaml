@@ -103,7 +103,7 @@ correlation_tracker:
   min_updates: 3
 strategy_lines:
   btc_swing:
-    enabled: false
+    enabled: true  # BTC 24/7 — no need to wait for Monday
     mode: probation
     timeframe: M30
     magic: 90410
