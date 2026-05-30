@@ -739,14 +739,7 @@ def cmd_live(args: argparse.Namespace) -> int:
         print(f"[hub] ERROR: launcher not found: {launcher}", file=sys.stderr)
         return 2
 
-    # ── No special flags needed — the hub's while-loop KeyboardInterrupt
-    # handler gracefully terminates all children.  CREATE_NEW_PROCESS_GROUP
-    # on Windows can cause premature termination in some terminal setups.
-
     # ── Multi-symbol support: auto-detect BTC config ──
-    # FIX-083: if configs/live_btc.yaml exists, launch it alongside the primary
-    # config.  Each launcher runs independently with its own crash monitoring.
-    # Missing BTC config = zero impact on existing gold-only deployment.
     configs_to_launch: list[str] = [args.config]
     _btc_config = PROJECT_ROOT / "configs" / "live_btc.yaml"
     if _btc_config.exists() and str(_btc_config) != str(args.config):
@@ -757,84 +750,55 @@ def cmd_live(args: argparse.Namespace) -> int:
         print(f"[hub]   Config: {_cfg}")
     print()
 
-    RESTART_COOLDOWN = 10  # seconds between launcher restarts
-    MAX_CONSECUTIVE_CRASHES = 3  # fast crashes within 60s trigger escalation
-    ESCALATION_SLEEP = 300  # 5 min pause after fast-crash burst
+    import threading as _th
 
-    # Track crash times per config
-    _crash_times: dict[str, list[float]] = {c: [] for c in configs_to_launch}
-    _procs: dict[str, subprocess.Popen] = {}
+    _shutdown = _th.Event()
+    _threads: list[_th.Thread] = []
 
-    # Launch all configs
-    for _cfg in configs_to_launch:
-        _procs[_cfg] = subprocess.Popen(
-            [sys.executable, str(launcher), _cfg],
-            stdout=None,
-            stderr=None,
-        )
-        print(f"[hub] Launcher[{_cfg}] started (pid={_procs[_cfg].pid})", flush=True)
-
-    _heartbeat_interval = 60.0
-    _last_heartbeat = 0.0
-    _shutdown_requested = False
-    while not _shutdown_requested:
-        # Periodic heartbeat so user knows hub is alive
-        _now = _time.time()
-        if _now - _last_heartbeat > _heartbeat_interval:
-            _last_heartbeat = _now
-            print(f"[hub] alive — {len(_procs)} launcher(s) running", flush=True)
-
-        # Monitor all processes; wait for any to exit
-        for _cfg, _proc in list(_procs.items()):
-            _retcode = _proc.poll()
-            if _retcode is None:
-                continue  # still running
-
-            print(
-                f"[hub] Launcher[{_cfg}] exited code={_retcode} at {_time.strftime('%H:%M:%S')}",
-                flush=True,
+    def _run_launcher(_cfg: str) -> None:
+        """Run a launcher in a dedicated thread, restarting on crash."""
+        RESTART_COOLDOWN = 10
+        MAX_CONSECUTIVE_CRASHES = 3
+        ESCALATION_SLEEP = 300
+        _crash_times: list[float] = []
+        while not _shutdown.is_set():
+            _proc = subprocess.Popen(
+                [sys.executable, str(launcher), _cfg],
+                stdout=None, stderr=None,
             )
-
-            _now2 = _time.time()
-            _ct = _crash_times[_cfg]
-            _ct.append(_now2)
-            _ct[:] = [t for t in _ct if _now2 - t < 60]
-
-            if len(_ct) >= MAX_CONSECUTIVE_CRASHES:
-                print(
-                    f"[hub] {MAX_CONSECUTIVE_CRASHES} crashes in 60s for {_cfg} — "
-                    f"cooling down {ESCALATION_SLEEP}s...",
-                    flush=True,
-                )
+            print(f"[hub] Launcher[{_cfg}] started (pid={_proc.pid})", flush=True)
+            _retcode = _proc.wait()
+            if _shutdown.is_set():
+                break
+            print(f"[hub] Launcher[{_cfg}] exited code={_retcode}", flush=True)
+            _now = _time.time()
+            _crash_times.append(_now)
+            _crash_times[:] = [t for t in _crash_times if _now - t < 60]
+            if len(_crash_times) >= MAX_CONSECUTIVE_CRASHES:
+                print(f"[hub] Launcher[{_cfg}] {MAX_CONSECUTIVE_CRASHES} crashes/60s — pausing {ESCALATION_SLEEP}s", flush=True)
                 _time.sleep(ESCALATION_SLEEP)
-                _ct.clear()
+                _crash_times.clear()
             else:
                 _time.sleep(RESTART_COOLDOWN)
 
-            # Restart this config
-            _procs[_cfg] = subprocess.Popen(
-                [sys.executable, str(launcher), _cfg],
-                stdout=None,
-                stderr=None,
-            )
-            print(f"[hub] Launcher[{_cfg}] restarted (pid={_procs[_cfg].pid})", flush=True)
+    for _cfg in configs_to_launch:
+        _t = _th.Thread(target=_run_launcher, args=(_cfg,), daemon=True, name=f"launcher-{_cfg}")
+        _t.start()
+        _threads.append(_t)
 
-        try:
-            _time.sleep(1.0)  # prevent busy-wait
-        except KeyboardInterrupt:
-            _shutdown_requested = True
-        except Exception:
-            pass  # Windows console events can interrupt sleep — ignore
+    print(f"[hub] {len(_threads)} launcher thread(s) running. Ctrl+C to stop.", flush=True)
+    try:
+        while any(_t.is_alive() for _t in _threads):
+            _time.sleep(10)
+            print(f"[hub] alive — {sum(1 for _t in _threads if _t.is_alive())} launcher(s)", flush=True)
+    except KeyboardInterrupt:
+        pass
 
-    print("[hub] Shutting down all launchers...", flush=True)
-    for _proc in _procs.values():
-        _proc.terminate()
-        try:
-            _proc.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            _proc.kill()
-            _proc.wait()
-    print("[hub] All launchers terminated.", flush=True)
+    print("[hub] Shutting down...", flush=True)
+    _shutdown.set()
+    for _t in _threads:
+        _t.join(timeout=30)
+    print("[hub] Done.", flush=True)
     return 0
 
 
