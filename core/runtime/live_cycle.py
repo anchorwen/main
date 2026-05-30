@@ -1118,6 +1118,39 @@ def _execute_management_phase(
         ),
         flush=True,
     )
+    # ── Phase 2: Position snapshot for meta-classifier training ──
+    # Records per-cycle state: bars_held, unrealized PnL in R-units,
+    # volatility change, trailing SL distance.  Used by MetaExit to
+    # learn dynamic exit timing from real position trajectories.
+    _pnl_r = 0.0
+    if mid is not None and pos.entry_price > 0 and pos.entry_atr > 0:
+        _pnl_r = (
+            (mid - pos.entry_price) / pos.entry_atr
+            if pos.side == "long"
+            else (pos.entry_price - mid) / pos.entry_atr
+        )
+    _vol_change = round(current_atr / pos.entry_atr, 4) if pos.entry_atr > 0 else 1.0
+    _trail_dist = (
+        round(abs(pos.current_sl - pos.entry_price), 3) if pos.current_sl > 0 else 0.0
+    )
+    with log_and_continue(component="PositionSnapshot:record"):
+        _snap_path = Path(config.base_dir) / "position_snapshots.jsonl"
+        _snap = json.dumps(
+            {
+                "ticket": pos.ticket,
+                "time": _utc_iso(),
+                "bars_held": pos.cycles_held,
+                "unrealized_pnl_r": round(_pnl_r, 6),
+                "current_volatility": _vol_change,
+                "trailing_sl_distance": _trail_dist,
+                "current_atr": round(current_atr, 4),
+                "entry_atr": round(pos.entry_atr, 4),
+            },
+            ensure_ascii=False,
+        )
+        _snap_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(_snap_path, "a", encoding="utf-8") as _sf:
+            _sf.write(_snap + "\n")
     # ── Single dispatch (prevents MT5 retcode 10006 rejections) ──
     _sl_changed = abs(_final_sl - pos.current_sl) >= config.exit_min_step
     _tp_changed = abs(_final_tp - pos.current_tp) >= config.exit_min_step
