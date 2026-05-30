@@ -3,11 +3,7 @@
 from __future__ import annotations
 
 import json
-import os
-import sys
 import time
-from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -15,7 +11,6 @@ from core.runtime.fault_handler import (
     FaultLevel,
     FaultTolerantContext,
     _check_crash_loop,
-    _record_crash,
     crash_if_failed,
     degrade_with_fallback,
     log_and_continue,

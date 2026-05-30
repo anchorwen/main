@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-from collections import deque
-from unittest.mock import MagicMock, patch
-
-import numpy as np
-import pytest
+from unittest.mock import patch
 
 from core.execution.meta_signal_filter import FilterResult, MetaSignalFilter
 
