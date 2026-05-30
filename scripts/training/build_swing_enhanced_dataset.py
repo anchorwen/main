@@ -597,7 +597,7 @@ def build_swing_dataset(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build enhanced swing training dataset")
     parser.add_argument(
-        "--tf", default="M30", choices=["M15", "M30"], help="Target timeframe (default: M30)"
+        "--tf", default="M30", choices=["M5", "M15", "M30"], help="Target timeframe (default: M30)"
     )
     parser.add_argument(
         "--horizon",

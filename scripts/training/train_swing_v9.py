@@ -215,7 +215,7 @@ def main() -> None:
     parser.add_argument(
         "--strategy",
         required=True,
-        choices=["m15_swing", "m30_swing", "h1_swing", "h4_swing", "daily_swing"],
+        choices=["barrier_12bar", "m15_swing", "m30_swing", "h1_swing", "h4_swing", "daily_swing"],
         help="Strategy name for brain registration",
     )
     parser.add_argument(
@@ -269,7 +269,11 @@ def main() -> None:
 
     # FIX-20260529-033: Bump to V2 for retrained models with purge-gap datasets,
     # feature_names embedding, and artifact_hash integrity.
-    brain_id = f"Swing_V9_{args.strategy.split('_')[0].upper()}_V2"
+    # barrier_12bar → Barrier_V9_12B_V1, m30_swing → Swing_V9_M30_V2, etc.
+    if args.strategy == "barrier_12bar":
+        brain_id = "Barrier_V9_12B_V1"
+    else:
+        brain_id = f"Swing_V9_{args.strategy.split('_')[0].upper()}_V2"
     model_filename = f"{brain_id}_model.json"
     model_path = output_dir / model_filename
     model.save_model(str(model_path))
@@ -293,6 +297,7 @@ def main() -> None:
 
     # Map strategy to magic number and training horizon
     _strategy_magic = {
+        "barrier_12bar": 90001,
         "m15_swing": 90310,
         "m30_swing": 90320,
         "h1_swing": 90330,
@@ -300,6 +305,7 @@ def main() -> None:
         "daily_swing": 90301,
     }
     _strategy_horizon = {
+        "barrier_12bar": 12,
         "m15_swing": 24,
         "m30_swing": 12,
         "h1_swing": 48,
@@ -324,7 +330,7 @@ def main() -> None:
         "feature_schema_id": feature_schema_id,
         "model_path": str(model_path),
         "artifact_path": artifact_rel,
-        "model_version": f"swing_{args.strategy}_v1",
+        "model_version": f"{args.strategy}_v1",
         "artifact_hash": artifact_hash,
         "status": "candidate",
         "vote_weight": 1.0,
@@ -332,7 +338,7 @@ def main() -> None:
         "brain_role": "alpha_brain",
         "training_horizon": horizon,
         "strategy": args.strategy,
-        "timeframe": args.strategy.split("_")[0].upper(),
+        "timeframe": "M5" if args.strategy == "barrier_12bar" else args.strategy.split("_")[0].upper(),
         "training_params": {
             "sl_atr_mult": 1.5,
             "tp_atr_mult": 1.5,
