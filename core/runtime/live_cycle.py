@@ -165,6 +165,7 @@ class LiveCycleState:
     )
     regime_gate: Any = None  # RegimeGate (persisted across cycles for ADX accumulation)
     intraday_dd_kill: Any = None  # IntradayDrawdownKill (persisted across cycles)
+    block_new_entries: bool = False  # FIX-080: circuit-breaker — set True when DD kill blocks, checked before strategy eval
     portfolio_risk_controller: Any = None  # PortfolioRiskController (persisted for VaR/correlation)
     signal_health_monitor: Any = None  # SignalHealthMonitor (persisted for drift detection)
     _last_health_report: dict[str, Any] | None = None  # latest health check report + actions
@@ -3524,6 +3525,7 @@ def execute_live_cycle(
                             _eq = float(getattr(_acc, "equity", 0))
                             dd_result = state.intraday_dd_kill.update(_eq)
                             if dd_result.get("blocked"):
+                                state.block_new_entries = True  # FIX-080: CB trip
                                 print(
                                     json.dumps(
                                         {
@@ -3533,6 +3535,21 @@ def execute_live_cycle(
                                             "high_watermark": dd_result["high_watermark"],
                                             "current_equity": dd_result["current_equity"],
                                             "force_close": dd_result.get("force_close", False),
+                                            "circuit_breaker": "OPEN — new entries blocked",
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
+                            elif state.block_new_entries:
+                                # DD recovered — clear the block
+                                state.block_new_entries = False
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "intraday_drawdown_recovered",
+                                            "time": _utc_iso(),
+                                            "circuit_breaker": "CLOSED — new entries allowed",
                                         },
                                         ensure_ascii=False,
                                     ),
@@ -3804,6 +3821,24 @@ def execute_live_cycle(
             )
             if _ou_parms is not None:
                 state._last_ou_params = _ou_parms
+
+        # ── Circuit breaker: skip all new entries when drawdown kill is active ──
+        # FIX-080: intraday drawdown kill now physically blocks new entries via
+        # block_new_entries flag (set in drawdown kill blocks above).
+        if state.block_new_entries:
+            print(
+                json.dumps(
+                    {
+                        "event": "circuit_breaker_entries_blocked",
+                        "time": _utc_iso(),
+                        "reason": "intraday_drawdown_kill_active",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            _log_cycle_end(state.loop_iteration)
+            return state, True  # skip entry logic, continue management
 
         # Evaluate all strategy lines
         eval_summary = _evaluate_strategy_lines(
@@ -4462,6 +4497,7 @@ def execute_live_cycle(
                             _eq = float(getattr(_acc, "equity", 0))
                             _dd = state.intraday_dd_kill.update(_eq)
                             if _dd.get("blocked"):
+                                state.block_new_entries = True  # FIX-080
                                 print(
                                     json.dumps(
                                         {
@@ -4469,6 +4505,7 @@ def execute_live_cycle(
                                             "time": _utc_iso(),
                                             "drawdown_pct": _dd["drawdown_pct"],
                                             "force_close": _dd.get("force_close", False),
+                                            "circuit_breaker": "OPEN",
                                         },
                                         ensure_ascii=False,
                                     ),
@@ -4537,6 +4574,20 @@ def execute_live_cycle(
                                             )
                                 _log_cycle_end(state.loop_iteration)
                                 return state, not config.once
+                            elif state.block_new_entries:
+                                # DD recovered — clear the block
+                                state.block_new_entries = False
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "intraday_drawdown_recovered_legacy",
+                                            "time": _utc_iso(),
+                                            "circuit_breaker": "CLOSED",
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
                     except Exception:
                         pass
 
