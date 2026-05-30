@@ -1,0 +1,6 @@
+{
+  "schema_version": "brain_performance_tracker.v1",
+  "window_size": 100,
+  "brain_ids": [],
+  "records": {}
+}

@@ -1,12 +1,247 @@
 {
   "schema_version": "governance_state.v1",
   "brain_states": {
-    "BTC_Swing_V1": {
-      "status": "shadow",
-      "vote_weight": 0.5,
-      "performance_metrics": {},
-      "transition_log": []
+    "Barrier_V9_12B_V1": {
+      "brain_id": "Barrier_V9_12B_V1",
+      "status": "candidate",
+      "registered_at": "2026-05-30T15:55:47.578825",
+      "last_transition_at": "2026-05-30T15:55:47.578825+00:00",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "Brain_Rev_M30_V1": {
+      "brain_id": "Brain_Rev_M30_V1",
+      "status": "candidate",
+      "registered_at": "2026-05-30T15:55:47.578825",
+      "last_transition_at": "2026-05-30T15:55:47.578825+00:00",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "Brain_Trend_M30_V1": {
+      "brain_id": "Brain_Trend_M30_V1",
+      "status": "candidate",
+      "registered_at": "2026-05-30T15:55:47.578825",
+      "last_transition_at": "2026-05-30T15:55:47.578825+00:00",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "Meta_Stage1_Binary_Cls_V1": {
+      "brain_id": "Meta_Stage1_Binary_Cls_V1",
+      "status": "candidate",
+      "registered_at": "2026-05-30T15:55:47.578825",
+      "last_transition_at": "2026-05-30T15:55:47.578825+00:00",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "Meta_Stage1_Huber_V1": {
+      "brain_id": "Meta_Stage1_Huber_V1",
+      "status": "candidate",
+      "registered_at": "2026-05-30T15:55:47.578825",
+      "last_transition_at": "2026-05-30T15:55:47.578825+00:00",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "Meta_Stage1_MetaLabel_Binary_V1": {
+      "brain_id": "Meta_Stage1_MetaLabel_Binary_V1",
+      "status": "candidate",
+      "registered_at": "2026-05-30T15:55:47.579827",
+      "last_transition_at": "2026-05-30T15:55:47.579827+00:00",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "OU_Params_V6_Sniper": {
+      "brain_id": "OU_Params_V6_Sniper",
+      "status": "candidate",
+      "registered_at": "2026-05-30T15:55:47.579827",
+      "last_transition_at": "2026-05-30T15:55:47.579827+00:00",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "OU_Params_V7_M15": {
+      "brain_id": "OU_Params_V7_M15",
+      "status": "candidate",
+      "registered_at": "2026-05-30T15:55:47.579827",
+      "last_transition_at": "2026-05-30T15:55:47.579827+00:00",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "Swing_V9_M15_V2": {
+      "brain_id": "Swing_V9_M15_V2",
+      "status": "candidate",
+      "registered_at": "2026-05-30T15:55:47.579827",
+      "last_transition_at": "2026-05-30T15:55:47.579827+00:00",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "Swing_V9_M30_V2": {
+      "brain_id": "Swing_V9_M30_V2",
+      "status": "candidate",
+      "registered_at": "2026-05-30T15:55:47.579827",
+      "last_transition_at": "2026-05-30T15:55:47.579827+00:00",
+      "transition_count": 1,
+      "freeze_count": 0
     }
   },
-  "transition_log": []
+  "transition_log": [
+    {
+      "brain_id": "Barrier_V9_12B_V1",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-30T15:55:47.578825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Barrier_V9_12B_V1",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=candidate)",
+      "timestamp": "2026-05-30T15:55:47.578825+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Brain_Rev_M30_V1",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-30T15:55:47.578825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Brain_Rev_M30_V1",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=shadow)",
+      "timestamp": "2026-05-30T15:55:47.578825+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Brain_Trend_M30_V1",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-30T15:55:47.578825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Brain_Trend_M30_V1",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=shadow)",
+      "timestamp": "2026-05-30T15:55:47.578825+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Meta_Stage1_Binary_Cls_V1",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-30T15:55:47.578825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Meta_Stage1_Binary_Cls_V1",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=shadow)",
+      "timestamp": "2026-05-30T15:55:47.578825+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Meta_Stage1_Huber_V1",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-30T15:55:47.578825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Meta_Stage1_Huber_V1",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=frozen)",
+      "timestamp": "2026-05-30T15:55:47.578825+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Meta_Stage1_MetaLabel_Binary_V1",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-30T15:55:47.579827",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Meta_Stage1_MetaLabel_Binary_V1",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=shadow)",
+      "timestamp": "2026-05-30T15:55:47.579827+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "OU_Params_V6_Sniper",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-30T15:55:47.579827",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "OU_Params_V6_Sniper",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=live)",
+      "timestamp": "2026-05-30T15:55:47.579827+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "OU_Params_V7_M15",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-30T15:55:47.579827",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "OU_Params_V7_M15",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=live)",
+      "timestamp": "2026-05-30T15:55:47.579827+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Swing_V9_M15_V2",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-30T15:55:47.579827",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Swing_V9_M15_V2",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=candidate)",
+      "timestamp": "2026-05-30T15:55:47.579827+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Swing_V9_M30_V2",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-30T15:55:47.579827",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Swing_V9_M30_V2",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=candidate)",
+      "timestamp": "2026-05-30T15:55:47.579827+00:00",
+      "fix_id": "FIX-20260529-034"
+    }
+  ]
 }

@@ -1,0 +1,6 @@
+{
+  "schema_version": "brain_pnl_ledger.v1",
+  "window_size": 100,
+  "pending": {},
+  "settled": {}
+}
