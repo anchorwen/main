@@ -701,9 +701,8 @@ def _reconnect_mt5(mt5_module: Any, terminal_path: str) -> bool:
             flush=True,
         )
         time.sleep(delay + random.uniform(0, 1.0))  # jitter: break rate-limit sync
-        try:
-            with log_and_continue(component="Bridge:shutdown"):
-                mt5_module.shutdown()
+        with log_and_continue(component="Bridge:shutdown"):
+            mt5_module.shutdown()
         try:
             if mt5_module.initialize(path=terminal_path):
                 print(
