@@ -486,8 +486,10 @@ def build_swing_dataset(
         X[row_idx, len(SWING_MACRO_FEATURES) + len(MICRO_FEATURES)] = tf_ou
         X[row_idx, len(SWING_MACRO_FEATURES) + len(MICRO_FEATURES) + 1] = tf_hurst
 
-        # Handle NaN/inf
-        X[row_idx] = np.nan_to_num(X[row_idx], nan=0.0, posinf=0.0, neginf=0.0)
+        # FIX-20260530-074: removed nan_to_num — XGBoost natively handles NaN
+        # via its `missing` parameter.  0.0 is a valid value (zero return, zero
+        # spread) and converting NaN→0.0 was feeding the model false information.
+        # Inf values are already prevented upstream by physical price bounds.
 
         y[row_idx] = labels[i]
         bar_indices[row_idx] = i
