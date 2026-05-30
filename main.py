@@ -731,7 +731,6 @@ def cmd_live(args: argparse.Namespace) -> int:
     restart the launcher if it exits.  Previously used subprocess.run()
     which meant a single launcher crash killed the entire system.
     """
-    import signal as _signal
     import subprocess
     import time as _time
 
@@ -740,12 +739,9 @@ def cmd_live(args: argparse.Namespace) -> int:
         print(f"[hub] ERROR: launcher not found: {launcher}", file=sys.stderr)
         return 2
 
-    # ── Signal isolation: Ctrl+C stops the hub, which then stops all children ──
-    # CREATE_NEW_PROCESS_GROUP prevents Ctrl+C from propagating to launchers.
-    # The hub catches KeyboardInterrupt and shuts down all children cleanly.
-    _creation_flags = 0
-    if sys.platform == "win32":
-        _creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+    # ── No special flags needed — the hub's while-loop KeyboardInterrupt
+    # handler gracefully terminates all children.  CREATE_NEW_PROCESS_GROUP
+    # on Windows can cause premature termination in some terminal setups.
 
     # ── Multi-symbol support: auto-detect BTC config ──
     # FIX-083: if configs/live_btc.yaml exists, launch it alongside the primary
@@ -775,7 +771,6 @@ def cmd_live(args: argparse.Namespace) -> int:
             [sys.executable, str(launcher), _cfg],
             stdout=None,
             stderr=None,
-            creationflags=_creation_flags,
         )
         print(f"[hub] Launcher[{_cfg}] started (pid={_procs[_cfg].pid})", flush=True)
 
@@ -813,7 +808,6 @@ def cmd_live(args: argparse.Namespace) -> int:
                     [sys.executable, str(launcher), _cfg],
                     stdout=None,
                     stderr=None,
-                    creationflags=_creation_flags,
                 )
                 print(f"[hub] Launcher[{_cfg}] restarted (pid={_procs[_cfg].pid})", flush=True)
 
