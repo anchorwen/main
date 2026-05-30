@@ -697,6 +697,35 @@ class BrainPnLStore:
         store._settled = data.get("settled", {})
         return store
 
+    def retention_prune(self, retention_days: int = 90) -> dict[str, int]:
+        """Remove settled entries older than *retention_days*.
+
+        Returns {brain_id: pruned_count} for audit logging.
+        Entries without a parsable entry_time are retained (conservative).
+        """
+        from datetime import UTC, datetime, timedelta
+
+        cutoff = datetime.now(UTC) - timedelta(days=retention_days)
+        pruned: dict[str, int] = {}
+        for bid in list(self._settled.keys()):
+            entries = self._settled[bid]
+            keep = []
+            removed = 0
+            for e in entries:
+                ts_str = e.get("entry_time", "")
+                try:
+                    ts = datetime.fromisoformat(ts_str)
+                    if ts < cutoff:
+                        removed += 1
+                        continue
+                except (ValueError, TypeError):
+                    pass  # unparsable timestamp → keep
+                keep.append(e)
+            if removed > 0:
+                self._settled[bid] = keep
+                pruned[bid] = removed
+        return pruned
+
     # ── properties ─────────────────────────────────────────────────────
 
     @property

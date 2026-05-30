@@ -830,6 +830,41 @@ def run_daily_ops(
                 }
             )
 
+    # ── SSOT reconciliation + PnL ledger retention ──
+    # FIX-081: Runs first so all downstream steps see consistent config and clean data.
+    try:
+        from scripts.brain import cmd_reconcile
+
+        _rec_steps: list[dict[str, Any]] = []
+        _rec_steps.append({"step": "reconcile", "action": "ssot_alignment"})
+        cmd_reconcile(auto_fix=True, cleanup_ledger=True)
+        _rec_steps.append({"step": "reconcile", "action": "ssot_alignment", "status": "ok"})
+
+        # PnL ledger retention: prune entries older than 90 days
+        _ledger_path = Path(base_dir) / "brain_pnl_ledger.json"
+        if _ledger_path.exists():
+            from core.feedback.brain_pnl_ledger import BrainPnLStore
+
+            _store = BrainPnLStore.load(str(_ledger_path))
+            _pruned = _store.retention_prune(retention_days=90)
+            if _pruned:
+                _store.save(str(_ledger_path))
+                _total_pruned = sum(_pruned.values())
+                _rec_steps.append(
+                    {
+                        "step": "ledger_retention",
+                        "status": "ok",
+                        "retention_days": 90,
+                        "brains_pruned": len(_pruned),
+                        "entries_pruned": _total_pruned,
+                    }
+                )
+            else:
+                _rec_steps.append({"step": "ledger_retention", "status": "ok", "entries_pruned": 0})
+        steps.extend(_rec_steps)
+    except Exception as _exc:
+        steps.append({"step": "reconcile", "status": "error", "error": str(_exc)})
+
     if not skip_shadow:
         steps.append(_step_shadow_ensemble(base_dir))
 
