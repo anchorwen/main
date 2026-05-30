@@ -787,16 +787,15 @@ def run_worker(args: argparse.Namespace) -> int:
             # ── Periodic health heartbeat ──
             _now = time.time()
             if _now - _last_health_write > 30:
-                try:
-                    _hb = {
-                        "last_heartbeat_utc": datetime.now(UTC).replace(tzinfo=None).isoformat(),
-                        "pid": os.getpid(),
-                        "mt5_connected": mt5 is not None,
-                        "outbox_pending": len(_list_pending(outbox_dir)),
-                    }
-                    with log_and_continue(component="Bridge:health_write"):
-                        health_path.write_text(json.dumps(_hb, ensure_ascii=False), encoding="utf-8")
-                    _last_health_write = _now
+                _hb = {
+                    "last_heartbeat_utc": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                    "pid": os.getpid(),
+                    "mt5_connected": mt5 is not None,
+                    "outbox_pending": len(_list_pending(outbox_dir)),
+                }
+                with log_and_continue(component="Bridge:health_write"):
+                    health_path.write_text(json.dumps(_hb, ensure_ascii=False), encoding="utf-8")
+                _last_health_write = _now
 
             # ── MT5 heartbeat + exponential backoff reconnect ──
             if _now - _last_heartbeat_check > _HEARTBEAT_INTERVAL:
