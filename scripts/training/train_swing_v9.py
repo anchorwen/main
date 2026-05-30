@@ -218,7 +218,7 @@ def main() -> None:
     parser.add_argument(
         "--strategy",
         required=True,
-        choices=["barrier_12bar", "m15_swing", "m30_swing", "h1_swing", "h4_swing", "daily_swing"],
+        choices=["barrier_12bar", "btc_swing", "m15_swing", "m30_swing", "h1_swing", "h4_swing", "daily_swing"],
         help="Strategy name for brain registration",
     )
     parser.add_argument(
@@ -275,6 +275,8 @@ def main() -> None:
     # barrier_12bar → Barrier_V9_12B_V1, m30_swing → Swing_V9_M30_V2, etc.
     if args.strategy == "barrier_12bar":
         brain_id = "Barrier_V9_12B_V1"
+    elif args.strategy == "btc_swing":
+        brain_id = "BTC_Swing_V1"
     else:
         brain_id = f"Swing_V9_{args.strategy.split('_')[0].upper()}_V2"
     model_filename = f"{brain_id}_model.json"
@@ -301,6 +303,7 @@ def main() -> None:
     # Map strategy to magic number and training horizon
     _strategy_magic = {
         "barrier_12bar": 90001,
+        "btc_swing": 90410,
         "m15_swing": 90310,
         "m30_swing": 90320,
         "h1_swing": 90330,
@@ -309,6 +312,7 @@ def main() -> None:
     }
     _strategy_horizon = {
         "barrier_12bar": 12,
+        "btc_swing": 12,
         "m15_swing": 24,
         "m30_swing": 12,
         "h1_swing": 48,

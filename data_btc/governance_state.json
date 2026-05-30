@@ -1,0 +1,12 @@
+{
+  "schema_version": "governance_state.v1",
+  "brain_states": {
+    "BTC_Swing_V1": {
+      "status": "shadow",
+      "vote_weight": 0.5,
+      "performance_metrics": {},
+      "transition_log": []
+    }
+  },
+  "transition_log": []
+}

@@ -10,7 +10,9 @@ features:
   store_dir: data_btc/feature_store
   update_interval_seconds: 60
 brains:
-  registry_entries: []
+  registry_entries:
+  - path: configs/brains_btc/BTC_Swing_V1.json
+    enabled: true
 gate:
   gate_policy_config: configs/live_gate_policy.json
   auto_recovery:
