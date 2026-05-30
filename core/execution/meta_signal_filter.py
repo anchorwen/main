@@ -27,6 +27,8 @@ from __future__ import annotations
 import json
 import math
 import os
+
+from core.runtime.fault_handler import log_and_continue
 import sys
 import time
 from collections import deque
@@ -128,12 +130,10 @@ class MetaSignalFilter:
         self._micro_scaler: Any = None
         self._micro_scaler_path = micro_scaler_path
         if micro_scaler_path and os.path.exists(micro_scaler_path):
-            try:
+            with log_and_continue(component="MetaFilter:load_scaler"):
                 import joblib
 
                 self._micro_scaler = joblib.load(micro_scaler_path)
-            except Exception:
-                pass
 
         # Protocol 2: Platt Scaling calibrator (smooth sigmoid, no step collapse)
         self._calibrator: Any = None
@@ -176,8 +176,8 @@ class MetaSignalFilter:
         # Determine model type from file extension
         is_mlp_primary = self.model_path.endswith(".json")
 
-        try:
-            # Load metadata (same for both model types)
+        _loaded = False
+        with log_and_continue(component="MetaFilter:load_model"):
             meta_path = self.model_path.rsplit(".", 1)[0] + ".meta.json"
             if os.path.exists(meta_path):
                 with open(meta_path) as f:
@@ -191,29 +191,25 @@ class MetaSignalFilter:
                 self._output_unit = meta.get("output_unit", "bps")
 
             if is_mlp_primary:
-                # ── MLP as primary model ──
                 from core.brains.online_mlp_model import OnlineMLP
 
                 self._mlp_model = OnlineMLP.load(self.model_path)
-                self._model = None  # no LGB model
+                self._model = None
                 self._load_calibrator()
-                return True
+                _loaded = True
             else:
-                # ── LightGBM as primary model ──
                 import lightgbm as lgb
 
                 self._model = lgb.Booster(model_file=self.model_path)
-                # Fallback: if .meta.json is missing, get feature names from the booster itself
                 if not self._feature_names:
-                    try:
+                    with log_and_continue(component="MetaFilter:feature_names_fallback"):
                         self._feature_names = self._model.feature_name()
-                    except Exception:
-                        pass
-                self._load_mlp_model()  # optional ensemble partner
+                self._load_mlp_model()
                 self._load_calibrator()
-                return True
-        except Exception:
+                _loaded = True
+        if not _loaded:
             return False
+        return True
 
     def _load_calibrator(self) -> None:
         """Load Platt scaling calibrator (LogisticRegression on log-odds).
@@ -257,9 +253,8 @@ class MetaSignalFilter:
         try:
             from core.brains.online_mlp_model import OnlineMLP
 
-            self._mlp_model = OnlineMLP.load(self.mlp_model_path)
-        except Exception:
-            self._mlp_model = None
+            with log_and_continue(component="MetaFilter:load_mlp"):
+                self._mlp_model = OnlineMLP.load(self.mlp_model_path)
 
     def filter(
         self,
@@ -525,37 +520,31 @@ class MetaSignalFilter:
         """
         import json as _json
 
-        try:
+        _state = None
+        with log_and_continue(component="MetaFilter:load_state"):
             with open(path, encoding="utf-8") as fh:
-                state = _json.load(fh)
-        except Exception:
+                _state = _json.load(fh)
+        if _state is None:
             return
 
-        try:
-            if "pred_history" in state:
-                # Restore as (timestamp, probability) tuples
-                items = state["pred_history"]
+        with log_and_continue(component="MetaFilter:restore_pred_history"):
+            if "pred_history" in _state:
+                items = _state["pred_history"]
                 if items and isinstance(items[0], list):
                     items = [tuple(it) for it in items]
                 for item in items[-self._conformal_window :]:
                     self._pred_history.append((float(item[0]), float(item[1])))
-        except Exception:
-            pass
 
-        try:
-            for item in state.get("pred_buffer", [])[-20:]:
+        with log_and_continue(component="MetaFilter:restore_pred_buffer"):
+            for item in _state.get("pred_buffer", [])[-20:]:
                 self._pred_buffer.append(float(item))
-        except Exception:
-            pass
 
-        try:
-            for item in state.get("atr_buffer", [])[-100:]:
+        with log_and_continue(component="MetaFilter:restore_atr_buffer"):
+            for item in _state.get("atr_buffer", [])[-100:]:
                 self._atr_buffer.append(float(item))
-        except Exception:
-            pass
 
-        try:
-            for item in state.get("micro_spread_buffer", [])[-100:]:
+        with log_and_continue(component="MetaFilter:restore_spread_buffer"):
+            for item in _state.get("micro_spread_buffer", [])[-100:]:
                 self._micro_spread_buffer.append(float(item))
         except Exception:
             pass
@@ -576,19 +565,16 @@ class MetaSignalFilter:
         # Get MLP probability (if available)
         mlp_prob: float | None = None
         if self._mlp_model is not None:
-            try:
+            with log_and_continue(component="MetaFilter:mlp_predict"):
                 raw = self._mlp_model.forward_numpy(np.array(feat_vec, dtype=np.float32))
-                # Handle both binary (N,2) softmax and single-output sigmoid
                 if raw.ndim == 2 and raw.shape[1] == 2:
-                    mlp_prob = float(raw[0, 1])  # P(class=1)
+                    mlp_prob = float(raw[0, 1])
                 elif raw.ndim == 1 and len(raw) >= 2:
-                    mlp_prob = float(raw[1])  # (2,): P(class=1) at index 1
+                    mlp_prob = float(raw[1])
                 elif raw.ndim == 1:
-                    mlp_prob = float(raw[0])  # single-output sigmoid
+                    mlp_prob = float(raw[0])
                 else:
                     mlp_prob = float(raw.ravel()[0])
-            except Exception:
-                pass
 
         # Ensemble or single-model fallback
         if lgb_prob is not None and mlp_prob is not None:
