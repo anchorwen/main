@@ -22,10 +22,18 @@ _SESSIONS = [
 ]
 
 
-def detect_session(now_utc: datetime | None = None) -> dict[str, Any]:
+def detect_session(
+    now_utc: datetime | None = None,
+    *,
+    market_type: str = "forex_24_5",
+) -> dict[str, Any]:
     """Detect current trading session and return risk multipliers.
 
     Returns dict with: session_name, volume_mult, sl_expand_mult, risk_tier.
+
+    market_type:
+      - "forex_24_5" (default): XAUUSDc — weekday trading, weekend off
+      - "crypto_24_7": BTCUSDC — always trading, never returns risk_tier="off"
     """
     if now_utc is None:
         now_utc = datetime.now(UTC).replace(tzinfo=None)
@@ -34,6 +42,17 @@ def detect_session(now_utc: datetime | None = None) -> dict[str, Any]:
 
     weekday = now_utc.weekday()
     hour = now_utc.hour + now_utc.minute / 60.0
+
+    # ── Crypto 24/7: never skip, never shut down ──
+    # FIX-20260530-082: BTC trades continuously.  The weekend block below
+    # would incorrectly shut down BTC processes every Saturday/Sunday.
+    if market_type == "crypto_24_7":
+        return {
+            "session_name": "crypto_continuous",
+            "volume_mult": 1.0,
+            "sl_expand_mult": 1.0,
+            "risk_tier": "normal",
+        }
 
     # ── Weekend: Fri 22:00 UTC → Sun ~22:00 UTC ──
     # Friday after market close
