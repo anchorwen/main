@@ -29,8 +29,8 @@ BARRIER_GROUP: dict[str, Any] = {
     "name": "barrier_12bar",
     "horizon_cycles": 12,
     "brain_types": {
-        "lightgbm_v1",  # Meta_Stage1_Binary_Cls_V1 — shadow monitoring (vote_weight=0.0)
-        # Meta_Stage1_Huber_V1 frozen 2026-05-24 (The Great Reset).
+        "lightgbm_v1",
+        "xgboost_v9",  # FIX-20260530: restored xgb_barrier_12bar_xgboost_v3 config
         # onnx_v9 (CRT) and online_sgd (Online_MLP) evicted 2026-05-22.
     },
     "contract": "survival_barrier_3.0sl_1.5tp_12bar",

@@ -129,6 +129,22 @@
       "last_transition_at": "2026-05-30T03:44:49.234460",
       "transition_count": 1,
       "freeze_count": 0
+    },
+    "lgb_barrier_12bar_lightgbm_v3_20260517_084114": {
+      "brain_id": "lgb_barrier_12bar_lightgbm_v3_20260517_084114",
+      "status": "shadow",
+      "registered_at": "2026-05-30T05:14:23.400380",
+      "last_transition_at": "2026-05-30T05:14:23.400380",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "xgb_barrier_12bar_xgboost_v3_20260517_084031": {
+      "brain_id": "xgb_barrier_12bar_xgboost_v3_20260517_084031",
+      "status": "shadow",
+      "registered_at": "2026-05-30T05:14:23.546413",
+      "last_transition_at": "2026-05-30T05:14:23.546413",
+      "transition_count": 1,
+      "freeze_count": 0
     }
   },
   "transition_log": [
@@ -935,6 +951,22 @@
       "to": "shadow",
       "reason": "brain_registered",
       "timestamp": "2026-05-30T03:44:49.234460",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "lgb_barrier_12bar_lightgbm_v3_20260517_084114",
+      "from": null,
+      "to": "shadow",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-30T05:14:23.400380",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "xgb_barrier_12bar_xgboost_v3_20260517_084031",
+      "from": null,
+      "to": "shadow",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-30T05:14:23.546413",
       "fix_id": "FIX-20260529-034"
     }
   ]
