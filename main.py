@@ -774,8 +774,16 @@ def cmd_live(args: argparse.Namespace) -> int:
         )
         print(f"[hub] Launcher[{_cfg}] started (pid={_procs[_cfg].pid})", flush=True)
 
+    _heartbeat_interval = 60.0
+    _last_heartbeat = 0.0
     while True:
         try:
+            # Periodic heartbeat so user knows hub is alive
+            _now = _time.time()
+            if _now - _last_heartbeat > _heartbeat_interval:
+                _last_heartbeat = _now
+                print(f"[hub] alive — {len(_procs)} launcher(s) running", flush=True)
+
             # Monitor all processes; wait for any to exit
             for _cfg, _proc in list(_procs.items()):
                 _retcode = _proc.poll()
