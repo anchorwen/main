@@ -36,10 +36,10 @@
     },
     "Meta_Stage1_Huber_V1": {
       "brain_id": "Meta_Stage1_Huber_V1",
-      "status": "candidate",
+      "status": "retired",
       "registered_at": "2026-05-17T08:00:00.000000",
-      "last_transition_at": "2026-05-29T01:29:30.094122+00:00",
-      "transition_count": 6,
+      "last_transition_at": "2026-05-30T00:45:44.373106",
+      "transition_count": 7,
       "freeze_count": 1,
       "freeze_reason": "The Great Reset: SL=2.0/TP=3.5 labels proven unprofitable with corrected 30pt spread/10pt slippage costs. EV surface collapse confirmed — TP>=2.5 all negative EV at SL=2.0. Retraining required with SL=3.0/TP=1.5 (EV=0.2004R). Stage 2 Meta Pipeline also pending retraining.",
       "performance_metrics": {
@@ -52,11 +52,11 @@
     },
     "Meta_Stage1_Binary_Cls_V1": {
       "brain_id": "Meta_Stage1_Binary_Cls_V1",
-      "status": "probation",
+      "status": "frozen",
       "registered_at": "2026-05-24T09:34:13.000000",
-      "last_transition_at": "2026-05-27T00:00:00.000000",
-      "transition_count": 4,
-      "freeze_count": 2,
+      "last_transition_at": "2026-05-30T00:45:44.436120",
+      "transition_count": 5,
+      "freeze_count": 3,
       "exposure_limited": false,
       "note": "FIX-20260526-041: manually restored from frozen to probation. Entry precision deep fix deployed (MetaFilter Stage2 gate + ConformalOU COLD exploration + confidence→p_win mapping). barrier_12bar probation 0.01 lot. Previously frozen due to pnl:critical from auto-governance — same 42.9% WR as all peers in brain_performance (shared record contamination suspected).",
       "performance_metrics": {
@@ -69,11 +69,11 @@
     },
     "Meta_Stage1_MetaLabel_Binary_V1": {
       "brain_id": "Meta_Stage1_MetaLabel_Binary_V1",
-      "status": "probation",
+      "status": "frozen",
       "registered_at": "2026-05-24T10:19:47.000000",
-      "last_transition_at": "2026-05-24T23:00:00.000000",
-      "transition_count": 1,
-      "freeze_count": 0,
+      "last_transition_at": "2026-05-30T00:45:44.498134",
+      "transition_count": 2,
+      "freeze_count": 1,
       "exposure_limited": false,
       "note": "Meta-Labeling binary classifier. OU signal (z_entry=1.3) → barrier SL=3.0/TP=1.5. 43-dim (40 V9 + 3 OU). z_entry hard-clipped [1.3, 2.5] for tree model extrapolation safety. OU features (z_score, half_life, theta) wired via _build_meta_feature_vector. Deployed to probation 2026-05-24.",
       "performance_metrics": {
@@ -92,11 +92,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4914,
-        "profit_factor": 0.74,
-        "sharpe_ratio": -29.5,
-        "total_trades": 232,
-        "pnl_r": -89.7
+        "win_rate": 0.5,
+        "profit_factor": 0.76,
+        "sharpe_ratio": -26.74,
+        "total_trades": 242,
+        "pnl_r": -83.67
       }
     },
     "Swing_V9_M15_V2": {
@@ -1182,6 +1182,27 @@
       "to_status": "retired",
       "reason": "pnl:critical",
       "timestamp": "2026-05-29T22:02:14.836377"
+    },
+    {
+      "brain_id": "Meta_Stage1_Huber_V1",
+      "from_status": "candidate",
+      "to_status": "retired",
+      "reason": "C3.2: 1627 trades, wr=44.9%, pnl_r=-369.65 — structurally negative",
+      "timestamp": "2026-05-30T00:45:44.373106"
+    },
+    {
+      "brain_id": "Meta_Stage1_Binary_Cls_V1",
+      "from_status": "probation",
+      "to_status": "frozen",
+      "reason": "C3.2: 540 trades, wr=46.8%, pnl_r=-241.03 — structurally negative",
+      "timestamp": "2026-05-30T00:45:44.436120"
+    },
+    {
+      "brain_id": "Meta_Stage1_MetaLabel_Binary_V1",
+      "from_status": "probation",
+      "to_status": "frozen",
+      "reason": "C3.2: 417 trades, wr=47.0%, pnl_r=-216.36 — structurally negative",
+      "timestamp": "2026-05-30T00:45:44.498134"
     }
   ]
 }

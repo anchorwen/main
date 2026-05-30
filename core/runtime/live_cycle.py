@@ -782,9 +782,14 @@ def _execute_management_phase(
     # reconciliation cycles — up to 10 min window). Single-ticket query is
     # lightweight and prevents position_not_found dispatches.
     if mt5_worker is not None and not config.no_mt5:
-        try:
+        # MT5 IPC — FTC(CRASH) lets the crash propagate (no outer try/except)
+        _mt5_pos = None
+        with FaultTolerantContext(
+            level=FaultLevel.CRASH,
+            component="MT5_IPC:positions_get:MIA_guard",
+        ):
             _mt5_pos = mt5_worker.positions_get(ticket=pos.ticket)
-            if not _mt5_pos:
+        if not _mt5_pos:
                 # ── Position closed in MT5 between reconciliation cycles ──
                 # FIX-20260525-024: previously just cleared and returned, which:
                 #   (a) left no close journal entry (ticket already gone from
@@ -828,24 +833,6 @@ def _execute_management_phase(
                     flush=True,
                 )
                 return False
-        except Exception:
-            # MT5 IPC failure — cannot confirm position existence.
-            # Dispatching modify_sltp for a stale position creates rejection
-            # noise (49/50 May 12 rejections were modify_sltp for closed
-            # tickets).  Bail out; the next cycle will retry.
-            print(
-                json.dumps(
-                    {
-                        "event": "position_manager_mt5_unreachable",
-                        "time": _utc_iso(),
-                        "ticket": pos.ticket,
-                        "reason": "mt5_ipc_exception_cannot_verify_position",
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-            return False
 
     # Resolve strategy name early — needed for dispatch magic attribution
     _sname = state.known_open_tickets.get(pos.ticket, {}).get("strategy", "")
@@ -6235,6 +6222,13 @@ def execute_live_cycle(
 
                 # Intraday drawdown kill for legacy path
                 if config.intraday_drawdown_kill_enabled:
+                    # MT5 IPC — FTC(CRASH), extracted from legacy try/except
+                    _acc = None
+                    with FaultTolerantContext(
+                        level=FaultLevel.CRASH,
+                        component="MT5_IPC:account_info:drawdown_kill_legacy",
+                    ):
+                        _acc = mt5_worker.account_info()
                     try:
                         from core.execution.pre_trade_guards import IntradayDrawdownKill
 
@@ -6244,7 +6238,6 @@ def execute_live_cycle(
                                 force_close_enabled=config.intraday_dd_force_close,
                                 force_close_pct=config.intraday_dd_force_close_pct,
                             )
-                        _acc = mt5_worker.account_info()
                         if _acc is not None:
                             _eq = float(getattr(_acc, "equity", 0))
                             _dd = state.intraday_dd_kill.update(_eq)
