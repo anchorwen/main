@@ -250,11 +250,10 @@ class MetaSignalFilter:
         """Load the optional MLP ensemble model for probability averaging."""
         if not self.mlp_model_path or not os.path.exists(self.mlp_model_path):
             return
-        try:
-            from core.brains.online_mlp_model import OnlineMLP
+        from core.brains.online_mlp_model import OnlineMLP
 
-            with log_and_continue(component="MetaFilter:load_mlp"):
-                self._mlp_model = OnlineMLP.load(self.mlp_model_path)
+        with log_and_continue(component="MetaFilter:load_mlp"):
+            self._mlp_model = OnlineMLP.load(self.mlp_model_path)
 
     def filter(
         self,
