@@ -25,10 +25,13 @@ brains:
     enabled: true
   - path: configs/brains/Meta_Stage1_MetaLabel_Binary_V1.json
     enabled: true
-  # Swing_V9 V1 configs archived to archive_deprecated/ (FIX-20260529-034: magic collision resolution)
   - path: configs/brains/Swing_V9_M30_V2.json
     enabled: true
   - path: configs/brains/Swing_V9_M15_V2.json
+    enabled: true
+  - path: configs/brains/Brain_Trend_M30_V1.json
+    enabled: true
+  - path: configs/brains/Brain_Rev_M30_V1.json
     enabled: true
 gate:
   gate_policy_config: configs/live_gate_policy.json
@@ -96,20 +99,18 @@ exit_management:
   require_min_r: 0.3
   min_sl_step: 0.15
 alert:
-  # Phase A: LiveAlertHub wiring (FIX-20260529-040)
-  # Controls the 6-layer alert pipeline: rules → circuit breaker → Slack/DingTalk/Log
-  enabled: true   # LiveAlertHub active (FIX-20260529-040): DingTalk webhook configured
+  enabled: true
   thresholds:
-    daily_loss_limit: -5.0          # USD, trip circuit breaker when daily realized PnL exceeds
-    consecutive_losers: 8           # warning when consecutive losses exceed this
-    win_rate_collapse: 0.30         # trip circuit breaker when rolling 100-trade WR drops below
-    strategy_degradation_loss: -3.0 # warning when single-strategy PnL drops below
-    strategy_degradation_wr: 0.30   # warning when single-strategy WR drops below
+    daily_loss_limit: -5.0
+    consecutive_losers: 8
+    win_rate_collapse: 0.3
+    strategy_degradation_loss: -3.0
+    strategy_degradation_wr: 0.3
   channels:
-    slack: true                     # enable Slack (requires QUANTOS_SLACK_WEBHOOK_URL)
-    dingtalk: true                  # enable DingTalk
-    dingtalk_webhook_url: "https://oapi.dingtalk.com/robot/send?access_token=f33f64c01a0323ee7859fab62495addd0ad75c02182425f91b5ffe4ffbf9ce46"
-    log: true                       # always enabled (writes to data/logs/alert_audit.jsonl)
+    slack: true
+    dingtalk: true
+    dingtalk_webhook_url: https://oapi.dingtalk.com/robot/send?access_token=f33f64c01a0323ee7859fab62495addd0ad75c02182425f91b5ffe4ffbf9ce46
+    log: true
 capital_allocator:
   base_volume: 0.01
   min_volume: 0.01
@@ -298,7 +299,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.0
   statarb_dynamic:
-    enabled: false  # FIX-20260529-036: disabled — 228 trades/-$2.17, 35.5% WR, bleeding artery
+    enabled: false
     timeframe: M5
     magic: 90003
     strategy_family: mean_reversion
@@ -336,7 +337,7 @@ strategy_lines:
       long_bias_discount: 0.1
     min_p_win: 0.45
   statarb_m15:
-    enabled: false  # FIX-20260529-036: disabled — paired with statarb_dynamic. OU brains retained for MetaFilter input only
+    enabled: false
     timeframe: M15
     magic: 90103
     strategy_family: mean_reversion
@@ -407,26 +408,17 @@ strategy_lines:
     - xgboost_v9
     base_volume: 0.01
     max_volume: 0.03
-    confidence_threshold: 0.35  # FIX-20260529-039: lowered from 0.45 — counter_trend penalise
-                                # (conf×0.60) drops 0.50→0.30, which was below old gate.
-                                # Now penalised signals survive to RR/MetaFilter checks.
-    min_p_win: 0.40          # FIX-20260529-055: lowered from 0.45 — rolling 100-trade WR
-                              # drifted from 0.458 (when FIX-039 set 0.45) to 0.400.
-                              # 0.40 matches current estimate while blocking truly broken signals.
-                              # Lifetime PnL +$2.75 over 146 trades confirms positive expectancy.
-    max_spread_points: 60     # FIX-20260529-038: M15 swing — block when spread >= 60 pts
-    spread_points: 30         # FIX-20260529-030: SL/TP spread cost alignment (XAUUSDc typical)
+    confidence_threshold: 0.35
+    min_p_win: 0.4
+    max_spread_points: 60
+    spread_points: 30
     sl:
       base_atr_mult: 1.5
       hard_sl_ratio: 1.5
       dynamic: true
-      min_rr_ratio: 0.85  # FIX-20260529-039: lowered from 1.0 — spread_points=30 pushes
-                           # net RR below gross 1:1. 0.85 allows post-spread RR ≥ 0.85
-                           # (breakeven=0.50, so this still filters strictly negative EV).
+      min_rr_ratio: 0.85
     tp:
-      base_atr_mult: 2.0  # FIX-20260529-039: 1.5→2.0 — symmetric SL/TP + spread →
-                           # net_RR=0.935<1.0 makes Kelly always negative.
-                           # TP=2.0 gives net_RR=1.258, breakeven WR=44.3% < p_win=45.8%.
+      base_atr_mult: 2.0
       partial_tp_enabled: true
       partial_tp_ratio: 0.5
       partial_tp_r: 1.5
@@ -455,23 +447,17 @@ strategy_lines:
     - xgboost_v9
     base_volume: 0.01
     max_volume: 0.03
-    confidence_threshold: 0.35  # FIX-20260529-039: lowered from 0.45 — counter_trend penalise
-                                # (conf×0.60) drops 0.50→0.30, which was below old gate.
-                                # Now penalised signals survive to RR/MetaFilter checks.
-    min_p_win: 0.45          # FIX-20260529-039: lowered from default 0.50 — trend strategies
-                              # can use 0.48 (code comment). 0.45 allows brain cold-start
-                              # (current rolling WR=0.463) while blocking truly broken signals.
-    max_spread_points: 70     # FIX-20260529-038: M30 swing — block when spread >= 70 pts
-    spread_points: 30         # FIX-20260529-030: SL/TP spread cost alignment (XAUUSDc typical)
+    confidence_threshold: 0.35
+    min_p_win: 0.45
+    max_spread_points: 70
+    spread_points: 30
     sl:
       base_atr_mult: 1.5
       hard_sl_ratio: 1.5
       dynamic: true
-      min_rr_ratio: 0.85  # FIX-20260529-039: lowered from 1.0 — spread_points=30 pushes
-                           # net RR below gross 1:1. 0.85 allows post-spread RR ≥ 0.85
-                           # (breakeven=0.50, so this still filters strictly negative EV).
+      min_rr_ratio: 0.85
     tp:
-      base_atr_mult: 2.0  # FIX-20260529-039: 1.5→2.0 (same rationale as m15_swing)
+      base_atr_mult: 2.0
       partial_tp_enabled: true
       partial_tp_ratio: 0.5
       partial_tp_r: 1.5
@@ -599,7 +585,7 @@ regime_gate:
       micro_h1: reduced
       statarb_dynamic: reduced
       statarb_m15: reduced
-    low_vol:                           # FIX-20260529-037: ATR < 20th percentile — liquidity vacuum gate
+    low_vol:
       barrier_12bar: reduced
       barrier_12bar_meta: reduced
       micro_3bar: false

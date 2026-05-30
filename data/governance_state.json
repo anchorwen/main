@@ -113,6 +113,22 @@
         "total_trades": 4,
         "pnl_r": -10.71
       }
+    },
+    "Brain_Trend_M30_V1": {
+      "brain_id": "Brain_Trend_M30_V1",
+      "status": "shadow",
+      "registered_at": "2026-05-30T03:44:49.097429",
+      "last_transition_at": "2026-05-30T03:44:49.097429",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "Brain_Rev_M30_V1": {
+      "brain_id": "Brain_Rev_M30_V1",
+      "status": "shadow",
+      "registered_at": "2026-05-30T03:44:49.234460",
+      "last_transition_at": "2026-05-30T03:44:49.234460",
+      "transition_count": 1,
+      "freeze_count": 0
     }
   },
   "transition_log": [
@@ -903,6 +919,22 @@
       "to": "candidate",
       "reason": "SSOT reconciliation: active config on disk overrides retired governance",
       "timestamp": "2026-05-30T02:20:26.472988+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Brain_Trend_M30_V1",
+      "from": null,
+      "to": "shadow",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-30T03:44:49.097429",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Brain_Rev_M30_V1",
+      "from": null,
+      "to": "shadow",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-30T03:44:49.234460",
       "fix_id": "FIX-20260529-034"
     }
   ]
