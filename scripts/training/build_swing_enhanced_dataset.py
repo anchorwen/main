@@ -575,8 +575,8 @@ def build_swing_dataset(
         "n_train_init": n_train_init,
         "n_val_init": n_val_init,
         "n_test_init": n_test_init,
-        "sl_atr_mult": 1.5,
-        "tp_atr_mult": 1.5,
+        "sl_atr_mult": _sl,
+        "tp_atr_mult": _tp,
         "label_dist": {str(k): int(v) for k, v in zip(unique, counts, strict=False)},
         "built_at": datetime.now().isoformat(),
     }

@@ -56,7 +56,7 @@ def load_dataset(data_dir: Path) -> dict[str, Any]:
 
 
 def compute_metrics(
-    y_true: np.ndarray, y_pred: np.ndarray, pnl: np.ndarray | None = None
+    y_true: np.ndarray, y_pred: np.ndarray, pnl: np.ndarray | None = None, *, meta: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """Compute comprehensive metrics for multi-class swing predictions."""
     correct = y_pred == y_true
@@ -84,10 +84,13 @@ def compute_metrics(
         trade_wr = float(trade_correct.mean())
         trade_count = int(trade_mask.sum())
 
-        # Simulated PnL: correct direction = +1.5, wrong = -1.5
+        # Use actual barrier multipliers from dataset metadata (not hardcoded 1.5)
+        # FIX-20260530: asymmetric labels (e.g. sl=2.5/tp=0.7) need correct PnL sim
+        _sl_mult = float(meta.get("sl_atr_mult", 1.5)) if meta else 1.5
+        _tp_mult = float(meta.get("tp_atr_mult", 1.5)) if meta else 1.5
         sim_pnl = np.empty(len(trade_correct), dtype=np.float64)
-        sim_pnl[:] = -1.5
-        sim_pnl[trade_correct] = 1.5
+        sim_pnl[:] = -_sl_mult  # Wrong direction = SL hit (loss)
+        sim_pnl[trade_correct] = _tp_mult  # Correct direction = TP hit (profit)
         gross_profit = float(np.sum(sim_pnl[sim_pnl > 0]))
         gross_loss = float(abs(np.sum(sim_pnl[sim_pnl < 0])))
         profit_factor = gross_profit / max(gross_loss, 1e-12)
@@ -197,8 +200,8 @@ def train_xgboost_swing(
     dtest = xgb.DMatrix(dataset["X_test"], label=dataset["y_test"], feature_names=feature_names)
     y_test_pred = np.asarray(booster.predict(dtest)).argmax(axis=1)
 
-    val_metrics = compute_metrics(dataset["y_val"], y_val_pred, dataset["pnl_r_val"])
-    test_metrics = compute_metrics(dataset["y_test"], y_test_pred, dataset["pnl_r_test"])
+    val_metrics = compute_metrics(dataset["y_val"], y_val_pred, dataset["pnl_r_val"], meta=dataset.get("meta"))
+    test_metrics = compute_metrics(dataset["y_test"], y_test_pred, dataset["pnl_r_test"], meta=dataset.get("meta"))
 
     return booster, {
         "best_iteration": int(best_iter),
