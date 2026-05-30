@@ -881,17 +881,25 @@ class BrainLifecycleManager:
                     except (json.JSONDecodeError, OSError):
                         pass
 
-        # ── magic uniqueness ──
-        magic_map: dict[int, str] = {}
+        # ── magic uniqueness (aligned with brain_registration_gate) ──
+        # Brains in the same contract_group MAY share a magic number —
+        # they vote together in the same strategy line, and the bridge
+        # routes fills to the strategy, not individual brains.
+        # Collisions across DIFFERENT contract_groups are real issues.
+        magic_map: dict[int, tuple[str, str]] = {}
         for bid, cfg in disk_brains.items():
             magic = cfg.get("magic")
             if magic is not None:
+                cg = cfg.get("contract_group", "")
                 if magic in magic_map:
-                    report.hardcoded_path_mismatches.append(
-                        f"magic collision: {magic} used by '{magic_map[magic]}' and '{bid}'"
-                    )
+                    existing_bid, existing_cg = magic_map[magic]
+                    if cg != existing_cg:
+                        report.hardcoded_path_mismatches.append(
+                            f"magic collision: {magic} used by '{existing_bid}' ({existing_cg})"
+                            f" and '{bid}' ({cg})"
+                        )
                 else:
-                    magic_map[magic] = bid
+                    magic_map[magic] = (bid, cg)
 
         # ── ensemble reference validity ──
         try:
