@@ -4358,7 +4358,7 @@ def execute_live_cycle(
         _recovered = False
         _recovery_reason = ""
         if _blocked_for > 300 and state._recent_atr_values and state._recent_mid_prices:
-            try:
+            with log_and_continue(component="SLStreak:market_normalization"):
                 import numpy as np
 
                 from core.execution.market_efficiency import (
@@ -4377,8 +4377,6 @@ def execute_live_cycle(
                     rolling_atr_std=_atr_std,
                     kaufman_er=_er,
                 )
-            except Exception:
-                pass
 
         if _recovered:
             print(
@@ -4612,11 +4610,9 @@ def execute_live_cycle(
                 _exit_ts_str = _entry.get("recorded_at", "")
                 _exit_ts = time.time()
                 if _exit_ts_str:
-                    try:
+                    with log_and_continue(component="MIA_Close:parse_timestamp"):
                         _parsed = datetime.fromisoformat(_exit_ts_str.replace("Z", "+00:00"))
                         _exit_ts = _parsed.timestamp()
-                    except Exception:
-                        pass
                 _exit_confidence = (
                     _entry.get("entry_consensus", {}).get("consensus_score", 0.5)
                     if isinstance(_entry.get("entry_consensus"), dict)
