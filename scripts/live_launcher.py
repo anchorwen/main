@@ -773,4 +773,4 @@ def launch(config_path: str = "configs/live.yaml") -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(launch())
+    raise SystemExit(launch(sys.argv[1] if len(sys.argv) > 1 else "configs/live.yaml"))
