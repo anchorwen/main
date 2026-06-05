@@ -114,6 +114,7 @@ class BarSyncPoller:
         fallback_interval: float = DEFAULT_FALLBACK_INTERVAL,
         mt5_worker: MT5Worker | None = None,
         market_type: str = "forex_24_5",  # FIX-20260601-042: session-aware bar sync
+        strict_mode: bool = False,  # Architect directive: refuse direct MT5 in production
     ) -> None:
         self.symbol = symbol
         self.timeframe = timeframe
@@ -127,6 +128,7 @@ class BarSyncPoller:
         self.poll_interval = poll_interval
         self.fallback_interval = fallback_interval
         self._mt5_worker = mt5_worker
+        self._strict_mode = strict_mode
 
         self._state_path = Path(state_dir) / "bar_sync_state.json"
         self._state = BarSyncState()
@@ -188,6 +190,11 @@ class BarSyncPoller:
                         self._timeframe_map(self.timeframe),
                         0,  # start_pos: 0 = most recent
                         2,  # count: 2 bars (current + previous)
+                    )
+                elif self._strict_mode:
+                    raise RuntimeError(
+                        "BarSyncPoller strict_mode: cannot fetch bars without MT5Worker. "
+                        "Worker became unavailable mid-cycle."
                     )
                 else:
                     import MetaTrader5 as mt5
@@ -538,10 +545,20 @@ class BarSyncPoller:
         When a worker is provided, the caller owns the MT5 lifecycle and this
         method is not called -- ``_mt5_available`` is set from the worker in
         ``__init__``.
+
+        In strict_mode (production), direct MT5 access is forbidden -- the
+        caller MUST provide a worker.  Raises RuntimeError if no worker.
         """
         if self._mt5_worker is not None:
             self._mt5_available = True
             return
+
+        if self._strict_mode:
+            raise RuntimeError(
+                "BarSyncPoller strict_mode: MT5Worker required. "
+                "Direct mt5.initialize() forbidden in production. "
+                "Pass mt5_worker= to BarSyncPoller constructor."
+            )
 
         try:
             import MetaTrader5 as mt5

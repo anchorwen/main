@@ -719,12 +719,6 @@ strategy_lines:
       max_consecutive_losses: 2
     direction_balance:
       long_bias_discount: 0.0
-portfolio_risk:
-  max_gross_exposure: 0.1
-  max_net_exposure: 0.05
-  max_same_direction_strategies: 2
-  netting_mode: net_out
-  execution_stagger_seconds: 20
 regime_gate:
   adx:
     trending_threshold: 30

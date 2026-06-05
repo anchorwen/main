@@ -1506,6 +1506,7 @@ def main(argv: list[str] | None = None) -> int:
                 timeout_seconds=args.bar_sync_timeout,
                 mt5_worker=mt5_worker,
                 market_type=_yaml_market_type,  # FIX-20260601-042: session-aware bar sync
+                strict_mode=True,  # Architect directive: no direct MT5 in production
             )
             print(
                 json.dumps(
