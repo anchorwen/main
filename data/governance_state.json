@@ -126,7 +126,7 @@
     },
     "Brain_Trend_M30_V1": {
       "brain_id": "Brain_Trend_M30_V1",
-      "status": "shadow",
+      "status": "candidate",
       "registered_at": "2026-05-30T03:44:49.097429",
       "last_transition_at": "2026-06-04T22:00:23.662856",
       "transition_count": 9,
@@ -137,7 +137,8 @@
         "sharpe_ratio": -23.83,
         "total_trades": 246,
         "pnl_r": -76.54
-      }
+      },
+      "vote_weight": 0.8
     },
     "Brain_Rev_M30_V1": {
       "brain_id": "Brain_Rev_M30_V1",
@@ -319,6 +320,12 @@
       "transition": "candidate->archived",
       "reason": "Training SL/TP=1.5/2.5 mismatched with strategy SL=2.5/TP=0.7. Wrong contract for mean_reversion family.",
       "timestamp": "2026-06-05T11:44:13Z"
+    },
+    {
+      "brain_id": "Brain_Trend_M30_V1",
+      "transition": "shadow->candidate",
+      "reason": "Active in last 7 days — producing signals. Promoted per P2 roster audit.",
+      "timestamp": "2026-06-05T11:46:23Z"
     }
   ]
 }
