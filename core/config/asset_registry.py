@@ -27,6 +27,7 @@ class AssetConfig:
     min_price: float
     max_price: float
     pip_size: float
+    digits: int  # MT5 _Digits — decimal places for price display (XAU=2, BTC=1)
 
 
 # ── Registry ──────────────────────────────────────────────────────────────────
@@ -38,6 +39,7 @@ ASSET_REGISTRY: dict[str, AssetConfig] = {
         min_price=1000.0,
         max_price=10000.0,  # FIX-029: data-error guard, not a market forecast — set wide enough to be permanent
         pip_size=0.01,
+        digits=2,
     ),
     "BTCUSDc": AssetConfig(
         symbol="BTCUSDc",
@@ -45,6 +47,7 @@ ASSET_REGISTRY: dict[str, AssetConfig] = {
         min_price=5000.0,
         max_price=200000.0,
         pip_size=0.1,
+        digits=1,
     ),
 }
 
