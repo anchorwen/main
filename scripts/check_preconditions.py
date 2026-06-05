@@ -78,7 +78,56 @@ TASKS = {
             {
                 "name": "DEPRECATED/LEGACY sites counted and assessed",
                 "check_fn": "check_legacy_count",
-                "required": None,  # informational
+                "required": None,
+                "current": None,
+            }
+        ],
+    },
+    # ── Sequential hardening tasks (no deadlines — depends on prior steps) ──
+    "S1": {
+        "name": "Golden Master 录制",
+        "deadline": None,  # sequential — activate now, accumulate passively
+        "preconditions": [
+            {
+                "name": "GOLDEN_MASTER_RECORD=1 env set + cycles recorded >= 500",
+                "check_fn": "check_golden_master",
+                "required": 500,
+                "current": None,
+            }
+        ],
+    },
+    "S2": {
+        "name": "Golden Master 回放校验 (blocks all refactoring)",
+        "deadline": None,
+        "preconditions": [
+            {
+                "name": "S1 complete + verify.py --golden-master implemented",
+                "check_fn": "check_golden_master_replay_ready",
+                "required": True,
+                "current": None,
+            }
+        ],
+    },
+    "S3": {
+        "name": "Socket边界 Pydantic海关",
+        "deadline": None,
+        "preconditions": [
+            {
+                "name": "MT5Worker tick/order result validated with AssetConfig.digits",
+                "check_fn": "check_pydantic_customs",
+                "required": True,
+                "current": None,
+            }
+        ],
+    },
+    "S4": {
+        "name": "提取 p_win 计算链为纯函数",
+        "deadline": None,
+        "preconditions": [
+            {
+                "name": "S2 complete + resolve_p_win_from_brains() extracted + Hypothesis test",
+                "check_fn": "check_pwin_extraction",
+                "required": True,
                 "current": None,
             }
         ],
@@ -158,10 +207,47 @@ def check_legacy_count() -> tuple[int, str]:
     return count, f"{count} DEPRECATED/LEGACY/Strangler sites in core/"
 
 
+# ── Sequential hardening checks ─────────────────────────────────────────
+
+
+def check_golden_master() -> tuple[int, str]:
+    """Check Golden Master recording cycles."""
+    import os
+    gm_path = PROJECT_ROOT / "data" / "golden_master.jsonl"
+    env_set = os.environ.get("GOLDEN_MASTER_RECORD") == "1"
+    cycles = 0
+    if gm_path.exists():
+        cycles = len([l for l in gm_path.read_text(encoding="utf-8").splitlines() if l.strip()])
+    return cycles, f"{cycles} cycles, env={'ACTIVE' if env_set else 'NOT SET (need GOLDEN_MASTER_RECORD=1)'}"
+
+
+def check_golden_master_replay_ready() -> tuple[bool, str]:
+    """Check if replay verification is ready."""
+    gm_path = PROJECT_ROOT / "data" / "golden_master.jsonl"
+    cycles = 0
+    if gm_path.exists():
+        cycles = len([l for l in gm_path.read_text(encoding="utf-8").splitlines() if l.strip()])
+    has_cmd = "--golden-master" in (PROJECT_ROOT / "scripts" / "verify.py").read_text(encoding="utf-8")
+    return (cycles >= 500 and has_cmd), f"cycles={cycles}/500, verify.py gm={'OK' if has_cmd else 'TODO'}"
+
+
+def check_pydantic_customs() -> tuple[bool, str]:
+    """Check AssetConfig.digits readiness."""
+    reg = PROJECT_ROOT / "core" / "config" / "asset_registry.py"
+    return "digits" in reg.read_text(encoding="utf-8"), "AssetConfig.digits present"
+
+
+def check_pwin_extraction() -> tuple[bool, str]:
+    """Check p_win extraction status."""
+    return (PROJECT_ROOT / "core" / "execution" / "pwin_chain.py").exists(), "p_win chain file"
+
+
 # ── Main ────────────────────────────────────────────────────────────────
 
 
-def days_until(date_str: str) -> int:
+def days_until(date_str: str | None) -> int:
+    if date_str is None:
+        return 999  # sequential task, no deadline
     d = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=UTC)
     return (d - datetime.now(UTC)).days
 
@@ -197,13 +283,15 @@ def format_report(task_results: list[dict], alert_only: bool = False) -> str:
 
     for tr in task_results:
         dl = tr["days_left"]
-        urgent = dl <= 3
-        symbol = "CRIT" if dl <= 0 else ("WARN" if dl <= 3 else "OK")
+        is_seq = dl >= 900  # sequential task, no deadline
+        urgent = (not is_seq) and dl <= 3
+        symbol = "SEQ" if is_seq else ("CRIT" if dl <= 0 else ("WARN" if dl <= 3 else "OK"))
 
-        if alert_only and not urgent:
+        if alert_only and not urgent and not is_seq:
             continue
 
-        lines.append(f"{symbol} {tr['task_id']}: {tr['name']} (deadline: {tr['deadline']}, {dl}d left)")
+        deadline_str = "sequential" if is_seq else f"{tr['deadline']}, {dl}d left"
+        lines.append(f"{symbol} {tr['task_id']}: {tr['name']} (deadline: {deadline_str})")
         for r in tr["results"]:
             met_str = "PASS" if r["met"] is True else ("FAIL" if r["met"] is False else "INFO")
             lines.append(f"   {met_str} {r['name']}")
