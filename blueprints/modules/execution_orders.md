@@ -59,6 +59,8 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260605-123 | 2026-06-05 | cursor-agent | 6110bc6 | **Core test长城**: 16 TrailStopEngine tests (activation watermark, vol adjustment -0.5/+0.5, regime-based mult, breakeven, per-position TrailPolicy). 13 execution_state tests (save/load roundtrip, stale rejection, corrupt JSON, circuit breaker restore, SL streak preservation). | RC-12 |
+| FIX-20260605-121 | 2026-06-05 | cursor-agent | 5892b3f | **Trail stop tests updated for FIX-064/071**: Trail activation watermark test (no trail before 1.0x ATR profit), vol adjustment tests updated for inverted logic (high vol -0.5 tightens, low vol +0.5 widens). Old +0.8/-0.3 delta model replaced. | RC-06 |
 | FIX-20260605-120 | 2026-06-05 | cursor-agent | — | **Asset-specific reentry thresholds**: Reentry guard SL/bleed cooldowns and penalties now read from YAML per asset. XAU: 180s/0.10, BTC: 300s/0.15. Hardcoded BTC values no longer leak to XAU. | RC-09 |
 | FIX-20260604-089 | 2026-06-04 | cursor-agent | — | **Brain vote recording swallow fix**: strategy_line.py `record_brain_votes()` exception no longer silently dropped — now `logger.warning`. | RC-07 |
 | — (arch audit) | 2026-06-05 | cursor-agent | — | **PositionManager architecture roadmap**: 1,720-line class diagnosed — high essential cohesion, 10 exit types documented with evaluation hierarchy. Roadmap comment injected at class header. `_compute_weighted_fallback` confirmed as defensive safety net (not dead code). | RC-06 |

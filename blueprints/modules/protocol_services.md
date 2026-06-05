@@ -45,6 +45,7 @@ DecisionIntent → DecisionCompiler → IntentMessageBuilder → CommunicationEn
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260605-122 | 2026-06-05 | cursor-agent | ae0d006 | **BarSyncPoller strict_mode**: New `strict_mode` parameter — when True (production), RuntimeError if MT5Worker unavailable instead of silent fallback to direct `mt5.initialize()`. Wired `strict_mode=True` in live_intent_loop.py. Defense-in-depth against accidental non-worker MT5 access. Note: BarSyncPoller already had correct Worker-first routing; strict_mode adds a hard guardrail for misconfiguration. | RC-09 |
 | FIX-20260531-003 | 2026-05-31 | cursor-agent | — | DistributedLock .tmp file cleanup: `FileLock.acquire()` left stale `.tmp` staging file after failed acquire (rename failed → OSError). Added `tmp.unlink(missing_ok=True)` in OSError handler. Prevents lock directory clutter and potential confusion in stale lock detection. | RC-06 (resource-leak) |
 | FIX-20260529-040 | 2026-05-29 | cursor-agent | — | CircuitBreaker.trip(reason) + _last_trip_reason field: enables instant OPEN on CRITICAL alert | RC-12 |
 | FIX-20260601-045 | 2026-06-01 | cursor-agent | — | **bar_sync_state version field**: added `schema_version: bar_sync_state.v1`. v2→v3 migration complete. | RC-09 |
