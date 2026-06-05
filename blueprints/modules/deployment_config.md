@@ -61,6 +61,7 @@ environment_config.json → EnvironmentConfig → ServiceContainer
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260605-125 | 2026-06-05 | cursor-agent | — | **Meta Pipeline probe trio archived**: 3 brain configs (Huber/Binary_Cls/MetaLabel) → status=archived. Governance state synchronized. Brain roster remains at 20 (3 archived, 17 active). | RC-11 |
 | FIX-20260605-122 | 2026-06-05 | cursor-agent | ae0d006 | **Dead config cleanup**: Removed `portfolio_risk:` nested block from live.yaml — code reads `LiveCycleConfig` flat keys (`portfolio_max_gross`, `portfolio_max_net`, `portfolio_netting_mode`), not the nested YAML path. Zero Python code references `"portfolio_risk"` as a config key. | RC-09 |
 | FIX-20260604-088 | 2026-06-04 | cursor-agent | — | **Governance cross-process FileLock**: `GovernanceService.save()` now acquires `FileLock("governance_state")` before atomic tmp+replace write. Asymmetric timeout: live daemons 1.0s, offline scripts 30.0s. All 4 bare-write bypassers (`brain_promotion.py`, `brain.py` reconcile, `run_promotion.py`, `reactivate_brains.py`) migrated to `GovernanceService.save()`. Eliminates file truncation risk from concurrent multi-process writes to `governance_state.json`. | RC-04, RC-06 |
 | — (arch audit) | 2026-06-05 | cursor-agent | — | **`_build_health` dedup + `_build_diagnostics` dedup**: `HealthCheckService.safe_get_health()` and `DiagnosticsDashboard.safe_get_snapshot()` extracted as shared helpers. `release_readiness.py` and `runbook_engine.py` now delegate to SSOT. | RC-06 |

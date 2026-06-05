@@ -13,7 +13,7 @@
     "filter_stage": "stage2"
   },
   "model_version": "barrier_12bar_regression_huber_retrained_sl3_tp1.5",
-  "status": "frozen",
+  "status": "archived",
   "vote_weight": 0.0,
   "magic": 90011,
   "artifact_path": "data/models/institutional/barrier_12bar_regression_huber_20260524_092113.txt",

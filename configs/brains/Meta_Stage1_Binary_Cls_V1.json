@@ -13,7 +13,7 @@
     "filter_stage": "stage2"
   },
   "model_version": "barrier_12bar_binary_cls_rr1.0_retrained",
-  "status": "shadow",
+  "status": "archived",
   "vote_weight": 0.5,
   "magic": 90001,
   "artifact_path": "data/models/institutional/barrier_12bar_binary_cls_20260528_015116.txt",

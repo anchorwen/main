@@ -54,7 +54,8 @@ BrainRegistryService → brain_entries → BrainFactory → adapters
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
-| FIX-20260604-088 | 2026-06-04 | cursor-agent | — | **brain_promotion.py bare-write eliminated**: `apply_promotion_decisions()` no longer writes `governance_state.json` via raw `write_text()` — uses locked atomic `GovernanceService.save(lock_timeout=30.0)`. | RC-04 |
+| FIX-20260605-125 | 2026-06-05 | cursor-agent | — | **Meta Pipeline probe trio archived**: Huber (1627 attr, -369.65R), Binary_Cls (540 attr, 100% LONG bias), MetaLabel (417 attr, 0 signals). All three had structurally negative expectancy. Governance + config archived. See full lifecycle report in ACTIVE_TASKS_REGISTRY.md. | RC-11 |
+| FIX-20260604-088 | 2026-06-04 | cursor-agent | — | **brain_promotion.py bare-write eliminated**
 | FIX-20260531-010 | 2026-05-31 | cursor-agent | — | brain_leaderboard.py docstring: added BTC usage example (data_btc/ paths). Actual code already supports base_dir parameter. | RC-09 |
 | FIX-20260528-023 | 2026-05-28 | cursor-agent | — | train_swing_v9 brain config output: added schema_version/magic/artifact_path fields | RC-09 |
 | FIX-20260528-017 | 2026-05-28 | cursor-agent | — | Schema Dimension & Feature Order SSOT: added strict-list feature order handshake in BrainFactory.build() — compares config `features` against model .meta.json `feature_names` using `!=` (NOT set()), raises BrainConfigError at first differing index. LightGBM uses positional indexing, scrambled features produce garbage predictions. | RC-06 |

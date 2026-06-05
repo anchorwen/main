@@ -10,11 +10,11 @@
       "freeze_count": 0,
       "exposure_limited": false,
       "performance_metrics": {
-        "win_rate": 0.4676,
-        "profit_factor": 0.85,
-        "sharpe_ratio": -13.86,
-        "total_trades": 1901,
-        "pnl_r": -325.64
+        "win_rate": 0.4677,
+        "profit_factor": 0.84,
+        "sharpe_ratio": -14.03,
+        "total_trades": 1903,
+        "pnl_r": -329.95
       }
     },
     "OU_Params_V7_M15": {
@@ -36,7 +36,7 @@
     },
     "Meta_Stage1_Huber_V1": {
       "brain_id": "Meta_Stage1_Huber_V1",
-      "status": "frozen",
+      "status": "archived",
       "registered_at": "2026-05-17T08:00:00.000000",
       "last_transition_at": "2026-06-03T22:00:19.068839",
       "transition_count": 13,
@@ -48,11 +48,13 @@
         "sharpe_ratio": -18.31,
         "total_trades": 1627,
         "pnl_r": -369.65
-      }
+      },
+      "archived_at": "2026-06-05T11:31:31Z",
+      "archive_reason": "Meta Pipeline Gen1 probe — 1627 attr, -369.65R. Replaced by Binary_Cls then MetaLabel."
     },
     "Meta_Stage1_Binary_Cls_V1": {
       "brain_id": "Meta_Stage1_Binary_Cls_V1",
-      "status": "shadow",
+      "status": "archived",
       "registered_at": "2026-05-24T09:34:13.000000",
       "last_transition_at": "2026-06-04T22:00:19.162845",
       "transition_count": 13,
@@ -67,11 +69,13 @@
         "pnl_r": -241.03
       },
       "frozen_at": "2026-06-05",
-      "frozen_reason": "C3.2复评: WR<47% PF<0.70 统计显著负EV"
+      "frozen_reason": "C3.2复评: WR<47% PF<0.70 统计显著负EV",
+      "archived_at": "2026-06-05T11:31:31Z",
+      "archive_reason": "Meta Pipeline Gen2 probe — 540 attr, 100% LONG prior-prob overfitting. Structurally negative."
     },
     "Meta_Stage1_MetaLabel_Binary_V1": {
       "brain_id": "Meta_Stage1_MetaLabel_Binary_V1",
-      "status": "shadow",
+      "status": "archived",
       "registered_at": "2026-05-24T10:19:47.000000",
       "last_transition_at": "2026-06-03T22:00:19.068839",
       "transition_count": 7,
@@ -86,7 +90,9 @@
         "pnl_r": -216.36
       },
       "frozen_at": "2026-06-05",
-      "frozen_reason": "C3.2复评: WR<47% PF<0.70 统计显著负EV"
+      "frozen_reason": "C3.2复评: WR<47% PF<0.70 统计显著负EV",
+      "archived_at": "2026-06-05T11:31:31Z",
+      "archive_reason": "Meta Pipeline Gen3 probe — 417 attr, 0 journal signals. Required OU signal engine never integrated."
     },
     "Swing_V9_M30_V2": {
       "brain_id": "Swing_V9_M30_V2",
@@ -96,11 +102,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4461,
+        "win_rate": 0.4463,
         "profit_factor": 0.74,
-        "sharpe_ratio": -28.74,
-        "total_trades": 733,
-        "pnl_r": -251.28
+        "sharpe_ratio": -29.16,
+        "total_trades": 735,
+        "pnl_r": -255.59
       }
     },
     "Swing_V9_M15_V2": {
@@ -248,11 +254,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.3871,
-        "profit_factor": 0.63,
-        "sharpe_ratio": -45.95,
-        "total_trades": 341,
-        "pnl_r": -168.41
+        "win_rate": 0.3878,
+        "profit_factor": 0.62,
+        "sharpe_ratio": -46.86,
+        "total_trades": 343,
+        "pnl_r": -172.72
       }
     },
     "Swing_LGB_M15_V1": {
@@ -279,5 +285,24 @@
       }
     }
   },
-  "transition_log": []
+  "transition_log": [
+    {
+      "brain_id": "Meta_Stage1_Huber_V1",
+      "transition": "frozen->archived",
+      "reason": "Meta Pipeline Gen1 probe — 1627 attr, -369.65R. Replaced by Binary_Cls then MetaLabel.",
+      "timestamp": "2026-06-05T11:31:31Z"
+    },
+    {
+      "brain_id": "Meta_Stage1_Binary_Cls_V1",
+      "transition": "shadow->archived",
+      "reason": "Meta Pipeline Gen2 probe — 540 attr, 100% LONG prior-prob overfitting. Structurally negative.",
+      "timestamp": "2026-06-05T11:31:31Z"
+    },
+    {
+      "brain_id": "Meta_Stage1_MetaLabel_Binary_V1",
+      "transition": "shadow->archived",
+      "reason": "Meta Pipeline Gen3 probe — 417 attr, 0 journal signals. Required OU signal engine never integrated.",
+      "timestamp": "2026-06-05T11:31:31Z"
+    }
+  ]
 }
