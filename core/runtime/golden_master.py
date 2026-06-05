@@ -1,17 +1,14 @@
 """Golden Master recorder — capture (inputs, outputs) pairs for regression testing.
 
-Architecture:  Non-invasive.  Activated only when ``GOLDEN_MASTER_RECORD=1``
-is set in the environment.  Each live cycle writes one JSON line to
-``data/golden_master.jsonl`` containing the decision-relevant inputs
-and the per-strategy outputs.
+Architecture:  Non-invasive.  Records every live cycle to
+``data/golden_master.jsonl`` by default.  Set ``GOLDEN_MASTER_RECORD=0``
+to disable.  Each record contains decision-relevant inputs and per-strategy
+outputs for one cycle (~2KB).
 
 Replay mode (``GOLDEN_MASTER_REPLAY=1``) compares live outputs against
 recorded expectations and logs mismatches — it does NOT block trading.
 
-Usage::
-
-    GOLDEN_MASTER_RECORD=1 python scripts/live_intent_loop.py ...   # Record
-    python scripts/verify.py --golden-master                        # Replay check
+Default: RECORDING ON.  Opt-out: GOLDEN_MASTER_RECORD=0.
 """
 
 from __future__ import annotations
@@ -23,13 +20,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-_ENV_RECORD = "GOLDEN_MASTER_RECORD"
-_ENV_REPLAY = "GOLDEN_MASTER_REPLAY"
+_ENV_DISABLE = "GOLDEN_MASTER_RECORD"  # set to "0" to disable
 _DEFAULT_PATH = "data/golden_master.jsonl"
 
 
 def _is_recording() -> bool:
-    return os.environ.get(_ENV_RECORD) == "1"
+    # Default ON — only disable when explicitly set to "0"
+    return os.environ.get(_ENV_DISABLE) != "0"
 
 
 def _is_replaying() -> bool:

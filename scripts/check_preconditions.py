@@ -214,11 +214,11 @@ def check_golden_master() -> tuple[int, str]:
     """Check Golden Master recording cycles."""
     import os
     gm_path = PROJECT_ROOT / "data" / "golden_master.jsonl"
-    env_set = os.environ.get("GOLDEN_MASTER_RECORD") == "1"
+    disabled = os.environ.get("GOLDEN_MASTER_RECORD") == "0"
     cycles = 0
     if gm_path.exists():
         cycles = len([l for l in gm_path.read_text(encoding="utf-8").splitlines() if l.strip()])
-    return cycles, f"{cycles} cycles, env={'ACTIVE' if env_set else 'NOT SET (need GOLDEN_MASTER_RECORD=1)'}"
+    return cycles, f"{cycles} cycles, recording={'OFF (GOLDEN_MASTER_RECORD=0)' if disabled else 'ON (default)'}"
 
 
 def check_golden_master_replay_ready() -> tuple[bool, str]:

@@ -259,11 +259,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4016,
+        "win_rate": 0.4005,
         "profit_factor": 0.81,
-        "sharpe_ratio": -19.3,
-        "total_trades": 376,
-        "pnl_r": -94.98
+        "sharpe_ratio": -19.98,
+        "total_trades": 377,
+        "pnl_r": -98.58
       }
     },
     "Swing_LGB_M15_V1": {
