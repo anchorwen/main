@@ -120,8 +120,9 @@ def check_calibrator_xau() -> tuple[int, str]:
         return 0, "state file not found"
     try:
         d = json.loads(state.read_text(encoding="utf-8"))
-        q = d.get("queue", d.get("samples", []))
-        return len(q), f"{len(q)} samples in calibrator queue"
+        hist = d.get("history", [])
+        cs = d.get("cold_started", False)
+        return len(hist), f"{len(hist)} samples (cold_started={cs})"
     except Exception as e:
         return 0, f"error reading state: {e}"
 
