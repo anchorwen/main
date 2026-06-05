@@ -49,6 +49,7 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260605-127 | 2026-06-05 | cursor-agent | d9d9f49 | **discover_probe_specs() hardened**: Now skips brains with status=archived/frozen or vote_weight=0.0. Prevents Meta Pipeline from wiring dead probes after FIX-125 archival. | RC-11 |
 | FIX-20260603-072 | 2026-06-03 | cursor-agent | — | **Global Execution State Hydration**: StrategyBudget now has `get_state()` / `load_state()` for restart persistence. Budget state (daily PnL, SL cooldown, consecutive losses, paused) survives process restart. | RC-03 |
 | FIX-20260601-037 | 2026-06-01 | cursor-agent | — | **PortfolioRiskController contract_size**: `_to_notional()` inflated BTC exposure 100× (XAU default 100.0). Passed `LiveCycleConfig.contract_size` to controller. `live_btc.yaml` portfolio_max_net 0.05→0.30. | RC-06 |
 | FIX-20260601-032 | 2026-06-01 | cursor-agent | — | **contract_size auto-resolution**: `compute_position_size` + `check_pre_trade_var` now accept optional `symbol` → auto-resolve `contract_size` from ASSET_REGISTRY. Callers updated (live_cycle.py, strategy_line.py). Forgetting `contract_size` no longer silently defaults to XAU 100.0. | RC-06 |
