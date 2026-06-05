@@ -31,6 +31,11 @@ Market bars → RegimeDetector.update(bar) → regime_label (low/normal/high vol
 
 ## Known Issues
 
+### 1. Global `shadow` mode — Phase 1 resolved (FIX-20260606-129), Phase 2 pending
+- ✅ **Phase 1 (T+1)**: `compute_continuous_regime_modulation()` no longer outputs "shadow". Max strictness = "reduced".
+- ⏳ **Phase 2**: Per-strategy vol gates (btc_swing vol-expansion gate, xau_trend vol-contraction gate) to be built incrementally.
+- See: `blueprints/system/AUDIT_20260605_XAU_BTC_DIVERGENCE.md` Issue #2
+
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 | FIX-20260604-082 | 2026-06-04 | cursor-agent | — | **OU mean-reversion revival**: re-enabled statarb_dynamic + statarb_m15. Added Gate 1b in strategy_line.py: OU strategies blocked when detected_regime=="high" — prevents catching-falling-knife in trending crashes. | RC-05 |

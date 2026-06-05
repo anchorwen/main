@@ -4196,8 +4196,12 @@ def execute_live_cycle(
                 feature_vector_sample=_fv_sample,
                 data_dir=config.base_dir,
             )
-        except Exception:
-            pass  # Recording failure must never break the live cycle
+        except Exception as _gm_exc:
+            import logging as _gm_log
+
+            _gm_log.getLogger(__name__).warning(
+                "Golden Master record_cycle_inputs failed: %s", _gm_exc
+            )
 
         # Evaluate all strategy lines
         eval_summary = _evaluate_strategy_lines(
@@ -4265,8 +4269,12 @@ def execute_live_cycle(
                     queued=eval_summary.get("queued", 0),
                     data_dir=config.base_dir,
                 )
-            except Exception:
-                pass  # Recording failure must never break the live cycle
+            except Exception as _gm_exc:
+                import logging as _gm_log
+
+                _gm_log.getLogger(__name__).warning(
+                    "Golden Master record_cycle_outputs failed: %s", _gm_exc
+                )
 
         # Log strategy evaluation results
         print(
@@ -4395,6 +4403,52 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
+
+                # ── FIX-20260606-128: persistent reentry block alert ───────
+                # When a strategy is blocked by the reentry guard for ≥ 5
+                # consecutive cycles, fire a warning via the alert hub so
+                # the operator can investigate.  Resets automatically when
+                # the strategy passes reentry check or changes direction.
+                _ah_reentry = getattr(state, "alert_hub", None)
+                if _ah_reentry is not None:
+                    _reentry_blocked_names = {s["strategy"] for s in _reentry_skipped}
+                    for _sname in _reentry_blocked_names:
+                        _streak_key = f"_reentry_block_streak_{_sname}"
+                        _streak = getattr(state, _streak_key, 0) + 1
+                        setattr(state, _streak_key, _streak)
+                        if _streak >= 5 and _streak % 5 == 0:
+                            _reason = next(
+                                (s["reason"] for s in _reentry_skipped if s["strategy"] == _sname),
+                                "unknown",
+                            )
+                            _alert = {
+                                "rule_name": "reentry_persistent_block",
+                                "rule_id": f"reentry_block_{_sname}_{int(time.time())}",
+                                "severity": "warning",
+                                "title": f"⚠️ {_sname} 重入持续拦截 ({_streak}周期)",
+                                "text": (
+                                    f"## {_sname} 重入守卫持续拦截\n\n"
+                                    f"- 连续拦截: **{_streak}** 个周期\n"
+                                    f"- 拦截原因: {_reason}\n"
+                                    f"- 时间: {_utc_iso()}\n\n"
+                                    f"> 请检查退出类型和历史置信度，考虑手动干预。"
+                                ),
+                                "timestamp_utc": _utc_iso(),
+                                "context": {
+                                    "strategy": _sname,
+                                    "consecutive_blocks": _streak,
+                                    "reason": _reason,
+                                },
+                            }
+                            import contextlib
+                            with contextlib.suppress(Exception):
+                                _ah_reentry._alert_queue.put_nowait(_alert)
+                # Reset streak for strategies that passed reentry
+                _passed_names = {_qd.strategy_name for _qd in _filtered_queue}
+                for _sname in _passed_names:
+                    _streak_key = f"_reentry_block_streak_{_sname}"
+                    if hasattr(state, _streak_key):
+                        setattr(state, _streak_key, 0)
 
         # Flush execution queue → dispatch to MT5
         if exec_queue.queue_size > 0 and not config.no_mt5:

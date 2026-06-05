@@ -157,16 +157,19 @@ def compute_continuous_regime_modulation(
     sl_tight = 1.0 - 0.45 * vol_stress * (1.0 - trend_conviction * 0.6)
     sl_tight = max(0.55, min(1.0, sl_tight))
 
-    # ── Strategy activation: continuous mapping, never "off" ──
-    # shadow = vol_stress is very high AND trend_conviction is very low
-    # reduced = vol_stress is high OR trend_conviction is low
-    # full = otherwise
-    shadow_score = vol_stress * (1.0 - trend_conviction)
-    if shadow_score > 0.60:
-        activation = "shadow"
-    elif (
-        vol_stress > 0.35 or trend_conviction < 0.15
-    ):  # FIX-20260602-053: 0.30→0.15 for BTC compatibility
+    # ── Strategy activation: continuous mapping ──────────────────────────
+    # FIX-20260606-129: Global "shadow" (absolute trading ban) removed per
+    # architect directive.  The continuous modulation must NOT issue
+    # universal kill orders — vol-based trade restrictions belong in
+    # per-strategy gates (e.g. ou_high_vol_blocked for OU strategies).
+    # shadow_score is retained as a diagnostic for future per-gate consumption.
+    #
+    # Historical context: FIX-20260602-053 lowered trend_conviction floor
+    # 0.30→0.15 for BTC compatibility, exposing cold-start shadow lock
+    # (Kalman/Hurst not converged → trend_conviction≈0 → shadow_score>0.60
+    # for 20-70 min post-restart).  See AUDIT_20260605_XAU_BTC_DIVERGENCE #2.
+    shadow_score = vol_stress * (1.0 - trend_conviction)  # diagnostic only
+    if vol_stress > 0.35 or trend_conviction < 0.15:
         activation = "reduced"
     else:
         activation = "full"

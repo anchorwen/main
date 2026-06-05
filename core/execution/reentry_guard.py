@@ -117,6 +117,24 @@ def check_reentry_quality(
         # signal, AND price confirmation of the new entry direction.
         if elapsed < 120:
             return False, f"brain_flip_too_soon_{elapsed:.0f}s_lt_120s"
+
+        # ── FIX-20260606-127: TTL hard unlock for brain_flip ──────────────
+        # Linear margin (+0.10) is mathematically unreachable when
+        # exit_confidence is near the model's output ceiling (tree models
+        # max ~0.70–0.82).  After TTL expires the old brain_flip exit is
+        # stale — the microstructural conditions that caused the flip have
+        # dissipated.  Only basic signal quality (confidence > 0.50) is
+        # required.  Same proven pattern as sl_hit TTL (FIX-20260528-011).
+        _brain_flip_ttl_s = max(14400, entry_half_life * timeframe_minutes * 2.5 * 60)
+        if elapsed > _brain_flip_ttl_s:
+            if new_confidence < 0.50:
+                return (
+                    False,
+                    f"brain_flip_ttl_expired_low_conf_{new_confidence:.3f}",
+                )
+            return True, f"brain_flip_ttl_expired_{elapsed:.0f}s"
+
+        # Within TTL window: original strict logic with absolute ceiling
         _threshold = min(max(exit_confidence + 0.10, 0.70), _MAX_THRESHOLD)
         if new_confidence < _threshold:
             return (
@@ -218,6 +236,22 @@ def check_reentry_quality(
     if category == "meta_exit":
         if elapsed < 120:
             return False, f"meta_exit_too_soon_{elapsed:.0f}s_lt_120s"
+
+        # ── FIX-20260606-127: TTL hard unlock for meta_exit ───────────────
+        # Same pattern as brain_flip TTL.  meta_exit +0.05 margin is less
+        # strict than brain_flip +0.10, but the same mathematical deadlock
+        # applies when exit_confidence is near the model's output ceiling.
+        # After TTL expires only basic signal quality is required.
+        _meta_ttl_s = max(7200, entry_half_life * timeframe_minutes * 2.0 * 60)
+        if elapsed > _meta_ttl_s:
+            if new_confidence < 0.50:
+                return (
+                    False,
+                    f"meta_exit_ttl_expired_low_conf_{new_confidence:.3f}",
+                )
+            return True, f"meta_exit_ttl_expired_{elapsed:.0f}s"
+
+        # Within TTL window: original strict logic
         if new_confidence < exit_confidence + 0.05:
             return (
                 False,

@@ -177,3 +177,4 @@
 {"ticket": 3793134562, "time": "2026-06-04T23:49:48", "bars_held": 1, "unrealized_pnl_r": -0.025793, "current_volatility": 0.8708, "trailing_sl_distance": 543.377, "current_atr": 141.7986, "entry_atr": 162.835}
 {"ticket": 3793134562, "time": "2026-06-04T23:54:46", "bars_held": 2, "unrealized_pnl_r": -0.500998, "current_volatility": 0.8266, "trailing_sl_distance": 543.377, "current_atr": 134.6029, "entry_atr": 162.835}
 {"ticket": 3793134562, "time": "2026-06-04T23:59:45", "bars_held": 3, "unrealized_pnl_r": -0.306814, "current_volatility": 0.8563, "trailing_sl_distance": 543.377, "current_atr": 139.4343, "entry_atr": 162.835}
+{"ticket": 3806353442, "time": "2026-06-05T16:54:44", "bars_held": 1, "unrealized_pnl_r": -0.986309, "current_volatility": 0.9455, "trailing_sl_distance": 1510.133, "current_atr": 396.1136, "entry_atr": 418.9257}
