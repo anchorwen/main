@@ -59,6 +59,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260605-124 | 2026-06-05 | cursor-agent | — | **entry_spread journal pipeline fix**: strategy_line.py:1766 entry_context dict lacked entry_spread. bid/ask spread correctly computed but only fed pnl_ledger, never journal. XAU 0/777 + BTC 0/36 opens had entry_spread=0 permanently. Single-line fix. | RC-06 |
 | FIX-20260605-123 | 2026-06-05 | cursor-agent | 6110bc6 | **Core test长城**: 16 TrailStopEngine tests (activation watermark, vol adjustment -0.5/+0.5, regime-based mult, breakeven, per-position TrailPolicy). 13 execution_state tests (save/load roundtrip, stale rejection, corrupt JSON, circuit breaker restore, SL streak preservation). | RC-12 |
 | FIX-20260605-121 | 2026-06-05 | cursor-agent | 5892b3f | **Trail stop tests updated for FIX-064/071**: Trail activation watermark test (no trail before 1.0x ATR profit), vol adjustment tests updated for inverted logic (high vol -0.5 tightens, low vol +0.5 widens). Old +0.8/-0.3 delta model replaced. | RC-06 |
 | FIX-20260605-120 | 2026-06-05 | cursor-agent | — | **Asset-specific reentry thresholds**: Reentry guard SL/bleed cooldowns and penalties now read from YAML per asset. XAU: 180s/0.10, BTC: 300s/0.15. Hardcoded BTC values no longer leak to XAU. | RC-09 |

@@ -1773,6 +1773,7 @@ class StrategyLine:
             "half_life": entry_half_life,
             "brain_predictions": _brain_preds,
             "entry_features": _entry_features,
+            "entry_spread": float(ask - bid) if (bid is not None and ask is not None and ask > bid) else 0.0,
         }
 
         # ── Determine venue ──

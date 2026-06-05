@@ -2,7 +2,7 @@
     "meta": {
         "format": 3,
         "version": "7.13.5",
-        "timestamp": "2026-06-05T18:21:30.736801",
+        "timestamp": "2026-06-05T19:19:55.829128",
         "branch_coverage": true,
         "show_contexts": false
     },
@@ -146929,6 +146929,7 @@
                 227,
                 233,
                 234,
+                235,
                 236,
                 237,
                 238,
@@ -147050,10 +147051,14 @@
                 535,
                 536,
                 539,
+                541,
+                542,
                 543,
                 552,
                 553,
                 556,
+                558,
+                559,
                 561,
                 565,
                 574,
@@ -147133,20 +147138,20 @@
                 800
             ],
             "summary": {
-                "covered_lines": 264,
+                "covered_lines": 269,
                 "num_statements": 356,
-                "percent_covered": 69.28251121076234,
-                "percent_covered_display": "69",
-                "missing_lines": 92,
+                "percent_covered": 71.0762331838565,
+                "percent_covered_display": "71",
+                "missing_lines": 87,
                 "excluded_lines": 0,
-                "percent_statements_covered": 74.15730337078652,
-                "percent_statements_covered_display": "74",
+                "percent_statements_covered": 75.56179775280899,
+                "percent_statements_covered_display": "76",
                 "num_branches": 90,
-                "num_partial_branches": 23,
-                "covered_branches": 45,
-                "missing_branches": 45,
-                "percent_branches_covered": 50.0,
-                "percent_branches_covered_display": "50"
+                "num_partial_branches": 20,
+                "covered_branches": 48,
+                "missing_branches": 42,
+                "percent_branches_covered": 53.333333333333336,
+                "percent_branches_covered_display": "53"
             },
             "missing_lines": [
                 75,
@@ -147161,7 +147166,6 @@
                 228,
                 229,
                 230,
-                235,
                 333,
                 334,
                 335,
@@ -147209,16 +147213,12 @@
                 498,
                 510,
                 515,
-                541,
-                542,
                 544,
                 545,
                 546,
                 547,
                 548,
                 550,
-                558,
-                559,
                 580,
                 585,
                 589,
@@ -147255,6 +147255,10 @@
                 [
                     226,
                     227
+                ],
+                [
+                    234,
+                    235
                 ],
                 [
                     234,
@@ -147318,11 +147322,19 @@
                 ],
                 [
                     539,
+                    541
+                ],
+                [
+                    539,
                     543
                 ],
                 [
                     543,
                     552
+                ],
+                [
+                    556,
+                    558
                 ],
                 [
                     556,
@@ -147463,10 +147475,6 @@
                     230
                 ],
                 [
-                    234,
-                    235
-                ],
-                [
                     334,
                     335
                 ],
@@ -147499,10 +147507,6 @@
                     494
                 ],
                 [
-                    539,
-                    541
-                ],
-                [
                     543,
                     544
                 ],
@@ -147521,10 +147525,6 @@
                 [
                     546,
                     552
-                ],
-                [
-                    556,
-                    558
                 ],
                 [
                     584,
@@ -147785,32 +147785,35 @@
                 "_classify_rv_zone": {
                     "executed_lines": [
                         234,
+                        235,
                         236,
                         237,
                         238
                     ],
                     "summary": {
-                        "covered_lines": 4,
+                        "covered_lines": 5,
                         "num_statements": 5,
-                        "percent_covered": 77.77777777777777,
-                        "percent_covered_display": "78",
-                        "missing_lines": 1,
+                        "percent_covered": 100.0,
+                        "percent_covered_display": "100",
+                        "missing_lines": 0,
                         "excluded_lines": 0,
-                        "percent_statements_covered": 80.0,
-                        "percent_statements_covered_display": "80",
+                        "percent_statements_covered": 100.0,
+                        "percent_statements_covered_display": "100",
                         "num_branches": 4,
-                        "num_partial_branches": 1,
-                        "covered_branches": 3,
-                        "missing_branches": 1,
-                        "percent_branches_covered": 75.0,
-                        "percent_branches_covered_display": "75"
+                        "num_partial_branches": 0,
+                        "covered_branches": 4,
+                        "missing_branches": 0,
+                        "percent_branches_covered": 100.0,
+                        "percent_branches_covered_display": "100"
                     },
-                    "missing_lines": [
-                        235
-                    ],
+                    "missing_lines": [],
                     "excluded_lines": [],
                     "start_line": 233,
                     "executed_branches": [
+                        [
+                            234,
+                            235
+                        ],
                         [
                             234,
                             236
@@ -147824,12 +147827,7 @@
                             238
                         ]
                     ],
-                    "missing_branches": [
-                        [
-                            234,
-                            235
-                        ]
-                    ]
+                    "missing_branches": []
                 },
                 "RegimeGate.__init__": {
                     "executed_lines": [
@@ -148807,44 +148805,48 @@
                         535,
                         536,
                         539,
+                        541,
+                        542,
                         543,
                         552,
                         553,
                         556,
+                        558,
+                        559,
                         561,
                         565
                     ],
                     "summary": {
-                        "covered_lines": 9,
+                        "covered_lines": 13,
                         "num_statements": 19,
-                        "percent_covered": 41.37931034482759,
-                        "percent_covered_display": "41",
-                        "missing_lines": 10,
+                        "percent_covered": 62.06896551724138,
+                        "percent_covered_display": "62",
+                        "missing_lines": 6,
                         "excluded_lines": 0,
-                        "percent_statements_covered": 47.36842105263158,
-                        "percent_statements_covered_display": "47",
+                        "percent_statements_covered": 68.42105263157895,
+                        "percent_statements_covered_display": "68",
                         "num_branches": 10,
-                        "num_partial_branches": 3,
-                        "covered_branches": 3,
-                        "missing_branches": 7,
-                        "percent_branches_covered": 30.0,
-                        "percent_branches_covered_display": "30"
+                        "num_partial_branches": 1,
+                        "covered_branches": 5,
+                        "missing_branches": 5,
+                        "percent_branches_covered": 50.0,
+                        "percent_branches_covered_display": "50"
                     },
                     "missing_lines": [
-                        541,
-                        542,
                         544,
                         545,
                         546,
                         547,
                         548,
-                        550,
-                        558,
-                        559
+                        550
                     ],
                     "excluded_lines": [],
                     "start_line": 519,
                     "executed_branches": [
+                        [
+                            539,
+                            541
+                        ],
                         [
                             539,
                             543
@@ -148855,14 +148857,14 @@
                         ],
                         [
                             556,
+                            558
+                        ],
+                        [
+                            556,
                             561
                         ]
                     ],
                     "missing_branches": [
-                        [
-                            539,
-                            541
-                        ],
                         [
                             543,
                             544
@@ -148882,10 +148884,6 @@
                         [
                             546,
                             552
-                        ],
-                        [
-                            556,
-                            558
                         ]
                     ]
                 },
@@ -149551,10 +149549,14 @@
                         535,
                         536,
                         539,
+                        541,
+                        542,
                         543,
                         552,
                         553,
                         556,
+                        558,
+                        559,
                         561,
                         565,
                         584,
@@ -149628,20 +149630,20 @@
                         800
                     ],
                     "summary": {
-                        "covered_lines": 136,
+                        "covered_lines": 140,
                         "num_statements": 215,
-                        "percent_covered": 60.55363321799308,
-                        "percent_covered_display": "61",
-                        "missing_lines": 79,
+                        "percent_covered": 62.62975778546713,
+                        "percent_covered_display": "63",
+                        "missing_lines": 75,
                         "excluded_lines": 0,
-                        "percent_statements_covered": 63.25581395348837,
-                        "percent_statements_covered_display": "63",
+                        "percent_statements_covered": 65.11627906976744,
+                        "percent_statements_covered_display": "65",
                         "num_branches": 74,
-                        "num_partial_branches": 19,
-                        "covered_branches": 39,
-                        "missing_branches": 35,
-                        "percent_branches_covered": 52.7027027027027,
-                        "percent_branches_covered_display": "53"
+                        "num_partial_branches": 17,
+                        "covered_branches": 41,
+                        "missing_branches": 33,
+                        "percent_branches_covered": 55.4054054054054,
+                        "percent_branches_covered_display": "55"
                     },
                     "missing_lines": [
                         333,
@@ -149691,16 +149693,12 @@
                         498,
                         510,
                         515,
-                        541,
-                        542,
                         544,
                         545,
                         546,
                         547,
                         548,
                         550,
-                        558,
-                        559,
                         580,
                         585,
                         589,
@@ -149777,11 +149775,19 @@
                         ],
                         [
                             539,
+                            541
+                        ],
+                        [
+                            539,
                             543
                         ],
                         [
                             543,
                             552
+                        ],
+                        [
+                            556,
+                            558
                         ],
                         [
                             556,
@@ -149918,10 +149924,6 @@
                             494
                         ],
                         [
-                            539,
-                            541
-                        ],
-                        [
                             543,
                             544
                         ],
@@ -149940,10 +149942,6 @@
                         [
                             546,
                             552
-                        ],
-                        [
-                            556,
-                            558
                         ],
                         [
                             584,
@@ -150091,6 +150089,7 @@
                         227,
                         233,
                         234,
+                        235,
                         236,
                         237,
                         238,
@@ -150159,20 +150158,20 @@
                         783
                     ],
                     "summary": {
-                        "covered_lines": 128,
+                        "covered_lines": 129,
                         "num_statements": 141,
-                        "percent_covered": 85.35031847133757,
-                        "percent_covered_display": "85",
-                        "missing_lines": 13,
+                        "percent_covered": 86.62420382165605,
+                        "percent_covered_display": "87",
+                        "missing_lines": 12,
                         "excluded_lines": 0,
-                        "percent_statements_covered": 90.78014184397163,
+                        "percent_statements_covered": 91.48936170212765,
                         "percent_statements_covered_display": "91",
                         "num_branches": 16,
-                        "num_partial_branches": 4,
-                        "covered_branches": 6,
-                        "missing_branches": 10,
-                        "percent_branches_covered": 37.5,
-                        "percent_branches_covered_display": "38"
+                        "num_partial_branches": 3,
+                        "covered_branches": 7,
+                        "missing_branches": 9,
+                        "percent_branches_covered": 43.75,
+                        "percent_branches_covered_display": "44"
                     },
                     "missing_lines": [
                         75,
@@ -150186,8 +150185,7 @@
                         170,
                         228,
                         229,
-                        230,
-                        235
+                        230
                     ],
                     "excluded_lines": [],
                     "start_line": 1,
@@ -150203,6 +150201,10 @@
                         [
                             226,
                             227
+                        ],
+                        [
+                            234,
+                            235
                         ],
                         [
                             234,
@@ -150253,10 +150255,6 @@
                         [
                             228,
                             230
-                        ],
-                        [
-                            234,
-                            235
                         ]
                     ]
                 }
@@ -152391,102 +152389,102 @@
                 1757,
                 1758,
                 1766,
-                1779,
                 1780,
                 1781,
-                1783,
-                1809,
-                1863,
-                1871,
-                1875,
-                1880,
-                1882,
-                1884,
+                1782,
+                1784,
+                1810,
+                1864,
+                1872,
+                1876,
+                1881,
+                1883,
                 1885,
                 1886,
                 1887,
                 1888,
-                1890,
-                1892,
-                1904,
-                1906,
-                1916,
+                1889,
+                1891,
+                1893,
+                1905,
+                1907,
                 1917,
                 1918,
                 1919,
                 1920,
                 1921,
-                1923,
+                1922,
                 1924,
                 1925,
-                1927,
+                1926,
                 1928,
-                1931,
+                1929,
                 1932,
-                1935,
+                1933,
                 1936,
-                1940,
-                1942,
+                1937,
+                1941,
                 1943,
                 1944,
                 1945,
                 1946,
                 1947,
-                1950,
+                1948,
                 1951,
                 1952,
                 1953,
                 1954,
-                1956,
+                1955,
                 1957,
                 1958,
                 1959,
                 1960,
                 1961,
-                1965,
+                1962,
                 1966,
-                1970,
+                1967,
                 1971,
-                1973,
+                1972,
                 1974,
-                1978,
-                2009,
-                2013,
-                2027,
-                2030,
-                2033,
+                1975,
+                1979,
+                2010,
+                2014,
+                2028,
+                2031,
                 2034,
-                2037,
+                2035,
                 2038,
-                2043,
-                2046,
+                2039,
+                2044,
                 2047,
-                2052,
-                2054,
-                2056,
-                2059,
+                2048,
+                2053,
+                2055,
+                2057,
                 2060,
                 2061,
                 2062,
-                2065,
-                2068,
-                2071,
-                2078,
+                2063,
+                2066,
+                2069,
+                2072,
                 2079,
                 2080,
-                2086,
+                2081,
                 2087,
                 2088,
-                2094,
-                2124,
-                2241,
-                2256,
-                2262,
-                2270,
+                2089,
+                2095,
+                2125,
+                2242,
+                2257,
+                2263,
                 2271,
                 2272,
                 2273,
-                2274
+                2274,
+                2275
             ],
             "summary": {
                 "covered_lines": 357,
@@ -152754,27 +152752,27 @@
                 1759,
                 1761,
                 1762,
-                1836,
                 1837,
-                1839,
-                1841,
-                1845,
-                1872,
-                1891,
-                1929,
-                1933,
-                1937,
+                1838,
+                1840,
+                1842,
+                1846,
+                1873,
+                1892,
+                1930,
+                1934,
                 1938,
-                1963,
-                2010,
-                2014,
-                2016,
-                2048,
+                1939,
+                1964,
+                2011,
+                2015,
+                2017,
                 2049,
-                2063,
+                2050,
                 2064,
-                2257,
-                2263
+                2065,
+                2258,
+                2264
             ],
             "excluded_lines": [],
             "executed_branches": [
@@ -153099,140 +153097,140 @@
                     1766
                 ],
                 [
-                    1871,
-                    1875
+                    1872,
+                    1876
                 ],
                 [
-                    1882,
-                    1884
+                    1883,
+                    1885
                 ],
                 [
-                    1882,
-                    1904
+                    1883,
+                    1905
                 ],
                 [
-                    1886,
-                    1887
+                    1887,
+                    1888
                 ],
                 [
-                    1890,
-                    1892
+                    1891,
+                    1893
                 ],
                 [
-                    1923,
-                    1924
+                    1924,
+                    1925
                 ],
                 [
-                    1923,
-                    1950
+                    1924,
+                    1951
                 ],
                 [
-                    1928,
-                    1931
+                    1929,
+                    1932
                 ],
                 [
-                    1932,
-                    1935
+                    1933,
+                    1936
                 ],
                 [
-                    1936,
-                    1940
+                    1937,
+                    1941
                 ],
                 [
-                    1942,
-                    1943
+                    1943,
+                    1944
                 ],
                 [
-                    1942,
-                    1945
-                ],
-                [
-                    1945,
-                    1923
-                ],
-                [
-                    1945,
+                    1943,
                     1946
                 ],
                 [
-                    1953,
-                    1954
+                    1946,
+                    1924
                 ],
                 [
-                    1953,
-                    1956
+                    1946,
+                    1947
                 ],
                 [
-                    1956,
+                    1954,
+                    1955
+                ],
+                [
+                    1954,
                     1957
                 ],
                 [
-                    1956,
-                    1959
+                    1957,
+                    1958
                 ],
                 [
-                    1959,
+                    1957,
                     1960
                 ],
                 [
-                    1970,
-                    1971
+                    1960,
+                    1961
                 ],
                 [
-                    1970,
-                    1973
+                    1971,
+                    1972
                 ],
                 [
-                    2009,
-                    2013
+                    1971,
+                    1974
                 ],
                 [
-                    2013,
-                    2027
+                    2010,
+                    2014
                 ],
                 [
-                    2047,
-                    2052
+                    2014,
+                    2028
                 ],
                 [
-                    2060,
-                    2061
+                    2048,
+                    2053
                 ],
                 [
-                    2060,
-                    2065
+                    2061,
+                    2062
                 ],
                 [
-                    2079,
-                    2080
+                    2061,
+                    2066
                 ],
                 [
-                    2079,
-                    2086
+                    2080,
+                    2081
                 ],
                 [
-                    2256,
-                    2262
+                    2080,
+                    2087
                 ],
                 [
-                    2262,
-                    2270
+                    2257,
+                    2263
                 ],
                 [
-                    2270,
+                    2263,
                     2271
                 ],
                 [
-                    2270,
+                    2271,
                     2272
                 ],
                 [
-                    2272,
+                    2271,
                     2273
                 ],
                 [
-                    2272,
+                    2273,
                     2274
+                ],
+                [
+                    2273,
+                    2275
                 ]
             ],
             "missing_branches": [
@@ -153813,68 +153811,68 @@
                     1759
                 ],
                 [
-                    1836,
-                    1837
+                    1837,
+                    1838
                 ],
                 [
-                    1836,
-                    1839
+                    1837,
+                    1840
                 ],
                 [
-                    1871,
-                    1872
+                    1872,
+                    1873
                 ],
                 [
-                    1886,
-                    1904
+                    1887,
+                    1905
                 ],
                 [
-                    1890,
-                    1891
+                    1891,
+                    1892
                 ],
                 [
-                    1928,
-                    1929
+                    1929,
+                    1930
                 ],
                 [
-                    1932,
-                    1933
+                    1933,
+                    1934
                 ],
                 [
-                    1936,
-                    1937
+                    1937,
+                    1938
                 ],
                 [
-                    1959,
-                    1963
+                    1960,
+                    1964
                 ],
                 [
-                    2009,
-                    2010
+                    2010,
+                    2011
                 ],
                 [
-                    2013,
-                    2014
-                ],
-                [
-                    2047,
-                    2048
+                    2014,
+                    2015
                 ],
                 [
                     2048,
                     2049
                 ],
                 [
-                    2048,
-                    2052
+                    2049,
+                    2050
                 ],
                 [
-                    2256,
-                    2257
+                    2049,
+                    2053
                 ],
                 [
-                    2262,
-                    2263
+                    2257,
+                    2258
+                ],
+                [
+                    2263,
+                    2264
                 ]
             ],
             "functions": {
@@ -154666,10 +154664,10 @@
                         1757,
                         1758,
                         1766,
-                        1779,
                         1780,
                         1781,
-                        1783
+                        1782,
+                        1784
                     ],
                     "summary": {
                         "covered_lines": 153,
@@ -155541,40 +155539,40 @@
                         "percent_branches_covered_display": "0"
                     },
                     "missing_lines": [
-                        1836,
                         1837,
-                        1839,
-                        1841,
-                        1845
+                        1838,
+                        1840,
+                        1842,
+                        1846
                     ],
                     "excluded_lines": [],
-                    "start_line": 1809,
+                    "start_line": 1810,
                     "executed_branches": [],
                     "missing_branches": [
                         [
-                            1836,
-                            1837
+                            1837,
+                            1838
                         ],
                         [
-                            1836,
-                            1839
+                            1837,
+                            1840
                         ]
                     ]
                 },
                 "StrategyLine._compute_consensus": {
                     "executed_lines": [
-                        1871,
-                        1875,
-                        1880,
-                        1882,
-                        1884,
+                        1872,
+                        1876,
+                        1881,
+                        1883,
                         1885,
                         1886,
                         1887,
                         1888,
-                        1890,
-                        1892,
-                        1904
+                        1889,
+                        1891,
+                        1893,
+                        1905
                     ],
                     "summary": {
                         "covered_lines": 12,
@@ -155593,89 +155591,89 @@
                         "percent_branches_covered_display": "62"
                     },
                     "missing_lines": [
-                        1872,
-                        1891
+                        1873,
+                        1892
                     ],
                     "excluded_lines": [],
-                    "start_line": 1863,
+                    "start_line": 1864,
                     "executed_branches": [
                         [
-                            1871,
-                            1875
+                            1872,
+                            1876
                         ],
                         [
-                            1882,
-                            1884
+                            1883,
+                            1885
                         ],
                         [
-                            1882,
-                            1904
+                            1883,
+                            1905
                         ],
                         [
-                            1886,
-                            1887
+                            1887,
+                            1888
                         ],
                         [
-                            1890,
-                            1892
+                            1891,
+                            1893
                         ]
                     ],
                     "missing_branches": [
                         [
-                            1871,
-                            1872
+                            1872,
+                            1873
                         ],
                         [
-                            1886,
-                            1904
+                            1887,
+                            1905
                         ],
                         [
-                            1890,
-                            1891
+                            1891,
+                            1892
                         ]
                     ]
                 },
                 "StrategyLine._compute_weighted_fallback": {
                     "executed_lines": [
-                        1916,
                         1917,
                         1918,
                         1919,
                         1920,
                         1921,
-                        1923,
+                        1922,
                         1924,
                         1925,
-                        1927,
+                        1926,
                         1928,
-                        1931,
+                        1929,
                         1932,
-                        1935,
+                        1933,
                         1936,
-                        1940,
-                        1942,
+                        1937,
+                        1941,
                         1943,
                         1944,
                         1945,
                         1946,
                         1947,
-                        1950,
+                        1948,
                         1951,
                         1952,
                         1953,
                         1954,
-                        1956,
+                        1955,
                         1957,
                         1958,
                         1959,
                         1960,
                         1961,
-                        1965,
+                        1962,
                         1966,
-                        1970,
+                        1967,
                         1971,
-                        1973,
-                        1974
+                        1972,
+                        1974,
+                        1975
                     ],
                     "summary": {
                         "covered_lines": 39,
@@ -155694,128 +155692,128 @@
                         "percent_branches_covered_display": "80"
                     },
                     "missing_lines": [
-                        1929,
-                        1933,
-                        1937,
+                        1930,
+                        1934,
                         1938,
-                        1963
+                        1939,
+                        1964
                     ],
                     "excluded_lines": [],
-                    "start_line": 1906,
+                    "start_line": 1907,
                     "executed_branches": [
                         [
-                            1923,
-                            1924
+                            1924,
+                            1925
                         ],
                         [
-                            1923,
-                            1950
+                            1924,
+                            1951
                         ],
                         [
-                            1928,
-                            1931
+                            1929,
+                            1932
                         ],
                         [
-                            1932,
-                            1935
+                            1933,
+                            1936
                         ],
                         [
-                            1936,
-                            1940
+                            1937,
+                            1941
                         ],
                         [
-                            1942,
-                            1943
+                            1943,
+                            1944
                         ],
                         [
-                            1942,
-                            1945
-                        ],
-                        [
-                            1945,
-                            1923
-                        ],
-                        [
-                            1945,
+                            1943,
                             1946
                         ],
                         [
-                            1953,
-                            1954
+                            1946,
+                            1924
                         ],
                         [
-                            1953,
-                            1956
+                            1946,
+                            1947
                         ],
                         [
-                            1956,
+                            1954,
+                            1955
+                        ],
+                        [
+                            1954,
                             1957
                         ],
                         [
-                            1956,
-                            1959
+                            1957,
+                            1958
                         ],
                         [
-                            1959,
+                            1957,
                             1960
                         ],
                         [
-                            1970,
-                            1971
+                            1960,
+                            1961
                         ],
                         [
-                            1970,
-                            1973
+                            1971,
+                            1972
+                        ],
+                        [
+                            1971,
+                            1974
                         ]
                     ],
                     "missing_branches": [
                         [
-                            1928,
-                            1929
+                            1929,
+                            1930
                         ],
                         [
-                            1932,
-                            1933
+                            1933,
+                            1934
                         ],
                         [
-                            1936,
-                            1937
+                            1937,
+                            1938
                         ],
                         [
-                            1959,
-                            1963
+                            1960,
+                            1964
                         ]
                     ]
                 },
                 "StrategyLine._compute_volume": {
                     "executed_lines": [
-                        2009,
-                        2013,
-                        2027,
-                        2030,
-                        2033,
+                        2010,
+                        2014,
+                        2028,
+                        2031,
                         2034,
-                        2037,
+                        2035,
                         2038,
-                        2043,
-                        2046,
+                        2039,
+                        2044,
                         2047,
-                        2052,
-                        2054,
-                        2056,
-                        2059,
+                        2048,
+                        2053,
+                        2055,
+                        2057,
                         2060,
                         2061,
                         2062,
-                        2065,
-                        2068,
-                        2071,
-                        2078,
+                        2063,
+                        2066,
+                        2069,
+                        2072,
                         2079,
                         2080,
-                        2086,
+                        2081,
                         2087,
-                        2088
+                        2088,
+                        2089
                     ],
                     "summary": {
                         "covered_lines": 27,
@@ -155834,80 +155832,80 @@
                         "percent_branches_covered_display": "58"
                     },
                     "missing_lines": [
-                        2010,
-                        2014,
-                        2016,
-                        2048,
+                        2011,
+                        2015,
+                        2017,
                         2049,
-                        2063,
-                        2064
+                        2050,
+                        2064,
+                        2065
                     ],
                     "excluded_lines": [],
-                    "start_line": 1978,
+                    "start_line": 1979,
                     "executed_branches": [
                         [
-                            2009,
-                            2013
+                            2010,
+                            2014
                         ],
                         [
-                            2013,
-                            2027
+                            2014,
+                            2028
                         ],
                         [
-                            2047,
-                            2052
+                            2048,
+                            2053
                         ],
                         [
-                            2060,
-                            2061
+                            2061,
+                            2062
                         ],
                         [
-                            2060,
-                            2065
+                            2061,
+                            2066
                         ],
                         [
-                            2079,
-                            2080
+                            2080,
+                            2081
                         ],
                         [
-                            2079,
-                            2086
+                            2080,
+                            2087
                         ]
                     ],
                     "missing_branches": [
                         [
-                            2009,
-                            2010
+                            2010,
+                            2011
                         ],
                         [
-                            2013,
-                            2014
-                        ],
-                        [
-                            2047,
-                            2048
+                            2014,
+                            2015
                         ],
                         [
                             2048,
                             2049
                         ],
                         [
-                            2048,
-                            2052
+                            2049,
+                            2050
+                        ],
+                        [
+                            2049,
+                            2053
                         ]
                     ]
                 },
                 "_counter_trend_action": {
                     "executed_lines": [
-                        2124,
-                        2241,
-                        2256,
-                        2262,
-                        2270,
+                        2125,
+                        2242,
+                        2257,
+                        2263,
                         2271,
                         2272,
                         2273,
-                        2274
+                        2274,
+                        2275
                     ],
                     "summary": {
                         "covered_lines": 9,
@@ -155926,45 +155924,45 @@
                         "percent_branches_covered_display": "75"
                     },
                     "missing_lines": [
-                        2257,
-                        2263
+                        2258,
+                        2264
                     ],
                     "excluded_lines": [],
-                    "start_line": 2094,
+                    "start_line": 2095,
                     "executed_branches": [
                         [
-                            2256,
-                            2262
+                            2257,
+                            2263
                         ],
                         [
-                            2262,
-                            2270
-                        ],
-                        [
-                            2270,
+                            2263,
                             2271
                         ],
                         [
-                            2270,
+                            2271,
                             2272
                         ],
                         [
-                            2272,
+                            2271,
                             2273
                         ],
                         [
-                            2272,
+                            2273,
                             2274
+                        ],
+                        [
+                            2273,
+                            2275
                         ]
                     ],
                     "missing_branches": [
                         [
-                            2256,
-                            2257
+                            2257,
+                            2258
                         ],
                         [
-                            2262,
-                            2263
+                            2263,
+                            2264
                         ]
                     ]
                 },
@@ -156057,11 +156055,11 @@
                         384,
                         428,
                         464,
-                        1809,
-                        1863,
-                        1906,
-                        1978,
-                        2094
+                        1810,
+                        1864,
+                        1907,
+                        1979,
+                        2095
                     ],
                     "summary": {
                         "covered_lines": 92,
@@ -156325,88 +156323,88 @@
                         1757,
                         1758,
                         1766,
-                        1779,
                         1780,
                         1781,
-                        1783,
-                        1871,
-                        1875,
-                        1880,
-                        1882,
-                        1884,
+                        1782,
+                        1784,
+                        1872,
+                        1876,
+                        1881,
+                        1883,
                         1885,
                         1886,
                         1887,
                         1888,
-                        1890,
-                        1892,
-                        1904,
-                        1916,
+                        1889,
+                        1891,
+                        1893,
+                        1905,
                         1917,
                         1918,
                         1919,
                         1920,
                         1921,
-                        1923,
+                        1922,
                         1924,
                         1925,
-                        1927,
+                        1926,
                         1928,
-                        1931,
+                        1929,
                         1932,
-                        1935,
+                        1933,
                         1936,
-                        1940,
-                        1942,
+                        1937,
+                        1941,
                         1943,
                         1944,
                         1945,
                         1946,
                         1947,
-                        1950,
+                        1948,
                         1951,
                         1952,
                         1953,
                         1954,
-                        1956,
+                        1955,
                         1957,
                         1958,
                         1959,
                         1960,
                         1961,
-                        1965,
+                        1962,
                         1966,
-                        1970,
+                        1967,
                         1971,
-                        1973,
+                        1972,
                         1974,
-                        2009,
-                        2013,
-                        2027,
-                        2030,
-                        2033,
+                        1975,
+                        2010,
+                        2014,
+                        2028,
+                        2031,
                         2034,
-                        2037,
+                        2035,
                         2038,
-                        2043,
-                        2046,
+                        2039,
+                        2044,
                         2047,
-                        2052,
-                        2054,
-                        2056,
-                        2059,
+                        2048,
+                        2053,
+                        2055,
+                        2057,
                         2060,
                         2061,
                         2062,
-                        2065,
-                        2068,
-                        2071,
-                        2078,
+                        2063,
+                        2066,
+                        2069,
+                        2072,
                         2079,
                         2080,
-                        2086,
+                        2081,
                         2087,
-                        2088
+                        2088,
+                        2089
                     ],
                     "summary": {
                         "covered_lines": 244,
@@ -156640,25 +156638,25 @@
                         1759,
                         1761,
                         1762,
-                        1836,
                         1837,
-                        1839,
-                        1841,
-                        1845,
-                        1872,
-                        1891,
-                        1929,
-                        1933,
-                        1937,
+                        1838,
+                        1840,
+                        1842,
+                        1846,
+                        1873,
+                        1892,
+                        1930,
+                        1934,
                         1938,
-                        1963,
-                        2010,
-                        2014,
-                        2016,
-                        2048,
+                        1939,
+                        1964,
+                        2011,
+                        2015,
+                        2017,
                         2049,
-                        2063,
-                        2064
+                        2050,
+                        2064,
+                        2065
                     ],
                     "excluded_lines": [],
                     "start_line": 332,
@@ -156964,116 +156962,116 @@
                             1766
                         ],
                         [
-                            1871,
-                            1875
+                            1872,
+                            1876
                         ],
                         [
-                            1882,
-                            1884
+                            1883,
+                            1885
                         ],
                         [
-                            1882,
-                            1904
+                            1883,
+                            1905
                         ],
                         [
-                            1886,
-                            1887
+                            1887,
+                            1888
                         ],
                         [
-                            1890,
-                            1892
+                            1891,
+                            1893
                         ],
                         [
-                            1923,
-                            1924
+                            1924,
+                            1925
                         ],
                         [
-                            1923,
-                            1950
+                            1924,
+                            1951
                         ],
                         [
-                            1928,
-                            1931
+                            1929,
+                            1932
                         ],
                         [
-                            1932,
-                            1935
+                            1933,
+                            1936
                         ],
                         [
-                            1936,
-                            1940
+                            1937,
+                            1941
                         ],
                         [
-                            1942,
-                            1943
+                            1943,
+                            1944
                         ],
                         [
-                            1942,
-                            1945
-                        ],
-                        [
-                            1945,
-                            1923
-                        ],
-                        [
-                            1945,
+                            1943,
                             1946
                         ],
                         [
-                            1953,
-                            1954
+                            1946,
+                            1924
                         ],
                         [
-                            1953,
-                            1956
+                            1946,
+                            1947
                         ],
                         [
-                            1956,
+                            1954,
+                            1955
+                        ],
+                        [
+                            1954,
                             1957
                         ],
                         [
-                            1956,
-                            1959
+                            1957,
+                            1958
                         ],
                         [
-                            1959,
+                            1957,
                             1960
                         ],
                         [
-                            1970,
-                            1971
+                            1960,
+                            1961
                         ],
                         [
-                            1970,
-                            1973
+                            1971,
+                            1972
                         ],
                         [
-                            2009,
-                            2013
+                            1971,
+                            1974
                         ],
                         [
-                            2013,
-                            2027
+                            2010,
+                            2014
                         ],
                         [
-                            2047,
-                            2052
+                            2014,
+                            2028
                         ],
                         [
-                            2060,
-                            2061
+                            2048,
+                            2053
                         ],
                         [
-                            2060,
-                            2065
+                            2061,
+                            2062
                         ],
                         [
-                            2079,
-                            2080
+                            2061,
+                            2066
                         ],
                         [
-                            2079,
-                            2086
+                            2080,
+                            2081
+                        ],
+                        [
+                            2080,
+                            2087
                         ]
                     ],
                     "missing_branches": [
@@ -157554,60 +157552,60 @@
                             1759
                         ],
                         [
-                            1836,
-                            1837
+                            1837,
+                            1838
                         ],
                         [
-                            1836,
-                            1839
+                            1837,
+                            1840
                         ],
                         [
-                            1871,
-                            1872
+                            1872,
+                            1873
                         ],
                         [
-                            1886,
-                            1904
+                            1887,
+                            1905
                         ],
                         [
-                            1890,
-                            1891
+                            1891,
+                            1892
                         ],
                         [
-                            1928,
-                            1929
+                            1929,
+                            1930
                         ],
                         [
-                            1932,
-                            1933
+                            1933,
+                            1934
                         ],
                         [
-                            1936,
-                            1937
+                            1937,
+                            1938
                         ],
                         [
-                            1959,
-                            1963
+                            1960,
+                            1964
                         ],
                         [
-                            2009,
-                            2010
+                            2010,
+                            2011
                         ],
                         [
-                            2013,
-                            2014
-                        ],
-                        [
-                            2047,
-                            2048
+                            2014,
+                            2015
                         ],
                         [
                             2048,
                             2049
                         ],
                         [
-                            2048,
-                            2052
+                            2049,
+                            2050
+                        ],
+                        [
+                            2049,
+                            2053
                         ]
                     ]
                 },
@@ -157707,20 +157705,20 @@
                         384,
                         428,
                         464,
-                        1809,
-                        1863,
-                        1906,
-                        1978,
-                        2094,
-                        2124,
-                        2241,
-                        2256,
-                        2262,
-                        2270,
+                        1810,
+                        1864,
+                        1907,
+                        1979,
+                        2095,
+                        2125,
+                        2242,
+                        2257,
+                        2263,
                         2271,
                         2272,
                         2273,
-                        2274
+                        2274,
+                        2275
                     ],
                     "summary": {
                         "covered_lines": 108,
@@ -157772,8 +157770,8 @@
                         172,
                         174,
                         176,
-                        2257,
-                        2263
+                        2258,
+                        2264
                     ],
                     "excluded_lines": [],
                     "start_line": 1,
@@ -157791,28 +157789,28 @@
                             163
                         ],
                         [
-                            2256,
-                            2262
+                            2257,
+                            2263
                         ],
                         [
-                            2262,
-                            2270
-                        ],
-                        [
-                            2270,
+                            2263,
                             2271
                         ],
                         [
-                            2270,
+                            2271,
                             2272
                         ],
                         [
-                            2272,
+                            2271,
                             2273
                         ],
                         [
-                            2272,
+                            2273,
                             2274
+                        ],
+                        [
+                            2273,
+                            2275
                         ]
                     ],
                     "missing_branches": [
@@ -157909,12 +157907,12 @@
                             174
                         ],
                         [
-                            2256,
-                            2257
+                            2257,
+                            2258
                         ],
                         [
-                            2262,
-                            2263
+                            2263,
+                            2264
                         ]
                     ]
                 }
@@ -315867,19 +315865,19 @@
         }
     },
     "totals": {
-        "covered_lines": 17785,
+        "covered_lines": 17790,
         "num_statements": 31065,
-        "percent_covered": 52.9086143973351,
+        "percent_covered": 52.92820927327504,
         "percent_covered_display": "53",
-        "missing_lines": 13280,
+        "missing_lines": 13275,
         "excluded_lines": 128,
-        "percent_statements_covered": 57.2509254788347,
+        "percent_statements_covered": 57.26702076291647,
         "percent_statements_covered_display": "57",
         "num_branches": 9762,
-        "num_partial_branches": 952,
-        "covered_branches": 3816,
-        "missing_branches": 5946,
-        "percent_branches_covered": 39.09035033804548,
+        "num_partial_branches": 949,
+        "covered_branches": 3819,
+        "missing_branches": 5943,
+        "percent_branches_covered": 39.12108174554395,
         "percent_branches_covered_display": "39"
     }
 }
