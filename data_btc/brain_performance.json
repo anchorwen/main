@@ -443,6 +443,18 @@
           "side": "",
           "recorded_at": ""
         }
+      },
+      {
+        "timestamp": "2026-06-05T17:09:04.712881",
+        "composite_score": 0.3609,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3806353442,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
       }
     ],
     "BTC_Swing_V10": [
@@ -613,6 +625,18 @@
         "fill_grade": null,
         "dimensions": {
           "position_ticket": 3793134562,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-05T17:09:04.712881",
+        "composite_score": 0.3609,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3806353442,
           "symbol": "",
           "side": "",
           "recorded_at": ""

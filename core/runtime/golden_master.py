@@ -100,7 +100,7 @@ def record_cycle_inputs(
 def record_cycle_outputs(
     capture: dict[str, Any] | None,
     *,
-    strategy_results: dict[str, Any],
+    strategy_results: dict[str, Any] | list[dict[str, Any]],
     decisions_map: dict[str, Any],
     trade_decisions: int,
     queued: int,
@@ -111,7 +111,14 @@ def record_cycle_outputs(
         return
 
     outputs: dict[str, Any] = {}
-    for name, result in (strategy_results or {}).items():
+    # strategy_results may be a dict {name: {...}} or a list [{strategy: name, ...}]
+    if isinstance(strategy_results, list):
+        _iterable = ((r.get("strategy", r.get("strategy_name", "?")), r) for r in strategy_results)
+    elif isinstance(strategy_results, dict):
+        _iterable = strategy_results.items()
+    else:
+        _iterable = ()
+    for name, result in _iterable:
         outputs[name] = {
             "direction": result.get("direction", "neutral"),
             "confidence": round(float(result.get("confidence", 0)), 4),
@@ -123,10 +130,16 @@ def record_cycle_outputs(
         }
 
     capture["outputs"] = outputs
+    if isinstance(strategy_results, list):
+        _names = [r.get("strategy", r.get("strategy_name", "?")) for r in strategy_results]
+    elif isinstance(strategy_results, dict):
+        _names = list(strategy_results.keys())
+    else:
+        _names = []
     capture["summary"] = {
         "trade_decisions": trade_decisions,
         "queued": queued,
-        "active_strategies": list((strategy_results or {}).keys()),
+        "active_strategies": _names,
     }
 
     _path = Path(data_dir) / "golden_master.jsonl"
