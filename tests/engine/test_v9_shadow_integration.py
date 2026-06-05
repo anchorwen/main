@@ -192,16 +192,18 @@ def test_v9_shadow_real_batch_integration_completed_contract():
     assert client_completed["data"]["data"]["stats"]["total"] == 2
     assert rendered_json["stats"]["total"] == 2
 
-    assert manager_completed["data"]["stats"]["side_actions"] == {
-        "flat.abstain": 2,
-    }
-    assert sse_completed["data"]["data"]["stats"]["side_actions"] == {
-        "flat.abstain": 2,
-    }
-    assert client_completed["data"]["data"]["stats"]["side_actions"] == {
-        "flat.abstain": 2,
-    }
-    assert rendered_json["stats"]["side_actions"] == {"flat.abstain": 2}
+    # FIX-125: Meta Pipeline probes archived — shadow flow now uses parliament
+    # consensus only (no Executive Veto).  Generates directional opens instead
+    # of the previous flat.abstain (Meta Pipeline killed all signals).
+    actions = manager_completed["data"]["stats"]["side_actions"]
+    assert "flat.abstain" not in actions, f"Expected no abstains, got {actions}"
+    total_opens = sum(v for k, v in actions.items() if ".open" in k)
+    assert total_opens == 2, f"Expected 2 opens, got {total_opens} ({actions})"
+    # Mirror checks
+    for other in [sse_completed["data"]["data"]["stats"]["side_actions"],
+                  client_completed["data"]["data"]["stats"]["side_actions"],
+                  rendered_json["stats"]["side_actions"]]:
+        assert other == actions, f"Mirror mismatch: {actions} != {other}"
 
 
 def test_v9_shadow_real_batch_json_manager_sse_blocked_mirror_fields_align(monkeypatch):

@@ -52,6 +52,20 @@ class MT5BrokerAdapter:
         mid = (bid + ask) / 2.0
         return mid, bid, ask
 
+    def get_account_equity(self, timeout: float = 5.0) -> float | None:
+        """Return current account equity from the MT5 worker thread.
+
+        Returns None if the worker is unavailable or the query fails.
+        Used by live_cycle.py for equity-based risk budgeting.
+        """
+        try:
+            acc = self._worker.account_info(timeout=timeout)
+            if acc is not None:
+                return float(getattr(acc, "equity", 0))
+        except Exception:
+            pass
+        return None
+
     def fetch_current_atr(self, symbol: str, period: int = 14, timeout: float = 10.0) -> float:
         """Compute current M5 ATR(*period*) — rates fetched on worker, math is local."""
         import numpy as np

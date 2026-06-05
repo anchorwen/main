@@ -10,10 +10,10 @@
       "freeze_count": 0,
       "performance_metrics": {
         "win_rate": 0.53,
-        "profit_factor": 0.93,
-        "sharpe_ratio": -7.32,
+        "profit_factor": 1.01,
+        "sharpe_ratio": 1.02,
         "total_trades": 100,
-        "pnl_r": -469.07
+        "pnl_r": 68.13
       }
     },
     "BTC_Swing_LGB_V1": {

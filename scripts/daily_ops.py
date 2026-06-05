@@ -267,8 +267,130 @@ def _step_feedback_loop(
         return {"step": "feedback_loop", "status": "error", "error": str(exc)[:500]}
 
 
+def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
+    """Feed the ConformalCalibrator from closed trades — independent of ML online learning.
+
+    FIX-028 hardcoded ``_step_online_feedback`` as "skipped: brain_retired" when
+    Online_MLP_V1 was retired (2026-05-25).  This also starved the ConformalCalibrator
+    whose only update() call site was inside ``OnlineFeedbackHook.process_closed_trades()``.
+
+    This step decouples calibrator updates from the ML pipeline so the calibrator
+    continues accumulating samples even when online learning is disabled.
+    """
+    import json
+    from pathlib import Path
+
+    journal_path = Path(base_dir) / "live_trade_journal.jsonl"
+    if not journal_path.exists():
+        return {"step": "calibrator_feed", "status": "skipped", "reason": "no_journal"}
+
+    # Track last processed position to avoid re-scanning entire journal
+    import contextlib
+
+    state_path = Path(base_dir) / "calibrator_feed_state.json"
+    last_pos = 0
+    if state_path.exists():
+        with contextlib.suppress(Exception):
+            last_pos = json.loads(state_path.read_text(encoding="utf-8")).get("last_line", 0)
+
+    # Read new lines since last position
+    lines = journal_path.read_text(encoding="utf-8").splitlines()
+    new_lines = lines[last_pos:]
+    if not new_lines:
+        return {"step": "calibrator_feed", "status": "ok", "new_samples": 0, "total": 0}
+
+    # Load calibrator
+    try:
+        from core.execution.conformal_calibrator import ConformalCalibrator
+
+        cal = ConformalCalibrator(state_path=f"{base_dir}/conformal_calibrator_state.json")
+    except Exception as e:
+        return {"step": "calibrator_feed", "status": "error", "error": f"init: {e}"}
+
+    # Pass 1: build p_win lookup from accepted entries
+    p_win_by_msg_id: dict[str, float] = {}
+    for line in new_lines:
+        try:
+            entry = json.loads(line)
+        except Exception:
+            continue
+        if entry.get("ack_status") != "accepted":
+            continue
+        pw = entry.get("p_win")
+        if pw is None:
+            continue
+        mid = entry.get("message_id")
+        if mid:
+            p_win_by_msg_id[mid] = float(pw)
+
+    # Pass 2: JOIN closed → p_win via open_message_id
+    new_samples = 0
+    for line in new_lines:
+        try:
+            entry = json.loads(line)
+        except Exception:
+            continue
+        if entry.get("ack_status") != "closed":
+            continue
+
+        p_win = entry.get("p_win")
+        if p_win is None:
+            detail = entry.get("detail", {})
+            if isinstance(detail, dict):
+                p_win = detail.get("p_win")
+        if p_win is None:
+            open_mid = entry.get("open_message_id")
+            if open_mid:
+                p_win = p_win_by_msg_id.get(open_mid)
+        if p_win is None:
+            continue
+
+        label = None
+        lbl = entry.get("label", "")
+        pnl = entry.get("pnl")
+        if isinstance(pnl, int | float) and pnl is not None:
+            if pnl > 0:
+                label = 1
+            elif pnl < 0:
+                label = -1
+            else:
+                label = 0
+        elif isinstance(lbl, str):
+            if "win" in lbl.lower() or "tp" in lbl.lower():
+                label = 1
+            elif "loss" in lbl.lower() or "sl" in lbl.lower():
+                label = -1
+        if label is None:
+            continue
+
+        ts = entry.get("recorded_at", "")
+        with contextlib.suppress(Exception):
+            cal.update(float(p_win), label, timestamp_utc=str(ts))
+            new_samples += 1
+
+    # Save position for next run
+    with contextlib.suppress(Exception):
+        state_path.write_text(
+            json.dumps({"last_line": len(lines), "updated_utc": str(cal.describe().get("sample_count", "?"))}),
+            encoding="utf-8",
+        )
+
+    diag = cal.describe()
+    return {
+        "step": "calibrator_feed",
+        "status": "ok",
+        "new_samples": new_samples,
+        "total_samples": diag.get("sample_count", 0),
+        "is_warm": diag.get("is_warm", False),
+        "threshold": diag.get("current_threshold"),
+    }
+
+
 def _step_online_feedback(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
-    """Online_MLP_V1 retired 2026-05-25 (pnl:critical). This step is permanently skipped."""
+    """Online_MLP_V1 retired 2026-05-25 (pnl:critical). This step is permanently skipped.
+
+    Calibrator updates are handled separately by ``_step_calibrator_feed()``.
+    """
     return {"step": "online_feedback", "status": "skipped", "reason": "brain_retired"}
 
 
@@ -907,6 +1029,10 @@ def run_daily_ops(
 
     # Online feedback: feed closed trades to online SGD learner via partial_fit
     # Runs after paper_trade_simulation and feedback_loop so all data is available
+    # Calibrator feed runs BEFORE online_feedback (independent of ML pipeline).
+    # FIX-028: online_feedback is permanently skipped but calibrator must keep
+    # accumulating samples for ConformalOUGate adaptive threshold.
+    steps.append(_step_calibrator_feed(base_dir, dry_run=dry_run))
     if not skip_online_feedback:
         steps.append(_step_online_feedback(base_dir, dry_run=dry_run))
 

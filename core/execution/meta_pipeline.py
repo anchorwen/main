@@ -106,6 +106,11 @@ def discover_probe_specs(brains: list[dict[str, Any]]) -> list[MetaProbeSpec]:
             roles = [roles]
         if "meta_probe" not in roles:
             continue
+        # Skip archived/frozen/zero-weight brains — they cannot serve as probes
+        status = b.get("status", "")
+        vw = b.get("vote_weight", 1.0)
+        if status in ("archived", "frozen") or vw == 0.0:
+            continue
 
         probe_cfg = b.get("meta_probe_config", {}) or {}
         specs.append(

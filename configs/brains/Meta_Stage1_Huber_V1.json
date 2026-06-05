@@ -4,8 +4,7 @@
   "brain_type": "lightgbm_v1",
   "brain_role": "alpha_brain",
   "roles": [
-    "voter",
-    "meta_probe"
+    "voter"
   ],
   "meta_probe_config": {
     "score_type": "bps_regression",
