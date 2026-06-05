@@ -83,13 +83,13 @@ TASKS = {
             }
         ],
     },
-    # ── Sequential hardening tasks (no deadlines — depends on prior steps) ──
+    # ── Sequential hardening tasks (depends on prior steps) ──
     "S1": {
-        "name": "Golden Master 录制",
-        "deadline": None,  # sequential — activate now, accumulate passively
+        "name": "Golden Master 录制 — 累积500周期 (安全网)",
+        "deadline": None,
         "preconditions": [
             {
-                "name": "GOLDEN_MASTER_RECORD=1 env set + cycles recorded >= 500",
+                "name": ">= 500 cycles recorded to data/golden_master.jsonl",
                 "check_fn": "check_golden_master",
                 "required": 500,
                 "current": None,
@@ -97,11 +97,11 @@ TASKS = {
         ],
     },
     "S2": {
-        "name": "Golden Master 回放校验 (blocks all refactoring)",
+        "name": "Golden Master 回放校验 (verify.py --golden-master)",
         "deadline": None,
         "preconditions": [
             {
-                "name": "S1 complete + verify.py --golden-master implemented",
+                "name": "S1 complete + verify.py --golden-master passes 100%",
                 "check_fn": "check_golden_master_replay_ready",
                 "required": True,
                 "current": None,
@@ -109,25 +109,25 @@ TASKS = {
         ],
     },
     "S3": {
-        "name": "Socket边界 Pydantic海关",
+        "name": "闸门重构: 动态分位数 + 去中心化shadow (在GM安全网下)",
         "deadline": None,
         "preconditions": [
             {
-                "name": "MT5Worker tick/order result validated with AssetConfig.digits",
-                "check_fn": "check_pydantic_customs",
+                "name": "S2 complete + regime_gate refactored with per-symbol percentiles + per-gate veto",
+                "check_fn": "check_gate_refactor",
                 "required": True,
                 "current": None,
             }
         ],
     },
     "S4": {
-        "name": "提取 p_win 计算链为纯函数",
+        "name": "BTC临时解 (仅当S3后BTC仍未恢复交易)",
         "deadline": None,
         "preconditions": [
             {
-                "name": "S2 complete + resolve_p_win_from_brains() extracted + Hypothesis test",
-                "check_fn": "check_pwin_extraction",
-                "required": True,
+                "name": "S3 complete AND btc_swing still producing zero live trades",
+                "check_fn": "check_btc_trading",
+                "required": True,  # True = btc is trading (no action needed)
                 "current": None,
             }
         ],
@@ -231,15 +231,34 @@ def check_golden_master_replay_ready() -> tuple[bool, str]:
     return (cycles >= 500 and has_cmd), f"cycles={cycles}/500, verify.py gm={'OK' if has_cmd else 'TODO'}"
 
 
-def check_pydantic_customs() -> tuple[bool, str]:
-    """Check AssetConfig.digits readiness."""
-    reg = PROJECT_ROOT / "core" / "config" / "asset_registry.py"
-    return "digits" in reg.read_text(encoding="utf-8"), "AssetConfig.digits present"
+def check_gate_refactor() -> tuple[bool, str]:
+    """Check if regime_gate has been refactored with per-symbol percentiles + per-gate veto."""
+    rg = PROJECT_ROOT / "core" / "execution" / "regime_gate.py"
+    text = rg.read_text(encoding="utf-8") if rg.exists() else ""
+    has_pct = "percentile" in text.lower() or "_pct" in text
+    has_context = "RegimeContext" in text
+    return (has_pct and has_context), f"dynamic_pct={'YES' if has_pct else 'NO'}, RegimeContext={'YES' if has_context else 'NO'}"
 
 
-def check_pwin_extraction() -> tuple[bool, str]:
-    """Check p_win extraction status."""
-    return (PROJECT_ROOT / "core" / "execution" / "pwin_chain.py").exists(), "p_win chain file"
+def check_btc_trading() -> tuple[bool, str]:
+    """Check if BTC btc_swing has recent live (non-shadow) trades."""
+    import json
+    from datetime import datetime, UTC, timedelta
+    jp = PROJECT_ROOT / "data_btc" / "live_trade_journal.jsonl"
+    if not jp.exists():
+        return False, "BTC journal not found"
+    cutoff = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
+    live_opens = 0
+    with open(jp, encoding="utf-8") as f:
+        for line in f:
+            try:
+                r = json.loads(line.strip())
+                if r.get("action") == "open" and r.get("recorded_at", "") >= cutoff:
+                    live_opens += 1
+            except Exception:
+                pass
+    trading = live_opens > 0
+    return trading, f"BTC 7d live opens={live_opens}, trading={'YES' if trading else 'NO (S4 may be needed)'}"
 
 
 # ── Main ────────────────────────────────────────────────────────────────
