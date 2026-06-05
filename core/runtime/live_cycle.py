@@ -4169,6 +4169,36 @@ def execute_live_cycle(
             _log_cycle_end(state.loop_iteration)
             return state, True  # skip entry logic, continue management
 
+        # ── Golden Master recording: capture inputs before evaluation ──
+        _gm_capture = None
+        try:
+            from core.runtime.golden_master import record_cycle_inputs
+
+            _fv_sample = None
+            if feature_vector is not None:
+                import numpy as np
+
+                _fv_arr = np.asarray(feature_vector, dtype=np.float64).ravel()
+                _fv_sample = _fv_arr
+            _gm_capture = record_cycle_inputs(
+                cycle_count=state.loop_iteration,
+                mid_price=mid_price,
+                bid=_bid,
+                ask=_ask,
+                current_atr=current_atr if current_atr else 0.0,
+                regime_info=regime_info,
+                trend_direction=trend_direction,
+                trend_strength=trend_strength if trend_strength is not None else 0.0,
+                macro_regime=macro_regime,
+                risk_budget_usd=_effective_risk_budget,
+                session_volume_mult=session_info.get("volume_mult", 1.0),
+                health_volume_mult=state._last_health_volume_mult or 1.0,
+                feature_vector_sample=_fv_sample,
+                data_dir=config.base_dir,
+            )
+        except Exception:
+            pass  # Recording failure must never break the live cycle
+
         # Evaluate all strategy lines
         eval_summary = _evaluate_strategy_lines(
             strategy_lines=strategies,
@@ -4209,6 +4239,34 @@ def execute_live_cycle(
             mtf_price_service=getattr(state, "_mtf_price_service", None),
             meta_feature_vector=_meta_feature_vector,
         )
+
+        # ── Golden Master recording: capture outputs after evaluation ──
+        if _gm_capture is not None:
+            try:
+                from core.runtime.golden_master import record_cycle_outputs
+
+                _decisions_map = eval_summary.get("decisions_map", {})
+                _strategy_outputs: dict[str, Any] = {}
+                for _sn, _sd in _decisions_map.items():
+                    _strategy_outputs[_sn] = {
+                        "direction": getattr(_sd, "direction", "neutral"),
+                        "confidence": getattr(_sd, "confidence", 0.0),
+                        "should_trade": getattr(_sd, "should_trade", False),
+                        "reason": getattr(_sd, "reason", ""),
+                        "volume": getattr(_sd, "volume", 0.0),
+                        "sl": getattr(_sd, "sl", 0.0),
+                        "tp": getattr(_sd, "tp", 0.0),
+                    }
+                record_cycle_outputs(
+                    _gm_capture,
+                    strategy_results=eval_summary.get("strategy_results", {}),
+                    decisions_map=_decisions_map,
+                    trade_decisions=eval_summary.get("trade_decisions", 0),
+                    queued=eval_summary.get("queued", 0),
+                    data_dir=config.base_dir,
+                )
+            except Exception:
+                pass  # Recording failure must never break the live cycle
 
         # Log strategy evaluation results
         print(
