@@ -10,11 +10,11 @@
       "freeze_count": 0,
       "exposure_limited": false,
       "performance_metrics": {
-        "win_rate": 0.4677,
+        "win_rate": 0.4675,
         "profit_factor": 0.84,
-        "sharpe_ratio": -14.03,
-        "total_trades": 1903,
-        "pnl_r": -329.95
+        "sharpe_ratio": -14.07,
+        "total_trades": 1906,
+        "pnl_r": -330.97
       }
     },
     "OU_Params_V7_M15": {
@@ -102,11 +102,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4463,
+        "win_rate": 0.4458,
         "profit_factor": 0.74,
-        "sharpe_ratio": -29.16,
-        "total_trades": 735,
-        "pnl_r": -255.59
+        "sharpe_ratio": -29.21,
+        "total_trades": 738,
+        "pnl_r": -256.61
       }
     },
     "Swing_V9_M15_V2": {
@@ -141,11 +141,13 @@
     },
     "Brain_Rev_M30_V1": {
       "brain_id": "Brain_Rev_M30_V1",
-      "status": "shadow",
+      "status": "archived",
       "registered_at": "2026-05-30T03:44:49.234460",
       "last_transition_at": "2026-05-30T03:44:49.234460",
       "transition_count": 1,
-      "freeze_count": 0
+      "freeze_count": 0,
+      "archived_at": "2026-06-05T11:44:13Z",
+      "archive_reason": "FIX-073 corrected evaluation: PF=1.65->0.46. Training metrics were inflated by hardcoded +/-1.5 ATR eval bug. Structurally unprofitable."
     },
     "Barrier_V9_12B_V1": {
       "brain_id": "Barrier_V9_12B_V1",
@@ -172,7 +174,7 @@
     },
     "Brain_Rev_M30_V2": {
       "brain_id": "Brain_Rev_M30_V2",
-      "status": "candidate",
+      "status": "archived",
       "registered_at": "2026-06-02T01:22:13.917926",
       "last_transition_at": "2026-06-02T01:22:13.917926",
       "transition_count": 1,
@@ -183,7 +185,9 @@
         "sharpe_ratio": -3.56,
         "total_trades": 89,
         "pnl_r": -3.39
-      }
+      },
+      "archived_at": "2026-06-05T11:44:13Z",
+      "archive_reason": "Training SL/TP=1.5/2.5 mismatched with strategy SL=2.5/TP=0.7. Wrong contract for mean_reversion family."
     },
     "Swing_M15_V3": {
       "brain_id": "Swing_M15_V3",
@@ -254,11 +258,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.3878,
+        "win_rate": 0.3873,
         "profit_factor": 0.62,
-        "sharpe_ratio": -46.86,
-        "total_trades": 343,
-        "pnl_r": -172.72
+        "sharpe_ratio": -46.91,
+        "total_trades": 346,
+        "pnl_r": -173.74
       }
     },
     "Swing_LGB_M15_V1": {
@@ -303,6 +307,18 @@
       "transition": "shadow->archived",
       "reason": "Meta Pipeline Gen3 probe — 417 attr, 0 journal signals. Required OU signal engine never integrated.",
       "timestamp": "2026-06-05T11:31:31Z"
+    },
+    {
+      "brain_id": "Brain_Rev_M30_V1",
+      "transition": "shadow->archived",
+      "reason": "FIX-073 corrected evaluation: PF=1.65->0.46. Training metrics were inflated by hardcoded +/-1.5 ATR eval bug. Structurally unprofitable.",
+      "timestamp": "2026-06-05T11:44:13Z"
+    },
+    {
+      "brain_id": "Brain_Rev_M30_V2",
+      "transition": "candidate->archived",
+      "reason": "Training SL/TP=1.5/2.5 mismatched with strategy SL=2.5/TP=0.7. Wrong contract for mean_reversion family.",
+      "timestamp": "2026-06-05T11:44:13Z"
     }
   ]
 }

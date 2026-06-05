@@ -54,7 +54,8 @@ BrainRegistryService → brain_entries → BrainFactory → adapters
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
-| FIX-20260605-125 | 2026-06-05 | cursor-agent | — | **Meta Pipeline probe trio archived**: Huber (1627 attr, -369.65R), Binary_Cls (540 attr, 100% LONG bias), MetaLabel (417 attr, 0 signals). All three had structurally negative expectancy. Governance + config archived. See full lifecycle report in ACTIVE_TASKS_REGISTRY.md. | RC-11 |
+| FIX-20260605-126 | 2026-06-05 | cursor-agent | — | **Brain_Rev_M30_V1/V2 archived**: V1 PF inflated by eval bug (1.65→0.46). V2 SL/TP mismatch (1.5/2.5 ≠ 2.5/0.7). Both structurally unviable. | RC-11 |
+| FIX-20260605-125 | 2026-06-05 | cursor-agent | — | **Meta Pipeline probe trio archived**: Huber (1627 attr, -369.65R), Binary_Cls (540 attr, 100% LONG bias), MetaLabel (417 attr, 0 signals). All three had structurally negative expectancy. | RC-11 |
 | FIX-20260604-088 | 2026-06-04 | cursor-agent | — | **brain_promotion.py bare-write eliminated**
 | FIX-20260531-010 | 2026-05-31 | cursor-agent | — | brain_leaderboard.py docstring: added BTC usage example (data_btc/ paths). Actual code already supports base_dir parameter. | RC-09 |
 | FIX-20260528-023 | 2026-05-28 | cursor-agent | — | train_swing_v9 brain config output: added schema_version/magic/artifact_path fields | RC-09 |
