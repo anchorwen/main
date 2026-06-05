@@ -35,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--default-volume", type=float, default=0.01)
     parser.add_argument("--deviation", type=int, default=20)
     parser.add_argument("--magic", type=int, default=90001)
+    parser.add_argument("--default-symbol", default="XAUUSDc", help="Trading symbol for reconnect symbol_select")
     parser.add_argument("--poll-seconds", type=float, default=1.0)
     parser.add_argument("--journal-path", default="data/live_trade_journal.jsonl")
     parser.add_argument("--protection-flag-path", default="data/live_dispatch_block.flag")
@@ -157,6 +158,8 @@ def _is_protection_active(protection_flag_path: Path) -> bool:
 # ── Retry / resilience helpers ──
 
 _MAX_RETRIES = 3
+# FIX-20260531-016: Dedup guard — fingerprint → last_sent_time
+_DEDUP_CACHE: dict[tuple, float] = {}
 
 # MT5 retcodes that are transient (deserve a retry)
 _TRANSIENT_RETCODES: set[int] = {
@@ -277,6 +280,22 @@ def _mt5_market_open(
     if take_profit is None:
         take_profit = _coerce_positive_float(msg_payload.get("tp"))
     volume = effective_volume(msg_payload, default_volume=default_volume)
+
+    # ── FIX-20260531-016: Dedup guard — prevent duplicate orders within 2s ──
+    _now = time.time()
+    _fingerprint = (symbol, side, round(volume, 4), round(stop_loss or 0, 2), round(take_profit or 0, 2))
+    _last = _DEDUP_CACHE.get(_fingerprint, 0.0)
+    if _now - _last < 2.0:
+        return "rejected", {
+            "reason": "duplicate_order_dedup_guard",
+            "last_sent_s": round(_now - _last, 3),
+            "symbol": symbol,
+            "side": side,
+        }
+    _DEDUP_CACHE[_fingerprint] = _now
+    # Periodic cleanup: evict entries older than 10s
+    if len(_DEDUP_CACHE) > 50:
+        _DEDUP_CACHE.clear()
 
     if side == "unknown" or not symbol:
         return "rejected", {"reason": "invalid_symbol_or_side", "symbol": symbol, "side": side}
@@ -485,10 +504,17 @@ def _derive_label(action: str, msg_payload: dict[str, Any], detail: dict[str, An
     if action == "modify_sltp":
         return "trail" if msg_payload.get("sl") else None
     if action == "close":
-        comment = msg_payload.get("comment", "")
-        if isinstance(comment, str) and comment:
-            # comment carries the structured exit reason from the strategy
-            return comment
+        # Label by PnL outcome (win/loss), NOT by close reason.
+        # The close reason stays in the `comment` field for audit + restart
+        # bootstrap classification.  Previously the comment was used as the
+        # label, which leaked "exit_watchdog:..." into the label field and
+        # caused the bootstrap to skip the entry (non-standard label).
+        pnl = msg_payload.get("pnl")
+        if pnl is not None:
+            try:
+                return "win" if float(pnl) > 0 else ("loss" if float(pnl) < 0 else "breakeven")
+            except (ValueError, TypeError):
+                pass
         if isinstance(detail, dict):
             retcode = detail.get("retcode")
             if retcode and retcode != 10009:
@@ -685,8 +711,11 @@ def _check_mt5_heartbeat(mt5: Any) -> bool:
         return False
 
 
-def _reconnect_mt5(mt5_module: Any, terminal_path: str) -> bool:
-    """Reconnect to MT5 with exponential backoff.  Returns True on success."""
+def _reconnect_mt5(mt5_module: Any, terminal_path: str, *, symbol: str = "XAUUSDc") -> bool:
+    """Reconnect to MT5 with exponential backoff.  Returns True on success.
+
+    symbol is a keyword-only parameter for the post-reconnect symbol_select.
+    """
     for attempt, delay in enumerate(_RECONNECT_BACKOFF_SEQUENCE, start=1):
         print(
             json.dumps(
@@ -716,9 +745,9 @@ def _reconnect_mt5(mt5_module: Any, terminal_path: str) -> bool:
                     ),
                     flush=True,
                 )
-                # Re-select symbol after reconnect
+                # Re-select symbol after reconnect (config-driven, not hardcoded)
                 with log_and_continue(component="Bridge:symbol_select"):
-                    mt5_module.symbol_select("XAUUSDc", True)
+                    mt5_module.symbol_select(symbol, True)
                 return True
         except Exception:
             pass
@@ -832,7 +861,7 @@ def run_worker(args: argparse.Namespace) -> int:
                             sys.exit(1)
                         terminal_path = args.mt5_terminal_path
                         if terminal_path:
-                            if _reconnect_mt5(mt5, str(terminal_path)):
+                            if _reconnect_mt5(mt5, str(terminal_path), symbol=args.default_symbol):
                                 _consecutive_hb_failures = 0
                             else:
                                 print(

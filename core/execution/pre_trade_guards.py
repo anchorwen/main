@@ -193,6 +193,7 @@ def _is_daily_close_window(now_utc: datetime | None = None) -> bool:
 
 # ── Pre-trade VaR check ────────────────────────────────────────────────
 
+# Legacy contract size constants — use ASSET_REGISTRY for new code (Defense 1)
 XAUUSD_CONTRACT_SIZE = 100.0  # 1 lot = 100 oz
 XAUUSD_PIP_VALUE = 1.0  # 1 pip = $1 per 0.01 lot (approx)
 
@@ -204,11 +205,20 @@ def check_pre_trade_var(
     sl_atr_mult: float,
     account_balance: float | None,
     max_risk_pct: float = 0.02,
+    contract_size: float = 100.0,
+    symbol: str = "",  # FIX-20260601-032: auto-resolve contract_size from ASSET_REGISTRY
 ) -> dict[str, Any]:
     """Estimate max loss and check against account risk budget.
 
     Returns dict with: passed, var_absolute, var_pct, max_risk_pct.
+    contract_size is per-symbol (XAU=100.0, BTC=1.0); defaults to XAU.
+    When symbol is provided, contract_size is resolved from ASSET_REGISTRY.
     """
+    if symbol:
+        from core.config.asset_registry import ASSET_REGISTRY
+
+        if symbol in ASSET_REGISTRY:
+            contract_size = ASSET_REGISTRY[symbol].contract_size
     if account_balance is None or account_balance <= 0:
         return {
             "passed": True,
@@ -219,7 +229,7 @@ def check_pre_trade_var(
         }
 
     sl_distance = atr * sl_atr_mult
-    var_absolute = volume * sl_distance * XAUUSD_CONTRACT_SIZE
+    var_absolute = volume * sl_distance * contract_size
     var_pct = var_absolute / account_balance
 
     return {
@@ -245,13 +255,20 @@ def compute_position_size(
     min_lot: float = 0.01,
     max_lot: float = 0.10,
     lot_step: float = 0.01,
+    symbol: str = "",  # FIX-20260601-032: auto-resolve contract_size from ASSET_REGISTRY
 ) -> float:
     """Compute position size so every trade risks the same USD amount.
 
     Formula: position = risk_budget / (ATR × SL_mult × contract_size)
 
     Clamped to [min_lot, max_lot] at lot_step granularity.
+    When symbol is provided, contract_size is resolved from ASSET_REGISTRY.
     """
+    if symbol:
+        from core.config.asset_registry import ASSET_REGISTRY
+
+        if symbol in ASSET_REGISTRY:
+            contract_size = ASSET_REGISTRY[symbol].contract_size
     import math
 
     if atr <= 0 or sl_atr_mult <= 0:
@@ -527,8 +544,17 @@ def check_tick_sanity(bid: float, ask: float, symbol: str = "XAUUSDc") -> dict[s
     if ask < bid:
         issues.append("inverted_spread")
 
-    # Price range sanity for XAUUSD (1000-8000, covers current ~4700 + headroom)
-    if symbol.startswith("XAU"):
+    # Price range sanity — driven by ASSET_REGISTRY (Defense 1)
+    # Falls back to XAU bounds for unregistered symbols.
+    from core.config.asset_registry import ASSET_REGISTRY
+
+    asset = ASSET_REGISTRY.get(symbol)
+    if asset is not None:
+        if bid < asset.min_price or bid > asset.max_price:
+            issues.append(f"bid_out_of_range:{bid} (expected {asset.min_price}-{asset.max_price})")
+        if ask < asset.min_price or ask > asset.max_price:
+            issues.append(f"ask_out_of_range:{ask} (expected {asset.min_price}-{asset.max_price})")
+    elif symbol.startswith("XAU"):
         if bid < 1000 or bid > 8000:
             issues.append(f"bid_out_of_range:{bid}")
         if ask < 1000 or ask > 8000:

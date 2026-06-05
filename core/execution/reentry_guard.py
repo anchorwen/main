@@ -25,13 +25,10 @@ def _classify_exit_reason(raw_reason: str) -> str:
     ``"time_expired"``, ``"ou_revert"``, ``"meta_exit"``, ``"unknown"``.
     """
     r = raw_reason.lower()
-    if (
-        "brain_flip" in r
-        or "signal_reversal" in r
-        or "confidence_drop" in r
-        or "confidence_decay" in r
-    ):
+    if "brain_flip" in r or "signal_reversal" in r:
         return "brain_flip"
+    if "confidence_decay" in r or "confidence_drop" in r:
+        return "momentum_pause"  # same-direction conviction dip — not a flip
     if "sl_hit" in r or "sl_stop" in r:
         return "sl_hit"
     if "tp_hit" in r or "take_profit" in r:
@@ -69,6 +66,11 @@ def check_reentry_quality(
     mid_price: float,
     entry_half_life: float = 0.0,
     timeframe_minutes: float = 5.0,
+    # ── FIX-20260605-120: per-asset threshold overrides ──
+    sl_cooldown_override: float | None = None,
+    sl_penalty_override: float | None = None,
+    bleed_cooldown_override: float | None = None,
+    bleed_penalty_override: float | None = None,
 ) -> tuple[bool, str]:
     """Return ``(allowed, reason)`` for re-entering after a managed exit.
 
@@ -101,16 +103,25 @@ def check_reentry_quality(
     if elapsed > _STALE_EXIT_SECONDS:
         return True, f"stale_exit_allowed_{elapsed:.0f}s_gt_{_STALE_EXIT_SECONDS:.0f}s"
 
+    # ── Absolute ceiling on reentry thresholds ──────────────────────────
+    # Tree models (XGBoost/LightGBM) rarely output confidence > 0.82 in
+    # real-market conditions.  Linear margin addition (e.g. exit_conf + 0.10)
+    # can produce thresholds > 1.0 when exit confidence is extreme, creating
+    # a mathematical deadlock — the model physically cannot reach the threshold.
+    # This ceiling prevents that class of permanent lock-out.
+    _MAX_THRESHOLD = 0.82
+
     if category == "brain_flip":
         # Brain flipped against us — this is the most dangerous exit category
         # for churn.  Require: minimum elapsed time, significantly stronger
         # signal, AND price confirmation of the new entry direction.
         if elapsed < 120:
             return False, f"brain_flip_too_soon_{elapsed:.0f}s_lt_120s"
-        if new_confidence < max(exit_confidence + 0.10, 0.70):
+        _threshold = min(max(exit_confidence + 0.10, 0.70), _MAX_THRESHOLD)
+        if new_confidence < _threshold:
             return (
                 False,
-                f"brain_flip_confidence_not_improved_{new_confidence:.3f}_need_{max(exit_confidence + 0.10, 0.70):.3f}",
+                f"brain_flip_confidence_not_improved_{new_confidence:.3f}_need_{_threshold:.3f}",
             )
         if exit_direction == "long" and mid_price <= exit_price:
             return False, "brain_flip_price_not_confirming_long"
@@ -130,13 +141,16 @@ def check_reentry_quality(
                     f"sl_ttl_expired_{elapsed:.0f}s_gt_{_ttl_s:.0f}s_half_life_{entry_half_life:.1f}",
                 )
 
-        # Stop-loss — strictest requirements (SL streak breaker handles most)
-        if elapsed < 180:
-            return False, f"sl_too_soon_{elapsed:.0f}s_lt_180s"
-        if new_confidence < exit_confidence + 0.10:
+        # FIX-20260605-120: per-asset thresholds via config override.
+        _sl_cooldown = sl_cooldown_override if sl_cooldown_override is not None else 180
+        _sl_penalty = sl_penalty_override if sl_penalty_override is not None else 0.10
+        if elapsed < _sl_cooldown:
+            return False, f"sl_too_soon_{elapsed:.0f}s_lt_{_sl_cooldown}s"
+        _sl_threshold = min(exit_confidence + _sl_penalty, _MAX_THRESHOLD)
+        if new_confidence < _sl_threshold:
             return (
                 False,
-                f"sl_recovery_confidence_insufficient_{new_confidence:.3f}",
+                f"sl_recovery_confidence_insufficient_{new_confidence:.3f}_need_{_sl_threshold:.3f}",
             )
         if exit_direction == "long" and mid_price <= exit_price + 1.0:
             return False, "sl_recovery_price_not_confirming_long"
@@ -157,6 +171,23 @@ def check_reentry_quality(
             )
         return True, "time_expired_refresh_allowed"
 
+    if category == "momentum_pause":
+        # Confidence decay / drop — the brain's conviction dipped below the
+        # decay threshold, triggering a safety exit, but the DIRECTION did NOT
+        # flip.  This is a same-direction pause, not a reversal.
+        #
+        # Treat leniently: as long as confidence has stabilised (not dropped
+        # further), allow re-entry.  The trend's "second leg" should not be
+        # blocked by the same strictness as a full brain_flip.
+        if elapsed < 60:
+            return False, f"momentum_pause_too_soon_{elapsed:.0f}s_lt_60s"
+        if new_confidence < exit_confidence - 0.05:
+            return (
+                False,
+                f"momentum_pause_confidence_decayed_{new_confidence:.3f}_need_{exit_confidence - 0.05:.3f}",
+            )
+        return True, "momentum_pause_refresh_allowed"
+
     if category == "tp_hit":
         # Take-profit — trend may continue, allow if confidence hasn't decayed.
         if new_confidence < exit_confidence - 0.03:
@@ -170,10 +201,11 @@ def check_reentry_quality(
         # price confirmation of a new extreme forming.
         if elapsed < 120:
             return False, f"ou_revert_too_soon_{elapsed:.0f}s_lt_120s"
-        if new_confidence < max(exit_confidence + 0.05, 0.70):
+        _ou_threshold = min(max(exit_confidence + 0.05, 0.70), _MAX_THRESHOLD)
+        if new_confidence < _ou_threshold:
             return (
                 False,
-                f"ou_revert_confidence_not_improved_{new_confidence:.3f}_need_{max(exit_confidence + 0.05, 0.70):.3f}",
+                f"ou_revert_confidence_not_improved_{new_confidence:.3f}_need_{_ou_threshold:.3f}",
             )
         # For SHORT: price must be HIGHER (further from mean = new extreme)
         # For LONG: price must be LOWER (further from mean = new extreme)
@@ -213,11 +245,14 @@ def check_reentry_quality(
         return True, "hesitation_reentry_confirmed"
 
     if category == "bleed_stop":
-        # Bleed stop — consecutive bars with negative PnL.  This is a
-        # strong adverse signal — treat similarly to SL hit.
-        if elapsed < 180:
-            return False, f"bleed_stop_too_soon_{elapsed:.0f}s_lt_180s"
-        if new_confidence < exit_confidence + 0.10:
+        # FIX-20260605-120: per-asset thresholds via config override.
+        # XAU defaults: cooldown=180s, confidence_penalty=0.10
+        # BTC: cooldown=600s, confidence_penalty=0.15
+        _cooldown = bleed_cooldown_override if bleed_cooldown_override is not None else 180
+        _penalty = bleed_penalty_override if bleed_penalty_override is not None else 0.10
+        if elapsed < _cooldown:
+            return False, f"bleed_stop_too_soon_{elapsed:.0f}s_lt_{_cooldown}s"
+        if new_confidence < exit_confidence + _penalty:
             return (
                 False,
                 f"bleed_stop_confidence_not_improved_{new_confidence:.3f}",
@@ -235,10 +270,11 @@ def check_reentry_quality(
     if category == "unknown_close":
         if elapsed < 900:
             return False, f"unknown_close_too_soon_{elapsed:.0f}s_lt_900s"
-        if new_confidence < max(exit_confidence, 0.70):
+        _unknown_threshold = min(max(exit_confidence, 0.70), _MAX_THRESHOLD)
+        if new_confidence < _unknown_threshold:
             return (
                 False,
-                f"unknown_close_confidence_insufficient_{new_confidence:.3f}",
+                f"unknown_close_confidence_insufficient_{new_confidence:.3f}_need_{_unknown_threshold:.3f}",
             )
         return True, "unknown_close_timeout_allowed"
 
@@ -347,6 +383,10 @@ class ReentryState:
         mid: float,
         entry_half_life: float = 0.0,
         timeframe_minutes: float = 5.0,
+        sl_cooldown: float | None = None,
+        sl_penalty: float | None = None,
+        bleed_cooldown: float | None = None,
+        bleed_penalty: float | None = None,
     ) -> tuple[bool, str, float]:
         """Check re-entry quality and return (allowed, reason, volume_scale).
 
@@ -375,6 +415,10 @@ class ReentryState:
             mid_price=mid,
             entry_half_life=entry_half_life,
             timeframe_minutes=timeframe_minutes,
+            sl_cooldown_override=sl_cooldown,
+            sl_penalty_override=sl_penalty,
+            bleed_cooldown_override=bleed_cooldown,
+            bleed_penalty_override=bleed_penalty,
         )
         if not allowed:
             return False, reason, 0.0

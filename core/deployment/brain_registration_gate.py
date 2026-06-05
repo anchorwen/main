@@ -18,6 +18,20 @@ Gate checks (12 checks, any ERROR = REJECT):
   9. brain_id is unique across all brain configs
   10. vote_weight in [0.0, 1.0] (WARNING)
   11. contract_group matches a known strategy_line in live.yaml (WARNING)
+
+Relationship with brain_config_validator.py
+────────────────────────────────────────────
+Both modules validate brain configs and share similarly-named ``_check_*``
+methods, but they serve DIFFERENT lifecycle stages by DESIGN:
+
+  brain_config_validator.py   →  runs at LOAD time   →  lenient, WARNING-only
+  brain_registration_gate.py  →  runs at REGISTRATION →  strict, FAILURE-on-error
+
+DO NOT copy-paste checks between them.  The Validator is intentionally
+lenient (to avoid blocking startup); the Gate is intentionally strict
+(to prevent bad brains entering production).  If you add a new check
+category to one, evaluate whether the other also needs it — but
+implement it with the appropriate severity for that lifecycle stage.
 """
 
 from __future__ import annotations

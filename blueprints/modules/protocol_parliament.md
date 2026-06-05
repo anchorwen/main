@@ -37,7 +37,8 @@ BrainSignal[] → ContractGroupConsensus.compute_all_group_signals()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
-| FIX-20260529-051 | 2026-05-30 | cursor-agent | — | Last Mile Protocol Phase 2: contract_groups.py 4 LOG sites (registry/brain_type/source_type/metadata_type probes) converted from structured logging.warning() → log_and_continue() FTC paradigm. | RC-07 |
+| FIX-20260530-087 | 2026-05-30 | cursor-agent | — | BTC_SWING_GROUP: added `BTC_SWING_GROUP` contract group to `ALL_GROUPS` in `contract_groups.py`. BTC swing strategy (`btc_swing`) isolated with magic=90410, brain_type=swing_v9, contract_group=btc_swing_v1. Prevents cross-contamination between gold and BTC brain voting. | RC-09 (config-drift) |
+| FIX-20260529-051 | 2026-05-30 | cursor-agent | — | Last Mile Protocol Phase 2: contract_groups.py 4 LOG sites converted to log_and_continue() | RC-07 |
 | FIX-20260529-048 | 2026-05-29 | cursor-agent | — | PR#3 Phase 2: contract_groups.py 4 sequential brain_group_resolution silent-pass handlers → LOG via structured logging (registry/brain_type/source_type/metadata_type probes). | RC-07 |
 | FIX-20260522-022 | 2026-05-22 | cursor-agent | 24ff517 | Phase 2b: ParliamentService _normalize_proposal adapter — maps BrainSignal frozen dataclass to legacy BrainDecisionProposal interface for v9 shadow compatibility. Fixes 32 v9 shadow tests. | contract-violation |
 | FIX-20260519-013 | 2026-05-19 | cursor-agent | — | Consensus direction bug: _compute_weighted()全neutral组(up==down==0.5)之前伪造direction="long"+confidence=0.2486。修复后全neutral→direction="neutral",confidence=0.0。brain_votes中statarb_dynamic组不再出现虚假long共识。 | contract-violation |

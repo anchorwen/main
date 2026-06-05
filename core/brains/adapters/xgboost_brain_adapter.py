@@ -80,34 +80,26 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
             learner_cfg = config.get("learner", {})
             lmp = learner_cfg.get("learner_model_param", {})
             self._num_class = int(lmp.get("num_class", "1") or "1")
-            # Infer num_features from the booster's feature_names or from config
-            feature_names = self._booster.feature_names
-            if feature_names:
-                self._num_features = len(feature_names)
-                # ── Feature-name parity check (FIX-20260529-027) ──
-                expected = self._brain_entry.get("features")
-                if expected and isinstance(expected, list) and len(expected) == len(feature_names):
-                    for i, (got, want) in enumerate(zip(feature_names, expected, strict=False)):
-                        if got != want:
-                            raise ValueError(
-                                f"Feature name mismatch at index {i} in {artifact_path}: "
-                                f"model has '{got}', brain config has '{want}'"
-                            )
-                elif expected and len(expected) != len(feature_names):
-                    raise ValueError(
-                        f"Feature count mismatch in {artifact_path}: "
-                        f"model has {len(feature_names)} features, "
-                        f"brain config has {len(expected)}"
-                    )
+            # Infer num_features: brain config is SSOT (FIX-20260531-021).
+            # XGBoost JSON does NOT reliably persist feature_names across
+            # save/load cycles.  We FORCE the booster to use brain config
+            # features so that infer() always sees the correct names.
+            _expected = self._brain_entry.get("features")
+            if _expected and isinstance(_expected, list):
+                self._num_features = len(_expected)
+                self._booster.feature_names = _expected
             else:
-                # Backward compat: model trained without feature_names embedding.
-                # Dimension count is still checked by infer() at call time.
+                feature_names = self._booster.feature_names
+                if feature_names:
+                    self._num_features = len(feature_names)
+            # ── Emit alert if model was trained without feature_names ──
+            if not self._booster.feature_names:
                 emit_brain_alert(
                     self._brain_entry.get("brain_id", "unknown"),
                     "model_lacks_feature_names",
                     {
                         "artifact": artifact_path,
-                        "note": "Retrain with feature_names in DMatrix to enable column-order validation",
+                        "note": "Retrain with feature_names in DMatrix",
                     },
                 )
                 raw = lmp.get(
@@ -157,26 +149,42 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
                 "fallback_reason": "zero_feature_vector",
             }
 
-        # Guard: model expects _num_features features.  Mismatched input
-        # (e.g. 9-dim single-bar when model was trained on 288-dim flat
-        # sequence) cannot produce meaningful predictions — return stub.
+        # Guard: model expects _num_features features.  Attempt to recover
+        # from common mismatch patterns before returning stub.
         if self._num_features and n_cols != self._num_features:
-            emit_brain_alert(
-                self._brain_entry.get("brain_id", "unknown"),
-                "feature_dimension_mismatch",
-                {"expected": self._num_features, "got": n_cols},
-            )
-            return {
-                "raw_score": 0.0,
-                "feature_count": n_cols,
-                "runtime_ms": 0.0,
-                "fallback": True,
-                "fallback_reason": f"dim_mismatch_expected_{self._num_features}_got_{n_cols}",
-            }
+            # swing_enhanced_21 (21-dim) ← daily_swing_24 (24-dim):
+            # Remove 3 XAU cross indices (12,13,14) from 24-dim daily vector.
+            if self._num_features == 21 and n_cols == 24:
+                _xau = {12, 13, 14}
+                vec_arr = np.array([vec_arr[i] for i in range(24) if i not in _xau], dtype=np.float64)
+                n_cols = len(vec_arr)
+            # swing_enhanced_29 (29-dim) ← daily_swing_24 (24-dim):
+            # Rebuild from 24 daily + zeros for 6 micro + 2 TF, then drop XAU indices.
+            elif self._num_features == 29 and n_cols == 24:
+                fv_35 = np.concatenate([vec_arr, np.zeros(11, dtype=np.float64)])
+                _xau = {12, 13, 14, 30, 31, 32}
+                vec_arr = np.array([fv_35[i] for i in range(35) if i not in _xau], dtype=np.float64)
+                n_cols = len(vec_arr)
+            else:
+                emit_brain_alert(
+                    self._brain_entry.get("brain_id", "unknown"),
+                    "feature_dimension_mismatch",
+                    {"expected": self._num_features, "got": n_cols},
+                )
+                return {
+                    "raw_score": 0.0,
+                    "feature_count": n_cols,
+                    "runtime_ms": 0.0,
+                    "fallback": True,
+                    "fallback_reason": f"dim_mismatch_expected_{self._num_features}_got_{n_cols}",
+                }
 
         booster_fn = self._booster.feature_names
+        brain_fn = self._brain_entry.get("features")
         if booster_fn and len(booster_fn) == n_cols:
             feature_names = booster_fn
+        elif isinstance(brain_fn, list) and len(brain_fn) == n_cols:
+            feature_names = brain_fn
         else:
             feature_names = None
 

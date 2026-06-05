@@ -3,6 +3,10 @@
 All modules that need a default brain or feature path should import from here
 rather than hardcoding strings.  This makes reference-integrity auditing trivial:
 scan one file instead of the entire codebase.
+
+NOTE: All defaults assume XAUUSDc.  BTCUSDc paths (data_btc/, configs/brains_btc/)
+are set via CLI args (--base-dir, --brains-dir, --config) at process launch time,
+not via these defaults.
 """
 
 from __future__ import annotations

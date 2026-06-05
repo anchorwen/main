@@ -61,7 +61,18 @@ environment_config.json → EnvironmentConfig → ServiceContainer
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
-| FIX-20260530-057 | 2026-05-30 | cursor-agent | — | C3.2 Meta brain demotion: Meta_Stage1_Huber_V1→retired, Binary_Cls_V1→frozen, MetaLabel_Binary_V1→frozen. All three structurally negative expectancy. | RC-09 |
+| FIX-20260604-088 | 2026-06-04 | cursor-agent | — | **Governance cross-process FileLock**: `GovernanceService.save()` now acquires `FileLock("governance_state")` before atomic tmp+replace write. Asymmetric timeout: live daemons 1.0s, offline scripts 30.0s. All 4 bare-write bypassers (`brain_promotion.py`, `brain.py` reconcile, `run_promotion.py`, `reactivate_brains.py`) migrated to `GovernanceService.save()`. Eliminates file truncation risk from concurrent multi-process writes to `governance_state.json`. | RC-04, RC-06 |
+| — (arch audit) | 2026-06-05 | cursor-agent | — | **`_build_health` dedup + `_build_diagnostics` dedup**: `HealthCheckService.safe_get_health()` and `DiagnosticsDashboard.safe_get_snapshot()` extracted as shared helpers. `release_readiness.py` and `runbook_engine.py` now delegate to SSOT. | RC-06 |
+| FIX-20260602-057 | 2026-06-02 | cursor-agent | — | BTC alert thresholds recalibrated: daily_loss -5→-30, consec_losers 8→5, WR collapse 0.30→0.25, strat_degrade_loss -3→-15, strat_degrade_wr 0.30→0.35. Added dedup cooldown config. | RC-05 |
+| FIX-20260602-055 | 2026-06-02 | cursor-agent | — | BTC exit params: time_exit 36→72, max_hold 60→120, confidence_drop 0.1→0.15. BTC holds 400+ cycles vs XAU 3-6 cycles. | RC-05 |
+| FIX-20260602-054 | 2026-06-02 | cursor-agent | — | BTC hesitation_cycles 3→12: XAU m5_swing uses 12, BTC spread friction needs more time to breakeven. | RC-05 |
+| FIX-20260601-044 | 2026-06-01 | cursor-agent | — | **Defense 3 generalized**: `_validate_brain_symbol_consistency()` now registry-driven (ASSET_REGISTRY). Works for any symbol, not just BTC/XAU. | RC-09 |
+| FIX-20260601-041 | 2026-06-01 | cursor-agent | — | **register_brain hardcoded path**: line 532 used `f"configs/brains/{cfg_path.name}"` instead of computed `rel_path`. BTC brains registered to wrong directory. Removed stale BTC_Swing_V4 from XAU live.yaml. | RC-09 |
+| FIX-20260601-038 | 2026-06-01 | cursor-agent | — | **BTC config calibration**: spread_points 1400→200, max_spread_points 500→3000, min_sl_distance 200→80. BTC ATR~71 required different scaling than XAU. | RC-05 |
+| FIX-20260601-035 | 2026-06-01 | cursor-agent | — | Dead config cleanup: removed `pipeline.default_mode: shadow` from live.yaml + live_btc.yaml (was not read by any Python code). | RC-09 |
+| FIX-20260601-034 | 2026-06-01 | cursor-agent | — | **Defense 3 brain-directory drift detection**: `BrainLifecycleManager.__init__` validates brain directory naming vs declared symbol. BTC live config + non-BTC brains_dir → ValueError at startup. | RC-09 |
+| FIX-20260531-011 | 2026-05-31 | cursor-agent | — | path_defaults.py: added multi-asset comment — all defaults assume XAUUSDc, BTC paths set via CLI args at process launch. | RC-09 |
+| FIX-20260530-057 | 2026-05-30 | cursor-agent | — | C3.2 Meta brain demotion: Meta_Stage1_Huber_V1→retired, Binary_Cls_V1→frozen | RC-09 |
 | FIX-20260529-055 | 2026-05-29 | cursor-agent | — | C3.1 m15_swing min_p_win 0.45→0.40: rolling 100-trade WR drifted from 0.458 to 0.400. Lifetime PnL +$2.75. | RC-05 |
 | FIX-20260529-037 | 2026-05-29 | cursor-agent | — | low_vol regime gate: live.yaml regime_map新增low_vol条目（ATR<20百分位×3根确认）。barrier/swing→reduced, micro/daily→false。架构师护栏：替代被否决的"周四过滤"硬编码。零Python变更。 | RC-06 |
 | FIX-20260529-036 | 2026-05-29 | cursor-agent | — | 禁用statarb_dynamic+statarb_m15: live.yaml enabled:false。684笔分析：228笔/-$2.17, 35.5% WR — OU mean-reversion在趋势市场中失血。架构师护栏：批准切除。 | RC-06 |

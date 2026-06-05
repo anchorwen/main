@@ -10,12 +10,17 @@ within their respective groups.
 
 swing_enhanced_35 brains (Phase 2 swing revival) receive 35-dim vectors:
 24 daily + 9 micro + 2 TF-specific (OU_Theta, Hurst).
+
+FIX-20260601-039: Feature assembly is now delegated to the central factory
+(``core.features.feature_assembler.assemble_features_by_schema()``).
+TF close buffer and OU/Hurst computation are inherited from the StrategyLine
+base class — no more copy-paste between SwingStrategy and BarrierStrategy.
 """
 
 from __future__ import annotations
 
 import json
-from collections import deque
+import logging
 from typing import Any
 
 import numpy as np
@@ -31,43 +36,10 @@ class SwingStrategy(StrategyLine):
 
     swing_enhanced_35 brains receive an augmented 35-dim vector built from
     daily + micro + TF-specific features computed from a rolling close buffer.
+
+    FIX-20260601-039: Feature assembly delegated to the central factory.
+    TF buffer and OU/Hurst inherited from StrategyLine base class.
     """
-
-    _TF_CLOSE_BUFFER_SIZE = 25  # enough for 20-bar OU/hurst lookback + margin
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self._tf_close_buffer: deque[float] = deque(maxlen=self._TF_CLOSE_BUFFER_SIZE)
-
-    def _compute_tf_ou_theta(self, lookback: int = 20) -> float:
-        buf = list(self._tf_close_buffer)
-        if len(buf) < lookback + 1:
-            return 0.0
-        window = buf[-lookback:]
-        y = np.array(window[1:], dtype=np.float64)
-        x = np.array(window[:-1], dtype=np.float64)
-        x_mean = float(np.mean(x))
-        y_mean = float(np.mean(y))
-        beta_num = float(np.sum((x - x_mean) * (y - y_mean)))
-        beta_den = float(np.sum((x - x_mean) ** 2))
-        if beta_den < 1e-12:
-            return 0.0
-        beta = np.clip(beta_num / beta_den, 1e-8, 0.99999999)
-        return float(-np.log(beta))
-
-    def _compute_tf_hurst(self, max_lag: int = 20) -> float:
-        buf = list(self._tf_close_buffer)
-        if len(buf) < max_lag + 1:
-            return 0.5
-        series = np.asarray(buf[-max_lag:], dtype=np.float64)
-        s = float(np.std(series))
-        if s < 1e-12:
-            return 0.5
-        mean_v = float(np.mean(series))
-        z = np.cumsum(series - mean_v)
-        r = float(np.max(z) - np.min(z))
-        rs = r / s
-        return float(np.log(rs) / np.log(max_lag))
 
     def _run_inference(
         self,
@@ -78,35 +50,47 @@ class SwingStrategy(StrategyLine):
         daily_feature_vector: Any = None,
     ) -> list[Any]:
         proposals: list[Any] = []
-        if daily_feature_vector is None:
-            return proposals  # D1 features not available yet
+        # FIX-20260602-050: only require daily features for swing_enhanced
+        # schemas.  v9_institutional brains (BTC_Swing_V4) don't need D1 data.
+        # Blocking all brains when daily_feature_vector is None caused the
+        # model to go blind → neutral_consensus for hours → restart unblinds.
+        _needs_daily = any(
+            "swing_enhanced" in getattr(b.get("adapter", None), "feature_schema", "")
+            or "daily_swing" in getattr(b.get("adapter", None), "feature_schema", "")
+            for b in self.brains
+        )
+        if _needs_daily and daily_feature_vector is None:
+            return proposals  # D1 features not available yet — only for swing brains
 
-        # Track TF close prices for OU/Hurst computation
+        # Track TF close prices for OU/Hurst computation (buffer in base class)
         if mid_price is not None and mid_price > 0:
             self._tf_close_buffer.append(mid_price)
+
+        from core.features.feature_assembler import assemble_features_by_schema
 
         for b_info in self.brains:
             try:
                 adapter = b_info["adapter"]
-                schema = getattr(adapter, "feature_schema", "")
+                schema = getattr(adapter, "feature_schema", "") or "v9_institutional"
 
-                if schema == "swing_enhanced_35":
-                    # Assemble 35-dim: 24 daily + 9 micro + 2 TF-specific
-                    daily_arr = np.asarray(daily_feature_vector, dtype=np.float64).ravel()
-                    micro_arr = np.asarray(micro_feature_vector, dtype=np.float64).ravel()
-                    tf_ou = self._compute_tf_ou_theta()
-                    tf_hurst = self._compute_tf_hurst()
-                    fv = np.concatenate([daily_arr[:24], micro_arr[:9], [tf_ou, tf_hurst]])
-                    prop = adapter.inference(fv)
-                else:
-                    prop = adapter.inference(daily_feature_vector)
+                fv = assemble_features_by_schema(
+                    schema,
+                    legacy_v9_vector=np.asarray(feature_vector, dtype=np.float64).ravel(),
+                    daily_features=daily_feature_vector,
+                    micro_features=micro_feature_vector,
+                    tf_ou=self._compute_tf_ou_theta(),
+                    tf_hurst=self._compute_tf_hurst(),
+                )
+                prop = adapter.inference(fv)
 
                 bid = b_info.get("brain_id", "unknown")
                 try:
                     if not getattr(prop, "brain_id", None):
                         prop.brain_id = bid
                 except Exception:
-                    pass
+                    logging.getLogger(__name__).warning(
+                        "Brain proposal build failed brain_id=%s", bid
+                    )
                 proposals.append(prop)
             except Exception as _exc:
                 print(

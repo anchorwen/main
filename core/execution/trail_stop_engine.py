@@ -49,6 +49,10 @@ class TrailPolicy:
     trail_atr_mult_high: float = 3.0
     breakeven_threshold_atr: float = 1.0
     min_step: float = 0.15  # minimum SL change to fire modify (price units)
+    # FIX-20260603-064: activation watermark — trail only starts after
+    # unrealized profit exceeds this many ATRs.  Prevents $3 bounce from
+    # stopping out a position that never had room to breathe.
+    trail_activation_atr: float = 1.0  # 0 = immediate (old behavior)
     min_trail_mult: float = 1.2  # absolute floor on effective trail multiplier
     max_lock_atr: float = 4.0  # max R to lock in via trailing
     graduated_lock_enabled: bool = True
@@ -87,8 +91,24 @@ class TrailStopEngine:
         The trail never exceeds original_SL + max_lock_atr × entry_atr
         (respects the model training contract).  The original TP remains
         the hard ceiling — never cancelled.
+
+        FIX-20260603-064: Activation watermark — trail stays at initial SL
+        until unrealized profit exceeds trail_activation_atr × entry_atr.
+        Prevents $3 micro-bounces from stopping out positions that never
+        had breathing room.
         """
         tp = self._resolve_policy(pos)
+
+        # ── Activation watermark check ──
+        if tp.trail_activation_atr > 0 and pos.entry_atr > 0:
+            _activation_price = tp.trail_activation_atr * pos.entry_atr
+            if pos.side == "long":
+                _unrealized_r = (pos.highest_high - pos.entry_price) / pos.entry_atr
+            else:
+                _unrealized_r = (pos.entry_price - pos.lowest_low) / pos.entry_atr
+            if _unrealized_r < tp.trail_activation_atr:
+                return None  # not enough profit yet — keep initial SL
+
         effective_mult = max(tp.min_trail_mult, pos.trail_multiplier)
 
         if pos.side == "long":
@@ -123,10 +143,25 @@ class TrailStopEngine:
             return round(candidate, 3)
 
     def should_breakeven(self, pos: ActivePosition, current_atr: float) -> bool:
-        """Return True when the favorable move exceeds the breakeven threshold."""
+        """Return True when the favorable move exceeds the breakeven threshold.
+
+        FIX-20260603-064: activation watermark — breakeven is suppressed until
+        unrealized profit exceeds trail_activation_atr × entry_atr.  Prevents
+        premature breakeven lock on positions that never had breathing room.
+        """
         if pos.breakeven_triggered:
             return False
         tp = self._resolve_policy(pos)
+
+        # ── Activation watermark check ──
+        if tp.trail_activation_atr > 0 and pos.entry_atr > 0:
+            if pos.side == "long":
+                _unrealized_r = (pos.highest_high - pos.entry_price) / pos.entry_atr
+            else:
+                _unrealized_r = (pos.entry_price - pos.lowest_low) / pos.entry_atr
+            if _unrealized_r < tp.trail_activation_atr:
+                return False  # not enough profit yet — keep breakeven suppressed
+
         threshold = tp.breakeven_threshold_atr * current_atr
         if pos.side == "long":
             return (pos.highest_high - pos.entry_price) >= threshold
@@ -182,17 +217,22 @@ class TrailStopEngine:
             return base_k
 
         vol_ratio = current_atr / pos.entry_atr
+        # FIX-20260603-071: quadratic explosion fix.
+        # Previously vol_ratio > 1.5 → vol_adj = +0.8, which multiplied k
+        # AND the already-doubled ATR → SL distance exploded (200→560 pts).
+        # At extreme vol, ATR expansion alone provides enough room — tighten k.
+        # Architect directive: extreme vol = trend climax, not room to breathe.
         if vol_ratio > 1.5:
-            vol_adj = 0.8
+            vol_adj = -0.5  # was +0.8
         elif vol_ratio > 1.2:
-            vol_adj = 0.4
+            vol_adj = -0.2  # was +0.4
         elif vol_ratio < 0.7:
-            vol_adj = -0.3
+            vol_adj = 0.5  # was -0.3
         else:
             vol_adj = 0.0
 
         k = base_k + vol_adj
-        return max(1.0, min(4.0, k))
+        return max(0.8, min(3.0, k))
 
     def _compute_brain_specific_trail_scale(self, pos: ActivePosition) -> float:
         """Widen trail for brains with high live Sharpe ratios.  [1.0, 1.5].

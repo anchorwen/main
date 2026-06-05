@@ -11,7 +11,9 @@ features:
   update_interval_seconds: 60
 brains:
   registry_entries:
-  - path: configs/brains_btc/BTC_Swing_V1.json
+  - path: configs/brains_btc/BTC_Swing_V4.json
+    enabled: true
+  - path: configs/brains_btc/BTC_Swing_LGB_V1.json
     enabled: true
 gate:
   gate_policy_config: configs/live_gate_policy.json
@@ -21,7 +23,6 @@ gate:
 pipeline:
   staging_dir: data_btc/staging
   data_dir: data_btc
-  default_mode: shadow
 training:
   plan_generator: scripts/training/generate_batch_plan.py
   lanes_config: scripts/training/lane_trainers.json
@@ -43,6 +44,10 @@ live_trading:
   sl_atr_mult: 2.0
   tp_atr_mult: 2.5
   cooldown_seconds: 300
+  # FIX-069: BTC reentry guard thresholds
+  reentry_cooldown_sl_seconds: 300
+  reentry_cooldown_bleed_seconds: 600
+  reentry_confidence_penalty: 0.15
   max_positions: 2
   multi_brain: true
   brains_dir: configs/brains_btc
@@ -69,25 +74,156 @@ exit_management:
   trail_atr_mult_low: 1.5
   trail_atr_mult_high: 3.0
   breakeven_threshold_atr: 1.5
+  trail_activation_atr: 1.0  # FIX-064: trail only after 1.0x ATR profit
   brain_reeval_interval: 5
   flip_exit_threshold: 0.5
-  confidence_drop_threshold: 0.1
-  max_hold_cycles: 60
+  confidence_drop_threshold: 0.15  # FIX-055: 0.1→0.15. BTC conf 0.6-0.7, 0.1 drop=15% relative decline too sensitive
+  max_hold_cycles: 120  # FIX-055: 60→120. BTC trades hold 400+ cycles (33h), 5h was too short
   require_min_r: 0.3
   min_sl_step: 1.0
+regime_gate:
+  adx:
+    trending_threshold: 30
+    mild_trend_threshold: 20
+  atr_percentile:
+    high_vol_threshold: 80
+    low_vol_threshold: 20
+  regime_map:
+    trending:
+      btc_swing: full
+    mild_trend:
+      btc_swing: full
+    ranging:
+      btc_swing: reduced
+    high_vol:
+      btc_swing: reduced
+    normal:
+      btc_swing: full
+# ── FIX-20260605-120: Asset-specific reentry guard thresholds ──
+reentry:
+  sl_cooldown_seconds: 300
+  sl_confidence_penalty: 0.15
+  bleed_cooldown_seconds: 600
+  bleed_confidence_penalty: 0.15
+
 alert:
   enabled: true
+  # ── FIX-20260602-057: Institutional alert tiers ──
+  # CRITICAL (钉钉实时): 日亏超限 / 断路器跳 / 连亏触发
+  # WARNING  (钉钉每小时聚合一条): 单笔亏损 / 胜率波动
+  # INFO     (日志): 正常运行事件
   thresholds:
-    daily_loss_limit: -5.0
-    consecutive_losers: 8
-    win_rate_collapse: 0.3
-    strategy_degradation_loss: -3.0
-    strategy_degradation_wr: 0.3
+    # ── CRITICAL: 需要立即处理 ──
+    daily_loss_limit: -30.0           # BTC 单笔可亏 $8-10, 日亏 $30+ 才告警
+    consecutive_losers: 5             # 连续 5 笔亏损
+    win_rate_collapse: 0.25           # 胜率 < 25%
+    circuit_breaker_trip: true        # 断路器跳闸 → CRITICAL
+    # ── WARNING: 关注但不紧急 ──
+    strategy_degradation_loss: -15.0  # 策略亏损超 $15
+    strategy_degradation_wr: 0.35     # 胜率 < 35%
+    single_trade_loss_threshold: -10.0  # 单笔亏损超 $10
+    # ── 去重 ──
+    warning_cooldown_minutes: 60      # 同类型 WARNING 1小时内只发1次
+    critical_cooldown_minutes: 15     # 同类型 CRITICAL 15分钟内只发1次
   channels:
-    slack: true
-    dingtalk: true
+    slack: false
+    dingtalk: true  # FIX-066: re-enabled — PnL data now from journal SSOT
     dingtalk_webhook_url: https://oapi.dingtalk.com/robot/send?access_token=f33f64c01a0323ee7859fab62495addd0ad75c02182425f91b5ffe4ffbf9ce46
     log: true
+
+# ── FIX-20260604-087: Unified alert rule catalog (SSOT) ──
+# BTC-specific thresholds per FIX-20260602-057 institutional calibration.
+alert_system:
+  rules:
+    # ── Phase A: infrastructure health ──
+    - id: "RULE-001"
+      name: "high_error_rate"
+      context_key: "error_rate"
+      operator: "gt"
+      threshold: 0.1
+      severity: "critical"
+      cooldown_seconds: 60
+    - id: "RULE-002"
+      name: "circuit_breaker_open"
+      context_key: "circuit_state"
+      operator: "eq"
+      threshold: "open"
+      severity: "critical"
+      cooldown_seconds: 120
+    - id: "RULE-003"
+      name: "bridge_heartbeat_missed"
+      context_key: "bridge_last_ack_seconds"
+      operator: "gt"
+      threshold: 120
+      severity: "critical"
+      cooldown_seconds: 120
+    - id: "RULE-004"
+      name: "brain_frozen"
+      context_key: "frozen_brain_count"
+      operator: "gt"
+      threshold: 0
+      severity: "warning"
+      cooldown_seconds: 600
+    - id: "RULE-005"
+      name: "position_limit_near"
+      context_key: "position_utilization"
+      operator: "gt"
+      threshold: 0.8
+      severity: "warning"
+      cooldown_seconds: 300
+    - id: "RULE-006"
+      name: "cycle_stall"
+      context_key: "cycle_duration_seconds"
+      operator: "gt"
+      threshold: 180
+      severity: "critical"
+      cooldown_seconds: 300
+    # ── Phase B: PnL fund-safety (BTC institutional thresholds) ──
+    - id: "RULE-007"
+      name: "daily_loss_exceeded"
+      context_key: "daily_pnl_usd"
+      operator: "lt"
+      threshold: -30.0
+      severity: "critical"
+      cooldown_seconds: 300
+    - id: "RULE-008"
+      name: "consecutive_losses"
+      context_key: "consecutive_losses"
+      operator: "gt"
+      threshold: 5
+      severity: "warning"
+      cooldown_seconds: 600
+    # ── Composite rules (logic in code, values here) ──
+    - id: "RULE-009"
+      name: "win_rate_collapse"
+      type: "composite"
+      composite_kind: "win_rate_collapse"
+      threshold: 0.25
+      min_window: 20
+      severity: "critical"
+      cooldown_seconds: 600
+    - id: "RULE-010"
+      name: "strategy_degradation"
+      type: "composite"
+      composite_kind: "strategy_degradation"
+      wr_threshold: 0.35
+      pnl_threshold: -15.0
+      severity: "warning"
+      cooldown_seconds: 1800
+    # ── Merged from alert_service.py (previously orphaned) ──
+    - id: "RULE-011"
+      name: "high_throttle_rate"
+      context_key: "throttle_rate"
+      operator: "gt"
+      threshold: 0.3
+      severity: "warning"
+      cooldown_seconds: 300
+# FIX-20260601-037: BTC contract_size=1.0 (vs XAU=100.0) → lot-based limits
+# must be ~6× higher to match same dollar notional exposure.
+# XAU: 0.05 lots × 100 × $4,500 = $22,500 max net
+# BTC: 0.30 lots ×   1 × $73,000 = $21,900 max net
+portfolio_max_net: 0.30
+portfolio_max_gross: 0.50
 capital_allocator:
   base_volume: 0.01
   min_volume: 0.01
@@ -103,9 +239,9 @@ correlation_tracker:
   min_updates: 3
 strategy_lines:
   btc_swing:
-    enabled: true  # BTC 24/7 — no need to wait for Monday
-    mode: probation
-    timeframe: M30
+    enabled: true  # BTC 24/7
+    mode: live
+    timeframe: M5
     magic: 90410
     strategy_family: trend_following
     min_valid_brains: 1
@@ -113,15 +249,21 @@ strategy_lines:
     brain_types:
     - xgboost_v9
     base_volume: 0.01
-    max_volume: 0.05
+    max_volume: 0.10
     min_p_win: 0.45
-    spread_points: 1400
-    max_spread_points: 2500
+    # FIX-20260601-038: BTC tick=0.01, spread ~$10-20 → 1000-2000 pts.
+    # XAU typical: 30-60 pts. BTC is ~30× wider — not an anomaly, just a
+    # higher nominal price ($73k vs $4.5k). 3000 pts = $30 max spread.
+    spread_points: 200
+    max_spread_points: 3000
     sl:
       base_atr_mult: 2.0
       hard_sl_ratio: 1.5
       dynamic: true
-      min_sl_distance: 200.0
+      # FIX-20260601-038: BTC ATR ~71 → 2.0×ATR ≈ 142.
+      # XAU min_sl_distance=200 was blocking: it forced SL wider than
+      # natural ATR-based value, crushing R:R → Kelly negative EV → volume=0.
+      min_sl_distance: 80.0
       min_rr_ratio: 0.85
     tp:
       base_atr_mult: 2.5
@@ -131,9 +273,9 @@ strategy_lines:
       trail_atr_mult: 2.0
       flip_exit_enabled: true
       flip_threshold: 0.5
-      time_exit_cycles: 36
+      time_exit_cycles: 72  # FIX-055: 36→72. BTC trends hold 400+ cycles (33h), 3h was too short.
       confidence_decay_exit: true
-      hesitation_cycles: 3
+      hesitation_cycles: 12  # FIX-054: 3→12
     budget:
       daily_loss_limit_pct: -0.03
       max_consecutive_losses: 5

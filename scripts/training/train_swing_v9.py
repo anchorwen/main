@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -85,12 +86,19 @@ def compute_metrics(
         trade_count = int(trade_mask.sum())
 
         # Use actual barrier multipliers from dataset metadata (not hardcoded 1.5)
-        # FIX-20260530: asymmetric labels (e.g. sl=2.5/tp=0.7) need correct PnL sim
-        _sl_mult = float(meta.get("sl_atr_mult", 1.5)) if meta else 1.5
-        _tp_mult = float(meta.get("tp_atr_mult", 1.5)) if meta else 1.5
-        sim_pnl = np.empty(len(trade_correct), dtype=np.float64)
-        sim_pnl[:] = -_sl_mult  # Wrong direction = SL hit (loss)
-        sim_pnl[trade_correct] = _tp_mult  # Correct direction = TP hit (profit)
+        # FIX-20260531-020: Use actual Triple Barrier PnL when available.
+        # Strategy PnL = predicted_direction × actual_asset_return
+        # e.g. predict SHORT(-1) × asset drops(-2%) = +2% profit
+        if pnl is not None and len(pnl) > 0:
+            _pnl_trade = pnl[trade_mask].astype(np.float64)
+            _pred_dir_trade = y_pred_dir[trade_mask].astype(np.float64)
+            sim_pnl = _pnl_trade * _pred_dir_trade
+        else:
+            _sl_mult = float(meta.get("sl_atr_mult", 1.5)) if meta else 1.5
+            _tp_mult = float(meta.get("tp_atr_mult", 1.5)) if meta else 1.5
+            sim_pnl = np.empty(len(trade_correct), dtype=np.float64)
+            sim_pnl[:] = -_sl_mult  # Wrong direction = SL hit (loss)
+            sim_pnl[trade_correct] = _tp_mult  # Correct direction = TP hit (profit)
         gross_profit = float(np.sum(sim_pnl[sim_pnl > 0]))
         gross_loss = float(abs(np.sum(sim_pnl[sim_pnl < 0])))
         profit_factor = gross_profit / max(gross_loss, 1e-12)
@@ -99,10 +107,16 @@ def compute_metrics(
         peak = np.maximum.accumulate(cumsum)
         max_dd = float(np.max(peak - cumsum))
 
-        # Sharpe (annualized, assuming 252 trading days)
-        # M30: ~48 bars/day → ~12096 bars/year
-        # M15: ~96 bars/day → ~24192 bars/year
-        _annual_factor = float(np.sqrt(252 * 48))
+        # FIX-20260531-020: Dynamic annualization — crypto 365d, forex 252d
+        _strat = str(meta.get("strategy", "m30")).lower() if meta else "m30"
+        _is_crypto = "btc" in _strat
+        _trading_days = 365 if _is_crypto else 252
+        _bars_per_day = 48  # default M30
+        for _tf, _bpd in {"m15": 96, "m30": 48, "h1": 24, "h4": 6, "daily": 1}.items():
+            if _tf in _strat:
+                _bars_per_day = _bpd
+                break
+        _annual_factor = float(np.sqrt(_trading_days * _bars_per_day))
         _mean_val = float(np.mean(sim_pnl))
         _std_val = float(np.std(sim_pnl))
         sharpe = (_mean_val / max(_std_val, 1e-12)) * _annual_factor
@@ -154,6 +168,17 @@ def train_xgboost_swing(
     for c in range(3):
         if class_counts[c] > 0:
             sample_weight[y_train == c] = n / (3 * class_counts[c])
+
+    # FIX-20260531-020: Return-magnitude weighting — large-move samples get
+    # higher weight so the model focuses on high-impact trades.
+    # clip(0.5, 5.0) defends against fat-tail overfit on a single extreme bar.
+    _pnl_r_train = dataset.get("pnl_r_train")
+    if _pnl_r_train is not None and len(_pnl_r_train) > 0:
+        _pnl_abs = np.abs(np.asarray(_pnl_r_train, dtype=np.float64))
+        _pnl_mean = float(_pnl_abs.mean())
+        if _pnl_mean > 0:
+            _pnl_weight = np.clip(_pnl_abs / _pnl_mean, 0.5, 5.0)
+            sample_weight = sample_weight * _pnl_weight
 
     params: dict[str, Any] = {
         "objective": "multi:softprob",
@@ -228,6 +253,8 @@ def main() -> None:
     parser.add_argument("--lr", type=float, default=0.05)
     parser.add_argument("--max-depth", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--brain-id", default=None, help="Override brain_id (default: auto-derived from strategy + version)")
+    parser.add_argument("--no-register", action="store_true", help="Skip auto-registration after training")
     args = parser.parse_args()
 
     data_dir = Path(args.dataset)
@@ -270,13 +297,16 @@ def main() -> None:
         Path(__file__).resolve().parent.parent.parent
     )  # scripts/training/train_swing_v9.py → repo root
 
-    # FIX-20260529-033: Bump to V2 for retrained models with purge-gap datasets,
-    # feature_names embedding, and artifact_hash integrity.
-    # barrier_12bar → Barrier_V9_12B_V1, m30_swing → Swing_V9_M30_V2, etc.
-    if args.strategy == "barrier_12bar":
+    # FIX-20260531-028: --brain-id override + auto-versioning.
+    if args.brain_id:
+        brain_id = args.brain_id
+    elif args.strategy == "barrier_12bar":
         brain_id = "Barrier_V9_12B_V1"
     elif args.strategy == "btc_swing":
-        brain_id = "BTC_Swing_V1"
+        # Auto-version: scan existing configs for latest V number
+        _btc_brains = sorted((project_root / "configs" / "brains_btc").glob("BTC_Swing_V*.json"))
+        _v = len(_btc_brains) + 1 if _btc_brains else 1
+        brain_id = f"BTC_Swing_V{_v}"
     else:
         brain_id = f"Swing_V9_{args.strategy.split('_')[0].upper()}_V2"
     model_filename = f"{brain_id}_model.json"
@@ -289,6 +319,17 @@ def main() -> None:
 
     artifact_hash = hashlib.sha256(model_path.read_bytes()).hexdigest()
 
+    # FIX-20260531-021: Embed real feature names into the model.
+    # Without this, XGBoost serialises with f_0..f_n internal names,
+    # causing BrainFactory feature-name mismatch at startup.
+    _fn_list = dataset.get("feature_names")
+    if _fn_list is not None and len(_fn_list) > 0:
+        if isinstance(_fn_list, np.ndarray):
+            _fn_list = _fn_list.tolist()
+        if isinstance(_fn_list, list) and not str(_fn_list[0]).startswith("f_"):
+            model.feature_names = _fn_list
+            model.save_model(str(model_path))
+
     # Feature importance
     importance = model.get_score(importance_type="gain")
     feature_names = dataset["feature_names"]
@@ -297,7 +338,10 @@ def main() -> None:
     top_features = sorted(importance.items(), key=lambda x: x[1], reverse=True)[:20]
     print("\n  Top 10 features by gain:")
     for i, (fname, gain) in enumerate(top_features[:10]):
-        feat_name = feature_names[int(fname.replace("f", ""))] if fname.startswith("f") else fname
+        try:
+            feat_name = feature_names[int(fname.replace("f", ""))] if fname.startswith("f") else fname
+        except (ValueError, IndexError):
+            feat_name = str(fname)
         print(f"    {i+1}. {feat_name}: {gain:.2f}")
 
     # Map strategy to magic number and training horizon
@@ -337,7 +381,7 @@ def main() -> None:
         "feature_schema_id": feature_schema_id,
         "model_path": str(model_path),
         "artifact_path": artifact_rel,
-        "model_version": f"{args.strategy}_v1",
+        "model_version": brain_id.lower(),
         "artifact_hash": artifact_hash,
         "status": "candidate",
         "vote_weight": 1.0,
@@ -347,8 +391,8 @@ def main() -> None:
         "strategy": args.strategy,
         "timeframe": "M5" if args.strategy == "barrier_12bar" else args.strategy.split("_")[0].upper(),
         "training_params": {
-            "sl_atr_mult": 1.5,
-            "tp_atr_mult": 1.5,
+            "sl_atr_mult": float(dataset["meta"].get("sl_atr_mult", 1.5)),
+            "tp_atr_mult": float(dataset["meta"].get("tp_atr_mult", 1.5)),
             "horizon": dataset["meta"].get("horizon", 12),
             "n_estimators": args.n_estimators,
             "learning_rate": args.lr,
@@ -374,7 +418,8 @@ def main() -> None:
         },
     }
 
-    config_path = project_root / "configs" / "brains" / f"{brain_id}.json"
+    _brains_subdir = "brains_btc" if args.strategy == "btc_swing" else "brains"
+    config_path = project_root / "configs" / _brains_subdir / f"{brain_id}.json"
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(brain_config, f, indent=2, ensure_ascii=False)
     print(f"  Config saved: {config_path}")
@@ -383,16 +428,23 @@ def main() -> None:
     print(f"  Test WR: {metrics['test']['trade_win_rate']:.1%}")
     print(f"  Test PF: {metrics['test']['profit_factor']:.2f}")
     print(f"  Test Sharpe: {metrics['test']['sharpe_annualized']:.2f}")
-    print("\n  ╔══════════════════════════════════════════════════════════════╗")
-    print("  ║  NEXT STEP: Register this brain with the one-click CLI:  ║")
-    print("  ║                                                            ║")
-    print(
-        f"  ║  python scripts/brain.py register configs/brains/{brain_id}.json --status shadow  ║"
-    )
-    print("  ║  python scripts/brain.py validate                          ║")
-    print("  ║                                                            ║")
-    print("  ║  DO NOT manually edit live.yaml or governance_state.json. ║")
-    print("  ╚══════════════════════════════════════════════════════════════╝")
+    # ── FIX-20260531-023: Auto-register after training ──
+    if not args.no_register:
+        import subprocess as _sp
+
+        _reg_status = "shadow"
+        print(f"\n  Auto-registering {brain_id} as {_reg_status}...")
+        _reg_result = _sp.run(
+            [sys.executable, str(project_root / "scripts" / "brain.py"), "register",
+             str(config_path), "--status", _reg_status],
+            capture_output=True, text=True, timeout=30,
+            cwd=str(project_root),
+        )
+        if _reg_result.returncode == 0:
+            print(f"  [OK] {brain_id} auto-registered as '{_reg_status}'")
+        else:
+            print(f"  [WARN] Auto-register failed: {_reg_result.stderr[:200]}")
+            print(f"  Manual: python scripts/brain.py register {config_path} --status shadow")
 
 
 if __name__ == "__main__":

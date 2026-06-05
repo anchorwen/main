@@ -110,7 +110,35 @@ _REQUIRED_BRAIN_FIELDS = {
 
 
 class BrainLifecycleManager:
-    """Central orchestrator for brain registration, retirement, and integrity."""
+    """Central orchestrator for brain registration, retirement, and integrity.
+
+    .. rubric:: Architectural Roadmap (1,241 lines — moderate essential complexity)
+
+    State is encapsulated in instance attributes.  No cross-boundary pollution.
+
+    **Domain boundaries**::
+
+        ── Report Models (4 dataclasses) ──
+        RetirementReport, RegistrationReport, IntegrityReport, ReferenceAuditReport
+
+        ── CRUD ──
+        register_brain      (~114L)  Registration + live.yaml update
+        retire_brain        (~145L)  Retirement + AtomicFileWriter rollback
+
+        ── Integrity ──
+        verify_startup_integrity  (~408L)  SSOT cross-validation — largest method
+          └─ SSOT: configs/brains/ is law; governance_state.json is vassal
+          └─ Auto-repair: register orphans, delete zombies, reconcile status
+        audit_hardcoded_references (~64L)  Reference scan
+        validate_brain_live_alignment      Config vs live.yaml consistency
+
+        ── Helpers ──
+        _load/save_live_yaml, _load/save_governance_service,
+        _scan_brain_configs, _find_config_by_brain_id
+
+    **Strangler Fig candidate**: ``verify_startup_integrity`` — extract
+    auto-repair phases (register/delete/reconcile) when next modified.
+    """
 
     def __init__(
         self,
@@ -125,6 +153,14 @@ class BrainLifecycleManager:
         self._brains_dir = self._project_root / brains_dir
         self._retired_dir = self._project_root / retired_dir
         self._live_yaml_path = self._project_root / live_yaml_path
+
+        # ── Defense 3 (FIX-20260601-034): brain directory drift detection ──
+        # If live config specifies a symbol, verify brain configs are for that symbol.
+        live_cfg = self._load_live_yaml()
+        declared_symbol = live_cfg.get("live_trading", {}).get("symbol", "")
+        if declared_symbol:
+            self._validate_brain_symbol_consistency(declared_symbol)
+        # ── end Defense 3 ──
 
     # ── helpers ─────────────────────────────────────────────────────────
 
@@ -145,8 +181,23 @@ class BrainLifecycleManager:
         import yaml
 
         if not self._live_yaml_path.exists():
-            return {}
-        return yaml.safe_load(self._live_yaml_path.read_text(encoding="utf-8")) or {}
+            raise FileNotFoundError(
+                f"FATAL: live config not found at {self._live_yaml_path} — "
+                f"system cannot start without configuration"
+            )
+        raw = self._live_yaml_path.read_text(encoding="utf-8")
+        if not raw.strip():
+            raise ValueError(
+                f"FATAL: live config at {self._live_yaml_path} is empty — "
+                f"system cannot start with empty configuration"
+            )
+        cfg = yaml.safe_load(raw)
+        if cfg is None:
+            raise ValueError(
+                f"FATAL: live config at {self._live_yaml_path} parsed to None — "
+                f"check YAML syntax"
+            )
+        return cfg
 
     def _save_live_yaml(self, config: dict[str, Any]) -> None:
         import yaml
@@ -155,6 +206,74 @@ class BrainLifecycleManager:
             yaml.dump(config, default_flow_style=False, allow_unicode=True, sort_keys=False),
             encoding="utf-8",
         )
+
+    def _validate_brain_symbol_consistency(self, declared_symbol: str) -> None:
+        """Defense 3 (FIX-20260601-034, FIX-20260601-044): fail-fast if brain
+        directory naming is inconsistent with the declared symbol.
+
+        Registry-driven: extracts the asset short name from ASSET_REGISTRY and
+        verifies the brains_dir path contains it.  Adding a new asset (TSLA, AAPL)
+        requires only one line in ASSET_REGISTRY — this check adapts automatically.
+
+        Catches the drift where base_dir=data_btc but brains_dir still points to
+        configs/brains/ (XAU brains → BTC live trading).
+        """
+        import logging
+        _log = logging.getLogger(__name__)
+
+        bd_lower = str(self._brains_dir).lower()
+        sym_lower = declared_symbol.lower()
+
+        # ── FIX-20260601-044: registry-driven, not BTC-specific ──
+        # Derive expected keyword from the symbol: "BTCUSDc" → "btc", "XAUUSDc" → "xau"
+        # For any symbol NOT in ASSET_REGISTRY, skip validation (backward compat).
+        from core.config.asset_registry import ASSET_REGISTRY
+        _asset = ASSET_REGISTRY.get(declared_symbol)
+        if _asset is not None:
+            # FIX-20260602-051: XAU's default brains_dir is configs/brains/ —
+            # it won't contain "xau".  Only validate when brains_dir looks
+            # like a per-asset directory (contains underscore or asset prefix).
+            if bd_lower.endswith("configs/brains") or bd_lower.endswith("configs\\brains"):
+                return  # default XAU directory — always valid
+
+            # Extract short name: take the first alphabetic segment (e.g. "BTC" from "BTCUSDc")
+            _short = "".join(c for c in declared_symbol if c.isalpha()).lower()
+            # Also check common aliases (e.g., "xau" for gold, not "xauusdc")
+            _aliases: set[str] = {_short}
+            if len(_short) > 3:
+                _aliases.add(_short[:3])  # "xauusdc" → also check "xau"
+
+            _matched = any(alias in bd_lower for alias in _aliases)
+            if not _matched:
+                msg = (
+                    f"BRAIN_DIR_DRIFT: live config declares symbol='{declared_symbol}' "
+                    f"(aliases: {sorted(_aliases)}) "
+                    f"but brains_dir='{self._brains_dir}' does not contain any alias. "
+                    f"Expected something like 'configs/brains_{_short}'. "
+                    f"This would load brains for the wrong asset."
+                )
+                _log.error(msg)
+                raise ValueError(msg)
+            return
+
+        # ── Legacy fallback for unregistered symbols ──
+        if "btc" in sym_lower and "btc" not in bd_lower:
+            msg = (
+                f"BRAIN_DIR_DRIFT: live config declares symbol='{declared_symbol}' "
+                f"but brains_dir='{self._brains_dir}' does not contain 'btc'. "
+                f"Expected something like 'configs/brains_btc'."
+            )
+            _log.error(msg)
+            raise ValueError(msg)
+
+        if "xau" in sym_lower and "btc" in bd_lower:
+            msg = (
+                f"BRAIN_DIR_DRIFT: live config declares symbol='{declared_symbol}' "
+                f"but brains_dir='{self._brains_dir}' contains 'btc'. "
+                f"Expected something like 'configs/brains'."
+            )
+            _log.error(msg)
+            raise ValueError(msg)
 
     def _load_governance_service(self):
         """Load GovernanceService from the standard state path, or return a fresh one."""
@@ -443,16 +562,26 @@ class BrainLifecycleManager:
             if not report.norm_config_found:
                 report.errors.append(f"normalization_config_missing: {norm_path}")
 
-        # 4. Quality gate: verify training metrics meet minimum thresholds
-        #    (proxy for forward-Sharpe until walk-forward pipeline is built)
-        train_sharpe = cfg.get("train_sharpe")
-        train_winrate = cfg.get("train_winrate")
-        train_profit_factor = cfg.get("train_profit_factor")
-        train_max_dd = cfg.get("train_max_dd")
+        # 4. Quality gate: verify training metrics meet minimum thresholds.
+        #    Training scripts (train_swing_v9.py) store metrics under
+        #    "training_metrics" sub-dict with "test_*" keys.
+        #    FIX-20260531-025: also check training_metrics sub-dict.
+        _tm = cfg.get("training_metrics", {})
+        train_sharpe = cfg.get("train_sharpe") or _tm.get("test_sharpe")
+        train_winrate = cfg.get("train_winrate") or _tm.get("test_trade_win_rate")
+        train_profit_factor = cfg.get("train_profit_factor") or _tm.get("test_profit_factor")
+        train_max_dd = cfg.get("train_max_dd") or _tm.get("test_max_dd")
 
         if train_sharpe is not None and train_sharpe <= 0:
             report.errors.append(f"quality_gate_failed: train_sharpe={train_sharpe} (require > 0)")
-        if train_winrate is not None and train_winrate <= 0.50:
+        # FIX-20260604-085: WR gate waived for low-RR strategies that are
+        # profitable (PF>1.0). At RR<1.0, breakeven WR > 50% but the brain
+        # can still be profitable through selective trade filtering.
+        _wr_override = (
+            train_profit_factor is not None and train_profit_factor > 1.0
+            and train_sharpe is not None and train_sharpe > 0
+        )
+        if train_winrate is not None and train_winrate <= 0.50 and not _wr_override:
             report.errors.append(
                 f"quality_gate_failed: train_winrate={train_winrate} (require > 0.50)"
             )
@@ -481,7 +610,7 @@ class BrainLifecycleManager:
             if not any(e.get("path", "") == rel_path for e in entries):
                 entries.append(
                     {
-                        "path": f"configs/brains/{cfg_path.name}",
+                        "path": rel_path,  # FIX-20260601-041: was hardcoded "configs/brains/" — broke brains_btc/
                         "enabled": True,
                     }
                 )
@@ -699,7 +828,7 @@ class BrainLifecycleManager:
         gov_data: dict = {}
         gov_path = self._base_dir / "governance_state.json"
         if gov_path.exists():
-            try:
+            try:  # noqa: SIM105
                 gov_data = json.loads(gov_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 pass
@@ -745,7 +874,7 @@ class BrainLifecycleManager:
                 )
             self._save_governance_service(gov)
             # Reload gov_data for subsequent checks
-            try:
+            try:  # noqa: SIM105
                 gov_data = json.loads(gov_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 pass
@@ -796,7 +925,7 @@ class BrainLifecycleManager:
                     )
             self._save_governance_service(gov)
             # Reload gov_data for subsequent checks
-            try:
+            try:  # noqa: SIM105
                 gov_data = json.loads(gov_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 pass
@@ -844,7 +973,7 @@ class BrainLifecycleManager:
                     f"SSOT reconciled (config overrides retired governance): {reconciled}"
                 )
                 self._save_governance_service(gov2)
-                try:
+                try:  # noqa: SIM105
                     gov_data = json.loads(gov_path.read_text(encoding="utf-8"))
                 except (json.JSONDecodeError, OSError):
                     pass

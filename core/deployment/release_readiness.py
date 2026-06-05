@@ -15,7 +15,6 @@ from core.contracts.domain_keys import (
     COMPLIANCE_CHECK_ALPHA_BUDGET_EVIDENCE_REGISTERED,
     COMPLIANCE_CHECK_ALPHA_BUDGET_WARNINGS_CLEAR,
     HEALTH_STATUS_ALIVE,
-    HEALTH_STATUS_MISSING,
     HEALTH_STATUS_READY,
     PAYLOAD_KEY_ALERT_COUNT,
     PAYLOAD_KEY_ALERTS,
@@ -261,15 +260,9 @@ class ReleaseReadinessService:
         return {k: getattr(cfg, k, None) for k in keys}
 
     def _build_health(self) -> dict:
-        if getattr(self._container, "health_check", None) is None:
-            return {
-                PAYLOAD_KEY_READINESS: {PAYLOAD_KEY_STATUS: HEALTH_STATUS_MISSING},
-                PAYLOAD_KEY_LIVENESS: {PAYLOAD_KEY_STATUS: HEALTH_STATUS_MISSING},
-            }
-        return {
-            PAYLOAD_KEY_READINESS: self._container.health_check.readiness(),
-            PAYLOAD_KEY_LIVENESS: self._container.health_check.liveness(),
-        }
+        from core.deployment.health_check import HealthCheckService
+
+        return HealthCheckService.safe_get_health(self._container)
 
     def _build_services(self) -> dict:
         details = {}

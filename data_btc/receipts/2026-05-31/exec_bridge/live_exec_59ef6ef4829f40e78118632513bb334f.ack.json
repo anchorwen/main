@@ -1,0 +1,22 @@
+{
+  "message_id": "live_exec_59ef6ef4829f40e78118632513bb334f",
+  "ack_status": "rejected",
+  "received_at": "2026-05-31T07:00:59",
+  "detail": {
+    "retcode": 10012,
+    "comment": "Request timeout",
+    "request": {
+      "action": 1,
+      "symbol": "BTCUSDc",
+      "volume": 0.01,
+      "type": 1,
+      "position": 3713518571,
+      "price": 73956.14,
+      "deviation": 20,
+      "magic": 90410,
+      "comment": "",
+      "type_time": 0,
+      "type_filling": 1
+    }
+  }
+}

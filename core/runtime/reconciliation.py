@@ -8,6 +8,7 @@ to detect positions closed externally (SL/TP hit, manual close).
 from __future__ import annotations
 
 import json
+import logging
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -230,7 +231,12 @@ def reconcile_closed_positions(
                     _rs = ensure_reentry_state(state._reentry_states, _exit_strategy)
                     _rs.record_exit(_rec)
                 except Exception:
-                    pass
+                    logging.getLogger(__name__).warning(
+                        "Reentry guard state recording failed ticket=%s strategy=%s — "
+                        "reentry protection is volatile until next persist",
+                        ticket,
+                        _exit_strategy,
+                    )
 
         del known_tickets[ticket]
 

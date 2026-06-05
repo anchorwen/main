@@ -34,14 +34,14 @@ def mgr(temp_state_dir):
 
 class TestEnums:
     def test_slot_state_values(self):
-        assert SlotState.LIVE == "live"
-        assert SlotState.STANDBY == "standby"
-        assert SlotState.DRAINING == "draining"
-        assert SlotState.FAILED == "failed"
+        assert SlotState.LIVE.value == "live"
+        assert SlotState.STANDBY.value == "standby"
+        assert SlotState.DRAINING.value == "draining"
+        assert SlotState.FAILED.value == "failed"
 
     def test_slot_color_values(self):
-        assert SlotColor.BLUE == "blue"
-        assert SlotColor.GREEN == "green"
+        assert SlotColor.BLUE.value == "blue"
+        assert SlotColor.GREEN.value == "green"
 
 
 # ── DeploymentSlot ────────────────────────────────────────────────────────────
@@ -361,12 +361,16 @@ class TestHealthProbe:
 
     def test_min_uptime_not_satisfied(self):
         probe = HealthProbe(min_uptime_seconds=999999)
+        # Use a timestamp 60 seconds ago — well under 999999s threshold.
+        # Hardcoded date (2026-05-21) would drift past threshold over time.
+        from datetime import UTC, datetime, timedelta
+        _recent = (datetime.now(UTC) - timedelta(seconds=60)).isoformat()
         slot = DeploymentSlot(
             color=SlotColor.BLUE,
             state=SlotState.LIVE,
             process_id=os.getpid(),
             brain_id="test",
-            started_at="2026-05-21T00:00:01",  # today, well under 999999s min_uptime
+            started_at=_recent,
         )
         result = probe.check(slot)
         assert not result["checks"]["min_uptime"]

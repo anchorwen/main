@@ -128,7 +128,7 @@ DAILY_SWING_GROUP: dict[str, Any] = {
 M15_SWING_GROUP: dict[str, Any] = {
     "name": "m15_swing",
     "horizon_cycles": 72,  # 24 M15 bars × 3 M5 cycles/M15
-    "brain_types": {"lightgbm_v1"},
+    "brain_types": {"xgboost_v9"},  # FIX-20260602-060: was lightgbm_v1, actual brain is xgboost_v9
     "contract": "m15_swing_24bar",
     "voting_mode": "weighted",
     "description": "M15 intraday swing — 24-bar (~6h) barrier, SL=1.5xATR, TP=3.0xATR",
@@ -387,23 +387,58 @@ class ContractGroupConsensus:
                 total_count=total,
             )
 
-        # Direction from weighted vote count
-        direction: Direction
-        if long_weight >= short_weight:
-            direction = "long"
-            consensus_base = long_weight / total_weight
+        # FIX-20260602-052 + FIX-20260603-062: self-normalization bug.
+        # When ALL non-neutral votes agree on the same direction, the
+        # weight/total_weight division collapses to 1.0 regardless of raw
+        # confidence.  This happens for single-brain AND for unanimous
+        # multi-brain (e.g. 2 brains both voting SHORT).
+        # Use weighted-average confidence instead.
+        _all_agree = (
+            (long_count > 0 and short_count == 0)
+            or (short_count > 0 and long_count == 0)
+        )
+        if _all_agree and (long_count + short_count) > 0:
+            if long_count > 0:
+                direction = "long"
+                _total_conf = sum(
+                    float(getattr(_p, "confidence", 0.5))
+                    for _p in proposals
+                    if getattr(_p, "direction", "neutral") == "long"
+                )
+                consensus_base = _total_conf / long_count
+            else:
+                direction = "short"
+                _total_conf = sum(
+                    float(getattr(_p, "confidence", 0.5))
+                    for _p in proposals
+                    if getattr(_p, "direction", "neutral") == "short"
+                )
+                consensus_base = _total_conf / short_count
+            # Small bonus for each additional agreeing brain
+            _agree_bonus = min(0.15, 0.05 * (max(long_count, short_count) - 1))
+            consensus_base = min(1.0, consensus_base + _agree_bonus)
+            # Neutral penalty
+            if neutral_count > 0:
+                neutral_ratio = neutral_count / total
+                consensus_base *= max(0.35, 1.0 - neutral_ratio * 0.2)
+            consensus_score = consensus_base
         else:
-            direction = "short"
-            consensus_base = short_weight / total_weight
+            # Mixed directions — weighted consensus (correct)
+            if long_weight >= short_weight:
+                direction = "long"
+                consensus_base = long_weight / total_weight
+            else:
+                direction = "short"
+                consensus_base = short_weight / total_weight
 
-        # Neutral penalty: if neutrals dominate, scale down
-        if neutral_count > 0:
-            neutral_ratio = neutral_count / total
-            consensus_base *= max(0.35, 1.0 - neutral_ratio * 0.2)
+            # Neutral penalty
+            if neutral_count > 0:
+                neutral_ratio = neutral_count / total
+                consensus_base *= max(0.35, 1.0 - neutral_ratio * 0.2)
 
-        # Majority agreement boost (within-group, so it's meaningful)
-        majority_ratio = max(long_count, short_count) / max(total, 1)
-        consensus_score = consensus_base * 0.5 + majority_ratio * 0.5
+            # Majority agreement boost
+            majority_ratio = max(long_count, short_count) / max(total, 1)
+            consensus_score = consensus_base * 0.5 + majority_ratio * 0.5
 
         # Build supporting/dissenting lists from parallel brain_ids + directions
         supporting_brains = [

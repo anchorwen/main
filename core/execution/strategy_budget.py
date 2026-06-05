@@ -246,3 +246,61 @@ class StrategyBudget:
             "streak_multiplier": self.get_streak_multiplier(),
             "sl_cooldown": self.get_sl_cooldown_info(),
         }
+
+    # ── Execution state persistence (FIX-20260603-072: Global Execution State Hydration) ──
+
+    def get_state(self) -> dict[str, Any]:
+        """Serializable snapshot of all mutable runtime state for restart recovery."""
+        _now = _time.time()
+        return {
+            "daily_pnl_pct": round(self.daily_pnl_pct, 4),
+            "consecutive_losses": self.consecutive_losses,
+            "total_trades_today": self.total_trades_today,
+            "total_wins_today": self.total_wins_today,
+            "paused": self.paused,
+            "paused_at": self.paused_at,
+            "last_trade_day": self.last_trade_day,
+            "_sl_timestamps": [t for t in self._sl_timestamps if t > _now - SL_COOLDOWN_WINDOW],
+            "_sl_cooldown_until": self._sl_cooldown_until
+            if self._sl_cooldown_until > _now
+            else 0.0,
+            "_sl_paused_rest_of_day": self._sl_paused_rest_of_day,
+        }
+
+    def load_state(self, saved: dict[str, Any]) -> None:
+        """Restore mutable runtime state from a previously persisted snapshot.
+
+        Only restores fields that exist in *saved* — backward-compatible with
+        older snapshot versions that may lack newer fields.
+        """
+        _now = _time.time()
+        if "daily_pnl_pct" in saved:
+            self.daily_pnl_pct = float(saved["daily_pnl_pct"])
+        if "consecutive_losses" in saved:
+            self.consecutive_losses = int(saved["consecutive_losses"])
+        if "total_trades_today" in saved:
+            self.total_trades_today = int(saved["total_trades_today"])
+        if "total_wins_today" in saved:
+            self.total_wins_today = int(saved["total_wins_today"])
+        if "paused" in saved:
+            self.paused = bool(saved["paused"])
+        if "paused_at" in saved:
+            self.paused_at = float(saved["paused_at"])
+        if "last_trade_day" in saved:
+            _saved_day = str(saved["last_trade_day"])
+            _today = self._today()
+            if _saved_day == _today:
+                self.last_trade_day = _saved_day
+            else:
+                # Stale day — counters will reset on next record_trade()
+                self.last_trade_day = ""
+        if "_sl_timestamps" in saved:
+            _cutoff = _now - SL_COOLDOWN_WINDOW
+            self._sl_timestamps = [t for t in saved["_sl_timestamps"] if t > _cutoff]
+        if "_sl_cooldown_until" in saved:
+            _until = float(saved["_sl_cooldown_until"])
+            self._sl_cooldown_until = _until if _until > _now else 0.0
+        if "_sl_paused_rest_of_day" in saved:
+            _paused_day = bool(saved["_sl_paused_rest_of_day"])
+            if _paused_day and self.last_trade_day == self._today():
+                self._sl_paused_rest_of_day = True

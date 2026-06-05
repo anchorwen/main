@@ -1,0 +1,9 @@
+# CODEOWNERS — 量化交易系统代码所有权
+#
+# 账本核心合同与层 — 架构冷冻期 (FIX-20260604-087 Phase 3)
+# 在测试覆盖率达到 80% 之前，任何修改必须经过 @anchorwen 显式 Review 批准。
+#
+# 绕过：需经架构听证会批准，且 commit 消息中引用批准记录。
+
+core/contracts/label_contract.py  @anchorwen
+core/ledger/                      @anchorwen

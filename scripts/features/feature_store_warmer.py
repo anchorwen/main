@@ -248,7 +248,7 @@ def warm_store(
         timeframe=timeframe,
         description="V9 Institutional 40-dim feature vector",
     )
-    try:
+    try:  # noqa: SIM105
         store.register_schema(schema)
     except Exception:
         pass

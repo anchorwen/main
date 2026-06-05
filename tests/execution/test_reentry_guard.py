@@ -15,12 +15,15 @@ from core.execution.reentry_guard import (
 
 
 class TestClassifyExitReason:
-    def test_confidence_drop_is_brain_flip(self):
-        assert _classify_exit_reason("confidence_drop_0.500") == "brain_flip"
-        assert _classify_exit_reason("confidence_drop_0.835") == "brain_flip"
+    def test_confidence_drop_is_momentum_pause(self):
+        # FIX-116: confidence_drop/decay → momentum_pause (same-direction dip, not flip)
+        assert _classify_exit_reason("confidence_drop_0.500") == "momentum_pause"
+        assert _classify_exit_reason("confidence_drop_0.835") == "momentum_pause"
+        assert _classify_exit_reason("confidence_decay_0.200") == "momentum_pause"
 
     def test_signal_reversal_is_brain_flip(self):
         assert _classify_exit_reason("signal_reversal_short") == "brain_flip"
+        assert _classify_exit_reason("brain_flip_long") == "brain_flip"
 
     def test_ou_reversion_is_ou_revert(self):
         assert _classify_exit_reason("ou_reversion_z0.11") == "ou_revert"
@@ -44,9 +47,12 @@ class TestClassifyExitReason:
 
 
 class TestCheckReentryQuality:
-    # ── time gate: brain_flip requires ≥120s ──
+    # ── momentum_pause (confidence_drop/decay) — lenient same-direction reentry ──
+    # FIX-116: momentum_pause has 60s cooldown (vs 120s for brain_flip),
+    # -0.05 confidence tolerance (vs strict improvement for brain_flip),
+    # and no price-confirmation requirement.
 
-    def test_brain_flip_blocks_too_soon(self):
+    def test_momentum_pause_blocks_too_soon(self):
         now = time.time()
         allowed, reason = check_reentry_quality(
             exit_reason_raw="confidence_drop_0.500",
@@ -61,13 +67,14 @@ class TestCheckReentryQuality:
         )
         assert allowed is False
         assert "too_soon" in reason
-        assert "120s" in reason
+        assert "60s" in reason
 
-    # ── brain_flip ──
+    # ── brain_flip (signal_reversal) — strict directional reversal reentry ──
 
     def test_brain_flip_blocks_without_confidence_improvement(self):
+        # Use signal_reversal to trigger actual brain_flip category
         allowed, reason = check_reentry_quality(
-            exit_reason_raw="confidence_drop_0.500",
+            exit_reason_raw="signal_reversal_short",
             exit_direction="short",
             exit_confidence=0.50,
             exit_price=4731.0,
@@ -81,7 +88,7 @@ class TestCheckReentryQuality:
 
     def test_brain_flip_blocks_without_price_confirmation_short(self):
         allowed, reason = check_reentry_quality(
-            exit_reason_raw="confidence_drop_0.500",
+            exit_reason_raw="signal_reversal_short",
             exit_direction="short",
             exit_confidence=0.50,
             exit_price=4731.0,
@@ -95,7 +102,7 @@ class TestCheckReentryQuality:
 
     def test_brain_flip_allows_with_confidence_and_price_confirmation(self):
         allowed, reason = check_reentry_quality(
-            exit_reason_raw="confidence_drop_0.500",
+            exit_reason_raw="signal_reversal_short",
             exit_direction="short",
             exit_confidence=0.50,
             exit_price=4731.0,

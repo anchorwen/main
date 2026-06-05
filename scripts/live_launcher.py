@@ -180,7 +180,12 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     try:
         from core.ledger.services.journal_cleanup import repair_and_cleanup
 
-        repair_report = repair_and_cleanup(journal_path, max_age_hours=24, dry_run=False)
+        repair_report = repair_and_cleanup(
+            journal_path,
+            max_age_hours=24,
+            dry_run=False,
+            lock_dir=PROJECT_ROOT / cfg["base_dir"] / "locks",  # FIX-20260601-043
+        )
         if repair_report.get("status") != "ok":
             print(
                 f"[launcher] Journal repair: backfilled {repair_report.get('backfilled_magic',0)} magic, "
@@ -230,6 +235,8 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         str(cfg["bridge"]["magic"]),
         "--default-volume",
         str(cfg["volume"]),
+        "--default-symbol",
+        cfg["symbol"],
     ]
 
     # ── Intent loop command ──
@@ -345,7 +352,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         _echo(f"  Safeguards: {', '.join(_safeguards)}")
 
     # ── Clean stale lock files from previous crashed sessions ──
-    _lock_dir = PROJECT_ROOT / "data" / "locks"
+    _lock_dir = PROJECT_ROOT / cfg["base_dir"] / "locks"
     if _lock_dir.exists():
         for _lf in _lock_dir.glob("*.lock"):
             try:
@@ -385,6 +392,37 @@ def launch(config_path: str = "configs/live.yaml") -> int:
             )
     except Exception:
         pass
+
+    # ── FIX-019: Kill stale bridge/intent from previous crashed sessions ──
+    # Without this, an old bridge surviving a launcher crash will poll the
+    # same outbox directory alongside the new bridge → duplicate MT5 orders.
+    _outbox_dir = str(PROJECT_ROOT / cfg["base_dir"] / "mt5_outbox")
+    _stale_killed = 0
+    try:
+        import subprocess as _sp
+
+        _wmic_out = _sp.run(
+            ["wmic", "process", "where", "name='python.exe'", "get", "processid,commandline",
+             "/format:csv"],
+            capture_output=True, text=True, timeout=10,
+        )
+        for _line in _wmic_out.stdout.split("\n"):
+            if "mt5_bridge_worker.py" in _line and _outbox_dir in _line:
+                _pid_str = _line.strip().split(",")[-1].strip()
+                if _pid_str and _pid_str.isdigit():
+                    _old_pid = int(_pid_str)
+                    if _old_pid != os.getpid():
+                        try:
+                            os.kill(_old_pid, 9)
+                            _stale_killed += 1
+                            print(f"[launcher] Killed stale bridge PID={_old_pid}", flush=True)
+                        except OSError:
+                            pass
+    except Exception:
+        pass
+    if _stale_killed:
+        _echo(f"  Stale bridge cleaned: {_stale_killed} process(es) terminated")
+        time_module.sleep(1.0)  # let OS reclaim the PID
 
     # ── Launch subprocesses ──
     subprocess_env = {**dict(os.environ), "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"}
@@ -503,7 +541,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         log_fh.write(msg4 + "\n")
         log_fh.flush()
         for _fh in [bridge_log_fh, intent_log_fh, log_fh]:
-            try:
+            try:  # noqa: SIM105
                 _fh.close()
             except Exception:
                 pass
@@ -755,6 +793,23 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     except KeyboardInterrupt:
         _on_signal(signal.SIGINT, None)
 
+    # ── Cleanup: terminate any still-running subprocesses ──
+    for _proc, _name in [(bridge_proc, "bridge"), (intent_proc, "intent")]:
+        if _proc.poll() is None:
+            try:
+                _proc.terminate()
+                _proc.wait(timeout=5)
+            except (subprocess.TimeoutExpired, OSError):
+                try:
+                    _proc.kill()
+                    _proc.wait()
+                except OSError:
+                    pass
+            _cw_msg = f"[launcher] Cleaned up {_name} subprocess (pid={_proc.pid})"
+            print(_cw_msg, flush=True)
+            log_fh.write(_cw_msg + "\n")
+            log_fh.flush()
+
     bridge_thread.join(timeout=3)
     intent_thread.join(timeout=3)
     stop_event.set()
@@ -764,7 +819,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     log_fh.write(msg + "\n")
     log_fh.flush()
     for _fh in [bridge_log_fh, intent_log_fh, log_fh]:
-        try:
+        try:  # noqa: SIM105
             _fh.close()
         except Exception:
             pass

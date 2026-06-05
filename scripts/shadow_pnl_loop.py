@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 import time
 from datetime import UTC, datetime
@@ -281,7 +282,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         rn_path = base_dir / "rolling_norm_state.json"
         if rn_path.exists():
-            try:
+            try:  # noqa: SIM105
                 rolling_norm.load_state(rn_path)
             except Exception:
                 pass
@@ -455,7 +456,7 @@ def main(argv: list[str] | None = None) -> int:
                 micro_source = micro_computer.compute_all()
                 _micro_features = micro_adapter.build_model_input(micro_source).ravel()
                 micro_sequences: dict[str, np.ndarray] = {}
-                try:
+                try:  # noqa: SIM105
                     micro_sequences = micro_computer.compute_all_sequences(32)
                 except Exception:
                     pass
@@ -625,7 +626,7 @@ def main(argv: list[str] | None = None) -> int:
                         and result["status"] == "ok"
                         and result["direction_bias"] != "neutral"
                     ):
-                        try:
+                        try:  # noqa: SIM105
                             pnl_ledger.record_signal(
                                 brain_id=result["brain_id"],
                                 symbol=symbol,
@@ -745,10 +746,13 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             pass
         if rolling_norm is not None:
-            try:
+            try:  # noqa: SIM105
                 rolling_norm.save_state(base_dir / "rolling_norm_state.json")
             except Exception:
-                pass
+                logging.getLogger(__name__).warning(
+                    "shadow_pnl_loop: failed to persist rolling normalizer state — "
+                    "feature normalization may reset on restart"
+                )
         mt5.shutdown()
 
     return 0

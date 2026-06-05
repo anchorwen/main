@@ -22,6 +22,9 @@ _IMPLEMENTED_SCHEMAS: set[str] = {
     "v2_microstructure_9",  # → v4.3_microstructure_9 alias
     "v2_microstructure_288",  # MicrostructureFeatureComputer × 32
     "swing_enhanced_35",  # 24 swing macro + 9 micro + 2 TF-specific (OU_Theta, Hurst)
+    "swing_enhanced_29",  # 21 swing macro + 6 micro + 2 TF (XAU cross-asset removed for BTC)
+    "swing_enhanced_21",  # 21 swing macro only — pure daily, no micro/TF
+    "btc_macro_enhanced_37",  # FIX-081: BTC 37-dim (AUDJPY, XAU, BTC/XAU ratio + ROC)
     "v6_price_series_1",  # OU Params Z-Score
 }
 
@@ -57,7 +60,7 @@ class FeatureService:
         feature_computer=None,
         default_venue: str = "MT5",
         feature_store=None,
-        default_symbol: str = "XAUUSD",
+        default_symbol: str = "",  # FIX-20260601-044: must be explicit per-symbol
         store_schema_name: str = "v9_institutional_40",
         store_timeframe: str = "M5",
     ):

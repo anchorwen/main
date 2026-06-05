@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -64,14 +65,37 @@ def _load_or_create_tracker(base_dir: str) -> Any:
         return BrainPerformanceTracker(window_size=100)
 
 
-def _load_or_create_governance(base_dir: str) -> Any:
+def _resolve_brains_dir(base_dir: str) -> Path:
+    """Defense 3: explicitly map base_dir to brains config directory.
+
+    Falls back to configs/brains/ for unknown base directories (test paths, etc.).
+    No implicit guessing — hard contract between base_dir and brains_dir.
+    """
+    _bd = str(base_dir).rstrip("/\\")
+    # Base dir → brains dir contract
+    _MAPPING: dict[str, str] = {
+        "data": "configs/brains",
+        "data_btc": "configs/brains_btc",
+    }
+    for key, brains in _MAPPING.items():
+        if _bd.endswith(key):
+            return PROJECT_ROOT / brains
+    # Fallback for test/unknown paths — use XAU default
+    return PROJECT_ROOT / "configs" / "brains"
+
+
+def _load_or_create_governance(base_dir: str, *, brains_dir: Path | None = None) -> Any:
     """Load persisted governance state, or create a fresh one.
 
     When creating a new governance service, auto-discovers brain configs from
-    ``configs/brains/`` and registers each as ``candidate``.  The hardcoded
-    DEFAULT_BRAIN_REGISTRATIONS dict (above) can still be used to pin specific
-    initial statuses, but the default empty dict triggers full auto-discovery.
+    the resolved brains_dir.  The hardcoded DEFAULT_BRAIN_REGISTRATIONS dict
+    (above) can still be used to pin specific initial statuses, but the
+    default empty dict triggers full auto-discovery.
+
+    Defense 3: brains_dir is resolved explicitly from base_dir contract.
     """
+    if brains_dir is None:
+        brains_dir = _resolve_brains_dir(base_dir)
     gov_path = Path(base_dir) / "governance_state.json"
     try:
         from core.governance.governance_service import GovernanceService
@@ -83,8 +107,6 @@ def _load_or_create_governance(base_dir: str) -> Any:
             for brain_id, status in DEFAULT_BRAIN_REGISTRATIONS.items():
                 gov.register_brain(brain_id, status)
         else:
-            # Auto-discover from configs/brains/
-            brains_dir = PROJECT_ROOT / "configs" / "brains"
             if brains_dir.is_dir():
                 import json as _json
 
@@ -206,7 +228,7 @@ def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
         from scripts.live_shadow_ensemble import build_report
 
         report = build_report(
-            brains_dir=PROJECT_ROOT / "configs" / "brains",
+            brains_dir=_resolve_brains_dir(base_dir),
             feature_store_dir=Path(base_dir) / "feature_store",
             parallel=True,
             symbol="XAUUSDc",
@@ -223,7 +245,7 @@ def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
 
 
 def _step_feedback_loop(
-    base_dir: str, *, dry_run: bool = False, tracker: Any = None
+    base_dir: str, *, dry_run: bool = False, tracker: Any = None, symbol: str = "XAUUSDc"
 ) -> dict[str, Any]:
     """Run feedback loop to update tracker with real trade outcomes from journal."""
     try:
@@ -231,7 +253,7 @@ def _step_feedback_loop(
 
         if tracker is None:
             tracker = _load_or_create_tracker(base_dir)
-        report = ingest_journal_to_tracker(tracker, base_dir=base_dir, dry_run=dry_run)
+        report = ingest_journal_to_tracker(tracker, base_dir=base_dir, dry_run=dry_run, symbol=symbol)
         return {
             "step": "feedback_loop",
             "status": "ok",
@@ -781,6 +803,7 @@ def run_daily_ops(
     skip_fs_maintenance: bool = False,
     dry_run: bool = False,
     mt5_terminal_path: str | None = None,
+    symbol: str = "XAUUSDc",  # FIX-20260601-033: per-symbol feedback
 ) -> dict[str, Any]:
     """Run the full daily operations pipeline.
 
@@ -876,7 +899,7 @@ def run_daily_ops(
     # Feedback loop: resolve pending dispatch outcomes → real P&L scores
     # Runs before governance/champion so they see the latest data
     if not skip_feedback:
-        steps.append(_step_feedback_loop(base_dir, dry_run=dry_run, tracker=shared_tracker))
+        steps.append(_step_feedback_loop(base_dir, dry_run=dry_run, tracker=shared_tracker, symbol=symbol))
 
     # Paper trade simulation: generate labeled trade outcomes from shadow decisions
     if not skip_paper_simulation:
@@ -912,13 +935,19 @@ def run_daily_ops(
                 tracker_path = Path(base_dir) / "brain_performance.json"
                 shared_tracker.save(tracker_path)
             except Exception:
-                pass
+                logging.getLogger(__name__).exception(
+                    "daily_ops: failed to persist BrainPerformanceTracker — "
+                    "performance data lost until next save"
+                )
         if shared_governance is not None:
             try:
                 gov_path = Path(base_dir) / "governance_state.json"
                 shared_governance.save(gov_path)
             except Exception:
-                pass
+                logging.getLogger(__name__).exception(
+                    "daily_ops: failed to persist GovernanceService — "
+                    "governance state may be stale on restart"
+                )
 
     if not skip_retraining:
         steps.append(_step_retraining_check(base_dir, dry_run=dry_run, auto_execute=not dry_run))

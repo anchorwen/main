@@ -201,7 +201,7 @@ class InferenceGuard:
         self._process = None
 
         if self._conn is not None:
-            try:
+            try:  # noqa: SIM105
                 self._conn.close()
             except Exception:
                 pass
@@ -210,13 +210,13 @@ class InferenceGuard:
     def _send_sentinel(self) -> None:
         """Send None sentinel to signal graceful shutdown."""
         if self._conn is not None:
-            try:
+            try:  # noqa: SIM105
                 self._conn.send(None)
             except Exception:
                 pass
 
     def __del__(self) -> None:
-        try:
+        try:  # noqa: SIM105
             self.shutdown()
         except Exception:
             pass

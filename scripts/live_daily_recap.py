@@ -19,7 +19,7 @@ from typing import Any
 
 # Fix garbled Chinese output on Windows (QO-0015)
 if sys.stdout.encoding != "utf-8":
-    try:
+    try:  # noqa: SIM105
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
     except Exception:
         pass
@@ -162,7 +162,7 @@ def _read_governance_progress(base_dir: Path, threshold: int = 10) -> dict[str, 
     gov_path = base_dir / "governance_state.json"
     gov = {}
     if gov_path.exists():
-        try:
+        try:  # noqa: SIM105
             gov = json.loads(gov_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             pass
@@ -692,7 +692,7 @@ def build_report(
     flag_present = flag_path.exists()
     flag_payload: dict[str, Any] = {}
     if flag_present:
-        try:
+        try:  # noqa: SIM105
             flag_payload = json.loads(flag_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             pass

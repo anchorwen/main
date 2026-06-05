@@ -38,6 +38,7 @@ Drift check → snapshot / rollback / freeze
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260601-048 | 2026-06-01 | cursor-agent | — | SIM105 ruff rule enabled: 47 existing silent exception sites marked `noqa: SIM105`. New `except Exception: pass` blocked at lint. | RC-07 |
 | FIX-20260528-018 | 2026-05-28 | cursor-agent | — | Online_MLP_V1 complete retirement: `--config` default changed from `online_learner_v1.json` to `None` + early guard with explicit error. Script now requires explicit `--config` argument. Daily_ops `_step_online_feedback()` reduced to permanent skip (brain retired 2026-05-25, pnl:critical). | RC-09, RC-11 |
 | FIX-20260527-003 | 2026-05-27 | cursor-agent | — | Remove hardcoded brain ID fallback: `scripts/online_feedback_hook.py` `brain_entry.get("brain_id", "Online_SGD_V1")` → `brain_entry["brain_id"]` — direct key access. If config lacks required `brain_id` field, KeyError surfaces immediately. Also registered `scripts/online_feedback_hook.py` in MODULE_SOURCE_MAP under `feedback_online`. | RC-09 |
 | FIX-20260523-008 | 2026-05-24 | cursor-agent | — | Track 3d: OnlineFeedbackHook now accepts ConformalCalibrator — updates (p_win, label) on each closed trade to feed the adaptive OU threshold | calibrator data pipeline for Track 3d |

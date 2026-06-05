@@ -29,6 +29,7 @@ Any producer needing an ID → contracts.ids.new_*_id() → uuid4-based string
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260530-086 | 2026-05-30 | cursor-agent | — | BTC magic: added `btc_swing: 90410` to `strategy_magic.py`. BTC uses isolated 904xx magic range to prevent signal routing conflicts with XAU (900xx). | RC-09 (config-drift) |
 | FIX-20260522-023 | 2026-05-22 | cursor-agent | 24ff517 | Batch mypy type safety: annotation fixes, None guards, type narrowing | type-confusion |
 
 ## Cross-Module Contracts

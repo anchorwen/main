@@ -625,10 +625,9 @@ def cmd_auto_recover(args: argparse.Namespace) -> int:
 
     cycles = int(auto_recovery.get("consecutive_pass_cycles", 3))
     current_pass = 0
-    try:
+    import contextlib
+    with contextlib.suppress(Exception):
         current_pass = int(state_path.read_text(encoding="utf-8").strip())
-    except Exception:
-        pass
 
     print(
         f"[hub] auto_recovery: enabled={auto_recovery.get('enabled', False)}  "
@@ -789,7 +788,14 @@ def cmd_live(args: argparse.Namespace) -> int:
     print(f"[hub] {len(_threads)} launcher thread(s) running. Ctrl+C to stop.", flush=True)
     try:
         while any(_t.is_alive() for _t in _threads):
-            _time.sleep(10)
+            try:
+                _time.sleep(10)
+            except KeyboardInterrupt:
+                raise
+            except Exception:
+                # Windows console events (child process exit signals, etc.)
+                # can interrupt sleep — ignore and continue monitoring.
+                pass
             print(f"[hub] alive — {sum(1 for _t in _threads if _t.is_alive())} launcher(s)", flush=True)
     except KeyboardInterrupt:
         pass

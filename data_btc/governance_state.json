@@ -1,85 +1,35 @@
 {
   "schema_version": "governance_state.v1",
   "brain_states": {
-    "Barrier_V9_12B_V1": {
-      "brain_id": "Barrier_V9_12B_V1",
+    "BTC_Swing_V4": {
+      "brain_id": "BTC_Swing_V4",
       "status": "candidate",
-      "registered_at": "2026-05-30T15:55:47.578825",
-      "last_transition_at": "2026-05-30T15:55:47.578825+00:00",
-      "transition_count": 1,
-      "freeze_count": 0
+      "registered_at": "2026-05-31T16:47:29.842195",
+      "last_transition_at": "2026-06-04T23:43:06.324598+00:00",
+      "transition_count": 4,
+      "freeze_count": 0,
+      "performance_metrics": {
+        "win_rate": 0.53,
+        "profit_factor": 0.91,
+        "sharpe_ratio": -9.55,
+        "total_trades": 100,
+        "pnl_r": -618.77
+      }
     },
-    "Brain_Rev_M30_V1": {
-      "brain_id": "Brain_Rev_M30_V1",
+    "BTC_Swing_LGB_V1": {
+      "brain_id": "BTC_Swing_LGB_V1",
       "status": "candidate",
-      "registered_at": "2026-05-30T15:55:47.578825",
-      "last_transition_at": "2026-05-30T15:55:47.578825+00:00",
+      "registered_at": "2026-06-04T05:24:24.284919",
+      "last_transition_at": "2026-06-04T05:24:24.284919+00:00",
       "transition_count": 1,
-      "freeze_count": 0
-    },
-    "Brain_Trend_M30_V1": {
-      "brain_id": "Brain_Trend_M30_V1",
-      "status": "candidate",
-      "registered_at": "2026-05-30T15:55:47.578825",
-      "last_transition_at": "2026-05-30T15:55:47.578825+00:00",
-      "transition_count": 1,
-      "freeze_count": 0
-    },
-    "Meta_Stage1_Binary_Cls_V1": {
-      "brain_id": "Meta_Stage1_Binary_Cls_V1",
-      "status": "candidate",
-      "registered_at": "2026-05-30T15:55:47.578825",
-      "last_transition_at": "2026-05-30T15:55:47.578825+00:00",
-      "transition_count": 1,
-      "freeze_count": 0
-    },
-    "Meta_Stage1_Huber_V1": {
-      "brain_id": "Meta_Stage1_Huber_V1",
-      "status": "candidate",
-      "registered_at": "2026-05-30T15:55:47.578825",
-      "last_transition_at": "2026-05-30T15:55:47.578825+00:00",
-      "transition_count": 1,
-      "freeze_count": 0
-    },
-    "Meta_Stage1_MetaLabel_Binary_V1": {
-      "brain_id": "Meta_Stage1_MetaLabel_Binary_V1",
-      "status": "candidate",
-      "registered_at": "2026-05-30T15:55:47.579827",
-      "last_transition_at": "2026-05-30T15:55:47.579827+00:00",
-      "transition_count": 1,
-      "freeze_count": 0
-    },
-    "OU_Params_V6_Sniper": {
-      "brain_id": "OU_Params_V6_Sniper",
-      "status": "candidate",
-      "registered_at": "2026-05-30T15:55:47.579827",
-      "last_transition_at": "2026-05-30T15:55:47.579827+00:00",
-      "transition_count": 1,
-      "freeze_count": 0
-    },
-    "OU_Params_V7_M15": {
-      "brain_id": "OU_Params_V7_M15",
-      "status": "candidate",
-      "registered_at": "2026-05-30T15:55:47.579827",
-      "last_transition_at": "2026-05-30T15:55:47.579827+00:00",
-      "transition_count": 1,
-      "freeze_count": 0
-    },
-    "Swing_V9_M15_V2": {
-      "brain_id": "Swing_V9_M15_V2",
-      "status": "candidate",
-      "registered_at": "2026-05-30T15:55:47.579827",
-      "last_transition_at": "2026-05-30T15:55:47.579827+00:00",
-      "transition_count": 1,
-      "freeze_count": 0
-    },
-    "Swing_V9_M30_V2": {
-      "brain_id": "Swing_V9_M30_V2",
-      "status": "candidate",
-      "registered_at": "2026-05-30T15:55:47.579827",
-      "last_transition_at": "2026-05-30T15:55:47.579827+00:00",
-      "transition_count": 1,
-      "freeze_count": 0
+      "freeze_count": 0,
+      "performance_metrics": {
+        "win_rate": 0.1429,
+        "profit_factor": 0.19,
+        "sharpe_ratio": -163.17,
+        "total_trades": 7,
+        "pnl_r": -222.05
+      }
     }
   },
   "transition_log": [
@@ -88,7 +38,7 @@
       "from": null,
       "to": "candidate",
       "reason": "brain_registered",
-      "timestamp": "2026-05-30T15:55:47.578825",
+      "timestamp": "2026-05-31T04:10:15.001567",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -96,7 +46,7 @@
       "from": null,
       "to": "candidate",
       "reason": "auto-registered from disk config (config status=candidate)",
-      "timestamp": "2026-05-30T15:55:47.578825+00:00",
+      "timestamp": "2026-05-31T04:10:15.001567+00:00",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -104,7 +54,7 @@
       "from": null,
       "to": "candidate",
       "reason": "brain_registered",
-      "timestamp": "2026-05-30T15:55:47.578825",
+      "timestamp": "2026-05-31T04:10:15.001567",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -112,7 +62,7 @@
       "from": null,
       "to": "candidate",
       "reason": "auto-registered from disk config (config status=shadow)",
-      "timestamp": "2026-05-30T15:55:47.578825+00:00",
+      "timestamp": "2026-05-31T04:10:15.001567+00:00",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -120,7 +70,7 @@
       "from": null,
       "to": "candidate",
       "reason": "brain_registered",
-      "timestamp": "2026-05-30T15:55:47.578825",
+      "timestamp": "2026-05-31T04:10:15.001567",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -128,7 +78,7 @@
       "from": null,
       "to": "candidate",
       "reason": "auto-registered from disk config (config status=shadow)",
-      "timestamp": "2026-05-30T15:55:47.578825+00:00",
+      "timestamp": "2026-05-31T04:10:15.001567+00:00",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -136,7 +86,7 @@
       "from": null,
       "to": "candidate",
       "reason": "brain_registered",
-      "timestamp": "2026-05-30T15:55:47.578825",
+      "timestamp": "2026-05-31T04:10:15.001567",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -144,7 +94,7 @@
       "from": null,
       "to": "candidate",
       "reason": "auto-registered from disk config (config status=shadow)",
-      "timestamp": "2026-05-30T15:55:47.578825+00:00",
+      "timestamp": "2026-05-31T04:10:15.001567+00:00",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -152,7 +102,7 @@
       "from": null,
       "to": "candidate",
       "reason": "brain_registered",
-      "timestamp": "2026-05-30T15:55:47.578825",
+      "timestamp": "2026-05-31T04:10:15.001567",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -160,7 +110,7 @@
       "from": null,
       "to": "candidate",
       "reason": "auto-registered from disk config (config status=frozen)",
-      "timestamp": "2026-05-30T15:55:47.578825+00:00",
+      "timestamp": "2026-05-31T04:10:15.001567+00:00",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -168,7 +118,7 @@
       "from": null,
       "to": "candidate",
       "reason": "brain_registered",
-      "timestamp": "2026-05-30T15:55:47.579827",
+      "timestamp": "2026-05-31T04:10:15.002567",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -176,7 +126,7 @@
       "from": null,
       "to": "candidate",
       "reason": "auto-registered from disk config (config status=shadow)",
-      "timestamp": "2026-05-30T15:55:47.579827+00:00",
+      "timestamp": "2026-05-31T04:10:15.002567+00:00",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -184,7 +134,7 @@
       "from": null,
       "to": "candidate",
       "reason": "brain_registered",
-      "timestamp": "2026-05-30T15:55:47.579827",
+      "timestamp": "2026-05-31T04:10:15.002567",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -192,7 +142,7 @@
       "from": null,
       "to": "candidate",
       "reason": "auto-registered from disk config (config status=live)",
-      "timestamp": "2026-05-30T15:55:47.579827+00:00",
+      "timestamp": "2026-05-31T04:10:15.002567+00:00",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -200,7 +150,7 @@
       "from": null,
       "to": "candidate",
       "reason": "brain_registered",
-      "timestamp": "2026-05-30T15:55:47.579827",
+      "timestamp": "2026-05-31T04:10:15.002567",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -208,7 +158,7 @@
       "from": null,
       "to": "candidate",
       "reason": "auto-registered from disk config (config status=live)",
-      "timestamp": "2026-05-30T15:55:47.579827+00:00",
+      "timestamp": "2026-05-31T04:10:15.002567+00:00",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -216,7 +166,7 @@
       "from": null,
       "to": "candidate",
       "reason": "brain_registered",
-      "timestamp": "2026-05-30T15:55:47.579827",
+      "timestamp": "2026-05-31T04:10:15.002567",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -224,7 +174,7 @@
       "from": null,
       "to": "candidate",
       "reason": "auto-registered from disk config (config status=candidate)",
-      "timestamp": "2026-05-30T15:55:47.579827+00:00",
+      "timestamp": "2026-05-31T04:10:15.002567+00:00",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -232,7 +182,7 @@
       "from": null,
       "to": "candidate",
       "reason": "brain_registered",
-      "timestamp": "2026-05-30T15:55:47.579827",
+      "timestamp": "2026-05-31T04:10:15.002567",
       "fix_id": "FIX-20260529-034"
     },
     {
@@ -240,7 +190,125 @@
       "from": null,
       "to": "candidate",
       "reason": "auto-registered from disk config (config status=candidate)",
-      "timestamp": "2026-05-30T15:55:47.579827+00:00",
+      "timestamp": "2026-05-31T04:10:15.002567+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V1",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-31T10:59:16.615692",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V1",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=candidate)",
+      "timestamp": "2026-05-31T10:59:16.615692+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V4",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-05-31T16:47:29.842195",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V4",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=probation)",
+      "timestamp": "2026-05-31T16:47:29.842195+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V10",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-03T06:21:42.259330",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V10",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=candidate)",
+      "timestamp": "2026-06-03T06:21:42.259330+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V4",
+      "from_status": "candidate",
+      "to_status": "live",
+      "reason": "pnl:stable",
+      "timestamp": "2026-06-03T22:04:47.952991"
+    },
+    {
+      "brain_id": "BTC_Swing_V3",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-04T03:07:52.772643",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V3",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=candidate)",
+      "timestamp": "2026-06-04T03:07:52.772643+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_LGB_V1",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-04T05:24:24.284919",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_LGB_V1",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=shadow)",
+      "timestamp": "2026-06-04T05:24:24.284919+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V2",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-04T07:26:07.249743",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V2",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=candidate)",
+      "timestamp": "2026-06-04T07:26:07.249743+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V4",
+      "from_status": "live",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-06-04T22:04:46.622476"
+    },
+    {
+      "brain_id": "BTC_Swing_V4",
+      "from": "retired",
+      "to": "candidate",
+      "reason": "SSOT reconciliation: active config on disk overrides retired governance",
+      "timestamp": "2026-06-04T23:43:06.324598+00:00",
       "fix_id": "FIX-20260529-034"
     }
   ]

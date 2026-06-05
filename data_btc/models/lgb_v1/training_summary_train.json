@@ -1,0 +1,165 @@
+{
+  "contract_id": "train",
+  "dataset_path": "data\\training\\btc_daily_lgb\\train.npz",
+  "trained_at_utc": "2026-06-04T05:22:11.103977+00:00",
+  "models": {
+    "lightgbm": {
+      "model_type": "lightgbm",
+      "num_classes": 3,
+      "n_features": 35,
+      "n_train": 5407,
+      "n_val": 1655,
+      "n_test": 1250,
+      "train_accuracy": 0.5715,
+      "val_accuracy": 0.4012,
+      "test_accuracy": 0.428,
+      "val_per_class": {
+        "short": {
+          "precision": 0.4405,
+          "recall": 0.2708,
+          "f1": 0.3354,
+          "support": 506
+        },
+        "neutral": {
+          "precision": 0.3361,
+          "recall": 0.5408,
+          "f1": 0.4146,
+          "support": 453
+        },
+        "long": {
+          "precision": 0.4585,
+          "recall": 0.4052,
+          "f1": 0.4302,
+          "support": 696
+        }
+      },
+      "train_time_seconds": 1.45,
+      "best_iteration": 37,
+      "permutation_importance": [
+        {
+          "name": "f1",
+          "importance": 0.015589,
+          "std": 0.007143
+        },
+        {
+          "name": "f9",
+          "importance": 0.01136,
+          "std": 0.003137
+        },
+        {
+          "name": "f29",
+          "importance": 0.006888,
+          "std": 0.005891
+        },
+        {
+          "name": "f22",
+          "importance": 0.006767,
+          "std": 0.00297
+        },
+        {
+          "name": "f25",
+          "importance": 0.005196,
+          "std": 0.002745
+        },
+        {
+          "name": "f34",
+          "importance": 0.003021,
+          "std": 0.001378
+        },
+        {
+          "name": "f27",
+          "importance": 0.002538,
+          "std": 0.005937
+        },
+        {
+          "name": "f20",
+          "importance": 0.001934,
+          "std": 0.003114
+        },
+        {
+          "name": "f2",
+          "importance": 0.001208,
+          "std": 0.001792
+        },
+        {
+          "name": "f26",
+          "importance": 0.000967,
+          "std": 0.001054
+        }
+      ],
+      "native_importance_top10": [
+        {
+          "name": "f27",
+          "importance": 596.0
+        },
+        {
+          "name": "f29",
+          "importance": 281.0
+        },
+        {
+          "name": "f25",
+          "importance": 213.0
+        },
+        {
+          "name": "f33",
+          "importance": 203.0
+        },
+        {
+          "name": "f0",
+          "importance": 166.0
+        },
+        {
+          "name": "f1",
+          "importance": 158.0
+        },
+        {
+          "name": "f34",
+          "importance": 147.0
+        },
+        {
+          "name": "f26",
+          "importance": 137.0
+        },
+        {
+          "name": "f9",
+          "importance": 107.0
+        },
+        {
+          "name": "f7",
+          "importance": 101.0
+        }
+      ],
+      "simulated_test_pnl_r": {
+        "total_pnl_r": 225.0,
+        "n_trades": 287,
+        "win_rate": 0.3833,
+        "sharpe": 2.44,
+        "max_drawdown_r": 57.0,
+        "avg_pnl_per_trade": 0.784,
+        "sl_mult": 2.0,
+        "tp_mult": 3.5
+      },
+      "loss_type": "pnl_weighted_cross_entropy",
+      "params": {
+        "objective": "multiclass",
+        "num_class": 3,
+        "metric": "multi_logloss",
+        "boosting_type": "gbdt",
+        "max_depth": 5,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "feature_fraction": 0.8,
+        "bagging_fraction": 0.8,
+        "bagging_freq": 1,
+        "min_child_samples": 10,
+        "min_child_weight": 0.001,
+        "reg_alpha": 0.3,
+        "reg_lambda": 0.5,
+        "n_estimators": 500,
+        "early_stopping_rounds": 50,
+        "random_state": 42,
+        "verbose": -1
+      }
+    }
+  }
+}

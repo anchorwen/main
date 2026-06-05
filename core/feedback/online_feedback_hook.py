@@ -336,7 +336,7 @@ class OnlineFeedbackHook:
                 if p_win is None and isinstance(entry.get("detail"), dict):
                     p_win = entry["detail"].get("p_win")
                 if p_win is not None:
-                    try:
+                    try:  # noqa: SIM105
                         self._calibrator.update(float(p_win), label)
                     except Exception:
                         pass  # non-critical — calibrator update failure must not block feedback

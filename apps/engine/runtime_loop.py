@@ -82,10 +82,9 @@ def _apply_meta_filter(
     # Get timestamp from snapshot
     timestamp_utc = None
     if hasattr(feature_snapshot, "event_time"):
-        try:
+        import contextlib
+        with contextlib.suppress(Exception):
             timestamp_utc = feature_snapshot.event_time.timestamp()
-        except Exception:
-            pass
 
     # Apply the filter with unified 49-dim features
     result = filter.filter(

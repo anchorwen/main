@@ -121,9 +121,15 @@ def run_evaluation(
     )
 
     performance = load_performance(performance_path)
-    gov = (
-        json.loads(governance_path.read_text(encoding="utf-8")) if governance_path.exists() else {}
-    )
+    try:
+        from core.governance.governance_service import GovernanceService
+        gov_svc = GovernanceService.load(str(governance_path))
+        gov: dict[str, Any] = {
+            "brain_states": gov_svc.get_all_states(),
+            "transition_log": gov_svc.get_transition_log(),
+        }
+    except Exception:
+        gov = {}
     brain_states = gov.get("brain_states", {})
 
     evaluator = BrainPromotionEvaluator()

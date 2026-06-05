@@ -56,7 +56,7 @@ def load_journal(path: str) -> list[dict[str, Any]]:
             line = line.strip()
             if not line:
                 continue
-            try:
+            try:  # noqa: SIM105
                 records.append(json.loads(line))
             except json.JSONDecodeError:
                 pass

@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -85,7 +86,10 @@ class SystemModeStore:
                 json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
             )
         except OSError:
-            pass  # Disk write failure is non-fatal for trading
+            logging.getLogger(__name__).error(
+                "SystemModeStore.save() failed — mode transition NOT persisted. "
+                "Restart will restore previous mode."
+            )
 
     @classmethod
     def load_latest(

@@ -24,7 +24,7 @@ def test_run_all_steps_skip_all():
         skip_paper_simulation=True,
         skip_fs_maintenance=True,
     )
-    assert report["total_steps"] == 0
+    assert report["total_steps"] >= 2  # SSOT reconciliation + ledger retention always run (FIX-081)
     assert report["errors"] == 0
     assert report["actions_total"] == 0
     assert report["schema_version"] == "daily_ops.v1"
@@ -154,4 +154,4 @@ def test_main_output_file(tmp_path: Path, monkeypatch):
     assert out.exists()
     data = json.loads(out.read_text(encoding="utf-8"))
     assert data["schema_version"] == "daily_ops.v1"
-    assert data["total_steps"] == 0
+    assert data["total_steps"] >= 2  # SSOT reconciliation always runs

@@ -466,9 +466,10 @@ def apply_promotion_decisions(
         gov["updated_at"] = (
             datetime.now(UTC).replace(tzinfo=None).replace(microsecond=0).isoformat()
         )
-        governance_path.write_text(
-            json.dumps(gov, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        # FIX-20260604-088: locked, atomic write via GovernanceService
+        svc = GovernanceService()
+        svc._brain_states = brain_states
+        svc._transition_log = transition_log
+        svc.save(str(governance_path), lock_timeout=30.0)
 
     return changes if changes else ["no_changes"]

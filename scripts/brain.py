@@ -591,7 +591,11 @@ def cmd_reconcile(
     # ── 5. Save ──
     if auto_fix and issues_fixed > 0:
         print(f"\n[reconcile] Saving {issues_fixed} fixes...")
-        gov_path.write_text(json.dumps({**gov_data, "brain_states": gov_states}, indent=2, ensure_ascii=False), encoding="utf-8")
+        # FIX-20260604-088: locked, atomic write via GovernanceService
+        from core.governance.governance_service import GovernanceService
+        _svc = GovernanceService()
+        _svc._brain_states = gov_states
+        _svc.save(str(gov_path), lock_timeout=30.0)
         live_path.write_text(live_yaml, encoding="utf-8")
         if cleanup_ledger:
             ledger_path.write_text(json.dumps(ledger_data, indent=2, ensure_ascii=False), encoding="utf-8")

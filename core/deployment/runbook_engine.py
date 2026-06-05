@@ -14,7 +14,6 @@ from core.contracts.domain_keys import (
     COMPLIANCE_CHECK_ALPHA_BUDGET_WARNINGS_CLEAR,
     HEALTH_STATUS_ALIVE,
     HEALTH_STATUS_DOWN,
-    HEALTH_STATUS_MISSING,
     HEALTH_STATUS_READY,
     PAYLOAD_KEY_ACTION,
     PAYLOAD_KEY_ACTION_PLAN,
@@ -344,22 +343,14 @@ class RunbookEngine:
             }
 
     def _build_health(self) -> dict:
-        health_check = getattr(self._container, "health_check", None)
-        if health_check is None:
-            return {
-                PAYLOAD_KEY_READINESS: {PAYLOAD_KEY_STATUS: HEALTH_STATUS_MISSING},
-                PAYLOAD_KEY_LIVENESS: {PAYLOAD_KEY_STATUS: HEALTH_STATUS_MISSING},
-            }
-        return {
-            PAYLOAD_KEY_READINESS: health_check.readiness(),
-            PAYLOAD_KEY_LIVENESS: health_check.liveness(),
-        }
+        from core.deployment.health_check import HealthCheckService
+
+        return HealthCheckService.safe_get_health(self._container)
 
     def _build_diagnostics(self) -> dict:
-        diagnostics = getattr(self._container, "diagnostics", None)
-        if diagnostics is None:
-            return {PAYLOAD_KEY_AVAILABLE: False}
-        return {PAYLOAD_KEY_AVAILABLE: True, PAYLOAD_KEY_SNAPSHOT: diagnostics.build_snapshot()}
+        from core.observability.diagnostics_dashboard import DiagnosticsDashboard
+
+        return DiagnosticsDashboard.safe_get_snapshot(self._container)
 
     def _evaluate_alerts(self, diagnostics: dict) -> list[dict]:
         alert_service = getattr(self._container, "alert_service", None)

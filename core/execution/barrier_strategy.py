@@ -4,12 +4,17 @@ Brains: onnx_v9, deepresmlp, online_sgd, xgboost_v9, lightgbm_v1
 Contract: survival_barrier_2.0sl_3.5tp_12bar
 Magic: 90001
 
-Uses V9 40-dim institutional features for all brains.
+FIX-20260601-039: Feature assembly is now delegated to the central factory
+(``core.features.feature_assembler.assemble_features_by_schema()``).
+BarrierStrategy no longer assumes all brains use V9 40-dim — brains with
+``swing_enhanced_35`` schema (Barrier_V9_12B_V1) receive correctly
+assembled 35-dim vectors.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 import numpy as np
@@ -22,13 +27,16 @@ _V9_NAME_TO_IDX: dict[str, int] = {name: i for i, name in enumerate(V9_INSTITUTI
 
 
 def _reorder_for_brain(feature_vector: np.ndarray, brain_features: list[str] | None) -> np.ndarray:
-    """Reorder feature vector from V9 canonical order to brain training order.
+    """Reorder feature vector to brain training order via name-based lookup.
 
-    LightGBM/XGBoost use positional indexing — if the feature order at inference
-    doesn't match the training order, every tree split reads the wrong feature
-    (train-serve skew → frozen confidence).  This function builds a name→value
-    map from the V9-ordered vector and extracts values in the brain's training
-    order, matching what the model saw during fit().
+    When lengths match and brain_features uses V9 canonical names, reorder
+    from V9 order to brain training order.  When lengths differ, the feature
+    factory has already assembled the correct vector — pass through as-is.
+
+    FIX-20260603-076: When lengths match but brain_features use a DIFFERENT
+    schema (e.g. swing_enhanced_35 vs v9_institutional), name lookup returns
+    all zeros.  Detect this by checking whether any brain feature names were
+    actually resolved — if not, pass through the factory-assembled vector.
     """
     if not brain_features or len(brain_features) != len(feature_vector):
         return np.asarray(feature_vector, dtype=np.float32)
@@ -42,16 +50,26 @@ def _reorder_for_brain(feature_vector: np.ndarray, brain_features: list[str] | N
         [name_to_val.get(name, 0.0) for name in brain_features],
         dtype=np.float32,
     )
+
+    # FIX-20260603-076: if ALL values defaulted to 0.0, the brain feature
+    # names don't match V9 canonical names — this happens for swing_enhanced_*
+    # schemas where the factory already assembled the correct order.
+    # Pass through the factory vector instead of returning zeros.
+    if np.max(np.abs(reordered)) < 1e-10:
+        return np.asarray(feature_vector, dtype=np.float32)
+
     return reordered
 
 
 class BarrierStrategy(StrategyLine):
     """60-min barrier prediction strategy.
 
-    All brains share the same V9 40-dim feature vector as input.
-    Each brain may have been trained with a different feature order —
-    the adapter receives a reordered vector matching that brain's training
-    feature_names.
+    Each brain declares its feature schema via the adapter.  The factory
+    assembles the correct vector, then ``_reorder_for_brain`` aligns the
+    feature order to what the brain saw during training.
+
+    TF close buffer and OU/Hurst computation are inherited from StrategyLine
+    base class (shared with SwingStrategy — no copy-paste).
     """
 
     def _run_inference(
@@ -63,20 +81,41 @@ class BarrierStrategy(StrategyLine):
         daily_feature_vector: Any = None,
     ) -> list[Any]:
         proposals: list[Any] = []
+
+        # Track TF close prices for OU/Hurst computation (buffer in base class)
+        if mid_price is not None and mid_price > 0:
+            self._tf_close_buffer.append(mid_price)
+
+        from core.features.feature_assembler import assemble_features_by_schema
+
         for b_info in self.brains:
             try:
-                fv = _reorder_for_brain(
-                    np.asarray(feature_vector, dtype=np.float32),
-                    b_info.get("features"),
+                adapter = b_info.get("adapter")
+                if adapter is None:
+                    continue
+                schema = getattr(adapter, "feature_schema", "") or "v9_institutional"
+
+                fv = assemble_features_by_schema(
+                    schema,
+                    legacy_v9_vector=np.asarray(feature_vector, dtype=np.float64).ravel(),
+                    daily_features=daily_feature_vector,
+                    micro_features=micro_feature_vector,
+                    tf_ou=self._compute_tf_ou_theta(),
+                    tf_hurst=self._compute_tf_hurst(),
                 )
-                prop = b_info["adapter"].inference(fv)
-                # Stamp brain_id
+
+                # Reorder to brain training order (name-based)
+                final_fv = _reorder_for_brain(fv, b_info.get("features"))
+                prop = adapter.inference(final_fv)
+
                 bid = b_info.get("brain_id", "unknown")
                 try:
                     if not getattr(prop, "brain_id", None):
                         prop.brain_id = bid
                 except Exception:
-                    pass
+                    logging.getLogger(__name__).warning(
+                        "Brain proposal build failed brain_id=%s", bid
+                    )
                 proposals.append(prop)
             except Exception as _exc:
                 print(

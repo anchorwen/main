@@ -224,7 +224,7 @@ class FaultTolerantContext:
             )
             self.exception = exc_val
             if self._alert_hub is not None:
-                try:
+                try:  # noqa: SIM105
                     self._alert_hub.send_critical(
                         f"degraded_{self.component}",
                         {"error": f"{type(exc_val).__name__}: {str(exc_val)[:200]}"},

@@ -519,7 +519,7 @@ class BlueGreenManager:
         files = sorted(self._history_dir.glob("cutover_*.json"), reverse=True)
         records: list[dict[str, Any]] = []
         for f in files[:limit]:
-            try:
+            try:  # noqa: SIM105
                 records.append(json.loads(f.read_text(encoding="utf-8")))
             except Exception:
                 pass

@@ -91,6 +91,22 @@ MICRO_FEATURES = [
     "USDJPYc_return",
 ]
 
+# FIX-20260604-081: BTC-specific feature lists (37-dim)
+BTC_MACRO_FEATURES_24 = [
+    "D1_Ret_1", "D1_Body_Ratio", "D1_ATR_14", "D1_RSI_14",
+    "D1_MACD", "D1_Vol_ZScore", "D1_Bollinger_Width", "D1_ADX_14",
+    "H4_Trend_Strength", "H4_ATR_Ratio", "H4_RSI_Divergence", "H4_vs_D1_Alignment",
+    "XAUUSDc_return", "Cross_DXY_Return", "Cross_EURUSD_Return", "Cross_Risk_On_Off",
+    "Derived_Weekday_Sin", "Derived_Weekday_Cos", "Derived_Days_To_MonthEnd",
+    "Derived_Is_MonthEnd_Week", "Derived_Weekend_Gap", "Derived_Vol_Regime",
+    "Derived_Momentum_5D", "Derived_Momentum_20D",
+]
+BTC_MICRO_FEATURES_9 = [
+    "tick_return", "hl_ratio", "co_ratio", "avg_spread",
+    "OIM", "tick_velocity", "AUDJPYc_return", "EURUSDc_return", "USDJPYc_return",
+]
+BTC_MACRO_FEATURES_2 = ["Cross_BTC_Gold_Ratio", "Cross_BTC_Gold_Ratio_ROC"]
+
 TF_SPECIFIC_FEATURES = ["TF_OU_Theta", "TF_Hurst"]
 
 ALL_FEATURE_NAMES = SWING_MACRO_FEATURES + MICRO_FEATURES + TF_SPECIFIC_FEATURES
@@ -245,11 +261,14 @@ def compute_micro_features_at_bar(
     result["tick_velocity"] = float(np.sum(m5_v)) / 1000.0
 
     # Cross-symbol returns (single bar — use per-bar return from prev bar)
+    # FIX-081: added AUDJPY, XAUUSD, BTC/XAU ratio + ROC
     if cross_data is not None:
         for sym_key, feat_key in [
             ("xag_close", "XAGUSDc_return"),
             ("eur_close", "EURUSDc_return"),
             ("jpy_close", "USDJPYc_return"),
+            ("audjpy_close", "AUDJPYc_return"),
+            ("xau_close", "XAUUSDc_return"),
         ]:
             sym_close = cross_data.get(sym_key)
             if sym_close is not None and bar_idx > 0 and bar_idx < len(sym_close):
@@ -261,8 +280,15 @@ def compute_micro_features_at_bar(
                     result[feat_key] = 0.0
             else:
                 result[feat_key] = 0.0
+        # BTC/XAU ratio + ROC (pre-computed in micro_cross)
+        for key in ("btc_xau_ratio", "btc_xau_ratio_roc"):
+            arr = cross_data.get(key)
+            if arr is not None and bar_idx < len(arr):
+                result["Cross_BTC_Gold_Ratio" if key == "btc_xau_ratio" else "Cross_BTC_Gold_Ratio_ROC"] = float(arr[bar_idx])
     else:
-        for feat_key in ["XAGUSDc_return", "EURUSDc_return", "USDJPYc_return"]:
+        for feat_key in ["XAGUSDc_return", "EURUSDc_return", "USDJPYc_return",
+                         "AUDJPYc_return", "XAUUSDc_return",
+                         "Cross_BTC_Gold_Ratio", "Cross_BTC_Gold_Ratio_ROC"]:
             result[feat_key] = 0.0
 
     return result
@@ -278,6 +304,10 @@ def compute_barrier_labels(
     *,
     sl_atr_mult: float | None = None,
     tp_atr_mult: float | None = None,
+    spread_points: float = 30,
+    slippage_points: float = 10,
+    tick_size: float = 0.01,
+    side: str = "long",
 ) -> np.ndarray:
     """Compute barrier labels: -1=SL, 0=timeout, 1=TP.
 
@@ -286,9 +316,19 @@ def compute_barrier_labels(
 
     When sl_atr_mult/tp_atr_mult are provided, they override atr_mult
     for asymmetric SL/TP (dual-track label generation).
+
+    Friction modeling (Phase 4 / C4.2):
+      Friction makes TP harder (further) and SL easier (closer) because
+      the trader enters with a half-spread loss built in.
+        LONG:  effective_tp = entry + tp_dist + friction_cost
+               effective_sl = entry - max(0, sl_dist - friction_cost)
+        SHORT: effective_tp = entry - tp_dist - friction_cost
+               effective_sl = entry + max(0, sl_dist - friction_cost)
     """
     _sl_mult = sl_atr_mult if sl_atr_mult is not None else atr_mult
     _tp_mult = tp_atr_mult if tp_atr_mult is not None else atr_mult
+    friction_points = spread_points + slippage_points
+    friction_cost = friction_points * tick_size
     n = ohlc["n_bars"]
     close = ohlc["close"]
     high = ohlc["high"]
@@ -307,19 +347,33 @@ def compute_barrier_labels(
 
         sl_dist = _sl_mult * atr_i
         tp_dist = _tp_mult * atr_i
-        sl_level = entry - sl_dist
-        tp_level = entry + tp_dist
+
+        # Apply friction: TP harder (further), SL easier (closer)
+        if side == "long":
+            effective_tp = entry + tp_dist + friction_cost
+            effective_sl = entry - max(0.0, sl_dist - friction_cost)
+        else:
+            effective_tp = entry - tp_dist - friction_cost
+            effective_sl = entry + max(0.0, sl_dist - friction_cost)
 
         for j in range(1, horizon + 1):
             idx = i + j
             if idx >= n:
                 break
-            if low[idx] <= sl_level:
-                labels[i] = -1  # SL hit (SHORT would win)
-                break
-            if high[idx] >= tp_level:
-                labels[i] = 1  # TP hit (LONG would win)
-                break
+            if side == "long":
+                if low[idx] <= effective_sl:
+                    labels[i] = -1  # SL hit
+                    break
+                if high[idx] >= effective_tp:
+                    labels[i] = 1  # TP hit
+                    break
+            else:
+                if high[idx] >= effective_sl:
+                    labels[i] = -1  # SL hit
+                    break
+                if low[idx] <= effective_tp:
+                    labels[i] = 1  # TP hit
+                    break
         # else: stays 0 (timeout)
 
     return labels
@@ -336,55 +390,77 @@ def build_swing_dataset(
     test_ratio: float = 0.15,
     raw_dir: Path | None = None,
     *,
+    cross_raw_dir: Path | None = None,
+    symbol: str = "xauusdc",
     sl_atr_mult: float | None = None,
     tp_atr_mult: float | None = None,
+    spread_points: float = 30,
+    slippage_points: float = 10,
+    tick_size: float = 0.01,
 ) -> dict[str, Any]:
     """Build enhanced swing dataset.
 
     Args:
-        tf: Target timeframe ("M15" or "M30").
+        tf: Target timeframe.
         horizon: Label barrier horizon in bars.
         output_dir: Where to save NPZ files.
         val_ratio: Fraction for validation.
         test_ratio: Fraction for test.
         raw_dir: Directory containing raw CSV data.
+        symbol: Symbol prefix for CSV files (e.g. "xauusdc", "btcusdc").
+            FIX-20260531-024: was hardcoded to xauusdc.
     """
+    _sym = symbol.lower()
     _data_dir = raw_dir or Path("data/raw")
-    n_m5 = M5_PER_TF[tf]
+    n_m5 = M5_PER_TF.get(tf, 1) if tf not in M5_PER_TF else M5_PER_TF[tf]
 
     # ── Load target-TF XAUUSD data ──
-    tf_csv = _data_dir / f"xauusdc_{tf.lower()}_merged.csv"
+    tf_csv = _data_dir / f"{symbol}_{tf.lower()}_merged.csv"
     print(f"[swing:{tf}] Loading {tf_csv}...")
     tf_ohlc = load_ohlc_csv(tf_csv)
     print(f"  {tf_ohlc['n_bars']} bars loaded")
 
     # ── Load M5 XAUUSD for micro features ──
-    m5_csv = _data_dir / "xauusdc_m5_merged.csv"
+    m5_csv = _data_dir / f"{_sym}_m5_merged.csv"
     m5_ohlc = load_ohlc_csv(m5_csv)
     print(f"  M5: {m5_ohlc['n_bars']} bars loaded")
 
-    # ── Load cross-symbol data ──
+    # ── Load cross-symbol data (FIX-20260604-081) ──
+    # BTC 24/7 trading vs forex/gold 24/5 → weekend bars need ffill.
+    # First try --raw-dir, fall back to --cross-raw-dir (global macro data lake).
+    # FIX-081: added AUDJPYc (risk appetite) and XAUUSDc (physical gold).
+    _cross_fallback_dir = cross_raw_dir or Path("data/raw")
     cross_data: dict[str, tuple[np.ndarray, list[pd.Timestamp]]] = {}
     for sym_name, csv_name in [
         ("silver", "xagusdc_m5_merged.csv"),
         ("eur", "eurusdc_m5_merged.csv"),
-        ("dxy", "usdjpyc_m5_merged.csv"),  # USDJPY for micro features
+        ("dxy", "usdjpyc_m5_merged.csv"),
+        ("audjpy", "audjpyc_m5_merged.csv"),      # NEW: risk appetite proxy
+        ("xau", "xauusdc_m5_merged.csv"),          # NEW: physical gold for BTC/XAU ratio
     ]:
         sym_path = _data_dir / csv_name
+        if not sym_path.exists():
+            sym_path = _cross_fallback_dir / csv_name
         if sym_path.exists():
             sym_ohlc = load_ohlc_csv(sym_path)
             cross_data[sym_name] = (sym_ohlc["close"], sym_ohlc["timestamp"])
-            print(f"  {sym_name}: {sym_ohlc['n_bars']} bars loaded")
+            print(f"  {sym_name}: {sym_ohlc['n_bars']} bars loaded (from {sym_path})")
+        else:
+            print(f"  [WARN] {sym_name} ({csv_name}) not found in raw-dir or cross-raw-dir")
 
     # ── Initialize DailyFeatureComputer for SSOT 24-dim macro features ──
-    d1_csv_path = _data_dir / "xauusdc_d1_merged.csv"
-    h4_csv_path = _data_dir / "xauusdc_h4_merged.csv"
+    d1_csv_path = _data_dir / f"{_sym}_d1_merged.csv"
+    h4_csv_path = _data_dir / f"{_sym}_h4_merged.csv"
     cross_asset_paths: dict[str, str | Path] = {}
     for name, csv_name in [
         ("XAGUSDc", "xagusdc_d1_merged.csv"),
         ("EURUSDc", "eurusdc_d1_merged.csv"),
+        ("AUDJPYc", "audjpyc_d1_merged.csv"),      # NEW
+        ("XAUUSDc", "xauusdc_d1_merged.csv"),       # NEW: BTC/XAU ratio source
     ]:
         p = _data_dir / csv_name
+        if not p.exists():
+            p = _cross_fallback_dir / csv_name
         if p.exists():
             cross_asset_paths[name] = p
     daily_computer: DailyFeatureComputer | None = None
@@ -414,16 +490,27 @@ def build_swing_dataset(
     _tp = tp_atr_mult if tp_atr_mult is not None else 1.5
     print(f"  Computing barrier labels (horizon={horizon}, SL={_sl}xATR, TP={_tp}xATR)...")
     labels = compute_barrier_labels(
-        tf_ohlc, atr_mult=1.5, horizon=horizon, sl_atr_mult=sl_atr_mult, tp_atr_mult=tp_atr_mult
+        tf_ohlc, atr_mult=1.5, horizon=horizon,
+        sl_atr_mult=sl_atr_mult, tp_atr_mult=tp_atr_mult,
+        spread_points=spread_points, slippage_points=slippage_points,
+        tick_size=tick_size, side="long",
     )
 
     # ── Build feature matrix ──
     n_bars = tf_ohlc["n_bars"]
+    # FIX-20260604-081: BTC uses 37-dim schema
+    _is_btc = _sym == "btcusdc"
+    _macro_feats = BTC_MACRO_FEATURES_24 if _is_btc else SWING_MACRO_FEATURES
+    _micro_feats = BTC_MICRO_FEATURES_9 if _is_btc else MICRO_FEATURES
+    _extra_feats = BTC_MACRO_FEATURES_2 if _is_btc else []
+    _all_feats = _macro_feats + _micro_feats + TF_SPECIFIC_FEATURES + _extra_feats
+    _n_feats = len(_all_feats)
+    print(f"  Features: {_n_feats}-dim schema {'(BTC 37)' if _is_btc else '(XAU 35)'}")
     # Need enough history for features
     start_idx = max(100, n_m5 * 2)  # skip first bars for feature stability
     valid_count = 0
 
-    X = np.zeros((n_bars - start_idx, N_FEATURES), dtype=np.float32)
+    X = np.zeros((n_bars - start_idx, _n_feats), dtype=np.float32)
     y = np.zeros(n_bars - start_idx, dtype=np.int32)
     bar_indices = np.zeros(n_bars - start_idx, dtype=np.int32)
 
@@ -431,7 +518,16 @@ def build_swing_dataset(
     micro_cross: dict[str, np.ndarray] = {}
     for sym_name, (sym_close, sym_ts) in cross_data.items():
         # Align to M5 timestamps
-        key = f"{'xag' if sym_name == 'silver' else 'eur' if sym_name == 'eur' else 'jpy'}_close"
+        if sym_name == "silver":
+            key = "xag_close"
+        elif sym_name == "eur":
+            key = "eur_close"
+        elif sym_name == "audjpy":
+            key = "audjpy_close"
+        elif sym_name == "xau":
+            key = "xau_close"
+        else:
+            key = "jpy_close"
         # Use searchsorted for alignment
         sym_ts_arr = np.array([ts.timestamp() for ts in sym_ts], dtype=np.float64)
         idxs_raw = np.searchsorted(sym_ts_arr, m5_ts_arr, side="right") - 1
@@ -439,7 +535,24 @@ def build_swing_dataset(
         valid_mask = (idxs >= 0) & (idxs < len(sym_close))
         aligned = np.full(len(m5_ts_arr), np.nan, dtype=np.float64)
         aligned[valid_mask] = np.asarray(sym_close)[idxs[valid_mask]]
+        # P0 Guardrail 1: ffill BEFORE ROC computation.
+        # Weekend bars have no cross-pair data — forward-fill from Friday close.
+        # NEVER fill zero.  Zeros = fake training signal.
+        aligned = pd.Series(aligned).ffill().bfill().to_numpy(dtype=np.float64)
         micro_cross[key] = aligned
+
+    # ── FIX-20260604-081 P0: BTC/XAU ratio + ROC (ffill already done above) ──
+    if "xau_close" in micro_cross and len(m5_ohlc["close"]) == len(micro_cross["xau_close"]):
+        btc_close = np.asarray(m5_ohlc["close"], dtype=np.float64)
+        xau_close = micro_cross["xau_close"]
+        btc_xau_ratio = np.full(len(btc_close), np.nan, dtype=np.float64)
+        mask = (xau_close > 0) & (btc_close > 0)
+        btc_xau_ratio[mask] = btc_close[mask] / xau_close[mask]
+        # P0 Guardrail 1 (cont.): ROC on ffill'd ratio sequence
+        btc_xau_ratio = pd.Series(btc_xau_ratio).ffill().bfill().to_numpy(dtype=np.float64)
+        btc_xau_roc = pd.Series(btc_xau_ratio).pct_change(periods=5).fillna(0.0).to_numpy(dtype=np.float64)
+        micro_cross["btc_xau_ratio"] = btc_xau_ratio
+        micro_cross["btc_xau_ratio_roc"] = btc_xau_roc
 
     # ── D1 index tracker (monotonic, both arrays are time-sorted) ──
     d1_idx_tracker: int = d1_min_lookback
@@ -465,26 +578,36 @@ def build_swing_dataset(
                 raw_row = daily_computer._gather_row(d1_idx_tracker)
                 macro = dict(zip(SWING_MACRO_FEATURES, raw_row, strict=False))
             else:
-                macro = dict.fromkeys(SWING_MACRO_FEATURES, 0.0)
+                macro = dict.fromkeys(_macro_feats, 0.0)
         else:
-            macro = dict.fromkeys(SWING_MACRO_FEATURES, 0.0)
+            macro = dict.fromkeys(_macro_feats, 0.0)
 
         # ── Micro features (single M5 snapshot, matches inference) ──
         micro = compute_micro_features_at_bar(m5_ohlc, micro_cross, m5_idx)
 
-        # ── TF-specific features (M5 close prices, matching inference _tf_close_buffer) ──
+        # ── TF-specific features ──
         m5_close_window = m5_ohlc["close"][max(0, m5_idx - OU_LOOKBACK) : m5_idx + 1]
         tf_ou = _ou_theta(m5_close_window, lookback=min(OU_LOOKBACK, len(m5_close_window)))
         tf_hurst = _hurst(m5_close_window, max_lag=min(HURST_MAX_LAG, len(m5_close_window)))
 
         # ── Assemble feature vector ──
         row_idx = valid_count
-        for j, name in enumerate(SWING_MACRO_FEATURES):
-            X[row_idx, j] = float(macro.get(name, 0.0))
-        for j, name in enumerate(MICRO_FEATURES):
-            X[row_idx, len(SWING_MACRO_FEATURES) + j] = float(micro.get(name, 0.0))
-        X[row_idx, len(SWING_MACRO_FEATURES) + len(MICRO_FEATURES)] = tf_ou
-        X[row_idx, len(SWING_MACRO_FEATURES) + len(MICRO_FEATURES) + 1] = tf_hurst
+        col = 0
+        for name in _macro_feats:
+            X[row_idx, col] = float(macro.get(name, 0.0))
+            col += 1
+        for name in _micro_feats:
+            X[row_idx, col] = float(micro.get(name, 0.0))
+            col += 1
+        X[row_idx, col] = tf_ou
+        col += 1
+        X[row_idx, col] = tf_hurst
+        col += 1
+        # FIX-081: BTC-specific extra features (BTC/XAU ratio + ROC)
+        for name in _extra_feats:
+            val = micro.get(name, 0.0) if isinstance(micro, dict) else 0.0
+            X[row_idx, col] = float(val)
+            col += 1
 
         # FIX-20260530-074: removed nan_to_num — XGBoost natively handles NaN
         # via its `missing` parameter.  0.0 is a valid value (zero return, zero
@@ -559,7 +682,7 @@ def build_swing_dataset(
         X_test=X_test,
         y_test=y_test_shifted,
         pnl_r_test=pnl_r_test,
-        feature_names=np.array(ALL_FEATURE_NAMES, dtype=str),
+        feature_names=np.array(_all_feats, dtype=str),
     )
 
     # Save metadata
@@ -568,8 +691,8 @@ def build_swing_dataset(
     meta = {
         "tf": tf,
         "horizon": horizon,
-        "n_features": N_FEATURES,
-        "feature_names": ALL_FEATURE_NAMES,
+        "n_features": _n_feats,
+        "feature_names": list(_all_feats),
         "n_train": n_train,
         "n_val": n_val,
         "n_test": n_test,
@@ -599,7 +722,7 @@ def build_swing_dataset(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build enhanced swing training dataset")
     parser.add_argument(
-        "--tf", default="M30", choices=["M5", "M15", "M30"], help="Target timeframe (default: M30)"
+        "--tf", default="M30", choices=["M5", "M15", "M30", "H1", "H4"], help="Target timeframe (default: M30)"
     )
     parser.add_argument(
         "--horizon",
@@ -613,6 +736,14 @@ def main() -> None:
         help="Output directory for NPZ files",
     )
     parser.add_argument("--raw-dir", default="data/raw", help="Directory containing raw CSV data")
+    parser.add_argument(
+        "--cross-raw-dir",
+        default="data/raw",
+        help="Fallback directory for cross-asset CSV data (XAG, EUR, JPY). "
+        "Used when --raw-dir lacks these files (e.g. BTC-only directory). "
+        "Default: data/raw (global macro data lake).",
+    )
+    parser.add_argument("--symbol", default="xauusdc", help="Symbol prefix for CSV files (e.g. xauusdc, btcusdc)")
     parser.add_argument(
         "--label-contract",
         default=None,
@@ -629,6 +760,24 @@ def main() -> None:
         type=float,
         default=None,
         help="TP ATR multiplier override (requires --sl-atr-mult)",
+    )
+    parser.add_argument(
+        "--spread-points",
+        type=float,
+        default=30,
+        help="Spread in MT5 points for friction modeling (default: 30)",
+    )
+    parser.add_argument(
+        "--slippage-points",
+        type=float,
+        default=10,
+        help="Slippage in MT5 points for friction modeling (default: 10)",
+    )
+    parser.add_argument(
+        "--tick-size",
+        type=float,
+        default=0.01,
+        help="MT5 tick size for cost calculation (default: 0.01)",
     )
     args = parser.parse_args()
 
@@ -667,6 +816,11 @@ def main() -> None:
         sl_atr_mult=_sl_mult,
         tp_atr_mult=_tp_mult,
         raw_dir=Path(args.raw_dir),
+        cross_raw_dir=Path(args.cross_raw_dir),
+        symbol=args.symbol,
+        spread_points=args.spread_points,
+        slippage_points=args.slippage_points,
+        tick_size=args.tick_size,
     )
 
 

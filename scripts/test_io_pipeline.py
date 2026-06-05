@@ -12,7 +12,6 @@ Usage:
 from __future__ import annotations
 
 import json
-import os
 import sys
 import tempfile
 import time
@@ -82,7 +81,7 @@ def test_entry_features_journal() -> bool:
     checks.append(("schema_version", ef.get("schema_version") == "v9_institutional"))
     v = ef.get("vector", [])
     checks.append(("vector 40-dim", len(v) == 40))
-    checks.append(("vector type list", isinstance(v, (list, tuple))))
+    checks.append(("vector type list", isinstance(v, list | tuple)))
     checks.append(("NaN sanitized", not any(np.isnan(x) for x in v)))
     checks.append(("vector matches input", all(abs(v[i] - np.nan_to_num(feature_vector)[i]) < 1e-9 for i in range(40))))
 
@@ -152,9 +151,9 @@ def test_position_snapshots() -> bool:
         d = json.loads(lines[0])
         checks.append(("ticket field", d.get("ticket") == 999999))
         checks.append(("bars_held field", isinstance(d.get("bars_held"), int)))
-        checks.append(("unrealized_pnl_r field", isinstance(d.get("unrealized_pnl_r"), (int, float))))
-        checks.append(("current_volatility field", isinstance(d.get("current_volatility"), (int, float))))
-        checks.append(("trailing_sl_distance field", isinstance(d.get("trailing_sl_distance"), (int, float))))
+        checks.append(("unrealized_pnl_r field", isinstance(d.get("unrealized_pnl_r"), int | float)))
+        checks.append(("current_volatility field", isinstance(d.get("current_volatility"), int | float)))
+        checks.append(("trailing_sl_distance field", isinstance(d.get("trailing_sl_distance"), int | float)))
         checks.append(("all required fields present", all(k in d for k in ["ticket", "bars_held", "unrealized_pnl_r", "current_volatility", "trailing_sl_distance", "current_atr", "entry_atr"])))
 
     all_ok = True

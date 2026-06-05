@@ -22,6 +22,7 @@ Architect guardrails satisfied:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -39,10 +40,12 @@ from core.observability.alert_channels import (
 )
 from core.observability.alert_runbook_bridge import AlertRunbookBridge
 from core.observability.alert_service import (
+    _DEFAULT_RULES_CONFIG,
     AlertChannel,
     AlertRule,
     AlertService,
     LogAlertChannel,
+    build_rules_from_config,
 )
 from core.protocol.services.resilience import CircuitBreaker
 
@@ -182,11 +185,14 @@ class LiveAlertHub:
         dingtalk_url: str = "",
         dingtalk_secret: str = "",
         thresholds: dict[str, float] | None = None,
+        rules_config: list[dict[str, Any]] | None = None,
     ) -> None:
         self._base_dir = Path(base_dir)
         # Bounded queue: hard cap at 1000 to prevent OOM during network partition
         self._alert_queue: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1000)
         self._thresholds = {**self._DEFAULT_THRESHOLDS, **(thresholds or {})}
+        # rules_config from YAML alert_system.rules (or None → fallback)
+        self._rules_config = rules_config
 
         # ── Layer 5: Delivery channels ──
         channels: list[Any] = []
@@ -225,7 +231,7 @@ class LiveAlertHub:
         # ── Layer 1: AlertService + rules ──
         self._alert_service = AlertService()
         self._alert_service.add_channel(_QueueChannel(self._alert_queue))
-        self._register_default_rules()
+        self._register_rules_from_config()
 
         # ── Stats ──
         self._cycles_evaluated: int = 0
@@ -240,7 +246,7 @@ class LiveAlertHub:
                     "fired_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
                     "context_snapshot": {
                         "message": "实盘告警系统已上线",
-                        "rules_active": "10",
+                        "rules_active": str(len(self._alert_service._rules)),
                         "channels": "钉钉 + 审计日志",
                     },
                 }
@@ -250,98 +256,17 @@ class LiveAlertHub:
 
     # ── Rule registration ──────────────────────────────────────────────
 
-    def _register_default_rules(self) -> None:
-        """Register Phase A rules: error rate, bridge, circuit, brain, position."""
-        self._alert_service.add_rule(
-            AlertRule(
-                name="high_error_rate",
-                condition_fn=lambda ctx: ctx.get("error_rate", 0) > 0.1,
-                severity="critical",
-                cooldown_seconds=60,
-            )
-        )
-        self._alert_service.add_rule(
-            AlertRule(
-                name="circuit_breaker_open",
-                condition_fn=lambda ctx: ctx.get("circuit_state", "") == "open",
-                severity="critical",
-                cooldown_seconds=120,
-            )
-        )
-        self._alert_service.add_rule(
-            AlertRule(
-                name="bridge_heartbeat_missed",
-                condition_fn=lambda ctx: ctx.get("bridge_last_ack_seconds", 0) > 120,
-                severity="critical",
-                cooldown_seconds=120,
-            )
-        )
-        self._alert_service.add_rule(
-            AlertRule(
-                name="brain_frozen",
-                condition_fn=lambda ctx: ctx.get("frozen_brain_count", 0) > 0,
-                severity="warning",
-                cooldown_seconds=600,
-            )
-        )
-        self._alert_service.add_rule(
-            AlertRule(
-                name="position_limit_near",
-                condition_fn=lambda ctx: ctx.get("position_utilization", 0) > 0.8,
-                severity="warning",
-                cooldown_seconds=300,
-            )
-        )
-        self._alert_service.add_rule(
-            AlertRule(
-                name="cycle_stall",
-                condition_fn=lambda ctx: ctx.get("cycle_duration_seconds", 0) > 180,
-                severity="critical",
-                cooldown_seconds=300,
-            )
-        )
+    def _register_rules_from_config(self) -> None:
+        """Register rules from declarative config, or fall back to defaults.
 
-        # ── Phase B: PnL fund-safety rules ──
-        _t = self._thresholds
-        self._alert_service.add_rule(
-            AlertRule(
-                name="daily_loss_exceeded",
-                condition_fn=lambda ctx: ctx.get("daily_pnl_usd", 0) < _t["daily_loss_limit"],
-                severity="critical",
-                cooldown_seconds=300,
-            )
-        )
-        self._alert_service.add_rule(
-            AlertRule(
-                name="consecutive_losses",
-                condition_fn=lambda ctx: ctx.get("consecutive_losses", 0)
-                > int(_t["consecutive_losers"]),
-                severity="warning",
-                cooldown_seconds=600,
-            )
-        )
-        self._alert_service.add_rule(
-            AlertRule(
-                name="win_rate_collapse",
-                condition_fn=lambda ctx: (
-                    ctx.get("rolling_win_rate", 1.0) < _t["win_rate_collapse"]
-                    and ctx.get("total_trades_window", 0) >= 20
-                ),
-                severity="critical",
-                cooldown_seconds=600,
-            )
-        )
-        self._alert_service.add_rule(
-            AlertRule(
-                name="strategy_degradation",
-                condition_fn=lambda ctx: (
-                    ctx.get("strategy_win_rate", 1.0) < _t["strategy_degradation_wr"]
-                    and ctx.get("strategy_pnl", 0) < _t["strategy_degradation_loss"]
-                ),
-                severity="warning",
-                cooldown_seconds=1800,
-            )
-        )
+        When *rules_config* was passed to __init__ (from YAML
+        ``alert_system.rules``), rules are built from that config.
+        Otherwise the hardcoded ``_DEFAULT_RULES_CONFIG`` is used
+        (11 rules, backward compatible).
+        """
+        cfg = self._rules_config if self._rules_config else _DEFAULT_RULES_CONFIG
+        for rule in build_rules_from_config(cfg):
+            self._alert_service.add_rule(rule)
 
     def add_rule(self, rule: AlertRule) -> None:
         self._alert_service.add_rule(rule)
@@ -367,6 +292,62 @@ class LiveAlertHub:
             self._alert_queue.put_nowait(alert)
         except queue.Full:
             self._write_fallback_alert(alert)
+
+    # ── Trade notification (per-open/per-close, bypasses alert rules) ──
+
+    def notify_trade(
+        self, action: str, symbol: str, side: str, volume: float,
+        price: float | None = None, pnl: float | None = None,
+    ) -> None:
+        """Send a trade notification directly to DingTalk (real-time, not batched).
+
+        Called from the trade execution path on every open and close.
+        Does NOT go through the alert rule engine — this is a PUSH notification,
+        not a threshold-based alert.
+        """
+        if action == "open":
+            title = f"[TRADE] {symbol} {side.upper()} OPEN"
+            text = (
+                f"## {symbol} 开仓通知\n\n"
+                f"- 方向: **{side.upper()}**\n"
+                f"- 手数: {volume}\n"
+                f"- 价格: {price or 'N/A'}\n"
+                f"- 时间: {__import__('datetime').datetime.now(__import__('datetime').UTC).isoformat()}"
+            )
+        elif action == "close":
+            pnl_str = f"{pnl:+.2f}" if pnl is not None else "N/A"
+            emoji = "🟢" if (pnl or 0) > 0 else ("🔴" if (pnl or 0) < 0 else "⚪")
+            title = f"[TRADE] {symbol} {side.upper()} CLOSE {emoji} {pnl_str}"
+            text = (
+                f"## {symbol} 平仓通知\n\n"
+                f"- 方向: **{side.upper()}**\n"
+                f"- 手数: {volume}\n"
+                f"- 平仓价: {price or 'N/A'}\n"
+                f"- 盈亏: **{pnl_str}**\n"
+                f"- 时间: {__import__('datetime').datetime.now(__import__('datetime').UTC).isoformat()}"
+            )
+        else:
+            return
+
+        # Enqueue directly — lightweight fire-and-forget
+        alert = {
+            "rule_name": "trade_notification",
+            "rule_id": f"trade_{action}_{__import__('time').time()}",
+            "severity": "info",
+            "title": title,
+            "text": text,
+            "timestamp_utc": __import__('datetime').datetime.now(__import__('datetime').UTC).isoformat(),
+            "context": {
+                "symbol": symbol,
+                "action": action,
+                "side": side,
+                "volume": volume,
+                "price": price,
+                "pnl": pnl,
+            },
+        }
+        with contextlib.suppress(Exception):
+            self._alert_queue.put_nowait(alert)  # queue full — drop silently (never block trading)
 
     # ── Main entry point (called from main loop every cycle) ───────────
 

@@ -3,7 +3,7 @@ repos:
     rev: v0.5.7
     hooks:
       - id: ruff
-        args: [--fix]
+        args: [--fix, --extend-select=BLE]  # BLE = no blind except Exception (new code only)
       - id: ruff-format
 
   # ------------------------------------------------------------------
@@ -48,5 +48,36 @@ repos:
         entry: python scripts/validate_blueprints.py
         language: python
         files: ^(blueprints/|core/|apps/|scripts/)
+        stages: [pre-commit]
+        pass_filenames: false
+
+  # ------------------------------------------------------------------
+  # Iron Law #1 全量验证门禁 — 任何 .py 改动后自动触发
+  # mypy + ruff + blueprint compliance + artifact contract
+  # 失败 = 提交阻断。不会漏跑。
+  # ------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: verify-iron-law
+        name: "[铁律 #1] 全量验证 (mypy+ruff+blueprint+artifact)"
+        entry: python scripts/verify.py --quick
+        language: python
+        files: \.py$
+        stages: [pre-commit]
+        pass_filenames: false
+        require_serial: true
+
+  # ------------------------------------------------------------------
+  # 账本禁动令 — 测试覆盖率 < 80% 时拦截 core/contracts/ + core/ledger/
+  # 绕过: set JOURNAL_FREEZE_BYPASS=APPROVED_BY_ARCH_REVIEW
+  # FIX-20260604-087: 架构修正案 Phase 3
+  # ------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: journal-freeze-gate
+        name: "[铁律] 账本禁动 — 覆盖率<80% 拦截修改"
+        entry: python scripts/journal_freeze_gate.py
+        language: python
+        files: ^(core/contracts/label_contract\.py|core/ledger/)
         stages: [pre-commit]
         pass_filenames: false

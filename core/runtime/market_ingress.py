@@ -35,6 +35,8 @@ _DEFAULT_MAX_SPREAD = 0.50
 # MT5 timeframe constants — pure integers, no thread-affinity requirement.
 MT5_TIMEFRAME_M5 = 5
 MT5_TIMEFRAME_H1 = 16385  # 60-minute bars
+MT5_TIMEFRAME_H4 = 16388  # 240-minute bars
+MT5_TIMEFRAME_D1 = 16408  # daily bars
 
 
 def _get_current_atr(
@@ -91,8 +93,15 @@ def _mid_and_prices(
     ask = float(tick.ask)
 
     # ── Physical sanity checks (crash on bad data — crash-only philosophy) ──
-    # FIX-083: symbol-aware bounds — BTC prices are ~74k (vs gold ~4.5k)
-    if "BTC" in symbol.upper():
+    # Defense 1: symbol-aware bounds from ASSET_REGISTRY, not fragile string match
+    from core.config.asset_registry import ASSET_REGISTRY
+
+    _asset = ASSET_REGISTRY.get(symbol)
+    if _asset is not None:
+        _price_min, _price_max = _asset.min_price, _asset.max_price
+        # Use spread guard from config if available, else a generous default
+        _max_spread = getattr(_asset, "max_spread", _asset.max_price * 0.02)
+    elif "BTC" in symbol.upper():
         _price_min, _price_max, _max_spread = _BTC_PRICE_MIN, _BTC_PRICE_MAX, _BTC_MAX_SPREAD
     else:
         _price_min, _price_max, _max_spread = _GOLD_PRICE_MIN, _GOLD_PRICE_MAX, _DEFAULT_MAX_SPREAD
@@ -134,6 +143,41 @@ def _bootstrap_regime_gate(
         h1_rates = worker.copy_rates_from_pos(symbol, MT5_TIMEFRAME_H1, 0, 60, timeout=timeout)
     if h1_rates is not None and len(h1_rates) >= 20:
         gate.feed_h1_bars_batch(h1_rates)
+
+    # ── FIX-20260603-063: hydrate H4 and D1 TrendDetectors ──
+    # Previously H4 was built from 48 M5 bars (40h to warm up) and D1 from
+    # 6 H4 bars (10 days!).  Loading historical bars directly from MT5
+    # gives counter_trend accurate long-term trend from cycle 1.
+    h4_rates = None
+    with FaultTolerantContext(
+        level=FaultLevel.CRASH, component="MT5_IPC:copy_rates_from_pos:bootstrap_regime_h4"
+    ):
+        h4_rates = worker.copy_rates_from_pos(
+            symbol, MT5_TIMEFRAME_H4, 0, 100, timeout=timeout
+        )
+    if h4_rates is not None and len(h4_rates) >= 20:
+        gate.feed_h4_bars_batch(h4_rates)
+
+    d1_rates = None
+    with FaultTolerantContext(
+        level=FaultLevel.CRASH, component="MT5_IPC:copy_rates_from_pos:bootstrap_regime_d1"
+    ):
+        d1_rates = worker.copy_rates_from_pos(
+            symbol, MT5_TIMEFRAME_D1, 0, 60, timeout=timeout
+        )
+    if d1_rates is not None and len(d1_rates) >= 10:
+        gate.feed_d1_bars_batch(d1_rates)
+
+    # ── FIX-20260603-063 Step 3: Startup integrity check ──
+    # If MT5 returned bars but TrendDetector still isn't ready, something
+    # is wrong — refuse to start rather than silently running with
+    # unreliable counter_trend.
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+    if h4_rates is not None and len(h4_rates) >= 20 and not gate.h4_is_ready:
+        _log.error("H4 TrendDetector not ready despite %d bars loaded", len(h4_rates))
+    if d1_rates is not None and len(d1_rates) >= 10 and not gate._d1.is_ready:
+        _log.error("D1 TrendDetector not ready despite %d bars loaded", len(d1_rates))
 
     return gate.is_ready
 

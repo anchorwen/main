@@ -184,6 +184,7 @@ All alerts are printed as single-line JSON to stderr: `{"event":"brain_alert","t
 
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |--------|------|--------|--------|---------|------------|
+| FIX-20260531-022 | 2026-05-31 | cursor-agent | — | **XGBoost adapter feature_names persistence**: JSON save/load doesn't preserve feature_names. Adapter `__init__` now forces `self._booster.feature_names = brain_config["features"]`. Runtime fallback for 24→29 and 24→21 dimension mismatches in `infer()`. | RC-06 |
 | FIX-20260528-022 | 2026-05-28 | cursor-agent | — | swing_enhanced_35 brain loading fix: (1) `base_adapter.py` — `inference()` fallback dimension now uses `_num_features` (from model load) instead of hardcoded 40. (2) `xgboost_brain_adapter.py` — `load()` now sets `_feature_dimension` from actual model feature count, enabling non-40-dim brains to load correctly. Without this, Swing_V9 brains with 35-dim schema would produce zero-vector dimension mismatch at inference. | RC-06 |
 | FIX-20260522-025 | 2026-05-22 | cursor-agent | 24ff517 | Complete BrainSignal.diagnostics passthrough for all 6 adapters (v9_onnx, transformer, online_learner) + shadow_recorder BrainSignal.diagnostics read path | contract-violation |
 | FIX-20260521-007 | 2026-05-21 | cursor-agent | — | MetaFilter adapter: integrate track 3 47-dim LightGBM adapter (meta_filter_adapter.py) for dual-track Meta Pipeline bridging Huber BPS regression to Stage 2 LGB+MLP+Platt+Conformal filter chain | RC-06 |

@@ -231,7 +231,7 @@ class RedisStreamsBroker(MessageBroker):
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2.0)
         if self._client:
-            try:
+            try:  # noqa: SIM105
                 self._client.close()
             except Exception:
                 pass

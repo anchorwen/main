@@ -9,6 +9,7 @@ Usage:
 
 from __future__ import annotations
 
+import logging  # noqa: F401 — used at L114 via getLogger()
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -110,7 +111,9 @@ def _validate_ack_sl_tp(
                 break
             _time.sleep(0.2)
     except Exception:
-        pass
+        logging.getLogger(__name__).warning(
+            "SL/TP confirmation wait failed — proceeding without confirmation"
+        )
 
     if ack_sl is not None and ack_tp is not None:
         sl_diff = abs(float(ack_sl) - requested_sl)

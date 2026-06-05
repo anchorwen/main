@@ -40,7 +40,7 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP"]
+select = ["E", "F", "I", "B", "UP", "SIM105"]  # SIM105 = no bare except:pass
 ignore = [
     "E501",
     "E402",
@@ -52,11 +52,27 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--cov=core --cov-report=json --cov-report=term --cov-branch"
 markers = [
   "fast_contracts: fast communication/v9-shadow contract suite",
   "staged_regression: staged communication/v9-shadow regression suite",
   "governance_contracts: governance summary contract suite",
 ]
+
+[tool.coverage.run]
+# Journal freeze gate protected paths (FIX-20260604-087 Phase 3)
+# When coverage.json exists and protected paths ≥ 80% line+branch,
+# the pre-commit gate allows journal modifications.
+source = ["core"]
+
+[tool.coverage.report]
+# Fail under 80% on protected paths (checked by journal_freeze_gate.py)
+show_missing = true
+skip_covered = false
+
+[tool.coverage.json]
+output = "coverage.json"
+pretty_print = true
 
 [tool.mypy]
 python_version = "3.11"

@@ -106,7 +106,7 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
 
         # ── Defense Line 2: Optional normalization ──
         if self._feature_adapter is not None:
-            try:
+            try:  # noqa: SIM105
                 raw_vector = self._feature_adapter.normalize(raw_vector)
             except Exception:
                 pass  # best-effort; dim mismatch caught by line 3

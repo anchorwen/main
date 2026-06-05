@@ -138,6 +138,19 @@ class ParliamentService:
         )
 
     def _compute_consensus(self, proposals: list) -> dict:
+        # ── WARNING: DEPRECATED LEGACY PATHWAY ──────────────────────────────────
+        # This cross-contract probability-averaging consensus is the OLD
+        # algorithm.  It mixes incommensurate confidence values from models
+        # trained on different contracts (softmax vs tanh vs sigmoid).
+        #
+        # The NEW path lives in:
+        #   core/parliament/contract_groups.py::ContractGroupConsensus.compute()
+        #   → called via strategy_line._compute_consensus()
+        #
+        # DO NOT port any Multi-Strategy logic into this method.
+        # This code path is unreachable with multi_strategy_enabled=True (default).
+        # Scheduled for deletion after confirmation of no rollback scenarios.
+        # ─────────────────────────────────────────────────────────────────────────
         if not proposals:
             return {
                 "aggregated_bias": "neutral",

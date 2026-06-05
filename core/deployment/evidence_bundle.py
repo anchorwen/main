@@ -54,7 +54,6 @@ from core.contracts.domain_keys import (
     PAYLOAD_KEY_SECTIONS,
     PAYLOAD_KEY_SHA256,
     PAYLOAD_KEY_SIZE_BYTES,
-    PAYLOAD_KEY_SNAPSHOT,
     PAYLOAD_KEY_SUMMARY,
     PAYLOAD_KEY_SYSTEM_MODE,
     PAYLOAD_KEY_VALIDATION_MODE,
@@ -202,10 +201,9 @@ class EvidenceBundleService:
         }
 
     def _build_diagnostics(self) -> dict:
-        diagnostics = getattr(self._container, "diagnostics", None)
-        if diagnostics is None:
-            return {PAYLOAD_KEY_AVAILABLE: False}
-        return {PAYLOAD_KEY_AVAILABLE: True, PAYLOAD_KEY_SNAPSHOT: diagnostics.build_snapshot()}
+        from core.observability.diagnostics_dashboard import DiagnosticsDashboard
+
+        return DiagnosticsDashboard.safe_get_snapshot(self._container)
 
     def _build_engine_config(self) -> dict:
         hr = getattr(self._container, "config_hot_reload", None)

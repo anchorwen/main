@@ -75,11 +75,11 @@ def test_barrier_group_definition():
     assert BARRIER_GROUP["name"] == "barrier_12bar"
     assert BARRIER_GROUP["horizon_cycles"] == 12
     assert "lightgbm_v1" in BARRIER_GROUP["brain_types"]
-    # Dictator Protocol (2026-05-22): onnx_v9 + online_sgd evicted —
-    # barrier_12bar is a single-brain Huber regression probe.
+    # Dictator Protocol (2026-05-22): onnx_v9 + online_sgd evicted.
+    # FIX-20260530-073: xgboost_v9 restored for barrier brain recovery.
     assert "onnx_v9" not in BARRIER_GROUP["brain_types"]
     assert "online_sgd" not in BARRIER_GROUP["brain_types"]
-    assert "xgboost_v9" not in BARRIER_GROUP["brain_types"]
+    assert "xgboost_v9" in BARRIER_GROUP["brain_types"]
 
 
 def test_micro_group_definition():
@@ -113,7 +113,7 @@ def test_get_group_for_brain_type_known():
     # returns last-write-wins.  Preferred: contract_group + get_group_for_contract_group().
     g = get_group_for_brain_type("xgboost_v9")
     assert g is not None
-    assert g["name"] in ("barrier_12bar", "daily_swing", "m30_swing", "h1_swing", "h4_swing")
+    assert g["name"] in ("barrier_12bar", "btc_swing", "daily_swing", "m30_swing", "h1_swing", "h4_swing")
     g45 = get_group_for_brain_type("xgboost_v4.5")
     assert g45 is not None
     assert g45["name"] == "micro_3bar"
@@ -152,7 +152,7 @@ def test_get_group_for_proposal_by_source():
     assert g is not None
     # brain_type="xgboost_v9" appears in multiple groups; _TYPE_TO_GROUP
     # returns last-write-wins.  Prefer contract_group for disambiguation.
-    assert g["name"] in ("barrier_12bar", "daily_swing", "m30_swing", "h1_swing", "h4_swing")
+    assert g["name"] in ("barrier_12bar", "btc_swing", "daily_swing", "m30_swing", "h1_swing", "h4_swing")
 
 
 def test_get_group_for_proposal_by_metadata():

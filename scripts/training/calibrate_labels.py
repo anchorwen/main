@@ -104,7 +104,7 @@ def calibrate_horizon(
     spread_points: float = 30,
     slippage_points: float = 10,
     tick_value: float = 0.01,
-    tick_size: float = 0.001,
+    tick_size: float = 0.01,
     volume: float = 0.01,
     entry_stride: int = 3,
 ) -> ProfitabilitySurface:
@@ -227,8 +227,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--tick-size",
         type=float,
-        default=0.001,
-        help="MT5 SYMBOL_TRADE_TICK_SIZE (default: 0.001 for XAUUSDc)",
+        default=0.01,
+        help="MT5 SYMBOL_TRADE_TICK_SIZE (default: 0.01 for XAUUSDc)",
     )
     p.add_argument(
         "--output",

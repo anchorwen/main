@@ -205,7 +205,17 @@ def build_trade_records(
         closes = [r for r in recs if r.get("action") in ("close", "modify", "modify_sltp")]
 
         for i, open_rec in enumerate(opens):
-            close_rec = closes[i] if i < len(closes) else None
+            # FIX-20260601-046: prefer close with valid close_price.
+            # Bridge close orders have detail={order,request,retcode} (no price).
+            # Reconciliation confirmations have detail={close_price,reason}.
+            # Taking closes[0] blindly picks the bridge order → pnl=None → unlabeled.
+            close_rec = None
+            for c in closes:
+                if _extract_exit_price(c.get("detail")) is not None:
+                    close_rec = c
+                    break
+            if close_rec is None and closes:
+                close_rec = closes[0]  # fallback: best-effort
 
             side = str(open_rec.get("side", ""))
             entry_price = _extract_entry_price(open_rec.get("detail"))

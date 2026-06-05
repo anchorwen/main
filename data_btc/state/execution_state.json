@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "saved_at_utc": "2026-06-05T09:59:45.260332",
+  "budgets": {
+    "btc_swing": {
+      "daily_pnl_pct": 0.0,
+      "consecutive_losses": 0,
+      "total_trades_today": 0,
+      "total_wins_today": 0,
+      "paused": false,
+      "paused_at": 0.0,
+      "last_trade_day": "",
+      "_sl_timestamps": [],
+      "_sl_cooldown_until": 0.0,
+      "_sl_paused_rest_of_day": false
+    }
+  },
+  "cooldown_registry": {},
+  "family_entry_tracker": {},
+  "sl_streak_blocks": {},
+  "sl_streak_global_block": 0.0,
+  "consecutive_degraded": 0,
+  "circuit_breaker_tripped": false,
+  "intraday_dd_active": false
+}

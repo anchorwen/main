@@ -94,7 +94,7 @@ def run_incremental_update(
         return {"step": "incremental_update", "status": "error", "error": str(exc)[:500]}
     finally:
         if computer is not None and hasattr(computer, "_mt5"):
-            try:
+            try:  # noqa: SIM105
                 computer._mt5.shutdown()
             except Exception:
                 pass

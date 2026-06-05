@@ -695,7 +695,42 @@ class BrainPnLStore:
         store = cls(window_size=data.get("window_size", 100))
         store._pending = data.get("pending", {})
         store._settled = data.get("settled", {})
+        # ── FIX-20260603-065 P1: hydrate in-memory accumulators from disk ──
+        store._hydrate_accumulators()
         return store
+
+    def _hydrate_accumulators(self) -> None:
+        """Rebuild in-memory PnL accumulators from settled disk data.
+
+        FIX-20260603-065: _running_daily_pnl and related counters were only
+        updated by settle_one().  After a restart (or manual ledger rebuild),
+        the in-memory state was empty while the disk had data → alerts showed
+        wrong daily PnL.  Now load() calls this to sync memory ← disk.
+        """
+        from datetime import UTC, datetime
+
+        _today = datetime.now(UTC).date()
+        self._running_daily_pnl = 0.0
+        self._running_consecutive_losses = 0
+        self._running_win_count = 0
+        self._running_trade_count = 0
+
+        for _bid, _trades in self._settled.items():
+            for _t in _trades:
+                _pnl = _t.get("pnl", 0) or 0.0
+                _ts_str = _t.get("settled_at", "") or _t.get("entry_time", "")
+                try:
+                    _ts = datetime.fromisoformat(_ts_str)
+                    if _ts.date() == _today:
+                        self._running_daily_pnl += _pnl
+                except (ValueError, TypeError, OSError):
+                    pass
+                self._running_trade_count += 1
+                if _pnl > 0:
+                    self._running_win_count += 1
+                    self._running_consecutive_losses = 0
+                elif _pnl < 0:
+                    self._running_consecutive_losses += 1
 
     def retention_prune(self, retention_days: int = 90) -> dict[str, int]:
         """Remove settled entries older than *retention_days*.

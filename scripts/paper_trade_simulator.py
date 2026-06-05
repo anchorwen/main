@@ -383,7 +383,7 @@ def simulate_trade(
     # Estimate exit friction (may differ from entry due to session change)
     exit_spread, exit_slippage = (dynamic_spread, dynamic_slippage)
     if exit_time and exit_time != entry_time:
-        try:
+        try:  # noqa: SIM105
             exit_spread, exit_slippage = _estimate_spread(exit_time, atr, exit_price)
         except Exception:
             pass

@@ -214,7 +214,16 @@ def main():
 
     # Load data
     pnl_ledger = load_json(pnl_path)
-    gov_state = load_json(gov_path)
+    try:
+        from core.governance.governance_service import GovernanceService
+        gov_svc = GovernanceService.load(str(gov_path))
+        gov_state: dict[str, Any] = {
+            "brain_states": gov_svc.get_all_states(),
+            "transition_log": gov_svc.get_transition_log(),
+        }
+    except Exception:
+        print(f"[run_promotion] ERROR: failed to load governance state from {gov_path}")
+        return 1
 
     # Ensure all brains from P&L are in governance state
     settled_brain_ids = list(pnl_ledger.get("settled", {}).keys())
@@ -258,7 +267,12 @@ def main():
 
     if args.apply:
         n = apply_decisions(gov_state, decisions)
-        save_json(gov_path, gov_state)
+        # FIX-20260604-088: locked, atomic write via GovernanceService
+        from core.governance.governance_service import GovernanceService
+        _svc = GovernanceService()
+        _svc._brain_states = gov_state.get("brain_states", {})
+        _svc._transition_log = gov_state.get("transition_log", [])
+        _svc.save(str(gov_path), lock_timeout=30.0)
         print(f"\nApplied {n} transition(s). Governance state saved to {gov_path}")
     else:
         print("\n[Dry run — use --apply to write changes]")

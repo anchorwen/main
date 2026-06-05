@@ -14,6 +14,7 @@ Checks:
 from __future__ import annotations
 
 import json
+import logging
 from collections import deque
 from datetime import UTC, datetime
 from typing import Any
@@ -114,7 +115,7 @@ class FeatureGate:
                         False, "FEATURE_COLD_START", "micro vector is all zeros (fallback)"
                     )
             except Exception:
-                pass
+                logging.getLogger(__name__).warning("Feature vector cold-start check failed")
 
         return GateResult(True, "", "ok")
 

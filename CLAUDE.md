@@ -42,14 +42,25 @@
 - 使用约定式提交格式：`<type>(<scope>): [FIX-YYYYMMDD-NNN] <description>`
 - 如果修改影响到跨模块合约，同步更新依赖模块的 Cross-Module Contracts
 
+### 8. 根因诊疗协议 (Root Cause Diagnosis Protocol)
+- **发现问题后，不挖到根因不出方案，不画影响链路不写代码**
+- 执行五步：**STOP**（停）→ **LOOKUP**（查蓝图/依赖/历史）→ **DIG**（至少3层追问+横向搜索）→ **MAP**（影响链路+双品种验证）→ **PLAN**（一篮子方案，ExitPlanMode 审批）
+- 完整协议：`blueprints/system/ROOT_CAUSE_DIAGNOSIS_PROTOCOL.md`
+- 适用门槛：改逻辑/改共享基础设施/改状态格式 → 完整五步；改配置值 → STOP+MAP；typo → 跳过但说明
+- 反例参考：协议文档中记录了 FIX-022（8轮修同一bug）、BTC三连打地鼠（spread→max_spread→min_sl）、XAU shadow 两次误判
+
 ## 验证命令
 
 ```bash
 # 快速验证 (mypy + ruff + 蓝图合规, ~10s)
+# 每次修改 .py 后必须运行并通过（铁律 #1）
 python scripts/verify.py --quick
 
 # 完整验证 (全量 mypy + ruff + 蓝图合规 + pytest, ~2min)
 python scripts/verify.py --full
+
+# 安装 pre-commit 钩子（一次性）—— git commit 时自动触发验证
+# pre-commit install
 
 # 更新验证戳
 python scripts/verify.py --full --stamp

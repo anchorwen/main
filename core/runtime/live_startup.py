@@ -282,7 +282,7 @@ def inject_performance_metrics(pnl_store: Any, base_dir: str) -> None:
                     "pnl_r": round(m.cumulative_pnl, 2),
                 },
             )
-        gov.save(str(_gov_path))
+        gov.save(str(_gov_path), lock_timeout=1.0)
     except Exception:
         import logging as _inj_log
 

@@ -14,6 +14,7 @@ import json
 import os
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -102,7 +103,7 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
             flush=True,
         )
 
-        # Resource cleanup: force GC + compact feature store
+        # Resource cleanup: force GC + compact feature store + prune old labels
         _cleanup_started = time.perf_counter()
         try:
             gc.collect()
@@ -112,6 +113,29 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
 
                 _store = LocalFeatureStore(base_dir=config.base_dir)
                 _store.compact(retention_days=7)
+            except Exception:
+                pass
+            # FIX-20260601-047: prune label files older than 30 days
+            try:
+                _labels_dir = Path(config.base_dir) / "labels"
+                if _labels_dir.exists():
+                    _cutoff = time.time() - (30 * 86400)
+                    _pruned = 0
+                    for _lf in _labels_dir.glob("*.jsonl"):
+                        try:
+                            if _lf.stat().st_mtime < _cutoff:
+                                _lf.unlink()
+                                _pruned += 1
+                        except OSError:
+                            pass
+                    if _pruned > 0:
+                        print(
+                            json.dumps(
+                                {"event": "labels_pruned", "count": _pruned, "retention_days": 30},
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
             except Exception:
                 pass
             _cleanup_ms = (time.perf_counter() - _cleanup_started) * 1000.0
@@ -153,7 +177,7 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
                 _gov_report = run_governance_cycle(
                     _tracker, _governance, dry_run=False, pnl_store=_pnl_store
                 )
-                _governance.save(_gov_path)
+                _governance.save(_gov_path, lock_timeout=1.0)
 
                 _applied = len(_gov_report.get("actions_applied", []))
                 _flagged = len(_gov_report.get("actions_flagged", []))

@@ -7,6 +7,7 @@ Extracted from scripts/live_intent_loop.py to keep the CLI script thin
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import time
@@ -36,6 +37,8 @@ from core.parliament.contract_groups import (
     MICRO_M15_GROUP,
 )
 from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, log_and_continue
+
+logger = logging.getLogger(__name__)
 from core.runtime.market_ingress import (  # noqa: F401 — re-export
     _bootstrap_regime_gate,
     _feed_regime_gate_cycle,
@@ -121,6 +124,12 @@ class LiveCycleConfig:
     portfolio_max_same_dir: int = 2
     portfolio_netting_mode: str = "net_out"  # "net_out" | "allow_coexist"
 
+    # ── FIX-20260605-120: Asset-specific reentry thresholds ──
+    reentry_sl_cooldown: float = 180.0
+    reentry_sl_penalty: float = 0.10
+    reentry_bleed_cooldown: float = 180.0
+    reentry_bleed_penalty: float = 0.10
+
     # ── live.yaml strategy_lines overrides ──
     strategy_configs: dict[str, Any] = field(default_factory=dict)
 
@@ -139,6 +148,51 @@ class LiveCycleConfig:
     intraday_drawdown_kill_pct: float = 0.02
     intraday_dd_force_close: bool = False
     intraday_dd_force_close_pct: float = 0.03  # force-close at 3% dd (vs 2% block)
+
+    # FIX-20260531-008: contract_size from ASSET_REGISTRY (Defense 1 & 2)
+    contract_size: float = 100.0  # XAU default; overridden for BTC
+
+    def __post_init__(self) -> None:
+        """Defense 2: fail-fast on contract_size mismatch + field sanity."""
+        from core.config.asset_registry import ASSET_REGISTRY
+
+        if self.symbol in ASSET_REGISTRY:
+            expected = ASSET_REGISTRY[self.symbol].contract_size
+            if self.contract_size != expected:
+                raise ValueError(
+                    f"LiveCycleConfig: contract_size mismatch for '{self.symbol}' "
+                    f"(got {self.contract_size}, expected {expected})"
+                )
+
+        # ── FIX-20260605-120: basic field sanity checks ──
+        if self.interval_seconds <= 0:
+            raise ValueError(
+                f"LiveCycleConfig: interval_seconds must be > 0, got {self.interval_seconds}"
+            )
+        if self.max_positions < 0:
+            raise ValueError(
+                f"LiveCycleConfig: max_positions must be >= 0, got {self.max_positions}"
+            )
+        if self.sl_atr_mult <= 0:
+            raise ValueError(
+                f"LiveCycleConfig: sl_atr_mult must be > 0, got {self.sl_atr_mult}"
+            )
+        if self.tp_atr_mult <= 0:
+            raise ValueError(
+                f"LiveCycleConfig: tp_atr_mult must be > 0, got {self.tp_atr_mult}"
+            )
+        if self.lot_step <= 0:
+            raise ValueError(
+                f"LiveCycleConfig: lot_step must be > 0, got {self.lot_step}"
+            )
+        if self.reentry_sl_cooldown < 0:
+            raise ValueError(
+                f"LiveCycleConfig: reentry_sl_cooldown must be >= 0, got {self.reentry_sl_cooldown}"
+            )
+        if not (0.0 <= self.reentry_sl_penalty <= 1.0):
+            raise ValueError(
+                f"LiveCycleConfig: reentry_sl_penalty must be in [0,1], got {self.reentry_sl_penalty}"
+            )
 
 
 @dataclass
@@ -159,6 +213,9 @@ class LiveCycleState:
     _recent_mid_prices: list[float] = field(default_factory=list)  # rolling 50 mid prices (ER calc)
     _recent_consensus_scores: list[float] = field(default_factory=list)  # rolling 500 scores (P80)
     _reentry_states: dict[str, Any] = field(default_factory=dict)  # {strategy_name: ReentryState}
+    # ── FIX-20260603-067 P2: gate telemetry funnel ──
+    _gate_stats: dict[str, dict[str, int]] = field(default_factory=dict)
+    _gate_stats_cycles: int = 0
     position_manager: Any = None  # ActivePositionManager (set by caller)
     correlation_tracker: Any = None  # GroupCorrelationTracker (set by caller)
     shadow_verification_pending: dict[str, Any] | None = (
@@ -182,6 +239,7 @@ class LiveCycleState:
     _last_cycle_start_time: float = 0.0  # wall clock at start of current cycle
     _cooldown_registry: Any = None  # CooldownRegistry (Cut 1: Absolute Refractory Period)
     _family_entry_tracker: Any = None  # FamilyEntryTracker (Cut 2: Cross-Strategy Spacing)
+    _strategies: dict[str, Any] | None = None  # FIX-072: cached strategy_lines for persistence
     _meta_filter_gate: Any = None  # MetaFilterGate (LightGBM 47-dim OU signal quality filter)
     _conformal_ou_gate: Any = None  # ConformalOUGate (physics-based OU signal quality gate)
     _mtf_price_service: Any = None  # MTFPriceService — M15 bar reconstruction from M5 tick history
@@ -257,7 +315,8 @@ def _compute_tf_ou_hurst(mid_prices: list[float]) -> tuple[float, float]:
 
 # ── Daily ops auto-scheduler ────────────────────────────────────────────
 
-DAILY_OPS_STATE_PATH = "data/state/daily_ops_state.json"
+# FIX-20260531-009: state paths derived from config.base_dir at call site
+DAILY_OPS_STATE_PATH = "data/state/daily_ops_state.json"  # legacy default; overridden by base_dir
 
 
 def _load_daily_ops_state(base_dir: str) -> float:
@@ -457,6 +516,7 @@ def _execute_management_phase(
     daily_feature_provider: Any = None,
     pnl_ledger: Any = None,
     ticket: int | None = None,
+    micro_feature_dict: dict[str, float] | None = None,
 ) -> Any:
     """Manage open position: trail stop, re-evaluate brains, check exits.
 
@@ -511,6 +571,7 @@ def _execute_management_phase(
                 _mia_entry = _build_mia_close_entry(
                     pos,
                     state.known_open_tickets.get(pos.ticket, {}),
+                    symbol=config.symbol,
                 )
                 # Enrich with MT5 deal history (close_price, reason)
                 with FaultTolerantContext(
@@ -696,10 +757,61 @@ def _execute_management_phase(
             }
 
             # ── Phase B: PnL fund-safety context injection ──
+            # FIX-20260603-066 P0: compute daily PnL from journal (SSOT),
+            # not from in-memory accumulators that drift on restart.
+            _daily_pnl = 0.0
+            _consec_losses = 0
+            _win_count = 0
+            _trade_count = 0
+            try:
+                from datetime import UTC
+                from datetime import datetime as _dt
+                _today = _dt.now(UTC).date()
+                _jp = Path(config.base_dir) / "live_trade_journal.jsonl"
+                if _jp.exists():
+                    # Read backwards from end — journal grows, only need today
+                    _lines = []
+                    with open(_jp, encoding="utf-8") as _jf:
+                        _lines = _jf.readlines()
+                    for _line in reversed(_lines):
+                        _line = _line.strip()
+                        if not _line:
+                            continue
+                        try:
+                            _e = json.loads(_line)
+                        except json.JSONDecodeError:
+                            continue
+                        if _e.get("action") != "close":
+                            continue
+                        _ts = _e.get("recorded_at", "")
+                        try:
+                            _d = _dt.fromisoformat(_ts.replace("Z", "+00:00")).date()
+                        except (ValueError, TypeError, OSError):
+                            continue
+                        if _d != _today:
+                            continue
+                        _pnl = _e.get("pnl")
+                        if _pnl is None:
+                            continue
+                        _pnl = float(_pnl)
+                        _daily_pnl += _pnl
+                        _trade_count += 1
+                        if _pnl > 0:
+                            _win_count += 1
+                            _consec_losses = 0
+                        elif _pnl < 0:
+                            _consec_losses += 1
+                _ctx["daily_pnl_usd"] = round(_daily_pnl, 2)
+                _ctx["consecutive_losses"] = _consec_losses
+                _ctx["rolling_win_rate"] = round(_win_count / max(1, _trade_count), 4)
+                _ctx["total_trades_window"] = _trade_count
+            except Exception:
+                pass  # journal read is best-effort for alerts
+
             if pnl_ledger is not None:
                 with log_and_continue(component="AlertHub:PnL_context"):
+                    # Still read strategy-level metrics from ledger
                     _pnl_stats = pnl_ledger.get_quick_stats()
-                    _ctx.update(_pnl_stats)
                     # Worst-performing strategy detection
                     _all_m = pnl_ledger.get_all_metrics()
                     _worst_pnl = 0.0
@@ -732,7 +844,10 @@ def _execute_management_phase(
                 _m5_bar = _m5_rates[0]
                 _m5_high = float(_m5_bar["high"])
                 _m5_low = float(_m5_bar["low"])
-                _m5_spread = int(_m5_bar.get("spread", 0))
+                try:
+                    _m5_spread = int(_m5_bar["spread"])
+                except (KeyError, ValueError, IndexError):
+                    _m5_spread = 0
     pm.update_prices(
         mid,
         bid,
@@ -933,6 +1048,18 @@ def _execute_management_phase(
     # ── 5.5 Partial take-profit ──
     if not pos.partial_tp_triggered and pos.partial_tp_r > 0:
         should_ptp, ptp_close_vol, ptp_remain_vol = pm.should_partial_tp(mid, ticket=pos.ticket)
+        # Phase C: If normal R-multiple partial TP didn't fire, try microstructure-aware trigger
+        if not should_ptp and micro_feature_dict is not None:
+            _ofi_z = float(micro_feature_dict.get("OFI", 0.0) or 0.0)
+            should_ptp, ptp_close_vol, ptp_remain_vol = pm.should_micro_partial_tp(
+                mid, _ofi_z, ticket=pos.ticket
+            )
+            if should_ptp:
+                _ofi_reason = f"ofi_{_ofi_z:.1f}z"
+            else:
+                _ofi_reason = ""
+        else:
+            _ofi_reason = ""
         if should_ptp:
             _close_payload: dict[str, Any] = {
                 "action": "close",
@@ -953,7 +1080,7 @@ def _execute_management_phase(
                     if _strat_magic:
                         _close_payload["magic"] = _strat_magic
                 except Exception:
-                    pass
+                    logger.warning("Magic resolution failed for partial close — using default")
             _open_entry = state.known_open_tickets.get(pos.ticket, {})
             _open_msg_id = _open_entry.get("message_id", "")
             if _open_msg_id:
@@ -1069,6 +1196,7 @@ def _execute_management_phase(
                             "event": "partial_tp_executed",
                             "time": _utc_iso(),
                             "ticket": pos.ticket,
+                            "trigger": "ofi" if _ofi_reason else "r_milestone",
                             "r": round(pm._compute_r_multiple(mid, ticket=pos.ticket), 2),
                             "closed_volume": ptp_close_vol,
                             "remaining_volume": ptp_remain_vol,
@@ -1231,21 +1359,21 @@ def _execute_management_phase(
                         prop = b_info["adapter"].get_signal(raw)
                     else:
                         prop = None
-                elif schema_id in ("daily_swing_24", "swing_24", "swing_enhanced_35"):
-                    # Swing brains use D1 daily features; swing_enhanced_35 adds micro+TF
+                elif "swing" in schema_id or "daily" in schema_id:
+                    # FIX-20260531-021: Data-driven assembly via schema registry
                     if daily_feature_provider is not None:
                         with FaultTolerantContext(
                             level=FaultLevel.DEGRADE,
                             component="ManagementBrainInference:DailyFeature",
                         ):
                             fv_24 = daily_feature_provider.get_latest()
-                            if schema_id == "swing_enhanced_35":
-                                tf_ou, tf_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
-                                fv = np.concatenate(
-                                    [fv_24[:24], np.zeros(9, dtype=np.float64), [tf_ou, tf_hurst]]
-                                )
-                            else:
-                                fv = fv_24
+                            tf_ou, tf_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
+                            from core.features.schemas.registry import assemble_swing_features
+
+                            fv = assemble_swing_features(
+                                schema_id, daily_features=fv_24,
+                                tf_ou=tf_ou, tf_hurst=tf_hurst,
+                            )
                             raw = b_info["adapter"].infer(fv)
                             prop = b_info["adapter"].get_signal(raw)
                     else:
@@ -1463,7 +1591,7 @@ def _execute_management_phase(
                                         pm.clear_position(ticket=pos.ticket)
                                     return True
                             except Exception:
-                                pass
+                                logger.warning("OU brain exit failed — continuing management")
                             break  # only one OU brain
 
                 should_exit = False
@@ -1791,12 +1919,15 @@ def _reconcile_closed_positions(
     )
 
 
-def _build_mia_close_entry(pos: Any, known_entry: dict[str, Any]) -> dict[str, Any]:
+def _build_mia_close_entry(pos: Any, known_entry: dict[str, Any], *, symbol: str = "XAUUSDc") -> dict[str, Any]:
     """Build a close journal entry for a position detected MIA in MT5.
 
     Called by _execute_management_phase when positions_get returns empty
     for a tracked ticket.  Uses all available engine-side info since MT5
     deal history may not be available yet (position just closed).
+
+    symbol is a keyword-only parameter; caller MUST pass config.symbol.
+    The default "XAUUSDc" exists only for backward compatibility.
     """
     side = str(getattr(pos, "side", known_entry.get("side", "")))
     entry_price = float(
@@ -1833,7 +1964,7 @@ def _build_mia_close_entry(pos: Any, known_entry: dict[str, Any]) -> dict[str, A
 
             _resolved_strategy = MAGIC_TO_STRATEGY.get(int(_resolved_magic), "")
         except Exception:
-            pass
+            logger.warning("MIA enrichment magic resolution failed")
 
     return {
         "schema_version": "live_trade_journal.v2",
@@ -1846,11 +1977,13 @@ def _build_mia_close_entry(pos: Any, known_entry: dict[str, Any]) -> dict[str, A
             "close_price": close_price,
             "pnl": pnl,
             "mia_detected_at": close_time_iso,
+            "entry_price": entry_price,  # FIX-20260602-058: for PnL recalculation
         },
-        "symbol": "XAUUSDc",
+        "symbol": known_entry.get("symbol") or symbol,
         "action": "close",
         "side": side,
         "volume": close_volume,
+        "entry_price": entry_price,  # FIX-20260602-058: for PnL recalculation
         "pnl": pnl,
         "label": "loss"
         if (pnl is not None and pnl < 0)
@@ -1913,6 +2046,9 @@ def _enrich_mia_from_deals(
                     mia_entry["pnl"] = round((close_price - entry_price) * close_volume, 2)
                 elif side == "short":
                     mia_entry["pnl"] = round((entry_price - close_price) * close_volume, 2)
+                # FIX-20260602-058: sync detail.pnl with recomputed PnL
+                if isinstance(mia_entry.get("detail"), dict):
+                    mia_entry["detail"]["pnl"] = mia_entry["pnl"]
             if mia_entry.get("pnl", 0) is not None:
                 pnl = mia_entry["pnl"]
                 if pnl < 0:
@@ -2124,6 +2260,71 @@ def execute_live_cycle(
 
     Returns (updated_state, should_continue). The caller owns the ``while True``
     loop and the ``time.sleep()`` between iterations.
+
+    .. rubric:: Architectural Roadmap
+
+    This function is a ~3,450-line monolithic state machine with **40 mutable
+    state fields** read/written across **13 logical phases**.  Big-bang
+    refactoring is FORBIDDEN — use the Strangler Fig pattern instead: extract
+    ONE phase at a time, only when that phase is next modified.
+
+    **Pipeline flow** (line numbers are section markers, not exact boundaries)::
+
+        ── STARTUP ──
+        Phase  0   L2232   Resolve MT5, circuit breaker init, heartbeat
+        Phase  1   L2312   First-cycle reconciliation, restart bootstrap
+        Phase  1a  L2388   Daily ops auto-scheduler (Highlander Rule)
+        Phase  1b  L2428   Startup orphan detection (MT5 vs state file)
+
+        ── DATA ACQUISITION & EXIT MANAGEMENT ──
+        Phase  2   L2525   Reconcile closed positions, SL streak tracking    [资金高危]
+        Phase  2a  L2691   Protection flag, mid-price, tick sanity
+        Phase  3   L2821   Shadow verification settlement                    [资金高危]
+        Phase  3a  L2866   Cooldown check, SL streak circuit breaker
+        Phase  3b  L3031   Market-closed guard, P&L settlement anchor
+        Phase  3c  L3062   Dynamic exit management (_execute_management_phase)
+        Phase  3d  L3104   MIA close processing, journal write
+
+        ── FEATURES & GATES ──
+        Phase  4   L3216   Feature computation, entry_context build          [最易剥离]
+        Phase  4a  L3264   MetaFilter gate + Conformal OU gate (lazy init)
+        Phase  4b  L3379   Daily D1 features, feature persistence
+        Phase  5   L3445   Market regime detection, feature gate, inference
+
+        ── RISK & BUDGET ──
+        Phase  6   L3502   Account equity, risk budget, vol-targeted sizing
+
+        ── ═══════ ROUTING FORK ═══════
+        │ if config.multi_brain and config.multi_strategy_enabled (default True):
+        │
+        ├─ ✅ NEW PATH (always taken with defaults) ─────────────────────
+        │
+        Phase  7   L3543   Multi-strategy evaluation, regime gate propagation
+        Phase  7a  L3673   Pre-close check, session detection
+        Phase  8   L3912   Cooldown registry, execution guard restore       [资金高危]
+        Phase  8a  L3951   MT5 position query, quarantine auto-clear
+        Phase  8b  L4053   Circuit breaker drawdown kill, re-entry quality
+        Phase  8c  L4300   Quarantine check, NET_OUT reassignment
+        Phase  8d  L4367   Trade notification, gate telemetry, family entry
+        Phase  8e  L4481   Position registration, shadow record
+        │
+        │   → L4725  return (early exit — new path complete)
+        │
+        └─ ⚠️  LEGACY PATH (unreachable with default config) ───────────
+             FIX-20260517-018: dead code — retained as rollback reference only.
+             Phase  9   L4730   Contract-group consensus
+             Phase 10   L5098   Shadow verification, risk eval, dispatch
+
+        ── SHARED TAIL ──
+        Phase 11   L5440   Per-model horizon map, position registration
+        Phase 12   L5634   Circuit breaker degraded-cycle tracking
+
+    **Immutability guardrail**: When extracting any phase, do NOT pass the
+    entire ``state`` object.  Extract as a pure function that receives only
+    the fields it reads, and returns results to be explicitly merged back
+    into ``state`` by the caller.  This is how ``_execute_management_phase``
+    and ``_reconcile_closed_positions`` were already extracted — follow that
+    precedent.
     """
     import numpy as np  # ensure np available in all code paths (local imports at L4506/L6503 may not execute)
 
@@ -2143,8 +2344,22 @@ def execute_live_cycle(
     if alert_hub is not None:
         state.alert_hub = alert_hub
 
-    # ── Cycle-start heartbeat (every iteration — catches freeze location) ──
+    # ── Cycle-start heartbeat ──
     _cycle_start_wall = time.time()
+    # ── FIX-068 debug: dump reentry state on cycle 1 ──
+    if state.loop_iteration == 1 and state._reentry_states:
+        for _sname, _rs in state._reentry_states.items():
+            _le = _rs.last_exit
+            print(json.dumps({
+                "event": "reentry_state_debug",
+                "step": "cycle1_start",
+                "strategy": _sname,
+                "has_last_exit": _le is not None,
+                "exit_timestamp": _le.timestamp if _le else None,
+                "exit_confidence": _le.confidence if _le else None,
+                "exit_reason": _le.reason if _le else None,
+                "consecutive_same_dir": _rs.consecutive_same_direction,
+            }, ensure_ascii=False, default=str), flush=True)
     print(
         json.dumps(
             {"event": "cycle_start", "time": _utc_iso(), "iteration": state.loop_iteration},
@@ -2187,45 +2402,15 @@ def execute_live_cycle(
         state._consecutive_degraded_cycles = 0
         state._circuit_breaker_tripped = False
 
-    # ── Restart state bootstrap: replay recent journal closes ──
-    # On restart, runtime state (_reentry_states, _pending_sl_records,
-    # consecutive_sl_hits) is lost.  Replay the last 30 min of journal
-    # close entries so the re-entry guard and graduated SL cooldown
-    # survive a restart.
-    if state.loop_iteration == 1 and not config.no_mt5:
-        _bootstrap_restart_state(state, str(journal_path), config)
-        # FIX-20260529-039: Bootstrap replays historical close entries to restore
-        # last_exit for each strategy, but record_exit() also increments
-        # consecutive_same_direction. After 20+ replayed entries all in the same
-        # direction, the volume decay check blocks the first live trade (volume
-        # decayed to 0). Reset the counter post-bootstrap — consecutive tracking
-        # is meaningful only within the current live session.
-        for _rs in state._reentry_states.values():
-            _rs.consecutive_same_direction = 0
-
-    # ── Daily ops auto-scheduler (The Highlander Rule) ──
-    # Fixed UTC 22:00–23:00 window (= 06:00–07:00 CST, post-market-close).
-    # Restore last-run state on first cycle; skip if already ran today.
-    if state.loop_iteration == 1 and state._last_daily_ops_utc == 0:
-        state._last_daily_ops_utc = _load_daily_ops_state(config.base_dir)
-    with log_and_continue(component="DailyOps:scheduling"):
-        _now_utc = datetime.now(UTC)
-        _today_22z = _now_utc.replace(hour=22, minute=0, second=0, microsecond=0)
-        _window_end = _today_22z + timedelta(hours=1)
-        _last_date = (
-            datetime.fromtimestamp(state._last_daily_ops_utc, UTC).date()
-            if state._last_daily_ops_utc > 0
-            else None
-        )
-        _already_ran_today = _last_date == _now_utc.date()
-        if _today_22z <= _now_utc < _window_end and not _already_ran_today:
-            _run_scheduled_daily_ops(config, state)
-
+    # ── FIX-20260603-074: On first cycle, reconcile positions closed during
+    # downtime BEFORE the restart state bootstrap.  Positions in known_open_tickets
+    # that are no longer open in MT5 were closed (by SL/TP/external) while the
+    # process was down.  Run reconciliation before bootstrap so that
+    # known_open_tickets only contains ACTUALLY open positions.  Otherwise the
+    # bootstrap skips the most recent close entries (their open_message_id is
+    # still in the stale known_open_tickets) and falls back to ancient exits →
+    # stale_exit_allowed bypasses the reentry guard → restart-immediate-trade.
     # ── On first cycle, reconcile positions closed during downtime ──
-    # Positions in known_open_tickets that are no longer open in MT5 were closed
-    # (by SL/TP/external) while the process was down.  Run reconciliation BEFORE
-    # filtering so close journal entries are created — otherwise they are silently
-    # discarded and the trade journal has a permanent gap (no close entry).
     if state.loop_iteration == 1 and state.known_open_tickets and not config.no_mt5:
         with FaultTolerantContext(
             level=FaultLevel.CRASH,
@@ -2291,37 +2476,123 @@ def execute_live_cycle(
                 t: r for t, r in state.known_open_tickets.items() if t in _open_tickets
             }
 
-        # ── Startup orphan detection: MT5 vs active_position.json ──
+    # ── Restart state bootstrap: replay recent journal closes ──
+    # FIX-20260603-074: MUST run AFTER reconciliation so known_open_tickets
+    # only contains actually-open positions.  Otherwise _active_open_mids
+    # includes stale entries → bootstrap skips the most recent close →
+    # falls back to ancient exit → stale_exit_allowed → restart-immediate-trade.
+    if state.loop_iteration == 1 and not config.no_mt5:
+        _bootstrap_restart_state(state, str(journal_path), config)
+        for _rs in state._reentry_states.values():
+            _rs.consecutive_same_direction = 0
+
+    # ── Daily ops auto-scheduler (The Highlander Rule) ──
+    # Primary: Fixed UTC 22:00–23:00 window (= 06:00–07:00 CST).
+    # FIX-20260604-078: Fallback — if >24h since last run AND not today,
+    # trigger immediately regardless of time.  Prevents daily_ops from
+    # never executing when the system never survives to 22:00 UTC.
+    if state.loop_iteration == 1 and state._last_daily_ops_utc == 0:
+        state._last_daily_ops_utc = _load_daily_ops_state(config.base_dir)
+    with log_and_continue(component="DailyOps:scheduling"):
+        _now_utc = datetime.now(UTC)
+        _today_22z = _now_utc.replace(hour=22, minute=0, second=0, microsecond=0)
+        _window_end = _today_22z + timedelta(hours=1)
+        _last_date = (
+            datetime.fromtimestamp(state._last_daily_ops_utc, UTC).date()
+            if state._last_daily_ops_utc > 0
+            else None
+        )
+        _already_ran_today = _last_date == _now_utc.date()
+        _in_primary_window = _today_22z <= _now_utc < _window_end
+        _fallback_overdue = (
+            state._last_daily_ops_utc > 0
+            and (time.time() - state._last_daily_ops_utc) > 86400
+            and not _already_ran_today
+        )
+        if (_in_primary_window or _fallback_overdue) and not _already_ran_today:
+            if _fallback_overdue and not _in_primary_window:
+                print(
+                    json.dumps(
+                        {
+                            "event": "daily_ops_fallback_triggered",
+                            "time": _utc_iso(),
+                            "hours_since_last": round(
+                                (time.time() - state._last_daily_ops_utc) / 3600, 1
+                            ),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+            _run_scheduled_daily_ops(config, state)
+
+    # ── Startup orphan detection: MT5 vs active_position.json ──
         try:
             _ap_path = os.path.join(config.base_dir, config.position_state_path)
             _ap_tickets: set[int] = set()
             if os.path.exists(_ap_path):
                 with open(_ap_path) as _f:
                     _ap = json.load(_f)
-                _ap_tickets = {
-                    int(t) for t in (_ap.get("tickets", []) if isinstance(_ap, dict) else [])
-                }
+                if isinstance(_ap, dict):
+                    # FIX-20260601-040: support both v2 ("tickets": [int]) and
+                    # v3 ("positions": [{"ticket": int}]) state file formats.
+                    # v2 → direct list of ticket IDs; v3 → list of position dicts.
+                    _ap_tickets = set()
+                    _v2_tickets = _ap.get("tickets", [])
+                    if isinstance(_v2_tickets, list):
+                        for t in _v2_tickets:
+                            try:  # noqa: SIM105
+                                _ap_tickets.add(int(t))
+                            except (TypeError, ValueError):
+                                pass
+                    _v3_positions = _ap.get("positions", [])
+                    if isinstance(_v3_positions, list):
+                        for p in _v3_positions:
+                            if isinstance(p, dict):
+                                try:  # noqa: SIM105
+                                    _ap_tickets.add(int(p.get("ticket", 0)))
+                                except (TypeError, ValueError):
+                                    pass
+                    _ap_tickets.discard(0)  # remove any zero placeholder
             _mt5_positions = mt5_worker.positions_get(symbol=config.symbol) or []
             _mt5_tickets = {p.ticket for p in _mt5_positions}
             _orphans = _mt5_tickets - _ap_tickets - set(state.known_open_tickets.keys())
             if _orphans:
+                # FIX-20260601-040: HARD_BLOCK → adopt-and-continue.
+                # Previously the system refused to start when it found a
+                # position in MT5 that wasn't in the state file or known_open
+                # tracker.  This caused crash-loops whenever the v2→v3 state
+                # migration left orphan detection blind (see FIX-036/040).
+                # Now we adopt the orphan into managed tracking — the exit
+                # watchdog will handle it normally.  If it's a ghost, it gets
+                # closed.  If it's real, management resumes.
+                for _ot in sorted(_orphans):
+                    state.known_open_tickets[_ot] = {
+                        "source": "orphan_adopted",
+                        "adopted_at": _utc_iso(),
+                    }
                 print(
                     json.dumps(
                         {
-                            "event": "orphan_position_mismatch",
+                            "event": "orphan_position_adopted",
                             "time": _utc_iso(),
-                            "severity": "HARD_BLOCK",
-                            "orphan_tickets": sorted(_orphans),
+                            "severity": "WARNING",
+                            "adopted_tickets": sorted(_orphans),
                             "mt5_tickets": sorted(_mt5_tickets),
                             "active_position_tickets": sorted(_ap_tickets),
                             "known_open_tickets": sorted(state.known_open_tickets.keys()),
-                            "action": "refusing_to_start",
+                            "action": "adopted_into_managed_tracking",
+                            "note": (
+                                "Orphan positions from MT5 adopted. "
+                                "Exit watchdog will manage them normally. "
+                                "If positions are already closed on MT5, "
+                                "they will be cleaned up on the next cycle."
+                            ),
                         },
                         ensure_ascii=False,
                     ),
                     flush=True,
                 )
-                return state, False  # refuse to start
         except json.JSONDecodeError:
             print(
                 json.dumps(
@@ -2423,7 +2694,12 @@ def execute_live_cycle(
                                     _strategy, float(_pnl)
                                 )
                             except Exception:
-                                pass
+                                logger.warning(
+                                    "PortfolioRiskController.update_returns failed "
+                                    "strategy=%s pnl=%s",
+                                    _strategy,
+                                    _pnl,
+                                )
 
                     # ── Collect for per-strategy budget recording (processed after
                     #     strategies are built, since budgets live on StrategyLine) ──
@@ -2865,6 +3141,10 @@ def execute_live_cycle(
                     _log_cycle_end(state.loop_iteration)
                     return state, True  # market closed — skip entire cycle
 
+        # Phase C: micro_feature_dict needed by management phase (OFI partial TP).
+        # Initialised None here; populated by feature computation below on each cycle.
+        micro_feature_dict: dict[str, float] | None = None
+
         # ── Global P&L settlement anchor (护栏二: 唯一结算点) ──
         # All safety guards have passed.
         # Step A: Update MFE/MAE for all pending signals + decrement TTL (Track 2).
@@ -2904,9 +3184,19 @@ def execute_live_cycle(
                         daily_feature_provider=daily_feature_provider,
                         pnl_ledger=pnl_ledger,
                         ticket=_pm_pos.ticket,
+                        micro_feature_dict=micro_feature_dict,
                     )
             except Exception:
-                pass
+                logger.exception(
+                    "Management phase aborted for ticket=%s — position state not updated",
+                    _pm_pos.ticket,
+                )
+                _ah = getattr(state, "alert_hub", None)
+                if _ah is not None:
+                    _ah.send_critical(
+                        "management_phase_failure",
+                        {"ticket": _pm_pos.ticket, "cycle": state.loop_iteration},
+                    )
             # Persist position state every N cycles (trail steps, breakeven, etc.)
             if state.loop_iteration % 5 == 0 and state.position_manager is not None:
                 with log_and_continue(component="PositionState:periodic_save"):
@@ -3029,7 +3319,7 @@ def execute_live_cycle(
     # when every strategy is at max positions.  A stale store silently degrades
     # signal quality on the next cycle that DOES trade.
     micro_sequences: dict[str, np.ndarray] = {}
-    micro_feature_dict: dict[str, float] | None = None
+    # micro_feature_dict initialised above (before management phase) — reused here
     from core.features.schemas.registry import get_schema_dimension as _schema_dim
 
     if config.no_mt5:
@@ -3083,9 +3373,9 @@ def execute_live_cycle(
             from core.execution.conformal_calibrator import ConformalCalibrator
 
             _cal = ConformalCalibrator(
-                state_path="data/conformal_calibrator_state.json",
+                state_path=f"{config.base_dir}/conformal_calibrator_state.json",
             )
-            _cal.cold_start_from_journal("data/live_trade_journal.jsonl")
+            _cal.cold_start_from_journal(f"{config.base_dir}/live_trade_journal.jsonl")
         except Exception as _cal_exc:
             print(
                 json.dumps(
@@ -3104,7 +3394,7 @@ def execute_live_cycle(
             from core.execution.meta_filter_gate import MetaFilterGate
 
             _mg = MetaFilterGate(
-                model_dir="data/models/meta_filter_v3",
+                model_dir=f"{config.base_dir}/models/meta_filter_v3",
                 threshold=META_FILTER_GATE_THRESHOLD,
                 calibrator=_cal,
             )
@@ -3270,7 +3560,7 @@ def execute_live_cycle(
                 if len(state._recent_atr_values) > 50:
                     state._recent_atr_values.pop(0)
         except Exception:
-            pass
+            logger.warning("Regime detector update failed — using stale regime values")
 
     # ── Feature gate: block garbage-in before it becomes garbage-out ──
     if not config.no_mt5:
@@ -3316,7 +3606,9 @@ def execute_live_cycle(
         if broker is not None:
             _account_equity = broker.get_account_equity()
     except Exception:
-        pass
+        logger.warning(
+            "Broker equity fetch failed — falling back to MT5 direct query"
+        )
     if _account_equity is None and mt5_worker is not None:
         with FaultTolerantContext(
             level=FaultLevel.CRASH,
@@ -3345,6 +3637,7 @@ def execute_live_cycle(
                 min_lot=config.min_lot,
                 max_lot=config.max_lot,
                 lot_step=config.lot_step,
+                symbol=config.symbol,
             )
             _vol_targeted = True
 
@@ -3354,6 +3647,7 @@ def execute_live_cycle(
 
         # Partition brains into contract groups and build strategy lines
         strategies = _build_strategy_lines(brains, config)
+        state._strategies = strategies  # FIX-072: stash for execution state persistence
 
         # ── Feed pending budget records from reconciliation ──
         if state._pending_budget_records:
@@ -3677,7 +3971,17 @@ def execute_live_cycle(
                                 _log_cycle_end(state.loop_iteration)
                                 return state, True
                     except Exception:
-                        pass  # force-close dispatch failure → skip, next cycle retries
+                        logger.exception(
+                            "Force-close dispatch orchestration failed ticket=%s",
+                            _pos.ticket,
+                        )
+                        _ah = getattr(state, "alert_hub", None)
+                        if _ah is not None:
+                            _ah.send_critical(
+                                "force_close_dispatch_failed",
+                                {"ticket": _pos.ticket, "cycle": state.loop_iteration},
+                            )
+                        # Continue to next position — do not abandon the cycle
 
                 # Feature vector quality check
                 fv_check = check_feature_vector(feature_vector)
@@ -3696,7 +4000,15 @@ def execute_live_cycle(
                     _log_cycle_end(state.loop_iteration)
                     return state, True  # skip cycle on bad features
             except Exception:
-                pass
+                logger.exception("Feature vector quality check crashed — halting cycle")
+                _ah = getattr(state, "alert_hub", None)
+                if _ah is not None:
+                    _ah.send_critical(
+                        "feature_vector_check_crash",
+                        {"cycle": state.loop_iteration},
+                    )
+                _log_cycle_end(state.loop_iteration)
+                return state, True  # skip cycle — garbage features would corrupt inference
 
         # ── Cut 1 + 2: Initialize cooldown registry & family entry tracker ──
         if state._cooldown_registry is None:
@@ -3708,6 +4020,17 @@ def execute_live_cycle(
 
             state._family_entry_tracker = FamilyEntryTracker()
 
+        # ── FIX-20260603-072: restore execution guard state from disk ──
+        # Runs once after lazy-init above.  Silently passes if no persisted
+        # state exists (first run or stale >24h snapshot).
+        if state.loop_iteration == 1 and state._cooldown_registry is not None:
+            try:
+                from core.runtime.execution_state import restore_execution_state
+
+                restore_execution_state(state, strategies, data_dir=config.base_dir)
+            except Exception:
+                pass
+
         # Portfolio risk controller (persist for VaR/correlation tracking) + execution queue
         if state.portfolio_risk_controller is None:
             state.portfolio_risk_controller = PortfolioRiskController(
@@ -3715,6 +4038,7 @@ def execute_live_cycle(
                 max_net_exposure=config.portfolio_max_net,
                 max_same_direction=config.portfolio_max_same_dir,
                 netting_mode=config.portfolio_netting_mode,
+                symbol_contract_size=config.contract_size,  # FIX-20260601-037: BTC=1.0, XAU=100.0
             )
         portfolio_risk = state.portfolio_risk_controller
         exec_queue = ExecutionQueue(
@@ -3910,7 +4234,7 @@ def execute_live_cycle(
                 entry_ctx = getattr(decision, "entry_context", None) or {}
                 brain_preds = entry_ctx.get("brain_predictions", [])
                 for bp in brain_preds:
-                    try:
+                    try:  # noqa: SIM105
                         state.signal_health_monitor.feed_prediction(
                             up_prob=float(bp.get("up_prob", 0.5)),
                             down_prob=float(bp.get("down_prob", 0.5)),
@@ -3935,6 +4259,10 @@ def execute_live_cycle(
                     mid=_entry_price,
                     entry_half_life=getattr(_d, "entry_half_life", 0.0),
                     timeframe_minutes=5.0,
+                    sl_cooldown=config.reentry_sl_cooldown,
+                    sl_penalty=config.reentry_sl_penalty,
+                    bleed_cooldown=config.reentry_bleed_cooldown,
+                    bleed_penalty=config.reentry_bleed_penalty,
                 )
                 # ── Diagnostic: log every re-entry check ──
                 _last_exit = _rs.last_exit
@@ -3953,6 +4281,11 @@ def execute_live_cycle(
                             "consecutive_same_dir": int(_cons_count_f),
                             "elapsed_since_exit_s": (
                                 round(time.time() - _last_exit.timestamp, 1) if _last_exit else -1
+                            ),
+                            "_diag_time_now": time.time(),
+                            "_diag_exit_ts": _last_exit.timestamp if _last_exit else -1,
+                            "_diag_exit_ts_stale": (
+                                (time.time() - _last_exit.timestamp) > 86400 if _last_exit else False
                             ),
                             "last_exit_category": _last_exit.category if _last_exit else "none",
                             "last_exit_reason": (_last_exit.reason[:60]) if _last_exit else "",
@@ -4136,6 +4469,22 @@ def execute_live_cycle(
                 # state.cycle_count 由外层 live_intent_loop.py 统一递增，
                 # 避免重复递增导致状态保存间隔/对账触发/冷却计时偏移。
 
+                # ── FIX-20260602-059: real-time trade notification ──
+                for dr in dispatch_results:
+                    if not dr.dispatched:
+                        continue
+                    _ah = getattr(state, "alert_hub", None)
+                    if _ah is not None:
+                        import contextlib
+                        with contextlib.suppress(Exception):
+                            _ah.notify_trade(
+                                action="open" if dr.reason != "net_out_close" else "close",
+                                symbol=config.symbol,
+                                side=dr.direction,
+                                volume=dr.volume,
+                                price=dr.price if hasattr(dr, "price") else None,
+                            )
+
             for dr in dispatch_results:
                 print(
                     json.dumps(
@@ -4151,6 +4500,34 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
+
+            # ── FIX-20260603-067 P2: gate telemetry per dispatch result ──
+            for dr in dispatch_results:
+                _sname = dr.strategy_name
+                _reason = dr.reason if not dr.dispatched else "dispatched"
+                if _sname not in state._gate_stats:
+                    state._gate_stats[_sname] = {}
+                state._gate_stats[_sname][_reason] = (
+                    state._gate_stats[_sname].get(_reason, 0) + 1
+                )
+            state._gate_stats_cycles += 1
+            if state._gate_stats_cycles >= 12:
+                _tp = Path(config.base_dir) / "reports" / "telemetry_gates.jsonl"
+                try:
+                    _tp.parent.mkdir(parents=True, exist_ok=True)
+                    _payload = {
+                        "event": "gate_telemetry",
+                        "time": _utc_iso(),
+                        "cycles": state._gate_stats_cycles,
+                        "symbol": config.symbol,
+                        "gates": state._gate_stats,
+                    }
+                    with open(_tp, "a", encoding="utf-8") as _tf:
+                        _tf.write(json.dumps(_payload, ensure_ascii=False) + "\n")
+                except OSError:
+                    pass
+                state._gate_stats.clear()
+                state._gate_stats_cycles = 0
 
             # ── Cut 2: Record family entries for dispatched positions ──
             if state._family_entry_tracker is not None:
@@ -4188,6 +4565,7 @@ def execute_live_cycle(
                             feature_vector,
                             micro_feature_vector,
                             mid_price,
+                            daily_feature_vector=daily_feature_vector,
                         )
                         _record_brain_outcomes(strategy_proposals, dr.direction, "pending", tracker)
                     except Exception as _bi_exc:
@@ -4324,6 +4702,9 @@ def execute_live_cycle(
                             current_high=entry_price,
                             partial_tp_r=_ptp_r,
                             partial_tp_ratio=_ptp_ratio,
+                            # Phase C: Microstructure-aware partial TP (OFI-based)
+                            ofi_partial_tp_threshold=_tp_cfg.get("ofi_partial_tp_threshold", 0.0),
+                            ofi_partial_tp_r_mult=_tp_cfg.get("ofi_partial_tp_r_mult", 0.5),
                             strategy_name=dr.strategy_name,
                             # Phase B: TrailPolicy from live.yaml exit.* — single source of truth for Risk Exit
                             trail_policy=TrailPolicy(
@@ -4442,7 +4823,9 @@ def execute_live_cycle(
                             "opposing_brains": [],
                         }
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Shadow verification registration failed strategy=%s", sname
+                    )
 
         if config.multi_strategy_enabled:
             _log_cycle_end(state.loop_iteration)
@@ -4596,7 +4979,7 @@ def execute_live_cycle(
                                     flush=True,
                                 )
                     except Exception:
-                        pass
+                        logger.warning("Intraday drawdown recovery check failed")
 
                 _fv = check_feature_vector(feature_vector)
                 if not _fv.get("passed"):
@@ -4642,26 +5025,23 @@ def execute_live_cycle(
                             prop = None
                 else:
                     prop = None
-            elif schema_id in ("daily_swing_24", "swing_24", "swing_enhanced_35"):
-                # Swing brains use D1 daily features; swing_enhanced_35 adds micro+TF
+            elif "swing" in schema_id or "daily" in schema_id:
+                # FIX-20260531-021: Data-driven assembly via schema registry
                 if daily_feature_vector is not None:
                     prop = None  # pre-initialise for DEGRADE
                     with FaultTolerantContext(
                         level=FaultLevel.DEGRADE,
                         component="EntryBrain:SwingBrain",
                     ):
-                        if schema_id == "swing_enhanced_35":
-                            daily_arr = np.asarray(daily_feature_vector, dtype=np.float64).ravel()
-                            if micro_feature_vector is not None:
-                                micro_arr = np.asarray(
-                                    micro_feature_vector, dtype=np.float64
-                                ).ravel()
-                            else:
-                                micro_arr = np.zeros(9, dtype=np.float64)
-                            tf_ou, tf_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
-                            fv = np.concatenate([daily_arr[:24], micro_arr[:9], [tf_ou, tf_hurst]])
-                        else:
-                            fv = daily_feature_vector
+                        tf_ou, tf_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
+                        from core.features.schemas.registry import assemble_swing_features
+
+                        fv = assemble_swing_features(
+                            schema_id,
+                            daily_features=daily_feature_vector,
+                            micro_features=micro_feature_vector,
+                            tf_ou=tf_ou, tf_hurst=tf_hurst,
+                        )
                         raw = b_info["adapter"].infer(fv)
                         prop = b_info["adapter"].get_signal(raw)
                 else:
@@ -4721,7 +5101,7 @@ def execute_live_cycle(
                         entry_slippage=0.10,
                     )
                 except Exception:
-                    pass
+                    logger.warning("PnL ledger signal recording failed (multi-strategy)")
         elif proposal is not None:
             try:
                 _single_brain_id2: str = str(
@@ -4739,7 +5119,7 @@ def execute_live_cycle(
                     entry_slippage=0.10,
                 )
             except Exception:
-                pass
+                logger.warning("PnL ledger signal recording failed (legacy)")
 
     # ── Regime-aware direction bias (legacy path) ──
     # Uses H1 trend from RegimeGate when available, falls back to
@@ -5183,7 +5563,7 @@ def execute_live_cycle(
                                 if t is not None and isinstance(t, int) and t > 0:
                                     pm_ticket = t
                         except Exception:
-                            pass
+                            logger.warning("Intent ID lookup failed for dispatch attribution")
                         break
                 if pm_ticket is not None:
                     # Build entry consensus snapshot
@@ -5235,7 +5615,7 @@ def execute_live_cycle(
 
                             _pm_strat_name = _M2S.get(dispatch_magic, "")
                         except Exception:
-                            pass
+                            logger.warning("Magic-to-strategy lookup failed for journal attribution")
 
                     state.position_manager.register_position(
                         ticket=pm_ticket,
@@ -5309,7 +5689,7 @@ def execute_live_cycle(
                                         rec["strategy"] = _M.get(_j_magic, "")
                                     state.known_open_tickets[ticket] = rec
                         except Exception:
-                            pass
+                            logger.warning("Open ticket journal enrichment failed ticket=%s", ticket)
                         break
             except Exception:
                 pass

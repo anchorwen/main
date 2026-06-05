@@ -56,13 +56,14 @@ class MT5Worker:
     # Seconds the worker loop waits on an empty queue before checking _running.
     _QUEUE_POLL_INTERVAL = 1.0
 
-    def __init__(self, alert_hub: Any = None) -> None:
+    def __init__(self, alert_hub: Any = None, *, symbol: str = "XAUUSDc") -> None:
         self._queue: queue.Queue = queue.Queue(maxsize=1000)
         self._running = False
         self._ready = threading.Event()
         self._thread: threading.Thread | None = None
         self._mt5: Any = None
         self._mt5_init_kwargs: dict[str, Any] = {}
+        self._default_symbol: str = symbol  # FIX-20260601-031: no hardcoded symbol
 
         # Per-command execution tracking (for hung-MT5 detection)
         self._command_in_flight: str | None = None
@@ -107,7 +108,7 @@ class MT5Worker:
         self._running = False
         if self._thread and self._thread.is_alive():
             # Send poison pill and wait
-            try:
+            try:  # noqa: SIM105
                 self._queue.put_nowait(None)
             except queue.Full:
                 pass
@@ -395,8 +396,8 @@ class MT5Worker:
         ok = mt5.initialize(**kwargs)
         if ok:
             self._mt5 = mt5
-            try:
-                self._mt5.symbol_select("XAUUSDc", True)
+            try:  # noqa: SIM105
+                self._mt5.symbol_select(self._default_symbol, True)
             except Exception:
                 pass
         else:

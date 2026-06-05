@@ -65,7 +65,7 @@ def _build_barrier_labels_array(
     spread_points: float = 30,
     slippage_points: float = 10,
     tick_value: float = 0.01,
-    tick_size: float = 0.001,
+    tick_size: float = 0.01,
     volume: float = 0.01,
 ) -> BarrierResult:
     """Build barrier labels for a single entry point.
@@ -259,7 +259,7 @@ class LabelContract:
     spread_points: float = 30  # raw MT5 points (not pips)
     slippage_points: float = 10  # conservative estimate for normal market conditions
     tick_value: float = 0.01  # SYMBOL_TRADE_TICK_VALUE for XAUUSDc
-    tick_size: float = 0.001  # SYMBOL_TRADE_TICK_SIZE for XAUUSDc
+    tick_size: float = 0.01  # SYMBOL_TRADE_TICK_SIZE for XAUUSDc (MT5: 0.01, not 0.001)
 
     # Metadata
     timeout_label: str = "timeout"
@@ -295,7 +295,7 @@ class LabelContract:
             spread_points=float(data.get("spread_points", data.get("spread_pips", 30))),
             slippage_points=float(data.get("slippage_points", data.get("slippage_pips", 10))),
             tick_value=float(data.get("tick_value", 0.01)),
-            tick_size=float(data.get("tick_size", 0.001)),
+            tick_size=float(data.get("tick_size", 0.01)),
             fallback_atr=float(data["fallback_atr"]) if "fallback_atr" in data else None,
             timeout_label=data.get("timeout_label", "timeout"),
             metadata=data.get("metadata", {}),

@@ -45,7 +45,11 @@ DecisionIntent → DecisionCompiler → IntentMessageBuilder → CommunicationEn
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
-| FIX-20260529-040 | 2026-05-29 | cursor-agent | — | CircuitBreaker.trip(reason) + _last_trip_reason field: enables instant OPEN on CRITICAL alert (not gradual failure_count accumulation). Used by LiveAlertHub for alert→kill-switch loop. | RC-12 |
+| FIX-20260531-003 | 2026-05-31 | cursor-agent | — | DistributedLock .tmp file cleanup: `FileLock.acquire()` left stale `.tmp` staging file after failed acquire (rename failed → OSError). Added `tmp.unlink(missing_ok=True)` in OSError handler. Prevents lock directory clutter and potential confusion in stale lock detection. | RC-06 (resource-leak) |
+| FIX-20260529-040 | 2026-05-29 | cursor-agent | — | CircuitBreaker.trip(reason) + _last_trip_reason field: enables instant OPEN on CRITICAL alert | RC-12 |
+| FIX-20260601-045 | 2026-06-01 | cursor-agent | — | **bar_sync_state version field**: added `schema_version: bar_sync_state.v1`. v2→v3 migration complete. | RC-09 |
+| FIX-20260601-043 | 2026-06-01 | cursor-agent | — | **Journal lock gap**: `journal_cleanup.py` writers now use FileLock. `_load_journal()` logs parse errors. | RC-04 |
+| FIX-20260601-042 | 2026-06-01 | cursor-agent | — | **bar_sync fragility root fix**: 8 silent except:pass → logged events. Session-aware (market_type param). Real-time lag via current_lag_bars(). Degraded sentinel marked _data_incomplete. | RC-07 |
 | FIX-20260525-011 | 2026-05-25 | cursor-agent | — | BarSyncPoller timeout/timeframe decoupling: DEFAULT_TIMEOUT_SECONDS was hardcoded 360s safe for M5 but insufficient for H1+ (5400s bar period). Dynamic floor: `max(360, int(bar_seconds × 1.5))` — M5=450s, M15=1350s, H1=5400s, H4=21600s. Formula enforced in __init__ using existing `_bar_seconds_for()`. | RC-05 (boundary-error: timeout-timeframe coupling) |
 | FIX-20260525-009 | 2026-05-25 | cursor-agent | — | MT5 worker refactoring: event_bar_sync.py — BarSyncPoller accepts optional mt5_worker, hardcoded TF constants, worker-aware error recovery (reconnect instead of shutdown+init). | RC-04, RC-06 |
 | FIX-20260524-014 | 2026-05-24 | cursor-agent | — | MODULE_SOURCE_MAP: add scripts/validators/journal_validator.py. Mypy fixes: journal_validator (1→0 — getattr for tuple.__name__), communication_operations_service (1→0 — assert posture is not None). | RC-02 |

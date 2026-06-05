@@ -3,10 +3,16 @@
 Combines PnL metrics (Sharpe, win rate, profit factor) with governance
 status and vote weight to produce a single composite score per brain.
 
-Usage::
+Usage (XAU)::
 
     pnl_store = BrainPnLStore.load("data/brain_pnl_ledger.json")
     governance = GovernanceService.load("data/governance_state.json")
+
+Usage (BTC)::
+
+    pnl_store = BrainPnLStore.load("data_btc/brain_pnl_ledger.json")
+    governance = GovernanceService.load("data_btc/governance_state.json")
+
     leaderboard = BrainLeaderboard()
     rankings = leaderboard.rank(pnl_store.get_all_metrics(), governance.get_all_states())
     for r in rankings:

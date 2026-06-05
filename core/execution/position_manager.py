@@ -78,6 +78,9 @@ class ActivePosition:
     partial_tp_triggered: bool = False  # partial take-profit already executed
     partial_tp_r: float = 0.0  # R-multiple at which to trigger partial TP (0=disabled)
     partial_tp_ratio: float = 0.5  # fraction of volume to close at partial TP
+    # Phase C: Microstructure-aware partial TP thresholds
+    ofi_partial_tp_threshold: float = 0.0  # |OFI_Z| threshold (0=disabled, e.g. 2.5)
+    ofi_partial_tp_r_mult: float = 0.5  # R-multiplier when OFI triggered (0.5 = half normal)
     confidence_ema: float = 0.0  # EMA-smoothed confidence for noise-immune exit
     confidence_alpha: float = 0.4  # EMA smoothing factor (0.4 ≈ 3 cycles to stabilise)
     consecutive_flips: int = 0  # per-position flip confirmation counter
@@ -124,12 +127,47 @@ class ActivePosition:
 class ActivePositionManager:
     """Orchestrates dynamic exit logic for multiple concurrent positions.
 
-    Each position is tracked independently — trail state, flip counters,
-    confidence EMA, and model horizons are all per-position.  Recovery
-    scans ALL MT5 positions so no ticket is left unmanaged.
+    .. rubric:: Architectural Roadmap (1,720 lines — high essential complexity)
 
-    All numeric parameters are defaults; they can be overridden per instance
-    from CLI flags or ``live.yaml``.
+    This class is large but cohesive.  State is encapsulated in
+    ``ActivePosition`` dataclass instances — no cross-boundary pollution.
+    Big-bang refactoring is NOT recommended.
+
+    **Domain boundaries**::
+
+        ── CRUD ──
+        register_position        (105L)  Entry registration + PnL mapping
+        update_prices             (44L)  Price/trail refresh per cycle
+        _update_single_position   (60L)  Single-position state machine
+        clear_position            (23L)  Close + cleanup
+
+        ── Trail Stop (delegated to TrailStopEngine) ──
+        compute_trail_stop, should_breakeven, should_partial_tp  (thin wrappers)
+
+        ── Exit Evaluation (called from _execute_management_phase) ──
+        Actual evaluation order in live_cycle.py:
+          1. should_exit_bleed          (L1471)  Bleed-stop — hard SL
+          2. should_exit_ou_based       (L1525)  OU mean-reversion signal
+          3. evaluate_brain_exit        (L1564)  Brain consensus flip + EMA decay
+             └─ _toxicity_veto          (gate)   Blocks non-toxic exits in protected period
+          4. evaluate_meta_exit         (L1642)  Meta-model multi-factor gate
+             └─ _toxicity_veto          (gate)
+          5. should_exit_hesitation     (L1697)  No breakeven within N cycles
+             └─ _toxicity_veto          (gate)
+          6. should_exit_time_based     (L1736)  Max hold time exceeded
+             └─ _toxicity_veto          (gate)
+
+        ── Other exit methods (called from specific strategy paths) ──
+        should_exit_zscore_dynamic, should_handoff_ou_to_trail,
+        check_volume_climax, should_enter_inflection
+
+        ── Persistence ──
+        save_state   (62L)  Serialize all positions to JSON
+        load_state  (166L)  Deserialize + hydrate — Strangler Fig candidate
+
+    **Strangler Fig candidates** (extract when next modified):
+      - ``load_state()`` → ``PositionHydrator`` class
+      - ``register_position()`` → ``EntryOperator`` class
     """
 
     def __init__(
@@ -139,6 +177,7 @@ class ActivePositionManager:
         trail_atr_mult_low: float = 1.5,
         trail_atr_mult_high: float = 3.0,
         breakeven_threshold_atr: float = 1.0,
+        trail_activation_atr: float = 1.0,  # FIX-064: trail only activates after this many ATRs of profit
         brain_reeval_interval: int = 5,
         flip_exit_threshold: float = 0.5,
         confidence_drop_threshold: float = 0.10,
@@ -194,6 +233,7 @@ class ActivePositionManager:
                 trail_atr_mult_low=trail_atr_mult_low,
                 trail_atr_mult_high=trail_atr_mult_high,
                 breakeven_threshold_atr=breakeven_threshold_atr,
+                trail_activation_atr=trail_activation_atr,  # FIX-064
                 min_step=min_step,
                 min_trail_mult=min_trail_mult,
                 max_lock_atr=max_lock_atr,
@@ -309,6 +349,8 @@ class ActivePositionManager:
         current_high: float | None = None,
         partial_tp_r: float = 0.0,
         partial_tp_ratio: float = 0.5,
+        ofi_partial_tp_threshold: float = 0.0,
+        ofi_partial_tp_r_mult: float = 0.5,
         strategy_name: str = "",
         trail_atr_mult: float | None = None,
         trail_atr_mult_low: float | None = None,
@@ -370,6 +412,8 @@ class ActivePositionManager:
             trail_multiplier=_trail,
             partial_tp_r=partial_tp_r,
             partial_tp_ratio=partial_tp_ratio,
+            ofi_partial_tp_threshold=ofi_partial_tp_threshold,
+            ofi_partial_tp_r_mult=ofi_partial_tp_r_mult,
             strategy_name=strategy_name,
             expected_remaining_volume=volume,
             trail_atr_mult=_trail,
@@ -525,6 +569,51 @@ class ActivePositionManager:
             remain_vol = round(pos.volume - close_vol, 2)
             return True, max(0.01, close_vol), max(0.01, remain_vol)
         return False, 0.0, 0.0
+
+    def should_micro_partial_tp(
+        self,
+        mid: float,
+        ofi_z: float,
+        ticket: int | None = None,
+    ) -> tuple[bool, float, float]:
+        """Check if microstructure (OFI) signals justify early partial TP.
+
+        Phase C Gate #3: When OFI z-score is extreme (signalling liquidity
+        crunch / order flow toxicity), trigger partial TP at a lower
+        R-multiple threshold than the normal static threshold.
+
+        Args:
+            mid: Current mid price.
+            ofi_z: OFI z-score from microstructure computer (>2.0 = bearish
+                   toxicity, <-2.0 = bullish toxicity).
+            ticket: Position ticket (uses primary if None).
+
+        Returns:
+            (should_trigger, close_volume, remaining_volume)
+        """
+        pos = self._get_pos(ticket)
+        if pos is None or pos.partial_tp_triggered or pos.partial_tp_r <= 0:
+            return False, 0.0, 0.0
+
+        # Read microstructure thresholds from position state
+        ofi_threshold: float = float(getattr(pos, "ofi_partial_tp_threshold", 0.0) or 0.0)
+        ofi_r_mult: float = float(getattr(pos, "ofi_partial_tp_r_mult", 0.5) or 0.5)
+        if ofi_threshold <= 0:
+            return False, 0.0, 0.0
+
+        # Only trigger if OFI exceeds threshold AND R-multiple is above
+        # reduced floor (e.g. 0.5x normal partial_tp_r when OFI > 2.5)
+        if abs(ofi_z) < ofi_threshold:
+            return False, 0.0, 0.0
+
+        r = self._compute_r_multiple(mid)
+        reduced_r = pos.partial_tp_r * ofi_r_mult
+        if r < reduced_r:
+            return False, 0.0, 0.0
+
+        close_vol = round(pos.volume * pos.partial_tp_ratio, 2)
+        remain_vol = round(pos.volume - close_vol, 2)
+        return True, max(0.01, close_vol), max(0.01, remain_vol)
 
     def _compute_r_multiple(self, mid: float, ticket: int | None = None) -> float:
         """Current R-multiple (fraction of initial risk)."""
@@ -1443,14 +1532,25 @@ class ActivePositionManager:
 
         MT5 is the authoritative source for physical state (price, SL, TP, volume).
         Python persists only intent-state that cannot be recovered from MT5.
+
+        FIX-20260601-036: when all positions are gone, DELETE the state file
+        instead of returning early.  A stale file on disk would be re-loaded
+        on next restart and incorrectly restored if the position still exists
+        in MT5 (net_exposure → new trades blocked).
         """
         import json as _json
         from pathlib import Path as _Path
 
+        p = _Path(save_path)
         if not self._positions:
+            # No open positions → remove stale state file
+            try:
+                if p.exists():
+                    p.unlink()
+            except OSError:
+                pass
             return
 
-        p = _Path(save_path)
         self._last_state_path = str(p)
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
@@ -1462,6 +1562,8 @@ class ActivePositionManager:
                         "cycles_held": pos.cycles_held,
                         "breakeven_triggered": pos.breakeven_triggered,
                         "partial_tp_done": pos.partial_tp_triggered,
+                        "entry_atr": pos.entry_atr,  # FIX-018: persist for R-multiple calc across restarts
+                        "entry_price": pos.entry_price,  # FIX-018: needed for PnL estimation
                         "brain_consensus_hash": self._compute_consensus_hash(pos),
                     }
                 )
@@ -1507,7 +1609,7 @@ class ActivePositionManager:
         try:
             age_h = (time.time() - p.stat().st_mtime) / 3600
             if age_h > max_age_hours:
-                try:
+                try:  # noqa: SIM105
                     p.unlink()  # clean up stale file
                 except OSError:
                     pass
@@ -1578,7 +1680,7 @@ class ActivePositionManager:
             pos = ActivePosition(
                 ticket=ticket,
                 side="unknown",  # filled by MT5 recovery
-                entry_price=0.0,  # filled by MT5 recovery
+                entry_price=float(d.get("entry_price", 0.0)),  # FIX-018: persisted since v3
                 volume=0.0,  # filled by MT5 recovery
                 initial_sl=0.0,
                 initial_tp=0.0,
@@ -1586,7 +1688,7 @@ class ActivePositionManager:
                 current_tp=0.0,
                 highest_high=0.0,  # filled by MT5 recovery
                 lowest_low=0.0,  # filled by MT5 recovery
-                entry_atr=2.0,
+                entry_atr=float(d.get("entry_atr", 2.0)),  # FIX-018: persisted since v3
                 entry_cycle=0,
                 cycles_held=int(d.get("cycles_held", 0)),
                 breakeven_triggered=bool(d.get("breakeven_triggered", False)),

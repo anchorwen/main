@@ -44,22 +44,55 @@ class GovernanceService:
 
     # ── persistence ──
 
-    def save(self, path: str | Path) -> Path:
-        """Persist governance state to a JSON file (atomic tmp+replace, thread-safe)."""
-        with self._lock:
-            out = Path(path)
-            out.parent.mkdir(parents=True, exist_ok=True)
-            payload = {
-                "schema_version": GOVERNANCE_STATE_SCHEMA,
-                "brain_states": dict(self._brain_states),
-                "transition_log": list(self._transition_log),
-            }
-            tmp = Path(str(out) + ".tmp")
-            tmp.write_text(
-                json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
+    def save(self, path: str | Path, *, lock_timeout: float = 5.0) -> Path:
+        """Persist governance state to a JSON file.
+
+        Uses cross-process advisory file lock + in-process thread lock +
+        atomic tmp+replace.  Safe for concurrent writers across
+        independent processes.
+
+        Args:
+            path: Target JSON file path.
+            lock_timeout: Max seconds to wait for the cross-process lock.
+                Live daemon callers should pass ``1.0`` to avoid blocking
+                the main cycle.  Offline scripts may pass ``30.0``.
+
+        Raises:
+            RuntimeError: If the cross-process lock cannot be acquired
+                within *lock_timeout* seconds.
+        """
+        from core.infrastructure.distributed_lock import FileLock
+
+        lock = FileLock(
+            name="governance_state",
+            ttl_seconds=max(lock_timeout * 3, 10),
+        )
+        result = lock.acquire(blocking=True, timeout_seconds=lock_timeout)
+
+        if not result.acquired:
+            raise RuntimeError(
+                f"Governance save aborted: lock acquisition timed out "
+                f"({lock_timeout}s) — {result.error}"
             )
-            os.replace(str(tmp), str(out))
-            return out
+
+        try:
+            with self._lock:
+                out = Path(path)
+                out.parent.mkdir(parents=True, exist_ok=True)
+                payload = {
+                    "schema_version": GOVERNANCE_STATE_SCHEMA,
+                    "brain_states": dict(self._brain_states),
+                    "transition_log": list(self._transition_log),
+                }
+                tmp = Path(str(out) + ".tmp")
+                tmp.write_text(
+                    json.dumps(payload, indent=2, ensure_ascii=False, default=str),
+                    encoding="utf-8",
+                )
+                os.replace(str(tmp), str(out))
+                return out
+        finally:
+            lock.release()
 
     @classmethod
     def load(cls, path: str | Path, audit_log: Any = None) -> "GovernanceService":

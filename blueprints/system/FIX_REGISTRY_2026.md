@@ -4,6 +4,107 @@
 
 ## Fix Details
 
+### FIX-20260601-036 — State file staleness: save_state now deletes file when empty
+
+- **Date**: 2026-06-01
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: `core/execution/position_manager.py`, `scripts/live_intent_loop.py`
+- **Description**: Two-part root cause fix for stale `active_position.json` blocking new trades after restart:
+  1. `save_state()` previously returned early when positions dict was empty — the old state file was never deleted. Now explicitly unlinks the file.
+  2. Startup recovery `clear_position()` + runtime `vanished` detection both now call `save_state()` immediately to persist cleanup. Previously, cleanup was in-memory only — a crash before cycle-end save would resurrect the stale position on next restart.
+- **Root Cause**: RC-03 (state-leak) — in-memory cleanup not persisted to disk. State file outlived position lifetime.
+- **Prevention**: MT5 is ground truth — state file is always deleted when positions hit zero. Every `clear_position` is followed by immediate `save_state`.
+
+### FIX-20260601-031 — MT5Worker hardcoded symbol_select removed
+
+- **Date**: 2026-06-01
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-orders
+- **Files**: `core/execution/mt5_worker.py`, `scripts/live_intent_loop.py`
+- **Description**: `MT5Worker.__init__` now accepts `symbol` parameter (default `"XAUUSDc"` for backward compat). `_mt5_initialize` uses `self._default_symbol` instead of hardcoded `"XAUUSDc"`. `live_intent_loop.py` passes `symbol=args.symbol`.
+- **Root Cause**: RC-09 (config-drift) — mt5_worker had hardcoded XAU symbol_select; BTC pipeline would select wrong symbol on reconnect.
+- **Prevention**: All symbol-aware modules must accept `symbol` as a constructor parameter. Defense 1 (ASSET_REGISTRY) provides SSOT.
+
+### FIX-20260601-032 — pre_trade_guards contract_size auto-resolution
+
+- **Date**: 2026-06-01
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution-guards
+- **Files**: `core/execution/pre_trade_guards.py`, `core/runtime/live_cycle.py`, `core/execution/strategy_line.py`
+- **Description**: `compute_position_size` and `check_pre_trade_var` now accept optional `symbol` param. When provided, `contract_size` is auto-resolved from ASSET_REGISTRY, overriding the default `100.0`. Both callers (live_cycle.py, strategy_line.py) now pass `symbol=config.symbol`.
+- **Root Cause**: RC-06 (contract-violation) — callers who forgot to pass `contract_size` would silently get XAU default (100.0), causing 100× errors for BTC.
+- **Prevention**: Auto-resolution from ASSET_REGISTRY means forgetting `contract_size` is no longer silently wrong for registered symbols. Defense 2 assertion in StrategyLineConfig catches mismatches early.
+
+### FIX-20260601-033 — feedback_loop + daily_ops symbol threading
+
+- **Date**: 2026-06-01
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: feedback-performance
+- **Files**: `scripts/feedback_loop.py`, `scripts/daily_ops.py`
+- **Description**: `feedback_loop.py` now has `--symbol` CLI arg (default `"XAUUSDc"`), passed to `ingest_journal_to_tracker`. `daily_ops.py` `_step_feedback_loop` and `run_daily_ops` accept/forward `symbol` param.
+- **Root Cause**: RC-09 (config-drift) — feedback loop always used XAU symbol for journal ingestion, even when running on BTC data.
+- **Prevention**: Symbol must be explicitly passed from CLI/config to all data pipeline stages.
+
+### FIX-20260601-034 — BrainLifecycleManager brain-directory drift detection (Defense 3)
+
+- **Date**: 2026-06-01
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: deployment-config
+- **Files**: `core/deployment/brain_lifecycle_manager.py`
+- **Description**: `BrainLifecycleManager.__init__` now validates brain directory naming consistency with declared symbol. If live config declares BTC but `brains_dir` path lacks "btc" → `ValueError` at startup. If live config declares XAU but `brains_dir` contains "btc" → `ValueError`.
+- **Root Cause**: RC-09 (config-drift) — implicit `_resolve_brains_dir(base_dir)` mapping created silent brain-path mismatches.
+- **Prevention**: Fail-fast at startup before any trading occurs. Defense 3: explicit injection + startup validation.
+
+### FIX-20260601-035 — Dead config cleanup: pipeline.default_mode
+
+- **Date**: 2026-06-01
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: deployment-config
+- **Files**: `configs/live.yaml`, `configs/live_btc.yaml`
+- **Description**: Removed `pipeline.default_mode: shadow` from both live configs. Grep confirmed no Python code reads this key — it was dead configuration.
+- **Root Cause**: RC-09 (config-drift) — config key added speculatively but never wired to any code path.
+- **Prevention**: Config keys should only be added when the corresponding code path is implemented.
+
+### FIX-20260601-038 — BTC config parameter calibration for ATR scale
+
+- **Date**: 2026-06-01
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: deployment-config
+- **Files**: `configs/live_btc.yaml`
+- **Description**: BTC ATR (~71) is fundamentally different scale from XAU. Three parameters were XAU-calibrated and blocking BTC: `spread_points` 1400→200 (spread_cost dominated raw TP distance), `max_spread_points` 500→3000 (actual BTC spread ~$14=1400pts is legitimate), `min_sl_distance` 200→80 (forced SL wider than natural ATR-based value → R:R collapsed → Kelly negative EV → volume=0).
+- **Root Cause**: RC-05 (boundary-error) — XAU parameters copied without ATR-scale adjustment.
+- **Prevention**: All per-symbol config parameters must be calibrated against the asset's ATR, not copied from XAU.
+
+### FIX-20260601-040 — Orphan detection v2+v3 dual-format + HARD_BLOCK→adopt
+
+- **Date**: 2026-06-01
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: `core/runtime/live_cycle.py`
+- **Description**: Startup orphan detection at line 2324 read only `_ap.get("tickets", [])` (v2 format: flat list of ticket IDs). But `position_manager.save_state()` writes v3 format with `"positions": [{"ticket": N}]`. Since `"tickets"` key never exists in v3 files, `_ap_tickets` was always empty → every MT5 position was flagged as orphan → HARD_BLOCK → shutdown → crash loop. Fixed: (1) dual-format read supporting both v2 `"tickets"` and v3 `"positions"`, (2) HARD_BLOCK changed to WARNING + adopt-into-managed-tracking instead of refusing to start.
+- **Root Cause**: RC-03 (state-leak) — v2→v3 format migration didn't update the orphan detection reader.
+- **Prevention**: All state file readers must support both old and new formats during migration. Version fields in state files (FIX-045) prevent future occurrences.
+
+### FIX-20260601-041 — register_brain hardcoded configs/brains/ path
+
+- **Date**: 2026-06-01
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: deployment-config
+- **Files**: `core/deployment/brain_lifecycle_manager.py`, `configs/live.yaml`
+- **Description**: `register_brain()` at line 528 computed correct `rel_path` from project root, but line 532 wrote `f"configs/brains/{cfg_path.name}"` — hardcoded `configs/brains/` prefix. BTC brains registered from `configs/brains_btc/` got written to live.yaml as `configs/brains/BTC_Swing_V4.json` (wrong path, missing `_btc`). Startup integrity then reported `missing_config_files`. Also, the brain was incorrectly registered in XAU's live.yaml (cross-contamination). Fixed: line 532 now uses computed `rel_path`. Removed stale BTC_Swing_V4 reference from XAU live.yaml.
+- **Root Cause**: RC-09 (config-drift) — hardcoded path string instead of using computed relative path.
+- **Prevention**: Never hardcode `configs/brains/` — always use `cfg_path.relative_to(project_root)`.
+
 ### FIX-20260529-040 — Phase A alert infrastructure: LiveAlertHub + DingTalk + CircuitBreaker.trip()
 
 - **Date**: 2026-05-29

@@ -105,7 +105,7 @@ class DynamicBrainWeighter:
         for p in proposals:
             brain_id = getattr(p, "brain_id", "")
             if brain_id in weights:
-                try:
+                try:  # noqa: SIM105
                     p.vote_weight = weights[brain_id]
                 except Exception:
                     pass  # frozen object — weight accessible via get_summary()

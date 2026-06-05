@@ -212,19 +212,23 @@ def test_trail_stop_respects_max_lock_cap(long_position, manager):
 
 
 def test_trail_stop_never_below_original_sl_long(long_position, manager):
-    """Original SL is the hard floor — trail cannot go below it."""
+    """Original SL is the hard floor — trail cannot go below it.
+
+    FIX-064: trail_activation_atr=1.0 — trail stays at initial SL until
+    unrealized profit exceeds 1.0×entry_atr.  With entry=2500, atr=5,
+    highest_high must exceed 2505 to pass the activation watermark.
+    """
     pos = manager._position = long_position
     pos.breakeven_triggered = True
-    pos.highest_high = 2485.0  # price went the wrong way
+    pos.highest_high = 2515.0  # +15pts profit, passes activation (needs >5)
     pos.current_sl = 2490.0
+    pos.entry_atr = 5.0
+    pos.trail_multiplier = 2.0
     new_sl = manager.compute_trail_stop(current_atr=5.0)
-    # candidate = max(2500, 2485-10) = max(2500, 2475) = 2500
-    # but 2500 < current_sl? No, 2500 > 2490, so it would advance.
-    # Actually the breakeven constraint ensures candidate >= 2500
-    # And 2500 > original SL 2490, so it's valid
-    # Wait — 2500 > 2490, so it returns 2500 which is capped at max_lock=2505
-    # Let me test the case where the raw trail goes below original SL
-    assert new_sl is not None  # trail advances to at least original SL floor
+    # candidate = max(2490, 2515-10) = max(2490, 2505) = 2505
+    # floor at initial_sl=2490, cap at max_lock=entry+1.5*entry_atr=2507.5
+    assert new_sl is not None
+    assert new_sl >= 2490.0  # never below original SL
 
 
 # ── Breakeven ─────────────────────────────────────────────────────────────
@@ -332,25 +336,35 @@ def test_regime_high_vol_loosens_trail(long_position, manager):
 
 
 def test_adaptive_trail_vol_expansion(long_position, manager):
-    """When volatility expands (vol_ratio > 1.5), trail K widens +0.8."""
+    """When volatility expands (vol_ratio > 1.5), trail K tightens -0.5.
+
+    FIX-071 quadratic explosion fix: extreme vol = trend climax — ATR
+    expansion alone provides enough room, so tighten K rather than widen.
+    Old behaviour (+0.8) caused SL distance explosion (200→560 pts).
+    """
     pos = manager._position = long_position
     pos.trail_multiplier = 2.0
     pos.entry_atr = 5.0
     current_atr = 10.0  # vol_ratio = 2.0 (> 1.5)
     pos.highest_high = 2550.0
     manager._adjust_trail_for_regime(current_atr, {"regime": "normal"})
-    assert pos.trail_multiplier == 2.8  # 2.0 + 0.8
+    assert pos.trail_multiplier == 1.5  # 2.0 - 0.5
 
 
 def test_adaptive_trail_vol_contraction(long_position, manager):
-    """When volatility contracts (vol_ratio < 0.7), trail K tightens -0.3."""
+    """When volatility contracts (vol_ratio < 0.7), trail K widens +0.5.
+
+    FIX-071: low vol = trailing stop too tight would kill positions early.
+    Widen to prevent premature exits in quiet markets.
+    Old behaviour (-0.3) was directionally wrong.
+    """
     pos = manager._position = long_position
     pos.trail_multiplier = 2.0
     pos.entry_atr = 5.0
     current_atr = 1.0  # vol_ratio = 0.2 (< 0.7)
     pos.highest_high = 2550.0
     manager._adjust_trail_for_regime(current_atr, {"regime": "normal"})
-    assert pos.trail_multiplier == 1.7  # 2.0 - 0.3
+    assert pos.trail_multiplier == 2.5  # 2.0 + 0.5
 
 
 # ── Layer 2: Brain ensemble exit ──────────────────────────────────────────

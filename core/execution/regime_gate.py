@@ -164,7 +164,9 @@ def compute_continuous_regime_modulation(
     shadow_score = vol_stress * (1.0 - trend_conviction)
     if shadow_score > 0.60:
         activation = "shadow"
-    elif vol_stress > 0.35 or trend_conviction < 0.30:
+    elif (
+        vol_stress > 0.35 or trend_conviction < 0.15
+    ):  # FIX-20260602-053: 0.30→0.15 for BTC compatibility
         activation = "reduced"
     else:
         activation = "full"
@@ -448,17 +450,52 @@ class RegimeGate:
     def feed_h1_bar(self, high: float, low: float, close: float) -> None:
         self._h1.update(close)
 
-    def feed_m5_bars_batch(self, bars: list[dict[str, float]]) -> None:
-        for b in bars:
-            self.feed_m5_bar(
-                high=b.get("high", b["close"]),
-                low=b.get("low", b["close"]),
-                close=b["close"],
-            )
+    @staticmethod
+    def _get_field(bar: Any, field: str, fallback_field: str) -> float:
+        """Extract a field from a bar, supporting both dict and numpy.void."""
+        try:
+            return float(bar[field])
+        except (TypeError, KeyError, ValueError, IndexError):
+            try:
+                return float(bar[fallback_field])
+            except (TypeError, KeyError, ValueError, IndexError):
+                return 0.0
 
-    def feed_h1_bars_batch(self, bars: list[dict[str, float]]) -> None:
+    def feed_m5_bars_batch(self, bars: list[Any]) -> None:
         for b in bars:
-            self._h1.update(b["close"])
+            try:
+                high = self._get_field(b, "high", "close")
+                low = self._get_field(b, "low", "close")
+                close = float(b["close"]) if not hasattr(b, "get") else float(b["close"])
+            except (TypeError, KeyError, ValueError):
+                continue
+            self.feed_m5_bar(high=high, low=low, close=close)
+
+    def feed_h1_bars_batch(self, bars: list[Any]) -> None:
+        for b in bars:
+            try:
+                close = float(b["close"])
+            except (TypeError, KeyError, ValueError):
+                continue
+            self._h1.update(close)
+
+    def feed_h4_bars_batch(self, bars: list[Any]) -> None:
+        """FIX-20260603-063: bootstrap H4 TrendDetector with historical bars."""
+        for b in bars:
+            try:
+                close = float(b["close"])
+            except (TypeError, KeyError, ValueError):
+                continue
+            self._h4.update(close)
+
+    def feed_d1_bars_batch(self, bars: list[Any]) -> None:
+        """FIX-20260603-063: bootstrap D1 TrendDetector with historical bars."""
+        for b in bars:
+            try:
+                close = float(b["close"])
+            except (TypeError, KeyError, ValueError):
+                continue
+            self._d1.update(close)
 
     @property
     def is_ready(self) -> bool:
@@ -664,8 +701,14 @@ class RegimeGate:
             if atr_percentile is not None
             else 0.5
         )
+        # FIX-20260604-086: Macro-Anchor Fusion — strip M5 micro-noise from
+        # global activation.  M5 trend_conviction → 0 in normal choppy markets
+        # → shadow_score > 0.60 → permanent global shadow deadlock.
+        # Max-pool H1 (primary swing anchor) and H4 (macro anchor at 0.7x)
+        # so the system activates when ANY higher timeframe shows conviction.
+        _macro_trend_conviction = max(h1_strength, h4_strength * 0.7)
         modulation = compute_continuous_regime_modulation(
-            trend_strength=m5_strength,
+            trend_strength=_macro_trend_conviction,
             vol_pct=_vpct,
             hurst=m5_hurst,
             vr_z=m5_vr_z,

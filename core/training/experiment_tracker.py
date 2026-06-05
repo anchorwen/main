@@ -245,5 +245,21 @@ class ExperimentTracker:
             f.write(json.dumps(summary, ensure_ascii=False) + "\n")
 
 
-# Module-level singleton for convenience
-tracker = ExperimentTracker(Path("experiments"))
+# Module-level singleton — lazily initialized to avoid import-time
+# filesystem side effects (mkdir, file stat) that could fail in
+# read-only or non-standard CWD environments.
+_tracker: ExperimentTracker | None = None
+
+
+def get_tracker() -> ExperimentTracker:
+    global _tracker
+    if _tracker is None:
+        _tracker = ExperimentTracker(Path("experiments"))
+    return _tracker
+
+
+# Backward-compatible alias — triggers lazy init on first access
+def __getattr__(name: str):
+    if name == "tracker":
+        return get_tracker()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

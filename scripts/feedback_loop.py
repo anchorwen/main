@@ -383,6 +383,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--date", default=None, help="UTC date key; default=today")
     p.add_argument("--dry-run", action="store_true", help="Show what would be applied")
     p.add_argument("--output", type=Path, default=None, help="Write report JSON to file")
+    p.add_argument("--symbol", default="XAUUSDc", help="Trading symbol (XAUUSDc, BTCUSDc)")
     return p
 
 
@@ -404,6 +405,7 @@ def main(argv: list[str] | None = None) -> int:
         brain_id=brain_id,
         date_filter=args.date,
         dry_run=args.dry_run,
+        symbol=args.symbol,
     )
 
     if not args.dry_run and report["updates_applied"] > 0:

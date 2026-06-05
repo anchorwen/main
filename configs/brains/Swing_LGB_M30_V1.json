@@ -1,0 +1,46 @@
+{
+  "schema_version": "brain_registry_entry.v1",
+  "brain_id": "Swing_LGB_M30_V1",
+  "brain_type": "lightgbm_v1",
+  "contract_group": "m30_swing",
+  "training_contract": "m30_swing",
+  "feature_schema": "swing_enhanced_35",
+  "feature_schema_id": "swing_enhanced_35",
+  "model_path": "data/models/lgb_m30/lightgbm_d1_train_lgb.txt",
+  "artifact_path": "data/models/lgb_m30/lightgbm_d1_train_lgb.txt",
+  "model_version": "lgb_m30_v1",
+  "status": "shadow",
+  "vote_weight": 1.0,
+  "magic": 90320,
+  "brain_role": "alpha_brain",
+  "training_horizon": 12,
+  "strategy": "m30_swing",
+  "timeframe": "M30",
+  "training_params": {
+    "sl_atr_mult": 1.5,
+    "tp_atr_mult": 2.5,
+    "horizon": 12,
+    "model_type": "lightgbm"
+  },
+  "training_metrics": {
+    "test_sharpe": 2.00,
+    "test_win_rate": 0.317,
+    "test_total_r": 327.5
+  },
+  "features": [
+    "D1_Ret_1", "D1_Body_Ratio", "D1_ATR_14", "D1_RSI_14",
+    "D1_MACD", "D1_Vol_ZScore", "D1_Bollinger_Width", "D1_ADX_14",
+    "H4_Trend_Strength", "H4_ATR_Ratio", "H4_RSI_Divergence", "H4_vs_D1_Alignment",
+    "Cross_Gold_Silver_Ratio", "Cross_DXY_Return", "Cross_EURUSD_Return", "Cross_Risk_On_Off",
+    "Derived_Weekday_Sin", "Derived_Weekday_Cos", "Derived_Days_To_MonthEnd",
+    "Derived_Is_MonthEnd_Week", "Derived_Weekend_Gap", "Derived_Vol_Regime",
+    "Derived_Momentum_5D", "Derived_Momentum_20D",
+    "tick_return", "hl_ratio", "co_ratio", "avg_spread",
+    "OIM", "tick_velocity", "XAGUSDc_return", "EURUSDc_return", "USDJPYc_return",
+    "TF_OU_Theta", "TF_Hurst"
+  ],
+  "n_features": 35,
+  "n_train_samples": 5409,
+  "trained_at": "2026-06-04T09:30:00Z",
+  "governance": {"min_confidence": 0.45, "cooldown_cycles": 3}
+}

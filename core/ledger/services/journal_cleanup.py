@@ -36,18 +36,72 @@ def _load_journal(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     entries: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").strip().split("\n"):
+    parse_errors = 0
+    for lineno, line in enumerate(path.read_text(encoding="utf-8").strip().split("\n"), start=1):
         if line:
             try:
                 entries.append(json.loads(line))
             except json.JSONDecodeError:
-                continue
+                parse_errors += 1
+                # FIX-20260601-043: log corrupted lines for monitoring.
+                # repair_journal() will drop these when it rewrites.
+                try:  # noqa: SIM105
+                    print(
+                        json.dumps(
+                            {
+                                "event": "journal_parse_error",
+                                "file": str(path),
+                                "line": lineno,
+                                "preview": line[:120],
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                except Exception:
+                    pass
+    if parse_errors:
+        try:  # noqa: SIM105
+            print(
+                json.dumps(
+                    {
+                        "event": "journal_parse_error_summary",
+                        "file": str(path),
+                        "total_errors": parse_errors,
+                        "total_lines": lineno,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        except Exception:
+            pass
     return entries
 
 
-def _append_journal(path: Path, entry: dict[str, Any]) -> None:
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+def _append_journal(path: Path, entry: dict[str, Any], *, lock_dir: Path | None = None) -> None:
+    """Append one JSON line to the journal with optional advisory lock.
+
+    FIX-20260601-043: lock_dir enables FileLock serialisation with the MT5
+    bridge worker and live_cycle reconciliation paths.
+    """
+    if lock_dir is not None:
+        from core.infrastructure.distributed_lock import FileLock
+        _lock = FileLock("live_trade_journal", lock_dir=str(lock_dir), ttl_seconds=10)
+        _acquired = _lock.acquire(blocking=True, timeout_seconds=5)
+        if _acquired.acquired:
+            try:
+                with open(path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            finally:
+                _lock.release()
+        else:
+            # Lock denied — write anyway (best-effort, journal is advisory)
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    else:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
 def _resolve_magic(entry: dict[str, Any]) -> int:
@@ -90,6 +144,7 @@ def cleanup_orphan_opens(
     *,
     max_age_hours: int = 24,
     dry_run: bool = False,
+    lock_dir: Path | None = None,  # FIX-20260601-043
 ) -> int:
     """Close orphan open entries that can never be filled.
 
@@ -206,7 +261,7 @@ def cleanup_orphan_opens(
         }
 
         if not dry_run:
-            _append_journal(journal_path, close_entry)
+            _append_journal(journal_path, close_entry, lock_dir=lock_dir)
         cleaned += 1
 
     return cleaned
@@ -216,6 +271,7 @@ def repair_journal(
     journal_path: Path,
     *,
     dry_run: bool = False,
+    lock_dir: Path | None = None,  # FIX-20260601-043: serialise with bridge
 ) -> dict[str, Any]:
     """Validate and repair journal integrity.
 
@@ -227,6 +283,11 @@ def repair_journal(
     3. **Detect duplicate entries** — same message_id appearing twice.
     4. **Report link integrity** — fraction of close entries with valid
        open_message_id or position_ticket linkage.
+
+    FIX-20260601-043: When lock_dir is provided, acquires the live_trade_journal
+    FileLock before the full-file rewrite (step 1 backfill).  This prevents the
+    truncation-in-progress corruption that occurs when the bridge appends while
+    repair rewrites.
 
     Returns a report dict with counts and repair actions taken.
     """
@@ -291,10 +352,27 @@ def repair_journal(
                     needs_rewrite = True
 
         if needs_rewrite:
-            journal_path.write_text(
-                "\n".join(json.dumps(e, ensure_ascii=False, default=str) for e in entries) + "\n",
-                encoding="utf-8",
-            )
+            # FIX-20260601-043: full-file rewrite must be serialised with
+            # the bridge worker and other journal writers to prevent the
+            # truncation-in-progress corruption pattern.
+            if lock_dir is not None:
+                from core.infrastructure.distributed_lock import FileLock
+                _lock = FileLock("live_trade_journal", lock_dir=str(lock_dir), ttl_seconds=10)
+                _acquired = _lock.acquire(blocking=True, timeout_seconds=5)
+                if _acquired.acquired:
+                    try:
+                        journal_path.write_text(
+                            "\n".join(json.dumps(e, ensure_ascii=False, default=str) for e in entries) + "\n",
+                            encoding="utf-8",
+                        )
+                    finally:
+                        _lock.release()
+                # If lock denied, skip rewrite — better stale data than corruption
+            else:
+                journal_path.write_text(
+                    "\n".join(json.dumps(e, ensure_ascii=False, default=str) for e in entries) + "\n",
+                    encoding="utf-8",
+                )
 
     # ── Link integrity ──
     closed_tickets: set[int] = set()
@@ -344,13 +422,14 @@ def repair_and_cleanup(
     *,
     max_age_hours: int = 24,
     dry_run: bool = False,
+    lock_dir: Path | None = None,  # FIX-20260601-043
 ) -> dict[str, Any]:
     """Run repair_journal then cleanup_orphan_opens in a single pass.
 
     This is the canonical entry point for startup journal maintenance.
     Call it once at the beginning of every live pipeline session.
     """
-    repair_report = repair_journal(journal_path, dry_run=dry_run)
-    orphan_count = cleanup_orphan_opens(journal_path, max_age_hours=max_age_hours, dry_run=dry_run)
+    repair_report = repair_journal(journal_path, dry_run=dry_run, lock_dir=lock_dir)
+    orphan_count = cleanup_orphan_opens(journal_path, max_age_hours=max_age_hours, dry_run=dry_run, lock_dir=lock_dir)
     repair_report["orphans_closed"] = orphan_count
     return repair_report

@@ -140,6 +140,11 @@ class FileLock(BaseLock):
                 )
             except OSError:
                 # FileExists on Windows, OSError on Unix when target exists
+                # Clean up stale .tmp file left by this failed acquire attempt
+                try:  # noqa: SIM105
+                    tmp.unlink(missing_ok=True)
+                except Exception:
+                    pass
                 if not blocking:
                     return LockAcquireResult(
                         acquired=False,

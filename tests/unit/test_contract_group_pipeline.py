@@ -209,9 +209,9 @@ def test_pipeline_only_one_group_active_reduced_confidence():
     assert allocation.should_trade
     assert allocation.direction == "long"
     assert allocation.agreement_level == "reduced"
-    # Direction-count voting: single brain 0.85 conf → consensus_score 1.0
-    # Then conf_mult=0.65 → ~0.65
-    assert allocation.confidence == pytest.approx(0.65, abs=0.01)
+    # FIX-052: single brain uses raw confidence (0.85), not self-normalized 1.0
+    # raw_conf=0.85 × conf_mult=0.65 ≈ 0.55
+    assert allocation.confidence == pytest.approx(0.5525, abs=0.01)
 
 
 def test_pipeline_high_regime_reduces_volume():

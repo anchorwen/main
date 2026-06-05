@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Any
 
 from core.observability.metric_names import DISPATCH_REJECTED, RECONCILIATION_BREACHED
 
@@ -17,6 +18,19 @@ class DiagnosticsDashboard:
         self._metrics = metrics_collector
         self._audit = audit_log
         self._tracker = brain_performance_tracker
+
+    @staticmethod
+    def safe_get_snapshot(container: Any) -> dict:
+        """Return ``{available: True, snapshot: ...}`` or ``{available: False}``.
+
+        Safe accessor for the diagnostics dashboard attached to a service
+        container.  Callers that just need the raw snapshot (evidence bundle,
+        runbook engine) use this instead of duplicating the guard clause.
+        """
+        diagnostics = getattr(container, "diagnostics", None)
+        if diagnostics is None:
+            return {"available": False}
+        return {"available": True, "snapshot": diagnostics.build_snapshot()}
 
     def build_snapshot(self, *, date_key: str | None = None) -> dict:
         return {

@@ -1,0 +1,22 @@
+{
+  "message_id": "live_exec_2d405684c342406ba0a88f3bbc519a33",
+  "ack_status": "rejected",
+  "received_at": "2026-05-31T07:07:38",
+  "detail": {
+    "retcode": 10036,
+    "comment": "Position doesn't exist",
+    "request": {
+      "action": 1,
+      "symbol": "BTCUSDc",
+      "volume": 0.01,
+      "type": 1,
+      "position": 3713518571,
+      "price": 73891.73,
+      "deviation": 20,
+      "magic": 90410,
+      "comment": "",
+      "type_time": 0,
+      "type_filling": 1
+    }
+  }
+}

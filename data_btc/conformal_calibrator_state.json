@@ -1,0 +1,13 @@
+{
+  "history": [
+    {
+      "p_win": 0.6,
+      "label": -1,
+      "timestamp": "2026-05-31T07:07:46Z"
+    }
+  ],
+  "clamp_hits_upper": 0,
+  "clamp_hits_lower": 0,
+  "total_computations": 0,
+  "cold_started": true
+}

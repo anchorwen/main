@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from core.config.asset_registry import get_asset
 from core.execution.barrier_strategy import BarrierStrategy
 from core.execution.micro_strategy import MicroStrategy
 from core.execution.statarb_strategy import StatArbStrategy
@@ -20,6 +21,7 @@ from core.parliament.contract_groups import (
     ARB_GROUP,
     BARRIER_12BAR_META_GROUP,
     BARRIER_GROUP,
+    BTC_SWING_GROUP,
     DAILY_SWING_GROUP,
     H1_SWING_GROUP,
     H4_SWING_GROUP,
@@ -165,6 +167,7 @@ def build_strategy_lines(
     m30_swing_brains = _known_groups["m30_swing"]
     h1_swing_brains = _known_groups["h1_swing"]
     h4_swing_brains = _known_groups["h4_swing"]
+    btc_swing_brains = _known_groups["btc_swing"]
 
     def _cfg(name: str, key: str, default: Any) -> Any:
         return config.strategy_configs.get(name, {}).get(key, default)
@@ -220,6 +223,8 @@ def build_strategy_lines(
 
         strategies["barrier_12bar"] = BarrierStrategy(
             StrategyLineConfig(
+                symbol=config.symbol,
+                contract_size=get_asset(config.symbol).contract_size,
                 name="barrier_12bar",
                 strategy_family=_cfg("barrier_12bar", "strategy_family", None)
                 or _STRATEGY_FAMILY_MAP.get("barrier_12bar", "trend_following"),
@@ -268,6 +273,8 @@ def build_strategy_lines(
     if micro_brains:
         strategies["micro_3bar"] = MicroStrategy(
             StrategyLineConfig(
+                symbol=config.symbol,
+                contract_size=get_asset(config.symbol).contract_size,
                 name="micro_3bar",
                 strategy_family=_STRATEGY_FAMILY_MAP.get("micro_3bar", "trend_following"),
                 magic=90002,
@@ -310,6 +317,8 @@ def build_strategy_lines(
     if micro_m15_brains:
         strategies["micro_m15"] = MicroStrategy(
             StrategyLineConfig(
+                symbol=config.symbol,
+                contract_size=get_asset(config.symbol).contract_size,
                 name="micro_m15",
                 strategy_family=_STRATEGY_FAMILY_MAP.get("micro_m15", "trend_following"),
                 magic=90101,
@@ -352,6 +361,8 @@ def build_strategy_lines(
     if micro_h1_brains:
         strategies["micro_h1"] = MicroStrategy(
             StrategyLineConfig(
+                symbol=config.symbol,
+                contract_size=get_asset(config.symbol).contract_size,
                 name="micro_h1",
                 strategy_family=_STRATEGY_FAMILY_MAP.get("micro_h1", "trend_following"),
                 magic=90201,
@@ -394,6 +405,8 @@ def build_strategy_lines(
     if statarb_brains:
         strategies["statarb_dynamic"] = StatArbStrategy(
             StrategyLineConfig(
+                symbol=config.symbol,
+                contract_size=get_asset(config.symbol).contract_size,
                 name="statarb_dynamic",
                 strategy_family=_cfg("statarb_dynamic", "strategy_family", None)
                 or _STRATEGY_FAMILY_MAP.get("statarb_dynamic", "trend_following"),
@@ -438,6 +451,8 @@ def build_strategy_lines(
     if statarb_m15_brains:
         strategies["statarb_m15"] = StatArbStrategy(
             StrategyLineConfig(
+                symbol=config.symbol,
+                contract_size=get_asset(config.symbol).contract_size,
                 name="statarb_m15",
                 strategy_family=_cfg("statarb_m15", "strategy_family", None)
                 or _STRATEGY_FAMILY_MAP.get("statarb_m15", "trend_following"),
@@ -482,6 +497,8 @@ def build_strategy_lines(
     if barrier_12bar_meta_brains:
         strategies["barrier_12bar_meta"] = BarrierStrategy(
             StrategyLineConfig(
+                symbol=config.symbol,
+                contract_size=get_asset(config.symbol).contract_size,
                 name="barrier_12bar_meta",
                 strategy_family=_cfg("barrier_12bar_meta", "strategy_family", None)
                 or _STRATEGY_FAMILY_MAP.get("barrier_12bar_meta", "trend_following"),
@@ -524,6 +541,8 @@ def build_strategy_lines(
     if daily_swing_brains:
         strategies["daily_swing"] = SwingStrategy(
             StrategyLineConfig(
+                symbol=config.symbol,
+                contract_size=get_asset(config.symbol).contract_size,
                 name="daily_swing",
                 strategy_family=_STRATEGY_FAMILY_MAP.get("daily_swing", "trend_following"),
                 magic=90301,
@@ -564,6 +583,8 @@ def build_strategy_lines(
     if m15_swing_brains:
         strategies["m15_swing"] = SwingStrategy(
             StrategyLineConfig(
+                symbol=config.symbol,
+                contract_size=get_asset(config.symbol).contract_size,
                 name="m15_swing",
                 strategy_family=_STRATEGY_FAMILY_MAP.get("m15_swing", "trend_following"),
                 magic=90310,
@@ -605,6 +626,8 @@ def build_strategy_lines(
     if m30_swing_brains:
         strategies["m30_swing"] = SwingStrategy(
             StrategyLineConfig(
+                symbol=config.symbol,
+                contract_size=get_asset(config.symbol).contract_size,
                 name="m30_swing",
                 strategy_family=_STRATEGY_FAMILY_MAP.get("m30_swing", "trend_following"),
                 magic=90320,
@@ -643,9 +666,54 @@ def build_strategy_lines(
             ),
         )
 
+    if btc_swing_brains:
+        strategies["btc_swing"] = SwingStrategy(
+            StrategyLineConfig(
+                symbol=config.symbol,
+                contract_size=get_asset(config.symbol).contract_size,
+                name="btc_swing",
+                strategy_family=_STRATEGY_FAMILY_MAP.get("btc_swing", "trend_following"),
+                magic=90410,
+                brain_types=BTC_SWING_GROUP["brain_types"],
+                base_volume=_vol_cfg("btc_swing"),
+                max_volume=_cfg("btc_swing", "max_volume", 0.05),
+                base_sl_atr_mult=_cfg("btc_swing", "sl", {}).get("base_atr_mult", 2.0),
+                base_tp_atr_mult=_cfg("btc_swing", "tp", {}).get("base_atr_mult", 2.5),
+                hard_sl_ratio=_cfg("btc_swing", "sl", {}).get("hard_sl_ratio", 1.5),
+                min_sl_distance=_cfg("btc_swing", "sl", {}).get("min_sl_distance", 200.0),
+                min_rr_ratio=_cfg("btc_swing", "sl", {}).get("min_rr_ratio", 0.85),
+                confidence_threshold=_cfg("btc_swing", "confidence_threshold", 0.35),
+                spread_points=_cfg("btc_swing", "spread_points", 1400),
+                max_spread_points=_cfg("btc_swing", "max_spread_points", 2500),
+                min_p_win=_cfg("btc_swing", "min_p_win", 0.45),
+                long_bias_discount=_cfg("btc_swing", "direction_balance", {}).get(
+                    "long_bias_discount", 0.0
+                ),
+                exit_flip_enabled=_exit_cfg("btc_swing", "flip_exit_enabled", True),
+                exit_time_cycles=_exit_cfg("btc_swing", "time_exit_cycles", 36),
+                exit_zscore_enabled=_exit_cfg("btc_swing", "zscore_exit_enabled", False),
+                exit_min_r=_exit_cfg("btc_swing", "min_r_for_hold", 0.3),
+                min_valid_brains=_cfg("btc_swing", "min_valid_brains", 1),
+                timeframe=_cfg("btc_swing", "timeframe", "M30"),
+                exit_hesitation_cycles=_exit_cfg("btc_swing", "hesitation_cycles", 3),
+            ),
+            btc_swing_brains,
+            budget=StrategyBudget(
+                "btc_swing",
+                daily_loss_limit_pct=_cfg("btc_swing", "budget", {}).get(
+                    "daily_loss_limit_pct", -0.03
+                ),
+                max_consecutive_losses=_cfg("btc_swing", "budget", {}).get(
+                    "max_consecutive_losses", 5
+                ),
+            ),
+        )
+
     if h1_swing_brains:
         strategies["h1_swing"] = SwingStrategy(
             StrategyLineConfig(
+                symbol=config.symbol,
+                contract_size=get_asset(config.symbol).contract_size,
                 name="h1_swing",
                 strategy_family=_STRATEGY_FAMILY_MAP.get("h1_swing", "trend_following"),
                 magic=90330,
@@ -658,6 +726,7 @@ def build_strategy_lines(
                 min_sl_distance=_cfg("h1_swing", "sl", {}).get("min_sl_distance", 0.0),
                 min_rr_ratio=_cfg("h1_swing", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg("h1_swing", "confidence_threshold", 0.45),
+                min_p_win=_cfg("h1_swing", "min_p_win", 0.50),
                 spread_points=_cfg("h1_swing", "spread_points", 0.0),
                 max_spread_points=_cfg("h1_swing", "max_spread_points", 0.0),
                 long_bias_discount=_cfg("h1_swing", "direction_balance", {}).get(
@@ -686,6 +755,8 @@ def build_strategy_lines(
     if h4_swing_brains:
         strategies["h4_swing"] = SwingStrategy(
             StrategyLineConfig(
+                symbol=config.symbol,
+                contract_size=get_asset(config.symbol).contract_size,
                 name="h4_swing",
                 strategy_family=_STRATEGY_FAMILY_MAP.get("h4_swing", "trend_following"),
                 magic=90340,
@@ -698,6 +769,7 @@ def build_strategy_lines(
                 min_sl_distance=_cfg("h4_swing", "sl", {}).get("min_sl_distance", 0.0),
                 min_rr_ratio=_cfg("h4_swing", "sl", {}).get("min_rr_ratio", 0.0),
                 confidence_threshold=_cfg("h4_swing", "confidence_threshold", 0.45),
+                min_p_win=_cfg("h4_swing", "min_p_win", 0.50),
                 spread_points=_cfg("h4_swing", "spread_points", 0.0),
                 max_spread_points=_cfg("h4_swing", "max_spread_points", 0.0),
                 long_bias_discount=_cfg("h4_swing", "direction_balance", {}).get(

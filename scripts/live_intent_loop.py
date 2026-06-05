@@ -21,6 +21,7 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from core.config.asset_registry import get_asset
 from core.features.rolling_normalizer import RollingNormalizer
 from core.feedback.brain_performance_tracker import BrainPerformanceTracker
 from core.risk.regime_detector import RegimeDetector
@@ -300,6 +301,10 @@ def main(argv: list[str] | None = None) -> int:
     _yaml_equity_risk_pct: float | None = None
     _yaml_market_type: str = "forex_24_5"  # FIX-082: read from live.yaml
     _yaml_regime_map: dict[str, dict[str, str]] | None = None
+    _yaml_portfolio_max_net: float | None = None  # FIX-20260601-037
+    _yaml_portfolio_max_gross: float | None = None
+    # ── FIX-20260605-120: reentry thresholds ──
+    _reentry_cfg: dict[str, Any] = {}
     if args.config:
         try:
             import yaml
@@ -318,6 +323,11 @@ def main(argv: list[str] | None = None) -> int:
                 _yaml_risk_budget = _lt.get("risk_budget_usd")
                 _yaml_equity_risk_pct = _lt.get("equity_risk_pct")
                 _yaml_market_type = str(_lt.get("market_type", "forex_24_5"))
+            # ── Portfolio risk limits: per-symbol lot-based exposure (FIX-20260601-037) ──
+            _yaml_portfolio_max_net = full_cfg.get("portfolio_max_net")
+            _yaml_portfolio_max_gross = full_cfg.get("portfolio_max_gross")
+            # ── FIX-20260605-120: reentry thresholds from YAML ──
+            _reentry_cfg = full_cfg.get("reentry", {}) if isinstance(full_cfg, dict) else {}
             if strategy_configs:
                 print(
                     json.dumps(
@@ -374,13 +384,15 @@ def main(argv: list[str] | None = None) -> int:
                     pass
 
         except Exception as exc:
+            import sys as _sys
             print(
                 json.dumps(
-                    {"event": "strategy_configs_load_warning", "error": str(exc)},
+                    {"event": "strategy_configs_load_fatal", "error": str(exc)},
                     ensure_ascii=False,
                 ),
                 flush=True,
             )
+            _sys.exit(1)
 
     # ── Startup integrity check ──
     try:
@@ -389,6 +401,8 @@ def main(argv: list[str] | None = None) -> int:
         lifecycle = BrainLifecycleManager(
             project_root=PROJECT_ROOT,
             base_dir=args.base_dir,
+            brains_dir=str(args.brains_dir) if args.brains_dir else "configs/brains",
+            live_yaml_path=args.config if hasattr(args, "config") and args.config else "configs/live.yaml",
         )
         integrity = lifecycle.verify_startup_integrity(auto_repair=True)
         if (
@@ -485,6 +499,30 @@ def main(argv: list[str] | None = None) -> int:
         exit_require_min_r=args.exit_require_min_r,
         strategy_configs=strategy_configs,
         regime_map=_yaml_regime_map,
+        contract_size=get_asset(args.symbol).contract_size,
+        portfolio_max_net=(
+            _yaml_portfolio_max_net
+            if _yaml_portfolio_max_net is not None
+            else 0.05
+        ),
+        portfolio_max_gross=(
+            _yaml_portfolio_max_gross
+            if _yaml_portfolio_max_gross is not None
+            else 0.10
+        ),
+        # ── FIX-20260605-120: per-asset reentry thresholds from YAML ──
+        reentry_sl_cooldown=float(
+            _reentry_cfg.get("sl_cooldown_seconds", 180)
+        ),
+        reentry_sl_penalty=float(
+            _reentry_cfg.get("sl_confidence_penalty", 0.10)
+        ),
+        reentry_bleed_cooldown=float(
+            _reentry_cfg.get("bleed_cooldown_seconds", 180)
+        ),
+        reentry_bleed_penalty=float(
+            _reentry_cfg.get("bleed_confidence_penalty", 0.10)
+        ),
     )
 
     # ── Initialize MT5Worker (single-threaded engine — all MT5 calls on one thread) ──
@@ -493,7 +531,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_mt5:
         from core.execution.mt5_worker import MT5Worker, set_mt5_worker
 
-        mt5_worker = MT5Worker()
+        mt5_worker = MT5Worker(symbol=args.symbol)
         if not mt5_worker.start(terminal_path=args.mt5_terminal_path):
             print(
                 json.dumps(
@@ -1099,6 +1137,23 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     # Position no longer exists on MT5 — remove from tracking
                     position_manager.clear_position(ticket=_rt_ticket)
+                    # FIX-20260601-036: persist cleanup immediately.
+                    # If we crash before the next cycle-end save, the stale
+                    # position would be re-loaded on next restart and block
+                    # new trades via net_exposure.
+                    position_manager.save_state(str(_pos_state_path))
+                    print(
+                        json.dumps(
+                            {
+                                "event": "position_startup_cleaned",
+                                "time": _utc_iso(),
+                                "ticket": _rt_ticket,
+                                "note": "Position in state file not found on MT5 — removed from tracking",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
 
         if not recovered:
             # ── Fallback: reconstruct ALL positions from MT5 (basic recovery, no trail state) ──
@@ -1245,6 +1300,9 @@ def main(argv: list[str] | None = None) -> int:
             vanished = managed_tickets - mt5_ticket_set
             for vt in vanished:
                 position_manager.clear_position(ticket=vt)
+                # FIX-20260601-036: persist immediately so a crash/restart
+                # doesn't resurrect the vanished position from stale state.
+                position_manager.save_state(str(_pos_state_path))
                 print(
                     json.dumps(
                         {
@@ -1273,7 +1331,12 @@ def main(argv: list[str] | None = None) -> int:
         try:
             from core.execution.meta_signal_filter import MetaSignalFilter
 
-            _filter_cfg_path = PROJECT_ROOT / "configs" / "brains" / "meta_stage2_filter_v3.json"
+            # FIX-20260531-014: resolve MetaFilter config from the correct brain directory
+            # (configs/brains/ for XAU, configs/brains_btc/ for BTC).
+            # If no MetaFilter config exists for this symbol, meta_signal_filter stays None
+            # → p_win falls through to PnL store or neutral default (0.5).
+            _brains_dir = Path(args.brains_dir) if hasattr(args, "brains_dir") and args.brains_dir else (PROJECT_ROOT / "configs" / "brains")
+            _filter_cfg_path = Path(_brains_dir) / "meta_stage2_filter_v3.json"
             if _filter_cfg_path.exists():
                 with open(_filter_cfg_path, encoding="utf-8") as _fcfh:
                     _fc = json.load(_fcfh)
@@ -1442,6 +1505,7 @@ def main(argv: list[str] | None = None) -> int:
                 state_dir=args.base_dir,
                 timeout_seconds=args.bar_sync_timeout,
                 mt5_worker=mt5_worker,
+                market_type=_yaml_market_type,  # FIX-20260601-042: session-aware bar sync
             )
             print(
                 json.dumps(
@@ -1535,18 +1599,22 @@ def main(argv: list[str] | None = None) -> int:
         try:
             from core.observability.live_alert_hub import LiveAlertHub
 
-            # Read alert thresholds from full YAML config (Phase B: PnL fund-safety)
+            # Read alert thresholds + rules_config from full YAML config
             _thresholds: dict[str, float] = {}
+            _rules_config: list[dict[str, Any]] | None = None
             if args.config:
                 try:
                     import yaml as _yaml_full
 
                     with open(args.config, encoding="utf-8") as _fh_full:
                         _full_cfg = _yaml_full.safe_load(_fh_full)
-                    _alert_cfg = _full_cfg.get("alert", {}) if isinstance(_full_cfg, dict) else {}
-                    _thresholds = (
-                        _alert_cfg.get("thresholds", {}) if isinstance(_alert_cfg, dict) else {}
-                    )
+                    if isinstance(_full_cfg, dict):
+                        _alert_cfg = _full_cfg.get("alert", {})
+                        if isinstance(_alert_cfg, dict):
+                            _thresholds = _alert_cfg.get("thresholds", {}) or {}
+                        _alert_sys = _full_cfg.get("alert_system", {})
+                        if isinstance(_alert_sys, dict):
+                            _rules_config = _alert_sys.get("rules", None)
                 except Exception:
                     pass
 
@@ -1556,6 +1624,7 @@ def main(argv: list[str] | None = None) -> int:
                 dingtalk_url=args.dingtalk_webhook or "",
                 dingtalk_secret=args.dingtalk_secret or "",
                 thresholds=_thresholds or None,
+                rules_config=_rules_config,
             )
             print(
                 json.dumps(
@@ -1613,7 +1682,7 @@ def main(argv: list[str] | None = None) -> int:
             "live_intent_loop",
             backend="auto",
             ttl_seconds=300,
-            lock_dir="data/locks",
+            lock_dir=str(Path(args.base_dir) / "locks"),
         )
         _acquired = _live_lock.acquire()
         if not _acquired.acquired:
@@ -1872,6 +1941,66 @@ def main(argv: list[str] | None = None) -> int:
                         )
                 except Exception:
                     pass
+            # ── FIX-20260603-075: persist execution guard state EVERY cycle ──
+            _strategies = getattr(state, "_strategies", None)
+            if _strategies is not None:
+                try:
+                    from core.runtime.execution_state import save_execution_state
+
+                    _exec_path = Path(args.base_dir) / "state" / "execution_state.json"
+                    save_execution_state(
+                        str(_exec_path),
+                        _strategies,
+                        getattr(state, "_cooldown_registry", None),
+                        getattr(state, "_family_entry_tracker", None),
+                        sl_streak_blocks=getattr(state, "sl_streak_blocked_until", {}),
+                        sl_streak_global_block=getattr(state, "sl_streak_blocked_all_until", 0.0),
+                        consecutive_degraded=state._consecutive_degraded_cycles,
+                        circuit_breaker_tripped=state._circuit_breaker_tripped,
+                        intraday_dd_active=state.block_new_entries,
+                    )
+                except Exception:
+                    pass
+
+            # ── FIX-20260604-077: persist PnL ledger EVERY cycle ──
+            # Same root cause as FIX-075: 60-cycle save interval means recent
+            # trades (and their p_win impact) are lost on crash/restart.
+            # The PnL store drives resolve_p_win_from_brains() which gates
+            # every entry — stale p_win = inflated confidence = restart→trade.
+            if pnl_ledger is not None:
+                try:
+                    pnl_ledger.save(pnl_ledger_path)
+                    _inject_performance_metrics(pnl_ledger, args.base_dir)
+                except Exception:
+                    pass
+
+            # ── FIX-20260604-079: data health monitor ──
+            # Runs every 60 cycles.  Checks feature store freshness,
+            # journal growth, and training prerequisite conditions.
+            # Alerts via LiveAlertHub when data quality degrades.
+            if state.loop_iteration % config.state_save_interval == 0:
+                try:
+                    from core.runtime.data_health_monitor import check_data_health
+
+                    _health = check_data_health(
+                        base_dir=args.base_dir,
+                        symbol=config.symbol,
+                        alert_hub=alert_hub,
+                    )
+                    if _health.get("alerts") or _health.get("checks", {}).get(
+                        "training_ready"
+                    ):
+                        print(
+                            json.dumps(
+                                {"event": "data_health_report", **_health},
+                                ensure_ascii=False,
+                                default=str,
+                            ),
+                            flush=True,
+                        )
+                except Exception:
+                    pass
+
             if state.loop_iteration % config.state_save_interval == 0:
                 if rolling_norm is not None:
                     try:
@@ -1885,19 +2014,8 @@ def main(argv: list[str] | None = None) -> int:
                         regime_detector.save_state(_regime_path)
                     except Exception:
                         pass
-                if pnl_ledger is not None:
-                    try:
-                        pnl_ledger.save(pnl_ledger_path)
-                        # P0.1: inject performance_metrics into governance state
-                        _inject_performance_metrics(pnl_ledger, args.base_dir)
-                    except Exception:
-                        import logging as _sv_log
-
-                        _sv_log.getLogger(__name__).warning(
-                            "pnl_ledger_save_or_metrics_injection_failed — retry next cycle"
-                        )
                 if meta_signal_filter is not None:
-                    try:
+                    try:  # noqa: SIM105
                         meta_signal_filter.save_state(str(_mf_state_path))
                     except Exception:
                         pass
@@ -1969,7 +2087,7 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         # ── Release distributed lock ──
         if _live_lock is not None:
-            try:
+            try:  # noqa: SIM105
                 _live_lock.release()
             except Exception:
                 pass
@@ -2056,8 +2174,28 @@ def main(argv: list[str] | None = None) -> int:
                         flush=True,
                     )
             if meta_signal_filter is not None:
-                try:
+                try:  # noqa: SIM105
                     meta_signal_filter.save_state(str(_mf_state_path))
+                except Exception:
+                    pass
+            # ── FIX-20260603-072: persist execution guard state on shutdown ──
+            _strategies = getattr(state, "_strategies", None)
+            if _strategies is not None:
+                try:
+                    from core.runtime.execution_state import save_execution_state
+
+                    _exec_path = Path(args.base_dir) / "state" / "execution_state.json"
+                    save_execution_state(
+                        str(_exec_path),
+                        _strategies,
+                        getattr(state, "_cooldown_registry", None),
+                        getattr(state, "_family_entry_tracker", None),
+                        sl_streak_blocks=getattr(state, "sl_streak_blocked_until", {}),
+                        sl_streak_global_block=getattr(state, "sl_streak_blocked_all_until", 0.0),
+                        consecutive_degraded=state._consecutive_degraded_cycles,
+                        circuit_breaker_tripped=state._circuit_breaker_tripped,
+                        intraday_dd_active=state.block_new_entries,
+                    )
                 except Exception:
                     pass
         finally:
@@ -2066,7 +2204,7 @@ def main(argv: list[str] | None = None) -> int:
 
         # ── Shutdown alert hub (护栏6: graceful drain of queued alerts) ──
         if alert_hub is not None:
-            try:
+            try:  # noqa: SIM105
                 alert_hub.shutdown()
             except Exception:
                 pass

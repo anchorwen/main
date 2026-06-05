@@ -104,7 +104,7 @@ class AtomicFileWriter:
         for target in list(self._backups.keys()):
             bak = self._backups[target]
             if bak.exists():
-                try:
+                try:  # noqa: SIM105
                     bak.replace(target)
                 except OSError:
                     pass
@@ -124,7 +124,7 @@ class AtomicFileWriter:
 
     @staticmethod
     def _unlink(path: Path) -> None:
-        try:
+        try:  # noqa: SIM105
             path.unlink(missing_ok=True)
         except OSError:
             pass

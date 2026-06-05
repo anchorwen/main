@@ -118,7 +118,7 @@ def compute_profitability_surface(
     spread_points: float = 30,
     slippage_points: float = 10,
     tick_value: float = 0.01,
-    tick_size: float = 0.001,
+    tick_size: float = 0.01,
     volume: float = 0.01,
 ) -> ProfitabilitySurface:
     """Compute the expected-value surface for a grid of (SL, TP) configurations.

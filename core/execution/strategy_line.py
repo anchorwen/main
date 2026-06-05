@@ -13,11 +13,16 @@ other.  That responsibility belongs to the PortfolioRiskController.
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass, field
 from typing import Any
 
+import numpy as np
+
 from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
+
+logger = logging.getLogger(__name__)
 
 # ── Bandit sizing constants (v3.1) ──
 
@@ -216,6 +221,7 @@ class StrategyLineConfig:
     name: str
     magic: int
     brain_types: set[str]
+    symbol: str = "XAUUSDc"  # FIX-20260531-008: config-driven, not hardcoded
     strategy_family: str = ""  # Phase 4: "mean_reversion" | "trend_following" | "" (auto-infer)
     base_volume: float = 0.01
     max_volume: float = 0.05
@@ -304,6 +310,21 @@ class StrategyLineConfig:
     daily_loss_limit_pct: float = -0.03
     max_consecutive_losses: int = 5
 
+    # FIX-20260531-008: contract_size from ASSET_REGISTRY (Defense 1)
+    contract_size: float = 100.0  # overridden per symbol via builder
+
+    def __post_init__(self) -> None:
+        """Architectural Defense 2: fail-fast on unregistered or mismatched assets."""
+        from core.config.asset_registry import ASSET_REGISTRY
+
+        if self.symbol and self.symbol in ASSET_REGISTRY:
+            expected_cs = ASSET_REGISTRY[self.symbol].contract_size
+            if self.contract_size != expected_cs:
+                raise ValueError(
+                    f"StrategyLineConfig [{self.name}]: contract_size mismatch "
+                    f"for '{self.symbol}' (got {self.contract_size}, expected {expected_cs})"
+                )
+
 
 # ── Strategy line base class ────────────────────────────────────────────
 
@@ -326,6 +347,81 @@ class StrategyLine:
         self.brains = brains  # brain registry entries for this strategy
         self.budget = budget
         self._last_entry_z: float | None = None  # v3.2: previous cycle z-score for inflection gate
+
+        # ── FIX-20260601-039: TF close buffer for OU/Hurst computation ──
+        # Shared by SwingStrategy and BarrierStrategy (and any future strategy
+        # that uses swing_enhanced_* feature schemas).  Extracted from
+        # SwingStrategy to avoid copy-paste in BarrierStrategy.
+        from collections import deque
+
+        self._TF_CLOSE_BUFFER_SIZE: int = 60
+        self._tf_close_buffer: deque[float] = deque(maxlen=self._TF_CLOSE_BUFFER_SIZE)
+
+    # ── TF OU/Hurst computation (shared by swing + barrier strategies) ──
+
+    def _compute_tf_ou_theta(self, lookback: int = 20) -> float:
+        """Estimate OU mean-reversion speed (theta) from recent closes."""
+        buf = list(self._tf_close_buffer)
+        if len(buf) < max(5, lookback):
+            return 0.0
+        try:
+            series = np.array(buf[-lookback:], dtype=np.float64)
+            log_p = np.log(series)
+            dx = np.diff(log_p)
+            if len(dx) < 2:
+                return 0.0
+            mu = np.mean(dx)
+            x_prev = log_p[:-1] - np.mean(log_p[:-1])
+            if np.sum(x_prev**2) < 1e-12:
+                return 0.0
+            theta_hat: float = float(-np.sum(x_prev * (dx - mu)) / np.sum(x_prev**2))
+            if not math.isfinite(theta_hat):
+                return 0.0
+            return max(0.0, min(10.0, float(theta_hat)))
+        except Exception:
+            return 0.0
+
+    def _compute_tf_hurst(self, max_lag: int = 20) -> float:
+        """Estimate Hurst exponent from recent close buffer (R/S method)."""
+        buf = list(self._tf_close_buffer)
+        if len(buf) < max(8, max_lag):
+            return 0.5
+        try:
+            series = np.array(buf[-max_lag:], dtype=np.float64)
+            log_p = np.log(series)
+            rets = np.diff(log_p)
+            n = len(rets)
+            if n < 8:
+                return 0.5
+            lags = [max(2, int(n / 2**k)) for k in range(4) if int(n / 2**k) >= 4]
+            if len(lags) < 2:
+                return 0.5
+            rs_vals: list[float] = []
+            for lag in lags:
+                segments = n // lag
+                if segments < 1:
+                    continue
+                rs_list = []
+                for s in range(segments):
+                    chunk = rets[s * lag : (s + 1) * lag]
+                    mean_r = np.mean(chunk)
+                    cum_dev = np.cumsum(chunk - mean_r)
+                    r_val = max(cum_dev) - min(cum_dev)
+                    s_val = np.std(chunk, ddof=1)
+                    if s_val > 1e-12:
+                        rs_list.append(r_val / s_val)
+                if rs_list:
+                    rs_vals.append(float(np.mean(rs_list)))
+            if len(rs_vals) < 2:
+                return 0.5
+            log_lags = np.log(lags[: len(rs_vals)])
+            log_rs = np.log(rs_vals)
+            slope = np.polyfit(log_lags, log_rs, 1)[0]
+            if not math.isfinite(slope):
+                return 0.5
+            return max(0.1, min(1.0, float(slope)))
+        except Exception:
+            return 0.5
 
     # ── Subclass overrides ──────────────────────────────────────────────
 
@@ -411,7 +507,6 @@ class StrategyLine:
         _meta_p_win: float | None = None  # P(TP|signal) — resolved by MetaFilter or downstream
 
         # ── 1. Regime gate ──
-        # "off" is deprecated (v3.0) — legacy guard, should never be reached
         if regime_gate_mode == "off":
             return StrategyDecision(
                 strategy_name=name,
@@ -428,7 +523,31 @@ class StrategyLine:
                 reason="regime_gate_off",
             )
 
-        # ── 1b. Spread gate (FIX-20260529-038) ──
+        # ── 1b. OU high-volatility gate (FIX-20260604-082) ──
+        # Mean-reversion strategies are crushed in high-vol trending regimes.
+        # When volatility is HIGH, OU signals are physically blocked regardless
+        # of signal quality.  This gate prevents the "catching a falling knife"
+        # death spiral that caused the previous WR decline.
+        if "statarb" in name and regime_info:
+            _rg = regime_info.get("regime_gate", {}) if isinstance(regime_info, dict) else {}
+            _detected_regime = str(regime_info.get("regime", ""))
+            if _detected_regime == "high":
+                return StrategyDecision(
+                    strategy_name=name,
+                    magic=self.config.magic,
+                    should_trade=False,
+                    direction="neutral",
+                    confidence=0.0,
+                    volume=0.0,
+                    sl=0.0,
+                    tp=0.0,
+                    hard_sl=0.0,
+                    regime_mode="high_vol_blocked",
+                    venue="live",
+                    reason=f"ou_high_vol_blocked:{_detected_regime}",
+                )
+
+        # ── 1c. Spread gate (FIX-20260529-038) ──
         # Physical cost gate: block when current spread exceeds per-strategy threshold.
         # Replaces hardcoded time-of-day / day-of-week filters.
         # H22 rollover spread spike → naturally blocked.  H12 lunch dead-zone → naturally blocked.
@@ -552,7 +671,7 @@ class StrategyLine:
                 try:
                     pnl_ledger.record_signal(
                         brain_id=getattr(p, "brain_id", "unknown"),
-                        symbol="XAUUSDc",
+                        symbol=self.config.symbol,
                         direction=p.direction
                         if hasattr(p, "direction")
                         else p.prediction.get("direction_bias", "neutral"),
@@ -673,7 +792,10 @@ class StrategyLine:
                 brain_status_map=_status_map,
             )
         except Exception:
-            pass
+            logger.warning(
+                "Brain vote recording failed strategy=%s — audit trail incomplete",
+                name,
+            )
 
         parliament_passed = (
             direction != "neutral" and confidence >= self.config.confidence_threshold
@@ -910,7 +1032,12 @@ class StrategyLine:
         #   - If corr < 0.05 for TWO consecutive periods → DISABLE this route
         #     (revert to Fix 1C confidence mapping fallback).
         #   - Long-term: collect 200+ OU settled trades → train OU-specific MetaFilter.
-        if meta_filter is not None and "statarb" in name and _meta_p_win is None:
+        # FIX-20260604-083: extend MetaFilter to swing strategies
+        if (
+            meta_filter is not None
+            and ("statarb" in name or name in ("m15_swing", "m30_swing"))
+            and _meta_p_win is None
+        ):
             try:
                 _z_proxy = entry_z_score * 12.5
                 _result = meta_filter.filter_arrays(
@@ -1420,12 +1547,16 @@ class StrategyLine:
                 _p_win = 0.50
                 _p_win_source = "cold_explore_neutral"
 
-        # ── 6b. OU confidence → p_win monotonic fallback (FIX-20260526-041) ──
-        # Tier-3 fallback: when MetaFilter and PnLStore are both unavailable,
-        # map the OU brain's per-signal confidence to a p_win estimate.
-        # confidence ∈ [0.35, 1.0] → p_win ∈ [0.47, 0.60] — bounded to avoid
-        # extreme Kelly sizing while preserving signal quality gradient.
-        if _p_win_source == "neutral_default" and ("statarb" in name or "ou" in name.lower()):
+        # ── 6b. Brain confidence → p_win monotonic fallback (FIX-20260531-015) ──
+        # Tier-3 fallback: when MetaFilter is unavailable AND PnLStore has
+        # insufficient history (< 10 trades), resolve_p_win_from_brains returns
+        # the hardcoded fail-closed 0.40.  For new assets this creates a
+        # chicken-and-egg deadlock.  Override with brain confidence mapping.
+        # confidence ∈ [0.35, 1.0] → p_win ∈ [0.47, 0.60] — bounded.
+        _is_fail_closed = _p_win_source == "neutral_default" or (
+            _p_win_source == "rolling_wr" and _p_win <= 0.40
+        )
+        if _is_fail_closed:
             _conf = max(0.0, min(1.0, confidence))
             _p_win = 0.40 + _conf * 0.20
             _p_win_source = "brain_confidence"
@@ -1452,10 +1583,14 @@ class StrategyLine:
         # breakeven win rate and add a 2% safety margin so the model must provably
         # beat the spread cost before taking a position.
         _effective_min_p_win = self.config.min_p_win
-        if sl_dist > 0 and tp_dist > 0:
+        if sl_dist > 0 and tp_dist > 0 and tp_dist >= sl_dist:
+            # Dynamic breakeven floor: only for RR >= 1.0 strategies where
+            # every loss = full SL and every win = full TP.
+            # When SL > TP (RR < 1.0), the surface scan validates EV
+            # with proper timeout/trail modeling — the simple breakeven
+            # formula overestimates required p_win (FIX-20260604-084).
             _breakeven_p_win = sl_dist / (tp_dist + sl_dist)
-            _dynamic_floor = _breakeven_p_win + 0.02
-            _effective_min_p_win = max(self.config.min_p_win, _dynamic_floor)
+            _effective_min_p_win = max(self.config.min_p_win, _breakeven_p_win)
         if _effective_min_p_win > 0 and _p_win < _effective_min_p_win and not _is_cold_explore:
             return StrategyDecision(
                 strategy_name=name,
@@ -1490,7 +1625,14 @@ class StrategyLine:
         from core.execution.kelly_sizer import compute_kelly_mult
 
         kelly_result = compute_kelly_mult(_p_win, _rr_ratio)
-        if kelly_result.fractional_mult == 0.0:
+        # FIX-20260604-086: For RR < 1.0 strategies, skip Kelly veto.
+        # Kelly assumes binary outcomes (full SL or full TP), but low-RR
+        # strategies rely on timeout exits and trail stops for partial
+        # outcomes. The surface scan (with proper timeout modeling) already
+        # validates EV > 0. Same principle as the dynamic floor RR<1.0 skip
+        # in Phase C Fix 2.
+        _is_low_rr = _rr_ratio > 0 and _rr_ratio < 1.0
+        if kelly_result.fractional_mult == 0.0 and not _is_low_rr:
             # Hard EV veto — negative expected value trade
             return StrategyDecision(
                 strategy_name=name,
@@ -1615,6 +1757,7 @@ class StrategyLine:
         _entry_features: dict[str, Any] | None = None
         if feature_vector is not None:
             import numpy as np
+
             _fv_arr = np.asarray(feature_vector, dtype=np.float64).ravel()
             _entry_features = {
                 "schema_version": "v9_institutional",
@@ -1626,6 +1769,8 @@ class StrategyLine:
             "vol_regime": (regime_info.get("regime", "normal") if regime_info else "normal"),
             "trend_direction": trend_direction,
             "macro_regime": macro_regime,
+            "z_score": entry_z_score,
+            "half_life": entry_half_life,
             "brain_predictions": _brain_preds,
             "entry_features": _entry_features,
         }
@@ -1752,7 +1897,10 @@ class StrategyLine:
                     signal.total_count,
                 )
 
-        # Fallback: weighted-average for unknown contract groups (tests, custom setups)
+        # Defensive fallback: weighted-average for strategies without a registered
+        # contract group (tests, custom setups, misconfigured strategies).
+        # Rarely/never hit in production — all active strategies have contract groups.
+        # KEEP as safety net — removing would turn a graceful fallback into a crash.
         return self._compute_weighted_fallback(proposals)
 
     def _compute_weighted_fallback(
@@ -1869,9 +2017,11 @@ class StrategyLine:
                 risk_budget_usd=risk_budget_usd,
                 atr=current_atr,
                 sl_atr_mult=self.config.base_sl_atr_mult,
+                contract_size=self.config.contract_size,
                 min_lot=0.01,
                 max_lot=self.config.max_volume,
                 lot_step=0.01,
+                symbol=self.config.symbol,
             )
         else:
             base_volume = self.config.base_volume
@@ -1908,7 +2058,7 @@ class StrategyLine:
         # ── Graduated streak reduction ──
         streak_mult = 1.0
         if self.budget is not None:
-            try:
+            try:  # noqa: SIM105
                 streak_mult = self.budget.get_streak_multiplier()
             except Exception:
                 pass
@@ -2058,6 +2208,32 @@ def _counter_trend_action(
             "vol_mult": 0.75,
             "h4_block": 0.60,
             "h4_penalise": 0.30,
+            "h4_conf_mult": 0.65,
+            "h4_vol_mult": 0.70,
+        },
+        # FIX-20260604-086: h1/h4 swing counter-trend thresholds.
+        # Long-horizon strategies need HIGHER block thresholds than short-horizon
+        # (m15/m30=0.70).  At H4=0.19 (macro funds idle / wide range-bound),
+        # H1=0.54 means price is at the box edge — this is where counter-trend
+        # signals capture the most alpha.  Default block=0.40 was silently
+        # blocking all non-trivial counter-trend signals on h1/h4.
+        "h1_swing": {
+            "block": 0.75,
+            "penalise": 0.55,
+            "conf_mult": 0.65,
+            "vol_mult": 0.75,
+            "h4_block": 0.70,
+            "h4_penalise": 0.50,
+            "h4_conf_mult": 0.65,
+            "h4_vol_mult": 0.70,
+        },
+        "h4_swing": {
+            "block": 0.80,
+            "penalise": 0.60,
+            "conf_mult": 0.65,
+            "vol_mult": 0.75,
+            "h4_block": 0.75,
+            "h4_penalise": 0.55,
             "h4_conf_mult": 0.65,
             "h4_vol_mult": 0.70,
         },

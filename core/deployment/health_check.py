@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Any
 
 from core.contracts.domain_keys import (
     HEALTH_CHECK_NAME_DISPATCHER,
@@ -27,6 +28,32 @@ class HealthCheckService:
 
     def __init__(self, service_container):
         self._container = service_container
+
+    @staticmethod
+    def safe_get_health(container: Any) -> dict:
+        """Return ``{readiness: ..., liveness: ...}`` or ``{missing, missing}``.
+
+        Safe accessor shared by ``ReleaseReadinessService`` and ``RunbookEngine``
+        to avoid duplicating the null-guard clause.  Single source of truth for
+        system health status retrieval.
+        """
+        from core.contracts.domain_keys import (
+            HEALTH_STATUS_MISSING,
+            PAYLOAD_KEY_LIVENESS,
+            PAYLOAD_KEY_READINESS,
+            PAYLOAD_KEY_STATUS,
+        )
+
+        health_check = getattr(container, "health_check", None)
+        if health_check is None:
+            return {
+                PAYLOAD_KEY_READINESS: {PAYLOAD_KEY_STATUS: HEALTH_STATUS_MISSING},
+                PAYLOAD_KEY_LIVENESS: {PAYLOAD_KEY_STATUS: HEALTH_STATUS_MISSING},
+            }
+        return {
+            PAYLOAD_KEY_READINESS: health_check.readiness(),
+            PAYLOAD_KEY_LIVENESS: health_check.liveness(),
+        }
 
     def liveness(self) -> dict:
         return {

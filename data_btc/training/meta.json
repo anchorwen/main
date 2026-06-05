@@ -1,7 +1,7 @@
 {
   "tf": "M30",
   "horizon": 12,
-  "n_features": 35,
+  "n_features": 21,
   "feature_names": [
     "D1_Ret_1",
     "D1_Body_Ratio",
@@ -15,9 +15,6 @@
     "H4_ATR_Ratio",
     "H4_RSI_Divergence",
     "H4_vs_D1_Alignment",
-    "Cross_Gold_Silver_Ratio",
-    "Cross_DXY_Return",
-    "Cross_EURUSD_Return",
     "Cross_Risk_On_Off",
     "Derived_Weekday_Sin",
     "Derived_Weekday_Cos",
@@ -26,18 +23,7 @@
     "Derived_Weekend_Gap",
     "Derived_Vol_Regime",
     "Derived_Momentum_5D",
-    "Derived_Momentum_20D",
-    "tick_return",
-    "hl_ratio",
-    "co_ratio",
-    "avg_spread",
-    "OIM",
-    "tick_velocity",
-    "XAGUSDc_return",
-    "EURUSDc_return",
-    "USDJPYc_return",
-    "TF_OU_Theta",
-    "TF_Hurst"
+    "Derived_Momentum_20D"
   ],
   "n_train": 5408,
   "n_val": 1655,
@@ -53,5 +39,14 @@
     "0": 1807,
     "1": 3176
   },
-  "built_at": "2026-05-30T23:48:23.941582"
+  "built_at": "2026-05-30T23:48:23.941582",
+  "removed_xau_features": [
+    "Cross_Gold_Silver_Ratio",
+    "Cross_DXY_Return",
+    "Cross_EURUSD_Return",
+    "XAGUSDc_return",
+    "EURUSDc_return",
+    "USDJPYc_return"
+  ],
+  "note": "V3: 21-dim daily only (no micro, no TF \u2014 FeatureService gap)"
 }

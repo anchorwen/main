@@ -41,6 +41,7 @@ Execution events → OutcomeCollector → DecisionScorer → BrainPerformanceTra
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
 |--------|------|--------|--------|---------|------------|
+| FIX-20260601-033 | 2026-06-01 | cursor-agent | — | **feedback_loop symbol threading**: `feedback_loop.py` + `daily_ops.py` now accept/forward `--symbol`/`symbol` param. Feedback ingestion no longer hardcoded to XAUUSDc. | RC-09 |
 | FIX-20260524-037 | 2026-05-24 | cursor-agent | — | C3: Probation floor (0.5 cap) reordered to after Sharpe adjustment and drawdown penalty — previously Sharpe bonus could push weight above the 0.5 cap. | RC-03 |
 | FIX-20260524-038 | 2026-05-24 | cursor-agent | — | H7: Auto-retire hard gate fixed — pf==0 edge case (previously `pf > 0 and pf < 0.60` missed pf==0, now `pf < 0.60`). | boundary-error |
 | FIX-20260524-041 | 2026-05-24 | cursor-agent | — | Sharpe annualization fix: returns are per-trade not daily, but _sharpe_ratio/_sortino_ratio hardcoded *sqrt(252) and /252. Now derives annual_factor from actual trade timestamps (N/span_days*365); falls back to 1.0 without timestamps. | RC-06 |

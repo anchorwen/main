@@ -44,7 +44,7 @@ def main() -> int:
         return 0
 
     # Run blueprint pre-check (always exit 0 — advisory only)
-    try:
+    try:  # noqa: SIM105
         subprocess.run(
             [
                 sys.executable,

@@ -85,11 +85,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[reactivate] ERROR: governance state not found at {gov_path}")
         return 1
 
-    with open(gov_path, encoding="utf-8") as fh:
-        gov_data = json.load(fh)
-
-    brain_states: dict[str, dict] = gov_data.get("brain_states", {})
-    transition_log: list[dict] = gov_data.get("transition_log", [])
+    try:
+        from core.governance.governance_service import GovernanceService
+        gov_svc = GovernanceService.load(str(gov_path))
+        brain_states = gov_svc.get_all_states()
+        transition_log = gov_svc.get_transition_log()
+    except Exception:
+        print(f"[reactivate] ERROR: failed to load governance state from {gov_path}")
+        return 1
 
     # ── Assess all brains ─────────────────────────────────────────────
     engine = BrainQualityEngine()
@@ -184,15 +187,16 @@ def main(argv: list[str] | None = None) -> int:
 
     # ── Save ──────────────────────────────────────────────────────────
     if not args.dry_run and changed:
-        gov_data["brain_states"] = brain_states
-        gov_data["transition_log"] = transition_log
-
         backup_path = gov_path.with_suffix(".json.bak")
         gov_path.rename(backup_path)
         print(f"[reactivate] Backup saved to {backup_path}")
 
-        with open(gov_path, "w", encoding="utf-8") as fh:
-            json.dump(gov_data, fh, indent=2, ensure_ascii=False, default=str)
+        # FIX-20260604-088: locked, atomic write via GovernanceService
+        from core.governance.governance_service import GovernanceService
+        _svc = GovernanceService()
+        _svc._brain_states = brain_states
+        _svc._transition_log = transition_log
+        _svc.save(str(gov_path), lock_timeout=30.0)
         print(f"[reactivate] Governance state saved to {gov_path}")
 
     # ── Summary ───────────────────────────────────────────────────────

@@ -1,0 +1,2 @@
+{"event": "CRITICAL", "message": "CRITICAL: exit_watchdog_timeout ticket=3713518571 reason=confidence_decay_ema_0.600 elapsed=35.0s attempts=4", "ticket": 3713518571, "reason": "confidence_decay_ema_0.600", "timestamp_utc": "2026-05-31T06:55:33.387235+00:00"}
+{"event": "CRITICAL", "message": "CRITICAL: exit_watchdog_timeout ticket=3713518571 reason=confidence_decay_ema_0.360 elapsed=35.0s attempts=4", "ticket": 3713518571, "reason": "confidence_decay_ema_0.360", "timestamp_utc": "2026-05-31T07:07:35.139007+00:00"}
