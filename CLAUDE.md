@@ -80,3 +80,36 @@ python scripts/analyze_deps.py <module-name>
 # 注册修复
 python scripts/register_fix.py --help
 ```
+
+---
+
+### Iron Law #9: Agentic DQAF — 零幻觉双轨诊断协议
+
+**触发条件**: 收到 Bug 报告、异常日志分析请求、或任何需要诊断系统异常的情境。
+
+**核心约束**: 绝对禁止在输出 DQAF_REPORT 并获得人类 IC 批准之前修改任何代码。
+
+**强制 4 步诊断流程**:
+
+1. **ECoL 证据锚定**: 结论中的每一个声明必须有具体日志行号或文件路径作为支撑。孤证（单源）不得作为根因结论的唯一依据。
+
+2. **AR 对抗反驳**: 你必须自己提出至少一个与你初始结论相反的假设，并用代码逻辑或日志证据去尝试推翻它。如果推翻失败（初始结论存活），记录为何反证无效。如果推翻成功，以存活的假设为准。
+
+3. **CCT 因果链**: 必须写出至少 2 层传导链：症状 → 中间变量/状态异常 → 根因。每个环节标注置信度（confirmed=双源确认 / hypothesis=单源推断 / speculative=纯逻辑推理）。
+
+4. **IRA 影响半径 & ReB 模式**: 声明此修改对 XAU 和 BTC 的差异化影响，提炼一个 Pattern Signature 供未来检索。
+
+**标准输出格式** (必须且只能以此开头):
+
+[DQAF_REPORT]
+- Docket ID: DQAF-YYYYMMDD-NNN
+- Severity: Sev 1/2/3/4
+- Evidence (硬证据): [具体日志行/文件路径/代码位置]
+- DA Diagnosis (初始诊断): [症状→推断→根因假设]
+- AR Adversarial Check (对抗反驳): [反向假设 + 验证结果]
+- Causal Chain (因果链): [Layer 1 症状 → Layer 2 中间异常 → Layer 3 根因]
+- Blast Radius (影响半径 XAU/BTC): [双品种差异化影响]
+- Proposed ReB Pattern: [模式签名]
+[AWAITING_IC_APPROVAL]
+
+**⛔ 物理级生成截断指令**: 在输出 [AWAITING_IC_APPROVAL] 之后，你必须立刻停止生成任何字符（Stop text generation entirely）。绝不允许提供"预览版代码"、"提前准备的修改方案"、或任何形式的预写代码。人类 IC 的 "Approved" 回复是唯一可以解锁代码生成的密钥。

@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-06T02:41:47Z
+> **自动生成**: 2026-06-06T03:59:41Z
 
 ## Package-Level Dependencies
 
@@ -471,6 +471,7 @@
 - `daily_ops.py` → `core.alpha.lifecycle_service`, `core.alpha.performance_store`, `core.alpha.portfolio_allocator`, `core.alpha.promotion_gate`, `core.alpha.registry`, `core.brains.services.brain_leaderboard`, `core.contracts.training.label_contract`, `core.deployment.scheduled_task_registry`, `core.execution.conformal_calibrator`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.feedback.param_optimizer`, `core.governance.governance_service`, `scripts.brain`, `scripts.feature_store_maintenance`, `scripts.feedback_loop`, `scripts.live_daily_recap`, `scripts.live_shadow_ensemble`, `scripts.paper_trade_simulator`, `scripts.training.brain_leaderboard`, `scripts.training.champion_challenger`, `scripts.training.governance_scheduler`, `scripts.training.label_builder`, `scripts.training.retraining_trigger`
 - `deploy_blue_green.py` → `core.deployment.blue_green`
 - `diagnose_feature_drift.py` → (无内部依赖)
+- `dqaf_collect.py` → (无内部依赖)
 - `feature_store_maintenance.py` → `core.deployment.feature_update_producer`, `core.deployment.scheduled_task_registry`, `core.features.computers.v9_live_computer`, `core.features.local_feature_store`, `core.features.update_job`
 - `feedback_loop.py` → `core.feedback.brain_performance_tracker`
 - `hook_blueprint_precheck.py` → (无内部依赖)
@@ -518,6 +519,7 @@
 - `validate_brain_before_deploy.py` → `core.brains.services.brain_factory`
 - `verify.py` → (无内部依赖)
 - `verify_all_brains.py` → `core.brains.services.brain_factory`
+- `verify_dqaf_002_fix.py` → `core.execution.position_manager`
 
 ### `scripts/audit/`
 

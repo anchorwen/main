@@ -1415,13 +1415,17 @@ def _execute_management_phase(
                     _l2_supporting = _entry_group_signal.brain_ids
                     _l2_total = _entry_group_signal.total_count
                 elif _entry_group_signal is not None:
-                    # Direction is neutral — use actual confidence from the
-                    # group signal (not hardcoded 0.0) so confidence-drop
-                    # exits are proportional.  Same pattern as union-mode
-                    # all-neutral fix in contract_groups.py.
+                    # Direction is neutral — the entry brains still exist
+                    # in the group even when votes deadlock.  Use brain_ids
+                    # (all brains) NOT [] so flip calculation in
+                    # evaluate_brain_exit() doesn't misinterpret a neutral
+                    # deadlock as "100% of entry brains flipped".
+                    # Confidence-drop exits remain proportional to group
+                    # confidence.  Same union-mode all-neutral pattern as
+                    # contract_groups.py.
                     _l2_direction = "neutral"
                     _l2_confidence = _entry_group_signal.confidence
-                    _l2_supporting = []
+                    _l2_supporting = _entry_group_signal.brain_ids
                     _l2_total = _entry_group_signal.total_count
                 else:
                     _l2_direction = "neutral"

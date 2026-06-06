@@ -1,0 +1,28 @@
+# DQAF Docket Registry — 案卷总账
+
+> **标准参考**: IEC 62740:2015 (Root Cause Analysis), ISO 31000:2018 (Risk Management), NTSB Party System (49 CFR Part 831.11)
+> **用途**: 记录每次正式诊断的元数据总览。症状简述不超过 60 字，详细内容引用 CCT_LEDGER.md 条目。
+> **格式约定**: 表格格式（仅元数据，字段简短）。因果链详细内容见 `CCT_LEDGER.md`，模式签名见 `ReB_PATTERN_INDEX.md`。
+
+## 严重等级定义
+
+| 等级 | 定义 | 适用流程 |
+|------|------|---------|
+| Sev 1 | 交易阻断、数据丢失、资金风险 | 完整 Agentic DQAF（DA/AR 双轨 + IC 裁决） |
+| Sev 2 | 输出偏差、信号退化、实盘质量下降 | 完整 Agentic DQAF（DA/AR 双轨 + IC 裁决） |
+| Sev 3 | 告警噪音、技术债务、非关键异常 | 简化流程（单人 DA，无需 AR 对抗） |
+| Sev 4 | 外观、文档、非功能性 | 现有 Iron Law #8 协议即可 |
+
+## 案卷索引
+
+| Docket ID | 日期 | 严重等级 | 症状简述 | IC 裁决 | 关联 FIX |
+|-----------|------|---------|---------|--------|----------|
+| DQAF-20260606-002 | 2026-06-06 | Sev 2 | BTC swing WR=14.29% PnL=-$813, brain_flip_extreme_100pct 假阳性出场 | **APPROVED → CLOSED** — 根因 RC-06: live_cycle.py:1424 `_l2_supporting=[]` 在 neutral 平票时产生 100% 假翻转 | FIX-20260606-137 |
+
+## 裁决状态说明
+
+- `AWAITING_IC` — 已提交 [DQAF_REPORT]，等待人类 IC 审批
+- `APPROVED` — IC 批准，进入修复阶段
+- `REJECTED` — IC 驳回，需重新诊断（注明驳回原因）
+- `TIERBREAKER` — DA 与 AR 结论矛盾，IC 要求第三轮诊断
+- `CLOSED` — 修复完成并验证通过

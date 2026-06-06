@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-06T02:41:47Z
-> **扫描模块数**: 475
+> **自动生成**: 2026-06-06T03:59:41Z
+> **扫描模块数**: 477
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -461,7 +461,7 @@
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
 | `golden_master.py` | ✅ active | — | 8 | 229 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 5849 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 5853 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 311 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 207 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 286 | — | |
@@ -546,13 +546,14 @@
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
 | `brain.py` | ✅ active | — | 12 | 734 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 568 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 574 | — | |
 | `check_preconditions.py` | ✅ active | — | 12 | 364 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
 | `daily_ops.py` | ✅ active | — | 27 | 1261 | — | |
 | `deploy_blue_green.py` | ✅ active | — | 7 | 126 | — | |
 | `diagnose_feature_drift.py` | ✅ active | — | 4 | 229 | — | |
+| `dqaf_collect.py` | ✅ active | — | 12 | 565 | — | |
 | `feature_store_maintenance.py` | ✅ active | — | 8 | 276 | — | |
 | `feedback_loop.py` | ✅ active | — | 12 | 426 | — | |
 | `hook_blueprint_precheck.py` | ✅ active | — | 1 | 65 | — | |
@@ -600,6 +601,7 @@
 | `validate_brain_before_deploy.py` | ✅ active | — | 12 | 394 | — | |
 | `verify.py` | ✅ active | — | 9 | 418 | — | |
 | `verify_all_brains.py` | ✅ active | — | 1 | 91 | — | |
+| `verify_dqaf_002_fix.py` | ✅ active | — | 3 | 180 | — | |
 
 ## scripts/audit
 

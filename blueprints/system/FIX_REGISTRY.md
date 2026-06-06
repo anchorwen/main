@@ -32,6 +32,8 @@ FIX-YYYYMMDD-NNN
 
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
+| FIX-20260606-137 | 2026-06-06 | runtime-live | **brain_flip false positive: neutral deadlock → 100% flip**: live_cycle.py:1424 `_l2_supporting=[]` caused empty-set misinterpretation in evaluate_brain_exit(). When multi-brain group vote deadlocked neutral, flip_ratio=len(entry_ids)/len(entry_ids)=100% → immediate brain_flip_extreme exit. Fixed to use `_entry_group_signal.brain_ids`. DQAF-002 diagnosed. | RC-06 |
+| FIX-20260606-136 | 2026-06-06 | monitor-dashboard | **Agentic DQAF v1.0 infrastructure deploy**: 3 system ledgers (DQAF_DOCKET_REGISTRY.md, CCT_LEDGER.md, ReB_PATTERN_INDEX.md), ECoL evidence collection script (dqaf_collect.py), Iron Law #9 zero-hallucination dual-track diagnostic protocol. IEC 62740 / ISO 31000 / NTSB Party System aligned. | RC-12 |
 | FIX-20260606-135 | 2026-06-06 | training, features | **Phase 5b Step C+D: BTC dataset rebuilt + BTC_Swing_V5 trained**: Dataset rebuilt with live-aligned features (SL=2.0/TP=2.5, [35-36] zero-filled to match live pipeline after FIX-134). V5 XGBoost trained: test WR=38.0%, PF=1.81, Sharpe=25.03. Confidence std=0.072 (vs V4 live std=0.010 — 7.2x improvement). Brain registered as candidate. Schema alias `swing_enhanced_37`→`btc_macro_enhanced_37` added. | RC-06 |
 | FIX-20260606-134 | 2026-06-06 | features, runtime-live | **BTCFeatureAugmenter — Phase 5b Step B.2**: New `btc_feature_augmenter.py` with 3 production safeguards. Fixes [12] XAUUSDc_return, [30] AUDJPYc_return. XAU pipeline frozen. | RC-06 |
 | FIX-20260606-133 | 2026-06-06 | features | **BTC feature assembler gap documented (Phase 5b Step A/B)**: Found 5/37 (13.5%) feature slots incorrect in live. Root cause of 8.4x confidence std collapse. | RC-06 |
@@ -1510,3 +1512,95 @@ FIX-YYYYMMDD-NNN
 
 - **Root Cause**: RC-07 (missing-validation), RC-03 (state-leak), RC-09 (config-drift)
 - **Verification**: verify.py --quick mypy PASS, ruff PASS, blueprint PASS.
+
+### FIX-20260606-136
+
+- **Date**: 2026-06-06
+- **Author**: cursor-agent
+- **Type**: feat(infrastructure)
+- **Modules**: monitor-dashboard, deployment-lifecycle
+- **Files**:
+  - `blueprints/system/DQAF_DOCKET_REGISTRY.md` (NEW) — Docket metadata ledger (table format)
+  - `blueprints/system/CCT_LEDGER.md` (NEW) — Causal chain ledger (heading-block format)
+  - `blueprints/system/ReB_PATTERN_INDEX.md` (NEW) — Remediation pattern index with 3 pre-seeded historical patterns
+  - `scripts/dqaf_collect.py` (NEW) — ECoL evidence collection station with 6-source collection, truncation/memory-bomb defenses, MANIFEST.txt audit trail
+  - `CLAUDE.md` (MODIFIED) — Iron Law #9: Agentic DQAF zero-hallucination dual-track diagnostic protocol with physical stop-generation lock
+
+- **Summary**: Agentic DQAF v1.0 — Diagnostic Quality Assurance Framework deployed as agent-native infrastructure.
+
+  The framework addresses the systemic problem of inconsistent/contradictory diagnoses (FIX-022 8-round repair, BTC triple whack-a-mole, XAU shadow double misdiagnosis, OU z_entry 24h rollback) by implementing the six DQAF components as agent-native artifacts rather than heavy Python OOP code:
+
+  **Component Mapping** (DQAF → Agentic Implementation):
+  - A. ECoL (Evidence Collection Station) → `scripts/dqaf_collect.py` — human runs, AI consumes
+  - B. DiT (Diagnostic Tribunal) → Prompt role-play — AI plays both DA + AR, human is IC
+  - C. CCT (Causal Chain Tracer) → `CCT_LEDGER.md` — AI-maintained text ledger
+  - D. CSC (Cross-Source Confirmation Gate) → Iron Law #9 mandatory self-check
+  - E. IRA (Impact Radius Analyzer) → Golden Master replay + dual-symbol declaration
+  - F. ReB (Remediation Bank) → `ReB_PATTERN_INDEX.md` — AI-maintained pattern index
+
+  **Engineering Safeguards (3 architect-level defenses)**:
+  1. Memory-bomb defense: journal 5000-line head+tail cap, text logs 2MB tail cap, zip >5MB WARNING, single file >50MB HIGH_RISK_SOURCE flag
+  2. Over-enthusiasm lock: ⛔ physical stop-generation instruction after [AWAITING_IC_APPROVAL]
+  3. Ledger horizontal scalability: DQAF_DOCKET_REGISTRY uses table (short metadata), CCT_LEDGER and ReB_PATTERN_INDEX use heading blocks (long text)
+
+  **International Standards Reference**: IEC 62740:2015 (Root Cause Analysis), ISO 31000:2018 (Risk Management), NTSB Party System 49 CFR Part 831.11, Google SRE Chapters 14-15
+
+  **Naming Convention**: DQAF-YYYYMMDD-NNN (dockets), CCT-YYYYMMDD-NNN (causal chains), ReB-YYYYMMDD-NNN (remediation patterns) — all aligned with existing FIX-YYYYMMDD-NNN format.
+
+- **Root Cause**: RC-12 (missing-feature) — no structured diagnostic quality assurance mechanism existed, leading to repeated inconsistent/contradictory diagnoses across the system's history.
+
+- **Prevention**: Iron Law #9 now mandates the DQAF_REPORT format and IC approval gate before any code modification. The CCT ledger makes diagnostic reasoning traceable and auditable. The ReB pattern index enables programmatic detection of repeated bug patterns.
+
+- **Dependents Checked**: N/A (new infrastructure, no existing dependents)
+- **Verification**:
+  ```
+  [PASS] ruff — scripts/dqaf_collect.py: 0 issues
+  [PASS] mypy — scripts/dqaf_collect.py: 0 issues
+  [PASS] Functional — dqaf_collect.py --hours 2 → 40KB zip, MANIFEST.txt 5KB
+  [PASS] verify.py --quick — no regressions
+  ```
+
+### FIX-20260606-137
+
+- **Date**: 2026-06-06
+- **Author**: cursor-agent
+- **Type**: fix(runtime-live)
+- **Modules**: runtime-live
+- **Docker ID**: DQAF-20260606-002
+- **CCT Chain**: CCT-20260606-001
+- **ReB Pattern**: ReB-20260606-001 (`neutral_deadlock_misinterpreted_as_total_flip`)
+- **Files**: `core/runtime/live_cycle.py:1424`
+
+- **Summary**: **brain_flip false positive: neutral group deadlock misinterpreted as 100% flip**.
+
+  When a multi-brain strategy's group vote deadlocks into "neutral" (e.g., V4 votes LONG, V5 votes SHORT → tie), `live_cycle.py` set `_l2_supporting = []`. This empty set was passed to `evaluate_brain_exit()`, where the flip calculation computed:
+
+  ```
+  flipped = entry_ids - current_support_set
+          = {"BTC_Swing_V4", "BTC_Swing_V5"} - {}
+          = {"BTC_Swing_V4", "BTC_Swing_V5"}
+  flip_ratio = 2/2 = 1.0 ≥ 0.70 → "brain_flip_extreme_100pct" → immediate exit
+  ```
+
+  This was a false positive: the brains hadn't actually flipped 100% — the group simply couldn't agree on a direction. The empty `[]` meant "the group has no winning direction" but was misinterpreted downstream as "all entry brains have disappeared."
+
+- **Root Cause**: RC-06 (contract-violation) — `_l2_supporting` semantics diverged between neutral branch (`[]` = "no consensus") and directional branch (`brain_ids` = "all brains in group"). The consumer (`evaluate_brain_exit`) always interpreted it as the set of currently-present brains.
+
+- **Fix**: Changed `_l2_supporting = []` to `_l2_supporting = _entry_group_signal.brain_ids`. When direction is neutral, `brain_ids` still contains all brain IDs in the group (they haven't vanished — they just deadlocked). This makes the flip calculation correctly return 0% when all brains are still present.
+
+- **Impact**: BTC swing strategy — 6 false brain_flip_exits/24h + 18 reentry blocks + strategy PnL -$813.49. XAU may also benefit if multi-brain strategies experience neutral deadlocks.
+
+- **Diagnosis**: Full DQAF process (DQAF-20260606-002) — the first production use of the Agentic DQAF framework. ECoL evidence collection → DA/AR adversarial diagnosis → CCT causal chain → CSC dual-source confirmation → IC adjudication → RE fix → ReB registration.
+
+- **Prevention**: 
+  1. Defensive check candidate: `evaluate_brain_exit()` should WARNING-log if `current_supporting` is empty but `entry_ids` is non-empty
+  2. ReB pattern `neutral_deadlock_misinterpreted_as_total_flip` now searchable for future similar contract mismatches
+
+- **Verification**:
+  ```
+  [PASS] mypy — live_cycle.py: 0 new errors
+  [PASS] ruff — live_cycle.py: 0 issues
+  [PASS] verify.py --quick — no regressions
+  [AWAIT] Golden Master replay (human offline verification)
+  ```
+

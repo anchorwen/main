@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260606-136 | 2026-06-06 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/dqaf_collect.py` to `monitor_dashboard` module (DQAF v1.0 ECoL evidence collection script). Also updated `monitor_dashboard.md` Fix History. | RC-09 |
 | FIX-20260531-003 | 2026-05-31 | cursor-agent | — | MODULE_SOURCE_MAP: add `main.py` → runtime_live, `core/infrastructure/` → protocol_services (both were unmapped → orphan compliance FATAL). Also add `regime_gate.py` fix + `distributed_lock.py` tmp cleanup to respective module blueprints. | RC-09 |
 | FIX-20260529-040 | 2026-05-29 | cursor-agent | — | MODULE_SOURCE_MAP: add core/observability/alert_channels.py, alert_service.py, alert_runbook_bridge.py, live_alert_hub.py to monitor_dashboard module (were unmapped → orphan compliance error). | RC-09 |
 | FIX-20260529-035 | 2026-05-29 | cursor-agent | — | P0.2+P1: (1) Killed silent assassin — `except Exception: pass` in scheduler_service governance pipeline replaced with Fail-Loud (`logger.exception` + `emit_brain_alert("pnl_pipeline_failure")`). (2) SSOT enforcement — `compute_performance_from_ledger()` replaced with `BrainPnLStore.get_all_metrics()` in scheduler_service. (3) P0.1 State Injection — performance_metrics written to `governance_service.set_performance_metrics()` for all brains with settled trades. | RC-06 |

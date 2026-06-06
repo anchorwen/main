@@ -76,6 +76,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260606-137 | 2026-06-06 | cursor-agent | — | **brain_flip false positive: neutral deadlock misinterpreted as 100% flip**: live_cycle.py:1424 `_l2_supporting=[]` caused `evaluate_brain_exit()` flip calculation to see empty set as "100% brains flipped". Fixed to `_entry_group_signal.brain_ids`. DQAF-002 first production use of Agentic DQAF. ReB pattern: `neutral_deadlock_misinterpreted_as_total_flip`. | RC-06 |
 | FIX-20260606-131 | 2026-06-06 | cursor-agent | — | **Reentry guard front-placement (P2.6)**: Reentry quality check moved from post-eval queue filtering into Cut 3 of strategy_evaluator. Eliminates ghost signals. Post-eval section simplified to volume decay only. FIX-128 alert migrated. | RC-06 |
 | FIX-20260606-129 | 2026-06-06 | cursor-agent | 917d46f | **Golden Master list/dict fix**: `record_cycle_outputs()` assumed dict but live cycle passes list. 3 restarts at 0 cycles. Fixed `.items()`+`.keys()` to detect format at runtime. | RC-06 |
 | FIX-20260605-123 | 2026-06-05 | cursor-agent | 6110bc6 | **Execution state test长城**: 13 tests for execution_state.json persistence (save/load/restore roundtrip, stale>24h rejection, corrupt JSON, budget hydration, circuit breaker restore, SL streak preservation with max() semantics). Directly hardens FIX-072/073/074 restart-amnesia class. | RC-12 |

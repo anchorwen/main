@@ -128,7 +128,11 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/feedback_loop.py",
         "scripts/trade_quality_report.py",
     ],
-    "feedback_pnl": ["core/feedback/brain_pnl_ledger.py", "scripts/shadow_pnl_loop.py", "scripts/paper_trade_simulator.py"],
+    "feedback_pnl": [
+        "core/feedback/brain_pnl_ledger.py",
+        "scripts/shadow_pnl_loop.py",
+        "scripts/paper_trade_simulator.py",
+    ],
     "feedback_online": [
         "core/feedback/online_feedback_hook.py",
         "scripts/online_feedback_hook.py",
@@ -221,6 +225,8 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/observability/message_broker.py",
         "core/metrics/factor_attribution.py",
         "scripts/live_dashboard.py",
+        "scripts/dqaf_collect.py",
+        "scripts/verify_dqaf_002_fix.py",
     ],
     "runtime_live": [
         "main.py",
