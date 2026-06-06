@@ -101,6 +101,55 @@ python scripts/register_fix.py --help
 
 **标准输出格式** (必须且只能以此开头):
 
+**🛑 强制握手协议 (The Handshake Protocol)**:
+遇到以下类型的请求时，若未提供 ECoL 证据包（`dqaf_collect.py` 生成的 `.zip`），必须输出 `🛑 [DQAF_HALT]` 并拒绝开始诊断：
+- 含"排查"、"为什么"、"是不是"、"什么原因"、"帮我看看"等诊断性关键词
+- 含 Bug 报告、异常日志、告警内容
+- 任何需要判断因果关系的提问
+
+`🛑 [DQAF_HALT]` 回复格式：
+```
+🛑 [DQAF_HALT] — 诊断请求已拦截
+原因: 未提供 ECoL 证据包。
+请运行: python scripts/dqaf_collect.py --hours N --docket-id DQAF-YYYYMMDD-NNN
+然后将生成的 .zip 文件提供给我。在收到证据包之前，我不会进行任何诊断。
+```
+**例外**: 以下情况允许跳过 HALT 直接使用 Sev 3 简化流程：
+- 纯代码语法问题（"这个 import 为什么报错"）
+- 询问已知文档/配置（"这个参数是什么意思"）
+- 非诊断性操作（"帮我运行这个命令"）
+
+---
+
+**Severity 分级与降级模板**:
+
+| 等级 | 触发条件 | 报告格式 | 流程要求 |
+|------|---------|---------|---------|
+| **Sev 1** | 交易阻断、数据丢失、资金风险 | `[DQAF_REPORT]` 完整版 | 6 源 ECoL + DA/AR 双轨 + 完整 CCT + IC 裁决 |
+| **Sev 2** | 输出偏差、信号退化、实盘质量下降 | `[DQAF_REPORT]` 完整版 | 6 源 ECoL + DA/AR 双轨 + 完整 CCT + IC 裁决 |
+| **Sev 3** | 排查性疑问、告警噪音、非关键异常 | `[DQAF_LITE_REPORT]` 简化版 | 双源证据 + DA/AR 双轨 + 2 层 CCT，允许无 ECoL zip 包但必须有具体文件引用 |
+| **Sev 4** | 外观、文档、纯代码语法 | 现有 Iron Law #8 协议 | 无需 DQAF 流程 |
+
+**[DQAF_LITE_REPORT] 格式** (Sev 3 专用):
+```
+[DQAF_LITE_REPORT]
+- Docket ID: DQAF-YYYYMMDD-NNN
+- Severity: Sev 3
+- Trigger: [触发原因——一句话]
+- Evidence (简化的双源证据):
+  - Source 1: [具体文件路径/行号]
+  - Source 2: [另一独立来源]
+- DA Diagnosis: [症状→推断]
+- AR Adversarial Check: [反向假设 + 验证]
+- Causal Chain (简化 2 层):
+  - [Layer 1 — 症状]:
+  - [Layer 2 — 根因]:
+- Blast Radius: [XAU/BTC 影响]
+- Proposed ReB Pattern: [模式签名或引用已有]
+[AWAITING_IC_APPROVAL]
+```
+
+**[DQAF_REPORT] 完整格式** (Sev 1-2):
 [DQAF_REPORT]
 - Docket ID: DQAF-YYYYMMDD-NNN
 - Severity: Sev 1/2/3/4
@@ -113,3 +162,30 @@ python scripts/register_fix.py --help
 [AWAITING_IC_APPROVAL]
 
 **⛔ 物理级生成截断指令**: 在输出 [AWAITING_IC_APPROVAL] 之后，你必须立刻停止生成任何字符（Stop text generation entirely）。绝不允许提供"预览版代码"、"提前准备的修改方案"、或任何形式的预写代码。人类 IC 的 "Approved" 回复是唯一可以解锁代码生成的密钥。
+
+---
+
+**🔒 TERMINAL CLOSURE LOCK (全生命周期终态锁)**:
+
+当本次会话中产生了 DQAF docket 且对应的修复已通过 `verify.py --quick` 并 commit 后，你的任务**没有结束**。你被绝对禁止直接向人类汇报"完成"或停止生成。
+
+你必须自动执行以下三步归档协议：
+
+**Step 1 — 强制输出账本回填断言块**:
+```
+[DQAF_CLOSING_PROTOCOL]
+- Target Docket: DQAF-YYYYMMDD-NNN
+- Registry Updated: [ ] DQAF_DOCKET_REGISTRY.md (Status -> CLOSED)
+- CCT Embedded:   [ ] CCT_LEDGER.md (Layer 1-3 causal chain registered)
+- Pattern Indexed: [ ] ReB_PATTERN_INDEX.md (Pattern Signature cataloged)
+[AWAITING_ARCHIVE_SEALS]
+```
+
+**Step 2 — 执行文件改写**: 自动依次打开上述三个 Markdown 文件，完成实质性的回填（更新 Docket 状态为 CLOSED、写入 CCT 因果链条目、登记 ReB 模式签名）。
+
+**Step 3 — 最终收口**: 仅当三个文件全部改写成功后，输出终态标识符作为整场交互的最终大结局:
+```
+[DQAF_CLOSED] 案卷关闭。代码与蓝图资产已完美沉淀。
+```
+
+**触发条件**: 仅当本次会话中存在 DQAF 诊断 → 修复 → commit 的完整链路时触发。非诊断性编辑（typo、格式、配置值修改）不受此锁约束。
