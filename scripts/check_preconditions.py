@@ -139,27 +139,41 @@ TASKS = {
 
 
 def check_entry_spread() -> tuple[float, str]:
-    """Count XAU opens with entry_spread > 0 in the journal."""
+    """Count XAU opens with entry_spread > 0 in the journal (post-FIX-124 only).
+
+    FIX-124 deployed 2026-06-05 ~12:00Z.  Trades before that date can never
+    have entry_spread>0 because the pipeline was broken.  Only counting
+    post-fix trades gives an honest measure of whether the fix is working.
+    """
     journal = PROJECT_ROOT / "data" / "live_trade_journal.jsonl"
     if not journal.exists():
         return 0.0, "journal not found"
     nonzero = 0
     total = 0
+    all_time_nonzero = 0
+    all_time_total = 0
+    cutoff = "2026-06-05T12:00"
     with open(journal, encoding="utf-8") as f:
         for line in f:
             try:
                 r = json.loads(line)
                 if r.get("action") != "open":
                     continue
-                total += 1
+                all_time_total += 1
                 ctx = r.get("entry_context") or {}
                 es = ctx.get("entry_spread", 0) or 0
                 if es > 0:
-                    nonzero += 1
+                    all_time_nonzero += 1
+                ts = r.get("recorded_at", "")
+                if ts >= cutoff:
+                    total += 1
+                    if es > 0:
+                        nonzero += 1
             except Exception:
                 pass
     ratio = nonzero / total if total > 0 else 0.0
-    return ratio, f"{nonzero}/{total} opens have entry_spread>0 ({ratio:.1%})"
+    all_time_ratio = all_time_nonzero / all_time_total if all_time_total > 0 else 0.0
+    return ratio, f"{nonzero}/{total} post-fix opens ({ratio:.1%}) | all-time: {all_time_nonzero}/{all_time_total} ({all_time_ratio:.1%})"
 
 
 def check_calibrator_xau() -> tuple[int, str]:
