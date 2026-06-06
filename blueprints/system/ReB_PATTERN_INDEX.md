@@ -34,11 +34,61 @@
 
 ---
 
-暂无条目。首次修复后由 AI Agent 登记。
+### ReB-20260606-002
+- **Pattern Signature**: `bootstrap_silent_fail_to_open`
+- **描述**: 重启状态恢复（restart_state bootstrap）中的异常被静默吞噬（`except Exception: return`），导致 `_reentry_states` 保持空字典。下游 reentry guard 的 `check_and_record_entry()` 遇到 `last_exit = None` 时按"首次入场"放行（`return True, "first_entry"`），使所有重入防护被绕过。本质是 **Fail-Open 反模式**：恢复失败时系统不应放行，而应进入保守状态（Fail-Closed）阻塞所有交易直到人工确认。这是 RC-03（state_leak_across_restart）的最致命子类。
+- **关联 FIX IDs**: FIX-20260606-138
+- **关联 Docket IDs**: DQAF-20260606-003
+- **预防策略**:
+  1. **严禁空 except 捕获**: 所有 error-handling 路径必须使用结构化日志（WARNING/ERROR 级别）并打印完整 traceback
+  2. **引导失败必须 Fail-Closed**: 状态恢复失败时设置 `_bootstrap_degraded` 标志，下游 gate evaluator 检查此标志并阻塞所有交易
+  3. **代码审查规则**: CI 中禁止 `except Exception: return` 和 `except Exception: pass` 模式（ruff 自定义规则或 pre-commit grep 检查）
+- **检测方法**:
+  1. 单元测试：模拟 journal 解析异常，验证 `_bootstrap_degraded = True` 且所有策略被阻塞
+  2. 静态检查：grep `except Exception:\s*(return|pass)` 并标记为阻断
+  3. 运行时告警：若 `system_online` 后 60s 内出现 `open` 记录，触发 DQAF 诊断流程
 
 ---
 
-## 已知高频模式（从历史 FIX_REGISTRY 预提取，待正式 Docket 回填）
+### ReB-20260606-003
+- **Pattern Signature**: `metric_pollution_via_rejected_retries`
+- **描述**: Append-only event log（记录所有尝试）被消费者错误地解释为 trade ledger（只记录最终结果）。当 MT5 断连导致 exit_watchdog 的重试在 journal 中产生大量 `ack_status="rejected"` 的重复条目时，告警聚合器无条件求和所有 `action=="close"` 的 `pnl` 字段，将同一仓位的 N 次重试计算为 N 笔独立亏损。本质是 **ontology-violation (RC-10)**：event log 与 trade ledger 是不同本体论范畴，消费者混淆了二者。
+- **关联 FIX IDs**: FIX-20260606-138-Phase0, FIX-20260606-138-Phase2
+- **关联 Docket IDs**: DQAF-20260606-005
+- **预防策略**:
+  1. **消费端幂等性聚合**: 告警聚合器必须按 `ack_status IN ("accepted","closed")` 过滤 + 按 `position_ticket` 去重（反向扫描取首条 = 终态）
+  2. **Schema 语义标注**: journal 条目应区分 "attempt"（尝试）与 "settlement"（结算），可选 `is_durable: bool` 字段
+  3. **跨周期冷却**: 连续被拒 ≥3 次的仓位进入 10 周期冷却池，从源头掐断重试风暴
+- **检测方法**:
+  1. 告警系统自检：对比 `COUNT(*)` vs `COUNT(DISTINCT position_ticket) WHERE ack_status IN ('accepted','closed')` — 差异 >20% 触发指标污染告警
+  2. 单元测试：注入 5 条同仓位 rejected + 1 条 accepted 的 journal → 验证聚合结果仅计 1 笔
+  3. 运行时监控：`exit_cooldown_activated` 事件计数，>0 时触发 bridge health 检查
+
+---
+
+### ReB-20260606-004
+- **Pattern Signature**: `missing_pnl_in_trade_notification`
+- **描述**: Dispatch 返回值契约不包含估算 PnL，导致下游通知服务无法获取盈亏数据。`_net_out_close_dispatch_fn` 内部已计算理论 PnL，但返回的 dict 未携带 → `execution_queue.flush()` 构造 `DispatchResult` 时无 PnL 来源 → `notify_trade(pnl=None)` → 钉钉永远显示 "N/A"。本质是数据契约在调用链中的逐层断裂。
+- **关联 FIX IDs**: FIX-20260606-138-Phase3
+- **关联 Docket IDs**: DQAF-20260606-006
+- **预防策略**:
+  1. `DispatchResult` 应作为通用 dispatch 结果承载所有通知所需字段（pnl, volume, price）
+  2. 回调函数返回值契约应显式声明可选字段，避免"隐式丢弃"
+- **检测方法**: 单元测试：构造带 PnL 的 close dispatch → 验证 DispatchResult.pnl 非空 → 验证 notify_trade 收到 pnl
+
+---
+
+---
+
+### ReB-20260606-005
+- **Pattern Signature**: `p_win_statistical_freeze_dead_zone`
+- **描述**: 当历史 bug 导致的真实亏损将 rolling WR 压低至盈亏平衡地板附近（如 0.44 vs 0.45）时，Fail-Closed 兜底因触发线太低（0.40）无法介入，而 p_win 闸门硬阻断所有交易。无新交易 → 无新数据 → rolling WR 不更新 → 永久冰封。本质是边界值死锁：p_win 在 0.40 和 breakeven 之间的"死锁带"无逃生机制。
+- **关联 FIX IDs**: FIX-20260606-139
+- **关联 Docket IDs**: DQAF-20260606-004
+- **预防策略**: UCB 弹性地板——当 p_win 落入死锁带（0.40 < p_win < min_p_win）且置信度高时，用置信度推导弹性 p_win 解锁。Kelly 自动将仓位缩减至微仓级别，风险可控。
+- **检测方法**: 监控 `p_win_source == "ucb_elastic_floor"` 触发频率——若连续 >10 周期触发，说明弹性地板在持续兜底，需人工检查脑健康。若连续 >50 周期触发，触发 DQAF 诊断。
+
+---
 
 以下模式来自 FIX_REGISTRY.md 中反复出现的 Bug 类型，作为初始化参考：
 
@@ -62,6 +112,6 @@
 - **Pattern Signature**: `state_leak_across_restart`
 - **描述**: 系统重启后内存状态（冷却/预算/跟踪器）被重置为默认值而非从持久化存储恢复，导致"重启即开单"的反复出现
 - **关联 FIX IDs**: FIX-20260602-050, FIX-20260603-072, FIX-20260603-073, FIX-20260603-074, FIX-20260604-077
-- **关联 Docket IDs**: 待回填
+- **关联 Docket IDs**: DQAF-20260606-003
 - **预防策略**: `execution_state.json` 作为 SSOT 持久化所有门禁状态，启动时强制水合（hydration），不可跳过
 - **检测方法**: `state_hydration_test.py` 启动水合完整性检查；`reentry_guard.py` TTL 持久化验证
