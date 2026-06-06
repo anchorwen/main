@@ -1,11 +1,10 @@
-"""Download OHLC data from MT5 for HMRE multi-resolution training.
+"""Download OHLC data from MT5 for multi-resolution training.
 
-Downloads H1 and H4 data for XAUUSDc, EURUSDc, USDJPYc, XAGUSDc.
+Downloads M5/D1/H4 data for XAUUSDc, BTCUSDc, and cross-asset symbols.
 
 Usage:
-  python scripts/training/download_mt5_ohlc.py --timeframe H1 --output-dir data/raw
-  python scripts/training/download_mt5_ohlc.py --timeframe H4 --output-dir data/raw
-  python scripts/training/download_mt5_ohlc.py --timeframe H1,H4 --output-dir data/raw
+  python scripts/training/download_mt5_ohlc.py --timeframe M5,D1,H4 --output-dir data/raw
+  python scripts/training/download_mt5_ohlc.py --timeframe M5,D1 --symbols BTCUSDc,XAUUSDc,AUDJPYc
 """
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ from pathlib import Path
 import MetaTrader5 as mt5
 import pandas as pd
 
-SYMBOLS = ["XAUUSDc", "EURUSDc", "USDJPYc", "XAGUSDc"]
+SYMBOLS = ["XAUUSDc", "BTCUSDc", "EURUSDc", "USDJPYc", "XAGUSDc", "AUDJPYc"]
 
 TIMEFRAME_MAP = {
     "M5": mt5.TIMEFRAME_M5,
@@ -73,12 +72,12 @@ def download_ohlc(
 def main():
     parser = argparse.ArgumentParser(prog="download_mt5_ohlc")
     parser.add_argument(
-        "--timeframe", type=str, default="H1,H4", help="Comma-separated timeframes (default: H1,H4)"
+        "--timeframe", type=str, default="M5,D1,H4", help="Comma-separated timeframes (default: M5,D1,H4)"
     )
     parser.add_argument(
         "--symbols",
         type=str,
-        default="XAUUSDc,EURUSDc,USDJPYc,XAGUSDc",
+        default="XAUUSDc,BTCUSDc,EURUSDc,USDJPYc,XAGUSDc,AUDJPYc",
         help="Comma-separated symbols",
     )
     parser.add_argument("--output-dir", type=Path, default=Path("data/raw"))

@@ -79,6 +79,8 @@ class BTCFeatureAugmenter:
         self._xau_fail_count = 0
         self._xau_stale_count = 0
         self._audjpy_fail_count = 0
+        self._xau_price_fail_count = 0  # FIX-138: XAU price fetch for BTC/XAU ratio
+        self._first_augment_logged = False  # one-shot confirmation on first success
 
     # ── Public API ──────────────────────────────────────────────────────
 
@@ -163,6 +165,15 @@ class BTCFeatureAugmenter:
             37,
         ), f"CRITICAL: BTCFeatureAugmenter output shape {fv_37.shape} != (37,)"
         assert not np.isnan(fv_37).any(), "CRITICAL: NaN detected in BTC augmented feature vector"
+
+        # ── Phase 6a: one-shot confirmation of cross-asset slot activation ──
+        if not self._first_augment_logged:
+            self._first_augment_logged = True
+            _log.info(
+                "BTCFeatureAugmenter: 37-dim pipeline activated. "
+                "Cross-asset slots: [12]=%.6f [30]=%.6f [35]=%.6f [36]=%.6f",
+                fv_37[12], fv_37[30], fv_37[35], fv_37[36],
+            )
 
         return fv_37
 
@@ -282,47 +293,67 @@ class BTCFeatureAugmenter:
             return 0.0
 
     def _compute_btc_xau_ratio(self, btc_price: float) -> tuple[float, float]:
-        """Compute Cross_BTC_Gold_Ratio and its 5-period ROC.
+        """Compute Cross_BTC_Gold_Ratio and its 1-bar ROC from MT5 XAU price.
 
-        Ratio = BTC_price / XAU_price.
-        ROC  = (ratio - ratio_5bars_ago) / ratio_5bars_ago.
+        Ratio = BTC_price / XAU_price  (macro risk proxy: high→risk-on).
+        ROC   = (ratio - ratio_prev) / ratio_prev  (1-bar momentum).
 
-        Safeguard 1 (time-alignment): if XAU data is stale, both values
-        are zero-filled.
+        Safeguard 2 (graceful degradation): if MT5 worker is unavailable,
+        XAUUSDc not in Market Watch, or any other error occurs, zero-fill
+        both slots with debounced warning.
+
+        Uses the same ``copy_rates_from_pos`` pattern as
+        ``_compute_audjpyc_return()`` (slot [30]).
         """
-        if self._store is None or btc_price <= 0:
+        if self._worker is None or btc_price <= 0:
             return (0.0, 0.0)
 
         try:
-            record = self._store.get_latest("XAUUSDc")
-            if record is None:
+            rates = self._worker.copy_rates_from_pos(
+                "XAUUSDc",
+                5,  # MT5_TIMEFRAME_M5
+                0,
+                2,  # 2 bars: current + previous for ROC
+                timeout=3.0,
+            )
+            if rates is None or len(rates) < 2:
+                self._xau_price_fail_count += 1
+                if self._xau_price_fail_count % _WARNING_DEBOUNCE_CYCLES == 0:
+                    _log.warning(
+                        "BTCFeatureAugmenter: XAUUSDc rates unavailable "
+                        "(symbol may not be in Market Watch). "
+                        "Zero-filling BTC/XAU ratio slots [35-36]. "
+                        "(failed %d times)",
+                        self._xau_price_fail_count,
+                    )
                 return (0.0, 0.0)
 
-            # Time-alignment check
-            record_time = record.get("event_time", record.get("timestamp", 0))
-            if isinstance(record_time, str):
-                from datetime import datetime
+            xau_close = float(rates[-1].get("close", 0))
+            xau_prev_close = float(rates[-2].get("close", 0))
 
-                try:
-                    record_time = datetime.fromisoformat(record_time.replace("Z", "+00:00"))
-                    record_ts = record_time.timestamp()
-                except (ValueError, TypeError):
-                    record_ts = 0
-            else:
-                record_ts = float(record_time) if record_time else 0
-
-            staleness = _time.time() - record_ts if record_ts > 0 else float("inf")
-            if staleness > _MAX_STALENESS_SECONDS:
+            if xau_close <= 0 or xau_prev_close <= 0:
                 return (0.0, 0.0)
 
-            # XAU price — need to reconstruct from M5_Price_ZScore or last close
-            values = record.get("values", record.get("features", {}))
-            # The V9 features don't directly store absolute price.
-            # We use the M5_Ret_1 to approximate price direction for the ratio.
-            # For the absolute ratio, we need XAU mid price from another source.
-            # FIX: compute from bar_sync_state or MT5 tick.
-            # For now: zero-fill until XAU price feed is wired.
-            return (0.0, 0.0)
+            ratio = btc_price / xau_close
+            ratio_prev = btc_price / xau_prev_close
 
-        except Exception:
+            if ratio_prev <= 0 or not math.isfinite(ratio_prev):
+                return (0.0, 0.0)
+
+            roc = (ratio - ratio_prev) / ratio_prev
+
+            ratio_out = ratio if math.isfinite(ratio) else 0.0
+            roc_out = roc if math.isfinite(roc) else 0.0
+            return (ratio_out, roc_out)
+
+        except Exception as exc:
+            self._xau_price_fail_count += 1
+            if self._xau_price_fail_count % _WARNING_DEBOUNCE_CYCLES == 0:
+                _log.error(
+                    "BTCFeatureAugmenter: failed to fetch XAUUSDc for "
+                    "BTC/XAU ratio: %s. Zero-filling slots [35-36]. "
+                    "(failed %d times)",
+                    exc,
+                    self._xau_price_fail_count,
+                )
             return (0.0, 0.0)

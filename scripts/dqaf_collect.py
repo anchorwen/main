@@ -36,11 +36,11 @@ DATA_ROOTS = [PROJECT_ROOT / "data", PROJECT_ROOT / "data_btc"]
 EVIDENCE_DIR = PROJECT_ROOT / "data" / "dqaf" / "evidence"
 
 # Truncation limits (per source type)
-MAX_JOURNAL_LINES = 5_000          # journal JSONL hard cap
-JOURNAL_HEAD = 500                 # lines to keep from head when truncating
-JOURNAL_TAIL = 500                 # lines to keep from tail when truncating
+MAX_JOURNAL_LINES = 5_000  # journal JSONL hard cap
+JOURNAL_HEAD = 500  # lines to keep from head when truncating
+JOURNAL_TAIL = 500  # lines to keep from tail when truncating
 MAX_LOG_FILE_BYTES = 2 * 1024 * 1024  # 2MB per text log file
-MAX_GOLDEN_MASTER_LINES = 200      # last N golden master records
+MAX_GOLDEN_MASTER_LINES = 200  # last N golden master records
 MAX_ZIP_SIZE_WARN = 5 * 1024 * 1024  # 5MB — warn if zip exceeds
 HIGH_RISK_SOURCE_BYTES = 50 * 1024 * 1024  # 50MB — flag individual source files
 
@@ -123,6 +123,7 @@ SOURCE_SPECS: list[dict[str, Any]] = [
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def utc_now() -> datetime:
     """Return current UTC datetime."""
     return datetime.now(UTC)
@@ -169,9 +170,7 @@ def find_timestamp_in_line(line: str) -> datetime | None:
     return None
 
 
-def glob_files(
-    data_root: Path, patterns: list[str], cutoff: datetime | None = None
-) -> list[Path]:
+def glob_files(data_root: Path, patterns: list[str], cutoff: datetime | None = None) -> list[Path]:
     """Find files matching any of the given patterns under data_root.
 
     If cutoff is provided, only include files modified after cutoff.
@@ -237,9 +236,7 @@ def filter_jsonl_by_time(
     return content, original_count, kept, True
 
 
-def filter_jsonl_tail_only(
-    path: Path, tail: int
-) -> tuple[str, int, int, bool]:
+def filter_jsonl_tail_only(path: Path, tail: int) -> tuple[str, int, int, bool]:
     """Take only the last N lines of a JSONL file (no time filter)."""
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
@@ -252,9 +249,8 @@ def filter_jsonl_tail_only(
         return "".join(all_lines), original_count, original_count, False
 
     tail_lines = all_lines[-tail:]
-    content = (
-        f"...[TRUNCATED: showing last {tail} of {original_count} lines]...\n"
-        + "".join(tail_lines)
+    content = f"...[TRUNCATED: showing last {tail} of {original_count} lines]...\n" + "".join(
+        tail_lines
     )
     return content, original_count, tail + 1, True
 
@@ -292,12 +288,11 @@ def filter_text_log_tail(path: Path, max_bytes: int) -> tuple[str, int, int, boo
     # Try to find a clean line boundary start
     first_newline = text.find("\n")
     if first_newline > 0 and first_newline < 200:
-        text = text[first_newline + 1:]
+        text = text[first_newline + 1 :]
 
     content = (
         f"[TRUNCATED: showing last ~{max_bytes // 1024}KB of {file_size} bytes "
-        f"({file_size // 1024}KB) original]\n"
-        + text
+        f"({file_size // 1024}KB) original]\n" + text
     )
     return content, file_size, len(content.encode("utf-8")), True
 
@@ -346,6 +341,7 @@ def generate_docket_id() -> str:
 # ---------------------------------------------------------------------------
 # Main collection logic
 # ---------------------------------------------------------------------------
+
 
 def collect_evidence(hours: int, docket_id: str) -> Path:
     """Collect all evidence sources and package into a zip file.
@@ -410,22 +406,18 @@ def collect_evidence(hours: int, docket_id: str) -> Path:
                     if file_type == "jsonl":
                         if truncation == "line_cap":
                             if source_name == "golden_master":
-                                content, orig_count, kept, was_truncated = (
-                                    filter_jsonl_tail_only(
-                                        file_path, spec["tail_lines"]
-                                    )
+                                content, orig_count, kept, was_truncated = filter_jsonl_tail_only(
+                                    file_path, spec["tail_lines"]
                                 )
                                 orig_size = orig_count
                                 kept_size = kept
                             else:
-                                content, orig_count, kept, was_truncated = (
-                                    filter_jsonl_by_time(
-                                        file_path,
-                                        cutoff,
-                                        spec["max_lines"],
-                                        spec["head_lines"],
-                                        spec["tail_lines"],
-                                    )
+                                content, orig_count, kept, was_truncated = filter_jsonl_by_time(
+                                    file_path,
+                                    cutoff,
+                                    spec["max_lines"],
+                                    spec["head_lines"],
+                                    spec["tail_lines"],
                                 )
                                 orig_size = orig_count
                                 kept_size = kept
@@ -435,8 +427,8 @@ def collect_evidence(hours: int, docket_id: str) -> Path:
                             kept_size = kept_bytes
 
                     elif file_type == "text":
-                        content, orig_bytes, kept_bytes, was_truncated = (
-                            filter_text_log_tail(file_path, spec["max_bytes"])
+                        content, orig_bytes, kept_bytes, was_truncated = filter_text_log_tail(
+                            file_path, spec["max_bytes"]
                         )
                         # Also filter by log level
                         content, _, _ = filter_log_by_level(content)
@@ -489,8 +481,7 @@ def collect_evidence(hours: int, docket_id: str) -> Path:
 
         manifest_lines.append("")
         manifest_lines.append(
-            f"Total estimated uncompressed size: "
-            f"{total_zip_size_estimate // 1024}KB"
+            f"Total estimated uncompressed size: " f"{total_zip_size_estimate // 1024}KB"
         )
         if total_zip_size_estimate > MAX_ZIP_SIZE_WARN:
             manifest_lines.append(
@@ -520,6 +511,7 @@ def collect_evidence(hours: int, docket_id: str) -> Path:
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(

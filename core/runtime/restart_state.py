@@ -3,14 +3,31 @@
 Extracted from live_cycle.py per the Strangler Fig pattern (#8).
 Called once on first cycle after restart to populate reentry states,
 SL streak counters, and graduated cooldown from recent journal history.
+
+..  rubric:: Fail-Closed Principle (FIX-20260606-138)
+
+    Previously, any exception during journal parsing was silently swallowed
+    (``except Exception: return``), leaving ``_reentry_states`` empty.  This
+    caused ``last_exit = None`` → ``"first_entry"`` bypass → restart-immediate-
+    trade (RC-03 / ReB-003c bootstrap_silent_fail_to_open).
+
+    Now: parse errors are logged with full traceback at ERROR level, and a
+    ``_bootstrap_degraded`` flag is set on the state object.  The pre-trade
+    gate evaluator checks this flag and blocks all trades when bootstrap
+    integrity cannot be confirmed — the system defaults to **closed** gates.
 """
 
 from __future__ import annotations
 
 import json
+import logging as _logging
 import time
+import traceback as _traceback
 from datetime import UTC, datetime
+from pathlib import Path as _Path
 from typing import Any
+
+_logger = _logging.getLogger(__name__)
 
 
 def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
@@ -21,17 +38,20 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
       - _reentry_states  (most recent exit per strategy)
       - _pending_sl_records  (all SL/loss events for graduated cooldown)
       - consecutive_sl_hits  (per-strategy SL streak counter)
-    """
-    import logging as _logging
-    from pathlib import Path as _Path
 
+    Sets ``state._bootstrap_degraded = True`` when journal parsing fails
+    entirely — downstream gates MUST check this flag and default to
+    conservative (block all trades) until manual intervention.
+    """
     _jp = _Path(journal_path)
     if not _jp.exists():
-        _logging.getLogger(__name__).warning(
+        _logger.warning(
             "Bootstrap: journal not found at %s — reentry guard will have no "
-            "exit history. If this is NOT a fresh system, journal data may be lost.",
+            "exit history. Setting _bootstrap_degraded=True. "
+            "All trades will be blocked until journal data is available.",
             journal_path,
         )
+        state._bootstrap_degraded = True
         return
 
     now = time.time()
@@ -57,55 +77,70 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
 
     try:
         _content = _jp.read_text(encoding="utf-8")
-        # Scan backwards from end to find most recent close per strategy
-        _lines = _content.splitlines()
-        for _line in reversed(_lines):
-            _line = _line.strip()
-            if not _line:
-                continue
-            try:
-                _entry = json.loads(_line)
-            except json.JSONDecodeError:
-                continue
-
-            _action = _entry.get("action", "")
-            if _action not in ("close",):
-                continue
-
-            # Skip closes whose open is still tracked
-            _open_mid = _entry.get("open_message_id", "")
-            if _open_mid and _open_mid in _active_open_mids:
-                continue
-
-            _ts_str = _entry.get("recorded_at", "")
-            try:
-                if _ts_str:
-                    _ts = datetime.fromisoformat(_ts_str.replace("Z", "+00:00")).timestamp()
-                else:
-                    continue
-            except Exception:
-                continue
-
-            # Resolve strategy from entry or magic
-            _strategy = _entry.get("strategy", "")
-            if not _strategy:
-                _magic = _entry.get("magic", 0)
-                if _magic:
-                    from core.contracts.strategy_magic import MAGIC_TO_STRATEGY as _M2
-                    _strategy = _M2.get(_magic, "")
-
-            # Collect: always for unseen strategies (most recent close),
-            # and for SL streak within the 7-day window.
-            if _strategy and _strategy not in _seen_strategies:
-                _close_entries.append(_entry)
-                _seen_strategies.add(_strategy)
-            elif _ts >= _sl_cutoff:
-                # Within SL streak window: collect for streak counting
-                _label = _entry.get("label", "")
-                if _label in ("sl_hit_first", "loss", "tp_hit_first", "win"):
-                    _close_entries.append(_entry)
     except Exception:
+        _logger.error(
+            "Bootstrap: failed to read journal at %s.\n%s",
+            journal_path,
+            _traceback.format_exc(),
+        )
+        state._bootstrap_degraded = True
         return
+
+    # ── Scan backwards from end to find most recent close per strategy ──
+    _lines = _content.splitlines()
+    for _line in reversed(_lines):
+        _line = _line.strip()
+        if not _line:
+            continue
+        try:
+            _entry = json.loads(_line)
+        except json.JSONDecodeError:
+            _logger.debug(
+                "Bootstrap: skipping non-JSON line in journal: %.100s...",
+                _line,
+            )
+            continue
+
+        _action = _entry.get("action", "")
+        if _action not in ("close",):
+            continue
+
+        # Skip closes whose open is still tracked
+        _open_mid = _entry.get("open_message_id", "")
+        if _open_mid and _open_mid in _active_open_mids:
+            continue
+
+        _ts_str = _entry.get("recorded_at", "")
+        try:
+            if _ts_str:
+                _ts = datetime.fromisoformat(_ts_str.replace("Z", "+00:00")).timestamp()
+            else:
+                continue
+        except Exception:
+            _logger.debug(
+                "Bootstrap: unparseable timestamp in journal entry: %.120s",
+                _ts_str,
+            )
+            continue
+
+        # Resolve strategy from entry or magic
+        _strategy = _entry.get("strategy", "")
+        if not _strategy:
+            _magic = _entry.get("magic", 0)
+            if _magic:
+                from core.contracts.strategy_magic import MAGIC_TO_STRATEGY as _M2
+                _strategy = _M2.get(_magic, "")
+
+        # Collect: always for unseen strategies (most recent close),
+        # and for SL streak within the 7-day window.
+        if _strategy and _strategy not in _seen_strategies:
+            _close_entries.append(_entry)
+            _seen_strategies.add(_strategy)
+        elif _ts >= _sl_cutoff:
+            # Within SL streak window: collect for streak counting
+            _label = _entry.get("label", "")
+            if _label in ("sl_hit_first", "loss", "tp_hit_first", "win"):
+                _close_entries.append(_entry)
 
     # ── FIX-20260603-068: full-chain debug — one restart to find root cause ──
     import json as _json
@@ -275,7 +310,12 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
                     "last_exit_reason": _rs.last_exit.reason if _rs.last_exit else None,
                 }, ensure_ascii=False, default=str), flush=True)
             except Exception:
-                pass
+                _logger.warning(
+                    "Bootstrap: failed to record exit for strategy=%s ticket=%s.\n%s",
+                    _strategy,
+                    _ticket,
+                    _traceback.format_exc(),
+                )
 
         # ── Count SL/loss for streak tracker ──
         if _label in ("sl_hit_first", "loss"):

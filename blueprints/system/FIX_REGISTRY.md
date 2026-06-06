@@ -1745,3 +1745,5 @@ FIX-YYYYMMDD-NNN
   [PASS] verify.py --quick — no regressions
   ```
 
+- **Follow-up Fix (2026-06-06)**: Original implementation referenced `_close_result` inside `isinstance()` check at the `_dispatched` convergence point without initializing it. `_close_result` was only assigned inside the `net_out/reduced` branch → `UnboundLocalError` for open-order dispatch. Fixed by initializing `_close_result: dict | None = None` before the branch, then checking `if _close_result is not None` before extracting PnL. Root cause: RC-05 (boundary-error) — variable scope leak across branch convergence.
+

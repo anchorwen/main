@@ -207,6 +207,10 @@ class LiveCycleState:
     _recent_mid_prices: list[float] = field(default_factory=list)  # rolling 50 mid prices (ER calc)
     _recent_consensus_scores: list[float] = field(default_factory=list)  # rolling 500 scores (P80)
     _reentry_states: dict[str, Any] = field(default_factory=dict)  # {strategy_name: ReentryState}
+    _bootstrap_degraded: bool = False  # FIX-138: set True when restart bootstrap fails
+    # ── FIX-20260606-138 Phase 2: cross-cycle exit retry cooldown ──
+    _exit_reject_streak: dict[int, int] = field(default_factory=dict)  # ticket → consecutive rejects
+    _exit_reject_cooldown: dict[int, float] = field(default_factory=dict)  # ticket → cooldown_until ts
     # ── FIX-20260603-067 P2: gate telemetry funnel ──
     _gate_stats: dict[str, dict[str, int]] = field(default_factory=dict)
     _gate_stats_cycles: int = 0
@@ -754,6 +758,9 @@ def _execute_management_phase(
             # ── Phase B: PnL fund-safety context injection ──
             # FIX-20260603-066 P0: compute daily PnL from journal (SSOT),
             # not from in-memory accumulators that drift on restart.
+            # FIX-20260606-138 Phase 0: filter by ack_status + dedup by
+            # position_ticket to prevent retry/rejected entries from
+            # polluting the rolling window (DQAF-20260606-005).
             _daily_pnl = 0.0
             _consec_losses = 0
             _win_count = 0
@@ -765,10 +772,13 @@ def _execute_management_phase(
                 _today = _dt.now(UTC).date()
                 _jp = Path(config.base_dir) / "live_trade_journal.jsonl"
                 if _jp.exists():
-                    # Read backwards from end — journal grows, only need today
+                    # Read backwards from end — journal grows, only need today.
+                    # Backwards scan + seen_positions ensures we only count
+                    # the MOST RECENT (final) close entry per position.
                     _lines = []
                     with open(_jp, encoding="utf-8") as _jf:
                         _lines = _jf.readlines()
+                    _seen_positions: set[int] = set()
                     for _line in reversed(_lines):
                         _line = _line.strip()
                         if not _line:
@@ -779,6 +789,10 @@ def _execute_management_phase(
                             continue
                         if _e.get("action") != "close":
                             continue
+                        # ── Phase 0 filter 1: skip rejected/retry entries ──
+                        _ack = _e.get("ack_status", "")
+                        if _ack not in ("accepted", "closed"):
+                            continue
                         _ts = _e.get("recorded_at", "")
                         try:
                             _d = _dt.fromisoformat(_ts.replace("Z", "+00:00")).date()
@@ -786,6 +800,19 @@ def _execute_management_phase(
                             continue
                         if _d != _today:
                             continue
+                        # ── Phase 0 filter 2: dedup by open position ──
+                        # Prefer detail.request.position (the actual MT5
+                        # position ticket being closed).  Fall back to the
+                        # close order's own position_ticket.
+                        _pos_tkt = (
+                            _e.get("detail", {}).get("request", {}).get("position")
+                            or _e.get("position_ticket")
+                        )
+                        if _pos_tkt is not None:
+                            _pos_tkt = int(_pos_tkt)
+                            if _pos_tkt in _seen_positions:
+                                continue  # already counted a more recent close
+                            _seen_positions.add(_pos_tkt)
                         _pnl = _e.get("pnl")
                         if _pnl is None:
                             continue
@@ -2181,6 +2208,8 @@ def _evaluate_strategy_lines(
     reentry_sl_penalty: float | None = None,
     reentry_bleed_cooldown: float | None = None,
     reentry_bleed_penalty: float | None = None,
+    # ── FIX-20260606-138: Fail-Closed on bootstrap degradation ──
+    bootstrap_degraded: bool = False,
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue."""
     from core.runtime.strategy_evaluator import evaluate_strategy_lines as _impl
@@ -2226,6 +2255,7 @@ def _evaluate_strategy_lines(
         reentry_sl_penalty=reentry_sl_penalty,
         reentry_bleed_cooldown=reentry_bleed_cooldown,
         reentry_bleed_penalty=reentry_bleed_penalty,
+        bootstrap_degraded=bootstrap_degraded,
     )
 
 
@@ -4263,6 +4293,8 @@ def execute_live_cycle(
             reentry_sl_penalty=config.reentry_sl_penalty,
             reentry_bleed_cooldown=config.reentry_bleed_cooldown,
             reentry_bleed_penalty=config.reentry_bleed_penalty,
+            # ── FIX-20260606-138: Fail-Closed on bootstrap degradation ──
+            bootstrap_degraded=getattr(state, "_bootstrap_degraded", False),
         )
 
         # ── Golden Master recording: capture outputs after evaluation ──
@@ -4422,6 +4454,34 @@ def execute_live_cycle(
                     _reason = payload.get("comment", "net_out")
                     _magic = payload.get("magic", 0)
                     _brain_ids = payload.get("brain_ids")
+                    # ── Phase 2: cross-cycle exit retry cooldown ──
+                    # If this position has been rejected ≥3 consecutive
+                    # cycles, skip the exit attempt for 10 cycles to
+                    # prevent retry storms (DQAF-20260606-005).
+                    import time as _cooldown_time
+
+                    _now_ts = _cooldown_time.time()
+                    _cd_until = state._exit_reject_cooldown.get(int(_ticket), 0.0)
+                    if _now_ts < _cd_until:
+                        _remaining = int(_cd_until - _now_ts)
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "exit_cooldown_skipped",
+                                    "time": _utc_iso(),
+                                    "ticket": _ticket,
+                                    "reason": _reason,
+                                    "cooldown_remaining_s": _remaining,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                        return {
+                            "dispatched": False,
+                            "intent_id": "",
+                            "reason": "exit_cooldown_active",
+                        }
                     # Calculate estimated PnL for journal recording
                     _net_pnl = payload.get("pnl")
                     if _net_pnl is None and mid_price is not None and _ticket:
@@ -4454,7 +4514,42 @@ def execute_live_cycle(
                         brain_ids=_brain_ids,
                         pnl=_net_pnl,
                     )
-                    return {"dispatched": _wd.success, "intent_id": ""}
+                    # ── Phase 2: update reject streak / cooldown ──
+                    _tkt_key = int(_ticket)
+                    if _wd.success:
+                        state._exit_reject_streak.pop(_tkt_key, None)
+                        state._exit_reject_cooldown.pop(_tkt_key, None)
+                    else:
+                        _streak = state._exit_reject_streak.get(_tkt_key, 0) + 1
+                        state._exit_reject_streak[_tkt_key] = _streak
+                        if _streak >= 3:
+                            _cooldown_s = 300  # 10 cycles × 30s
+                            _cd_deadline = _now_ts + _cooldown_s
+                            state._exit_reject_cooldown[_tkt_key] = _cd_deadline
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "exit_cooldown_activated",
+                                        "time": _utc_iso(),
+                                        "ticket": _ticket,
+                                        "consecutive_rejects": _streak,
+                                        "cooldown_seconds": _cooldown_s,
+                                        "message": (
+                                            "Position exit has been rejected "
+                                            f"{_streak} times consecutively. "
+                                            "Cooling down for 10 cycles to "
+                                            "prevent retry storm."
+                                        ),
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                    return {
+                        "dispatched": _wd.success,
+                        "intent_id": "",
+                        "pnl": _net_pnl,  # FIX-138-Phase3: pass PnL through to notify_trade
+                    }
 
                 _net_out_close_dispatch_fn = _net_out_close_dispatch_fn
 
@@ -4538,6 +4633,9 @@ def execute_live_cycle(
                 # 避免重复递增导致状态保存间隔/对账触发/冷却计时偏移。
 
                 # ── FIX-20260602-059: real-time trade notification ──
+                # FIX-138-Phase3: pass PnL + dedup per position_ticket to
+                # prevent retry storms from flooding DingTalk (DQAF-006).
+                _notified_tickets: set[int] = set()
                 for dr in dispatch_results:
                     if not dr.dispatched:
                         continue
@@ -4545,13 +4643,25 @@ def execute_live_cycle(
                     if _ah is not None:
                         import contextlib
 
+                        _action = "open" if dr.reason != "net_out_close" else "close"
+                        _tkt = (
+                            dr.net_out_ticket_update.get("old_ticket", 0)
+                            if dr.net_out_ticket_update
+                            else 0
+                        )
+                        # Dedup: only one close notification per ticket per cycle
+                        if _action == "close" and _tkt:
+                            if _tkt in _notified_tickets:
+                                continue
+                            _notified_tickets.add(_tkt)
                         with contextlib.suppress(Exception):
                             _ah.notify_trade(
-                                action="open" if dr.reason != "net_out_close" else "close",
+                                action=_action,
                                 symbol=config.symbol,
                                 side=dr.direction,
                                 volume=dr.volume,
                                 price=dr.price if hasattr(dr, "price") else None,
+                                pnl=dr.pnl,  # FIX-138-Phase3: estimated PnL
                             )
 
             for dr in dispatch_results:
@@ -5120,7 +5230,16 @@ def execute_live_cycle(
                                     tf_hurst=tf_hurst,
                                 )
                             except Exception:
-                                pass  # graceful degradation — fall back to legacy assembly
+                                import logging as _btc_log
+                                import traceback as _btc_tb
+
+                                _btc_log.getLogger(__name__).warning(
+                                    "BTCFeatureAugmenter.augment() failed — "
+                                    "falling back to legacy XAU-centric assembly. "
+                                    "BTC cross-asset slots [12][30][35][36] will be "
+                                    "incorrect.\n%s",
+                                    _btc_tb.format_exc(),
+                                )
 
                         fv = assemble_swing_features(
                             schema_id,

@@ -9,11 +9,11 @@
       "transition_count": 5,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.5,
-        "profit_factor": 0.9,
-        "sharpe_ratio": -10.65,
+        "win_rate": 0.46,
+        "profit_factor": 0.83,
+        "sharpe_ratio": -19.8,
         "total_trades": 100,
-        "pnl_r": -695.17
+        "pnl_r": -656.42
       }
     },
     "BTC_Swing_LGB_V1": {
@@ -39,11 +39,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.25,
-        "profit_factor": 0.0,
-        "sharpe_ratio": 0.0,
-        "total_trades": 4,
-        "pnl_r": -175.03
+        "win_rate": 0.46,
+        "profit_factor": 0.83,
+        "sharpe_ratio": -19.8,
+        "total_trades": 100,
+        "pnl_r": -656.42
       }
     }
   },

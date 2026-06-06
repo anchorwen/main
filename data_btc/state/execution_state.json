@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "saved_at_utc": "2026-06-06T03:54:44.059807",
+  "saved_at_utc": "2026-06-06T15:24:44.542544",
   "budgets": {
     "btc_swing": {
       "daily_pnl_pct": 0.0,
@@ -18,7 +18,7 @@
   "cooldown_registry": {},
   "family_entry_tracker": {},
   "sl_streak_blocks": {},
-  "sl_streak_global_block": 0,
+  "sl_streak_global_block": 0.0,
   "consecutive_degraded": 0,
   "circuit_breaker_tripped": false,
   "intraday_dd_active": false

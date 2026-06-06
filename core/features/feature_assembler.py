@@ -51,6 +51,7 @@ def assemble_features_by_schema(
     micro_features: Any = None,
     tf_ou: float = 0.0,
     tf_hurst: float = 0.5,
+    btc_augment: np.ndarray | None = None,  # FIX-134/138: pre-augmented 37-dim BTC vector
 ) -> np.ndarray:
     """Build a feature vector for a brain given its declared feature schema.
 
@@ -63,6 +64,11 @@ def assemble_features_by_schema(
         micro_features: Optional 9-dim microstructure vector (for enhanced swing).
         tf_ou: Timeframe-specific OU-theta value (for enhanced swing).
         tf_hurst: Timeframe-specific Hurst exponent (for enhanced swing).
+        btc_augment: Pre-computed 37-dim BTC feature vector from
+            ``BTCFeatureAugmenter.augment()``.  Only used when
+            *schema_name* is ``btc_macro_enhanced_37`` — the augmenter
+            corrects cross-asset slots that differ between XAU and BTC.
+            If None (or for XAU schemas), the legacy assembly path is used.
 
     Returns:
         Feature vector at the correct dimension for the declared schema.
@@ -93,6 +99,7 @@ def assemble_features_by_schema(
             micro_features=micro_features,
             tf_ou=tf_ou,
             tf_hurst=tf_hurst,
+            btc_augment=btc_augment,
         )
 
     # Unknown / unset schema → fall back to V9 40-dim (legacy default).

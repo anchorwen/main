@@ -191,6 +191,7 @@ class ExecutionQueue:
 
             # If NET_OUT or REDUCED, handle opposing position first
             _net_out_ticket_update: dict[str, Any] | None = None
+            _close_result: dict[str, Any] | None = None  # FIX-138-Phase3: init before branch
             if risk.verdict.value in ("net_out", "reduced") and risk.net_out_ticket:
                 # Close/reduce existing opposing position
                 _close_confirmed = False
@@ -347,6 +348,8 @@ class ExecutionQueue:
 
             if _dispatched:
                 _close_pnl: float | None = None
+                if _close_result is not None:
+                    _close_pnl = _close_result.get("pnl")
                 results.append(
                     DispatchResult(
                         strategy_name=queued.strategy_name,

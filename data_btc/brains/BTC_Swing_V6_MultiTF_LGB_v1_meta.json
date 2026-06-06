@@ -1,0 +1,45 @@
+{
+  "brain_id": "BTC_Swing_V6_MultiTF_LGB_v1",
+  "model_type": "lightgbm",
+  "feature_schema": "btc_macro_enhanced_37",
+  "n_features": 37,
+  "timeframes": [
+    "M15",
+    "M30",
+    "H1"
+  ],
+  "train_samples": 13800,
+  "n_trees": 3,
+  "test_auc": {
+    "M15": 0.6556769416681956,
+    "M30": 0.7371913580246914,
+    "H1": 0.8029405784577848
+  },
+  "top_gain": [
+    [
+      1,
+      "D1_Body_Ratio",
+      1572.6076617240906
+    ],
+    [
+      0,
+      "D1_Ret_1",
+      1058.5068590641022
+    ],
+    [
+      27,
+      "avg_spread",
+      282.4639523625374
+    ],
+    [
+      35,
+      "Cross_BTC_Gold_Ratio",
+      177.48593925125897
+    ],
+    [
+      13,
+      "Cross_DXY_Return",
+      137.29969954490662
+    ]
+  ]
+}

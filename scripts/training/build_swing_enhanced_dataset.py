@@ -506,6 +506,22 @@ def build_swing_dataset(
     _all_feats = _macro_feats + _micro_feats + TF_SPECIFIC_FEATURES + _extra_feats
     _n_feats = len(_all_feats)
     print(f"  Features: {_n_feats}-dim schema {'(BTC 37)' if _is_btc else '(XAU 35)'}")
+
+    # ── FIX-138: load XAUUSDc D1 close prices for BTC slot [12] override ──
+    _xau_d1_closes: list[float] | None = None
+    _xau_d1_dates: list | None = None  # for timestamp-based alignment
+    if _is_btc:
+        _xau_d1_path = _data_dir / "xauusdc_d1_merged.csv"
+        if not _xau_d1_path.exists():
+            _xau_d1_path = _cross_fallback_dir / "xauusdc_d1_merged.csv"
+        if _xau_d1_path.exists():
+            _xau_d1_data = load_ohlc_csv(_xau_d1_path)
+            _xau_d1_closes = list(_xau_d1_data["close"])
+            _xau_d1_dates = list(_xau_d1_data["timestamp"])
+            print(f"  XAUUSDc D1: {len(_xau_d1_closes)} bars loaded for slot [12] override")
+        else:
+            print("  [WARN] XAUUSDc D1 not found — slot [12] will be zero-filled")
+
     # Need enough history for features
     start_idx = max(100, n_m5 * 2)  # skip first bars for feature stability
     valid_count = 0
@@ -577,6 +593,29 @@ def build_swing_dataset(
             if d1_idx_tracker >= d1_min_lookback and d1_idx_tracker < daily_computer._n:
                 raw_row = daily_computer._gather_row(d1_idx_tracker)
                 macro = dict(zip(SWING_MACRO_FEATURES, raw_row, strict=False))
+                # ── FIX-138: BTC slot [12] is XAUUSDc_return, not Cross_Gold_Silver_Ratio ──
+                if _is_btc and _xau_d1_closes is not None and _xau_d1_dates is not None:
+                    # ── Align XAU D1 to BTC D1 bar by timestamp ──
+                    _btc_dt = daily_computer._d1_datetimes[d1_idx_tracker]
+                    _xau_idx = 0
+                    for _j in range(len(_xau_d1_dates)):
+                        if _xau_d1_dates[_j] <= _btc_dt:
+                            _xau_idx = _j
+                        else:
+                            break
+                    if _xau_idx > 0 and _xau_idx < len(_xau_d1_closes):
+                        _xau_curr = _xau_d1_closes[_xau_idx]
+                        _xau_prev = _xau_d1_closes[_xau_idx - 1]
+                        if _xau_prev > 0:
+                            macro["XAUUSDc_return"] = (
+                                (_xau_curr - _xau_prev) / _xau_prev * 100.0
+                            )
+                        else:
+                            macro["XAUUSDc_return"] = 0.0
+                    else:
+                        macro["XAUUSDc_return"] = 0.0
+                elif _is_btc:
+                    macro["XAUUSDc_return"] = 0.0
             else:
                 macro = dict.fromkeys(_macro_feats, 0.0)
         else:

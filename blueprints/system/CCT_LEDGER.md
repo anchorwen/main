@@ -115,6 +115,7 @@
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: `missing_pnl_in_trade_notification`
 - **关联 FIX**: FIX-20260606-138-Phase3
+- **Follow-up**: Phase 3 初版在 `execution_queue.py` 中引用 `_close_result` 时未初始化（变量仅在 close 分支存在），导致开仓路径 `UnboundLocalError`。已通过分支前初始化 + None 检查修复（RC-05 boundary-error）。
 
 ### CCT-20260606-005
 - **Docket ID**: DQAF-20260606-004

@@ -225,24 +225,31 @@ def check_legacy_count() -> tuple[int, str]:
 
 
 def check_golden_master() -> tuple[int, str]:
-    """Check Golden Master recording cycles."""
+    """Check Golden Master recording cycles (XAU + BTC combined)."""
     import os
-    gm_path = PROJECT_ROOT / "data" / "golden_master.jsonl"
+    total = 0
+    parts = []
+    for label, rel_path in [("XAU", "data/golden_master.jsonl"), ("BTC", "data_btc/golden_master.jsonl")]:
+        gm_path = PROJECT_ROOT / rel_path
+        cycles = 0
+        if gm_path.exists():
+            cycles = len([l for l in gm_path.read_text(encoding="utf-8").splitlines() if l.strip()])
+        total += cycles
+        parts.append(f"{label}={cycles}")
     disabled = os.environ.get("GOLDEN_MASTER_RECORD") == "0"
-    cycles = 0
-    if gm_path.exists():
-        cycles = len([l for l in gm_path.read_text(encoding="utf-8").splitlines() if l.strip()])
-    return cycles, f"{cycles} cycles, recording={'OFF (GOLDEN_MASTER_RECORD=0)' if disabled else 'ON (default)'}"
+    status = "OFF" if disabled else "ON"
+    return total, f"{total} cycles ({', '.join(parts)}), recording={status}"
 
 
 def check_golden_master_replay_ready() -> tuple[bool, str]:
-    """Check if replay verification is ready."""
-    gm_path = PROJECT_ROOT / "data" / "golden_master.jsonl"
-    cycles = 0
-    if gm_path.exists():
-        cycles = len([l for l in gm_path.read_text(encoding="utf-8").splitlines() if l.strip()])
+    """Check if replay verification is ready (combined XAU+BTC >= 500)."""
+    total = 0
+    for rel_path in ["data/golden_master.jsonl", "data_btc/golden_master.jsonl"]:
+        gm_path = PROJECT_ROOT / rel_path
+        if gm_path.exists():
+            total += len([l for l in gm_path.read_text(encoding="utf-8").splitlines() if l.strip()])
     has_cmd = "--golden-master" in (PROJECT_ROOT / "scripts" / "verify.py").read_text(encoding="utf-8")
-    return (cycles >= 500 and has_cmd), f"cycles={cycles}/500, verify.py gm={'OK' if has_cmd else 'TODO'}"
+    return (total >= 500 and has_cmd), f"combined={total}/500, verify.py gm={'OK' if has_cmd else 'TODO'}"
 
 
 def check_gate_refactor() -> tuple[bool, str]:

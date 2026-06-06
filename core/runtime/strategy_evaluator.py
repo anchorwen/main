@@ -64,11 +64,52 @@ def evaluate_strategy_lines(
     reentry_sl_penalty: float | None = None,
     reentry_bleed_cooldown: float | None = None,
     reentry_bleed_penalty: float | None = None,
+    # ── FIX-20260606-138: bootstrap degraded flag (Fail-Closed) ──
+    bootstrap_degraded: bool = False,
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue.
 
     Returns a summary dict for logging.
+
+    When *bootstrap_degraded* is True (restart state restoration failed),
+    ALL trades are blocked — the system defaults to Fail-Closed rather than
+    silently allowing trades through empty guard state.
     """
+    # ── FIX-20260606-138: Fail-Closed on bootstrap degradation ──
+    if bootstrap_degraded:
+        import json as _json_fc
+
+        _blocked_summary: dict[str, Any] = {
+            "event": "gate_chain_blocked",
+            "reason": "bootstrap_degraded_fail_closed",
+            "time": _utc_iso(),
+            "message": (
+                "Restart state bootstrap failed — reentry guard, cooldown, "
+                "and budget state could not be verified.  All trades are "
+                "blocked until manual intervention confirms state integrity."
+            ),
+            "action_required": (
+                "Check journal file integrity and restart the system. "
+                "If journal is intact, review bootstrap logs for errors."
+            ),
+            "strategies_blocked": sorted(strategy_lines.keys()),
+        }
+        print(_json_fc.dumps(_blocked_summary, ensure_ascii=False), flush=True)
+        return {
+            "decisions_map": {},
+            "trade_decisions": 0,
+            "strategy_results": [
+                {
+                    "strategy": sname,
+                    "should_trade": False,
+                    "direction": "neutral",
+                    "confidence": 0.0,
+                    "reason": "bootstrap_degraded_fail_closed",
+                }
+                for sname in strategy_lines
+            ],
+        }
+
     decisions: list[Any] = []
     _blocked = sl_streak_blocked_until or {}
     strategy_results: list[dict[str, Any]] = []

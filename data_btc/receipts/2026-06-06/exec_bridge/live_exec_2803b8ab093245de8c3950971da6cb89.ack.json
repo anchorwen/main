@@ -1,0 +1,16 @@
+{
+  "message_id": "live_exec_2803b8ab093245de8c3950971da6cb89",
+  "ack_status": "rejected",
+  "received_at": "2026-06-06T06:55:15",
+  "detail": {
+    "retcode": 10031,
+    "comment": "Request rejected due to absence of network connection",
+    "request": {
+      "action": 6,
+      "symbol": "BTCUSDc",
+      "position": 3807506009,
+      "sl": 61559.74429,
+      "tp": 59583.493
+    }
+  }
+}
