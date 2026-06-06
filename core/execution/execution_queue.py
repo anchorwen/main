@@ -48,6 +48,9 @@ class DispatchResult:
     reason: str = ""
     journal_entry: dict[str, Any] | None = None
     net_out_ticket_update: dict[str, Any] | None = None
+    pnl: float | None = None  # FIX-138-Phase3: estimated PnL for trade notifications
+    volume: float = 0.0  # trade volume (for notifications)
+    price: float | None = None  # fill price (for notifications)
 
 
 class ExecutionQueue:
@@ -343,6 +346,7 @@ class ExecutionQueue:
                         _time.sleep(1.5)
 
             if _dispatched:
+                _close_pnl: float | None = None
                 results.append(
                     DispatchResult(
                         strategy_name=queued.strategy_name,
@@ -352,6 +356,10 @@ class ExecutionQueue:
                         reason="ok",
                         journal_entry=_journal_entry,
                         net_out_ticket_update=_net_out_ticket_update,
+                        pnl=_close_pnl,
+                        volume=risk.adjusted_volume
+                        if risk.adjusted_volume > 0
+                        else decision.volume,
                     )
                 )
             else:
