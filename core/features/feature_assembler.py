@@ -82,7 +82,11 @@ def assemble_features_by_schema(
             return v[:40] if len(v) >= 40 else np.pad(v, (0, 40 - len(v)))
         return np.zeros(40, dtype=np.float64)
 
-    if "swing_enhanced" in schema_name or "daily_swing" in schema_name or "btc_macro" in schema_name:
+    if (
+        "swing_enhanced" in schema_name
+        or "daily_swing" in schema_name
+        or "btc_macro" in schema_name
+    ):
         return _build_swing_vector(
             schema_name,
             daily_features,
@@ -109,13 +113,15 @@ def assemble_features_by_schema(
 def _derive_xau_indices(feature_list: list[str]) -> set[int]:
     """Return indices of XAU cross-asset features in *feature_list*."""
     _XAU_PATTERNS = {
-        "Cross_Gold", "Cross_DXY", "Cross_EUR", "Cross_Silver",
-        "XAGUSD", "EURUSD", "USDJPY",
+        "Cross_Gold",
+        "Cross_DXY",
+        "Cross_EUR",
+        "Cross_Silver",
+        "XAGUSD",
+        "EURUSD",
+        "USDJPY",
     }
-    return {
-        i for i, f in enumerate(feature_list)
-        if any(p in f for p in _XAU_PATTERNS)
-    }
+    return {i for i, f in enumerate(feature_list) if any(p in f for p in _XAU_PATTERNS)}
 
 
 # Computed once at import (same as registry.py)
@@ -140,6 +146,7 @@ def _build_swing_vector(
     micro_features: Any = None,
     tf_ou: float = 0.0,
     tf_hurst: float = 0.5,
+    btc_augment: np.ndarray | None = None,  # FIX-134: pre-augmented 37-dim BTC vector
 ) -> np.ndarray:
     """Build a swing feature vector from components using schema metadata.
 
@@ -189,10 +196,20 @@ def _build_swing_vector(
         return fv_35
 
     if canonical == "btc_macro_enhanced_37":
-        # BTC 37-dim: 24 macro + 9 micro + 2 TF + 2 BTC/XAU ratio features
-        # The ratio + ROC are computed at build time (offline) and will be
-        # filled by the live computer at runtime (DailyFeatureComputer extension pending).
-        return np.concatenate([fv_35, np.zeros(2, dtype=np.float64)])
+        # ── FIX-20260606-133/134: BTC feature alignment (Phase 5b Step B) ─
+        # When btc_augment is provided (BTCFeatureAugmenter), use the
+        # pre-computed 37-dim vector with corrected cross-asset slots.
+        # Otherwise fall back to the legacy assembly path (XAU-centric
+        # features with hardcoded zeros for ratio slots).
+        if btc_augment is not None and len(btc_augment) == 37:
+            return np.asarray(btc_augment, dtype=np.float64)
+
+        # Legacy path (pre-FIX-134): XAU-centric assembly with documented gaps.
+        # Slot [12]=Cross_Gold_Silver_Ratio (should be XAUUSDc_return)
+        # Slot [30]=XAGUSDc_return (should be AUDJPYc_return)
+        # Slots [35-36]=hardcoded zeros (should be BTC/XAU ratio + ROC)
+        fv_37 = np.concatenate([fv_35, np.zeros(2, dtype=np.float64)])
+        return fv_37
 
     if canonical == "swing_enhanced_29":
         return np.array(

@@ -290,5 +290,14 @@
       }
     }
   },
-  "transition_log": []
+  "transition_log": [
+    {
+      "brain_id": "BTC_Swing_V5",
+      "from": null,
+      "to": "shadow",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-06T02:19:13.666241",
+      "fix_id": "FIX-20260529-034"
+    }
+  ]
 }

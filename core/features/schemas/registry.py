@@ -50,6 +50,7 @@ SCHEMA_DIMENSIONS: dict[str, int] = {
 # Canonical name resolution (alias → canonical)
 SCHEMA_ALIASES: dict[str, str] = {
     "swing_24": "daily_swing_24",
+    "swing_enhanced_37": "btc_macro_enhanced_37",  # FIX-135: training script output alias
 }
 
 # ── Lazy cache for feature name resolution ─────────────────────────
@@ -147,25 +148,33 @@ def get_schema_feature_names(schema_name: str) -> list[str]:
 # Eliminates hardcoded if/elif chains in live_cycle.py.
 # Adding a new swing schema now only requires updating this file.
 
+
 # Indices of XAU cross-asset features in the 35-dim concatenation
 # FIX-20260531-026: XAU cross-asset feature indices derived from feature names.
 # No more hardcoded {12,13,14,30,31,32} that silently break on reorder.
 def _derive_xau_indices(feature_list: list[str]) -> set[int]:
     """Return indices of XAU cross-asset features in feature_list."""
     _XAU_PATTERNS = {
-        "Cross_Gold", "Cross_DXY", "Cross_EUR", "Cross_Silver",
-        "XAGUSD", "EURUSD", "USDJPY",
+        "Cross_Gold",
+        "Cross_DXY",
+        "Cross_EUR",
+        "Cross_Silver",
+        "XAGUSD",
+        "EURUSD",
+        "USDJPY",
     }
-    return {i for i, f in enumerate(feature_list)
-            if any(p in f for p in _XAU_PATTERNS)}
+    return {i for i, f in enumerate(feature_list) if any(p in f for p in _XAU_PATTERNS)}
+
 
 _XAU_35_INDICES: set[int] = _derive_xau_indices(
-    __import__("core.features.schemas.swing_enhanced_schema", fromlist=["SWING_ENHANCED_35_FEATURES"])
-    .SWING_ENHANCED_35_FEATURES
+    __import__(
+        "core.features.schemas.swing_enhanced_schema", fromlist=["SWING_ENHANCED_35_FEATURES"]
+    ).SWING_ENHANCED_35_FEATURES
 )
 _XAU_24_INDICES: set[int] = _derive_xau_indices(
-    __import__("core.features.schemas.daily_swing_schema", fromlist=["DAILY_SWING_24_FEATURES"])
-    .DAILY_SWING_24_FEATURES
+    __import__(
+        "core.features.schemas.daily_swing_schema", fromlist=["DAILY_SWING_24_FEATURES"]
+    ).DAILY_SWING_24_FEATURES
 )
 
 
@@ -176,6 +185,7 @@ def assemble_swing_features(
     micro_features: Any = None,
     tf_ou: float = 0.0,
     tf_hurst: float = 0.5,
+    btc_augment: Any = None,  # FIX-134: pre-augmented BTC vector
 ):
     """Build a swing feature vector from components using schema metadata.
 
@@ -188,10 +198,12 @@ def assemble_swing_features(
     Raises ValueError if schema_id is unknown.
     """
     from core.features.feature_assembler import _build_swing_vector
+
     return _build_swing_vector(
         schema_id,
         daily_features,
         micro_features=micro_features,
         tf_ou=tf_ou,
         tf_hurst=tf_hurst,
+        btc_augment=btc_augment,
     )

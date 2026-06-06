@@ -253,7 +253,9 @@ def _step_feedback_loop(
 
         if tracker is None:
             tracker = _load_or_create_tracker(base_dir)
-        report = ingest_journal_to_tracker(tracker, base_dir=base_dir, dry_run=dry_run, symbol=symbol)
+        report = ingest_journal_to_tracker(
+            tracker, base_dir=base_dir, dry_run=dry_run, symbol=symbol
+        )
         return {
             "step": "feedback_loop",
             "status": "ok",
@@ -371,7 +373,12 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
     # Save position for next run
     with contextlib.suppress(Exception):
         state_path.write_text(
-            json.dumps({"last_line": len(lines), "updated_utc": str(cal.describe().get("sample_count", "?"))}),
+            json.dumps(
+                {
+                    "last_line": len(lines),
+                    "updated_utc": str(cal.describe().get("sample_count", "?")),
+                }
+            ),
             encoding="utf-8",
         )
 
@@ -592,6 +599,56 @@ def _step_retraining_check(
         leaderboard = build_lb(
             decisions_dir, labels_path=labels_path if labels_path.exists() else None
         )
+
+        # ── FIX-20260606-132: PnL-based fallback for assets without shadow ensemble ──
+        # brain_leaderboard.build_report() relies on XAUUSD.decisions.jsonl from
+        # shadow ensemble.  Assets without shadow (BTC 24/7 crypto) have no decision
+        # files → leaderboard is always empty.  Fall back to PnL-based BrainLeaderboard
+        # which consumes brain_pnl_ledger.json + governance_state.json — available for
+        # all assets via base_dir.
+        if leaderboard.get("total_decisions", 0) == 0:
+            try:
+                from core.brains.services.brain_leaderboard import BrainLeaderboard
+                from core.feedback.brain_pnl_ledger import BrainPnLStore
+                from core.governance.governance_service import GovernanceService
+
+                pnl_path = base / "brain_pnl_ledger.json"
+                gov_path = base / "governance_state.json"
+                if pnl_path.exists() and gov_path.exists():
+                    pnl_store = BrainPnLStore.load(pnl_path)
+                    governance = GovernanceService.load(gov_path)
+                    lb = BrainLeaderboard()
+                    rankings = lb.rank(
+                        pnl_store.get_all_metrics(),
+                        governance_states=governance.get_all_states(),
+                    )
+                    leaderboard = {
+                        "schema": "pnl_leaderboard.v1",
+                        "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                        "total_brains": len(rankings),
+                        "total_decisions": sum(r.trade_count for r in rankings),
+                        "brains": [
+                            {
+                                "brain_id": r.brain_id,
+                                "rank": i + 1,
+                                "score": round(r.score, 2),
+                                "status": r.governance_status,
+                                "win_rate": round(r.win_rate, 4),
+                                "profit_factor": round(r.profit_factor, 4),
+                                "sharpe_ratio": round(r.sharpe, 4),
+                                "total_trades": r.trade_count,
+                                "pnl_r": round(r.cum_pnl, 2),
+                                "max_drawdown": round(r.max_drawdown, 4),
+                                "health_signal": r.health_signal,
+                                "vote_weight": r.vote_weight,
+                                "recommendation": r.recommendation,
+                            }
+                            for i, r in enumerate(rankings)
+                        ],
+                    }
+            except Exception as _pnl_lb_exc:
+                leaderboard["fallback_error"] = str(_pnl_lb_exc)[:200]
+
         result = detect_degradation(leaderboard, baseline)
 
         # Persist leaderboard for next run's comparison
@@ -1021,7 +1078,9 @@ def run_daily_ops(
     # Feedback loop: resolve pending dispatch outcomes → real P&L scores
     # Runs before governance/champion so they see the latest data
     if not skip_feedback:
-        steps.append(_step_feedback_loop(base_dir, dry_run=dry_run, tracker=shared_tracker, symbol=symbol))
+        steps.append(
+            _step_feedback_loop(base_dir, dry_run=dry_run, tracker=shared_tracker, symbol=symbol)
+        )
 
     # Paper trade simulation: generate labeled trade outcomes from shadow decisions
     if not skip_paper_simulation:

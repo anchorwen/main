@@ -174,17 +174,11 @@ class LiveCycleConfig:
                 f"LiveCycleConfig: max_positions must be >= 0, got {self.max_positions}"
             )
         if self.sl_atr_mult <= 0:
-            raise ValueError(
-                f"LiveCycleConfig: sl_atr_mult must be > 0, got {self.sl_atr_mult}"
-            )
+            raise ValueError(f"LiveCycleConfig: sl_atr_mult must be > 0, got {self.sl_atr_mult}")
         if self.tp_atr_mult <= 0:
-            raise ValueError(
-                f"LiveCycleConfig: tp_atr_mult must be > 0, got {self.tp_atr_mult}"
-            )
+            raise ValueError(f"LiveCycleConfig: tp_atr_mult must be > 0, got {self.tp_atr_mult}")
         if self.lot_step <= 0:
-            raise ValueError(
-                f"LiveCycleConfig: lot_step must be > 0, got {self.lot_step}"
-            )
+            raise ValueError(f"LiveCycleConfig: lot_step must be > 0, got {self.lot_step}")
         if self.reentry_sl_cooldown < 0:
             raise ValueError(
                 f"LiveCycleConfig: reentry_sl_cooldown must be >= 0, got {self.reentry_sl_cooldown}"
@@ -244,6 +238,7 @@ class LiveCycleState:
     _conformal_ou_gate: Any = None  # ConformalOUGate (physics-based OU signal quality gate)
     _mtf_price_service: Any = None  # MTFPriceService — M15 bar reconstruction from M5 tick history
     _last_ou_params: dict[str, float] | None = None  # {z_score, half_life, theta} for meta labeler
+    _btc_augmenter: Any = None  # BTCFeatureAugmenter — FIX-134 lazy-init for BTC feature pipeline
     # MIA close entries collected by _execute_management_phase, consumed by caller
     _pending_mia_closes: list[dict[str, Any]] = field(default_factory=list)
 
@@ -561,50 +556,50 @@ def _execute_management_phase(
         ):
             _mt5_pos = mt5_worker.positions_get(ticket=pos.ticket)
         if not _mt5_pos:
-                # ── Position closed in MT5 between reconciliation cycles ──
-                # FIX-20260525-024: previously just cleared and returned, which:
-                #   (a) left no close journal entry (ticket already gone from
-                #       known_open_tickets → reconciliation never sees it)
-                #   (b) left stale position_state file
-                #   (c) left reentry guard with unknown_exit → permanent block
-                # Now: collect close info, defer journal/state/reentry to caller.
-                _mia_entry = _build_mia_close_entry(
-                    pos,
-                    state.known_open_tickets.get(pos.ticket, {}),
-                    symbol=config.symbol,
-                )
-                # Enrich with MT5 deal history (close_price, reason)
-                with FaultTolerantContext(
-                    level=FaultLevel.CRASH,
-                    component="MT5_IPC:history_deals_get:MIA_enrich",
-                ):
-                    _deals = mt5_worker.history_deals_get(position=pos.ticket)
-                    if _deals:
-                        _enrich_mia_from_deals(_mia_entry, _deals)
-                state._pending_mia_closes.append(_mia_entry)
-                pm.clear_position(ticket=pos.ticket)
-                state.known_open_tickets.pop(pos.ticket, None)
-                # Save position state immediately — don't wait for periodic save
-                with FaultTolerantContext(
-                    level=FaultLevel.CRASH,
-                    component="pos_state_save_mia_close",
-                ):
-                    pm.save_state(config.position_state_path)
-                print(
-                    json.dumps(
-                        {
-                            "event": "position_manager_mt5_not_found",
-                            "time": _utc_iso(),
-                            "ticket": pos.ticket,
-                            "reason": "position_closed_in_mt5",
-                            "close_price": _mia_entry.get("detail", {}).get("close_price"),
-                            "pnl": _mia_entry.get("pnl"),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-                return False
+            # ── Position closed in MT5 between reconciliation cycles ──
+            # FIX-20260525-024: previously just cleared and returned, which:
+            #   (a) left no close journal entry (ticket already gone from
+            #       known_open_tickets → reconciliation never sees it)
+            #   (b) left stale position_state file
+            #   (c) left reentry guard with unknown_exit → permanent block
+            # Now: collect close info, defer journal/state/reentry to caller.
+            _mia_entry = _build_mia_close_entry(
+                pos,
+                state.known_open_tickets.get(pos.ticket, {}),
+                symbol=config.symbol,
+            )
+            # Enrich with MT5 deal history (close_price, reason)
+            with FaultTolerantContext(
+                level=FaultLevel.CRASH,
+                component="MT5_IPC:history_deals_get:MIA_enrich",
+            ):
+                _deals = mt5_worker.history_deals_get(position=pos.ticket)
+                if _deals:
+                    _enrich_mia_from_deals(_mia_entry, _deals)
+            state._pending_mia_closes.append(_mia_entry)
+            pm.clear_position(ticket=pos.ticket)
+            state.known_open_tickets.pop(pos.ticket, None)
+            # Save position state immediately — don't wait for periodic save
+            with FaultTolerantContext(
+                level=FaultLevel.CRASH,
+                component="pos_state_save_mia_close",
+            ):
+                pm.save_state(config.position_state_path)
+            print(
+                json.dumps(
+                    {
+                        "event": "position_manager_mt5_not_found",
+                        "time": _utc_iso(),
+                        "ticket": pos.ticket,
+                        "reason": "position_closed_in_mt5",
+                        "close_price": _mia_entry.get("detail", {}).get("close_price"),
+                        "pnl": _mia_entry.get("pnl"),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            return False
 
     # Resolve strategy name early — needed for dispatch magic attribution
     _sname = state.known_open_tickets.get(pos.ticket, {}).get("strategy", "")
@@ -766,6 +761,7 @@ def _execute_management_phase(
             try:
                 from datetime import UTC
                 from datetime import datetime as _dt
+
                 _today = _dt.now(UTC).date()
                 _jp = Path(config.base_dir) / "live_trade_journal.jsonl"
                 if _jp.exists():
@@ -955,9 +951,7 @@ def _execute_management_phase(
             else (pos.entry_price - mid) / pos.entry_atr
         )
     _vol_change = round(current_atr / pos.entry_atr, 4) if pos.entry_atr > 0 else 1.0
-    _trail_dist = (
-        round(abs(pos.current_sl - pos.entry_price), 3) if pos.current_sl > 0 else 0.0
-    )
+    _trail_dist = round(abs(pos.current_sl - pos.entry_price), 3) if pos.current_sl > 0 else 0.0
     with log_and_continue(component="PositionSnapshot:record"):
         _snap_path = Path(config.base_dir) / "position_snapshots.jsonl"
         _snap = json.dumps(
@@ -1371,8 +1365,10 @@ def _execute_management_phase(
                             from core.features.schemas.registry import assemble_swing_features
 
                             fv = assemble_swing_features(
-                                schema_id, daily_features=fv_24,
-                                tf_ou=tf_ou, tf_hurst=tf_hurst,
+                                schema_id,
+                                daily_features=fv_24,
+                                tf_ou=tf_ou,
+                                tf_hurst=tf_hurst,
                             )
                             raw = b_info["adapter"].infer(fv)
                             prop = b_info["adapter"].get_signal(raw)
@@ -1919,7 +1915,9 @@ def _reconcile_closed_positions(
     )
 
 
-def _build_mia_close_entry(pos: Any, known_entry: dict[str, Any], *, symbol: str = "XAUUSDc") -> dict[str, Any]:
+def _build_mia_close_entry(
+    pos: Any, known_entry: dict[str, Any], *, symbol: str = "XAUUSDc"
+) -> dict[str, Any]:
     """Build a close journal entry for a position detected MIA in MT5.
 
     Called by _execute_management_phase when positions_get returns empty
@@ -2136,7 +2134,6 @@ def _build_meta_feature_vector(
     )
 
 
-
 def _evaluate_strategy_lines(
     *,
     strategy_lines: dict[str, Any],
@@ -2174,6 +2171,12 @@ def _evaluate_strategy_lines(
     family_entry_tracker: Any = None,
     mtf_price_service: Any = None,
     meta_feature_vector: Any = None,
+    # ── FIX-20260606-131: reentry guard front-placement (P2.6) ──
+    reentry_states: dict[str, Any] | None = None,
+    reentry_sl_cooldown: float | None = None,
+    reentry_sl_penalty: float | None = None,
+    reentry_bleed_cooldown: float | None = None,
+    reentry_bleed_penalty: float | None = None,
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue."""
     from core.runtime.strategy_evaluator import evaluate_strategy_lines as _impl
@@ -2214,6 +2217,11 @@ def _evaluate_strategy_lines(
         family_entry_tracker=family_entry_tracker,
         mtf_price_service=mtf_price_service,
         meta_feature_vector=meta_feature_vector,
+        reentry_states=reentry_states,
+        reentry_sl_cooldown=reentry_sl_cooldown,
+        reentry_sl_penalty=reentry_sl_penalty,
+        reentry_bleed_cooldown=reentry_bleed_cooldown,
+        reentry_bleed_penalty=reentry_bleed_penalty,
     )
 
 
@@ -2350,16 +2358,23 @@ def execute_live_cycle(
     if state.loop_iteration == 1 and state._reentry_states:
         for _sname, _rs in state._reentry_states.items():
             _le = _rs.last_exit
-            print(json.dumps({
-                "event": "reentry_state_debug",
-                "step": "cycle1_start",
-                "strategy": _sname,
-                "has_last_exit": _le is not None,
-                "exit_timestamp": _le.timestamp if _le else None,
-                "exit_confidence": _le.confidence if _le else None,
-                "exit_reason": _le.reason if _le else None,
-                "consecutive_same_dir": _rs.consecutive_same_direction,
-            }, ensure_ascii=False, default=str), flush=True)
+            print(
+                json.dumps(
+                    {
+                        "event": "reentry_state_debug",
+                        "step": "cycle1_start",
+                        "strategy": _sname,
+                        "has_last_exit": _le is not None,
+                        "exit_timestamp": _le.timestamp if _le else None,
+                        "exit_confidence": _le.confidence if _le else None,
+                        "exit_reason": _le.reason if _le else None,
+                        "consecutive_same_dir": _rs.consecutive_same_direction,
+                    },
+                    ensure_ascii=False,
+                    default=str,
+                ),
+                flush=True,
+            )
     print(
         json.dumps(
             {"event": "cycle_start", "time": _utc_iso(), "iteration": state.loop_iteration},
@@ -2526,7 +2541,7 @@ def execute_live_cycle(
                 )
             _run_scheduled_daily_ops(config, state)
 
-    # ── Startup orphan detection: MT5 vs active_position.json ──
+        # ── Startup orphan detection: MT5 vs active_position.json ──
         try:
             _ap_path = os.path.join(config.base_dir, config.position_state_path)
             _ap_tickets: set[int] = set()
@@ -3338,9 +3353,7 @@ def execute_live_cycle(
             ):
                 micro_sequences = micro_feature_computer.compute_all_sequences(32)
             micro_feature_dict = {}
-            micro_feature_vector = np.zeros(
-                _schema_dim("v4.3_microstructure_9"), dtype=np.float64
-            )
+            micro_feature_vector = np.zeros(_schema_dim("v4.3_microstructure_9"), dtype=np.float64)
             with FaultTolerantContext(
                 level=FaultLevel.DEGRADE,
                 component="FeatureCompute:micro_features",
@@ -3606,9 +3619,7 @@ def execute_live_cycle(
         if broker is not None:
             _account_equity = broker.get_account_equity()
     except Exception:
-        logger.warning(
-            "Broker equity fetch failed — falling back to MT5 direct query"
-        )
+        logger.warning("Broker equity fetch failed — falling back to MT5 direct query")
     if _account_equity is None and mt5_worker is not None:
         with FaultTolerantContext(
             level=FaultLevel.CRASH,
@@ -4242,6 +4253,12 @@ def execute_live_cycle(
             family_entry_tracker=state._family_entry_tracker,
             mtf_price_service=getattr(state, "_mtf_price_service", None),
             meta_feature_vector=_meta_feature_vector,
+            # ── FIX-20260606-131: reentry guard front-placement ──
+            reentry_states=state._reentry_states,
+            reentry_sl_cooldown=config.reentry_sl_cooldown,
+            reentry_sl_penalty=config.reentry_sl_penalty,
+            reentry_bleed_cooldown=config.reentry_bleed_cooldown,
+            reentry_bleed_penalty=config.reentry_bleed_penalty,
         )
 
         # ── Golden Master recording: capture outputs after evaluation ──
@@ -4309,146 +4326,81 @@ def execute_live_cycle(
                     except (TypeError, ValueError):
                         pass
 
-        # ── Re-entry quality guard: filter decisions that would churn ──
+        # ── Volume decay for consecutive same-direction entries ──────────
+        # FIX-20260606-131: reentry quality check moved to Cut 3 in
+        # strategy_evaluator.evaluate_strategy_lines().  This section now
+        # only applies volume decay — all queued decisions already passed
+        # the reentry guard during evaluation (no more ghost signals).
         if exec_queue.queue_size > 0 and state._reentry_states:
-            from core.execution.reentry_guard import ensure_reentry_state
+            from core.execution.reentry_guard import (  # noqa: I001
+                apply_reentry_volume_scale,
+                ensure_reentry_state,
+            )
 
-            _filtered_queue: list[Any] = []
-            _reentry_skipped: list[dict[str, Any]] = []
             for _qd in exec_queue._queue:
                 _rs = ensure_reentry_state(state._reentry_states, _qd.strategy_name)
-                _d = _qd.decision
-                _entry_price = mid_price if mid_price is not None and mid_price > 0 else 0.0
-                _allowed, _rr_reason, _cons_count_f = _rs.check_and_record_entry(
-                    direction=_d.direction,
-                    confidence=_d.confidence,
-                    mid=_entry_price,
-                    entry_half_life=getattr(_d, "entry_half_life", 0.0),
-                    timeframe_minutes=5.0,
-                    sl_cooldown=config.reentry_sl_cooldown,
-                    sl_penalty=config.reentry_sl_penalty,
-                    bleed_cooldown=config.reentry_bleed_cooldown,
-                    bleed_penalty=config.reentry_bleed_penalty,
-                )
-                # ── Diagnostic: log every re-entry check ──
-                _last_exit = _rs.last_exit
-                _hl = getattr(_d, "entry_half_life", 0.0)
-                _ttl_s = _hl * 5.0 * 2.5 * 60.0 if _hl > 0 else 0.0
-                print(
-                    json.dumps(
-                        {
-                            "event": "reentry_check",
-                            "time": _utc_iso(),
-                            "strategy": _qd.strategy_name,
-                            "direction": _d.direction,
-                            "confidence": round(_d.confidence, 4),
-                            "allowed": _allowed,
-                            "reason": _rr_reason,
-                            "consecutive_same_dir": int(_cons_count_f),
-                            "elapsed_since_exit_s": (
-                                round(time.time() - _last_exit.timestamp, 1) if _last_exit else -1
-                            ),
-                            "_diag_time_now": time.time(),
-                            "_diag_exit_ts": _last_exit.timestamp if _last_exit else -1,
-                            "_diag_exit_ts_stale": (
-                                (time.time() - _last_exit.timestamp) > 86400 if _last_exit else False
-                            ),
-                            "last_exit_category": _last_exit.category if _last_exit else "none",
-                            "last_exit_reason": (_last_exit.reason[:60]) if _last_exit else "",
-                            "entry_half_life": round(_hl, 1),
-                            "ttl_seconds": round(_ttl_s, 0),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-                if not _allowed:
-                    _reentry_skipped.append(
-                        {
-                            "strategy": _qd.strategy_name,
-                            "direction": _d.direction,
-                            "confidence": _d.confidence,
-                            "reason": _rr_reason,
-                        }
+                _cons = _rs.consecutive_same_direction
+                if _cons > 0:
+                    _scaled_vol, _should_block = apply_reentry_volume_scale(
+                        _qd.decision.volume, _cons
                     )
-                    continue
-                # Apply volume decay for consecutive same-direction entries
-                _cons_count = int(_cons_count_f)
-                if _cons_count > 0:
-                    from core.execution.reentry_guard import apply_reentry_volume_scale
-
-                    _scaled_vol, _should_block = apply_reentry_volume_scale(_d.volume, _cons_count)
                     if _should_block:
-                        _reentry_skipped.append(
-                            {
-                                "strategy": _qd.strategy_name,
-                                "direction": _d.direction,
-                                "confidence": _d.confidence,
-                                "reason": f"volume_decay_blocked_consecutive_{_cons_count}",
-                            }
-                        )
-                        continue
-                    _d.volume = _scaled_vol
-                _filtered_queue.append(_qd)
-            if _reentry_skipped:
-                exec_queue._queue = _filtered_queue
-                print(
-                    json.dumps(
-                        {
-                            "event": "reentry_guard_skip",
-                            "time": _utc_iso(),
-                            "skipped": _reentry_skipped,
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+                        _qd.decision.volume = 0.0
+                        _qd.decision.should_trade = False
+                    else:
+                        _qd.decision.volume = _scaled_vol
 
-                # ── FIX-20260606-128: persistent reentry block alert ───────
-                # When a strategy is blocked by the reentry guard for ≥ 5
-                # consecutive cycles, fire a warning via the alert hub so
-                # the operator can investigate.  Resets automatically when
-                # the strategy passes reentry check or changes direction.
-                _ah_reentry = getattr(state, "alert_hub", None)
-                if _ah_reentry is not None:
-                    _reentry_blocked_names = {s["strategy"] for s in _reentry_skipped}
-                    for _sname in _reentry_blocked_names:
-                        _streak_key = f"_reentry_block_streak_{_sname}"
-                        _streak = getattr(state, _streak_key, 0) + 1
-                        setattr(state, _streak_key, _streak)
-                        if _streak >= 5 and _streak % 5 == 0:
-                            _reason = next(
-                                (s["reason"] for s in _reentry_skipped if s["strategy"] == _sname),
-                                "unknown",
-                            )
-                            _alert = {
-                                "rule_name": "reentry_persistent_block",
-                                "rule_id": f"reentry_block_{_sname}_{int(time.time())}",
-                                "severity": "warning",
-                                "title": f"⚠️ {_sname} 重入持续拦截 ({_streak}周期)",
-                                "text": (
-                                    f"## {_sname} 重入守卫持续拦截\n\n"
-                                    f"- 连续拦截: **{_streak}** 个周期\n"
-                                    f"- 拦截原因: {_reason}\n"
-                                    f"- 时间: {_utc_iso()}\n\n"
-                                    f"> 请检查退出类型和历史置信度，考虑手动干预。"
-                                ),
-                                "timestamp_utc": _utc_iso(),
-                                "context": {
-                                    "strategy": _sname,
-                                    "consecutive_blocks": _streak,
-                                    "reason": _reason,
-                                },
-                            }
-                            import contextlib
-                            with contextlib.suppress(Exception):
-                                _ah_reentry._alert_queue.put_nowait(_alert)
-                # Reset streak for strategies that passed reentry
-                _passed_names = {_qd.strategy_name for _qd in _filtered_queue}
-                for _sname in _passed_names:
-                    _streak_key = f"_reentry_block_streak_{_sname}"
-                    if hasattr(state, _streak_key):
-                        setattr(state, _streak_key, 0)
+        # ── FIX-20260606-128: reentry block streak alert ──────────────────
+        # Scans strategy results for reentry-blocked strategies (Cut 3 in
+        # strategy_evaluator).  When a strategy is blocked for ≥ 5
+        # consecutive cycles, fires a warning via alert hub.
+        _strat_results = eval_summary.get("strategy_results", [])
+        _ah_reentry = getattr(state, "alert_hub", None)
+        for _sr in _strat_results:
+            _sname = _sr.get("strategy", "")
+            _reason = _sr.get("reason", "")
+            if not _sr.get("should_trade") and (
+                "brain_flip" in _reason
+                or "meta_exit" in _reason
+                or "sl_" in _reason
+                or "ou_revert" in _reason
+                or "unknown" in _reason
+                or "bleed" in _reason
+                or "momentum" in _reason
+                or "hesitation" in _reason
+            ):
+                _streak_key = f"_reentry_block_streak_{_sname}"
+                _streak = getattr(state, _streak_key, 0) + 1
+                setattr(state, _streak_key, _streak)
+                if _streak >= 5 and _streak % 5 == 0 and _ah_reentry is not None:
+                    _alert = {
+                        "rule_name": "reentry_persistent_block",
+                        "rule_id": f"reentry_block_{_sname}_{int(time.time())}",
+                        "severity": "warning",
+                        "title": f"Reentry Block: {_sname} ({_streak} cycles)",
+                        "text": (
+                            f"## {_sname} 重入守卫持续拦截\n\n"
+                            f"- 连续拦截: **{_streak}** 个周期\n"
+                            f"- 拦截原因: {_reason}\n"
+                            f"- 时间: {_utc_iso()}\n\n"
+                            f"> 请检查退出类型和历史置信度。"
+                        ),
+                        "timestamp_utc": _utc_iso(),
+                        "context": {
+                            "strategy": _sname,
+                            "consecutive_blocks": _streak,
+                            "reason": _reason,
+                        },
+                    }
+                    import contextlib
+
+                    with contextlib.suppress(Exception):
+                        _ah_reentry._alert_queue.put_nowait(_alert)
+            else:
+                # Reset streak when strategy passes or isn't reentry-blocked
+                _streak_key = f"_reentry_block_streak_{_sname}"
+                if hasattr(state, _streak_key):
+                    setattr(state, _streak_key, 0)
 
         # Flush execution queue → dispatch to MT5
         if exec_queue.queue_size > 0 and not config.no_mt5:
@@ -4588,6 +4540,7 @@ def execute_live_cycle(
                     _ah = getattr(state, "alert_hub", None)
                     if _ah is not None:
                         import contextlib
+
                         with contextlib.suppress(Exception):
                             _ah.notify_trade(
                                 action="open" if dr.reason != "net_out_close" else "close",
@@ -4619,9 +4572,7 @@ def execute_live_cycle(
                 _reason = dr.reason if not dr.dispatched else "dispatched"
                 if _sname not in state._gate_stats:
                     state._gate_stats[_sname] = {}
-                state._gate_stats[_sname][_reason] = (
-                    state._gate_stats[_sname].get(_reason, 0) + 1
-                )
+                state._gate_stats[_sname][_reason] = state._gate_stats[_sname].get(_reason, 0) + 1
             state._gate_stats_cycles += 1
             if state._gate_stats_cycles >= 12:
                 _tp = Path(config.base_dir) / "reports" / "telemetry_gates.jsonl"
@@ -4935,9 +4886,7 @@ def execute_live_cycle(
                             "opposing_brains": [],
                         }
                 except Exception:
-                    logger.warning(
-                        "Shadow verification registration failed strategy=%s", sname
-                    )
+                    logger.warning("Shadow verification registration failed strategy=%s", sname)
 
         if config.multi_strategy_enabled:
             _log_cycle_end(state.loop_iteration)
@@ -4969,9 +4918,7 @@ def execute_live_cycle(
             try:
                 from core.execution.pre_trade_guards import check_feature_vector, detect_session
 
-                _s = detect_session(
-                    market_type=getattr(config, "market_type", "forex_24_5")
-                )
+                _s = detect_session(market_type=getattr(config, "market_type", "forex_24_5"))
                 if _s.get("risk_tier") == "off":
                     _log_cycle_end(state.loop_iteration)
                     return state, not config.once
@@ -5148,11 +5095,36 @@ def execute_live_cycle(
                         tf_ou, tf_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
                         from core.features.schemas.registry import assemble_swing_features
 
+                        # ── FIX-20260606-134: BTC feature augmenter ──
+                        _btc_aug = None
+                        if config.symbol == "BTCUSDc":
+                            try:
+                                _aug = getattr(state, "_btc_augmenter", None)
+                                if _aug is None:
+                                    from core.features.computers.btc_feature_augmenter import (  # noqa: I001
+                                        BTCFeatureAugmenter,
+                                    )
+
+                                    _fs = getattr(feature_service, "_store", None)
+                                    _aug = BTCFeatureAugmenter(_fs, mt5_worker=mt5_worker)
+                                    state._btc_augmenter = _aug
+                                _btc_aug = _aug.augment(
+                                    daily_feature_vector,
+                                    micro_feature_vector,
+                                    btc_price=mid_price or 0.0,
+                                    tf_ou=tf_ou,
+                                    tf_hurst=tf_hurst,
+                                )
+                            except Exception:
+                                pass  # graceful degradation — fall back to legacy assembly
+
                         fv = assemble_swing_features(
                             schema_id,
                             daily_features=daily_feature_vector,
                             micro_features=micro_feature_vector,
-                            tf_ou=tf_ou, tf_hurst=tf_hurst,
+                            tf_ou=tf_ou,
+                            tf_hurst=tf_hurst,
+                            btc_augment=_btc_aug,
                         )
                         raw = b_info["adapter"].infer(fv)
                         prop = b_info["adapter"].get_signal(raw)
@@ -5727,7 +5699,9 @@ def execute_live_cycle(
 
                             _pm_strat_name = _M2S.get(dispatch_magic, "")
                         except Exception:
-                            logger.warning("Magic-to-strategy lookup failed for journal attribution")
+                            logger.warning(
+                                "Magic-to-strategy lookup failed for journal attribution"
+                            )
 
                     state.position_manager.register_position(
                         ticket=pm_ticket,
@@ -5801,7 +5775,9 @@ def execute_live_cycle(
                                         rec["strategy"] = _M.get(_j_magic, "")
                                     state.known_open_tickets[ticket] = rec
                         except Exception:
-                            logger.warning("Open ticket journal enrichment failed ticket=%s", ticket)
+                            logger.warning(
+                                "Open ticket journal enrichment failed ticket=%s", ticket
+                            )
                         break
             except Exception:
                 pass

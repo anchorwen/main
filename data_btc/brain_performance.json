@@ -6,7 +6,8 @@
     "BTC_Swing_V1",
     "BTC_Swing_V10",
     "BTC_Swing_V3",
-    "BTC_Swing_V4"
+    "BTC_Swing_V4",
+    "BTC_Swing_V5"
   ],
   "records": {
     "BTC_Swing_V1": [
@@ -467,6 +468,42 @@
           "side": "",
           "recorded_at": ""
         }
+      },
+      {
+        "timestamp": "2026-06-06T02:27:44.082242",
+        "composite_score": 0.617,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3807425499,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-06T02:27:44.082242",
+        "composite_score": 0.5935,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3807420190,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-06T02:35:39.894915",
+        "composite_score": 0.4473,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3807433202,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
       }
     ],
     "BTC_Swing_V10": [
@@ -661,6 +698,56 @@
         "fill_grade": null,
         "dimensions": {
           "position_ticket": 3807362678,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-06T02:27:44.082242",
+        "composite_score": 0.617,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3807425499,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-06T02:27:44.082242",
+        "composite_score": 0.5935,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3807420190,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-06T02:35:39.894915",
+        "composite_score": 0.4473,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3807433202,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      }
+    ],
+    "BTC_Swing_V5": [
+      {
+        "timestamp": "2026-06-06T02:35:39.894915",
+        "composite_score": 0.4473,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3807433202,
           "symbol": "",
           "side": "",
           "recorded_at": ""

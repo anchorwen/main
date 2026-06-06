@@ -13,8 +13,10 @@ brains:
   registry_entries:
   - path: configs/brains_btc/BTC_Swing_V4.json
     enabled: true
-  - path: configs/brains_btc/BTC_Swing_LGB_V1.json
+  - path: configs/brains_btc/BTC_Swing_V5.json
     enabled: true
+  - path: configs/brains_btc/BTC_Swing_LGB_V1.json
+    enabled: false
 gate:
   gate_policy_config: configs/live_gate_policy.json
   auto_recovery:

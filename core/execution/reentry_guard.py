@@ -118,14 +118,17 @@ def check_reentry_quality(
         if elapsed < 120:
             return False, f"brain_flip_too_soon_{elapsed:.0f}s_lt_120s"
 
-        # ── FIX-20260606-127: TTL hard unlock for brain_flip ──────────────
-        # Linear margin (+0.10) is mathematically unreachable when
-        # exit_confidence is near the model's output ceiling (tree models
-        # max ~0.70–0.82).  After TTL expires the old brain_flip exit is
-        # stale — the microstructural conditions that caused the flip have
-        # dissipated.  Only basic signal quality (confidence > 0.50) is
-        # required.  Same proven pattern as sl_hit TTL (FIX-20260528-011).
-        _brain_flip_ttl_s = max(14400, entry_half_life * timeframe_minutes * 2.5 * 60)
+        # ── FIX-20260606-127 / FIX-20260606-130: TTL hard unlock ─────────
+        # FIX-127 added TTL for brain_flip (proven sl_hit TTL pattern).
+        # FIX-130 recalibrates parameters for BTC model capability:
+        #   TTL: 4h→2h — BTC max confidence ceiling ~0.686, floor 0.70 was
+        #        unreachable → guaranteed 4h deadlock after every brain_flip.
+        #   Addition: +0.10→+0.05 — narrower margin still requires real
+        #        improvement but doesn't overshoot model output range.
+        #   Floor: 0.70→0.65 — BTC model P99≈0.685, 0.65 is reachable.
+        # After TTL expires, only basic signal quality (confidence > 0.50)
+        # is required — same pattern as FIX-20260528-011.
+        _brain_flip_ttl_s = max(7200, entry_half_life * timeframe_minutes * 2.5 * 60)
         if elapsed > _brain_flip_ttl_s:
             if new_confidence < 0.50:
                 return (
@@ -134,8 +137,8 @@ def check_reentry_quality(
                 )
             return True, f"brain_flip_ttl_expired_{elapsed:.0f}s"
 
-        # Within TTL window: original strict logic with absolute ceiling
-        _threshold = min(max(exit_confidence + 0.10, 0.70), _MAX_THRESHOLD)
+        # Within TTL window: strict logic with model-aware ceiling (FIX-130)
+        _threshold = min(max(exit_confidence + 0.05, 0.65), _MAX_THRESHOLD)
         if new_confidence < _threshold:
             return (
                 False,

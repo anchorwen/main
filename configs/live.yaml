@@ -46,17 +46,19 @@ brains:
   - path: configs/brains/Swing_M15_V3.json
     enabled: false
   - path: configs/brains/Brain_Trend_V10_M30.json
-    enabled: false  # FIX-086: old training SL/TP (1.5/2.5) incompatible with live (3.0/1.5)
+    enabled: false
   - path: configs/brains/Swing_V10_M15.json
-    enabled: false  # FIX-086: old training SL/TP (1.5/2.5) incompatible with live (3.0/1.5)
+    enabled: false
   - path: configs/brains/Swing_V9_H4_V2.json
     enabled: true
   - path: configs/brains/Swing_V9_H1_V2.json
     enabled: true
   - path: configs/brains/Swing_LGB_M30_V1.json
-    enabled: false  # FIX-086: old training SL/TP (1.5/2.5) incompatible with live (3.0/1.5)
+    enabled: false
   - path: configs/brains/Swing_LGB_M15_V1.json
-    enabled: false  # FIX-086: old training SL/TP (1.5/2.5) incompatible with live (3.0/1.5)
+    enabled: false
+  - path: configs/brains_btc/BTC_Swing_V5.json
+    enabled: true
 gate:
   gate_policy_config: configs/live_gate_policy.json
   auto_recovery:
@@ -121,13 +123,11 @@ exit_management:
   max_hold_cycles: 60
   require_min_r: 0.3
   min_sl_step: 0.15
-# ── FIX-20260605-120: Asset-specific reentry guard thresholds ──
 reentry:
   sl_cooldown_seconds: 180
-  sl_confidence_penalty: 0.10
+  sl_confidence_penalty: 0.1
   bleed_cooldown_seconds: 180
-  bleed_confidence_penalty: 0.10
-
+  bleed_confidence_penalty: 0.1
 alert:
   enabled: true
   thresholds:
@@ -141,97 +141,87 @@ alert:
     dingtalk: true
     dingtalk_webhook_url: https://oapi.dingtalk.com/robot/send?access_token=f33f64c01a0323ee7859fab62495addd0ad75c02182425f91b5ffe4ffbf9ce46
     log: true
-
-# ── FIX-20260604-087: Unified alert rule catalog (SSOT) ──
-# All 11 rules are defined declaratively here so that LiveAlertHub and
-# AlertService consume the same config.  Thresholds, severity, and
-# cooldown values can be adjusted without touching Python code.
-# Logic (simple/composite) stays in alert_service.py — only values live here.
 alert_system:
   rules:
-    # ── Phase A: infrastructure health ──
-    - id: "RULE-001"
-      name: "high_error_rate"
-      context_key: "error_rate"
-      operator: "gt"
-      threshold: 0.1
-      severity: "critical"
-      cooldown_seconds: 60
-    - id: "RULE-002"
-      name: "circuit_breaker_open"
-      context_key: "circuit_state"
-      operator: "eq"
-      threshold: "open"
-      severity: "critical"
-      cooldown_seconds: 120
-    - id: "RULE-003"
-      name: "bridge_heartbeat_missed"
-      context_key: "bridge_last_ack_seconds"
-      operator: "gt"
-      threshold: 120
-      severity: "critical"
-      cooldown_seconds: 120
-    - id: "RULE-004"
-      name: "brain_frozen"
-      context_key: "frozen_brain_count"
-      operator: "gt"
-      threshold: 0
-      severity: "warning"
-      cooldown_seconds: 600
-    - id: "RULE-005"
-      name: "position_limit_near"
-      context_key: "position_utilization"
-      operator: "gt"
-      threshold: 0.8
-      severity: "warning"
-      cooldown_seconds: 300
-    - id: "RULE-006"
-      name: "cycle_stall"
-      context_key: "cycle_duration_seconds"
-      operator: "gt"
-      threshold: 180
-      severity: "critical"
-      cooldown_seconds: 300
-    # ── Phase B: PnL fund-safety ──
-    - id: "RULE-007"
-      name: "daily_loss_exceeded"
-      context_key: "daily_pnl_usd"
-      operator: "lt"
-      threshold: -5.0
-      severity: "critical"
-      cooldown_seconds: 300
-    - id: "RULE-008"
-      name: "consecutive_losses"
-      context_key: "consecutive_losses"
-      operator: "gt"
-      threshold: 8
-      severity: "warning"
-      cooldown_seconds: 600
-    # ── Composite rules (logic in code, values here) ──
-    - id: "RULE-009"
-      name: "win_rate_collapse"
-      type: "composite"
-      composite_kind: "win_rate_collapse"
-      threshold: 0.30
-      min_window: 20
-      severity: "critical"
-      cooldown_seconds: 600
-    - id: "RULE-010"
-      name: "strategy_degradation"
-      type: "composite"
-      composite_kind: "strategy_degradation"
-      wr_threshold: 0.30
-      pnl_threshold: -3.0
-      severity: "warning"
-      cooldown_seconds: 1800
-    # ── Merged from alert_service.py (previously orphaned) ──
-    - id: "RULE-011"
-      name: "high_throttle_rate"
-      context_key: "throttle_rate"
-      operator: "gt"
-      threshold: 0.3
-      severity: "warning"
-      cooldown_seconds: 300
+  - id: RULE-001
+    name: high_error_rate
+    context_key: error_rate
+    operator: gt
+    threshold: 0.1
+    severity: critical
+    cooldown_seconds: 60
+  - id: RULE-002
+    name: circuit_breaker_open
+    context_key: circuit_state
+    operator: eq
+    threshold: open
+    severity: critical
+    cooldown_seconds: 120
+  - id: RULE-003
+    name: bridge_heartbeat_missed
+    context_key: bridge_last_ack_seconds
+    operator: gt
+    threshold: 120
+    severity: critical
+    cooldown_seconds: 120
+  - id: RULE-004
+    name: brain_frozen
+    context_key: frozen_brain_count
+    operator: gt
+    threshold: 0
+    severity: warning
+    cooldown_seconds: 600
+  - id: RULE-005
+    name: position_limit_near
+    context_key: position_utilization
+    operator: gt
+    threshold: 0.8
+    severity: warning
+    cooldown_seconds: 300
+  - id: RULE-006
+    name: cycle_stall
+    context_key: cycle_duration_seconds
+    operator: gt
+    threshold: 180
+    severity: critical
+    cooldown_seconds: 300
+  - id: RULE-007
+    name: daily_loss_exceeded
+    context_key: daily_pnl_usd
+    operator: lt
+    threshold: -5.0
+    severity: critical
+    cooldown_seconds: 300
+  - id: RULE-008
+    name: consecutive_losses
+    context_key: consecutive_losses
+    operator: gt
+    threshold: 8
+    severity: warning
+    cooldown_seconds: 600
+  - id: RULE-009
+    name: win_rate_collapse
+    type: composite
+    composite_kind: win_rate_collapse
+    threshold: 0.3
+    min_window: 20
+    severity: critical
+    cooldown_seconds: 600
+  - id: RULE-010
+    name: strategy_degradation
+    type: composite
+    composite_kind: strategy_degradation
+    wr_threshold: 0.3
+    pnl_threshold: -3.0
+    severity: warning
+    cooldown_seconds: 1800
+  - id: RULE-011
+    name: high_throttle_rate
+    context_key: throttle_rate
+    operator: gt
+    threshold: 0.3
+    severity: warning
+    cooldown_seconds: 300
 capital_allocator:
   base_volume: 0.01
   min_volume: 0.01
@@ -421,7 +411,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.0
   statarb_dynamic:
-    enabled: true  # FIX-20260604-082: re-enabled with high-vol regime gate
+    enabled: true
     timeframe: M5
     magic: 90003
     strategy_family: mean_reversion
@@ -463,7 +453,7 @@ strategy_lines:
       long_bias_discount: 0.1
     min_p_win: 0.45
   statarb_m15:
-    enabled: true  # FIX-20260604-082: re-enabled with high-vol regime gate
+    enabled: true
     timeframe: M15
     magic: 90103
     strategy_family: mean_reversion
@@ -651,7 +641,7 @@ strategy_lines:
     base_volume: 0.01
     max_volume: 0.02
     confidence_threshold: 0.45
-    min_p_win: 0.30
+    min_p_win: 0.3
     spread_points: 30
     max_spread_points: 70
     sl:
@@ -692,7 +682,7 @@ strategy_lines:
     base_volume: 0.01
     max_volume: 0.02
     confidence_threshold: 0.45
-    min_p_win: 0.30
+    min_p_win: 0.3
     spread_points: 30
     max_spread_points: 70
     sl:

@@ -58,6 +58,12 @@ def evaluate_strategy_lines(
     family_entry_tracker: Any = None,
     mtf_price_service: Any = None,
     meta_feature_vector: Any = None,
+    # ── FIX-20260606-131: reentry guard front-placement (P2.6) ──
+    reentry_states: dict[str, Any] | None = None,
+    reentry_sl_cooldown: float | None = None,
+    reentry_sl_penalty: float | None = None,
+    reentry_bleed_cooldown: float | None = None,
+    reentry_bleed_penalty: float | None = None,
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue.
 
@@ -96,7 +102,8 @@ def evaluate_strategy_lines(
         # ── Cut 1: Absolute Refractory Period (cooldown check) ──
         if cooldown_registry is not None:
             _cd_allowed, _cd_reason = cooldown_registry.check_cooldown(
-                sname, "long",
+                sname,
+                "long",
             )
             if not _cd_allowed:
                 pass
@@ -185,6 +192,40 @@ def evaluate_strategy_lines(
                         ),
                         flush=True,
                     )
+
+        # ── Cut 3: Reentry quality guard (FIX-20260606-131, P2.6 front-placement) ──
+        if decision.should_trade and reentry_states is not None:
+            from core.execution.reentry_guard import ensure_reentry_state
+
+            _rs = ensure_reentry_state(reentry_states, sname)
+            _allowed, _rr_reason, _cons_count_f = _rs.check_and_record_entry(
+                direction=decision.direction,
+                confidence=decision.confidence,
+                mid=mid_price or 0.0,
+                entry_half_life=getattr(decision, "entry_half_life", 0.0),
+                timeframe_minutes=5.0,
+                sl_cooldown=reentry_sl_cooldown,
+                sl_penalty=reentry_sl_penalty,
+                bleed_cooldown=reentry_bleed_cooldown,
+                bleed_penalty=reentry_bleed_penalty,
+            )
+            if not _allowed:
+                decision.should_trade = False
+                decision.reason = _rr_reason
+                print(
+                    json.dumps(
+                        {
+                            "event": "reentry_blocked",
+                            "time": _utc_iso(),
+                            "strategy": sname,
+                            "direction": decision.direction,
+                            "confidence": round(decision.confidence, 4),
+                            "reason": _rr_reason,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
 
         # Apply session + health volume multipliers
         if decision.should_trade:
