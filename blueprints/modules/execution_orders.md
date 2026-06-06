@@ -59,6 +59,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260606-139 | 2026-06-06 | cursor-agent | — | **UCB elastic floor for p_win statistical freeze**: strategy_line.py Fail-Closed dead zone (0.40 < p_win < min_p_win) filled with confidence-derived elastic floor. `p_win = max(raw, floor - 0.05 + conf×0.10)`. Kelly auto-sizes micro-lot exploration. DQAF-004. | RC-05 |
 | FIX-20260605-128 | 2026-06-05 | cursor-agent | d9d9f49 | **MT5BrokerAdapter.get_account_equity() added**: Broker equity fetch was failing (AttributeError) because adapter lacked the method. Added delegation to worker.account_info(). Eliminates fallback WARNING in live logs. | RC-06 |
 | FIX-20260605-124 | 2026-06-05 | cursor-agent | — | **entry_spread journal pipeline fix**: strategy_line.py:1766 entry_context dict lacked entry_spread. bid/ask spread correctly computed but only fed pnl_ledger, never journal. XAU 0/777 + BTC 0/36 opens had entry_spread=0 permanently. Single-line fix. | RC-06 |
 | FIX-20260605-123 | 2026-06-05 | cursor-agent | 6110bc6 | **Core test长城**: 16 TrailStopEngine tests (activation watermark, vol adjustment -0.5/+0.5, regime-based mult, breakeven, per-position TrailPolicy). 13 execution_state tests (save/load roundtrip, stale rejection, corrupt JSON, circuit breaker restore, SL streak preservation). | RC-12 |

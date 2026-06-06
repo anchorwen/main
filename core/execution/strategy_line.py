@@ -1560,6 +1560,25 @@ class StrategyLine:
             _conf = max(0.0, min(1.0, confidence))
             _p_win = 0.40 + _conf * 0.20
             _p_win_source = "brain_confidence"
+
+        # ── 6b-2. UCB elastic floor (FIX-20260606-139) ──
+        # Statistical freeze breaker: when rolling WR is marginally below the
+        # min_p_win floor (0.40 < p_win < floor) AND brain confidence is high,
+        # use a confidence-derived elastic p_win to break the deadlock.
+        # Formula: p_win = max(raw, floor - 0.05 + conf × 0.10)
+        #   conf=0.50 → floor-0.05+0.05 = floor          (just breakeven)
+        #   conf=0.82 → floor-0.05+0.082 = floor+0.032   (modest edge)
+        # Kelly multiplier is automatically tiny (p_win barely > breakeven)
+        # so risk is bounded to micro-lot exploration.
+        _elastic_trigger = (
+            _p_win_source == "rolling_wr"
+            and 0.40 < _p_win < self.config.min_p_win
+        )
+        if _elastic_trigger:
+            _conf = max(0.0, min(1.0, confidence))
+            _elastic_p_win = self.config.min_p_win - 0.05 + _conf * 0.10
+            _p_win = max(_p_win, _elastic_p_win)
+            _p_win_source = "ucb_elastic_floor"
         # else: neutral 0.5 → Kelly mult = 1.0 (no amplification or dampening)
 
         # ── 5f. Dynamic p_win adjustment for OU strategies (FIX-20260526-030) ──

@@ -32,6 +32,7 @@ FIX-YYYYMMDD-NNN
 
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
+| FIX-20260606-139 | 2026-06-06 | execution-orders | **UCB elastic floor for p_win statistical freeze**: strategy_line.py Fail-Closed dead zone (0.40 < p_win < min_p_win) filled with confidence-derived elastic floor. When rolling WR is marginally below breakeven floor but brain confidence is high, p_win = max(raw, floor - 0.05 + conf×0.10). Kelly auto-sizes micro-lot exploration. DQAF-004 diagnosed. | RC-05 |
 | FIX-20260606-137 | 2026-06-06 | runtime-live | **brain_flip false positive: neutral deadlock → 100% flip**: live_cycle.py:1424 `_l2_supporting=[]` caused empty-set misinterpretation in evaluate_brain_exit(). When multi-brain group vote deadlocked neutral, flip_ratio=len(entry_ids)/len(entry_ids)=100% → immediate brain_flip_extreme exit. Fixed to use `_entry_group_signal.brain_ids`. DQAF-002 diagnosed. | RC-06 |
 | FIX-20260606-136 | 2026-06-06 | monitor-dashboard | **Agentic DQAF v1.0 infrastructure deploy**: 3 system ledgers (DQAF_DOCKET_REGISTRY.md, CCT_LEDGER.md, ReB_PATTERN_INDEX.md), ECoL evidence collection script (dqaf_collect.py), Iron Law #9 zero-hallucination dual-track diagnostic protocol. IEC 62740 / ISO 31000 / NTSB Party System aligned. | RC-12 |
 | FIX-20260606-135 | 2026-06-06 | training, features | **Phase 5b Step C+D: BTC dataset rebuilt + BTC_Swing_V5 trained**: Dataset rebuilt with live-aligned features (SL=2.0/TP=2.5, [35-36] zero-filled to match live pipeline after FIX-134). V5 XGBoost trained: test WR=38.0%, PF=1.81, Sharpe=25.03. Confidence std=0.072 (vs V4 live std=0.010 — 7.2x improvement). Brain registered as candidate. Schema alias `swing_enhanced_37`→`btc_macro_enhanced_37` added. | RC-06 |
@@ -1602,5 +1603,145 @@ FIX-YYYYMMDD-NNN
   [PASS] ruff — live_cycle.py: 0 issues
   [PASS] verify.py --quick — no regressions
   [AWAIT] Golden Master replay (human offline verification)
+  ```
+
+### FIX-20260606-138
+
+- **Date**: 2026-06-06
+- **Author**: cursor-agent
+- **Type**: fix(runtime-restart)
+- **Modules**: runtime-restart, runtime-live, strategy-evaluator
+- **Docket ID**: DQAF-20260606-003
+- **CCT Chain**: CCT-20260606-002
+- **ReB Pattern**: ReB-20260606-002 (`bootstrap_silent_fail_to_open`)
+- **Files**: `core/runtime/restart_state.py`, `core/runtime/live_cycle.py`, `core/runtime/strategy_evaluator.py`
+
+- **Summary**: **Eliminate Fail-Open anti-pattern: silent exception swallowing in restart bootstrap**.
+
+  `restart_state.py` had `except Exception: return` wrapping the entire journal parse logic (line 107). Any non-JSON exception (datetime parse failure, import failure, ExitRecord construction error) caused the function to silently return with `_reentry_states` still empty. Downstream `ReentryState.check_and_record_entry()` then hit `last_exit is None` → returned `True, "first_entry"` → bypassed ALL reentry checks → restart-immediate-trade.
+
+  This is the **Fail-Open anti-pattern** (RC-07/fail-open): when state restoration fails, the system defaults to "allow all" instead of "deny all".
+
+  Additionally, `except Exception: pass` in the individual exit recording block silently dropped per-exit errors.
+
+- **Root Cause**: RC-07 (missing-validation) × Fail-Open anti-pattern — the bootstrap result was never validated before being consumed by the gate evaluator. Error handling defaulted to "open" (allow) rather than "closed" (deny).
+
+- **Fix**:
+  1. **`restart_state.py`**: Replaced the monolithic `except Exception: return` with targeted error handling — journal read failure logs ERROR with full traceback and sets `state._bootstrap_degraded = True`. Journal not found also sets degraded flag. Per-exit recording failure logs WARNING with traceback instead of silently passing. All structured logs include the actual exception traceback for root-cause diagnosis.
+  2. **`strategy_evaluator.py`**: Added `bootstrap_degraded: bool = False` parameter. When True, the evaluator short-circuits and blocks ALL trades with reason `"bootstrap_degraded_fail_closed"`, printing a structured alert with actionable instructions.
+  3. **`live_cycle.py`**: Added `_bootstrap_degraded: bool = False` field to `LiveCycleState` dataclass. Passes `getattr(state, "_bootstrap_degraded", False)` to the strategy evaluator on every cycle.
+
+- **Impact**: BTC — eliminates the restart-immediate-trade mechanism at its root (the silent bootstrap failure → empty reentry guard → "first_entry" bypass chain). XAU — same code paths, same protection. Also eliminates the `except Exception: pass` gap where individual exit recording failures were invisible.
+
+- **Prevention**:
+  1. CI should flag `except Exception:\s*(return|pass)` as blocking (ruff custom rule or pre-commit grep)
+  2. All bootstrap/gate-restore code paths must default to Fail-Closed — degrade to "block all" not "allow all"
+  3. ReB pattern `bootstrap_silent_fail_to_open` now searchable for future similar anti-patterns
+
+- **Verification**:
+  ```
+  [PASS] mypy — restart_state.py + live_cycle.py + strategy_evaluator.py: 0 new errors
+  [PASS] ruff — 0 issues
+  [PASS] verify.py --quick — no regressions
+  [PASS] blueprint compliance — Iron Law #7
+  ```
+
+### FIX-20260606-138-Phase0
+
+- **Date**: 2026-06-06
+- **Author**: cursor-agent
+- **Type**: fix(runtime-alert)
+- **Modules**: runtime-live
+- **Docket ID**: DQAF-20260606-005
+- **CCT Chain**: CCT-20260606-003
+- **ReB Pattern**: ReB-20260606-003 (`metric_pollution_via_rejected_retries`)
+- **Files**: `core/runtime/live_cycle.py:755-810`
+
+- **Summary**: **Fix alert metric pollution: filter by ack_status + dedup by position_ticket**.
+
+  The alert PnL aggregator in `_execute_alert_dispatch` counted ALL `action=="close"` journal entries indiscriminately — including `ack_status="rejected"` retry entries. This caused 28 retries of a single -$9.90 close to count as 28 independent losses (-$277.20), collapsing `rolling_win_rate` from 41.5% to 2.56% and triggering false `win_rate_collapse` alarms.
+
+- **Root Cause**: RC-10 (ontology-violation) — the append-only event log was consumed as a trade ledger without filtering or deduplication. Event log records all attempts; trade ledger records only final outcomes.
+
+- **Fix**:
+  1. Added `ack_status` filter: only count entries where `ack_status in ("accepted", "closed")`
+  2. Added `seen_positions: set[int]` dedup: resolve position from `detail.request.position` or `position_ticket`; only count the first (most recent) entry per position in the backwards scan
+  3. 157 close entries → 41 unique positions correctly counted
+
+- **Impact**: Daily PnL accuracy restored. `rolling_win_rate` from 2.56% (false) → 41.5% (true). Eliminates false `win_rate_collapse` and `daily_loss_exceeded` alarms caused by retry pollution.
+
+- **Verification**:
+  ```
+  [PASS] mypy — 0 new errors
+  [PASS] ruff — 0 issues
+  [PASS] verify.py --quick — no regressions
+  [VERIFIED] script: 157 close entries → 41 positions, WR=41.5%, PnL=+$60.97
+  ```
+
+### FIX-20260606-138-Phase2
+
+- **Date**: 2026-06-06
+- **Author**: cursor-agent
+- **Type**: fix(runtime-exit)
+- **Modules**: runtime-live
+- **Docket ID**: DQAF-20260606-005
+- **CCT Chain**: CCT-20260606-003
+- **ReB Pattern**: ReB-20260606-003 (`metric_pollution_via_rejected_retries`)
+- **Files**: `core/runtime/live_cycle.py:241-243, 4447-4525`
+
+- **Summary**: **Cross-cycle exit retry cooldown: block repeated close attempts after 3 consecutive rejects**.
+
+  Previously, when MT5 was disconnected, `exit_watchdog` would fire every cycle for the same open position — each cycle triggering a fresh 5-retry attempt. With a 30s cycle, this produced ~30 rejected close attempts per hour, each writing a journal entry and consuming bridge I/O.
+
+  Now, a per-position reject streak counter tracks consecutive failures. After 3 consecutive rejects, the position enters a 300s (10-cycle) cooldown pool. During cooldown, `_net_out_close_dispatch_fn` skips the exit_watchdog call entirely and returns `{"dispatched": False, "reason": "exit_cooldown_active"}`.
+
+- **Root Cause**: RC-12 (missing-feature) — no cross-cycle memory of exit rejections. Each cycle independently decided to retry, unaware that the previous N cycles had all failed.
+
+- **Fix**:
+  1. Added `_exit_reject_streak: dict[int, int]` and `_exit_reject_cooldown: dict[int, float]` to `LiveCycleState`
+  2. Before `exit_watchdog.execute_exit()`, check cooldown deadline — skip if active
+  3. After `execute_exit()` returns, update streak: success → reset; failure → increment; streak ≥3 → 300s cooldown
+  4. Structured log events: `exit_cooldown_skipped` and `exit_cooldown_activated`
+
+- **Impact**: Retry storms eliminated at source. Journal pollution from rejected retries drops by ~90%. Bridge I/O preserved during outages. Exit watchdog CPU cycles saved.
+
+- **Verification**:
+  ```
+  [PASS] mypy — 0 new errors
+  [PASS] ruff — 0 issues
+  [PASS] verify.py --quick — no regressions
+  ```
+
+### FIX-20260606-138-Phase3
+
+- **Date**: 2026-06-06
+- **Author**: cursor-agent
+- **Type**: fix(runtime-notify)
+- **Modules**: runtime-live, execution-queue
+- **Docket ID**: DQAF-20260606-006
+- **CCT Chain**: CCT-20260606-004
+- **ReB Pattern**: ReB-20260606-004 (`missing_pnl_in_trade_notification`)
+- **Files**: `core/execution/execution_queue.py:41-51`, `core/runtime/live_cycle.py:4447-4525, 4640-4665`
+
+- **Summary**: **Fix DingTalk trade notifications: add PnL + volume to DispatchResult, dedup close notifications**.
+
+  DingTalk close notifications always showed "PnL: N/A" because `DispatchResult` had no `pnl` field. `_net_out_close_dispatch_fn` computed `_net_pnl` internally but the return dict never carried it upstream. Additionally, every retry attempt triggered a duplicate DingTalk notification.
+
+- **Root Cause**: RC-06 (contract-violation) — `DispatchResult` data contract missing `pnl`, `volume`, `price` fields needed by downstream notification consumers.
+
+- **Fix**:
+  1. Added `pnl: float | None`, `volume: float`, `price: float | None` to `DispatchResult`
+  2. `_net_out_close_dispatch_fn` now returns `{"dispatched": ..., "intent_id": ..., "pnl": _net_pnl}`
+  3. `execution_queue.flush()` extracts `pnl` from close result and populates `DispatchResult`
+  4. `notify_trade()` call now passes `pnl=dr.pnl` 
+  5. Per-cycle dedup via `_notified_tickets: set[int]` — only one close notification per ticket
+
+- **Impact**: DingTalk close notifications now show actual estimated PnL. Retry duplicate notifications eliminated.
+
+- **Verification**:
+  ```
+  [PASS] mypy — 0 errors
+  [PASS] ruff — 0 issues
+  [PASS] verify.py --quick — no regressions
   ```
 
