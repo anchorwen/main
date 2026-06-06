@@ -27,7 +27,23 @@
 
 ---
 
-暂无条目。首次诊断后由 AI Agent 登记。
+### CCT-20260607-005
+- **Docket ID**: DQAF-20260607-005
+- **日期**: 2026-06-07
+- **置信度**: confirmed (3 源确认)
+- **因果链**:
+  - [Layer 1 — 症状]: BTC 持仓 ticket=3807675970 数小时未平仓，系统持续开新仓 (vol=0.09, 113 周期)，但 exit watchdog 未管理任何持仓。日志仅 3 个 management_phase 事件 vs 113 个 multi_strategy_eval 事件。
+    - 证据: `intent_20260606T134832Z.log` — `cycle_error` 事件 (13:54:45) + `orphan_position_adopted` 事件 (13:59:44) + 仅 3 个 management 事件 vs 113 周期
+  - [Layer 2 — 中间异常]: `execution_queue.py:350` 中 `_close_result` 变量未初始化即被引用 (`UnboundLocalError`)，导致 `flush()` 崩溃。调用方 `live_intent_loop.py:1902` 的 `except Exception` 仅打印日志但未熔断，系统继续新开仓循环。
+    - 证据: `execution_queue.py` git diff 显示 line 194 的 `_close_result = None` 初始化是后加补丁；traceback 确认崩溃点在 `flush()` 内部
+  - [Layer 3 — 根因]: **RC-07 (Fail-Open 反模式)** — 派发管道的致命异常被通用 `except Exception` 吞噬，未触发 circuit_breaker。孤儿收养逻辑仅存储 `source + adopted_at` 元数据，exit watchdog 无足够信息接管。
+    - 证据: `live_cycle.py:2608-2644` 孤儿收养代码仅写入 2 字段；`live_intent_loop.py:1902-1916` 异常处理未区分 fatal vs transient
+- **证据引用**:
+  - Source 1: `data_btc/logs/intent_20260606T134832Z.log` — cycle_error traceback (line 350)
+  - Source 2: `core/execution/execution_queue.py` git history — `_close_result` init added in 3dbeeb4
+  - Source 3: `core/runtime/live_cycle.py:2608-2644` — orphan adoption minimal metadata
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260607-003
 
 ---
 

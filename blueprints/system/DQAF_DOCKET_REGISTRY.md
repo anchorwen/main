@@ -19,6 +19,7 @@
 |-----------|------|---------|---------|--------|----------|
 | DQAF-20260606-004 | 2026-06-06 | Sev 2 | 6+ 小时零开仓——p_win=0.44 与 breakeven=0.45 之间的 0.01 死锁带，双闸门交替拦截 (p_win + bleed_stop) | **APPROVED → CLOSED** — UCB 弹性地板 (FIX-139) 填平死锁带。置信度推导 p_win=0.482，Kelly 自动微仓探索。方案三优于方案一二。 | FIX-20260606-139 |
 | DQAF-20260606-003 | 2026-06-06 | Sev 3 | 重启后立即开单——排查是否 FIX-137 引入回归 | **APPROVED → CONFIRMED** — 老问题重现 (RC-03 state-leak)，cooldown 清理非致因。关联已知存量模式 `state_leak_across_restart` | — |
+| DQAF-20260607-005 | 2026-06-07 | Sev 1 | UnboundLocalError 导致 dispatch 崩溃 → 孤儿持仓 → 系统数小时只开仓不平仓 (Fail-Open) | **APPROVED → CLOSED** — 三层防线: FIX-140 (Fail-Closed dispatch), FIX-141 (孤儿富化), FIX-142 (兜底网关) | FIX-20260607-140, FIX-20260607-141, FIX-20260607-142 |
 | DQAF-20260606-002 | 2026-06-06 | Sev 2 | BTC swing WR=14.29% PnL=-$813, brain_flip_extreme_100pct 假阳性出场 | **APPROVED → CLOSED** — 根因 RC-06: live_cycle.py:1424 `_l2_supporting=[]` 在 neutral 平票时产生 100% 假翻转 | FIX-20260606-137 |
 
 ## 裁决状态说明
