@@ -1900,6 +1900,13 @@ def main(argv: list[str] | None = None) -> int:
                 if not should_continue:
                     break
             except Exception as exc:
+                # ── FIX-20260607-140: Fail-Closed on dispatch pipeline crash ──
+                # ExecutionQueueFatalError means the dispatch pipeline is broken.
+                # Trip the circuit breaker IMMEDIATELY — do NOT continue the
+                # cycle without a functioning dispatch path (Fail-Open→Fail-Closed).
+                if isinstance(exc, __import__("core.execution.execution_queue", fromlist=["ExecutionQueueFatalError"]).ExecutionQueueFatalError):
+                    state._circuit_breaker_tripped = True
+                    state.block_new_entries = True
                 _tb = traceback.format_exc()
                 print(
                     json.dumps(
@@ -1909,6 +1916,7 @@ def main(argv: list[str] | None = None) -> int:
                             "error": str(exc),
                             "error_type": type(exc).__name__,
                             "traceback": _tb,
+                            "circuit_breaker_tripped": state._circuit_breaker_tripped,
                         },
                         ensure_ascii=False,
                     ),

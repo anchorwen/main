@@ -2435,6 +2435,76 @@ def execute_live_cycle(
             ),
             flush=True,
         )
+        # ── FIX-20260607-142: Fail-Safe Exit Gateway ─────────────────
+        # When the circuit breaker is tripped (e.g. dispatch pipeline crash,
+        # consecutive degraded cycles), attempt to close ALL open MT5
+        # positions directly.  This is a cold-blooded last-resort mechanism
+        # that bypasses the brain/queue/execution pipeline entirely.
+        # Market close-all protects capital when the system is in an
+        # unknown or degraded state.
+        if not config.no_mt5 and mt5_worker is not None:
+            try:
+                _open_positions = mt5_worker.positions_get(symbol=config.symbol) or []
+                if _open_positions:
+                    _closed_any = False
+                    for _pos in _open_positions:
+                        _ticket = _pos.ticket
+                        _side = "short" if _pos.type == 1 else "long"
+                        _vol = float(getattr(_pos, "volume", 0) or 0)
+                        _close_side = "buy" if _side == "short" else "sell"
+                        try:  # noqa: SIM105
+                            _cb_result = mt5_worker.order_send(
+                                symbol=config.symbol,
+                                order_type=1,  # Market
+                                volume=_vol,
+                                side=_close_side,
+                                ticket=_ticket,
+                                magic=getattr(_pos, "magic", 0),
+                            )
+                            _closed_any = True
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "circuit_breaker_close",
+                                        "time": _utc_iso(),
+                                        "ticket": _ticket,
+                                        "side": _side,
+                                        "volume": _vol,
+                                        "result": str(_cb_result)[:200],
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                        except Exception as _cb_close_exc:
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "circuit_breaker_close_failed",
+                                        "time": _utc_iso(),
+                                        "ticket": _ticket,
+                                        "error": str(_cb_close_exc)[:200],
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                    if _closed_any:
+                        # After emergency close, reset the circuit breaker
+                        state._circuit_breaker_tripped = False
+                        state.block_new_entries = True  # keep blocked — manual review needed
+            except Exception as _cb_exc:
+                print(
+                    json.dumps(
+                        {
+                            "event": "circuit_breaker_close_all_failed",
+                            "time": _utc_iso(),
+                            "error": str(_cb_exc)[:200],
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
     # Reset on first non-degraded cycle
     if not degraded_wakeup and state._consecutive_degraded_cycles > 0:
         print(
@@ -2615,11 +2685,31 @@ def execute_live_cycle(
                 # Now we adopt the orphan into managed tracking — the exit
                 # watchdog will handle it normally.  If it's a ghost, it gets
                 # closed.  If it's real, management resumes.
+                # ── FIX-20260607-141: enrich orphan adoption with MT5 data ──
+                # Previously, orphan adoption stored only minimal metadata
+                # (source + adopted_at).  The exit watchdog needs SL, TP, entry
+                # price, direction, and volume to manage the position properly.
+                # Without enrichment, the watchdog may ignore or mismanage
+                # adopted positions.
                 for _ot in sorted(_orphans):
-                    state.known_open_tickets[_ot] = {
+                    _pos_data: dict[str, Any] = {
                         "source": "orphan_adopted",
                         "adopted_at": _utc_iso(),
                     }
+                    # Enrich from MT5 position data
+                    for _p in _mt5_positions:
+                        if _p.ticket == _ot:
+                            _pos_data.update({
+                                "ticket": _ot,
+                                "direction": "short" if _p.type == 1 else "long",
+                                "entry_price": float(getattr(_p, "price_open", 0) or 0),
+                                "current_sl": float(getattr(_p, "sl", 0) or 0),
+                                "current_tp": float(getattr(_p, "tp", 0) or 0),
+                                "volume": float(getattr(_p, "volume", 0) or 0),
+                                "enriched_from_mt5": True,
+                            })
+                            break
+                    state.known_open_tickets[_ot] = _pos_data
                 print(
                     json.dumps(
                         {

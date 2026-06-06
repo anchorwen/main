@@ -19,6 +19,17 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+
+class ExecutionQueueFatalError(Exception):
+    """Fatal dispatch pipeline error — circuit breaker MUST be tripped.
+
+    Raised by :meth:`ExecutionQueue.flush` when an unhandled exception
+    occurs inside the dispatch loop.  The caller (live_cycle.py) catches
+    this and trips the global circuit breaker to prevent new entries
+    while the pipeline is in an unknown state (FIX-20260607-140).
+    """
+
+
 # Default priority: Micro > Barrier > StatArb (shortest hold time first)
 DEFAULT_PRIORITY = {
     "micro_3bar": 0,
@@ -103,6 +114,50 @@ class ExecutionQueue:
         if not self._queue:
             return []
 
+        # ── FIX-20260607-140: Fail-Closed dispatch wrapper ───────────────
+        # Any unhandled exception inside flush() is a FATAL error — the
+        # dispatch pipeline is broken and the system MUST NOT continue
+        # opening new positions (Fail-Open → Fail-Closed).
+        # The caller catches ExecutionQueueFatalError and trips the
+        # circuit breaker, blocking all new entries.
+        try:
+            return self._flush_unsafe(
+                dispatch_fn,
+                journal_path=journal_path,
+                mt5_terminal_path=mt5_terminal_path,
+                symbol=symbol,
+                base_dir=base_dir,
+                ignore_protection_flag=ignore_protection_flag,
+                protection_flag_path=protection_flag_path,
+                broker=broker,
+                close_dispatch_fn=close_dispatch_fn,
+            )
+        except Exception as _fatal_exc:
+            import logging as _fatal_log
+            _fatal_log.getLogger(__name__).critical(
+                "FATAL: ExecutionQueue flush() crashed — dispatch pipeline broken. "
+                "Circuit breaker MUST be tripped by caller. Error: %s",
+                _fatal_exc,
+                exc_info=True,
+            )
+            raise ExecutionQueueFatalError(
+                f"Dispatch pipeline fatal error: {_fatal_exc}"
+            ) from _fatal_exc
+
+    def _flush_unsafe(
+        self,
+        dispatch_fn,
+        *,
+        journal_path: Any = None,
+        mt5_terminal_path: str = "",
+        symbol: str = "XAUUSDc",
+        base_dir: str = "data",
+        ignore_protection_flag: bool = False,
+        protection_flag_path: str = "",
+        broker: Any = None,
+        close_dispatch_fn: Any = None,
+    ) -> list[DispatchResult]:
+        """Internal flush implementation — wrapped by fail-closed guard."""
         # Sort by priority (lowest first)
         self._queue.sort(key=lambda q: q.priority)
         results: list[DispatchResult] = []

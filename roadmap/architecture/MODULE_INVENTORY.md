@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-06T03:59:41Z
+> **自动生成**: 2026-06-06T23:30:27Z
 > **扫描模块数**: 477
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -206,7 +206,7 @@
 | `correlation_sizer.py` | ✅ active | ClusterResult | 1 | 109 | — | |
 | `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 244 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 180 | — | |
-| `execution_queue.py` | ✅ active | QueuedDecision, DispatchResult, ExecutionQueue | 4 | 378 | — | |
+| `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 5 | 445 | — | |
 | `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 8 | 485 | — | |
 | `fill_simulator.py` | ✅ active | FillSimulationConfig, FillSimulator | 8 | 125 | — | |
 | `fix_contracts.py` | ✅ active | FixSessionConfig, FixMessage, FixExecutionReport | 4 | 69 | — | |
@@ -239,7 +239,7 @@
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 64 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 11 | 306 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 17 | 2275 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 17 | 2294 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 112 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 7 | 267 | — | |
@@ -250,7 +250,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `data_augmentation.py` | ✅ active | — | 4 | 141 | — | |
-| `feature_assembler.py` | ✅ active | — | 3 | 226 | — | |
+| `feature_assembler.py` | ✅ active | — | 3 | 233 | — | |
 | `feature_service.py` | ✅ active | FeatureService, FeatureBrainRegistry, IntentExplainer | 13 | 365 | — | |
 | `feature_snapshot.py` | ✅ active | StoredFeatureSnapshot | 2 | 33 | — | |
 | `local_feature_store.py` | ✅ active | LocalFeatureStore | 18 | 267 | — | |
@@ -270,7 +270,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `btc_feature_augmenter.py` | ✅ active | BTCFeatureAugmenter | 5 | 328 | — | |
+| `btc_feature_augmenter.py` | ✅ active | BTCFeatureAugmenter | 5 | 359 | — | |
 | `daily_computer.py` | ✅ active | DailyFeatureComputer | 22 | 726 | — | |
 | `live_daily_provider.py` | ✅ active | LiveDailyFeatureProvider | 8 | 225 | — | |
 | `microstructure_computer.py` | ✅ active | MicrostructureFeatureComputer | 20 | 552 | — | |
@@ -461,19 +461,19 @@
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
 | `golden_master.py` | ✅ active | — | 8 | 229 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 5853 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 6067 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 311 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 207 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 286 | — | |
 | `reconciliation.py` | ✅ active | — | 2 | 243 | — | |
-| `restart_state.py` | ✅ active | — | 1 | 309 | — | |
+| `restart_state.py` | ✅ active | — | 1 | 349 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
 | `shadow_recorder.py` | ✅ active | — | 8 | 313 | — | |
 | `signal_health.py` | ✅ active | GateResult, FeatureGate, _RollingStats, SignalHealthMonitor | 23 | 507 | — | |
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |
 | `signal_pipeline.py` | ✅ active | — | 2 | 108 | — | |
 | `strategy_builder.py` | ✅ active | — | 6 | 798 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 2 | 351 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 2 | 392 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 
 ## core/schemas
@@ -547,7 +547,7 @@
 | `brain.py` | ✅ active | — | 12 | 734 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
 | `check_blueprint_compliance.py` | ✅ active | — | 10 | 574 | — | |
-| `check_preconditions.py` | ✅ active | — | 12 | 364 | — | |
+| `check_preconditions.py` | ✅ active | — | 12 | 371 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
 | `daily_ops.py` | ✅ active | — | 27 | 1261 | — | |
@@ -566,7 +566,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 369 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 5 | 2224 | — | |
+| `live_intent_loop.py` | ✅ active | — | 5 | 2230 | — | |
 | `live_launcher.py` | ✅ active | — | 13 | 831 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 484 | — | |
@@ -655,7 +655,7 @@
 | `build_micro_flat_features.py` | ✅ active | — | 3 | 151 | — | |
 | `build_profitable_labels.py` | ✅ active | — | 5 | 452 | — | |
 | `build_s1_regression_dataset.py` | ✅ active | — | 3 | 181 | — | |
-| `build_swing_enhanced_dataset.py` | ✅ active | — | 8 | 828 | — | |
+| `build_swing_enhanced_dataset.py` | ✅ active | — | 8 | 867 | — | |
 | `build_v9_micro_dataset.py` | ✅ active | — | 2 | 257 | — | |
 | `calibrate_labels.py` | ✅ active | — | 4 | 298 | — | |
 | `calibrate_meta_filter.py` | ✅ active | — | 4 | 218 | — | |
@@ -664,7 +664,7 @@
 | `crt_manifest.py` | ✅ active | CRTManifestV1 | 9 | 159 | — | |
 | `dataset_builder.py` | ✅ active | — | 14 | 569 | — | |
 | `dataset_builder_d1.py` | ✅ active | — | 6 | 452 | — | |
-| `download_mt5_ohlc.py` | ✅ active | — | 2 | 115 | — | |
+| `download_mt5_ohlc.py` | ✅ active | — | 2 | 114 | — | |
 | `e2e_pipeline_validation.py` | ✅ active | — | 9 | 539 | — | |
 | `eval_alignment.py` | ✅ active | — | 9 | 318 | — | |
 | `eval_ensemble_baselines.py` | ✅ active | — | 2 | 147 | — | |
