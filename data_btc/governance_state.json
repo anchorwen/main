@@ -3,17 +3,17 @@
   "brain_states": {
     "BTC_Swing_V4": {
       "brain_id": "BTC_Swing_V4",
-      "status": "candidate",
+      "status": "live",
       "registered_at": "2026-05-31T16:47:29.842195",
-      "last_transition_at": "2026-06-04T23:43:06.324598+00:00",
-      "transition_count": 4,
+      "last_transition_at": "2026-06-05T22:04:45.484657",
+      "transition_count": 5,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.51,
-        "profit_factor": 1.08,
-        "sharpe_ratio": 7.51,
+        "win_rate": 0.49,
+        "profit_factor": 0.81,
+        "sharpe_ratio": -20.05,
         "total_trades": 100,
-        "pnl_r": 577.77
+        "pnl_r": -1533.45
       }
     },
     "BTC_Swing_LGB_V1": {
@@ -310,6 +310,13 @@
       "reason": "SSOT reconciliation: active config on disk overrides retired governance",
       "timestamp": "2026-06-04T23:43:06.324598+00:00",
       "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V4",
+      "from_status": "candidate",
+      "to_status": "live",
+      "reason": "pnl:stable",
+      "timestamp": "2026-06-05T22:04:45.484657"
     }
   ]
 }

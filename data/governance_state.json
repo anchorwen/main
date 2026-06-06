@@ -5,24 +5,24 @@
       "brain_id": "OU_Params_V6_Sniper",
       "status": "live",
       "registered_at": "2026-05-04T10:51:17.123332",
-      "last_transition_at": "2026-06-04T22:00:19.162845",
-      "transition_count": 12,
+      "last_transition_at": "2026-06-05T22:02:06.092820",
+      "transition_count": 13,
       "freeze_count": 0,
       "exposure_limited": false,
       "performance_metrics": {
-        "win_rate": 0.4669,
-        "profit_factor": 0.83,
-        "sharpe_ratio": -15.16,
-        "total_trades": 1919,
-        "pnl_r": -365.65
+        "win_rate": 0.4689,
+        "profit_factor": 0.84,
+        "sharpe_ratio": -14.02,
+        "total_trades": 1943,
+        "pnl_r": -342.45
       }
     },
     "OU_Params_V7_M15": {
       "brain_id": "OU_Params_V7_M15",
       "status": "live",
       "registered_at": "2026-05-24T22:00:00.000000",
-      "last_transition_at": "2026-05-30T02:20:26.472988+00:00",
-      "transition_count": 5,
+      "last_transition_at": "2026-06-05T22:02:06.093820",
+      "transition_count": 6,
       "freeze_count": 0,
       "exposure_limited": false,
       "vote_weight": 1.5,
@@ -102,11 +102,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4542,
+        "win_rate": 0.4545,
         "profit_factor": 0.79,
-        "sharpe_ratio": -23.23,
-        "total_trades": 786,
-        "pnl_r": -227.37
+        "sharpe_ratio": -22.46,
+        "total_trades": 825,
+        "pnl_r": -230.3
       }
     },
     "Swing_V9_M15_V2": {
@@ -244,11 +244,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4054,
-        "profit_factor": 0.52,
-        "sharpe_ratio": -60.01,
-        "total_trades": 296,
-        "pnl_r": -250.6
+        "win_rate": 0.4061,
+        "profit_factor": 0.51,
+        "sharpe_ratio": -61.98,
+        "total_trades": 330,
+        "pnl_r": -284.74
       }
     },
     "Swing_V9_H1_V2": {
@@ -259,11 +259,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4111,
-        "profit_factor": 0.85,
-        "sharpe_ratio": -15.19,
-        "total_trades": 416,
-        "pnl_r": -85.5
+        "win_rate": 0.4167,
+        "profit_factor": 0.86,
+        "sharpe_ratio": -14.4,
+        "total_trades": 456,
+        "pnl_r": -87.91
       }
     },
     "Swing_LGB_M15_V1": {
@@ -290,42 +290,5 @@
       }
     }
   },
-  "transition_log": [
-    {
-      "brain_id": "Meta_Stage1_Huber_V1",
-      "transition": "frozen->archived",
-      "reason": "Meta Pipeline Gen1 probe — 1627 attr, -369.65R. Replaced by Binary_Cls then MetaLabel.",
-      "timestamp": "2026-06-05T11:31:31Z"
-    },
-    {
-      "brain_id": "Meta_Stage1_Binary_Cls_V1",
-      "transition": "shadow->archived",
-      "reason": "Meta Pipeline Gen2 probe — 540 attr, 100% LONG prior-prob overfitting. Structurally negative.",
-      "timestamp": "2026-06-05T11:31:31Z"
-    },
-    {
-      "brain_id": "Meta_Stage1_MetaLabel_Binary_V1",
-      "transition": "shadow->archived",
-      "reason": "Meta Pipeline Gen3 probe — 417 attr, 0 journal signals. Required OU signal engine never integrated.",
-      "timestamp": "2026-06-05T11:31:31Z"
-    },
-    {
-      "brain_id": "Brain_Rev_M30_V1",
-      "transition": "shadow->archived",
-      "reason": "FIX-073 corrected evaluation: PF=1.65->0.46. Training metrics were inflated by hardcoded +/-1.5 ATR eval bug. Structurally unprofitable.",
-      "timestamp": "2026-06-05T11:44:13Z"
-    },
-    {
-      "brain_id": "Brain_Rev_M30_V2",
-      "transition": "candidate->archived",
-      "reason": "Training SL/TP=1.5/2.5 mismatched with strategy SL=2.5/TP=0.7. Wrong contract for mean_reversion family.",
-      "timestamp": "2026-06-05T11:44:13Z"
-    },
-    {
-      "brain_id": "Brain_Trend_M30_V1",
-      "transition": "shadow->candidate",
-      "reason": "Active in last 7 days — producing signals. Promoted per P2 roster audit.",
-      "timestamp": "2026-06-05T11:46:23Z"
-    }
-  ]
+  "transition_log": []
 }

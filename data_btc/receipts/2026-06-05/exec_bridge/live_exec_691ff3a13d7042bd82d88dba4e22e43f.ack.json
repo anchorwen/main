@@ -1,0 +1,15 @@
+{
+  "message_id": "live_exec_691ff3a13d7042bd82d88dba4e22e43f",
+  "ack_status": "accepted",
+  "received_at": "2026-06-05T21:24:47",
+  "detail": {
+    "retcode": 10009,
+    "request": {
+      "action": 6,
+      "symbol": "BTCUSDc",
+      "position": 3807362678,
+      "sl": 62953.71971,
+      "tp": 60903.833
+    }
+  }
+}

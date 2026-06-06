@@ -76,6 +76,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260606-129 | 2026-06-06 | cursor-agent | 917d46f | **Golden Master list/dict fix**: `record_cycle_outputs()` assumed dict but live cycle passes list. 3 restarts at 0 cycles. Fixed `.items()`+`.keys()` to detect format at runtime. | RC-06 |
 | FIX-20260605-123 | 2026-06-05 | cursor-agent | 6110bc6 | **Execution state test长城**: 13 tests for execution_state.json persistence (save/load/restore roundtrip, stale>24h rejection, corrupt JSON, budget hydration, circuit breaker restore, SL streak preservation with max() semantics). Directly hardens FIX-072/073/074 restart-amnesia class. | RC-12 |
 | FIX-20260605-122 | 2026-06-05 | cursor-agent | ae0d006 | **Strict_mode MT5 isolation**: BarSyncPoller `strict_mode` — production RuntimeError if MT5Worker unavailable instead of silent fallback. Dead `portfolio_risk:` YAML block removed. | RC-09 |
 | FIX-20260605-121 | 2026-06-05 | cursor-agent | 5892b3f | **Verification restored**: `verify.py --full` back to 2767 passed. 3 trail stop tests + 5 reentry tests + 1 domain key test fixed after FIX-064/071/116 behavior changes. | RC-06 |
