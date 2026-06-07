@@ -48,6 +48,7 @@ class SwingStrategy(StrategyLine):
         mid_price: float | None,
         micro_sequences: dict[str, Any] | None = None,
         daily_feature_vector: Any = None,
+        btc_augment: Any = None,  # FIX-20260607-XXX: pre-computed 37-dim BTC vector
     ) -> list[Any]:
         proposals: list[Any] = []
         # FIX-20260602-050: only require daily features for swing_enhanced
@@ -80,6 +81,7 @@ class SwingStrategy(StrategyLine):
                     micro_features=micro_feature_vector,
                     tf_ou=self._compute_tf_ou_theta(),
                     tf_hurst=self._compute_tf_hurst(),
+                    btc_augment=btc_augment if "btc_macro" in schema else None,
                 )
                 prop = adapter.inference(fv)
 

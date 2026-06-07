@@ -38,6 +38,7 @@ Market bars → RegimeDetector.update(bar) → regime_label (low/normal/high vol
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260607-144 | 2026-06-07 | cursor-agent | — | **Kalman ATR anchoring + trend detector hardening**: KalmanTrendFilter.anchor_to_atr() eliminates magnitude hallucination (R=2.0→BTC-scaled). RegimeGate auto-anchors on bar 15 via True Range ATR. H4/H1 trend direction exposed for exit-layer trend protection. | RC-06 |
 | FIX-20260604-082 | 2026-06-04 | cursor-agent | — | **OU mean-reversion revival**: re-enabled statarb_dynamic + statarb_m15. Added Gate 1b in strategy_line.py: OU strategies blocked when detected_regime=="high" — prevents catching-falling-knife in trending crashes. | RC-05 |
 | FIX-20260531-002 | 2026-05-31 | cursor-agent | — | BTC intent loop cycle_error: `'numpy.void' object has no attribute 'get'` in regime_gate.py:454 `feed_m5_bars_batch()`. MT5 `copy_rates_from_pos()` returns numpy structured arrays, not dicts. The `.get("high", b["close"])` pattern fails because numpy.void has no `.get()`. Added `_get_field()` static helper with try/except for both dict and numpy.void access, ported `feed_h1_bars_batch()` to same safe pattern. | RC-06 (type-confusion: numpy-vs-dict) |
 | FIX-20260527-010 | 2026-05-27 | cursor-agent | — | RegimeGate.default_fail_closed() static factory: returns a RegimeGate with all strategies locked to "shadow" across all regimes | RC-06 |

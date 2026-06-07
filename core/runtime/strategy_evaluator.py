@@ -69,6 +69,7 @@ def evaluate_strategy_lines(
     reentry_bleed_penalty: float | None = None,
     # ── FIX-20260606-138: bootstrap degraded flag (Fail-Closed) ──
     bootstrap_degraded: bool = False,
+    btc_augment: Any = None,  # FIX-20260607-XXX: pre-computed 37-dim BTC vector
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue.
 
@@ -190,6 +191,7 @@ def evaluate_strategy_lines(
             meta_filter_gate=meta_filter_gate,
             conformal_ou_gate=conformal_ou_gate,
             micro_feature_dict=micro_feature_dict,
+            btc_augment=btc_augment,  # FIX-20260607-XXX
         )
 
         # ── Cut 1: Post-evaluate cooldown check (direction known) ──

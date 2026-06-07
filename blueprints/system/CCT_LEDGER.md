@@ -185,3 +185,85 @@
 - **是否被推翻**: 否 — AR假设(长方向偏见)被 journal 中 3笔 long 的开仓记录推翻
 - **关联 ReB Pattern**: ReB-20260607-007 (`signal_wiring_unconsumed_computed_output`)
 - **关联 FIX**: FIX-20260607-143
+
+---
+
+### CCT-20260607-006
+- **Docket ID**: DQAF-20260607-006
+- **日期**: 2026-06-07
+- **置信度**: confirmed (3 源确认)
+- **因果链**:
+  - [Layer 1 — 症状]: Ticket=3807506009 开仓后在 80 分钟内被拒绝 75 次平仓请求，journal 中产生 76 条 close 记录。同时 position_snapshots 显示 bars 3-16（13根K线/65分钟）的所有字段值完全相同（unrealized_pnl_r=-1.29, trailing_sl_distance=1269.17, current_atr=385.58），数据管道完全冻结。
+    - 证据: `data_btc/live_trade_journal.jsonl` — ticket 3807506009 的 76 条 close 记录（ack=rejected × 75, ack=closed × 1）
+    - 证据: `data_btc/position_snapshots.jsonl` — ticket 3807506009 的 18 条快照，bar 3-16 所有字段值完全一致
+  - [Layer 2 — 中间异常]: `_mid_and_prices()` 持续从 MT5 获取价格数据，但 MT5 返回的是**相同的过期 tick**（`tick.time` 不推进）。该函数仅检查价格有效性（NaN/Inf/零值/越界/点差），无 staleness 检测。`live_cycle.py` 主循环用过期价格计算特征→开仓→管理→平仓，形成完整的"瞎子指挥"链条。同时 ExitWatchdog 在每个管理周期被重新触发（跨周期雪崩），每个 batch 5 次重试全部被 MT5 拒绝（deviation 超限——价格已偏离订单价格 $500+）。
+    - 证据: `core/runtime/market_ingress.py:77-120` — `_mid_and_prices()` 返回 `(mid, bid, ask)` 无时间戳
+    - 证据: `core/runtime/live_cycle.py:1542-1574` — bleed_stop 每周期触发 `_dispatch_managed_close` 但不检查之前是否已派发
+    - 证据: `core/execution/exit_watchdog.py:43-49` — MAX_RETRIES=5, MAX_TOTAL_DURATION=30s，但外部管理循环不断重启新 batch
+  - [Layer 3 — 根因]: **RC-07 (Fail-Open 反模式) + RC-09 (数据新鲜度契约缺失)**。MT5 Bridge 在断连/数据停滞时返回旧 tick 而非抛出异常，上层无 staleness 检测机制，系统将过期数据当作实时数据处理。同时 exit dispatch 路径缺少 pending_close 状态锁，导致 watchdog batch 被管理循环反复重新触发，形成 75 次拒绝的雪崩。
+    - 证据: `core/runtime/market_ingress.py` — tick.time 字段存在但从未被提取和传播
+    - 证据: `core/execution/position_manager.py` — 修复前无 `_pending_close` 锁机制
+- **修复** (FIX-20260607-XXX):
+  - (a) `_mid_and_prices()` 返回值扩展为 `(mid, bid, ask, tick_time)`
+  - (b) `live_cycle.py` 主循环头部增加 staleness 检测：`data_age > 120s` → 跳过本周期；连续 3 次触发 `_circuit_breaker_tripped`
+  - (c) `_dispatch_managed_close()` 增加价格年龄守卫：`tick_age > 60s` → 拒绝派发
+  - (d) `ActivePositionManager` 增加 `_pending_close` 锁：同一 ticket 在 3 周期内不允许重复派发平仓
+  - (e) `trail_activation_atr` 从 1.0 降为 0.3（BTC 配置）
+- **证据引用**:
+  - Source 1 (Journal): `data_btc/live_trade_journal.jsonl` — ticket 3807506009 完整生命周期
+  - Source 2 (Snapshots): `data_btc/position_snapshots.jsonl` — 13 根 bar 的数据冻结证据
+  - Source 3 (Source Code): `market_ingress.py` + `live_cycle.py` + `position_manager.py` + `exit_watchdog.py` — 4 文件完整追踪
+  - Source 4 (Audit Script): `scripts/analyze_live_journal.py` — Trail SL 3.465x ATR + 83% 仓位 SL 从未收紧
+- **是否被推翻**: 否 — AR 假设 (Trail 乘数计算 bug) 被代码审计推翻：乘数正确，问题在于激活水印 + staleness 导致的"Trail 从未启动"
+- **关联 ReB Pattern**: ReB-20260607-008 (`stale_data_fail_open_blind_trading`)
+- **关联 FIX**: FIX-20260607-XXX
+
+---
+
+### CCT-20260607-007
+- **Docket ID**: DQAF-20260607-007
+- **日期**: 2026-06-07
+- **置信度**: confirmed (双源确认)
+- **因果链**:
+  - [Layer 1 — 症状]: 钉钉告警 `策略性能下降` 中显示 `策略盈亏(USD): -2105.05` 和 `策略胜率: 0.1429`，用户反馈数值不准确。实际 `当日盈亏(USD): 2.96` 与 `策略盈亏(USD): -2105.05` 差距 700 倍，引起困惑。
+    - 证据: 钉钉消息截图 + `alert_audit.jsonl` — strategy_degradation 告警
+  - [Layer 2 — 中间异常]: 两个独立问题叠加：(a) **标签错位**: `alert_channels.py:160` 将 `strategy_pnl` 映射为 `策略盈亏(USD)`，但 `brain_pnl_ledger.py:53` 中 `cumulative_pnl` 的注释明确写的是 `total P&L per unit`（每单位 R-multiple），不是 USD；(b) **缝合怪指标**: `live_cycle.py:886-888` 对 PnL 和 WinRate 独立取 `min()`，导致 `_worst_pnl` 来自 BTC_Swing_V4（-2105R），`_worst_wr` 来自 BTC_Swing_LGB_V1（0.1429）。告警描述的 "策略" 在物理世界中不存在——是两个不同大脑的碎片拼接。
+    - 证据: `live_cycle.py:886-888` — `_worst_pnl = min(...)` 和 `_worst_wr = min(...)` 是独立循环
+    - 证据: `brain_pnl_ledger.py:53` — `cumulative_pnl: float = 0.0  # total P&L per unit`
+    - 证据: `alert_channels.py:160` — `"strategy_pnl": "策略盈亏(USD)"`
+  - [Layer 3 — 根因]: **RC-08 (语义契约断裂)** — 数据生产者（BrainPnLStore）的 `cumulative_pnl` 明确标注为 per-unit R-multiple，但消费者（告警标签）将其错误解释为 USD。同时 "最差策略" 的构建使用了两个独立 `min()` 而非选择单一最差大脑，产生了一个无物理对应物的虚假指标。
+    - 证据: `live_cycle.py:878-890` 修复前代码 vs 修复后代码
+- **修复** (FIX-20260607-XXX):
+  - (a) `live_cycle.py:886-888`: 独立 `min()` → `min(_all_m.values(), key=lambda m: m.cumulative_pnl)` 选择单一最差大脑，PnL 和 WR 同源
+  - (b) `alert_channels.py:160-161`: `策略盈亏(USD)` → `最差大脑累计PnL(R)`, `策略胜率` → `最差大脑胜率`, 新增 `最差大脑ID`
+  - (c) 新增 `_ctx["worst_brain_id"]` 使告警可溯源到具体大脑
+- **证据引用**:
+  - Source 1 (Alert Audit): `data_btc/logs/alert_audit.jsonl` — strategy_degradation 告警上下文
+  - Source 2 (Governance State): `data_btc/governance_state.json` — BTC_Swing_V4 pnl_r=-2171.86 vs 告警值 -2105.05
+  - Source 3 (Source Code): `live_cycle.py:878-890` + `brain_pnl_ledger.py:53` + `alert_channels.py:160`
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260607-009 (`frankenstein_metric_independent_min`)
+- **关联 FIX**: FIX-20260607-XXX
+
+---
+
+### CCT-20260607-008
+- **Docket ID**: DQAF-20260607-008
+- **日期**: 2026-06-07
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: Phase A 焊死了价格 staleness 检测，但特征存储、Bridge 心跳、周期停顿三个组件仍处于 Fail-Open 状态——检测存在但仅发告警/记录，不阻断交易。
+  - [Layer 2 — 中间异常]: 三个防线的"检测→告警"链路完整，但"告警→熔断"链路缺失。特征冻结时系统继续用过期特征推理；Bridge 断连时继续用旧价格评估。
+  - [Layer 3 — 根因]: **RC-07 (Fail-Open 残余)** — 告警 ≠ 熔断 的模式在三个子系统中重复出现。
+- **修复** (FIX-20260607-XXX Phase B):
+  - (a) B1: `feature_stale_warning` → `_consecutive_stale_features`，连续 3 次 → 熔断
+  - (b) B2: `_bridge_silence > 300s` → 立即熔断（无需等 3 周期）
+  - (c) B3: `cycle_duration > 180s` → `_consecutive_degraded_cycles++`，连续 3 次 → 熔断
+  - (d) Config 新增 `max_bridge_silence_seconds=300.0` + `cycle_stall_threshold_seconds=180.0`
+- **证据引用**:
+  - Source 1: `live_cycle.py:3817-3829` (修复前 feature_stale 仅 print)
+  - Source 2: `live_cycle.py:777-799` (bridge_last_ack 仅用于告警上下文)
+  - Source 3: `live_cycle.py:2519` (_last_cycle_start_time 已采集但未用于 stall 检测)
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260607-008 (`stale_data_fail_open_blind_trading`)
+- **关联 FIX**: FIX-20260607-XXX

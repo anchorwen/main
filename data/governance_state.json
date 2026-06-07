@@ -288,14 +288,6 @@
         "total_trades": 16,
         "pnl_r": -3.03
       }
-    },
-    "BTC_Swing_V6_MultiTF_LGB_v1": {
-      "brain_id": "BTC_Swing_V6_MultiTF_LGB_v1",
-      "status": "shadow",
-      "registered_at": "2026-06-06T13:18:24.081068",
-      "last_transition_at": "2026-06-06T13:18:24.081068",
-      "transition_count": 1,
-      "freeze_count": 0
     }
   },
   "transition_log": []

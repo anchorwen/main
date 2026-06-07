@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-06T23:30:27Z
+> **自动生成**: 2026-06-07T14:33:05Z
 
 ## Package-Level Dependencies
 
@@ -243,7 +243,7 @@
 
 ### `core/features/schemas/`
 
-- `btc_macro_enhanced_schema.py` → `core.features.schemas.daily_swing_schema`
+- `btc_macro_enhanced_schema.py` → (无内部依赖)
 - `daily_swing_schema.py` → (无内部依赖)
 - `microstructure_schema.py` → `core.features.store_contracts`
 - `registry.py` → `core.features.feature_assembler`, `core.features.schemas.btc_macro_enhanced_schema`, `core.features.schemas.daily_swing_schema`, `core.features.schemas.microstructure_schema`, `core.features.schemas.swing_enhanced_schema`, `core.features.schemas.v9_institutional_schema`, `core.features.schemas.v9_micro_schema`
@@ -460,15 +460,18 @@
 - `_fix_unused_ignores_v2.py` → (无内部依赖)
 - `_test_xgb_names.py` → `core.brains.adapters.xgboost_brain_adapter`
 - `analyze_deps.py` → (无内部依赖)
+- `analyze_live_journal.py` → (无内部依赖)
 - `audit_btc_cross_validate.py` → (无内部依赖)
+- `audit_data_health.py` → (无内部依赖)
 - `backtest_runner.py` → `core.backtest.data_feed`, `core.backtest.engine`, `core.backtest.metrics`, `core.backtest.strategy_adapter`, `core.contracts.strategy_magic`, `core.metrics.brinson_attribution`, `core.metrics.factor_attribution`
 - `brain.py` → `core.brains.brain_registry`, `core.deployment.brain_lifecycle_manager`, `core.governance.governance_service`
 - `bridge_supervisor.py` → `scripts.mt5_bridge_worker`
 - `check_blueprint_compliance.py` → (无内部依赖)
 - `check_preconditions.py` → (无内部依赖)
 - `ci_prepare_v9_shadow_fixtures.py` → `apps.engine.main_v9_shadow`
+- `classify_ble001.py` → (无内部依赖)
 - `daily_cost_report.py` → (无内部依赖)
-- `daily_ops.py` → `core.alpha.lifecycle_service`, `core.alpha.performance_store`, `core.alpha.portfolio_allocator`, `core.alpha.promotion_gate`, `core.alpha.registry`, `core.brains.services.brain_leaderboard`, `core.contracts.training.label_contract`, `core.deployment.scheduled_task_registry`, `core.execution.conformal_calibrator`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.feedback.param_optimizer`, `core.governance.governance_service`, `scripts.brain`, `scripts.feature_store_maintenance`, `scripts.feedback_loop`, `scripts.live_daily_recap`, `scripts.live_shadow_ensemble`, `scripts.paper_trade_simulator`, `scripts.training.brain_leaderboard`, `scripts.training.champion_challenger`, `scripts.training.governance_scheduler`, `scripts.training.label_builder`, `scripts.training.retraining_trigger`
+- `daily_ops.py` → `core.alpha.lifecycle_service`, `core.alpha.performance_store`, `core.alpha.portfolio_allocator`, `core.alpha.promotion_gate`, `core.alpha.registry`, `core.brains.services.brain_leaderboard`, `core.contracts.training.label_contract`, `core.deployment.scheduled_task_registry`, `core.execution.conformal_calibrator`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.feedback.param_optimizer`, `core.governance.governance_service`, `core.ledger.services.journal_cleanup`, `scripts.brain`, `scripts.feature_store_maintenance`, `scripts.feedback_loop`, `scripts.live_daily_recap`, `scripts.live_shadow_ensemble`, `scripts.paper_trade_simulator`, `scripts.training.brain_leaderboard`, `scripts.training.champion_challenger`, `scripts.training.governance_scheduler`, `scripts.training.label_builder`, `scripts.training.retraining_trigger`
 - `deploy_blue_green.py` → `core.deployment.blue_green`
 - `diagnose_feature_drift.py` → (无内部依赖)
 - `dqaf_collect.py` → (无内部依赖)
@@ -605,6 +608,8 @@
 - `train_stage2_lgb_pit.py` → (无内部依赖)
 - `train_stage2_mlp_pit.py` → `core.brains.online_mlp_model`
 - `train_swing_v9.py` → (无内部依赖)
+- `train_v6_m15_baseline.py` → (无内部依赖)
+- `train_v6_multitf_v2.py` → (无内部依赖)
 - `write_manifest_stub.py` → `scripts.training.crt_manifest`
 - `your_trainer.py` → `scripts.training.crt_manifest`
 
@@ -624,6 +629,10 @@
 - `sur_trainer.py` → `core.contracts.training.training_recipe`
 - `transformer_trainer.py` → `core.contracts.training.training_recipe`
 - `xgb_trainer.py` → `core.contracts.training.training_recipe`, `core.features.data_augmentation`
+
+### `scripts/tuning/`
+
+- `tune_btc_kalman_h4.py` → (无内部依赖)
 
 ### `scripts/validators/`
 

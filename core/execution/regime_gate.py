@@ -310,6 +310,15 @@ class RegimeGate:
         self._m5_bar_count: int = 0
         self._h4_bar_count: int = 0
         self._h4_accum: list[float] = []
+
+        # ── FIX-20260607-XXX: ATR anchoring for Kalman noise matrices ──
+        # Eliminates magnitude hallucination: R=2.0 is designed for XAU at
+        # $4,300 but applied to BTC at $61,000 — a 14,000× mismatch.  After
+        # the first ATR_PERIOD M5 bars, compute ATR and re-anchor Q and R
+        # to the asset's actual volatility.  One-shot, never repeats.
+        self._kalman_anchored: bool = False
+        self._atr_tr_buffer: list[float] = []  # rolling True Range values
+        self._atr_prev_close: float = 0.0
         self._d1_accum: list[float] = []
 
         self._current_regime: str = "normal"
@@ -425,6 +434,35 @@ class RegimeGate:
         self._m5.update(close)
         self._h4_accum.append(close)
         self._m5_bar_count += 1
+
+        # ── FIX-20260607-XXX: ATR anchoring trigger ──
+        # Accumulate True Range values on every M5 bar.  On the ATR_PERIOD-th
+        # bar (14), compute the initial ATR and anchor all four Kalman filters
+        # to the asset's actual volatility.  One-shot — _kalman_anchored
+        # prevents re-anchoring on subsequent bars.
+        if not self._kalman_anchored:
+            if self._atr_prev_close > 0:
+                tr = max(
+                    high - low, abs(high - self._atr_prev_close), abs(low - self._atr_prev_close)
+                )
+                self._atr_tr_buffer.append(tr)
+            self._atr_prev_close = close
+            if len(self._atr_tr_buffer) >= 14:
+                atr_val = sum(self._atr_tr_buffer[-14:]) / 14.0
+                self._m5.anchor_kalman_to_atr(atr_val)
+                self._h1.anchor_kalman_to_atr(atr_val)
+                self._h4.anchor_kalman_to_atr(atr_val)
+                self._d1.anchor_kalman_to_atr(atr_val)
+                self._kalman_anchored = True
+                import logging
+
+                _log = logging.getLogger(__name__)
+                _log.info(
+                    "[RegimeGate] Kalman Anchored: ATR=%.2f, " "New_R=%.2f, New_Q_level=%.2f",
+                    atr_val,
+                    (0.5 * atr_val) ** 2,
+                    (0.1 * atr_val) ** 2,
+                )
 
         # RV tracking: maintain 12-bar close window for realized vol
         self._m5_close_window.append(close)

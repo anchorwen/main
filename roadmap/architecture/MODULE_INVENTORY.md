@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-06T23:30:27Z
-> **扫描模块数**: 477
+> **自动生成**: 2026-06-07T14:33:05Z
+> **扫描模块数**: 483
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -198,7 +198,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `barrier_strategy.py` | ✅ active | BarrierStrategy | 2 | 134 | — | |
+| `barrier_strategy.py` | ✅ active | BarrierStrategy | 2 | 135 | — | |
 | `broker_adapter.py` | ✅ active | BrokerAdapter | 9 | 68 | — | |
 | `capital_allocator.py` | ✅ active | AllocationDecision, GroupCorrelationTracker, CapitalAllocator | 9 | 468 | — | |
 | `conformal_calibrator.py` | ✅ active | ConformalCalibrator | 10 | 380 | — | |
@@ -224,26 +224,26 @@
 | `meta_filter_gate.py` | ✅ active | MetaFilterGate | 7 | 220 | — | |
 | `meta_pipeline.py` | ✅ active | MetaProbeSpec, MetaProbeResult, MetaPipeline | 8 | 490 | — | |
 | `meta_signal_filter.py` | ✅ active | FilterResult, MetaSignalFilter | 19 | 882 | — | |
-| `micro_strategy.py` | ✅ active | MicroStrategy | 1 | 85 | — | |
+| `micro_strategy.py` | ✅ active | MicroStrategy | 1 | 86 | — | |
 | `mt5_broker_adapter.py` | ✅ active | MT5BrokerAdapter | 12 | 159 | — | |
 | `mt5_worker.py` | ✅ active | MT5Worker | 20 | 405 | — | |
 | `order_state_machine.py` | ✅ active | OrderStateMachine | 9 | 101 | — | |
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 529 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 49 | 1758 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 52 | 1816 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 27 | 882 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
 | `quality_contracts.py` | ✅ active | ExecutionBenchmark, ExecutionQualityMetric, ImplementationShortfall, ExecutionQualityReport | 3 | 138 | — | |
 | `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 7 | 492 | — | |
-| `regime_gate.py` | ✅ active | RegimeModulation, OURegime2D, RegimeGate | 42 | 803 | — | |
+| `regime_gate.py` | ✅ active | RegimeModulation, OURegime2D, RegimeGate | 42 | 841 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
-| `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 64 | — | |
+| `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 65 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 11 | 306 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 17 | 2294 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 18 | 2351 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
-| `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 112 | — | |
+| `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 114 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 7 | 267 | — | |
-| `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 31 | 643 | — | |
+| `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 33 | 699 | — | |
 
 ## core/features
 
@@ -281,7 +281,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `btc_macro_enhanced_schema.py` | 📄 config | — | 0 | 91 | — | |
+| `btc_macro_enhanced_schema.py` | 📄 config | — | 0 | 89 | — | |
 | `daily_swing_schema.py` | 📄 config | — | 0 | 44 | — | |
 | `microstructure_schema.py` | ✅ active | — | 1 | 32 | — | |
 | `registry.py` | ✅ active | — | 4 | 209 | — | |
@@ -343,7 +343,7 @@
 | `execution_event_writer.py` | ✅ active | ExecutionEventWriter | 3 | 47 | — | |
 | `execution_reconciliation_service.py` | ✅ active | ExecutionReconciliationService | 9 | 264 | — | |
 | `gate_decision_refs.py` | ✅ active | — | 4 | 30 | — | |
-| `journal_cleanup.py` | ✅ active | — | 8 | 435 | — | |
+| `journal_cleanup.py` | ✅ active | — | 9 | 580 | — | |
 | `replay_execution_reader.py` | ✅ active | ReplayExecutionReader | 5 | 35 | — | |
 | `replay_execution_writer.py` | ✅ active | ReplayExecutionWriter | 2 | 26 | — | |
 | `replay_plan_refs.py` | ✅ active | — | 11 | 85 | — | |
@@ -378,7 +378,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `alert_channels.py` | ✅ active | SlackAlertChannel, DingTalkAlertChannel, CompositeAlertChannel | 10 | 267 | — | |
+| `alert_channels.py` | ✅ active | SlackAlertChannel, DingTalkAlertChannel, CompositeAlertChannel | 10 | 268 | — | |
 | `alert_runbook_bridge.py` | ✅ active | RunbookAction, RunbookSOP, AlertRunbookBridge | 10 | 502 | — | |
 | `alert_service.py` | 🧪 stub | AlertRule, AlertChannel, LogAlertChannel, InMemoryAlertChannel, BatchingAlertChannel, SeverityRouter, AlertService | 26 | 467 | — | |
 | `audit_log.py` | ✅ active | StructuredAuditLog | 11 | 180 | — | |
@@ -397,7 +397,7 @@
 
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
-| `contract_groups.py` | ✅ active | ContractGroupConsensus, ABGroupRouter | 15 | 762 | — | |
+| `contract_groups.py` | ✅ active | ContractGroupConsensus, ABGroupRouter | 15 | 763 | — | |
 | `group_consensus.py` | ✅ active | — | 1 | 165 | — | |
 | `parliament_service.py` | ✅ active | ParliamentService | 11 | 312 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
@@ -457,13 +457,13 @@
 | `execution_gateway_router.py` | ✅ active | ExecutionGatewayRouter | 5 | 30 | — | |
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
 | `execution_state.py` | ✅ active | — | 4 | 187 | — | |
-| `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 8 | 317 | — | |
+| `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 9 | 345 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
-| `golden_master.py` | ✅ active | — | 8 | 229 | — | |
+| `golden_master.py` | ✅ active | — | 8 | 233 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 6067 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 6470 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 311 | — | |
-| `market_ingress.py` | ✅ active | — | 5 | 207 | — | |
+| `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 286 | — | |
 | `reconciliation.py` | ✅ active | — | 2 | 243 | — | |
 | `restart_state.py` | ✅ active | — | 1 | 349 | — | |
@@ -473,7 +473,7 @@
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |
 | `signal_pipeline.py` | ✅ active | — | 2 | 108 | — | |
 | `strategy_builder.py` | ✅ active | — | 6 | 798 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 2 | 392 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 2 | 399 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 
 ## core/schemas
@@ -542,15 +542,18 @@
 | `_fix_unused_ignores_v2.py` | 📄 config | — | 0 | 55 | — | |
 | `_test_xgb_names.py` | 📄 config | — | 0 | 81 | — | |
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
+| `analyze_live_journal.py` | ✅ active | — | 6 | 517 | — | |
 | `audit_btc_cross_validate.py` | ✅ active | — | 4 | 285 | — | |
+| `audit_data_health.py` | ✅ active | — | 2 | 128 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
 | `brain.py` | ✅ active | — | 12 | 734 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 574 | — | |
-| `check_preconditions.py` | ✅ active | — | 12 | 371 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 576 | — | |
+| `check_preconditions.py` | ✅ active | — | 12 | 377 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
+| `classify_ble001.py` | ✅ active | — | 1 | 63 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 27 | 1261 | — | |
+| `daily_ops.py` | ✅ active | — | 27 | 1278 | — | |
 | `deploy_blue_green.py` | ✅ active | — | 7 | 126 | — | |
 | `diagnose_feature_drift.py` | ✅ active | — | 4 | 229 | — | |
 | `dqaf_collect.py` | ✅ active | — | 12 | 565 | — | |
@@ -655,7 +658,7 @@
 | `build_micro_flat_features.py` | ✅ active | — | 3 | 151 | — | |
 | `build_profitable_labels.py` | ✅ active | — | 5 | 452 | — | |
 | `build_s1_regression_dataset.py` | ✅ active | — | 3 | 181 | — | |
-| `build_swing_enhanced_dataset.py` | ✅ active | — | 8 | 867 | — | |
+| `build_swing_enhanced_dataset.py` | ✅ active | — | 8 | 928 | — | |
 | `build_v9_micro_dataset.py` | ✅ active | — | 2 | 257 | — | |
 | `calibrate_labels.py` | ✅ active | — | 4 | 298 | — | |
 | `calibrate_meta_filter.py` | ✅ active | — | 4 | 218 | — | |
@@ -699,6 +702,8 @@
 | `train_stage2_lgb_pit.py` | ✅ active | — | 4 | 187 | — | |
 | `train_stage2_mlp_pit.py` | ✅ active | — | 4 | 234 | — | |
 | `train_swing_v9.py` | ✅ active | — | 4 | 451 | — | |
+| `train_v6_m15_baseline.py` | 📄 config | — | 0 | 168 | — | |
+| `train_v6_multitf_v2.py` | 📄 config | — | 0 | 215 | — | |
 | `write_manifest_stub.py` | ✅ active | — | 2 | 60 | — | |
 | `your_trainer.py` | ✅ active | — | 7 | 223 | — | |
 
@@ -722,6 +727,12 @@
 | `sur_trainer.py` | ✅ active | — | 5 | 313 | — | |
 | `transformer_trainer.py` | ✅ active | UpgradedQuantTransformer, _Model | 14 | 793 | — | |
 | `xgb_trainer.py` | ✅ active | — | 10 | 634 | — | |
+
+## scripts/tuning
+
+| 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
+|------|------|----|------|------|------|------|
+| `tune_btc_kalman_h4.py` | ✅ active | SimpleKalman | 7 | 265 | — | |
 
 ## scripts/validators
 

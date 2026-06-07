@@ -59,8 +59,6 @@ brains:
     enabled: false
   - path: configs/brains_btc/BTC_Swing_V5.json
     enabled: true
-  - path: configs/brains/BTC_Swing_V6_MultiTF_LGB_v1.json
-    enabled: true
 gate:
   gate_policy_config: configs/live_gate_policy.json
   auto_recovery:

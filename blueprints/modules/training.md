@@ -69,6 +69,7 @@ Dataset CPCV CustomObj  Trainer    EvaluationReport
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260607-146 | 2026-06-07 | cursor-agent | — | **V6/V7/V8 training pipeline + BTC SL/TP enforcement**: build_swing_enhanced_dataset.py enforces SL=2.0/TP=2.5 for BTC. V6 M15 baseline (AUC=0.630), V6 MultiTF (AUC=0.656, 3-TF joint). V7 seed=77 (AUC=0.646). V8 2.9yr data (AUC=0.654, covers 2024 ETF bull run). Data export extended to 100K M15 bars (2023-07~2026-06). | RC-06 |
 |--------|------|--------|--------|---------|------------|
 | FIX-20260604-084 | 2026-06-04 | cursor-agent | — | C4.2 Label profitability recalibration: tick_size 0.001→0.01 (4 files, 10x friction fix), 4-TF surface recalibration → all current SL/TP EV-negative, live.yaml SL/TP updated (M15/M30 1.5/2.5→3.0/1.5, H1 2.0/3.5→3.0/2.0, H4 2.0/4.0→3.0/2.0), dynamic floor RR<1.0 skip, dataset builder friction modeling, 9 brain config training_params corrected. | RC-06, RC-09 |
 | FIX-20260604-083 | 2026-06-04 | cursor-agent | — | MetaExit model retrained: 833 paired trades (up from 819), 232 wins (up from 229), WR=27.85% (stable vs 27.96%). EV comparison delta -2.28% within 5% tolerance — fresher data preferred. Quality gates passed: n_wins=232 >= 15, WR=27.85% >= 20%. Guardrail 1 (data leakage): confirmed all 8 features from OPEN records only, is_sl_hit/is_tp_hit removed. Guardrail 2 (EV comparison): new model used (delta < 5%). | RC-09 |

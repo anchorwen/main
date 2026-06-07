@@ -258,6 +258,8 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/training/",
         "core/backtest/strategy_adapter.py",
         "scripts/training/",
+        "scripts/tuning/",
+        "scripts/analyze_live_journal.py",
         "scripts/backtest/backtest_high_recall_precision.py",
         "scripts/backtest/backtest_meta_filter.py",
         "scripts/backtest/backtest_dynamic_exit.py",

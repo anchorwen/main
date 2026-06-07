@@ -26,7 +26,7 @@ _BTC_PRICE_MIN = 2000.0
 _BTC_PRICE_MAX = 200000.0
 # Default max spread in price units before treating as data error.
 _DEFAULT_MAX_SPREAD = 0.50  # XAUUSDc
-_BTC_MAX_SPREAD = 2000.0     # BTCUSDc — spread is naturally larger (~$14)
+_BTC_MAX_SPREAD = 2000.0  # BTCUSDc — spread is naturally larger (~$14)
 # Max allowed spread in price units before we treat it as a data error.
 # For XAUUSDc (cents), 0.50 = 50 cents = 500 points — well above any
 # reasonable market spread even during news events.
@@ -76,8 +76,18 @@ def _position_count(worker: MT5Worker, symbol: str, timeout: float = 5.0) -> int
 
 def _mid_and_prices(
     worker: MT5Worker, symbol: str, timeout: float = 5.0
-) -> tuple[float, float, float]:
-    """Fetch bid/ask/mid — executed on the worker thread."""
+) -> tuple[float, float, float, float]:
+    """Fetch bid/ask/mid + tick timestamp — executed on the worker thread.
+
+    Returns (mid, bid, ask, tick_time_unix) where tick_time_unix is the
+    MT5 server timestamp of the tick (Unix seconds).  Callers MUST verify
+    data_age = time.time() - tick_time_unix against the staleness threshold
+    before using the price for trading decisions.
+
+    FIX-20260607-XXX: Staleness Contract — tick.time is now propagated to
+    callers so live_cycle can detect data pipeline freezes (e.g. MT5
+    disconnection causing repeated stale ticks).
+    """
     tick = None
     with FaultTolerantContext(
         level=FaultLevel.CRASH,
@@ -91,6 +101,16 @@ def _mid_and_prices(
         raise RuntimeError("tick unavailable")
     bid = float(tick.bid)
     ask = float(tick.ask)
+
+    # ── Extract tick timestamp for staleness detection ──
+    # MT5 MqlTick.time is Unix seconds (int).  .time_msc is milliseconds.
+    # Prefer .time_msc / 1000 for sub-second precision; fall back to .time.
+    try:
+        tick_time = float(getattr(tick, "time_msc", 0) or 0) / 1000.0
+        if tick_time <= 0:
+            tick_time = float(getattr(tick, "time", 0) or 0)
+    except (TypeError, ValueError):
+        tick_time = 0.0
 
     # ── Physical sanity checks (crash on bad data — crash-only philosophy) ──
     # Defense 1: symbol-aware bounds from ASSET_REGISTRY, not fragile string match
@@ -117,7 +137,7 @@ def _mid_and_prices(
     if (ask - bid) > _max_spread:
         raise ValueError(f"Spread explosion: bid={bid} ask={ask} spread={ask - bid:.5f}")
 
-    return (bid + ask) / 2.0, bid, ask
+    return (bid + ask) / 2.0, bid, ask, tick_time
 
 
 def _bootstrap_regime_gate(
@@ -152,9 +172,7 @@ def _bootstrap_regime_gate(
     with FaultTolerantContext(
         level=FaultLevel.CRASH, component="MT5_IPC:copy_rates_from_pos:bootstrap_regime_h4"
     ):
-        h4_rates = worker.copy_rates_from_pos(
-            symbol, MT5_TIMEFRAME_H4, 0, 100, timeout=timeout
-        )
+        h4_rates = worker.copy_rates_from_pos(symbol, MT5_TIMEFRAME_H4, 0, 100, timeout=timeout)
     if h4_rates is not None and len(h4_rates) >= 20:
         gate.feed_h4_bars_batch(h4_rates)
 
@@ -162,9 +180,7 @@ def _bootstrap_regime_gate(
     with FaultTolerantContext(
         level=FaultLevel.CRASH, component="MT5_IPC:copy_rates_from_pos:bootstrap_regime_d1"
     ):
-        d1_rates = worker.copy_rates_from_pos(
-            symbol, MT5_TIMEFRAME_D1, 0, 60, timeout=timeout
-        )
+        d1_rates = worker.copy_rates_from_pos(symbol, MT5_TIMEFRAME_D1, 0, 60, timeout=timeout)
     if d1_rates is not None and len(d1_rates) >= 10:
         gate.feed_d1_bars_batch(d1_rates)
 
@@ -173,6 +189,7 @@ def _bootstrap_regime_gate(
     # is wrong — refuse to start rather than silently running with
     # unreliable counter_trend.
     import logging as _logging
+
     _log = _logging.getLogger(__name__)
     if h4_rates is not None and len(h4_rates) >= 20 and not gate.h4_is_ready:
         _log.error("H4 TrendDetector not ready despite %d bars loaded", len(h4_rates))

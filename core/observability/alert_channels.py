@@ -157,8 +157,9 @@ class DingTalkAlertChannel(AlertChannel):
         "daily_pnl_usd": "当日盈亏(USD)",
         "consecutive_losses": "连续亏损次数",
         "rolling_win_rate": "滚动胜率",
-        "strategy_pnl": "策略盈亏(USD)",
-        "strategy_win_rate": "策略胜率",
+        "strategy_pnl": "最差大脑累计PnL(R)",
+        "strategy_win_rate": "最差大脑胜率",
+        "worst_brain_id": "最差大脑ID",
         "total_trades_window": "窗口内交易数",
     }
 

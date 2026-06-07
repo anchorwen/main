@@ -258,6 +258,13 @@ class ActivePositionManager:
         # same-direction re-entry is blocked until z crosses to the OPPOSITE side.
         self._drift_lock: dict[str, float] = {}
 
+        # FIX-20260607-XXX: Pending Close Lock — prevent cross-cycle retry avalanche.
+        # When ExitWatchdog fires for a ticket, subsequent management cycles must NOT
+        # spawn fresh watchdog batches until the previous one has resolved (success
+        # or timeout).  Maps ticket → cycle_count of first dispatch.
+        # After PENDING_CLOSE_MAX_CYCLES, the lock auto-expires to allow retry.
+        self._pending_close: dict[int, int] = {}
+
     # ── Internal helpers ──────────────────────────────────────────────────
 
     def _get_pos(self, ticket: int | None = None) -> ActivePosition | None:
@@ -311,12 +318,14 @@ class ActivePositionManager:
         """Clear a specific position or all positions (ticket=None)."""
         if ticket is not None:
             self._positions.pop(ticket, None)
+            self._pending_close.pop(ticket, None)  # FIX-20260607-XXX: release lock
             if self._primary_ticket == ticket:
                 self._primary_ticket = (
                     next(iter(self._positions), None) if self._positions else None
                 )
         else:
             self._positions.clear()
+            self._pending_close.clear()  # FIX-20260607-XXX: release all locks
             self._primary_ticket = None
             self._last_brain_reeval_cycle = -1
             self._entry_consensus_score = 0.0
@@ -329,6 +338,36 @@ class ActivePositionManager:
                         _p.unlink()
                 except OSError:
                     pass
+
+    # ── FIX-20260607-XXX: Pending Close Lock ──────────────────────────────
+    # Prevents the cross-cycle retry avalanche where each management cycle
+    # spawns a fresh ExitWatchdog batch for the same ticket.  Once a close
+    # has been dispatched, subsequent cycles must wait for it to resolve.
+
+    PENDING_CLOSE_MAX_CYCLES: int = 3  # max cycles before lock auto-expires for retry
+
+    def mark_pending_close(self, ticket: int, cycle: int) -> None:
+        """Record that a close has been dispatched for this ticket."""
+        self._pending_close[ticket] = cycle
+
+    def is_pending_close(self, ticket: int, current_cycle: int) -> bool:
+        """True if a close is in-flight and hasn't timed out yet.
+
+        Returns False (allow retry) when:
+        - Ticket is not in the pending set (never dispatched)
+        - Lock has expired (> PENDING_CLOSE_MAX_CYCLES since dispatch)
+        """
+        dispatched_cycle = self._pending_close.get(ticket)
+        if dispatched_cycle is None:
+            return False
+        if current_cycle - dispatched_cycle >= self.PENDING_CLOSE_MAX_CYCLES:
+            self._pending_close.pop(ticket, None)  # auto-expire
+            return False
+        return True
+
+    def clear_pending_close(self, ticket: int) -> None:
+        """Explicitly release the pending lock (called on watchdog success)."""
+        self._pending_close.pop(ticket, None)
 
     def register_position(
         self,

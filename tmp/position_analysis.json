@@ -1,0 +1,4452 @@
+{
+  "analysis_metadata": {
+    "source_file": "data_btc/position_snapshots.jsonl",
+    "analysis_time": "2026-06-07",
+    "total_records": 237,
+    "total_tickets": 46,
+    "date_range": {
+      "from": "2026-05-31T06:39:02",
+      "to": "2026-06-07T03:29:45"
+    },
+    "note": "Ticket 3713518571 (min_r=-80.095R) is an extreme outlier, likely a micro-lot position where R-multiple is distorted by tiny notional size. Excluded from 'clean' aggregate stats.",
+    "fields_analyzed": [
+      "unrealized_pnl_r",
+      "bars_held",
+      "trailing_sl_distance",
+      "current_atr",
+      "entry_atr",
+      "current_volatility"
+    ]
+  },
+  "aggregate_analysis": {
+    "overview": {
+      "total_snapshots": 237,
+      "total_unique_tickets": 46,
+      "deep_negative_count": 12,
+      "deep_negative_pct": 26.1,
+      "tsld_never_tight_2x_count": 38,
+      "tsld_never_tight_2x_pct": 82.6,
+      "tsld_never_moderate_3x_count": 24,
+      "tsld_inactive_majority_count": 4,
+      "stuck_frozen_count": 1,
+      "reversal_count": 13,
+      "tsld_zero_any_count": 23,
+      "tsld_zero_any_pct": 50.0
+    },
+    "pnl_aggregate": {
+      "all_tickets": {
+        "avg_final_pnl_r": -1.3456,
+        "median_final_pnl_r": 0.3272,
+        "avg_min_pnl_r": -1.9615,
+        "avg_max_pnl_r": -0.1101,
+        "worst_min_pnl_r": -80.095,
+        "best_max_pnl_r": 3.0246
+      },
+      "excluding_extreme_outlier": {
+        "ticket_count": 45,
+        "avg_final_pnl_r": 0.4044,
+        "median_final_pnl_r": 0.3363,
+        "avg_min_pnl_r": -0.2252,
+        "avg_max_pnl_r": 0.8617,
+        "worst_min_pnl_r": -3.1802,
+        "best_max_pnl_r": 3.0246,
+        "positive_final_count": 30,
+        "negative_final_count": 15,
+        "win_rate_final": 66.7
+      }
+    },
+    "trailing_sl_aggregate": {
+      "avg_tsld_to_atr": 3.45,
+      "median_tsld_to_atr": 3.43,
+      "max_tsld_to_atr": 5.38,
+      "min_tsld_to_atr": 1.99,
+      "tickets_with_tsld_zero": 23,
+      "tsld_distribution": {
+        "tight_ever": 8,
+        "moderate_ever": 22,
+        "tsld_tightened": 6
+      }
+    }
+  },
+  "findings": {
+    "critical_issues": [
+      "Ticket 3807506009: Position tracking FROZEN for 13 consecutive bars (65-min) \u2014 same unrealized_pnl_r (-1.3722R), trailing_sl_distance, current_atr repeated. Data pipeline stall suspected.",
+      "Ticket 3713518571: EXTREME OUTLIER \u2014 unrealized_pnl_r reached -80.095R. Likely micro-lot with distorted R-multiple or data error. TSld distance: [221.0, 221.0, 221.0, 203.058, 203.058, 201.532]"
+    ],
+    "critical_count": 2,
+    "warnings": [
+      "Ticket 3713518571: Trailing SL max distance = 5.2x ATR (very loose). Max drawdown during life: -80.095R. Final PnL: -80.095R.",
+      "Ticket 3713529211: Trailing SL max distance = 5.0x ATR (very loose). Max drawdown during life: -0.5292R. Final PnL: -0.1445R.",
+      "Ticket 3713534570: Trailing SL max distance = 5.61x ATR (very loose). Max drawdown during life: -0.841R. Final PnL: 0.3181R.",
+      "Ticket 3718190326: Trailing SL max distance = 5.01x ATR (very loose). Max drawdown during life: -1.2045R. Final PnL: 0.3363R.",
+      "Ticket 3748531665: Trailing SL max distance = 5.06x ATR (very loose). Max drawdown during life: -0.2361R. Final PnL: 1.6517R.",
+      "Ticket 3753495812: Trailing SL max distance = 5.14x ATR (very loose). Max drawdown during life: 0.3919R. Final PnL: 1.5257R.",
+      "Ticket 3755540480: Trailing SL max distance = 5.13x ATR (very loose). Max drawdown during life: -3.1802R. Final PnL: -3.1802R.",
+      "Ticket 3756738343: Trailing SL max distance = 5.34x ATR (very loose). Max drawdown during life: -0.0906R. Final PnL: -0.0447R.",
+      "Ticket 3763168632: Trailing SL max distance = 5.5x ATR (very loose). Max drawdown during life: -0.8888R. Final PnL: -0.8888R.",
+      "Ticket 3807506009: Trailing SL max distance = 6.67x ATR (very loose). Max drawdown during life: -1.3722R. Final PnL: -1.3722R.",
+      "Ticket 3719883742: trailing_sl_distance=0 for 75% of 4 snapshots \u2014 trailing stop never engaged. Final PnL: 2.3889R",
+      "Ticket 3726756986: trailing_sl_distance=0 for 67% of 3 snapshots \u2014 trailing stop never engaged. Final PnL: 1.4414R",
+      "Ticket 3753276582: trailing_sl_distance=0 for 50% of 2 snapshots \u2014 trailing stop never engaged. Final PnL: 0.3145R",
+      "Ticket 3753495812: trailing_sl_distance=0 for 55% of 11 snapshots \u2014 trailing stop never engaged. Final PnL: 1.5257R",
+      "Ticket 3755832533: trailing_sl_distance=0 for 50% of 6 snapshots \u2014 trailing stop never engaged. Final PnL: 0.2996R",
+      "Ticket 3759631402: trailing_sl_distance=0 for 50% of 2 snapshots \u2014 trailing stop never engaged. Final PnL: 0.2863R",
+      "Ticket 3778259516: trailing_sl_distance=0 for 50% of 10 snapshots \u2014 trailing stop never engaged. Final PnL: 1.2917R",
+      "Ticket 3807433202: trailing_sl_distance=0 for 50% of 2 snapshots \u2014 trailing stop never engaged. Final PnL: 0.512R",
+      "Ticket 3807675970: trailing_sl_distance=0 for 67% of 3 snapshots \u2014 trailing stop never engaged. Final PnL: 0.6105R"
+    ],
+    "warnings_count": 19,
+    "observations": [
+      "Ticket 3718190326: bars_held reset 2 times across 11 snapshots \u2014 position re-entered or split across segments",
+      "Ticket 3734657525: bars_held reset 2 times across 5 snapshots \u2014 position re-entered or split across segments",
+      "Ticket 3748531665: bars_held reset 2 times across 9 snapshots \u2014 position re-entered or split across segments",
+      "Ticket 3753495812: bars_held reset 2 times across 11 snapshots \u2014 position re-entered or split across segments",
+      "Ticket 3756738343: bars_held reset 2 times across 6 snapshots \u2014 position re-entered or split across segments",
+      "Ticket 3760333193: bars_held reset 2 times across 8 snapshots \u2014 position re-entered or split across segments",
+      "Ticket 3778259516: bars_held reset 2 times across 10 snapshots \u2014 position re-entered or split across segments",
+      "Ticket 3713518571: Deep negative. Min: -80.095R, Max: -43.84R, Final: -80.095R. TSld grade: VERY_LOOSE: max tsld/ATR=5.2x (>5x ATR)",
+      "Ticket 3718190326: Deep negative. Min: -1.2045R, Max: 0.7527R, Final: 0.3363R. TSld grade: VERY_LOOSE: max tsld/ATR=5.0x (>5x ATR)",
+      "Ticket 3739236654: Deep negative. Min: -1.7376R, Max: -1.4355R, Final: -1.4355R. TSld grade: MODERATE: tightened to <=3x ATR at some point",
+      "Ticket 3743461712: Deep negative. Min: -1.0625R, Max: 0.2689R, Final: -0.5121R. TSld grade: LOOSE: max tsld/ATR=3.5x (>3x ATR)",
+      "Ticket 3751226197: Deep negative. Min: -1.2886R, Max: -0.1102R, Final: -0.1102R. TSld grade: LOOSE: max tsld/ATR=4.2x (>3x ATR)",
+      "Ticket 3755540480: Deep negative. Min: -3.1802R, Max: -0.5885R, Final: -3.1802R. TSld grade: VERY_LOOSE: max tsld/ATR=5.1x (>5x ATR)",
+      "Ticket 3760333193: Deep negative. Min: -1.0848R, Max: 0.3901R, Final: -0.095R. TSld grade: LOOSE: max tsld/ATR=3.5x (>3x ATR)",
+      "Ticket 3762302048: Deep negative. Min: -1.0753R, Max: -0.1948R, Final: -0.3676R. TSld grade: LOOSE: max tsld/ATR=3.5x (>3x ATR)",
+      "Ticket 3777287872: Deep negative. Min: -1.3629R, Max: 0.1135R, Final: -1.3629R. TSld grade: LOOSE: max tsld/ATR=4.4x (>3x ATR)",
+      "Ticket 3806353442: Deep negative. Min: -1.1087R, Max: -0.9863R, Final: -1.0602R. TSld grade: LOOSE: max tsld/ATR=3.8x (>3x ATR)",
+      "Ticket 3807506009: Deep negative. Min: -1.3722R, Max: -0.974R, Final: -1.3722R. TSld grade: VERY_LOOSE: max tsld/ATR=6.7x (>5x ATR)",
+      "Ticket 3808011353: Deep negative. Min: -1.7225R, Max: 0.4831R, Final: -1.1204R. TSld grade: LOOSE: max tsld/ATR=3.0x (>3x ATR)"
+    ],
+    "observations_count": 19,
+    "executive_summary": "Analyzed 46 positions from 237 snapshots (2026-05-31 to 2026-06-07). 12 positions (26.1%) went deep negative (<=-1R). 38 positions (82.6%) never had trailing SL tighten to <=2x ATR. 23 positions (50.0%) had trailing SL inactive (0.0) at some point. 1 position(s) had frozen tracking data. Excluding the -80R outlier, avg final PnL = 0.4044R, win rate = 66.7%. Average trailing SL distance = 3.45x ATR \u2014 this is excessively wide (recommend <=2x ATR)."
+  },
+  "per_ticket_analysis": [
+    {
+      "ticket": 3713518571,
+      "snapshot_count": 6,
+      "first_time": "2026-05-31T06:39:02",
+      "last_time": "2026-05-31T07:06:59",
+      "duration_minutes": 30,
+      "entry_atr": 2.0,
+      "pnl_summary": {
+        "min_r": -80.095,
+        "max_r": -43.84,
+        "final_r": -80.095,
+        "start_r": -47.28,
+        "range_r": 36.255,
+        "went_deep_negative": true
+      },
+      "bars_progression": {
+        "max_bars_held": 6,
+        "bars_reset_count": 0,
+        "final_bars_held": 6,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          221.0,
+          221.0,
+          221.0,
+          203.058,
+          203.058,
+          201.532
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 5.2,
+        "avg_tsld_to_atr": 4.81,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "loose",
+          "very_loose",
+          "loose",
+          "loose",
+          "loose"
+        ],
+        "grade": "VERY_LOOSE: max tsld/ATR=5.2x (>5x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -9.6,
+        "atr_first": 48.2,
+        "atr_last": 43.6,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-05-31T06:39:02",
+          "end_time": "2026-05-31T07:06:59",
+          "start_bar": 1,
+          "end_bar": 6,
+          "effective_bars": 6,
+          "pnl_min_r": -80.095,
+          "pnl_max_r": -43.84,
+          "pnl_start_r": -47.28,
+          "pnl_end_r": -80.095,
+          "pnl_trajectory": "deepening_loss",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 201.532,
+          "trailing_sl_max_distance": 221.0,
+          "tsld_to_atr_min": 4.57,
+          "tsld_to_atr_max": 5.02
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": -32.815
+      },
+      "flags": {
+        "deep_negative": true,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": true
+      }
+    },
+    {
+      "ticket": 3713529211,
+      "snapshot_count": 2,
+      "first_time": "2026-05-31T08:14:55",
+      "last_time": "2026-05-31T08:19:54",
+      "duration_minutes": 10,
+      "entry_atr": 55.5729,
+      "pnl_summary": {
+        "min_r": -0.5292,
+        "max_r": -0.1445,
+        "final_r": -0.1445,
+        "start_r": -0.5292,
+        "range_r": 0.3847,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 2,
+        "bars_reset_count": 0,
+        "final_bars_held": 2,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          282.536,
+          282.536
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 5.0,
+        "avg_tsld_to_atr": 4.9,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "very_loose"
+        ],
+        "grade": "VERY_LOOSE: max tsld/ATR=5.0x (>5x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": -3.8,
+        "atr_first": 58.7,
+        "atr_last": 56.5,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-05-31T08:14:55",
+          "end_time": "2026-05-31T08:19:54",
+          "start_bar": 1,
+          "end_bar": 2,
+          "effective_bars": 2,
+          "pnl_min_r": -0.5292,
+          "pnl_max_r": -0.1445,
+          "pnl_start_r": -0.5292,
+          "pnl_end_r": -0.1445,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 282.536,
+          "trailing_sl_max_distance": 282.536,
+          "tsld_to_atr_min": 4.9,
+          "tsld_to_atr_max": 4.9
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.3847
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3713534570,
+      "snapshot_count": 3,
+      "first_time": "2026-05-31T09:09:54",
+      "last_time": "2026-05-31T09:19:53",
+      "duration_minutes": 15,
+      "entry_atr": 56.7171,
+      "pnl_summary": {
+        "min_r": -0.841,
+        "max_r": 0.3181,
+        "final_r": 0.3181,
+        "start_r": -0.3851,
+        "range_r": 1.1591,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 3,
+        "bars_reset_count": 0,
+        "final_bars_held": 3,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          290.865,
+          290.865,
+          290.865
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 5.61,
+        "avg_tsld_to_atr": 5.38,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "very_loose",
+          "very_loose",
+          "very_loose"
+        ],
+        "grade": "VERY_LOOSE: max tsld/ATR=5.6x (>5x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": -2.2,
+        "atr_first": 55.9,
+        "atr_last": 54.7,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-05-31T09:09:54",
+          "end_time": "2026-05-31T09:19:53",
+          "start_bar": 1,
+          "end_bar": 3,
+          "effective_bars": 3,
+          "pnl_min_r": -0.841,
+          "pnl_max_r": 0.3181,
+          "pnl_start_r": -0.3851,
+          "pnl_end_r": 0.3181,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 290.865,
+          "trailing_sl_max_distance": 290.865,
+          "tsld_to_atr_min": 5.37,
+          "tsld_to_atr_max": 5.37
+        }
+      ],
+      "reversal": {
+        "type": "negative_to_positive",
+        "pnl_delta_from_start": 0.7031
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": true,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3713588985,
+      "snapshot_count": 3,
+      "first_time": "2026-05-31T15:34:50",
+      "last_time": "2026-05-31T15:44:51",
+      "duration_minutes": 15,
+      "entry_atr": 73.3707,
+      "pnl_summary": {
+        "min_r": -0.1116,
+        "max_r": 1.3368,
+        "final_r": 1.3368,
+        "start_r": -0.1116,
+        "range_r": 1.4484,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 3,
+        "bars_reset_count": 0,
+        "final_bars_held": 3,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          214.0,
+          214.0,
+          214.0
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 3.35,
+        "avg_tsld_to_atr": 3.28,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "loose",
+          "loose"
+        ],
+        "grade": "LOOSE: max tsld/ATR=3.3x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -5.7,
+        "atr_first": 68.0,
+        "atr_last": 64.1,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-05-31T15:34:50",
+          "end_time": "2026-05-31T15:44:51",
+          "start_bar": 1,
+          "end_bar": 3,
+          "effective_bars": 3,
+          "pnl_min_r": -0.1116,
+          "pnl_max_r": 1.3368,
+          "pnl_start_r": -0.1116,
+          "pnl_end_r": 1.3368,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 214.0,
+          "trailing_sl_max_distance": 214.0,
+          "tsld_to_atr_min": 3.27,
+          "tsld_to_atr_max": 3.27
+        }
+      ],
+      "reversal": {
+        "type": "negative_to_positive",
+        "pnl_delta_from_start": 1.4484
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": true,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3713616013,
+      "snapshot_count": 3,
+      "first_time": "2026-05-31T18:14:50",
+      "last_time": "2026-05-31T18:24:53",
+      "duration_minutes": 15,
+      "entry_atr": 56.7114,
+      "pnl_summary": {
+        "min_r": -0.0739,
+        "max_r": 0.0497,
+        "final_r": 0.0497,
+        "start_r": -0.036,
+        "range_r": 0.1236,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 3,
+        "bars_reset_count": 0,
+        "final_bars_held": 3,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          115.009,
+          115.009,
+          115.009
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 2.12,
+        "avg_tsld_to_atr": 2.1,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "moderate",
+          "moderate",
+          "moderate"
+        ],
+        "grade": "MODERATE: tightened to <=3x ATR at some point"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": -2.2,
+        "atr_first": 55.4,
+        "atr_last": 54.2,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-05-31T18:14:50",
+          "end_time": "2026-05-31T18:24:53",
+          "start_bar": 1,
+          "end_bar": 3,
+          "effective_bars": 3,
+          "pnl_min_r": -0.0739,
+          "pnl_max_r": 0.0497,
+          "pnl_start_r": -0.036,
+          "pnl_end_r": 0.0497,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 115.009,
+          "trailing_sl_max_distance": 115.009,
+          "tsld_to_atr_min": 2.1,
+          "tsld_to_atr_max": 2.1
+        }
+      ],
+      "reversal": {
+        "type": "negative_to_positive",
+        "pnl_delta_from_start": 0.0857
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": false,
+        "reversed": true,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3713620264,
+      "snapshot_count": 3,
+      "first_time": "2026-05-31T18:49:56",
+      "last_time": "2026-05-31T18:59:51",
+      "duration_minutes": 15,
+      "entry_atr": 52.04,
+      "pnl_summary": {
+        "min_r": 0.367,
+        "max_r": 0.7073,
+        "final_r": 0.7073,
+        "start_r": 0.5013,
+        "range_r": 0.3403,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 3,
+        "bars_reset_count": 0,
+        "final_bars_held": 3,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          101.338,
+          101.338,
+          101.338
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 2.0,
+        "avg_tsld_to_atr": 1.99,
+        "ever_tight_2x": true,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "tight",
+          "tight",
+          "tight"
+        ],
+        "grade": "ACCEPTABLE: tightened to <=2x ATR at some point"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": 1.3,
+        "atr_first": 50.8,
+        "atr_last": 51.4,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-05-31T18:49:56",
+          "end_time": "2026-05-31T18:59:51",
+          "start_bar": 1,
+          "end_bar": 3,
+          "effective_bars": 3,
+          "pnl_min_r": 0.367,
+          "pnl_max_r": 0.7073,
+          "pnl_start_r": 0.5013,
+          "pnl_end_r": 0.7073,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 101.338,
+          "trailing_sl_max_distance": 101.338,
+          "tsld_to_atr_min": 1.99,
+          "tsld_to_atr_max": 1.99
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.206
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": false,
+        "tsld_never_moderate_3x": false,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3718190326,
+      "snapshot_count": 11,
+      "first_time": "2026-06-01T04:58:50",
+      "last_time": "2026-06-01T05:34:58",
+      "duration_minutes": 55,
+      "entry_atr": 101.3214,
+      "pnl_summary": {
+        "min_r": -1.2045,
+        "max_r": 0.7527,
+        "final_r": 0.3363,
+        "start_r": -1.2045,
+        "range_r": 1.9571,
+        "went_deep_negative": true
+      },
+      "bars_progression": {
+        "max_bars_held": 5,
+        "bars_reset_count": 2,
+        "final_bars_held": 5,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          266.82,
+          266.82,
+          405.286,
+          266.82,
+          405.286,
+          405.286
+        ],
+        "zero_count": 5,
+        "zero_ratio": 0.45,
+        "max_tsld_to_atr": 5.01,
+        "avg_tsld_to_atr": 3.86,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "moderate",
+          "inactive",
+          "moderate",
+          "inactive",
+          "inactive",
+          "loose",
+          "loose",
+          "inactive",
+          "inactive",
+          "very_loose",
+          "loose"
+        ],
+        "grade": "VERY_LOOSE: max tsld/ATR=5.0x (>5x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -19.8,
+        "atr_first": 101.3,
+        "atr_last": 81.3,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-01T04:58:50",
+          "end_time": "2026-06-01T04:59:50",
+          "start_bar": 1,
+          "end_bar": 2,
+          "effective_bars": 2,
+          "pnl_min_r": -1.2045,
+          "pnl_max_r": -0.8105,
+          "pnl_start_r": -1.2045,
+          "pnl_end_r": -0.8105,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 1,
+          "trailing_sl_min_distance": 266.82,
+          "trailing_sl_max_distance": 266.82,
+          "tsld_to_atr_min": 2.8,
+          "tsld_to_atr_max": 2.8
+        },
+        {
+          "segment_index": 2,
+          "start_time": "2026-06-01T05:01:52",
+          "end_time": "2026-06-01T05:14:53",
+          "start_bar": 1,
+          "end_bar": 4,
+          "effective_bars": 4,
+          "pnl_min_r": -0.874,
+          "pnl_max_r": -0.2435,
+          "pnl_start_r": -0.2435,
+          "pnl_end_r": -0.8131,
+          "pnl_trajectory": "deepening_loss",
+          "trailing_sl_zero_count": 2,
+          "trailing_sl_min_distance": 266.82,
+          "trailing_sl_max_distance": 405.286,
+          "tsld_to_atr_min": 2.9,
+          "tsld_to_atr_max": 4.41
+        },
+        {
+          "segment_index": 3,
+          "start_time": "2026-06-01T05:16:09",
+          "end_time": "2026-06-01T05:34:58",
+          "start_bar": 1,
+          "end_bar": 5,
+          "effective_bars": 5,
+          "pnl_min_r": -0.521,
+          "pnl_max_r": 0.7527,
+          "pnl_start_r": -0.521,
+          "pnl_end_r": 0.3363,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 2,
+          "trailing_sl_min_distance": 266.82,
+          "trailing_sl_max_distance": 405.286,
+          "tsld_to_atr_min": 3.21,
+          "tsld_to_atr_max": 4.87
+        }
+      ],
+      "reversal": {
+        "type": "significant_swing",
+        "pnl_delta_from_start": 1.5407
+      },
+      "flags": {
+        "deep_negative": true,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": false,
+        "reversed": true,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3719181823,
+      "snapshot_count": 7,
+      "first_time": "2026-06-01T05:49:53",
+      "last_time": "2026-06-01T06:14:50",
+      "duration_minutes": 35,
+      "entry_atr": 86.0564,
+      "pnl_summary": {
+        "min_r": -0.1884,
+        "max_r": 1.7178,
+        "final_r": 0.9089,
+        "start_r": -0.1884,
+        "range_r": 1.9062,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 5,
+        "bars_reset_count": 1,
+        "final_bars_held": 5,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          212.965,
+          212.965,
+          219.96,
+          344.226,
+          344.226
+        ],
+        "zero_count": 2,
+        "zero_ratio": 0.29,
+        "max_tsld_to_atr": 4.51,
+        "avg_tsld_to_atr": 3.35,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "moderate",
+          "moderate",
+          "moderate",
+          "inactive",
+          "inactive",
+          "loose",
+          "loose"
+        ],
+        "grade": "LOOSE: max tsld/ATR=4.5x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -8.1,
+        "atr_first": 85.1,
+        "atr_last": 78.2,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-01T05:49:53",
+          "end_time": "2026-06-01T05:54:53",
+          "start_bar": 1,
+          "end_bar": 2,
+          "effective_bars": 2,
+          "pnl_min_r": -0.1884,
+          "pnl_max_r": -0.0654,
+          "pnl_start_r": -0.1884,
+          "pnl_end_r": -0.0654,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 212.965,
+          "trailing_sl_max_distance": 212.965,
+          "tsld_to_atr_min": 2.6,
+          "tsld_to_atr_max": 2.6
+        },
+        {
+          "segment_index": 2,
+          "start_time": "2026-06-01T05:58:45",
+          "end_time": "2026-06-01T06:14:50",
+          "start_bar": 1,
+          "end_bar": 5,
+          "effective_bars": 5,
+          "pnl_min_r": 0.3405,
+          "pnl_max_r": 1.7178,
+          "pnl_start_r": 0.5664,
+          "pnl_end_r": 0.9089,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 2,
+          "trailing_sl_min_distance": 219.96,
+          "trailing_sl_max_distance": 344.226,
+          "tsld_to_atr_min": 2.8,
+          "tsld_to_atr_max": 4.38
+        }
+      ],
+      "reversal": {
+        "type": "negative_to_positive",
+        "pnl_delta_from_start": 1.0973
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": false,
+        "reversed": true,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3719883742,
+      "snapshot_count": 4,
+      "first_time": "2026-06-01T06:24:51",
+      "last_time": "2026-06-01T06:39:50",
+      "duration_minutes": 20,
+      "entry_atr": 79.1536,
+      "pnl_summary": {
+        "min_r": 1.2944,
+        "max_r": 2.3889,
+        "final_r": 2.3889,
+        "start_r": 1.2944,
+        "range_r": 1.0945,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 4,
+        "bars_reset_count": 0,
+        "final_bars_held": 4,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          188.098
+        ],
+        "zero_count": 3,
+        "zero_ratio": 0.75,
+        "max_tsld_to_atr": 2.28,
+        "avg_tsld_to_atr": 2.28,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "moderate",
+          "inactive",
+          "inactive",
+          "inactive"
+        ],
+        "grade": "CRITICAL: trailing SL inactive (0.0) for majority of snapshots"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": -1.9,
+        "atr_first": 82.5,
+        "atr_last": 81.0,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-01T06:24:51",
+          "end_time": "2026-06-01T06:39:50",
+          "start_bar": 1,
+          "end_bar": 4,
+          "effective_bars": 4,
+          "pnl_min_r": 1.2944,
+          "pnl_max_r": 2.3889,
+          "pnl_start_r": 1.2944,
+          "pnl_end_r": 2.3889,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 3,
+          "trailing_sl_min_distance": 188.098,
+          "trailing_sl_max_distance": 188.098,
+          "tsld_to_atr_min": 2.32,
+          "tsld_to_atr_max": 2.32
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 1.0945
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": false,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": true,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3726756986,
+      "snapshot_count": 3,
+      "first_time": "2026-06-01T13:09:51",
+      "last_time": "2026-06-01T13:19:49",
+      "duration_minutes": 15,
+      "entry_atr": 197.1393,
+      "pnl_summary": {
+        "min_r": 1.2058,
+        "max_r": 1.979,
+        "final_r": 1.4414,
+        "start_r": 1.2058,
+        "range_r": 0.7732,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 3,
+        "bars_reset_count": 0,
+        "final_bars_held": 3,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          711.701
+        ],
+        "zero_count": 2,
+        "zero_ratio": 0.67,
+        "max_tsld_to_atr": 4.7,
+        "avg_tsld_to_atr": 4.7,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "inactive",
+          "inactive"
+        ],
+        "grade": "CRITICAL: trailing SL inactive (0.0) for majority of snapshots"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -8.3,
+        "atr_first": 151.3,
+        "atr_last": 138.8,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-01T13:09:51",
+          "end_time": "2026-06-01T13:19:49",
+          "start_bar": 1,
+          "end_bar": 3,
+          "effective_bars": 3,
+          "pnl_min_r": 1.2058,
+          "pnl_max_r": 1.979,
+          "pnl_start_r": 1.2058,
+          "pnl_end_r": 1.4414,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 2,
+          "trailing_sl_min_distance": 711.701,
+          "trailing_sl_max_distance": 711.701,
+          "tsld_to_atr_min": 4.89,
+          "tsld_to_atr_max": 4.89
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.2356
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": true,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3733983711,
+      "snapshot_count": 5,
+      "first_time": "2026-06-02T00:39:49",
+      "last_time": "2026-06-02T00:59:49",
+      "duration_minutes": 25,
+      "entry_atr": 112.5036,
+      "pnl_summary": {
+        "min_r": -0.5387,
+        "max_r": 0.6466,
+        "final_r": -0.5387,
+        "start_r": 0.6466,
+        "range_r": 1.1854,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 5,
+        "bars_reset_count": 0,
+        "final_bars_held": 5,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          316.004,
+          316.004,
+          316.004,
+          107.406,
+          107.406
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 3.4,
+        "avg_tsld_to_atr": 2.4,
+        "ever_tight_2x": true,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": true,
+        "classification": [
+          "moderate",
+          "loose",
+          "loose",
+          "tight",
+          "tight"
+        ],
+        "grade": "LOOSE: max tsld/ATR=3.4x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -20.3,
+        "atr_first": 109.0,
+        "atr_last": 87.0,
+        "atr_contraction": true,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-02T00:39:49",
+          "end_time": "2026-06-02T00:59:49",
+          "start_bar": 1,
+          "end_bar": 5,
+          "effective_bars": 5,
+          "pnl_min_r": -0.5387,
+          "pnl_max_r": 0.6466,
+          "pnl_start_r": 0.6466,
+          "pnl_end_r": -0.5387,
+          "pnl_trajectory": "profit_taking",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 107.406,
+          "trailing_sl_max_distance": 316.004,
+          "tsld_to_atr_min": 1.12,
+          "tsld_to_atr_max": 3.3
+        }
+      ],
+      "reversal": {
+        "type": "significant_swing",
+        "pnl_delta_from_start": -1.1854
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": false,
+        "tsld_never_moderate_3x": false,
+        "reversed": true,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3734657525,
+      "snapshot_count": 5,
+      "first_time": "2026-06-02T01:19:50",
+      "last_time": "2026-06-02T01:33:59",
+      "duration_minutes": 25,
+      "entry_atr": 90.7136,
+      "pnl_summary": {
+        "min_r": -0.4347,
+        "max_r": 2.4096,
+        "final_r": 2.4096,
+        "start_r": -0.3457,
+        "range_r": 2.8442,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 3,
+        "bars_reset_count": 2,
+        "final_bars_held": 1,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          229.349,
+          235.09,
+          235.09
+        ],
+        "zero_count": 2,
+        "zero_ratio": 0.4,
+        "max_tsld_to_atr": 2.35,
+        "avg_tsld_to_atr": 2.23,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "moderate",
+          "moderate",
+          "inactive",
+          "inactive",
+          "moderate"
+        ],
+        "grade": "MODERATE: tightened to <=3x ATR at some point"
+      },
+      "volatility_analysis": {
+        "vol_trend": "rising",
+        "atr_change_pct": 17.7,
+        "atr_first": 97.5,
+        "atr_last": 114.8,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-02T01:19:50",
+          "end_time": "2026-06-02T01:19:50",
+          "start_bar": 1,
+          "end_bar": 1,
+          "effective_bars": 1,
+          "pnl_min_r": -0.3457,
+          "pnl_max_r": -0.3457,
+          "pnl_start_r": -0.3457,
+          "pnl_end_r": -0.3457,
+          "pnl_trajectory": "sideways",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 229.349,
+          "trailing_sl_max_distance": 229.349,
+          "tsld_to_atr_min": 2.35,
+          "tsld_to_atr_max": 2.35
+        },
+        {
+          "segment_index": 2,
+          "start_time": "2026-06-02T01:24:02",
+          "end_time": "2026-06-02T01:29:48",
+          "start_bar": 1,
+          "end_bar": 3,
+          "effective_bars": 3,
+          "pnl_min_r": -0.4347,
+          "pnl_max_r": 0.6901,
+          "pnl_start_r": -0.4347,
+          "pnl_end_r": 0.6901,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 2,
+          "trailing_sl_min_distance": 235.09,
+          "trailing_sl_max_distance": 235.09,
+          "tsld_to_atr_min": 2.35,
+          "tsld_to_atr_max": 2.35
+        },
+        {
+          "segment_index": 3,
+          "start_time": "2026-06-02T01:33:59",
+          "end_time": "2026-06-02T01:33:59",
+          "start_bar": 1,
+          "end_bar": 1,
+          "effective_bars": 1,
+          "pnl_min_r": 2.4096,
+          "pnl_max_r": 2.4096,
+          "pnl_start_r": 2.4096,
+          "pnl_end_r": 2.4096,
+          "pnl_trajectory": "sideways",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 235.09,
+          "trailing_sl_max_distance": 235.09,
+          "tsld_to_atr_min": 2.05,
+          "tsld_to_atr_max": 2.05
+        }
+      ],
+      "reversal": {
+        "type": "negative_to_positive",
+        "pnl_delta_from_start": 2.7553
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": false,
+        "reversed": true,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3735394530,
+      "snapshot_count": 4,
+      "first_time": "2026-06-02T01:44:51",
+      "last_time": "2026-06-02T01:59:48",
+      "duration_minutes": 20,
+      "entry_atr": 116.89,
+      "pnl_summary": {
+        "min_r": 0.0027,
+        "max_r": 2.6852,
+        "final_r": 2.6852,
+        "start_r": 0.0027,
+        "range_r": 2.6824,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 4,
+        "bars_reset_count": 0,
+        "final_bars_held": 4,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          334.533,
+          334.533,
+          334.533,
+          140.014
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 2.66,
+        "avg_tsld_to_atr": 2.14,
+        "ever_tight_2x": true,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": true,
+        "classification": [
+          "moderate",
+          "moderate",
+          "moderate",
+          "tight"
+        ],
+        "grade": "ACCEPTABLE: tightened to <=2x ATR at some point"
+      },
+      "volatility_analysis": {
+        "vol_trend": "rising",
+        "atr_change_pct": 20.4,
+        "atr_first": 125.7,
+        "atr_last": 151.3,
+        "atr_contraction": false,
+        "atr_expansion": true
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-02T01:44:51",
+          "end_time": "2026-06-02T01:59:48",
+          "start_bar": 1,
+          "end_bar": 4,
+          "effective_bars": 4,
+          "pnl_min_r": 0.0027,
+          "pnl_max_r": 2.6852,
+          "pnl_start_r": 0.0027,
+          "pnl_end_r": 2.6852,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 140.014,
+          "trailing_sl_max_distance": 334.533,
+          "tsld_to_atr_min": 1.03,
+          "tsld_to_atr_max": 2.45
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 2.6824
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": false,
+        "tsld_never_moderate_3x": false,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3738805149,
+      "snapshot_count": 6,
+      "first_time": "2026-06-02T04:04:52",
+      "last_time": "2026-06-02T04:24:49",
+      "duration_minutes": 30,
+      "entry_atr": 111.6443,
+      "pnl_summary": {
+        "min_r": -0.0645,
+        "max_r": 1.4691,
+        "final_r": 0.6569,
+        "start_r": -0.0645,
+        "range_r": 1.5336,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 5,
+        "bars_reset_count": 1,
+        "final_bars_held": 5,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          312.414,
+          319.41,
+          446.577,
+          446.577
+        ],
+        "zero_count": 2,
+        "zero_ratio": 0.33,
+        "max_tsld_to_atr": 4.51,
+        "avg_tsld_to_atr": 3.87,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "loose",
+          "inactive",
+          "inactive",
+          "loose",
+          "loose"
+        ],
+        "grade": "LOOSE: max tsld/ATR=4.5x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "rising",
+        "atr_change_pct": 5.2,
+        "atr_first": 94.4,
+        "atr_last": 99.3,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-02T04:04:52",
+          "end_time": "2026-06-02T04:04:52",
+          "start_bar": 1,
+          "end_bar": 1,
+          "effective_bars": 1,
+          "pnl_min_r": -0.0645,
+          "pnl_max_r": -0.0645,
+          "pnl_start_r": -0.0645,
+          "pnl_end_r": -0.0645,
+          "pnl_trajectory": "sideways",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 312.414,
+          "trailing_sl_max_distance": 312.414,
+          "tsld_to_atr_min": 3.31,
+          "tsld_to_atr_max": 3.31
+        },
+        {
+          "segment_index": 2,
+          "start_time": "2026-06-02T04:08:01",
+          "end_time": "2026-06-02T04:24:49",
+          "start_bar": 1,
+          "end_bar": 5,
+          "effective_bars": 5,
+          "pnl_min_r": 0.2507,
+          "pnl_max_r": 1.4691,
+          "pnl_start_r": 0.2507,
+          "pnl_end_r": 0.6569,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 2,
+          "trailing_sl_min_distance": 319.41,
+          "trailing_sl_max_distance": 446.577,
+          "tsld_to_atr_min": 3.21,
+          "tsld_to_atr_max": 4.49
+        }
+      ],
+      "reversal": {
+        "type": "negative_to_positive",
+        "pnl_delta_from_start": 0.7214
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": true,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3739236654,
+      "snapshot_count": 3,
+      "first_time": "2026-06-02T04:34:49",
+      "last_time": "2026-06-02T04:44:50",
+      "duration_minutes": 15,
+      "entry_atr": 99.8207,
+      "pnl_summary": {
+        "min_r": -1.7376,
+        "max_r": -1.4355,
+        "final_r": -1.4355,
+        "start_r": -1.5914,
+        "range_r": 0.3021,
+        "went_deep_negative": true
+      },
+      "bars_progression": {
+        "max_bars_held": 3,
+        "bars_reset_count": 0,
+        "final_bars_held": 3,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          264.401,
+          264.401,
+          264.401
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 2.65,
+        "avg_tsld_to_atr": 2.62,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "moderate",
+          "moderate",
+          "moderate"
+        ],
+        "grade": "MODERATE: tightened to <=3x ATR at some point"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": -1.7,
+        "atr_first": 102.2,
+        "atr_last": 100.5,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-02T04:34:49",
+          "end_time": "2026-06-02T04:44:50",
+          "start_bar": 1,
+          "end_bar": 3,
+          "effective_bars": 3,
+          "pnl_min_r": -1.7376,
+          "pnl_max_r": -1.4355,
+          "pnl_start_r": -1.5914,
+          "pnl_end_r": -1.4355,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 264.401,
+          "trailing_sl_max_distance": 264.401,
+          "tsld_to_atr_min": 2.62,
+          "tsld_to_atr_max": 2.62
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.1559
+      },
+      "flags": {
+        "deep_negative": true,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": false,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3740718229,
+      "snapshot_count": 2,
+      "first_time": "2026-06-02T06:19:48",
+      "last_time": "2026-06-02T06:24:49",
+      "duration_minutes": 10,
+      "entry_atr": 130.0721,
+      "pnl_summary": {
+        "min_r": 0.8058,
+        "max_r": 1.1825,
+        "final_r": 1.1825,
+        "start_r": 0.8058,
+        "range_r": 0.3767,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 2,
+        "bars_reset_count": 0,
+        "final_bars_held": 2,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          392.323,
+          392.323
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 3.02,
+        "avg_tsld_to_atr": 3.02,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "loose"
+        ],
+        "grade": "LOOSE: max tsld/ATR=3.0x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": -0.4,
+        "atr_first": 130.3,
+        "atr_last": 129.7,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-02T06:19:48",
+          "end_time": "2026-06-02T06:24:49",
+          "start_bar": 1,
+          "end_bar": 2,
+          "effective_bars": 2,
+          "pnl_min_r": 0.8058,
+          "pnl_max_r": 1.1825,
+          "pnl_start_r": 0.8058,
+          "pnl_end_r": 1.1825,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 392.323,
+          "trailing_sl_max_distance": 392.323,
+          "tsld_to_atr_min": 3.02,
+          "tsld_to_atr_max": 3.02
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.3767
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3741300003,
+      "snapshot_count": 4,
+      "first_time": "2026-06-02T06:44:49",
+      "last_time": "2026-06-02T06:59:48",
+      "duration_minutes": 20,
+      "entry_atr": 134.07,
+      "pnl_summary": {
+        "min_r": 0.8144,
+        "max_r": 1.8128,
+        "final_r": 1.8128,
+        "start_r": 0.8144,
+        "range_r": 0.9984,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 4,
+        "bars_reset_count": 0,
+        "final_bars_held": 4,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          410.395,
+          410.395,
+          410.395
+        ],
+        "zero_count": 1,
+        "zero_ratio": 0.25,
+        "max_tsld_to_atr": 3.23,
+        "avg_tsld_to_atr": 3.0,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "moderate",
+          "moderate",
+          "inactive"
+        ],
+        "grade": "LOOSE: max tsld/ATR=3.2x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "rising",
+        "atr_change_pct": 21.7,
+        "atr_first": 127.2,
+        "atr_last": 154.9,
+        "atr_contraction": false,
+        "atr_expansion": true
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-02T06:44:49",
+          "end_time": "2026-06-02T06:59:48",
+          "start_bar": 1,
+          "end_bar": 4,
+          "effective_bars": 4,
+          "pnl_min_r": 0.8144,
+          "pnl_max_r": 1.8128,
+          "pnl_start_r": 0.8144,
+          "pnl_end_r": 1.8128,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 1,
+          "trailing_sl_min_distance": 410.395,
+          "trailing_sl_max_distance": 410.395,
+          "tsld_to_atr_min": 2.89,
+          "tsld_to_atr_max": 2.89
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.9984
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": false,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3743461712,
+      "snapshot_count": 5,
+      "first_time": "2026-06-02T10:44:51",
+      "last_time": "2026-06-02T11:04:52",
+      "duration_minutes": 25,
+      "entry_atr": 138.5507,
+      "pnl_summary": {
+        "min_r": -1.0625,
+        "max_r": 0.2689,
+        "final_r": -0.5121,
+        "start_r": 0.2689,
+        "range_r": 1.3314,
+        "went_deep_negative": true
+      },
+      "bars_progression": {
+        "max_bars_held": 5,
+        "bars_reset_count": 0,
+        "final_bars_held": 5,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          431.112,
+          431.112,
+          431.112,
+          211.581,
+          203.497
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 3.45,
+        "avg_tsld_to_atr": 2.69,
+        "ever_tight_2x": true,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": true,
+        "classification": [
+          "loose",
+          "loose",
+          "loose",
+          "tight",
+          "tight"
+        ],
+        "grade": "LOOSE: max tsld/ATR=3.5x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": -2.3,
+        "atr_first": 128.7,
+        "atr_last": 125.7,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-02T10:44:51",
+          "end_time": "2026-06-02T11:04:52",
+          "start_bar": 1,
+          "end_bar": 5,
+          "effective_bars": 5,
+          "pnl_min_r": -1.0625,
+          "pnl_max_r": 0.2689,
+          "pnl_start_r": 0.2689,
+          "pnl_end_r": -0.5121,
+          "pnl_trajectory": "profit_taking",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 203.497,
+          "trailing_sl_max_distance": 431.112,
+          "tsld_to_atr_min": 1.61,
+          "tsld_to_atr_max": 3.41
+        }
+      ],
+      "reversal": {
+        "type": "positive_to_negative",
+        "pnl_delta_from_start": -0.7809
+      },
+      "flags": {
+        "deep_negative": true,
+        "tsld_never_tight_2x": false,
+        "tsld_never_moderate_3x": false,
+        "reversed": true,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3748531665,
+      "snapshot_count": 9,
+      "first_time": "2026-06-02T18:14:49",
+      "last_time": "2026-06-02T18:44:51",
+      "duration_minutes": 45,
+      "entry_atr": 153.5464,
+      "pnl_summary": {
+        "min_r": -0.2361,
+        "max_r": 2.1211,
+        "final_r": 1.6517,
+        "start_r": -0.2361,
+        "range_r": 2.3572,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 5,
+        "bars_reset_count": 2,
+        "final_bars_held": 5,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          501.624,
+          501.624,
+          508.62,
+          614.186,
+          614.186
+        ],
+        "zero_count": 4,
+        "zero_ratio": 0.44,
+        "max_tsld_to_atr": 5.06,
+        "avg_tsld_to_atr": 4.25,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "loose",
+          "loose",
+          "inactive",
+          "inactive",
+          "inactive",
+          "inactive",
+          "very_loose",
+          "very_loose"
+        ],
+        "grade": "VERY_LOOSE: max tsld/ATR=5.1x (>5x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -9.5,
+        "atr_first": 134.6,
+        "atr_last": 121.8,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-02T18:14:49",
+          "end_time": "2026-06-02T18:19:49",
+          "start_bar": 1,
+          "end_bar": 2,
+          "effective_bars": 2,
+          "pnl_min_r": -0.2361,
+          "pnl_max_r": 0.1629,
+          "pnl_start_r": -0.2361,
+          "pnl_end_r": 0.1629,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 501.624,
+          "trailing_sl_max_distance": 501.624,
+          "tsld_to_atr_min": 3.72,
+          "tsld_to_atr_max": 3.72
+        },
+        {
+          "segment_index": 2,
+          "start_time": "2026-06-02T18:20:36",
+          "end_time": "2026-06-02T18:24:50",
+          "start_bar": 1,
+          "end_bar": 2,
+          "effective_bars": 2,
+          "pnl_min_r": 0.2675,
+          "pnl_max_r": 0.9847,
+          "pnl_start_r": 0.2675,
+          "pnl_end_r": 0.9847,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 1,
+          "trailing_sl_min_distance": 508.62,
+          "trailing_sl_max_distance": 508.62,
+          "tsld_to_atr_min": 3.7,
+          "tsld_to_atr_max": 3.7
+        },
+        {
+          "segment_index": 3,
+          "start_time": "2026-06-02T18:25:20",
+          "end_time": "2026-06-02T18:44:51",
+          "start_bar": 1,
+          "end_bar": 5,
+          "effective_bars": 5,
+          "pnl_min_r": 1.1963,
+          "pnl_max_r": 2.1211,
+          "pnl_start_r": 1.1963,
+          "pnl_end_r": 1.6517,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 3,
+          "trailing_sl_min_distance": 614.186,
+          "trailing_sl_max_distance": 614.186,
+          "tsld_to_atr_min": 4.7,
+          "tsld_to_atr_max": 4.7
+        }
+      ],
+      "reversal": {
+        "type": "negative_to_positive",
+        "pnl_delta_from_start": 1.8879
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": true,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3751226197,
+      "snapshot_count": 5,
+      "first_time": "2026-06-03T00:09:48",
+      "last_time": "2026-06-03T00:29:48",
+      "duration_minutes": 25,
+      "entry_atr": 250.6686,
+      "pnl_summary": {
+        "min_r": -1.2886,
+        "max_r": -0.1102,
+        "final_r": -0.1102,
+        "start_r": -0.3158,
+        "range_r": 1.1784,
+        "went_deep_negative": true
+      },
+      "bars_progression": {
+        "max_bars_held": 5,
+        "bars_reset_count": 0,
+        "final_bars_held": 5,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          904.407,
+          904.407,
+          904.407,
+          435.417,
+          435.417
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 4.25,
+        "avg_tsld_to_atr": 3.29,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": true,
+        "classification": [
+          "loose",
+          "loose",
+          "loose",
+          "moderate",
+          "moderate"
+        ],
+        "grade": "LOOSE: max tsld/ATR=4.2x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -8.2,
+        "atr_first": 228.5,
+        "atr_last": 209.8,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-03T00:09:48",
+          "end_time": "2026-06-03T00:29:48",
+          "start_bar": 1,
+          "end_bar": 5,
+          "effective_bars": 5,
+          "pnl_min_r": -1.2886,
+          "pnl_max_r": -0.1102,
+          "pnl_start_r": -0.3158,
+          "pnl_end_r": -0.1102,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 435.417,
+          "trailing_sl_max_distance": 904.407,
+          "tsld_to_atr_min": 2.0,
+          "tsld_to_atr_max": 4.16
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.2056
+      },
+      "flags": {
+        "deep_negative": true,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": false,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3753276582,
+      "snapshot_count": 2,
+      "first_time": "2026-06-03T02:14:02",
+      "last_time": "2026-06-03T02:14:52",
+      "duration_minutes": 10,
+      "entry_atr": 185.6964,
+      "pnl_summary": {
+        "min_r": 0.2459,
+        "max_r": 0.3145,
+        "final_r": 0.3145,
+        "start_r": 0.2459,
+        "range_r": 0.0686,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 2,
+        "bars_reset_count": 0,
+        "final_bars_held": 2,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          671.67
+        ],
+        "zero_count": 1,
+        "zero_ratio": 0.5,
+        "max_tsld_to_atr": 3.69,
+        "avg_tsld_to_atr": 3.69,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "inactive"
+        ],
+        "grade": "LOOSE: max tsld/ATR=3.7x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": -3.4,
+        "atr_first": 182.2,
+        "atr_last": 176.0,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-03T02:14:02",
+          "end_time": "2026-06-03T02:14:52",
+          "start_bar": 1,
+          "end_bar": 2,
+          "effective_bars": 2,
+          "pnl_min_r": 0.2459,
+          "pnl_max_r": 0.3145,
+          "pnl_start_r": 0.2459,
+          "pnl_end_r": 0.3145,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 1,
+          "trailing_sl_min_distance": 671.67,
+          "trailing_sl_max_distance": 671.67,
+          "tsld_to_atr_min": 3.75,
+          "tsld_to_atr_max": 3.75
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.0686
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3753495812,
+      "snapshot_count": 11,
+      "first_time": "2026-06-03T02:24:48",
+      "last_time": "2026-06-03T03:04:48",
+      "duration_minutes": 55,
+      "entry_atr": 185.8664,
+      "pnl_summary": {
+        "min_r": 0.3919,
+        "max_r": 1.5343,
+        "final_r": 1.5257,
+        "start_r": 1.0711,
+        "range_r": 1.1424,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 5,
+        "bars_reset_count": 2,
+        "final_bars_held": 5,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          665.579,
+          7.0,
+          743.466,
+          743.466,
+          743.466
+        ],
+        "zero_count": 6,
+        "zero_ratio": 0.55,
+        "max_tsld_to_atr": 5.14,
+        "avg_tsld_to_atr": 3.66,
+        "ever_tight_2x": true,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "inactive",
+          "tight",
+          "inactive",
+          "inactive",
+          "loose",
+          "inactive",
+          "inactive",
+          "inactive",
+          "very_loose",
+          "very_loose"
+        ],
+        "grade": "CRITICAL: trailing SL inactive (0.0) for majority of snapshots"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -20.3,
+        "atr_first": 181.7,
+        "atr_last": 144.9,
+        "atr_contraction": true,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-03T02:24:48",
+          "end_time": "2026-06-03T02:29:48",
+          "start_bar": 1,
+          "end_bar": 2,
+          "effective_bars": 2,
+          "pnl_min_r": 1.0711,
+          "pnl_max_r": 1.2619,
+          "pnl_start_r": 1.0711,
+          "pnl_end_r": 1.2619,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 1,
+          "trailing_sl_min_distance": 665.579,
+          "trailing_sl_max_distance": 665.579,
+          "tsld_to_atr_min": 3.69,
+          "tsld_to_atr_max": 3.69
+        },
+        {
+          "segment_index": 2,
+          "start_time": "2026-06-03T02:30:39",
+          "end_time": "2026-06-03T02:44:48",
+          "start_bar": 1,
+          "end_bar": 4,
+          "effective_bars": 4,
+          "pnl_min_r": 0.3919,
+          "pnl_max_r": 1.0705,
+          "pnl_start_r": 1.0248,
+          "pnl_end_r": 0.8012,
+          "pnl_trajectory": "profit_taking",
+          "trailing_sl_zero_count": 2,
+          "trailing_sl_min_distance": 7.0,
+          "trailing_sl_max_distance": 743.466,
+          "tsld_to_atr_min": 0.04,
+          "tsld_to_atr_max": 4.13
+        },
+        {
+          "segment_index": 3,
+          "start_time": "2026-06-03T02:48:17",
+          "end_time": "2026-06-03T03:04:48",
+          "start_bar": 1,
+          "end_bar": 5,
+          "effective_bars": 5,
+          "pnl_min_r": 0.6604,
+          "pnl_max_r": 1.5343,
+          "pnl_start_r": 1.1435,
+          "pnl_end_r": 1.5257,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 3,
+          "trailing_sl_min_distance": 743.466,
+          "trailing_sl_max_distance": 743.466,
+          "tsld_to_atr_min": 4.62,
+          "tsld_to_atr_max": 4.62
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.4546
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": false,
+        "tsld_never_moderate_3x": false,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": true,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3755540480,
+      "snapshot_count": 4,
+      "first_time": "2026-06-03T04:57:29",
+      "last_time": "2026-06-03T05:09:48",
+      "duration_minutes": 20,
+      "entry_atr": 245.0621,
+      "pnl_summary": {
+        "min_r": -3.1802,
+        "max_r": -0.5885,
+        "final_r": -3.1802,
+        "start_r": -0.5885,
+        "range_r": 2.5917,
+        "went_deep_negative": true
+      },
+      "bars_progression": {
+        "max_bars_held": 4,
+        "bars_reset_count": 0,
+        "final_bars_held": 4,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          889.74,
+          980.249
+        ],
+        "zero_count": 2,
+        "zero_ratio": 0.5,
+        "max_tsld_to_atr": 5.13,
+        "avg_tsld_to_atr": 4.44,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "inactive",
+          "inactive",
+          "very_loose"
+        ],
+        "grade": "VERY_LOOSE: max tsld/ATR=5.1x (>5x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -19.6,
+        "atr_first": 237.6,
+        "atr_last": 191.1,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-03T04:57:29",
+          "end_time": "2026-06-03T05:09:48",
+          "start_bar": 1,
+          "end_bar": 4,
+          "effective_bars": 4,
+          "pnl_min_r": -3.1802,
+          "pnl_max_r": -0.5885,
+          "pnl_start_r": -0.5885,
+          "pnl_end_r": -3.1802,
+          "pnl_trajectory": "deepening_loss",
+          "trailing_sl_zero_count": 2,
+          "trailing_sl_min_distance": 889.74,
+          "trailing_sl_max_distance": 980.249,
+          "tsld_to_atr_min": 4.15,
+          "tsld_to_atr_max": 4.57
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": -2.5917
+      },
+      "flags": {
+        "deep_negative": true,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3755832533,
+      "snapshot_count": 6,
+      "first_time": "2026-06-03T05:24:49",
+      "last_time": "2026-06-03T05:49:51",
+      "duration_minutes": 30,
+      "entry_atr": 186.5429,
+      "pnl_summary": {
+        "min_r": 0.286,
+        "max_r": 1.1542,
+        "final_r": 0.2996,
+        "start_r": 0.6511,
+        "range_r": 0.8682,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 6,
+        "bars_reset_count": 0,
+        "final_bars_held": 6,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          668.932,
+          668.932,
+          668.932
+        ],
+        "zero_count": 3,
+        "zero_ratio": 0.5,
+        "max_tsld_to_atr": 3.53,
+        "avg_tsld_to_atr": 3.47,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "loose",
+          "loose",
+          "inactive",
+          "inactive",
+          "inactive"
+        ],
+        "grade": "LOOSE: max tsld/ATR=3.5x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": 0.4,
+        "atr_first": 189.4,
+        "atr_last": 190.1,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-03T05:24:49",
+          "end_time": "2026-06-03T05:49:51",
+          "start_bar": 1,
+          "end_bar": 6,
+          "effective_bars": 6,
+          "pnl_min_r": 0.286,
+          "pnl_max_r": 1.1542,
+          "pnl_start_r": 0.6511,
+          "pnl_end_r": 0.2996,
+          "pnl_trajectory": "profit_taking",
+          "trailing_sl_zero_count": 3,
+          "trailing_sl_min_distance": 668.932,
+          "trailing_sl_max_distance": 668.932,
+          "tsld_to_atr_min": 3.48,
+          "tsld_to_atr_max": 3.48
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": -0.3515
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3756738343,
+      "snapshot_count": 6,
+      "first_time": "2026-06-03T06:04:51",
+      "last_time": "2026-06-03T06:21:44",
+      "duration_minutes": 30,
+      "entry_atr": 211.6293,
+      "pnl_summary": {
+        "min_r": -0.0906,
+        "max_r": 0.5158,
+        "final_r": -0.0447,
+        "start_r": 0.2553,
+        "range_r": 0.6063,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 4,
+        "bars_reset_count": 2,
+        "final_bars_held": 1,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          763.865,
+          770.87,
+          846.517,
+          770.87
+        ],
+        "zero_count": 2,
+        "zero_ratio": 0.33,
+        "max_tsld_to_atr": 5.34,
+        "avg_tsld_to_atr": 4.36,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "loose",
+          "inactive",
+          "inactive",
+          "very_loose",
+          "loose"
+        ],
+        "grade": "VERY_LOOSE: max tsld/ATR=5.3x (>5x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -18.1,
+        "atr_first": 202.6,
+        "atr_last": 165.9,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-03T06:04:51",
+          "end_time": "2026-06-03T06:04:51",
+          "start_bar": 1,
+          "end_bar": 1,
+          "effective_bars": 1,
+          "pnl_min_r": 0.2553,
+          "pnl_max_r": 0.2553,
+          "pnl_start_r": 0.2553,
+          "pnl_end_r": 0.2553,
+          "pnl_trajectory": "sideways",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 763.865,
+          "trailing_sl_max_distance": 763.865,
+          "tsld_to_atr_min": 3.77,
+          "tsld_to_atr_max": 3.77
+        },
+        {
+          "segment_index": 2,
+          "start_time": "2026-06-03T06:07:21",
+          "end_time": "2026-06-03T06:19:47",
+          "start_bar": 1,
+          "end_bar": 4,
+          "effective_bars": 4,
+          "pnl_min_r": -0.0906,
+          "pnl_max_r": 0.5158,
+          "pnl_start_r": -0.0906,
+          "pnl_end_r": 0.223,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 2,
+          "trailing_sl_min_distance": 770.87,
+          "trailing_sl_max_distance": 846.517,
+          "tsld_to_atr_min": 4.39,
+          "tsld_to_atr_max": 4.82
+        },
+        {
+          "segment_index": 3,
+          "start_time": "2026-06-03T06:21:44",
+          "end_time": "2026-06-03T06:21:44",
+          "start_bar": 1,
+          "end_bar": 1,
+          "effective_bars": 1,
+          "pnl_min_r": -0.0447,
+          "pnl_max_r": -0.0447,
+          "pnl_start_r": -0.0447,
+          "pnl_end_r": -0.0447,
+          "pnl_trajectory": "sideways",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 770.87,
+          "trailing_sl_max_distance": 770.87,
+          "tsld_to_atr_min": 4.65,
+          "tsld_to_atr_max": 4.65
+        }
+      ],
+      "reversal": {
+        "type": "positive_to_negative",
+        "pnl_delta_from_start": -0.3
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": true,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3759631402,
+      "snapshot_count": 2,
+      "first_time": "2026-06-03T07:58:45",
+      "last_time": "2026-06-03T07:59:47",
+      "duration_minutes": 10,
+      "entry_atr": 131.1179,
+      "pnl_summary": {
+        "min_r": 0.2863,
+        "max_r": 0.29,
+        "final_r": 0.2863,
+        "start_r": 0.29,
+        "range_r": 0.0037,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 2,
+        "bars_reset_count": 0,
+        "final_bars_held": 2,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          402.18
+        ],
+        "zero_count": 1,
+        "zero_ratio": 0.5,
+        "max_tsld_to_atr": 2.99,
+        "avg_tsld_to_atr": 2.99,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "moderate",
+          "inactive"
+        ],
+        "grade": "MODERATE: tightened to <=3x ATR at some point"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -7.6,
+        "atr_first": 134.6,
+        "atr_last": 124.4,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-03T07:58:45",
+          "end_time": "2026-06-03T07:59:47",
+          "start_bar": 1,
+          "end_bar": 2,
+          "effective_bars": 2,
+          "pnl_min_r": 0.2863,
+          "pnl_max_r": 0.29,
+          "pnl_start_r": 0.29,
+          "pnl_end_r": 0.2863,
+          "pnl_trajectory": "profit_taking",
+          "trailing_sl_zero_count": 1,
+          "trailing_sl_min_distance": 402.18,
+          "trailing_sl_max_distance": 402.18,
+          "tsld_to_atr_min": 3.1,
+          "tsld_to_atr_max": 3.1
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": -0.0037
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": false,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3759861585,
+      "snapshot_count": 1,
+      "first_time": "2026-06-03T08:03:33",
+      "last_time": "2026-06-03T08:03:33",
+      "duration_minutes": 5,
+      "entry_atr": 129.0421,
+      "pnl_summary": {
+        "min_r": 0.1988,
+        "max_r": 0.1988,
+        "final_r": 0.1988,
+        "start_r": 0.1988,
+        "range_r": 0.0,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 1,
+        "bars_reset_count": 0,
+        "final_bars_held": 1,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          393.96
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 2.99,
+        "avg_tsld_to_atr": 2.99,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "moderate"
+        ],
+        "grade": "MODERATE: tightened to <=3x ATR at some point"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": 0.0,
+        "atr_first": 131.8,
+        "atr_last": 131.8,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-03T08:03:33",
+          "end_time": "2026-06-03T08:03:33",
+          "start_bar": 1,
+          "end_bar": 1,
+          "effective_bars": 1,
+          "pnl_min_r": 0.1988,
+          "pnl_max_r": 0.1988,
+          "pnl_start_r": 0.1988,
+          "pnl_end_r": 0.1988,
+          "pnl_trajectory": "sideways",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 393.96,
+          "trailing_sl_max_distance": 393.96,
+          "tsld_to_atr_min": 2.99,
+          "tsld_to_atr_max": 2.99
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.0
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": false,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3760333193,
+      "snapshot_count": 8,
+      "first_time": "2026-06-03T08:34:49",
+      "last_time": "2026-06-03T08:59:48",
+      "duration_minutes": 40,
+      "entry_atr": 109.8864,
+      "pnl_summary": {
+        "min_r": -1.0848,
+        "max_r": 0.3901,
+        "final_r": -0.095,
+        "start_r": -0.7171,
+        "range_r": 1.4749,
+        "went_deep_negative": true
+      },
+      "bars_progression": {
+        "max_bars_held": 5,
+        "bars_reset_count": 2,
+        "final_bars_held": 5,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          303.66,
+          310.66,
+          310.66,
+          439.546,
+          439.546
+        ],
+        "zero_count": 3,
+        "zero_ratio": 0.38,
+        "max_tsld_to_atr": 3.51,
+        "avg_tsld_to_atr": 2.95,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "moderate",
+          "moderate",
+          "inactive",
+          "moderate",
+          "inactive",
+          "inactive",
+          "loose",
+          "loose"
+        ],
+        "grade": "LOOSE: max tsld/ATR=3.5x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "rising",
+        "atr_change_pct": 12.1,
+        "atr_first": 112.1,
+        "atr_last": 125.7,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-03T08:34:49",
+          "end_time": "2026-06-03T08:34:49",
+          "start_bar": 1,
+          "end_bar": 1,
+          "effective_bars": 1,
+          "pnl_min_r": -0.7171,
+          "pnl_max_r": -0.7171,
+          "pnl_start_r": -0.7171,
+          "pnl_end_r": -0.7171,
+          "pnl_trajectory": "sideways",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 303.66,
+          "trailing_sl_max_distance": 303.66,
+          "tsld_to_atr_min": 2.71,
+          "tsld_to_atr_max": 2.71
+        },
+        {
+          "segment_index": 2,
+          "start_time": "2026-06-03T08:37:58",
+          "end_time": "2026-06-03T08:39:47",
+          "start_bar": 1,
+          "end_bar": 2,
+          "effective_bars": 2,
+          "pnl_min_r": -0.2844,
+          "pnl_max_r": 0.3901,
+          "pnl_start_r": -0.2844,
+          "pnl_end_r": 0.3901,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 1,
+          "trailing_sl_min_distance": 310.66,
+          "trailing_sl_max_distance": 310.66,
+          "tsld_to_atr_min": 2.64,
+          "tsld_to_atr_max": 2.64
+        },
+        {
+          "segment_index": 3,
+          "start_time": "2026-06-03T08:44:45",
+          "end_time": "2026-06-03T08:59:48",
+          "start_bar": 1,
+          "end_bar": 5,
+          "effective_bars": 5,
+          "pnl_min_r": -1.0848,
+          "pnl_max_r": -0.095,
+          "pnl_start_r": -0.7414,
+          "pnl_end_r": -0.095,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 2,
+          "trailing_sl_min_distance": 310.66,
+          "trailing_sl_max_distance": 439.546,
+          "tsld_to_atr_min": 2.51,
+          "tsld_to_atr_max": 3.54
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.6221
+      },
+      "flags": {
+        "deep_negative": true,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": false,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3761938697,
+      "snapshot_count": 2,
+      "first_time": "2026-06-03T09:44:49",
+      "last_time": "2026-06-03T09:46:08",
+      "duration_minutes": 10,
+      "entry_atr": 129.8593,
+      "pnl_summary": {
+        "min_r": 0.2972,
+        "max_r": 0.3765,
+        "final_r": 0.2972,
+        "start_r": 0.3765,
+        "range_r": 0.0793,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 1,
+        "bars_reset_count": 1,
+        "final_bars_held": 1,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          389.533,
+          398.13
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 3.65,
+        "avg_tsld_to_atr": 3.64,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "loose"
+        ],
+        "grade": "LOOSE: max tsld/ATR=3.7x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": 1.3,
+        "atr_first": 107.6,
+        "atr_last": 109.0,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-03T09:44:49",
+          "end_time": "2026-06-03T09:44:49",
+          "start_bar": 1,
+          "end_bar": 1,
+          "effective_bars": 1,
+          "pnl_min_r": 0.3765,
+          "pnl_max_r": 0.3765,
+          "pnl_start_r": 0.3765,
+          "pnl_end_r": 0.3765,
+          "pnl_trajectory": "sideways",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 389.533,
+          "trailing_sl_max_distance": 389.533,
+          "tsld_to_atr_min": 3.62,
+          "tsld_to_atr_max": 3.62
+        },
+        {
+          "segment_index": 2,
+          "start_time": "2026-06-03T09:46:08",
+          "end_time": "2026-06-03T09:46:08",
+          "start_bar": 1,
+          "end_bar": 1,
+          "effective_bars": 1,
+          "pnl_min_r": 0.2972,
+          "pnl_max_r": 0.2972,
+          "pnl_start_r": 0.2972,
+          "pnl_end_r": 0.2972,
+          "pnl_trajectory": "sideways",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 398.13,
+          "trailing_sl_max_distance": 398.13,
+          "tsld_to_atr_min": 3.65,
+          "tsld_to_atr_max": 3.65
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": -0.0793
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3762302048,
+      "snapshot_count": 9,
+      "first_time": "2026-06-03T10:13:34",
+      "last_time": "2026-06-03T10:44:49",
+      "duration_minutes": 45,
+      "entry_atr": 133.005,
+      "pnl_summary": {
+        "min_r": -1.0753,
+        "max_r": -0.1948,
+        "final_r": -0.3676,
+        "start_r": -0.8314,
+        "range_r": 0.8805,
+        "went_deep_negative": true
+      },
+      "bars_progression": {
+        "max_bars_held": 5,
+        "bars_reset_count": 1,
+        "final_bars_held": 5,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          410.7,
+          532.02,
+          410.7,
+          532.02,
+          532.02
+        ],
+        "zero_count": 4,
+        "zero_ratio": 0.44,
+        "max_tsld_to_atr": 3.52,
+        "avg_tsld_to_atr": 3.02,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "moderate",
+          "inactive",
+          "inactive",
+          "loose",
+          "moderate",
+          "inactive",
+          "inactive",
+          "loose",
+          "loose"
+        ],
+        "grade": "LOOSE: max tsld/ATR=3.5x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "rising",
+        "atr_change_pct": 6.0,
+        "atr_first": 159.4,
+        "atr_last": 169.0,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-03T10:13:34",
+          "end_time": "2026-06-03T10:24:48",
+          "start_bar": 1,
+          "end_bar": 4,
+          "effective_bars": 4,
+          "pnl_min_r": -0.8314,
+          "pnl_max_r": -0.1948,
+          "pnl_start_r": -0.8314,
+          "pnl_end_r": -0.3928,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 2,
+          "trailing_sl_min_distance": 410.7,
+          "trailing_sl_max_distance": 532.02,
+          "tsld_to_atr_min": 2.68,
+          "tsld_to_atr_max": 3.47
+        },
+        {
+          "segment_index": 2,
+          "start_time": "2026-06-03T10:28:31",
+          "end_time": "2026-06-03T10:44:49",
+          "start_bar": 1,
+          "end_bar": 5,
+          "effective_bars": 5,
+          "pnl_min_r": -1.0753,
+          "pnl_max_r": -0.3676,
+          "pnl_start_r": -0.6985,
+          "pnl_end_r": -0.3676,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 2,
+          "trailing_sl_min_distance": 410.7,
+          "trailing_sl_max_distance": 532.02,
+          "tsld_to_atr_min": 2.57,
+          "tsld_to_atr_max": 3.33
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.4638
+      },
+      "flags": {
+        "deep_negative": true,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": false,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3763168632,
+      "snapshot_count": 5,
+      "first_time": "2026-06-03T10:59:47",
+      "last_time": "2026-06-03T11:19:49",
+      "duration_minutes": 25,
+      "entry_atr": 171.6614,
+      "pnl_summary": {
+        "min_r": -0.8888,
+        "max_r": -0.1144,
+        "final_r": -0.8888,
+        "start_r": -0.6083,
+        "range_r": 0.7744,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 5,
+        "bars_reset_count": 0,
+        "final_bars_held": 5,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          590.983,
+          590.983,
+          590.983,
+          590.983,
+          590.983
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 5.5,
+        "avg_tsld_to_atr": 4.8,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "very_loose"
+        ],
+        "grade": "VERY_LOOSE: max tsld/ATR=5.5x (>5x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -18.3,
+        "atr_first": 131.5,
+        "atr_last": 107.4,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-03T10:59:47",
+          "end_time": "2026-06-03T11:19:49",
+          "start_bar": 1,
+          "end_bar": 5,
+          "effective_bars": 5,
+          "pnl_min_r": -0.8888,
+          "pnl_max_r": -0.1144,
+          "pnl_start_r": -0.6083,
+          "pnl_end_r": -0.8888,
+          "pnl_trajectory": "deepening_loss",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 590.983,
+          "trailing_sl_max_distance": 590.983,
+          "tsld_to_atr_min": 4.77,
+          "tsld_to_atr_max": 4.77
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": -0.2806
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3777287872,
+      "snapshot_count": 5,
+      "first_time": "2026-06-04T04:04:47",
+      "last_time": "2026-06-04T04:24:46",
+      "duration_minutes": 25,
+      "entry_atr": 256.065,
+      "pnl_summary": {
+        "min_r": -1.3629,
+        "max_r": 0.1135,
+        "final_r": -1.3629,
+        "start_r": -0.4755,
+        "range_r": 1.4764,
+        "went_deep_negative": true
+      },
+      "bars_progression": {
+        "max_bars_held": 5,
+        "bars_reset_count": 0,
+        "final_bars_held": 5,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          923.834,
+          923.834,
+          923.834,
+          923.834,
+          923.834
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 4.38,
+        "avg_tsld_to_atr": 4.18,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "loose"
+        ],
+        "grade": "LOOSE: max tsld/ATR=4.4x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -13.7,
+        "atr_first": 244.2,
+        "atr_last": 210.8,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-04T04:04:47",
+          "end_time": "2026-06-04T04:24:46",
+          "start_bar": 1,
+          "end_bar": 5,
+          "effective_bars": 5,
+          "pnl_min_r": -1.3629,
+          "pnl_max_r": 0.1135,
+          "pnl_start_r": -0.4755,
+          "pnl_end_r": -1.3629,
+          "pnl_trajectory": "deepening_loss",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 923.834,
+          "trailing_sl_max_distance": 923.834,
+          "tsld_to_atr_min": 4.17,
+          "tsld_to_atr_max": 4.17
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": -0.8874
+      },
+      "flags": {
+        "deep_negative": true,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3778259516,
+      "snapshot_count": 10,
+      "first_time": "2026-06-04T05:04:46",
+      "last_time": "2026-06-04T05:39:47",
+      "duration_minutes": 50,
+      "entry_atr": 202.0179,
+      "pnl_summary": {
+        "min_r": 0.8594,
+        "max_r": 2.8115,
+        "final_r": 1.2917,
+        "start_r": 1.9158,
+        "range_r": 1.9521,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 5,
+        "bars_reset_count": 2,
+        "final_bars_held": 5,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          729.264,
+          7.0,
+          808.071,
+          808.071,
+          808.071
+        ],
+        "zero_count": 5,
+        "zero_ratio": 0.5,
+        "max_tsld_to_atr": 3.8,
+        "avg_tsld_to_atr": 2.88,
+        "ever_tight_2x": true,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "tight",
+          "inactive",
+          "inactive",
+          "loose",
+          "inactive",
+          "inactive",
+          "inactive",
+          "loose",
+          "loose"
+        ],
+        "grade": "LOOSE: max tsld/ATR=3.8x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": 3.9,
+        "atr_first": 213.2,
+        "atr_last": 221.6,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-04T05:04:46",
+          "end_time": "2026-06-04T05:04:46",
+          "start_bar": 1,
+          "end_bar": 1,
+          "effective_bars": 1,
+          "pnl_min_r": 1.9158,
+          "pnl_max_r": 1.9158,
+          "pnl_start_r": 1.9158,
+          "pnl_end_r": 1.9158,
+          "pnl_trajectory": "sideways",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 729.264,
+          "trailing_sl_max_distance": 729.264,
+          "tsld_to_atr_min": 3.42,
+          "tsld_to_atr_max": 3.42
+        },
+        {
+          "segment_index": 2,
+          "start_time": "2026-06-04T05:09:08",
+          "end_time": "2026-06-04T05:19:46",
+          "start_bar": 1,
+          "end_bar": 4,
+          "effective_bars": 4,
+          "pnl_min_r": 2.1129,
+          "pnl_max_r": 2.7848,
+          "pnl_start_r": 2.6463,
+          "pnl_end_r": 2.7408,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 2,
+          "trailing_sl_min_distance": 7.0,
+          "trailing_sl_max_distance": 808.071,
+          "tsld_to_atr_min": 0.03,
+          "tsld_to_atr_max": 3.68
+        },
+        {
+          "segment_index": 3,
+          "start_time": "2026-06-04T05:24:26",
+          "end_time": "2026-06-04T05:39:47",
+          "start_bar": 1,
+          "end_bar": 5,
+          "effective_bars": 5,
+          "pnl_min_r": 0.8594,
+          "pnl_max_r": 2.8115,
+          "pnl_start_r": 2.749,
+          "pnl_end_r": 1.2917,
+          "pnl_trajectory": "profit_taking",
+          "trailing_sl_zero_count": 3,
+          "trailing_sl_min_distance": 808.071,
+          "trailing_sl_max_distance": 808.071,
+          "tsld_to_atr_min": 3.67,
+          "tsld_to_atr_max": 3.67
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": -0.6241
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": false,
+        "tsld_never_moderate_3x": false,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3780565147,
+      "snapshot_count": 12,
+      "first_time": "2026-06-04T07:04:35",
+      "last_time": "2026-06-04T07:49:47",
+      "duration_minutes": 60,
+      "entry_atr": 177.7157,
+      "pnl_summary": {
+        "min_r": 0.6917,
+        "max_r": 3.0246,
+        "final_r": 1.0098,
+        "start_r": 0.9039,
+        "range_r": 2.3329,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 11,
+        "bars_reset_count": 0,
+        "final_bars_held": 11,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          620.98,
+          710.863,
+          710.863,
+          710.863,
+          710.863,
+          710.863,
+          710.863,
+          710.863,
+          710.863
+        ],
+        "zero_count": 3,
+        "zero_ratio": 0.25,
+        "max_tsld_to_atr": 4.1,
+        "avg_tsld_to_atr": 3.78,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "inactive",
+          "inactive",
+          "loose",
+          "loose",
+          "loose",
+          "inactive",
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "loose"
+        ],
+        "grade": "LOOSE: max tsld/ATR=4.1x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": -1.9,
+        "atr_first": 187.6,
+        "atr_last": 183.9,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-04T07:04:35",
+          "end_time": "2026-06-04T07:49:47",
+          "start_bar": 1,
+          "end_bar": 11,
+          "effective_bars": 12,
+          "pnl_min_r": 0.6917,
+          "pnl_max_r": 3.0246,
+          "pnl_start_r": 0.9039,
+          "pnl_end_r": 1.0098,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 3,
+          "trailing_sl_min_distance": 620.98,
+          "trailing_sl_max_distance": 710.863,
+          "tsld_to_atr_min": 3.38,
+          "tsld_to_atr_max": 3.87
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.1059
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3793134562,
+      "snapshot_count": 3,
+      "first_time": "2026-06-04T23:49:48",
+      "last_time": "2026-06-04T23:59:45",
+      "duration_minutes": 15,
+      "entry_atr": 162.835,
+      "pnl_summary": {
+        "min_r": -0.501,
+        "max_r": -0.0258,
+        "final_r": -0.3068,
+        "start_r": -0.0258,
+        "range_r": 0.4752,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 3,
+        "bars_reset_count": 0,
+        "final_bars_held": 3,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          543.377,
+          543.377,
+          543.377
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 4.04,
+        "avg_tsld_to_atr": 3.92,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "loose",
+          "loose"
+        ],
+        "grade": "LOOSE: max tsld/ATR=4.0x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": -1.7,
+        "atr_first": 141.8,
+        "atr_last": 139.4,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-04T23:49:48",
+          "end_time": "2026-06-04T23:59:45",
+          "start_bar": 1,
+          "end_bar": 3,
+          "effective_bars": 3,
+          "pnl_min_r": -0.501,
+          "pnl_max_r": -0.0258,
+          "pnl_start_r": -0.0258,
+          "pnl_end_r": -0.3068,
+          "pnl_trajectory": "deepening_loss",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 543.377,
+          "trailing_sl_max_distance": 543.377,
+          "tsld_to_atr_min": 3.92,
+          "tsld_to_atr_max": 3.92
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": -0.281
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3806353442,
+      "snapshot_count": 3,
+      "first_time": "2026-06-05T16:54:44",
+      "last_time": "2026-06-05T17:04:43",
+      "duration_minutes": 15,
+      "entry_atr": 418.9257,
+      "pnl_summary": {
+        "min_r": -1.1087,
+        "max_r": -0.9863,
+        "final_r": -1.0602,
+        "start_r": -0.9863,
+        "range_r": 0.1224,
+        "went_deep_negative": true
+      },
+      "bars_progression": {
+        "max_bars_held": 3,
+        "bars_reset_count": 0,
+        "final_bars_held": 3,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          1510.133,
+          1510.133,
+          1510.133
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 3.82,
+        "avg_tsld_to_atr": 3.8,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "loose",
+          "loose"
+        ],
+        "grade": "LOOSE: max tsld/ATR=3.8x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": 1.4,
+        "atr_first": 396.1,
+        "atr_last": 401.7,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-05T16:54:44",
+          "end_time": "2026-06-05T17:04:43",
+          "start_bar": 1,
+          "end_bar": 3,
+          "effective_bars": 3,
+          "pnl_min_r": -1.1087,
+          "pnl_max_r": -0.9863,
+          "pnl_start_r": -0.9863,
+          "pnl_end_r": -1.0602,
+          "pnl_trajectory": "deepening_loss",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 1510.133,
+          "trailing_sl_max_distance": 1510.133,
+          "tsld_to_atr_min": 3.8,
+          "tsld_to_atr_max": 3.8
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": -0.0739
+      },
+      "flags": {
+        "deep_negative": true,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3807362678,
+      "snapshot_count": 3,
+      "first_time": "2026-06-05T21:19:43",
+      "last_time": "2026-06-05T21:29:44",
+      "duration_minutes": 15,
+      "entry_atr": 321.3971,
+      "pnl_summary": {
+        "min_r": 0.197,
+        "max_r": 0.7677,
+        "final_r": 0.7677,
+        "start_r": 0.197,
+        "range_r": 0.5706,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 3,
+        "bars_reset_count": 0,
+        "final_bars_held": 3,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          1159.03,
+          1159.03,
+          1159.03
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 4.76,
+        "avg_tsld_to_atr": 4.56,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "loose",
+          "loose"
+        ],
+        "grade": "LOOSE: max tsld/ATR=4.8x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -8.5,
+        "atr_first": 265.9,
+        "atr_last": 243.3,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-05T21:19:43",
+          "end_time": "2026-06-05T21:29:44",
+          "start_bar": 1,
+          "end_bar": 3,
+          "effective_bars": 3,
+          "pnl_min_r": 0.197,
+          "pnl_max_r": 0.7677,
+          "pnl_start_r": 0.197,
+          "pnl_end_r": 0.7677,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 1159.03,
+          "trailing_sl_max_distance": 1159.03,
+          "tsld_to_atr_min": 4.55,
+          "tsld_to_atr_max": 4.55
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.5706
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3807420190,
+      "snapshot_count": 5,
+      "first_time": "2026-06-06T01:37:14",
+      "last_time": "2026-06-06T01:54:44",
+      "duration_minutes": 25,
+      "entry_atr": 160.0586,
+      "pnl_summary": {
+        "min_r": 0.5394,
+        "max_r": 1.143,
+        "final_r": 0.5394,
+        "start_r": 0.9105,
+        "range_r": 0.6037,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 5,
+        "bars_reset_count": 0,
+        "final_bars_held": 5,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          532.62,
+          640.234,
+          640.234
+        ],
+        "zero_count": 2,
+        "zero_ratio": 0.4,
+        "max_tsld_to_atr": 4.35,
+        "avg_tsld_to_atr": 3.94,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "inactive",
+          "inactive",
+          "loose",
+          "loose"
+        ],
+        "grade": "LOOSE: max tsld/ATR=4.4x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -9.2,
+        "atr_first": 165.9,
+        "atr_last": 150.7,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-06T01:37:14",
+          "end_time": "2026-06-06T01:54:44",
+          "start_bar": 1,
+          "end_bar": 5,
+          "effective_bars": 5,
+          "pnl_min_r": 0.5394,
+          "pnl_max_r": 1.143,
+          "pnl_start_r": 0.9105,
+          "pnl_end_r": 0.5394,
+          "pnl_trajectory": "profit_taking",
+          "trailing_sl_zero_count": 2,
+          "trailing_sl_min_distance": 532.62,
+          "trailing_sl_max_distance": 640.234,
+          "tsld_to_atr_min": 3.46,
+          "tsld_to_atr_max": 4.16
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": -0.3711
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3807425499,
+      "snapshot_count": 3,
+      "first_time": "2026-06-06T02:09:43",
+      "last_time": "2026-06-06T02:19:44",
+      "duration_minutes": 15,
+      "entry_atr": 149.9136,
+      "pnl_summary": {
+        "min_r": 0.2555,
+        "max_r": 2.6332,
+        "final_r": 2.6332,
+        "start_r": 0.2555,
+        "range_r": 2.3777,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 3,
+        "bars_reset_count": 0,
+        "final_bars_held": 3,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          476.651,
+          476.651
+        ],
+        "zero_count": 1,
+        "zero_ratio": 0.33,
+        "max_tsld_to_atr": 3.13,
+        "avg_tsld_to_atr": 3.02,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "moderate",
+          "inactive"
+        ],
+        "grade": "LOOSE: max tsld/ATR=3.1x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "rising",
+        "atr_change_pct": 8.3,
+        "atr_first": 152.2,
+        "atr_last": 164.8,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-06T02:09:43",
+          "end_time": "2026-06-06T02:19:44",
+          "start_bar": 1,
+          "end_bar": 3,
+          "effective_bars": 3,
+          "pnl_min_r": 0.2555,
+          "pnl_max_r": 2.6332,
+          "pnl_start_r": 0.2555,
+          "pnl_end_r": 2.6332,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 1,
+          "trailing_sl_min_distance": 476.651,
+          "trailing_sl_max_distance": 476.651,
+          "tsld_to_atr_min": 2.98,
+          "tsld_to_atr_max": 2.98
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 2.3777
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": false,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3807433202,
+      "snapshot_count": 2,
+      "first_time": "2026-06-06T02:29:41",
+      "last_time": "2026-06-06T02:29:43",
+      "duration_minutes": 10,
+      "entry_atr": 183.4029,
+      "pnl_summary": {
+        "min_r": 0.4655,
+        "max_r": 0.512,
+        "final_r": 0.512,
+        "start_r": 0.4655,
+        "range_r": 0.0466,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 2,
+        "bars_reset_count": 0,
+        "final_bars_held": 2,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          630.22
+        ],
+        "zero_count": 1,
+        "zero_ratio": 0.5,
+        "max_tsld_to_atr": 3.44,
+        "avg_tsld_to_atr": 3.44,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "inactive"
+        ],
+        "grade": "LOOSE: max tsld/ATR=3.4x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": -4.3,
+        "atr_first": 183.4,
+        "atr_last": 175.5,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-06T02:29:41",
+          "end_time": "2026-06-06T02:29:43",
+          "start_bar": 1,
+          "end_bar": 2,
+          "effective_bars": 2,
+          "pnl_min_r": 0.4655,
+          "pnl_max_r": 0.512,
+          "pnl_start_r": 0.4655,
+          "pnl_end_r": 0.512,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 1,
+          "trailing_sl_min_distance": 630.22,
+          "trailing_sl_max_distance": 630.22,
+          "tsld_to_atr_min": 3.51,
+          "tsld_to_atr_max": 3.51
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.0466
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3807444876,
+      "snapshot_count": 7,
+      "first_time": "2026-06-06T03:14:44",
+      "last_time": "2026-06-06T03:44:44",
+      "duration_minutes": 35,
+      "entry_atr": 176.8379,
+      "pnl_summary": {
+        "min_r": -0.3865,
+        "max_r": 1.6847,
+        "final_r": 0.7017,
+        "start_r": -0.2289,
+        "range_r": 2.0712,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 7,
+        "bars_reset_count": 0,
+        "final_bars_held": 7,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          610.054,
+          610.054,
+          610.054,
+          610.054,
+          610.054,
+          3.656,
+          60.317
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 4.12,
+        "avg_tsld_to_atr": 2.76,
+        "ever_tight_2x": true,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": true,
+        "classification": [
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "tight",
+          "tight"
+        ],
+        "grade": "LOOSE: max tsld/ATR=4.1x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -8.3,
+        "atr_first": 173.0,
+        "atr_last": 158.6,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-06T03:14:44",
+          "end_time": "2026-06-06T03:44:44",
+          "start_bar": 1,
+          "end_bar": 7,
+          "effective_bars": 7,
+          "pnl_min_r": -0.3865,
+          "pnl_max_r": 1.6847,
+          "pnl_start_r": -0.2289,
+          "pnl_end_r": 0.7017,
+          "pnl_trajectory": "recovering",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 3.656,
+          "trailing_sl_max_distance": 610.054,
+          "tsld_to_atr_min": 0.02,
+          "tsld_to_atr_max": 3.78
+        }
+      ],
+      "reversal": {
+        "type": "negative_to_positive",
+        "pnl_delta_from_start": 0.9306
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": false,
+        "tsld_never_moderate_3x": false,
+        "reversed": true,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3807506009,
+      "snapshot_count": 18,
+      "first_time": "2026-06-06T05:29:44",
+      "last_time": "2026-06-06T06:59:44",
+      "duration_minutes": 90,
+      "entry_atr": 351.9929,
+      "pnl_summary": {
+        "min_r": -1.3722,
+        "max_r": -0.974,
+        "final_r": -1.3722,
+        "start_r": -1.191,
+        "range_r": 0.3982,
+        "went_deep_negative": true
+      },
+      "bars_progression": {
+        "max_bars_held": 18,
+        "bars_reset_count": 0,
+        "final_bars_held": 18,
+        "stuck_bars_count": 13,
+        "stuck_detected": true
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          1269.174,
+          1269.174,
+          1269.174,
+          1269.174,
+          1269.174,
+          1269.174,
+          1269.174,
+          1269.174,
+          1269.174,
+          1269.174,
+          1269.174,
+          1269.174,
+          1269.174,
+          1269.174,
+          1269.174,
+          1269.174,
+          1269.174,
+          1269.174
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 6.67,
+        "avg_tsld_to_atr": 3.65,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "loose",
+          "very_loose",
+          "very_loose"
+        ],
+        "grade": "VERY_LOOSE: max tsld/ATR=6.7x (>5x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -50.8,
+        "atr_first": 387.0,
+        "atr_last": 190.3,
+        "atr_contraction": true,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-06T05:29:44",
+          "end_time": "2026-06-06T06:59:44",
+          "start_bar": 1,
+          "end_bar": 18,
+          "effective_bars": 18,
+          "pnl_min_r": -1.3722,
+          "pnl_max_r": -0.974,
+          "pnl_start_r": -1.191,
+          "pnl_end_r": -1.3722,
+          "pnl_trajectory": "deepening_loss",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 1269.174,
+          "trailing_sl_max_distance": 1269.174,
+          "tsld_to_atr_min": 3.49,
+          "tsld_to_atr_max": 3.49
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": -0.1813
+      },
+      "flags": {
+        "deep_negative": true,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": true,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3807675970,
+      "snapshot_count": 3,
+      "first_time": "2026-06-06T23:20:03",
+      "last_time": "2026-06-06T23:29:45",
+      "duration_minutes": 15,
+      "entry_atr": 116.5436,
+      "pnl_summary": {
+        "min_r": 0.6105,
+        "max_r": 1.5214,
+        "final_r": 0.6105,
+        "start_r": 1.0672,
+        "range_r": 0.9109,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 3,
+        "bars_reset_count": 0,
+        "final_bars_held": 3,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          410.1
+        ],
+        "zero_count": 2,
+        "zero_ratio": 0.67,
+        "max_tsld_to_atr": 3.52,
+        "avg_tsld_to_atr": 3.52,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "inactive",
+          "inactive"
+        ],
+        "grade": "CRITICAL: trailing SL inactive (0.0) for majority of snapshots"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -12.2,
+        "atr_first": 116.5,
+        "atr_last": 102.3,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-06T23:20:03",
+          "end_time": "2026-06-06T23:29:45",
+          "start_bar": 1,
+          "end_bar": 3,
+          "effective_bars": 3,
+          "pnl_min_r": 0.6105,
+          "pnl_max_r": 1.5214,
+          "pnl_start_r": 1.0672,
+          "pnl_end_r": 0.6105,
+          "pnl_trajectory": "profit_taking",
+          "trailing_sl_zero_count": 2,
+          "trailing_sl_min_distance": 410.1,
+          "trailing_sl_max_distance": 410.1,
+          "tsld_to_atr_min": 3.72,
+          "tsld_to_atr_max": 3.72
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": -0.4567
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": true,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3807975099,
+      "snapshot_count": 3,
+      "first_time": "2026-06-07T01:44:42",
+      "last_time": "2026-06-07T01:54:42",
+      "duration_minutes": 15,
+      "entry_atr": 187.3207,
+      "pnl_summary": {
+        "min_r": 0.442,
+        "max_r": 0.5265,
+        "final_r": 0.5265,
+        "start_r": 0.442,
+        "range_r": 0.0846,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 3,
+        "bars_reset_count": 0,
+        "final_bars_held": 3,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          661.891,
+          661.891,
+          661.891
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 3.49,
+        "avg_tsld_to_atr": 3.42,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": false,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "loose",
+          "loose",
+          "loose"
+        ],
+        "grade": "LOOSE: max tsld/ATR=3.5x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": 3.2,
+        "atr_first": 189.4,
+        "atr_last": 195.5,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-07T01:44:42",
+          "end_time": "2026-06-07T01:54:42",
+          "start_bar": 1,
+          "end_bar": 3,
+          "effective_bars": 3,
+          "pnl_min_r": 0.442,
+          "pnl_max_r": 0.5265,
+          "pnl_start_r": 0.442,
+          "pnl_end_r": 0.5265,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 661.891,
+          "trailing_sl_max_distance": 661.891,
+          "tsld_to_atr_min": 3.41,
+          "tsld_to_atr_max": 3.41
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.0846
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": true,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3807989482,
+      "snapshot_count": 5,
+      "first_time": "2026-06-07T02:14:45",
+      "last_time": "2026-06-07T02:34:43",
+      "duration_minutes": 25,
+      "entry_atr": 183.4793,
+      "pnl_summary": {
+        "min_r": 0.6931,
+        "max_r": 1.5072,
+        "final_r": 1.337,
+        "start_r": 0.6931,
+        "range_r": 0.8141,
+        "went_deep_negative": false
+      },
+      "bars_progression": {
+        "max_bars_held": 5,
+        "bars_reset_count": 0,
+        "final_bars_held": 5,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          641.452,
+          641.452,
+          2.598
+        ],
+        "zero_count": 2,
+        "zero_ratio": 0.4,
+        "max_tsld_to_atr": 3.98,
+        "avg_tsld_to_atr": 2.64,
+        "ever_tight_2x": true,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": true,
+        "classification": [
+          "loose",
+          "loose",
+          "inactive",
+          "inactive",
+          "tight"
+        ],
+        "grade": "LOOSE: max tsld/ATR=4.0x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "falling",
+        "atr_change_pct": -17.4,
+        "atr_first": 161.0,
+        "atr_last": 133.0,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-07T02:14:45",
+          "end_time": "2026-06-07T02:34:43",
+          "start_bar": 1,
+          "end_bar": 5,
+          "effective_bars": 5,
+          "pnl_min_r": 0.6931,
+          "pnl_max_r": 1.5072,
+          "pnl_start_r": 0.6931,
+          "pnl_end_r": 1.337,
+          "pnl_trajectory": "improving_profit",
+          "trailing_sl_zero_count": 2,
+          "trailing_sl_min_distance": 2.598,
+          "trailing_sl_max_distance": 641.452,
+          "tsld_to_atr_min": 0.02,
+          "tsld_to_atr_max": 4.3
+        }
+      ],
+      "reversal": {
+        "type": "none",
+        "pnl_delta_from_start": 0.6439
+      },
+      "flags": {
+        "deep_negative": false,
+        "tsld_never_tight_2x": false,
+        "tsld_never_moderate_3x": false,
+        "reversed": false,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    },
+    {
+      "ticket": 3808011353,
+      "snapshot_count": 6,
+      "first_time": "2026-06-07T03:04:42",
+      "last_time": "2026-06-07T03:29:45",
+      "duration_minutes": 30,
+      "entry_atr": 125.7979,
+      "pnl_summary": {
+        "min_r": -1.7225,
+        "max_r": 0.4831,
+        "final_r": -1.1204,
+        "start_r": 0.4831,
+        "range_r": 2.2056,
+        "went_deep_negative": true
+      },
+      "bars_progression": {
+        "max_bars_held": 6,
+        "bars_reset_count": 0,
+        "final_bars_held": 6,
+        "stuck_bars_count": 0,
+        "stuck_detected": false
+      },
+      "trailing_sl_analysis": {
+        "active_distances": [
+          364.893,
+          364.893,
+          364.893,
+          364.893,
+          364.893,
+          364.893
+        ],
+        "zero_count": 0,
+        "zero_ratio": 0.0,
+        "max_tsld_to_atr": 3.0,
+        "avg_tsld_to_atr": 2.86,
+        "ever_tight_2x": false,
+        "ever_moderate_3x": true,
+        "tsld_tightened_over_life": false,
+        "classification": [
+          "moderate",
+          "moderate",
+          "loose",
+          "moderate",
+          "moderate",
+          "moderate"
+        ],
+        "grade": "LOOSE: max tsld/ATR=3.0x (>3x ATR)"
+      },
+      "volatility_analysis": {
+        "vol_trend": "stable",
+        "atr_change_pct": 4.7,
+        "atr_first": 124.0,
+        "atr_last": 129.8,
+        "atr_contraction": false,
+        "atr_expansion": false
+      },
+      "segments": [
+        {
+          "segment_index": 1,
+          "start_time": "2026-06-07T03:04:42",
+          "end_time": "2026-06-07T03:29:45",
+          "start_bar": 1,
+          "end_bar": 6,
+          "effective_bars": 6,
+          "pnl_min_r": -1.7225,
+          "pnl_max_r": 0.4831,
+          "pnl_start_r": 0.4831,
+          "pnl_end_r": -1.1204,
+          "pnl_trajectory": "profit_taking",
+          "trailing_sl_zero_count": 0,
+          "trailing_sl_min_distance": 364.893,
+          "trailing_sl_max_distance": 364.893,
+          "tsld_to_atr_min": 2.86,
+          "tsld_to_atr_max": 2.86
+        }
+      ],
+      "reversal": {
+        "type": "positive_to_negative",
+        "pnl_delta_from_start": -1.6034
+      },
+      "flags": {
+        "deep_negative": true,
+        "tsld_never_tight_2x": true,
+        "tsld_never_moderate_3x": false,
+        "reversed": true,
+        "stuck_frozen": false,
+        "tsld_inactive_majority": false,
+        "extreme_outlier": false
+      }
+    }
+  ]
+}

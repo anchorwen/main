@@ -478,6 +478,7 @@ class StrategyLine:
         mid_price: float | None,
         micro_sequences: dict[str, Any] | None = None,
         daily_feature_vector: Any = None,
+        btc_augment: Any = None,  # FIX-20260607-XXX: pre-computed 37-dim BTC vector
     ) -> list[Any]:
         """Run brain inference for this strategy's brains.
 
@@ -534,6 +535,7 @@ class StrategyLine:
         meta_filter_gate: Any = None,
         conformal_ou_gate: Any = None,
         micro_feature_dict: dict[str, float] | None = None,
+        btc_augment: Any = None,  # FIX-20260607-XXX: pre-computed 37-dim BTC vector
     ) -> StrategyDecision:
         """Run the full strategy evaluation for one cycle.
 
@@ -642,6 +644,7 @@ class StrategyLine:
                 mid_price,
                 micro_sequences,
                 daily_feature_vector,
+                btc_augment,  # FIX-20260607-XXX
             )
         except Exception:  # noqa: BLE001
             return StrategyDecision(
@@ -1618,10 +1621,7 @@ class StrategyLine:
         #   conf=0.82 → floor-0.05+0.082 = floor+0.032   (modest edge)
         # Kelly multiplier is automatically tiny (p_win barely > breakeven)
         # so risk is bounded to micro-lot exploration.
-        _elastic_trigger = (
-            _p_win_source == "rolling_wr"
-            and 0.40 < _p_win < self.config.min_p_win
-        )
+        _elastic_trigger = _p_win_source == "rolling_wr" and 0.40 < _p_win < self.config.min_p_win
         if _elastic_trigger:
             _conf = max(0.0, min(1.0, confidence))
             _elastic_p_win = self.config.min_p_win - 0.05 + _conf * 0.10
@@ -1847,7 +1847,9 @@ class StrategyLine:
             "half_life": entry_half_life,
             "brain_predictions": _brain_preds,
             "entry_features": _entry_features,
-            "entry_spread": float(ask - bid) if (bid is not None and ask is not None and ask > bid) else 0.0,
+            "entry_spread": float(ask - bid)
+            if (bid is not None and ask is not None and ask > bid)
+            else 0.0,
         }
 
         # ── Determine venue ──

@@ -1,0 +1,100 @@
+{
+  "brain_id": "BTC_Swing_V8_MultiTF_LGB_v1",
+  "model_type": "lightgbm",
+  "feature_schema": "btc_macro_enhanced_37",
+  "n_features": 37,
+  "timeframes": [
+    "M15",
+    "M30",
+    "H1"
+  ],
+  "horizon": "24/12/6",
+  "train_samples": 27940,
+  "val_samples": 8257,
+  "test_samples": 6518,
+  "n_trees": 5,
+  "test_auc": 0.6543,
+  "sl_atr_mult": 2.0,
+  "tp_atr_mult": 2.5,
+  "label_contract": "live_btc_v1",
+  "data_period": "2023-07 ~ 2026-06 (2.9yr, covers 2024 ETF bull run 5k->4k)",
+  "v6_baseline_auc": 0.6556,
+  "v7_baseline_auc": 0.6463,
+  "top_features": [
+    [
+      35,
+      "Cross_BTC_Gold_Ratio",
+      19.0
+    ],
+    [
+      9,
+      "H4_ATR_Ratio",
+      15.0
+    ],
+    [
+      29,
+      "tick_velocity",
+      14.0
+    ],
+    [
+      0,
+      "D1_Ret_1",
+      14.0
+    ],
+    [
+      1,
+      "D1_Body_Ratio",
+      12.0
+    ],
+    [
+      25,
+      "hl_ratio",
+      8.0
+    ],
+    [
+      27,
+      "avg_spread",
+      6.0
+    ],
+    [
+      17,
+      "Derived_Weekday_Cos",
+      5.0
+    ],
+    [
+      23,
+      "Derived_Momentum_20D",
+      5.0
+    ],
+    [
+      6,
+      "D1_Bollinger_Width",
+      5.0
+    ],
+    [
+      3,
+      "D1_RSI_14",
+      5.0
+    ],
+    [
+      7,
+      "D1_ADX_14",
+      3.0
+    ],
+    [
+      36,
+      "Cross_BTC_Gold_Ratio_ROC",
+      3.0
+    ],
+    [
+      16,
+      "Derived_Weekday_Sin",
+      3.0
+    ],
+    [
+      18,
+      "Derived_Days_To_MonthEnd",
+      3.0
+    ]
+  ]
+}

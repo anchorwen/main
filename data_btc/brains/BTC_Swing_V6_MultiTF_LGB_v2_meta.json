@@ -1,0 +1,100 @@
+{
+  "brain_id": "BTC_Swing_V6_MultiTF_LGB_v2",
+  "model_type": "lightgbm",
+  "feature_schema": "btc_macro_enhanced_37",
+  "n_features": 37,
+  "timeframes": [
+    "M15",
+    "M30",
+    "H1"
+  ],
+  "horizon": "24/12/6",
+  "train_samples": 13771,
+  "val_samples": 3899,
+  "test_samples": 3597,
+  "n_trees": 34,
+  "test_auc": 0.6556,
+  "test_f1": 0.2728,
+  "sl_atr_mult": 2.0,
+  "tp_atr_mult": 2.5,
+  "label_contract": "live_btc_v1",
+  "regularization": "colsample0.7_subsample0.8_minleaf100_L10.2_L22.0",
+  "m15_only_baseline_auc": 0.6304,
+  "top_features": [
+    [
+      35,
+      "Cross_BTC_Gold_Ratio",
+      107.0
+    ],
+    [
+      27,
+      "avg_spread",
+      82.0
+    ],
+    [
+      29,
+      "tick_velocity",
+      70.0
+    ],
+    [
+      0,
+      "D1_Ret_1",
+      51.0
+    ],
+    [
+      33,
+      "TF_OU_Theta",
+      49.0
+    ],
+    [
+      1,
+      "D1_Body_Ratio",
+      46.0
+    ],
+    [
+      25,
+      "hl_ratio",
+      33.0
+    ],
+    [
+      34,
+      "TF_Hurst",
+      30.0
+    ],
+    [
+      10,
+      "H4_RSI_Divergence",
+      26.0
+    ],
+    [
+      3,
+      "D1_RSI_14",
+      26.0
+    ],
+    [
+      18,
+      "Derived_Days_To_MonthEnd",
+      25.0
+    ],
+    [
+      30,
+      "AUDJPYc_return",
+      24.0
+    ],
+    [
+      36,
+      "Cross_BTC_Gold_Ratio_ROC",
+      23.0
+    ],
+    [
+      8,
+      "H4_Trend_Strength",
+      22.0
+    ],
+    [
+      9,
+      "H4_ATR_Ratio",
+      20.0
+    ]
+  ]
+}

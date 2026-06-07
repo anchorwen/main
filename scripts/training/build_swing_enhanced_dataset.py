@@ -93,17 +93,41 @@ MICRO_FEATURES = [
 
 # FIX-20260604-081: BTC-specific feature lists (37-dim)
 BTC_MACRO_FEATURES_24 = [
-    "D1_Ret_1", "D1_Body_Ratio", "D1_ATR_14", "D1_RSI_14",
-    "D1_MACD", "D1_Vol_ZScore", "D1_Bollinger_Width", "D1_ADX_14",
-    "H4_Trend_Strength", "H4_ATR_Ratio", "H4_RSI_Divergence", "H4_vs_D1_Alignment",
-    "XAUUSDc_return", "Cross_DXY_Return", "Cross_EURUSD_Return", "Cross_Risk_On_Off",
-    "Derived_Weekday_Sin", "Derived_Weekday_Cos", "Derived_Days_To_MonthEnd",
-    "Derived_Is_MonthEnd_Week", "Derived_Weekend_Gap", "Derived_Vol_Regime",
-    "Derived_Momentum_5D", "Derived_Momentum_20D",
+    "D1_Ret_1",
+    "D1_Body_Ratio",
+    "D1_ATR_14",
+    "D1_RSI_14",
+    "D1_MACD",
+    "D1_Vol_ZScore",
+    "D1_Bollinger_Width",
+    "D1_ADX_14",
+    "H4_Trend_Strength",
+    "H4_ATR_Ratio",
+    "H4_RSI_Divergence",
+    "H4_vs_D1_Alignment",
+    "XAUUSDc_return",
+    "Cross_DXY_Return",
+    "Cross_EURUSD_Return",
+    "Cross_Risk_On_Off",
+    "Derived_Weekday_Sin",
+    "Derived_Weekday_Cos",
+    "Derived_Days_To_MonthEnd",
+    "Derived_Is_MonthEnd_Week",
+    "Derived_Weekend_Gap",
+    "Derived_Vol_Regime",
+    "Derived_Momentum_5D",
+    "Derived_Momentum_20D",
 ]
 BTC_MICRO_FEATURES_9 = [
-    "tick_return", "hl_ratio", "co_ratio", "avg_spread",
-    "OIM", "tick_velocity", "AUDJPYc_return", "EURUSDc_return", "USDJPYc_return",
+    "tick_return",
+    "hl_ratio",
+    "co_ratio",
+    "avg_spread",
+    "OIM",
+    "tick_velocity",
+    "AUDJPYc_return",
+    "EURUSDc_return",
+    "USDJPYc_return",
 ]
 BTC_MACRO_FEATURES_2 = ["Cross_BTC_Gold_Ratio", "Cross_BTC_Gold_Ratio_ROC"]
 
@@ -284,11 +308,19 @@ def compute_micro_features_at_bar(
         for key in ("btc_xau_ratio", "btc_xau_ratio_roc"):
             arr = cross_data.get(key)
             if arr is not None and bar_idx < len(arr):
-                result["Cross_BTC_Gold_Ratio" if key == "btc_xau_ratio" else "Cross_BTC_Gold_Ratio_ROC"] = float(arr[bar_idx])
+                result[
+                    "Cross_BTC_Gold_Ratio" if key == "btc_xau_ratio" else "Cross_BTC_Gold_Ratio_ROC"
+                ] = float(arr[bar_idx])
     else:
-        for feat_key in ["XAGUSDc_return", "EURUSDc_return", "USDJPYc_return",
-                         "AUDJPYc_return", "XAUUSDc_return",
-                         "Cross_BTC_Gold_Ratio", "Cross_BTC_Gold_Ratio_ROC"]:
+        for feat_key in [
+            "XAGUSDc_return",
+            "EURUSDc_return",
+            "USDJPYc_return",
+            "AUDJPYc_return",
+            "XAUUSDc_return",
+            "Cross_BTC_Gold_Ratio",
+            "Cross_BTC_Gold_Ratio_ROC",
+        ]:
             result[feat_key] = 0.0
 
     return result
@@ -435,8 +467,8 @@ def build_swing_dataset(
         ("silver", "xagusdc_m5_merged.csv"),
         ("eur", "eurusdc_m5_merged.csv"),
         ("dxy", "usdjpyc_m5_merged.csv"),
-        ("audjpy", "audjpyc_m5_merged.csv"),      # NEW: risk appetite proxy
-        ("xau", "xauusdc_m5_merged.csv"),          # NEW: physical gold for BTC/XAU ratio
+        ("audjpy", "audjpyc_m5_merged.csv"),  # NEW: risk appetite proxy
+        ("xau", "xauusdc_m5_merged.csv"),  # NEW: physical gold for BTC/XAU ratio
     ]:
         sym_path = _data_dir / csv_name
         if not sym_path.exists():
@@ -455,8 +487,8 @@ def build_swing_dataset(
     for name, csv_name in [
         ("XAGUSDc", "xagusdc_d1_merged.csv"),
         ("EURUSDc", "eurusdc_d1_merged.csv"),
-        ("AUDJPYc", "audjpyc_d1_merged.csv"),      # NEW
-        ("XAUUSDc", "xauusdc_d1_merged.csv"),       # NEW: BTC/XAU ratio source
+        ("AUDJPYc", "audjpyc_d1_merged.csv"),  # NEW
+        ("XAUUSDc", "xauusdc_d1_merged.csv"),  # NEW: BTC/XAU ratio source
     ]:
         p = _data_dir / csv_name
         if not p.exists():
@@ -490,10 +522,15 @@ def build_swing_dataset(
     _tp = tp_atr_mult if tp_atr_mult is not None else 1.5
     print(f"  Computing barrier labels (horizon={horizon}, SL={_sl}xATR, TP={_tp}xATR)...")
     labels = compute_barrier_labels(
-        tf_ohlc, atr_mult=1.5, horizon=horizon,
-        sl_atr_mult=sl_atr_mult, tp_atr_mult=tp_atr_mult,
-        spread_points=spread_points, slippage_points=slippage_points,
-        tick_size=tick_size, side="long",
+        tf_ohlc,
+        atr_mult=1.5,
+        horizon=horizon,
+        sl_atr_mult=sl_atr_mult,
+        tp_atr_mult=tp_atr_mult,
+        spread_points=spread_points,
+        slippage_points=slippage_points,
+        tick_size=tick_size,
+        side="long",
     )
 
     # ── Build feature matrix ──
@@ -566,7 +603,9 @@ def build_swing_dataset(
         btc_xau_ratio[mask] = btc_close[mask] / xau_close[mask]
         # P0 Guardrail 1 (cont.): ROC on ffill'd ratio sequence
         btc_xau_ratio = pd.Series(btc_xau_ratio).ffill().bfill().to_numpy(dtype=np.float64)
-        btc_xau_roc = pd.Series(btc_xau_ratio).pct_change(periods=5).fillna(0.0).to_numpy(dtype=np.float64)
+        btc_xau_roc = (
+            pd.Series(btc_xau_ratio).pct_change(periods=5).fillna(0.0).to_numpy(dtype=np.float64)
+        )
         micro_cross["btc_xau_ratio"] = btc_xau_ratio
         micro_cross["btc_xau_ratio_roc"] = btc_xau_roc
 
@@ -607,9 +646,7 @@ def build_swing_dataset(
                         _xau_curr = _xau_d1_closes[_xau_idx]
                         _xau_prev = _xau_d1_closes[_xau_idx - 1]
                         if _xau_prev > 0:
-                            macro["XAUUSDc_return"] = (
-                                (_xau_curr - _xau_prev) / _xau_prev * 100.0
-                            )
+                            macro["XAUUSDc_return"] = (_xau_curr - _xau_prev) / _xau_prev * 100.0
                         else:
                             macro["XAUUSDc_return"] = 0.0
                     else:
@@ -761,7 +798,10 @@ def build_swing_dataset(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build enhanced swing training dataset")
     parser.add_argument(
-        "--tf", default="M30", choices=["M5", "M15", "M30", "H1", "H4"], help="Target timeframe (default: M30)"
+        "--tf",
+        default="M30",
+        choices=["M5", "M15", "M30", "H1", "H4"],
+        help="Target timeframe (default: M30)",
     )
     parser.add_argument(
         "--horizon",
@@ -782,7 +822,9 @@ def main() -> None:
         "Used when --raw-dir lacks these files (e.g. BTC-only directory). "
         "Default: data/raw (global macro data lake).",
     )
-    parser.add_argument("--symbol", default="xauusdc", help="Symbol prefix for CSV files (e.g. xauusdc, btcusdc)")
+    parser.add_argument(
+        "--symbol", default="xauusdc", help="Symbol prefix for CSV files (e.g. xauusdc, btcusdc)"
+    )
     parser.add_argument(
         "--label-contract",
         default=None,
@@ -825,6 +867,7 @@ def main() -> None:
     _tp_mult: float | None = args.tp_atr_mult
     if args.label_contract:
         import json as _json
+
         with open(args.label_contract) as _f:
             _lc = _json.load(_f)
         barriers = _lc.get("barriers", {})
@@ -832,8 +875,26 @@ def main() -> None:
         _tp_mult = _tp_mult or barriers.get("tp_atr_mult")
         if _sl_mult and _tp_mult:
             print(
-                f"[label_contract] {_lc['contract_id']}: "
-                f"sl_atr={_sl_mult}, tp_atr={_tp_mult}"
+                f"[label_contract] {_lc['contract_id']}: " f"sl_atr={_sl_mult}, tp_atr={_tp_mult}"
+            )
+
+    # ── FIX-20260607-XXX: BTC SL/TP contract enforcement ──
+    # The live system uses SL=2.0/TP=2.5 (configs/live_btc.yaml).  Training
+    # labels MUST match the live execution contract, otherwise the model learns
+    # to predict outcomes under a different risk:reward profile than what the
+    # live system executes (train-serve label skew).
+    if args.symbol.lower() == "btcusdc":
+        if _sl_mult is None:
+            _sl_mult = 2.0
+            print("[btc_contract] SL defaulted to 2.0x ATR (live_btc.yaml)")
+        if _tp_mult is None:
+            _tp_mult = 2.5
+            print("[btc_contract] TP defaulted to 2.5x ATR (live_btc.yaml)")
+        if _sl_mult != 2.0 or _tp_mult != 2.5:
+            print(
+                f"[btc_contract] ⚠️  WARNING: SL={_sl_mult}, TP={_tp_mult} "
+                f"does NOT match live config (SL=2.0, TP=2.5).  "
+                f"Labels will have train-serve skew!"
             )
 
     # Auto-adjust horizon defaults

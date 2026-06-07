@@ -1756,3 +1756,67 @@ FIX-YYYYMMDD-NNN
 
 - **Follow-up Fix (2026-06-06)**: Original implementation referenced `_close_result` inside `isinstance()` check at the `_dispatched` convergence point without initializing it. `_close_result` was only assigned inside the `net_out/reduced` branch → `UnboundLocalError` for open-order dispatch. Fixed by initializing `_close_result: dict | None = None` before the branch, then checking `if _close_result is not None` before extracting PnL. Root cause: RC-05 (boundary-error) — variable scope leak across branch convergence.
 
+---
+
+### FIX-20260607-144: Entry/Exit Timeframe Alignment — H4 Trend Protection
+
+- **Date**: 2026-06-07
+- **Severity**: HIGH (structural asymmetry causing premature exits)
+- **Files Modified**:
+  - `core/runtime/live_cycle.py` — `_execute_management_phase()`: trend protection umbrella + adaptive thresholds
+- **Root Cause**: **RC-06 (contract-violation)** — Entry uses H4>H1>M5 trend hierarchy to gate entries, but exit layers (brain_flip, bleed_stop, confidence_decay) operate purely on M5 noise without H4 trend awareness. This creates a structural asymmetry where positions are carefully opened only when macro trend aligns, but carelessly closed by micro noise.
+- **Impact**: 81% of trades (93 "loss" + MIA) closed by M5-level intermediate exit layers rather than reaching SL/TP. Brain_flip and confidence_decay on 5-minute bars were prematurely terminating positions that H4 trend still supported.
+- **Fix**:
+  - (a) **Trend Protection Umbrella**: When H4 trend direction matches position side → `_trend_protected=True` → brain_flip and confidence_decay exits are PHYSICALLY BLOCKED (skipped entirely). When H4 neutral but H1 matches → `_trend_mild_protected=True` → brain_flip requires confidence ≥ 0.80, confidence_decay blocked.
+  - (b) **Adaptive Bleed Stop**: trend-protected → 5 bars (was 3), trend-mild → 4 bars. min_hold doubled under full protection.
+  - (c) **Diagnostic logging**: `trend_protection_active` event on first activation per position.
+- **Safety Net**: Trailing SL (Chandelier) is NEVER disabled by trend protection — it continues to tighten regardless. When H4 reverses against the position, `_trend_protected` becomes False and all M5 exits resume normal operation.
+- **Evidence**: Golden master data shows brain confidence distribution p50=0.692, p75=0.822. The 0.80 threshold for mild protection sits at the upper edge (p75-p90), filtering 71.3% of routine M5 noise while allowing genuinely confident reversals.
+- **Verification**:
+  ```
+  [PASS] mypy — 0 errors
+  [PASS] ruff — 0 issues
+  [PASS] verify.py --quick — no regressions
+  ```
+- **Related Docket**: DQAF-20260607-009 (three-layer over-defense audit)
+- **Prevention**: Any new exit layer must declare its trend awareness level (H4-aware / H1-aware / M5-only) and justify the timeframe choice relative to entry gates.
+
+---
+
+### FIX-20260607-145: V4 Retirement — SL/TP Label Contract Mismatch
+
+- **Date**: 2026-06-07
+- **Severity**: HIGH (train-serve label skew causing degraded performance)
+- **Files Modified**: `configs/live_btc.yaml` — V4 `enabled: true → false`
+- **Root Cause**: **RC-06 (contract-violation)** — BTC_Swing_V4 was trained on 2026-06-04 with symmetric SL=TP=1.5 labels (build_swing_enhanced_dataset.py default). The BTC SL/TP enforcement (Phase A, 2026-06-07) was added AFTER V4 was trained. Live execution uses SL=2.0/TP=2.5. The brain learned to predict outcomes under a different risk:reward profile than what the live system executes.
+- **Impact**: V4 PnL=-1100R, WR=42%, status=probation. Label contract mismatch is a contributing factor to poor performance.
+- **Fix**: V4 disabled in live_btc.yaml. V5 (trained with correct SL=2.0/TP=2.5, same model architecture) serves as the replacement. V6/V7/V8 (also correct labels) provide additional signal diversity.
+- **Verification**:
+  ```
+  [PASS] mypy — 0 errors
+  [PASS] ruff — 0 issues
+  ```
+
+---
+
+### FIX-20260607-146: V7/V8 Brain Registration + Extended Data Export
+
+- **Date**: 2026-06-07
+- **Severity**: INFO (brain lifecycle — no code changes)
+- **Files Created**:
+  - `configs/brains_btc/BTC_Swing_V7_MultiTF_LGB_v1.json` — V7 (seed=77 retrain, same 17mo data as V6)
+  - `configs/brains_btc/BTC_Swing_V8_MultiTF_LGB_v1.json` — V8 (seed=88, 2.9yr data covering 2024 ETF bull run)
+  - `data_btc/brains/BTC_Swing_V7_MultiTF_LGB_v1.txt` + meta
+  - `data_btc/brains/BTC_Swing_V8_MultiTF_LGB_v1.txt` + meta
+- **Files Modified**: `configs/live_btc.yaml` — V7/V8 added as shadow (vote_weight=0.0)
+- **Data Export**: Extended raw CSV data via MT5 terminal — M15 now covers 2023-07-31~2026-06-07 (100K bars, 2.9yr). Key addition: 2024 ETF bull run ($25k→$74k).
+- **Key Finding**: V6 vs V7 AUC difference -0.009 (within random seed variance) → data saturation confirmed at 17 months. V8 AUC=0.654 (same as V6's 0.656) but uses only 5 trees vs 34 → more robust, less overfit.
+- **Critical Discovery**: btc_augment fix (FIX-20260607-XXX) not only fixed V6 — it also corrected V4/V5 feature input. V4/V5 produced their FIRST LONG signal (conf=0.596) after 506 consecutive SHORT-only cycles. Confirms the legacy XAU-centric feature path was suppressing LONG predictions.
+- **Verification**:
+  ```
+  [PASS] mypy — 0 errors
+  [PASS] ruff — 0 issues
+  [PASS] verify.py --quick — no regressions
+  ```
+- **Related Docket**: DQAF-20260607-010 (magic audit + SL/TP mismatch)
+

@@ -96,6 +96,54 @@ class KalmanTrendFilter:
         self._velocity_uncertainty: float = np.sqrt(self._P[1, 1])
         self._bar_count: int = 0
 
+    # ── Volatility Anchoring (FIX-20260607-XXX) ──────────────────────────
+
+    def anchor_to_atr(self, atr_value: float, *, k_r: float = 0.5, k_q: float = 0.1) -> None:
+        """Re-anchor measurement and process noise to the asset's actual ATR.
+
+        Eliminates the "magnitude hallucination" where R=2.0 (designed for
+        XAUUSD at ~$4,300) is applied to BTCUSD at ~$61,000 — a 14,000×
+        scale mismatch that blinds the Kalman filter for hundreds of bars
+        until the adaptive EMA slowly catches up.
+
+        Formula:
+            R_anchor = (k_r × ATR)²     measurement noise variance
+            Q_anchor = (k_q × ATR)²     process noise variance (level)
+
+        The constants k_r=0.5, k_q=0.1 are universal across all assets:
+          XAUUSD  ATR≈40   → R≈400,   Q≈16
+          BTCUSD  ATR≈400  → R≈40,000, Q≈1,600
+          EURUSD  ATR≈0.005→ R≈0.000006, Q≈0.0000003
+
+        After anchoring, the state covariance P is reset so the filter
+        starts from the new noise baseline with a clean slate rather than
+        carrying forward uncertainty estimates from the wrong magnitude.
+        """
+        if atr_value <= 0:
+            return
+
+        # ── Anchor noise matrices ──
+        new_r = (k_r * atr_value) ** 2
+        new_q_level = (k_q * atr_value) ** 2
+        new_q_vel = new_q_level * 0.25  # velocity noise: ¼ of level noise
+
+        self._R = new_r
+        self._Q[0, 0] = new_q_level
+        self._Q[0, 1] = 0.0
+        self._Q[1, 0] = 0.0
+        self._Q[1, 1] = new_q_vel
+
+        # ── Reset state covariance to the new noise baseline ──
+        # P = diag(R, Q_level) — the filter's initial uncertainty should
+        # reflect the fresh noise estimates, not stale ones from the wrong
+        # magnitude.  This gives the Kalman gain a clean starting point.
+        self._P = np.eye(2, dtype=np.float64)
+        self._P[0, 0] = new_r
+        self._P[1, 1] = new_q_level
+
+        # ── Clear innovation buffer so adaptive mode starts fresh ──
+        self._innovation_buffer.clear()
+
     # ── Properties ──
 
     @property
@@ -587,6 +635,14 @@ class TrendDetector:
 
         raw = k_str * 0.6 + persistence_score * 0.4
         return max(0.0, min(1.0, raw))
+
+    def anchor_kalman_to_atr(self, atr_value: float, *, k_r: float = 0.5, k_q: float = 0.1) -> None:
+        """Re-anchor the internal Kalman filter to the asset's actual ATR.
+
+        Delegates to :meth:`KalmanTrendFilter.anchor_to_atr`.  See that method
+        for the mathematical rationale (magnitude hallucination elimination).
+        """
+        self._kalman.anchor_to_atr(atr_value, k_r=k_r, k_q=k_q)
 
     def update(self, price: float) -> None:
         """Feed one price observation. O(1)."""

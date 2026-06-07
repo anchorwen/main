@@ -1,0 +1,94 @@
+{
+  "brain_id": "BTC_Swing_V6_M15_LGB_v4",
+  "model_type": "lightgbm",
+  "feature_schema": "btc_macro_enhanced_37",
+  "n_features": 37,
+  "timeframe": "M15",
+  "horizon": 24,
+  "train_samples": 7299,
+  "val_samples": 2059,
+  "test_samples": 1952,
+  "n_trees": 34,
+  "test_auc": 0.6304,
+  "test_f1": 0.0767,
+  "sl_atr_mult": 2.0,
+  "tp_atr_mult": 2.5,
+  "label_contract": "live_btc_v1",
+  "top_features": [
+    [
+      35,
+      "Cross_BTC_Gold_Ratio",
+      86.0
+    ],
+    [
+      27,
+      "avg_spread",
+      80.0
+    ],
+    [
+      29,
+      "tick_velocity",
+      71.0
+    ],
+    [
+      1,
+      "D1_Body_Ratio",
+      44.0
+    ],
+    [
+      32,
+      "USDJPYc_return",
+      42.0
+    ],
+    [
+      33,
+      "TF_OU_Theta",
+      40.0
+    ],
+    [
+      0,
+      "D1_Ret_1",
+      35.0
+    ],
+    [
+      10,
+      "H4_RSI_Divergence",
+      33.0
+    ],
+    [
+      34,
+      "TF_Hurst",
+      28.0
+    ],
+    [
+      5,
+      "D1_Vol_ZScore",
+      26.0
+    ],
+    [
+      9,
+      "H4_ATR_Ratio",
+      26.0
+    ],
+    [
+      17,
+      "Derived_Weekday_Cos",
+      25.0
+    ],
+    [
+      25,
+      "hl_ratio",
+      25.0
+    ],
+    [
+      3,
+      "D1_RSI_14",
+      23.0
+    ],
+    [
+      7,
+      "D1_ADX_14",
+      22.0
+    ]
+  ]
+}

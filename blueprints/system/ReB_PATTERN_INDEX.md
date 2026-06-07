@@ -136,3 +136,36 @@
 - **关联 Docket IDs**: DQAF-20260607-007
 - **预防策略**: 对任何新增的 RegimeGate 特征字段，在 classify() 返回 dict 中添加后，应同步检查两个消费点：(1) evaluate() 入口是否需要该信号，(2) exit management 是否需要。可选: 在架构审计 checklist 中增加"信号消费审计"专项。
 - **检测方法**: 用 grep 搜索 `regime_gate_result.get("` 找出所有被提取的字段，对比下游函数签名中被实际使用的字段。gap = extracted - consumed。自动化脚本 `check_unconsumed_regime_signals.py` 考虑加入 pre-commit。
+
+---
+
+### ReB-20260607-008
+- **Pattern Signature**: `stale_data_fail_open_blind_trading`
+- **描述**: 数据源（MT5 Bridge）在断连或数据停滞时返回过期 tick 而非抛出异常，数据获取层（market_ingress）未提取并传播 tick 时间戳，决策层（live_cycle）无 staleness 检查，系统在数据管道冰封时继续用过期价格做特征计算、开仓、平仓决策。同时平仓派发路径缺少 pending 状态锁，watchdog batch 被管理循环反复重新触发形成百次级重试拒绝雪崩。本质是**两道 Fail-Open**：(1) 数据层——过期数据被当作实时数据处理，(2) 执行层——已派发的平仓指令可被后续周期无脑重建。
+- **关联 FIX IDs**: FIX-20260607-XXX (Staleness Contract + Pending Close Lock)
+- **关联 Docket IDs**: DQAF-20260607-006
+- **预防策略**:
+  1. **Staleness Contract (数据新鲜度契约)**: 所有价格获取函数必须返回时间戳，调用方在每次决策前验证 `time.time() - tick_time < max_age`。连续超限 → circuit_breaker 熔断
+  2. **Pending Close Lock (派发锁)**: 对已派发平仓的 ticket，管理循环在 N 周期内禁止重建新的 watchdog batch。锁在 `clear_position()` 时自动释放，超时后自动过期
+  3. **价格年龄守卫**: 在平仓派发前验证用于构建订单的价格不超过 60 秒。过期价格必然导致 deviation 拒绝，不如让 MT5 服务端 SL/TP 执行
+  4. **Circuit Breaker**: 连续 3 周期 staleness → `circuit_breaker_tripped = True` → 下一周期绕过所有决策层，直接 `mt5_worker.order_send()` 平掉所有持仓
+- **检测方法**:
+  1. 启动时健康检查：验证最近一次 tick 的年龄 < 30s
+  2. 运行时监控：`data_stale` 事件计数 > 5/小时 → DQAF 诊断
+  3. `analyze_live_journal.py` 脚本检测：ticket 的 close_attempts > 10 → 告警
+  4. 单元测试：模拟 stale tick → 验证 circuit_breaker 触发 + close dispatch 被拒
+
+---
+
+### ReB-20260607-009
+- **Pattern Signature**: `frankenstein_metric_independent_min`
+- **描述**: 当需要报告"最差策略"的性能指标时，对多个子组件的 PnL 和 WinRate **独立取 min()**，导致最终报告的两个指标可能来自**不同的大脑/策略**。告警描述的"策略"在物理世界中不存在——是多个实体的碎片拼接（缝合怪）。本质是聚合语义错误：`min()` 应该作用于**整个实体**（选择最差的那个），而非作用于**各个字段**（拼接各字段的最差值）。
+- **关联 FIX IDs**: FIX-20260607-XXX
+- **关联 Docket IDs**: DQAF-20260607-007
+- **预防策略**:
+  1. 对多实体聚合场景，始终使用 `min(items, key=lambda x: x.field)` 选择单一实体，而非对各字段独立 `min()`
+  2. 告警标签必须匹配数据的物理量纲——`per-unit R-multiple` ≠ `USD`
+  3. 告警上下文中的"策略级"指标应标注来源实体 ID（如 `worst_brain_id`），使运维可溯源
+- **检测方法**:
+  1. Code review 规则：搜索 `min(acc, x.field1)` + `min(acc2, x.field2)` 在同一循环中的模式
+  2. 告警审计：若 `strategy_pnl` 和 `strategy_win_rate` 在同一告警中出现，验证它们来自同一实体

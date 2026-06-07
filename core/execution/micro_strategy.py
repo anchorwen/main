@@ -31,6 +31,7 @@ class MicroStrategy(StrategyLine):
         mid_price: float | None,
         micro_sequences: dict[str, Any] | None = None,
         daily_feature_vector: Any = None,
+        btc_augment: Any = None,  # FIX-20260607-XXX: pre-computed 37-dim BTC vector
     ) -> list[Any]:
         proposals: list[Any] = []
         for b_info in self.brains:

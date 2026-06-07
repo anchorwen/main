@@ -116,6 +116,18 @@ class LiveCycleConfig:
     exit_min_step: float = 0.15
     market_type: str = "forex_24_5"  # FIX-082: "crypto_24_7" for BTC, "forex_24_5" for gold
 
+    # ── FIX-20260607-XXX: Staleness Contract ──
+    # Maximum allowed age of the latest tick before the cycle is skipped.
+    # 120s for BTC (crypto 24/7, tick expected every few seconds).
+    # XAU would use 60s (forex 24/5, tick expected sub-second).
+    max_data_age_seconds: float = 120.0
+    close_price_max_age_seconds: float = 60.0  # refuse close dispatch if price older than this
+    # Phase B: maximum silence from MT5 bridge before circuit breaker trip.
+    # 300s (5 min) — if no successful price fetch for 5 minutes, MT5 is dead.
+    max_bridge_silence_seconds: float = 300.0
+    # Phase B: single-cycle duration above this threshold increments degraded counter.
+    cycle_stall_threshold_seconds: float = 180.0
+
     # ── Multi-strategy mode ──
     multi_strategy_enabled: bool = True  # False → fallback to old CapitalAllocator
     strategy_stagger_seconds: float = 20.0  # delay between strategy dispatches
@@ -241,6 +253,9 @@ class LiveCycleState:
     alert_hub: Any = None  # LiveAlertHub instance (FIX-20260529-040)
     _last_bridge_ack_time: float = 0.0  # Unix ts of last successful broker.fetch_prices()
     _last_cycle_start_time: float = 0.0  # wall clock at start of current cycle
+    _last_tick_age: float = (
+        0.0  # FIX-20260607-XXX: age of latest tick (seconds) for staleness guard
+    )
     _cooldown_registry: Any = None  # CooldownRegistry (Cut 1: Absolute Refractory Period)
     _family_entry_tracker: Any = None  # FamilyEntryTracker (Cut 2: Cross-Strategy Spacing)
     _strategies: dict[str, Any] | None = None  # FIX-072: cached strategy_lines for persistence
@@ -255,6 +270,11 @@ class LiveCycleState:
     # Circuit breaker: 3 consecutive degraded cycles → management-only mode
     _consecutive_degraded_cycles: int = 0
     _circuit_breaker_tripped: bool = False
+
+    # FIX-20260607-XXX: Staleness Contract — consecutive cycles with stale data
+    # triggers circuit breaker (data pipeline freeze → fail-closed).
+    _consecutive_stale_cycles: int = 0
+    _consecutive_stale_features: int = 0  # Phase B: feature store staleness → circuit breaker
 
     # Regime gate fail-closed: stale counter for fail-open → fail-closed migration
     _regime_gate_stale_counter: int = 0
@@ -487,7 +507,34 @@ def _dispatch_managed_close(
     exit_urgency: float = 0.5,
     factor_breakdown: dict[str, float] | None = None,
 ) -> bool:
-    """Issue a close order for a managed position and record exit for re-entry guard."""
+    """Issue a close order for a managed position and record exit for re-entry guard.
+
+    FIX-20260607-XXX: Price Age Guard — refuses to dispatch a close order
+    when the latest price tick is older than close_price_max_age_seconds.
+    Sending a close at a stale price guarantees rejection (deviation exceeded)
+    and feeds the retry avalanche.  Better to let MT5's server-side SL/TP
+    handle the exit.
+    """
+    # ── Price age guard ──
+    _tick_age = getattr(state, "_last_tick_age", 0.0) if state is not None else 0.0
+    if _tick_age > config.close_price_max_age_seconds:
+        print(
+            json.dumps(
+                {
+                    "event": "close_rejected_stale_price",
+                    "time": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                    "ticket": getattr(pos, "ticket", 0),
+                    "tick_age_seconds": round(_tick_age, 1),
+                    "max_allowed_seconds": config.close_price_max_age_seconds,
+                    "reason": reason[:80],
+                    "action": "refuse_dispatch_let_mt5_sltp_handle",
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        return False  # refuse dispatch — let MT5 server-side SL/TP handle it
+
     from core.execution.managed_close import dispatch_managed_close as _impl
 
     return _impl(
@@ -653,7 +700,7 @@ def _execute_management_phase(
             _price_degraded = False
     else:
         # _mid_and_prices has internal FTC(CRASH) — let it propagate
-        mid, bid, ask = _mid_and_prices(mt5_worker, config.symbol)
+        mid, bid, ask, _tick_time = _mid_and_prices(mt5_worker, config.symbol)
         if mid > 0:
             state._last_bridge_ack_time = time.time()
         _price_degraded = False
@@ -838,17 +885,26 @@ def _execute_management_phase(
 
             if pnl_ledger is not None:
                 with log_and_continue(component="AlertHub:PnL_context"):
-                    # Still read strategy-level metrics from ledger
-                    _pnl_stats = pnl_ledger.get_quick_stats()
-                    # Worst-performing strategy detection
+                    # FIX-20260607-XXX: "Frankenstein" logic fix.
+                    # Previously _worst_pnl and _worst_wr were independently
+                    # min()'d across all brains — they could come from two
+                    # DIFFERENT brains (e.g. pnl from V4, wr from LGB_V1),
+                    # producing a misleading "strategy" metric that describes
+                    # no actual brain.  Now: find the single brain with the
+                    # worst cumulative_pnl, and use ITS win_rate too.
                     _all_m = pnl_ledger.get_all_metrics()
-                    _worst_pnl = 0.0
-                    _worst_wr = 1.0
-                    for _m in _all_m.values():
-                        _worst_pnl = min(_worst_pnl, _m.cumulative_pnl)
-                        _worst_wr = min(_worst_wr, _m.win_rate)
-                    _ctx["strategy_pnl"] = round(_worst_pnl, 2)
-                    _ctx["strategy_win_rate"] = round(_worst_wr, 4)
+                    if _all_m:
+                        _worst_m = min(
+                            _all_m.values(),
+                            key=lambda m: getattr(m, "cumulative_pnl", 0.0),
+                        )
+                        _ctx["strategy_pnl"] = round(getattr(_worst_m, "cumulative_pnl", 0.0), 2)
+                        _ctx["strategy_win_rate"] = round(getattr(_worst_m, "win_rate", 1.0), 4)
+                        _ctx["worst_brain_id"] = getattr(_worst_m, "brain_id", "")
+                    else:
+                        _ctx["strategy_pnl"] = 0.0
+                        _ctx["strategy_win_rate"] = 1.0
+                        _ctx["worst_brain_id"] = ""
 
             _ah.evaluate_and_dispatch(_ctx)
 
@@ -1333,6 +1389,26 @@ def _execute_management_phase(
         )
         return False
 
+    # ── 6.7 Pending Close Lock (FIX-20260607-XXX) ──
+    # Prevents cross-cycle retry avalanche: when ExitWatchdog is already
+    # trying to close this position, subsequent management cycles must NOT
+    # spawn fresh watchdog batches.  The lock auto-expires after
+    # ActivePositionManager.PENDING_CLOSE_MAX_CYCLES to allow retry.
+    if pm.is_pending_close(pos.ticket, state.loop_iteration):
+        print(
+            json.dumps(
+                {
+                    "event": "pending_close_skipped",
+                    "time": _utc_iso(),
+                    "ticket": pos.ticket,
+                    "loop_iteration": state.loop_iteration,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        return False
+
     # ── 7. Layer 2: Brain ensemble re-evaluation ──
     current_consensus: dict[str, Any] = {}
     current_supporting: list[str] = []
@@ -1519,6 +1595,78 @@ def _execute_management_phase(
                 # bleed_stop from firing before the position has had reasonable
                 # time to develop (FIX-20260522-027).
                 #
+                # ── FIX-20260607-XXX: H4 Trend Protection Umbrella ──
+                # When the H4/H1 macro trend still supports the position
+                # direction, M5-level noise exits (brain_flip, confidence_decay,
+                # bleed_stop) are PHYSICALLY BLOCKED.  The position gets room
+                # to breathe — closing on a 5-minute wobble when the 4-hour
+                # trend is still in your favor is a structural error.
+                #
+                # Trend hierarchy: H4 > H1 > M5 (same as entry counter_trend gate).
+                # If H4 agrees with position → full protection.
+                # If H4 neutral but H1 agrees → mild protection.
+                # If both disagree or neutral → no protection (normal M5 exits).
+                _trend_protected = False
+                _trend_mild_protected = False
+                _h4_dir = "neutral"
+                _h1_dir = "neutral"
+                if hasattr(state, "regime_gate") and state.regime_gate is not None:
+                    try:
+                        _h4_dir = state.regime_gate.h4_trend_direction
+                        _h1_dir = state.regime_gate.h1_trend_direction
+                        if _h4_dir != "neutral" and _h4_dir == pos.side:
+                            _trend_protected = True  # H4 supports position
+                        elif _h4_dir == "neutral" and _h1_dir == pos.side:
+                            _trend_mild_protected = True  # H1 supports, H4 silent
+                    except Exception:  # noqa: BLE001
+                        pass
+
+                # ── FIX-20260607-144: Override trend protection when losing ──
+                # Trailing SL (Chandelier) only tightens in the PROFIT direction.
+                # For a losing position, the SL stays frozen at entry — trend
+                # protection becomes a trap, letting losses grow with no defense.
+                # If unrealized PnL is below -1.0R, override protection:
+                # the H4 "support" is either wrong or lagging.  Let M5 exits work.
+                if _trend_protected or _trend_mild_protected:
+                    _r_check = pm._compute_r_multiple(mid, ticket=pos.ticket) if mid else 0.0
+                    if _r_check < -1.0:
+                        _trend_protected = False
+                        _trend_mild_protected = False
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "trend_protection_overridden_loss",
+                                    "time": _utc_iso(),
+                                    "ticket": pos.ticket,
+                                    "r": round(_r_check, 3),
+                                    "reason": "position_underwater_despite_trend_support",
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+
+                # Diagnostic: one-shot log when trend protection activates
+                if (_trend_protected or _trend_mild_protected) and getattr(
+                    pos, "cycles_held", 0
+                ) <= 3:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "trend_protection_active",
+                                "time": _utc_iso(),
+                                "ticket": pos.ticket,
+                                "side": pos.side,
+                                "h4_trend": _h4_dir,
+                                "h1_trend": _h1_dir,
+                                "protection_level": "full" if _trend_protected else "mild",
+                                "action": "blocking_M5_noise_exits",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+
                 # FIX-20260525-020: Mean-reversion (statarb/OU) strategies are
                 # EXEMPT from bleed_stop.  They enter at trend extremes — price
                 # continuing 3-5 bars in the same direction is normal "rubber band
@@ -1531,7 +1679,15 @@ def _execute_management_phase(
                         _strat_cfg.get("horizon_cycles", 0) or _strat_cfg.get("horizon", 0) or 0
                     )
                     _bleed_bars = max(3, _horizon // 3) if _horizon > 0 else 3
+                    # Option B: trend-aligned → 5 bars tolerance (was 3)
+                    if _trend_protected:
+                        _bleed_bars = max(5, _bleed_bars)
+                    elif _trend_mild_protected:
+                        _bleed_bars = max(4, _bleed_bars)
                     _min_hold = max(2, _bleed_bars)
+                    # Option A: trend-protected → double min_hold
+                    if _trend_protected:
+                        _min_hold = _min_hold * 2
                     if getattr(pos, "cycles_held", 0) < _min_hold:
                         _should_bleed, _bleed_reason = False, ""
                     else:
@@ -1540,6 +1696,7 @@ def _execute_management_phase(
                             pos, _r_now, bleed_bars=_bleed_bars
                         )
                     if _should_bleed:
+                        pm.mark_pending_close(pos.ticket, state.loop_iteration)
                         _dispatched = _dispatch_managed_close(
                             config,
                             pos,
@@ -1594,6 +1751,7 @@ def _execute_management_phase(
                                     ou_z, ticket=pos.ticket
                                 )
                                 if should_ou_exit:
+                                    pm.mark_pending_close(pos.ticket, state.loop_iteration)
                                     _dispatched = _dispatch_managed_close(
                                         config,
                                         pos,
@@ -1629,13 +1787,36 @@ def _execute_management_phase(
                 should_exit = False
                 exit_reason = ""
                 if _flip_enabled:
-                    should_exit, exit_reason = pm.evaluate_brain_exit(
-                        current_consensus,
-                        current_supporting,
-                        mid=mid,
-                        ticket=pos.ticket,
-                        kalman_velocity_bps=getattr(state, "_last_kalman_velocity_bps", None),
-                    )
+                    # ── FIX-20260607-XXX: Trend Protection — block M5 brain_flip ──
+                    # When H4 trend supports the position, physically block
+                    # brain_flip and confidence_decay exits.  The brain changing
+                    # its mind on a 5-minute bar is NOT a valid exit signal when
+                    # the 4-hour trend is still in your favor.
+                    if _trend_protected:
+                        # Full protection: skip brain_flip/confidence_decay entirely.
+                        # Only Trailing SL and MetaExit (which has its own trend
+                        # awareness) can close the position.
+                        should_exit = False
+                        exit_reason = ""
+                    else:
+                        should_exit, exit_reason = pm.evaluate_brain_exit(
+                            current_consensus,
+                            current_supporting,
+                            mid=mid,
+                            ticket=pos.ticket,
+                            kalman_velocity_bps=getattr(state, "_last_kalman_velocity_bps", None),
+                        )
+                        # Option B: mild protection — require higher confidence
+                        if should_exit and _trend_mild_protected:
+                            _exit_conf = float(current_consensus.get("consensus_score", 0.5))
+                            if "brain_flip" in exit_reason and _exit_conf < 0.80:
+                                should_exit = False
+                                exit_reason = (
+                                    f"brain_flip_shielded_trend_mild_conf_{_exit_conf:.2f}"
+                                )
+                            elif "confidence_decay" in exit_reason:
+                                should_exit = False
+                                exit_reason = "confidence_decay_shielded_trend_mild"
                 # ── Phase C Fix 3: Price-Confirmation Shield ──
                 # When confidence_decay triggers but price action confirms the
                 # trade direction, veto the time-based exit and let Trailing SL
@@ -1652,6 +1833,7 @@ def _execute_management_phase(
                     _bf_confidence = float(
                         current_consensus.get("consensus_score", _exit_confidence)
                     )
+                    pm.mark_pending_close(pos.ticket, state.loop_iteration)
                     _dispatched = _dispatch_managed_close(
                         config,
                         pos,
@@ -1721,6 +1903,7 @@ def _execute_management_phase(
             )
             if evaluation is not None:
                 meta_reason = f"meta_exit_u{evaluation.exit_urgency:.2f}_{evaluation.exit_reason}"
+                pm.mark_pending_close(pos.ticket, state.loop_iteration)
                 _dispatched = _dispatch_managed_close(
                     config,
                     pos,
@@ -1770,6 +1953,7 @@ def _execute_management_phase(
             mid if mid is not None else 0.0, ticket=pos.ticket
         )
         if should_hesitate:
+            pm.mark_pending_close(pos.ticket, state.loop_iteration)
             _dispatched = _dispatch_managed_close(
                 config,
                 pos,
@@ -1812,6 +1996,7 @@ def _execute_management_phase(
             ticket=pos.ticket,
         )
         if should_time_exit:
+            pm.mark_pending_close(pos.ticket, state.loop_iteration)
             _dispatched = _dispatch_managed_close(
                 config,
                 pos,
@@ -2222,6 +2407,7 @@ def _evaluate_strategy_lines(
     reentry_bleed_penalty: float | None = None,
     # ── FIX-20260606-138: Fail-Closed on bootstrap degradation ──
     bootstrap_degraded: bool = False,
+    btc_augment: Any = None,  # FIX-20260607-XXX: pre-computed 37-dim BTC vector
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue."""
     from core.runtime.strategy_evaluator import evaluate_strategy_lines as _impl
@@ -2271,6 +2457,7 @@ def _evaluate_strategy_lines(
         reentry_bleed_cooldown=reentry_bleed_cooldown,
         reentry_bleed_penalty=reentry_bleed_penalty,
         bootstrap_degraded=bootstrap_degraded,
+        btc_augment=btc_augment,  # FIX-20260607-XXX
     )
 
 
@@ -2436,6 +2623,27 @@ def execute_live_cycle(
     if getattr(state, "_last_bridge_ack_time", 0) == 0:
         state._last_bridge_ack_time = _cycle_start_wall
 
+    # ── Phase B: Bridge silence check (FIX-20260607-XXX) ──
+    # If the MT5 bridge has not returned a successful price fetch for longer
+    # than max_bridge_silence_seconds, the bridge is dead.  Trip the circuit
+    # breaker immediately (no 3-cycle grace period — bridge death is binary).
+    _bridge_silence = time.time() - state._last_bridge_ack_time
+    if _bridge_silence > config.max_bridge_silence_seconds and not state._circuit_breaker_tripped:
+        state._circuit_breaker_tripped = True
+        print(
+            json.dumps(
+                {
+                    "event": "circuit_breaker_bridge_silence_trip",
+                    "time": _utc_iso(),
+                    "bridge_silence_seconds": round(_bridge_silence, 1),
+                    "max_allowed_seconds": config.max_bridge_silence_seconds,
+                    "action": "management_only_mode",
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+
     # ── Circuit breaker: 3 consecutive degraded cycles → management-only ──
     if state._circuit_breaker_tripped:
         print(
@@ -2520,6 +2728,42 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
+    # ── Phase B: Cycle stall detection (FIX-20260607-XXX) ──
+    # A single cycle taking longer than cycle_stall_threshold_seconds is a
+    # strong signal of pipeline blockage (MT5 hang, feature computation stall,
+    # IPC deadlock).  Increment the degraded counter so that 3 consecutive
+    # stalled cycles trip the circuit breaker.
+    _cycle_duration = time.time() - state._last_cycle_start_time
+    if _cycle_duration > config.cycle_stall_threshold_seconds:
+        state._consecutive_degraded_cycles += 1
+        print(
+            json.dumps(
+                {
+                    "event": "cycle_stall_detected",
+                    "time": _utc_iso(),
+                    "cycle_duration_seconds": round(_cycle_duration, 1),
+                    "threshold_seconds": config.cycle_stall_threshold_seconds,
+                    "consecutive_degraded": state._consecutive_degraded_cycles,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        if state._consecutive_degraded_cycles >= 3:
+            state._circuit_breaker_tripped = True
+            print(
+                json.dumps(
+                    {
+                        "event": "circuit_breaker_cycle_stall_trip",
+                        "time": _utc_iso(),
+                        "consecutive_degraded": state._consecutive_degraded_cycles,
+                        "action": "management_only_mode",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+
     # Reset on first non-degraded cycle
     if not degraded_wakeup and state._consecutive_degraded_cycles > 0:
         print(
@@ -2973,6 +3217,7 @@ def execute_live_cycle(
     mid_price: float | None = None
     _bid: float | None = None
     _ask: float | None = None
+    _tick_time: float = 0.0  # FIX-20260607-XXX: for staleness detection
     if broker is not None:
         with FaultTolerantContext(
             level=FaultLevel.DEGRADE,
@@ -2981,9 +3226,78 @@ def execute_live_cycle(
             mid_price, _bid, _ask = broker.fetch_prices(config.symbol)
     elif not config.no_mt5:
         # _mid_and_prices has internal FTC(CRASH) — let it propagate
-        mid_price, _bid, _ask = _mid_and_prices(mt5_worker, config.symbol)
+        mid_price, _bid, _ask, _tick_time = _mid_and_prices(mt5_worker, config.symbol)
 
-    # ── Rolling mid-price buffer (circuit breaker & ER calc) ──
+    # ── FIX-20260607-XXX: Staleness Contract (Iron Law #11 Data Analytics) ──
+    # Data pipeline freeze detection: if MT5 returns the same stale tick for
+    # multiple cycles, the system is "blind" — all trading decisions based on
+    # this data are invalid.  Fail-closed: skip the cycle, and trip the
+    # circuit breaker after 3 consecutive stale cycles.
+    _stale_this_cycle = False
+    if _tick_time > 0:
+        _data_age = time.time() - _tick_time
+        state._last_tick_age = round(_data_age, 3)  # for diagnostics
+        if _data_age > config.max_data_age_seconds:
+            _stale_this_cycle = True
+            state._consecutive_stale_cycles += 1
+            print(
+                json.dumps(
+                    {
+                        "event": "data_stale",
+                        "time": _utc_iso(),
+                        "data_age_seconds": round(_data_age, 1),
+                        "max_allowed_seconds": config.max_data_age_seconds,
+                        "consecutive_stale_cycles": state._consecutive_stale_cycles,
+                        "tick_time_unix": _tick_time,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            if state._consecutive_stale_cycles >= 3:
+                state._circuit_breaker_tripped = True
+                print(
+                    json.dumps(
+                        {
+                            "event": "circuit_breaker_staleness_trip",
+                            "time": _utc_iso(),
+                            "consecutive_stale_cycles": state._consecutive_stale_cycles,
+                            "data_age_seconds": round(_data_age, 1),
+                            "action": "management_only_mode",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+        else:
+            state._consecutive_stale_cycles = 0
+
+    # ── Stale-cycle early return: skip all trading decisions ──
+    # When data is stale but the circuit breaker has NOT yet tripped (first
+    # 1-2 stale cycles), skip the remainder of this cycle.  The rolling
+    # buffer and MTF service will still process on the next cycle when fresh
+    # data arrives.  If the circuit breaker HAS tripped, the management-only
+    # path at the top of the next cycle handles position close-out.
+    if _stale_this_cycle and not state._circuit_breaker_tripped:
+        # Still update the rolling buffer so it stays warm
+        if mid_price is not None and mid_price > 0:
+            state._recent_mid_prices.append(mid_price)
+            if len(state._recent_mid_prices) > 50:
+                state._recent_mid_prices.pop(0)
+        # MTF service needs fresh ticks — skip when stale
+        print(
+            json.dumps(
+                {
+                    "event": "stale_cycle_skipped",
+                    "time": _utc_iso(),
+                    "consecutive_stale_cycles": state._consecutive_stale_cycles,
+                    "action": "skip_trading_keep_buffers_warm",
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        return state, True  # continue running, skip this cycle's decisions
     if mid_price is not None and mid_price > 0:
         state._recent_mid_prices.append(mid_price)
         if len(state._recent_mid_prices) > 50:
@@ -3667,6 +3981,7 @@ def execute_live_cycle(
                         ts_unix = float(ts)
                     freshness = check_feature_freshness(ts_unix, max_age_seconds=300.0)
                     if not freshness["fresh"]:
+                        state._consecutive_stale_features += 1
                         print(
                             json.dumps(
                                 {
@@ -3674,11 +3989,28 @@ def execute_live_cycle(
                                     "time": _utc_iso(),
                                     "age_seconds": freshness.get("age_seconds"),
                                     "max_age_seconds": freshness["max_age_seconds"],
+                                    "consecutive_stale_features": state._consecutive_stale_features,
                                 },
                                 ensure_ascii=False,
                             ),
                             flush=True,
                         )
+                        if state._consecutive_stale_features >= 3:
+                            state._circuit_breaker_tripped = True
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "circuit_breaker_feature_staleness_trip",
+                                        "time": _utc_iso(),
+                                        "consecutive_stale_features": state._consecutive_stale_features,
+                                        "action": "management_only_mode",
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                    else:
+                        state._consecutive_stale_features = 0
 
     if pos_count >= config.max_positions:
         if state.loop_iteration % 10 == 0:
@@ -4368,6 +4700,41 @@ def execute_live_cycle(
                 "Golden Master record_cycle_inputs failed: %s", _gm_exc
             )
 
+        # ── FIX-20260607-XXX: BTC 37-dim feature augmentation ──
+        # Compute btc_augment for BTC brains using btc_macro_enhanced_37 schema.
+        # Must be computed BEFORE strategy evaluation so SwingStrategy._run_inference()
+        # can pass it to assemble_features_by_schema(), avoiding the legacy
+        # XAU-centric fallback path (which has incorrect cross-asset slots).
+        _btc_aug: Any = None
+        if config.symbol == "BTCUSDc" and daily_feature_vector is not None:
+            try:
+                _aug = getattr(state, "_btc_augmenter", None)
+                if _aug is None:
+                    from core.features.computers.btc_feature_augmenter import (
+                        BTCFeatureAugmenter,
+                    )
+
+                    _aug = BTCFeatureAugmenter(feature_store, mt5_worker=mt5_worker)
+                    state._btc_augmenter = _aug
+                tf_ou, tf_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
+                _btc_aug = _aug.augment(
+                    daily_feature_vector,
+                    micro_feature_vector,
+                    btc_price=mid_price or 0.0,
+                    tf_ou=tf_ou,
+                    tf_hurst=tf_hurst,
+                )
+            except Exception:  # noqa: BLE001
+                import logging as _btc_log2
+                import traceback as _btc_tb2
+
+                _btc_log2.getLogger(__name__).error(
+                    "BTCFeatureAugmenter failed in main eval — "
+                    "V6 brains using btc_macro_enhanced_37 will get "
+                    "legacy XAU-centric features (slots [12][30][35][36] incorrect).\n%s",
+                    _btc_tb2.format_exc(),
+                )
+
         # Evaluate all strategy lines
         eval_summary = _evaluate_strategy_lines(
             strategy_lines=strategies,
@@ -4418,6 +4785,7 @@ def execute_live_cycle(
             reentry_bleed_penalty=config.reentry_bleed_penalty,
             # ── FIX-20260606-138: Fail-Closed on bootstrap degradation ──
             bootstrap_degraded=getattr(state, "_bootstrap_degraded", False),
+            btc_augment=_btc_aug,  # FIX-20260607-XXX
         )
 
         # ── Golden Master recording: capture outputs after evaluation ──
@@ -5358,13 +5726,18 @@ def execute_live_cycle(
                                 import logging as _btc_log
                                 import traceback as _btc_tb
 
-                                _btc_log.getLogger(__name__).warning(
-                                    "BTCFeatureAugmenter.augment() failed — "
-                                    "falling back to legacy XAU-centric assembly. "
+                                _btc_log.getLogger(__name__).error(
+                                    "BTCFeatureAugmenter.augment() CRASHED — "
                                     "BTC cross-asset slots [12][30][35][36] will be "
-                                    "incorrect.\n%s",
+                                    "zero-filled.  Train-serve skew is ACTIVE.  "
+                                    "Fix the augmenter before trusting brain inference.\n%s",
                                     _btc_tb.format_exc(),
                                 )
+                                # FIX-20260607-XXX: Do NOT silently fall back.
+                                # btc_aug remains None → assemble_swing_features()
+                                # will zero-fill slots [35-36] via legacy path.
+                                # This is intentionally visible — the operator
+                                # must fix the augmenter, not ignore the skew.
 
                         fv = assemble_swing_features(
                             schema_id,
@@ -5653,7 +6026,7 @@ def execute_live_cycle(
             if broker is not None:
                 mid, bid, ask = broker.fetch_prices(config.symbol)
             else:
-                mid, bid, ask = _mid_and_prices(mt5_worker, config.symbol)
+                mid, bid, ask, _tick_time = _mid_and_prices(mt5_worker, config.symbol)
         except Exception as _price_exc:  # noqa: BLE001
             # MT5 connection may have gone stale during cooldown — attempt reconnect
             try:
@@ -5662,7 +6035,7 @@ def execute_live_cycle(
                 if broker is not None:
                     mid, bid, ask = broker.fetch_prices(config.symbol)
                 else:
-                    mid, bid, ask = _mid_and_prices(mt5_worker, config.symbol)
+                    mid, bid, ask, _tick_time = _mid_and_prices(mt5_worker, config.symbol)
             except Exception:  # noqa: BLE001
                 print(
                     json.dumps(

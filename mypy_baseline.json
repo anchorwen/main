@@ -1,5 +1,4 @@
 {
-  "core/runtime/golden_master.py": 2,
-  "scripts/audit_btc_cross_validate.py": 1,
-  "scripts/check_preconditions.py": 2
+  "scripts/analyze_live_journal.py": 11,
+  "scripts/tuning/tune_btc_kalman_h4.py": 3
 }

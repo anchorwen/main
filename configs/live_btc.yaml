@@ -11,12 +11,18 @@ features:
   update_interval_seconds: 60
 brains:
   registry_entries:
-  - path: configs/brains_btc/BTC_Swing_V4.json
-    enabled: true
+  - path: configs/brains_btc/archive/BTC_Swing_V4.json
+    enabled: false  # RETIRED — SL/TP mismatch (trained 1.5/1.5 vs live 2.0/2.5). Replaced by V5.
   - path: configs/brains_btc/BTC_Swing_V5.json
     enabled: true
-  - path: configs/brains_btc/BTC_Swing_LGB_V1.json
-    enabled: false
+  - path: configs/brains_btc/archive/BTC_Swing_LGB_V1.json
+    enabled: false  # RETIRED — WR=14.3%, PF=0.19
+  - path: configs/brains_btc/BTC_Swing_V6_MultiTF_LGB_v2.json
+    enabled: true  # Phase D: SHADOW (vote_weight=0.0) — signals recorded, zero trade impact
+  - path: configs/brains_btc/BTC_Swing_V7_MultiTF_LGB_v1.json
+    enabled: true  # V7: SHADOW (vote_weight=0.0) — V6 vs V7 correlation对照组
+  - path: configs/brains_btc/BTC_Swing_V8_MultiTF_LGB_v1.json
+    enabled: true  # V8: SHADOW (vote_weight=0.0) — 2.9yr data, bidirectional test
 gate:
   gate_policy_config: configs/live_gate_policy.json
   auto_recovery:
@@ -76,7 +82,7 @@ exit_management:
   trail_atr_mult_low: 1.5
   trail_atr_mult_high: 3.0
   breakeven_threshold_atr: 1.5
-  trail_activation_atr: 1.0  # FIX-064: trail only after 1.0x ATR profit
+  trail_activation_atr: 0.3  # FIX-20260607-XXX: 1.0→0.3. BTC vol regime: don't wait 1.0x ATR profit before defending. Allow trail to tighten toward entry even on marginal favourable moves.
   brain_reeval_interval: 5
   flip_exit_threshold: 0.5
   confidence_drop_threshold: 0.15  # FIX-055: 0.1→0.15. BTC conf 0.6-0.7, 0.1 drop=15% relative decline too sensitive
