@@ -189,3 +189,30 @@ python scripts/register_fix.py --help
 ```
 
 **触发条件**: 仅当本次会话中存在 DQAF 诊断 → 修复 → commit 的完整链路时触发。非诊断性编辑（typo、格式、配置值修改）不受此锁约束。
+
+---
+
+### Iron Law #10: 渐进式随改随升 (Incremental Upgrade Doctrine)
+
+**触发条件**: 修改以下热路径文件中的任意一个时自动触发：
+- `core/runtime/live_cycle.py`
+- `scripts/live_intent_loop.py`
+- `core/execution/strategy_line.py`
+- `core/execution/execution_queue.py`
+
+**核心约束**: 修改上述文件时，必须扫描该文件中是否存在 `# noqa: BLE001` 标记。若存在，须将对应站点的 `try: ... except Exception: pass` 替换为 `with fail_open_guard("ComponentName"): ...`。
+
+**背景**: 2026-06-07 战役将 BLE001 从 566 降至 0，确立了 29 个存量 FAIL_OPEN 站点的"渐进式随改随升"纲领（FIX-148）。`fail_open_guard()` 工具已部署在 `core/runtime/fault_handler.py`（FIX-146）。
+
+**执行规则**:
+- 每次修改上述文件时，至少替换 **1 个** `# noqa: BLE001` 站点
+- 替换后删除对应的 `# noqa: BLE001` 注释
+- 若文件中已无 `# noqa: BLE001`，此铁律自动跳过
+- 不得专门为替换 BLE001 而修改热路径文件（避免无谓风险）
+
+**存量站点分布** (供参考):
+| 文件 | 存量 |
+|------|------|
+| `live_cycle.py` | 7 |
+| `live_intent_loop.py` | 20 |
+| `strategy_line.py` | 2 |
