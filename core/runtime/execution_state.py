@@ -38,6 +38,7 @@ def save_execution_state(
     sl_streak_global_block: float = 0.0,
     consecutive_degraded: int = 0,
     circuit_breaker_tripped: bool = False,
+    circuit_breaker_tripped_at: float = 0.0,
     intraday_dd_active: bool = False,
 ) -> None:
     """Snapshot all execution guard state to disk (atomic write via tmp+replace)."""
@@ -57,6 +58,7 @@ def save_execution_state(
         "sl_streak_global_block": sl_streak_global_block,
         "consecutive_degraded": consecutive_degraded,
         "circuit_breaker_tripped": circuit_breaker_tripped,
+        "circuit_breaker_tripped_at": circuit_breaker_tripped_at,
         "intraday_dd_active": intraday_dd_active,
     }
 
@@ -181,6 +183,10 @@ def restore_execution_state(
     )
     if data.get("circuit_breaker_tripped", False):
         state._circuit_breaker_tripped = True
+        state._circuit_breaker_tripped_at = max(
+            getattr(state, "_circuit_breaker_tripped_at", 0.0),
+            data.get("circuit_breaker_tripped_at", 0.0),
+        )
 
     # Intraday DD kill — prevents restart from clearing drawdown block
     if data.get("intraday_dd_active", False):

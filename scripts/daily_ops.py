@@ -27,6 +27,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 SCHEMA_VERSION = "daily_ops.v1"
 
 THIS_DIR = Path(__file__).resolve().parent
@@ -287,12 +289,10 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
         return {"step": "calibrator_feed", "status": "skipped", "reason": "no_journal"}
 
     # Track last processed position to avoid re-scanning entire journal
-    import contextlib
-
     state_path = Path(base_dir) / "calibrator_feed_state.json"
     last_pos = 0
     if state_path.exists():
-        with contextlib.suppress(Exception):
+        with fail_open_guard("CalibratorFeedStateRead"):
             last_pos = json.loads(state_path.read_text(encoding="utf-8")).get("last_line", 0)
 
     # Read new lines since last position
@@ -366,17 +366,18 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             continue
 
         ts = entry.get("recorded_at", "")
-        with contextlib.suppress(Exception):
+        with fail_open_guard("CalibratorFeedUpdate"):
             cal.update(float(p_win), label, timestamp_utc=str(ts))
             new_samples += 1
 
     # Save position for next run
-    with contextlib.suppress(Exception):
+    with fail_open_guard("CalibratorFeedStateSave"):
         state_path.write_text(
             json.dumps(
                 {
                     "last_line": len(lines),
-                    "updated_utc": str(cal.describe().get("sample_count", "?")),
+                    "updated_utc": datetime.now(UTC).isoformat(),
+                    "sample_count": cal.describe().get("sample_count", 0),
                 }
             ),
             encoding="utf-8",

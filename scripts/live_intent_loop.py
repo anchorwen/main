@@ -1913,6 +1913,7 @@ def main(argv: list[str] | None = None) -> int:
                     ).ExecutionQueueFatalError,
                 ):
                     state._circuit_breaker_tripped = True
+                    state._circuit_breaker_tripped_at = time.time()
                     state.block_new_entries = True
                 _tb = traceback.format_exc()
                 print(
@@ -1973,6 +1974,9 @@ def main(argv: list[str] | None = None) -> int:
                         sl_streak_global_block=getattr(state, "sl_streak_blocked_all_until", 0.0),
                         consecutive_degraded=state._consecutive_degraded_cycles,
                         circuit_breaker_tripped=state._circuit_breaker_tripped,
+                        circuit_breaker_tripped_at=getattr(
+                            state, "_circuit_breaker_tripped_at", 0.0
+                        ),
                         intraday_dd_active=state.block_new_entries,
                     )
                 except Exception:  # noqa: BLE001
@@ -2208,6 +2212,9 @@ def main(argv: list[str] | None = None) -> int:
                         sl_streak_global_block=getattr(state, "sl_streak_blocked_all_until", 0.0),
                         consecutive_degraded=state._consecutive_degraded_cycles,
                         circuit_breaker_tripped=state._circuit_breaker_tripped,
+                        circuit_breaker_tripped_at=getattr(
+                            state, "_circuit_breaker_tripped_at", 0.0
+                        ),
                         intraday_dd_active=state.block_new_entries,
                     )
                 except Exception:  # noqa: BLE001

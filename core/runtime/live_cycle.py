@@ -132,6 +132,9 @@ class LiveCycleConfig:
     max_bridge_silence_seconds: float = 300.0
     # Phase B: single-cycle duration above this threshold increments degraded counter.
     cycle_stall_threshold_seconds: float = 180.0
+    circuit_breaker_cooldown_seconds: float = (
+        600.0  # 10min — breaker auto-reset after cooldown + conditions clear
+    )
 
     # ── Multi-strategy mode ──
     multi_strategy_enabled: bool = True  # False → fallback to old CapitalAllocator
@@ -275,6 +278,9 @@ class LiveCycleState:
     # Circuit breaker: 3 consecutive degraded cycles → management-only mode
     _consecutive_degraded_cycles: int = 0
     _circuit_breaker_tripped: bool = False
+    _circuit_breaker_tripped_at: float = (
+        0.0  # Unix ts when breaker last tripped (for cooldown reset)
+    )
 
     # FIX-20260607-XXX: Staleness Contract — consecutive cycles with stale data
     # triggers circuit breaker (data pipeline freeze → fail-closed).
@@ -2633,6 +2639,7 @@ def execute_live_cycle(
     _bridge_silence = time.time() - state._last_bridge_ack_time
     if _bridge_silence > config.max_bridge_silence_seconds and not state._circuit_breaker_tripped:
         state._circuit_breaker_tripped = True
+        state._circuit_breaker_tripped_at = time.time()
         print(
             json.dumps(
                 {
@@ -2678,7 +2685,7 @@ def execute_live_cycle(
                         _side = "short" if _pos.type == 1 else "long"
                         _vol = float(getattr(_pos, "volume", 0) or 0)
                         _close_side = "buy" if _side == "short" else "sell"
-                        try:  # noqa: SIM105
+                        with fail_open_guard("CircuitBreakerClose"):
                             _cb_result = mt5_worker.order_send(
                                 symbol=config.symbol,
                                 order_type=1,  # Market
@@ -2697,19 +2704,6 @@ def execute_live_cycle(
                                         "side": _side,
                                         "volume": _vol,
                                         "result": str(_cb_result)[:200],
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                                flush=True,
-                            )
-                        except Exception as _cb_close_exc:  # noqa: BLE001
-                            print(
-                                json.dumps(
-                                    {
-                                        "event": "circuit_breaker_close_failed",
-                                        "time": _utc_iso(),
-                                        "ticket": _ticket,
-                                        "error": str(_cb_close_exc)[:200],
                                     },
                                     ensure_ascii=False,
                                 ),
@@ -2754,6 +2748,7 @@ def execute_live_cycle(
         )
         if state._consecutive_degraded_cycles >= 3:
             state._circuit_breaker_tripped = True
+            state._circuit_breaker_tripped_at = time.time()
             print(
                 json.dumps(
                     {
@@ -2767,21 +2762,43 @@ def execute_live_cycle(
                 flush=True,
             )
 
-    # Reset on first non-degraded cycle
-    if not degraded_wakeup and state._consecutive_degraded_cycles > 0:
-        print(
-            json.dumps(
-                {
-                    "event": "circuit_breaker_reset",
-                    "time": _utc_iso(),
-                    "previous_consecutive_degraded": state._consecutive_degraded_cycles,
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
+    # ── Circuit breaker unified auto-reset (DQAF-20260608-001) ──
+    # Old logic (line 2774): `if not degraded_wakeup and _consecutive_degraded_cycles > 0`
+    # only covered the cycle-stall/degraded-wakeup trip paths.  Bridge-silence and
+    # ExecutionQueueFatalError trips never incremented _consecutive_degraded_cycles,
+    # so the auto-reset condition was permanently false → breaker stuck forever.
+    #
+    # New logic: cooldown-based unified reset.  After circuit_breaker_cooldown_seconds,
+    # if ALL triggering conditions have cleared, reset the breaker unconditionally.
+    if state._circuit_breaker_tripped:
+        _cooldown_elapsed = (
+            time.time() - state._circuit_breaker_tripped_at
+        ) > config.circuit_breaker_cooldown_seconds
+        _bridge_alive = _bridge_silence <= config.max_bridge_silence_seconds
+        _not_stalled = _cycle_duration <= config.cycle_stall_threshold_seconds
+        _not_degraded = not degraded_wakeup
+        if _cooldown_elapsed and _bridge_alive and _not_stalled and _not_degraded:
+            print(
+                json.dumps(
+                    {
+                        "event": "circuit_breaker_reset",
+                        "time": _utc_iso(),
+                        "reason": "cooldown_elapsed_all_conditions_clear",
+                        "tripped_duration_seconds": round(
+                            time.time() - state._circuit_breaker_tripped_at, 1
+                        ),
+                        "previous_consecutive_degraded": state._consecutive_degraded_cycles,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            state._circuit_breaker_tripped = False
+            state._circuit_breaker_tripped_at = 0.0
+            state._consecutive_degraded_cycles = 0
+    elif not degraded_wakeup and state._consecutive_degraded_cycles > 0:
+        # Breaker NOT tripped but degraded counter > 0 → reset counter on clean cycle
         state._consecutive_degraded_cycles = 0
-        state._circuit_breaker_tripped = False
 
     # ── FIX-20260603-074: On first cycle, reconcile positions closed during
     # downtime BEFORE the restart state bootstrap.  Positions in known_open_tickets
@@ -3259,6 +3276,7 @@ def execute_live_cycle(
             )
             if state._consecutive_stale_cycles >= 3:
                 state._circuit_breaker_tripped = True
+                state._circuit_breaker_tripped_at = time.time()
                 print(
                     json.dumps(
                         {
@@ -3879,25 +3897,16 @@ def execute_live_cycle(
                 state_path=f"{config.base_dir}/conformal_calibrator_state.json",
             )
             _cal.cold_start_from_journal(f"{config.base_dir}/live_trade_journal.jsonl")
-        except Exception as _cal_exc:  # noqa: BLE001
-            print(
-                json.dumps(
-                    {
-                        "event": "conformal_calibrator_init_error",
-                        "time": _utc_iso(),
-                        "error": str(_cal_exc),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
+        except Exception:
+            with fail_open_guard("ConformalCalibratorInit"):
+                raise
 
         # ── MetaFilterGate (47-dim LGB, for non-OU strategies if any) ──
         try:
             from core.execution.meta_filter_gate import MetaFilterGate
 
             _mg = MetaFilterGate(
-                model_dir=f"{config.base_dir}/models/meta_filter_v3",
+                model_dir="data/models/meta_filter_v3",
                 threshold=META_FILTER_GATE_THRESHOLD,
                 calibrator=_cal,
             )
@@ -3920,18 +3929,9 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except Exception as _mg_exc:  # noqa: BLE001
-            print(
-                json.dumps(
-                    {
-                        "event": "meta_filter_gate_init_error",
-                        "time": _utc_iso(),
-                        "error": str(_mg_exc),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
+        except Exception:
+            with fail_open_guard("MetaFilterGateInit"):
+                raise
 
         # ── Conformal OU Gate (physics-based, for OU strategies) ──
         try:
@@ -4032,6 +4032,7 @@ def execute_live_cycle(
                         )
                         if state._consecutive_stale_features >= 3:
                             state._circuit_breaker_tripped = True
+                            state._circuit_breaker_tripped_at = time.time()
                             print(
                                 json.dumps(
                                     {
@@ -6501,6 +6502,7 @@ def execute_live_cycle(
         state._consecutive_degraded_cycles += 1
         if state._consecutive_degraded_cycles >= 3:
             state._circuit_breaker_tripped = True
+            state._circuit_breaker_tripped_at = time.time()
             print(
                 json.dumps(
                     {

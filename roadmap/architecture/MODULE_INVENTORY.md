@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-07T16:46:29Z
+> **自动生成**: 2026-06-07T17:54:45Z
 > **扫描模块数**: 483
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -456,12 +456,12 @@
 | `execution_gates.py` | ✅ active | RuntimeRiskGate, RuntimeGovernanceGate, RuntimeExecutionApprovalChain | 6 | 107 | — | |
 | `execution_gateway_router.py` | ✅ active | ExecutionGatewayRouter | 5 | 30 | — | |
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
-| `execution_state.py` | ✅ active | — | 4 | 187 | — | |
+| `execution_state.py` | ✅ active | — | 4 | 193 | — | |
 | `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 9 | 345 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
 | `golden_master.py` | ✅ active | — | 8 | 233 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 25 | 6470 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 26 | 6521 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 311 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 286 | — | |
@@ -553,7 +553,7 @@
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `classify_ble001.py` | ✅ active | — | 1 | 63 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 27 | 1278 | — | |
+| `daily_ops.py` | ✅ active | — | 27 | 1279 | — | |
 | `deploy_blue_green.py` | ✅ active | — | 7 | 126 | — | |
 | `diagnose_feature_drift.py` | ✅ active | — | 4 | 229 | — | |
 | `dqaf_collect.py` | ✅ active | — | 12 | 565 | — | |
@@ -569,7 +569,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 369 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 5 | 2237 | — | |
+| `live_intent_loop.py` | ✅ active | — | 5 | 2244 | — | |
 | `live_launcher.py` | ✅ active | — | 13 | 831 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 484 | — | |

@@ -122,9 +122,7 @@ def test_load_returns_none_for_missing_file():
 def test_load_rejects_stale_state(tmp_state_path):
     """State older than 24h is rejected and deleted."""
     tmp_state_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_state_path.write_text(
-        json.dumps({"version": 1, "budgets": {}}), encoding="utf-8"
-    )
+    tmp_state_path.write_text(json.dumps({"version": 1, "budgets": {}}), encoding="utf-8")
     # Make file appear 25 hours old
     stale_time = time.time() - (25 * 3600)
     os.utime(tmp_state_path, (stale_time, stale_time))
@@ -208,9 +206,7 @@ def test_restore_hydrates_budgets(tmp_path, mock_strategies):
 
     # Budget should have been hydrated
     barrier_budget = mock_strategies["barrier_12bar"].budget
-    barrier_budget.load_state.assert_called_once_with(
-        {"daily_pnl": -2.5, "consecutive_losses": 2}
-    )
+    barrier_budget.load_state.assert_called_once_with({"daily_pnl": -2.5, "consecutive_losses": 2})
 
 
 def test_restore_hydrates_circuit_breaker(tmp_path, mock_strategies):
@@ -241,12 +237,14 @@ def test_restore_hydrates_circuit_breaker(tmp_path, mock_strategies):
     state.sl_streak_blocked_all_until = 0.0
     state._consecutive_degraded_cycles = 0
     state._circuit_breaker_tripped = False
+    state._circuit_breaker_tripped_at = 0.0
     state.block_new_entries = False
 
     restore_execution_state(state, mock_strategies, data_dir=str(tmp_path))
 
     assert state._consecutive_degraded_cycles == 3
     assert state._circuit_breaker_tripped is True
+    assert state._circuit_breaker_tripped_at >= 0.0
     assert state.block_new_entries is True
 
 
@@ -259,6 +257,7 @@ def test_restore_handles_missing_file_gracefully(tmp_path, mock_strategies):
     state.sl_streak_blocked_all_until = 0.0
     state._consecutive_degraded_cycles = 0
     state._circuit_breaker_tripped = False
+    state._circuit_breaker_tripped_at = 0.0
     state.block_new_entries = False
 
     # Should not raise
