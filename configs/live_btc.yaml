@@ -275,7 +275,9 @@ strategy_lines:
       min_rr_ratio: 0.85
     tp:
       base_atr_mult: 2.5
-      partial_tp_enabled: false
+      partial_tp_enabled: true
+      partial_tp_r: 1.0     # Free-Ride: close 50% at +1.0R, SL → breakeven
+      partial_tp_ratio: 0.5  # worst case after TP1: net +0.5R
     exit:
       trail_enabled: true
       trail_atr_mult: 2.0
