@@ -398,6 +398,7 @@ class ContractGroupConsensus:
             or (short_count > 0 and long_count == 0)
         )
         if _all_agree and (long_count + short_count) > 0:
+            direction: Direction = "neutral"  # narrowed per branch below
             if long_count > 0:
                 direction = "long"
                 _total_conf = sum(
