@@ -32,7 +32,8 @@ FIX-YYYYMMDD-NNN
 
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
-| FIX-20260607-147 | 2026-06-07 | parliament | **contract_groups.py mypy 清零**: Added `direction: Direction` type annotation before branch narrowing. Only production-code mypy error remaining after 179 test-file errors excluded. Baseline error count reduced by 1. | RC-02 |
+| FIX-20260607-148 | 2026-06-07 | governance | **BLE001 Phase 2 tactical deferral**: 29 FAIL_OPEN sites audited — 90% are state-persistence/shutdown-cleanup (best-effort degradation, acceptable). High-risk trading-path silent-failures already covered by FIX-138 (Fail-Closed bootstrap) + FIX-140 (dispatch circuit-breaker). Established Incremental-Upgrade doctrine: replace `except: pass` with `fail_open_guard()` when next touching each hot-path file. `fail_open_guard` tool deployed (FIX-146). BLE001 count: 566→0. ruff: 0 warnings. mypy production: 0. | RC-07 |
+| FIX-20260607-147 | 2026-06-07 | parliament | **contract_groups.py mypy 清零**: Added `direction: Direction` type annotation before branch narrowing. | RC-02 |
 | FIX-20260607-146 | 2026-06-07 | runtime-live, testing | **BLE001 governance Phase 1: `fail_open_guard()` context manager**: New DEGRADE-level wrapper in `fault_handler.py`. 5 unit tests. | RC-07 |
 | FIX-20260607-145 | 2026-06-07 | ledger-services, scripts | **Journal compaction: atomic prune of old rejected entries (>30d)**: `compact_journal()` in `journal_cleanup.py` with `os.replace()` atomic swap + FileLock. | RC-11 |
 | FIX-20260607-144 | 2026-06-07 | runtime-live | **Golden Master 存量 mypy 清零**: (1) 补充缺失常量 `_ENV_REPLAY = "GOLDEN_MASTER_REPLAY"` (F821 undefined name)。(2) `_iterable` 添加 `Any` 类型注解消除 if/elif 分支类型不兼容告警 (Generator vs dict_items)。两个均为存量错误，非本次会话引入。 | RC-06 |
