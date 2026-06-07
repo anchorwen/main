@@ -207,7 +207,7 @@ class CommunicationDispatcher:
             if self._metrics:
                 self._metrics.inc(DISPATCH_TRANSPORT_DELIVERED)
             return result
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             attempts.append(
                 {
                     "adapter_name": primary_adapter_name,
@@ -256,7 +256,7 @@ class CommunicationDispatcher:
                 if self._metrics:
                     self._metrics.inc(DISPATCH_PROTOCOL_VALIDATED)
                 return fallback_result
-            except Exception as fallback_exc:
+            except Exception as fallback_exc:  # noqa: BLE001
                 attempts.append(
                     {
                         "adapter_name": fallback_adapter_name,

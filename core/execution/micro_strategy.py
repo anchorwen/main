@@ -43,7 +43,7 @@ class MicroStrategy(StrategyLine):
                     if seq is not None:
                         try:
                             prop = b_info["adapter"].run(None, seq)
-                        except Exception as _hmre_exc:
+                        except Exception as _hmre_exc:  # noqa: BLE001
                             # Fallback: reshape and use infer_sequence() directly,
                             # bypassing the rolling buffer (infer() expects 9-dim
                             # vectors; passing a flat ravel would corrupt the buffer).
@@ -51,7 +51,7 @@ class MicroStrategy(StrategyLine):
                                 seq_batch = seq.astype(np.float32).reshape(1, seq.shape[0], 9)
                                 raw = b_info["adapter"].infer_sequence(seq_batch)
                                 prop = b_info["adapter"].get_signal(raw)
-                            except Exception:
+                            except Exception:  # noqa: BLE001
                                 raise _hmre_exc from None
                     else:
                         continue  # sequence not available for this TF
@@ -62,10 +62,10 @@ class MicroStrategy(StrategyLine):
                 try:
                     if not getattr(prop, "brain_id", None):
                         prop.brain_id = bid
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
                 proposals.append(prop)
-            except Exception as _exc:
+            except Exception as _exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {

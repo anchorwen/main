@@ -204,7 +204,7 @@ class PortfolioRiskController:
         try:
             corr = float(np.corrcoef(r1, r2)[0, 1])
             return corr if not np.isnan(corr) else 0.0
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning(
                 "Correlation computation failed for %s vs %s — assuming fully correlated",
                 s1,
@@ -417,7 +417,7 @@ class PortfolioRiskController:
                 )
                 if cvar_value > self.var_max_pct * _equity:
                     var_warning = True
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning(
                 "VaR/CVaR computation failed for strategy=%s — risk check skipped",
                 strategy,

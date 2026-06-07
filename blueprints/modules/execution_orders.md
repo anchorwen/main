@@ -229,3 +229,5 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 ```bash
 python -m pytest tests/ -k "execution or order or fill" -q
 ```
+
+| FIX-20260607-143 | 2026-06-07 | cursor-agent | — | **Trend Maturity Discount + Kalman Velocity Flip Exit**: (1) `trend_maturity_discount()` in strategy_line.py — Hurst persistence loss + Kalman velocity decay → position size scaling for trend/swing strategies. (2) Kalman velocity sign flip as fast-path exit in evaluate_brain_exit() — exits BEFORE price hits SL when |v|>3bps reverses. Pure wiring — signals already computed, now consumed. DQAF-20260607-007. | RC-12 |

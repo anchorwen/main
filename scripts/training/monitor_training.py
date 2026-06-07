@@ -107,7 +107,7 @@ def get_training_pids() -> list[dict[str, Any]]:
                         "commandline": parts[1].strip() if len(parts) == 3 else "",
                     }
                 )
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
     return results
 
@@ -151,7 +151,7 @@ def scan_result_files(manifests_dir: Path) -> tuple[int, int, list[dict]]:
                 ok += 1
             else:
                 fail += 1
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
     return ok, fail, details
 
@@ -182,7 +182,7 @@ def read_training_log_tail(batch_dir: Path, n_lines: int = 15) -> str:
         text = log_path.read_text(encoding="utf-8", errors="replace")
         lines = [l.strip() for l in text.splitlines() if l.strip()]
         return "\n".join(lines[-n_lines:]) if lines else "(log empty)"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return f"(read error: {e})"
 
 
@@ -192,7 +192,7 @@ def read_monitor_state(batch_dir: Path) -> dict[str, Any]:
     if state_path.exists():
         try:
             return json.loads(state_path.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
     return {"last_ok_count": 0, "last_ok_time": None, "stuck_alerts": 0}
 

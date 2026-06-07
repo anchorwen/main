@@ -138,7 +138,7 @@ def resolve_p_win_from_brains(
             continue
         try:
             m = pnl_store.get_metrics(str(brain_id), window=100)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             skipped_reasons.append(f"{brain_id}:get_metrics_error:{type(exc).__name__}")
             continue
         if m is None:

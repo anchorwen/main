@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 _ENV_DISABLE = "GOLDEN_MASTER_RECORD"  # set to "0" to disable
+_ENV_REPLAY = "GOLDEN_MASTER_REPLAY"  # set to "1" to enable replay mode
 _DEFAULT_PATH = "data/golden_master.jsonl"
 
 
@@ -51,6 +52,7 @@ def record_cycle_inputs(
     trend_direction: str,
     trend_strength: float,
     macro_regime: str,
+    hurst: float | None = None,  # FIX-20260607-143: M5 Hurst for trend maturity observability
     risk_budget_usd: float,
     session_volume_mult: float,
     health_volume_mult: float,
@@ -89,6 +91,7 @@ def record_cycle_inputs(
             "trend_direction": trend_direction,
             "trend_strength": round(trend_strength, 4),
             "macro_regime": macro_regime,
+            "hurst": round(hurst, 4) if hurst is not None else None,
             "risk_budget_usd": round(risk_budget_usd, 2),
             "session_volume_mult": round(session_volume_mult, 4),
             "health_volume_mult": round(health_volume_mult, 4),
@@ -112,6 +115,7 @@ def record_cycle_outputs(
 
     outputs: dict[str, Any] = {}
     # strategy_results may be a dict {name: {...}} or a list [{strategy: name, ...}]
+    _iterable: Any  # Generator or dict_items — resolved at runtime
     if isinstance(strategy_results, list):
         _iterable = ((r.get("strategy", r.get("strategy_name", "?")), r) for r in strategy_results)
     elif isinstance(strategy_results, dict):

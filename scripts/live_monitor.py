@@ -216,7 +216,7 @@ def _check_positions(mt5_terminal_path: str | None, symbol: str) -> dict[str, An
         result["total_pnl"] = round(total_pnl, 2)
         result["available"] = True
         mt5.shutdown()
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
     return result
@@ -457,7 +457,7 @@ def main(argv: list[str] | None = None) -> int:
                 lookback_hours=args.lookback_hours,
             )
             print(json.dumps(snapshot, ensure_ascii=False, default=str), flush=True)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             error_event = {
                 "event": "monitor_error",
                 "time": _utc_now_iso(),

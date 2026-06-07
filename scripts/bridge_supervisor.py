@@ -102,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
         except KeyboardInterrupt:
             _log("Bridge supervisor stopped by user (Ctrl+C)", args.log_path)
             return 0
-        except Exception:
+        except Exception:  # noqa: BLE001
             restart_count += 1
             total_cycles += 1
             _log(

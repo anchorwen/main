@@ -3,17 +3,17 @@
   "brain_states": {
     "BTC_Swing_V4": {
       "brain_id": "BTC_Swing_V4",
-      "status": "live",
+      "status": "probation",
       "registered_at": "2026-05-31T16:47:29.842195",
-      "last_transition_at": "2026-06-05T22:04:45.484657",
-      "transition_count": 5,
+      "last_transition_at": "2026-06-06T22:04:43.892235",
+      "transition_count": 6,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.46,
-        "profit_factor": 0.83,
-        "sharpe_ratio": -19.8,
+        "win_rate": 0.41,
+        "profit_factor": 0.48,
+        "sharpe_ratio": -69.72,
         "total_trades": 100,
-        "pnl_r": -656.42
+        "pnl_r": -2096.93
       }
     },
     "BTC_Swing_LGB_V1": {
@@ -39,11 +39,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.46,
-        "profit_factor": 0.83,
-        "sharpe_ratio": -19.8,
+        "win_rate": 0.41,
+        "profit_factor": 0.48,
+        "sharpe_ratio": -69.72,
         "total_trades": 100,
-        "pnl_r": -656.42
+        "pnl_r": -2096.93
       }
     }
   },
@@ -348,6 +348,13 @@
       "reason": "auto-registered from disk config (config status=candidate)",
       "timestamp": "2026-06-06T02:26:44.334634+00:00",
       "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V4",
+      "from_status": "live",
+      "to_status": "probation",
+      "reason": "pnl:warning",
+      "timestamp": "2026-06-06T22:04:43.892235"
     }
   ]
 }

@@ -111,7 +111,7 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
 
         try:
             data = json.loads(Path(artifact_path).read_text(encoding="utf-8"))
-        except Exception:
+        except Exception:  # noqa: BLE001
             self._backend = "online_sgd:zeros"
             self._init_zeros()
             emit_brain_alert(
@@ -137,7 +137,7 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
                     self._n_features,
                     self._total_updates,
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 self._backend = "online_mlp:zeros"
                 self._init_mlp_zeros()
                 emit_brain_alert(
@@ -158,7 +158,7 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
                     self._classes.tolist(),
                     self._total_updates,
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 self._backend = "online_sgd:zeros"
                 self._init_zeros()
                 emit_brain_alert(
@@ -419,7 +419,7 @@ class OnlineLearnerAdapter(BaseBrainAdapter):
 
         try:
             clf.partial_fit(x, y, classes=self._classes)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("OnlineLearnerAdapter: SGD step failed: %s", e)
             return False
 

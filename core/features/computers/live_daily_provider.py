@@ -89,7 +89,7 @@ class LiveDailyFeatureProvider:
             if rates is not None and len(rates) > 0:
                 latest = int(rates[-1]["time"])
                 return latest > self._last_bar_time
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
         return False
 
@@ -107,7 +107,7 @@ class LiveDailyFeatureProvider:
                 dts = self._computer._d1_datetimes
                 if dts and idx < len(dts):
                     self._last_bar_time = int(dts[idx].timestamp())
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     def _sync_csv(self) -> None:
@@ -197,7 +197,7 @@ class LiveDailyFeatureProvider:
                 ),
                 flush=True,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             print(
                 json.dumps(
                     {
@@ -221,5 +221,5 @@ class LiveDailyFeatureProvider:
             if self._cross_assets:
                 kwargs["cross_assets"] = self._cross_assets
             self._computer = DailyFeatureComputer(**kwargs)
-        except Exception:
+        except Exception:  # noqa: BLE001
             self._computer = None

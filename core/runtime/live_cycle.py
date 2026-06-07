@@ -208,9 +208,15 @@ class LiveCycleState:
     _recent_consensus_scores: list[float] = field(default_factory=list)  # rolling 500 scores (P80)
     _reentry_states: dict[str, Any] = field(default_factory=dict)  # {strategy_name: ReentryState}
     _bootstrap_degraded: bool = False  # FIX-138: set True when restart bootstrap fails
+    # ── FIX-20260607-007: Kalman velocity for exit management ──
+    _last_kalman_velocity_bps: float | None = None
     # ── FIX-20260606-138 Phase 2: cross-cycle exit retry cooldown ──
-    _exit_reject_streak: dict[int, int] = field(default_factory=dict)  # ticket → consecutive rejects
-    _exit_reject_cooldown: dict[int, float] = field(default_factory=dict)  # ticket → cooldown_until ts
+    _exit_reject_streak: dict[int, int] = field(
+        default_factory=dict
+    )  # ticket → consecutive rejects
+    _exit_reject_cooldown: dict[int, float] = field(
+        default_factory=dict
+    )  # ticket → cooldown_until ts
     # ── FIX-20260603-067 P2: gate telemetry funnel ──
     _gate_stats: dict[str, dict[str, int]] = field(default_factory=dict)
     _gate_stats_cycles: int = 0
@@ -326,7 +332,7 @@ def _load_daily_ops_state(base_dir: str) -> float:
             with open(state_path) as f:
                 data = json.load(f)
             return float(data.get("last_daily_ops_utc", 0.0))
-    except Exception as _exc:
+    except Exception as _exc:  # noqa: BLE001
         import logging as _logging
 
         _logging.getLogger(__name__).warning(
@@ -450,7 +456,7 @@ def _dispatch_modify_trail(
             adapter_name="mt5",
             extensions={"mt5_terminal_path": config.mt5_terminal_path},
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         print(
             json.dumps(
                 {
@@ -804,10 +810,9 @@ def _execute_management_phase(
                         # Prefer detail.request.position (the actual MT5
                         # position ticket being closed).  Fall back to the
                         # close order's own position_ticket.
-                        _pos_tkt = (
-                            _e.get("detail", {}).get("request", {}).get("position")
-                            or _e.get("position_ticket")
-                        )
+                        _pos_tkt = _e.get("detail", {}).get("request", {}).get(
+                            "position"
+                        ) or _e.get("position_ticket")
                         if _pos_tkt is not None:
                             _pos_tkt = int(_pos_tkt)
                             if _pos_tkt in _seen_positions:
@@ -828,7 +833,7 @@ def _execute_management_phase(
                 _ctx["consecutive_losses"] = _consec_losses
                 _ctx["rolling_win_rate"] = round(_win_count / max(1, _trade_count), 4)
                 _ctx["total_trades_window"] = _trade_count
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass  # journal read is best-effort for alerts
 
             if pnl_ledger is not None:
@@ -1100,7 +1105,7 @@ def _execute_management_phase(
                     _strat_magic = STRATEGY_TO_MAGIC.get(_sname, 0)
                     if _strat_magic:
                         _close_payload["magic"] = _strat_magic
-                except Exception:
+                except Exception:  # noqa: BLE001
                     logger.warning("Magic resolution failed for partial close — using default")
             _open_entry = state.known_open_tickets.get(pos.ticket, {})
             _open_msg_id = _open_entry.get("message_id", "")
@@ -1172,7 +1177,7 @@ def _execute_management_phase(
                         extensions={"mt5_terminal_path": config.mt5_terminal_path},
                     )
                     _ptp_dispatched = True
-            except Exception as _ptp_exc:
+            except Exception as _ptp_exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {
@@ -1342,7 +1347,7 @@ def _execute_management_phase(
         if micro_feature_computer is not None:
             try:
                 mgmt_sequences = micro_feature_computer.compute_all_sequences(32)
-            except Exception as _seq_exc:
+            except Exception as _seq_exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {
@@ -1617,7 +1622,7 @@ def _execute_management_phase(
                                     if _dispatched:
                                         pm.clear_position(ticket=pos.ticket)
                                     return True
-                            except Exception:
+                            except Exception:  # noqa: BLE001
                                 logger.warning("OU brain exit failed — continuing management")
                             break  # only one OU brain
 
@@ -1625,7 +1630,11 @@ def _execute_management_phase(
                 exit_reason = ""
                 if _flip_enabled:
                     should_exit, exit_reason = pm.evaluate_brain_exit(
-                        current_consensus, current_supporting, mid=mid, ticket=pos.ticket
+                        current_consensus,
+                        current_supporting,
+                        mid=mid,
+                        ticket=pos.ticket,
+                        kalman_velocity_bps=getattr(state, "_last_kalman_velocity_bps", None),
                     )
                 # ── Phase C Fix 3: Price-Confirmation Shield ──
                 # When confidence_decay triggers but price action confirms the
@@ -1670,7 +1679,7 @@ def _execute_management_phase(
                     if _dispatched:
                         pm.clear_position(ticket=pos.ticket)
                     return True
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {"event": "brain_reeval_error", "time": _utc_iso(), "error": str(exc)},
@@ -1743,7 +1752,7 @@ def _execute_management_phase(
                 if _dispatched:
                     pm.clear_position(ticket=pos.ticket)
                 return True
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             print(
                 json.dumps(
                     {"event": "meta_exit_error", "time": _utc_iso(), "error": str(exc)},
@@ -1992,7 +2001,7 @@ def _build_mia_close_entry(
             from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
 
             _resolved_strategy = MAGIC_TO_STRATEGY.get(int(_resolved_magic), "")
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("MIA enrichment magic resolution failed")
 
     return {
@@ -2195,6 +2204,9 @@ def _evaluate_strategy_lines(
     account_equity: float | None = None,
     cycle_count: int = 0,
     meta_signal_filter: Any = None,
+    # ── FIX-20260607-007: trend maturity signals ──
+    hurst: float | None = None,
+    kalman_velocity_bps: float | None = None,
     meta_filter_gate: Any = None,
     conformal_ou_gate: Any = None,
     micro_feature_dict: dict[str, float] | None = None,
@@ -2250,6 +2262,9 @@ def _evaluate_strategy_lines(
         family_entry_tracker=family_entry_tracker,
         mtf_price_service=mtf_price_service,
         meta_feature_vector=meta_feature_vector,
+        # ── FIX-20260607-007 ──
+        hurst=hurst,
+        kalman_velocity_bps=kalman_velocity_bps,
         reentry_states=reentry_states,
         reentry_sl_cooldown=reentry_sl_cooldown,
         reentry_sl_penalty=reentry_sl_penalty,
@@ -2476,7 +2491,7 @@ def execute_live_cycle(
                                 ),
                                 flush=True,
                             )
-                        except Exception as _cb_close_exc:
+                        except Exception as _cb_close_exc:  # noqa: BLE001
                             print(
                                 json.dumps(
                                     {
@@ -2493,7 +2508,7 @@ def execute_live_cycle(
                         # After emergency close, reset the circuit breaker
                         state._circuit_breaker_tripped = False
                         state.block_new_entries = True  # keep blocked — manual review needed
-            except Exception as _cb_exc:
+            except Exception as _cb_exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {
@@ -2699,15 +2714,17 @@ def execute_live_cycle(
                     # Enrich from MT5 position data
                     for _p in _mt5_positions:
                         if _p.ticket == _ot:
-                            _pos_data.update({
-                                "ticket": _ot,
-                                "direction": "short" if _p.type == 1 else "long",
-                                "entry_price": float(getattr(_p, "price_open", 0) or 0),
-                                "current_sl": float(getattr(_p, "sl", 0) or 0),
-                                "current_tp": float(getattr(_p, "tp", 0) or 0),
-                                "volume": float(getattr(_p, "volume", 0) or 0),
-                                "enriched_from_mt5": True,
-                            })
+                            _pos_data.update(
+                                {
+                                    "ticket": _ot,
+                                    "direction": "short" if _p.type == 1 else "long",
+                                    "entry_price": float(getattr(_p, "price_open", 0) or 0),
+                                    "current_sl": float(getattr(_p, "sl", 0) or 0),
+                                    "current_tp": float(getattr(_p, "tp", 0) or 0),
+                                    "volume": float(getattr(_p, "volume", 0) or 0),
+                                    "enriched_from_mt5": True,
+                                }
+                            )
                             break
                     state.known_open_tickets[_ot] = _pos_data
                 print(
@@ -2747,7 +2764,7 @@ def execute_live_cycle(
                 ),
                 flush=True,
             )
-        except Exception as _exc:
+        except Exception as _exc:  # noqa: BLE001
             print(
                 json.dumps(
                     {
@@ -2832,7 +2849,7 @@ def execute_live_cycle(
                                 state.portfolio_risk_controller.update_returns(
                                     _strategy, float(_pnl)
                                 )
-                            except Exception:
+                            except Exception:  # noqa: BLE001
                                 logger.warning(
                                     "PortfolioRiskController.update_returns failed "
                                     "strategy=%s pnl=%s",
@@ -2925,7 +2942,7 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     # ── Protection flag check ──
@@ -3513,7 +3530,7 @@ def execute_live_cycle(
                 state_path=f"{config.base_dir}/conformal_calibrator_state.json",
             )
             _cal.cold_start_from_journal(f"{config.base_dir}/live_trade_journal.jsonl")
-        except Exception as _cal_exc:
+        except Exception as _cal_exc:  # noqa: BLE001
             print(
                 json.dumps(
                     {
@@ -3554,7 +3571,7 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except Exception as _mg_exc:
+        except Exception as _mg_exc:  # noqa: BLE001
             print(
                 json.dumps(
                     {
@@ -3601,7 +3618,7 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except Exception as _oug_exc:
+        except Exception as _oug_exc:  # noqa: BLE001
             print(
                 json.dumps(
                     {
@@ -3696,7 +3713,7 @@ def execute_live_cycle(
                 state._recent_atr_values.append(current_atr)
                 if len(state._recent_atr_values) > 50:
                     state._recent_atr_values.pop(0)
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("Regime detector update failed — using stale regime values")
 
     # ── Feature gate: block garbage-in before it becomes garbage-out ──
@@ -3742,7 +3759,7 @@ def execute_live_cycle(
     try:
         if broker is not None:
             _account_equity = broker.get_account_equity()
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.warning("Broker equity fetch failed — falling back to MT5 direct query")
     if _account_equity is None and mt5_worker is not None:
         with FaultTolerantContext(
@@ -3840,6 +3857,9 @@ def execute_live_cycle(
         trend_strength: float = 0.0
         h4_trend_strength: float = 0.0
         macro_regime: str = "mixed"
+        # FIX-20260607-007: trend maturity signals for sizing + exit
+        _m5_hurst: float | None = None
+        _h1_kalman_velocity_bps: float | None = None
 
         if not config.no_mt5 and regime_gate is not None:
             try:
@@ -3859,6 +3879,15 @@ def execute_live_cycle(
                 h4_trend_strength = regime_gate_result.get("h4_trend_strength", 0.0)
                 macro_regime = regime_gate_result.get("macro_regime", "mixed")
                 regime_modulation = regime_gate_result.get("modulation")
+                # FIX-20260607-007: extract trend maturity signals for sizing + exit
+                _m5_hurst = regime_gate_result.get("m5_hurst")
+                _h1_ema_slope_raw = regime_gate_result.get("h1_ema_slope")
+                if _h1_ema_slope_raw is not None:
+                    # h1_ema_slope = velocity_scaled / 10000 ≈ velocity in % per bar
+                    # Convert to bps: multiply by 10000
+                    _h1_kalman_velocity_bps = round(float(_h1_ema_slope_raw) * 10000, 2)
+                # FIX-20260607-007: persist for next cycle's exit management
+                state._last_kalman_velocity_bps = _h1_kalman_velocity_bps
                 # ── Per-cycle regime gate diagnostic (FIX-20260527-004) ──
                 _global_act = (
                     regime_modulation.strategy_activation
@@ -3879,7 +3908,7 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-            except Exception as _rg_exc:
+            except Exception as _rg_exc:  # noqa: BLE001
                 state._regime_gate_stale_counter += 1
                 _stale_n = state._regime_gate_stale_counter
                 if _stale_n > 12:  # 1 hour at M5 — fail-closed
@@ -4060,7 +4089,7 @@ def execute_live_cycle(
                                                         pnl=_dd_pnl,
                                                     )
                                                     _dd_dispatched = _dd_wd.success
-                                                except Exception:
+                                                except Exception:  # noqa: BLE001
                                                     _dd_dispatched = False
                                             if not _dd_dispatched:
                                                 dispatch_live_order(
@@ -4091,7 +4120,7 @@ def execute_live_cycle(
                                                 ),
                                                 flush=True,
                                             )
-                                        except Exception as _fc_exc:
+                                        except Exception as _fc_exc:  # noqa: BLE001
                                             print(
                                                 json.dumps(
                                                     {
@@ -4163,7 +4192,7 @@ def execute_live_cycle(
                 from core.runtime.execution_state import restore_execution_state
 
                 restore_execution_state(state, strategies, data_dir=config.base_dir)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
         # Portfolio risk controller (persist for VaR/correlation tracking) + execution queue
@@ -4328,10 +4357,11 @@ def execute_live_cycle(
                 risk_budget_usd=_effective_risk_budget,
                 session_volume_mult=session_info.get("volume_mult", 1.0),
                 health_volume_mult=state._last_health_volume_mult or 1.0,
+                hurst=_m5_hurst,  # FIX-20260607-143: trend maturity observability
                 feature_vector_sample=_fv_sample,
                 data_dir=config.base_dir,
             )
-        except Exception as _gm_exc:
+        except Exception as _gm_exc:  # noqa: BLE001
             import logging as _gm_log
 
             _gm_log.getLogger(__name__).warning(
@@ -4377,6 +4407,9 @@ def execute_live_cycle(
             family_entry_tracker=state._family_entry_tracker,
             mtf_price_service=getattr(state, "_mtf_price_service", None),
             meta_feature_vector=_meta_feature_vector,
+            # ── FIX-20260607-007: trend maturity signals ──
+            hurst=_m5_hurst,
+            kalman_velocity_bps=_h1_kalman_velocity_bps,
             # ── FIX-20260606-131: reentry guard front-placement ──
             reentry_states=state._reentry_states,
             reentry_sl_cooldown=config.reentry_sl_cooldown,
@@ -4412,7 +4445,7 @@ def execute_live_cycle(
                     queued=eval_summary.get("queued", 0),
                     data_dir=config.base_dir,
                 )
-            except Exception as _gm_exc:
+            except Exception as _gm_exc:  # noqa: BLE001
                 import logging as _gm_log
 
                 _gm_log.getLogger(__name__).warning(
@@ -4835,7 +4868,7 @@ def execute_live_cycle(
                             daily_feature_vector=daily_feature_vector,
                         )
                         _record_brain_outcomes(strategy_proposals, dr.direction, "pending", tracker)
-                    except Exception as _bi_exc:
+                    except Exception as _bi_exc:  # noqa: BLE001
                         print(
                             json.dumps(
                                 {
@@ -4898,7 +4931,7 @@ def execute_live_cycle(
                                                 brain_votes_from_journal = bv
                                             if ticket is not None:
                                                 break  # found valid entry, stop scanning lines
-                                    except Exception:
+                                    except Exception:  # noqa: BLE001
                                         pass  # malformed journal line → skip
                                 if ticket is not None:
                                     break  # got the ticket, stop retrying
@@ -5039,9 +5072,9 @@ def execute_live_cycle(
                                     spread_points=_lom_spread_pts,
                                     current_bar=state.loop_iteration,
                                 )
-                            except Exception:
+                            except Exception:  # noqa: BLE001
                                 pass
-                    except Exception as _reg_exc:
+                    except Exception as _reg_exc:  # noqa: BLE001
                         print(
                             json.dumps(
                                 {
@@ -5071,6 +5104,8 @@ def execute_live_cycle(
                         trend_direction=trend_direction,
                         trend_strength=trend_strength,
                         h4_trend_strength=h4_trend_strength,
+                        hurst=_m5_hurst,  # FIX-20260607-007
+                        kalman_velocity_bps=_h1_kalman_velocity_bps,  # FIX-20260607-007
                         macro_regime=macro_regime,
                         risk_budget_usd=_effective_risk_budget,
                         pnl_store=pnl_ledger,
@@ -5089,7 +5124,7 @@ def execute_live_cycle(
                             "supporting_brains": decision.brain_ids,
                             "opposing_brains": [],
                         }
-                except Exception:
+                except Exception:  # noqa: BLE001
                     logger.warning("Shadow verification registration failed strategy=%s", sname)
 
         if config.multi_strategy_enabled:
@@ -5213,7 +5248,7 @@ def execute_live_cycle(
                                                 ),
                                                 flush=True,
                                             )
-                                        except Exception as _fc_exc:
+                                        except Exception as _fc_exc:  # noqa: BLE001
                                             print(
                                                 json.dumps(
                                                     {
@@ -5241,14 +5276,14 @@ def execute_live_cycle(
                                     ),
                                     flush=True,
                                 )
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         logger.warning("Intraday drawdown recovery check failed")
 
                 _fv = check_feature_vector(feature_vector)
                 if not _fv.get("passed"):
                     _log_cycle_end(state.loop_iteration)
                     return state, not config.once
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
         raw_proposals = []
@@ -5271,7 +5306,7 @@ def execute_live_cycle(
                 if seq is not None and seq.ndim == 2 and seq.shape[0] >= 32:
                     try:
                         prop = b_info["adapter"].run(None, seq)
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         # Fallback: bypass run() pipeline.
                         # Transformer adapters: use infer_sequence() to avoid rolling-buffer corruption.
                         # XGBoost adapters: use infer() with flat ravel (model expects 288-dim).
@@ -5284,7 +5319,7 @@ def execute_live_cycle(
                             else:
                                 raw = b_info["adapter"].infer(seq.ravel().astype(np.float64))
                             prop = b_info["adapter"].get_signal(raw)
-                        except Exception:
+                        except Exception:  # noqa: BLE001
                             prop = None
                 else:
                     prop = None
@@ -5319,7 +5354,7 @@ def execute_live_cycle(
                                     tf_ou=tf_ou,
                                     tf_hurst=tf_hurst,
                                 )
-                            except Exception:
+                            except Exception:  # noqa: BLE001
                                 import logging as _btc_log
                                 import traceback as _btc_tb
 
@@ -5397,7 +5432,7 @@ def execute_live_cycle(
                         entry_spread=_live_spread,
                         entry_slippage=0.10,
                     )
-                except Exception:
+                except Exception:  # noqa: BLE001
                     logger.warning("PnL ledger signal recording failed (multi-strategy)")
         elif proposal is not None:
             try:
@@ -5415,7 +5450,7 @@ def execute_live_cycle(
                     entry_spread=_live_spread,
                     entry_slippage=0.10,
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.warning("PnL ledger signal recording failed (legacy)")
 
     # ── Regime-aware direction bias (legacy path) ──
@@ -5459,7 +5494,7 @@ def execute_live_cycle(
             import numpy as np
 
             _rolling_p80 = float(np.percentile(state._recent_consensus_scores, 80))
-        except Exception:
+        except Exception:  # noqa: BLE001
             _rolling_p80 = 0.0
     _effective_threshold = (
         max(config.confidence_threshold, _rolling_p80)
@@ -5590,7 +5625,7 @@ def execute_live_cycle(
                     feature_vector=feature_vector,
                     regime_info=regime_info,
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {"event": "record_error", "time": _utc_iso(), "error": str(exc)},
@@ -5619,7 +5654,7 @@ def execute_live_cycle(
                 mid, bid, ask = broker.fetch_prices(config.symbol)
             else:
                 mid, bid, ask = _mid_and_prices(mt5_worker, config.symbol)
-        except Exception as _price_exc:
+        except Exception as _price_exc:  # noqa: BLE001
             # MT5 connection may have gone stale during cooldown — attempt reconnect
             try:
                 if not config.no_mt5:
@@ -5628,7 +5663,7 @@ def execute_live_cycle(
                     mid, bid, ask = broker.fetch_prices(config.symbol)
                 else:
                     mid, bid, ask = _mid_and_prices(mt5_worker, config.symbol)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 print(
                     json.dumps(
                         {
@@ -5723,7 +5758,7 @@ def execute_live_cycle(
                     feature_vector=feature_vector,
                     regime_info=regime_info,
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {"event": "record_error", "time": _utc_iso(), "error": str(exc)},
@@ -5769,7 +5804,7 @@ def execute_live_cycle(
                     feature_vector=feature_vector,
                     regime_info=regime_info,
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {"event": "record_error", "time": _utc_iso(), "error": str(exc)},
@@ -5859,7 +5894,7 @@ def execute_live_cycle(
                                 t = rec.get("position_ticket")
                                 if t is not None and isinstance(t, int) and t > 0:
                                     pm_ticket = t
-                        except Exception:
+                        except Exception:  # noqa: BLE001
                             logger.warning("Intent ID lookup failed for dispatch attribution")
                         break
                 if pm_ticket is not None:
@@ -5911,7 +5946,7 @@ def execute_live_cycle(
                             from core.contracts.strategy_magic import MAGIC_TO_STRATEGY as _M2S
 
                             _pm_strat_name = _M2S.get(dispatch_magic, "")
-                        except Exception:
+                        except Exception:  # noqa: BLE001
                             logger.warning(
                                 "Magic-to-strategy lookup failed for journal attribution"
                             )
@@ -5947,7 +5982,7 @@ def execute_live_cycle(
                         ),
                         flush=True,
                     )
-            except Exception as _reg_exc:
+            except Exception as _reg_exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {
@@ -5987,12 +6022,12 @@ def execute_live_cycle(
                                             _j_magic = rec.get("magic", 0)
                                         rec["strategy"] = _M.get(_j_magic, "")
                                     state.known_open_tickets[ticket] = rec
-                        except Exception:
+                        except Exception:  # noqa: BLE001
                             logger.warning(
                                 "Open ticket journal enrichment failed ticket=%s", ticket
                             )
                         break
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
         dispatch_event = {

@@ -58,6 +58,9 @@ def evaluate_strategy_lines(
     family_entry_tracker: Any = None,
     mtf_price_service: Any = None,
     meta_feature_vector: Any = None,
+    # ── FIX-20260607-007: trend maturity signals ──
+    hurst: float | None = None,
+    kalman_velocity_bps: float | None = None,
     # ── FIX-20260606-131: reentry guard front-placement (P2.6) ──
     reentry_states: dict[str, Any] | None = None,
     reentry_sl_cooldown: float | None = None,
@@ -174,6 +177,8 @@ def evaluate_strategy_lines(
             trend_direction=trend_direction,
             trend_strength=trend_strength,
             h4_trend_strength=h4_trend_strength,
+            hurst=hurst,  # FIX-20260607-007
+            kalman_velocity_bps=kalman_velocity_bps,  # FIX-20260607-007
             macro_regime=macro_regime,
             risk_budget_usd=risk_budget_usd,
             tracker=tracker,
@@ -301,7 +306,7 @@ def evaluate_strategy_lines(
                     reason=decision.reason,
                     gate_diag=getattr(decision, "gate_diag", None) or None,
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
             continue
 

@@ -77,7 +77,7 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
 
     try:
         _content = _jp.read_text(encoding="utf-8")
-    except Exception:
+    except Exception:  # noqa: BLE001
         _logger.error(
             "Bootstrap: failed to read journal at %s.\n%s",
             journal_path,
@@ -116,7 +116,7 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
                 _ts = datetime.fromisoformat(_ts_str.replace("Z", "+00:00")).timestamp()
             else:
                 continue
-        except Exception:
+        except Exception:  # noqa: BLE001
             _logger.debug(
                 "Bootstrap: unparseable timestamp in journal entry: %.120s",
                 _ts_str,
@@ -273,7 +273,7 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
                 _ts = datetime.fromisoformat(_ts_str.replace("Z", "+00:00")).timestamp()
             else:
                 continue
-        except Exception:
+        except Exception:  # noqa: BLE001
             continue
 
         # ── Resolve entry_confidence from matching open ──
@@ -309,7 +309,7 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
                     "last_exit_confidence": _rs.last_exit.confidence if _rs.last_exit else None,
                     "last_exit_reason": _rs.last_exit.reason if _rs.last_exit else None,
                 }, ensure_ascii=False, default=str), flush=True)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 _logger.warning(
                     "Bootstrap: failed to record exit for strategy=%s ticket=%s.\n%s",
                     _strategy,

@@ -128,7 +128,7 @@ def run_evaluation(
             "brain_states": gov_svc.get_all_states(),
             "transition_log": gov_svc.get_transition_log(),
         }
-    except Exception:
+    except Exception:  # noqa: BLE001
         gov = {}
     brain_states = gov.get("brain_states", {})
 

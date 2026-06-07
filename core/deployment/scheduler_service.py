@@ -127,7 +127,7 @@ class SchedulerService:
             task.last_run = datetime.now(UTC).replace(tzinfo=None)
             task.last_error = None
             return {PAYLOAD_KEY_TASK: task.name, PAYLOAD_KEY_STATUS: HEALTH_CHECK_STATUS_OK}
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             task.error_count += 1
             task.last_run = datetime.now(UTC).replace(tzinfo=None)
             task.last_error = str(exc)
@@ -165,7 +165,7 @@ class SchedulerService:
                             tracker = ShadowTracker(base_dir="data")
                             shadow_map = build_shadow_summary(tracker, candidate_ids)
                             summary_map.update(shadow_map)
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass  # Shadow tracking is non-critical
 
                 if summary_map:
@@ -286,7 +286,7 @@ class SchedulerService:
                         if tracker_path.exists():
                             fresh = type(container.brain_tracker).load(tracker_path)
                             container.brain_tracker._records = fresh._records
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
 
             svc.add_task("daily_ops", daily_ops, interval_seconds=86400)

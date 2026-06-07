@@ -234,7 +234,7 @@ class BTCFeatureAugmenter:
             ret = float(values.get("M5_Ret_1", 0.0))
             return ret if math.isfinite(ret) else 0.0
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             self._xau_fail_count += 1
             if self._xau_fail_count % _WARNING_DEBOUNCE_CYCLES == 0:
                 _log.error(
@@ -281,7 +281,7 @@ class BTCFeatureAugmenter:
             ret = (curr_close - prev_close) / prev_close
             return ret if math.isfinite(ret) else 0.0
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             self._audjpy_fail_count += 1
             if self._audjpy_fail_count % _WARNING_DEBOUNCE_CYCLES == 0:
                 _log.error(
@@ -346,7 +346,7 @@ class BTCFeatureAugmenter:
             roc_out = roc if math.isfinite(roc) else 0.0
             return (ratio_out, roc_out)
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             self._xau_price_fail_count += 1
             if self._xau_price_fail_count % _WARNING_DEBOUNCE_CYCLES == 0:
                 _log.error(

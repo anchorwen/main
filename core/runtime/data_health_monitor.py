@@ -60,7 +60,7 @@ def check_data_health(
                         "age_minutes": round(age_min, 1),
                         "total_records": len(lines),
                     }
-        except Exception:
+        except Exception:  # noqa: BLE001
             report["checks"]["feature_store"] = {"status": "error", "age_minutes": -1}
     else:
         report["checks"]["feature_store"] = {"status": "missing"}
@@ -98,7 +98,7 @@ def check_data_health(
                     json.dump({"last_close_count": closes, "checked_at": _utc_iso()}, f)
             except OSError:
                 pass
-        except Exception:
+        except Exception:  # noqa: BLE001
             report["checks"]["journal"] = {"status": "error"}
     else:
         report["checks"]["journal"] = {"status": "missing"}
@@ -116,7 +116,7 @@ def check_data_health(
                     "data_health_degraded",
                     {"checks": report["checks"], "alerts": _alerts},
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
     # ── 4. Training ready notification ──
@@ -128,7 +128,7 @@ def check_data_health(
                     "training_condition_met",
                     {"message": _tr.get("message", "")},
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
     return report

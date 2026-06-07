@@ -96,7 +96,7 @@ class FeatureGate:
                         "FEATURE_ZERO_VECTOR",
                         f"{zero_count}/{total} zero features (≥30 non-zero required)",
                     )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 return GateResult(False, "FEATURE_ZERO_VECTOR", "feature vector validation failed")
 
         # ── Market data sanity ──
@@ -114,7 +114,7 @@ class FeatureGate:
                     return GateResult(
                         False, "FEATURE_COLD_START", "micro vector is all zeros (fallback)"
                     )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logging.getLogger(__name__).warning("Feature vector cold-start check failed")
 
         return GateResult(True, "", "ok")
@@ -246,7 +246,7 @@ class SignalHealthMonitor:
                 if r.get("warning", False):
                     results["warnings"] += 1
                     results["healthy"] = False
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 results["checks"][name] = {"warning": True, "reason": f"check_error: {exc}"}
                 results["warnings"] += 1
                 results["healthy"] = False

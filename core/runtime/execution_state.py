@@ -146,7 +146,7 @@ def restore_execution_state(
             if budget is not None and hasattr(budget, "load_state"):
                 try:
                     budget.load_state(budget_snapshot)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
 
     # ── Restore cooldown registry ──
@@ -154,7 +154,7 @@ def restore_execution_state(
     if cd_data and state._cooldown_registry is not None:
         try:
             state._cooldown_registry.load_state(cd_data)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     # ── Restore family entry tracker ──
@@ -162,7 +162,7 @@ def restore_execution_state(
     if fe_data and state._family_entry_tracker is not None:
         try:
             state._family_entry_tracker.load_state(fe_data)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     # ── FIX-20260605-120: restore additional guard state ──

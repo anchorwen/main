@@ -72,7 +72,7 @@ def _load_brain_entry(config_path: str) -> dict[str, Any] | None:
             entry = json.load(f)
         if entry.get("schema_version") == "brain_registry_entry.v1":
             return entry
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         print(f"[ERROR] Failed to load {config_path}: {exc}")
     return None
 
@@ -84,7 +84,7 @@ def _build_adapter(entry: dict[str, Any]):
     factory = BrainFactory()
     try:
         return factory.build(entry)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         print(f"[ERROR] BrainFactory.build() failed: {exc}")
         return None
 
@@ -225,7 +225,7 @@ def validate_brain(
             proposal = adapter.inference(zero_vec)
             d, c = _get_direction_and_confidence(proposal)
             results.append({"direction": d, "confidence": c})
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             report["passed"] = False
             report["checks"]["inference"] = {"passed": False, "detail": str(exc)[:100]}
             return report
@@ -239,7 +239,7 @@ def validate_brain(
                     proposal = adapter.inference(np.zeros(40, dtype=np.float32))
                 d, c = _get_direction_and_confidence(proposal)
                 results.append({"direction": d, "confidence": c})
-            except Exception:
+            except Exception:  # noqa: BLE001
                 results.append({"direction": "neutral", "confidence": 0.0})
 
     directions = [r["direction"] for r in results]

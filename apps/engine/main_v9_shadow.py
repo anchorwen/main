@@ -1488,7 +1488,7 @@ class ShadowSessionManager:
             )
             completed["event"] = f"{self._stream_plan.event_name_prefix}.completed"
             yield build_session_event(session_id, completed["event"], completed)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             yield build_session_event(
                 session_id,
                 f"{self._stream_plan.event_name_prefix}.error",

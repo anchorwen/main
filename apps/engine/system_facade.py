@@ -175,7 +175,7 @@ class SystemSelfTest:
         try:
             fn()
             return {"name": name, "status": "pass"}
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             return {"name": name, "status": "fail", "error": str(exc)}
 
     def _test_health(self):

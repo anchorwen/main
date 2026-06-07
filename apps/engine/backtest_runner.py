@@ -87,7 +87,7 @@ class BacktestRunner:
 
                 decisions.append(decision_info)
 
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 errors.append({"index": i, "error": str(exc)})
 
         replay.deactivate()

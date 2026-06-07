@@ -351,7 +351,7 @@ def _run_step(cmd: list[str]) -> dict[str, Any]:
         }
     except subprocess.TimeoutExpired:
         return {"step": Path(cmd[1]).stem if len(cmd) > 1 else "unknown", "status": "timeout"}
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {
             "step": Path(cmd[1]).stem if len(cmd) > 1 else "unknown",
             "status": "error",

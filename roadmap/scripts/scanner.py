@@ -84,7 +84,7 @@ def _decorator_name(d: ast.expr) -> str:
     try:
         if hasattr(ast, "unparse"):
             return ast.unparse(d)
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
     if isinstance(d, ast.Name):
         return f"@{d.id}"
@@ -212,7 +212,7 @@ def _determine_status(
     """Heuristic to determine module readiness."""
     try:
         content = module_path.read_text(encoding="utf-8")
-    except Exception:
+    except Exception:  # noqa: BLE001
         return "unreadable"
 
     if not classes and not functions:
@@ -244,7 +244,7 @@ def scan_module(file_path: Path, root: Path) -> ModuleInfo:
 
     try:
         source = file_path.read_text(encoding="utf-8")
-    except Exception:
+    except Exception:  # noqa: BLE001
         return ModuleInfo(
             rel_path=rel_path,
             abs_path=str(file_path),

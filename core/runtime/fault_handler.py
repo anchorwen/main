@@ -229,7 +229,7 @@ class FaultTolerantContext:
                         f"degraded_{self.component}",
                         {"error": f"{type(exc_val).__name__}: {str(exc_val)[:200]}"},
                     )
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
             return True  # swallow, caller checks ctx.exception
 

@@ -95,7 +95,7 @@ def _build_brains(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 }
             )
             print(f"  [shadow_pnl] loaded {bid} [{entry.get('brain_type', '?')}]", flush=True)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             print(f"  [shadow_pnl] SKIP {bid}: {exc}", flush=True)
     return brains
 
@@ -113,7 +113,7 @@ def _get_prices(mt5: Any, symbol: str) -> tuple[float, float, float, float] | No
         mid = (bid + ask) / 2.0
         spread = ask - bid
         return (bid, ask, mid, spread)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 
@@ -140,7 +140,7 @@ def _run_brain_inference(
             "down_probability": round(float(pred.get("down_probability", 0.5)), 6),
             "confidence": round(float(pred.get("confidence", 0.0)), 6),
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
         return {
             "brain_id": brain_id,
@@ -202,7 +202,7 @@ def _write_decision_records(
             symbol=symbol,
             store=store,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"written": False, "error": str(exc)[:500]}
 
 
@@ -234,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
     # ── MT5 ──
     try:
         import MetaTrader5 as mt5_mod
-    except Exception:
+    except Exception:  # noqa: BLE001
         print(json.dumps({"error": "MetaTrader5 package required"}), flush=True)
         return 2
 
@@ -284,7 +284,7 @@ def main(argv: list[str] | None = None) -> int:
         if rn_path.exists():
             try:  # noqa: SIM105
                 rolling_norm.load_state(rn_path)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
     # ── Load brains ──
@@ -316,7 +316,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"[shadow_pnl] PnL ledger loaded: {pnl_ledger.total_settled} settled, {pnl_ledger.pending_count} pending",
                 flush=True,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             pnl_ledger = BrainPnLStore(window_size=5000)
     else:
         pnl_ledger = BrainPnLStore(window_size=5000)
@@ -353,7 +353,7 @@ def main(argv: list[str] | None = None) -> int:
                     f"{sorted(retired_ids)}",
                     flush=True,
                 )
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
     # ── Regime detector ──
@@ -378,7 +378,7 @@ def main(argv: list[str] | None = None) -> int:
                 atr_val = float(np.mean(tr))
                 if atr_val > 0.01:
                     regime_detector.update(atr_val)
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
     # ── Cycle state ──
@@ -437,7 +437,7 @@ def main(argv: list[str] | None = None) -> int:
                                 ),
                                 flush=True,
                             )
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
 
                 # ── 3. Compute features ──
@@ -458,7 +458,7 @@ def main(argv: list[str] | None = None) -> int:
                 micro_sequences: dict[str, np.ndarray] = {}
                 try:  # noqa: SIM105
                     micro_sequences = micro_computer.compute_all_sequences(32)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
 
                 # ── 4. Persist features to store ──
@@ -496,7 +496,7 @@ def main(argv: list[str] | None = None) -> int:
                         )
                     if _records:
                         feature_store.write_records(_records)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
 
                 # ── 5. Run all brains ──
@@ -538,7 +538,7 @@ def main(argv: list[str] | None = None) -> int:
                                     ),
                                     "confidence": round(float(pred.get("confidence", 0.0)), 6),
                                 }
-                            except Exception:
+                            except Exception:  # noqa: BLE001
                                 # Fallback: zero-padded (32,9) sequence to match 288-dim model
                                 fallback_seq = np.zeros((32, 9), dtype=np.float32)
                                 try:
@@ -562,7 +562,7 @@ def main(argv: list[str] | None = None) -> int:
                                         ),
                                         "confidence": round(float(pred.get("confidence", 0.0)), 6),
                                     }
-                                except Exception:
+                                except Exception:  # noqa: BLE001
                                     result = {
                                         "brain_id": b["brain_id"],
                                         "brain_type": btype,
@@ -594,7 +594,7 @@ def main(argv: list[str] | None = None) -> int:
                                     ),
                                     "confidence": round(float(pred.get("confidence", 0.0)), 6),
                                 }
-                            except Exception:
+                            except Exception:  # noqa: BLE001
                                 result = {
                                     "brain_id": b["brain_id"],
                                     "brain_type": btype,
@@ -636,7 +636,7 @@ def main(argv: list[str] | None = None) -> int:
                                 entry_spread=live_spread,
                                 entry_slippage=0.10,
                             )
-                        except Exception:
+                        except Exception:  # noqa: BLE001
                             pass
 
                 # ── 6. Compute consensus ──
@@ -696,7 +696,7 @@ def main(argv: list[str] | None = None) -> int:
                             ),
                             flush=True,
                         )
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001
                         print(
                             json.dumps(
                                 {"event": "save_error", "error": str(exc)}, ensure_ascii=False
@@ -704,7 +704,7 @@ def main(argv: list[str] | None = None) -> int:
                             flush=True,
                         )
 
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {
@@ -743,12 +743,12 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
         if rolling_norm is not None:
             try:  # noqa: SIM105
                 rolling_norm.save_state(base_dir / "rolling_norm_state.json")
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logging.getLogger(__name__).warning(
                     "shadow_pnl_loop: failed to persist rolling normalizer state — "
                     "feature normalization may reset on restart"

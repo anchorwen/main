@@ -97,7 +97,7 @@ def _run_shadow_inference(
         from core.features.live_feature_source import (
             snapshot_features,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001
         # Fallback: return abstain if live feature extraction unavailable
         return {
             "action": "abstain",
@@ -111,7 +111,7 @@ def _run_shadow_inference(
 
     try:
         features = snapshot_features(symbol=symbol, feature_source_path=feature_source_path)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return {
             "action": "abstain",
             "symbol": symbol,

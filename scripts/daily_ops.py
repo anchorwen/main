@@ -59,7 +59,7 @@ def _load_or_create_tracker(base_dir: str) -> Any:
         if tracker_path.exists():
             return BrainPerformanceTracker.load(tracker_path)
         return BrainPerformanceTracker(window_size=100)
-    except Exception:
+    except Exception:  # noqa: BLE001
         from core.feedback.brain_performance_tracker import BrainPerformanceTracker
 
         return BrainPerformanceTracker(window_size=100)
@@ -115,7 +115,7 @@ def _load_or_create_governance(base_dir: str, *, brains_dir: Path | None = None)
                         continue
                     try:
                         cfg = _json.loads(cfg_path.read_text(encoding="utf-8"))
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         continue
                     if cfg.get("schema_version") != "brain_registry_entry.v1":
                         continue
@@ -127,7 +127,7 @@ def _load_or_create_governance(base_dir: str, *, brains_dir: Path | None = None)
                         )
                         gov.register_brain(bid, initial)
         return gov
-    except Exception:
+    except Exception:  # noqa: BLE001
         from core.governance.governance_service import GovernanceService
 
         gov = GovernanceService()
@@ -152,7 +152,7 @@ def _load_or_create_pnl_store(base_dir: str) -> Any:
         if ledger_path.exists():
             return BrainPnLStore.load(ledger_path)
         return BrainPnLStore()
-    except Exception:
+    except Exception:  # noqa: BLE001
         from core.feedback.brain_pnl_ledger import BrainPnLStore
 
         return BrainPnLStore()
@@ -218,7 +218,7 @@ def _step_label_builder(
             "losses": losses,
             "output": str(out_path) if not dry_run else None,
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "label_builder", "status": "error", "error": str(exc)[:500]}
 
 
@@ -240,7 +240,7 @@ def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
             "consensus": report.get("comparison", {}).get("consensus", "unknown"),
             "agreement": report.get("comparison", {}).get("agreement_score", 0.0),
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "shadow_ensemble", "status": "error", "error": str(exc)[:500]}
 
 
@@ -265,7 +265,7 @@ def _step_feedback_loop(
             "updates_applied": report.get("updates_applied", 0),
             "brains_updated": report.get("brain_ids_updated", []),
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "feedback_loop", "status": "error", "error": str(exc)[:500]}
 
 
@@ -306,7 +306,7 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
         from core.execution.conformal_calibrator import ConformalCalibrator
 
         cal = ConformalCalibrator(state_path=f"{base_dir}/conformal_calibrator_state.json")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return {"step": "calibrator_feed", "status": "error", "error": f"init: {e}"}
 
     # Pass 1: build p_win lookup from accepted entries
@@ -314,7 +314,7 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
     for line in new_lines:
         try:
             entry = json.loads(line)
-        except Exception:
+        except Exception:  # noqa: BLE001
             continue
         if entry.get("ack_status") != "accepted":
             continue
@@ -330,7 +330,7 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
     for line in new_lines:
         try:
             entry = json.loads(line)
-        except Exception:
+        except Exception:  # noqa: BLE001
             continue
         if entry.get("ack_status") != "closed":
             continue
@@ -419,7 +419,7 @@ def _step_paper_trade_simulation(base_dir: str, *, dry_run: bool = False) -> dic
             "win_rate": result.get("win_rate", 0),
             "dry_run": dry_run,
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "paper_trade_simulation", "status": "error", "error": str(exc)[:500]}
 
 
@@ -460,7 +460,7 @@ def _step_governance(
             "flagged": report.get("actions_flagged", []),
             "leaderboard_cross_check": cross_check,
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "governance", "status": "error", "error": str(exc)[:500]}
 
 
@@ -567,7 +567,7 @@ def _step_champion_challenger(
             "eligible": sum(1 for c in report.get("comparisons", []) if c.get("eligible")),
             "details": report.get("promotions", []),
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "champion_challenger", "status": "error", "error": str(exc)[:500]}
 
 
@@ -646,7 +646,7 @@ def _step_retraining_check(
                             for i, r in enumerate(rankings)
                         ],
                     }
-            except Exception as _pnl_lb_exc:
+            except Exception as _pnl_lb_exc:  # noqa: BLE001
                 leaderboard["fallback_error"] = str(_pnl_lb_exc)[:200]
 
         result = detect_degradation(leaderboard, baseline)
@@ -696,7 +696,7 @@ def _step_retraining_check(
             "details": result.get("signals", []),
             "auto_execution": execution_result,
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "retraining_check", "status": "error", "error": str(exc)[:500]}
 
 
@@ -788,7 +788,7 @@ def _step_param_optimization(
             "degraded_brains": degraded_ids,
             "would_generate": len(degraded_ids),
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "param_optimization", "status": "error", "error": str(exc)[:500]}
 
 
@@ -848,7 +848,7 @@ def _step_alpha_lifecycle(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             "actions_flagged": len(applied) if dry_run else len(applied),
             "details": applied,
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "alpha_lifecycle", "status": "error", "error": str(exc)[:500]}
 
 
@@ -889,7 +889,7 @@ def _step_alpha_allocation(base_dir: str, *, dry_run: bool = False) -> dict[str,
             "allocatable_count": allocation.get("allocatable_count", 0),
             "output": str(out_path) if not dry_run else None,
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "alpha_allocation", "status": "error", "error": str(exc)[:500]}
 
 
@@ -931,7 +931,7 @@ def _step_feature_store_maintenance(
             "compaction": compaction,
             "stats": stats,
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "feature_store_maintenance", "status": "error", "error": str(exc)[:500]}
 
 
@@ -953,7 +953,7 @@ def _step_daily_recap(base_dir: str, *, mt5_terminal_path: str | None = None) ->
             "date_key": report.get("date_key_utc", ""),
             "sections": list(report.keys()),
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "daily_recap", "status": "error", "error": str(exc)[:500]}
 
 
@@ -1064,7 +1064,7 @@ def run_daily_ops(
             else:
                 _rec_steps.append({"step": "ledger_retention", "status": "ok", "entries_pruned": 0})
         steps.extend(_rec_steps)
-    except Exception as _exc:
+    except Exception as _exc:  # noqa: BLE001
         steps.append({"step": "reconcile", "status": "error", "error": str(_exc)})
 
     # ── FIX-20260607-144: Journal compaction ──────────────────────────
@@ -1081,7 +1081,7 @@ def run_daily_ops(
                 _journal_path, retention_days=30, dry_run=dry_run, lock_dir=_base
             )
             steps.append({"step": "journal_compaction", **_compaction_result})
-    except Exception as _jc_exc:
+    except Exception as _jc_exc:  # noqa: BLE001
         steps.append({"step": "journal_compaction", "status": "error", "error": str(_jc_exc)[:200]})
 
     if not skip_shadow:

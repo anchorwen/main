@@ -52,7 +52,7 @@ def staged_py_files() -> list[str]:
             for line in result.stdout.strip().split("\n")
             if line.strip().endswith(".py")
         ]
-    except Exception:
+    except Exception:  # noqa: BLE001
         return []
 
 
@@ -77,7 +77,7 @@ def run_mypy(filepath: str) -> tuple[int, str]:
         return -1, "mypy timed out"
     except FileNotFoundError:
         return -1, "mypy not installed — run: pip install mypy"
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return -1, str(exc)
 
 

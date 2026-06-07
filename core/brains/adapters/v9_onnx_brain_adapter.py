@@ -53,7 +53,7 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
                 self._output_names = []  # guard handles real names
                 self._backend = "onnxruntime:isolated"
                 return
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 self._guard = None
                 print(
                     f"[v9_onnx_adapter] inference_isolation failed for "
@@ -76,7 +76,7 @@ class V9OnnxBrainAdapter(BaseBrainAdapter):
             if len(input_shape) >= 2 and isinstance(input_shape[1], int) and input_shape[1] > 0:
                 self._num_features = input_shape[1]
             self._backend = "onnxruntime"
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             self._backend = f"stub:{type(exc).__name__}"
             bid = self._brain_entry.get("brain_id", "unknown")
             print(

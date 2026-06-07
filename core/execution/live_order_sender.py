@@ -110,7 +110,7 @@ def _validate_ack_sl_tp(
                 ack_tp = detail.get("confirmed_tp")
                 break
             _time.sleep(0.2)
-    except Exception:
+    except Exception:  # noqa: BLE001
         logging.getLogger(__name__).warning(
             "SL/TP confirmation wait failed — proceeding without confirmation"
         )

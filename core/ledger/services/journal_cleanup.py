@@ -58,7 +58,7 @@ def _load_journal(path: Path) -> list[dict[str, Any]]:
                         ),
                         flush=True,
                     )
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
     if parse_errors:
         try:  # noqa: SIM105
@@ -74,7 +74,7 @@ def _load_journal(path: Path) -> list[dict[str, Any]]:
                 ),
                 flush=True,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
     return entries
 
@@ -134,7 +134,7 @@ def _resolve_strategy(entry: dict[str, Any]) -> str:
             from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
 
             return MAGIC_TO_STRATEGY.get(magic, "")
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
     return ""
 
@@ -553,7 +553,7 @@ def compact_journal(
         else:
             _log.debug("Journal compaction: nothing to remove")
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         _log.error("Journal compaction failed: %s", exc, exc_info=True)
         # Clean up temp file on failure
         import contextlib

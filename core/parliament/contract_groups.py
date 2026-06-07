@@ -331,7 +331,7 @@ class ContractGroupConsensus:
             total += 1
             try:
                 bid = getattr(p, "brain_id", "unknown")
-            except Exception:
+            except Exception:  # noqa: BLE001
                 bid = "unknown"
             brain_ids.append(bid)
 
@@ -351,7 +351,7 @@ class ContractGroupConsensus:
                     summary = dynamic_weighter.get_summary(bid)
                     if summary:
                         vote_weight = dynamic_weighter._compute_weight(summary)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
             else:
                 vote_weight = float(getattr(p, "vote_weight", 1.0) or 1.0)
@@ -488,7 +488,7 @@ class ContractGroupConsensus:
         for p in proposals:
             try:
                 bid = getattr(p, "brain_id", "unknown")
-            except Exception:
+            except Exception:  # noqa: BLE001
                 bid = "unknown"
             all_brain_ids.append(bid)
 

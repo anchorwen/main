@@ -204,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
             timeout_seconds=args.timeout,
         )
         exit_code = 0
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         print(f"[arb_trainer] Optimization failed: {type(exc).__name__}: {exc}", file=sys.stderr)
         import traceback
 

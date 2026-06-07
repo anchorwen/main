@@ -129,7 +129,7 @@ def main() -> None:
             print(
                 f"LR Blender: coef={results['lr_blender_coef']}, intercept={results['lr_blender_intercept']}, logloss={blender_loss:.6f}"
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
     elif len(lgb_probs) == len(y_true):
         results["optimal_w_lgb"] = 1.0

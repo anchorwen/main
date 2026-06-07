@@ -21,7 +21,7 @@ from typing import Any
 if sys.stdout.encoding != "utf-8":
     try:  # noqa: SIM105
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
 SCHEMA_VERSION = "live_daily_recap.v1"
@@ -52,11 +52,11 @@ def _run_quality_report(base_dir: Path, date_key: str) -> dict[str, Any]:
     """Call live_data_quality_report.build_report in-process."""
     try:
         from scripts.live_data_quality_report import build_report as build_dq
-    except Exception:
+    except Exception:  # noqa: BLE001
         return {"error": "import_dq_failed"}
     try:
         return build_dq(base_dir, date_filter=date_key)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
 
 
@@ -64,11 +64,11 @@ def _run_trade_quality_report(journal_path: Path, date_key: str) -> dict[str, An
     """Call trade_quality_report.build_report in-process."""
     try:
         from scripts.trade_quality_report import build_report as build_tq
-    except Exception:
+    except Exception:  # noqa: BLE001
         return {"error": "import_tq_failed"}
     try:
         return build_tq(journal_path=str(journal_path), date_key=date_key)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
 
 
@@ -102,7 +102,7 @@ def _run_mt5_pnl_snapshot(
         return {"error": f"subprocess_exit_{cp.returncode}", "stderr": cp.stderr[:500]}
     except subprocess.TimeoutExpired:
         return {"error": "pnl_snapshot_timeout"}
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
 
 
@@ -487,7 +487,7 @@ def _run_shadow_compare(
     """Call shadow_live_compare_report.build_report_payload in-process."""
     try:
         from scripts.shadow_live_compare_report import build_report_payload as build_shadow
-    except Exception:
+    except Exception:  # noqa: BLE001
         return {"error": "import_shadow_compare_failed"}
     try:
         return build_shadow(
@@ -497,7 +497,7 @@ def _run_shadow_compare(
             shadow_baseline_json=None,
             base_dir=base_dir,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
 
 
@@ -510,7 +510,7 @@ def _run_shadow_ensemble(
     """Call live_shadow_ensemble.build_report in-process (parallel multi-model inference)."""
     try:
         from scripts.live_shadow_ensemble import build_report as build_ensemble
-    except Exception:
+    except Exception:  # noqa: BLE001
         return {"error": "import_shadow_ensemble_failed"}
     try:
         return build_ensemble(
@@ -519,7 +519,7 @@ def _run_shadow_ensemble(
             feature_dim=feature_dim,
             parallel=True,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
 
 
@@ -533,7 +533,7 @@ def _run_feature_quality(
     """Call live_feature_quality_report.build_report in-process."""
     try:
         from scripts.live_feature_quality_report import build_report as build_fq
-    except Exception:
+    except Exception:  # noqa: BLE001
         return {"error": "import_feature_quality_failed"}
     try:
         return build_fq(
@@ -542,7 +542,7 @@ def _run_feature_quality(
             symbol=symbol,
             date_filter=date_filter,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
 
 
@@ -553,11 +553,11 @@ def _run_eval_alignment(
     """Call eval_alignment.build_report in-process (live P&L vs backtest)."""
     try:
         from scripts.training.eval_alignment import build_report as build_align
-    except Exception:
+    except Exception:  # noqa: BLE001
         return {"error": "import_eval_alignment_failed"}
     try:
         return build_align(labels_path, backtest_path)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
 
 
@@ -570,11 +570,11 @@ def _run_brain_leaderboard(
     """Call brain_leaderboard.build_report in-process."""
     try:
         from scripts.training.brain_leaderboard import build_report as build_bl
-    except Exception:
+    except Exception:  # noqa: BLE001
         return {"error": "import_brain_leaderboard_failed"}
     try:
         return build_bl(decisions_dir, date_filter=date_filter, labels_path=labels_path)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
 
 
@@ -606,7 +606,7 @@ def _run_pnl_leaderboard(base_dir: Path) -> dict[str, Any]:
             "rankings": lb.to_records(rankings),
             "table": lb.format_table(rankings),
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)[:500]}
 
 
@@ -616,7 +616,7 @@ def _run_governance_snapshot(base_dir: Path, *, dry_run: bool = True) -> dict[st
         from scripts.daily_ops import _step_governance
 
         return _step_governance(str(base_dir), dry_run=dry_run)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "governance", "status": "error", "error": str(exc)[:500]}
 
 
@@ -626,7 +626,7 @@ def _run_champion_challenger_snapshot(base_dir: Path, *, dry_run: bool = True) -
         from scripts.daily_ops import _step_champion_challenger
 
         return _step_champion_challenger(str(base_dir), dry_run=dry_run)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "champion_challenger", "status": "error", "error": str(exc)[:500]}
 
 
@@ -757,7 +757,7 @@ def build_report(
             pnl_ledger_path=pnl_ledger_path if pnl_ledger_path.exists() else None,
         )
         brain_attribution = attr_svc.quick_summary()
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
     # ── Build training dataset (Phase B) ──
@@ -773,7 +773,7 @@ def build_report(
                 output_dir=base_dir / "training",
                 symbol=symbol.rstrip("c"),
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             training_dataset = {"error": str(exc)[:500]}
 
     run_state = _derive_run_state(trade_quality, data_quality, flag_present)

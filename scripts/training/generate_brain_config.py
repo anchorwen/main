@@ -159,7 +159,7 @@ def _resolve_features_for_schema(feature_schema_id: str) -> list[str] | None:
         if feature_schema_id not in SCHEMA_DIMENSIONS:
             return None
         return get_schema_feature_names(feature_schema_id)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 

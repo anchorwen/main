@@ -178,7 +178,7 @@ def _load_h4_csv(
         return None
     try:
         return _load_d1_csv(csv_path)  # same OHLC format
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 

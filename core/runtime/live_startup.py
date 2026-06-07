@@ -80,7 +80,7 @@ def bootstrap_regime_detector(
                 detector._var = sample_var - detector._eps
 
         return detector.is_warmed_up
-    except Exception:
+    except Exception:  # noqa: BLE001
         return False
 
 
@@ -161,7 +161,7 @@ def apply_governance_filter(
 
         gov = GovernanceService.load(gov_path)
         report["governance_loaded"] = True
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         report["reason"] = f"governance_load_failed: {exc}"
         return entries, report
 
@@ -233,7 +233,7 @@ def check_single_brain_governance(brain_id: str, base_dir: str) -> dict[str, Any
         from core.governance.governance_service import GovernanceService
 
         gov = GovernanceService.load(gov_path)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"blocked": False, "warning": False, "reason": f"governance_load_failed: {exc}"}
 
     state = gov.get_brain_state(brain_id)
@@ -283,7 +283,7 @@ def inject_performance_metrics(pnl_store: Any, base_dir: str) -> None:
                 },
             )
         gov.save(str(_gov_path), lock_timeout=1.0)
-    except Exception:
+    except Exception:  # noqa: BLE001
         import logging as _inj_log
 
         _inj_log.getLogger(__name__).warning(

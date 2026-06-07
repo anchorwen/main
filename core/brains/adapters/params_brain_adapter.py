@@ -75,7 +75,7 @@ class ParamsBrainAdapter(BaseBrainAdapter):
             self._max_half_life = float(opt.get("max_half_life", 20))
             self._theta_min = float(opt.get("theta_min", 0.005))
             self._backend = "params:ou"
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             self._backend = f"stub:{type(exc).__name__}"
 
     def infer(self, feature_vector: np.ndarray) -> dict[str, Any]:

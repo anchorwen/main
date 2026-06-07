@@ -232,7 +232,7 @@ def _probe_mt5(config: Any, args: argparse.Namespace) -> dict[str, Any] | None:
     """Probe MT5 for live position/account data. Returns None if unavailable."""
     try:
         import MetaTrader5 as mt5
-    except Exception:
+    except Exception:  # noqa: BLE001
         return {"error": "MetaTrader5 package not installed"}
 
     # Resolve terminal path
@@ -250,7 +250,7 @@ def _probe_mt5(config: Any, args: argparse.Namespace) -> dict[str, Any] | None:
             terminal_path = cfg.get("live_trading", {}).get("mt5_terminal_path", "") or cfg.get(
                 "mt5", {}
             ).get("terminal_path", "")
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     if not terminal_path:
@@ -392,7 +392,7 @@ def _probe_journal(config: Any, args: argparse.Namespace) -> dict[str, Any] | No
                 pnl_ledger_path=pnl_path if pnl_path.exists() else None,
             )
             attribution = attr_svc.quick_summary()
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         return {
@@ -405,7 +405,7 @@ def _probe_journal(config: Any, args: argparse.Namespace) -> dict[str, Any] | No
             "open_positions_in_journal": len(opens),
             "brain_attribution": attribution,
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
 
 
@@ -440,7 +440,7 @@ def _probe_governance(config: Any, args: argparse.Namespace) -> dict[str, Any] |
             "brain_summary": summary,
             "transition_log": gov.get("transition_log", [])[-5:],
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
 
 
@@ -792,7 +792,7 @@ def cmd_live(args: argparse.Namespace) -> int:
                 _time.sleep(10)
             except KeyboardInterrupt:
                 raise
-            except Exception:
+            except Exception:  # noqa: BLE001
                 # Windows console events (child process exit signals, etc.)
                 # can interrupt sleep — ignore and continue monitoring.
                 pass

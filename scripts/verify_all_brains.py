@@ -69,7 +69,7 @@ def main():
             result["direction"] = prop.prediction.get("direction_bias", "?")
             result["confidence"] = round(prop.prediction.get("confidence", 0.0), 4)
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             result["error"] = f"{type(exc).__name__}: {exc!s}"[:150]
 
         results.append(result)

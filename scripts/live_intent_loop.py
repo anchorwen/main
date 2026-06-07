@@ -349,7 +349,7 @@ def main(argv: list[str] | None = None) -> int:
                     from core.runtime.live_cycle import apply_timeframe_scaling
 
                     apply_timeframe_scaling(strategy_configs)
-                except Exception as _ts_exc:
+                except Exception as _ts_exc:  # noqa: BLE001
                     print(
                         json.dumps(
                             {
@@ -380,11 +380,12 @@ def main(argv: list[str] | None = None) -> int:
                             ),
                             flush=True,
                         )
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             import sys as _sys
+
             print(
                 json.dumps(
                     {"event": "strategy_configs_load_fatal", "error": str(exc)},
@@ -402,7 +403,9 @@ def main(argv: list[str] | None = None) -> int:
             project_root=PROJECT_ROOT,
             base_dir=args.base_dir,
             brains_dir=str(args.brains_dir) if args.brains_dir else "configs/brains",
-            live_yaml_path=args.config if hasattr(args, "config") and args.config else "configs/live.yaml",
+            live_yaml_path=args.config
+            if hasattr(args, "config") and args.config
+            else "configs/live.yaml",
         )
         integrity = lifecycle.verify_startup_integrity(auto_repair=True)
         if (
@@ -454,7 +457,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         print(
             json.dumps(
                 {"event": "startup_integrity_error", "error": str(exc)},
@@ -501,28 +504,16 @@ def main(argv: list[str] | None = None) -> int:
         regime_map=_yaml_regime_map,
         contract_size=get_asset(args.symbol).contract_size,
         portfolio_max_net=(
-            _yaml_portfolio_max_net
-            if _yaml_portfolio_max_net is not None
-            else 0.05
+            _yaml_portfolio_max_net if _yaml_portfolio_max_net is not None else 0.05
         ),
         portfolio_max_gross=(
-            _yaml_portfolio_max_gross
-            if _yaml_portfolio_max_gross is not None
-            else 0.10
+            _yaml_portfolio_max_gross if _yaml_portfolio_max_gross is not None else 0.10
         ),
         # ── FIX-20260605-120: per-asset reentry thresholds from YAML ──
-        reentry_sl_cooldown=float(
-            _reentry_cfg.get("sl_cooldown_seconds", 180)
-        ),
-        reentry_sl_penalty=float(
-            _reentry_cfg.get("sl_confidence_penalty", 0.10)
-        ),
-        reentry_bleed_cooldown=float(
-            _reentry_cfg.get("bleed_cooldown_seconds", 180)
-        ),
-        reentry_bleed_penalty=float(
-            _reentry_cfg.get("bleed_confidence_penalty", 0.10)
-        ),
+        reentry_sl_cooldown=float(_reentry_cfg.get("sl_cooldown_seconds", 180)),
+        reentry_sl_penalty=float(_reentry_cfg.get("sl_confidence_penalty", 0.10)),
+        reentry_bleed_cooldown=float(_reentry_cfg.get("bleed_cooldown_seconds", 180)),
+        reentry_bleed_penalty=float(_reentry_cfg.get("bleed_confidence_penalty", 0.10)),
     )
 
     # ── Initialize MT5Worker (single-threaded engine — all MT5 calls on one thread) ──
@@ -555,7 +546,7 @@ def main(argv: list[str] | None = None) -> int:
     # ── Load configs ──
     try:
         norm_config = load_normalization_config(args.normalization_config)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         print(
             json.dumps({"error": "normalization_config_load_failed", "detail": str(exc)}, indent=2)
         )
@@ -589,7 +580,7 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {
@@ -625,7 +616,7 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {
@@ -660,7 +651,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.multi_brain:
         try:
             brain_entry = load_brain_entry(args.brain_entry)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             print(json.dumps({"error": "brain_entry_load_failed", "detail": str(exc)}, indent=2))
             if mt5_worker is not None:
                 mt5_worker.stop()
@@ -758,7 +749,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _dfp_exc:
+        except Exception as _dfp_exc:  # noqa: BLE001
             print(
                 json.dumps(
                     {
@@ -791,7 +782,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             tracker = BrainPerformanceTracker(window_size=100)
     else:
         tracker = BrainPerformanceTracker(window_size=100)
@@ -816,7 +807,7 @@ def main(argv: list[str] | None = None) -> int:
             ),
             flush=True,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001
         pnl_ledger = BrainPnLStore(window_size=100)
 
     # ── Load open positions from journal ──
@@ -838,7 +829,7 @@ def main(argv: list[str] | None = None) -> int:
                         _magic = rec.get("detail", {}).get("request", {}).get("magic", 0)
                         rec["strategy"] = MAGIC_TO_STRATEGY.get(_magic, "")
                         known_open_tickets[ticket] = rec
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     # ── Initialize brain adapter(s) ──
@@ -865,7 +856,7 @@ def main(argv: list[str] | None = None) -> int:
                         if not _rp.is_absolute():
                             _rp = (PROJECT_ROOT / _rp).resolve()
                         _disabled_paths.add(str(_rp.resolve()))
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         if _disabled_paths:
@@ -920,7 +911,7 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
-        except Exception as _vex:
+        except Exception as _vex:  # noqa: BLE001
             print(
                 json.dumps(
                     {
@@ -959,7 +950,7 @@ def main(argv: list[str] | None = None) -> int:
                         "normalization_config_path": entry.get("normalization_config_path"),
                     }
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {
@@ -1046,7 +1037,7 @@ def main(argv: list[str] | None = None) -> int:
                 model_path=meta_model or "data/models/meta_exit_model.txt",
                 urgency_threshold=getattr(args, "meta_exit_threshold", 0.65),
             )
-        except Exception as _meta_exit_exc:
+        except Exception as _meta_exit_exc:  # noqa: BLE001
             print(
                 json.dumps(
                     {
@@ -1085,7 +1076,7 @@ def main(argv: list[str] | None = None) -> int:
         managed_tickets: set[int] = set()
         try:
             restored = position_manager.load_state(_pos_state_path)
-        except Exception:
+        except Exception:  # noqa: BLE001
             restored = None
 
         if restored is not None:
@@ -1159,7 +1150,7 @@ def main(argv: list[str] | None = None) -> int:
             # ── Fallback: reconstruct ALL positions from MT5 (basic recovery, no trail state) ──
             try:
                 open_positions = _broker.get_open_positions_detail(args.symbol)
-            except Exception as _recovery_exc:
+            except Exception as _recovery_exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {
@@ -1218,7 +1209,7 @@ def main(argv: list[str] | None = None) -> int:
                                 ):
                                     recovered_supporting = rec.get("brain_ids", [])
                                     break
-                            except Exception:
+                            except Exception:  # noqa: BLE001
                                 pass
 
                     current_high = max(entry_price, float(mp.price_current))
@@ -1322,7 +1313,7 @@ def main(argv: list[str] | None = None) -> int:
         from core.execution.capital_allocator import GroupCorrelationTracker
 
         correlation_tracker = GroupCorrelationTracker(ema_alpha=0.05)
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
     # ── Initialize MetaSignalFilter (V3 Stage 2: LGB+MLP + Platt + Conformal) ──
@@ -1335,7 +1326,11 @@ def main(argv: list[str] | None = None) -> int:
             # (configs/brains/ for XAU, configs/brains_btc/ for BTC).
             # If no MetaFilter config exists for this symbol, meta_signal_filter stays None
             # → p_win falls through to PnL store or neutral default (0.5).
-            _brains_dir = Path(args.brains_dir) if hasattr(args, "brains_dir") and args.brains_dir else (PROJECT_ROOT / "configs" / "brains")
+            _brains_dir = (
+                Path(args.brains_dir)
+                if hasattr(args, "brains_dir") and args.brains_dir
+                else (PROJECT_ROOT / "configs" / "brains")
+            )
             _filter_cfg_path = Path(_brains_dir) / "meta_stage2_filter_v3.json"
             if _filter_cfg_path.exists():
                 with open(_filter_cfg_path, encoding="utf-8") as _fcfh:
@@ -1432,7 +1427,7 @@ def main(argv: list[str] | None = None) -> int:
                         flush=True,
                     )
                     meta_signal_filter = None
-        except Exception as _mf_exc:
+        except Exception as _mf_exc:  # noqa: BLE001
             print(
                 json.dumps(
                     {"event": "meta_filter_init_error", "time": _utc_iso(), "error": str(_mf_exc)},
@@ -1478,7 +1473,7 @@ def main(argv: list[str] | None = None) -> int:
 
             hot_reload = ConfigHotReload(str(_hot_path))
             hot_reload.load()
-        except Exception as _hot_reload_exc:
+        except Exception as _hot_reload_exc:  # noqa: BLE001
             print(
                 json.dumps(
                     {
@@ -1521,7 +1516,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _bs_exc:
+        except Exception as _bs_exc:  # noqa: BLE001
             print(
                 json.dumps(
                     {
@@ -1551,7 +1546,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _ew_exc:
+        except Exception as _ew_exc:  # noqa: BLE001
             print(
                 json.dumps(
                     {
@@ -1581,7 +1576,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _lm_exc:
+        except Exception as _lm_exc:  # noqa: BLE001
             print(
                 json.dumps(
                     {
@@ -1616,7 +1611,7 @@ def main(argv: list[str] | None = None) -> int:
                         _alert_sys = _full_cfg.get("alert_system", {})
                         if isinstance(_alert_sys, dict):
                             _rules_config = _alert_sys.get("rules", None)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
 
             alert_hub = LiveAlertHub(
@@ -1638,7 +1633,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _ah_exc:
+        except Exception as _ah_exc:  # noqa: BLE001
             print(
                 json.dumps(
                     {
@@ -1668,7 +1663,7 @@ def main(argv: list[str] | None = None) -> int:
             msg["traceback"] = "".join(_traceback.format_tb(exc_tb))[-2000:]
         try:
             print(json.dumps(msg, ensure_ascii=False), flush=True)
-        except Exception:
+        except Exception:  # noqa: BLE001
             print(f"FATAL: {exc_type}: {exc_value}", flush=True)
         _sys.__excepthook__(exc_type, exc_value, exc_tb)
 
@@ -1755,7 +1750,7 @@ def main(argv: list[str] | None = None) -> int:
                                     ),
                                     flush=True,
                                 )
-                            except Exception as _wsexc:
+                            except Exception as _wsexc:  # noqa: BLE001
                                 print(
                                     json.dumps(
                                         {
@@ -1789,7 +1784,7 @@ def main(argv: list[str] | None = None) -> int:
                                     ),
                                     flush=True,
                                 )
-                        except Exception as _wsexc:
+                        except Exception as _wsexc:  # noqa: BLE001
                             print(
                                 json.dumps(
                                     {
@@ -1895,16 +1890,21 @@ def main(argv: list[str] | None = None) -> int:
                     try:
                         tracker = BrainPerformanceTracker.load(tracker_path)
                         state._tracker_reload_pending = False
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
                 if not should_continue:
                     break
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 # ── FIX-20260607-140: Fail-Closed on dispatch pipeline crash ──
                 # ExecutionQueueFatalError means the dispatch pipeline is broken.
                 # Trip the circuit breaker IMMEDIATELY — do NOT continue the
                 # cycle without a functioning dispatch path (Fail-Open→Fail-Closed).
-                if isinstance(exc, __import__("core.execution.execution_queue", fromlist=["ExecutionQueueFatalError"]).ExecutionQueueFatalError):
+                if isinstance(
+                    exc,
+                    __import__(
+                        "core.execution.execution_queue", fromlist=["ExecutionQueueFatalError"]
+                    ).ExecutionQueueFatalError,
+                ):
                     state._circuit_breaker_tripped = True
                     state.block_new_entries = True
                 _tb = traceback.format_exc()
@@ -1948,7 +1948,7 @@ def main(argv: list[str] | None = None) -> int:
                             ),
                             flush=True,
                         )
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
             # ── FIX-20260603-075: persist execution guard state EVERY cycle ──
             _strategies = getattr(state, "_strategies", None)
@@ -1968,7 +1968,7 @@ def main(argv: list[str] | None = None) -> int:
                         circuit_breaker_tripped=state._circuit_breaker_tripped,
                         intraday_dd_active=state.block_new_entries,
                     )
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
 
             # ── FIX-20260604-077: persist PnL ledger EVERY cycle ──
@@ -1980,7 +1980,7 @@ def main(argv: list[str] | None = None) -> int:
                 try:
                     pnl_ledger.save(pnl_ledger_path)
                     _inject_performance_metrics(pnl_ledger, args.base_dir)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
 
             # ── FIX-20260604-079: data health monitor ──
@@ -1996,9 +1996,7 @@ def main(argv: list[str] | None = None) -> int:
                         symbol=config.symbol,
                         alert_hub=alert_hub,
                     )
-                    if _health.get("alerts") or _health.get("checks", {}).get(
-                        "training_ready"
-                    ):
+                    if _health.get("alerts") or _health.get("checks", {}).get("training_ready"):
                         print(
                             json.dumps(
                                 {"event": "data_health_report", **_health},
@@ -2007,7 +2005,7 @@ def main(argv: list[str] | None = None) -> int:
                             ),
                             flush=True,
                         )
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
 
             if state.loop_iteration % config.state_save_interval == 0:
@@ -2015,18 +2013,18 @@ def main(argv: list[str] | None = None) -> int:
                     try:
                         _state_path = Path(args.base_dir) / "rolling_norm_state.json"
                         rolling_norm.save_state(_state_path)
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
                 if regime_detector is not None:
                     try:
                         _regime_path = Path(args.base_dir) / "regime_detector_state.json"
                         regime_detector.save_state(_regime_path)
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
                 if meta_signal_filter is not None:
                     try:  # noqa: SIM105
                         meta_signal_filter.save_state(str(_mf_state_path))
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
 
             # ── Wait for next cycle: event-driven bar sync or interval sleep ──
@@ -2080,7 +2078,7 @@ def main(argv: list[str] | None = None) -> int:
                             time.sleep(args.interval_seconds)
                 else:
                     time.sleep(args.interval_seconds)
-            except Exception as _bar_exc:
+            except Exception as _bar_exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {
@@ -2098,7 +2096,7 @@ def main(argv: list[str] | None = None) -> int:
         if _live_lock is not None:
             try:  # noqa: SIM105
                 _live_lock.release()
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
         # ── Graceful shutdown: persist all state ──
         print(
@@ -2130,25 +2128,25 @@ def main(argv: list[str] | None = None) -> int:
                         ),
                         flush=True,
                     )
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
 
             if rolling_norm is not None:
                 try:
                     _state_path = Path(args.base_dir) / "rolling_norm_state.json"
                     rolling_norm.save_state(_state_path)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
             if regime_detector is not None:
                 try:
                     _regime_path = Path(args.base_dir) / "regime_detector_state.json"
                     regime_detector.save_state(_regime_path)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
             try:
                 save_path = Path(args.base_dir) / "brain_performance.json"
                 tracker.save(save_path)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {"event": "tracker_save_error", "time": _utc_iso(), "error": str(exc)},
@@ -2170,7 +2168,7 @@ def main(argv: list[str] | None = None) -> int:
                         ),
                         flush=True,
                     )
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     print(
                         json.dumps(
                             {
@@ -2185,7 +2183,7 @@ def main(argv: list[str] | None = None) -> int:
             if meta_signal_filter is not None:
                 try:  # noqa: SIM105
                     meta_signal_filter.save_state(str(_mf_state_path))
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
             # ── FIX-20260603-072: persist execution guard state on shutdown ──
             _strategies = getattr(state, "_strategies", None)
@@ -2205,7 +2203,7 @@ def main(argv: list[str] | None = None) -> int:
                         circuit_breaker_tripped=state._circuit_breaker_tripped,
                         intraday_dd_active=state.block_new_entries,
                     )
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
         finally:
             signal.signal(signal.SIGINT, _old_sigint)
@@ -2215,7 +2213,7 @@ def main(argv: list[str] | None = None) -> int:
         if alert_hub is not None:
             try:  # noqa: SIM105
                 alert_hub.shutdown()
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
         if mt5_worker is not None:

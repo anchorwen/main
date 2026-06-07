@@ -30,7 +30,7 @@ class BatchProcessor:
                         "status": "completed",
                     }
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 errors.append({"index": i, "trigger": trigger, "error": str(exc)})
                 results.append(
                     {"index": i, "trigger": trigger, "status": "error", "error": str(exc)}
@@ -65,7 +65,7 @@ class BatchProcessor:
             try:
                 r = self._orchestrator.process_execution_event(**event)
                 results.append({"index": i, "status": "processed", **r})
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 errors.append({"index": i, "error": str(exc), "event": event})
 
         return {

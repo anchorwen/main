@@ -283,7 +283,7 @@ class AuditTrail:
                     results.append(entry)
                     if len(results) >= limit:
                         break
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
         return results

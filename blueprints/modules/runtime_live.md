@@ -373,3 +373,5 @@ The 0.10 barrier threshold only passes with at least 1 directional brain. With c
 ```bash
 python -m pytest tests/ -k "runtime or live or cycle" -q
 ```
+
+| FIX-20260607-143 | 2026-06-07 | cursor-agent | — | **Trend Maturity + Kalman Exit wiring**: Extracted M5 Hurst + H1 Kalman velocity from regime_gate_result → passed through _evaluate_strategy_lines → strategy.evaluate(). Kalman velocity stored in LiveCycleState._last_kalman_velocity_bps for exit management (one-cycle lag, acceptable). Pure wiring — no new signals. DQAF-20260607-007. | RC-12 |

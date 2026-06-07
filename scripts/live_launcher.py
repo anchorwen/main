@@ -148,7 +148,7 @@ def _feedback_loop_runner(
             if log_fh is not None:
                 log_fh.write(msg + "\n")
                 log_fh.flush()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             msg = f"[feedback] ERROR: {exc}"
             print(msg, flush=True)
             if log_fh is not None:
@@ -199,7 +199,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
             print(
                 f"[launcher] Unresolved tickets needing manual review: {tickets[:20]}", flush=True
             )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         print(f"[launcher] WARNING: journal repair/cleanup failed: {exc}", flush=True)
 
     # ── Open log file for this session ──
@@ -364,7 +364,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                     except OSError:
                         _lf.unlink()
                         _echo(f"  Stale lock cleaned: {_lf.name} (pid={_pid} dead)")
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
     _echo(f"  Log: {log_path}")
@@ -390,7 +390,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
             _echo(
                 f"  WARNING: {_orphan_count} other Python processes detected — may cause MT5 contention"
             )
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
     # ── FIX-019: Kill stale bridge/intent from previous crashed sessions ──
@@ -418,7 +418,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                             print(f"[launcher] Killed stale bridge PID={_old_pid}", flush=True)
                         except OSError:
                             pass
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
     if _stale_killed:
         _echo(f"  Stale bridge cleaned: {_stale_killed} process(es) terminated")
@@ -484,7 +484,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                             log_fh.flush()
                     else:
                         stop_event.wait(1.0)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     bridge_thread = threading.Thread(
@@ -543,7 +543,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         for _fh in [bridge_log_fh, intent_log_fh, log_fh]:
             try:  # noqa: SIM105
                 _fh.close()
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
         sys.exit(0)
 
@@ -634,7 +634,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                 intent_proc = new_proc
 
             return new_proc
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             msg3 = f"[launcher] ERROR restarting {name}: {exc}"
             print(msg3, flush=True)
             log_fh.write(msg3 + "\n")
@@ -685,7 +685,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                     ).total_seconds() / 60
                     if hb_age > BRIDGE_STALL_MINUTES:
                         alerts.append(f"BRIDGE_STALL: no heartbeat for {hb_age:.0f}m")
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
         # 3. Active position staleness
@@ -700,7 +700,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                     ).total_seconds() / 3600
                     if age_h > 24:
                         alerts.append(f"STALE_ACTIVE_POSITION: position state {age_h:.0f}h old")
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
         # 4. Governance staleness
@@ -757,7 +757,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                     print(msg, flush=True)
                     log_fh.write(msg + "\n")
                     log_fh.flush()
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     # ── Main watchdog loop ──
@@ -821,7 +821,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     for _fh in [bridge_log_fh, intent_log_fh, log_fh]:
         try:  # noqa: SIM105
             _fh.close()
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     return exit_code[0]

@@ -55,7 +55,7 @@ def main() -> int:
             cwd=str(ROOT),
             timeout=15,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass  # Never let a reminder hook break the flow
 
     return 0

@@ -624,7 +624,7 @@ def _resolve_features_for_schema(feature_schema_id: str) -> list[str] | None:
         if feature_schema_id not in SCHEMA_DIMENSIONS:
             return None
         return get_schema_feature_names(feature_schema_id)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 
@@ -667,7 +667,7 @@ def generate_brain_config(
             from core.training.model_hashing import hash_model_file
 
             artifact_hash = hash_model_file(Path(model_path))
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     config: dict[str, Any] = {

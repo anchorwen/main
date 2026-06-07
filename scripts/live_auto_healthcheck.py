@@ -86,7 +86,7 @@ def _run_policy_eval(base_dir: Path, symbol: str) -> dict[str, Any]:
     try:
         from scripts.live_dispatch_policy import build_parser as policy_parser
         from scripts.live_dispatch_policy import load_gate_policy_config, run_policy
-    except Exception:
+    except Exception:  # noqa: BLE001
         return {"error": "import_failed"}
 
     try:
@@ -97,7 +97,7 @@ def _run_policy_eval(base_dir: Path, symbol: str) -> dict[str, Any]:
         config = load_gate_policy_config(None)
         _code, result = run_policy(p_args, gate_config=config)
         return result
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
 
 

@@ -112,12 +112,12 @@ class BarrierStrategy(StrategyLine):
                 try:
                     if not getattr(prop, "brain_id", None):
                         prop.brain_id = bid
-                except Exception:
+                except Exception:  # noqa: BLE001
                     logging.getLogger(__name__).warning(
                         "Brain proposal build failed brain_id=%s", bid
                     )
                 proposals.append(prop)
-            except Exception as _exc:
+            except Exception as _exc:  # noqa: BLE001
                 print(
                     json.dumps(
                         {

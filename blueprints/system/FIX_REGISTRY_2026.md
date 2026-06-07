@@ -5428,3 +5428,25 @@ barrier_12bar 启动后两个周期均为 `insufficient_voters_1_lt_2` (total=0)
 - **Root Cause**: RC-09 (config-drift) — 多个闸门默认值在spread_points/TP变更后未重新校准，形成链式阻断。RC-05 (boundary-error) — counter_trend默认block=0.40对swing策略过于严格。
 - **Risk**: 低。所有闸门物理上合理（非绕过），仅调整阈值匹配当前市场结构和策略特性。
 - **Verification**: verify.py --full: 2702 passed. Live: position opened and managed.
+
+### FIX-20260607-143
+- **Date**: 2026-06-07
+- **Author**: cursor-agent
+- **Type**: feat
+- **Module**: execution-orders, runtime-live
+- **Files**: core/execution/strategy_line.py, core/execution/position_manager.py, core/runtime/strategy_evaluator.py, core/runtime/live_cycle.py
+- **Description**: Trend Maturity Discount + Kalman Velocity Flip Exit. DQAF-20260607-007. (1) trend_maturity_discount(): Hurst persistence loss + Kalman velocity decay → position size scaling for trend/swing strategies. H=0.60→1.00x, H=0.50→0.55x, floor=0.40x. (2) Kalman velocity sign flip as fast-path exit in evaluate_brain_exit() — exits BEFORE price hits SL when velocity reverses. Threshold |v|>3bps rejects noise. (3) Data wiring: M5 Hurst + H1 Kalman velocity extracted from regime_gate_result → strategy.evaluate() and position_manager via LiveCycleState._last_kalman_velocity_bps.
+- **Root Cause**: RC-12 (missing-feature) — Kalman velocity + Hurst already computed every cycle by TrendDetector and included in RegimeGate.classify() return dict, but never consumed by position sizing or exit decisions. Pure wiring — no new signals introduced.
+- **Risk**: Low. New parameters have None defaults → no-op. trend_maturity_discount only activates when Hurst < 0.60. Kalman velocity flip threshold 3bps filters M5 noise. Both changes are pure additive, no existing gate logic modified.
+- **Verification**: verify.py --quick: PASS (mypy + ruff). trend_maturity_discount() smoke tested H=[0.60,0.55,0.50,0.45]. Live: pending deployment.
+
+### FIX-20260607-144
+- **Date**: 2026-06-07
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: core/runtime/golden_master.py
+- **Description**: Golden Master mypy 存量错误清零。2个错误: (1) `_ENV_REPLAY` 常量未定义——行33引用但行23只定义了 `_ENV_DISABLE`。补加 `_ENV_REPLAY = "GOLDEN_MASTER_REPLAY"`。 (2) `_iterable` 在 if/elif 分支中类型从 Generator 变为 dict_items → mypy incompatible types。添加 `_iterable: Any` 显式类型注解。两处均为存量错误，非本次会话引入。
+- **Root Cause**: RC-06 (contract-violation) — `_ENV_REPLAY` 声明遗漏; 类型注解缺失导致 mypy 无法推断 union type。
+- **Risk**: 无。`_is_replaying()` 未在任何热路径调用——仅用于 future feature。`_iterable` 运行时行为不变。
+- **Verification**: `python -m mypy core/runtime/golden_master.py` → exit=0。verify.py --quick: [PASS] mypy [PASS] ruff。

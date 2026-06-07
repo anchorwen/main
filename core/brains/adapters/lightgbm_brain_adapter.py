@@ -53,7 +53,7 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
             self._booster = booster
             self._num_features = booster.num_feature()
             self._backend = "lightgbm:txt"
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             self._backend = f"stub:{type(exc).__name__}"
             self._booster = None
             emit_brain_alert(
@@ -108,7 +108,7 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
         if self._feature_adapter is not None:
             try:  # noqa: SIM105
                 raw_vector = self._feature_adapter.normalize(raw_vector)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass  # best-effort; dim mismatch caught by line 3
 
         # ── Defense Line 3: Dimension assertion ──

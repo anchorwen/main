@@ -664,6 +664,8 @@ class ActivePositionManager:
         current_supporting: list[str],
         mid: float | None = None,
         ticket: int | None = None,
+        *,
+        kalman_velocity_bps: float | None = None,  # FIX-20260607-007: H1 Kalman velocity (bps)
     ) -> tuple[bool, str]:
         """Check if brain consensus has flipped against the entry direction.
 
@@ -682,6 +684,10 @@ class ActivePositionManager:
            below entry confidence by more than ``confidence_drop_threshold``.
            EMA low-pass removes white noise while preserving trend sensitivity.
 
+        4. **Kalman velocity flip** (FIX-20260607-007): O(1) per-bar leading
+           indicator — exits BEFORE price hits SL when Kalman velocity sign
+           reverses.  Acts as a differential (D) term in the exit PID.
+
         Minimum-hold protection: during the first ``min_hold_cycles``, exits
         are suppressed unless the toxicity veto fires (price near hard SL).
 
@@ -696,6 +702,19 @@ class ActivePositionManager:
             mid if mid is not None else 0.0, ticket=ticket
         ):
             return False, "protected_min_hold"
+
+        # ── 0. Kalman velocity flip (FIX-20260607-007) ──
+        # Fast-path exit: when the Kalman velocity (1st derivative of price)
+        # changes sign, the trend direction has reversed at the microstructure
+        # level.  This is a LEADING indicator — price may still be moving in
+        # the position's favor, but momentum has flipped.  Exiting here saves
+        # spread + slippage vs waiting for the trail stop to fire.
+        # Threshold: |velocity| > 3 bps to reject noise.
+        if kalman_velocity_bps is not None and abs(kalman_velocity_bps) > 3.0:
+            if pos.side == "long" and kalman_velocity_bps < -3.0:
+                return True, f"kalman_velocity_flip_long_v={kalman_velocity_bps:.1f}bps"
+            elif pos.side == "short" and kalman_velocity_bps > 3.0:
+                return True, f"kalman_velocity_flip_short_v={kalman_velocity_bps:.1f}bps"
 
         # ── 1. Signal-reversal: full consensus opposes position ──
         consensus_dir = str(current_consensus.get("aggregated_bias", "neutral"))

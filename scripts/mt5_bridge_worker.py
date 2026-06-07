@@ -143,7 +143,7 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
                 for line in journal_path.read_text(encoding="utf-8").splitlines():
                     if mid in line:
                         return  # duplicate, skip
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass  # journal dedup is best-effort — skip malformed lines
         with journal_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
@@ -707,7 +707,7 @@ def _check_mt5_heartbeat(mt5: Any) -> bool:
     try:
         info = mt5.terminal_info()
         return info is not None
-    except Exception:
+    except Exception:  # noqa: BLE001
         return False
 
 
@@ -749,7 +749,7 @@ def _reconnect_mt5(mt5_module: Any, terminal_path: str, *, symbol: str = "XAUUSD
                 with log_and_continue(component="Bridge:symbol_select"):
                     mt5_module.symbol_select(symbol, True)
                 return True
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
     return False
 
@@ -773,7 +773,7 @@ def run_worker(args: argparse.Namespace) -> int:
                 print(f"[bridge] MT5 initialized: {terminal_path}", flush=True)
             else:
                 print(f"[bridge] WARN: MT5 init failed: {_mt5.last_error()}", flush=True)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             print(f"[bridge] WARN: MT5 unavailable: {exc}", flush=True)
 
     health_path = Path(args.receipt_dir).parent / "reports" / "mt5_bridge_health.json"
@@ -802,7 +802,7 @@ def run_worker(args: argparse.Namespace) -> int:
                             mt5=mt5,
                         )
                     )
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     processed.append(
                         {
                             "message_id": path.stem,

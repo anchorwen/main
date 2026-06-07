@@ -84,7 +84,7 @@ def main() -> int:
                 print("[mypy] Commit will be BLOCKED by pre-commit hook. Fix before delivery.")
     except subprocess.TimeoutExpired:
         print(f"[mypy] {file_path}: timed out")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         print(f"[mypy] {file_path}: check failed ({exc})")
 
     return 0  # Never block on PostToolUse — just report

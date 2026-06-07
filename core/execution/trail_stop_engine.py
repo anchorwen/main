@@ -263,5 +263,5 @@ class TrailStopEngine:
             avg_sharpe = float(np.mean(sharpe_values))
             scale = 1.0 + 0.25 * float(np.tanh(avg_sharpe * 1.2))
             return float(np.clip(scale, 1.0, 1.5))
-        except Exception:
+        except Exception:  # noqa: BLE001
             return 1.0

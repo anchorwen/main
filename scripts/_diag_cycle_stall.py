@@ -44,7 +44,7 @@ def _position_count(mt5_obj, symbol, timeout=5.0):
         try:
             pos = mt5_obj.positions_get(symbol=symbol)
             result[0] = len(pos) if pos else 0
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             exc_info[0] = e
 
     t = th.Thread(target=_target, daemon=True)

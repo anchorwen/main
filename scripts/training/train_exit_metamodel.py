@@ -138,7 +138,7 @@ def extract_features(pair: dict[str, Any]) -> dict[str, Any]:
         ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
         entry_hour = float(ts.hour)
         entry_dow = float(ts.weekday())
-    except Exception:
+    except Exception:  # noqa: BLE001
         entry_hour = 12.0
         entry_dow = 3.0
 

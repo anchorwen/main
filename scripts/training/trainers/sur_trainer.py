@@ -168,13 +168,13 @@ def main(argv: list[str] | None = None) -> int:
     # other UTF-8 characters in subprocess output don't cause crashes.
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-    except Exception:
+    except Exception:  # noqa: BLE001
         import io
 
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     try:
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-    except Exception:
+    except Exception:  # noqa: BLE001
         import io
 
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")

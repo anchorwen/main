@@ -378,7 +378,7 @@ class ServiceContainer:
                     self.brain_registry.register(brain_data)
                 elif isinstance(entry, dict) and "brain_id" in entry:
                     self.brain_registry.register(entry)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logging.getLogger(__name__).warning(
                     "Failed to auto-register brain entry: %s", entry, exc_info=True
                 )

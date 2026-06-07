@@ -5,8 +5,8 @@
       "brain_id": "OU_Params_V6_Sniper",
       "status": "live",
       "registered_at": "2026-05-04T10:51:17.123332",
-      "last_transition_at": "2026-06-05T22:02:06.092820",
-      "transition_count": 13,
+      "last_transition_at": "2026-06-06T22:00:23.984804",
+      "transition_count": 14,
       "freeze_count": 0,
       "exposure_limited": false,
       "performance_metrics": {
@@ -21,8 +21,8 @@
       "brain_id": "OU_Params_V7_M15",
       "status": "live",
       "registered_at": "2026-05-24T22:00:00.000000",
-      "last_transition_at": "2026-06-05T22:02:06.093820",
-      "transition_count": 6,
+      "last_transition_at": "2026-06-06T22:00:23.984804",
+      "transition_count": 7,
       "freeze_count": 0,
       "exposure_limited": false,
       "vote_weight": 1.5,
@@ -298,22 +298,5 @@
       "freeze_count": 0
     }
   },
-  "transition_log": [
-    {
-      "brain_id": "BTC_Swing_V5",
-      "from": null,
-      "to": "shadow",
-      "reason": "brain_registered",
-      "timestamp": "2026-06-06T02:19:13.666241",
-      "fix_id": "FIX-20260529-034"
-    },
-    {
-      "brain_id": "BTC_Swing_V6_MultiTF_LGB_v1",
-      "from": null,
-      "to": "shadow",
-      "reason": "brain_registered",
-      "timestamp": "2026-06-06T13:18:24.081068",
-      "fix_id": "FIX-20260529-034"
-    }
-  ]
+  "transition_log": []
 }

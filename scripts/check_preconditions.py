@@ -170,7 +170,7 @@ def check_entry_spread() -> tuple[float, str]:
                     total += 1
                     if es > 0:
                         nonzero += 1
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
     ratio = nonzero / total if total > 0 else 0.0
     all_time_ratio = all_time_nonzero / all_time_total if all_time_total > 0 else 0.0
@@ -187,7 +187,7 @@ def check_calibrator_xau() -> tuple[int, str]:
         hist = d.get("history", [])
         cs = d.get("cold_started", False)
         return len(hist), f"{len(hist)} samples (cold_started={cs})"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return 0, f"error reading state: {e}"
 
 
@@ -217,7 +217,7 @@ def check_legacy_count() -> tuple[int, str]:
                 if any(kw in line for kw in ("DEPRECATED", "LEGACY", "Strangler Fig")):
                     if "test" not in str(py_file).lower():
                         count += 1
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
     return count, f"{count} DEPRECATED/LEGACY/Strangler sites in core/"
 
@@ -277,7 +277,7 @@ def check_btc_trading() -> tuple[bool, str]:
                 r = json.loads(line.strip())
                 if r.get("action") == "open" and r.get("recorded_at", "") >= cutoff:
                     live_opens += 1
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
     trading = live_opens > 0
     return trading, f"BTC 7d live opens={live_opens}, trading={'YES' if trading else 'NO (S4 may be needed)'}"
@@ -310,7 +310,7 @@ def run_check(task_id: str) -> dict[str, object]:
             else:
                 met = None  # informational only
             results.append({"name": pc["name"], "value": value, "required": required, "detail": detail, "met": met})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             results.append({"name": pc["name"], "value": None, "detail": str(e), "met": False})
     return {"task_id": task_id, "name": task.get("name"), "deadline": task.get("deadline"), "days_left": days_until(cast(str, task.get("deadline", ""))), "results": results}
 

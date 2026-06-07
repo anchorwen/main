@@ -114,7 +114,7 @@ class BrainRegistrationGate:
                 ok = check_fn(entry, result)
                 if ok:
                     result.checks_passed += 1
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 result.failures.append((check_name, f"unexpected error: {exc}"))
 
         # Non-blocking warnings
@@ -323,7 +323,7 @@ class BrainRegistrationGate:
 
             live = yaml.safe_load(self._live_yaml_path.read_text(encoding="utf-8")) or {}
             return set(live.get("strategy_lines", {}).keys())
-        except Exception:
+        except Exception:  # noqa: BLE001
             return set()
 
     # ── CLI entry point ──

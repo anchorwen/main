@@ -144,7 +144,7 @@ class FeatureService:
                                     freshness["max_age_seconds"],
                                 )
                                 _stale = True
-                        except Exception:
+                        except Exception:  # noqa: BLE001
                             logging.warning(
                                 "FeatureService freshness check failed for %s — "
                                 "forcing live recompute to avoid stale cache",
@@ -181,7 +181,7 @@ class FeatureService:
             def _run_compute() -> None:
                 try:
                     _compute_result[0] = self._computer.compute_all()
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     _compute_error[0] = exc
 
             _t = threading.Thread(target=_run_compute, daemon=True)
@@ -314,7 +314,7 @@ class FeatureService:
                 "zero_feature_vector_fallback",
                 {"symbol": symbol, "n_features": n_features, "tier": 3},
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
         return np.zeros(n_features, dtype=np.float32)
 

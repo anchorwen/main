@@ -90,13 +90,13 @@ def run_incremental_update(
             "started_at": result.started_at.isoformat(),
             "finished_at": result.finished_at.isoformat(),
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "incremental_update", "status": "error", "error": str(exc)[:500]}
     finally:
         if computer is not None and hasattr(computer, "_mt5"):
             try:  # noqa: SIM105
                 computer._mt5.shutdown()
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
 
@@ -127,7 +127,7 @@ def run_compaction(
             "trimmed_by_retention": total_trimmed,
             "per_partition": results,
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "compaction", "status": "error", "error": str(exc)[:500]}
 
 
@@ -151,7 +151,7 @@ def run_stats(store_dir: str) -> dict[str, Any]:
             "partitions": partitions,
             "per_partition": stats,
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {"step": "stats", "status": "error", "error": str(exc)[:500]}
 
 

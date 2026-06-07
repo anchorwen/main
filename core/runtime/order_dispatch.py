@@ -68,7 +68,7 @@ def _check_recent_sl_streak(
         if not p.exists():
             return False, 0
         lines = p.read_text(encoding="utf-8").splitlines()
-    except Exception:
+    except Exception:  # noqa: BLE001
         return False, 0
 
     now = _time.time()
@@ -79,7 +79,7 @@ def _check_recent_sl_streak(
             continue
         try:
             rec = json.loads(line)
-        except Exception:
+        except Exception:  # noqa: BLE001
             continue
         if rec.get("action") != "close":
             continue
@@ -96,7 +96,7 @@ def _check_recent_sl_streak(
                 dt = datetime.fromisoformat(recorded)
             if now - dt.timestamp() > lookback_seconds:
                 break
-        except Exception:
+        except Exception:  # noqa: BLE001
             continue
         label = rec.get("label", "")
         if label in ("sl_hit_first", "loss"):
@@ -197,7 +197,7 @@ def _build_risk_context(mt5_worker: Any, symbol: str) -> dict[str, Any]:
             if balance > 0:
                 ctx["current_drawdown_pct"] = round(max(0.0, (balance - equity) / balance) * 100, 2)
         ctx["_source"] = "mt5_live"
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         ctx["_source"] = "mt5_error"
         ctx["_error"] = str(exc)
 
@@ -226,7 +226,7 @@ def _build_risk_context_from_broker(broker: Any, symbol: str) -> dict[str, Any]:
         ctx["positions_per_symbol"] = per_sym
         ctx["current_drawdown_pct"] = broker.get_account_drawdown_pct()
         ctx["_source"] = f"{getattr(broker, 'broker_name', 'unknown')}_live"
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         ctx["_source"] = "broker_error"
         ctx["_error"] = str(exc)
     return ctx
@@ -275,7 +275,7 @@ def _evaluate_risk(
             if hasattr(control_snapshot.mode_state.current_mode, "value")
             else str(control_snapshot.mode_state.current_mode),
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {
             "status": "error",
             "risk_tier": "unknown",

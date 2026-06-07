@@ -24,7 +24,7 @@ def main():
         try:
             with open(f) as fh:
                 d = json.load(fh)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"{f.name}: ERROR {e}")
             continue
 

@@ -350,7 +350,7 @@ def load_ohlc_arrays(csv_path: Path) -> dict[str, np.ndarray]:
                 if ts_dt.tzinfo is not None:
                     ts_dt = ts_dt.tz_convert(None)
                 timestamp_epochs.append(ts_dt.timestamp())
-            except Exception:
+            except Exception:  # noqa: BLE001
                 timestamp_epochs.append(0.0)
 
     return {

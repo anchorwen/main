@@ -282,7 +282,7 @@ def filter_text_log_tail(path: Path, max_bytes: int) -> tuple[str, int, int, boo
 
     try:
         text = raw.decode("utf-8", errors="replace")
-    except Exception:
+    except Exception:  # noqa: BLE001
         text = str(raw)
 
     # Try to find a clean line boundary start

@@ -712,7 +712,7 @@ def _auto_register_in_live_yaml(brain_config: dict[str, Any], config_path: Path)
     try:
         with open(live_yaml_path, encoding="utf-8") as f:
             live = _yaml.safe_load(f) or {}
-    except Exception:
+    except Exception:  # noqa: BLE001
         print("[train] WARNING: Failed to read live.yaml, skip auto-register")
         return
 
@@ -737,7 +737,7 @@ def _auto_register_in_live_yaml(brain_config: dict[str, Any], config_path: Path)
         with open(live_yaml_path, "w", encoding="utf-8") as f:
             _yaml.safe_dump(live, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
         print(f"[train] Registered {brain_id} in live.yaml")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"[train] WARNING: Failed to update live.yaml: {e}")
 
 
@@ -756,7 +756,7 @@ def _auto_register_in_governance(brain_config: dict[str, Any]) -> None:
                 "brain_states": {},
                 "transition_log": [],
             }
-    except Exception:
+    except Exception:  # noqa: BLE001
         print("[train] WARNING: Failed to read governance_state.json")
         return
 
@@ -787,7 +787,7 @@ def _auto_register_in_governance(brain_config: dict[str, Any]) -> None:
         with open(gov_path, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2, ensure_ascii=False)
         print(f"[train] Registered {brain_id} in governance_state.json (candidate)")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"[train] WARNING: Failed to update governance_state.json: {e}")
 
 
@@ -825,7 +825,7 @@ def _write_model_meta_json(model_path: str | Path, contract: TrainingContract) -
                 fn = data.get("feature_names")
                 if fn is not None:
                     feature_names = fn.tolist() if isinstance(fn, np.ndarray) else list(fn)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     if not feature_names:
@@ -1075,7 +1075,7 @@ def run_optuna_search(
                 y_val, val_preds, regression=_resolve_train_mode(contract) == "reg"
             )
             forward_s = val_metrics.get("sharpe_ratio", -999.0)
-        except Exception:
+        except Exception:  # noqa: BLE001
             forward_s = -999.0
         finally:
             contract.architecture.custom_params = saved_params
@@ -1299,7 +1299,7 @@ def run_pipeline(
             if critical:
                 result.errors = critical
                 return result
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         result.errors = [f"Contract loading failed: {e}"]
         print(f"[train] ERROR: {e}")
         return result
@@ -1322,7 +1322,7 @@ def run_pipeline(
                     )
                     if cal_result.get("recommend_action"):
                         print(f"[train] → {cal_result['recommend_action']}")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 print(f"[train] WARNING: Profitability calibration failed (non-fatal): {e}")
         else:
             print(
@@ -1340,7 +1340,7 @@ def run_pipeline(
     # ── Load dataset ──
     try:
         ds = load_dataset(contract)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         result.errors = [f"Dataset loading failed: {e}"]
         print(f"[train] ERROR: {e}")
         return result
@@ -1393,7 +1393,7 @@ def run_pipeline(
             pnl_raw = raw.get("pnl_r") or raw.get("pnl")
             if pnl_raw is not None:
                 pnl_array = np.asarray(pnl_raw, dtype=np.float64)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     # ── Label preprocessing: directional (-1/0/1) → binary (0/1) ──
@@ -1475,7 +1475,7 @@ def run_pipeline(
 
             n_train, n_val, n_test = len(X_train), len(X_val), len(X_test)
             print(f"[train] Pre-split dataset: train={n_train}, val={n_val}, test={n_test}")
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
     if not pre_split:
@@ -1679,7 +1679,7 @@ def run_pipeline(
         result.metrics = best_metrics
         print(f"[train] Best seed: {best_seed} (forward_sharpe={best_sharpe:.4f})")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         result.errors = [f"Training failed: {e}"]
         print(f"[train] ERROR during training: {e}")
         import traceback
@@ -1750,7 +1750,7 @@ def run_pipeline(
                 result.metrics["cpcv_sharpe_std"] = round(cpcv_sharpe_std, 4)
                 print(f"[train] CPCV Sharpe: {cpcv_sharpe_mean:.4f} ± {cpcv_sharpe_std:.4f}")
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"[train] WARNING: CPCV evaluation failed (non-fatal): {e}")
 
     # ── Quality gates ──
@@ -1841,7 +1841,7 @@ def run_pipeline(
         model_hash = hash_model_file(model_path)
         result.model_hash = model_hash
         print(f"[train] Model hash: {model_hash}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"[train] WARNING: Model hashing failed: {e}")
 
     # ── Registry ──
@@ -1871,7 +1871,7 @@ def run_pipeline(
         registry.add_or_update(record)
         result.run_id = record.run_id
         print(f"[train] Registered run: {record.run_id} (status={record.status})")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"[train] WARNING: Registry write failed (non-fatal): {e}")
 
     # ── Brain config ──
@@ -1909,7 +1909,7 @@ def run_pipeline(
             # Auto-register in governance_state.json
             _auto_register_in_governance(brain_config)
             _print_register_reminder(config_path.name)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"[train] WARNING: Brain config generation failed: {e}")
 
     # ── Finalize ──

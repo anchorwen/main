@@ -57,5 +57,5 @@ def record_gate_block(
         audit_path = audit_dir / f"{date_str}.jsonl"
         with open(audit_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass  # audit recording is best-effort, not critical path

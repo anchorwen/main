@@ -120,7 +120,7 @@ def log_training_run(
             )
         else:
             result["status"] = f"backend_{backend}_not_available"
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("mlflow_bridge: %s logging failed for %s: %s", backend, run_name, exc)
         result["status"] = f"error: {exc}"
 
@@ -135,7 +135,7 @@ def log_metric(key: str, value: float, *, step: int = 0) -> None:
 
             if mlflow.active_run():
                 mlflow.log_metric(key, value, step=step)
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
 

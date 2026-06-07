@@ -74,7 +74,7 @@ def _build_brain(entry: dict[str, Any]) -> tuple[Any | None, str | None]:
         factory = BrainFactory()
         adapter = factory.build(entry)
         return adapter, None
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         err_msg = f"{type(exc).__name__}: {exc}"
         print(
             f"[shadow_ensemble] build_failed brain_id={bid} error={err_msg}",
@@ -109,7 +109,7 @@ def _run_single_brain(
             if hasattr(adapter, "describe")
             else "unknown",
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
         err_str = str(exc)[:500]
         print(
@@ -189,7 +189,7 @@ def _resolve_feature_vector(
                     dtype=np.float64,
                 )
                 return vec, "store"
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
     return np.zeros(feature_dim, dtype=np.float64), "stub"
 
@@ -215,7 +215,7 @@ def _resolve_micro_feature_vector(
                 )
                 vec = adapter.build_model_input(record.values).ravel()
                 return vec, "store"
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
     return np.zeros(9, dtype=np.float64), "stub"
 
@@ -314,7 +314,7 @@ def build_report(
                 symbol=symbol,
                 store=store,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             shadow_write_result = {"written": False, "error": str(exc)[:500]}
     report["shadow_decisions_written"] = shadow_write_result
 
