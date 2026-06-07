@@ -203,9 +203,40 @@ class DingTalkAlertChannel(AlertChannel):
         rule = alert.get("rule_name", "unknown")
         rule_cn = self.RULE_NAME_CN.get(rule, rule)
         fired_at = alert.get("fired_at", "")
+        symbol = alert.get("symbol", "")
         context = alert.get("context_snapshot", {})
         aggregated = alert.get("aggregated_count", 0)
 
+        symbol_line = f"**【{symbol}】**\n\n" if symbol else ""
+
+        # ── Type A: direct notification (title + text already formatted) ──
+        title = alert.get("title", "")
+        text = alert.get("text", "")
+        if title and text:
+            agg_line = (
+                f"\n\n> ⚠️ 同类告警在过去窗口内发生了 **{aggregated}** 次" if aggregated > 1 else ""
+            )
+            return {
+                "msgtype": "markdown",
+                "markdown": {
+                    "title": title,
+                    "text": (
+                        f"{symbol_line}"
+                        f"{text}\n\n"
+                        f"**触发时间:** {fired_at}{agg_line}"
+                        f"\n\n---\nQuantOs 实盘告警系统"
+                    ),
+                },
+            }
+
+        # ── Type B (Phase 2): actionable incident with runbook SOP ──
+        runbook = alert.get("runbook", {})
+        if runbook.get("available"):
+            # TODO Phase 2: render runbook actions, diagnostic commands,
+            # and escalation path into the markdown body.
+            pass
+
+        # ── Type C (default / backward-compatible): state snapshot ──
         ctx_lines = (
             "\n".join(f"- **{self.CONTEXT_KEY_CN.get(k, k)}**: `{v}`" for k, v in context.items())
             or "_无上下文_"
@@ -220,6 +251,7 @@ class DingTalkAlertChannel(AlertChannel):
             "markdown": {
                 "title": f"QUANT OS 告警: {rule_cn}",
                 "text": (
+                    f"{symbol_line}"
                     f"## {prefix} QUANT OS 告警: {rule_cn}\n\n"
                     f"**严重级别:** `{severity_cn}`  \n"
                     f"**触发时间:** {fired_at}  \n\n"

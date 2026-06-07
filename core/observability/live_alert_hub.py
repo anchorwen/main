@@ -98,7 +98,10 @@ class BackgroundDeliveryWorker(threading.Thread):
                 self._queue.task_done()
                 continue
 
-            enriched = self._bridge.enrich(to_send)
+            if to_send.get("rule_name") == "trade_notification":
+                enriched = to_send
+            else:
+                enriched = self._bridge.enrich(to_send)
             try:
                 self._channel.send(enriched)
                 self._delivered += 1
@@ -111,6 +114,9 @@ class BackgroundDeliveryWorker(threading.Thread):
 
     def _dedup_or_pass(self, alert: dict[str, Any]) -> dict[str, Any] | None:
         """Return alert to send, or None to suppress duplicate."""
+        # Trade notifications are real-time push events — never dedup/batch
+        if alert.get("rule_name") == "trade_notification":
+            return alert
         severity = alert.get("severity", "warning")
         if severity == "critical":
             return alert
@@ -181,12 +187,14 @@ class LiveAlertHub:
         self,
         base_dir: str = "data",
         *,
+        symbol: str = "",
         slack_url: str = "",
         dingtalk_url: str = "",
         dingtalk_secret: str = "",
         thresholds: dict[str, float] | None = None,
         rules_config: list[dict[str, Any]] | None = None,
     ) -> None:
+        self._symbol = symbol or ""
         self._base_dir = Path(base_dir)
         # Bounded queue: hard cap at 1000 to prevent OOM during network partition
         self._alert_queue: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1000)
@@ -243,6 +251,7 @@ class LiveAlertHub:
                 {
                     "rule_name": "system_online",
                     "severity": "info",
+                    "symbol": self._symbol,
                     "fired_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
                     "context_snapshot": {
                         "message": "实盘告警系统已上线",
@@ -296,8 +305,13 @@ class LiveAlertHub:
     # ── Trade notification (per-open/per-close, bypasses alert rules) ──
 
     def notify_trade(
-        self, action: str, symbol: str, side: str, volume: float,
-        price: float | None = None, pnl: float | None = None,
+        self,
+        action: str,
+        symbol: str,
+        side: str,
+        volume: float,
+        price: float | None = None,
+        pnl: float | None = None,
     ) -> None:
         """Send a trade notification directly to DingTalk (real-time, not batched).
 
@@ -312,7 +326,7 @@ class LiveAlertHub:
                 f"- 方向: **{side.upper()}**\n"
                 f"- 手数: {volume}\n"
                 f"- 价格: {price or 'N/A'}\n"
-                f"- 时间: {__import__('datetime').datetime.now(__import__('datetime').UTC).isoformat()}"
+                f"- 时间: {datetime.now(UTC).isoformat()}"
             )
         elif action == "close":
             pnl_str = f"{pnl:+.2f}" if pnl is not None else "N/A"
@@ -324,7 +338,7 @@ class LiveAlertHub:
                 f"- 手数: {volume}\n"
                 f"- 平仓价: {price or 'N/A'}\n"
                 f"- 盈亏: **{pnl_str}**\n"
-                f"- 时间: {__import__('datetime').datetime.now(__import__('datetime').UTC).isoformat()}"
+                f"- 时间: {datetime.now(UTC).isoformat()}"
             )
         else:
             return
@@ -332,11 +346,12 @@ class LiveAlertHub:
         # Enqueue directly — lightweight fire-and-forget
         alert = {
             "rule_name": "trade_notification",
-            "rule_id": f"trade_{action}_{__import__('time').time()}",
+            "rule_id": f"trade_{action}_{time.time()}",
             "severity": "info",
             "title": title,
             "text": text,
-            "timestamp_utc": __import__('datetime').datetime.now(__import__('datetime').UTC).isoformat(),
+            "symbol": symbol,
+            "fired_at": datetime.now(UTC).isoformat(),
             "context": {
                 "symbol": symbol,
                 "action": action,

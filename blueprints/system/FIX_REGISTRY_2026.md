@@ -4,6 +4,31 @@
 
 ## Fix Details
 
+### FIX-20260608-001 — DingTalk alert pipeline P0 repair: polymorphic _format() engine + dedup bypass + symbol fingerprinting
+
+- **Date**: 2026-06-08
+- **Author**: cursor-agent
+- **Commit**: (pending)
+- **Type**: fix
+- **Module**: monitor-dashboard, runtime-live
+- **Files**: core/observability/alert_channels.py, core/observability/live_alert_hub.py, scripts/live_intent_loop.py
+- **Description**: 
+  Three P0 bugs fixed in the DingTalk alert pipeline:
+  1. **Dedup black hole** (`_dedup_or_pass`): All trade_notifications shared rule_name="trade_notification", and the 60s dedup window suppressed all but the first. Fixed with a 2-line whitelist guard that returns trade_notification alerts immediately.
+  2. **Renderer blindness** (`DingTalkAlertChannel._format`): The renderer only read `context_snapshot` — ignoring `title`/`text` from `notify_trade()` and `runbook` from `AlertRunbookBridge`. Rewrote as a polymorphic Type A/B/C dispatcher: Type A (direct) renders title+text when present, Type B (Phase 2 placeholder) renders runbook SOP when available, Type C (fallback) renders context_snapshot — backward compatible.
+  3. **Wasteful enrichment** (`BackgroundDeliveryWorker.run`): Trade notifications were enriched through `AlertRunbookBridge.enrich()` which always returned a null object for unknown rules. Now skipped with a conditional.
+  
+  Additional improvements:
+  - 4 inline `__import__('datetime')` anti-patterns in `notify_trade()` replaced with top-level `datetime.now(UTC)`.
+  - Timestamp field unified from `timestamp_utc` → `fired_at` for consistency with the rest of the alert pipeline.
+  - Timezone-aware ISO format (`+00:00`) used per user directive.
+  - Symbol instance fingerprinting (`【XAUUSDc】`) injected into all alert markdown via `symbol` field, propagated from `args.symbol` through `LiveAlertHub` to every alert dict.
+  - Iron Law #10: Replaced 1 BLE001 site in `live_intent_loop.py` (AlertConfigLoader YAML read) with `fail_open_guard("AlertConfigLoader")`.
+
+- **Root Cause**: RC-06 — contract-violation: Three data paths (notify_trade → title/text/context, alert_service → context_snapshot, runbook_bridge → runbook) each produced different alert dict shapes, but `_format()` only understood one. No polymorphic dispatch — the renderer imposed a single schema on heterogeneous alert types.
+- **Prevention**: The polymorphic Type A/B/C dispatcher in `_format()` establishes a clear contract: alert producers declare their type via the presence of specific fields (title+text for Type A, runbook.available for Type B, context_snapshot for Type C). New alert types must choose their type and follow the field contract.
+- **Dependents Checked**: `live_cycle.py` (notify_trade call site), `live_intent_loop.py` (hub construction), `alert_runbook_bridge.py` (enrichment), alert tests (23/23 pass).
+
 ### FIX-20260601-036 — State file staleness: save_state now deletes file when empty
 
 - **Date**: 2026-06-01

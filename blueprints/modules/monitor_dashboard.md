@@ -50,6 +50,7 @@ Web-based real-time monitoring dashboard for the live trading system. Single-fil
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260608-001 | 2026-06-08 | cursor-agent | — | **DingTalk alert pipeline P0 repair**: (1) Dedup bypass for trade_notification — _dedup_or_pass() now whitelist-passes trade_notification instead of suppressing all after 1/60s. (2) Polymorphic _format() engine — Type A direct (title+text), Type B runbook (Phase 2), Type C snapshot fallback. Fixes renderer blindness where notify_trade's title/text and runbook_bridge's SOP were discarded. (3) Skip runbook enrichment for trade_notifications. (4) Symbol instance fingerprinting injected into all alerts. (5) 4 `__import__` anti-patterns replaced with top-level imports. | RC-06 |
 | FIX-20260607-146 | 2026-06-07 | cursor-agent | — | **Alert label fix + frankenstein metric**: strategy_pnl label corrected (USD→R). strategy_win_rate→最差大脑胜率. worst_brain_id added. Frankenstein metric fixed: single brain selection vs independent min(). | RC-08 |
 |--------|------|--------|--------|---------|------------|
 | FIX-20260606-136 | 2026-06-06 | cursor-agent | — | **Agentic DQAF v1.0**: Diagnostic Quality Assurance Framework — 3 system ledgers (DQAF_DOCKET_REGISTRY, CCT_LEDGER, ReB_PATTERN_INDEX), ECoL evidence collection script (dqaf_collect.py), Iron Law #9 (zero-hallucination dual-track diagnostic protocol). IEC 62740 / ISO 31000 / NTSB Party System. | RC-12 |

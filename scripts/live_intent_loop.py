@@ -25,7 +25,7 @@ from core.config.asset_registry import get_asset
 from core.features.rolling_normalizer import RollingNormalizer
 from core.feedback.brain_performance_tracker import BrainPerformanceTracker
 from core.risk.regime_detector import RegimeDetector
-from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, fail_open_guard
 from core.runtime.live_cycle import (
     LiveCycleConfig,
     LiveCycleState,
@@ -1599,7 +1599,7 @@ def main(argv: list[str] | None = None) -> int:
             _thresholds: dict[str, float] = {}
             _rules_config: list[dict[str, Any]] | None = None
             if args.config:
-                try:
+                with fail_open_guard("AlertConfigLoader"):
                     import yaml as _yaml_full
 
                     with open(args.config, encoding="utf-8") as _fh_full:
@@ -1611,11 +1611,18 @@ def main(argv: list[str] | None = None) -> int:
                         _alert_sys = _full_cfg.get("alert_system", {})
                         if isinstance(_alert_sys, dict):
                             _rules_config = _alert_sys.get("rules", None)
-                except Exception:  # noqa: BLE001
-                    pass
+
+            # Derive symbol for alert instance fingerprinting:
+            # prefer explicit --symbol, fall back to base_dir heuristic
+            _alert_symbol = (
+                args.symbol
+                if args.symbol
+                else ("BTCUSDc" if "btc" in str(args.base_dir).lower() else "XAUUSDc")
+            )
 
             alert_hub = LiveAlertHub(
                 base_dir=args.base_dir,
+                symbol=_alert_symbol,
                 slack_url=args.slack_webhook or "",
                 dingtalk_url=args.dingtalk_webhook or "",
                 dingtalk_secret=args.dingtalk_secret or "",
