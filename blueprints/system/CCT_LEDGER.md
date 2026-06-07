@@ -27,7 +27,50 @@
 
 ---
 
-### CCT-20260607-005
+### CCT-20260608-001a
+- **Docket ID**: DQAF-20260608-001
+- **日期**: 2026-06-08
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: `execution_state.json` 显示 `circuit_breaker_tripped: true` 但 `consecutive_degraded: 0`。备份文件（6/6）显示 `false` → 熔断器在 6/6~6/7 间触发且从未自愈
+  - [Layer 2 — 中间异常]: 熔断器有 3 种触发路径（bridge_silence/cycle_stall×3/ExecutionQueueFatalError），但自愈逻辑仅覆盖 cycle_stall 路径。bridge_silence 和 FatalError 不递增 `consecutive_degraded` → 自愈条件 `_consecutive_degraded_cycles > 0` 永久为 False
+  - [Layer 3 — 根因]: RC-06 状态机非对称陷阱 (Asymmetric State Machine Trap) — 多路径触发 vs 单路径自愈的不完备状态转换表。`live_cycle.py:2771` 自愈条件与 `live_cycle.py:2634` bridge_silence 触发路径不兼容
+- **证据引用**:
+  - Source 1: `data_btc/state/execution_state.json:24` — `circuit_breaker_tripped: true, consecutive_degraded: 0`
+  - Source 2: `data_btc/state/execution_state.json.bak:31` — 6/6 03:54 仍为 `false`
+  - Source 3: `core/runtime/live_cycle.py:2634-2648` + `2771-2784` — 触发与自愈代码源
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260608-001
+
+### CCT-20260608-001b
+- **Docket ID**: DQAF-20260608-001
+- **日期**: 2026-06-08
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: `meta_filter_state.json` 所有缓冲区为空（pred_history=0, pred_buffer=0, atr_buffer=0, micro_spread_buffer=0）
+  - [Layer 2 — 中间异常]: `MetaFilterGate(model_dir=f"{base_dir}/models/meta_filter_v3")` → `data_btc/models/meta_filter_v3/` 不存在 → `_mg.load()` 抛出 FileNotFoundError → `except Exception` 静默吞噬 → `_mg.is_loaded=False` → `state._meta_filter_gate` 从未赋值
+  - [Layer 3 — 根因]: RC-09 config-drift — BTC 品种迁移到 `data_btc/` 时，静态模型文件留在 `data/models/`，路径构造盲目使用 `config.base_dir` 导致断裂
+- **证据引用**:
+  - Source 1: `core/runtime/live_cycle.py:3900` — `model_dir=f"{config.base_dir}/models/meta_filter_v3"`
+  - Source 2: `data/models/meta_filter_v3/` 存在（4个文件） vs `data_btc/models/meta_filter_v3/` 不存在
+  - Source 3: `meta_filter_state.json` — 全空缓冲区
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260608-002
+
+### CCT-20260608-001c
+- **Docket ID**: DQAF-20260608-001
+- **日期**: 2026-06-08
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: `calibrator_feed_state.json` 中 `"updated_utc": "35"` — 值 "35" 不是 ISO 时间戳
+  - [Layer 2 — 中间异常]: `scripts/daily_ops.py:379` 代码 `"updated_utc": str(cal.describe().get("sample_count", "?"))` — 字段名期望时间戳但实际读取 `sample_count` 键（整数 35）
+  - [Layer 3 — 根因]: RC-06 contract-violation — `cal.describe()` 不返回 `updated_utc` 字段，开发者使用错误键名回退到 `sample_count`
+- **证据引用**:
+  - Source 1: `data_btc/calibrator_feed_state.json:2` — `"updated_utc": "35"`
+  - Source 2: `scripts/daily_ops.py:379` — 源码行确认为字段-值错配
+  - Source 3: `core/execution/conformal_calibrator.py:337` — `describe()` 返回键名确认为 `sample_count`
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260608-003
 - **Docket ID**: DQAF-20260607-005
 - **日期**: 2026-06-07
 - **置信度**: confirmed (3 源确认)

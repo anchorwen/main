@@ -20,6 +20,41 @@
 
 ---
 
+### ReB-20260608-001
+- **Pattern Signature**: `CIRCUIT_BREAKER_RESET_ASYM`
+- **描述**: 熔断器有 N 个触发路径（bridge_silence / cycle_stall×3 / ExecutionQueueFatalError / staleness），但自愈逻辑仅覆盖其中一部分（只检查 `consecutive_degraded_cycles > 0`）。未被自愈逻辑覆盖的触发路径导致熔断器永久卡死。本质是状态机转换表不完备——触发边与自愈边不是 N:N 映射。
+- **关联 FIX IDs**: FIX-20260608-003
+- **关联 Docket IDs**: DQAF-20260608-001
+- **预防策略**: 
+  1. 熔断器必须有统一的状态转换表文档（触发边 × 自愈边矩阵），代码审查时对照检查
+  2. 自愈逻辑应基于超时冷却（cooldown）而非依赖特定计数器——冷却制是通用自愈路径，覆盖所有触发源
+  3. 每个 `circuit_breaker_tripped = True` 赋值点必须同步记录 `tripped_at` 时间戳
+- **检测方法**: 搜索 `_circuit_breaker_tripped = True` 的所有赋值点 → 逐一检查是否存在对应的自愈路径 → 缺失则告警
+
+### ReB-20260608-002
+- **Pattern Signature**: `ORPHAN_SUBSYSTEM_DETECTION`
+- **描述**: 子系统代码完整存在（core/alpha/, MetaFilterGate），状态文件存在但永远处于初始/空值。根因是子系统从未被主循环接线（Alpha）或接线因路径断裂静默失败（MetaFilter）。表面看状态文件"正常"（schema 正确、无损坏），但数据量为零暴露了"未接线"的事实。
+- **关联 FIX IDs**: FIX-20260608-003
+- **关联 Docket IDs**: DQAF-20260608-001
+- **预防策略**:
+  1. 每个子系统在模块蓝图中标记为 {wired | standalone | deferred} 三态
+  2. 每周定时扫描：状态文件大小 < 阈值 → 告警
+  3. 新子系统集成必须在 live_cycle.py 中有显式调用点，CI 检查调用链完整性
+- **检测方法**: `python scripts/audit_data_health.py` 已包含状态文件 size=0 检测 → 扩展为检测初始值模式（如 `alpha_count: 0`, `pred_history: []`）
+
+### ReB-20260608-003
+- **Pattern Signature**: `WEAKLY_TYPED_DICT_KEY_MISMATCH`
+- **描述**: 使用弱类型字典 `.get(key, fallback)` 时，上游返回的字典不包含预期的 key，导致代码静默回退到错误的 fallback 值。本质是 Dict[str, Any] 类型在调用处和返回处之间的契约断裂——没有编译期检查保证键名一致。
+- **关联 FIX IDs**: FIX-20260608-003
+- **关联 Docket IDs**: DQAF-20260608-001
+- **预防策略**:
+  1. 状态描述方法（如 `describe()`）应返回 dataclass 而非 `Dict[str, Any]`
+  2. 如果必须用 dict，调用处应显式检查期望的 key 是否存在，不存在时记录 WARNING
+  3. 字段名应自文档化——`updated_utc` 应被命名为 `updated_utc_iso` 以明确其格式
+- **检测方法**: mypy 的 `TypedDict` 可以捕获键名拼写错误 → 将状态文件 schema 声明为 TypedDict 而非 plain dict
+
+---
+
 ### ReB-20260606-001
 - **Pattern Signature**: `neutral_deadlock_misinterpreted_as_total_flip`
 - **描述**: 当多脑策略的群组投票出现 neutral 平票时，调用方将 `current_supporting` 设为空列表 `[]`，导致下游 flip 计算将空集误解为"100% 入场 brain 已翻转"，触发假阳性 brain_flip_extreme 紧急出场。本质是 neutral 状态与 flip 判定之间的语义契约断裂。

@@ -17,6 +17,7 @@
 
 | Docket ID | 日期 | 严重等级 | 症状简述 | IC 裁决 | 关联 FIX |
 |-----------|------|---------|---------|--------|----------|
+| DQAF-20260608-001 | 2026-06-08 | Sev 1 (复合) | 全量数据异常审计: 熔断器永久卡死(Sev 1) + calibrator时间戳损坏(Sev 2) + MetaFilter静默失效(Sev 2) + Alpha空跑(Sev 2) + Golden Master仅3天(Sev 3) — 10项异常收敛为5个独立根因 | **APPROVED → CLOSED** — FIX-20260608-003: (1) 熔断器冷却制统一自愈, (2) MetaFilter模型路径修复, (3) calibrator时间戳字段-值错配修复. ReB: CIRCUIT_BREAKER_RESET_ASYM, ORPHAN_SUBSYSTEM_DETECTION | FIX-20260608-003 |
 | DQAF-20260606-004 | 2026-06-06 | Sev 2 | 6+ 小时零开仓——p_win=0.44 与 breakeven=0.45 之间的 0.01 死锁带，双闸门交替拦截 (p_win + bleed_stop) | **APPROVED → CLOSED** — UCB 弹性地板 (FIX-139) 填平死锁带。置信度推导 p_win=0.482，Kelly 自动微仓探索。方案三优于方案一二。 | FIX-20260606-139 |
 | DQAF-20260606-003 | 2026-06-06 | Sev 3 | 重启后立即开单——排查是否 FIX-137 引入回归 | **APPROVED → CONFIRMED** — 老问题重现 (RC-03 state-leak)，cooldown 清理非致因。关联已知存量模式 `state_leak_across_restart` | — |
 | DQAF-20260607-005 | 2026-06-07 | Sev 1 | UnboundLocalError 导致 dispatch 崩溃 → 孤儿持仓 → 系统数小时只开仓不平仓 (Fail-Open) | **APPROVED → CLOSED** — 三层防线: FIX-140 (Fail-Closed dispatch), FIX-141 (孤儿富化), FIX-142 (兜底网关) | FIX-20260607-140, FIX-20260607-141, FIX-20260607-142 |
