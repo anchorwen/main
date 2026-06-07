@@ -36,7 +36,12 @@ from core.parliament.contract_groups import (
     MICRO_H4_GROUP,
     MICRO_M15_GROUP,
 )
-from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, log_and_continue
+from core.runtime.fault_handler import (
+    FaultLevel,
+    FaultTolerantContext,
+    fail_open_guard,
+    log_and_continue,
+)
 
 logger = logging.getLogger(__name__)
 from core.runtime.market_ingress import (  # noqa: F401 — re-export
@@ -2182,12 +2187,10 @@ def _build_mia_close_entry(
         "request", {}
     ).get("magic", 0)
     if not _resolved_strategy and _resolved_magic:
-        try:
+        with fail_open_guard("MIA_MagicResolution"):
             from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
 
             _resolved_strategy = MAGIC_TO_STRATEGY.get(int(_resolved_magic), "")
-        except Exception:  # noqa: BLE001
-            logger.warning("MIA enrichment magic resolution failed")
 
     return {
         "schema_version": "live_trade_journal.v2",
@@ -3680,6 +3683,29 @@ def execute_live_cycle(
         #   - Journal has no close entry → PnL hole
         #   - Reentry guard gets unknown_exit → permanent block
         #   - Position state file stays stale
+        # ── Single-point-of-exit: notify DingTalk for ALL position closes ──
+        def _emit_close_notification(
+            _ah: Any, _sym: str, _side: str, _vol: float, _price: float | None, _pnl: float | None
+        ) -> None:
+            """Notify DingTalk when a position is closed, regardless of close path.
+
+            Called from MIA-detected closes AND dispatch-driven closes.
+            Fire-and-forget — never blocks the main loop.
+            """
+            import contextlib
+
+            if _ah is None:
+                return
+            with contextlib.suppress(Exception):
+                _ah.notify_trade(
+                    action="close",
+                    symbol=_sym,
+                    side=_side,
+                    volume=_vol,
+                    price=_price,
+                    pnl=_pnl,
+                )
+
         if state._pending_mia_closes:
             _mia_closed = state._pending_mia_closes
             state._pending_mia_closes = []
@@ -3759,6 +3785,15 @@ def execute_live_cycle(
                             ),
                             flush=True,
                         )
+                # ── Notify DingTalk: MIA-detected close ──
+                _emit_close_notification(
+                    _ah=getattr(state, "alert_hub", None),
+                    _sym=_entry.get("symbol", config.symbol),
+                    _side=_exit_side if _exit_side in ("long", "short") else _entry.get("side", ""),
+                    _vol=float(_entry.get("volume", 0) or 0),
+                    _price=_exit_price,
+                    _pnl=_entry.get("pnl"),
+                )
             # ── Save position state immediately ──
             if state.position_manager is not None:
                 with FaultTolerantContext(
@@ -5131,28 +5166,42 @@ def execute_live_cycle(
                     if not dr.dispatched:
                         continue
                     _ah = getattr(state, "alert_hub", None)
-                    if _ah is not None:
+                    if _ah is None:
+                        continue
+
+                    _action = "open" if dr.reason != "net_out_close" else "close"
+                    _tkt = (
+                        dr.net_out_ticket_update.get("old_ticket", 0)
+                        if dr.net_out_ticket_update
+                        else 0
+                    )
+                    # Dedup: only one close notification per ticket per cycle
+                    if _action == "close" and _tkt:
+                        if _tkt in _notified_tickets:
+                            continue
+                        _notified_tickets.add(_tkt)
+                    if _action == "close":
+                        # Single-point-of-exit: unified close notification
+                        _emit_close_notification(
+                            _ah=_ah,
+                            _sym=config.symbol,
+                            _side=dr.direction,
+                            _vol=dr.volume,
+                            _price=dr.price if hasattr(dr, "price") else None,
+                            _pnl=dr.pnl,
+                        )
+                    else:
+                        # Open notification — fire-and-forget
                         import contextlib
 
-                        _action = "open" if dr.reason != "net_out_close" else "close"
-                        _tkt = (
-                            dr.net_out_ticket_update.get("old_ticket", 0)
-                            if dr.net_out_ticket_update
-                            else 0
-                        )
-                        # Dedup: only one close notification per ticket per cycle
-                        if _action == "close" and _tkt:
-                            if _tkt in _notified_tickets:
-                                continue
-                            _notified_tickets.add(_tkt)
                         with contextlib.suppress(Exception):
                             _ah.notify_trade(
-                                action=_action,
+                                action="open",
                                 symbol=config.symbol,
                                 side=dr.direction,
                                 volume=dr.volume,
                                 price=dr.price if hasattr(dr, "price") else None,
-                                pnl=dr.pnl,  # FIX-138-Phase3: estimated PnL
+                                pnl=dr.pnl,
                             )
 
             for dr in dispatch_results:

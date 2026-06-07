@@ -4,6 +4,28 @@
 
 ## Fix Details
 
+### FIX-20260608-002 — MIA close notification gap: single-point-of-exit for all position closes
+
+- **Date**: 2026-06-08
+- **Author**: cursor-agent
+- **Commit**: (pending)
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: core/runtime/live_cycle.py
+- **Description**:
+  MIA (Missing In Action) close detection — when a position is closed on MT5 without system knowledge — never called `notify_trade`. Three confirmed MIA closes (2026-06-07 TP/SL hits) had zero DingTalk notifications.
+  
+  Created `_emit_close_notification()` helper as single-point-of-exit for ALL position closes:
+  - MIA processing loop now calls helper after journal write + reentry guard
+  - Dispatch-driven closes refactored to use same helper (removing duplicate `notify_trade(action="close", ...)` code)
+  - Helper is fire-and-forget — never blocks the main loop
+  
+  Additional: Removed 4 inline `contextlib` imports, centralized to local scope. Iron Law #10: replaced 1 BLE001 site (MIA_MagicResolution) with `fail_open_guard("MIA_MagicResolution")`. BLE001 count: 52→51.
+
+- **Root Cause**: RC-06 — contract-violation: FIX-20260525-024 (MIA journal/state fix) predated FIX-20260606-138-Phase3 (trade notifications). The notification hook was integrated into the dispatch pipeline but never wired to the MIA detection path. Two separate close-event code paths diverged.
+- **Prevention**: The `_emit_close_notification` helper now serves as the canonical close-notification entry point. Any future close path (force close, circuit-breaker close, manual close) should call this helper rather than `notify_trade` directly.
+- **Dependents Checked**: Dispatch path (same helper, verified no behavior change). `notify_trade` in live_alert_hub.py (unchanged).
+
 ### FIX-20260608-001 — DingTalk alert pipeline P0 repair: polymorphic _format() engine + dedup bypass + symbol fingerprinting
 
 - **Date**: 2026-06-08
