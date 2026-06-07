@@ -315,3 +315,31 @@ def log_and_continue(component: str) -> FaultTolerantContext:
         level=FaultLevel.LOG,
         component=component,
     )
+
+
+def fail_open_guard(component: str) -> FaultTolerantContext:
+    """Drop-in replacement for bare ``except Exception: pass`` on the hot path.
+
+    FIX-20260607-146: BLE001 governance Phase 1 (preparation).
+    Provides a DEGRADE-level context that logs the exception with full
+    traceback but never crashes — the system continues operating in a
+    potentially degraded state.  This is the minimum safe wrapper for
+    replacing legacy ``except Exception: pass`` sites before they can
+    be individually audited and upgraded to CRASH or RETRY as appropriate.
+
+    Usage (governance Phase 2)::
+
+        # BEFORE (BLE001 — blind except):
+        try:
+            do_something()
+        except Exception:
+            pass
+
+        # AFTER (auditable degradation):
+        with fail_open_guard("ComponentName"):
+            do_something()
+    """
+    return FaultTolerantContext(
+        level=FaultLevel.DEGRADE,
+        component=component,
+    )

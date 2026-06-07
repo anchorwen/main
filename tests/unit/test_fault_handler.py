@@ -226,3 +226,59 @@ class TestVariableScopeLeakage:
         # FTC swallows it. Then `_ = result` is AFTER the with block.
         # result was never bound → UnboundLocalError propagates.
         assert raised, "UnboundLocalError should be raised without pre-init"
+
+
+class TestFailOpenGuard:
+    """FIX-20260607-146: fail_open_guard — drop-in replacement for except Exception: pass."""
+
+    def test_swallows_exception_without_crashing(self):
+        """fail_open_guard absorbs exceptions and continues execution."""
+        from core.runtime.fault_handler import fail_open_guard
+
+        survived = False
+        with fail_open_guard("test_fail_open"):
+            _ = 1 / 0  # ZeroDivisionError
+        survived = True
+        assert survived, "Execution should continue after fail_open_guard"
+
+    def test_returns_none_on_exception(self):
+        """Ensure no value leaks from the with block on exception."""
+        from core.runtime.fault_handler import fail_open_guard
+
+        result = "pre_init"
+        with fail_open_guard("test_fail_open"):
+            raise RuntimeError("intentional")  # raises, result stays pre_init
+        assert result == "pre_init", "Pre-init value preserved after exception"
+
+    def test_normal_execution_passes_through(self):
+        """When no exception occurs, the block executes normally."""
+        from core.runtime.fault_handler import fail_open_guard
+
+        result = "before"
+        with fail_open_guard("test_fail_open"):
+            result = "inside"
+        assert result == "inside", "Normal execution should update the variable"
+
+    def test_nested_exceptions_handled(self):
+        """Nested fail_open_guard blocks handle exceptions independently."""
+        from core.runtime.fault_handler import fail_open_guard
+
+        outer_ok = inner_ok = False
+        with fail_open_guard("outer"):
+            with fail_open_guard("inner"):
+                _ = 1 / 0
+            inner_ok = True
+        outer_ok = True
+        assert inner_ok, "Inner block survived"
+        assert outer_ok, "Outer block survived"
+
+    def test_multiple_calls_independent(self):
+        """Each fail_open_guard call is independent."""
+        from core.runtime.fault_handler import fail_open_guard
+
+        count = 0
+        for _ in range(3):
+            with fail_open_guard(f"iter_{count}"):
+                _ = 1 / 0
+            count += 1
+        assert count == 3, "All three iterations completed"
