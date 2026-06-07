@@ -25,7 +25,7 @@ def load_json(path):
 def safe_float(v, default=0.0):
     try:
         return float(v) if v is not None and v != "None" else default
-    except:
+    except (ValueError, TypeError):
         return default
 
 
@@ -144,7 +144,7 @@ recent_labels = [
     l for l in labels if str(l.get("timestamp", l.get("time", "")))[:10] in (yesterday, today)
 ]
 print(f"  Total labels: {len(labels)}, Recent: {len(recent_labels)}")
-label_counts = defaultdict(int)
+label_counts: dict[str, int] = defaultdict(int)
 for l in recent_labels:
     label_counts[str(l.get("label", "unknown"))] += 1
 for k, v in sorted(label_counts.items()):

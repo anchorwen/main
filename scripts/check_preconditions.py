@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -292,11 +293,12 @@ def days_until(date_str: str | None) -> int:
     return (d - datetime.now(UTC)).days
 
 
-def run_check(task_id: str) -> dict:
-    task = TASKS[task_id]
-    results = []
-    for pc in task["preconditions"]:
-        fn = globals().get(pc["check_fn"])
+def run_check(task_id: str) -> dict[str, object]:
+    task = cast(dict[str, object], TASKS[task_id])
+    results: list[dict[str, object]] = []
+    preconditions = cast(list[dict[str, object]], task.get("preconditions", []))
+    for pc in preconditions:
+        fn = globals().get(cast(str, pc.get("check_fn", "")))
         if fn is None:
             results.append({"name": pc["name"], "value": None, "detail": "check function not found", "met": False})
             continue
@@ -310,7 +312,7 @@ def run_check(task_id: str) -> dict:
             results.append({"name": pc["name"], "value": value, "required": required, "detail": detail, "met": met})
         except Exception as e:
             results.append({"name": pc["name"], "value": None, "detail": str(e), "met": False})
-    return {"task_id": task_id, "name": task["name"], "deadline": task["deadline"], "days_left": days_until(task["deadline"]), "results": results}
+    return {"task_id": task_id, "name": task.get("name"), "deadline": task.get("deadline"), "days_left": days_until(cast(str, task.get("deadline", ""))), "results": results}
 
 
 def format_report(task_results: list[dict], alert_only: bool = False) -> str:
@@ -367,5 +369,9 @@ if __name__ == "__main__":
     print(format_report(results, alert_only=args.alert))
 
     # Exit code: 1 if any precondition is unmet (for CI/automation)
-    any_unmet = any(r["met"] is False for tr in results for r in tr["results"])
+    any_unmet = any(
+        cast(bool, r.get("met", True)) is False
+        for tr in results
+        for r in cast(list[dict[str, object]], tr.get("results", []))
+    )
     sys.exit(1 if any_unmet else 0)
