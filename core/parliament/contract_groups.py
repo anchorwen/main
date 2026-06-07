@@ -344,18 +344,28 @@ class ContractGroupConsensus:
             conf = float(getattr(p, "confidence", 0.5))
             fallback = bool(getattr(p, "fallback", False))
 
-            # Dynamic weight from weighter, or object attribute, or 1.0 default
-            vote_weight = 1.0
-            if dynamic_weighter is not None:
-                try:
-                    summary = dynamic_weighter.get_summary(bid)
-                    if summary:
-                        vote_weight = dynamic_weighter._compute_weight(summary)
-                except Exception:  # noqa: BLE001
-                    pass
-            else:
-                vote_weight = float(getattr(p, "vote_weight", 1.0) or 1.0)
+            # ── FIX-20260607-011: Decouple base_weight (config permission)
+            #    from dynamic_scale (PnL performance multiplier).
+            #
+            #    base_weight = config-level gate: 0.0=muted, 1.0=full voting rights
+            #    dynamic_scale = PnL-driven adjustment from DynamicBrainWeighter
+            #
+            #    final = base_weight × dynamic_scale
+            #    If base_weight=0, the brain is PHYSICALLY MUTED regardless
+            #    of PnL performance.  This prevents shadow brains from
+            #    accumulating collective weight to override voting brains.
+            base_weight = float(getattr(p, "vote_weight", 1.0) or 1.0)
+            if base_weight <= 0.0:
+                # ── Fail-Fast Gate: muted brain cannot vote ──
+                directions.append("neutral")
+                continue
 
+            # dynamic_scale is pre-computed by DynamicBrainWeighter.apply_weights()
+            # and stamped onto the proposal as p.dynamic_scale.
+            # If unavailable (frozen object or no weighter), default to 1.0.
+            dynamic_scale = float(getattr(p, "dynamic_scale", 1.0) or 1.0)
+
+            vote_weight = base_weight * dynamic_scale
             weight = vote_weight * conf * (0.5 if fallback else 1.0)
 
             if direction_str == "long":

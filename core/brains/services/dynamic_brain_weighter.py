@@ -95,7 +95,12 @@ class DynamicBrainWeighter:
         return weights
 
     def apply_weights(self, proposals: list) -> list:
-        """Set vote_weight on each proposal in-place and return the list.
+        """Set dynamic_scale on each proposal in-place and return the list.
+
+        FIX-20260607-011: vote_weight is the config-level BASE permission
+        (0.0=muted).  This method sets dynamic_scale — the PnL-based
+        performance multiplier.  The final voting weight in contract_groups
+        is base_weight × dynamic_scale.
 
         Frozen objects (e.g. BrainSignal) reject mutation — weights are
         still available via get_summary() / get_weights() for downstream
@@ -106,9 +111,9 @@ class DynamicBrainWeighter:
             brain_id = getattr(p, "brain_id", "")
             if brain_id in weights:
                 try:  # noqa: SIM105
-                    p.vote_weight = weights[brain_id]
+                    p.dynamic_scale = weights[brain_id]
                 except Exception:  # noqa: BLE001
-                    pass  # frozen object — weight accessible via get_summary()
+                    pass  # frozen object
         return proposals
 
     def get_summary(self, brain_id: str) -> dict:

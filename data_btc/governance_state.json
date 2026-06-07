@@ -1,36 +1,6 @@
 {
   "schema_version": "governance_state.v1",
   "brain_states": {
-    "BTC_Swing_V4": {
-      "brain_id": "BTC_Swing_V4",
-      "status": "probation",
-      "registered_at": "2026-05-31T16:47:29.842195",
-      "last_transition_at": "2026-06-06T22:04:43.892235",
-      "transition_count": 6,
-      "freeze_count": 0,
-      "performance_metrics": {
-        "win_rate": 0.42,
-        "profit_factor": 0.7,
-        "sharpe_ratio": -35.68,
-        "total_trades": 100,
-        "pnl_r": -1175.51
-      }
-    },
-    "BTC_Swing_LGB_V1": {
-      "brain_id": "BTC_Swing_LGB_V1",
-      "status": "candidate",
-      "registered_at": "2026-06-04T05:24:24.284919",
-      "last_transition_at": "2026-06-04T05:24:24.284919+00:00",
-      "transition_count": 1,
-      "freeze_count": 0,
-      "performance_metrics": {
-        "win_rate": 0.1429,
-        "profit_factor": 0.19,
-        "sharpe_ratio": -163.17,
-        "total_trades": 7,
-        "pnl_r": -222.05
-      }
-    },
     "BTC_Swing_V5": {
       "brain_id": "BTC_Swing_V5",
       "status": "candidate",
@@ -39,11 +9,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.42,
-        "profit_factor": 0.7,
-        "sharpe_ratio": -35.68,
+        "win_rate": 0.43,
+        "profit_factor": 0.81,
+        "sharpe_ratio": -21.74,
         "total_trades": 100,
-        "pnl_r": -1175.51
+        "pnl_r": -756.09
       }
     },
     "BTC_Swing_V6_MultiTF_LGB_v2": {
@@ -55,10 +25,10 @@
       "freeze_count": 0,
       "performance_metrics": {
         "win_rate": 0.47,
-        "profit_factor": 0.76,
-        "sharpe_ratio": -26.72,
+        "profit_factor": 0.69,
+        "sharpe_ratio": -37.38,
         "total_trades": 100,
-        "pnl_r": -880.49
+        "pnl_r": -1299.91
       }
     },
     "BTC_Swing_V7_MultiTF_LGB_v1": {
@@ -69,11 +39,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4444,
-        "profit_factor": 2.35,
-        "sharpe_ratio": 84.66,
-        "total_trades": 9,
-        "pnl_r": 210.33
+        "win_rate": 0.4762,
+        "profit_factor": 0.93,
+        "sharpe_ratio": -7.56,
+        "total_trades": 21,
+        "pnl_r": -59.47
       }
     },
     "BTC_Swing_V8_MultiTF_LGB_v1": {
@@ -84,11 +54,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.6,
-        "profit_factor": 9.68,
-        "sharpe_ratio": 191.92,
-        "total_trades": 5,
-        "pnl_r": 282.04
+        "win_rate": 0.5294,
+        "profit_factor": 1.02,
+        "sharpe_ratio": 1.75,
+        "total_trades": 17,
+        "pnl_r": 12.24
       }
     }
   },

@@ -1820,3 +1820,28 @@ FIX-YYYYMMDD-NNN
   ```
 - **Related Docket**: DQAF-20260607-010 (magic audit + SL/TP mismatch)
 
+---
+
+### FIX-20260607-147: Vote Weight Decoupling — Shadow Brain Silent Coup
+
+- **Date**: 2026-06-07
+- **Severity**: CRITICAL (shadow brains with vote_weight=0.0 were actually voting and determining trade direction)
+- **Files Modified**:
+  - `core/brains/services/dynamic_brain_weighter.py` — `apply_weights()`: stamp `dynamic_scale` instead of overwriting `vote_weight`
+  - `core/parliament/contract_groups.py` — `_compute_weighted()`: `base_weight × dynamic_scale` with fail-fast gate at base_weight=0
+- **Root Cause**: **RC-09 (conceptual conflation)** — `vote_weight` served two conflicting purposes: (1) config-level permission gate (0=muted), (2) PnL-driven performance multiplier. The DynamicBrainWeighter's `apply_weights()` directly overwrote the proposal's `vote_weight` with the computed dynamic weight, completely bypassing the config-level safety lock. `contract_groups.py` then used this overwritten value as the voting weight. Three shadow brains (V6/V7/V8) with config `vote_weight=0.0` each received dynamic weights of 0.15-0.25, collectively amassing 0.55 vs the lone voting brain V5 at 0.25 — causing the consensus to flip from SHORT (correct) to LONG (shadow-driven).
+- **Impact**: All LONG trades since V6/V7/V8 deployment were actually directed by shadow brains, not by the intended voting brain (V5). V5 consistently predicted SHORT (down_prob ≈ 0.70) but was overruled.
+- **Fix**: 
+  - (a) `apply_weights()` now stamps `p.dynamic_scale` instead of overwriting `p.vote_weight` — preserving the config base permission
+  - (b) `contract_groups.py` reads `base_weight` from proposal's original `vote_weight`, then multiplies by `dynamic_scale`. If `base_weight <= 0` → fail-fast gate mutes the brain regardless of PnL
+  - (c) Formula: `final = base_weight × dynamic_scale`, where base_weight ∈ {0.0, 1.0} is a binary permission gate
+- **Post-fix expected behavior**: V6/V7/V8 with base_weight=0.0 → physically muted. V5 alone determines direction. Consensus should return to SHORT (matching V5's prediction).
+- **Verification**:
+  ```
+  [PASS] mypy — 0 errors
+  [PASS] ruff — 0 issues
+  [PASS] verify.py --quick — no regressions
+  ```
+- **Related Docket**: DQAF-20260607-011 (shadow brain silent coup)
+- **Prevention**: Any weight computation system must distinguish between "permission to vote" (binary, config-level) and "confidence in vote" (continuous, PnL-driven). These must be separate variables that multiply — never overwrite.
+
