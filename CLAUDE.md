@@ -192,7 +192,9 @@ python scripts/register_fix.py --help
 
 ---
 
-### Iron Law #10: 渐进式随改随升 (Incremental Upgrade Doctrine)
+### Iron Law #10: 渐进式随改随升 (Incremental Upgrade Doctrine) [TEMPORARY — 自毁条件见下]
+
+**⛔ 自毁条件**: 当以下文件中的 `# noqa: BLE001` 全部清零后，**立即删除本 Iron Law #10**（不得遗留脚手架）。检查命令：`grep -c "noqa: BLE001" core/runtime/live_cycle.py scripts/live_intent_loop.py core/execution/strategy_line.py`
 
 **触发条件**: 修改以下热路径文件中的任意一个时自动触发：
 - `core/runtime/live_cycle.py`
