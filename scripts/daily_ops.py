@@ -1067,6 +1067,23 @@ def run_daily_ops(
     except Exception as _exc:
         steps.append({"step": "reconcile", "status": "error", "error": str(_exc)})
 
+    # ── FIX-20260607-144: Journal compaction ──────────────────────────
+    # Prunes old rejected entries (>30d) from live_trade_journal.jsonl.
+    # Uses atomic os.replace() + FileLock — safe for concurrent writes.
+    # Runs during daily ops window when trading is paused (Option B: lazy writer).
+    try:
+        from core.ledger.services.journal_cleanup import compact_journal
+
+        _base = Path(base_dir)
+        _journal_path = _base / "live_trade_journal.jsonl"
+        if _journal_path.exists():
+            _compaction_result = compact_journal(
+                _journal_path, retention_days=30, dry_run=dry_run, lock_dir=_base
+            )
+            steps.append({"step": "journal_compaction", **_compaction_result})
+    except Exception as _jc_exc:
+        steps.append({"step": "journal_compaction", "status": "error", "error": str(_jc_exc)[:200]})
+
     if not skip_shadow:
         steps.append(_step_shadow_ensemble(base_dir))
 

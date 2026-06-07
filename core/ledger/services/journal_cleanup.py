@@ -433,3 +433,148 @@ def repair_and_cleanup(
     orphan_count = cleanup_orphan_opens(journal_path, max_age_hours=max_age_hours, dry_run=dry_run, lock_dir=lock_dir)
     repair_report["orphans_closed"] = orphan_count
     return repair_report
+
+
+def compact_journal(
+    journal_path: Path,
+    *,
+    retention_days: int = 30,
+    dry_run: bool = False,
+    lock_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Remove old rejected entries from the journal with atomic swap.
+
+    FIX-20260607-144: Journal compaction for rejected retry entries.
+    Rejected entries (ack_status="rejected") are ephemeral noise — failed
+    dispatch attempts that carry no durable trade outcome.  They are retained
+    for *retention_days* for post-mortem analysis, then pruned.
+
+    Uses atomic ``os.replace()`` so a crash during compaction cannot corrupt
+    the journal.  Acquires the same ``FileLock`` as ``_append_journal()``
+    to prevent bridge/live_cycle concurrent writes during the rewrite.
+
+    Safety confirmed (Phase 1):
+      - ``restart_state.py`` reverse-scans journal and deduplicates by
+        ``open_message_id``.  Only the last close per position matters.
+        Removing old rejected entries does not affect restart behaviour.
+      - Journal writes use ``open(path, "a")`` (lazy-writer pattern).
+        No persistent file handle exists — ``os.replace()`` is safe.
+
+    Args:
+        journal_path: Path to live_trade_journal.jsonl.
+        retention_days: How many days to keep rejected entries (default 30).
+        dry_run: If True, report counts but do not modify the journal.
+        lock_dir: Directory for FileLock (same as append path).
+
+    Returns:
+        Dict with ``retained``, ``removed``, ``dry_run`` counts.
+    """
+    import logging
+    import os as _os
+    import time as _time
+
+    _log = logging.getLogger(__name__)
+
+    if not journal_path.exists():
+        return {"status": "empty", "retained": 0, "removed": 0}
+
+    cutoff = _time.time() - (retention_days * 24 * 3600)
+    temp_path = journal_path.with_suffix(".jsonl.tmp")
+    retained = 0
+    removed = 0
+    corrupted = 0
+
+    # ── Acquire FileLock (same lock as _append_journal) ──
+    _lock_acquired = False
+    _lock = None
+    if lock_dir is not None:
+        from core.infrastructure.distributed_lock import FileLock
+
+        _lock = FileLock("live_trade_journal", lock_dir=str(lock_dir), ttl_seconds=10)
+        _acquired = _lock.acquire(blocking=True, timeout_seconds=5)
+        _lock_acquired = _acquired.acquired if _acquired else False
+
+    try:
+        # ── Pass 1: filter → temp file ──
+        with open(journal_path, encoding="utf-8") as f_in, \
+             open(temp_path, "w", encoding="utf-8") as f_out:
+            for line in f_in:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+
+                try:
+                    record = json.loads(stripped)
+                except json.JSONDecodeError:
+                    # Corrupted line — keep it (conservative, human review)
+                    f_out.write(line)
+                    corrupted += 1
+                    continue
+
+                ack = record.get("ack_status", "")
+                if ack != "rejected":
+                    # Always retain non-rejected entries
+                    f_out.write(line)
+                    retained += 1
+                    continue
+
+                # Rejected entry — check age
+                ts_str = record.get("recorded_at", "")
+                record_ts = 0.0
+                if ts_str:
+                    try:
+                        from datetime import datetime
+                        record_ts = datetime.fromisoformat(
+                            ts_str.replace("Z", "+00:00")
+                        ).timestamp()
+                    except (ValueError, TypeError):
+                        pass
+
+                if record_ts >= cutoff:
+                    # Within retention window — keep
+                    f_out.write(line)
+                    retained += 1
+                else:
+                    # Outside retention window — prune
+                    removed += 1
+
+        # ── Pass 2: atomic swap ──
+        if not dry_run and removed > 0:
+            _os.replace(temp_path, journal_path)
+            _log.info(
+                "Journal compaction complete: retained=%d removed=%d (old rejected, >%dd)",
+                retained, removed, retention_days,
+            )
+        elif dry_run and removed > 0:
+            _log.info(
+                "Journal compaction DRY-RUN: would retain=%d remove=%d (old rejected, >%dd)",
+                retained, removed, retention_days,
+            )
+        else:
+            _log.debug("Journal compaction: nothing to remove")
+
+    except Exception as exc:
+        _log.error("Journal compaction failed: %s", exc, exc_info=True)
+        # Clean up temp file on failure
+        import contextlib
+        with contextlib.suppress(OSError):
+            if temp_path.exists():
+                temp_path.unlink()
+        return {"status": "error", "error": str(exc)[:200]}
+
+    finally:
+        if _lock_acquired and _lock is not None:
+            _lock.release()
+        # Clean up temp file if still present (e.g. dry run or no-op)
+        import contextlib
+        with contextlib.suppress(OSError):
+            if temp_path.exists() and (dry_run or removed == 0):
+                temp_path.unlink()
+
+    return {
+        "status": "ok",
+        "retained": retained,
+        "removed": removed,
+        "corrupted_lines": corrupted,
+        "dry_run": dry_run,
+    }
