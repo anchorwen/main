@@ -17,8 +17,6 @@ Total: 37 dimensions.
 Physically isolated from swing_enhanced_35 — XAU models are unaffected.
 """
 
-from core.features.schemas.daily_swing_schema import DAILY_SWING_24_FEATURES
-
 # ── Microstructure features (9) — BTC-optimized ──
 _BTC_MICRO_FEATURES = [
     "tick_return",
@@ -87,5 +85,5 @@ assert len(BTC_MACRO_ENHANCED_37_FEATURES) == 37, (
 )
 # ── Verify uniqueness ──
 assert len(set(BTC_MACRO_ENHANCED_37_FEATURES)) == 37, (
-    f"BTC schema has duplicate feature names"
+    "BTC schema has duplicate feature names"
 )
