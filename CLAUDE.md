@@ -2,6 +2,46 @@
 
 ## 铁律 (Iron Law)
 
+### Iron Law #0: 编辑前强制安检 (Pre-Edit Mandatory Checklist) — 最高优先级
+
+**触发条件**: 调用 Edit 或 Write 工具修改以下任意文件类型之前：
+- `.py` (Python 源代码)
+- `.yaml` / `.yml` (配置文件, 包括 live_btc.yaml, live.yaml)
+- `.json` (大脑配置, schemas, 治理状态等)
+
+**纯机械操作豁免** (可直接执行, 无需安检):
+- Ruff/格式化自动修复 (由 pre-commit hook 触发)
+- 变量重命名消除 lint 警告 (不改变行为逻辑)
+- 文档文件 `.md` 编辑 (FIX_REGISTRY, 蓝图更新——这些是 Iron Law #7 的产出, 非触发源)
+
+**安检清单** (每次 Edit/Write 前必须在对话中显式输出):
+
+```
+[PRE-EDIT CHECKLIST — Iron Law #0]
+1. 修改动机是否来自对系统行为的观察/判断?
+   ├─ 是 → 必须已有 DQAF_REPORT + IC Approved
+   └─ 否 (纯机械) → 直接执行, 清单通过
+2. DQAF 报告是否已输出?
+   ├─ 是 → 报告 Docket ID: DQAF-YYYYMMDD-NNN
+   └─ 否 → STOP — 先输出 DQAF 报告
+3. 人类 IC 是否已对该报告回复 "Approved"?
+   ├─ 是 → 继续
+   └─ 否 → STOP — 输出 [AWAITING_IC_APPROVAL] 后物理截断
+4. 目标模块蓝图是否已查阅? (Iron Law #6)
+   ├─ 是 → blueprints/modules/<module>.md
+   └─ 否 → STOP — 先查蓝图
+5. FIX_REGISTRY 是否已检索同类修复? (Iron Law #6)
+   ├─ 是 → 无冲突
+   └─ 否 → STOP — 先检索
+[CHECKLIST PASSED] → 允许 Edit/Write
+```
+
+**结构性保证**: 此清单不依赖 Agent 判断"我是否需要安检"——只要目标文件类型匹配，安检自动触发。Agent 唯一的自由裁量权是"是否为纯机械操作"，该判断必须在清单 Step 1 中显式论证。
+
+**与现有铁律的关系**: Iron Law #0 不新增行为规范, 只程序化执行已有规范。Iron Law #9 定义诊断流程 → Step 2-3 强制执行。Iron Law #6 定义蓝图查阅 → Step 4-5 强制执行。
+
+---
+
 ### 1. 每次代码修改后必须验证
 - 完成任何 `.py` 文件修改后，必须运行 `python scripts/verify.py --full` 并通过
 - 如果 `--full` 不通过，**不得声明工作完成**
