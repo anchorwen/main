@@ -90,6 +90,27 @@
 
 ---
 
+### CCT-20260608-002
+- **Docket ID**: DQAF-20260608-002
+- **日期**: 2026-06-08
+- **置信度**: confirmed (双源确认)
+- **因果链**:
+  - [Layer 1 — 症状]: XAUUSDc LONG 平仓 (ticket=3818953854, 07:09:43, exit_watchdog:meta_exit, PnL=+0.03) 无钉钉通知。操作员仅收到开仓提醒，完全不知道仓位已平。
+    - 证据: `data/live_trade_journal.jsonl` — close action at 07:09:43, PnL=0.03
+    - 证据: `data/logs/alert_audit.jsonl` — 无 trade_close 条目, 最后一条 XAU 记录是 06:49:44 的 trade_open
+  - [Layer 2 — 中间异常]: `dispatch_managed_close()` (managed_close.py) — 所有受管平仓的统一入口 (meta_exit/SL/TP/hesitation/time_decay/brain_flip/drawdown_kill) — 覆盖了重入守卫、ghost-volume 审计、PnL 追踪, 但**从未调用 `notify_trade()`**。
+    - 证据: `core/execution/managed_close.py:298-318` — pre-fix 代码包含 `known_open_tickets.pop()`, `_pending_budget_records.append()`, `_pending_sl_records.append()`, 但没有 `notify_trade` 调用
+  - [Layer 3 — 根因]: RC-06 contract-violation — FIX-20260608-002 创建了 `_emit_close_notification()` 作为平仓通知的统一 helper, 但仅接线 MIA 路径 (live_cycle.py:3807) 和执行队列 net_out 路径 (live_cycle.py:5186)。`dispatch_managed_close()` (FIX-20260530-071 从 live_cycle.py 通过 Strangler Fig 提取) 早于通知系统 (FIX-20260606-138-Phase3) 的出现, 从未被 retrofitted。本质是"事件总线缺失综合征"——横切关注点 (通知) 通过手动调用耦合到每个退出路径, 而非通过发布/订阅自动覆盖。
+    - 证据: `core/runtime/live_cycle.py` git history — `_emit_close_notification` 在 88112bf 中添加, 仅 2 个调用点 (MIA + net_out)。`managed_close.py` 零调用。
+- **证据引用**:
+  - Source 1: `data/live_trade_journal.jsonl` — XAUUSDc LONG close at 07:09:43, ticket=3819448262, PnL=+0.03
+  - Source 2: `data/logs/alert_audit.jsonl` — 无对应 trade_close 条目
+  - Source 3: `core/execution/managed_close.py` — `dispatch_managed_close()` pre-fix 代码中无 `notify_trade` 调用
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260608-003
+
+---
+
 ## 置信度标记说明
 
 | 标记 | 定义 | 要求 |

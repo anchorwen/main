@@ -69,6 +69,21 @@
 
 ---
 
+### ReB-20260608-003
+- **Pattern Signature**: `MISSING_NOTIFY_IN_MANAGED_CLOSE`
+- **描述**: 受管平仓的统一入口函数 (`dispatch_managed_close`) 完成了所有业务逻辑（重入守卫、Budget、SL 追踪、仓位清理）但遗漏了 横切关注点——钉钉通知。每个新的退出路径 (meta_exit/SL/TP/hesitation 等) 都通过此函数, 却全部静默。本质是"事件总线缺失综合征" (Missing Event Bus Syndrome): 通信 (通知) 通过手动调用耦合到每个 action site, 而非通过发布/订阅机制自动覆盖。任何新增退出路径都可能遗漏相同关注点。
+- **关联 FIX IDs**: FIX-20260608-005, FIX-20260608-002 (MIA 路径的先发修复, 同根同源)
+- **关联 Docket IDs**: DQAF-20260608-002
+- **预防策略**:
+  1. **架构北极星**: Event Bus (Pub-Sub) 模式 — 每笔平仓成功后发布 `TRADE_CLOSED_EVENT`, 钉钉通知器订阅该事件。底层订单模块无需知道通知的存在。
+  2. **当前务实的闸门**: `dispatch_managed_close()` 现在在函数尾部 (所有业务逻辑完成后的统一收口处) 调用 `notify_trade`。任何新增的退出路径通过此函数自动获得通知覆盖。
+  3. **代码审查清单**: 任何新增"平仓"代码路径 (action="close") 必须包含 `notify_trade` 调用或复用 `dispatch_managed_close`。
+- **检测方法**:
+  1. `verify.py --quick` 中的蓝图合规检查 — 若 managed_close.py 有修改但 FIX_REGISTRY 无对应条目 → 阻断
+  2. 运行时审计: 对比 `live_trade_journal.jsonl` 中的 close action 数量与 `alert_audit.jsonl` 中的 trade_close 数量, 差距 > 0 → 触发 DQAF
+
+---
+
 ### ReB-20260607-003
 - **Pattern Signature**: `dispatch_crash_fail_open_orphan_spiral`
 - **描述**: 执行队列 (ExecutionQueue) 内部发生未预期异常时，通用 `except Exception` 仅打印日志而不触发 circuit_breaker。系统主循环继续运行，大脑持续开新仓但派发管道已断，持仓沦为孤儿。孤儿收养逻辑缺乏完整 MT5 数据富化，exit watchdog 无法接管管理。本质是 **三层 Fail-Open**: (1) dispatch 内部异常未熔断, (2) 调用方未区分 fatal vs transient 异常, (3) 孤儿收养缺乏强制看门狗接管回调。

@@ -22,6 +22,7 @@
 | DQAF-20260606-003 | 2026-06-06 | Sev 3 | 重启后立即开单——排查是否 FIX-137 引入回归 | **APPROVED → CONFIRMED** — 老问题重现 (RC-03 state-leak)，cooldown 清理非致因。关联已知存量模式 `state_leak_across_restart` | — |
 | DQAF-20260607-005 | 2026-06-07 | Sev 1 | UnboundLocalError 导致 dispatch 崩溃 → 孤儿持仓 → 系统数小时只开仓不平仓 (Fail-Open) | **APPROVED → CLOSED** — 三层防线: FIX-140 (Fail-Closed dispatch), FIX-141 (孤儿富化), FIX-142 (兜底网关) | FIX-20260607-140, FIX-20260607-141, FIX-20260607-142 |
 | DQAF-20260607-007 | 2026-06-07 | Sev 3 | 架构师提案: 趋势衰竭 Confidence Decay + V型反转非对称出场。诊断确认: 拒绝N笔交易计数衰减，接受 Kalman+Hurst 状态驱动仓位缩放 + Kalman 速度翻转快速出口。 | **APPROVED → CLOSED** — `trend_maturity_discount()` + `evaluate_brain_exit()` Kalman velocity flip 接线完成。纯增量，两个信号已计算仅未消费。 | FIX-20260607-143 |
+| DQAF-20260608-002 | 2026-06-08 | Sev 2 | XAUUSDc meta_exit 平仓无钉钉通知: `dispatch_managed_close()` 遗漏 `notify_trade` 调用, 所有受管平仓静默 | **APPROVED → CLOSED** — FIX-20260608-005: 在 `dispatch_managed_close()` 尾部注入 fire-and-forget `notify_trade(action="close", ...)`. 覆盖全部 7+ 受管退出路径. ReB: MISSING_NOTIFY_IN_MANAGED_CLOSE | FIX-20260608-005 |
 | DQAF-20260606-002 | 2026-06-06 | Sev 2 | BTC swing WR=14.29% PnL=-$813, brain_flip_extreme_100pct 假阳性出场 | **APPROVED → CLOSED** — 根因 RC-06: live_cycle.py:1424 `_l2_supporting=[]` 在 neutral 平票时产生 100% 假翻转 | FIX-20260606-137 |
 
 ## 裁决状态说明
