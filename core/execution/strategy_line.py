@@ -127,67 +127,12 @@ def _adjust_p_win_for_regime(
 ) -> float:
     """Dynamically adjust p_win for OU strategies based on trend strength.
 
-    FIX-20260526-030: Historical p_win (rolling 100-trade WR ~0.49) is a static
-    average applied uniformly to all trades.  In trending regimes, high |z_score|
-    means momentum ignition (price is trending away from mean), NOT a mean-reversion
-    setup.  The model's "confidence" (z_score depth) is actually ANTI-informative
-    in trends — the more confident the brain, the worse the outcome.
-
-    FIX-20260526-035: Direction-aware asymmetric penalty.  With-trend pullbacks
-    ("千金难买牛回头") are the highest-quality OU setups — the trend is your
-    friend, not a risk factor.  Counter-trend signals (catching a falling knife
-    in a downtrend or shorting into an uptrend) receive the full penalty.
-
-    This function inversely maps z_score → p_win discount when ADX indicates
-    trending conditions.  Hard floor at 65% of original p_win prevents the
-    adjustment from ever being the sole veto (that's the p_win gate's job).
-
-    Non-OU strategies and non-trending regimes pass through unchanged.
+    Delegates to :func:`core.execution.pwin_chain.adjust_p_win_for_regime`
+    (S3 — Functional Core extraction).
     """
-    if "statarb" not in name or not regime_info or entry_z_score is None:
-        return p_win
+    from core.execution.pwin_chain import adjust_p_win_for_regime as _impl
 
-    _rg: dict[str, Any] = {}
-    if isinstance(regime_info, dict):
-        _maybe_rg = regime_info.get("regime_gate")
-        if isinstance(_maybe_rg, dict):
-            _rg = _maybe_rg
-
-    _h1_adx = float(_rg.get("h1_adx") or 0.0)
-
-    # Only adjust when trend is significant (FIX-20260526-031: lowered from 20→15
-    # to match actual ADX distribution and prevent false negatives)
-    if _h1_adx < 15.0:
-        return p_win
-
-    # ── Direction-aware bypass: with-trend pullbacks are Alpha, not risk ──
-    _primary_dir = str(_rg.get("primary_trend") or "neutral")
-    _h1_dir = str(_rg.get("h1_trend_direction") or "neutral")
-    _ref_dir = _primary_dir if _primary_dir != "neutral" else _h1_dir
-
-    if trade_direction != "neutral" and _ref_dir != "neutral":
-        if trade_direction == _ref_dir:
-            return p_win  # 千金难买牛回头 — no penalty for with-trend pullbacks
-        # Counter-trend: continue to penalty logic below
-
-    abs_z = abs(entry_z_score)
-    # FIX-20260526-031: lowered from 1.5→0.8 — the old threshold was physically
-    # unreachable (actual OU |z| range 0.1-0.3).  Fix 3 (z_depth veto) filters
-    # |z|<0.325, so signals reaching here have |z|≥0.325.  The 0.8 threshold
-    # starts modest penalties for moderate deviations in trending markets.
-    if abs_z < 0.8:
-        return p_win
-
-    # Trending: inverse z_score effect on p_win
-    # At ADX=25, |z|=0.8: discount ≈ 0.97 (mild penalty at boundary)
-    # At ADX=30, |z|=1.5: discount ≈ 0.90 (moderate penalty)
-    # At ADX=40, |z|=2.5: discount ≈ 0.79 (strong penalty)
-    trend_penalty = min(0.90, (_h1_adx - 15.0) / 100.0)
-    z_amplification = min(1.0, (abs_z - 0.5) / 3.0)  # FIX-20260526-031: baseline 0.5→0.8→3.5 ramp
-    discount = 1.0 - trend_penalty * z_amplification
-
-    adjusted = p_win * max(discount, 0.65)  # floor at 65% of original
-    return round(adjusted, 4)
+    return _impl(p_win, name, regime_info, entry_z_score, trade_direction)
 
 
 def check_z_inflection(

@@ -2673,6 +2673,11 @@ def execute_live_cycle(
         if not config.no_mt5 and mt5_worker is not None:
             try:
                 _open_positions = mt5_worker.positions_get(symbol=config.symbol) or []
+                # ── FIX-20260608-005: bridge liveness heartbeat ──
+                # positions_get() success proves MT5 bridge is alive even
+                # during management-only mode.  Update heartbeat so the
+                # cooldown-based auto-reset can detect bridge recovery.
+                state._last_bridge_ack_time = time.time()
                 if _open_positions:
                     _closed_any = False
                     for _pos in _open_positions:

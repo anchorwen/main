@@ -110,25 +110,37 @@ TASKS = {
         ],
     },
     "S3": {
-        "name": "闸门重构: 动态分位数 + 去中心化shadow (在GM安全网下)",
+        "name": "提取 p_win 计算链为纯函数 (Functional Core)",
         "deadline": None,
         "preconditions": [
             {
-                "name": "S2 complete + regime_gate refactored with per-symbol percentiles + per-gate veto",
-                "check_fn": "check_gate_refactor",
+                "name": "pwin_chain.py created with resolve + adjust functions",
+                "check_fn": "check_pwin_extraction",
                 "required": True,
                 "current": None,
             }
         ],
     },
     "S4": {
-        "name": "BTC临时解 (仅当S3后BTC仍未恢复交易)",
+        "name": "SL/TP Hypothesis属性测试 (轻量版)",
         "deadline": None,
         "preconditions": [
             {
-                "name": "S3 complete AND btc_swing still producing zero live trades",
-                "check_fn": "check_btc_trading",
-                "required": True,  # True = btc is trading (no action needed)
+                "name": "Hypothesis property tests for dynamic_sl_tp (13 tests, 500 runs each)",
+                "check_fn": "check_sltp_hypothesis",
+                "required": True,
+                "current": None,
+            }
+        ],
+    },
+    "S5": {
+        "name": "TrailStopEngine 完全纯化 (技术债, 完整版)",
+        "deadline": None,
+        "preconditions": [
+            {
+                "name": "TrailStopEngine state deps (trail_policy, pnl_store) → explicit params",
+                "check_fn": "check_trailstop_pure",
+                "required": True,
                 "current": None,
             }
         ],
@@ -174,7 +186,10 @@ def check_entry_spread() -> tuple[float, str]:
                 pass
     ratio = nonzero / total if total > 0 else 0.0
     all_time_ratio = all_time_nonzero / all_time_total if all_time_total > 0 else 0.0
-    return ratio, f"{nonzero}/{total} post-fix opens ({ratio:.1%}) | all-time: {all_time_nonzero}/{all_time_total} ({all_time_ratio:.1%})"
+    return (
+        ratio,
+        f"{nonzero}/{total} post-fix opens ({ratio:.1%}) | all-time: {all_time_nonzero}/{all_time_total} ({all_time_ratio:.1%})",
+    )
 
 
 def check_calibrator_xau() -> tuple[int, str]:
@@ -228,9 +243,13 @@ def check_legacy_count() -> tuple[int, str]:
 def check_golden_master() -> tuple[int, str]:
     """Check Golden Master recording cycles (XAU + BTC combined)."""
     import os
+
     total = 0
     parts = []
-    for label, rel_path in [("XAU", "data/golden_master.jsonl"), ("BTC", "data_btc/golden_master.jsonl")]:
+    for label, rel_path in [
+        ("XAU", "data/golden_master.jsonl"),
+        ("BTC", "data_btc/golden_master.jsonl"),
+    ]:
         gm_path = PROJECT_ROOT / rel_path
         cycles = 0
         if gm_path.exists():
@@ -249,8 +268,12 @@ def check_golden_master_replay_ready() -> tuple[bool, str]:
         gm_path = PROJECT_ROOT / rel_path
         if gm_path.exists():
             total += len([l for l in gm_path.read_text(encoding="utf-8").splitlines() if l.strip()])
-    has_cmd = "--golden-master" in (PROJECT_ROOT / "scripts" / "verify.py").read_text(encoding="utf-8")
-    return (total >= 500 and has_cmd), f"combined={total}/500, verify.py gm={'OK' if has_cmd else 'TODO'}"
+    has_cmd = "--golden-master" in (PROJECT_ROOT / "scripts" / "verify.py").read_text(
+        encoding="utf-8"
+    )
+    return (
+        total >= 500 and has_cmd
+    ), f"combined={total}/500, verify.py gm={'OK' if has_cmd else 'TODO'}"
 
 
 def check_gate_refactor() -> tuple[bool, str]:
@@ -259,13 +282,16 @@ def check_gate_refactor() -> tuple[bool, str]:
     text = rg.read_text(encoding="utf-8") if rg.exists() else ""
     has_pct = "percentile" in text.lower() or "_pct" in text
     has_context = "RegimeContext" in text
-    return (has_pct and has_context), f"dynamic_pct={'YES' if has_pct else 'NO'}, RegimeContext={'YES' if has_context else 'NO'}"
+    return (
+        has_pct and has_context
+    ), f"dynamic_pct={'YES' if has_pct else 'NO'}, RegimeContext={'YES' if has_context else 'NO'}"
 
 
 def check_btc_trading() -> tuple[bool, str]:
     """Check if BTC btc_swing has recent live (non-shadow) trades."""
     import json
     from datetime import datetime, UTC, timedelta
+
     jp = PROJECT_ROOT / "data_btc" / "live_trade_journal.jsonl"
     if not jp.exists():
         return False, "BTC journal not found"
@@ -280,7 +306,10 @@ def check_btc_trading() -> tuple[bool, str]:
             except Exception:  # noqa: BLE001
                 pass
     trading = live_opens > 0
-    return trading, f"BTC 7d live opens={live_opens}, trading={'YES' if trading else 'NO (S4 may be needed)'}"
+    return (
+        trading,
+        f"BTC 7d live opens={live_opens}, trading={'YES' if trading else 'NO (S4 may be needed)'}",
+    )
 
 
 # ── Main ────────────────────────────────────────────────────────────────
@@ -300,7 +329,14 @@ def run_check(task_id: str) -> dict[str, object]:
     for pc in preconditions:
         fn = globals().get(cast(str, pc.get("check_fn", "")))
         if fn is None:
-            results.append({"name": pc["name"], "value": None, "detail": "check function not found", "met": False})
+            results.append(
+                {
+                    "name": pc["name"],
+                    "value": None,
+                    "detail": "check function not found",
+                    "met": False,
+                }
+            )
             continue
         try:
             value, detail = fn()
@@ -309,10 +345,24 @@ def run_check(task_id: str) -> dict[str, object]:
                 met = value >= required if isinstance(required, (int, float)) else value == required
             else:
                 met = None  # informational only
-            results.append({"name": pc["name"], "value": value, "required": required, "detail": detail, "met": met})
+            results.append(
+                {
+                    "name": pc["name"],
+                    "value": value,
+                    "required": required,
+                    "detail": detail,
+                    "met": met,
+                }
+            )
         except Exception as e:  # noqa: BLE001
             results.append({"name": pc["name"], "value": None, "detail": str(e), "met": False})
-    return {"task_id": task_id, "name": task.get("name"), "deadline": task.get("deadline"), "days_left": days_until(cast(str, task.get("deadline", ""))), "results": results}
+    return {
+        "task_id": task_id,
+        "name": task.get("name"),
+        "deadline": task.get("deadline"),
+        "days_left": days_until(cast(str, task.get("deadline", ""))),
+        "results": results,
+    }
 
 
 def format_report(task_results: list[dict], alert_only: bool = False) -> str:
@@ -340,7 +390,9 @@ def format_report(task_results: list[dict], alert_only: bool = False) -> str:
             lines.append(f"      Current: {r['detail']}")
             if r["required"] is not None and r["met"] is False:
                 lines.append(f"      Required: {r['required']}")
-                alerts.append(f"{tr['task_id']}: {r['name']} — {r['detail']} (need {r['required']})")
+                alerts.append(
+                    f"{tr['task_id']}: {r['name']} — {r['detail']} (need {r['required']})"
+                )
                 all_ok = False
         lines.append("")
 

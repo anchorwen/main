@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-08T06:08:52Z
+> **自动生成**: 2026-06-08T10:11:35Z
 
 ## Package-Level Dependencies
 
@@ -184,7 +184,7 @@
 - `fix_gateway_adapter.py` → `core.execution.fix_contracts`, `core.execution.fix_execution_mapper`, `core.execution.fix_message_builder`, `core.execution.gateway_contracts`, `core.execution.order_state_machine`
 - `fix_message_builder.py` → `core.execution.fix_contracts`, `core.execution.gateway_contracts`
 - `gateway_contracts.py` → (无内部依赖)
-- `kelly_sizer.py` → (无内部依赖)
+- `kelly_sizer.py` → `core.execution.pwin_chain`
 - `limit_order_monitor.py` → (无内部依赖)
 - `live_order_sender.py` → `core.contracts.domain.communication_envelope`, `core.contracts.enums`, `core.deployment.environment_config`, `core.deployment.service_container`, `core.execution.broker_adapter`, `core.execution.mt5_broker_adapter`, `core.execution.mt5_worker`, `core.protocol.live_execution_contract`, `core.protocol.schema_versions`
 - `managed_close.py` → `core.contracts.strategy_magic`, `core.execution.live_order_sender`, `core.execution.reentry_guard`, `core.runtime.fault_handler`
@@ -202,6 +202,7 @@
 - `portfolio_risk.py` → `core.execution.capital_allocator`
 - `position_manager.py` → `core.execution.meta_exit_engine`, `core.execution.trail_stop_engine`
 - `pre_trade_guards.py` → `core.config.asset_registry`
+- `pwin_chain.py` → (无内部依赖)
 - `quality_analyzer.py` → `core.execution.gateway_contracts`, `core.execution.quality_contracts`, `core.execution.schema_versions`
 - `quality_contracts.py` → (无内部依赖)
 - `reentry_guard.py` → (无内部依赖)
@@ -209,7 +210,7 @@
 - `schema_versions.py` → (无内部依赖)
 - `statarb_strategy.py` → `core.execution.strategy_line`
 - `strategy_budget.py` → (无内部依赖)
-- `strategy_line.py` → `core.brains.services.dynamic_brain_weighter`, `core.config.asset_registry`, `core.execution.dynamic_sl_tp`, `core.execution.kelly_sizer`, `core.execution.meta_pipeline`, `core.execution.pre_trade_guards`, `core.parliament.contract_groups`, `core.runtime.fault_handler`, `core.runtime.shadow_recorder`
+- `strategy_line.py` → `core.brains.services.dynamic_brain_weighter`, `core.config.asset_registry`, `core.execution.dynamic_sl_tp`, `core.execution.kelly_sizer`, `core.execution.meta_pipeline`, `core.execution.pre_trade_guards`, `core.execution.pwin_chain`, `core.parliament.contract_groups`, `core.runtime.fault_handler`, `core.runtime.shadow_recorder`
 - `strategy_type.py` → (无内部依赖)
 - `swing_strategy.py` → `core.execution.strategy_line`, `core.features.feature_assembler`
 - `trail_stop_engine.py` → `core.execution.position_manager`
@@ -521,7 +522,7 @@
 - `validate_artifacts.py` → (无内部依赖)
 - `validate_blueprints.py` → (无内部依赖)
 - `validate_brain_before_deploy.py` → `core.brains.services.brain_factory`
-- `verify.py` → (无内部依赖)
+- `verify.py` → `core.runtime.golden_master`
 - `verify_all_brains.py` → `core.brains.services.brain_factory`
 - `verify_dqaf_002_fix.py` → `core.execution.position_manager`
 

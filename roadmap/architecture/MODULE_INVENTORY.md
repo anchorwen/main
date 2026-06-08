@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-08T06:08:52Z
-> **扫描模块数**: 484
+> **自动生成**: 2026-06-08T10:11:35Z
+> **扫描模块数**: 485
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -214,10 +214,10 @@
 | `fix_gateway_adapter.py` | ✅ active | FixGatewayAdapter | 12 | 136 | — | |
 | `fix_message_builder.py` | ✅ active | FixMessageBuilder | 5 | 57 | — | |
 | `gateway_contracts.py` | ✅ active | OrderRequest, Fill, OrderState, ExecutionGateway | 9 | 103 | — | |
-| `kelly_sizer.py` | ✅ active | KellyResult | 2 | 163 | — | |
+| `kelly_sizer.py` | ✅ active | KellyResult | 2 | 113 | — | |
 | `limit_order_monitor.py` | ✅ active | LimitOrderIntent, LimitFillResult, LimitOrderMonitor | 9 | 329 | — | |
 | `live_order_sender.py` | ✅ active | — | 6 | 325 | — | |
-| `managed_close.py` | ✅ active | — | 2 | 318 | — | |
+| `managed_close.py` | ✅ active | — | 2 | 336 | — | |
 | `market_efficiency.py` | ✅ active | — | 2 | 67 | — | |
 | `market_impact.py` | ✅ active | MarketImpactEstimate | 3 | 168 | — | |
 | `meta_exit_engine.py` | ✅ active | ExitFeatureSnapshot, ExitEvaluation, MetaExitEngine | 13 | 509 | — | |
@@ -230,8 +230,9 @@
 | `order_state_machine.py` | ✅ active | OrderStateMachine | 9 | 101 | — | |
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 529 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 52 | 1816 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 53 | 1886 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 27 | 882 | — | |
+| `pwin_chain.py` | ✅ active | — | 2 | 137 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
 | `quality_contracts.py` | ✅ active | ExecutionBenchmark, ExecutionQualityMetric, ImplementationShortfall, ExecutionQualityReport | 3 | 138 | — | |
 | `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 7 | 492 | — | |
@@ -239,7 +240,7 @@
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 65 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 11 | 306 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 18 | 2351 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 18 | 2296 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 114 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 7 | 267 | — | |
@@ -549,8 +550,8 @@
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
 | `brain.py` | ✅ active | — | 12 | 734 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 577 | — | |
-| `check_preconditions.py` | ✅ active | — | 12 | 377 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 579 | — | |
+| `check_preconditions.py` | ✅ active | — | 12 | 429 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `classify_ble001.py` | ✅ active | — | 1 | 63 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
@@ -603,7 +604,7 @@
 | `validate_artifacts.py` | ✅ active | — | 4 | 196 | — | |
 | `validate_blueprints.py` | ✅ active | — | 7 | 292 | — | |
 | `validate_brain_before_deploy.py` | ✅ active | — | 12 | 394 | — | |
-| `verify.py` | ✅ active | — | 9 | 418 | — | |
+| `verify.py` | ✅ active | — | 10 | 534 | — | |
 | `verify_all_brains.py` | ✅ active | — | 1 | 91 | — | |
 | `verify_dqaf_002_fix.py` | ✅ active | — | 3 | 180 | — | |
 

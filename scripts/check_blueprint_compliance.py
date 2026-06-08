@@ -85,6 +85,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/execution/market_efficiency.py",
         "core/execution/dynamic_sl_tp.py",
         "core/execution/kelly_sizer.py",
+        "core/execution/pwin_chain.py",
         "core/alpha/ou_optimizer.py",
         "core/alpha/performance_store.py",
     ],
@@ -232,6 +233,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
     "runtime_live": [
         "main.py",
         "core/runtime/",
+        "scripts/check_preconditions.py",
         "scripts/daily_ops.py",
         "scripts/_diag_cycle_stall.py",
         "scripts/live_intent_loop.py",
