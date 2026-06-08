@@ -1298,6 +1298,13 @@ class ActivePositionManager:
 
         evaluation = self.meta_exit_engine.evaluate(snap)
 
+        # ── FIX-20260608-006: MetaExit shadow telemetry ──
+        # Write the full ExitFeatureSnapshot + MetaExit prediction to a
+        # dedicated JSONL file for future model retraining.  This closes
+        # the train-serve feature gap: the training script can read this
+        # file and use the SAME 20 features the runtime engine uses.
+        self._write_meta_exit_telemetry(snap, evaluation, pos.ticket)
+
         # Save current R for next cycle's trajectory comparison
         pos.prev_r = round(r_now, 4)
 
@@ -1305,6 +1312,69 @@ class ActivePositionManager:
             return evaluation
 
         return None
+
+    @staticmethod
+    def _write_meta_exit_telemetry(
+        snap: Any, evaluation: Any, ticket: int,
+    ) -> None:
+        """Write ExitFeatureSnapshot + MetaExit prediction to telemetry log.
+
+        FIX-20260608-006: This bridges the train-serve feature gap.  The
+        training script (train_exit_metamodel.py) currently uses only 8
+        journal-level features.  This log records the full 20-feature
+        ExitFeatureSnapshot that the runtime engine actually consumes,
+        enabling future retraining with complete feature parity.
+
+        Written to ``data/meta_exit_snapshots.jsonl`` (append-only, JSONL).
+        One line per management-cycle evaluation.  Zero impact on existing
+        consumers — this is a dedicated, purpose-built training dataset.
+        """
+        import json as _json
+        import time as _time
+        from pathlib import Path as _Path
+
+        _path = _Path("data") / "meta_exit_snapshots.jsonl"
+        try:
+            _path.parent.mkdir(parents=True, exist_ok=True)
+            _record = {
+                "ticket": ticket,
+                "timestamp_utc": _time.time(),
+                # ── Full ExitFeatureSnapshot (20 dims) ──
+                "snapshot": {
+                    "current_r": snap.current_r,
+                    "prev_r": snap.prev_r,
+                    "peak_r": snap.peak_r,
+                    "drawdown_r": snap.drawdown_r,
+                    "pnl_pct": snap.pnl_pct,
+                    "cycles_held": snap.cycles_held,
+                    "expected_horizon": snap.expected_horizon,
+                    "time_ratio": snap.time_ratio,
+                    "regime": snap.regime,
+                    "regime_confidence": snap.regime_confidence,
+                    "trend_aligned": snap.trend_aligned,
+                    "atr_current": snap.atr_current,
+                    "atr_entry": snap.atr_entry,
+                    "atr_expansion": snap.atr_expansion,
+                    "entry_consensus_score": snap.entry_consensus_score,
+                    "entry_supporting_count": snap.entry_supporting_count,
+                    "current_supporting_count": snap.current_supporting_count,
+                    "consensus_drift": snap.consensus_drift,
+                    "side": snap.side,
+                    "symbol": snap.symbol,
+                },
+                # ── MetaExit prediction ──
+                "meta_exit": {
+                    "exit_urgency": evaluation.exit_urgency,
+                    "should_exit": evaluation.should_exit,
+                    "exit_reason": evaluation.exit_reason,
+                    "p_win": evaluation.p_win,
+                    "factor_breakdown": evaluation.factor_breakdown,
+                },
+            }
+            with open(_path, "a", encoding="utf-8") as _f:
+                _f.write(_json.dumps(_record, ensure_ascii=False, default=str) + "\n")
+        except Exception:  # noqa: BLE001
+            pass  # telemetry failure must never block trading
 
     @staticmethod
     def _is_trend_aligned(regime_info: dict[str, Any], *, position_side: str = "") -> bool:

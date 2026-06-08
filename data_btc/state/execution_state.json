@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "saved_at_utc": "2026-06-08T07:49:41.507731",
+  "saved_at_utc": "2026-06-08T08:04:41.815360",
   "budgets": {
     "btc_swing": {
       "daily_pnl_pct": 0.0,
@@ -21,6 +21,6 @@
   "sl_streak_global_block": 0.0,
   "consecutive_degraded": 0,
   "circuit_breaker_tripped": true,
-  "circuit_breaker_tripped_at": 1780899580.9280593,
+  "circuit_breaker_tripped_at": 1780905580.638653,
   "intraday_dd_active": false
 }
