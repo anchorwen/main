@@ -128,8 +128,8 @@ class LiveCycleConfig:
     max_data_age_seconds: float = 120.0
     close_price_max_age_seconds: float = 60.0  # refuse close dispatch if price older than this
     # Phase B: maximum silence from MT5 bridge before circuit breaker trip.
-    # 300s (5 min) — if no successful price fetch for 5 minutes, MT5 is dead.
-    max_bridge_silence_seconds: float = 300.0
+    # 600s (10 min) — 2 M5 bars tolerance; avoids boundary-flapping on single-bar gaps.
+    max_bridge_silence_seconds: float = 600.0
     # Phase B: single-cycle duration above this threshold increments degraded counter.
     cycle_stall_threshold_seconds: float = 180.0
     circuit_breaker_cooldown_seconds: float = (
@@ -2627,27 +2627,45 @@ def execute_live_cycle(
     if getattr(state, "_last_bridge_ack_time", 0) == 0:
         state._last_bridge_ack_time = _cycle_start_wall
 
-    # ── Phase B: Bridge silence check (FIX-20260607-XXX) ──
-    # If the MT5 bridge has not returned a successful price fetch for longer
-    # than max_bridge_silence_seconds, the bridge is dead.  Trip the circuit
-    # breaker immediately (no 3-cycle grace period — bridge death is binary).
+    # ── Phase B: Bridge silence check (FIX-20260608-008) ──
+    # Bridge silence no longer trips the breaker immediately.  Instead it
+    # increments the degraded counter — same escalation path as cycle_stall.
+    # Only 3 consecutive degraded cycles (across ANY degradation source)
+    # actually trip the breaker.  This prevents single-bar MT5 micro-outages
+    # from triggering a 10-minute cooldown.
     _bridge_silence = time.time() - state._last_bridge_ack_time
-    if _bridge_silence > config.max_bridge_silence_seconds and not state._circuit_breaker_tripped:
-        state._circuit_breaker_tripped = True
-        state._circuit_breaker_tripped_at = time.time()
+    if _bridge_silence > config.max_bridge_silence_seconds:
+        state._consecutive_degraded_cycles += 1
         print(
             json.dumps(
                 {
-                    "event": "circuit_breaker_bridge_silence_trip",
+                    "event": "bridge_silence_degraded",
                     "time": _utc_iso(),
                     "bridge_silence_seconds": round(_bridge_silence, 1),
                     "max_allowed_seconds": config.max_bridge_silence_seconds,
-                    "action": "management_only_mode",
+                    "consecutive_degraded": state._consecutive_degraded_cycles,
+                    "action": "degraded — trip at >=3",
                 },
                 ensure_ascii=False,
             ),
             flush=True,
         )
+        if state._consecutive_degraded_cycles >= 3 and not state._circuit_breaker_tripped:
+            state._circuit_breaker_tripped = True
+            state._circuit_breaker_tripped_at = time.time()
+            print(
+                json.dumps(
+                    {
+                        "event": "circuit_breaker_bridge_silence_trip",
+                        "time": _utc_iso(),
+                        "consecutive_degraded": state._consecutive_degraded_cycles,
+                        "bridge_silence_seconds": round(_bridge_silence, 1),
+                        "action": "management_only_mode",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
 
     # ── Circuit breaker: 3 consecutive degraded cycles → management-only ──
     if state._circuit_breaker_tripped:
