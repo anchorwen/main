@@ -16,6 +16,25 @@ from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FE
 from core.features.store_contracts import FeatureRecord, FeatureSchema
 
 
+def _resolve_timeframe(now: datetime) -> str:
+    """Map current wall-clock time to the coarsest aligned timeframe.
+
+    Hierarchy: H1 > M30 > M15 > M5.
+    - At HH:00 → H1
+    - At HH:00 or HH:30 → M30
+    - At HH:00 / :15 / :30 / :45 → M15
+    - Otherwise → M5
+    """
+    minute = now.minute
+    if minute == 0:
+        return "H1"
+    if minute % 30 == 0:
+        return "M30"
+    if minute % 15 == 0:
+        return "M15"
+    return "M5"
+
+
 def produce_from_live_computer(
     computer,  # V9LiveFeatureComputer
     schema: FeatureSchema,
@@ -23,17 +42,22 @@ def produce_from_live_computer(
 ) -> Iterable[FeatureRecord]:
     """Yield a single FeatureRecord per call — no historical backfill.
 
-    This is designed for periodic (e.g. every 60s) incremental updates.
     Each call computes all 40 features from the current MT5 snapshot and
-    yields exactly one record.
+    yields exactly one record.  The ``timeframe`` label is determined
+    dynamically from the wall clock so that higher-timeframe snapshots
+    (H1, M30, M15) are naturally sparse while M5 remains dense.
+
+    The full 40-dim feature vector is included in every record regardless
+    of the timeframe label — no zero-filling or feature splitting.
     """
     features = computer.compute_all()
     event_time = datetime.now(UTC).replace(tzinfo=None)
+    dynamic_tf = _resolve_timeframe(event_time)
     yield FeatureRecord(
         schema_name=schema.name,
         schema_version=schema.version,
         symbol=symbol,
-        timeframe=schema.timeframe,
+        timeframe=dynamic_tf,
         event_time=event_time,
         values={name: features.get(name, 0.0) for name in V9_INSTITUTIONAL_40_FEATURES},
         source="mt5_live",

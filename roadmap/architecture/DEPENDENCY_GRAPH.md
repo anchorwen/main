@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-07T17:54:45Z
+> **自动生成**: 2026-06-08T06:08:52Z
 
 ## Package-Level Dependencies
 
@@ -461,6 +461,7 @@
 - `_test_xgb_names.py` → `core.brains.adapters.xgboost_brain_adapter`
 - `analyze_deps.py` → (无内部依赖)
 - `analyze_live_journal.py` → (无内部依赖)
+- `analyze_recent_losses.py` → (无内部依赖)
 - `audit_btc_cross_validate.py` → (无内部依赖)
 - `audit_data_health.py` → (无内部依赖)
 - `backtest_runner.py` → `core.backtest.data_feed`, `core.backtest.engine`, `core.backtest.metrics`, `core.backtest.strategy_adapter`, `core.contracts.strategy_magic`, `core.metrics.brinson_attribution`, `core.metrics.factor_attribution`
@@ -471,7 +472,7 @@
 - `ci_prepare_v9_shadow_fixtures.py` → `apps.engine.main_v9_shadow`
 - `classify_ble001.py` → (无内部依赖)
 - `daily_cost_report.py` → (无内部依赖)
-- `daily_ops.py` → `core.alpha.lifecycle_service`, `core.alpha.performance_store`, `core.alpha.portfolio_allocator`, `core.alpha.promotion_gate`, `core.alpha.registry`, `core.brains.services.brain_leaderboard`, `core.contracts.training.label_contract`, `core.deployment.scheduled_task_registry`, `core.execution.conformal_calibrator`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.feedback.param_optimizer`, `core.governance.governance_service`, `core.ledger.services.journal_cleanup`, `core.runtime.fault_handler`, `scripts.brain`, `scripts.feature_store_maintenance`, `scripts.feedback_loop`, `scripts.live_daily_recap`, `scripts.live_shadow_ensemble`, `scripts.paper_trade_simulator`, `scripts.training.brain_leaderboard`, `scripts.training.champion_challenger`, `scripts.training.governance_scheduler`, `scripts.training.label_builder`, `scripts.training.retraining_trigger`
+- `daily_ops.py` → `core.alpha.contracts`, `core.alpha.lifecycle_service`, `core.alpha.performance_store`, `core.alpha.portfolio_allocator`, `core.alpha.promotion_gate`, `core.alpha.registry`, `core.brains.services.brain_leaderboard`, `core.contracts.training.label_contract`, `core.deployment.scheduled_task_registry`, `core.execution.conformal_calibrator`, `core.feedback.brain_performance_tracker`, `core.feedback.brain_pnl_ledger`, `core.feedback.param_optimizer`, `core.governance.governance_service`, `core.ledger.services.journal_cleanup`, `core.runtime.fault_handler`, `scripts.brain`, `scripts.feature_store_maintenance`, `scripts.feedback_loop`, `scripts.live_daily_recap`, `scripts.live_shadow_ensemble`, `scripts.paper_trade_simulator`, `scripts.training.brain_leaderboard`, `scripts.training.champion_challenger`, `scripts.training.governance_scheduler`, `scripts.training.label_builder`, `scripts.training.retraining_trigger`
 - `deploy_blue_green.py` → `core.deployment.blue_green`
 - `diagnose_feature_drift.py` → (无内部依赖)
 - `dqaf_collect.py` → (无内部依赖)

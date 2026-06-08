@@ -50,6 +50,7 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260608-004 | 2026-06-08 | cursor-agent | — | **Multi-TF Feature Store**: `produce_from_live_computer()` now assigns dynamic timeframe labels (H1 at :00, M30 at :00/:30, M15 at :00/:15/:30/:45, M5 otherwise). Full 40-dim vector in every record — no zero-filling. `feature_update_producer.py` added to MODULE_SOURCE_MAP. | RC-12 |
 | FIX-20260604-081 | 2026-06-04 | cursor-agent | — | **BTC 37-dim macro enhanced schema**: `btc_macro_enhanced_schema.py` (AUDJPYc, XAUUSDc, BTC/XAU ratio+ROC). Registered in `_IMPLEMENTED_SCHEMAS`, `SCHEMA_DIMENSIONS`, `feature_assembler`. Physically isolated from XAU. ffill→ROC guard. | RC-06 |
 | FIX-20260604-080 | 2026-06-04 | cursor-agent | — | **BTC cross-pair zero-fix**: `build_swing_enhanced_dataset.py --cross-raw-dir` fallback to `data/raw` macro lake. Cross features now non-zero. `ffill()` for 24/7 vs 24/5 weekend gap. | RC-06 |
 | FIX-20260531-021 | 2026-05-31 | cursor-agent | — | **Data-driven swing feature assembly**: `assemble_swing_features()` in registry.py + `_derive_xau_indices()` auto-detects XAU-specific feature indices. BTC training removes XAU-only features (6 columns) from 35-dim → 29-dim schema. | RC-06 |

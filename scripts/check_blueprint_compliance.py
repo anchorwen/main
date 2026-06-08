@@ -208,6 +208,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/features/schemas/swing_enhanced_schema.py",
         "core/features/schemas/registry.py",
         "core/market/calendar.py",
+        "core/deployment/feature_update_producer.py",
         "scripts/features/feature_store_warmer.py",
         "scripts/feature_store_maintenance.py",
     ],

@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260608-004 | 2026-06-08 | cursor-agent | — | MODULE_SOURCE_MAP: add `core/deployment/feature_update_producer.py` → features_service module. Required for FIX-004 multi-TF Feature Store blueprint compliance. | RC-09 |
 | FIX-20260607-146 | 2026-06-07 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/tuning/`, `scripts/analyze_live_journal.py` to training module. V4+LGB_V1 brain configs archived. V7+V8 brain configs registered. | RC-09 |
 | FIX-20260606-136 | 2026-06-06 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/dqaf_collect.py` to `monitor_dashboard` module (DQAF v1.0 ECoL evidence collection script). Also updated `monitor_dashboard.md` Fix History. | RC-09 |
 | FIX-20260531-003 | 2026-05-31 | cursor-agent | — | MODULE_SOURCE_MAP: add `main.py` → runtime_live, `core/infrastructure/` → protocol_services (both were unmapped → orphan compliance FATAL). Also add `regime_gate.py` fix + `distributed_lock.py` tmp cleanup to respective module blueprints. | RC-09 |

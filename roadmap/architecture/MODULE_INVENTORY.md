@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-07T17:54:45Z
-> **扫描模块数**: 483
+> **自动生成**: 2026-06-08T06:08:52Z
+> **扫描模块数**: 484
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -167,7 +167,7 @@
 | `domain_keys.py` | ⬜ empty | — | 0 | 7 | — | |
 | `environment_config.py` | ✅ active | Environment, EnvironmentConfig | 7 | 126 | — | |
 | `evidence_bundle.py` | ✅ active | EvidenceBundleService | 10 | 287 | — | |
-| `feature_update_producer.py` | ✅ active | — | 2 | 53 | — | |
+| `feature_update_producer.py` | ✅ active | — | 3 | 77 | — | |
 | `final_audit.py` | ✅ active | FinalAuditService | 5 | 211 | — | |
 | `governance_summary.py` | ✅ active | — | 4 | 56 | — | |
 | `health_check.py` | ✅ active | HealthCheckService | 9 | 117 | — | |
@@ -543,17 +543,18 @@
 | `_test_xgb_names.py` | 📄 config | — | 0 | 81 | — | |
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
 | `analyze_live_journal.py` | ✅ active | — | 6 | 517 | — | |
+| `analyze_recent_losses.py` | ✅ active | — | 1 | 315 | — | |
 | `audit_btc_cross_validate.py` | ✅ active | — | 4 | 285 | — | |
 | `audit_data_health.py` | ✅ active | — | 2 | 128 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
 | `brain.py` | ✅ active | — | 12 | 734 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 576 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 577 | — | |
 | `check_preconditions.py` | ✅ active | — | 12 | 377 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `classify_ble001.py` | ✅ active | — | 1 | 63 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 27 | 1279 | — | |
+| `daily_ops.py` | ✅ active | — | 28 | 1417 | — | |
 | `deploy_blue_green.py` | ✅ active | — | 7 | 126 | — | |
 | `diagnose_feature_drift.py` | ✅ active | — | 4 | 229 | — | |
 | `dqaf_collect.py` | ✅ active | — | 12 | 565 | — | |

@@ -793,6 +793,143 @@ def _step_param_optimization(
         return {"step": "param_optimization", "status": "error", "error": str(exc)[:500]}
 
 
+def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
+    """Feed closed trade PnL into Alpha performance store.
+
+    Reads live_trade_journal.jsonl, extracts per-alpha PnL from closed
+    trades since the last feed, and records AlphaPerformanceSnapshot(s).
+
+    Runs BEFORE _step_alpha_lifecycle so promotion/demotion evaluation
+    has fresh performance data to work with.
+    """
+    with fail_open_guard("AlphaFeed"):
+        from core.alpha.performance_store import AlphaPerformanceStore
+        from core.alpha.registry import AlphaRegistry
+
+        journal_path = Path(base_dir) / "live_trade_journal.jsonl"
+        registry_path = Path(base_dir) / "alpha_registry.json"
+        perf_path = Path(base_dir) / "alpha_performance.json"
+        state_path = Path(base_dir) / "alpha_feed_state.json"
+
+        # ── Load or create registry ──
+        if registry_path.exists():
+            with fail_open_guard("AlphaFeed:load_registry"):
+                registry = AlphaRegistry.load(registry_path)
+        else:
+            registry = AlphaRegistry()
+
+        # Ensure btc_swing is registered
+        existing_ids = {r.alpha_id for r in registry.list_records()}
+        if "btc_swing" not in existing_ids and not dry_run:
+            with fail_open_guard("AlphaFeed:register_btc_swing"):
+                from core.alpha.contracts import AlphaLifecycleState, AlphaRecord
+
+                registry.register(
+                    AlphaRecord(
+                        alpha_id="btc_swing",
+                        state=AlphaLifecycleState.ACTIVE,
+                        strategy_class="swing",
+                        assets=["BTCUSDc"],
+                    )
+                )
+                registry.save(registry_path)
+
+        # ── Load performance store ──
+        if perf_path.exists():
+            with fail_open_guard("AlphaFeed:load_perf"):
+                perf_store = AlphaPerformanceStore.load(perf_path)
+        else:
+            perf_store = AlphaPerformanceStore()
+
+        # ── Track last processed journal line ──
+        last_line = 0
+        if state_path.exists():
+            with fail_open_guard("AlphaFeed:read_state"):
+                last_line = json.loads(state_path.read_text(encoding="utf-8")).get("last_line", 0)
+
+        if not journal_path.exists():
+            return {"step": "alpha_feed", "status": "skipped", "reason": "no_journal"}
+
+        lines = journal_path.read_text(encoding="utf-8").splitlines()
+        new_lines = lines[last_line:]
+        if not new_lines:
+            return {"step": "alpha_feed", "status": "ok", "new_snapshots": 0}
+
+        # ── Aggregate PnL by alpha from closed trades ──
+        alpha_pnls: dict[str, list[float]] = {}
+        alpha_wins: dict[str, int] = {}
+        alpha_losses: dict[str, int] = {}
+        alpha_trades: dict[str, int] = {}
+
+        for line in new_lines:
+            with fail_open_guard("AlphaFeed:parse_line"):
+                entry = json.loads(line)
+            if entry.get("action") != "close":
+                continue
+            ack = entry.get("ack_status", "")
+            if ack not in ("accepted", "closed"):
+                continue
+            pnl = entry.get("pnl")
+            if pnl is None:
+                continue
+            strategy = entry.get("strategy", "btc_swing")
+            alpha_pnls.setdefault(strategy, []).append(float(pnl))
+            alpha_trades[strategy] = alpha_trades.get(strategy, 0) + 1
+            if float(pnl) > 0:
+                alpha_wins[strategy] = alpha_wins.get(strategy, 0) + 1
+            elif float(pnl) < 0:
+                alpha_losses[strategy] = alpha_losses.get(strategy, 0) + 1
+
+        # ── Create snapshots ──
+        new_snapshots = 0
+        now_utc = datetime.now(UTC).isoformat()
+        for alpha_id, pnls in alpha_pnls.items():
+            total_pnl = sum(pnls)
+            n = len(pnls)
+            wins = alpha_wins.get(alpha_id, 0)
+            losses = alpha_losses.get(alpha_id, 0)
+            wr = wins / (wins + losses) if (wins + losses) > 0 else 0.0
+            avg_win = sum(p for p in pnls if p > 0) / max(wins, 1)
+            avg_loss = abs(sum(p for p in pnls if p < 0)) / max(losses, 1)
+            pf = (sum(p for p in pnls if p > 0) / avg_loss) if avg_loss > 0 else 0.0
+
+            with fail_open_guard("AlphaFeed:record_snapshot"):
+                perf_store.record_snapshot(
+                    alpha_id=alpha_id,
+                    metrics={
+                        "total_pnl": round(total_pnl, 2),
+                        "trade_count": n,
+                        "win_rate": round(wr, 4),
+                        "profit_factor": round(pf, 4),
+                        "avg_win": round(avg_win, 2),
+                        "avg_loss": round(avg_loss, 2),
+                        "wins": wins,
+                        "losses": losses,
+                    },
+                    source="trade_journal",
+                    window="daily",
+                )
+                new_snapshots += 1
+
+        # ── Save ──
+        if not dry_run and new_snapshots > 0:
+            with fail_open_guard("AlphaFeed:save_perf"):
+                perf_store.save(perf_path)
+            with fail_open_guard("AlphaFeed:save_state"):
+                state_path.write_text(
+                    json.dumps({"last_line": len(lines), "updated_utc": now_utc}),
+                    encoding="utf-8",
+                )
+
+        return {
+            "step": "alpha_feed",
+            "status": "ok",
+            "new_snapshots": new_snapshots,
+            "alphas_fed": list(alpha_pnls.keys()),
+            "total_trades_fed": sum(alpha_trades.values()),
+        }
+
+
 def _step_alpha_lifecycle(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
     """Run alpha lifecycle evaluation: promotion gate on all registered alphas."""
     try:
@@ -1159,6 +1296,7 @@ def run_daily_ops(
         steps.append(_step_daily_recap(base_dir, mt5_terminal_path=mt5_terminal_path))
 
     if not skip_alpha:
+        steps.append(_step_alpha_feed(base_dir, dry_run=dry_run))
         steps.append(_step_alpha_lifecycle(base_dir, dry_run=dry_run))
     if not skip_alpha_allocation:
         steps.append(_step_alpha_allocation(base_dir, dry_run=dry_run))
