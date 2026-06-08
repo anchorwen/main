@@ -10,11 +10,11 @@
       "freeze_count": 0,
       "exposure_limited": false,
       "performance_metrics": {
-        "win_rate": 0.4698,
+        "win_rate": 0.4711,
         "profit_factor": 0.83,
-        "sharpe_ratio": -15.67,
-        "total_trades": 2056,
-        "pnl_r": -411.97
+        "sharpe_ratio": -14.95,
+        "total_trades": 2078,
+        "pnl_r": -402.68
       }
     },
     "OU_Params_V7_M15": {
@@ -102,11 +102,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4532,
+        "win_rate": 0.4538,
         "profit_factor": 0.76,
-        "sharpe_ratio": -26.94,
-        "total_trades": 929,
-        "pnl_r": -322.25
+        "sharpe_ratio": -26.12,
+        "total_trades": 941,
+        "pnl_r": -322.9
       }
     },
     "Swing_V9_M15_V2": {
@@ -244,11 +244,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4289,
-        "profit_factor": 0.55,
-        "sharpe_ratio": -55.77,
-        "total_trades": 443,
-        "pnl_r": -361.77
+        "win_rate": 0.4308,
+        "profit_factor": 0.56,
+        "sharpe_ratio": -52.84,
+        "total_trades": 455,
+        "pnl_r": -362.42
       }
     },
     "Swing_V9_H1_V2": {
@@ -259,11 +259,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4315,
-        "profit_factor": 0.78,
-        "sharpe_ratio": -23.01,
-        "total_trades": 591,
-        "pnl_r": -190.24
+        "win_rate": 0.4353,
+        "profit_factor": 0.82,
+        "sharpe_ratio": -18.46,
+        "total_trades": 618,
+        "pnl_r": -165.35
       }
     },
     "Swing_LGB_M15_V1": {

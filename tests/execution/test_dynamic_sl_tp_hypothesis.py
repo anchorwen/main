@@ -11,7 +11,6 @@ Verifies mathematical invariants that MUST hold for ANY input:
 
 from __future__ import annotations
 
-import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
@@ -23,7 +22,6 @@ from core.execution.dynamic_sl_tp import (
     compute_dynamic_sl_tp,
     compute_sl_tp_levels,
 )
-
 
 # ── Input generators ───────────────────────────────────────────────────────
 
@@ -52,7 +50,13 @@ def level_inputs(draw, *, with_spread: bool = True):
         current_atr=draw(st.floats(0.1, 500.0)),
         ref_atr=draw(st.floats(0.1, 500.0)),
     )
-    return dict(side=side, entry_price=entry_price, dsl=dsl, tick_size=tick_size, spread_points=spread_points)
+    return dict(
+        side=side,
+        entry_price=entry_price,
+        dsl=dsl,
+        tick_size=tick_size,
+        spread_points=spread_points,
+    )
 
 
 # ── Property tests ─────────────────────────────────────────────────────────
@@ -73,18 +77,18 @@ class TestSLTPInvariants:
     def test_sl_multiplier_within_hard_bounds(self, inp):
         """SL multiplier must never exceed hard-coded safety bounds."""
         result = compute_dynamic_sl_tp(**inp)
-        assert MIN_SL_ATR <= result.sl_atr_mult <= MAX_SL_ATR, (
-            f"sl_atr_mult={result.sl_atr_mult} outside [{MIN_SL_ATR}, {MAX_SL_ATR}]"
-        )
+        assert (
+            MIN_SL_ATR <= result.sl_atr_mult <= MAX_SL_ATR
+        ), f"sl_atr_mult={result.sl_atr_mult} outside [{MIN_SL_ATR}, {MAX_SL_ATR}]"
 
     @given(reasonable_sltp_inputs())
     @settings(max_examples=500)
     def test_tp_multiplier_within_hard_bounds(self, inp):
         """TP multiplier must never exceed hard-coded safety bounds."""
         result = compute_dynamic_sl_tp(**inp)
-        assert MIN_TP_ATR <= result.tp_atr_mult <= MAX_TP_ATR, (
-            f"tp_atr_mult={result.tp_atr_mult} outside [{MIN_TP_ATR}, {MAX_TP_ATR}]"
-        )
+        assert (
+            MIN_TP_ATR <= result.tp_atr_mult <= MAX_TP_ATR
+        ), f"tp_atr_mult={result.tp_atr_mult} outside [{MIN_TP_ATR}, {MAX_TP_ATR}]"
 
     @given(reasonable_sltp_inputs())
     @settings(max_examples=500)

@@ -281,6 +281,7 @@ class LiveCycleState:
     _circuit_breaker_tripped_at: float = (
         0.0  # Unix ts when breaker last tripped (for cooldown reset)
     )
+    _circuit_breaker_trip_reason: str = ""  # DQAF-20260608-003: which path tripped the breaker
 
     # FIX-20260607-XXX: Staleness Contract — consecutive cycles with stale data
     # triggers circuit breaker (data pipeline freeze → fail-closed).
@@ -2653,6 +2654,7 @@ def execute_live_cycle(
         if state._consecutive_degraded_cycles >= 3 and not state._circuit_breaker_tripped:
             state._circuit_breaker_tripped = True
             state._circuit_breaker_tripped_at = time.time()
+            state._circuit_breaker_trip_reason = "bridge_silence"
             print(
                 json.dumps(
                     {
@@ -2660,6 +2662,7 @@ def execute_live_cycle(
                         "time": _utc_iso(),
                         "consecutive_degraded": state._consecutive_degraded_cycles,
                         "bridge_silence_seconds": round(_bridge_silence, 1),
+                        "trip_reason": state._circuit_breaker_trip_reason,
                         "action": "management_only_mode",
                     },
                     ensure_ascii=False,
@@ -2767,12 +2770,14 @@ def execute_live_cycle(
         if state._consecutive_degraded_cycles >= 3:
             state._circuit_breaker_tripped = True
             state._circuit_breaker_tripped_at = time.time()
+            state._circuit_breaker_trip_reason = "cycle_stall"
             print(
                 json.dumps(
                     {
                         "event": "circuit_breaker_cycle_stall_trip",
                         "time": _utc_iso(),
                         "consecutive_degraded": state._consecutive_degraded_cycles,
+                        "trip_reason": state._circuit_breaker_trip_reason,
                         "action": "management_only_mode",
                     },
                     ensure_ascii=False,
@@ -2780,23 +2785,26 @@ def execute_live_cycle(
                 flush=True,
             )
 
-    # ── Circuit breaker unified auto-reset (DQAF-20260608-001) ──
-    # Old logic (line 2774): `if not degraded_wakeup and _consecutive_degraded_cycles > 0`
-    # only covered the cycle-stall/degraded-wakeup trip paths.  Bridge-silence and
-    # ExecutionQueueFatalError trips never incremented _consecutive_degraded_cycles,
-    # so the auto-reset condition was permanently false → breaker stuck forever.
+    # ── Circuit breaker unified auto-reset (DQAF-20260608-003) ──
+    # DQAF-20260608-003 ROOT-CAUSE FIX: the auto-reset previously only cleared
+    # _consecutive_degraded_cycles, but the breaker could be tripped by 6 different
+    # paths using 3 different counters (degraded, stale_cycles, stale_features).
+    # Surviving counters from the non-reset paths would immediately re-trip the
+    # breaker on the same cycle → death spiral.  Now ALL counters are cleared.
     #
-    # New logic: cooldown-based unified reset.  After circuit_breaker_cooldown_seconds,
-    # if ALL triggering conditions have cleared, reset the breaker unconditionally.
+    # Reset condition: cooldown elapsed AND all 3 trigger conditions clear.
     if state._circuit_breaker_tripped:
         _cooldown_elapsed = (
             time.time() - state._circuit_breaker_tripped_at
         ) > config.circuit_breaker_cooldown_seconds
         # Recomputed after management-only block may have updated heartbeat
-        _bridge_alive = (time.time() - state._last_bridge_ack_time) <= config.max_bridge_silence_seconds
+        _bridge_alive = (
+            time.time() - state._last_bridge_ack_time
+        ) <= config.max_bridge_silence_seconds
         _not_stalled = _cycle_duration <= config.cycle_stall_threshold_seconds
         _not_degraded = not degraded_wakeup
         if _cooldown_elapsed and _bridge_alive and _not_stalled and _not_degraded:
+            _prev_reason = state._circuit_breaker_trip_reason
             print(
                 json.dumps(
                     {
@@ -2807,6 +2815,9 @@ def execute_live_cycle(
                             time.time() - state._circuit_breaker_tripped_at, 1
                         ),
                         "previous_consecutive_degraded": state._consecutive_degraded_cycles,
+                        "previous_consecutive_stale_cycles": state._consecutive_stale_cycles,
+                        "previous_consecutive_stale_features": state._consecutive_stale_features,
+                        "previous_trip_reason": _prev_reason,
                     },
                     ensure_ascii=False,
                 ),
@@ -2814,7 +2825,11 @@ def execute_live_cycle(
             )
             state._circuit_breaker_tripped = False
             state._circuit_breaker_tripped_at = 0.0
+            state._circuit_breaker_trip_reason = ""
+            # ── DQAF-003 core fix: reset ALL degradation counters ──
             state._consecutive_degraded_cycles = 0
+            state._consecutive_stale_cycles = 0
+            state._consecutive_stale_features = 0
     elif not degraded_wakeup and state._consecutive_degraded_cycles > 0:
         # Breaker NOT tripped but degraded counter > 0 → reset counter on clean cycle
         state._consecutive_degraded_cycles = 0
@@ -3296,6 +3311,7 @@ def execute_live_cycle(
             if state._consecutive_stale_cycles >= 3:
                 state._circuit_breaker_tripped = True
                 state._circuit_breaker_tripped_at = time.time()
+                state._circuit_breaker_trip_reason = "data_staleness"
                 print(
                     json.dumps(
                         {
@@ -3303,6 +3319,7 @@ def execute_live_cycle(
                             "time": _utc_iso(),
                             "consecutive_stale_cycles": state._consecutive_stale_cycles,
                             "data_age_seconds": round(_data_age, 1),
+                            "trip_reason": state._circuit_breaker_trip_reason,
                             "action": "management_only_mode",
                         },
                         ensure_ascii=False,
@@ -4052,12 +4069,14 @@ def execute_live_cycle(
                         if state._consecutive_stale_features >= 3:
                             state._circuit_breaker_tripped = True
                             state._circuit_breaker_tripped_at = time.time()
+                            state._circuit_breaker_trip_reason = "feature_staleness"
                             print(
                                 json.dumps(
                                     {
                                         "event": "circuit_breaker_feature_staleness_trip",
                                         "time": _utc_iso(),
                                         "consecutive_stale_features": state._consecutive_stale_features,
+                                        "trip_reason": state._circuit_breaker_trip_reason,
                                         "action": "management_only_mode",
                                     },
                                     ensure_ascii=False,
@@ -6522,12 +6541,14 @@ def execute_live_cycle(
         if state._consecutive_degraded_cycles >= 3:
             state._circuit_breaker_tripped = True
             state._circuit_breaker_tripped_at = time.time()
+            state._circuit_breaker_trip_reason = "degraded_wakeup"
             print(
                 json.dumps(
                     {
                         "event": "circuit_breaker_tripped",
                         "time": _utc_iso(),
                         "consecutive_degraded": state._consecutive_degraded_cycles,
+                        "trip_reason": state._circuit_breaker_trip_reason,
                         "action": "suspend_new_entries",
                         "mode": "management_only",
                     },

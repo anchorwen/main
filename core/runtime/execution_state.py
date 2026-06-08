@@ -40,6 +40,10 @@ def save_execution_state(
     circuit_breaker_tripped: bool = False,
     circuit_breaker_tripped_at: float = 0.0,
     intraday_dd_active: bool = False,
+    # ── DQAF-20260608-003: full counter persistence ──
+    consecutive_stale_cycles: int = 0,
+    consecutive_stale_features: int = 0,
+    circuit_breaker_trip_reason: str = "",
 ) -> None:
     """Snapshot all execution guard state to disk (atomic write via tmp+replace)."""
     p = Path(save_path)
@@ -60,6 +64,10 @@ def save_execution_state(
         "circuit_breaker_tripped": circuit_breaker_tripped,
         "circuit_breaker_tripped_at": circuit_breaker_tripped_at,
         "intraday_dd_active": intraday_dd_active,
+        # ── DQAF-20260608-003: full counter persistence ──
+        "consecutive_stale_cycles": consecutive_stale_cycles,
+        "consecutive_stale_features": consecutive_stale_features,
+        "circuit_breaker_trip_reason": circuit_breaker_trip_reason,
     }
 
     # ── Strategy budgets ──
@@ -178,7 +186,7 @@ def restore_execution_state(
 
     # Circuit breaker state — prevents restart from clearing degraded-cycle counter
     state._consecutive_degraded_cycles = max(
-        state._consecutive_degraded_cycles,
+        getattr(state, "_consecutive_degraded_cycles", 0),
         data.get("consecutive_degraded", 0),
     )
     if data.get("circuit_breaker_tripped", False):
@@ -187,6 +195,23 @@ def restore_execution_state(
             getattr(state, "_circuit_breaker_tripped_at", 0.0),
             data.get("circuit_breaker_tripped_at", 0.0),
         )
+        # ── DQAF-20260608-003: restore trip reason for diagnostics ──
+        if data.get("circuit_breaker_trip_reason", ""):
+            state._circuit_breaker_trip_reason = data["circuit_breaker_trip_reason"]
+
+    # ── DQAF-20260608-003: restore stale counters ──
+    # These counters were previously NOT persisted, causing "ghost breaker"
+    # after restart: breaker=True but the counter that triggered it was lost.
+    # Now restored with max() semantics (disk may be stale vs in-memory).
+    # Use getattr with default 0 for backward compatibility with tests/mocks.
+    state._consecutive_stale_cycles = max(
+        getattr(state, "_consecutive_stale_cycles", 0),
+        data.get("consecutive_stale_cycles", 0),
+    )
+    state._consecutive_stale_features = max(
+        getattr(state, "_consecutive_stale_features", 0),
+        data.get("consecutive_stale_features", 0),
+    )
 
     # Intraday DD kill — prevents restart from clearing drawdown block
     if data.get("intraday_dd_active", False):

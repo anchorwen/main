@@ -201,6 +201,9 @@ def test_restore_hydrates_budgets(tmp_path, mock_strategies):
     state._consecutive_degraded_cycles = 0
     state._circuit_breaker_tripped = False
     state.block_new_entries = False
+    state._consecutive_stale_cycles = 0
+    state._consecutive_stale_features = 0
+    state._circuit_breaker_trip_reason = ""
 
     restore_execution_state(state, mock_strategies, data_dir=str(tmp_path))
 
@@ -239,6 +242,9 @@ def test_restore_hydrates_circuit_breaker(tmp_path, mock_strategies):
     state._circuit_breaker_tripped = False
     state._circuit_breaker_tripped_at = 0.0
     state.block_new_entries = False
+    state._consecutive_stale_cycles = 0
+    state._consecutive_stale_features = 0
+    state._circuit_breaker_trip_reason = ""
 
     restore_execution_state(state, mock_strategies, data_dir=str(tmp_path))
 
@@ -259,6 +265,9 @@ def test_restore_handles_missing_file_gracefully(tmp_path, mock_strategies):
     state._circuit_breaker_tripped = False
     state._circuit_breaker_tripped_at = 0.0
     state.block_new_entries = False
+    state._consecutive_stale_cycles = 0
+    state._consecutive_stale_features = 0
+    state._circuit_breaker_trip_reason = ""
 
     # Should not raise
     restore_execution_state(state, mock_strategies, data_dir=str(tmp_path))
@@ -298,6 +307,9 @@ def test_restore_preserves_higher_sl_streak(tmp_path, mock_strategies):
     state._consecutive_degraded_cycles = 5  # > persisted
     state._circuit_breaker_tripped = False
     state.block_new_entries = False
+    state._consecutive_stale_cycles = 0
+    state._consecutive_stale_features = 0
+    state._circuit_breaker_trip_reason = ""
 
     restore_execution_state(state, mock_strategies, data_dir=str(tmp_path))
 

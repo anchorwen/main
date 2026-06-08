@@ -1978,6 +1978,12 @@ def main(argv: list[str] | None = None) -> int:
                             state, "_circuit_breaker_tripped_at", 0.0
                         ),
                         intraday_dd_active=state.block_new_entries,
+                        # ── DQAF-20260608-003: full counter persistence ──
+                        consecutive_stale_cycles=state._consecutive_stale_cycles,
+                        consecutive_stale_features=state._consecutive_stale_features,
+                        circuit_breaker_trip_reason=getattr(
+                            state, "_circuit_breaker_trip_reason", ""
+                        ),
                     )
                 except Exception:  # noqa: BLE001
                     pass
@@ -2216,6 +2222,12 @@ def main(argv: list[str] | None = None) -> int:
                             state, "_circuit_breaker_tripped_at", 0.0
                         ),
                         intraday_dd_active=state.block_new_entries,
+                        # ── DQAF-20260608-003: full counter persistence ──
+                        consecutive_stale_cycles=state._consecutive_stale_cycles,
+                        consecutive_stale_features=state._consecutive_stale_features,
+                        circuit_breaker_trip_reason=getattr(
+                            state, "_circuit_breaker_trip_reason", ""
+                        ),
                     )
                 except Exception:  # noqa: BLE001
                     pass

@@ -32,6 +32,7 @@ FIX-YYYYMMDD-NNN
 
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
+| FIX-20260608-009 | 2026-06-08 | runtime-live, execution-state | **DQAF-003: Circuit breaker fragmented trip paths — root-cause fix**: (1) All 5 breaker trip paths now record `_circuit_breaker_trip_reason` (bridge_silence/cycle_stall/data_staleness/feature_staleness/degraded_wakeup). (2) Auto-reset clears ALL degradation counters (was: only `_consecutive_degraded_cycles`; now: also `_consecutive_stale_cycles` + `_consecutive_stale_features`). (3) `save_execution_state` persists all 3 counters + trip_reason. (4) `restore_execution_state` restores all counters (prevent ghost-breaker after restart). ReB: `FRAGMENTED_BREAKER_TRIP_PATHS_WITH_STALE_COUNTER_LEAK`. | RC-06, RC-03 |
 | FIX-20260608-006 | 2026-06-08 | runtime-live | **Circuit breaker reset circular dependency**: FIX-003 cooldown reset required `_bridge_alive` but `_last_bridge_ack_time` frozen during management-only mode. `positions_get()` success now updates heartbeat to break cycle. | RC-06 |
 | FIX-20260608-005 | 2026-06-08 | execution-orders | **Managed close notification gap**: `dispatch_managed_close()` (primary exit path for meta_exit/SL/TP/hesitation/time_decay/brain_flip/drawdown_kill) never called `notify_trade`. All managed closes were silent on DingTalk. Added fire-and-forget `notify_trade(action="close", ...)` at single-point-of-exit after close confirmed + tracking updated. DQAF-20260608-002 diagnosed. | RC-06 |
 | FIX-20260608-004r | 2026-06-08 | runtime-live, features-service, scripts | **DQAF-001 residual (revised): Alpha feed retained, multi-TF FS ROLLED BACK**. Dynamic timeframe labeling reverted — 40-dim vector already is the multi-TF snapshot; pure M5 stream avoids Swiss Cheese time-series gaps. | RC-12 |
@@ -1852,6 +1853,44 @@ FIX-YYYYMMDD-NNN
   ```
 - **Related Docket**: DQAF-20260607-011 (shadow brain silent coup)
 - **Prevention**: Any weight computation system must distinguish between "permission to vote" (binary, config-level) and "confidence in vote" (continuous, PnL-driven). These must be separate variables that multiply — never overwrite.
+
+---
+
+### FIX-20260608-009: Circuit Breaker Fragmented Trip Paths — Root-Cause Fix (DQAF-20260608-003)
+
+- **Module**: runtime-live, execution-state
+- **Files**: `core/runtime/live_cycle.py`, `core/runtime/execution_state.py`, `scripts/live_intent_loop.py`, `tests/unit/test_execution_state.py`
+- **DQAF Docket**: DQAF-20260608-003
+- **Severity**: Sev 2 — trading blocked, system in breaker death-spiral
+- **Root Cause**: RC-06 (contract-violation — breaker trip paths used 3 independent counters but auto-reset only cleared 1), RC-03 (state-leak — stale counters survived auto-reset, causing immediate re-trip)
+
+**Background**: The circuit breaker had been "fixed" 6+ times (FIX-019, FIX-120, FIX-142, FIX-006, FIX-003, FIX-008) without permanent resolution. Each fix addressed a single trip path while leaving the underlying architecture fragmented:
+
+- **6 trip paths** using **3 different counters**: `_consecutive_degraded_cycles` (bridge_silence, cycle_stall, degraded_wakeup), `_consecutive_stale_cycles` (data_staleness), `_consecutive_stale_features` (feature_staleness)
+- **Auto-reset** (live_cycle.py L2815) only cleared `_consecutive_degraded_cycles`
+- Surviving `_consecutive_stale_cycles >= 3` would **immediately re-trip** the breaker on the same cycle after auto-reset
+- After restart, breaker state was restored from disk but the stale counters that caused it were **not persisted** → "ghost breaker" (breaker=True, no trigger cause)
+- System restarted ~110 times on May 31 alone (crash-restart death spiral)
+
+**Changes — 手术四刀**:
+
+1. **Trip reason tracking**: All 5 trip paths (`bridge_silence` L2655, `cycle_stall` L2771, `data_staleness` L3310, `feature_staleness` L4068, `degraded_wakeup` L6540) now set `state._circuit_breaker_trip_reason` with a unique string identifier. This enables diagnosis of WHY the breaker tripped — previously impossible.
+
+2. **Unified counter reset in auto-reset**: `circuit_breaker_reset` (L2817) now clears ALL 3 counters: `_consecutive_degraded_cycles = 0`, `_consecutive_stale_cycles = 0`, `_consecutive_stale_features = 0`. Previously only cleared `_consecutive_degraded_cycles`. The reset log now includes all previous counter values + trip_reason for audit trail.
+
+3. **Full counter persistence**: `save_execution_state()` now persists `consecutive_stale_cycles`, `consecutive_stale_features`, and `circuit_breaker_trip_reason` alongside the existing fields. `restore_execution_state()` restores all 3 new fields with `max()` semantics (disk may be stale vs in-memory).
+
+4. **New LiveCycleState field**: `_circuit_breaker_trip_reason: str = ""` added to `LiveCycleState` class.
+
+**ReB Pattern**: `FRAGMENTED_BREAKER_TRIP_PATHS_WITH_STALE_COUNTER_LEAK` — Multiple independent trip paths with independent counters where auto-reset only clears a subset, causing surviving counters to immediately re-trigger. Fix: unified counter reset + full persistence.
+
+**Files changed**:
+- `core/runtime/live_cycle.py`: +1 field (`_circuit_breaker_trip_reason`), 5 trip paths annotated with reason, auto-reset clears all counters
+- `core/runtime/execution_state.py`: `save_execution_state()` signature +3 params, `restore_execution_state()` restores +3 fields
+- `scripts/live_intent_loop.py`: 2 `save_execution_state()` call sites pass new counters
+- `tests/unit/test_execution_state.py`: 4 MagicMock fixtures updated with new attributes
+
+**Verification**: `verify.py --quick` PASS (mypy + ruff + blueprint). 1918/1919 pytest PASS (1 pre-existing integration test failure unrelated). `tests/unit/test_execution_state.py` 13/13 PASS.
 
 ---
 

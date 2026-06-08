@@ -331,3 +331,29 @@
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: ReB-20260607-008 (`stale_data_fail_open_blind_trading`)
 - **关联 FIX**: FIX-20260607-XXX
+
+---
+
+### CCT-20260608-003: 断路器碎片化 trip 路径死亡螺旋 (DQAF-20260608-003)
+
+- **发现日期**: 2026-06-08
+- **严重等级**: Sev 2 — 交易阻断
+- **因果链**:
+  - [Layer 1 — 症状] (confirmed): 断路器反复触发，系统频繁重启 (May 31: 110次)，trade_decisions=0
+    - Source 1: `data_btc/logs/alert_audit.jsonl` — 123 daily_loss + 57 strategy_degradation
+    - Source 2: `data_btc/state/execution_state.json` — consecutive_degraded=0 but circuit_breaker_tripped=true (矛盾)
+    - Source 3: `data_btc/golden_master.jsonl` — 仅3个cycle, 全部 trade_decisions=0
+  - [Layer 2 — 中间异常] (confirmed): Auto-reset (live_cycle.py L2815) 仅重置 `_consecutive_degraded_cycles=0`，未重置 `_consecutive_stale_cycles` 和 `_consecutive_stale_features`
+    - Source 4: `live_cycle.py` L2817 vs L3313 — reset 只清 degraded 不清 stale
+    - 后果: breaker 由 data_staleness 触发后，auto-reset 后 stale counter >= 3 仍存活，同一 cycle 内 L3296 重新 trip
+  - [Layer 3 — 根因] (confirmed): 断路器架构碎片化 — 6条 trip 路径使用 3种独立计数器，auto-reset 未覆盖全部
+    - Source 5: `live_cycle.py` 5条 trip 路径仅 bridge+stall+wakeup 共用 `_consecutive_degraded_cycles`
+    - Source 6: `execution_state.py` save 未持久化 stale counters → 重启后 breaker=True 但计数器丢失 → "幽灵 breaker"
+    - Source 7: FIX_REGISTRY — 6+次独立断路器修复均未根除
+- **修复** (FIX-20260608-009):
+  - (a) 新增 `_circuit_breaker_trip_reason` 字段 — 所有 5 条 trip 路径记录触发原因
+  - (b) Auto-reset 统一清除全部 3 种计数器 (degraded + stale_cycles + stale_features)
+  - (c) `save/restore_execution_state` 补齐全部计数器 + trip_reason 持久化
+- **是否被推翻**: 否 — AR 反证确认：多次修复均为单路径打补丁
+- **关联 ReB Pattern**: ReB-20260608-003 (`FRAGMENTED_BREAKER_TRIP_PATHS_WITH_STALE_COUNTER_LEAK`)
+- **关联 FIX**: FIX-20260608-009

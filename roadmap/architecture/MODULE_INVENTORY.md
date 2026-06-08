@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-08T10:11:35Z
+> **自动生成**: 2026-06-08T11:34:24Z
 > **扫描模块数**: 485
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -167,7 +167,7 @@
 | `domain_keys.py` | ⬜ empty | — | 0 | 7 | — | |
 | `environment_config.py` | ✅ active | Environment, EnvironmentConfig | 7 | 126 | — | |
 | `evidence_bundle.py` | ✅ active | EvidenceBundleService | 10 | 287 | — | |
-| `feature_update_producer.py` | ✅ active | — | 3 | 77 | — | |
+| `feature_update_producer.py` | ✅ active | — | 2 | 57 | — | |
 | `final_audit.py` | ✅ active | FinalAuditService | 5 | 211 | — | |
 | `governance_summary.py` | ✅ active | — | 4 | 56 | — | |
 | `health_check.py` | ✅ active | HealthCheckService | 9 | 117 | — | |
@@ -457,12 +457,12 @@
 | `execution_gates.py` | ✅ active | RuntimeRiskGate, RuntimeGovernanceGate, RuntimeExecutionApprovalChain | 6 | 107 | — | |
 | `execution_gateway_router.py` | ✅ active | ExecutionGatewayRouter | 5 | 30 | — | |
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
-| `execution_state.py` | ✅ active | — | 4 | 193 | — | |
+| `execution_state.py` | ✅ active | — | 4 | 218 | — | |
 | `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 9 | 345 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
 | `golden_master.py` | ✅ active | — | 8 | 233 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 26 | 6521 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 26 | 6561 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 311 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 286 | — | |
@@ -550,7 +550,7 @@
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
 | `brain.py` | ✅ active | — | 12 | 734 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 579 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 580 | — | |
 | `check_preconditions.py` | ✅ active | — | 12 | 429 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `classify_ble001.py` | ✅ active | — | 1 | 63 | — | |
@@ -571,7 +571,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 369 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 5 | 2244 | — | |
+| `live_intent_loop.py` | ✅ active | — | 5 | 2256 | — | |
 | `live_launcher.py` | ✅ active | — | 13 | 831 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 484 | — | |

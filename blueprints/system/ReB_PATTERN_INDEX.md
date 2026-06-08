@@ -219,3 +219,22 @@
 - **检测方法**:
   1. Code review 规则：搜索 `min(acc, x.field1)` + `min(acc2, x.field2)` 在同一循环中的模式
   2. 告警审计：若 `strategy_pnl` 和 `strategy_win_rate` 在同一告警中出现，验证它们来自同一实体
+
+---
+
+### ReB-20260608-003: `FRAGMENTED_BREAKER_TRIP_PATHS_WITH_STALE_COUNTER_LEAK`
+
+- **发现日期**: 2026-06-08
+- **发现环境**: BTCUSDc 实盘 — 熔断器反复触发，系统 110 次/日重启 (May 31)
+- **模式描述**: 断路器有多条独立 trip 路径（bridge_silence, cycle_stall, data_staleness, feature_staleness, degraded_wakeup），各自使用独立的连续计数器。Auto-reset 仅重置其中一种计数器（`_consecutive_degraded_cycles`），其余计数器（`_consecutive_stale_cycles`, `_consecutive_stale_features`）在 reset 后仍然存活。若 breaker 由未重置的计数器触发，auto-reset 后的同一 cycle 内立即被重新 trip → 形成"reset → same-cycle re-trip → reset → ..."的死亡螺旋。重启后 breaker 状态从磁盘恢复（`circuit_breaker_tripped=true`），但触发它的 stale counter 丢失（未持久化）→ breaker 无原因存活（"幽灵 breaker"），必须等待 cooldown 超时才能恢复。
+- **关联 FIX IDs**: FIX-20260608-009 (root cause), FIX-20260608-006 (circular dependency), FIX-20260608-003 (asymmetric reset), FIX-20260605-120 (persistence), FIX-20260522-019 (initial implementation)
+- **关联 Docket IDs**: DQAF-20260608-003
+- **预防策略**:
+  1. **断路器 trip 路径必须使用统一计数器** — 任何新的 trip 条件必须 increment 同一 `_consecutive_degraded_cycles` 计数器
+  2. **Auto-reset 必须清除所有计数器** — 添加新计数器时必须同步更新 reset 逻辑；使用 `_ALL_DEGRADATION_COUNTERS` 元组强制编译时检查
+  3. **持久化与恢复必须对称** — `save` 存什么，`restore` 就恢复什么；保存时记录 `trip_reason` 使运维可溯源
+  4. **单路径打补丁是反模式** — 如果同一个子系统被修复 ≥ 3 次，必须从架构层面审查整体设计
+- **检测方法**:
+  1. Code review 规则：搜索 `_circuit_breaker_tripped = True` 的所有赋值点，验证是否存在独立计数器未在 auto-reset 中清除
+  2. 运行时监控：`circuit_breaker_trip_reason` 字段值的变化频率——同一 reason 短时间内重复出现 = 死亡螺旋
+  3. 启动诊断：若 `circuit_breaker_tripped=true` 但所有 counter=0，判定为"幽灵 breaker"，发出 `ghost_breaker_detected` 告警
