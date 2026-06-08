@@ -2774,7 +2774,8 @@ def execute_live_cycle(
         _cooldown_elapsed = (
             time.time() - state._circuit_breaker_tripped_at
         ) > config.circuit_breaker_cooldown_seconds
-        _bridge_alive = _bridge_silence <= config.max_bridge_silence_seconds
+        # Recomputed after management-only block may have updated heartbeat
+        _bridge_alive = (time.time() - state._last_bridge_ack_time) <= config.max_bridge_silence_seconds
         _not_stalled = _cycle_duration <= config.cycle_stall_threshold_seconds
         _not_degraded = not degraded_wakeup
         if _cooldown_elapsed and _bridge_alive and _not_stalled and _not_degraded:
