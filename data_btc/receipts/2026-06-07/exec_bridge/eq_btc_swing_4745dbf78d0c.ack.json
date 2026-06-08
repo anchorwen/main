@@ -1,0 +1,25 @@
+{
+  "message_id": "eq_btc_swing_4745dbf78d0c",
+  "ack_status": "accepted",
+  "received_at": "2026-06-07T18:19:47",
+  "detail": {
+    "retcode": 10009,
+    "order": 3808476433,
+    "request": {
+      "action": 1,
+      "symbol": "BTCUSDc",
+      "volume": 0.03,
+      "type": 0,
+      "price": 62140.32,
+      "deviation": 20,
+      "magic": 90410,
+      "comment": "",
+      "type_time": 0,
+      "type_filling": 1,
+      "sl": 61917.07406,
+      "tp": 62402.32242
+    },
+    "confirmed_sl": 61917.07,
+    "confirmed_tp": 62402.32
+  }
+}

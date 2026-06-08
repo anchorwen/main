@@ -4,6 +4,27 @@
 
 ## Fix Details
 
+### FIX-20260608-005 — Managed close notification gap: dispatch_managed_close() never called notify_trade
+
+- **Date**: 2026-06-08
+- **Author**: cursor-agent
+- **Commit**: (pending)
+- **Type**: fix
+- **Module**: execution-orders
+- **Files**: core/execution/managed_close.py
+- **Description**:
+  `dispatch_managed_close()` — the single entry point for ALL managed position closes (meta_exit, SL, TP, hesitation, time_decay, brain_flip, drawdown_kill) — never called `notify_trade()`. FIX-20260608-002 fixed MIA-detected closes and net_out dispatch closes, but missed this primary exit path entirely. Result: every managed close since the trade notification system was deployed was silent on DingTalk.
+
+  **Architecture context** (per IC review on DQAF-20260608-002):
+  - System lacks Event Bus infrastructure — intent-driven notification at the orchestrator level (`dispatch_managed_close`) is the pragmatic choice over coupling into low-level MT5 order receipt handlers
+  - Intent-driven notification: "engine decided to close → notify operator" is the accepted semantic; actual fill confirmation happens downstream via journal/reconciliation
+
+  **Fix**: Added fire-and-forget `notify_trade(action="close", symbol=..., side=..., volume=..., price=mid, pnl=pnl)` call at the function tail, after close confirmed (`_close_dispatched=True`) and all tracking updated (known_open_tickets, budget, SL streak). Wrapped in `contextlib.suppress(Exception)` — never blocks or throws from managed close.
+
+- **Root Cause**: RC-06 — contract-violation. FIX-20260608-002 established `_emit_close_notification()` as the canonical close-notification helper but only wired MIA + execution-queue net_out paths. `dispatch_managed_close()` (extracted via Strangler Fig, FIX-20260530-071) was the blind spot — it predated the notification system (FIX-20260606-138-Phase3) and was never retrofitted.
+- **Prevention**: Any future close path added to the system must call `notify_trade(action="close", ...)`. The three canonical close paths are now documented: (1) MIA → `_emit_close_notification` in live_cycle.py, (2) Net-out → same helper, (3) Managed → inline `notify_trade` in managed_close.py. Event Bus architecture (architectural north star) would eliminate this class of bug entirely.
+- **Dependents Checked**: `notify_trade` in live_alert_hub.py (unchanged — existing signature sufficient). All 7+ managed close callers in live_cycle.py converge through `_dispatch_managed_close()` → `dispatch_managed_close()` — single fix covers all.
+
 ### FIX-20260608-002 — MIA close notification gap: single-point-of-exit for all position closes
 
 - **Date**: 2026-06-08

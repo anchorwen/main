@@ -9,11 +9,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.43,
-        "profit_factor": 0.81,
-        "sharpe_ratio": -21.74,
+        "win_rate": 0.5,
+        "profit_factor": 0.77,
+        "sharpe_ratio": -27.81,
         "total_trades": 100,
-        "pnl_r": -756.09
+        "pnl_r": -1098.75
       }
     },
     "BTC_Swing_V6_MultiTF_LGB_v2": {
@@ -24,11 +24,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.47,
-        "profit_factor": 0.69,
-        "sharpe_ratio": -37.38,
+        "win_rate": 0.45,
+        "profit_factor": 0.8,
+        "sharpe_ratio": -24.23,
         "total_trades": 100,
-        "pnl_r": -1299.91
+        "pnl_r": -957.25
       }
     },
     "BTC_Swing_V7_MultiTF_LGB_v1": {
@@ -39,11 +39,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4762,
-        "profit_factor": 0.93,
-        "sharpe_ratio": -7.56,
-        "total_trades": 21,
-        "pnl_r": -59.47
+        "win_rate": 0.45,
+        "profit_factor": 0.8,
+        "sharpe_ratio": -24.23,
+        "total_trades": 100,
+        "pnl_r": -957.25
       }
     },
     "BTC_Swing_V8_MultiTF_LGB_v1": {
@@ -54,11 +54,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.5294,
-        "profit_factor": 1.02,
-        "sharpe_ratio": 1.75,
-        "total_trades": 17,
-        "pnl_r": 12.24
+        "win_rate": 0.45,
+        "profit_factor": 0.8,
+        "sharpe_ratio": -24.23,
+        "total_trades": 100,
+        "pnl_r": -957.25
       }
     }
   },
@@ -418,6 +418,21 @@
       "reason": "auto-registered from disk config (config status=shadow)",
       "timestamp": "2026-06-07T14:03:10.374910+00:00",
       "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V4",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-07T22:04:43.187909",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V4",
+      "from_status": "frozen",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-06-07T22:04:43.449967"
     }
   ]
 }

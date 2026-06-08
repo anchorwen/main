@@ -315,4 +315,22 @@ def dispatch_managed_close(
                     }
                 )
 
+    # ── FIX-20260608-005: close notification (managed close path) ──
+    # Intent-driven: operator needs real-time push that the engine decided
+    # to close.  Fire-and-forget — never blocks or throws from managed close.
+    if _close_dispatched and state is not None:
+        import contextlib as _ctxlib
+
+        with _ctxlib.suppress(Exception):
+            _ah = getattr(state, "alert_hub", None)
+            if _ah is not None:
+                _ah.notify_trade(
+                    action="close",
+                    symbol=config.symbol,
+                    side=pos.side,
+                    volume=pos.volume,
+                    price=mid,
+                    pnl=pnl,
+                )
+
     return _close_dispatched

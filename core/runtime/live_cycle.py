@@ -1913,39 +1913,34 @@ def _execute_management_phase(
                 ticket=pos.ticket,
             )
             if evaluation is not None:
-                meta_reason = f"meta_exit_u{evaluation.exit_urgency:.2f}_{evaluation.exit_reason}"
-                pm.mark_pending_close(pos.ticket, state.loop_iteration)
-                _dispatched = _dispatch_managed_close(
-                    config,
-                    pos,
-                    reason=meta_reason,
-                    mid=mid,
-                    state=state,
-                    strategy_name=_sname,
-                    exit_confidence=_exit_confidence,
-                    exit_watchdog=state.exit_watchdog,
-                    mt5_worker=mt5_worker,
-                    exit_urgency=evaluation.exit_urgency,
-                    factor_breakdown=evaluation.factor_breakdown,
-                )
+                # ── FIX-20260608-XXX: MetaExit demoted to TELEMETRY ONLY ──
+                # The MetaExit ML model (data/models/meta_exit_model.txt) was
+                # trained on only 833 samples with 8 journal-level features.
+                # It has a 27.9% baseline WR, circular SL-distance dependency,
+                # and a train-serve feature gap (training features ≠ runtime
+                # ExitFeatureSnapshot features).  As of 2026-06-08, only 16
+                # additional XAU trades are available — statistically zero.
+                #
+                # MetaExit is now SHADOW MODE: evaluate + log, but NEVER
+                # dispatch a close.  Layer 1 (Trail SL) + Layer 2 (Brain Flip)
+                # handle exits.  TODO: re-enable when >=500 XAU trades with
+                # ExitFeatureSnapshot-level features are available for retraining.
                 print(
                     json.dumps(
                         {
-                            "event": "meta_exit_triggered",
+                            "event": "meta_exit_shadow_telemetry",
                             "time": _utc_iso(),
                             "ticket": pos.ticket,
-                            "reason": meta_reason,
                             "exit_urgency": round(evaluation.exit_urgency, 3),
                             "p_win": evaluation.p_win,
-                            "dispatched": _dispatched,
+                            "exit_reason": evaluation.exit_reason,
+                            "factor_breakdown": evaluation.factor_breakdown,
+                            "action": "BLOCKED — telemetry only, close NOT dispatched",
                         },
                         ensure_ascii=False,
                     ),
                     flush=True,
                 )
-                if _dispatched:
-                    pm.clear_position(ticket=pos.ticket)
-                return True
         except Exception as exc:  # noqa: BLE001
             print(
                 json.dumps(
