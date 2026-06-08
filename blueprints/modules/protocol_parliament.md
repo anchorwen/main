@@ -37,6 +37,7 @@ BrainSignal[] → ContractGroupConsensus.compute_all_group_signals()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260607-147 | 2026-06-07 | cursor-agent | — | **Vote weight decoupling**: `contract_groups._compute_weighted()` now uses `base_weight × dynamic_scale` with fail-fast gate at base_weight≤0. Config vote_weight preserved as binary permission, dynamic_scale from PnL performance as multiplier. DQAF-011. | RC-09 |
 | FIX-20260530-087 | 2026-05-30 | cursor-agent | — | BTC_SWING_GROUP: added `BTC_SWING_GROUP` contract group to `ALL_GROUPS` in `contract_groups.py`. BTC swing strategy (`btc_swing`) isolated with magic=90410, brain_type=swing_v9, contract_group=btc_swing_v1. Prevents cross-contamination between gold and BTC brain voting. | RC-09 (config-drift) |
 | FIX-20260529-051 | 2026-05-30 | cursor-agent | — | Last Mile Protocol Phase 2: contract_groups.py 4 LOG sites converted to log_and_continue() | RC-07 |
 | FIX-20260529-048 | 2026-05-29 | cursor-agent | — | PR#3 Phase 2: contract_groups.py 4 sequential brain_group_resolution silent-pass handlers → LOG via structured logging (registry/brain_type/source_type/metadata_type probes). | RC-07 |

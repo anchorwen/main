@@ -54,6 +54,7 @@ BrainRegistryService → brain_entries → BrainFactory → adapters
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260607-147 | 2026-06-07 | cursor-agent | — | **Vote weight decoupling**: `apply_weights()` stamps `p.dynamic_scale` instead of overwriting `p.vote_weight`. Config base_weight preserved as binary permission gate. Prevents shadow brains (config vote_weight=0.0) from accumulating collective dynamic weight to override voting brains. DQAF-011. | RC-09 |
 | FIX-20260605-126 | 2026-06-05 | cursor-agent | — | **Brain_Rev_M30_V1/V2 archived + Brain_Trend_M30_V1 promoted shadow→candidate (vw=0.8)**: Rev killed by eval bug and SL/TP mismatch. Trend promoted based on 7-day signal activity. Final roster: 11 candidate, 2 live, 2 shadow, 5 archived. | RC-11 |
 | FIX-20260605-125 | 2026-06-05 | cursor-agent | — | **Meta Pipeline probe trio archived**: Huber (1627 attr, -369.65R), Binary_Cls (540 attr, 100% LONG bias), MetaLabel (417 attr, 0 signals). All three had structurally negative expectancy. | RC-11 |
 | FIX-20260604-088 | 2026-06-04 | cursor-agent | — | **brain_promotion.py bare-write eliminated**
