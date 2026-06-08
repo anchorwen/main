@@ -1850,3 +1850,32 @@ FIX-YYYYMMDD-NNN
 - **Related Docket**: DQAF-20260607-011 (shadow brain silent coup)
 - **Prevention**: Any weight computation system must distinguish between "permission to vote" (binary, config-level) and "confidence in vote" (continuous, PnL-driven). These must be separate variables that multiply — never overwrite.
 
+---
+
+### FIX-20260608-006: MetaExit Shadow Telemetry — Train-Serve Feature Gap Bridge
+
+- **Date**: 2026-06-08
+- **Severity**: MEDIUM (data pipeline gap for future retraining)
+- **Files Modified**:
+  - `core/execution/position_manager.py` — `evaluate_meta_exit()`: call `_write_meta_exit_telemetry()` after snapshot construction. New `_write_meta_exit_telemetry()` static method writes 20-dim ExitFeatureSnapshot + MetaExit predictions to `data/meta_exit_snapshots.jsonl`
+  - `core/runtime/live_cycle.py` — MetaExit close dispatch demoted to shadow telemetry (evaluate + log, never close). Layer 1 (Trail SL) + Layer 2 (Brain Flip) handle exits.
+- **Root Cause**: **RC-06 (train-serve feature gap)** — Training script (`train_exit_metamodel.py`) uses 8 journal-level features (SL distance, TP distance, entry hour, etc.). Runtime MetaExitEngine uses 20 ExitFeatureSnapshot features (PnL trajectory, regime state, consensus drift, ATR dynamics). The gap makes any retrained model structurally incompatible with runtime inference.
+- **Impact**: Current MetaExit model (833 samples, 27.9% WR, SL-distance circular dependency) was closing profitable XAU positions (p_win=0.234 on r=+0.38 LONG). Only 16 new XAU trades available — statistically zero for retraining.
+- **Fix**: 
+  - (a) MetaExit close dispatch blocked — `evaluate_meta_exit()` result is logged but never triggers `_dispatch_managed_close()`
+  - (b) Full ExitFeatureSnapshot (20 features) + MetaExit predictions (p_win, urgency, reason) written to `data/meta_exit_snapshots.jsonl` on every management cycle — one JSON line per evaluation
+  - (c) Telemetry failure never blocks trading (`except Exception: pass`)
+- **Re-enable Conditions** (TODO in memory):
+  1. XAU ≥500 completed trades (open→close pairs)
+  2. Rewrite `train_exit_metamodel.py` to use ExitFeatureSnapshot features (same 20-dims as runtime)
+  3. Backtest: new model p_win vs actual WR correlation > 0.3
+  4. Shadow run 72h before re-enabling close dispatch
+- **Verification**:
+  ```
+  [PASS] mypy — 0 errors
+  [PASS] ruff — 0 issues
+  [PASS] verify.py --quick — no regressions
+  ```
+- **Related Docket**: DQAF-20260608-004 (MetaExit data pipeline audit)
+- **Prevention**: Any ML model used in production must have its training features logged at runtime in the SAME format. Train-serve feature parity is a deployment gate — not an afterthought.
+
