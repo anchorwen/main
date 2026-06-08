@@ -5,7 +5,15 @@ Contract: ou_mean_reversion_zscore
 Magic: 90003
 
 Uses raw mid-price as input (not feature vectors).
-Only trades when Z-score exceeds thresholds.
+Direction is derived from Z-score sign (negative z → long/oversold,
+positive z → short/overbought).
+
+Entry decisions are dynamically evaluated by the Meta Filter ensemble
+and Conformal OU gate.  Z-score is used as a continuous feature for
+p_win penalty (pwin_chain.py) and volume scaling (sigmoid_exhaustion,
+z_depth_penalty), NOT as a hard binary gate.  The system has evolved
+beyond static |Z| > 2.0 heuristics — the ML pipeline owns the final
+entry decision.
 """
 
 from __future__ import annotations
@@ -21,10 +29,13 @@ from core.execution.strategy_line import StrategyLine
 class StatArbStrategy(StrategyLine):
     """OU mean-reversion strategy.
 
-    Single brain (ou_params_v6).  Direction is derived from Z-score:
-      Z > 2.0  → short (overbought, expect reversion down)
-      Z < -2.0 → long  (oversold, expect reversion up)
-      |Z| < 1.0 → neutral
+    Single brain (ou_params_v6).  Direction is derived from Z-score sign
+    (negative z → oversold/long, positive z → overbought/short).
+
+    Entry gating is performed by MetaFilter (p_win threshold) and
+    ConformalOUGate (quality scoring).  Z-score magnitude affects p_win
+    via continuous penalty functions (pwin_chain.py) and position sizing
+    via sigmoid_exhaustion + z_depth_penalty — no hard binary threshold.
     """
 
     def _run_inference(

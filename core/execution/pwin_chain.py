@@ -19,6 +19,7 @@ Known Issue: KI-004 — 3 silent fallback paths all return 0.40
 
 from __future__ import annotations
 
+import math
 import statistics
 from typing import Any
 
@@ -135,3 +136,48 @@ def adjust_p_win_for_regime(
     _penalty = min((abs_z - 0.8) * 0.35, 0.40)
     _adjusted = p_win * (1.0 - _penalty)
     return max(_adjusted, p_win * 0.65)
+
+
+# ── adjust_p_win_for_z_strength ─────────────────────────────────────────────
+
+
+def adjust_p_win_for_z_strength(
+    p_win: float,
+    strategy_name: str,
+    entry_z_score: float,
+    *,
+    z_threshold: float = 1.0,
+    penalty_max: float = 0.15,
+    steepness: float = 8.0,
+) -> float:
+    """Weak-Z penalty for mean-reversion strategies.
+
+    DQAF-20260608-003 sub-finding: meta_filter can produce high p_win (>0.60)
+    even when |z| < 1.0 — the neutral zone where OU reversion force is absent.
+    The existing pwin_chain trend penalty only addresses HIGH-|z| risk (momentum
+    ignition in trending regimes) but leaves LOW-|z| signals unprotected.
+
+    This function applies a continuous multiplicative penalty on p_win when |z|
+    falls below the threshold.  The penalty uses a sigmoid for smooth transition
+    — no binary cliff.  MetaFilter retains final authority: sufficiently
+    confident signals (raw p_win > 0.55 / (1 - penalty)) can still pass.
+
+    Calibration (z_threshold=1.0, penalty_max=0.15, steepness=8.0):
+      |z| = 0.00 → ~15.0% penalty   (p_win × 0.85)
+      |z| = 0.50 → ~14.7% penalty   (strong penalty — no reversion force)
+      |z| = 0.81 → ~12.4% penalty   (Trade 1: 0.6229 → 0.546 → REJECTED)
+      |z| = 0.95 →  ~8.9% penalty   (marginal — approaching neutral boundary)
+      |z| = 1.00 →  ~7.5% penalty   (transition midpoint)
+      |z| = 1.05 →  ~6.0% penalty   (rapidly decaying above threshold)
+      |z| = 1.50 →  ~1.4% penalty   (essentially no penalty)
+
+    Non-statarb strategies pass through unchanged.
+    """
+    if "statarb" not in strategy_name:
+        return p_win
+
+    abs_z = abs(entry_z_score)
+    # Sigmoid: high penalty at low |z|, decays to zero above z_threshold
+    # penalty_factor ∈ (0, penalty_max]
+    penalty_factor = penalty_max / (1.0 + math.exp(steepness * (abs_z - z_threshold)))
+    return p_win * (1.0 - penalty_factor)

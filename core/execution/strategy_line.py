@@ -1580,6 +1580,16 @@ class StrategyLine:
         # into anti-informative high-confidence OU signals.
         _p_win = _adjust_p_win_for_regime(_p_win, name, regime_info, entry_z_score, direction)
 
+        # ── 5f2. Weak-Z p_win penalty for OU strategies (DQAF-20260608-003) ──
+        # When |z| < 1.0, the OU reversion force is physically absent (neutral
+        # zone).  MetaFilter may still produce high p_win from other features,
+        # but the statistical basis for mean-reversion entry is missing.
+        # Continuous sigmoid penalty — no binary cliff, MetaFilter retains the
+        # final say for sufficiently confident signals.
+        from core.execution.pwin_chain import adjust_p_win_for_z_strength as _z_strength
+
+        _p_win = _z_strength(_p_win, name, entry_z_score)
+
         # ── 5g. Hard p_win gate — physical isolation of Entry Conditions from Position Sizing ──
         # Mean-reversion strategies with p_win < 0.50 have lost statistical advantage.
         # Kelly formula alone produces "expected value illusion": theoretical RR is rarely
