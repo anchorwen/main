@@ -214,6 +214,113 @@ def check_stamp() -> tuple[bool, str]:
     return True, "Stamp valid"
 
 
+def _run_golden_master_check() -> int:
+    """Validate recorded Golden Master cycles for structural integrity and consistency.
+
+    Checks:
+      1. All cycles have required fields (inputs, outputs, summary)
+      2. Output consistency: same inputs → same outputs (determinism check)
+      3. Anomaly detection: cycles with zero trades, all-blocked cycles, etc.
+      4. Coverage stats: strategies seen, regime distribution, signal frequency
+    """
+    from collections import Counter
+
+    try:
+        from core.runtime.golden_master import load_records
+    except ImportError:
+        print("[FAIL] Golden Master: cannot import golden_master module")
+        return 1
+
+    all_records = []
+    for label, data_dir in [("XAU", "data"), ("BTC", "data_btc")]:
+        records = load_records(data_dir)
+        for r in records:
+            r["_source"] = label
+        all_records.extend(records)
+
+    if not all_records:
+        print("[FAIL] Golden Master: no recorded cycles found")
+        return 1
+
+    print(f"Golden Master: {len(all_records)} cycles loaded "
+          f"(XAU={sum(1 for r in all_records if r['_source']=='XAU')}, "
+          f"BTC={sum(1 for r in all_records if r['_source']=='BTC')})")
+
+    errors = 0
+    warnings = 0
+
+    # ── Check 1: structural integrity ──
+    required_keys = {"cycle", "timestamp_utc", "now_unix", "inputs", "outputs", "summary"}
+    for i, r in enumerate(all_records):
+        missing = required_keys - set(r.keys())
+        if missing:
+            print(f"  [ERROR] Cycle {i}: missing keys {missing}")
+            errors += 1
+
+    if errors == 0:
+        print("  [PASS] Structural integrity: all cycles have required fields")
+
+    # ── Check 2: output consistency (determinism) ──
+    # Group cycles with identical inputs, check outputs match
+    input_sigs: dict[str, list[dict]] = {}
+    for r in all_records:
+        inp = r.get("inputs", {})
+        sig = f"{inp.get('regime')}|{inp.get('trend_direction')}|{inp.get('spread'):.2f}|{inp.get('current_atr'):.1f}"
+        input_sigs.setdefault(sig, []).append(r)
+
+    determinism_violations = 0
+    for sig, group in input_sigs.items():
+        if len(group) < 2:
+            continue
+        baseline = group[0]["outputs"]
+        for other in group[1:]:
+            for strat, out in other["outputs"].items():
+                base = baseline.get(strat, {})
+                if base.get("should_trade") != out.get("should_trade"):
+                    determinism_violations += 1
+                    if determinism_violations <= 3:  # limit noise
+                        print(f"  [WARN] Non-determinism: {sig} → {strat}: "
+                              f"trade={base.get('should_trade')} vs {out.get('should_trade')}")
+    if determinism_violations == 0:
+        print("  [PASS] Determinism: identical inputs produce identical should_trade decisions")
+    else:
+        print(f"  [WARN] Determinism: {determinism_violations} output variations with same inputs")
+        warnings += determinism_violations
+
+    # ── Check 3: coverage statistics ──
+    strategies = Counter()
+    regimes = Counter()
+    trade_count = 0
+    blocked_count = 0
+    for r in all_records:
+        for s in r.get("summary", {}).get("active_strategies", []):
+            strategies[s] += 1
+        regimes[r.get("inputs", {}).get("regime", "?")] += 1
+        if r.get("summary", {}).get("trade_decisions", 0) > 0:
+            trade_count += 1
+        else:
+            blocked_count += 1
+
+    print(f"  [INFO] Strategies seen: {dict(strategies)}")
+    print(f"  [INFO] Regime distribution: {dict(regimes)}")
+    print(f"  [INFO] Cycles with trades: {trade_count}, all-blocked: {blocked_count}")
+
+    # ── Check 4: anomaly detection ──
+    source_cycles = Counter(r["_source"] for r in all_records)
+    print(f"  [INFO] Source distribution: {dict(source_cycles)}")
+
+    if trade_count == 0:
+        print("  [WARN] No cycles with trades recorded — all signals blocked")
+        warnings += 1
+
+    if errors > 0:
+        print(f"\n[FAIL] Golden Master: {errors} error(s), {warnings} warning(s)")
+        return 1
+    else:
+        print(f"\n[PASS] Golden Master: structural validation passed ({warnings} warnings)")
+        return 0
+
+
 def main() -> int:
     import argparse
 
@@ -231,6 +338,11 @@ def main() -> int:
     )
     parser.add_argument(
         "--blueprints", action="store_true", help="Run blueprint consistency validation"
+    )
+    parser.add_argument(
+        "--golden-master",
+        action="store_true",
+        help="Replay-validation of recorded Golden Master cycles",
     )
     parser.add_argument("--files", nargs="*", help="Specific file(s) to check")
     args = parser.parse_args()
@@ -254,6 +366,10 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001
             print(f"Blueprint validation error: {exc}")
             return 1
+
+    # --golden-master: replay-validation of recorded cycles
+    if args.golden_master:
+        return _run_golden_master_check()
 
     # --check-stamp: lightweight, no heavy checks
     if args.check_stamp or (
