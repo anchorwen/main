@@ -1,0 +1,19 @@
+{
+  "schema_version": "meta_filter_config.v1",
+  "filter_id": "Meta_Stage2_Filter_BTC_V1",
+  "model_path": "data_btc/models/meta_stage2_lightgbm_btc_v1.txt",
+  "threshold": 0.55,
+  "mode": "binary",
+  "stage1_brain_id": null,
+  "feature_schema": "btc_meta_stage2_47",
+  "calibrator_path": "data_btc/models/meta_stage2_calibrator_btc_v1.pkl",
+  "calibration_method": "platt_scaling",
+  "conformal": {
+    "enabled": false,
+    "window": 500,
+    "percentile": 80.0,
+    "min_threshold": 0.50,
+    "max_age_days": 14.0
+  },
+  "description": "BTC MetaFilter V1 — Stage 2 P(TP|signal) filter. 47 PiT meta-features (37 btc_macro_enhanced + 10 PiT meta). Trained on 3,532 btc_swing signals from phase5b dataset (2,333 TP / 1,199 SL). Stage 1: LGB-Huber OOF PiT CV. Stage 2: LGB binary classifier (210 rounds, val WR 70.9%). Platt calibrated. FIX-20260609-002-BTC."
+}
