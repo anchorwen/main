@@ -25,8 +25,6 @@ from core.execution.portfolio_risk import PortfolioRiskController
 from core.execution.regime_gate import RegimeGate
 
 # ── Strategy line imports ──
-from core.execution.trail_stop_engine import TrailPolicy
-
 # ── Extracted sub-modules (P2 refactor) ──
 from core.market.mtf_price_service import MTFPriceService
 from core.parliament.contract_groups import (
@@ -5340,260 +5338,27 @@ def execute_live_cycle(
                         )
 
             # ── Register opened positions for dynamic exit management ──
-            if (
-                config.exit_management_enabled
-                and state.position_manager is not None
-                and not config.no_mt5
-            ):
-                decisions_map = eval_summary.get("decisions_map", {})
+            # Strangler Fig #10: extracted to core/runtime/position_registration.py
+            from core.runtime.position_registration import register_dispatched_positions
+            
+            _reg_result = register_dispatched_positions(
+                config=config,
+                position_manager=state.position_manager,
+                known_open_tickets=state.known_open_tickets,
+                loop_iteration=state.loop_iteration,
+                limit_monitor=state.limit_monitor,
+                dispatch_results=dispatch_results,
+                eval_summary=eval_summary,
+                brains=brains,
+                journal_path=journal_path,
+                current_atr=current_atr,
+                mid_price=mid_price,
+                bid=_bid,
+                ask=_ask,
+                _utc_iso_fn=_utc_iso,
+                _DEFAULT_HORIZON=_DEFAULT_HORIZON,
+            )
 
-                for dr in dispatch_results:
-                    if not dr.dispatched:
-                        continue
-                    decision = decisions_map.get(dr.strategy_name)
-                    if decision is None:
-                        continue
-
-                    intent_id = (dr.journal_entry or {}).get("intent_id", "")
-                    ticket: int | None = None
-                    entry_from_journal: float | None = None
-                    brain_votes_from_journal: list[dict[str, Any]] | None = None
-
-                    # Retry up to 10 times (5s total) — bridge writes journal async
-                    if intent_id and journal_path:
-                        import time as _time2
-
-                        for _retry in range(10):
-                            if journal_path.exists():
-                                for line in journal_path.read_text(encoding="utf-8").splitlines():
-                                    line = line.strip()
-                                    if not line or intent_id not in line:
-                                        continue
-                                    try:
-                                        rec = json.loads(line)
-                                        if rec.get("message_id") == intent_id:
-                                            t = rec.get("position_ticket")
-                                            if t is not None and isinstance(t, int) and t > 0:
-                                                ticket = t
-                                            ep = rec.get("entry_price")
-                                            if (
-                                                ep is not None
-                                                and isinstance(ep, int | float)
-                                                and ep > 0
-                                            ):
-                                                entry_from_journal = float(ep)
-                                            bv = rec.get("brain_votes")
-                                            if isinstance(bv, list):
-                                                brain_votes_from_journal = bv
-                                            if ticket is not None:
-                                                break  # found valid entry, stop scanning lines
-                                    except Exception:  # noqa: BLE001
-                                        pass  # malformed journal line → skip
-                                if ticket is not None:
-                                    break  # got the ticket, stop retrying
-                            _time2.sleep(0.5)
-
-                    if ticket is None:
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "position_register_skip",
-                                    "time": _utc_iso(),
-                                    "strategy": dr.strategy_name,
-                                    "reason": "no_ticket_in_journal",
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-                        continue
-
-                    entry_price = entry_from_journal or mid_price or 0.0
-                    entry_consensus = {
-                        "aggregated_bias": decision.direction,
-                        "consensus_score": decision.confidence,
-                        "voter_count": decision.total_count,
-                        "majority_ratio": (
-                            decision.supporting_count / decision.total_count
-                            if decision.total_count > 0
-                            else 0.0
-                        ),
-                    }
-
-                    # Build per-model horizon map (reads training_horizon from brain JSON)
-                    model_horizons: dict[str, int] = {}
-                    for bid in decision.brain_ids:
-                        horizon = 12
-                        for bi in brains:
-                            if bi.get("brain_id") == bid:
-                                horizon = bi.get("training_horizon", _DEFAULT_HORIZON)
-                                break
-                        model_horizons[bid] = horizon
-
-                    try:
-                        # Determine partial TP + exit parameters from strategy config
-                        _s_cfg = config.strategy_configs.get(dr.strategy_name, {})
-                        _tp_cfg = _s_cfg.get("tp", {})
-                        _exit_cfg = _s_cfg.get("exit", {})
-                        _ptp_r = (
-                            _tp_cfg.get("partial_tp_r", 0.0)
-                            if _tp_cfg.get("partial_tp_enabled")
-                            else 0.0
-                        )
-                        _ptp_ratio = _tp_cfg.get("partial_tp_ratio", 0.5)
-                        state.position_manager.register_position(
-                            ticket=ticket,
-                            side=decision.direction,
-                            entry_price=entry_price,
-                            volume=decision.volume,
-                            initial_sl=decision.sl,
-                            initial_tp=decision.tp,
-                            entry_atr=current_atr,
-                            entry_cycle=state.loop_iteration,
-                            entry_z_score=getattr(decision, "entry_z_score", 0.0),
-                            entry_half_life=getattr(decision, "entry_half_life", 0.0),
-                            entry_consensus=entry_consensus,
-                            supporting_brain_ids=decision.brain_ids,
-                            model_horizons=model_horizons,
-                            current_high=entry_price,
-                            partial_tp_r=_ptp_r,
-                            partial_tp_ratio=_ptp_ratio,
-                            # Phase C: Microstructure-aware partial TP (OFI-based)
-                            ofi_partial_tp_threshold=_tp_cfg.get("ofi_partial_tp_threshold", 0.0),
-                            ofi_partial_tp_r_mult=_tp_cfg.get("ofi_partial_tp_r_mult", 0.5),
-                            strategy_name=dr.strategy_name,
-                            # Phase B: TrailPolicy from live.yaml exit.* — single source of truth for Risk Exit
-                            trail_policy=TrailPolicy(
-                                trail_atr_mult=_exit_cfg.get("trail_atr_mult", 2.0),
-                                trail_atr_mult_low=_exit_cfg.get("trail_atr_mult_low", 1.5),
-                                trail_atr_mult_high=_exit_cfg.get("trail_atr_mult_high", 3.0),
-                                breakeven_threshold_atr=_exit_cfg.get(
-                                    "breakeven_threshold_atr", 1.0
-                            ),
-                            trail_activation_atr=_exit_cfg.get(
-                                "trail_activation_atr",
-                                getattr(config, "exit_trail_activation_atr", 1.0),
-                            ),
-                        ),
-                        cold_explore=getattr(decision, "cold_explore", False),
-                        )
-                        # Sync known_open_tickets so reconciliation can detect closes
-                        state.known_open_tickets[ticket] = {
-                            "position_ticket": ticket,
-                            "action": "open",
-                            "side": decision.direction,
-                            "volume": decision.volume,
-                            "entry_price": entry_price,
-                            "strategy": dr.strategy_name,
-                            "magic": decision.magic,
-                            "message_id": intent_id,
-                            "brain_ids": decision.brain_ids,
-                            "brain_votes": brain_votes_from_journal or [],
-                            "entry_consensus": {
-                                "consensus_score": decision.confidence,
-                                "direction": decision.direction,
-                            },
-                        }
-                        # Persist immediately after registration
-                        with FaultTolerantContext(
-                            level=FaultLevel.CRASH,
-                            component="PositionState:save_after_register",
-                        ):
-                            state.position_manager.save_state(config.position_state_path)
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "position_registered_for_mgmt",
-                                    "time": _utc_iso(),
-                                    "ticket": ticket,
-                                    "strategy": dr.strategy_name,
-                                    "side": decision.direction,
-                                    "entry_price": entry_price,
-                                    "initial_sl": decision.sl,
-                                    "initial_tp": decision.tp,
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-                        # ── Shadow record: limit-equivalent order for execution quality analysis ──
-                        if state.limit_monitor is not None:
-                            try:
-                                _lom_spread_pts = 0.0
-                                _lom_b = _bid if _bid is not None else 0.0
-                                _lom_a = _ask if _ask is not None else 0.0
-                                if _lom_a > _lom_b > 0:
-                                    _lom_spread_pts = round((_lom_a - _lom_b) * 10000, 1)
-                                state.limit_monitor.place(
-                                    signal_bar=state.loop_iteration,
-                                    direction=decision.direction,
-                                    signal_close=entry_price,
-                                    entry_atr=current_atr,
-                                    spread_points=_lom_spread_pts,
-                                    current_bar=state.loop_iteration,
-                                )
-                            except Exception:  # noqa: BLE001
-                                pass
-                    except Exception as _reg_exc:  # noqa: BLE001
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "position_register_error",
-                                    "time": _utc_iso(),
-                                    "strategy": dr.strategy_name,
-                                    "error": str(_reg_exc),
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-
-        # Shadow verification recording
-        if config.no_mt5:
-            for sname, strategy in strategies.items():
-                try:
-                    decision = strategy.evaluate(
-                        feature_vector=feature_vector,
-                        micro_feature_vector=micro_feature_vector,
-                        mid_price=mid_price,
-                        bid=_bid,  # FIX-20260529-038: wire real bid for Max_Spread_Gate
-                        ask=_ask,  # FIX-20260529-038: wire real ask for Max_Spread_Gate
-                        current_atr=current_atr,
-                        regime_info=regime_info,
-                        regime_gate_mode="full",
-                        trend_direction=trend_direction,
-                        trend_strength=trend_strength,
-                        h4_trend_strength=h4_trend_strength,
-                        hurst=_m5_hurst,  # FIX-20260607-007
-                        kalman_velocity_bps=_h1_kalman_velocity_bps,  # FIX-20260607-007
-                        macro_regime=macro_regime,
-                        risk_budget_usd=_effective_risk_budget,
-                        pnl_store=pnl_ledger,
-                        micro_sequences=micro_sequences,
-                        meta_filter=meta_signal_filter,
-                        meta_filter_gate=getattr(state, "_meta_filter_gate", None),
-                        conformal_ou_gate=getattr(state, "_conformal_ou_gate", None),
-                        micro_feature_dict=micro_feature_dict,
-                    )
-                    if decision.should_trade and mid_price is not None:
-                        state.shadow_verification_pending = {
-                            "direction": decision.direction,
-                            "entry_price": mid_price,
-                            "consensus_score": decision.confidence,
-                            "strategy": sname,
-                            "supporting_brains": decision.brain_ids,
-                            "opposing_brains": [],
-                        }
-                except Exception:  # noqa: BLE001
-                    logger.warning("Shadow verification registration failed strategy=%s", sname)
-
-        if config.multi_strategy_enabled:
-            _log_cycle_end(state.loop_iteration)
-            return state, not config.once
-
-    elif config.multi_brain:
-        # DEPRECATED: unreachable with multi_strategy_enabled=True (default).
-        # Retained as rollback reference only — do not add new logic here.
         # ── LEGACY: Contract-group consensus (fallback) ──
         pre_close = _check_pre_close(config, state)
         if pre_close.get("no_new_positions"):
@@ -6437,7 +6202,7 @@ def execute_live_cycle(
                             {
                                 "event": "position_registered_for_mgmt",
                                 "time": _utc_iso(),
-                                "ticket": ticket,
+                                "ticket": pm_ticket,
                                 "side": side,
                                 "entry_price": ref_for_guard,
                                 "initial_sl": stop_loss,
