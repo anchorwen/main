@@ -76,6 +76,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260609-007 | 2026-06-09 | cursor-agent | — | **Trail dispatch Strangler Fig extraction (P0)**: `compute_and_dispatch_trail()` → `core/runtime/trail_dispatch.py`. Handles trail SL, breakeven, trail TP, diag, snapshots, dispatch. `live_cycle.py`: 6565→6169 (-396). | RC-08 |
 | FIX-20260609-006 | 2026-06-09 | cursor-agent | — | **Position registration Strangler Fig extraction**: `register_dispatched_positions()` extracted from `live_cycle.py` L5342-5518 → `core/runtime/position_registration.py`. `live_cycle.py`: 6565→6332 lines. Fixed pre-existing `ticket` undefined bug in legacy dispatch. | RC-08 |
 | FIX-20260609-004 | 2026-06-09 | cursor-agent | — | **trail_activation_atr dead-wire**: YAML `exit_management.trail_activation_atr:0.3` never read. Added arg + YAML read + PM wiring. Horizontal audit: 11 params, 2 gaps. | RC-09 |
 | FIX-20260609-002 | 2026-06-09 | cursor-agent | — | **BrainSignal contract repair + family spacing**: `_record_brain_outcomes()` now compatible with BrainSignal dataclass (hasattr guards for .direction/.confidence). Intra-cycle family spacing optimistic lock prevents same-family cluster entries. DQAF-20260609-002. | RC-06 |
