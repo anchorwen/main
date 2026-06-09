@@ -1030,250 +1030,38 @@ class StrategyLine:
         if _meta_reject is not None:
             return _meta_reject
 
-        # ── 4aa. Direction-aware trend isolation gate (OU/statarb only) ──
-        # FIX-20260526-033: Replace symmetric ADX>25 block with direction-aware
-        # counter-trend gating.  Kalman fusion trend detection (no ADX lag) +
-        # primary_trend direction check via H4>H1>M5 priority chain.
-        #
-        # Physics: mean-reversion WITH the trend (pullback in uptrend, bounce
-        # in downtrend) has trend tailwind — the trend pulls price back toward
-        # the mean.  Counter-trend MR (fading the trend) is catching a falling
-        # knife — blocked.  This explains the LONG +44.2 vs SHORT -100.8 PnL
-        # asymmetry in OU_Params_V6_Sniper (1284 trades).
-        #
-        # Two-stage gating:
-        #   1. Trend detection: Kalman strength > 25 OR multi-TF consensus
-        #   2. Direction check: counter-trend → BLOCK; with-trend → ALLOW
-        if "statarb" in name and regime_info:
-            _rg = regime_info.get("regime_gate", {}) if isinstance(regime_info, dict) else {}
-            _trend_strength = float(_rg.get("h1_adx") or 0.0)  # Kalman fusion ×100
-            _h4_ts = float(_rg.get("h4_trend_strength") or 0.0)
-            _m5_ts = float(_rg.get("m5_trend_strength") or 0.0)
-            _h1_dir = str(_rg.get("h1_trend_direction") or "neutral")
-            _primary_dir = str(_rg.get("primary_trend") or "neutral")
-            _primary_source = str(_rg.get("primary_trend_source") or "h1")
-
-            _is_strong_trend = _trend_strength > 25.0
-            _mtf_consensus = _trend_strength > 20.0 and _h4_ts > 0.5 and _m5_ts > 0.5
-
-            if _is_strong_trend or _mtf_consensus:
-                # Direction-aware: ref_dir uses longest available timeframe
-                _ref_dir = _primary_dir if _primary_dir != "neutral" else _h1_dir
-                _is_counter_trend = (
-                    direction != "neutral" and _ref_dir != "neutral" and direction != _ref_dir
-                )
-
-                if _is_counter_trend:
-                    return StrategyDecision(
-                        strategy_name=name,
-                        magic=self.config.magic,
-                        should_trade=False,
-                        direction=direction,
-                        confidence=confidence,
-                        volume=0.0,
-                        sl=0.0,
-                        tp=0.0,
-                        hard_sl=0.0,
-                        brain_ids=brain_ids,
-                        supporting_count=support_count,
-                        total_count=total_count,
-                        regime_mode=regime_gate_mode,
-                        reason=f"counter_trend_blocked:{direction}_vs_{_ref_dir}({_primary_source})_ts={_trend_strength:.1f}",
-                    )
-                # With-trend MR → allowed (trend tailwind)
-
-        if not parliament_passed:
-            return StrategyDecision(
-                strategy_name=name,
-                magic=self.config.magic,
-                should_trade=False,
-                direction=direction,
-                confidence=confidence,
-                volume=0.0,
-                sl=0.0,
-                tp=0.0,
-                hard_sl=0.0,
-                brain_ids=brain_ids,
-                supporting_count=support_count,
-                total_count=total_count,
-                regime_mode=regime_gate_mode,
-                reason=(
-                    f"low_confidence_{confidence:.4f}_lt_{self.config.confidence_threshold}"
-                    if direction != "neutral"
-                    else "neutral_consensus"
-                ),
-                gate_diag={
-                    "gate": "parliament",
-                    "confidence": confidence,
-                    "threshold": self.config.confidence_threshold,
-                    "direction": direction,
-                    "supporting": support_count,
-                    "total": total_count,
-                    "brain_diag": [
-                        {
-                            "brain_id": getattr(p, "brain_id", "?"),
-                            "z_score": getattr(p, "raw_score", None),
-                            "half_life": getattr(p, "diagnostics", {}).get("half_life"),
-                            "buffer_len": getattr(p, "diagnostics", {}).get("buffer_len"),
-                            "theta": getattr(p, "diagnostics", {}).get("theta"),
-                        }
-                        for p in (proposals or [])
-                    ],
-                },
-            )
-
-        # ── 4b. Hard multi-TF trend filter (Phase C Fix 1) ──
-        # When H4 and H1 agree on direction, swing strategies are physically
-        # blocked from counter-trend entries.  This is stricter than the
-        # strength-based counter-trend gate below — alignment alone is enough.
-        # barrier_12bar and statarb families are EXEMPT.
-        _h4_dir = "neutral"
-        if regime_info is not None:
-            _rg = regime_info.get("regime_gate", {})
-            if isinstance(_rg, dict):
-                _h4_dir = str(_rg.get("h4_trend_direction", "neutral"))
-        _h1_dir = trend_direction  # primary_trend: H4 > H1 > M5 hierarchy
-        _is_swing = name in ("m30_swing", "m15_swing", "h1_swing", "h4_swing")
-        if (
-            _is_swing
-            and direction is not None
-            and _h1_dir != "neutral"
-            and _h4_dir != "neutral"
-            and _h1_dir == _h4_dir
-            and direction != _h1_dir
-        ):
-            return StrategyDecision(
-                strategy_name=name,
-                magic=self.config.magic,
-                should_trade=False,
-                direction=direction,
-                confidence=confidence,
-                volume=0.0,
-                sl=0.0,
-                tp=0.0,
-                hard_sl=0.0,
-                brain_ids=brain_ids,
-                supporting_count=support_count,
-                total_count=total_count,
-                regime_mode=regime_gate_mode,
-                reason=f"hard_trend_filter_{direction}_vs_h1h4_{_h1_dir}",
-                gate_diag={
-                    "gate": "hard_trend_filter",
-                    "signal_direction": direction,
-                    "h1_trend": _h1_dir,
-                    "h4_trend": _h4_dir,
-                },
-            )
-
-        # ── 4c. Counter-trend gate ──
-        # Block trades that oppose the higher-timeframe trend.
-        # barrier_12bar is EXEMPT — Dictator Protocol: the Huber BPS probe IS
-        # the trend signal; a counter-trend block would silence the only voter
-        # (FIX-20260522-013).
-        # statarb (mean-reversion) family is EXEMPT — mean-reversion is
-        # inherently counter-trend.  Blocking a statarb SHORT during a BULL
-        # trend is a category error: the strategy is *supposed* to fade the
-        # trend at extremes (FIX-20260526-028).
-        _ct_vol_mult = 1.0
-        if (
-            name != "barrier_12bar"
-            and "statarb" not in name
-            and trend_direction != "neutral"
-            and direction != trend_direction
-        ):
-            ct_block = _counter_trend_action(name, trend_strength, h4_trend_strength)
-            if ct_block["action"] == "block":
-                return StrategyDecision(
-                    strategy_name=name,
-                    magic=self.config.magic,
-                    should_trade=False,
-                    direction=direction,
-                    confidence=confidence,
-                    volume=0.0,
-                    sl=0.0,
-                    tp=0.0,
-                    hard_sl=0.0,
-                    brain_ids=brain_ids,
-                    supporting_count=support_count,
-                    total_count=total_count,
-                    regime_mode=regime_gate_mode,
-                    reason=f"counter_trend_blocked_{direction}_vs_{trend_direction}",
-                    gate_diag={
-                        "gate": "counter_trend",
-                        "signal_direction": direction,
-                        "trend_direction": trend_direction,
-                        "trend_strength": trend_strength,
-                        "h4_trend_strength": h4_trend_strength,
-                    },
-                )
-            elif ct_block["action"] == "penalise":
-                confidence *= ct_block["confidence_mult"]
-                _ct_vol_mult = float(ct_block.get("vol_mult", 1.0))
-                if confidence < self.config.confidence_threshold:
-                    return StrategyDecision(
-                        strategy_name=name,
-                        magic=self.config.magic,
-                        should_trade=False,
-                        direction=direction,
-                        confidence=confidence,
-                        volume=0.0,
-                        sl=0.0,
-                        tp=0.0,
-                        hard_sl=0.0,
-                        brain_ids=brain_ids,
-                        supporting_count=support_count,
-                        total_count=total_count,
-                        regime_mode=regime_gate_mode,
-                        reason=f"counter_trend_penalised_{direction}_vs_{trend_direction}",
-                    )
-
-        # ── 4d. Z-score inflection gate (v3.2) ──
-        # For OU/statarb strategies: require z-score turning back toward mean.
-        # Prevents catching falling knives when z is still accelerating away.
-        # Knife 1: z_entry raised to 2.0 — only trade extreme reversions where
-        # the edge is strongest and mean-drift risk is lowest.
-        if "statarb" in name or "ou" in name.lower():
-            if entry_z_score != 0.0:
-                _z_entry = 1.3 if "statarb" in name else 1.5
-                _inf_allow, _inf_reason = check_z_inflection(
-                    entry_z_score,
-                    self._last_entry_z,
-                    direction,
-                    z_entry=_z_entry,
-                )
-                self._last_entry_z = entry_z_score
-                if not _inf_allow:
-                    return StrategyDecision(
-                        strategy_name=name,
-                        magic=self.config.magic,
-                        should_trade=False,
-                        direction=direction,
-                        confidence=confidence,
-                        volume=0.0,
-                        sl=0.0,
-                        tp=0.0,
-                        hard_sl=0.0,
-                        brain_ids=brain_ids,
-                        supporting_count=support_count,
-                        total_count=total_count,
-                        regime_mode=regime_gate_mode,
-                        reason=_inf_reason,
-                    )
-
-        # ── 4e. Meta-Labeling Gate (Strangler Fig #12: meta_filter_routing.py) ──
-        _meta_p_win_4e, _meta_reject_4e = apply_meta_filter_gate(
+        # ── 4aa-4d: Trend isolation gates (Strangler Fig #13: trend_isolation_gates.py) ──
+        _ct_vol_mult = 1.0  # default, may be overridden by counter-trend penalise
+        from core.execution.trend_isolation_gates import apply_trend_isolation_gates
+        _trend_reject = apply_trend_isolation_gates(
             name=name, direction=direction, confidence=confidence,
-            entry_z_score=entry_z_score, feature_vector=feature_vector,
-            micro_feature_vector=micro_feature_vector, meta_filter=meta_filter,
-            proposals=proposals, config=self.config,
-            brain_ids=brain_ids, support_count=support_count,
-            total_count=total_count, regime_gate_mode=regime_gate_mode,
-            _meta_p_win=_meta_p_win,
+            entry_z_score=entry_z_score, regime_info=regime_info,
+            config=self.config, brain_ids=brain_ids,
+            support_count=support_count, total_count=total_count,
+            regime_gate_mode=regime_gate_mode,
+            last_entry_z=self._last_entry_z,
         )
-        if _meta_reject_4e is not None:
-            return _meta_reject_4e
-        if _meta_p_win_4e is not None:
-            _meta_p_win = _meta_p_win_4e
+        if _trend_reject is not None:
+            return _trend_reject
+        if "statarb" in name and entry_z_score != 0.0:
+            self._last_entry_z = entry_z_score
+
+        # ── Counter-trend volume penalty (retained inline — modifies _ct_vol_mult) ──
+        if regime_info is not None:
+            _rg_ct = regime_info.get("regime_gate", {}) if isinstance(regime_info, dict) else {}
+            _h1_adx_ct = float(_rg_ct.get("h1_adx") or 0.0)
+            _h1_dir_ct = str(_rg_ct.get("h1_trend_direction") or "neutral")
+            _primary_dir_ct = str(_rg_ct.get("primary_trend") or "neutral")
+            _CT_PENALISE: dict[str, dict[str, float]] = {
+                "statarb_dynamic": {"penalise": 0.30, "h4_penalise": 0.20},
+                "statarb_m15": {"penalise": 0.30, "h4_penalise": 0.20},
+            }
+            _ct_cfg = _CT_PENALISE.get(name)
+            if _ct_cfg and _h1_adx_ct > 0 and direction != "neutral" and _primary_dir_ct != "neutral":
+                if direction != _primary_dir_ct:
+                    _pen = _ct_cfg.get("penalise", 0.30)
+                    if _h1_adx_ct >= _pen:
+                        _ct_vol_mult = 0.70
 
         # ── 5. Dynamic SL/TP ──
         from core.execution.dynamic_sl_tp import compute_dynamic_sl_tp, compute_sl_tp_levels
