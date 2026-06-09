@@ -1015,107 +1015,20 @@ class StrategyLine:
                         reason="meta_filter_gate_exception_blocked",
                     )
 
-        # ── 4ab. MetaFilter experimental routing for statarb (FIX-20260526-041) ──
-        # EXPERIMENTAL: MetaFilter (48-dim LGB + Platt, Forward Sharpe 1.30) was
-        # trained on barrier_12bar trend/breakout logic.  Applying it to statarb
-        # mean-reversion signals is a domain-shift transfer-learning hack.
-        # entry_z_score * 12.5 serves as a proxy s1_prediction (|z|≤4 → |proxy|≤50,
-        # within the BPS training distribution).  The Platt calibrator + 47-dim
-        # context features provide partial domain-shift buffering.
-        #
-        # GUARDRAILS:
-        #   - Every 50 settled trades, evaluate corr(meta_p_win, realized_pnl).
-        #   - If corr < 0.05 for TWO consecutive periods → DISABLE this route
-        #     (revert to Fix 1C confidence mapping fallback).
-        #   - Long-term: collect 200+ OU settled trades → train OU-specific MetaFilter.
-        # FIX-20260604-083 / FIX-20260609-002: extend MetaFilter to ALL swing strategies
-        # Previously h1_swing and h4_swing were excluded → p_win fell back to rolling_wr
-        # (0.41) which bypassed MetaFilter gate entirely.  DQAF-20260609-002 diagnosed.
-        if (
-            meta_filter is not None
-            and ("statarb" in name or name in ("m15_swing", "m30_swing", "h1_swing", "h4_swing", "btc_swing"))
-            and _meta_p_win is None
-        ):
-            try:
-                _z_proxy = entry_z_score * 12.5
-                _result = meta_filter.filter_arrays(
-                    direction=direction,
-                    s1_prediction=_z_proxy,
-                    v9_array=feature_vector,
-                    micro_array=micro_feature_vector,
-                )
-                if not _result.passed:
-                    # FIX-20260527-006: COLD phase exploration bypass.
-                    # When the ConformalOU calibrator is in COLD phase
-                    # (force_min_volume=True), skip MetaFilter gate and
-                    # fall through to downstream COLD exploration logic.
-                    _ou_gate = getattr(self, "_last_ou_result", None)
-                    if _ou_gate and _ou_gate.get("force_min_volume"):
-                        _meta_p_win = None  # don't use MetaFilter p_win for cold explore
-                    else:
-                        import json as _json
-
-                        print(
-                            _json.dumps(
-                                {
-                                    "event": "kelly_diag",
-                                    "time": __import__("datetime").datetime.utcnow().isoformat()
-                                    + "Z",
-                                    "strategy": name,
-                                    "stage": "meta_filter_rejected_statarb",
-                                    "z_score": round(entry_z_score, 4),
-                                    "z_proxy": round(_z_proxy, 4),
-                                    "result_p_win": round(float(getattr(_result, "p_win", 0)), 4),
-                                    "passed": False,
-                                    "reason": getattr(_result, "reason", None) or "threshold",
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-                        return StrategyDecision(
-                            strategy_name=name,
-                            magic=self.config.magic,
-                            should_trade=False,
-                            direction=direction,
-                            confidence=confidence,
-                            volume=0.0,
-                            sl=0.0,
-                            tp=0.0,
-                            hard_sl=0.0,
-                            brain_ids=brain_ids,
-                            supporting_count=support_count,
-                            total_count=total_count,
-                            regime_mode=regime_gate_mode,
-                            reason=f"meta_filter_rejected_statarb:{getattr(_result, 'reason', 'threshold')}",
-                        )
-                _meta_p_win = float(_result.p_win)
-                import json as _json
-
-                print(
-                    _json.dumps(
-                        {
-                            "event": "kelly_diag",
-                            "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
-                            "strategy": name,
-                            "stage": "meta_filter_p_win_statarb",
-                            "z_score": round(entry_z_score, 4),
-                            "z_proxy": round(_z_proxy, 4),
-                            "result_p_win": round(_meta_p_win, 4),
-                            "passed": True,
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-            except Exception:  # noqa: BLE001
-                import logging
-
-                logging.getLogger(__name__).warning(
-                    "MetaFilter statarb routing failed for %s: fallthrough to p_win resolution",
-                    name,
-                    exc_info=True,
-                )
+        # ── 4ab. MetaFilter gate (Strangler Fig #12: meta_filter_routing.py) ──
+        from core.execution.meta_filter_routing import apply_meta_filter_gate
+        _meta_p_win, _meta_reject = apply_meta_filter_gate(
+            name=name, direction=direction, confidence=confidence,
+            entry_z_score=entry_z_score, feature_vector=feature_vector,
+            micro_feature_vector=micro_feature_vector, meta_filter=meta_filter,
+            proposals=proposals, config=self.config,
+            brain_ids=brain_ids, support_count=support_count,
+            total_count=total_count, regime_gate_mode=regime_gate_mode,
+            _meta_p_win=_meta_p_win,
+            _last_ou_result=getattr(self, "_last_ou_result", None),
+        )
+        if _meta_reject is not None:
+            return _meta_reject
 
         # ── 4aa. Direction-aware trend isolation gate (OU/statarb only) ──
         # FIX-20260526-033: Replace symmetric ADX>25 block with direction-aware
@@ -1347,105 +1260,20 @@ class StrategyLine:
                         reason=_inf_reason,
                     )
 
-        # ── 4e. Meta-Labeling ML Gate (Stage 2) ──
-        # Filters barrier_12bar signals through the LGB+MLP ensemble model.
-        # Extracts Stage 1 raw prediction from the Huber brain, assembles the
-        # 48-dim named feature dict from the V9 + micro ndarrays, and applies
-        # Platt calibration + conformal thresholding.  Other strategies pass
-        # through unchanged (scope isolation).
-        if meta_filter is not None and name == "barrier_12bar":
-            from core.execution.meta_pipeline import extract_probe_score
-
-            _s1_prediction: float | None = None
-            for spec in self.config.meta_probe_specs:
-                _s1 = extract_probe_score(proposals, spec.brain_id)
-                if _s1 is not None:
-                    _s1_prediction = _s1
-                    break
-            # Fallback: if no meta_probe_specs configured, scan all proposals
-            if _s1_prediction is None:
-                for p in proposals:
-                    raw = getattr(p, "raw_score", None)
-                    if raw is not None:
-                        _s1_prediction = float(raw)
-                        break
-                    # Legacy fallback
-                    ext = getattr(p, "extensions", None)
-                    if ext and isinstance(ext, dict):
-                        ro = ext.get("raw_outputs", {})
-                        if isinstance(ro, dict):
-                            raw = ro.get("raw_score")
-                            if raw is not None:
-                                _s1_prediction = float(raw)
-                                break
-
-            if _s1_prediction is not None:
-                result = meta_filter.filter_arrays(
-                    direction=direction,
-                    s1_prediction=_s1_prediction,
-                    v9_array=feature_vector,
-                    micro_array=micro_feature_vector,
-                )
-                if not result.passed:
-                    import json as _json
-
-                    _diag_p_win = getattr(result, "p_win", None)
-                    print(
-                        _json.dumps(
-                            {
-                                "event": "kelly_diag",
-                                "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
-                                "strategy": name,
-                                "stage": "meta_filter_rejected",
-                                "s1_prediction": round(_s1_prediction, 6)
-                                if _s1_prediction
-                                else None,
-                                "result_p_win": round(float(_diag_p_win), 4)
-                                if _diag_p_win is not None
-                                else None,
-                                "passed": False,
-                                "reason": result.reason if result.reason else "threshold",
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
-                    return StrategyDecision(
-                        strategy_name=name,
-                        magic=self.config.magic,
-                        should_trade=False,
-                        direction=direction,
-                        confidence=confidence,
-                        volume=0.0,
-                        sl=0.0,
-                        tp=0.0,
-                        hard_sl=0.0,
-                        brain_ids=brain_ids,
-                        supporting_count=support_count,
-                        total_count=total_count,
-                        regime_mode=regime_gate_mode,
-                        reason=f"meta_filter_rejected:{result.reason}"
-                        if result.reason
-                        else "meta_filter_rejected",
-                    )
-                _meta_p_win = float(result.p_win)
-                import json as _json
-
-                print(
-                    _json.dumps(
-                        {
-                            "event": "kelly_diag",
-                            "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
-                            "strategy": name,
-                            "stage": "meta_filter_p_win",
-                            "s1_prediction": round(_s1_prediction, 6),
-                            "result_p_win": round(_meta_p_win, 4),
-                            "passed": result.passed,
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+        # ── 4e. Meta-Labeling Gate (Strangler Fig #12: meta_filter_routing.py) ──
+        _meta_p_win_4e, _meta_reject_4e = apply_meta_filter_gate(
+            name=name, direction=direction, confidence=confidence,
+            entry_z_score=entry_z_score, feature_vector=feature_vector,
+            micro_feature_vector=micro_feature_vector, meta_filter=meta_filter,
+            proposals=proposals, config=self.config,
+            brain_ids=brain_ids, support_count=support_count,
+            total_count=total_count, regime_gate_mode=regime_gate_mode,
+            _meta_p_win=_meta_p_win,
+        )
+        if _meta_reject_4e is not None:
+            return _meta_reject_4e
+        if _meta_p_win_4e is not None:
+            _meta_p_win = _meta_p_win_4e
 
         # ── 5. Dynamic SL/TP ──
         from core.execution.dynamic_sl_tp import compute_dynamic_sl_tp, compute_sl_tp_levels
