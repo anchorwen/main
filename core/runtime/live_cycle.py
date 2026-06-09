@@ -4044,6 +4044,33 @@ def execute_live_cycle(
         strategies = _build_strategy_lines(brains, config)
         state._strategies = strategies  # FIX-072: stash for execution state persistence
 
+        # ── FIX-20260609-010: Restore budget state EVERY cycle ────────────────
+        # _build_strategy_lines() above creates fresh StrategyBudget objects
+        # with zeroed counters.  Without per-cycle restoration the persisted
+        # cumulative state (daily PnL, consecutive losses, SL cooldown) is
+        # lost after cycle 1, permanently disabling all budget-based circuit
+        # breakers (daily_loss_limit, max_consecutive_losses, intraday DD).
+        # The restore MUST happen before pending budget records are fed so
+        # those records are ADDED to the restored cumulative state rather
+        # than overwritten by it.
+        try:
+            from core.runtime.execution_state import load_execution_state as _load_exec
+
+            _exec_snap = _load_exec(Path(config.base_dir) / "state" / "execution_state.json")
+            if _exec_snap is not None:
+                _budgets_data: dict[str, Any] = _exec_snap.get("budgets", {})
+                for _sname, _snap in _budgets_data.items():
+                    _strat = strategies.get(_sname)
+                    if _strat is not None:
+                        _budget = getattr(_strat, "budget", None)
+                        if _budget is not None and hasattr(_budget, "load_state"):
+                            import contextlib
+
+                            with contextlib.suppress(Exception):
+                                _budget.load_state(_snap)
+        except Exception:  # noqa: BLE001
+            pass  # Non-fatal: budget restore failure → zeroed counters this cycle
+
         # ── Feed pending budget records from reconciliation ──
         if state._pending_budget_records:
             for _rec in state._pending_budget_records:
@@ -5179,7 +5206,7 @@ def execute_live_cycle(
             # ── Register opened positions for dynamic exit management ──
             # Strangler Fig #10: extracted to core/runtime/position_registration.py
             from core.runtime.position_registration import register_dispatched_positions
-            
+
             _reg_result = register_dispatched_positions(
                 config=config,
                 position_manager=state.position_manager,

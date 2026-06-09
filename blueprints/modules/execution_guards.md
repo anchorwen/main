@@ -49,6 +49,7 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260609-010 | 2026-06-09 | cursor-agent | — | **Budget counter reset every cycle**: `_build_strategy_lines()` (live_cycle.py) creates fresh StrategyBudget objects every cycle, but `restore_execution_state()` only ran on cycle 1. Cycles 2+ ran with zeroed daily PnL, consecutive losses, and SL cooldown counters → all cumulative circuit breakers permanently disabled after first cycle. Fix: restore budget state from disk EVERY cycle before pending records are fed. DQAF-20260609-001. | RC-03 |
 | FIX-20260608-007 | 2026-06-08 | agent | — | **S3 Functional Core extraction**: `pwin_chain.py` (new) — extracted `resolve_p_win_from_brains()` from `kelly_sizer.py` and `adjust_p_win_for_regime()` from `strategy_line.py` into shared pure-function module. kelly_sizer delegates to pwin_chain. MODULE_SOURCE_MAP updated. | RC-12 |
 | FIX-20260605-127 | 2026-06-05 | cursor-agent | d9d9f49 | **discover_probe_specs() hardened**: Now skips brains with status=archived/frozen or vote_weight=0.0. Prevents Meta Pipeline from wiring dead probes after FIX-125 archival. | RC-11 |
 | FIX-20260603-072 | 2026-06-03 | cursor-agent | — | **Global Execution State Hydration**: StrategyBudget now has `get_state()` / `load_state()` for restart persistence. Budget state (daily PnL, SL cooldown, consecutive losses, paused) survives process restart. | RC-03 |

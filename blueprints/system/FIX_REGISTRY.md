@@ -32,6 +32,7 @@ FIX-YYYYMMDD-NNN
 
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
+| FIX-20260609-010 | 2026-06-09 | runtime-live, execution-reentry | **Budget counter reset every cycle + hesitation threshold BTC calibration**: (1) `_build_strategy_lines()` in live_cycle.py rebuilds all StrategyBudget objects every cycle (zeroed counters), but `restore_execution_state()` only ran on cycle 1 → daily loss limits, consecutive loss breaker, and all cumulative circuit breakers permanently disabled on cycles 2+. Fix: restore budget state from disk EVERY cycle before feeding pending records. (2) FIX-001 added `_MAX_THRESHOLD=0.82` + TTL, but +0.15 margin with floor 0.70 still produced unreachable thresholds for BTC tree models (P99≈0.685). Fix: margin +0.15→+0.08, floor 0.70→0.65. Ordering: brain_flip +0.05 < hesitation +0.08 < sl_hit +0.10. DQAF-20260609-001. | RC-03, RC-05 |
 | FIX-20260609-009 | 2026-06-09 | execution-orders | **Trend isolation gates Strangler Fig extraction (P1)**: `apply_trend_isolation_gates()` extracted from sections 4aa-4d (232 lines) → `core/execution/trend_isolation_gates.py` (196 lines). Unified counter-trend, multi-TF, inflection gates. `strategy_line.py`: 2377→1993 (-384 after 008+009). | RC-08 |
 | FIX-20260609-008 | 2026-06-09 | execution-orders | **MetaFilter gate routing Strangler Fig extraction (P1)**: `apply_meta_filter_gate()` extracted from `StrategyLine.evaluate()` sections 4ab+4e (202 lines) → `core/execution/meta_filter_routing.py` (218 lines). Unified statarb/swing/barrier MetaFilter paths. `strategy_line.py`: 2377→2205 (-172). | RC-08 |
 | FIX-20260609-007 | 2026-06-09 | runtime-live | **Trail dispatch Strangler Fig extraction (P0)**: `compute_and_dispatch_trail()` extracted from `_execute_management_phase()` → `core/runtime/trail_dispatch.py` (218 lines). Handles Chandelier trail, breakeven, trail TP, diag logging, snapshot recording, single modify_sltp dispatch. `live_cycle.py`: 6565→6169 (-396 lines after FIX-006+007). | RC-08 |
@@ -1934,6 +1935,28 @@ FIX-YYYYMMDD-NNN
 - **Prevention**: Any ML model used in production must have its training features logged at runtime in the SAME format. Train-serve feature parity is a deployment gate — not an afterthought.
 
 ---
+
+### FIX-20260609-010: Budget Counter Reset + Hesitation Threshold BTC Calibration (DQAF-20260609-001)
+
+- **Severity**: Sev 2 — All cumulative circuit breakers disabled + reentry mathematical deadlock
+- **Diagnosis**: DQAF-20260609-001 — 全栈健康检查发现 2 个严重问题
+- **Files changed**:
+  - `core/runtime/live_cycle.py` (+28 lines): per-cycle budget restoration after `_build_strategy_lines()`
+  - `core/execution/reentry_guard.py` (threshold L298): margin 0.15→0.08, floor 0.70→0.65
+
+**Sub-fix A — Budget counter reset every cycle**:
+- **Root cause**: `_build_strategy_lines()` (L4044) creates fresh `StrategyBudget` objects with zeroed counters EVERY cycle. `restore_execution_state()` (originally L4433) only ran on `loop_iteration == 1`. Cycles 2+ ran with zeroed budgets → `daily_loss_limit`, `max_consecutive_losses`, `intraday_dd_active` and all cumulative circuit breakers permanently disabled.
+- **Fix**: `load_execution_state()` + `budget.load_state()` called every cycle after `_build_strategy_lines()` and BEFORE pending budget records are fed. This ensures cumulative counters survive across cycles.
+- **Impact**: All budget-based circuit breakers are now functional. Without this fix, the system was trading without ANY cumulative risk protection after cycle 1.
+- **RC**: RC-03 (state-leak — in-memory state leaking across cycle boundary via reconstruction)
+
+**Sub-fix B — Hesitation reentry threshold BTC calibration**:
+- **Root cause**: FIX-001 added `_MAX_THRESHOLD=0.82` and 2h TTL, but the +0.15 margin with floor 0.70 still produced unreachable thresholds for BTC tree-based models (LightGBM/XGBoost P99 ≈ 0.685-0.75): `exit_confidence=0.67 → max(0.82, 0.70)=0.82 → deadlock`. 150 consecutive cycles blocked on 2026-06-08/09.
+- **Fix**: margin +0.15→+0.08, floor 0.70→0.65. New worst-case: `exit_conf=0.70 → 0.78` (below ceiling, within model tail capability). Ordering: brain_flip +0.05 < hesitation +0.08 < sl_hit +0.10.
+- **Validation**: 30/30 reentry guard tests pass with new thresholds.
+- **RC**: RC-05 (boundary-error — threshold exceeds model output range)
+
+- **ReB Pattern**: `Cap-Output Mismatch Deadlock` (阈值上限-模型输出不匹配死锁) — shared by FIX-127/130 (brain_flip), FIX-011 (sl_hit), FIX-001 (hesitation TTL+ceiling), FIX-010 (hesitation margin+floor)
 
 ### FIX-20260609-001: Hesitation Permanent Deadlock — TTL + _MAX_THRESHOLD Ceiling (DQAF-20260609-001)
 

@@ -270,13 +270,17 @@ def check_reentry_quality(
             return False, f"hesitation_too_soon_{elapsed:.0f}s_lt_180s"
 
         # ── FIX-20260609-001: TTL hard unlock + _MAX_THRESHOLD ceiling ──
-        # Before this fix, the hesitation category was the ONLY category
-        # lacking both a TTL escape and the _MAX_THRESHOLD ceiling.  When
-        # exit_confidence was high (e.g. BTC 0.7668), the threshold
-        # max(exit_confidence + 0.15, 0.70) = 0.9168 exceeded the model's
-        # P99 output (~0.685), creating a MATHEMATICAL DEADLOCK with no
-        # time-based escape.  The stale_exit override (24h) was the only
-        # way out — unacceptable for a sub-30min SL-hit exit.
+        # ── FIX-20260609-010: BTC model-aware calibration ─────────────────
+        # FIX-001 added _MAX_THRESHOLD=0.82 and 2h TTL, but the +0.15 margin
+        # with floor 0.70 still produces unreachable thresholds for BTC
+        # tree-based models (LightGBM/XGBoost P99 ≈ 0.685-0.75):
+        #   exit_conf=0.67 → max(0.82, 0.70)=0.82 → deadlock (150+ cycles
+        #   observed 2026-06-08/09).
+        # FIX-010 recalibrates to match FIX-130 brain_flip BTC parameters:
+        #   margin +0.08 (was +0.15), floor 0.65 (was 0.70).
+        # Ordering: brain_flip +0.05 < hesitation +0.08 < sl_hit +0.10 —
+        #   hesitation is stricter than a direction-neutral confidence dip
+        #   but less strict than a realised stop-loss.
         #
         # TTL (time-to-live): after 2h or 2.0 half-life cycles (whichever
         # longer), force-unlock with basic signal quality check (>0.50).
@@ -291,11 +295,11 @@ def check_reentry_quality(
                 )
             return True, f"hesitation_ttl_expired_{elapsed:.0f}s"
 
-        # Within TTL window: strict threshold WITH _MAX_THRESHOLD ceiling.
-        # Without the ceiling, exit_confidence + 0.15 can exceed 0.82
-        # (brain_flip FIX-117), creating unreachable thresholds for tree
-        # models whose output naturally caps at ~0.75-0.82.
-        _hesitation_threshold = min(max(exit_confidence + 0.15, 0.70), _MAX_THRESHOLD)
+        # Within TTL window: confidence improvement +0.08, floor 0.65,
+        # ceiling _MAX_THRESHOLD=0.82.
+        # BTC worst-case: exit_conf=0.70 → 0.78 (below ceiling, rare but
+        # reachable).  exit_conf=0.67 → 0.75 (P99 tail reachable).
+        _hesitation_threshold = min(max(exit_confidence + 0.08, 0.65), _MAX_THRESHOLD)
         if new_confidence < _hesitation_threshold:
             return (
                 False,

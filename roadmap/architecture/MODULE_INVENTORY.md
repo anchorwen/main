@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-09T01:26:55Z
-> **扫描模块数**: 486
+> **自动生成**: 2026-06-09T10:28:12Z
+> **扫描模块数**: 490
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -222,6 +222,7 @@
 | `market_impact.py` | ✅ active | MarketImpactEstimate | 3 | 168 | — | |
 | `meta_exit_engine.py` | ✅ active | ExitFeatureSnapshot, ExitEvaluation, MetaExitEngine | 13 | 509 | — | |
 | `meta_filter_gate.py` | ✅ active | MetaFilterGate | 7 | 220 | — | |
+| `meta_filter_routing.py` | ✅ active | — | 1 | 218 | — | |
 | `meta_pipeline.py` | ✅ active | MetaProbeSpec, MetaProbeResult, MetaPipeline | 8 | 490 | — | |
 | `meta_signal_filter.py` | ✅ active | FilterResult, MetaSignalFilter | 19 | 882 | — | |
 | `micro_strategy.py` | ✅ active | MicroStrategy | 1 | 86 | — | |
@@ -230,21 +231,22 @@
 | `order_state_machine.py` | ✅ active | OrderStateMachine | 9 | 101 | — | |
 | `paper_gateway.py` | ✅ active | PaperExecutionGateway | 10 | 153 | — | |
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 529 | — | |
-| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 53 | 1886 | — | |
+| `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 53 | 1900 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 27 | 882 | — | |
 | `pwin_chain.py` | ✅ active | — | 3 | 183 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
 | `quality_contracts.py` | ✅ active | ExecutionBenchmark, ExecutionQualityMetric, ImplementationShortfall, ExecutionQualityReport | 3 | 138 | — | |
-| `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 7 | 520 | — | |
+| `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 7 | 524 | — | |
 | `regime_gate.py` | ✅ active | RegimeModulation, OURegime2D, RegimeGate | 42 | 841 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 11 | 306 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 18 | 2343 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 18 | 1993 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 114 | — | |
-| `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 7 | 267 | — | |
+| `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 8 | 313 | — | |
 | `trend_detector.py` | ✅ active | KalmanTrendFilter, TrendDetector | 33 | 699 | — | |
+| `trend_isolation_gates.py` | ✅ active | — | 1 | 196 | — | |
 
 ## core/features
 
@@ -462,10 +464,11 @@
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
 | `golden_master.py` | ✅ active | — | 8 | 233 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 26 | 6561 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 26 | 6196 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 311 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 298 | — | |
+| `position_registration.py` | ✅ active | — | 1 | 270 | — | |
 | `reconciliation.py` | ✅ active | — | 2 | 243 | — | |
 | `restart_state.py` | ✅ active | — | 1 | 349 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
@@ -476,6 +479,7 @@
 | `strategy_builder.py` | ✅ active | — | 6 | 798 | — | |
 | `strategy_evaluator.py` | ✅ active | — | 2 | 414 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
+| `trail_dispatch.py` | ✅ active | — | 1 | 218 | — | |
 
 ## core/schemas
 
@@ -572,7 +576,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 369 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 5 | 2256 | — | |
+| `live_intent_loop.py` | ✅ active | — | 5 | 2278 | — | |
 | `live_launcher.py` | ✅ active | — | 13 | 831 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 484 | — | |
@@ -653,7 +657,7 @@
 | `brain_promotion_runner.py` | ✅ active | — | 6 | 202 | — | |
 | `build_calibrated_dataset.py` | ✅ active | — | 19 | 772 | — | |
 | `build_live_labeled_dataset.py` | ✅ active | — | 4 | 236 | — | |
-| `build_meta_features.py` | ✅ active | — | 7 | 776 | — | |
+| `build_meta_features.py` | ✅ active | — | 7 | 801 | — | |
 | `build_meta_labeling_dataset.py` | ✅ active | — | 8 | 819 | — | |
 | `build_meta_labels.py` | ✅ active | — | 6 | 379 | — | |
 | `build_meta_learner.py` | ✅ active | — | 7 | 481 | — | |
