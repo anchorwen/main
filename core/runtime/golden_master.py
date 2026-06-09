@@ -140,10 +140,26 @@ def record_cycle_outputs(
         _names = list(strategy_results.keys())
     else:
         _names = []
+    # ── FIX-20260610-001: include strategy_results in summary for audit ──
+    # Previously strategy_results was only in capture["outputs"] (per-strategy
+    # keyed dicts).  Adding a shallow copy to summary so that post-trade
+    # analytics can iterate over all strategy decisions without parsing outputs.
+    _strategy_summary: list[dict[str, Any]] = []
+    if isinstance(strategy_results, list):
+        for r in strategy_results:
+            _strategy_summary.append({
+                "strategy": r.get("strategy", r.get("strategy_name", "?")),
+                "should_trade": bool(r.get("should_trade", False)),
+                "direction": r.get("direction", "neutral"),
+                "confidence": round(float(r.get("confidence", 0)), 4),
+                "volume": round(float(r.get("volume", 0)), 4),
+                "reason": str(r.get("reason", "")),
+            })
     capture["summary"] = {
         "trade_decisions": trade_decisions,
         "queued": queued,
         "active_strategies": _names,
+        "strategy_results": _strategy_summary,
     }
 
     _path = Path(data_dir) / "golden_master.jsonl"

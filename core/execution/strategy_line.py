@@ -1956,18 +1956,40 @@ def _counter_trend_action(
             "h4_conf_mult": 0.65,
             "h4_vol_mult": 0.70,
         },
+        # ── FIX-20260610-001: btc_swing counter-trend gate (DQAF-20260610-001) ──
+        # btc_swing was falling through to the default (block=0.40), causing
+        # 114/116 cycles to be hard-blocked when H1 trend=SHORT but brains
+        # predicted LONG (secondary reaction buy signals).  BTC crypto markets
+        # exhibit higher mean-reversion frequency than forex — counter-trend
+        # entries on pullbacks should NOT be hard-blocked at moderate trend
+        # strength.  Only extreme trend (>0.85) triggers hard block.
+        # Penalise at 0.55 (same as h1_swing) with conf×0.65 + vol×0.75.
+        "btc_swing": {
+            "block": 0.85,
+            "penalise": 0.55,
+            "conf_mult": 0.65,
+            "vol_mult": 0.75,
+            "h4_block": 0.80,
+            "h4_penalise": 0.55,
+            "h4_conf_mult": 0.65,
+            "h4_vol_mult": 0.70,
+        },
     }
+    # ── FIX-20260610-001: softened default for unknown strategies ──
+    # Previous default block=0.40 was over-blocking — any strategy not in the
+    # explicit threshold list had counter-trend trades hard-blocked at even
+    # mild trend strength.  Raised to 0.60 (only block in strong trend).
     t = thresholds.get(
         strategy_name,
         {
-            "block": 0.40,
-            "penalise": 0.20,
-            "conf_mult": 0.60,
-            "vol_mult": 0.65,
-            "h4_block": 0.99,
-            "h4_penalise": 0.99,
-            "h4_conf_mult": 1.0,
-            "h4_vol_mult": 1.0,
+            "block": 0.60,
+            "penalise": 0.35,
+            "conf_mult": 0.65,
+            "vol_mult": 0.70,
+            "h4_block": 0.70,
+            "h4_penalise": 0.40,
+            "h4_conf_mult": 0.65,
+            "h4_vol_mult": 0.70,
         },
     )
 
