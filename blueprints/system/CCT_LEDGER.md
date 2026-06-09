@@ -419,3 +419,27 @@
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: ReB-20260609-001-B (`Cap-Output Mismatch Deadlock`) + `Budget Reconstruction Amnesia`
 - **关联 FIX**: FIX-20260609-001, FIX-20260609-010
+
+---
+
+### CCT-20260609-011
+- **Docket ID**: DQAF-20260609-011
+- **日期**: 2026-06-09
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: BTC 4 个大脑全部 `candidate` 状态，0 个 `live`。系统以 0.02-0.1 lot 正常开单，今日 PnL ≈ -$30，胜率 ~31% (4关3亏)。候选大脑 profit_factor=0.72, sharpe=-30, 从未证明盈利能力。
+  - [Layer 2 — 中间异常 A]: `live_startup.py:178-193` 治理过滤仅移除 `retired`/`frozen`，`candidate` 获全票权通过。更严重的是逻辑倒挂：`probation`（曾 live 后退化）被罚 vote_weight×0.5，而 `candidate`（从未证明）无任何限制。整个开单链路（strategy_evaluator, strategy_line, signal_pipeline）无 governance status check。
+  - [Layer 2 — 中间异常 B]: 大脑绩效极差（profit_factor < 1.0, sharpe < -29），但治理服务（daily_ops）无法将任何大脑晋升为 `live`。系统陷入"全 candidate 死循环"——没有 live 大脑 → 开单亏损 → 绩效恶化 → 更不可能晋升 → 永远 candidate。
+  - [Layer 3 — 根因]: RC-07 (missing-validation) × RC-09 (config-drift) — (A) 大脑治理状态从未作为开单前置条件，governance_state.json 在整个 live 交易链路中是"只读不用的死数据"；(B) candidate 的 vote_weight 设计意图应是 ≤ probation，但代码实现相反。
+- **证据引用**:
+  - Source 1: `data_btc/governance_state.json` — 4 brains all `candidate`, 0 `live`
+  - Source 2: `data_btc/logs/alert_audit.jsonl` — 6/9 trade_notification: 4 closes, 3 losses, PnL ≈ -$30
+  - Source 3: `core/runtime/live_startup.py:178-193` — candidate falls through to "kept" without penalty
+  - Source 4: `core/runtime/strategy_evaluator.py` — zero governance status checks in entire evaluation chain
+- **修复** (FIX-20260609-011):
+  - (1) `live_startup.py`: candidate 加 vote_weight×0.5 惩罚
+  - (2) `live_cycle.py`: 每 cycle 读取 governance_state.json → 传入 strategy_evaluator
+  - (3) `strategy_evaluator.py`: Cut 4 — 无 live 大脑时 confidence<0.50→blocked, volume→0.01
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260609-011 (`GOVERNANCE_VACUUM_CADET_BRAINS`)
+- **关联 FIX**: FIX-20260609-011

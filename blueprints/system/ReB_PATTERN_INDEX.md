@@ -307,3 +307,18 @@
 - **检测方法**:
   1. 启动后（loop_iteration ≥ 3）检查 `execution_state.json` 中 `total_trades_today` 是否 > 0 — 若为 0 但 trade_journal 中当日有记录 → 告警
   2. 运行时断言：每个 cycle 开始时 budget counters ≥ 上一 cycle 结束时 counters（单调不减，除日切外）
+
+---
+
+### ReB-20260609-011
+- **Pattern Signature**: `GOVERNANCE_VACUUM_CADET_BRAINS` (治理真空——未成年模型驾驶重型机甲)
+- **描述**: 所有活跃大脑均处于 `candidate`（从未证明盈利）状态，无 `live` 大脑。治理状态在整个开单链路中完全是"死数据"——governance_state.json 被 daily_ops 写入但没有任何交易门禁消费它。逻辑倒挂：`probation`（已退化）被罚 vote_weight×0.5，而 `candidate`（未证明）获全票权。结果是 profit_factor=0.72、sharpe=-30 的候选大脑以 0.1 lot 实盘裸奔。
+- **关联 FIX IDs**: FIX-20260609-011
+- **关联 Docket IDs**: DQAF-20260609-011
+- **预防策略**:
+  1. governance_state.json 必须被至少一个交易门禁作为 BLOCKING 条件消费——不能仅仅是"记录"
+  2. 新增大脑状态时必须在 `live_startup.py` 的 `filter_brains_by_governance()` 中显式处理，不允许 fall-through
+  3. daily_ops 中增加 "全 candidate 超时告警"：如果连续 N 天无大脑晋升 live → 触发人工审核
+- **检测方法**:
+  1. 每个 cycle 检查 governance_state 中 `status=="live"` 的大脑数量 → 0 且 strategy 在开单 → 告警
+  2. 搜索 `filter_brains_by_governance` 中未被显式处理的状态 → CI lint 检查
