@@ -3603,31 +3603,48 @@ def execute_live_cycle(
         if state._pending_mia_closes:
             _mia_closed = state._pending_mia_closes
             state._pending_mia_closes = []
-            # ── Write to journal (same FileLock pattern as reconciliation) ──
-            with log_and_continue(component="MIA_Close:journal_write"):
-                from core.infrastructure.distributed_lock import FileLock
+            # ── FIX-20260610-002: in-memory dedup (F2) ──────────────────
+            # Track processed tickets within this session so that if
+            # clear_position() fails and the same ticket is re-detected
+            # as MIA in a later cycle, we skip the duplicate journal write.
+            _mia_seen: set[int] = getattr(state, "_mia_processed_tickets", set())
+            _mia_closed = [
+                e for e in _mia_closed
+                if int(e.get("position_ticket", 0) or 0) not in _mia_seen
+            ]
+            for _e in _mia_closed:
+                _t = int(_e.get("position_ticket", 0) or 0)
+                if _t:
+                    _mia_seen.add(_t)
+            state._mia_processed_tickets = _mia_seen  # type: ignore[attr-defined]
+            if not _mia_closed:
+                _mia_closed = []  # all deduped — skip journal write
+            if _mia_closed:
+                # ── Write to journal (same FileLock pattern as reconciliation) ──
+                with log_and_continue(component="MIA_Close:journal_write"):
+                    from core.infrastructure.distributed_lock import FileLock
 
-                _jlock = FileLock(
-                    "live_trade_journal",
-                    lock_dir=str(journal_path.parent / ".locks"),
-                    ttl_seconds=10,
-                )
-                _jacquired = _jlock.acquire(blocking=True, timeout_seconds=5)
-                if _jacquired.acquired:
-                    try:
-                        _existing = (
-                            journal_path.read_text(encoding="utf-8")
-                            if journal_path.exists()
-                            else ""
-                        )
-                        with open(journal_path, "a", encoding="utf-8") as _jf:
-                            for _entry in _mia_closed:
-                                _mid = _entry.get("message_id", "")
-                                if _mid and _mid in _existing:
-                                    continue
-                                _jf.write(json.dumps(_entry, ensure_ascii=False) + "\n")
-                    finally:
-                        _jlock.release()
+                    _jlock = FileLock(
+                        "live_trade_journal",
+                        lock_dir=str(journal_path.parent / ".locks"),
+                        ttl_seconds=10,
+                    )
+                    _jacquired = _jlock.acquire(blocking=True, timeout_seconds=5)
+                    if _jacquired.acquired:
+                        try:
+                            _existing = (
+                                journal_path.read_text(encoding="utf-8")
+                                if journal_path.exists()
+                                else ""
+                            )
+                            with open(journal_path, "a", encoding="utf-8") as _jf:
+                                for _entry in _mia_closed:
+                                    _mid = _entry.get("message_id", "")
+                                    if _mid and _mid in _existing:
+                                        continue
+                                    _jf.write(json.dumps(_entry, ensure_ascii=False) + "\n")
+                        finally:
+                            _jlock.release()
             # ── Record exit for reentry guard ──
             for _entry in _mia_closed:
                 _exit_strategy = _entry.get("strategy", "")
@@ -3688,6 +3705,54 @@ def execute_live_cycle(
                     _price=_exit_price,
                     _pnl=_entry.get("pnl"),
                 )
+                # ── FIX-20260610-002: Clean up ghost position (F1) ─────────
+                # MIA-detected closes were recorded in the journal and reentry
+                # guard, but the ActivePositionManager was NEVER told to remove
+                # the position.  Result: ghost position blocks new entries
+                # (max_positions gate) until process restart.
+                _mia_ticket = _entry.get("position_ticket")
+                if _mia_ticket and state.position_manager is not None:
+                    with log_and_continue(component="MIA_Close:clear_position"):
+                        state.position_manager.clear_position(int(_mia_ticket))
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "mia_position_cleared",
+                                    "time": _utc_iso(),
+                                    "ticket": _mia_ticket,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                # ── FIX-20260610-002: Record budget for MIA close (F3) ──────
+                # Budget was never updated for MIA-detected closes — daily
+                # PnL, consecutive loss counters, and all cumulative circuit
+                # breakers missed every MIA close.  Feed through the same
+                # pending-records pipeline as reconciliation closes.
+                _mia_pnl = _entry.get("pnl")
+                if _mia_pnl is not None and _exit_strategy:
+                    _is_win = float(_mia_pnl) > 0
+                    if not hasattr(state, "_pending_budget_records"):
+                        state._pending_budget_records = []
+                    state._pending_budget_records.append({
+                        "strategy": _exit_strategy,
+                        "pnl": float(_mia_pnl),
+                        "is_win": _is_win,
+                    })
+                    print(
+                        json.dumps(
+                            {
+                                "event": "mia_budget_queued",
+                                "time": _utc_iso(),
+                                "ticket": _mia_ticket,
+                                "pnl": float(_mia_pnl),
+                                "is_win": _is_win,
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
             # ── Save position state immediately ──
             if state.position_manager is not None:
                 with FaultTolerantContext(
