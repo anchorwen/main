@@ -17,6 +17,7 @@
 
 | Docket ID | 日期 | 严重等级 | 症状简述 | IC 裁决 | 关联 FIX |
 |-----------|------|---------|---------|--------|----------|
+| DQAF-20260609-002-UPDATE | 2026-06-09 | Sev 2 | 剥洋葱排查: BTC MetaFilter模型文件根本不存在(configs/brains_btc/),静默退化到rolling_wr(0.48),跨品种盲点模式 | **APPROVED → CLOSED** — FIX-002-UPDATE (Hard Floor Defense) + FIX-002-BTC (Path A: BTC MetaFilter V1训练, 47-dim LGB, val WR 70.9%). Path B (≥200笔实盘重训) 搁置. ReB: CROSS_SYMBOL_METAFILTER_BLINDSPOT | FIX-20260609-002-UPDATE, FIX-20260609-002-BTC |
 | DQAF-20260609-002 | 2026-06-09 | Sev 2 | XAU 2日交易退化: WR=20%, h1/h4 p_win=0.41(rolling_wr)绕过MetaFilter, 三swing同向同时开仓, BrainSignal合约断裂37次/9天 | **APPROVED → CLOSED** — FIX-20260609-002: (1) h1/h4接入MetaFilter, (2) Kelly低RR保本线兜底, (3) Family同周期乐观锁, (4) BrainSignal兼容. ReB: ReB-20260609-002 | FIX-20260609-002 |
 | DQAF-20260609-001 | 2026-06-09 | Sev 2 | BTC 23h 零开仓: reentry guard hesitation 类别同时缺少 _MAX_THRESHOLD 天花板和 TTL 硬解锁 → 阈值 0.9168 超过模型 P99(~0.685) → 数学死锁, 148 信号全拦截 | **APPROVED → CLOSED** — FIX-20260609-001: (1) `min(max(exit_conf+0.15, 0.70), _MAX_THRESHOLD)` 天花板, (2) TTL 硬解锁 2h 后仅需 confidence>0.50. ReB: ReB-20260609-001 | FIX-20260609-001 |
 | DQAF-20260608-003 | 2026-06-08 | Sev 2 | 熔断器碎片化 trip 路径：6条独立路径×3种计数器，auto-reset仅清除1种→stale counter泄漏→立即重新trip→死亡螺旋。系统May 31重启110次。 | **APPROVED → CLOSED** — FIX-20260608-009: (1) 5条trip路径全部记录 `trip_reason`，(2) auto-reset统一清除全部3种counter，(3) 持久化补齐全部counter+trip_reason，(4) restore防幽灵breaker。ReB: `FRAGMENTED_BREAKER_TRIP_PATHS_WITH_STALE_COUNTER_LEAK` | FIX-20260608-009 |
