@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-08T11:34:24Z
+> **自动生成**: 2026-06-09T00:46:53Z
 > **扫描模块数**: 485
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -232,15 +232,15 @@
 | `portfolio_risk.py` | ✅ active | RiskVerdict, RiskResult, PortfolioState, PortfolioRiskController | 14 | 529 | — | |
 | `position_manager.py` | ✅ active | ActivePosition, ActivePositionManager | 53 | 1886 | — | |
 | `pre_trade_guards.py` | ✅ active | IntradayDrawdownKill, CooldownRegistry, FamilyEntryTracker | 27 | 882 | — | |
-| `pwin_chain.py` | ✅ active | — | 2 | 137 | — | |
+| `pwin_chain.py` | ✅ active | — | 3 | 183 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
 | `quality_contracts.py` | ✅ active | ExecutionBenchmark, ExecutionQualityMetric, ImplementationShortfall, ExecutionQualityReport | 3 | 138 | — | |
-| `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 7 | 492 | — | |
+| `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 7 | 520 | — | |
 | `regime_gate.py` | ✅ active | RegimeModulation, OURegime2D, RegimeGate | 42 | 841 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
-| `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 65 | — | |
+| `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 11 | 306 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 18 | 2296 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 18 | 2306 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 114 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 7 | 267 | — | |

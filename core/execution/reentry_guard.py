@@ -268,10 +268,38 @@ def check_reentry_quality(
         # confirmation before re-entering same direction.
         if elapsed < 180:
             return False, f"hesitation_too_soon_{elapsed:.0f}s_lt_180s"
-        if new_confidence < max(exit_confidence + 0.15, 0.70):
+
+        # ── FIX-20260609-001: TTL hard unlock + _MAX_THRESHOLD ceiling ──
+        # Before this fix, the hesitation category was the ONLY category
+        # lacking both a TTL escape and the _MAX_THRESHOLD ceiling.  When
+        # exit_confidence was high (e.g. BTC 0.7668), the threshold
+        # max(exit_confidence + 0.15, 0.70) = 0.9168 exceeded the model's
+        # P99 output (~0.685), creating a MATHEMATICAL DEADLOCK with no
+        # time-based escape.  The stale_exit override (24h) was the only
+        # way out — unacceptable for a sub-30min SL-hit exit.
+        #
+        # TTL (time-to-live): after 2h or 2.0 half-life cycles (whichever
+        # longer), force-unlock with basic signal quality check (>0.50).
+        # Same pattern as brain_flip (FIX-127/130), sl_hit (FIX-20260528-011),
+        # and meta_exit (FIX-127).
+        _hesitation_ttl_s = max(7200, entry_half_life * timeframe_minutes * 2.0 * 60)
+        if elapsed > _hesitation_ttl_s:
+            if new_confidence < 0.50:
+                return (
+                    False,
+                    f"hesitation_ttl_expired_low_conf_{new_confidence:.3f}",
+                )
+            return True, f"hesitation_ttl_expired_{elapsed:.0f}s"
+
+        # Within TTL window: strict threshold WITH _MAX_THRESHOLD ceiling.
+        # Without the ceiling, exit_confidence + 0.15 can exceed 0.82
+        # (brain_flip FIX-117), creating unreachable thresholds for tree
+        # models whose output naturally caps at ~0.75-0.82.
+        _hesitation_threshold = min(max(exit_confidence + 0.15, 0.70), _MAX_THRESHOLD)
+        if new_confidence < _hesitation_threshold:
             return (
                 False,
-                f"hesitation_confidence_not_improved_{new_confidence:.3f}",
+                f"hesitation_confidence_not_improved_{new_confidence:.3f}_need_{_hesitation_threshold:.3f}",
             )
         # For LONG: price must be LOWER than exit (cheaper entry)
         if exit_direction == "long" and mid_price >= exit_price:

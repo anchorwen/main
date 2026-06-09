@@ -9,11 +9,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.48,
-        "profit_factor": 0.66,
-        "sharpe_ratio": -45.18,
+        "win_rate": 0.47,
+        "profit_factor": 0.98,
+        "sharpe_ratio": -1.85,
         "total_trades": 100,
-        "pnl_r": -1463.47
+        "pnl_r": -61.81
       }
     },
     "BTC_Swing_V6_MultiTF_LGB_v2": {
@@ -24,11 +24,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.43,
-        "profit_factor": 0.85,
-        "sharpe_ratio": -18.29,
+        "win_rate": 0.46,
+        "profit_factor": 0.54,
+        "sharpe_ratio": -59.32,
         "total_trades": 100,
-        "pnl_r": -592.53
+        "pnl_r": -1978.19
       }
     },
     "BTC_Swing_V7_MultiTF_LGB_v1": {
@@ -39,11 +39,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.43,
-        "profit_factor": 0.85,
-        "sharpe_ratio": -18.29,
+        "win_rate": 0.46,
+        "profit_factor": 0.54,
+        "sharpe_ratio": -59.32,
         "total_trades": 100,
-        "pnl_r": -592.53
+        "pnl_r": -1978.19
       }
     },
     "BTC_Swing_V8_MultiTF_LGB_v1": {
@@ -54,11 +54,26 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.43,
-        "profit_factor": 0.85,
-        "sharpe_ratio": -18.29,
+        "win_rate": 0.46,
+        "profit_factor": 0.54,
+        "sharpe_ratio": -59.32,
         "total_trades": 100,
-        "pnl_r": -592.53
+        "pnl_r": -1978.19
+      }
+    },
+    "BTC_Swing_V4": {
+      "brain_id": "BTC_Swing_V4",
+      "status": "frozen",
+      "registered_at": "2026-06-08T22:04:41.487057",
+      "last_transition_at": "2026-06-08T22:04:41.487057",
+      "transition_count": 1,
+      "freeze_count": 0,
+      "performance_metrics": {
+        "win_rate": 0.42,
+        "profit_factor": 0.72,
+        "sharpe_ratio": -32.42,
+        "total_trades": 100,
+        "pnl_r": -1053.65
       }
     }
   },
@@ -433,6 +448,14 @@
       "to_status": "retired",
       "reason": "pnl:critical",
       "timestamp": "2026-06-07T22:04:43.449967"
+    },
+    {
+      "brain_id": "BTC_Swing_V4",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-08T22:04:41.487057",
+      "fix_id": "FIX-20260529-034"
     }
   ]
 }

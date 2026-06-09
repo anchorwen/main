@@ -32,6 +32,7 @@ FIX-YYYYMMDD-NNN
 
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
+| FIX-20260609-001 | 2026-06-09 | execution-reentry | **Hesitation permanent deadlock: TTL + _MAX_THRESHOLD ceiling**: `hesitation` was the ONLY exit category lacking both a TTL hard unlock and the `_MAX_THRESHOLD` ceiling (FIX-117/127/130 added these to brain_flip/sl_hit/meta_exit/ou_revert/unknown_close but MISSED hesitation). BTC deadlock: exit_confidence=0.7668 → threshold `max(0.7668+0.15,0.70)=0.9168` > model P99 (~0.685) → MATHEMATICAL DEADLOCK 23h/148 cycles. Fix: (a) `min(max(exit_confidence+0.15, 0.70), _MAX_THRESHOLD)`, (b) TTL hard unlock after `max(2h, hl×tf×2.0×60)` → confidence>0.50. ReB: ReB-20260609-001. | RC-05, RC-12 |
 | FIX-20260608-010 | 2026-06-08 | execution-orders | **DQAF-003 sub-fix: Weak-Z p_win penalty for statarb**: (1) `adjust_p_win_for_z_strength()` added to `pwin_chain.py` — sigmoid penalty on p_win when \|z\| < 1.0 (neutral zone with absent reversion force). Prevents meta_filter overconfidence at weak z. (2) `statarb_strategy.py` docstring aligned with evolved architecture — binary \|Z\|>2.0 heuristics removed, ML pipeline documented as entry decision owner. ReB: `WEAK_Z_META_FILTER_OVERCONFIDENCE`. | RC-06, RC-12 |
 | FIX-20260608-009 | 2026-06-08 | runtime-live, execution-state | **DQAF-003: Circuit breaker fragmented trip paths — root-cause fix**: (1) All 5 breaker trip paths now record `_circuit_breaker_trip_reason` (bridge_silence/cycle_stall/data_staleness/feature_staleness/degraded_wakeup). (2) Auto-reset clears ALL degradation counters (was: only `_consecutive_degraded_cycles`; now: also `_consecutive_stale_cycles` + `_consecutive_stale_features`). (3) `save_execution_state` persists all 3 counters + trip_reason. (4) `restore_execution_state` restores all counters (prevent ghost-breaker after restart). ReB: `FRAGMENTED_BREAKER_TRIP_PATHS_WITH_STALE_COUNTER_LEAK`. | RC-06, RC-03 |
 | FIX-20260608-006 | 2026-06-08 | runtime-live | **Circuit breaker reset circular dependency**: FIX-003 cooldown reset required `_bridge_alive` but `_last_bridge_ack_time` frozen during management-only mode. `positions_get()` success now updates heartbeat to break cycle. | RC-06 |
@@ -1921,4 +1922,35 @@ FIX-YYYYMMDD-NNN
   ```
 - **Related Docket**: DQAF-20260608-004 (MetaExit data pipeline audit)
 - **Prevention**: Any ML model used in production must have its training features logged at runtime in the SAME format. Train-serve feature parity is a deployment gate — not an afterthought.
+
+---
+
+### FIX-20260609-001: Hesitation Permanent Deadlock — TTL + _MAX_THRESHOLD Ceiling (DQAF-20260609-001)
+
+- **Severity**: Sev 2 — BTC btc_swing trading blocked for ~23h (148 cycles, zero opens)
+- **Module**: `core/execution/reentry_guard.py` → `check_reentry_quality()`, `hesitation` category
+- **Root Cause (RC-05 + RC-12)**:
+  The `hesitation` category in `check_reentry_quality()` was the ONLY exit category that lacked both:
+  1. **`_MAX_THRESHOLD` ceiling** (FIX-117 added to brain_flip/sl_hit/ou_revert/unknown_close, but MISSED hesitation)
+  2. **TTL hard unlock** (FIX-127 added to brain_flip + meta_exit, FIX-011 added to sl_hit, but MISSED hesitation)
+
+  When exit_confidence was high (BTC 0.7668 from `exit_watchdog:hesitation_15c_no_breakeven`):
+  - `max(0.7668 + 0.15, 0.70)` = 0.9168
+  - BTC model P99 confidence ≈ 0.685 (FIX-130)
+  - 0.9168 is MATHEMATICALLY UNREACHABLE for any tree model
+  - No TTL escape → permanent deadlock until stale_exit override (24h) fires
+- **Damages**: BTC 23h trading silence. 148 signals with confidence 0.746-0.750, p_win 0.45-0.48, regime=full (trending), 3/4 brains supporting LONG direction — all incorrectly blocked.
+- **Fix**:
+  1. Added `_MAX_THRESHOLD` wrapping: `min(max(exit_confidence + 0.15, 0.70), _MAX_THRESHOLD)` → ceiling at 0.82 (reachable by tree models)
+  2. Added TTL hard unlock: after `max(7200, entry_half_life * timeframe_minutes * 2.0 * 60)` seconds, only confidence > 0.50 required. Same proven pattern as brain_flip (FIX-127/130), sl_hit (FIX-20260528-011), meta_exit (FIX-127).
+  3. Enhanced rejection reason to include the threshold value for future diagnostics: `hesitation_confidence_not_improved_X.XXX_need_Y.YYY`
+- **ReB Pattern**: `ReB-20260609-001: Hesitation Permanent Deadlock` — reentry guard category simultaneously lacks _MAX_THRESHOLD ceiling and TTL hard unlock, allowing threshold to exceed model output range creating mathematical deadlock. Signature: `category=hesitation AND exit_confidence + 0.15 > model_P99 AND no_TTL AND no_MAX_THRESHOLD`.
+- **Prevention**: Every new or modified reentry guard category MUST have: (a) `_MAX_THRESHOLD` ceiling on positive-margin thresholds, (b) TTL hard unlock with basic signal quality floor. Missing either = automatic CI block via `reentry_guard_category_compliance` test.
+- **Verification**:
+  ```
+  [PASS] mypy — 0 errors
+  [PASS] ruff — 0 issues
+  [PASS] verify.py --quick — no regressions
+  ```
+- **Related Docket**: DQAF-20260609-001 (diagnosis of BTC trading silence)
 
