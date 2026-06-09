@@ -5469,9 +5469,13 @@ def execute_live_cycle(
                                 trail_atr_mult_high=_exit_cfg.get("trail_atr_mult_high", 3.0),
                                 breakeven_threshold_atr=_exit_cfg.get(
                                     "breakeven_threshold_atr", 1.0
-                                ),
                             ),
-                            cold_explore=getattr(decision, "cold_explore", False),
+                            trail_activation_atr=_exit_cfg.get(
+                                "trail_activation_atr",
+                                getattr(config, "exit_trail_activation_atr", 1.0),
+                            ),
+                        ),
+                        cold_explore=getattr(decision, "cold_explore", False),
                         )
                         # Sync known_open_tickets so reconciliation can detect closes
                         state.known_open_tickets[ticket] = {

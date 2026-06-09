@@ -396,6 +396,7 @@ class ActivePositionManager:
         trail_atr_mult_high: float | None = None,
         breakeven_threshold_atr: float | None = None,
         trail_policy: TrailPolicy | None = None,  # Phase B: preferred over scattered attrs
+        trail_activation_atr: float | None = None,  # DQAF-005: per-strategy override (None=use PM default)
         cold_explore: bool = False,  # bypass trailing for uncensored calibration labels
     ) -> ActivePosition:
         """Record a newly-opened position (or recover one after restart).
@@ -429,6 +430,19 @@ class ActivePositionManager:
                 breakeven_threshold_atr
                 if breakeven_threshold_atr is not None
                 else self.breakeven_threshold_atr
+            )
+        # DQAF-005: Per-strategy trail_activation_atr override.
+        # When provided without an explicit trail_policy, construct a
+        # position-level TrailPolicy carrying the strategy-specific value.
+        # Other trail params (decay, graduated lock, etc.) use TrailPolicy
+        # defaults — they are not strategy-specific.
+        if trail_policy is None and trail_activation_atr is not None:
+            trail_policy = TrailPolicy(
+                trail_atr_mult=_trail,
+                trail_atr_mult_low=_trail_low,
+                trail_atr_mult_high=_trail_high,
+                breakeven_threshold_atr=_breakeven,
+                trail_activation_atr=trail_activation_atr,
             )
         pos = ActivePosition(
             ticket=ticket,

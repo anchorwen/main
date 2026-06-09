@@ -281,6 +281,8 @@ strategy_lines:
       min_r_for_hold: 0.3
       confidence_decay_exit: true
       hesitation_cycles: 12
+      trail_activation_atr: 0.3
+      _comment_trail_activation: 'DQAF-005: MR thin profits, early activation'
     budget:
       daily_loss_limit_pct: -0.03
       max_consecutive_losses: 5
@@ -405,6 +407,8 @@ strategy_lines:
       flip_threshold: 0.45
       time_exit_cycles: 240
       hesitation_cycles: 2
+      trail_activation_atr: 0.3
+      _comment_trail_activation: 'DQAF-005: scalping, activate immediately'
     budget:
       daily_loss_limit_pct: -0.015
       max_consecutive_losses: 4
@@ -441,6 +445,7 @@ strategy_lines:
       trail_atr_mult_low: 1.8
       trail_atr_mult_high: 2.5
       breakeven_threshold_atr: 0.5
+      trail_activation_atr: 0.3
       flip_exit_enabled: false
       time_exit_cycles: 40
       zscore_exit_enabled: true
@@ -483,6 +488,8 @@ strategy_lines:
       zscore_exit_enabled: true
       confidence_decay_exit: false
       hesitation_cycles: 3
+      trail_activation_atr: 0.3
+      _comment_trail_activation: 'DQAF-005: MR M15, thin profits'
     budget:
       daily_loss_limit_pct: -0.02
       max_consecutive_losses: 7
@@ -515,6 +522,8 @@ strategy_lines:
       flip_threshold: 0.4
       time_exit_cycles: 1440
       hesitation_cycles: 3
+      trail_activation_atr: 0.5
+      _comment_trail_activation: 'DQAF-005: medium trend, moderate activation'
     budget:
       daily_loss_limit_pct: -0.02
       max_consecutive_losses: 3
@@ -556,6 +565,8 @@ strategy_lines:
       confidence_decay_exit: true
       min_r_for_hold: 0.15
       hesitation_cycles: 4
+      trail_activation_atr: 0.4
+      _comment_trail_activation: 'DQAF-005: short trend, above single-bar noise'
     budget:
       daily_loss_limit_pct: -0.015
       max_consecutive_losses: 4
@@ -592,6 +603,8 @@ strategy_lines:
       flip_threshold: 0.4
       time_exit_cycles: 36
       hesitation_cycles: 3
+      trail_activation_atr: 0.4
+      _comment_trail_activation: 'DQAF-005: medium trend, balance noise vs breathing room'
     budget:
       daily_loss_limit_pct: -0.015
       max_consecutive_losses: 4
@@ -668,6 +681,8 @@ strategy_lines:
       confidence_decay_exit: true
       min_r_for_hold: 0.0
       hesitation_cycles: 3
+      trail_activation_atr: 0.7
+      _comment_trail_activation: 'DQAF-005: long trend, need 20+ bars to develop'
     budget:
       daily_loss_limit_pct: -0.015
       max_consecutive_losses: 3
@@ -704,6 +719,8 @@ strategy_lines:
       flip_threshold: 0.4
       time_exit_cycles: 864
       hesitation_cycles: 3
+      trail_activation_atr: 0.8
+      _comment_trail_activation: 'DQAF-005: longest trend, maximum breathing room'
     budget:
       daily_loss_limit_pct: -0.015
       max_consecutive_losses: 2
