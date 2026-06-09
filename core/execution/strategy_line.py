@@ -1559,15 +1559,44 @@ class StrategyLine:
             _p_win = 0.40 + _conf * 0.20
             _p_win_source = "brain_confidence"
 
+        # ── FIX-20260609-002-UPDATE: Hard Floor Defense for absent MetaFilter ──
+        # When MetaFilter is unavailable (model file missing, cross-symbol blind
+        # spot), p_win falls back to rolling_wr — an uncalibrated historical
+        # average.  Without the MetaFilter's Platt calibration + conformal
+        # thresholding, the elastic UCB floor and COLD exploration bypasses are
+        # untrustworthy — they can lift a sub-breakeven p_win above the floor.
+        #
+        # Defense: when MetaFilter is absent AND p_win comes from rolling_wr,
+        # (a) log a WARNING to break the silent degradation, (b) enforce an
+        # elevated floor: max(configured_min_p_win, dynamic_breakeven, 0.50).
+        # Coin-flip (0.50) is the minimum bar when the model-based p_win is
+        # unavailable — without it, we're trading on historical noise.
+        # DQAF-20260609-002 diagnosed the cross-symbol blind spot pattern.
+        _meta_filter_absent = meta_filter is None and _p_win_source in (
+            "rolling_wr",
+            "neutral_default",
+        )
+        if _meta_filter_absent:
+            import logging as _lg
+
+            _lg.getLogger(__name__).warning(
+                "[STRATEGY_DEGRADE] %s running WITHOUT MetaFilter! "
+                "p_win=%.3f from %s. MetaFilter model file may be missing or "
+                "strategy not routed. Falling back to hard floor defense.",
+                name,
+                _p_win,
+                _p_win_source,
+            )
+            # Disable elastic UCB trigger — uncalibrated without MetaFilter
+            _elastic_trigger = False
+            _is_cold_explore = False
+            # Elevate floor: coin-flip is the minimum bar without MetaFilter
+            _meta_absent_floor = max(self.config.min_p_win, 0.50)
+            # Merge into effective_min_p_win computation later
+            _p_win_source = "rolling_wr_no_metafilter"
+
         # ── 6b-2. UCB elastic floor (FIX-20260606-139) ──
-        # Statistical freeze breaker: when rolling WR is marginally below the
-        # min_p_win floor (0.40 < p_win < floor) AND brain confidence is high,
-        # use a confidence-derived elastic p_win to break the deadlock.
-        # Formula: p_win = max(raw, floor - 0.05 + conf × 0.10)
-        #   conf=0.50 → floor-0.05+0.05 = floor          (just breakeven)
-        #   conf=0.82 → floor-0.05+0.082 = floor+0.032   (modest edge)
-        # Kelly multiplier is automatically tiny (p_win barely > breakeven)
-        # so risk is bounded to micro-lot exploration.
+        # (only active when MetaFilter is available — see guard above)
         _elastic_trigger = _p_win_source == "rolling_wr" and 0.40 < _p_win < self.config.min_p_win
         if _elastic_trigger:
             _conf = max(0.0, min(1.0, confidence))
@@ -1607,6 +1636,11 @@ class StrategyLine:
         # breakeven win rate and add a 2% safety margin so the model must provably
         # beat the spread cost before taking a position.
         _effective_min_p_win = self.config.min_p_win
+        # ── FIX-20260609-002-UPDATE: MetaFilter-absent elevated floor ──
+        # When MetaFilter is missing, the floor is elevated to at least 0.50
+        # (coin-flip) because rolling_wr is uncalibrated historical noise.
+        if _meta_filter_absent:
+            _effective_min_p_win = max(_effective_min_p_win, _meta_absent_floor)
         if sl_dist > 0 and tp_dist > 0 and tp_dist >= sl_dist:
             # Dynamic breakeven floor: only for RR >= 1.0 strategies where
             # every loss = full SL and every win = full TP.
