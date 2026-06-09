@@ -82,7 +82,7 @@ exit_management:
   trail_atr_mult_low: 1.5
   trail_atr_mult_high: 3.0
   breakeven_threshold_atr: 1.5
-  trail_activation_atr: 0.3  # FIX-20260607-XXX: 1.0→0.3. BTC vol regime: don't wait 1.0x ATR profit before defending. Allow trail to tighten toward entry even on marginal favourable moves.
+  trail_activation_atr: 0.5  # DQAF-20260609-004: 0.3→0.5. BTC single-bar noise floor ~0.3-0.5 ATR. 0.3 caused trail activation on random M5 noise (36% of trades at bar1, 15% premature). 0.5 is above the noise floor while still activating early enough (before 1.0R decay starts). Pipeline: 0.5R trail→1.5R breakeven→2.0R full decay.
   brain_reeval_interval: 5
   flip_exit_threshold: 0.5
   confidence_drop_threshold: 0.15  # FIX-055: 0.1→0.15. BTC conf 0.6-0.7, 0.1 drop=15% relative decline too sensitive
