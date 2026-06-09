@@ -17,6 +17,7 @@
 
 | Docket ID | 日期 | 严重等级 | 症状简述 | IC 裁决 | 关联 FIX |
 |-----------|------|---------|---------|--------|----------|
+| DQAF-20260609-012 | 2026-06-09 | Sev 2 | BTC 大脑盈利能力诊断: V5 test_PF=1.81→live_PF=0.73, 归一化器XAU复制品, M5/12bar信号≈随机. 全TF网格搜索→BTC不支持R:R≥1.0. M15 SL=3.0/TP=2.0 EV=+0.456R 全场最佳. | **APPROVED → CLOSED** — FIX-20260609-012: B1审计→B2/B3重训管线→V9 H1 (EV+0.38R) + V10 M15 (EV+0.46R) shadow注册. ReB: BTC_SURVIVAL_ALPHA | FIX-20260609-012 |
 | DQAF-20260609-011 | 2026-06-09 | Sev 2 | 大脑治理真空: 4 candidate brains 零 live, 全票权开单, 0.1 lot 裸奔, PnL ~-$30/day. candidate 倒挂 (全票权) vs probation (0.5×). | **APPROVED → CLOSED** — FIX-20260609-011: (1) candidate vote_weight×0.5, (2) governance_state per-cycle 管线, (3) strategy_evaluator 无 live 降级 (conf<0.50→blocked, vol→0.01). ReB: GOVERNANCE_VACUUM_CADET_BRAINS | FIX-20260609-011 |
 | DQAF-20260609-002-UPDATE | 2026-06-09 | Sev 2 | 剥洋葱排查: BTC MetaFilter模型文件根本不存在(configs/brains_btc/),静默退化到rolling_wr(0.48),跨品种盲点模式 | **APPROVED → CLOSED** — FIX-002-UPDATE (Hard Floor Defense) + FIX-002-BTC (Path A: BTC MetaFilter V1训练, 47-dim LGB, val WR 70.9%). Path B (≥200笔实盘重训) 搁置. ReB: CROSS_SYMBOL_METAFILTER_BLINDSPOT | FIX-20260609-002-UPDATE, FIX-20260609-002-BTC |
 | DQAF-20260609-002 | 2026-06-09 | Sev 2 | XAU 2日交易退化: WR=20%, h1/h4 p_win=0.41(rolling_wr)绕过MetaFilter, 三swing同向同时开仓, BrainSignal合约断裂37次/9天 | **APPROVED → CLOSED** — FIX-20260609-002: (1) h1/h4接入MetaFilter, (2) Kelly低RR保本线兜底, (3) Family同周期乐观锁, (4) BrainSignal兼容. ReB: ReB-20260609-002 | FIX-20260609-002 |

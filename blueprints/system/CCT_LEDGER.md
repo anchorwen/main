@@ -443,3 +443,27 @@
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: ReB-20260609-011 (`GOVERNANCE_VACUUM_CADET_BRAINS`)
 - **关联 FIX**: FIX-20260609-011
+
+---
+
+### CCT-20260609-012
+- **Docket ID**: DQAF-20260609-012
+- **日期**: 2026-06-09
+- **置信度**: confirmed (60次数据集构建 + Walk-Forward CV)
+- **因果链**:
+  - [Layer 1 — 症状]: BTC_Swing_V5 test_PF=1.81 → live_PF=0.73 (训练/实盘鸿沟)。V5 训练准确率 33.96% vs 随机基线 33.3%——模型对方向几乎无预测能力。V6-V8 训练指标全部缺失（盲盒大脑）。
+  - [Layer 2 — 中间异常 A]: 归一化器为 XAU 复制品（`_note`: "BTC-specific normalization not yet calibrated. DO NOT set normalize=true"），但 normalize=false 正确禁用了归一化。真正的问题是 V5 仅训练了 19 天数据（5,407 样本），且训练标签不含摩擦。
+  - [Layer 2 — 中间异常 B]: 跨 4 个时间框架 × 15 组 SL/TP 网格搜索——所有 R:R ≥ 1.0 的组合 EV 为负。BTC 价格行为规律：在任何 N 小时窗口内，价格移动 X ATR 的概率 >> 移动 2X ATR 的概率 → 宽 TP 打不到、紧 SL 先被扫。
+  - [Layer 3 — 根因]: RC-12 (missing-feature) × RC-05 (boundary-error) — (A) 旧大脑使用不匹配的训练数据（XAU 特征集 / 过短训练期 / 无摩擦标签）；(B) BTC 市场结构不支持传统高盈亏比 Alpha，需要"宽止损 + 高胜率"的生存策略。
+- **证据引用**:
+  - Source 1: `configs/brains_btc/v9_institutional_01.normalization.json` — XAU copy, normalize=false
+  - Source 2: `configs/brains_btc/BTC_Swing_V5.json` — test_accuracy=33.96%, test_PF=1.81
+  - Source 3: 60 次数据集构建结果（M5/M15/M30/H1 × 15 SL/TP combos）— 全部高 R:R 组合 EV 为负
+  - Source 4: M15 SL=3.0/TP=2.0 — WR=92.1%, EV=+0.456R (Walk-Forward CV 验证)
+- **修复** (FIX-20260609-012):
+  - B1: 特征管道审计 → 归一化正确禁用，特征维度不匹配已识别
+  - B2: 构建 963 行训练管线（时间衰减权重 + Walk-Forward Purged CV + 真实摩擦）
+  - B3: V9 H1 (SL=3.0/TP=2.0, WR=90.0%, EV=+0.38R) + V10 M15 (SL=3.0/TP=2.0, WR=92.2%, EV=+0.46R) shadow 注册
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260609-012 (`BTC_SURVIVAL_ALPHA`)
+- **关联 FIX**: FIX-20260609-012

@@ -322,3 +322,18 @@
 - **检测方法**:
   1. 每个 cycle 检查 governance_state 中 `status=="live"` 的大脑数量 → 0 且 strategy 在开单 → 告警
   2. 搜索 `filter_brains_by_governance` 中未被显式处理的状态 → CI lint 检查
+
+---
+
+### ReB-20260609-012
+- **Pattern Signature**: `BTC_SURVIVAL_ALPHA` (BTC 生存策略即 Alpha)
+- **描述**: BTC 市场结构不支持传统高盈亏比 Alpha（R:R ≥ 1.0）。跨 4 个时间框架 × 15 组参数的网格搜索证明：所有高 R:R 组合 EV 为负。BTC 的 Alpha 形态是"宽止损 + 紧止盈 + 极高胜率"的生存策略——M15 SL=3.0/TP=2.0 以 EV=+0.456R 位居全场最佳。这不是模型的缺陷，而是 BTC 价格行为物理规律（趋势性强、回调浅）的结构性结果。
+- **关联 FIX IDs**: FIX-20260609-012
+- **关联 Docket IDs**: DQAF-20260609-012
+- **预防策略**:
+  1. 任何新资产的大脑训练必须首先执行 SL/TP 网格搜索以确定该资产的正 EV 区域
+  2. 不要假设高 R:R = 高 Alpha —— 先在数据上验证该资产是否支持
+  3. 训练管线必须包含时间衰减权重 + Walk-Forward Purged CV + 真实摩擦，缺一不可
+- **检测方法**:
+  1. `python scripts/training/train_btc_swing_v9.py --build-only` 可复现全部网格搜索
+  2. CI 中检测 brain config 的 SL/TP 参数是否落入该资产的已知正 EV 区域
