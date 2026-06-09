@@ -357,3 +357,18 @@
 - **是否被推翻**: 否 — AR 反证确认：多次修复均为单路径打补丁
 - **关联 ReB Pattern**: ReB-20260608-003 (`FRAGMENTED_BREAKER_TRIP_PATHS_WITH_STALE_COUNTER_LEAK`)
 - **关联 FIX**: FIX-20260608-009
+
+---
+
+## CCT-20260609-001: BTC Hesitation Permanent Deadlock
+
+- **Docket ID**: DQAF-20260609-001
+- **Severity**: Sev 2
+- **Date**: 2026-06-09
+- **Causal Chain**:
+  - **Layer 1 — 症状**: BTC btc_swing 自 2026-06-08 01:02 UTC 起零开仓。148 次连续信号评价（confidence 0.746-0.750, p_win 0.45-0.48, regime=full trending, 3/4 brains 支持 LONG）全部被 `reentry_blocked` 拦截，reason=`hesitation_confidence_not_improved`。
+  - **Layer 2 — 中间异常**: 最后一笔 hesitation 退出（ticket=3808448708）通过 bootstrap 重放时 `exit_reason` 被跨记录借用到最新 close（ticket=3810297338），形成 `exit_reason="exit_watchdog:hesitation_15c_no_breakeven"` + `exit_confidence=0.7668` 的组合。`check_reentry_quality()` 的 hesitation 路径计算阈值 `max(0.7668+0.15, 0.70)=0.9168` — 此值超过 BTC 树模型 P99 输出 (~0.685) 和绝对最大值 (~0.77)，**数学上不可达**。
+  - **Layer 3 — 根因 (RC-05 + RC-12)**: `reentry_guard.py` 的 `hesitation` 类别是唯一同时缺少两项保护的退出类别：(a) `_MAX_THRESHOLD=0.82` 天花板 — FIX-117 已施加于 brain_flip/sl_hit/ou_revert/unknown_close 但遗漏了 hesitation；(b) TTL 硬解锁 — FIX-127 已施加于 brain_flip+meta_exit，FIX-011 已施加于 sl_hit，但均遗漏了 hesitation。唯一的逃生通道是 24h stale exit override。
+- **是否被推翻**: 否 — AR 反证确认：BTC 信号质量正常（confidence>0.74, p_win>0.45），hesitation 后 confidence 从 0.5 提升到 0.75（+50%），实为合理重入时机。死锁非市场质量导致，纯为代码边界条件缺陷。
+- **关联 ReB Pattern**: ReB-20260609-001 (`HESITATION_PERMANENT_DEADLOCK`)
+- **关联 FIX**: FIX-20260609-001

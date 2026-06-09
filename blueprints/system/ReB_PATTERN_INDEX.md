@@ -238,3 +238,28 @@
   1. Code review 规则：搜索 `_circuit_breaker_tripped = True` 的所有赋值点，验证是否存在独立计数器未在 auto-reset 中清除
   2. 运行时监控：`circuit_breaker_trip_reason` 字段值的变化频率——同一 reason 短时间内重复出现 = 死亡螺旋
   3. 启动诊断：若 `circuit_breaker_tripped=true` 但所有 counter=0，判定为"幽灵 breaker"，发出 `ghost_breaker_detected` 告警
+
+---
+
+## ReB-20260609-001: Hesitation Permanent Deadlock
+
+- **发现日期**: 2026-06-09
+- **来源 Docket**: DQAF-20260609-001
+- **分类**: 边界条件死锁 (Boundary Deadlock) / 代码骨架不完整 (Incomplete Code Skeleton)
+- **模式签名**: 重入守卫某退出类别同时缺少 `_MAX_THRESHOLD` 天花板和 TTL 硬解锁，正边际加法 (`exit_confidence + margin`) 产生的阈值超过模型输出范围形成数学死锁。签名关键词: `category=hesitation AND exit_confidence + 0.15 > model_P99 AND no_TTL AND no_MAX_THRESHOLD`.
+- **典型症状**:
+  1. 某策略线连续数小时至数天零开仓
+  2. intent log 中出现大量连续同一 `reentry_blocked` 事件，reason 包含同一退出类别
+  3. 被拦截信号的置信度明显正常（非极低值），但始终无法达到阈值
+  4. 计算 `exit_confidence + margin` 若超过 0.82 (树模型输出天花板)，即为本模式
+- **根因机制**: 多个 FIX 向 reentry guard 添加保护（`_MAX_THRESHOLD` / TTL 硬解锁）时，每次仅针对特定类别施加，遗漏了 hesitation 类别。每次遗漏都是因为"此 FIX 针对 X 类别"的范围限定，没有系统性验证"所有类别是否都需要此保护"。结果: hesitation 在 FIX-117 (ceiling)、FIX-127 (TTL)、FIX-011 (TTL) 三次广谱加固中均被遗漏，成为唯一裸奔的类别。
+- **修复模板**:
+  1. 对该类别的正边际阈值施加 `_MAX_THRESHOLD` 包裹: `min(max(exit_conf + margin, floor), _MAX_THRESHOLD)`
+  2. 添加 TTL 硬解锁: 超时后降级为基础置信度检查 (confidence > 0.50)
+  3. 增强 rejection reason 包含阈值数值，便于未来诊断
+- **预防措施**:
+  1. 编写 `reentry_guard_category_compliance` 测试：验证每一个退出类别同时具备 (a) `_MAX_THRESHOLD` 包裹（若存在正边际加法）(b) TTL 硬解锁（若存在正边际加法 + price confirmation）
+  2. Code review 规则：新增/修改退出类别处理时，必须显式说明是否施加了上述两项保护
+  3. 架构审计：每季度运行全类别保护扫描，确保无遗漏
+- **关联 CCT**: CCT-20260609-001
+- **关联 FIX**: FIX-20260609-001
