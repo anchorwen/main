@@ -281,3 +281,29 @@
   1. 运行时监控：`management_phase_diag` 中 `trail_sl_candidate: null` 连续 ≥ 10 bars → 告警
   2. 回测检查：搜索 `breakeven_triggered=true + trail_fired=false` 持续超过半衰期的仓位
   3. 单元测试：验证 R=1.0, 1.5, 2.0, 3.0 时 trail 均有非 null candidate
+
+---
+
+### ReB-20260609-001-B
+- **Pattern Signature**: `CAP_OUTPUT_MISMATCH_DEADLOCK` (Cap-Output Mismatch Deadlock)
+- **描述**: Reentry guard 的置信度阈值公式（如 `max(exit_confidence + margin, floor)` + `_MAX_THRESHOLD` 天花板）产生的阈值超过目标模型的 P99 输出范围。当模型是 tree-based (XGBoost/LightGBM) 时，天然输出上限约 0.75-0.82，而 `_MAX_THRESHOLD=0.82` 在天花板有保护的情况下仍因 floor/margin 组合产生不可达阈值。BTC 观测：150+ 连续周期封锁（12.5h）。历史先例：FIX-127/130 (brain_flip, floor 0.70→0.65), FIX-117 (新增 `_MAX_THRESHOLD`), FIX-001 (hesitation TTL+ceiling), FIX-010 (hesitation margin+floor)。
+- **关联 FIX IDs**: FIX-20260609-001, FIX-20260609-010, FIX-20260606-127, FIX-20260606-130, FIX-20260605-117
+- **关联 Docket IDs**: DQAF-20260609-001
+- **预防策略**:
+  1. 任何涉及 `exit_confidence + X` 边际加法的阈值公式，必须在代码注释中标注目标模型的 P99 输出范围
+  2. 新增 reentry 类别时必须附带模型输出分布分析（histogram + P50/P90/P99 percentiles）
+  3. CI 中增加 `_MAX_THRESHOLD` 合规检查：任何 exit_category 的阈值公式必须包含 `_MAX_THRESHOLD` 天花板 且 floor 不超过目标模型 P90
+- **检测方法**: 搜索 alert_audit 中 `reentry_persistent_block` 连续 ≥ 50 cycles → 触发 `_MAX_THRESHOLD` 审查
+
+### ReB-20260609-001-C
+- **Pattern Signature**: `BUDGET_RECONSTRUCTION_AMNESIA` (Budget Reconstruction Amnesia)
+- **描述**: 策略对象（含 StrategyBudget）在每个 cycle 被重建（`_build_strategy_lines()`），但持久化状态仅在 cycle 1 恢复（`restore_execution_state()`）。Cycle 2+ 的 budget 计数器恒为零 → 所有累计风控闸门（daily_loss_limit, max_consecutive_losses, intraday_dd, consecutive_degraded）永久失效。本质是对象生命周期管理（recreate-on-every-cycle）与状态生命周期管理（restore-once）之间的契约断裂。关联模式：FIX-20260603-072 引入了 `restore_execution_state()` 但未预见 `_build_strategy_lines()` 会移至循环内（FIX-20260530-070 Strangler Fig #5）。
+- **关联 FIX IDs**: FIX-20260609-010, FIX-20260603-072, FIX-20260530-070
+- **关联 Docket IDs**: DQAF-20260609-001
+- **预防策略**:
+  1. 任何 `_build_*` / `_create_*` 在循环内被调用时，必须配套 `_restore_*` / `_hydrate_*` 在同一循环迭代中
+  2. CI 中添加 "destructive-rebuild-in-loop" 检测：扫描循环内的 `_build_*` 调用 → 检查是否紧跟 `restore`/`hydrate` 调用 → 缺失则告警
+  3. 架构原则：状态对象应在循环外创建一次（构造即持久），而非每 cycle 重建
+- **检测方法**:
+  1. 启动后（loop_iteration ≥ 3）检查 `execution_state.json` 中 `total_trades_today` 是否 > 0 — 若为 0 但 trade_journal 中当日有记录 → 告警
+  2. 运行时断言：每个 cycle 开始时 budget counters ≥ 上一 cycle 结束时 counters（单调不减，除日切外）

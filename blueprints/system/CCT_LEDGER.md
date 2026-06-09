@@ -392,3 +392,30 @@
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: ReB-20260609-001-B (`BREAKEVEN_FLOOR_TRAIL_DEADLOCK`)
 - **关联 FIX**: FIX-20260609-003
+
+---
+
+### CCT-20260609-001b
+- **Docket ID**: DQAF-20260609-001
+- **日期**: 2026-06-09
+- **置信度**: confirmed (双源交叉验证 — 同事审计 + Agent 审计)
+- **因果链**:
+  - [Layer 1 — 症状 A]: `execution_state.json` 显示 `total_trades_today: 0`, `consecutive_losses: 0`，但 alert_audit 记录至少有 4 笔已关仓交易、3 笔亏损。Daily Loss Limit (-$30) 未触发。
+  - [Layer 2 — 中间异常 A]: `live_cycle.py:4044` `_build_strategy_lines()` 每个 cycle 创建全新的 `StrategyBudget` 对象（计数器=0）。`live_cycle.py:4433` `restore_execution_state()` 仅在 `loop_iteration == 1` 时恢复。Cycle 2+ budget 恒为零 → 所有累计风控闸门（daily_loss_limit, max_consecutive_losses, intraday_dd）永久失效。
+  - [Layer 3 — 根因 A]: RC-03 (state-leak) — `_build_strategy_lines()` 每 cycle 重建策略对象是 FIX-20260530-070 (Strangler Fig #5) 的架构残余。原设计中策略对象在循环外创建一次，提取后移入循环内但未配套恢复逻辑。
+  - [Layer 1 — 症状 B]: alert_audit 显示 `hesitation_confidence_not_improved_0.746_need_0.820` 连续 150 cycles (6/8-6/9)。BTC btc_swing 重入被永久封锁。
+  - [Layer 2 — 中间异常 B]: FIX-001 部署了 `_MAX_THRESHOLD=0.82` 天花板 + 2h TTL，但 `reentry_guard.py:298` 的 `exit_confidence + 0.15` 边际加法在 floor 0.70 约束下仍产生 0.82 阈值。BTC 树模型 (LightGBM/XGBoost) P99 输出 ≈ 0.685-0.75，无法达到 0.82。
+  - [Layer 3 — 根因 B]: RC-05 (boundary-error) — threshold calibration 未根据目标模型的输出分布校准。+0.15 边际对 BTC tree-based 模型过大（对比 brain_flip +0.05, BTC P99≈0.685）。
+- **证据引用**:
+  - Source 1 (A): `data_btc/state/execution_state.json` — `total_trades_today: 0, consecutive_losses: 0` (2026-06-09 09:59 UTC)
+  - Source 2 (A): `data_btc/logs/alert_audit.jsonl` — 6/9 trade_notification close events: PnL=-1.74, -1.36, -13.93, -14.01
+  - Source 3 (A): `core/runtime/live_cycle.py:4044-4054` + `core/runtime/live_cycle.py:4433` — 每 cycle 重建 + 仅 cycle 1 恢复
+  - Source 1 (B): `data_btc/logs/alert_audit.jsonl` — reentry_persistent_block: 150 cycles (6/8 23:29-6/9 00:44)
+  - Source 2 (B): `core/execution/reentry_guard.py:298` — `min(max(exit_confidence + 0.15, 0.70), _MAX_THRESHOLD)`
+  - Source 3 (B): BTC brain performance data (governance_state.json) — 4 brains all candidate, P99 confidence 0.685-0.75
+- **修复** (FIX-20260609-010):
+  - Sub-fix A: `live_cycle.py` 新增 per-cycle budget 恢复块 — `load_execution_state()` → `budget.load_state()` 在 `_build_strategy_lines()` 之后、pending records 之前执行
+  - Sub-fix B: `reentry_guard.py:298` — margin 0.15→0.08, floor 0.70→0.65. 排序: brain_flip+0.05 < hesitation+0.08 < sl_hit+0.10
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260609-001-B (`Cap-Output Mismatch Deadlock`) + `Budget Reconstruction Amnesia`
+- **关联 FIX**: FIX-20260609-001, FIX-20260609-010
