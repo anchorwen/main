@@ -240,6 +240,21 @@ def evaluate_strategy_lines(
                         ),
                         flush=True,
                     )
+                else:
+                    # ── FIX-20260609-002: intra-cycle optimistic lock ──
+                    # Record the entry immediately so that subsequent
+                    # family members evaluated in the SAME cycle see the
+                    # spacing gap and are blocked.  Without this, all
+                    # family members pass spacing check simultaneously
+                    # (no entries recorded yet) → cluster entry.
+                    # DQAF-20260609-002 diagnosed (3 swing same-second).
+                    import time as _time
+
+                    family_entry_tracker.record_entry(
+                        _fam,
+                        decision.direction,
+                        _time.time(),
+                    )
 
         # ── Cut 3: Reentry quality guard (FIX-20260606-131, P2.6 front-placement) ──
         if decision.should_trade and reentry_states is not None:

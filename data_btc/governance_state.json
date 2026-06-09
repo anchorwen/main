@@ -9,11 +9,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.47,
-        "profit_factor": 0.98,
-        "sharpe_ratio": -1.85,
+        "win_rate": 0.43,
+        "profit_factor": 0.88,
+        "sharpe_ratio": -12.21,
         "total_trades": 100,
-        "pnl_r": -61.81
+        "pnl_r": -402.88
       }
     },
     "BTC_Swing_V6_MultiTF_LGB_v2": {
@@ -24,11 +24,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.46,
-        "profit_factor": 0.54,
-        "sharpe_ratio": -59.32,
+        "win_rate": 0.48,
+        "profit_factor": 0.59,
+        "sharpe_ratio": -49.6,
         "total_trades": 100,
-        "pnl_r": -1978.19
+        "pnl_r": -1637.12
       }
     },
     "BTC_Swing_V7_MultiTF_LGB_v1": {
@@ -39,11 +39,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.46,
-        "profit_factor": 0.54,
-        "sharpe_ratio": -59.32,
+        "win_rate": 0.48,
+        "profit_factor": 0.59,
+        "sharpe_ratio": -49.6,
         "total_trades": 100,
-        "pnl_r": -1978.19
+        "pnl_r": -1637.12
       }
     },
     "BTC_Swing_V8_MultiTF_LGB_v1": {
@@ -54,26 +54,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.46,
-        "profit_factor": 0.54,
-        "sharpe_ratio": -59.32,
+        "win_rate": 0.48,
+        "profit_factor": 0.59,
+        "sharpe_ratio": -49.6,
         "total_trades": 100,
-        "pnl_r": -1978.19
-      }
-    },
-    "BTC_Swing_V4": {
-      "brain_id": "BTC_Swing_V4",
-      "status": "frozen",
-      "registered_at": "2026-06-08T22:04:41.487057",
-      "last_transition_at": "2026-06-08T22:04:41.487057",
-      "transition_count": 1,
-      "freeze_count": 0,
-      "performance_metrics": {
-        "win_rate": 0.42,
-        "profit_factor": 0.72,
-        "sharpe_ratio": -32.42,
-        "total_trades": 100,
-        "pnl_r": -1053.65
+        "pnl_r": -1637.12
       }
     }
   },

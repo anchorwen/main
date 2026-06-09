@@ -1028,10 +1028,12 @@ class StrategyLine:
         #   - If corr < 0.05 for TWO consecutive periods → DISABLE this route
         #     (revert to Fix 1C confidence mapping fallback).
         #   - Long-term: collect 200+ OU settled trades → train OU-specific MetaFilter.
-        # FIX-20260604-083: extend MetaFilter to swing strategies
+        # FIX-20260604-083 / FIX-20260609-002: extend MetaFilter to ALL swing strategies
+        # Previously h1_swing and h4_swing were excluded → p_win fell back to rolling_wr
+        # (0.41) which bypassed MetaFilter gate entirely.  DQAF-20260609-002 diagnosed.
         if (
             meta_filter is not None
-            and ("statarb" in name or name in ("m15_swing", "m30_swing"))
+            and ("statarb" in name or name in ("m15_swing", "m30_swing", "h1_swing", "h4_swing"))
             and _meta_p_win is None
         ):
             try:
@@ -1653,7 +1655,15 @@ class StrategyLine:
         # outcomes. The surface scan (with proper timeout modeling) already
         # validates EV > 0. Same principle as the dynamic floor RR<1.0 skip
         # in Phase C Fix 2.
+        #
+        # ── FIX-20260609-002: fail-safe floor for low-RR strategies ──
+        # Even with timeout exits, p_win below the RR-implied breakeven is
+        # unconditionally negative EV.  RR < 1.0 means you lose MORE on SL
+        # than you gain on TP, so p_win must be proportionally HIGHER to
+        # compensate.  p_win=0.41 with RR=0.65 → breakeven=0.606 → clearly
+        # negative EV.  DQAF-20260609-002 diagnosed.
         _is_low_rr = _rr_ratio > 0 and _rr_ratio < 1.0
+        _rr_breakeven = 1.0 / (1.0 + _rr_ratio) if _rr_ratio > 0 else 0.5
         if kelly_result.fractional_mult == 0.0 and not _is_low_rr:
             # Hard EV veto — negative expected value trade
             return StrategyDecision(
@@ -1672,6 +1682,33 @@ class StrategyLine:
                 regime_mode=regime_gate_mode,
                 venue="live",
                 reason=f"negative_kelly_ev:p_win={_p_win:.3f}_rr={_rr_ratio:.3f}_kf={kelly_result.kelly_fraction:.3f}",
+                entry_z_score=entry_z_score,
+                entry_half_life=entry_half_life,
+                p_win=_p_win,
+                kelly_mult=0.0,
+            )
+        # ── FIX-20260609-002b: low-RR fail-safe floor ──
+        # For low-RR strategies where Kelly veto is normally skipped
+        # (FIX-086), add an absolute floor: if p_win is below the
+        # RR-implied breakeven, the trade is unconditionally negative EV
+        # regardless of timeout/trailing exit mechanics.
+        if _is_low_rr and _p_win < _rr_breakeven:
+            return StrategyDecision(
+                strategy_name=name,
+                magic=self.config.magic,
+                should_trade=False,
+                direction="neutral",
+                confidence=round(confidence, 4),
+                volume=0.0,
+                sl=levels["stop_loss"],
+                tp=levels["take_profit"],
+                hard_sl=levels["hard_sl"],
+                brain_ids=brain_ids,
+                supporting_count=support_count,
+                total_count=total_count,
+                regime_mode=regime_gate_mode,
+                venue="live",
+                reason=f"negative_ev_low_rr:p_win={_p_win:.3f}_lt_breakeven={_rr_breakeven:.3f}_rr={_rr_ratio:.3f}",
                 entry_z_score=entry_z_score,
                 entry_half_life=entry_half_life,
                 p_win=_p_win,

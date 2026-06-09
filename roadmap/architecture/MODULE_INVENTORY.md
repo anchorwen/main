@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-09T00:46:53Z
-> **扫描模块数**: 485
+> **自动生成**: 2026-06-09T01:26:55Z
+> **扫描模块数**: 486
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -240,7 +240,7 @@
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 11 | 306 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 18 | 2306 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 18 | 2343 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 114 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 7 | 267 | — | |
@@ -465,7 +465,7 @@
 | `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 26 | 6561 | — | |
 | `live_startup.py` | ✅ active | — | 10 | 311 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
-| `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 286 | — | |
+| `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 298 | — | |
 | `reconciliation.py` | ✅ active | — | 2 | 243 | — | |
 | `restart_state.py` | ✅ active | — | 1 | 349 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 16 | — | |
@@ -474,7 +474,7 @@
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |
 | `signal_pipeline.py` | ✅ active | — | 2 | 108 | — | |
 | `strategy_builder.py` | ✅ active | — | 6 | 798 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 2 | 399 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 2 | 414 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 
 ## core/schemas
@@ -545,6 +545,7 @@
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
 | `analyze_live_journal.py` | ✅ active | — | 6 | 517 | — | |
 | `analyze_recent_losses.py` | ✅ active | — | 1 | 315 | — | |
+| `analyze_xau_recent_entries.py` | ✅ active | — | 9 | 456 | — | |
 | `audit_btc_cross_validate.py` | ✅ active | — | 4 | 285 | — | |
 | `audit_data_health.py` | ✅ active | — | 2 | 128 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |

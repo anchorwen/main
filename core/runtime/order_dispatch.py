@@ -146,15 +146,27 @@ def _build_minimal_control_snapshot() -> Any:
 
 
 def _record_brain_outcomes(proposals, direction, execution_outcome, tracker):
-    """Record each brain's performance based on consensus agreement."""
+    """Record each brain's performance based on consensus agreement.
+
+    Compatible with both BrainSignal (new — has .direction/.confidence)
+    and BrainDecisionProposal (old — has .prediction dict).
+    FIX-20260609-002: BrainSignal contract repair.
+    """
     for p in proposals:
-        p_dir = p.prediction.get("direction_bias", "neutral")
+        # ── FIX-20260609-002: BrainSignal compatibility ──
+        # BrainSignal has .direction + .confidence; BrainDecisionProposal
+        # has .prediction dict.  Check hasattr to support both.
+        if hasattr(p, "direction"):
+            p_dir = p.direction
+        else:
+            p_dir = p.prediction.get("direction_bias", "neutral")
+        if hasattr(p, "confidence"):
+            p_conf = p.confidence
+        else:
+            p_conf = p.prediction.get("confidence", 0.0)
+
         matched = p_dir == direction if direction != "neutral" else p_dir == "neutral"
-        composite = (
-            round(0.55 + p.prediction.get("confidence", 0.0) * 0.3, 4)
-            if matched
-            else round(0.25 + p.prediction.get("confidence", 0.0) * 0.2, 4)
-        )
+        composite = round(0.55 + p_conf * 0.3, 4) if matched else round(0.25 + p_conf * 0.2, 4)
         tracker.record_outcome(
             p.brain_id,
             {"composite_score": composite, "execution_outcome": execution_outcome},

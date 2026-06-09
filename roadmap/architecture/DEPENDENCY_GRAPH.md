@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-09T00:46:53Z
+> **自动生成**: 2026-06-09T01:26:55Z
 
 ## Package-Level Dependencies
 
@@ -463,6 +463,7 @@
 - `analyze_deps.py` → (无内部依赖)
 - `analyze_live_journal.py` → (无内部依赖)
 - `analyze_recent_losses.py` → (无内部依赖)
+- `analyze_xau_recent_entries.py` → (无内部依赖)
 - `audit_btc_cross_validate.py` → (无内部依赖)
 - `audit_data_health.py` → (无内部依赖)
 - `backtest_runner.py` → `core.backtest.data_feed`, `core.backtest.engine`, `core.backtest.metrics`, `core.backtest.strategy_adapter`, `core.contracts.strategy_magic`, `core.metrics.brinson_attribution`, `core.metrics.factor_attribution`
