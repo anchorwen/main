@@ -200,8 +200,10 @@ def _build_pit_oof_features(
     oim_divergences = np.zeros(n, dtype=np.float64)
     toxicity_scores = np.zeros(n, dtype=np.float64)
 
-    # Column indices
-    atr_col = feature_names.index("M5_ATR_14") if "M5_ATR_14" in feature_names else 2
+    # Column indices — cross-schema compatible (XAU v9_institutional_40 + BTC btc_macro_enhanced_37)
+    # FIX-20260609-002-BTC: BTC uses D1_ATR_14 not M5_ATR_14, TF_Hurst not M5_Hurst.
+    _atr_name = "M5_ATR_14" if "M5_ATR_14" in feature_names else ("D1_ATR_14" if "D1_ATR_14" in feature_names else None)
+    atr_col = feature_names.index(_atr_name) if _atr_name else 2
     avg_spread_col = feature_names.index("avg_spread") if has_micro else -1
     oim_col = feature_names.index("OIM") if has_micro else -1
     tick_velocity_col = feature_names.index("tick_velocity") if has_micro else -1
@@ -376,15 +378,27 @@ def build_meta_features(
     ts_array = np.asarray(timestamps, dtype=np.float64).ravel() if timestamps is not None else None
 
     if is_binary:
-        # ── Binary mode: drop timeout (y==0), remap {-1→0, 1→1} ──
-        keep_mask = y_dir != 0
-        X = X[keep_mask]
-        y_dir = y_dir[keep_mask]
-        if ts_array is not None:
-            ts_array = ts_array[keep_mask]
-        y_reg = None  # not used in binary mode
-        # Remap: -1 (SL) → 0, 1 (TP) → 1
-        y_binary = np.where(y_dir == -1, 0, 1).astype(np.int32)
+        # ── Binary mode: drop timeout, remap SL→0, TP→1 ──
+        # FIX-20260609-002-BTC: handle both {-1,0,1} (XAU) and {0,1,2} (BTC) label formats.
+        _unique_labels = set(np.unique(y_dir))
+        if _unique_labels == {0, 1, 2}:
+            # BTC format: 0=timeout, 1=TP, 2=SL
+            keep_mask = y_dir != 0
+            X = X[keep_mask]
+            y_dir = y_dir[keep_mask]
+            if ts_array is not None:
+                ts_array = ts_array[keep_mask]
+            y_reg = None
+            y_binary = np.where(y_dir == 1, 1, 0).astype(np.int32)
+        else:
+            # XAU format: -1=SL, 0=timeout, 1=TP
+            keep_mask = y_dir != 0
+            X = X[keep_mask]
+            y_dir = y_dir[keep_mask]
+            if ts_array is not None:
+                ts_array = ts_array[keep_mask]
+            y_reg = None
+            y_binary = np.where(y_dir == -1, 0, 1).astype(np.int32)
         y_target = y_binary.astype(np.float64)
         print(
             f"[meta] Binary mode: dropped {(~keep_mask).sum()} timeout samples, {X.shape[0]} remaining"
@@ -400,8 +414,11 @@ def build_meta_features(
         y_reg = np.asarray(y_reg, dtype=np.float64).ravel()
         y_target = y_reg
         # Stage 2 labels: binary TP/SL
+        # FIX-20260609-002-BTC: handle both {-1,0,1} and {0,1,2} label formats
         unique_labels = set(np.unique(y_dir))
         if unique_labels == {-1, 0, 1}:
+            y_binary = np.where(y_dir == 1, 1, 0).astype(np.int32)
+        elif unique_labels == {0, 1, 2}:
             y_binary = np.where(y_dir == 1, 1, 0).astype(np.int32)
         else:
             y_binary = y_dir
@@ -548,11 +565,14 @@ def build_meta_features(
         meta_names.append("atr_percentile_100")
 
         # 4-5. Vol z-score + Hurst (direct column copies, no lookahead risk)
-        vol_col = feature_names.index("M5_Vol_ZScore") if "M5_Vol_ZScore" in feature_names else 5
+        # FIX-20260609-002-BTC: BTC uses D1_Vol_ZScore / TF_Hurst
+        _vol_name = "M5_Vol_ZScore" if "M5_Vol_ZScore" in feature_names else ("D1_Vol_ZScore" if "D1_Vol_ZScore" in feature_names else None)
+        vol_col = feature_names.index(_vol_name) if _vol_name else 5
         meta_features.append(X[:, vol_col].reshape(-1, 1))
         meta_names.append("vol_zscore")
 
-        hurst_col = feature_names.index("M5_Hurst") if "M5_Hurst" in feature_names else 37
+        _hurst_name = "M5_Hurst" if "M5_Hurst" in feature_names else ("TF_Hurst" if "TF_Hurst" in feature_names else None)
+        hurst_col = feature_names.index(_hurst_name) if _hurst_name else 34
         meta_features.append(X[:, hurst_col].reshape(-1, 1))
         meta_names.append("hurst_m5")
 
@@ -649,18 +669,23 @@ def build_meta_features(
         meta_names.append("oof_pred_zscore_20")
 
         # 3. ATR percentile (post-hoc rolling, not PiT)
-        atr_col = feature_names.index("M5_ATR_14") if "M5_ATR_14" in feature_names else 2
+        # FIX-20260609-002-BTC: BTC uses D1_ATR_14
+        _atr_name2 = "M5_ATR_14" if "M5_ATR_14" in feature_names else ("D1_ATR_14" if "D1_ATR_14" in feature_names else None)
+        atr_col = feature_names.index(_atr_name2) if _atr_name2 else 2
         atr_values = X[:, atr_col]
         atr_pct = _compute_atr_percentile(atr_values).reshape(-1, 1)
         meta_features.append(atr_pct)
         meta_names.append("atr_percentile_100")
 
         # 4-5. Vol zscore + Hurst
-        vol_col = feature_names.index("M5_Vol_ZScore") if "M5_Vol_ZScore" in feature_names else 5
+        # FIX-20260609-002-BTC: BTC uses D1_Vol_ZScore / TF_Hurst
+        _vol_name2 = "M5_Vol_ZScore" if "M5_Vol_ZScore" in feature_names else ("D1_Vol_ZScore" if "D1_Vol_ZScore" in feature_names else None)
+        vol_col = feature_names.index(_vol_name2) if _vol_name2 else 5
         meta_features.append(X[:, vol_col].reshape(-1, 1))
         meta_names.append("vol_zscore")
 
-        hurst_col = feature_names.index("M5_Hurst") if "M5_Hurst" in feature_names else 37
+        _hurst_name2 = "M5_Hurst" if "M5_Hurst" in feature_names else ("TF_Hurst" if "TF_Hurst" in feature_names else None)
+        hurst_col = feature_names.index(_hurst_name2) if _hurst_name2 else 34
         meta_features.append(X[:, hurst_col].reshape(-1, 1))
         meta_names.append("hurst_m5")
 

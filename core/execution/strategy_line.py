@@ -1033,7 +1033,7 @@ class StrategyLine:
         # (0.41) which bypassed MetaFilter gate entirely.  DQAF-20260609-002 diagnosed.
         if (
             meta_filter is not None
-            and ("statarb" in name or name in ("m15_swing", "m30_swing", "h1_swing", "h4_swing"))
+            and ("statarb" in name or name in ("m15_swing", "m30_swing", "h1_swing", "h4_swing", "btc_swing"))
             and _meta_p_win is None
         ):
             try:

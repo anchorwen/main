@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "saved_at_utc": "2026-06-09T01:24:44.008500",
+  "saved_at_utc": "2026-06-09T06:34:44.237524",
   "budgets": {
     "btc_swing": {
       "daily_pnl_pct": 0.0,
@@ -15,7 +15,15 @@
       "_sl_paused_rest_of_day": false
     }
   },
-  "cooldown_registry": {},
+  "cooldown_registry": {
+    "btc_swing": {
+      "deadline": 1780982080.9859922,
+      "cooldown_sec": 300,
+      "type": "passive_1x_tf",
+      "exit_reason": "ev_trajectory_btc_swing_gamma1.0_t7%_r-0.51_lt_-0.44",
+      "exit_direction": "long"
+    }
+  },
   "family_entry_tracker": {},
   "sl_streak_blocks": {},
   "sl_streak_global_block": 0.0,

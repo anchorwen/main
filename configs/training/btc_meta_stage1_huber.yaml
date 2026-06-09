@@ -1,0 +1,61 @@
+schema_version: "training_contract.v2.1"
+contract_id: "btc_meta_stage1_huber"
+
+# ── FIX-20260609-002-BTC: BTC MetaFilter Stage 1 training contract ──
+# Uses phase5b dataset (37-dim btc_macro_enhanced_37) — the same schema
+# used by BTC_Swing_V5/V6/V7/V8 brain training.  Stage 1 Huber regression
+# generates OOF BPS predictions → consumed by build_meta_features.py to
+# build Stage 2 meta-features.
+
+dataset:
+  path: "data_btc/training/phase5b/train.npz"
+  feature_schema: "btc_macro_enhanced_37"
+  min_samples_per_class: 100
+  sample_weighting: "balanced"
+
+label:
+  contract_id: "label-binary-barrier-btc-1.0.0"
+  sl_atr_mult: 2.0
+  tp_atr_mult: 2.5
+  horizon_bars: 12
+  profitability_calibrated: false
+  label_mapping: "binary"  # binary for MetaFilter — 1=TP, 0=non-TP
+  spread_points: 30
+  slippage_points: 10
+  tick_size: 0.01
+  tick_value: 0.01
+
+architecture:
+  type: "lightgbm"
+  objective_function: "reg_huber"
+  search_space: "default"
+  optuna_trials: 30
+  n_seeds: 3
+  custom_params:
+    num_leaves: 31
+    learning_rate: 0.03
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 5
+    min_data_in_leaf: 20
+    lambda_l1: 0.1
+    lambda_l2: 0.1
+    huber_delta: 1.0
+
+validation:
+  method: "kfold"  # no timestamps in BTC NPZ — fall back to shuffled KFold
+  n_splits: 5
+
+quality_gates:
+  min_train_sharpe: 0.25  # relaxed — Stage 1 is feature generator, not final model
+  min_train_win_rate: 0.45
+  model_type: tree
+  max_overfit_gap: 1.5
+
+output:
+  brain_id_template: "btc_meta_stage1_{timestamp}"
+  model_dir: "data_btc/models"
+  config_dir: "configs/brains_btc"
+  registry_db: "data_btc/training/registry.db"
+  auto_register: false
+  initial_status: "shadow"
