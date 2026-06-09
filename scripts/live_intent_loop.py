@@ -212,6 +212,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="ATR multiple to trigger breakeven SL move (default: 1.0)",
     )
     p.add_argument(
+        "--exit-trail-activation-atr",
+        type=float,
+        default=1.0,
+        help="Trail only activates after unrealized profit exceeds this many ATRs (default: 1.0, FIX-20260609-004)",
+    )
+    p.add_argument(
         "--exit-brain-reeval-interval",
         type=int,
         default=1,
@@ -1057,11 +1063,27 @@ def main(argv: list[str] | None = None) -> int:
     if not args.disable_exit_management and not args.no_mt5 and _broker is not None:
         from core.execution.position_manager import ActivePositionManager
 
+        # FIX-20260609-004: Read exit_management from YAML config to override
+        # arg defaults.  Previously the entire exit_management section was dead
+        # config — never read by any code path.  trail_activation_atr was
+        # hardcoded to TrailPolicy default (1.0) ignoring YAML (0.3).
+        _yaml_trail_activation_atr = args.exit_trail_activation_atr
+        if hasattr(args, "config") and args.config:
+            try:
+                import yaml as _yaml_exit
+                with open(args.config, encoding="utf-8") as _fh_exit:
+                    _exit_cfg = _yaml_exit.safe_load(_fh_exit).get("exit_management", {})
+                if isinstance(_exit_cfg, dict) and "trail_activation_atr" in _exit_cfg:
+                    _yaml_trail_activation_atr = float(_exit_cfg["trail_activation_atr"])
+            except Exception:  # noqa: BLE001
+                pass
+
         position_manager = ActivePositionManager(
             trail_atr_mult=args.exit_trail_atr_mult,
             trail_atr_mult_low=args.exit_trail_atr_mult_low,
             trail_atr_mult_high=args.exit_trail_atr_mult_high,
             breakeven_threshold_atr=args.exit_breakeven_atr,
+            trail_activation_atr=_yaml_trail_activation_atr,  # FIX-20260609-004
             brain_reeval_interval=args.exit_brain_reeval_interval,
             flip_exit_threshold=args.exit_flip_threshold,
             confidence_drop_threshold=args.exit_confidence_drop,
