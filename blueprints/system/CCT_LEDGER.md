@@ -372,3 +372,23 @@
 - **是否被推翻**: 否 — AR 反证确认：BTC 信号质量正常（confidence>0.74, p_win>0.45），hesitation 后 confidence 从 0.5 提升到 0.75（+50%），实为合理重入时机。死锁非市场质量导致，纯为代码边界条件缺陷。
 - **关联 ReB Pattern**: ReB-20260609-001 (`HESITATION_PERMANENT_DEADLOCK`)
 - **关联 FIX**: FIX-20260609-001
+
+---
+
+### CCT-20260609-001-B: Breakeven Floor Trail Deadlock (DQAF-20260609-001 sub-finding)
+
+- **Docket ID**: DQAF-20260609-001
+- **发现日期**: 2026-06-09
+- **严重等级**: Sev 2 — 出场质量退化，保本后利润保护失效
+- **因果链**:
+  - **Layer 1 — 症状** (confirmed): BTC trade 3809501680 bar 16-23 共 8 根 bar，`trail_sl_candidate: null`，SL 锁死 62924。只有 TP 单向收紧。入场后价格继续涨了 +$306，仓位只能通过 TP 被命中出场，而非通过 trailing SL 逐步锁利。
+    - Source 1: `management_phase_diag` 日志 — bar 16-23 全部 `trail_sl_candidate: null, trail_fired: false`
+    - Source 2: `live_trade_journal.jsonl` — SL 从 bar 15 dispatch 后始终 62923.98
+  - **Layer 2 — 中间异常** (confirmed): `trail_stop_engine.py:158` — `max(candidate, entry_price)` + `candidate <= current_sl + min_step` 形成双重锁定。`highest_high` 停滞在 63313，但 Chandelier 需要 `trail_mult * ATR` 的利润缓冲才能突破保本地板。trail_mult=2.5 + ATR≈185 → 需要 ~460 pts 利润。最高只到 389 pts。candidate 被地板抬到 62951, 但 62951 ≤ 62924 + 0.15 → return None。
+    - Source 3: `trail_stop_engine.py` L161-173 — 完整的循环死锁代码路径
+  - **Layer 3 — 根因 (RC-05)** (confirmed): trail_mult 是**静态常量** — 从入场到出场永远不变（regime-given 2.5）。没有随着利润积累而收紧的机制。保本前的大 multiplier 是为了防止水下仓位被过早止损——这是正确的。但保本后仓位已经安全，multiplier 应该变小以允许 trail 逐步锁利。静态 multiplier 无法区分"水下求生"和"水上锁利"两个阶段。
+    - Source 4: `trail_stop_engine.py` L158 (旧) — `effective_mult = max(tp.min_trail_mult, pos.trail_multiplier)` — trail_multiplier 只被 regime gate 调整，永不考虑利润
+- **修复** (FIX-20260609-003): 新增 `_compute_decayed_mult()` — trail_mult 随 R-max 从 base 平滑衰减到 min_trail_mult(R: 0.5→2.0)。`TrailPolicy` 新增 `decay_start_r, decay_full_r, decay_enabled`。
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260609-001-B (`BREAKEVEN_FLOOR_TRAIL_DEADLOCK`)
+- **关联 FIX**: FIX-20260609-003

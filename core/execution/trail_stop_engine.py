@@ -60,6 +60,15 @@ class TrailPolicy:
         (3.0, 1.5),  # at +3R peak, SL floor >= +1.5R
         (5.0, 3.5),  # at +5R peak, SL floor >= +3.5R
     )
+    # DQAF-20260609-001: Non-linear dynamic decay — profit-aware trail tightening.
+    # Multiplier decays from base to min_trail_mult as R-multiple grows from
+    # decay_start_r to decay_full_r.  Prevents the "breakeven floor deadlock"
+    # where Chandelier trail can never exceed entry_price because trail_mult
+    # is too wide for the profit earned.  Also prevents premature stops right
+    # after breakeven by keeping the trail relaxed at low R.
+    decay_start_r: float = 0.5  # R-multiple where decay begins
+    decay_full_r: float = 2.0  # R-multiple where decay completes (trail hits min_mult)
+    decay_enabled: bool = True  # set False to restore pre-009 behavior
 
 
 # ── Trail Stop Engine ──────────────────────────────────────────────────────
@@ -81,6 +90,43 @@ class TrailStopEngine:
         self.pnl_store = pnl_store
 
     # ── Public API ─────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _compute_decayed_mult(pos: ActivePosition, tp: TrailPolicy) -> float:
+        """Profit-aware nonlinear decay of trail multiplier.
+
+        DQAF-20260609-001: As a position accumulates profit, the trail
+        multiplier smoothly decays from the regime-given base to min_trail_mult.
+        This prevents the "breakeven floor deadlock" where Chandelier trail
+        can never exceed entry_price because the multiplier is too wide for
+        the profit earned.
+
+        Decay is linear in R-space between decay_start_r and decay_full_r:
+          - R < decay_start_r:  keep base multiplier (room to breathe)
+          - R > decay_full_r:   use min_trail_mult  (lock in profits)
+          - Between:            linear interpolation
+
+        The effective_mult is then capped by max(min_trail_mult, decayed_value).
+        """
+        base_mult = max(tp.min_trail_mult, pos.trail_multiplier)
+        if not tp.decay_enabled or pos.entry_atr <= 0:
+            return base_mult
+
+        # R_max from highest_high or lowest_low
+        if pos.side == "long":
+            r_max = (pos.highest_high - pos.entry_price) / pos.entry_atr
+        else:
+            r_max = (pos.entry_price - pos.lowest_low) / pos.entry_atr
+
+        if r_max < tp.decay_start_r:
+            return base_mult
+        if r_max > tp.decay_full_r:
+            return tp.min_trail_mult
+
+        # Linear interpolation
+        ratio = (r_max - tp.decay_start_r) / (tp.decay_full_r - tp.decay_start_r)
+        decayed = base_mult - ratio * (base_mult - tp.min_trail_mult)
+        return max(tp.min_trail_mult, decayed)
 
     def compute_trail_stop(self, pos: ActivePosition, current_atr: float) -> float | None:
         """Return new SL if the trail has advanced, else None.
@@ -109,7 +155,7 @@ class TrailStopEngine:
             if _unrealized_r < tp.trail_activation_atr:
                 return None  # not enough profit yet — keep initial SL
 
-        effective_mult = max(tp.min_trail_mult, pos.trail_multiplier)
+        effective_mult = self._compute_decayed_mult(pos, tp)
 
         if pos.side == "long":
             candidate = pos.highest_high - effective_mult * current_atr

@@ -263,3 +263,21 @@
   3. 架构审计：每季度运行全类别保护扫描，确保无遗漏
 - **关联 CCT**: CCT-20260609-001
 - **关联 FIX**: FIX-20260609-001
+
+---
+
+### ReB-20260609-001-B: `BREAKEVEN_FLOOR_TRAIL_DEADLOCK`
+
+- **发现日期**: 2026-06-09
+- **发现环境**: BTCUSDc 实盘 — trade 3809501680，保本后 SL 锁死 23 根 bar
+- **模式描述**: 保本止损触发后，trail_stop_engine 的 Chandelier 公式要求 `highest_high - trail_mult × ATR > entry_price` 才能让 SL 突破保本地板。当 trail_mult 是静态常量（如 regime-given 2.5）且 ATR 较高时，需要的利润缓冲可能超过仓位实际能达到的最高点。此时 `max(candidate, entry_price)` 将 candidate 锁定在 entry_price，`candidate ≤ current_sl + min_step` 返回 None — 数学死锁形成。SL 永远不动，只有 TP 单向收紧。
+- **关联 FIX IDs**: FIX-20260609-003
+- **关联 Docket IDs**: DQAF-20260609-001
+- **预防策略**:
+  1. **trail_mult 必须随利润动态衰减** — 水下求生用大乘数（2.5x），水上锁利用小乘数（1.2x）。线性插值连接两者
+  2. **所有"地板"逻辑必须配套"突破"机制** — breakeven floor 保护本金，但必须有路径让 trail 在利润积累后突破地板
+  3. **静态参数 + 阈值 = 死锁风险** — `static_mult > profit / ATR` 是死锁的充要条件，必须有一个动态衰减变量打破不等式
+- **检测方法**:
+  1. 运行时监控：`management_phase_diag` 中 `trail_sl_candidate: null` 连续 ≥ 10 bars → 告警
+  2. 回测检查：搜索 `breakeven_triggered=true + trail_fired=false` 持续超过半衰期的仓位
+  3. 单元测试：验证 R=1.0, 1.5, 2.0, 3.0 时 trail 均有非 null candidate

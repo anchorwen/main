@@ -139,28 +139,35 @@ def test_trail_stop_moves_down_for_short(short_position, manager):
 
 
 def test_trail_stop_never_moves_backward_long(long_position, manager):
-    """SL should not go down for a long when price retreats.
+    """SL should not go down for a long when price retreats — but CAN
+    advance via nonlinear decay when R-max is high enough.
 
-    With graduated lock disabled, trail SL stays when highest_high unchanged.
+    DQAF-20260609-001: With decay, trail_mult tightens at high R.
+    At R=2.0, trail_mult has decayed to min_mult=1.2 → candidate=2504 > 2500.
+    The trail advances, which is the CORRECT profit-locking behavior.
     """
     manager.graduated_lock_enabled = False
     pos = manager._position = long_position
-    pos.highest_high = 2510.0
-    pos.current_sl = 2500.0  # already trailed up
-    # Now price retreats but highest_high stays 2510
+    pos.highest_high = 2510.0  # +10 pts = +2.0R (entry_price=2500, entry_atr=5)
+    pos.current_sl = 2500.0    # already trailed up
+    # R_max = (2510-2500)/5 = 2.0 → fully decayed to min_trail_mult=1.2
+    # candidate = 2510 - 1.2*5 = 2504 > 2500 → trail advances
     new_sl = manager.compute_trail_stop(current_atr=5.0)
-    # candidate still = 2510 - 10 = 2500, which == current_sl, so None
-    assert new_sl is None
+    assert new_sl == 2504.0  # trail advances via decayed multiplier
 
 
 def test_graduated_lock_advances_sl_at_3r_long(long_position, manager):
-    """At +3R peak, graduated lock raises SL floor to +1.5R."""
+    """At +3R peak, graduated lock raises SL floor to +1.5R.
+
+    DQAF-20260609-001: With decay, trail_mult has fully decayed to 1.2 at R=3.0.
+    candidate = 2515 - 1.2*5 = 2509, graduated lock floor = 2507.5.
+    max(2509, 2507.5) = 2509 (candidate from decayed trail wins over lock floor).
+    """
     pos = manager._position = long_position
     pos.highest_high = 2515.0  # +15 = 3R at entry_atr=5.0
     pos.current_sl = 2500.0  # at breakeven
     new_sl = manager.compute_trail_stop(current_atr=5.0)
-    # candidate = 2515 - 10 = 2505, graduated lock at 3R: floor = 2500 + 1.5*5 = 2507.5
-    assert new_sl == 2507.5
+    assert new_sl == 2509.0
 
 
 def test_trail_stop_none_when_no_improvement(long_position, manager):
@@ -172,15 +179,21 @@ def test_trail_stop_none_when_no_improvement(long_position, manager):
 
 
 def test_trail_stop_after_breakeven_long(long_position, manager):
-    """After breakeven, SL cannot go below entry price."""
+    """After breakeven: SL floored at entry_price, advances with decay.
+
+    DQAF-20260609-001: Nonlinear decay allows trail to break through
+    the breakeven floor once R-max provides enough multiplier decay.
+    At R=1.6, trail_mult has decayed to ~1.41 → candidate=2500.93 > 2500.
+    """
     pos = manager._position = long_position
     pos.breakeven_triggered = True
-    pos.highest_high = 2508.0
-    pos.current_sl = 2500.0
+    pos.highest_high = 2508.0  # +8 pts = +1.6R
+    pos.current_sl = 2500.0    # at breakeven
     new_sl = manager.compute_trail_stop(current_atr=5.0)
-    # candidate = max(entry, 2508 - 10) = max(2500, 2498) = 2500
-    # 2500 == current_sl, so None
-    assert new_sl is None
+    # R_max = 1.6 → decayed_mult = 2.0 - (1.1/1.5)*0.8 ≈ 1.413
+    # candidate = max(entry, 2508 - 1.413*5) = max(2500, 2500.93) = 2500.93
+    # 2500.93 > 2500 + 0.15 → trail advances via decay
+    assert new_sl == pytest.approx(2500.933, abs=0.01)
 
 
 def test_trail_stop_above_breakeven_long(long_position, manager):
