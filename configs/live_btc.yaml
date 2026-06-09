@@ -23,6 +23,11 @@ brains:
     enabled: true
   - path: configs/brains_btc/BTC_Swing_V8_MultiTF_LGB_v1.json
     enabled: true
+  # ── FIX-20260609-012: V9/V10 next-gen survival brains (shadow) ──
+  - path: configs/brains_btc/BTC_Swing_V9_H1_Survival.json
+    enabled: true
+  - path: configs/brains_btc/BTC_Swing_V10_M15_Survival.json
+    enabled: true
 gate:
   gate_policy_config: configs/live_gate_policy.json
   auto_recovery:
