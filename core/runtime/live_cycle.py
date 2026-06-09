@@ -2250,6 +2250,8 @@ def _evaluate_strategy_lines(
     # ── FIX-20260606-138: Fail-Closed on bootstrap degradation ──
     bootstrap_degraded: bool = False,
     btc_augment: Any = None,  # FIX-20260607-XXX: pre-computed 37-dim BTC vector
+    # ── FIX-20260609-011: governance degradation gate ──
+    governance_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue."""
     from core.runtime.strategy_evaluator import evaluate_strategy_lines as _impl
@@ -2300,6 +2302,7 @@ def _evaluate_strategy_lines(
         reentry_bleed_penalty=reentry_bleed_penalty,
         bootstrap_degraded=bootstrap_degraded,
         btc_augment=btc_augment,  # FIX-20260607-XXX
+        governance_state=governance_state,
     )
 
 
@@ -4673,6 +4676,20 @@ def execute_live_cycle(
                     _btc_tb2.format_exc(),
                 )
 
+        # ── FIX-20260609-011: load governance state for degradation gate ──
+        # Read once per cycle so the governance degradation gate sees the
+        # latest brain status transitions (daily_ops updates this file).
+        _gov_state: dict[str, Any] | None = None
+        try:
+            _gov_path = Path(config.base_dir) / "governance_state.json"
+            if _gov_path.exists():
+                import json as _json_gov
+
+                _gov_raw = _json_gov.loads(_gov_path.read_text(encoding="utf-8"))
+                _gov_state = _gov_raw.get("brain_states", {})
+        except Exception:  # noqa: BLE001
+            _gov_state = None  # Non-fatal: gate silently skips if unreadable
+
         # Evaluate all strategy lines
         eval_summary = _evaluate_strategy_lines(
             strategy_lines=strategies,
@@ -4724,6 +4741,7 @@ def execute_live_cycle(
             # ── FIX-20260606-138: Fail-Closed on bootstrap degradation ──
             bootstrap_degraded=getattr(state, "_bootstrap_degraded", False),
             btc_augment=_btc_aug,  # FIX-20260607-XXX
+            governance_state=_gov_state,
         )
 
         # ── Golden Master recording: capture outputs after evaluation ──

@@ -70,6 +70,8 @@ def evaluate_strategy_lines(
     # ── FIX-20260606-138: bootstrap degraded flag (Fail-Closed) ──
     bootstrap_degraded: bool = False,
     btc_augment: Any = None,  # FIX-20260607-XXX: pre-computed 37-dim BTC vector
+    # ── FIX-20260609-011: governance degradation gate ──
+    governance_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue.
 
@@ -289,6 +291,60 @@ def evaluate_strategy_lines(
                     ),
                     flush=True,
                 )
+
+        # ── Cut 4: Governance degradation gate (FIX-20260609-011) ──────────
+        # When NO brain in this strategy has achieved "live" status, the
+        # strategy is trading with unproven (candidate) or degraded
+        # (probation/frozen) models.  Degrade to minimum exploration volume
+        # and require higher confidence to prevent "cadet brains driving
+        # heavy mechs" (observed: 4 candidate brains, 0.1 lot, -$30/day).
+        if decision.should_trade and governance_state is not None:
+            _strat_brains = getattr(strategy, "brains", []) or []
+            _live_count = sum(
+                1
+                for _b in _strat_brains
+                if governance_state.get(_b.get("brain_id", ""), {}).get("status") == "live"
+            )
+            if _live_count == 0:
+                _degraded_confidence_floor = 0.50
+                _degraded_max_volume = 0.01
+                if decision.confidence < _degraded_confidence_floor:
+                    decision.should_trade = False
+                    decision.reason = "no_live_brains_and_low_confidence"
+                    print(
+                        json.dumps(
+                            {
+                                "event": "governance_degraded_blocked",
+                                "time": _utc_iso(),
+                                "strategy": sname,
+                                "direction": decision.direction,
+                                "confidence": round(decision.confidence, 4),
+                                "live_brains": 0,
+                                "reason": decision.reason,
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                else:
+                    decision.volume = min(decision.volume, _degraded_max_volume)
+                    decision.reason = (decision.reason or "") + " [degraded: no_live_brains]"
+                    print(
+                        json.dumps(
+                            {
+                                "event": "governance_degraded_volume",
+                                "time": _utc_iso(),
+                                "strategy": sname,
+                                "direction": decision.direction,
+                                "confidence": round(decision.confidence, 4),
+                                "volume": decision.volume,
+                                "live_brains": 0,
+                                "reason": decision.reason,
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
 
         # Apply session + health volume multipliers
         if decision.should_trade:

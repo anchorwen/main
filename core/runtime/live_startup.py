@@ -217,6 +217,38 @@ def apply_governance_filter(
                 flush=True,
             )
 
+        # ── FIX-20260609-011: candidate brain penalty ────────────────────
+        # candidate brains have NEVER demonstrated profitability — they are
+        # newly registered and unproven.  Previously candidate received full
+        # vote_weight while probation (formerly live, now degraded) was
+        # penalised 0.5× — a logical inversion.  candidate now receives the
+        # same 0.5× penalty as probation so that unproven brains don't
+        # dominate the ensemble vote.
+        if status == "candidate":
+            entry = dict(entry)
+            original_weight = entry.get("vote_weight", 1.0)
+            entry["vote_weight"] = round(original_weight * 0.5, 4)
+            entry["_governance_status"] = "candidate"
+            report["penalized"].append(
+                {
+                    "brain_id": brain_id,
+                    "original_weight": original_weight,
+                    "new_weight": entry["vote_weight"],
+                }
+            )
+            print(
+                json.dumps(
+                    {
+                        "event": "brain_governance_penalty",
+                        "brain_id": brain_id,
+                        "status": status,
+                        "vote_weight": entry["vote_weight"],
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+
         report["kept"].append(brain_id)
         filtered.append(entry)
 

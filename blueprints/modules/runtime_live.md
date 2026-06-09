@@ -76,6 +76,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260609-011 | 2026-06-09 | cursor-agent | — | **Governance degradation gate**: governance_state.json read per-cycle → strategy_evaluator checks live brain count → zero live → degrade. DQAF-20260609-011. | RC-07 |
 | FIX-20260609-010 | 2026-06-09 | cursor-agent | — | **Budget counter reset every cycle**: `_build_strategy_lines()` → fresh StrategyBudget every cycle, `restore_execution_state()` only cycle 1 → all cumulative breakers dead cycles 2+. Fix: per-cycle budget restore from disk before pending records. DQAF-20260609-001. | RC-03 |
 | FIX-20260609-007 | 2026-06-09 | cursor-agent | — | **Trail dispatch Strangler Fig extraction (P0)**: `compute_and_dispatch_trail()` → `core/runtime/trail_dispatch.py`. Handles trail SL, breakeven, trail TP, diag, snapshots, dispatch. `live_cycle.py`: 6565→6169 (-396). | RC-08 |
 | FIX-20260609-005 | 2026-06-09 | cursor-agent | — | **Per-strategy trail_activation_atr**: `register_position` + `live_cycle.py` dispatch wire `_exit_cfg.trail_activation_atr` → per-position `TrailPolicy`. 9 strategies calibrated (statarb=0.3, swing=0.4-0.8, btc=0.5). | RC-09 |

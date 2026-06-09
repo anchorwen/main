@@ -49,6 +49,7 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260609-011 | 2026-06-09 | cursor-agent | — | **Governance degradation gate**: When zero live brains in a strategy, confidence floor 0.50 + volume cap 0.01. candidate brains penalised vote_weight×0.5. DQAF-20260609-011. | RC-07 |
 | FIX-20260609-010 | 2026-06-09 | cursor-agent | — | **Budget counter reset every cycle**: `_build_strategy_lines()` (live_cycle.py) creates fresh StrategyBudget objects every cycle, but `restore_execution_state()` only ran on cycle 1. Cycles 2+ ran with zeroed daily PnL, consecutive losses, and SL cooldown counters → all cumulative circuit breakers permanently disabled after first cycle. Fix: restore budget state from disk EVERY cycle before pending records are fed. DQAF-20260609-001. | RC-03 |
 | FIX-20260608-007 | 2026-06-08 | agent | — | **S3 Functional Core extraction**: `pwin_chain.py` (new) — extracted `resolve_p_win_from_brains()` from `kelly_sizer.py` and `adjust_p_win_for_regime()` from `strategy_line.py` into shared pure-function module. kelly_sizer delegates to pwin_chain. MODULE_SOURCE_MAP updated. | RC-12 |
 | FIX-20260605-127 | 2026-06-05 | cursor-agent | d9d9f49 | **discover_probe_specs() hardened**: Now skips brains with status=archived/frozen or vote_weight=0.0. Prevents Meta Pipeline from wiring dead probes after FIX-125 archival. | RC-11 |
