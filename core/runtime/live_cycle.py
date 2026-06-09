@@ -23,9 +23,6 @@ from core.brains.brain_registry import BrainRegistry
 from core.execution.execution_queue import ExecutionQueue
 from core.execution.portfolio_risk import PortfolioRiskController
 from core.execution.regime_gate import RegimeGate
-
-# ── Strategy line imports ──
-# ── Extracted sub-modules (P2 refactor) ──
 from core.market.mtf_price_service import MTFPriceService
 from core.parliament.contract_groups import (
     ARB_GROUP,
@@ -40,6 +37,10 @@ from core.runtime.fault_handler import (
     fail_open_guard,
     log_and_continue,
 )
+
+# ── Strategy line imports ──
+# ── Extracted sub-modules (P2 refactor) ──
+from core.runtime.trail_dispatch import compute_and_dispatch_trail
 
 logger = logging.getLogger(__name__)
 from core.runtime.market_ingress import (  # noqa: F401 — re-export
@@ -954,188 +955,26 @@ def _execute_management_phase(
         m5_spread_points=_m5_spread,
     )
 
-    # ── 4-5.2: Trail SL, breakeven, trail TP — computed separately,
-    # dispatched as a SINGLE modify_sltp to prevent MT5 rejecting
-    # back-to-back requests for the same ticket (retcode 10006). ──
-    _final_sl = pos.current_sl
-    _final_tp = pos.current_tp
-    _reasons: list[str] = []
-    _old_sl = pos.current_sl
-    _old_tp = pos.current_tp
-    _trail_sl: float | None = None
-    _be_triggered = False
-    _be_dispatched = False
-
-    # Layer 1: Chandelier trailing stop
-    # FIX-20260524-002: respect min_hold_cycles so trailing stop does not
-    # tighten the hard SL before the position has had reasonable time to
-    # develop.  Previously Layer 1 ran from cycle 1 with no protection,
-    # causing exits at 0.5-1.0R instead of the designed 2.0R SL for
-    # strategies whose breakeven threshold was not reached in time.
-    #
-    # FIX-20260527-004: cold_explore bypass — forced exploration trades must
-    # run to hard SL or hard TP to collect uncensored labels for ConformalOU
-    # online calibration.  Trailing stops would produce truncated data.
-    if not getattr(pos, "cold_explore", False):
-        _trail_sl = pm.compute_trail_stop(current_atr, ticket=pos.ticket)
-        if _trail_sl is not None and abs(_trail_sl - pos.current_sl) >= config.exit_min_step:
-            if pos.cycles_held >= pm.min_hold_cycles:
-                _reasons.append("trail")
-                _final_sl = _trail_sl
-    else:
-        _trail_sl = None
-
-    # Breakeven check — only fires once per position
-    if not pos.breakeven_triggered and pm.should_breakeven(mid, current_atr, ticket=pos.ticket):
-        _be_triggered = True
-        _be_sl = pos.entry_price
-        _be_improves = (pos.side == "long" and _be_sl > _final_sl) or (
-            pos.side == "short" and _be_sl < _final_sl
-        )
-        if _be_improves:
-            _reasons.append("breakeven")
-            _final_sl = _be_sl
-            _be_dispatched = True
-        pos.breakeven_triggered = True
-
-    # Dynamic trailing TP — tightens when ATR contracts
-    _trail_tp = pm.compute_trail_tp(current_atr, ticket=pos.ticket)
-    if _trail_tp is not None and abs(_trail_tp - pos.current_tp) >= config.exit_min_step:
-        _reasons.append("tp")
-        _final_tp = _trail_tp
-
-    # ── Diagnostic: log trail/breakeven decision details every cycle ──
-    print(
-        json.dumps(
-            {
-                "event": "management_phase_diag",
-                "time": _utc_iso(),
-                "ticket": pos.ticket,
-                "side": pos.side,
-                "entry": round(pos.entry_price, 3),
-                "lowest_low": round(pos.lowest_low, 3),
-                "highest_high": round(pos.highest_high, 3),
-                "current_sl": round(pos.current_sl, 3),
-                "current_tp": round(pos.current_tp, 3),
-                "trail_mult": round(pos.trail_multiplier, 4),
-                "current_atr": round(current_atr, 4),
-                "entry_atr": round(pos.entry_atr, 4),
-                "trail_sl_candidate": round(_trail_sl, 3) if _trail_sl is not None else None,
-                "trail_fired": _trail_sl is not None
-                and abs(_trail_sl - pos.current_sl) >= config.exit_min_step,
-                "breakeven_fired": _be_triggered,
-                "breakeven_improves": _be_dispatched,
-                "cycles_held": pos.cycles_held,
-                "breakeven_triggered_flag": pos.breakeven_triggered,
-                "final_sl": round(_final_sl, 3),
-                "final_tp": round(_final_tp, 3),
-                "reasons": _reasons,
-                "exit_min_step": config.exit_min_step,
-                "pm_min_step": getattr(pm, "min_step", "N/A"),
-            },
-            ensure_ascii=False,
-        ),
-        flush=True,
+    # ── 4-5.2: Trail SL, breakeven, trail TP ──
+    # Strangler Fig #11: extracted to core/runtime/trail_dispatch.py
+    _trail_result = compute_and_dispatch_trail(
+        config=config,
+        pos=pos,
+        pm=pm,
+        state=state,
+        mid=mid,
+        current_atr=current_atr,
+        strategy_name=_sname,
+        utc_iso_fn=_utc_iso,
+        dispatch_modify_trail_fn=_dispatch_modify_trail,
     )
-    # ── Phase 2: Position snapshot for meta-classifier training ──
-    # Records per-cycle state: bars_held, unrealized PnL in R-units,
-    # volatility change, trailing SL distance.  Used by MetaExit to
-    # learn dynamic exit timing from real position trajectories.
-    _pnl_r = 0.0
-    if mid is not None and pos.entry_price > 0 and pos.entry_atr > 0:
-        _pnl_r = (
-            (mid - pos.entry_price) / pos.entry_atr
-            if pos.side == "long"
-            else (pos.entry_price - mid) / pos.entry_atr
-        )
-    _vol_change = round(current_atr / pos.entry_atr, 4) if pos.entry_atr > 0 else 1.0
-    _trail_dist = round(abs(pos.current_sl - pos.entry_price), 3) if pos.current_sl > 0 else 0.0
-    with log_and_continue(component="PositionSnapshot:record"):
-        _snap_path = Path(config.base_dir) / "position_snapshots.jsonl"
-        _snap = json.dumps(
-            {
-                "ticket": pos.ticket,
-                "time": _utc_iso(),
-                "bars_held": pos.cycles_held,
-                "unrealized_pnl_r": round(_pnl_r, 6),
-                "current_volatility": _vol_change,
-                "trailing_sl_distance": _trail_dist,
-                "current_atr": round(current_atr, 4),
-                "entry_atr": round(pos.entry_atr, 4),
-            },
-            ensure_ascii=False,
-        )
-        _snap_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(_snap_path, "a", encoding="utf-8") as _sf:
-            _sf.write(_snap + "\n")
-    # ── Single dispatch (prevents MT5 retcode 10006 rejections) ──
-    _sl_changed = abs(_final_sl - pos.current_sl) >= config.exit_min_step
-    _tp_changed = abs(_final_tp - pos.current_tp) >= config.exit_min_step
-    if _reasons:
-        _dispatch_modify_trail(
-            config,
-            pos,
-            _final_sl,
-            _final_tp,
-            reason="+".join(_reasons),
-            brain_ids=pos.supporting_brain_ids,
-            strategy_name=_sname,
-            state=state,
-        )
-        # Update local state and log AFTER dispatch
-        if _sl_changed:
-            pos.current_sl = _final_sl
-            print(
-                json.dumps(
-                    {
-                        "event": "trail_stop_moved",
-                        "time": _utc_iso(),
-                        "ticket": pos.ticket,
-                        "side": pos.side,
-                        "old_sl": round(_old_sl, 3),
-                        "new_sl": round(_final_sl, 3),
-                        "highest_high": round(pos.highest_high, 3),
-                        "trail_mult": pos.trail_multiplier,
-                        "merged_reasons": "+".join(_reasons),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-        if _tp_changed:
-            pos.current_tp = _final_tp
-            print(
-                json.dumps(
-                    {
-                        "event": "trail_tp_moved",
-                        "time": _utc_iso(),
-                        "ticket": pos.ticket,
-                        "side": pos.side,
-                        "old_tp": round(_old_tp, 3),
-                        "new_tp": round(_final_tp, 3),
-                        "atr_ratio": round(current_atr / max(pos.entry_atr, 0.01), 2),
-                        "merged_reasons": "+".join(_reasons),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-    if _be_triggered:
-        print(
-            json.dumps(
-                {
-                    "event": "breakeven_triggered",
-                    "time": _utc_iso(),
-                    "ticket": pos.ticket,
-                    "side": pos.side,
-                    "entry_price": pos.entry_price,
-                    "mid": round(mid, 3),
-                    "dispatched": _be_dispatched,
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
+    _final_sl = _trail_result["final_sl"]
+    _final_tp = _trail_result["final_tp"]
+    _reasons = _trail_result["reasons"]
+    _be_triggered = _trail_result["be_triggered"]
+    _be_dispatched = _trail_result["be_dispatched"]
+    _sl_changed = _trail_result["sl_changed"]
+    _tp_changed = _trail_result["tp_changed"]
 
     # ── 5.5 Partial take-profit ──
     if not pos.partial_tp_triggered and pos.partial_tp_r > 0:
