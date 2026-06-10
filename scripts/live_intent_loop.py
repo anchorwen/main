@@ -1875,7 +1875,45 @@ def main(argv: list[str] | None = None) -> int:
         _old_sigint_handler = signal.signal(signal.SIGINT, _on_shutdown_signal)
         _old_sigterm_handler = signal.signal(signal.SIGTERM, _on_shutdown_signal)
 
+        # ── FIX-20260610-003: Watchdog daemon thread ─────────────────────
+        # Monitors the main loop heartbeat.  If execute_live_cycle() blocks
+        # for >300s (e.g. stuck in MT5 IPC), the watchdog force-kills the
+        # process via os._exit(1).  systemd/supervisor restarts it.
+        # os._exit() is used (not sys.exit) because a stuck C extension
+        # call cannot be interrupted by Python-level signals or exceptions.
+        # State preservation: execution_state is saved every cycle,
+        # position_state during management phase, journal via FileLock —
+        # the worst-case data loss is the current in-flight cycle.
+        import os as _os_module
+        import threading as _threading
+
+        _watchdog_heartbeat = {"last": time.time()}
+
+        def _watchdog_loop() -> None:
+            while True:
+                _threading.Event().wait(60.0)
+                _elapsed = time.time() - _watchdog_heartbeat["last"]
+                if _elapsed > 300.0:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "watchdog_triggered",
+                                "time": _utc_iso(),
+                                "elapsed_s": round(_elapsed, 1),
+                                "last_heartbeat": _watchdog_heartbeat["last"],
+                                "action": "os._exit(1)",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                    _os_module._exit(1)
+
+        _watchdog_thread = _threading.Thread(target=_watchdog_loop, daemon=True, name="watchdog")
+        _watchdog_thread.start()
+
         while True:
+            _watchdog_heartbeat["last"] = time.time()
             if _shutdown_flag[0]:
                 print(
                     json.dumps(
@@ -1913,6 +1951,7 @@ def main(argv: list[str] | None = None) -> int:
                     alert_hub=alert_hub,
                     degraded_wakeup=_degraded_wakeup,
                 )
+                _watchdog_heartbeat["last"] = time.time()  # FIX-003: cycle completed
                 _degraded_wakeup = False  # consumed, reset for next cycle
                 # Reload tracker if daily_ops enriched it with realized P&L
                 if state._tracker_reload_pending:
