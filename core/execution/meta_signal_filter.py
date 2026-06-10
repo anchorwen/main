@@ -506,6 +506,24 @@ class MetaSignalFilter:
             for _vi, _fi in enumerate(v9_indices):
                 if _vi < len(arr):
                     v9_dict[self._feature_names[_fi]] = float(arr[_vi])
+            # FIX-20260610-007: Train-serve feature space mismatch guard.
+            # The model was trained on feature_names (e.g. D1_* macro).  If
+            # none of those names match V9 prefixes (M5_/M15_/M30_/H1_), the
+            # 40-dim V9 array is silently discarded → model produces blind
+            # predictions on 38 NaN features + 9 micro features only.
+            # Detect this and reject so the system falls through to rolling_wr.
+            if len(v9_indices) == 0 and len(self._feature_names) > 0:
+                return FilterResult(
+                    passed=False,
+                    p_win=0.5,
+                    threshold=self.threshold,
+                    reason=(
+                        f"feature_space_mismatch: model expects {len(self._feature_names)} "
+                        f"features (e.g. {self._feature_names[0]}) but V9 array has no "
+                        f"matching prefixes.  Retrain model on V9 features or provide "
+                        f"btc_macro_enhanced_37 features."
+                    ),
+                )
         if micro_array is not None:
             arr = np.asarray(micro_array, dtype=np.float64).ravel()
             for _vi, _fi in enumerate(micro_indices):
