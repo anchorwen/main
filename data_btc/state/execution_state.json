@@ -1,30 +1,24 @@
 {
   "version": 2,
   "schema_version": "execution_state.v2",
-  "saved_at_utc": "2026-06-10T15:25:02.085583",
+  "saved_at_utc": "2026-06-10T15:55:04.536784",
   "budgets": {
     "btc_swing": {
-      "daily_pnl_pct": -2.973,
-      "consecutive_losses": 1,
-      "total_trades_today": 13,
+      "daily_pnl_pct": -2.993,
+      "consecutive_losses": 2,
+      "total_trades_today": 14,
       "total_wins_today": 4,
       "paused": false,
       "paused_at": 0.0,
       "last_trade_day": "2026-06-10",
-      "_sl_timestamps": [],
+      "_sl_timestamps": [
+        1781105380.4025424
+      ],
       "_sl_cooldown_until": 0.0,
       "_sl_paused_rest_of_day": false
     }
   },
-  "cooldown_registry": {
-    "btc_swing": {
-      "deadline": 1781104502.086858,
-      "cooldown_sec": 300,
-      "type": "passive_1x_tf",
-      "exit_reason": "ev_trajectory_btc_swing_gamma1.0_t4%_r-0.73_lt_-0.47",
-      "exit_direction": "long"
-    }
-  },
+  "cooldown_registry": {},
   "family_entry_tracker": {},
   "sl_streak_blocks": {},
   "sl_streak_global_block": 0.0,
