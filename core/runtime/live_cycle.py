@@ -1331,8 +1331,9 @@ def _execute_management_phase(
                         prop = b_info["adapter"].get_signal(raw)
                     else:
                         prop = None
-                elif "swing" in schema_id or "daily" in schema_id:
-                    # FIX-20260531-021: Data-driven assembly via schema registry
+                elif "swing" in schema_id or "daily" in schema_id or "btc_macro" in schema_id:
+                    # FIX-20260531-021 / FIX-20260610-009: Data-driven assembly via schema registry
+                    # btc_macro added 2026-06-10 — BTC brains fell to else → raw 40-dim.
                     if daily_feature_provider is not None:
                         with FaultTolerantContext(
                             level=FaultLevel.DEGRADE,
@@ -5561,8 +5562,11 @@ def execute_live_cycle(
                             prop = None
                 else:
                     prop = None
-            elif "swing" in schema_id or "daily" in schema_id:
-                # FIX-20260531-021: Data-driven assembly via schema registry
+            elif "swing" in schema_id or "daily" in schema_id or "btc_macro" in schema_id:
+                # FIX-20260531-021 / FIX-20260610-009: Data-driven assembly via schema registry
+                # btc_macro added 2026-06-10 — the 4th hardcoded schema check that
+                # FIX-022 missed.  BTC brains (btc_macro_enhanced_37) fell through
+                # to the else branch → raw 40-dim feature_vector → dimension mismatch.
                 if daily_feature_vector is not None:
                     prop = None  # pre-initialise for DEGRADE
                     with FaultTolerantContext(
