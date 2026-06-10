@@ -59,6 +59,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260610-006 | 2026-06-10 | cursor-agent | — | **Trail telemetry structured**: ActivePosition.trail_advances计数器; managed_close dispatch payload注入trail_contribution{initial_sl,final_sl,trail_advances}. | RC-06 |
 | FIX-20260609-008 | 2026-06-09 | cursor-agent | — | **MetaFilter gate routing Strangler Fig (P1)**: `apply_meta_filter_gate()` → `meta_filter_routing.py`. Unified statarb/swing/barrier paths. `strategy_line.py`: 2377→2205 (-172). | RC-08 |
 | FIX-20260609-005 | 2026-06-09 | cursor-agent | — | **Per-strategy trail_activation_atr**: 9 strategies calibrated. `register_position` + dispatch wire per-position TrailPolicy. Live YAML: statarb=0.3, m15/m30=0.4, btc=0.5, h1=0.7, h4=0.8. | RC-09 |
 | FIX-20260609-004 | 2026-06-09 | cursor-agent | — | **trail_activation_atr dead-wire + exit param audit**: YAML `exit_management.trail_activation_atr:0.3` never read by any code. Arg parser missing `--exit-trail-activation-atr`. PM used TrailPolicy default 1.0. Horizontal audit of 11 exit params: 9 wired, 2 gaps (trail_activation_atr + min_sl_step). Fix: arg + YAML read + PM wiring. | RC-09, RC-06 |

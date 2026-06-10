@@ -49,6 +49,8 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260610-006 | 2026-06-10 | cursor-agent | — | **ATR freeze guard**: MetaSignalFilter 连续5周期浮点全等检测→_atr_frozen标志+JSON event+持久化; 值波动→自动解除. | RC-12 |
+| FIX-20260610-007 | 2026-06-10 | cursor-agent | — | **Budget cross-day unfreeze + Calibrator merge persist**: strategy_budget._reset_daily()增加paused清除; load_state()跨日强制unpause. conformal_calibrator._save_state()合并磁盘值max(old,new)防止覆盖. | RC-03, RC-06 |
 | FIX-20260609-011 | 2026-06-09 | cursor-agent | — | **Governance degradation gate**: When zero live brains in a strategy, confidence floor 0.50 + volume cap 0.01. candidate brains penalised vote_weight×0.5. DQAF-20260609-011. | RC-07 |
 | FIX-20260609-010 | 2026-06-09 | cursor-agent | — | **Budget counter reset every cycle**: `_build_strategy_lines()` (live_cycle.py) creates fresh StrategyBudget objects every cycle, but `restore_execution_state()` only ran on cycle 1. Cycles 2+ ran with zeroed daily PnL, consecutive losses, and SL cooldown counters → all cumulative circuit breakers permanently disabled after first cycle. Fix: restore budget state from disk EVERY cycle before pending records are fed. DQAF-20260609-001. | RC-03 |
 | FIX-20260608-007 | 2026-06-08 | agent | — | **S3 Functional Core extraction**: `pwin_chain.py` (new) — extracted `resolve_p_win_from_brains()` from `kelly_sizer.py` and `adjust_p_win_for_regime()` from `strategy_line.py` into shared pure-function module. kelly_sizer delegates to pwin_chain. MODULE_SOURCE_MAP updated. | RC-12 |
