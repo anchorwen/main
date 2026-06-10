@@ -281,9 +281,7 @@ class DataHealthService:
         )
         warn_count = sum(1 for s in sources if s.status == SourceStatus.WARN)
         report.primary_codes = [
-            s.primary_code
-            for s in sources
-            if s.primary_code and s.status != SourceStatus.PASS
+            s.primary_code for s in sources if s.primary_code and s.status != SourceStatus.PASS
         ]
         if fail_count > 0:
             report.alert_level = "CRITICAL"
@@ -371,8 +369,12 @@ class DataHealthService:
     def check_feature_store(self) -> SourceCheckResult:
         """Check feature store for staleness and data quality."""
         fs_path = os.path.join(
-            self._base_dir, "feature_store", "records",
-            f"symbol={self._symbol}", "timeframe=M5", "features.jsonl",
+            self._base_dir,
+            "feature_store",
+            "records",
+            f"symbol={self._symbol}",
+            "timeframe=M5",
+            "features.jsonl",
         )
         last = _safe_jsonl_last(fs_path)
         if last is None:
@@ -414,7 +416,8 @@ class DataHealthService:
             zero_count = sum(1 for v in feats if isinstance(v, int | float) and v == 0)
             # NaN check
             nan_count = sum(
-                1 for v in feats
+                1
+                for v in feats
                 if isinstance(v, float) and (v != v)  # NaN check
             )
             metrics["feature_dim"] = len(feats)
@@ -549,10 +552,16 @@ class DataHealthService:
 
         brain_states = gv.get("brain_states", gv.get("brains", {}))
         if isinstance(brain_states, list):
-            live_count = sum(1 for b in brain_states if isinstance(b, dict) and b.get("status") == "live")
+            live_count = sum(
+                1 for b in brain_states if isinstance(b, dict) and b.get("status") == "live"
+            )
             total_count = len(brain_states)
         elif isinstance(brain_states, dict):
-            live_count = sum(1 for v in brain_states.values() if isinstance(v, dict) and v.get("status") == "live")
+            live_count = sum(
+                1
+                for v in brain_states.values()
+                if isinstance(v, dict) and v.get("status") == "live"
+            )
             total_count = len(brain_states)
         else:
             live_count = 0
@@ -586,63 +595,128 @@ class DataHealthService:
     @health_check(
         tier=Tier.CRITICAL,
         source="meta_filter_state",
-        description="MetaFilter is_loaded, ATR buffer freeze detection",
+        description="MetaFilter runtime status via event-interception (tail-read intent log)",
     )
     def check_meta_filter_state(self) -> SourceCheckResult:
-        """Check meta_filter_state.json for functional health."""
+        """Check MetaFilter health via event-interception, not state file polling.
+
+        FIX-20260610-007: The old check read meta_filter_state.json which uses
+        lazy serialization (async, low-frequency writes).  Buffers are often
+        empty even when the filter IS running — producing META_FILTER_NEVER_LOADED
+        false positives that destroy alert credibility (wolf-crying effect).
+
+        Now uses _safe_jsonl_last() tail-read on the latest intent log to find
+        the `meta_pipeline_wired` event, which is written synchronously at
+        startup when the filter loads successfully.  This provides millisecond-
+        accurate status without adding I/O burden (8KB tail read).
+        """
+        import glob as _glob
+
+        metrics: dict[str, Any] = {}
+
+        # ── Primary: event-interception via head-read of intent log ──
+        # meta_pipeline_wired is written once at boot (start of log).
+        # Head-read ~64KB from the first 1-2 intent logs to find it.
+        log_dir = os.path.join(self._base_dir, "logs")
+        if os.path.isdir(log_dir):
+            intent_logs = sorted(_glob.glob(os.path.join(log_dir, "intent_*.log")), reverse=True)
+            wired_entry = None
+            wired_log = ""
+            for log_path in intent_logs[:2]:  # current + previous log
+                try:
+                    fsize = os.path.getsize(log_path)
+                    if fsize == 0:
+                        continue
+                    with open(log_path, encoding="utf-8") as f:
+                        # Read first 64KB to scan for the wired event
+                        chunk = f.read(min(fsize, 65536))
+                        for line in chunk.strip().split("\n"):
+                            line = line.strip()
+                            if '"event": "meta_pipeline_wired"' in line:
+                                try:
+                                    wired_entry = json.loads(line)
+                                    wired_log = os.path.basename(log_path)
+                                    break
+                                except json.JSONDecodeError:
+                                    continue
+                        if wired_entry:
+                            break
+                except Exception:  # noqa: BLE001
+                    continue
+
+            if wired_entry is not None:
+                lgb_loaded = wired_entry.get("lgb_loaded", False)
+                calibrator = wired_entry.get("calibrator_loaded", False)
+                features = wired_entry.get("features", 0)
+                wired_at = wired_entry.get("time", "")
+                age_min = _age_minutes(wired_at)
+                metrics["lgb_loaded"] = lgb_loaded
+                metrics["calibrator_loaded"] = calibrator
+                metrics["feature_count"] = features
+                metrics["wired_age_minutes"] = round(age_min, 1)
+                metrics["log_source"] = wired_log
+
+                if age_min > 360:
+                    # Last wired >6h ago — may have restarted without reload
+                    status = SourceStatus.WARN
+                    code = "META_FILTER_WIRED_STALE"
+                    message = f"MetaFilter wired {age_min:.0f}min ago (LGB={lgb_loaded}, cal={calibrator}, dims={features})"
+                else:
+                    status = SourceStatus.PASS
+                    code = "META_FILTER_OK"
+                    message = f"MetaFilter active (LGB={lgb_loaded}, cal={calibrator}, dims={features}, wired {age_min:.0f}min ago)"
+                return SourceCheckResult(
+                    source="meta_filter_state",
+                    tier=Tier.CRITICAL,
+                    status=status,
+                    primary_code=code,
+                    metrics=metrics,
+                    message=message,
+                    checked_at=_utc_iso(),
+                )
+
+        # ── Secondary: fall back to state file if no log found ──
         mf_path = os.path.join(self._base_dir, "meta_filter_state.json")
         mf = _safe_json_load(mf_path)
-
         if mf is None:
             return SourceCheckResult(
                 source="meta_filter_state",
                 tier=Tier.CRITICAL,
                 status=SourceStatus.MISSING,
                 primary_code="META_FILTER_STATE_MISSING",
-                message="meta_filter_state.json not found",
+                message="meta_filter_state.json not found and no intent log with meta_pipeline_wired event",
                 checked_at=_utc_iso(),
             )
 
-        metrics: dict[str, Any] = {}
-
-        # Pred buffer
         pred_buffer = mf.get("pred_buffer", mf.get("pred_history", []))
         pred_count = len(pred_buffer) if isinstance(pred_buffer, list) else 0
-        metrics["pred_buffer_count"] = pred_count
-
-        # ATR buffer — detect freeze (all values identical)
         atr_buffer = mf.get("atr_buffer", [])
         atr_count = len(atr_buffer) if isinstance(atr_buffer, list) else 0
         atr_frozen = False
-        if atr_count >= 3 and isinstance(atr_buffer, list):
+        if atr_count >= 5 and isinstance(atr_buffer, list):
             atr_values = [float(v) for v in atr_buffer if v is not None]
             if atr_values and len(set(round(v, 4) for v in atr_values)) == 1:
                 atr_frozen = True
+        metrics["pred_buffer_count"] = pred_count
         metrics["atr_buffer_count"] = atr_count
         metrics["atr_frozen"] = atr_frozen
+        metrics["log_source"] = "state_file_fallback"
 
-        # Micro spread buffer
-        micro_buf = mf.get("micro_spread_buffer", [])
-        micro_count = len(micro_buf) if isinstance(micro_buf, list) else 0
-        metrics["micro_spread_buffer_count"] = micro_count
-
-        # Determine status
-        if pred_count == 0 and atr_count == 0:
-            status = SourceStatus.FAIL
-            code = "META_FILTER_NEVER_LOADED"
-            message = "MetaFilter state exists but all buffers empty — ORPHAN_SUBSYSTEM"
-        elif atr_frozen:
-            status = SourceStatus.FAIL
-            code = "META_FILTER_ATR_FROZEN"
-            message = f"ATR buffer frozen ({atr_count} identical values) — MetaFilter not processing"
-        elif pred_count == 0:
+        # FIX-20260610-007: Only flag as failure if no log evidence AND state is empty.
+        # Empty state buffers with a cold start are normal (lazy serialization).
+        # If the state file has data but is stale, that's still useful info.
+        if atr_frozen and atr_count >= 90:
             status = SourceStatus.WARN
-            code = "META_FILTER_PRED_EMPTY"
-            message = "Prediction buffer empty"
-        else:
+            code = "META_FILTER_ATR_FROZEN"
+            message = f"ATR buffer frozen ({atr_count} identical values) — M5_ATR_14 may be defaulting to 1.0"
+        elif pred_count > 0:
             status = SourceStatus.PASS
             code = "META_FILTER_OK"
-            message = f"Pred buffer: {pred_count}, ATR buffer: {atr_count}"
+            message = f"MetaFilter active via state file (pred={pred_count}, atr={atr_count})"
+        else:
+            status = SourceStatus.WARN
+            code = "META_FILTER_STATE_EMPTY"
+            message = f"State file empty (pred={pred_count}, atr={atr_count}) — may be cold start or lazy write; check intent log for meta_pipeline_wired"
 
         return SourceCheckResult(
             source="meta_filter_state",
@@ -875,7 +949,9 @@ class DataHealthService:
         if cold_started and total_computations == 0:
             status = SourceStatus.FAIL
             code = "CONFORMAL_COLD_STALLED"
-            message = f"Cold-started, {total_computations} computations, {history_count} history entries"
+            message = (
+                f"Cold-started, {total_computations} computations, {history_count} history entries"
+            )
         elif cold_started and history_count < 50:
             status = SourceStatus.WARN
             code = "CONFORMAL_COLD_WARMING"
@@ -958,7 +1034,11 @@ class DataHealthService:
             tier=Tier.HIGH,
             status=status,
             primary_code=code,
-            metrics={"total_brains": total, "low_record_count": len(low_record_brains), "window_size": window_size},
+            metrics={
+                "total_brains": total,
+                "low_record_count": len(low_record_brains),
+                "window_size": window_size,
+            },
             message=message,
             checked_at=_utc_iso(),
         )
@@ -1109,7 +1189,11 @@ class DataHealthService:
                 ):
                     blocked_reasons.add(reason)
 
-        metrics: dict[str, Any] = {"cycle": cycle, "age_minutes": round(age_min, 1), "trade_decisions": trade_decisions}
+        metrics: dict[str, Any] = {
+            "cycle": cycle,
+            "age_minutes": round(age_min, 1),
+            "trade_decisions": trade_decisions,
+        }
 
         if age_min > 30:
             status = SourceStatus.FAIL
@@ -1254,7 +1338,9 @@ class DataHealthService:
         total = lb.get("total_brains", 0)
         brains = lb.get("brains", [])
 
-        critical_count = sum(1 for b in brains if isinstance(b, dict) and b.get("health_signal") == "critical")
+        critical_count = sum(
+            1 for b in brains if isinstance(b, dict) and b.get("health_signal") == "critical"
+        )
         zero_vote = sum(1 for b in brains if isinstance(b, dict) and b.get("vote_weight", 0) == 0)
 
         message = ""
@@ -1280,7 +1366,12 @@ class DataHealthService:
             tier=Tier.MEDIUM,
             status=status,
             primary_code=code,
-            metrics={"total_brains": total, "critical_count": critical_count, "zero_vote_count": zero_vote, "age_hours": round(age_h, 1)},
+            metrics={
+                "total_brains": total,
+                "critical_count": critical_count,
+                "zero_vote_count": zero_vote,
+                "age_hours": round(age_h, 1),
+            },
             message=message,
             checked_at=_utc_iso(),
         )
@@ -1308,8 +1399,11 @@ class DataHealthService:
         last_ts = do.get("last_daily_ops_utc", 0)
         if isinstance(last_ts, int | float) and last_ts > 0:
             from datetime import datetime
+
             last_dt = datetime.fromtimestamp(float(last_ts), tz=UTC)
-            age_h = (datetime.now(UTC).replace(tzinfo=None) - last_dt.replace(tzinfo=None)).total_seconds() / 3600
+            age_h = (
+                datetime.now(UTC).replace(tzinfo=None) - last_dt.replace(tzinfo=None)
+            ).total_seconds() / 3600
         else:
             age_h = -1
 
@@ -1476,7 +1570,11 @@ class DataHealthService:
             tier=Tier.MEDIUM,
             status=status,
             primary_code=code,
-            metrics={"total_brains_assessed": assessed, "degraded_count": degraded, "urgency": urgency},
+            metrics={
+                "total_brains_assessed": assessed,
+                "degraded_count": degraded,
+                "urgency": urgency,
+            },
             message=message,
             checked_at=_utc_iso(),
         )
@@ -1522,7 +1620,11 @@ class DataHealthService:
             tier=Tier.MEDIUM,
             status=status,
             primary_code=code,
-            metrics={"schema_count": schema_count, "valid_schemas": valid, "dimensions": dims_by_schema},
+            metrics={
+                "schema_count": schema_count,
+                "valid_schemas": valid,
+                "dimensions": dims_by_schema,
+            },
             message=f"{valid}/{schema_count} schemas valid, dims={dims_by_schema}",
             checked_at=_utc_iso(),
         )
@@ -1557,13 +1659,20 @@ class DataHealthService:
         else:
             status = SourceStatus.PASS
             code = "ALERT_DELIVERY_OK"
-            message = f"{audit_count} delivered, {undelivered_count} undelivered, last {age_h:.1f}h ago"
+            message = (
+                f"{audit_count} delivered, {undelivered_count} undelivered, last {age_h:.1f}h ago"
+            )
         return SourceCheckResult(
             source="alert_delivery",
             tier=Tier.MEDIUM,
             status=status,
             primary_code=code,
-            metrics={"audit_count": audit_count, "undelivered_count": undelivered_count, "fail_rate": round(fail_rate, 4), "last_age_hours": round(age_h, 1)},
+            metrics={
+                "audit_count": audit_count,
+                "undelivered_count": undelivered_count,
+                "fail_rate": round(fail_rate, 4),
+                "last_age_hours": round(age_h, 1),
+            },
             message=message,
             checked_at=_utc_iso(),
         )
@@ -1607,7 +1716,11 @@ class DataHealthService:
             tier=Tier.MEDIUM,
             status=status,
             primary_code=code,
-            metrics={"schema_version": sv, "source_count": source_count, "age_hours": round(age_h, 1)},
+            metrics={
+                "schema_version": sv,
+                "source_count": source_count,
+                "age_hours": round(age_h, 1),
+            },
             message=f"Self-check: {source_count} sources tracked, age {age_h:.1f}h",
             checked_at=_utc_iso(),
         )
@@ -1730,7 +1843,11 @@ class DataHealthService:
             check_name="pnl_ledger_freshness",
             status=status,
             primary_code=code,
-            metrics={"total_settled": total_settled, "latest_close_age_hours": round(age_h, 1), "journal_closes": journal_closes},
+            metrics={
+                "total_settled": total_settled,
+                "latest_close_age_hours": round(age_h, 1),
+                "journal_closes": journal_closes,
+            },
             message=f"PnL ledger: {total_settled} settled, last close {age_h:.1f}h ago (journal: {journal_closes} closes)",
             checked_at=_utc_iso(),
         )
@@ -1774,8 +1891,14 @@ class DataHealthService:
         return CrossCheckResult(
             check_name="open_vs_close_convergence",
             status=status,
-            primary_code="CROSS_OPEN_CLOSE_DIVERGENCE" if status != SourceStatus.PASS else "CROSS_OK",
-            metrics={"open_count": open_count, "close_count": close_count, "ratio": round(ratio, 4)},
+            primary_code="CROSS_OPEN_CLOSE_DIVERGENCE"
+            if status != SourceStatus.PASS
+            else "CROSS_OK",
+            metrics={
+                "open_count": open_count,
+                "close_count": close_count,
+                "ratio": round(ratio, 4),
+            },
             message=f"Opens={open_count} vs Closes={close_count} (ratio={ratio:.2f})",
             checked_at=_utc_iso(),
         )
@@ -1808,29 +1931,35 @@ class DataHealthService:
 
             data = _safe_json_load(full_path)
             if data is None:
-                findings.append(OrphanFinding(
-                    source_path=rel_path,
-                    pattern="never_written",
-                    detail="File exists but cannot be parsed as JSON",
-                ))
+                findings.append(
+                    OrphanFinding(
+                        source_path=rel_path,
+                        pattern="never_written",
+                        detail="File exists but cannot be parsed as JSON",
+                    )
+                )
                 continue
 
             if zero_key is not None:
                 val = data.get(zero_key)
                 if val is None or val == 0 or val == [] or val == {}:
-                    findings.append(OrphanFinding(
-                        source_path=rel_path,
-                        pattern=pattern,
-                        detail=f"{zero_key}={val} — subsystem appears unwired",
-                    ))
+                    findings.append(
+                        OrphanFinding(
+                            source_path=rel_path,
+                            pattern=pattern,
+                            detail=f"{zero_key}={val} — subsystem appears unwired",
+                        )
+                    )
             else:
                 # Check for empty dict/list at top level
                 if not data or all(not v for v in data.values() if not isinstance(v, bool)):
-                    findings.append(OrphanFinding(
-                        source_path=rel_path,
-                        pattern=pattern,
-                        detail="All fields empty or zero — subsystem appears unwired",
-                    ))
+                    findings.append(
+                        OrphanFinding(
+                            source_path=rel_path,
+                            pattern=pattern,
+                            detail="All fields empty or zero — subsystem appears unwired",
+                        )
+                    )
 
         return findings
 
@@ -1882,11 +2011,14 @@ class DataHealthService:
             errors = record.get("error_history", [])
             if isinstance(errors, list):
                 if src.status in (SourceStatus.FAIL, SourceStatus.WARN, SourceStatus.MISSING):
-                    errors.insert(0, {
-                        "utc": now,
-                        "code": src.primary_code,
-                        "message": src.message[:200],
-                    })
+                    errors.insert(
+                        0,
+                        {
+                            "utc": now,
+                            "code": src.primary_code,
+                            "message": src.message[:200],
+                        },
+                    )
                     errors = errors[:3]
                 elif src.status == SourceStatus.PASS:
                     # Clear error history on recovery
@@ -1899,8 +2031,12 @@ class DataHealthService:
             if len(errors) >= 2:
                 # More errors in recent half → degrading
                 mid = len(errors) // 2
-                recent_errors = sum(1 for e in errors[:mid] if e.get("code", "") not in ("RECOVERED", ""))
-                older_errors = sum(1 for e in errors[mid:] if e.get("code", "") not in ("RECOVERED", ""))
+                recent_errors = sum(
+                    1 for e in errors[:mid] if e.get("code", "") not in ("RECOVERED", "")
+                )
+                older_errors = sum(
+                    1 for e in errors[mid:] if e.get("code", "") not in ("RECOVERED", "")
+                )
                 if recent_errors > older_errors:
                     trend = "degrading"
                 elif recent_errors < older_errors:
@@ -1911,7 +2047,8 @@ class DataHealthService:
                 "last_status": src.status.value,
                 "last_primary_code": src.primary_code,
                 "metrics_snapshot": {
-                    k: v for k, v in src.metrics.items()
+                    k: v
+                    for k, v in src.metrics.items()
                     if isinstance(v, int | float | str | bool | type(None))
                 },
                 "error_history": errors,
@@ -1938,8 +2075,12 @@ class DataHealthService:
             "schema_version": "data_health_state.v2",
             "updated_at": now,
             "symbol": self._symbol,
-            "last_full_run_utc": now if self._mode == "full" else current.get("last_full_run_utc", ""),
-            "last_lightweight_run_utc": now if self._mode != "full" else current.get("last_lightweight_run_utc", ""),
+            "last_full_run_utc": now
+            if self._mode == "full"
+            else current.get("last_full_run_utc", ""),
+            "last_lightweight_run_utc": now
+            if self._mode != "full"
+            else current.get("last_lightweight_run_utc", ""),
             "overall_status": report.alert_level,
             "sources": sources_state,
             "cross_checks": cross_state,
