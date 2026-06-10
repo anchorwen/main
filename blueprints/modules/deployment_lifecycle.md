@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260610-007 | 2026-06-10 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/send_data_health_alert.py` → `monitor_dashboard`. FIX-007 DingTalk adapter. | RC-09 |
 | FIX-20260610-004 | 2026-06-10 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/analyze_trail_impact.py` → `runtime_live`. DQAF-20260610-001. | RC-09 |
 | FIX-20260608-007 | 2026-06-08 | agent | — | MODULE_SOURCE_MAP: add `core/execution/pwin_chain.py` → execution_guards (S3 refactoring new file). | RC-09 |
 | FIX-20260608-004 | 2026-06-08 | cursor-agent | — | MODULE_SOURCE_MAP: add `core/deployment/feature_update_producer.py` → features_service module. Required for FIX-004 multi-TF Feature Store blueprint compliance. | RC-09 |

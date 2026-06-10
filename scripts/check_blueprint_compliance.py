@@ -233,6 +233,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/dqaf_collect.py",
         "scripts/verify_dqaf_002_fix.py",
         "scripts/run_data_health.py",
+        "scripts/send_data_health_alert.py",
     ],
     "runtime_live": [
         "main.py",
