@@ -7,7 +7,7 @@ fix:
   target_comp_id: ''
   venue: FIX_LIVE
 mt5:
-  terminal_path: D:\MetaTrader 5\terminal64.exe
+  terminal_path: D:\exness\MetaTrader 5 EXNESS2\terminal64.exe
   default_symbol: XAUUSDc
   normalization_config: configs/brains/v9_institutional_01.normalization.json
 features:
@@ -80,7 +80,7 @@ training:
     trainer_root: data/training/mtx_v4.5
     dataset_csv: data/training/mtx_v4.5/Exness_XAUUSDm_2026_04.csv
 live_trading:
-  mt5_terminal_path: D:\MetaTrader 5\terminal64.exe
+  mt5_terminal_path: D:\exness\MetaTrader 5 EXNESS2\terminal64.exe
   symbol: XAUUSDc
   volume: 0.01
   interval_seconds: 60
