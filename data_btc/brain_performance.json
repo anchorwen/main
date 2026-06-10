@@ -1443,6 +1443,30 @@
           "side": "",
           "recorded_at": ""
         }
+      },
+      {
+        "timestamp": "2026-06-10T16:54:33.430258",
+        "composite_score": 0.41,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3869227352,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T17:10:43.933391",
+        "composite_score": 0.5,
+        "execution_outcome": "breakeven",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3869566418,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
       }
     ],
     "BTC_Swing_V6_MultiTF_LGB_v2": [
@@ -1789,6 +1813,30 @@
         "fill_grade": null,
         "dimensions": {
           "position_ticket": 3869140665,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T16:54:33.430258",
+        "composite_score": 0.41,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3869227352,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T17:10:43.933391",
+        "composite_score": 0.5,
+        "execution_outcome": "breakeven",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3869566418,
           "symbol": "",
           "side": "",
           "recorded_at": ""
@@ -2143,6 +2191,30 @@
           "side": "",
           "recorded_at": ""
         }
+      },
+      {
+        "timestamp": "2026-06-10T16:54:33.430258",
+        "composite_score": 0.41,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3869227352,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T17:10:43.933391",
+        "composite_score": 0.5,
+        "execution_outcome": "breakeven",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3869566418,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
       }
     ],
     "BTC_Swing_V10_M15_Survival": [
@@ -2349,6 +2421,30 @@
           "side": "",
           "recorded_at": ""
         }
+      },
+      {
+        "timestamp": "2026-06-10T16:54:33.430258",
+        "composite_score": 0.41,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3869227352,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T17:10:43.933391",
+        "composite_score": 0.5,
+        "execution_outcome": "breakeven",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3869566418,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
       }
     ],
     "BTC_Swing_V9_H1_Survival": [
@@ -2551,6 +2647,30 @@
         "fill_grade": null,
         "dimensions": {
           "position_ticket": 3869140665,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T16:54:33.430258",
+        "composite_score": 0.41,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3869227352,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T17:10:43.933391",
+        "composite_score": 0.5,
+        "execution_outcome": "breakeven",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3869566418,
           "symbol": "",
           "side": "",
           "recorded_at": ""

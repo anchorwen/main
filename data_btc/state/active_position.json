@@ -1,0 +1,19 @@
+{
+  "version": 3,
+  "positions": [
+    {
+      "ticket": 3869723570,
+      "cycles_held": 0,
+      "breakeven_triggered": false,
+      "partial_tp_done": false,
+      "entry_atr": 179.9214285714292,
+      "entry_price": 62050.44,
+      "brain_consensus_hash": "9aa05e2a1d50fbce"
+    }
+  ],
+  "_last_brain_reeval_cycle": -1,
+  "_entry_consensus_score": 0.8802,
+  "_recovery_cycle": -1,
+  "_primary_ticket": 3869723570,
+  "saved_at_utc": "2026-06-10T17:15:03.195582"
+}

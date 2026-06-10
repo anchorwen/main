@@ -12,9 +12,9 @@ a HealthReport; external callers decide how to route it.
 from __future__ import annotations
 
 import enum
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
-
+from typing import Any
 
 # ── Enums ──────────────────────────────────────────────────────────────────
 
@@ -72,6 +72,24 @@ class OrphanFinding:
     source_path: str  # relative to base_dir
     pattern: str  # "zero_data" | "never_written" | "empty_init"
     detail: str  # human-readable description
+
+
+@dataclass
+class BehavioralMetrics:
+    """Incremental counters for behavioral compliance checks (FIX-20260611-002).
+
+    Uses cursor-based log scanning (seek/tell) to avoid double-counting
+    events across overlapping time windows.  Counters are reset each audit
+    tick; the file cursor persists to enable incremental reads only.
+    """
+
+    gate_bypass_count: int = 0
+    brain_alerts: dict[str, int] = field(default_factory=dict)
+    intent_dispatched_count: int = 0
+    strategy_rejections: int = 0
+    cycle_count: int = 0
+    last_log_byte_offset: int = 0
+    intent_log_path: str = ""
 
 
 @dataclass
@@ -173,6 +191,13 @@ DEFAULT_THRESHOLDS: dict[str, float | int] = {
     "cross_source_journal_pnl_tolerance_pct": 0.10,
     "cross_source_close_settled_tolerance_pct": 0.05,
     "cross_source_open_close_max_age_hours": 24,
+    # ── FIX-20260611-002: behavioral compliance ──
+    "gate_bypass_max_count": 0,
+    "position_limit_consecutive_alerts": 3,
+    "brain_output_min_productive_brains": 1,
+    "brain_output_max_alerts_per_brain": 5,
+    "trade_activity_max_silent_cycles": 60,
+    "behavioral_max_lines_per_tick": 500,
 }
 
 

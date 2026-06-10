@@ -2217,6 +2217,7 @@ def main(argv: list[str] | None = None) -> int:
                         base_dir=args.base_dir,
                         symbol=config.symbol,
                         alert_hub=alert_hub,
+                        position_manager=getattr(state, "position_manager", None),
                     )
                     if _health.get("alerts") or _health.get("checks", {}).get("training_ready"):
                         print(

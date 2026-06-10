@@ -17,6 +17,7 @@ def check_data_health(
     base_dir: str,
     symbol: str,
     alert_hub: Any = None,
+    position_manager: Any = None,  # FIX-20260611-002
 ) -> dict[str, Any]:
     """DEPRECATED — delegates to DataHealthService.run_lightweight().
 
@@ -27,7 +28,10 @@ def check_data_health(
     try:
         from core.observability.data_health_service import DataHealthService
 
-        svc = DataHealthService(base_dir=base_dir, symbol=symbol, mode="light")
+        svc = DataHealthService(
+            base_dir=base_dir, symbol=symbol, mode="light",
+            position_manager=position_manager,
+        )
         report = svc.run_lightweight()
         svc.save_health_state(report)
 

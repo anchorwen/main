@@ -21,6 +21,7 @@ Iron Law for Monitoring #4 (Iterability):
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 import time
@@ -213,6 +214,7 @@ class DataHealthService:
         *,
         thresholds: dict[str, float | int] | None = None,
         mode: str = "full",
+        position_manager: Any = None,  # FIX-20260611-002: for position_limit check
     ):
         self._base_dir = base_dir
         self._symbol = symbol
@@ -221,6 +223,10 @@ class DataHealthService:
             self._thresholds.update(thresholds)
         self._mode = mode
         self._start_time = time.perf_counter()
+        self._position_manager = position_manager
+        # ── FIX-20260611-002: behavioral compliance incremental scanner ──
+        self._cached_behavioral_metrics: Any = None
+        self._position_exceeded_streak: int = 0
 
     # ── Threshold helpers ──────────────────────────────────────────────
 
@@ -2107,6 +2113,287 @@ class DataHealthService:
     # ══════════════════════════════════════════════════════════════════════
     # ALERT CONTEXT (for external dispatcher — Iron Law #3)
     # ══════════════════════════════════════════════════════════════════════
+
+    # ── FIX-20260611-002: Behavioral compliance — incremental log scanner ──
+
+    def _hydrate_behavioral_metrics(self) -> None:
+        """Incrementally scan intent log for behavioral compliance counters.
+
+        Uses seek/tell cursor to avoid double-counting across overlapping
+        time windows.  Counters are RESET each tick (accumulation bug fix);
+        only the file cursor persists.  Hard fuse at max_lines_per_tick=500
+        to prevent I/O from exceeding the 16ms per-tick budget.
+        """
+        from core.observability.data_health_schema import BehavioralMetrics
+
+        # ── Resolve current log path ──
+        _log_pattern = os.path.join(self._base_dir, "logs", "intent_*.log")
+        _log_files = sorted(glob.glob(_log_pattern))
+        _current_log_path = _log_files[-1] if _log_files else ""
+
+        # ── Preserve cursor across log rotation ──
+        _current_offset = 0
+        if self._cached_behavioral_metrics is not None:
+            if self._cached_behavioral_metrics.intent_log_path == _current_log_path:
+                _current_offset = self._cached_behavioral_metrics.last_log_byte_offset
+            # else: log rotated → reset cursor to 0
+
+        # ── Reset counters each tick, preserve cursor (accumulation bug fix) ──
+        self._cached_behavioral_metrics = BehavioralMetrics(
+            last_log_byte_offset=_current_offset,
+            intent_log_path=_current_log_path,
+        )
+        _metrics = self._cached_behavioral_metrics
+
+        if not _current_log_path or not os.path.exists(_current_log_path):
+            return
+
+        _max_lines = int(self._t("behavioral_max_lines_per_tick"))
+        try:
+            with open(_current_log_path, encoding="utf-8") as f:
+                f.seek(_current_offset)
+                _lines_read = 0
+                for _line in f:
+                    _lines_read += 1
+                    if _lines_read > _max_lines:
+                        break
+                    # ── Fast substring matching (no JSON parse for perf) ──
+                    if '"event": "consensus_blocked_by_main_eval"' in _line:
+                        _metrics.gate_bypass_count += 1
+                    elif '"event": "brain_alert"' in _line:
+                        _bid = ""
+                        if '"brain_id": "' in _line:
+                            _start = _line.index('"brain_id": "') + 13
+                            _end = _line.index('"', _start)
+                            _bid = _line[_start:_end]
+                        _metrics.brain_alerts[_bid or "unknown"] = (
+                            _metrics.brain_alerts.get(_bid or "unknown", 0) + 1
+                        )
+                    elif '"event": "intent_dispatched"' in _line:
+                        _metrics.intent_dispatched_count += 1
+                    elif '"should_trade": false' in _line:
+                        _metrics.strategy_rejections += 1
+                    elif '"event": "cycle_end"' in _line:
+                        _metrics.cycle_count += 1
+
+                # ── Update cursor for next tick ──
+                _metrics.last_log_byte_offset = f.tell()
+        except Exception:  # noqa: BLE001
+            pass  # best-effort — never crash the audit tick
+
+    # ── FIX-20260611-002: Behavioral compliance checks ──
+
+    @health_check(
+        tier=Tier.CRITICAL,
+        source="gate_bypass",
+        description="Phase 10 dispatch bypassed main eval gates",
+    )
+    def check_gate_bypass(self) -> SourceCheckResult:
+        self._hydrate_behavioral_metrics()
+        _count = self._cached_behavioral_metrics.gate_bypass_count
+        _max = int(self._t("gate_bypass_max_count"))
+        if _count > _max:
+            return SourceCheckResult(
+                source="gate_bypass",
+                tier=Tier.CRITICAL,
+                status=SourceStatus.FAIL,
+                primary_code="GATE_BYPASS_DETECTED",
+                message=f"Phase 10 consensus dispatch bypassed main eval {_count} time(s)",
+                metrics={"bypass_count": _count, "max_allowed": _max},
+                checked_at=_utc_iso(),
+            )
+        return SourceCheckResult(
+            source="gate_bypass", tier=Tier.CRITICAL,
+            status=SourceStatus.PASS, primary_code="GATE_BYPASS_OK",
+            message="No gate bypass events detected",
+            metrics={"bypass_count": _count}, checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.CRITICAL,
+        source="position_limit",
+        description="Concurrent positions vs max_positions",
+    )
+    def check_position_limit(self) -> SourceCheckResult:
+        # ── Authoritative source: position_manager (MT5-synced), not intent log ──
+        _max_positions = 2  # default; overridden by live_btc.yaml config
+        _current = 0
+        if self._position_manager is not None:
+            try:
+                _positions = self._position_manager.get_all_positions()
+                _current = len(_positions)
+            except Exception:  # noqa: BLE001
+                pass
+
+        # ── Read max_positions from config ──
+        _cfg_path = os.path.join(self._base_dir, "..", "configs")
+        for _yaml_name in ("live_btc.yaml", "live.yaml"):
+            _yp = os.path.join(_cfg_path, _yaml_name)
+            if os.path.exists(_yp):
+                try:
+                    import yaml
+                    with open(_yp, encoding="utf-8") as f:
+                        _cfg = yaml.safe_load(f)
+                    _mp = _cfg.get("max_positions")
+                    if _mp is not None:
+                        _max_positions = int(_mp)
+                        break
+                except Exception:  # noqa: BLE001
+                    pass
+
+        if _current > _max_positions:
+            self._position_exceeded_streak += 1
+            _consecutive_needed = int(self._t("position_limit_consecutive_alerts"))
+            if self._position_exceeded_streak >= _consecutive_needed:
+                return SourceCheckResult(
+                    source="position_limit",
+                    tier=Tier.CRITICAL,
+                    status=SourceStatus.FAIL,
+                    primary_code="POSITION_LIMIT_EXCEEDED_PERSISTENT",
+                    message=(
+                        f"Concurrent positions ({_current}) > max_positions "
+                        f"({_max_positions}) for {self._position_exceeded_streak} "
+                        f"consecutive audits — likely a system-level leak"
+                    ),
+                    metrics={
+                        "current_positions": _current,
+                        "max_positions": _max_positions,
+                        "consecutive_alerts": self._position_exceeded_streak,
+                    },
+                    checked_at=_utc_iso(),
+                )
+            return SourceCheckResult(
+                source="position_limit",
+                tier=Tier.CRITICAL,
+                status=SourceStatus.WARN,
+                primary_code="POSITION_LIMIT_EXCEEDED_TRANSIENT",
+                message=(
+                    f"Concurrent positions ({_current}) > max_positions "
+                    f"({_max_positions}) — transient (streak {self._position_exceeded_streak}/"
+                    f"{_consecutive_needed})"
+                ),
+                metrics={
+                    "current_positions": _current,
+                    "max_positions": _max_positions,
+                    "consecutive_alerts": self._position_exceeded_streak,
+                },
+                checked_at=_utc_iso(),
+            )
+        # Reset streak
+        self._position_exceeded_streak = 0
+        return SourceCheckResult(
+            source="position_limit", tier=Tier.CRITICAL,
+            status=SourceStatus.PASS, primary_code="POSITION_LIMIT_OK",
+            message=f"Concurrent positions ({_current}) within limit ({_max_positions})",
+            metrics={"current_positions": _current, "max_positions": _max_positions},
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.HIGH,
+        source="brain_output_health",
+        description="Brain prediction silence detection",
+    )
+    def check_brain_output_health(self) -> SourceCheckResult:
+        self._hydrate_behavioral_metrics()
+        _alerts = self._cached_behavioral_metrics.brain_alerts
+        _cycles = self._cached_behavioral_metrics.cycle_count
+        _min_brains = int(self._t("brain_output_min_productive_brains"))
+        _max_alerts = int(self._t("brain_output_max_alerts_per_brain"))
+
+        _productive = sum(1 for c in _alerts.values() if c > 0)
+
+        if _productive == 0 and _cycles > 0:
+            return SourceCheckResult(
+                source="brain_output_health",
+                tier=Tier.HIGH,
+                status=SourceStatus.FAIL,
+                primary_code="BRAIN_SILENCE_ALL",
+                message=f"Zero brain alerts across {_cycles} cycles — possible full-brain silence",
+                metrics={"productive_brains": 0, "cycles": _cycles, "alerts": _alerts},
+                checked_at=_utc_iso(),
+            )
+        if _productive < _min_brains:
+            return SourceCheckResult(
+                source="brain_output_health",
+                tier=Tier.HIGH,
+                status=SourceStatus.WARN,
+                primary_code="BRAIN_SILENCE_LOW",
+                message=f"Only {_productive}/{_min_brains} brains producing output",
+                metrics={"productive_brains": _productive, "alerts": _alerts},
+                checked_at=_utc_iso(),
+            )
+        # Check individual brain alert spikes
+        _overactive = [bid for bid, c in _alerts.items() if c > _max_alerts]
+        if _overactive:
+            return SourceCheckResult(
+                source="brain_output_health",
+                tier=Tier.HIGH,
+                status=SourceStatus.WARN,
+                primary_code="BRAIN_ALERT_SPIKE",
+                message=f"Brains with >{_max_alerts} alerts: {_overactive}",
+                metrics={"overactive_brains": _overactive, "alerts": _alerts},
+                checked_at=_utc_iso(),
+            )
+        return SourceCheckResult(
+            source="brain_output_health", tier=Tier.HIGH,
+            status=SourceStatus.PASS, primary_code="BRAIN_OUTPUT_OK",
+            message=f"{_productive} brains producing output across {_cycles} cycles",
+            metrics={"productive_brains": _productive, "cycles": _cycles, "alerts": _alerts},
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.HIGH,
+        source="trade_activity",
+        description="Trade frequency anomaly — distinguishes 'thinking' from 'dead'",
+    )
+    def check_trade_activity(self) -> SourceCheckResult:
+        self._hydrate_behavioral_metrics()
+        _trades = self._cached_behavioral_metrics.intent_dispatched_count
+        _rejections = self._cached_behavioral_metrics.strategy_rejections
+
+        if _trades > 0:
+            return SourceCheckResult(
+                source="trade_activity", tier=Tier.HIGH,
+                status=SourceStatus.PASS, primary_code="TRADE_ACTIVITY_OK",
+                message=f"{_trades} trades dispatched — system is active",
+                metrics={"trades": _trades, "rejections": _rejections},
+                checked_at=_utc_iso(),
+            )
+        if _rejections > 0:
+            return SourceCheckResult(
+                source="trade_activity", tier=Tier.HIGH,
+                status=SourceStatus.PASS,
+                primary_code="TRADE_ACTIVITY_REJECTING",
+                message=f"0 trades but {_rejections} rejections — system thinking, market unfavorable",
+                metrics={"trades": 0, "rejections": _rejections},
+                checked_at=_utc_iso(),
+            )
+        # Zero trades AND zero rejections → system may be dead
+        _cycles = self._cached_behavioral_metrics.cycle_count
+        _max_silent = int(self._t("trade_activity_max_silent_cycles"))
+        if _cycles >= _max_silent:
+            return SourceCheckResult(
+                source="trade_activity",
+                tier=Tier.HIGH,
+                status=SourceStatus.FAIL,
+                primary_code="TRADE_ACTIVITY_SILENT",
+                message=(
+                    f"0 trades AND 0 rejections across {_cycles} cycles — "
+                    f"system may be stalled (main eval not running?)"
+                ),
+                metrics={"cycles_silent": _cycles, "max_silent": _max_silent},
+                checked_at=_utc_iso(),
+            )
+        return SourceCheckResult(
+            source="trade_activity", tier=Tier.HIGH,
+            status=SourceStatus.PASS,
+            primary_code="TRADE_ACTIVITY_SILENT_BUT_RECENT",
+            message=f"0 trades in {_cycles} cycles, below alert threshold ({_max_silent})",
+            metrics={"cycles_silent": _cycles, "max_silent": _max_silent},
+            checked_at=_utc_iso(),
+        )
 
     def build_alert_context(self, report: HealthReport) -> dict[str, Any]:
         """Convert report to alert context keys for external evaluation.
