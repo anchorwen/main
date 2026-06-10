@@ -1444,6 +1444,171 @@ class DataHealthService:
             checked_at=_utc_iso(),
         )
 
+    @health_check(
+        tier=Tier.MEDIUM,
+        source="feature_store_schemas",
+        description="Feature store schema registry integrity and drift",
+    )
+    def check_feature_store_schemas(self) -> SourceCheckResult:
+        """Check feature_store/schemas.json for schema version and dimension count."""
+        fs_path = os.path.join(self._base_dir, "feature_store", "schemas.json")
+        fs = _safe_json_load(fs_path)
+        if fs is None:
+            return SourceCheckResult(
+                source="feature_store_schemas",
+                tier=Tier.MEDIUM,
+                status=SourceStatus.MISSING,
+                primary_code="FS_SCHEMAS_MISSING",
+                message="feature_store/schemas.json not found",
+                checked_at=_utc_iso(),
+            )
+        schema_count = len(fs) if isinstance(fs, dict) else 0
+        if schema_count == 0:
+            return SourceCheckResult(
+                source="feature_store_schemas",
+                tier=Tier.MEDIUM,
+                status=SourceStatus.FAIL,
+                primary_code="FS_SCHEMAS_EMPTY",
+                message="No feature schemas registered",
+                checked_at=_utc_iso(),
+            )
+        valid = 0
+        for _name, schema in fs.items():
+            if isinstance(schema, dict) and "dimensions" in schema:
+                valid += 1
+        status = SourceStatus.PASS if valid == schema_count else SourceStatus.WARN
+        code = "FS_SCHEMAS_OK" if valid == schema_count else "FS_SCHEMAS_INCOMPLETE"
+        return SourceCheckResult(
+            source="feature_store_schemas",
+            tier=Tier.MEDIUM,
+            status=status,
+            primary_code=code,
+            metrics={"schema_count": schema_count, "valid_schemas": valid},
+            message=f"{valid}/{schema_count} schemas valid",
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.MEDIUM,
+        source="alert_delivery",
+        description="Alert audit log — delivery success rate and recent activity",
+    )
+    def check_alert_delivery(self) -> SourceCheckResult:
+        """Check logs/alert_audit.jsonl and alert_undelivered.jsonl for delivery health."""
+        audit_path = os.path.join(self._base_dir, "logs", "alert_audit.jsonl")
+        undelivered_path = os.path.join(self._base_dir, "logs", "alert_undelivered.jsonl")
+        audit_count = _safe_jsonl_count(audit_path) or 0
+        undelivered_count = _safe_jsonl_count(undelivered_path) or 0
+        last = _safe_jsonl_last(audit_path)
+        last_ts = last.get("timestamp_utc", last.get("time", "")) if last else ""
+        age_h = _age_minutes(last_ts) / 60.0 if last_ts else -1
+        fail_rate = undelivered_count / max(audit_count + undelivered_count, 1)
+        if audit_count == 0:
+            status = SourceStatus.WARN
+            code = "ALERT_AUDIT_EMPTY"
+            message = "No alert audit entries — alert system may not be running"
+        elif fail_rate > 0.10:
+            status = SourceStatus.FAIL
+            code = "ALERT_DELIVERY_FAIL_RATE_HIGH"
+            message = f"{undelivered_count}/{audit_count + undelivered_count} undelivered ({fail_rate:.1%})"
+        elif age_h > 6:
+            status = SourceStatus.WARN
+            code = "ALERT_AUDIT_STALE"
+            message = f"Last alert {age_h:.0f}h ago — alert system may be silent"
+        else:
+            status = SourceStatus.PASS
+            code = "ALERT_DELIVERY_OK"
+            message = f"{audit_count} delivered, {undelivered_count} undelivered, last {age_h:.1f}h ago"
+        return SourceCheckResult(
+            source="alert_delivery",
+            tier=Tier.MEDIUM,
+            status=status,
+            primary_code=code,
+            metrics={"audit_count": audit_count, "undelivered_count": undelivered_count, "fail_rate": round(fail_rate, 4), "last_age_hours": round(age_h, 1)},
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.MEDIUM,
+        source="data_health_self",
+        description="DataHealthService own state file — self-monitoring integrity",
+    )
+    def check_data_health_self(self) -> SourceCheckResult:
+        """Check state/data_health_state.json for self-monitoring integrity."""
+        dh_path = os.path.join(self._base_dir, "state", "data_health_state.json")
+        dh = _safe_json_load(dh_path)
+        if dh is None:
+            return SourceCheckResult(
+                source="data_health_self",
+                tier=Tier.MEDIUM,
+                status=SourceStatus.MISSING,
+                primary_code="DH_SELF_MISSING",
+                message="data_health_state.json not found",
+                checked_at=_utc_iso(),
+            )
+        sv = dh.get("schema_version", "")
+        if sv != "data_health_state.v2":
+            return SourceCheckResult(
+                source="data_health_self",
+                tier=Tier.MEDIUM,
+                status=SourceStatus.WARN,
+                primary_code="DH_SELF_SCHEMA_OLD",
+                message=f"Schema {sv or 'missing'} — expected data_health_state.v2",
+                checked_at=_utc_iso(),
+            )
+        updated = dh.get("updated_at", "")
+        age_h = _age_minutes(updated) / 60.0
+        sources = dh.get("sources", {})
+        source_count = len(sources)
+        status = SourceStatus.WARN if age_h > 24 else SourceStatus.PASS
+        code = "DH_SELF_STALE" if age_h > 24 else "DH_SELF_OK"
+        return SourceCheckResult(
+            source="data_health_self",
+            tier=Tier.MEDIUM,
+            status=status,
+            primary_code=code,
+            metrics={"schema_version": sv, "source_count": source_count, "age_hours": round(age_h, 1)},
+            message=f"Self-check: {source_count} sources tracked, age {age_h:.1f}h",
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.MEDIUM,
+        source="alpha_allocation",
+        description="Portfolio allocation output — alpha_count check",
+    )
+    def check_alpha_allocation(self) -> SourceCheckResult:
+        """Check reports/alpha_allocation.json for portfolio allocation health."""
+        aa_path = os.path.join(self._base_dir, "reports", "alpha_allocation.json")
+        aa = _safe_json_load(aa_path)
+        if aa is None:
+            return SourceCheckResult(
+                source="alpha_allocation",
+                tier=Tier.MEDIUM,
+                status=SourceStatus.SKIPPED,
+                primary_code="ALPHA_ALLOC_MISSING",
+                message="alpha_allocation.json not found",
+                checked_at=_utc_iso(),
+            )
+        alpha_count = aa.get("alpha_count", 0)
+        allocatable = aa.get("allocatable_count", 0)
+        if alpha_count == 0:
+            status = SourceStatus.WARN
+            code = "ALPHA_ALLOC_EMPTY"
+        else:
+            status = SourceStatus.PASS
+            code = "ALPHA_ALLOC_OK"
+        return SourceCheckResult(
+            source="alpha_allocation",
+            tier=Tier.MEDIUM,
+            status=status,
+            primary_code=code,
+            metrics={"alpha_count": alpha_count, "allocatable_count": allocatable},
+            message=f"{alpha_count} alphas, {allocatable} allocatable",
+            checked_at=_utc_iso(),
+        )
+
     # ══════════════════════════════════════════════════════════════════════
     # CROSS-SOURCE VALIDATION (FULL mode only)
     # ══════════════════════════════════════════════════════════════════════
