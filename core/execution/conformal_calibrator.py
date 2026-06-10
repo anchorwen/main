@@ -277,13 +277,32 @@ class ConformalCalibrator:
         serializable: list[dict[str, Any]] = []
         for p_win, label, ts in self._history:
             serializable.append({"p_win": p_win, "label": label, "timestamp": ts})
+
+        # FIX-20260610-007: Merge with existing on-disk state to prevent
+        # total_computations from being zeroed out.  Two ConformalCalibrator
+        # instances share this state file: the live-cycle instance (which
+        # calls compute_threshold() and increments in-memory) and the
+        # daily_ops instance (which calls update() but never compute_threshold()).
+        # Without merging, daily_ops overwrites the live-cycle counter with 0.
+        _total = self._total_computations
+        _clamp_up = self._clamp_hits_upper
+        _clamp_lo = self._clamp_hits_lower
+        if self._state_path.exists():
+            try:
+                _old = json.loads(self._state_path.read_text(encoding="utf-8"))
+                _total = max(_total, int(_old.get("total_computations", 0)))
+                _clamp_up = max(_clamp_up, int(_old.get("clamp_hits_upper", 0)))
+                _clamp_lo = max(_clamp_lo, int(_old.get("clamp_hits_lower", 0)))
+            except (json.JSONDecodeError, OSError, ValueError, TypeError):
+                pass  # corrupt state → use in-memory values
+
         self._state_path.write_text(
             json.dumps(
                 {
                     "history": serializable,
-                    "clamp_hits_upper": self._clamp_hits_upper,
-                    "clamp_hits_lower": self._clamp_hits_lower,
-                    "total_computations": self._total_computations,
+                    "clamp_hits_upper": _clamp_up,
+                    "clamp_hits_lower": _clamp_lo,
+                    "total_computations": _total,
                     "cold_started": self._cold_started,
                 },
                 indent=2,

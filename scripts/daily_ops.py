@@ -619,9 +619,28 @@ def _step_retraining_check(
                     pnl_store = BrainPnLStore.load(pnl_path)
                     governance = GovernanceService.load(gov_path)
                     lb = BrainLeaderboard()
+                    # FIX-20260610-007: pass vote_weights from DynamicBrainWeighter
+                    # so leaderboard reflects actual PnL-based quality weights.
+                    _vote_weights: dict[str, float] = {}
+                    try:
+                        from core.brains.brain_registry import load_brain_registry
+                        from core.brains.services.dynamic_brain_weighter import DynamicBrainWeighter
+                        _perf_path = base / "brain_performance.json"
+                        if _perf_path.exists():
+                            _registry = load_brain_registry(base_dir=str(base))
+                            _tracker = _registry.get("tracker")
+                            if _tracker is not None:
+                                _dw = DynamicBrainWeighter(
+                                    performance_tracker=_tracker,
+                                    pnl_store=pnl_store,
+                                )
+                                _vote_weights = _dw.get_weights()
+                    except Exception:  # noqa: BLE001
+                        pass  # fall back to equal-weight (handled in rank())
                     rankings = lb.rank(
                         pnl_store.get_all_metrics(),
                         governance_states=governance.get_all_states(),
+                        vote_weights=_vote_weights,
                     )
                     leaderboard = {
                         "schema": "pnl_leaderboard.v1",

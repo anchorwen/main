@@ -123,6 +123,13 @@ class BrainLeaderboard:
         if vote_weights is None:
             vote_weights = {}
 
+        # FIX-20260610-007: Equal-weight fallback — prevent global
+        # vote_weight=0 collapse when caller doesn't pass weights.
+        # All-zero weights (or empty dict) → every brain gets 1/N.
+        if not vote_weights or all(v == 0.0 for v in vote_weights.values()):
+            n = max(len(metrics_map), 1)
+            vote_weights = {bid: 1.0 / n for bid in metrics_map}
+
         rankings: list[BrainRanking] = []
         for brain_id, m in metrics_map.items():
             # Extract fields — support both BrainPnLMetrics objects and dicts

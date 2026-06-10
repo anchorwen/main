@@ -69,6 +69,12 @@ class StrategyBudget:
         self._sl_timestamps.clear()
         self._sl_cooldown_until = 0.0
         self._sl_paused_rest_of_day = False
+        # FIX-20260610-007: Clear loss-limit pause on cross-day reset.
+        # Previously only _sl_paused_rest_of_day was cleared; self.paused
+        # stayed True across midnight, causing permanent budget_paused lock
+        # when cooldown_minutes=0 (never auto-unpauses).
+        self.paused = False
+        self.paused_at = 0.0
         self.last_trade_day = self._today()
 
     def check_pause(self) -> bool:
@@ -286,6 +292,12 @@ class StrategyBudget:
             self.paused = bool(saved["paused"])
         if "paused_at" in saved:
             self.paused_at = float(saved["paused_at"])
+        # FIX-20260610-007: Force-unpause on cross-day restore.
+        # If the saved state is from a previous day, the daily loss limit
+        # has reset — the pause should not survive into the new day.
+        if self.paused and self.last_trade_day == "":
+            self.paused = False
+            self.paused_at = 0.0
         if "last_trade_day" in saved:
             _saved_day = str(saved["last_trade_day"])
             _today = self._today()

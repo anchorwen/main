@@ -595,9 +595,27 @@ def _run_pnl_leaderboard(base_dir: Path) -> dict[str, Any]:
         governance = GovernanceService.load(gov_path) if gov_path.exists() else GovernanceService()
 
         lb = BrainLeaderboard()
+        # FIX-20260610-007: pass vote_weights from DynamicBrainWeighter
+        _vote_weights: dict[str, float] = {}
+        try:
+            from core.brains.brain_registry import load_brain_registry
+            from core.brains.services.dynamic_brain_weighter import DynamicBrainWeighter
+            _perf_path = base_dir / "brain_performance.json"
+            if _perf_path.exists():
+                _registry = load_brain_registry(base_dir=str(base_dir))
+                _tracker = _registry.get("tracker")
+                if _tracker is not None:
+                    _dw = DynamicBrainWeighter(
+                        performance_tracker=_tracker,
+                        pnl_store=pnl_store,
+                    )
+                    _vote_weights = _dw.get_weights()
+        except Exception:  # noqa: BLE001
+            pass
         rankings = lb.rank(
             pnl_store.get_all_metrics(),
             governance_states=governance.get_all_states(),
+            vote_weights=_vote_weights,
         )
         return {
             "schema_version": "pnl_leaderboard.v1",
