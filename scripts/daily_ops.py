@@ -1073,6 +1073,58 @@ def _step_feature_store_maintenance(
         return {"step": "feature_store_maintenance", "status": "error", "error": str(exc)[:500]}
 
 
+def _step_data_health(
+    base_dir: str,
+    *,
+    symbol: str = "XAUUSDc",
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """FIX-20260610-005: Run unified data health checks (FULL mode).
+
+    Covers all 20 data sources across CRITICAL/HIGH/MEDIUM tiers,
+    cross-source validation, and orphan subsystem detection.
+    Alerts are dispatched through the alert system's rule engine
+    (RULE-012..016) — no ad-hoc alert_hub calls.
+    """
+    try:
+        from core.observability.data_health_service import DataHealthService
+
+        svc = DataHealthService(base_dir=base_dir, symbol=symbol, mode="full")
+        report = svc.run_full()
+
+        if not dry_run:
+            svc.save_health_state(report)
+            # Iron Law #3: DataHealthService doesn't send alerts.
+            # Alert dispatch is done externally — here we produce the context
+            # dict so downstream alert steps can evaluate it.
+            ctx = svc.build_alert_context(report)
+            steps_result = {
+                "step": "data_health",
+                "status": "ok",
+                "alert_level": report.alert_level,
+                "elapsed_ms": report.elapsed_ms,
+                "total_sources_checked": len(report.sources),
+                "pass_count": sum(1 for s in report.sources if s.status.value == "pass"),
+                "warn_count": sum(1 for s in report.sources if s.status.value == "warn"),
+                "fail_count": sum(1 for s in report.sources if s.status.value == "fail"),
+                "missing_count": sum(1 for s in report.sources if s.status.value == "missing"),
+                "cross_check_warnings": sum(1 for c in report.cross_checks if c.status.value != "pass"),
+                "orphan_count": len(report.orphans),
+                "primary_codes": report.primary_codes,
+                "alert_context": ctx,
+            }
+            return steps_result
+        else:
+            return {
+                "step": "data_health",
+                "status": "dry_run",
+                "total_sources_checked": len(report.sources),
+                "alert_level": report.alert_level,
+            }
+    except Exception as exc:  # noqa: BLE001 — Iron Law #1
+        return {"step": "data_health", "status": "error", "error": str(exc)[:500]}
+
+
 def _step_daily_recap(base_dir: str, *, mt5_terminal_path: str | None = None) -> dict[str, Any]:
     """Run daily recap and return summary."""
     try:
@@ -1118,6 +1170,7 @@ def run_daily_ops(
     skip_online_feedback: bool = False,
     skip_paper_simulation: bool = False,
     skip_fs_maintenance: bool = False,
+    skip_data_health: bool = False,
     dry_run: bool = False,
     mt5_terminal_path: str | None = None,
     symbol: str = "XAUUSDc",  # FIX-20260601-033: per-symbol feedback
@@ -1292,6 +1345,10 @@ def run_daily_ops(
     if not skip_retraining:
         steps.append(_step_retraining_check(base_dir, dry_run=dry_run, auto_execute=not dry_run))
 
+    # ── FIX-20260610-005: DataHealthService FULL mode ──
+    if not skip_data_health:
+        steps.append(_step_data_health(base_dir, symbol=symbol, dry_run=dry_run))
+
     if not skip_recap:
         steps.append(_step_daily_recap(base_dir, mt5_terminal_path=mt5_terminal_path))
 
@@ -1337,6 +1394,7 @@ def run_daily_ops(
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="daily_ops")
     p.add_argument("--base-dir", default="data", help="Base data directory")
+    p.add_argument("--symbol", default="XAUUSDc", help="Trading symbol (default: XAUUSDc)")
     p.add_argument("--dry-run", action="store_true", help="Assess without applying transitions")
     p.add_argument("--skip-shadow", action="store_true", help="Skip shadow ensemble")
     p.add_argument("--skip-label-builder", action="store_true", help="Skip label builder")
@@ -1357,6 +1415,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--skip-fs-maintenance", action="store_true", help="Skip feature store maintenance"
+    )
+    p.add_argument(
+        "--skip-data-health", action="store_true", help="Skip data health monitoring"
     )
     p.add_argument("--output", type=Path, default=None, help="Write combined report JSON to file")
     p.add_argument(
@@ -1386,7 +1447,9 @@ def main(argv: list[str] | None = None) -> int:
         skip_online_feedback=args.skip_online_feedback,
         skip_paper_simulation=args.skip_paper_simulation,
         skip_fs_maintenance=args.skip_fs_maintenance,
+        skip_data_health=args.skip_data_health,
         dry_run=args.dry_run,
+        symbol=args.symbol,
         mt5_terminal_path=args.mt5_terminal_path,
     )
 

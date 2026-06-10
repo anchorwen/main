@@ -24,8 +24,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from datetime import UTC, datetime, timezone
-from pathlib import Path
+from datetime import UTC, datetime
 from typing import Any
 
 from core.observability.data_health_schema import (
@@ -42,7 +41,6 @@ from core.observability.data_health_schema import (
     health_check,
 )
 
-
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 
@@ -58,7 +56,7 @@ def _age_minutes(iso_ts: str | None) -> float:
         s = str(iso_ts)[:19]
         dt = datetime.fromisoformat(s)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return (datetime.now(UTC) - dt).total_seconds() / 60.0
     except (ValueError, TypeError, OSError):
         return -1.0
@@ -358,7 +356,7 @@ class DataHealthService:
         if age_min < 0:
             status = SourceStatus.WARN
             code = "FEATURE_STORE_TIMESTAMP_UNREADABLE"
-            message = f"Cannot parse event_time from last record"
+            message = "Cannot parse event_time from last record"
         elif age_min > max_age * 2:
             status = SourceStatus.FAIL
             code = "FEATURE_STORE_STALE"
@@ -376,7 +374,7 @@ class DataHealthService:
         metrics: dict[str, Any] = {"age_minutes": round(age_min, 1)}
         feats = last.get("features", last.get("feature_vector", []))
         if isinstance(feats, list) and len(feats) > 0:
-            zero_count = sum(1 for v in feats if isinstance(v, (int, float)) and v == 0)
+            zero_count = sum(1 for v in feats if isinstance(v, int | float) and v == 0)
             # NaN check
             nan_count = sum(
                 1 for v in feats
@@ -480,7 +478,7 @@ class DataHealthService:
             if status == SourceStatus.PASS:
                 status = SourceStatus.WARN
             code = "EXEC_STATE_STALE_COUNTERS_NO_BREAKER"
-            message += f" | stale/degraded counters non-zero but breaker not tripped"
+            message += " | stale/degraded counters non-zero but breaker not tripped"
 
         return SourceCheckResult(
             source="execution_state",
@@ -685,6 +683,757 @@ class DataHealthService:
         )
 
     # ══════════════════════════════════════════════════════════════════════
+    # HIGH-TIER CHECKS (FULL mode only)
+    # ══════════════════════════════════════════════════════════════════════
+
+    @health_check(
+        tier=Tier.HIGH,
+        source="position_snapshots",
+        description="Position snapshot trail distance, bar coverage",
+    )
+    def check_position_snapshots(self) -> SourceCheckResult:
+        """Check position_snapshots.jsonl for trail activity and coverage."""
+        ps_path = os.path.join(self._base_dir, "position_snapshots.jsonl")
+        stats = _safe_jsonl_tail_stats(ps_path, max_scan=200)
+
+        if not stats:
+            return SourceCheckResult(
+                source="position_snapshots",
+                tier=Tier.HIGH,
+                status=SourceStatus.MISSING,
+                primary_code="POS_SNAP_MISSING",
+                message="position_snapshots.jsonl not found",
+                checked_at=_utc_iso(),
+            )
+
+        # Read actual snapshots for trail analysis
+        last = _safe_jsonl_last(ps_path)
+        last_time = last.get("time", "") if last else ""
+
+        # Check for recent snapshots
+        if last and isinstance(last, dict):
+            trail_dist = last.get("trailing_sl_distance", 0) or 0
+            bars = last.get("bars_held", 0) or 0
+
+            status = SourceStatus.PASS
+            code = "POS_SNAP_OK"
+            message = f"Last snapshot: {bars} bars held, trail_dist={trail_dist:.1f}"
+
+            # Staleness check
+            age_min = _age_minutes(last_time)
+            if age_min > 60:
+                status = SourceStatus.WARN
+                code = "POS_SNAP_STALE"
+                message += f" | Stale ({age_min:.0f} min)"
+        else:
+            status = SourceStatus.PASS
+            code = "POS_SNAP_OK"
+            message = "Snapshots present, no positions currently open"
+
+        return SourceCheckResult(
+            source="position_snapshots",
+            tier=Tier.HIGH,
+            status=status,
+            primary_code=code,
+            metrics={"total_lines": stats.get("total_lines", 0), "last_time": last_time},
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.HIGH,
+        source="calibrator_feed_state",
+        description="Calibrator feed sample count, staleness",
+    )
+    def check_calibrator_feed_state(self) -> SourceCheckResult:
+        """Check calibrator_feed_state.json for sample accumulation."""
+        cf_path = os.path.join(self._base_dir, "calibrator_feed_state.json")
+        cf = _safe_json_load(cf_path)
+
+        if cf is None:
+            return SourceCheckResult(
+                source="calibrator_feed_state",
+                tier=Tier.HIGH,
+                status=SourceStatus.MISSING,
+                primary_code="CAL_FEED_MISSING",
+                message="calibrator_feed_state.json not found",
+                checked_at=_utc_iso(),
+            )
+
+        sample_count = cf.get("sample_count", 0)
+        last_line = cf.get("last_line", 0)
+        updated = cf.get("updated_utc", "")
+        age_min = _age_minutes(updated)
+
+        # Phase determination: COLD < 50, WARM 50-200, HOT > 200
+        if sample_count < 50:
+            phase = "COLD"
+            phase_msg = f"{sample_count}/50 to WARM"
+        elif sample_count < 200:
+            phase = "WARM"
+            phase_msg = f"{sample_count}/200 to HOT"
+        else:
+            phase = "HOT"
+            phase_msg = f"{sample_count} samples"
+
+        if age_min > 12 * 60:
+            status = SourceStatus.FAIL
+            code = "CAL_FEED_STALLED"
+        elif age_min > 6 * 60:
+            status = SourceStatus.WARN
+            code = "CAL_FEED_STALE"
+        else:
+            status = SourceStatus.PASS if sample_count >= 50 else SourceStatus.WARN
+            code = f"CAL_FEED_{phase}"
+
+        return SourceCheckResult(
+            source="calibrator_feed_state",
+            tier=Tier.HIGH,
+            status=status,
+            primary_code=code,
+            metrics={
+                "sample_count": sample_count,
+                "last_line": last_line,
+                "age_minutes": round(age_min, 1),
+                "phase": phase,
+            },
+            message=f"Calibrator feed: {phase} ({phase_msg}), age {age_min:.0f} min",
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.HIGH,
+        source="conformal_calibrator",
+        description="Conformal calibrator cold_started, history freshness",
+    )
+    def check_conformal_calibrator(self) -> SourceCheckResult:
+        """Check conformal_calibrator_state.json for active learning."""
+        cc_path = os.path.join(self._base_dir, "conformal_calibrator_state.json")
+        cc = _safe_json_load(cc_path)
+
+        if cc is None:
+            return SourceCheckResult(
+                source="conformal_calibrator",
+                tier=Tier.HIGH,
+                status=SourceStatus.MISSING,
+                primary_code="CONFORMAL_MISSING",
+                message="conformal_calibrator_state.json not found",
+                checked_at=_utc_iso(),
+            )
+
+        cold_started = cc.get("cold_started", True)
+        total_computations = cc.get("total_computations", 0)
+        history = cc.get("history", [])
+        history_count = len(history) if isinstance(history, list) else 0
+
+        # Check last history entry freshness
+        last_ts = ""
+        if isinstance(history, list) and history:
+            last_entry = history[-1]
+            if isinstance(last_entry, dict):
+                last_ts = last_entry.get("timestamp", "")
+
+        age_days = _age_minutes(last_ts) / (60 * 24) if last_ts else -1
+
+        if cold_started and total_computations == 0:
+            status = SourceStatus.FAIL
+            code = "CONFORMAL_COLD_STALLED"
+            message = f"Cold-started, {total_computations} computations, {history_count} history entries"
+        elif cold_started and history_count < 50:
+            status = SourceStatus.WARN
+            code = "CONFORMAL_COLD_WARMING"
+            message = f"Cold-started, {history_count}/50 history entries to warm"
+        elif age_days > 7:
+            status = SourceStatus.FAIL
+            code = "CONFORMAL_HISTORY_FROZEN"
+            message = f"History frozen: last entry {age_days:.0f} days ago"
+        elif age_days > 3:
+            status = SourceStatus.WARN
+            code = "CONFORMAL_HISTORY_STALE"
+            message = f"History stale: last entry {age_days:.0f} days ago"
+        else:
+            status = SourceStatus.PASS
+            code = "CONFORMAL_OK"
+            message = f"Active: {total_computations} computations, {history_count} history entries"
+
+        return SourceCheckResult(
+            source="conformal_calibrator",
+            tier=Tier.HIGH,
+            status=status,
+            primary_code=code,
+            metrics={
+                "cold_started": cold_started,
+                "total_computations": total_computations,
+                "history_count": history_count,
+                "last_history_age_days": round(age_days, 1) if age_days >= 0 else -1,
+            },
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.HIGH,
+        source="brain_performance",
+        description="Per-brain record count, dimension completeness",
+    )
+    def check_brain_performance(self) -> SourceCheckResult:
+        """Check brain_performance.json for record coverage."""
+        bp_path = os.path.join(self._base_dir, "brain_performance.json")
+        bp = _safe_json_load(bp_path)
+
+        if bp is None:
+            return SourceCheckResult(
+                source="brain_performance",
+                tier=Tier.HIGH,
+                status=SourceStatus.MISSING,
+                primary_code="BRAIN_PERF_MISSING",
+                message="brain_performance.json not found",
+                checked_at=_utc_iso(),
+            )
+
+        brain_ids = bp.get("brain_ids", [])
+        window_size = bp.get("window_size", 100)
+        min_records = int(self._t("brain_perf_min_records_per_brain"))
+
+        low_record_brains = []
+        for bid in brain_ids:
+            records = bp.get(bid, [])
+            if isinstance(records, list) and len(records) < min_records:
+                low_record_brains.append(f"{bid}({len(records)})")
+
+        total = len(brain_ids)
+
+        if total == 0:
+            status = SourceStatus.WARN
+            code = "BRAIN_PERF_EMPTY"
+            message = "No brains tracked in brain_performance"
+        elif low_record_brains:
+            status = SourceStatus.WARN
+            code = "BRAIN_PERF_LOW_RECORDS"
+            message = f"{len(low_record_brains)}/{total} brains have <{min_records} records: {', '.join(low_record_brains[:5])}"
+        else:
+            status = SourceStatus.PASS
+            code = "BRAIN_PERF_OK"
+            message = f"{total} brains tracked, all >= {min_records} records"
+
+        return SourceCheckResult(
+            source="brain_performance",
+            tier=Tier.HIGH,
+            status=status,
+            primary_code=code,
+            metrics={"total_brains": total, "low_record_count": len(low_record_brains), "window_size": window_size},
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.HIGH,
+        source="brain_pnl_ledger",
+        description="PnL ledger settled vs pending ratio, entry age",
+    )
+    def check_brain_pnl_ledger(self) -> SourceCheckResult:
+        """Check brain_pnl_ledger.json for settlement health."""
+        pl_path = os.path.join(self._base_dir, "brain_pnl_ledger.json")
+        pl = _safe_json_load(pl_path)
+
+        if pl is None:
+            return SourceCheckResult(
+                source="brain_pnl_ledger",
+                tier=Tier.HIGH,
+                status=SourceStatus.MISSING,
+                primary_code="PNL_LEDGER_MISSING",
+                message="brain_pnl_ledger.json not found",
+                checked_at=_utc_iso(),
+            )
+
+        settled = pl.get("settled", {})
+        pending = pl.get("pending", {})
+        settled_count = sum(len(v) for v in settled.values()) if isinstance(settled, dict) else 0
+        pending_count = sum(len(v) for v in pending.values()) if isinstance(pending, dict) else 0
+
+        if settled_count == 0 and pending_count == 0:
+            status = SourceStatus.SKIPPED
+            code = "PNL_LEDGER_EMPTY"
+            message = "No settled or pending entries — no trades yet"
+        elif pending_count > settled_count * 2:
+            status = SourceStatus.WARN
+            code = "PNL_LEDGER_PENDING_BACKLOG"
+            message = f"Pending ({pending_count}) >> Settled ({settled_count}) — settlement lag"
+        else:
+            status = SourceStatus.PASS
+            code = "PNL_LEDGER_OK"
+            message = f"Settled: {settled_count}, Pending: {pending_count}"
+
+        return SourceCheckResult(
+            source="brain_pnl_ledger",
+            tier=Tier.HIGH,
+            status=status,
+            primary_code=code,
+            metrics={"settled_count": settled_count, "pending_count": pending_count},
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.HIGH,
+        source="bar_sync_state",
+        description="Bar sync lag, total bars growth",
+    )
+    def check_bar_sync_state(self) -> SourceCheckResult:
+        """Check bar_sync_state.json for synchronization health."""
+        bs_path = os.path.join(self._base_dir, "bar_sync_state.json")
+        bs = _safe_json_load(bs_path)
+
+        if bs is None:
+            return SourceCheckResult(
+                source="bar_sync_state",
+                tier=Tier.HIGH,
+                status=SourceStatus.MISSING,
+                primary_code="BAR_SYNC_MISSING",
+                message="bar_sync_state.json not found",
+                checked_at=_utc_iso(),
+            )
+
+        lag = bs.get("lag_count", 0)
+        total = bs.get("total_bars_seen", 0)
+        last_sync = bs.get("last_sync_utc", "")
+        age_min = _age_minutes(last_sync)
+        max_lag = int(self._t("bar_sync_max_lag_count"))
+
+        if age_min > 15:
+            status = SourceStatus.FAIL
+            code = "BAR_SYNC_STALE"
+            message = f"Bar sync stale: {age_min:.0f} min since last sync"
+        elif lag > max_lag:
+            status = SourceStatus.FAIL
+            code = "BAR_SYNC_LAG_HIGH"
+            message = f"Bar sync lag {lag} exceeds threshold {max_lag}"
+        elif lag > max_lag // 2:
+            status = SourceStatus.WARN
+            code = "BAR_SYNC_LAG_ELEVATED"
+            message = f"Bar sync lag {lag}"
+        else:
+            status = SourceStatus.PASS
+            code = "BAR_SYNC_OK"
+            message = f"Bar sync lag={lag}, total_bars={total}, age={age_min:.0f} min"
+
+        return SourceCheckResult(
+            source="bar_sync_state",
+            tier=Tier.HIGH,
+            status=status,
+            primary_code=code,
+            metrics={"lag_count": lag, "total_bars_seen": total, "age_minutes": round(age_min, 1)},
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.HIGH,
+        source="golden_master",
+        description="Golden master cycle count, last entry age",
+    )
+    def check_golden_master(self) -> SourceCheckResult:
+        """Check golden_master.jsonl for replay data health."""
+        gm_path = os.path.join(self._base_dir, "golden_master.jsonl")
+        last = _safe_jsonl_last(gm_path)
+
+        if last is None:
+            return SourceCheckResult(
+                source="golden_master",
+                tier=Tier.HIGH,
+                status=SourceStatus.MISSING,
+                primary_code="GOLDEN_MASTER_MISSING",
+                message="golden_master.jsonl not found or empty",
+                checked_at=_utc_iso(),
+            )
+
+        cycle = last.get("cycle", 0)
+        ts = last.get("timestamp_utc", "")
+        age_min = _age_minutes(ts)
+
+        # Check if trading is blocked
+        summary = last.get("summary", {})
+        trade_decisions = summary.get("trade_decisions", 0)
+        outputs = last.get("outputs", {})
+        blocked_reasons = set()
+        for _strategy, decision in outputs.items():
+            if isinstance(decision, dict):
+                reason = decision.get("reason", "")
+                if "budget_paused" in reason or "blocked" in reason.lower():
+                    blocked_reasons.add(reason)
+
+        metrics: dict[str, Any] = {"cycle": cycle, "age_minutes": round(age_min, 1), "trade_decisions": trade_decisions}
+
+        if age_min > 30:
+            status = SourceStatus.FAIL
+            code = "GOLDEN_MASTER_STALE"
+            message = f"Last GM cycle {cycle} age {age_min:.0f} min"
+        elif cycle == 0:
+            status = SourceStatus.FAIL
+            code = "GOLDEN_MASTER_EMPTY"
+            message = "GM recorded 0 cycles"
+        elif blocked_reasons:
+            status = SourceStatus.WARN
+            code = "GOLDEN_MASTER_TRADING_BLOCKED"
+            message = f"Cycle {cycle}: trading blocked — {', '.join(list(blocked_reasons)[:3])}"
+            metrics["blocked_reasons"] = list(blocked_reasons)
+        else:
+            status = SourceStatus.PASS
+            code = "GOLDEN_MASTER_OK"
+            message = f"Cycle {cycle}, {trade_decisions} decisions, age {age_min:.0f} min"
+
+        return SourceCheckResult(
+            source="golden_master",
+            tier=Tier.HIGH,
+            status=status,
+            primary_code=code,
+            metrics=metrics,
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    # ══════════════════════════════════════════════════════════════════════
+    # MEDIUM-TIER CHECKS (FULL mode only)
+    # ══════════════════════════════════════════════════════════════════════
+
+    @health_check(
+        tier=Tier.MEDIUM,
+        source="alpha_registry",
+        description="Alpha registry alpha_count, orphan detection",
+    )
+    def check_alpha_registry(self) -> SourceCheckResult:
+        """Check alpha_registry.json for alpha availability."""
+        ar_path = os.path.join(self._base_dir, "alpha_registry.json")
+        ar = _safe_json_load(ar_path)
+
+        if ar is None:
+            return SourceCheckResult(
+                source="alpha_registry",
+                tier=Tier.MEDIUM,
+                status=SourceStatus.MISSING,
+                primary_code="ALPHA_REGISTRY_MISSING",
+                message="alpha_registry.json not found",
+                checked_at=_utc_iso(),
+            )
+
+        alpha_count = ar.get("alpha_count", 0)
+        records = ar.get("records", [])
+
+        if alpha_count == 0:
+            status = SourceStatus.FAIL
+            code = "ALPHA_REGISTRY_EMPTY"
+            message = "No alphas registered — ORPHAN_SUBSYSTEM"
+        else:
+            active = sum(1 for r in records if isinstance(r, dict) and r.get("state") == "active")
+            status = SourceStatus.PASS
+            code = "ALPHA_REGISTRY_OK"
+            message = f"{alpha_count} alphas, {active} active"
+
+        return SourceCheckResult(
+            source="alpha_registry",
+            tier=Tier.MEDIUM,
+            status=status,
+            primary_code=code,
+            metrics={"alpha_count": alpha_count},
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.MEDIUM,
+        source="regime_detector_state",
+        description="Regime detector warmup, sample count",
+    )
+    def check_regime_detector_state(self) -> SourceCheckResult:
+        """Check regime_detector_state.json for health."""
+        rd_path = os.path.join(self._base_dir, "regime_detector_state.json")
+        rd = _safe_json_load(rd_path)
+
+        if rd is None:
+            return SourceCheckResult(
+                source="regime_detector_state",
+                tier=Tier.MEDIUM,
+                status=SourceStatus.MISSING,
+                primary_code="REGIME_STATE_MISSING",
+                message="regime_detector_state.json not found",
+                checked_at=_utc_iso(),
+            )
+
+        warmed = rd.get("is_warmed_up", False)
+        count = rd.get("count", 0)
+        atr_mean = rd.get("atr_mean", 0)
+
+        if not warmed:
+            status = SourceStatus.WARN
+            code = "REGIME_NOT_WARMED"
+            message = f"Regime detector not warmed up ({count} samples)"
+        else:
+            status = SourceStatus.PASS
+            code = "REGIME_OK"
+            message = f"Warmed up: {count} samples, ATR mean={atr_mean:.1f}"
+
+        return SourceCheckResult(
+            source="regime_detector_state",
+            tier=Tier.MEDIUM,
+            status=status,
+            primary_code=code,
+            metrics={"is_warmed_up": warmed, "sample_count": count, "atr_mean": round(atr_mean, 1)},
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.MEDIUM,
+        source="leaderboard",
+        description="Leaderboard staleness, brain health summary",
+    )
+    def check_leaderboard(self) -> SourceCheckResult:
+        """Check reports/leaderboard.json for staleness and health signals."""
+        lb_path = os.path.join(self._base_dir, "reports", "leaderboard.json")
+        lb = _safe_json_load(lb_path)
+
+        if lb is None:
+            return SourceCheckResult(
+                source="leaderboard",
+                tier=Tier.MEDIUM,
+                status=SourceStatus.MISSING,
+                primary_code="LEADERBOARD_MISSING",
+                message="leaderboard.json not found",
+                checked_at=_utc_iso(),
+            )
+
+        generated = lb.get("generated_at", "")
+        age_h = _age_minutes(generated) / 60.0
+        total = lb.get("total_brains", 0)
+        brains = lb.get("brains", [])
+
+        critical_count = sum(1 for b in brains if isinstance(b, dict) and b.get("health_signal") == "critical")
+        zero_vote = sum(1 for b in brains if isinstance(b, dict) and b.get("vote_weight", 0) == 0)
+
+        if age_h > 12:
+            status = SourceStatus.WARN
+            code = "LEADERBOARD_STALE"
+        elif critical_count > 3:
+            status = SourceStatus.WARN
+            code = "LEADERBOARD_MANY_CRITICAL"
+        elif zero_vote == total and total > 0:
+            status = SourceStatus.WARN
+            code = "LEADERBOARD_ZERO_VOTE_WEIGHT"
+            message = f"All {total} brains have vote_weight=0"
+        else:
+            status = SourceStatus.PASS
+            code = "LEADERBOARD_OK"
+
+        if not message or code == "LEADERBOARD_OK":
+            message = f"{total} brains, {critical_count} critical, age {age_h:.1f}h"
+
+        return SourceCheckResult(
+            source="leaderboard",
+            tier=Tier.MEDIUM,
+            status=status,
+            primary_code=code,
+            metrics={"total_brains": total, "critical_count": critical_count, "zero_vote_count": zero_vote, "age_hours": round(age_h, 1)},
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.MEDIUM,
+        source="daily_ops_state",
+        description="Daily ops last run time, completion check",
+    )
+    def check_daily_ops_state(self) -> SourceCheckResult:
+        """Check state/daily_ops_state.json for schedule adherence."""
+        do_path = os.path.join(self._base_dir, "state", "daily_ops_state.json")
+        do = _safe_json_load(do_path)
+
+        if do is None:
+            return SourceCheckResult(
+                source="daily_ops_state",
+                tier=Tier.MEDIUM,
+                status=SourceStatus.MISSING,
+                primary_code="DAILY_OPS_STATE_MISSING",
+                message="daily_ops_state.json not found",
+                checked_at=_utc_iso(),
+            )
+
+        last_ts = do.get("last_daily_ops_utc", 0)
+        if isinstance(last_ts, int | float) and last_ts > 0:
+            from datetime import datetime
+            last_dt = datetime.fromtimestamp(float(last_ts), tz=UTC)
+            age_h = (datetime.now(UTC).replace(tzinfo=None) - last_dt.replace(tzinfo=None)).total_seconds() / 3600
+        else:
+            age_h = -1
+
+        if age_h < 0:
+            status = SourceStatus.WARN
+            code = "DAILY_OPS_TIMESTAMP_INVALID"
+            message = "Cannot parse last_daily_ops_utc"
+        elif age_h > 30:
+            status = SourceStatus.FAIL
+            code = "DAILY_OPS_MISSED"
+            message = f"Last daily ops {age_h:.0f}h ago — may have missed a cycle"
+        elif age_h > 25:
+            status = SourceStatus.WARN
+            code = "DAILY_OPS_OVERDUE"
+            message = f"Last daily ops {age_h:.0f}h ago"
+        else:
+            status = SourceStatus.PASS
+            code = "DAILY_OPS_OK"
+            message = f"Last daily ops {age_h:.1f}h ago"
+
+        return SourceCheckResult(
+            source="daily_ops_state",
+            tier=Tier.MEDIUM,
+            status=status,
+            primary_code=code,
+            metrics={"age_hours": round(age_h, 1)},
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.MEDIUM,
+        source="live_labels",
+        description="Live labels entry count vs journal close count",
+    )
+    def check_live_labels(self) -> SourceCheckResult:
+        """Check reports/live_labels.jsonl for label data health."""
+        ll_path = os.path.join(self._base_dir, "reports", "live_labels.jsonl")
+        count = _safe_jsonl_count(ll_path)
+
+        if count is None or count == 0:
+            return SourceCheckResult(
+                source="live_labels",
+                tier=Tier.MEDIUM,
+                status=SourceStatus.SKIPPED if count == 0 else SourceStatus.MISSING,
+                primary_code="LIVE_LABELS_EMPTY",
+                message="live_labels.jsonl empty or not found",
+                checked_at=_utc_iso(),
+            )
+
+        # Check for unlabeled entries
+        try:
+            with open(ll_path, encoding="utf-8") as f:
+                unlabeled = sum(1 for line in f if '"label": "unlabeled"' in line)
+        except Exception:  # noqa: BLE001
+            unlabeled = 0
+
+        if unlabeled > 3:
+            status = SourceStatus.WARN
+            code = "LIVE_LABELS_UNLABELED"
+            message = f"{count} entries, {unlabeled} unlabeled"
+        else:
+            status = SourceStatus.PASS
+            code = "LIVE_LABELS_OK"
+            message = f"{count} entries"
+
+        return SourceCheckResult(
+            source="live_labels",
+            tier=Tier.MEDIUM,
+            status=status,
+            primary_code=code,
+            metrics={"entry_count": count, "unlabeled_count": unlabeled},
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.MEDIUM,
+        source="exit_watchdog_alerts",
+        description="Exit watchdog alert frequency anomaly",
+    )
+    def check_exit_watchdog_alerts(self) -> SourceCheckResult:
+        """Check exit watchdog alert frequency for retry storms."""
+        ew_path = os.path.join(self._base_dir, "reports", "exit_watchdog_alerts.jsonl")
+        count = _safe_jsonl_count(ew_path)
+
+        if count is None or count == 0:
+            return SourceCheckResult(
+                source="exit_watchdog_alerts",
+                tier=Tier.MEDIUM,
+                status=SourceStatus.PASS,
+                primary_code="EXIT_WATCHDOG_OK",
+                message="No exit watchdog alerts",
+                checked_at=_utc_iso(),
+            )
+
+        # Check last alert freshness
+        last = _safe_jsonl_last(ew_path)
+        last_ts = last.get("timestamp_utc", "") if last else ""
+        age_h = _age_minutes(last_ts) / 60.0 if last_ts else -1
+
+        if count > 30:
+            status = SourceStatus.WARN
+            code = "EXIT_WATCHDOG_ALERT_SPIKE"
+            message = f"{count} alerts — possible retry storm"
+        elif age_h > 24:
+            status = SourceStatus.PASS
+            code = "EXIT_WATCHDOG_OK"
+            message = f"{count} alerts, last {age_h:.0f}h ago"
+        else:
+            status = SourceStatus.PASS
+            code = "EXIT_WATCHDOG_OK"
+            message = f"{count} alerts, last {age_h:.1f}h ago"
+
+        return SourceCheckResult(
+            source="exit_watchdog_alerts",
+            tier=Tier.MEDIUM,
+            status=status,
+            primary_code=code,
+            metrics={"alert_count": count, "last_age_hours": round(age_h, 1)},
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.MEDIUM,
+        source="retraining_signal",
+        description="Retraining signal assessments, degradation detection",
+    )
+    def check_retraining_signal(self) -> SourceCheckResult:
+        """Check retraining_signal_prev.json for assessment activity."""
+        rs_path = os.path.join(self._base_dir, "reports", "retraining_signal_prev.json")
+        rs = _safe_json_load(rs_path)
+
+        if rs is None:
+            return SourceCheckResult(
+                source="retraining_signal",
+                tier=Tier.MEDIUM,
+                status=SourceStatus.MISSING,
+                primary_code="RETRAIN_SIGNAL_MISSING",
+                message="retraining_signal_prev.json not found",
+                checked_at=_utc_iso(),
+            )
+
+        assessed = rs.get("total_brains_assessed", 0)
+        degraded = rs.get("degraded_count", 0)
+        urgency = rs.get("overall_urgency", "unknown")
+
+        if assessed == 0 and urgency == "ok":
+            status = SourceStatus.WARN
+            code = "RETRAIN_NO_ASSESSMENTS"
+            message = f"0 brains assessed (urgency={urgency}) — retraining pipeline may be idle"
+        elif degraded > 0:
+            status = SourceStatus.WARN
+            code = "RETRAIN_DEGRADATION_DETECTED"
+            message = f"{degraded} brains degraded, {assessed} assessed"
+        else:
+            status = SourceStatus.PASS
+            code = "RETRAIN_OK"
+            message = f"{assessed} assessed, {degraded} degraded, urgency={urgency}"
+
+        return SourceCheckResult(
+            source="retraining_signal",
+            tier=Tier.MEDIUM,
+            status=status,
+            primary_code=code,
+            metrics={"total_brains_assessed": assessed, "degraded_count": degraded, "urgency": urgency},
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    # ══════════════════════════════════════════════════════════════════════
     # CROSS-SOURCE VALIDATION (FULL mode only)
     # ══════════════════════════════════════════════════════════════════════
 
@@ -794,7 +1543,7 @@ class DataHealthService:
     # ══════════════════════════════════════════════════════════════════════
 
     # Known (path_suffix, zero_check_key) pairs for orphan detection.
-    _ORPHAN_SIGNATURES: list[tuple[str, str, str]] = [
+    _ORPHAN_SIGNATURES: list[tuple[str, str | None, str]] = [
         ("alpha_registry.json", "alpha_count", "zero_data"),
         ("alpha_performance.json", "alpha_count", "zero_data"),
         ("conformal_calibrator_state.json", "cold_started", "empty_init"),
@@ -820,7 +1569,7 @@ class DataHealthService:
                 findings.append(OrphanFinding(
                     source_path=rel_path,
                     pattern="never_written",
-                    detail=f"File exists but cannot be parsed as JSON",
+                    detail="File exists but cannot be parsed as JSON",
                 ))
                 continue
 
@@ -921,7 +1670,7 @@ class DataHealthService:
                 "last_primary_code": src.primary_code,
                 "metrics_snapshot": {
                     k: v for k, v in src.metrics.items()
-                    if isinstance(v, (int, float, str, bool, type(None)))
+                    if isinstance(v, int | float | str | bool | type(None))
                 },
                 "error_history": errors,
                 "trend": trend,
