@@ -343,3 +343,67 @@ def fail_open_guard(component: str) -> FaultTolerantContext:
         level=FaultLevel.DEGRADE,
         component=component,
     )
+
+
+# ── FIX-20260610-003: MT5 IPC timeout wrapper ──────────────────────────
+# Surgery A: MT5 calls (positions_get, copy_rates_from_pos, etc.) can block
+# indefinitely when two processes share one MT5 terminal.  The MetaTrader5
+# Python library has no native timeout — this wrapper runs the call in a
+# daemon thread and aborts if it exceeds the timeout.
+#
+# Usage:
+#   result = mt5_call_with_timeout(mt5.positions_get, symbol="BTCUSDc", timeout=5.0)
+#   if result is _MT5_TIMEOUT_SENTINEL:
+#       ... handle timeout ...
+
+import threading as _threading_mt5
+
+_MT5_TIMEOUT_SENTINEL = object()
+
+
+def mt5_call_with_timeout(
+    fn: Any,
+    *args: Any,
+    timeout: float = 5.0,
+    **kwargs: Any,
+) -> Any:
+    """Call *fn* in a daemon thread, return result or _MT5_TIMEOUT_SENTINEL.
+
+    When *fn* blocks (e.g. MT5 IPC deadlock from concurrent terminal access),
+    the calling thread is not blocked beyond *timeout* seconds.  The daemon
+    thread is abandoned — it will be cleaned up when the process exits.
+    """
+    result: list[Any] = [_MT5_TIMEOUT_SENTINEL]
+    error: list[BaseException | None] = [None]
+    done = _threading_mt5.Event()
+
+    def _target() -> None:
+        try:
+            result[0] = fn(*args, **kwargs)
+        except Exception as exc:  # noqa: BLE001
+            error[0] = exc
+        finally:
+            done.set()
+
+    t = _threading_mt5.Thread(target=_target, daemon=True, name=f"mt5_to_{timeout}s")
+    t.start()
+    t.join(timeout=timeout)
+
+    if not done.is_set():
+        # Thread still running → MT5 call is blocking.
+        # Log the hang and return sentinel.  The daemon thread leaks but
+        # will be cleaned up on process exit.
+        logger.error(
+            "MT5 call timed out after %.1fs: %s(*%s, **%s)",
+            timeout,
+            getattr(fn, "__name__", str(fn)),
+            args,
+            {k: v for k, v in kwargs.items() if k != "timeout"},
+        )
+        return _MT5_TIMEOUT_SENTINEL
+
+    if error[0] is not None:
+        raise error[0]  # Re-raise in calling thread
+
+    return result[0]
+

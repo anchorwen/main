@@ -1876,7 +1876,7 @@ def main(argv: list[str] | None = None) -> int:
         _old_sigterm_handler = signal.signal(signal.SIGTERM, _on_shutdown_signal)
 
         # ── FIX-20260610-003: Watchdog daemon thread ─────────────────────
-        # Monitors the main loop heartbeat.  If execute_live_cycle() blocks
+        # Monitors state.last_heartbeat.  If execute_live_cycle() blocks
         # for >300s (e.g. stuck in MT5 IPC), the watchdog force-kills the
         # process via os._exit(1).  systemd/supervisor restarts it.
         # os._exit() is used (not sys.exit) because a stuck C extension
@@ -1887,33 +1887,35 @@ def main(argv: list[str] | None = None) -> int:
         import os as _os_module
         import threading as _threading
 
-        _watchdog_heartbeat = {"last": time.time()}
+        # Seed the heartbeat so the watchdog doesn't fire during startup
+        state.last_heartbeat = time.time()
 
         def _watchdog_loop() -> None:
             while True:
-                _threading.Event().wait(60.0)
-                _elapsed = time.time() - _watchdog_heartbeat["last"]
+                _threading.Event().wait(10.0)
+                _elapsed = time.time() - getattr(state, "last_heartbeat", 0.0)
                 if _elapsed > 300.0:
-                    print(
-                        json.dumps(
-                            {
-                                "event": "watchdog_triggered",
-                                "time": _utc_iso(),
-                                "elapsed_s": round(_elapsed, 1),
-                                "last_heartbeat": _watchdog_heartbeat["last"],
-                                "action": "os._exit(1)",
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
+                    # Write last words to a dedicated kill log (stdout may
+                    # be buffered / lost on hard kill).
+                    try:
+                        with open("watchdog_kill.log", "a", encoding="utf-8") as _wf:
+                            _wf.write(
+                                f"[{_utc_iso()}] WATCHDOG TRIGGERED. "
+                                f"elapsed={_elapsed:.1f}s. "
+                                f"MT5 IPC deadlock suspected. "
+                                f"Hard killing PID {_os_module.getpid()}.\n"
+                            )
+                    except OSError:
+                        pass
                     _os_module._exit(1)
 
-        _watchdog_thread = _threading.Thread(target=_watchdog_loop, daemon=True, name="watchdog")
+        _watchdog_thread = _threading.Thread(
+            target=_watchdog_loop, daemon=True, name="watchdog"
+        )
         _watchdog_thread.start()
 
         while True:
-            _watchdog_heartbeat["last"] = time.time()
+            state.last_heartbeat = time.time()
             if _shutdown_flag[0]:
                 print(
                     json.dumps(
@@ -1951,7 +1953,7 @@ def main(argv: list[str] | None = None) -> int:
                     alert_hub=alert_hub,
                     degraded_wakeup=_degraded_wakeup,
                 )
-                _watchdog_heartbeat["last"] = time.time()  # FIX-003: cycle completed
+                state.last_heartbeat = time.time()  # FIX-003: cycle completed
                 _degraded_wakeup = False  # consumed, reset for next cycle
                 # Reload tracker if daily_ops enriched it with realized P&L
                 if state._tracker_reload_pending:

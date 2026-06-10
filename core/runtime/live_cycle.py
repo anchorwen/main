@@ -271,6 +271,8 @@ class LiveCycleState:
     _mtf_price_service: Any = None  # MTFPriceService — M15 bar reconstruction from M5 tick history
     _last_ou_params: dict[str, float] | None = None  # {z_score, half_life, theta} for meta labeler
     _btc_augmenter: Any = None  # BTCFeatureAugmenter — FIX-134 lazy-init for BTC feature pipeline
+    # ── FIX-20260610-003: watchdog heartbeat ──
+    last_heartbeat: float = 0.0
     # MIA close entries collected by _execute_management_phase, consumed by caller
     _pending_mia_closes: list[dict[str, Any]] = field(default_factory=list)
 
@@ -622,7 +624,16 @@ def _execute_management_phase(
             level=FaultLevel.CRASH,
             component="MT5_IPC:positions_get:MIA_guard",
         ):
-            _mt5_pos = mt5_worker.positions_get(ticket=pos.ticket)
+            from core.runtime.fault_handler import (
+                _MT5_TIMEOUT_SENTINEL,
+                mt5_call_with_timeout,
+            )
+
+            _mt5_pos = mt5_call_with_timeout(
+                mt5_worker.positions_get, ticket=pos.ticket, timeout=5.0
+            )
+            if _mt5_pos is _MT5_TIMEOUT_SENTINEL:
+                _mt5_pos = None  # timeout → skip MIA check, retry next cycle
         if not _mt5_pos:
             # ── Position closed in MT5 between reconciliation cycles ──
             # FIX-20260525-024: previously just cleared and returned, which:
