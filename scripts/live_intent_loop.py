@@ -1417,29 +1417,81 @@ def main(argv: list[str] | None = None) -> int:
                     conformal_max_age_days=float(_cf_cfg.get("max_age_days", 14.0)),
                 )
                 if meta_signal_filter.load():
-                    # Restore rolling buffers from previous run (crash recovery)
-                    _mf_state_path = Path(args.base_dir) / "meta_filter_state.json"
-                    meta_signal_filter.load_state(str(_mf_state_path))
-                    print(
-                        json.dumps(
-                            {
-                                "event": "meta_pipeline_wired",
-                                "time": _utc_iso(),
-                                "stage2_filter": _resolved_lgb,
-                                "threshold": _fc.get("threshold", 0.65),
-                                "features": len(meta_signal_filter._feature_names),
-                                "mlp_loaded": meta_signal_filter._mlp_model is not None,
-                                "lgb_loaded": meta_signal_filter._model is not None,
-                                "calibrator_loaded": meta_signal_filter._calibrator is not None,
-                                "conformal_enabled": meta_signal_filter._conformal_mode,
-                                "conformal_max_age_days": meta_signal_filter._conformal_max_age_days,
-                                "ensemble_weights": list(meta_signal_filter._ensemble_weights),
-                                "micro_scaler_loaded": meta_signal_filter._micro_scaler is not None,
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
+                    # ── MLOps Iron Law #3: Dictionary Isomorphism ──
+                    # Validate model feature_names against V9 schema BEFORE
+                    # accepting the model.  Prevents V1-style train-serve skew
+                    # where D1_* macro features were fed M5_* V9 data.
+                    _mf_feature_ok = True
+                    _mf_feature_diag = ""
+                    try:
+                        _fs_schema_path = (
+                            Path(args.base_dir) / "feature_store" / "schemas.json"
+                        )
+                        if _fs_schema_path.exists():
+                            _fs_schemas = json.loads(
+                                _fs_schema_path.read_text(encoding="utf-8")
+                            )
+                            _v9_features: set[str] = set()
+                            for _sc_name, _sc in _fs_schemas.items():
+                                if (
+                                    isinstance(_sc, dict)
+                                    and "v9_institutional" in _sc.get("name", "")
+                                    and args.symbol in _sc.get("symbol", "")
+                                ):
+                                    _v9_features = set(_sc.get("fields", []))
+                                    break
+                            if _v9_features:
+                                _mf_model_features = set(
+                                    meta_signal_filter._feature_names
+                                )
+                                _missing = _v9_features - _mf_model_features
+                                if _missing:
+                                    _mf_feature_ok = False
+                                    _mf_feature_diag = (
+                                        f"Model missing {len(_missing)} V9 features: "
+                                        f"{sorted(list(_missing))[:5]}..."
+                                    )
+                    except Exception:  # noqa: BLE001
+                        pass  # schema file may not exist; skip check
+
+                    if not _mf_feature_ok:
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "meta_filter_feature_mismatch",
+                                    "time": _utc_iso(),
+                                    "error": _mf_feature_diag,
+                                    "action": "reject_model_fallback_to_rolling_wr",
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                        meta_signal_filter = None
+                    else:
+                        # Restore rolling buffers from previous run (crash recovery)
+                        _mf_state_path = Path(args.base_dir) / "meta_filter_state.json"
+                        meta_signal_filter.load_state(str(_mf_state_path))
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "meta_pipeline_wired",
+                                    "time": _utc_iso(),
+                                    "stage2_filter": _resolved_lgb,
+                                    "threshold": _fc.get("threshold", 0.65),
+                                    "features": len(meta_signal_filter._feature_names),
+                                    "mlp_loaded": meta_signal_filter._mlp_model is not None,
+                                    "lgb_loaded": meta_signal_filter._model is not None,
+                                    "calibrator_loaded": meta_signal_filter._calibrator is not None,
+                                    "conformal_enabled": meta_signal_filter._conformal_mode,
+                                    "conformal_max_age_days": meta_signal_filter._conformal_max_age_days,
+                                    "ensemble_weights": list(meta_signal_filter._ensemble_weights),
+                                    "micro_scaler_loaded": meta_signal_filter._micro_scaler is not None,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
                 else:
                     print(
                         json.dumps(
