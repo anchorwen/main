@@ -1,19 +1,9 @@
 {
   "schema_version": "meta_filter_config.v1",
-  "filter_id": "Meta_Stage2_Filter_V3",
-  "model_path": "data/models/institutional/meta_stage2_lightgbm_v2_20260528_015901.txt",
+  "filter_id": "Meta_Stage2_Filter_XAU_V1",
+  "model_path": "data/models/meta_stage2_lightgbm_xau_v1.txt",
   "threshold": 0.55,
   "mode": "binary",
-  "stage1_brain_id": "Meta_Stage1_Binary_Cls_V1",
-  "feature_schema": "meta_stage2_runtime_47",
-  "calibrator_path": "",
-  "calibration_method": "platt_scaling",
-  "conformal": {
-    "enabled": false,
-    "window": 500,
-    "percentile": 80.0,
-    "min_threshold": 0.50,
-    "max_age_days": 14.0
-  },
-  "description": "Stage 2 P(TP|signal) filter V3 — FIX-20260528-013 full pipeline rebuild. Single LightGBM on 47 PiT meta-features (40 V9 + 7 meta). RR=1.0 symmetric labels. CPCV Sharpe 8.49 ± 3.33, Forward Sharpe 5.01. Retrained 2026-05-28 with corrected Stage 1 brain predictions."
+  "feature_schema": "v9_institutional_40",
+  "description": "XAU MetaFilter V1 \u2014 715 PIT-aligned V9 samples, 5-Fold CV AUC=0.642, class_weight=balanced"
 }

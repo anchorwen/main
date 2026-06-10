@@ -28,8 +28,9 @@ import numpy as np
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Build BTC MetaFilter V2 PIT-aligned dataset")
-    p.add_argument("--data-dir", default="data_btc", help="BTC data directory")
-    p.add_argument("--output", default=None, help="Output NPZ path (default: data_btc/training/meta_features_btc_v2.npz)")
+    p.add_argument("--data-dir", default="data_btc", help="Data directory")
+    p.add_argument("--symbol", default="BTCUSDc", help="Trading symbol")
+    p.add_argument("--output", default=None, help="Output NPZ path")
     p.add_argument("--spread-cost-usd", type=float, default=2.50, help="Estimated round-trip spread+slippage cost in USD")
     p.add_argument("--pnl-threshold-mult", type=float, default=1.5, help="Damping multiplier on spread cost for y=1")
     return p.parse_args()
@@ -97,11 +98,11 @@ def load_journal_opens(data_dir: str) -> list[dict[str, Any]]:
     return trades
 
 
-def load_feature_store(data_dir: str) -> list[dict[str, Any]]:
+def load_feature_store(data_dir: str, symbol: str = "BTCUSDc") -> list[dict[str, Any]]:
     """Load all feature records from the M5 feature store."""
     fs_path = os.path.join(
         data_dir, "feature_store", "records",
-        "symbol=BTCUSDc", "timeframe=M5", "features.jsonl",
+        f"symbol={symbol}", "timeframe=M5", "features.jsonl",
     )
     if not os.path.exists(fs_path):
         print(f"ERROR: {fs_path} not found")
@@ -123,7 +124,7 @@ def load_feature_store(data_dir: str) -> list[dict[str, Any]]:
     return records
 
 
-def load_v9_feature_names(data_dir: str) -> list[str]:
+def load_v9_feature_names(data_dir: str, symbol: str = "BTCUSDc") -> list[str]:
     """Load V9 institutional feature names from the feature store schema."""
     fs_schema_path = os.path.join(data_dir, "feature_store", "schemas.json")
     if not os.path.exists(fs_schema_path):
@@ -132,7 +133,7 @@ def load_v9_feature_names(data_dir: str) -> list[str]:
     with open(fs_schema_path, encoding="utf-8") as f:
         schemas = json.load(f)
     for sc in schemas.values():
-        if isinstance(sc, dict) and "v9_institutional" in sc.get("name", "") and "BTCUSDc" in sc.get("symbol", ""):
+        if isinstance(sc, dict) and "v9_institutional" in sc.get("name", "") and symbol in sc.get("symbol", ""):
             return sc.get("fields", [])[:40]
     return []
 
@@ -257,16 +258,17 @@ def main() -> None:
     args = parse_args()
     data_dir = args.data_dir
 
+    symbol = args.symbol
     trades = load_journal_opens(data_dir)
     if not trades:
         return
 
-    features = load_feature_store(data_dir)
+    features = load_feature_store(data_dir, symbol)
     if not features:
         return
 
-    v9_names = load_v9_feature_names(data_dir)
-    print(f"V9 schema: {len(v9_names)} features: {v9_names[:3]}...")
+    v9_names = load_v9_feature_names(data_dir, symbol)
+    print(f"V9 schema ({symbol}): {len(v9_names)} features: {v9_names[:3]}...")
 
     X, y_pnl, meta = asof_join(trades, features, v9_names)
     if len(X) == 0:
@@ -275,7 +277,8 @@ def main() -> None:
     y = apply_labels(y_pnl, args.spread_cost_usd, args.pnl_threshold_mult)
 
     # ── Save ──
-    output = args.output or os.path.join(data_dir, "training", "meta_features_btc_v2.npz")
+    sym_tag = symbol.lower().replace("usdc", "").replace("usd", "")
+    output = args.output or os.path.join(data_dir, "training", f"meta_features_{sym_tag}_v1.npz")
     os.makedirs(os.path.dirname(output), exist_ok=True)
 
     np.savez_compressed(
