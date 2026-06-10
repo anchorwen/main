@@ -1160,7 +1160,7 @@ class StrategyLine:
         # deadlock (calibrator needs trades → trades need calibration).
         # Risk: ~$0.50-1.00 loss per explore trade, bounded by 0.01 lot cap.
         _needs_exploration = (
-            _p_win_source in ("rolling_wr", "brain_confidence", "neutral_default")
+            _p_win_source in ("rolling_wr", "brain_confidence", "neutral_default", "meta_filter")
             and _p_win < 0.52
         )
         if ("statarb" in name or "ou" in name.lower()
