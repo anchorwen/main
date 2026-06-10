@@ -1059,7 +1059,17 @@ class DataHealthService:
         for _strategy, decision in outputs.items():
             if isinstance(decision, dict):
                 reason = decision.get("reason", "")
-                if "budget_paused" in reason or "blocked" in reason.lower():
+                # FIX-20260610-007: distinguish pathological blocks from normal
+                # operational states.  Reentry cooldowns, low confidence, regime
+                # gates are healthy — they don't indicate a system problem.
+                # Only budget_paused, circuit_breaker, governance blocks, and
+                # complete inference failures are pathological.
+                if (
+                    "budget_paused" in reason
+                    or "circuit_breaker" in reason
+                    or "governance_blocked" in reason
+                    or "no_live_brain" in reason
+                ):
                     blocked_reasons.add(reason)
 
         metrics: dict[str, Any] = {"cycle": cycle, "age_minutes": round(age_min, 1), "trade_decisions": trade_decisions}
