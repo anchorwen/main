@@ -1653,61 +1653,85 @@ class DataHealthService:
     # ══════════════════════════════════════════════════════════════════════
 
     def _check_journal_vs_pnl_ledger(self) -> CrossCheckResult:
-        """Compare journal close count vs PnL ledger settled count."""
-        jl_path = os.path.join(self._base_dir, "live_trade_journal.jsonl")
-        pl_path = os.path.join(self._base_dir, "brain_pnl_ledger.json")
+        """Audit PnL ledger: freshness of most recent settled entry.
 
+        FIX-20260610-007: Replaced the broken count comparison (journal trade
+        count vs PnL ledger brain-entry count = apples vs oranges) with a
+        meaningful freshness check — when was the last brain-trade-outcome
+        recorded?  If the PnL ledger hasn't been updated in >24h, the
+        settlement pipeline may be stalled.
+        """
+        pl_path = os.path.join(self._base_dir, "brain_pnl_ledger.json")
+        if not os.path.exists(pl_path):
+            return CrossCheckResult(
+                check_name="pnl_ledger_freshness",
+                status=SourceStatus.SKIPPED,
+                primary_code="CROSS_PNL_LEDGER_MISSING",
+                message="brain_pnl_ledger.json not found",
+                checked_at=_utc_iso(),
+            )
+
+        try:
+            pl = json.loads(open(pl_path, encoding="utf-8").read())
+        except Exception:  # noqa: BLE001
+            return CrossCheckResult(
+                check_name="pnl_ledger_freshness",
+                status=SourceStatus.FAIL,
+                primary_code="CROSS_PNL_LEDGER_CORRUPT",
+                message="brain_pnl_ledger.json unreadable",
+                checked_at=_utc_iso(),
+            )
+
+        settled = pl.get("settled", {})
+        total_settled = 0
+        latest_ts = ""
+        for brain_trades in settled.values():
+            if isinstance(brain_trades, list):
+                total_settled += len(brain_trades)
+                for trade in brain_trades:
+                    if isinstance(trade, dict):
+                        ct = trade.get("close_time", "")
+                        if ct and (not latest_ts or ct > latest_ts):
+                            latest_ts = ct
+
+        if total_settled == 0:
+            return CrossCheckResult(
+                check_name="pnl_ledger_freshness",
+                status=SourceStatus.SKIPPED,
+                primary_code="CROSS_PNL_LEDGER_EMPTY",
+                message="No settled entries in PnL ledger",
+                metrics={"total_settled": 0, "latest_close": ""},
+                checked_at=_utc_iso(),
+            )
+
+        age_h = _age_minutes(latest_ts) / 60.0 if latest_ts else -1
         journal_closes = 0
         try:
+            jl_path = os.path.join(self._base_dir, "live_trade_journal.jsonl")
             if os.path.exists(jl_path):
                 with open(jl_path, encoding="utf-8") as f:
                     for line in f:
-                        if '"action": "close"' in line or '"action": "loss"' in line:
+                        if '"action": "close"' in line:
                             journal_closes += 1
         except Exception:  # noqa: BLE001
             pass
 
-        pnl_settled = 0
-        try:
-            if os.path.exists(pl_path):
-                pl = json.loads(open(pl_path, encoding="utf-8").read())
-                settled = pl.get("settled", {})
-                # FIX-20260610-007: settled is {brain_id: [trades]}, not a flat list.
-                # len(settled) counts brains (11), not actual trade entries (741).
-                if isinstance(settled, dict):
-                    pnl_settled = sum(len(v) for v in settled.values() if isinstance(v, list))
-        except Exception:  # noqa: BLE001
-            pass
-
-        if journal_closes == 0:
-            return CrossCheckResult(
-                check_name="journal_vs_pnl_ledger",
-                status=SourceStatus.SKIPPED,
-                primary_code="CROSS_JOURNAL_VS_PNL_SKIPPED",
-                message="No journal closes to compare",
-                checked_at=_utc_iso(),
-            )
-
-        delta_pct = abs(journal_closes - pnl_settled) / max(journal_closes, 1)
-        tol = self._t("cross_source_close_settled_tolerance_pct")
-
-        if delta_pct > tol * 2:
+        if age_h > 48:
             status = SourceStatus.FAIL
-        elif delta_pct > tol:
+            code = "CROSS_PNL_LEDGER_STALE"
+        elif age_h > 24:
             status = SourceStatus.WARN
+            code = "CROSS_PNL_LEDGER_STALE"
         else:
             status = SourceStatus.PASS
+            code = "CROSS_OK"
 
         return CrossCheckResult(
-            check_name="journal_vs_pnl_ledger",
+            check_name="pnl_ledger_freshness",
             status=status,
-            primary_code="CROSS_JOURNAL_VS_PNL_MISMATCH" if status != SourceStatus.PASS else "CROSS_OK",
-            metrics={
-                "journal_closes": journal_closes,
-                "pnl_ledger_settled": pnl_settled,
-                "delta_pct": round(delta_pct, 4),
-            },
-            message=f"Journal closes={journal_closes} vs PnL settled={pnl_settled} ({delta_pct:.1%})",
+            primary_code=code,
+            metrics={"total_settled": total_settled, "latest_close_age_hours": round(age_h, 1), "journal_closes": journal_closes},
+            message=f"PnL ledger: {total_settled} settled, last close {age_h:.1f}h ago (journal: {journal_closes} closes)",
             checked_at=_utc_iso(),
         )
 
