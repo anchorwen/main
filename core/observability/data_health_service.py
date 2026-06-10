@@ -84,18 +84,55 @@ def _safe_jsonl_count(path: str) -> int | None:
         return None
 
 
-def _safe_jsonl_last(path: str) -> dict[str, Any] | None:
-    """Read the last line of a JSONL file; return None on failure."""
+def _safe_jsonl_last(path: str, tail_bytes: int = 8192) -> dict[str, Any] | None:
+    """Read the last line of a JSONL file using tail-read; return None on failure.
+
+    FIX-20260610-007: Optimized for large files (XAU features.jsonl is 69MB).
+    Instead of reading the entire file, seeks to the last tail_bytes and
+    extracts the last valid JSON line.  Falls back to full read if the file
+    is smaller than tail_bytes.
+    """
     try:
         if not os.path.exists(path):
             return None
+        fsize = os.path.getsize(path)
+        if fsize == 0:
+            return None
         with open(path, encoding="utf-8") as f:
-            last = None
-            for line in f:
+            if fsize <= tail_bytes:
+                # Small file — read entirely for simplicity
+                last = None
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        last = line
+                return json.loads(last) if last else None
+            # Large file — tail-read: seek to last tail_bytes
+            f.seek(max(0, fsize - tail_bytes))
+            chunk = f.read(tail_bytes)
+            # Find the last complete JSON line in the chunk
+            lines = chunk.strip().split("\n")
+            for line in reversed(lines):
                 line = line.strip()
-                if line:
-                    last = line
-            return json.loads(last) if last else None
+                if not line:
+                    continue
+                try:
+                    return json.loads(line)
+                except json.JSONDecodeError:
+                    continue  # partial first line of chunk, try previous
+            # Fallback: if tail chunk only has partial lines, read more
+            f.seek(max(0, fsize - tail_bytes * 2))
+            chunk = f.read(tail_bytes * 2)
+            lines = chunk.strip().split("\n")
+            for line in reversed(lines):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    return json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+            return None
     except Exception:  # noqa: BLE001
         return None
 
@@ -1473,8 +1510,10 @@ class DataHealthService:
                 checked_at=_utc_iso(),
             )
         valid = 0
+        dims_by_schema: dict[str, int] = {}
         for _name, schema in fs.items():
-            if isinstance(schema, dict) and "dimensions" in schema:
+            if isinstance(schema, dict) and isinstance(schema.get("fields"), list):
+                dims_by_schema[_name] = len(schema["fields"])
                 valid += 1
         status = SourceStatus.PASS if valid == schema_count else SourceStatus.WARN
         code = "FS_SCHEMAS_OK" if valid == schema_count else "FS_SCHEMAS_INCOMPLETE"
@@ -1483,8 +1522,8 @@ class DataHealthService:
             tier=Tier.MEDIUM,
             status=status,
             primary_code=code,
-            metrics={"schema_count": schema_count, "valid_schemas": valid},
-            message=f"{valid}/{schema_count} schemas valid",
+            metrics={"schema_count": schema_count, "valid_schemas": valid, "dimensions": dims_by_schema},
+            message=f"{valid}/{schema_count} schemas valid, dims={dims_by_schema}",
             checked_at=_utc_iso(),
         )
 
