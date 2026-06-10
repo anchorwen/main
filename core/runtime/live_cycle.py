@@ -271,6 +271,8 @@ class LiveCycleState:
     _mtf_price_service: Any = None  # MTFPriceService — M15 bar reconstruction from M5 tick history
     _last_ou_params: dict[str, float] | None = None  # {z_score, half_life, theta} for meta labeler
     _btc_augmenter: Any = None  # BTCFeatureAugmenter — FIX-134 lazy-init for BTC feature pipeline
+    # ── FIX-20260610-010: main eval decisions for Phase 10 gate alignment ──
+    _last_eval_decisions: dict[str, dict[str, Any]] = field(default_factory=dict)
     # ── FIX-20260610-003: watchdog heartbeat ──
     last_heartbeat: float = 0.0
     # MIA close entries collected by _execute_management_phase, consumed by caller
@@ -4901,10 +4903,21 @@ def execute_live_cycle(
                 )
             except Exception as _gm_exc:  # noqa: BLE001
                 import logging as _gm_log
-
                 _gm_log.getLogger(__name__).warning(
                     "Golden Master record_cycle_outputs failed: %s", _gm_exc
                 )
+
+        # ── FIX-20260610-010: Persist main eval decisions for Phase 10 gate alignment ──
+        _last_decisions: dict[str, dict[str, Any]] = {}
+        for _sr in eval_summary.get("strategy_results", []):
+            _sname = _sr.get("strategy", "")
+            if _sname:
+                _last_decisions[_sname] = {
+                    "should_trade": _sr.get("should_trade", False),
+                    "reason": _sr.get("reason", ""),
+                    "direction": _sr.get("direction", "neutral"),
+                }
+        state._last_eval_decisions = _last_decisions
 
         # Log strategy evaluation results
         print(
@@ -5726,6 +5739,50 @@ def execute_live_cycle(
                 confidence = min(0.99, confidence + 0.03 * _ts)
             else:
                 confidence = max(0.30, confidence - 0.06 * _ts)
+
+    # ── FIX-20260610-010: Respect main eval safety gates [HARDENED Fail-Closed] ──
+    # Phase 10 consensus must NOT override a main eval rejection.
+    # If the main evaluation path blocked a strategy (reentry guard, budget,
+    # position limit, etc.), Phase 10 has no authority to independently dispatch.
+    # Missing records → Fail-Closed (block), not Fail-Open (allow).
+    _active_groups: list[str] = (
+        consensus_extra.get("allocation", {}).get("active_groups", [])
+        if consensus_extra
+        else []
+    )
+    if _active_groups:
+        _all_blocked = True
+        _block_reasons: list[str] = []
+        for _group in _active_groups:
+            _decision = state._last_eval_decisions.get(_group)
+            if _decision is None:
+                _block_reasons.append(f"{_group}:missing_record_fail_closed")
+            elif not _decision.get("should_trade", False):
+                _block_reasons.append(
+                    f"{_group}:{_decision.get('reason', 'blocked')}"
+                )
+            else:
+                _all_blocked = False  # at least one strategy passed main eval
+        if _all_blocked:
+            print(
+                json.dumps(
+                    {
+                        "event": "consensus_blocked_by_main_eval",
+                        "time": _utc_iso(),
+                        "active_groups": _active_groups,
+                        "consensus_direction": direction,
+                        "consensus_confidence": round(confidence, 4),
+                        "block_reasons": _block_reasons,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            direction = "neutral"
+            confidence = 0.0
+    elif not _active_groups and state._last_eval_decisions:
+        # No active groups but decisions exist — Phase 10 has nothing to do
+        pass  # direction is already handled by consensus result
 
     # ── Low confidence skip ──
     # Push to rolling buffer (all non-neutral signals)
