@@ -226,10 +226,13 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/observability/alert_runbook_bridge.py",
         "core/observability/live_alert_hub.py",
         "core/observability/message_broker.py",
+        "core/observability/data_health_schema.py",
+        "core/observability/data_health_service.py",
         "core/metrics/factor_attribution.py",
         "scripts/live_dashboard.py",
         "scripts/dqaf_collect.py",
         "scripts/verify_dqaf_002_fix.py",
+        "scripts/run_data_health.py",
     ],
     "runtime_live": [
         "main.py",

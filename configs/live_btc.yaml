@@ -215,6 +215,47 @@ alert_system:
     threshold: 0.3
     severity: warning
     cooldown_seconds: 300
+  # ── FIX-20260610-005: Data Health Monitoring rules ──
+  - id: RULE-012
+    name: data_source_critical_failure
+    context_key: data_health_critical_fail_count
+    operator: gt
+    threshold: 0
+    severity: critical
+    cooldown_seconds: 300
+    description: Any CRITICAL-tier data source in fail or missing status
+  - id: RULE-013
+    name: data_health_degraded
+    context_key: data_health_warn_count
+    operator: gt
+    threshold: 2
+    severity: warning
+    cooldown_seconds: 600
+    description: More than 2 data sources in warn status
+  - id: RULE-014
+    name: cross_source_discrepancy
+    context_key: cross_source_discrepancy_count
+    operator: gt
+    threshold: 0
+    severity: critical
+    cooldown_seconds: 600
+    description: Any cross-source validation failure
+  - id: RULE-015
+    name: orphan_subsystem_detected
+    context_key: orphan_subsystem_count
+    operator: gt
+    threshold: 0
+    severity: warning
+    cooldown_seconds: 1800
+    description: Subsystem with zero-data pattern detected (pipeline never wired)
+  - id: RULE-016
+    name: state_file_stale
+    context_key: stale_state_file_count
+    operator: gt
+    threshold: 0
+    severity: warning
+    cooldown_seconds: 600
+    description: State file not updated within expected cadence
 portfolio_max_net: 0.3
 portfolio_max_gross: 0.5
 capital_allocator:
@@ -271,3 +312,27 @@ strategy_lines:
       max_consecutive_losses: 5
     direction_balance:
       long_bias_discount: 0.0
+
+# ── FIX-20260610-005: Data Health Monitoring ──
+data_health:
+  enabled: true
+  full_check_time_utc: "06:00"
+  thresholds:
+    feature_store_max_age_minutes: 15
+    feature_store_max_zero_pct: 0.30
+    feature_store_max_nan_pct: 0.05
+    feature_store_expected_growth_per_hour: 12
+    journal_pnl_null_max_pct: 0.10
+    journal_close_open_ratio_min: 0.30
+    journal_max_entry_age_hours: 168
+    execution_state_max_age_minutes: 15
+    governance_min_live_brains: 1
+    meta_filter_max_atr_freeze_hours: 6
+    bridge_heartbeat_max_age_seconds: 120
+    bar_sync_max_lag_count: 10
+    state_file_staleness_minutes: 60
+    brain_perf_min_records_per_brain: 5
+    pnl_ledger_max_settled_pending_ratio: 10.0
+    cross_source_journal_pnl_tolerance_pct: 0.10
+    cross_source_close_settled_tolerance_pct: 0.05
+    cross_source_open_close_max_age_hours: 24

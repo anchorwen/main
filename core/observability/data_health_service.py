@@ -1,0 +1,986 @@
+"""DataHealthService — unified data health monitoring for live trading.
+
+Iron Law for Monitoring #1 (Stability & Isolation):
+  - All file I/O wrapped in fail_open_guard — a check failure must NEVER
+    propagate to the trading main loop.
+  - LIGHT mode targets <50ms latency (CRITICAL-tier only, tail reads, no
+    directory scans, no full-file parsing).
+
+Iron Law for Monitoring #2 (Recoverability):
+  - State persisted via atomic write (tmp + os.replace).
+  - Corrupt state file → silent return to fresh_health_state().
+
+Iron Law for Monitoring #3 (Decoupling):
+  - DataHealthService produces HealthReport ONLY.  Zero alert_hub calls,
+    zero notify_trade calls, zero side effects beyond file reads + state writes.
+
+Iron Law for Monitoring #4 (Iterability):
+  - All checks registered via @health_check decorator.  Engine dispatch
+    iterates the registry filtered by tier — no if/elif chains.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import time
+from datetime import UTC, datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from core.observability.data_health_schema import (
+    DEFAULT_THRESHOLDS,
+    CrossCheckResult,
+    HealthReport,
+    OrphanFinding,
+    SourceCheckResult,
+    SourceStatus,
+    Tier,
+    build_alert_context,
+    fresh_health_state,
+    get_checks,
+    health_check,
+)
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────
+
+
+def _utc_iso() -> str:
+    return datetime.now(UTC).replace(tzinfo=None).isoformat()
+
+
+def _age_minutes(iso_ts: str | None) -> float:
+    """Compute age in minutes from an ISO timestamp string."""
+    if not iso_ts:
+        return -1.0
+    try:
+        s = str(iso_ts)[:19]
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (datetime.now(UTC) - dt).total_seconds() / 60.0
+    except (ValueError, TypeError, OSError):
+        return -1.0
+
+
+def _safe_json_load(path: str) -> dict[str, Any] | None:
+    """Load a JSON file; return None on any failure (Iron Law #1)."""
+    try:
+        if not os.path.exists(path):
+            return None
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:  # noqa: BLE001 — Iron Law #1: never crash on bad data
+        return None
+
+
+def _safe_jsonl_count(path: str) -> int | None:
+    """Count lines in a JSONL file; return None on failure."""
+    try:
+        if not os.path.exists(path):
+            return None
+        with open(path, encoding="utf-8") as f:
+            return sum(1 for _ in f)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _safe_jsonl_last(path: str) -> dict[str, Any] | None:
+    """Read the last line of a JSONL file; return None on failure."""
+    try:
+        if not os.path.exists(path):
+            return None
+        with open(path, encoding="utf-8") as f:
+            last = None
+            for line in f:
+                line = line.strip()
+                if line:
+                    last = line
+            return json.loads(last) if last else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _safe_jsonl_tail_stats(path: str, max_scan: int = 500) -> dict[str, Any]:
+    """Scan the last N lines of a JSONL for basic stats.
+
+    Returns dict with: line_count, pnl_null_count, pnl_null_rate,
+    close_count, open_count, retry_count, label_distribution.
+    Returns empty dict on failure (Iron Law #1).
+    """
+    try:
+        if not os.path.exists(path):
+            return {}
+        with open(path, encoding="utf-8") as f:
+            lines = f.readlines()
+
+        total = len(lines)
+        tail = lines[-max_scan:] if total > max_scan else lines
+
+        pnl_null = 0
+        close_count = 0
+        open_count = 0
+        retry_count = 0
+        labels: dict[str, int] = {}
+
+        for line in tail:
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            action = rec.get("action", "")
+            if action == "close":
+                close_count += 1
+                if rec.get("pnl") is None:
+                    pnl_null += 1
+                label = rec.get("label", "unknown")
+                labels[label] = labels.get(label, 0) + 1
+                ack = rec.get("ack_status", "")
+                if ack == "rejected":
+                    retry_count += 1
+            elif action == "open":
+                open_count += 1
+
+        pnl_null_rate = pnl_null / close_count if close_count > 0 else 0.0
+
+        return {
+            "total_lines": total,
+            "tail_scanned": len(tail),
+            "close_count_tail": close_count,
+            "open_count_tail": open_count,
+            "pnl_null_count": pnl_null,
+            "pnl_null_rate": round(pnl_null_rate, 4),
+            "retry_count": retry_count,
+            "label_distribution": labels,
+        }
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+# ── DataHealthService ──────────────────────────────────────────────────────
+
+
+class DataHealthService:
+    """Unified data health monitor — two invocation modes.
+
+    LIGHT mode (per-cycle, <50ms): CRITICAL-tier checks only, tail reads, no
+      directory scans.  Safe to call synchronously from the main trading loop.
+
+    FULL mode (daily_ops, ~1-5s): all tiers + cross-source validation + orphan
+      detection.  Designed for once-daily execution.
+    """
+
+    def __init__(
+        self,
+        base_dir: str,
+        symbol: str,
+        *,
+        thresholds: dict[str, float | int] | None = None,
+        mode: str = "full",
+    ):
+        self._base_dir = base_dir
+        self._symbol = symbol
+        self._thresholds = dict(DEFAULT_THRESHOLDS)
+        if thresholds:
+            self._thresholds.update(thresholds)
+        self._mode = mode
+        self._start_time = time.perf_counter()
+
+    # ── Threshold helpers ──────────────────────────────────────────────
+
+    def _t(self, key: str) -> float:
+        return float(self._thresholds.get(key, 0))
+
+    # ── Top-level dispatch ─────────────────────────────────────────────
+
+    def run_full(self) -> HealthReport:
+        """Run all registered checks (CRITICAL + HIGH + MEDIUM) + cross-source
+        validation + orphan detection."""
+        return self._run(tiers=(Tier.CRITICAL, Tier.HIGH, Tier.MEDIUM), include_extras=True)
+
+    def run_lightweight(self) -> HealthReport:
+        """Run CRITICAL-tier checks only.  Target <50ms latency."""
+        return self._run(tiers=(Tier.CRITICAL,), include_extras=False)
+
+    def _run(self, tiers: tuple[Tier, ...], include_extras: bool) -> HealthReport:
+        report = HealthReport(
+            schema_version="data_health_report.v1",
+            generated_at=_utc_iso(),
+            base_dir=self._base_dir,
+            symbol=self._symbol,
+        )
+
+        sources: list[SourceCheckResult] = []
+        for meta in get_checks():
+            if meta.tier not in tiers:
+                continue
+            try:
+                result = meta.func(self)
+            except Exception as exc:  # noqa: BLE001 — Iron Law #1
+                result = SourceCheckResult(
+                    source=meta.source,
+                    tier=meta.tier,
+                    status=SourceStatus.FAIL,
+                    primary_code=f"{meta.source.upper()}_CHECK_CRASHED",
+                    message=f"Check raised {type(exc).__name__}: {exc}",
+                    checked_at=_utc_iso(),
+                )
+            if result.metrics:
+                pass  # already set
+            sources.append(result)
+
+        report.sources = sources
+
+        # Cross-source validation (FULL only)
+        if include_extras:
+            report.cross_checks = [
+                self._check_journal_vs_pnl_ledger(),
+                self._check_open_vs_close_convergence(),
+            ]
+            report.orphans = self._detect_orphan_subsystems()
+
+        # Aggregate
+        fail_count = sum(
+            1 for s in sources if s.status in (SourceStatus.FAIL, SourceStatus.MISSING)
+        )
+        warn_count = sum(1 for s in sources if s.status == SourceStatus.WARN)
+        report.primary_codes = [
+            s.primary_code
+            for s in sources
+            if s.primary_code and s.status != SourceStatus.PASS
+        ]
+        if fail_count > 0:
+            report.alert_level = "CRITICAL"
+        elif warn_count > 2:
+            report.alert_level = "WARNING"
+        else:
+            report.alert_level = "OK"
+        report.aggregated = {
+            "total_sources": len(sources),
+            "pass_count": sum(1 for s in sources if s.status == SourceStatus.PASS),
+            "warn_count": warn_count,
+            "fail_count": fail_count,
+            "missing_count": sum(1 for s in sources if s.status == SourceStatus.MISSING),
+            "skipped_count": sum(1 for s in sources if s.status == SourceStatus.SKIPPED),
+        }
+        report.elapsed_ms = round((time.perf_counter() - self._start_time) * 1000, 2)
+
+        return report
+
+    # ══════════════════════════════════════════════════════════════════════
+    # CRITICAL-TIER CHECKS
+    # ══════════════════════════════════════════════════════════════════════
+
+    @health_check(
+        tier=Tier.CRITICAL,
+        source="trade_journal",
+        description="PnL null rate, entry completeness, retry rate",
+    )
+    def check_trade_journal(self) -> SourceCheckResult:
+        """Check live_trade_journal.jsonl for PnL completeness and entry quality."""
+        jl_path = os.path.join(self._base_dir, "live_trade_journal.jsonl")
+        stats = _safe_jsonl_tail_stats(jl_path, max_scan=500)
+
+        if not stats:
+            return SourceCheckResult(
+                source="trade_journal",
+                tier=Tier.CRITICAL,
+                status=SourceStatus.MISSING,
+                primary_code="JOURNAL_FILE_MISSING",
+                message="live_trade_journal.jsonl not found or unreadable",
+                checked_at=_utc_iso(),
+            )
+
+        pnl_null_rate = stats.get("pnl_null_rate", 0.0)
+        close_count = stats.get("close_count_tail", 0)
+        retry_count = stats.get("retry_count", 0)
+        labels = stats.get("label_distribution", {})
+
+        # P1: PnL null rate
+        if pnl_null_rate > self._t("journal_pnl_null_max_pct"):
+            status = SourceStatus.FAIL
+            code = "JOURNAL_PNL_NULL_RATE_HIGH"
+        elif pnl_null_rate > self._t("journal_pnl_null_max_pct") * 0.5:
+            status = SourceStatus.WARN
+            code = "JOURNAL_PNL_NULL_RATE_ELEVATED"
+        else:
+            status = SourceStatus.PASS
+            code = "JOURNAL_OK"
+
+        message = (
+            f"Close entries (tail 500): {close_count}, "
+            f"PnL null: {stats.get('pnl_null_count', 0)} ({pnl_null_rate:.1%}), "
+            f"Retries: {retry_count}"
+        )
+
+        # Annotate if 'trail' label is absent (ReB-20260610-001 blindspot)
+        if "trail" not in labels and close_count > 10:
+            message += " | WARNING: 'trail' exit label never recorded (TRAIL_TELEMETRY_BLINDSPOT)"
+
+        return SourceCheckResult(
+            source="trade_journal",
+            tier=Tier.CRITICAL,
+            status=status,
+            primary_code=code,
+            metrics=stats,
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.CRITICAL,
+        source="feature_store",
+        description="Feature store freshness, zero/nan rate, growth rate",
+    )
+    def check_feature_store(self) -> SourceCheckResult:
+        """Check feature store for staleness and data quality."""
+        fs_path = os.path.join(
+            self._base_dir, "feature_store", "records",
+            f"symbol={self._symbol}", "timeframe=M5", "features.jsonl",
+        )
+        last = _safe_jsonl_last(fs_path)
+        if last is None:
+            return SourceCheckResult(
+                source="feature_store",
+                tier=Tier.CRITICAL,
+                status=SourceStatus.MISSING,
+                primary_code="FEATURE_STORE_MISSING",
+                message="features.jsonl not found or unreadable",
+                checked_at=_utc_iso(),
+            )
+
+        # Freshness
+        event_ts = last.get("event_time", "")
+        age_min = _age_minutes(event_ts)
+        max_age = self._t("feature_store_max_age_minutes")
+
+        if age_min < 0:
+            status = SourceStatus.WARN
+            code = "FEATURE_STORE_TIMESTAMP_UNREADABLE"
+            message = f"Cannot parse event_time from last record"
+        elif age_min > max_age * 2:
+            status = SourceStatus.FAIL
+            code = "FEATURE_STORE_STALE"
+            message = f"Last feature record age {age_min:.1f} min (threshold: {max_age} min)"
+        elif age_min > max_age:
+            status = SourceStatus.WARN
+            code = "FEATURE_STORE_STALE"
+            message = f"Last feature record age {age_min:.1f} min (threshold: {max_age} min)"
+        else:
+            status = SourceStatus.PASS
+            code = "FEATURE_STORE_OK"
+            message = f"Last feature record age {age_min:.1f} min"
+
+        # Zero/Nan check on last record features
+        metrics: dict[str, Any] = {"age_minutes": round(age_min, 1)}
+        feats = last.get("features", last.get("feature_vector", []))
+        if isinstance(feats, list) and len(feats) > 0:
+            zero_count = sum(1 for v in feats if isinstance(v, (int, float)) and v == 0)
+            # NaN check
+            nan_count = sum(
+                1 for v in feats
+                if isinstance(v, float) and (v != v)  # NaN check
+            )
+            metrics["feature_dim"] = len(feats)
+            metrics["zero_count"] = zero_count
+            metrics["zero_pct"] = round(zero_count / len(feats), 4)
+            metrics["nan_count"] = nan_count
+
+            if metrics["zero_pct"] > self._t("feature_store_max_zero_pct"):
+                if status == SourceStatus.PASS:
+                    status = SourceStatus.WARN
+                code = "FEATURE_STORE_ZERO_RATE"
+                message += f" | Zero rate {metrics['zero_pct']:.1%} exceeds threshold"
+            if nan_count > 0:
+                if status == SourceStatus.PASS:
+                    status = SourceStatus.WARN
+                code = "FEATURE_STORE_NAN_DETECTED"
+                message += f" | {nan_count} NaN values in last feature vector"
+
+        return SourceCheckResult(
+            source="feature_store",
+            tier=Tier.CRITICAL,
+            status=status,
+            primary_code=code,
+            metrics=metrics,
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.CRITICAL,
+        source="execution_state",
+        description="Execution state schema, staleness, breaker consistency",
+    )
+    def check_execution_state(self) -> SourceCheckResult:
+        """Check state/execution_state.json for integrity and breaker consistency."""
+        es_path = os.path.join(self._base_dir, "state", "execution_state.json")
+        es = _safe_json_load(es_path)
+
+        if es is None:
+            return SourceCheckResult(
+                source="execution_state",
+                tier=Tier.CRITICAL,
+                status=SourceStatus.MISSING,
+                primary_code="EXEC_STATE_MISSING",
+                message="execution_state.json not found or unreadable",
+                checked_at=_utc_iso(),
+            )
+
+        # Schema check
+        if "schema_version" not in es:
+            return SourceCheckResult(
+                source="execution_state",
+                tier=Tier.CRITICAL,
+                status=SourceStatus.FAIL,
+                primary_code="EXEC_STATE_SCHEMA_INVALID",
+                message="execution_state.json missing schema_version field",
+                checked_at=_utc_iso(),
+            )
+
+        # Staleness
+        saved_at = es.get("saved_at_utc", es.get("updated_at", ""))
+        age_min = _age_minutes(saved_at)
+        max_age = self._t("execution_state_max_age_minutes")
+
+        if age_min > max_age * 2:
+            status = SourceStatus.FAIL
+            code = "EXEC_STATE_STALE"
+        elif age_min > max_age:
+            status = SourceStatus.WARN
+            code = "EXEC_STATE_STALE"
+        else:
+            status = SourceStatus.PASS
+            code = "EXEC_STATE_OK"
+
+        message = f"execution_state age {age_min:.1f} min"
+
+        # Breaker consistency check
+        cb_tripped = es.get("circuit_breaker_tripped", False)
+        cb_tripped_at = es.get("_circuit_breaker_tripped_at", es.get("circuit_breaker_tripped_at"))
+        degraded = es.get("_consecutive_degraded_cycles", es.get("consecutive_degraded_cycles", 0))
+        stale_cycles = es.get("_consecutive_stale_cycles", es.get("consecutive_stale_cycles", 0))
+
+        metrics: dict[str, Any] = {
+            "age_minutes": round(age_min, 1),
+            "circuit_breaker_tripped": cb_tripped,
+            "consecutive_degraded": degraded,
+            "consecutive_stale_cycles": stale_cycles,
+        }
+
+        # Pattern: breaker tripped but no trip_reason or timestamp
+        if cb_tripped and not cb_tripped_at:
+            status = SourceStatus.WARN
+            code = "EXEC_STATE_BREAKER_NO_TIMESTAMP"
+            message += " | breaker tripped but no timestamp recorded"
+        # Pattern: stale counters > 0 but breaker not tripped (inconsistency)
+        if not cb_tripped and (degraded > 3 or stale_cycles > 3):
+            metrics["inconsistent_counters"] = True
+            if status == SourceStatus.PASS:
+                status = SourceStatus.WARN
+            code = "EXEC_STATE_STALE_COUNTERS_NO_BREAKER"
+            message += f" | stale/degraded counters non-zero but breaker not tripped"
+
+        return SourceCheckResult(
+            source="execution_state",
+            tier=Tier.CRITICAL,
+            status=status,
+            primary_code=code,
+            metrics=metrics,
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.CRITICAL,
+        source="governance_state",
+        description="Governance live brain count, transition log health",
+    )
+    def check_governance_state(self) -> SourceCheckResult:
+        """Check governance_state.json for live brain presence."""
+        gv_path = os.path.join(self._base_dir, "governance_state.json")
+        gv = _safe_json_load(gv_path)
+
+        if gv is None:
+            return SourceCheckResult(
+                source="governance_state",
+                tier=Tier.CRITICAL,
+                status=SourceStatus.MISSING,
+                primary_code="GOV_STATE_MISSING",
+                message="governance_state.json not found",
+                checked_at=_utc_iso(),
+            )
+
+        brain_states = gv.get("brain_states", gv.get("brains", {}))
+        if isinstance(brain_states, list):
+            live_count = sum(1 for b in brain_states if isinstance(b, dict) and b.get("status") == "live")
+            total_count = len(brain_states)
+        elif isinstance(brain_states, dict):
+            live_count = sum(1 for v in brain_states.values() if isinstance(v, dict) and v.get("status") == "live")
+            total_count = len(brain_states)
+        else:
+            live_count = 0
+            total_count = 0
+
+        min_live = int(self._t("governance_min_live_brains"))
+
+        if total_count == 0:
+            status = SourceStatus.WARN
+            code = "GOV_NO_BRAINS_REGISTERED"
+            message = "No brains registered in governance state"
+        elif live_count < min_live:
+            status = SourceStatus.FAIL
+            code = "GOV_NO_LIVE_BRAINS"
+            message = f"Zero live brains ({live_count}/{total_count}) — GOVERNANCE_VACUUM"
+        else:
+            status = SourceStatus.PASS
+            code = "GOV_OK"
+            message = f"{live_count}/{total_count} brains live"
+
+        return SourceCheckResult(
+            source="governance_state",
+            tier=Tier.CRITICAL,
+            status=status,
+            primary_code=code,
+            metrics={"live_brain_count": live_count, "total_brain_count": total_count},
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.CRITICAL,
+        source="meta_filter_state",
+        description="MetaFilter is_loaded, ATR buffer freeze detection",
+    )
+    def check_meta_filter_state(self) -> SourceCheckResult:
+        """Check meta_filter_state.json for functional health."""
+        mf_path = os.path.join(self._base_dir, "meta_filter_state.json")
+        mf = _safe_json_load(mf_path)
+
+        if mf is None:
+            return SourceCheckResult(
+                source="meta_filter_state",
+                tier=Tier.CRITICAL,
+                status=SourceStatus.MISSING,
+                primary_code="META_FILTER_STATE_MISSING",
+                message="meta_filter_state.json not found",
+                checked_at=_utc_iso(),
+            )
+
+        metrics: dict[str, Any] = {}
+
+        # Pred buffer
+        pred_buffer = mf.get("pred_buffer", mf.get("pred_history", []))
+        pred_count = len(pred_buffer) if isinstance(pred_buffer, list) else 0
+        metrics["pred_buffer_count"] = pred_count
+
+        # ATR buffer — detect freeze (all values identical)
+        atr_buffer = mf.get("atr_buffer", [])
+        atr_count = len(atr_buffer) if isinstance(atr_buffer, list) else 0
+        atr_frozen = False
+        if atr_count >= 3 and isinstance(atr_buffer, list):
+            atr_values = [float(v) for v in atr_buffer if v is not None]
+            if atr_values and len(set(round(v, 4) for v in atr_values)) == 1:
+                atr_frozen = True
+        metrics["atr_buffer_count"] = atr_count
+        metrics["atr_frozen"] = atr_frozen
+
+        # Micro spread buffer
+        micro_buf = mf.get("micro_spread_buffer", [])
+        micro_count = len(micro_buf) if isinstance(micro_buf, list) else 0
+        metrics["micro_spread_buffer_count"] = micro_count
+
+        # Determine status
+        if pred_count == 0 and atr_count == 0:
+            status = SourceStatus.FAIL
+            code = "META_FILTER_NEVER_LOADED"
+            message = "MetaFilter state exists but all buffers empty — ORPHAN_SUBSYSTEM"
+        elif atr_frozen:
+            status = SourceStatus.FAIL
+            code = "META_FILTER_ATR_FROZEN"
+            message = f"ATR buffer frozen ({atr_count} identical values) — MetaFilter not processing"
+        elif pred_count == 0:
+            status = SourceStatus.WARN
+            code = "META_FILTER_PRED_EMPTY"
+            message = "Prediction buffer empty"
+        else:
+            status = SourceStatus.PASS
+            code = "META_FILTER_OK"
+            message = f"Pred buffer: {pred_count}, ATR buffer: {atr_count}"
+
+        return SourceCheckResult(
+            source="meta_filter_state",
+            tier=Tier.CRITICAL,
+            status=status,
+            primary_code=code,
+            metrics=metrics,
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    @health_check(
+        tier=Tier.CRITICAL,
+        source="mt5_bridge_health",
+        description="MT5 bridge heartbeat, connection status",
+    )
+    def check_mt5_bridge_health(self) -> SourceCheckResult:
+        """Check MT5 bridge health report for connectivity."""
+        bh_path = os.path.join(self._base_dir, "reports", "mt5_bridge_health.json")
+        bh = _safe_json_load(bh_path)
+
+        if bh is None:
+            return SourceCheckResult(
+                source="mt5_bridge_health",
+                tier=Tier.CRITICAL,
+                status=SourceStatus.MISSING,
+                primary_code="BRIDGE_HEALTH_MISSING",
+                message="mt5_bridge_health.json not found",
+                checked_at=_utc_iso(),
+            )
+
+        # Check heartbeat freshness
+        last_ack = bh.get("bridge_last_ack_utc", bh.get("last_ack_utc", ""))
+        age_sec = (_age_minutes(last_ack) * 60.0) if last_ack else -1
+        max_age = self._t("bridge_heartbeat_max_age_seconds")
+
+        pid = bh.get("pid", "?")
+        connected = bh.get("connected", bh.get("connection_ok", True))
+        pending = bh.get("outbox_pending", bh.get("pending_count", 0))
+
+        if age_sec < 0:
+            status = SourceStatus.WARN
+            code = "BRIDGE_TIMESTAMP_UNREADABLE"
+            message = f"Cannot parse bridge heartbeat timestamp (PID={pid})"
+        elif age_sec > max_age * 2:
+            status = SourceStatus.FAIL
+            code = "BRIDGE_HEARTBEAT_STALE"
+            message = f"Bridge heartbeat age {age_sec:.0f}s (PID={pid}) — possible disconnect"
+        elif age_sec > max_age:
+            status = SourceStatus.WARN
+            code = "BRIDGE_HEARTBEAT_STALE"
+            message = f"Bridge heartbeat age {age_sec:.0f}s (PID={pid})"
+        elif not connected:
+            status = SourceStatus.FAIL
+            code = "BRIDGE_DISCONNECTED"
+            message = f"Bridge reports disconnected (PID={pid})"
+        else:
+            status = SourceStatus.PASS
+            code = "BRIDGE_OK"
+            message = f"Bridge healthy (PID={pid}, age={age_sec:.0f}s, pending={pending})"
+
+        return SourceCheckResult(
+            source="mt5_bridge_health",
+            tier=Tier.CRITICAL,
+            status=status,
+            primary_code=code,
+            metrics={
+                "age_seconds": round(age_sec, 1),
+                "pid": pid,
+                "connected": connected,
+                "outbox_pending": pending,
+            },
+            message=message,
+            checked_at=_utc_iso(),
+        )
+
+    # ══════════════════════════════════════════════════════════════════════
+    # CROSS-SOURCE VALIDATION (FULL mode only)
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _check_journal_vs_pnl_ledger(self) -> CrossCheckResult:
+        """Compare journal close count vs PnL ledger settled count."""
+        jl_path = os.path.join(self._base_dir, "live_trade_journal.jsonl")
+        pl_path = os.path.join(self._base_dir, "brain_pnl_ledger.json")
+
+        journal_closes = 0
+        try:
+            if os.path.exists(jl_path):
+                with open(jl_path, encoding="utf-8") as f:
+                    for line in f:
+                        if '"action": "close"' in line or '"action": "loss"' in line:
+                            journal_closes += 1
+        except Exception:  # noqa: BLE001
+            pass
+
+        pnl_settled = 0
+        try:
+            if os.path.exists(pl_path):
+                pl = json.loads(open(pl_path, encoding="utf-8").read())
+                settled = pl.get("settled", {})
+                pnl_settled = len(settled) if isinstance(settled, dict) else 0
+        except Exception:  # noqa: BLE001
+            pass
+
+        if journal_closes == 0:
+            return CrossCheckResult(
+                check_name="journal_vs_pnl_ledger",
+                status=SourceStatus.SKIPPED,
+                primary_code="CROSS_JOURNAL_VS_PNL_SKIPPED",
+                message="No journal closes to compare",
+                checked_at=_utc_iso(),
+            )
+
+        delta_pct = abs(journal_closes - pnl_settled) / max(journal_closes, 1)
+        tol = self._t("cross_source_close_settled_tolerance_pct")
+
+        if delta_pct > tol * 2:
+            status = SourceStatus.FAIL
+        elif delta_pct > tol:
+            status = SourceStatus.WARN
+        else:
+            status = SourceStatus.PASS
+
+        return CrossCheckResult(
+            check_name="journal_vs_pnl_ledger",
+            status=status,
+            primary_code="CROSS_JOURNAL_VS_PNL_MISMATCH" if status != SourceStatus.PASS else "CROSS_OK",
+            metrics={
+                "journal_closes": journal_closes,
+                "pnl_ledger_settled": pnl_settled,
+                "delta_pct": round(delta_pct, 4),
+            },
+            message=f"Journal closes={journal_closes} vs PnL settled={pnl_settled} ({delta_pct:.1%})",
+            checked_at=_utc_iso(),
+        )
+
+    def _check_open_vs_close_convergence(self) -> CrossCheckResult:
+        """Check that open and close counts converge within 24h."""
+        jl_path = os.path.join(self._base_dir, "live_trade_journal.jsonl")
+
+        open_count = 0
+        close_count = 0
+        try:
+            if os.path.exists(jl_path):
+                with open(jl_path, encoding="utf-8") as f:
+                    for line in f:
+                        if '"action": "open"' in line:
+                            open_count += 1
+                        elif '"action": "close"' in line:
+                            close_count += 1
+        except Exception:  # noqa: BLE001
+            pass
+
+        if open_count == 0:
+            return CrossCheckResult(
+                check_name="open_vs_close_convergence",
+                status=SourceStatus.SKIPPED,
+                primary_code="CROSS_OPEN_CLOSE_SKIPPED",
+                message="No open entries to compare",
+                checked_at=_utc_iso(),
+            )
+
+        ratio = close_count / max(open_count, 1)
+        # Closed should be >= open_count - active_positions.
+        # A ratio < 0.3 means most opens don't have a matching close.
+        min_ratio = self._t("journal_close_open_ratio_min")
+
+        if ratio < min_ratio:
+            status = SourceStatus.WARN
+        else:
+            status = SourceStatus.PASS
+
+        return CrossCheckResult(
+            check_name="open_vs_close_convergence",
+            status=status,
+            primary_code="CROSS_OPEN_CLOSE_DIVERGENCE" if status != SourceStatus.PASS else "CROSS_OK",
+            metrics={"open_count": open_count, "close_count": close_count, "ratio": round(ratio, 4)},
+            message=f"Opens={open_count} vs Closes={close_count} (ratio={ratio:.2f})",
+            checked_at=_utc_iso(),
+        )
+
+    # ══════════════════════════════════════════════════════════════════════
+    # ORPHAN SUBSYSTEM DETECTION (FULL mode only)
+    # ══════════════════════════════════════════════════════════════════════
+
+    # Known (path_suffix, zero_check_key) pairs for orphan detection.
+    _ORPHAN_SIGNATURES: list[tuple[str, str, str]] = [
+        ("alpha_registry.json", "alpha_count", "zero_data"),
+        ("alpha_performance.json", "alpha_count", "zero_data"),
+        ("conformal_calibrator_state.json", "cold_started", "empty_init"),
+        ("calibrator_feed_state.json", "sample_count", "zero_data"),
+        ("brain_performance.json", None, "empty_init"),  # checks if file is empty or has no records
+        ("reports/retraining_signal_prev.json", "total_brains_assessed", "zero_data"),
+    ]
+
+    def _detect_orphan_subsystems(self) -> list[OrphanFinding]:
+        """Scan for subsystems whose state files exist but contain only initial/empty data.
+
+        Generalizes ReB-20260608-002 (ORPHAN_SUBSYSTEM_DETECTION).
+        """
+        findings: list[OrphanFinding] = []
+
+        for rel_path, zero_key, pattern in self._ORPHAN_SIGNATURES:
+            full_path = os.path.join(self._base_dir, rel_path)
+            if not os.path.exists(full_path):
+                continue  # file doesn't exist → not an orphan, just not deployed
+
+            data = _safe_json_load(full_path)
+            if data is None:
+                findings.append(OrphanFinding(
+                    source_path=rel_path,
+                    pattern="never_written",
+                    detail=f"File exists but cannot be parsed as JSON",
+                ))
+                continue
+
+            if zero_key is not None:
+                val = data.get(zero_key)
+                if val is None or val == 0 or val == [] or val == {}:
+                    findings.append(OrphanFinding(
+                        source_path=rel_path,
+                        pattern=pattern,
+                        detail=f"{zero_key}={val} — subsystem appears unwired",
+                    ))
+            else:
+                # Check for empty dict/list at top level
+                if not data or all(not v for v in data.values() if not isinstance(v, bool)):
+                    findings.append(OrphanFinding(
+                        source_path=rel_path,
+                        pattern=pattern,
+                        detail="All fields empty or zero — subsystem appears unwired",
+                    ))
+
+        return findings
+
+    # ══════════════════════════════════════════════════════════════════════
+    # STATE PERSISTENCE
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _state_path(self) -> str:
+        return os.path.join(self._base_dir, "state", "data_health_state.json")
+
+    def load_health_state(self) -> dict[str, Any]:
+        """Load persisted health state — graceful degradation on corruption.
+
+        Iron Law for Monitoring #2: corrupt file → silent return to fresh state.
+        """
+        path = self._state_path()
+        try:
+            if not os.path.exists(path):
+                return fresh_health_state(self._symbol)
+            with open(path, encoding="utf-8") as f:
+                state = json.load(f)
+            # Validate minimum schema
+            if not isinstance(state, dict) or "schema_version" not in state:
+                return fresh_health_state(self._symbol)
+            # Ensure v2 structure exists
+            if "sources" not in state:
+                state["sources"] = {}
+            if "legacy" not in state:
+                state["legacy"] = {"last_close_count": 0, "checked_at": ""}
+            state["symbol"] = self._symbol
+            return state
+        except (json.JSONDecodeError, FileNotFoundError, OSError, TypeError, ValueError):
+            return fresh_health_state(self._symbol)
+
+    def save_health_state(self, report: HealthReport) -> None:
+        """Persist health state snapshot with atomic write.
+
+        Iron Law for Monitoring #2: write to .tmp → os.replace (atomic).
+        """
+        path = self._state_path()
+        current = self.load_health_state()
+        now = _utc_iso()
+
+        # Update per-source records
+        sources_state: dict[str, dict[str, Any]] = current.get("sources", {})
+        for src in report.sources:
+            record = sources_state.get(src.source, {})
+            # Track error history (last 3)
+            errors = record.get("error_history", [])
+            if isinstance(errors, list):
+                if src.status in (SourceStatus.FAIL, SourceStatus.WARN, SourceStatus.MISSING):
+                    errors.insert(0, {
+                        "utc": now,
+                        "code": src.primary_code,
+                        "message": src.message[:200],
+                    })
+                    errors = errors[:3]
+                elif src.status == SourceStatus.PASS:
+                    # Clear error history on recovery
+                    if errors and errors[0].get("code") != "RECOVERED":
+                        errors.insert(0, {"utc": now, "code": "RECOVERED", "message": ""})
+                        errors = errors[:3]
+
+            # Compute trend
+            trend = "stable"
+            if len(errors) >= 2:
+                # More errors in recent half → degrading
+                mid = len(errors) // 2
+                recent_errors = sum(1 for e in errors[:mid] if e.get("code", "") not in ("RECOVERED", ""))
+                older_errors = sum(1 for e in errors[mid:] if e.get("code", "") not in ("RECOVERED", ""))
+                if recent_errors > older_errors:
+                    trend = "degrading"
+                elif recent_errors < older_errors:
+                    trend = "improving"
+
+            sources_state[src.source] = {
+                "last_check_utc": now,
+                "last_status": src.status.value,
+                "last_primary_code": src.primary_code,
+                "metrics_snapshot": {
+                    k: v for k, v in src.metrics.items()
+                    if isinstance(v, (int, float, str, bool, type(None)))
+                },
+                "error_history": errors,
+                "trend": trend,
+            }
+
+        # Update cross-check records
+        cross_state: dict[str, dict[str, Any]] = current.get("cross_checks", {})
+        for cc in report.cross_checks:
+            cross_state[cc.check_name] = {
+                "last_check_utc": now,
+                "last_status": cc.status.value,
+                "delta_pct": cc.metrics.get("delta_pct"),
+            }
+
+        # Compute journal close count for legacy compat
+        jl_count = 0
+        for src in report.sources:
+            if src.source == "trade_journal":
+                jl_count = src.metrics.get("close_count_tail", 0)
+                break
+
+        state = {
+            "schema_version": "data_health_state.v2",
+            "updated_at": now,
+            "symbol": self._symbol,
+            "last_full_run_utc": now if self._mode == "full" else current.get("last_full_run_utc", ""),
+            "last_lightweight_run_utc": now if self._mode != "full" else current.get("last_lightweight_run_utc", ""),
+            "overall_status": report.alert_level,
+            "sources": sources_state,
+            "cross_checks": cross_state,
+            "orphan_subsystems": [
+                {"source_path": o.source_path, "pattern": o.pattern, "detail": o.detail}
+                for o in report.orphans
+            ],
+            "legacy": {
+                "last_close_count": jl_count,
+                "checked_at": now,
+            },
+        }
+
+        # Atomic write (Iron Law #2)
+        try:
+            tmp_path = path + ".tmp"
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(state, f, ensure_ascii=False, default=str)
+            os.replace(tmp_path, path)
+        except OSError:
+            pass  # Iron Law #1: persistence failure must not crash
+
+    # ══════════════════════════════════════════════════════════════════════
+    # ALERT CONTEXT (for external dispatcher — Iron Law #3)
+    # ══════════════════════════════════════════════════════════════════════
+
+    def build_alert_context(self, report: HealthReport) -> dict[str, Any]:
+        """Convert report to alert context keys for external evaluation.
+
+        This method produces data only — the caller (daily_ops / live_intent_loop)
+        passes the dict to AlertService.evaluate().  DataHealthService itself
+        never calls alert_hub or sends notifications (Iron Law #3).
+        """
+        return build_alert_context(report)
