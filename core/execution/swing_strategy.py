@@ -72,7 +72,23 @@ class SwingStrategy(StrategyLine):
         for b_info in self.brains:
             try:
                 adapter = b_info["adapter"]
-                schema = getattr(adapter, "feature_schema", "") or "v9_institutional"
+                # ── FIX-20260610-009: Schema resolution anchored to brain config ──
+                # PREVIOUSLY queried the runtime Adapter instance for a
+                # 'feature_schema' property that does NOT exist on
+                # LightGBM/XGBoost adapters.  getattr silently returned "",
+                # cascading into ``or "v9_institutional"`` → 40-dim V9 vector
+                # for ALL brains regardless of their training contract.
+                # BTC brains (37-dim btc_macro_enhanced_37) received 40-dim
+                # vectors → dimension mismatch → raw_score=0.0 fallback.
+                # This single line spawned RC-06 across 5 failed patches
+                # (FIX-022, FIX-025, FIX-017, FIX-081, FIX-135).
+                schema = b_info.get("feature_schema_id", "")
+                if not schema:
+                    raise ValueError(
+                        f"[FATAL_CONTRACT] Brain {b_info.get('brain_id', 'unknown')} "
+                        f"missing explicit feature_schema_id in config — "
+                        f"cannot determine feature schema for inference"
+                    )
 
                 fv = assemble_features_by_schema(
                     schema,

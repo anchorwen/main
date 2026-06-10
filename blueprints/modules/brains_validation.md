@@ -63,7 +63,7 @@ Load-time brain config validation and runtime alerting. Catches configuration er
 | Alert Type | Trigger | Fallback Behavior |
 |-----------|---------|-------------------|
 | `config_validation_error` | BrainConfigValidator fails (ERROR level) | Brain excluded, added to `_failed_brain_ids` |
-| `feature_dimension_mismatch` | `len(feature_vector) != adapter._num_features` | Zero vector → neutral prediction |
+| `feature_dimension_mismatch` | `len(feature_vector) != adapter._num_features` | Zero vector → neutral prediction | **RESOLVED in FIX-20260610-009** — root cause was `SwingStrategy._run_inference()` resolving schema from adapter object (which lacks `feature_schema`) instead of brain config `feature_schema_id`. Silent fallback to `"v9_institutional"` (40-dim) corrupted input for non-V9 brains. Fix: schema anchored to `b_info["feature_schema_id"]` + fatal error on missing schema. |
 | `model_load_failed` | ONNX/XGBoost/LightGBM/JSON load exception | `stub:<ExceptionName>` backend |
 | `feature_missing` | No `features` in config AND booster unavailable | Zero vector |
 | `brain_stub_mode` | ONNX session is None, deterministic stub active | Heuristic-based fallback |

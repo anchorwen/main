@@ -347,10 +347,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 2. **All-LONG bias** — zero SHORT signals generated
 3. **Live PnL deeply negative** despite stellar training metrics (fw_sharpe=8.21 → live_sharpe=-0.10)
 
-**Root cause hypothesis**: The LightGBM adapter (`core/brains/adapters/`) receives constant/zero feature vectors at inference time. Tree-based models fed constant input collapse to a single leaf value. OU_Params_V6_Sniper (non-ML) works fine → problem is in the ML feature resolution pipeline, specifically:
-- `feature_schema_id` resolution in brain factory
-- `normalization_config_path` loading
-- LightGBM adapter's `_predict()` feature vector construction
+**Root cause**: ~~hypothesis~~ **CONFIRMED & RESOLVED in FIX-20260610-009** (2026-06-10). The LightGBM adapter was receiving 40-dim V9 vectors instead of 37-dim BTC vectors because `SwingStrategy._run_inference()` resolved the feature schema from `getattr(adapter, "feature_schema", "")` — the adapter has no such attribute, so it silently defaulted to `"v9_institutional"` → `assemble_features_by_schema()` returned 40 features → `len(fv)=40 != adapter._num_features=37` → zero fallback prediction → constant leaf value. **Fix**: schema now anchored to `b_info["feature_schema_id"]` from brain config JSON, which correctly declares `"btc_macro_enhanced_37"` (37-dim) for BTC brains and `"swing_enhanced_35"` (35-dim) for XAU swing brains. Missing schema → fatal ValueError. Closes a 2-week technical debt loop (5 prior patches: FIX-022, FIX-025, FIX-017, FIX-081, FIX-135).
 
 ### Consensus Dilution Analysis
 
