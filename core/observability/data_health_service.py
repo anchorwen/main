@@ -1210,6 +1210,7 @@ class DataHealthService:
         critical_count = sum(1 for b in brains if isinstance(b, dict) and b.get("health_signal") == "critical")
         zero_vote = sum(1 for b in brains if isinstance(b, dict) and b.get("vote_weight", 0) == 0)
 
+        message = ""
         if age_h > 12:
             status = SourceStatus.WARN
             code = "LEADERBOARD_STALE"
@@ -1457,7 +1458,10 @@ class DataHealthService:
             if os.path.exists(pl_path):
                 pl = json.loads(open(pl_path, encoding="utf-8").read())
                 settled = pl.get("settled", {})
-                pnl_settled = len(settled) if isinstance(settled, dict) else 0
+                # FIX-20260610-007: settled is {brain_id: [trades]}, not a flat list.
+                # len(settled) counts brains (11), not actual trade entries (741).
+                if isinstance(settled, dict):
+                    pnl_settled = sum(len(v) for v in settled.values() if isinstance(v, list))
         except Exception:  # noqa: BLE001
             pass
 
