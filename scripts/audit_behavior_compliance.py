@@ -263,13 +263,24 @@ def audit_max_positions_code() -> dict:
 
     root = Path(__file__).resolve().parent.parent
 
-    # Find all references to max_positions
-    result = subprocess.run(
-        ["grep", "-rn", "max_positions", "--include=*.py",
-         str(root / "core"), str(root / "scripts")],
-        capture_output=True, text=True, timeout=10, cwd=str(root),
-    )
-    refs = result.stdout.strip().split("\n") if result.stdout.strip() else []
+    # Find all references to max_positions (Python-native, no grep dependency)
+    refs = []
+    for py_file in sorted(root.glob("core/**/*.py")):
+        try:
+            with open(py_file, encoding="utf-8") as f:
+                for i, line in enumerate(f, 1):
+                    if "max_positions" in line:
+                        refs.append(f"{py_file}:{i}: {line.rstrip()}")
+        except Exception:  # noqa: BLE001
+            pass
+    for py_file in sorted(root.glob("scripts/**/*.py")):
+        try:
+            with open(py_file, encoding="utf-8") as f:
+                for i, line in enumerate(f, 1):
+                    if "max_positions" in line:
+                        refs.append(f"{py_file}:{i}: {line.rstrip()}")
+        except Exception:  # noqa: BLE001
+            pass
 
     # Find Phase 10 dispatch path
     phase10_lines = []
