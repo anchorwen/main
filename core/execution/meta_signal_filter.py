@@ -149,6 +149,13 @@ class MetaSignalFilter:
         self._pred_buffer: deque[float] = deque(maxlen=20)
         self._atr_buffer: deque[float] = deque(maxlen=100)
 
+        # FIX-20260610-006: ATR freeze detection — when the ATR feed stalls
+        # (identical values across consecutive cycles), MetaFilter's volatility
+        # normalization degrades silently.  This flag is consumed by
+        # DataHealthService and can trigger alert RULE-012.
+        self._atr_frozen: bool = False
+        self._atr_frozen_detected_at: str = ""
+
         # v4.1: Rolling buffers for micro-derived meta features (EWMA)
         self._micro_spread_buffer: deque[float] = deque(maxlen=100)
         self._micro_oim_buffer: deque[float] = deque(maxlen=100)
@@ -345,6 +352,35 @@ class MetaSignalFilter:
                 self._pred_buffer.append(float(s1_prediction))
                 current_atr = float(v9_features.get("M5_ATR_14", 1.0))
                 if current_atr > 0:
+                    # FIX-20260610-006: ATR freeze guard — if the last 5
+                    # buffered values are float-identical to current_atr,
+                    # the ATR feed has stalled.  MetaFilter volatility
+                    # normalization stops adapting → degradation.
+                    _atr_vals = list(self._atr_buffer)
+                    if len(_atr_vals) >= 5:
+                        _recent_5 = _atr_vals[-5:]
+                        if all(abs(v - current_atr) < 1e-8 for v in _recent_5):
+                            if not self._atr_frozen:
+                                self._atr_frozen = True
+                                self._atr_frozen_detected_at = str(timestamp_utc) if timestamp_utc else ""
+                                import json as _json_atr
+                                print(
+                                    _json_atr.dumps(
+                                        {
+                                            "event": "meta_filter_atr_frozen",
+                                            "time": timestamp_utc,
+                                            "atr_value": round(current_atr, 6),
+                                            "buffer_len": len(_atr_vals),
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
+                        else:
+                            # ATR values are moving again — unfreeze
+                            if self._atr_frozen:
+                                self._atr_frozen = False
+                                self._atr_frozen_detected_at = ""
                     self._atr_buffer.append(current_atr)
                 # Update micro rolling buffers (for micro-derived meta features)
                 if has_micro:
@@ -502,6 +538,9 @@ class MetaSignalFilter:
             "pred_buffer": list(self._pred_buffer),
             "atr_buffer": list(self._atr_buffer),
             "micro_spread_buffer": list(self._micro_spread_buffer),
+            # FIX-20260610-006: persist ATR freeze status for health monitoring
+            "atr_frozen": self._atr_frozen,
+            "atr_frozen_detected_at": self._atr_frozen_detected_at,
         }
         import os as _os
 
@@ -544,6 +583,11 @@ class MetaSignalFilter:
         with log_and_continue(component="MetaFilter:restore_spread_buffer"):
             for item in _state.get("micro_spread_buffer", [])[-100:]:
                 self._micro_spread_buffer.append(float(item))
+
+        # FIX-20260610-006: restore ATR freeze status
+        with log_and_continue(component="MetaFilter:restore_atr_frozen"):
+            self._atr_frozen = bool(_state.get("atr_frozen", False))
+            self._atr_frozen_detected_at = str(_state.get("atr_frozen_detected_at", ""))
 
     def _predict_proba(self, feat_vec: list[float]) -> float:
         """Compute ensemble P(TP|signal) = w_lgb * prob_lgb + w_mlp * prob_mlp.

@@ -66,6 +66,8 @@ def compute_and_dispatch_trail(
             if pos.cycles_held >= pm.min_hold_cycles:
                 _reasons.append("trail")
                 _final_sl = _trail_sl
+                # FIX-20260610-006: count trail tightenings for telemetry
+                pos.trail_advances += 1
     else:
         _trail_sl = None
 

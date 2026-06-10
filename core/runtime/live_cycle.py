@@ -2087,6 +2087,13 @@ def _build_mia_close_entry(
         "strategy": _resolved_strategy,
         "sl": initial_sl,
         "tp": initial_tp,
+        # FIX-20260610-006: structured trail telemetry —
+        # distinguishes "SL hit at original SL" from "SL hit at trailed SL"
+        "trail_contribution": {
+            "initial_sl": initial_sl,
+            "final_sl": current_sl,
+            "trail_advances": getattr(pos, "trail_advances", 0),
+        },
         "open_message_id": known_entry.get("message_id"),
         "brain_ids": known_entry.get("brain_ids"),
     }
@@ -2175,7 +2182,12 @@ def _enrich_mia_from_deals(
                 mia_entry["label"] = "breakeven"
 
         if close_reason == 4:
-            mia_entry["label"] = "sl_hit_first"
+            # FIX-20260610-006: distinguish original SL hit from trailed SL hit
+            _tc = mia_entry.get("trail_contribution", {})
+            if isinstance(_tc, dict) and _tc.get("trail_advances", 0) > 0:
+                mia_entry["label"] = "sl_hit_trailed"
+            else:
+                mia_entry["label"] = "sl_hit_first"
         elif close_reason == 5:
             mia_entry["label"] = "tp_hit_first"
 

@@ -71,6 +71,7 @@ class ActivePosition:
     # State flags
     breakeven_triggered: bool = False
     trail_multiplier: float = 2.0
+    trail_advances: int = 0  # FIX-20260610-006: count of trail SL tightenings
     r_milestones_hit: list[str] = field(default_factory=list)
     cycles_held: int = 0
     highest_r: float = 0.0  # peak R-multiple achieved

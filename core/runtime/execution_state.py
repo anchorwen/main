@@ -54,6 +54,7 @@ def save_execution_state(
 
     payload: dict[str, Any] = {
         "version": 2,  # bumped — new fields
+        "schema_version": "execution_state.v2",  # FIX-20260610-006: versioned contract
         "saved_at_utc": _utc_iso(),
         "budgets": {},
         "cooldown_registry": {},

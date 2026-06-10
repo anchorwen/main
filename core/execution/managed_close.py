@@ -205,6 +205,15 @@ def dispatch_managed_close(
         if _open_msg_id:
             payload["open_message_id"] = _open_msg_id
 
+    # FIX-20260610-006: structured trail telemetry —
+    # records initial_sl, final_sl, and trail_advances so downstream
+    # journal consumers can distinguish "original SL hit" from "trailed SL hit"
+    payload["trail_contribution"] = {
+        "initial_sl": getattr(pos, "initial_sl", 0.0),
+        "final_sl": getattr(pos, "current_sl", 0.0),
+        "trail_advances": getattr(pos, "trail_advances", 0),
+    }
+
     # ── Dispatch with optional watchdog protection ──
     _close_dispatched = False
     if exit_watchdog is not None:
