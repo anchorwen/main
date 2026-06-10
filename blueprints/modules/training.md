@@ -69,6 +69,7 @@ Dataset CPCV CustomObj  Trainer    EvaluationReport
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260610-007 | 2026-06-10 | cursor-agent | — | **BTC MetaFilter V2 完整MLOps管线**: (1) build_btc_metafilter_v2_dataset.py — ASOF PIT join, 54样本40维V9特征, 0数据穿越. (2) train_btc_metafilter_v2.py — 极端正则化(max_depth=2,num_leaves=5,min_data_in_leaf=10), 5-Fold CV AUC=0.82, 字典同构验证. (3) MLOps Iron Laws #1-3. V1因train-serve特征空间错位(模型D1_*宏观→线上M5_*V9)被紧急禁用. | RC-12, RC-06 |
 | FIX-20260607-146 | 2026-06-07 | cursor-agent | — | **V6/V7/V8 training pipeline + BTC SL/TP enforcement**: build_swing_enhanced_dataset.py enforces SL=2.0/TP=2.5 for BTC. V6 M15 baseline (AUC=0.630), V6 MultiTF (AUC=0.656, 3-TF joint). V7 seed=77 (AUC=0.646). V8 2.9yr data (AUC=0.654, covers 2024 ETF bull run). Data export extended to 100K M15 bars (2023-07~2026-06). | RC-06 |
 |--------|------|--------|--------|---------|------------|
 | FIX-20260604-084 | 2026-06-04 | cursor-agent | — | C4.2 Label profitability recalibration: tick_size 0.001→0.01 (4 files, 10x friction fix), 4-TF surface recalibration → all current SL/TP EV-negative, live.yaml SL/TP updated (M15/M30 1.5/2.5→3.0/1.5, H1 2.0/3.5→3.0/2.0, H4 2.0/4.0→3.0/2.0), dynamic floor RR<1.0 skip, dataset builder friction modeling, 9 brain config training_params corrected. | RC-06, RC-09 |
