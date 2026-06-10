@@ -77,6 +77,15 @@
   "n_features": 37,
   "n_train_samples": 61603,
   "trained_at": "2026-06-09T17:52:20.081094+00:00",
+  "label_contract": {
+    "sl_atr_mult": 3.0,
+    "tp_atr_mult": 2.0,
+    "contract_type": "survival",
+    "requires_dedicated_strategy_line": true,
+    "aligned_with": null,
+    "graduation_path": "create btc_swing_survival_h1 with matching SL=3.0/TP=2.0",
+    "note": "Trained for survival mode (SL>TP, compensated by 90%+ WR). Cannot share btc_swing strategy line (SL=2.0/TP=2.5). Counterfactual PnL under existing strategy line is directionally informative but NOT statistically valid due to right-censoring bias."
+  },
   "governance": {
     "min_confidence": 0.5,
     "cooldown_cycles": 3

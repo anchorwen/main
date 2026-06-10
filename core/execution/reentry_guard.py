@@ -22,29 +22,52 @@ def _classify_exit_reason(raw_reason: str) -> str:
     """Map a raw exit reason string to a canonical category.
 
     Returns one of: ``"brain_flip"``, ``"sl_hit"``, ``"tp_hit"``,
-    ``"time_expired"``, ``"ou_revert"``, ``"meta_exit"``, ``"unknown"``.
+    ``"time_expired"``, ``"ou_revert"``, ``"meta_exit"``, ``"kalman_flip"``,
+    ``"watchdog"``, ``"net_out"``, ``"emergency_close"``, ``"hesitation"``,
+    ``"bleed_stop"``, ``"momentum_pause"``, ``"unknown_close"``, ``"unknown"``.
+
+    FIX-20260610-002: Added kalman_velocity, meta_exit sub-patterns (pnl_urgency,
+    time_decay, regime_misalignment, consensus_drift, vol_expansion, ml_p_win),
+    net_out, exit_watchdog, grace_period_emergency, partial_tp patterns.
     """
     r = raw_reason.lower()
     if "brain_flip" in r or "signal_reversal" in r:
         return "brain_flip"
     if "confidence_decay" in r or "confidence_drop" in r:
         return "momentum_pause"  # same-direction conviction dip — not a flip
+    if "kalman_velocity" in r:
+        return "kalman_flip"  # FIX-20260610-002: Kalman trend velocity reversal exit
     if "sl_hit" in r or "sl_stop" in r:
         return "sl_hit"
-    if "tp_hit" in r or "take_profit" in r:
+    if "tp_hit" in r or "take_profit" in r or "partial_tp" in r:
         return "tp_hit"
+    # ── FIX-20260610-002: Meta exit sub-patterns (must precede generic time_ check) ──
+    if (
+        "meta_exit" in r
+        or "pnl_urgency" in r
+        or "time_decay" in r
+        or "regime_misalignment" in r
+        or "consensus_drift" in r
+        or "vol_expansion" in r
+        or "ml_p_win" in r
+    ):
+        return "meta_exit"
     if "time_" in r or "phase" in r:
         return "time_expired"
     if "ou_" in r or "zscore" in r or "z_score" in r:
         return "ou_revert"
-    if "meta_exit" in r:
-        return "meta_exit"
     if "hesitation_" in r:
         return "hesitation"
     if "bleed_stop_" in r:
         return "bleed_stop"
     if "ev_trajectory" in r:
         return "time_expired"  # EV trajectory IS a time-based exit
+    if "net_out" in r:
+        return "net_out"  # FIX-20260610-002: net position close
+    if "exit_watchdog" in r:
+        return "watchdog"  # FIX-20260610-002: watchdog-forced exit
+    if "grace_period_emergency" in r:
+        return "emergency_close"  # FIX-20260610-002: emergency close during grace period
     if "mia_close" in r or "unknown_close" in r or "manual_close" in r or "manual" in r:
         return "unknown_close"
     return "unknown"

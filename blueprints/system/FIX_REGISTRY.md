@@ -39,7 +39,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260610-006 | 2026-06-10 | runtime-live, execution-orders, execution-guards, execution-state | **生产数据隐患一篮子止血**: (1) execution_state.py — save_execution_state()注入schema_version. (2) meta_signal_filter.py — ATR一阶导数防呆守卫 (连续5周期浮点全等→_atr_frozen, 波动→自动解除). (3) position_manager.py — ActivePosition新增trail_advances计数器. (4) trail_dispatch.py — SL推进时递增trail_advances. (5) live_cycle.py — MIA close新增trail_contribution{initial_sl,final_sl,trail_advances}, trail_advances>0→label=sl_hit_trailed. (6) managed_close.py — dispatch payload注入trail_contribution. DataHealthService首跑检出5个潜伏故障的靶向修复. | RC-06 |
 | FIX-20260610-007 | 2026-06-10 | execution-guards, brains-services, runtime-live, observability, training | **系统解冻+DataHealth+BTC V2+XAU方向分离+数据加速**: (Phase 1-3) budget+leaderboard+calibrator. (Phase 4-5) 24源+DingTalk. (MLOps) V1禁用→V2 PIT(BTC 54 AUC=0.82, XAU 715 AUC=0.64). XAU方向分离 LONG 381 AUC=0.68 + SHORT 334 AUC=0.67, MetaFilterGate路由. cold_explore. DQAF-20260610-001. | RC-03, RC-06, RC-10, RC-12 |
 | FIX-20260610-005 | 2026-06-10 | observability, monitor-dashboard, deployment-config | **DataHealthService — 统一数据健康监控基建**: (1) `data_health_schema.py` — dataclass/enum/@health_check装饰器注册表(Iron Law #4), 阈值默认值, 告警上下文构建器. (2) `data_health_service.py` — CRITICAL层6项检查(trade_journal PnL null率/feature_store新鲜度/execution_state断路器一致性/governance_state live brain/meta_filter_state ATR冻结/mt5_bridge_health心跳), 跨源对账2项, 孤儿检测(泛化ReB-20260608-002), 原子状态持久化(Iron Law #2). LIGHT模式<50ms(Iron Law #1). 零alert_hub调用(Iron Law #3). (3) `run_data_health.py` — CLI, JSON输出, 退出码0/1/2. (4) `data_health_monitor.py`→shim. (5) 告警规则RULE-012~016. DQAF-20260610-001 IC Mandate + Architecture Review 4铁律. | RC-12 |
-| FIX-20260609-012 | 2026-06-09 | runtime-live, execution-reentry, training | **BTC 大脑重训 V9/V10**: B1审计→B2/B3训练管线 (963行, 时间衰减+Walk-Forward CV+真实摩擦)。网格搜索15组SL/TP×4TF→BTC不支持R:R≥1.0。M15 SL=3.0/TP=2.0 EV=+0.456R全场最佳。V9 H1 (EV+0.38R)+V10 M15 (EV+0.46R) shadow注册。 | RC-12 |
+| FIX-20260610-008 | 2026-06-10 | deployment-config, scripts, execution-guards | **配置一致性闸门 + label_contract补全 + 出场原因分类强化**: (1) V5退役遗漏修复 — live.yaml中BTC_Swing_V5 enabled→false (FIX-001仅更新了BTC配置). (2) V9/V10补全label_contract块 — 生存模式合约(SL=3.0/TP=2.0)显式声明为不与现有btc_swing对齐, 需要专属策略线. (3) verify.py新增`_check_config_consistency()` — 跨品种路径污染检测 + 退役大脑enabled检测 + label_contract缺失告警. (4) `_classify_exit_reason()`补全14种出场模式: kalman_velocity_flip→kalman_flip, meta_exit子类型(pnl_urgency/time_decay/regime_misalignment/consensus_drift/vol_expansion/ml_p_win), net_out, exit_watchdog, grace_period_emergency, partial_tp. DQAF-20260610-002. | RC-09, RC-12, RC-11, RC-06, RC-07 |
 | FIX-20260609-011 | 2026-06-09 | runtime-live, execution-guards, deployment-config | **Governance degradation gate: no-live-brains protection**: When zero brains in a strategy have "live" governance status → (a) confidence floor raised to 0.50, (b) volume capped at 0.01 (min_lot). candidate brains now penalised vote_weight×0.5 (same as probation — fixes logical inversion where unproven brains had full vote while degraded brains had halved). DQAF-20260609-011. | RC-07, RC-09 |
 | FIX-20260609-010 | 2026-06-09 | runtime-live, execution-reentry | **Budget counter reset every cycle + hesitation threshold BTC calibration**: (1) `_build_strategy_lines()` in live_cycle.py rebuilds all StrategyBudget objects every cycle (zeroed counters), but `restore_execution_state()` only ran on cycle 1 → daily loss limits, consecutive loss breaker, and all cumulative circuit breakers permanently disabled on cycles 2+. Fix: restore budget state from disk EVERY cycle before feeding pending records. (2) FIX-001 added `_MAX_THRESHOLD=0.82` + TTL, but +0.15 margin with floor 0.70 still produced unreachable thresholds for BTC tree models (P99≈0.685). Fix: margin +0.15→+0.08, floor 0.70→0.65. Ordering: brain_flip +0.05 < hesitation +0.08 < sl_hit +0.10. DQAF-20260609-001. | RC-03, RC-05 |
 | FIX-20260609-009 | 2026-06-09 | execution-orders | **Trend isolation gates Strangler Fig extraction (P1)**: `apply_trend_isolation_gates()` extracted from sections 4aa-4d (232 lines) → `core/execution/trend_isolation_gates.py` (196 lines). Unified counter-trend, multi-TF, inflection gates. `strategy_line.py`: 2377→1993 (-384 after 008+009). | RC-08 |
@@ -1996,3 +1996,60 @@ FIX-YYYYMMDD-NNN
   ```
 - **Related Docket**: DQAF-20260609-001 (diagnosis of BTC trading silence)
 
+---
+
+### FIX-20260610-008: 配置一致性闸门 + label_contract 补全 + 出场原因分类强化 (DQAF-20260610-002)
+
+- **Severity**: Sev 2 — 配置污染(功能性无害但运维风险) + 标签中毒(反事实PnL静默污染)
+- **Diagnosis**: DQAF-20260610-002 — 入场/出场全量审计发现三项根因
+- **Files changed**:
+  - `configs/live.yaml` (-1/+1): BTC_Swing_V5 enabled: true → false
+  - `configs/brains_btc/BTC_Swing_V9_H1_Survival.json` (+14 lines): label_contract 块
+  - `configs/brains_btc/BTC_Swing_V10_M15_Survival.json` (+14 lines): label_contract 块
+  - `scripts/verify.py` (+140 lines): `_check_config_consistency()` 函数 + quick/full 集成
+  - `core/execution/reentry_guard.py` (+19 lines): `_classify_exit_reason()` 补全模式
+
+**子修复 A — XAU 配置清理**:
+- **Root cause (RC-09, RC-11)**: FIX-20260610-001 退役 V5 时只更新了 BTC 配置(`live_btc.yaml` enabled→false)和脑文件(`status: retired`), 遗漏了 XAU 配置(`live.yaml`). 根本原因: 无跨配置一致性检查机制, 退役操作是"点修复"模式.
+- **Fix**: `live.yaml` 中 `BTC_Swing_V5` enabled→false. 运行时 `strategy_builder.py:122` 已经有 `status==retired → continue` 的防御, 但配置层面仍需清理以避免运维误判.
+- **Prevention**: verify.py 新增 `_check_config_consistency()` 检查退役大脑不得在任何配置中 enabled, 违者阻断.
+
+**子修复 B — V9/V10 label_contract 补全**:
+- **Root cause (RC-06, RC-12)**: V9_H1_Survival 和 V10_M15_Survival 以生存模式训练(SL=3.0/TP=2.0), 与现有 btc_swing 策略线(SL=2.0/TP=2.5)的契约不同. V6/V7/V8 均有 `label_contract` 块声明对齐关系, 但 V9/V10 缺失——因为它们的契约与任何现有策略线都不对齐, 需要专属策略线.
+- **Fix**: 补全 `label_contract` 块, 显式声明 `contract_type: "survival"`, `aligned_with: null`, `requires_dedicated_strategy_line: true`, 并记录 graduation_path. `note` 字段说明反事实 PnL 仅方向性参考(存在右审查偏差).
+- **Prevention**: verify.py `_check_config_consistency()` 对缺失 label_contract 的 enabled 大脑输出 WARN. 未来可在 brain_lifecycle_manager 中对 `aligned_with: null` 的大脑强制 shadow 状态.
+
+**子修复 C — verify.py 配置一致性闸门**:
+- **Root cause (RC-12, RC-07)**: 系统缺少配置层面的静态验证. 退役/禁用操作依赖人工记忆同步双品种配置文件.
+- **Fix**: `_check_config_consistency()` 实现三项检查:
+  1. 跨品种路径污染检测: XAU 配置不得引用 `brains_btc/`, BTC 配置不得引用 `brains/`(除共享外)
+  2. 退役大脑检测: status retired/frozen 的脑不得 enabled=true
+  3. label_contract 缺失检测: enabled 大脑缺少 label_contract 块 → WARN
+- **Integration**: 集成到 `verify.py --quick` 和 `--full` 流程中, 作为提交前闸门.
+
+**子修复 D — 出场原因分类强化**:
+- **Root cause (RC-07)**: `_classify_exit_reason()` 仅覆盖 12 种模式, `kalman_velocity_flip`, `ml_p_win`, `pnl_urgency`, `net_out`, `exit_watchdog`, `grace_period_emergency`, `partial_tp` 等落入 `"unknown"` 分类. 标签数据污染影响: (1) Reentry Guard 冷却策略使用默认参数(可能过松或过严), (2) MetaFilter 训练标签噪声, (3) 事后审计无法按出场原因分类统计.
+- **Fix**: 新增 7 种模式匹配 → 3 个新规范类别:
+  - `kalman_velocity` → `"kalman_flip"` (趋势速度反转出场)
+  - Meta Exit 子类型(`pnl_urgency`/`time_decay`/`regime_misalignment`/`consensus_drift`/`vol_expansion`/`ml_p_win`) → `"meta_exit"`
+  - `net_out` → `"net_out"` (净仓位平仓)
+  - `exit_watchdog` → `"watchdog"` (看门狗强制出场)
+  - `grace_period_emergency` → `"emergency_close"` (宽限期紧急出场)
+  - `partial_tp` → `"tp_hit"` (部分止盈)
+- **Reentry guard 行为**: 新类别暂走 "Unknown" 保守处理(900s 超时 + confidence 检查), 后续按各类型的实际表现数据精细调优.
+- **Validation**: 31/31 pattern tests pass (14 pre-existing + 17 new patterns).
+
+- **ReB Pattern**: `CONFIG_SYMMETRY_DRIFT` — 双品种部署架构中对共享大脑的配置修改只应用到单一品种配置文件, 未同步到另一品种. 多见于退役/禁用/参数调整操作.
+  - Signature: `brain.status==retired AND found enabled:true in non-primary config`
+  - Prevention: `_check_config_consistency()` in verify.py
+  - Also prevented by: `strategy_builder.py` runtime `continue` on retired (defense-in-depth)
+
+- **Verification**:
+  ```
+  [PASS] mypy — 0 errors
+  [PASS] ruff — 0 issues
+  [PASS] verify.py --quick — no regressions
+  [PASS] 31/31 _classify_exit_reason pattern tests
+  [PASS] Config consistency: 0 errors, 6 warnings (legitimate XAU label_contract gaps)
+  ```
+- **Related Docket**: DQAF-20260610-002 (entry/exit audit)

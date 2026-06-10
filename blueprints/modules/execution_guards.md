@@ -49,6 +49,7 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260610-008 | 2026-06-10 | cursor-agent | — | **出场原因分类强化**: `_classify_exit_reason()`补全7种模式→3个新规范类别: kalman_velocity→kalman_flip, meta_exit子类型6种(全部归入meta_exit), net_out, exit_watchdog→watchdog, grace_period_emergency→emergency_close, partial_tp→tp_hit. 14种预存模式回归测试全通过+17种新模式测试. DQAF-20260610-002. | RC-07 |
 | FIX-20260610-006 | 2026-06-10 | cursor-agent | — | **ATR freeze guard**: MetaSignalFilter 连续5周期浮点全等检测→_atr_frozen标志+JSON event+持久化; 值波动→自动解除. | RC-12 |
 | FIX-20260610-007 | 2026-06-10 | cursor-agent | — | **Budget解冻+Calibrator+数据加速+XAU方向分离**: budget跨日unpause; calibrator merge; hesitation 0.08→0.05; cold_explore扩展swing(绕过MetaFilter+趋势隔离+vol*0.5); MetaFilter V1止血+V2 PIT; XAU方向分离(LONG 381 AUC=0.68, SHORT 334 AUC=0.67)+路由; 字典同构; 趋势门禁绕过(逆势冷探索). | RC-03, RC-06, RC-12 |
 | FIX-20260609-011 | 2026-06-09 | cursor-agent | — | **Governance degradation gate**: When zero live brains in a strategy, confidence floor 0.50 + volume cap 0.01. candidate brains penalised vote_weight×0.5. DQAF-20260609-011. | RC-07 |

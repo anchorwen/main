@@ -214,6 +214,169 @@ def check_stamp() -> tuple[bool, str]:
     return True, "Stamp valid"
 
 
+def _check_config_consistency() -> tuple[bool, list[str]]:
+    """Validate cross-config brain consistency (FIX-20260610-002).
+
+    Checks:
+      1. Cross-asset contamination: XAU config must not reference brains_btc/,
+         BTC config must not reference brains/ (unless marked as shared).
+      2. Retired/frozen brains must not be enabled in any config.
+      3. Brain label_contract alignment with strategy line SL/TP.
+
+    Returns (passed, error_messages).
+    """
+    try:
+        import yaml
+    except ImportError:
+        print("[WARN] Config Consistency: PyYAML not available — skipping check")
+        return True, []
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    live_configs = sorted(ROOT.glob("configs/live*.yaml"))
+    if not live_configs:
+        return True, []
+
+    # ── Determine asset from config path ──
+    def _asset_from_path(p: Path) -> str:
+        name = p.name
+        if "btc" in name.lower():
+            return "BTC"
+        return "XAU"
+
+    # ── Build brain status cache ──
+    brain_cache: dict[str, dict] = {}
+
+    def _load_brain(brain_path_str: str) -> dict | None:
+        if brain_path_str in brain_cache:
+            return brain_cache[brain_path_str]
+        brain_path = ROOT / brain_path_str
+        if not brain_path.exists():
+            brain_cache[brain_path_str] = {}
+            return None
+        try:
+            with open(brain_path, encoding="utf-8") as f:
+                data = json.load(f)
+            brain_cache[brain_path_str] = data
+            return data
+        except Exception:  # noqa: BLE001
+            brain_cache[brain_path_str] = {}
+            return None
+
+    for config_path in live_configs:
+        asset = _asset_from_path(config_path)
+        try:
+            with open(config_path, encoding="utf-8") as f:
+                config = yaml.safe_load(f)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{config_path.name}: cannot parse YAML — {exc}")
+            continue
+
+        brains_section = config.get("brains", {})
+        registry = brains_section.get("registry_entries", [])
+        if not registry:
+            continue
+
+        for entry in registry:
+            if not isinstance(entry, dict):
+                continue
+            brain_path = entry.get("path", "")
+            enabled = entry.get("enabled", True)
+            if not brain_path:
+                continue
+
+            # ── Check 1: cross-asset contamination ──
+            is_btc_brain = "brains_btc" in brain_path
+            is_xau_brain = "brains/" in brain_path and "brains_btc" not in brain_path
+
+            if asset == "XAU" and is_btc_brain:
+                if enabled:
+                    errors.append(
+                        f"{config_path.name}: BTC brain '{brain_path}' enabled in XAU config "
+                        f"— cross-asset contamination (FIX-20260610-002)"
+                    )
+                else:
+                    # Disabled is OK (kept for reference) but note as info
+                    pass
+
+            if asset == "BTC" and is_xau_brain:
+                # Check if this is a genuinely shared brain or misplacement
+                brain_data = _load_brain(brain_path)
+                if brain_data:
+                    strategy = brain_data.get("strategy", "")
+                    # Some BTC brains were historically placed in configs/brains/
+                    # before the directory split. Allow if strategy is BTC-specific.
+                    if "btc" not in strategy.lower() and "BTC" not in str(
+                        brain_data.get("symbol", "")
+                    ):
+                        if enabled:
+                            errors.append(
+                                f"{config_path.name}: XAU brain '{brain_path}' enabled in BTC config "
+                                f"— cross-asset contamination"
+                            )
+
+            if not enabled:
+                continue
+
+            # ── Check 2: retired/frozen brain must not be enabled ──
+            brain_data = _load_brain(brain_path)
+            if brain_data is None:
+                warnings.append(f"{config_path.name}: brain '{brain_path}' not found on disk")
+                continue
+
+            status = brain_data.get("status", "")
+            if status in ("retired", "frozen"):
+                errors.append(
+                    f"{config_path.name}: RETIRED brain '{brain_path}' (status={status}) "
+                    f"still enabled=true — must be disabled (FIX-20260610-002)"
+                )
+
+            # ── Check 3: label_contract existence (warning only) ──
+            label_contract = brain_data.get("label_contract")
+            if label_contract is None:
+                warnings.append(
+                    f"{config_path.name}: brain '{brain_path}' missing label_contract block — "
+                    f"train-serve SL/TP alignment cannot be verified"
+                )
+            elif isinstance(label_contract, dict):
+                aligned_with = label_contract.get("aligned_with")
+                contract_sl = label_contract.get("sl_atr_mult")
+                contract_tp = label_contract.get("tp_atr_mult")
+
+                if aligned_with is None:
+                    # Brain explicitly declares non-alignment — check graduation_path
+                    grad_path = label_contract.get("graduation_path", "")
+                    if not grad_path:
+                        warnings.append(
+                            f"{config_path.name}: brain '{brain_path}' label_contract.aligned_with=null "
+                            f"but no graduation_path specified"
+                        )
+                    else:
+                        # This is intentional (survival brains, etc.) — informational
+                        pass
+                elif isinstance(aligned_with, str) and "live_btc.yaml" in aligned_with:
+                    if asset != "BTC":
+                        warnings.append(
+                            f"{config_path.name}: brain '{brain_path}' label_contract declares "
+                            f"aligned_with={aligned_with} but is deployed in {config_path.name}"
+                        )
+
+    # Print results
+    if errors:
+        print(f"\n[FAIL] Config Consistency: {len(errors)} error(s)")
+        for e in errors:
+            print(f"  ❌ {e}")
+    if warnings:
+        print(f"[WARN] Config Consistency: {len(warnings)} warning(s)")
+        for w in warnings:
+            print(f"  ⚠️  {w}")
+    if not errors and not warnings:
+        print("[PASS] Config Consistency: all checks passed")
+
+    return len(errors) == 0, errors
+
+
 def _run_golden_master_check() -> int:
     """Validate recorded Golden Master cycles for structural integrity and consistency.
 
@@ -242,9 +405,11 @@ def _run_golden_master_check() -> int:
         print("[FAIL] Golden Master: no recorded cycles found")
         return 1
 
-    print(f"Golden Master: {len(all_records)} cycles loaded "
-          f"(XAU={sum(1 for r in all_records if r['_source']=='XAU')}, "
-          f"BTC={sum(1 for r in all_records if r['_source']=='BTC')})")
+    print(
+        f"Golden Master: {len(all_records)} cycles loaded "
+        f"(XAU={sum(1 for r in all_records if r['_source']=='XAU')}, "
+        f"BTC={sum(1 for r in all_records if r['_source']=='BTC')})"
+    )
 
     errors = 0
     warnings = 0
@@ -279,8 +444,10 @@ def _run_golden_master_check() -> int:
                 if base.get("should_trade") != out.get("should_trade"):
                     determinism_violations += 1
                     if determinism_violations <= 3:  # limit noise
-                        print(f"  [WARN] Non-determinism: {sig} → {strat}: "
-                              f"trade={base.get('should_trade')} vs {out.get('should_trade')}")
+                        print(
+                            f"  [WARN] Non-determinism: {sig} → {strat}: "
+                            f"trade={base.get('should_trade')} vs {out.get('should_trade')}"
+                        )
     if determinism_violations == 0:
         print("  [PASS] Determinism: identical inputs produce identical should_trade decisions")
     else:
@@ -288,8 +455,8 @@ def _run_golden_master_check() -> int:
         warnings += determinism_violations
 
     # ── Check 3: coverage statistics ──
-    strategies = Counter()
-    regimes = Counter()
+    strategies: Counter[str] = Counter()
+    regimes: Counter[str] = Counter()
     trade_count = 0
     blocked_count = 0
     for r in all_records:
@@ -453,6 +620,11 @@ def main() -> int:
                 print(f"[FAIL] artifact validation error: {exc}")
                 all_passed = False
 
+            print(">>> config consistency (FIX-20260610-002)...")
+            cfg_ok, cfg_errs = _check_config_consistency()
+            if not cfg_ok:
+                all_passed = False
+
     elif args.full:
         print(">>> mypy...")
         passed, output = run_mypy()
@@ -513,6 +685,11 @@ def main() -> int:
                 all_passed = False
         except Exception as exc:  # noqa: BLE001
             print(f"[FAIL] artifact validation error: {exc}")
+            all_passed = False
+
+        print(">>> config consistency (FIX-20260610-002)...")
+        cfg_ok, cfg_errs = _check_config_consistency()
+        if not cfg_ok:
             all_passed = False
 
         print(">>> pytest...")

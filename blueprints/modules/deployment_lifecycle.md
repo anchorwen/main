@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260610-008 | 2026-06-10 | cursor-agent | — | 配置一致性静态闸门 (`scripts/verify.py` +140: `_check_config_consistency()`). V9/V10补全label_contract(SL=3.0/TP=2.0生存模式,需专属策略线). V5 XAU残留清理(`live.yaml` enabled→false). DQAF-20260610-002. | RC-09, RC-12 |
 | FIX-20260610-007 | 2026-06-10 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/send_data_health_alert.py`→`monitor_dashboard`, `scripts/build_btc_metafilter_v2_dataset.py`+`scripts/train_btc_metafilter_v2.py`→`training`. FIX-007 DingTalk+MLOps. | RC-09 |
 | FIX-20260610-004 | 2026-06-10 | cursor-agent | — | MODULE_SOURCE_MAP: add `scripts/analyze_trail_impact.py` → `runtime_live`. DQAF-20260610-001. | RC-09 |
 | FIX-20260608-007 | 2026-06-08 | agent | — | MODULE_SOURCE_MAP: add `core/execution/pwin_chain.py` → execution_guards (S3 refactoring new file). | RC-09 |

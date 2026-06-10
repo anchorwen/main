@@ -57,8 +57,9 @@ brains:
     enabled: false
   - path: configs/brains/Swing_LGB_M15_V1.json
     enabled: false
+  # ── FIX-20260610-002: V5 retired (33.9% acc, BTC-specific) — disabled in XAU ──
   - path: configs/brains_btc/BTC_Swing_V5.json
-    enabled: true
+    enabled: false
 gate:
   gate_policy_config: configs/live_gate_policy.json
   auto_recovery:

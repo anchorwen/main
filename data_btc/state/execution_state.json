@@ -1,15 +1,16 @@
 {
   "version": 2,
-  "saved_at_utc": "2026-06-09T06:34:44.237524",
+  "schema_version": "execution_state.v2",
+  "saved_at_utc": "2026-06-10T12:05:01.069551",
   "budgets": {
     "btc_swing": {
-      "daily_pnl_pct": 0.0,
-      "consecutive_losses": 0,
-      "total_trades_today": 0,
-      "total_wins_today": 0,
+      "daily_pnl_pct": -8.101,
+      "consecutive_losses": 3,
+      "total_trades_today": 10,
+      "total_wins_today": 2,
       "paused": false,
       "paused_at": 0.0,
-      "last_trade_day": "",
+      "last_trade_day": "2026-06-10",
       "_sl_timestamps": [],
       "_sl_cooldown_until": 0.0,
       "_sl_paused_rest_of_day": false
@@ -17,10 +18,10 @@
   },
   "cooldown_registry": {
     "btc_swing": {
-      "deadline": 1780982080.9859922,
-      "cooldown_sec": 300,
-      "type": "passive_1x_tf",
-      "exit_reason": "ev_trajectory_btc_swing_gamma1.0_t7%_r-0.51_lt_-0.44",
+      "deadline": 1781091060.6530325,
+      "cooldown_sec": 60,
+      "type": "unknown_60s",
+      "exit_reason": "kalman_velocity_flip_long_v=-6.3bps",
       "exit_direction": "long"
     }
   },

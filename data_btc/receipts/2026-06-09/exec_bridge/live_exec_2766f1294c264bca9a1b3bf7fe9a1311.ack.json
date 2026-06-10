@@ -1,0 +1,22 @@
+{
+  "message_id": "live_exec_2766f1294c264bca9a1b3bf7fe9a1311",
+  "ack_status": "accepted",
+  "received_at": "2026-06-09T23:10:03",
+  "detail": {
+    "retcode": 10009,
+    "order": 3855432750,
+    "request": {
+      "action": 1,
+      "symbol": "BTCUSDc",
+      "volume": 0.01,
+      "type": 1,
+      "position": 3855212065,
+      "price": 61720.41,
+      "deviation": 20,
+      "magic": 90410,
+      "comment": "",
+      "type_time": 0,
+      "type_filling": 1
+    }
+  }
+}

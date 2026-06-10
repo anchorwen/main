@@ -363,3 +363,16 @@
   2. 当检测到仓位平均持仓时间 < N 个 bar 且全为单一方向时，触发"逆势微仓模式"告警
   3. 大脑训练时应在标签中包含趋势方向信息，使模型学会"顺大势、逆小势"的区别
 - **检测方法**: `python scripts/analyze_trail_impact.py` 已包含持仓时间分析。定期运行监控 avg_hold_mins 和方向集中度。
+
+---
+
+### ReB-20260610-003
+- **Pattern Signature**: `CONFIG_SYMMETRY_DRIFT`
+- **描述**: 双品种部署架构中，对共享大脑的配置修改只应用到单一品种配置文件(live_btc.yaml)，未同步到另一品种(live.yaml)。多见于退役/禁用/参数调整操作。典型场景: 大脑在 commit A 被添加到两个品种的配置中(如 Phase 5b 批量注册)，在 commit B 退役时只更新了主品种配置——因为退役决策基于主品种的实盘表现，次品种的引用被遗忘。
+- **关联 FIX IDs**: FIX-20260610-008
+- **关联 Docket IDs**: DQAF-20260610-002
+- **预防策略**:
+  1. `_check_config_consistency()` in verify.py — 静态扫描所有 `live*.yaml`，检测 `status: retired/frozen` 但 `enabled: true` 的大脑
+  2. 退役流程标准化: 退役大脑时必须(1)更新脑 JSON(status+vote_weight),(2)在所有引用该脑的配置文件中设 enabled=false,(3)运行 verify.py 确认
+  3. 未来: governance_service 自动退役时同步更新所有配置文件引用
+- **检测方法**: `python scripts/verify.py --quick` 自动检测并报错。也可手动: `grep -r "BTC_Swing_V5" configs/live*.yaml`

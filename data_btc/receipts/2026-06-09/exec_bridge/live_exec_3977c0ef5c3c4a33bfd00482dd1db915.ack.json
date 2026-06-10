@@ -1,0 +1,22 @@
+{
+  "message_id": "live_exec_3977c0ef5c3c4a33bfd00482dd1db915",
+  "ack_status": "rejected",
+  "received_at": "2026-06-09T18:10:24",
+  "detail": {
+    "retcode": 10031,
+    "comment": "Request rejected due to absence of network connection",
+    "request": {
+      "action": 1,
+      "symbol": "BTCUSDc",
+      "volume": 0.01,
+      "type": 1,
+      "position": 3853350396,
+      "price": 61719.92,
+      "deviation": 20,
+      "magic": 90410,
+      "comment": "",
+      "type_time": 0,
+      "type_filling": 1
+    }
+  }
+}

@@ -487,3 +487,29 @@
 - **是否被推翻**: 否 (AR验证通过 — 0%胜率被证伪为遥测污染而非trail退化)
 - **关联 ReB Pattern**: ReB-20260610-001 (`TRAIL_TELEMETRY_BLINDSPOT`), ReB-20260610-002 (`MICRO_LIFESPAN_COUNTER_TREND`)
 - **关联 FIX**: — (诊断报告, 无代码修改; IC Mandate转入MIA管道修复)
+
+---
+
+### CCT-20260610-002
+- **Docket ID**: DQAF-20260610-002
+- **日期**: 2026-06-10
+- **置信度**: confirmed (code audit × git history bisect × config validation × 31 pattern tests)
+- **因果链**:
+  - [Layer 1 — 症状 A]: V9_H1_Survival/V10_M15_Survival training SL=3.0/TP=2.0 与 btc_swing 策略线 SL=2.0/TP=2.5 不一致
+  - [Layer 2 — 中间层 A]: 非 bug——FIX-20260609-012 网格搜索确认 BTC 不支持 R:R≥1.0，特意训练生存模式(SL>TP, 90%+ WR)并注册为 shadow。但缺少 label_contract 声明其不同契约
+  - [Layer 3 — 根因 A]: 训练管线未自动生成非对齐大脑的 label_contract。V6/V7/V8 有 `aligned_with: live_btc.yaml`，但 V9/V10 与任何现有策略线都不对齐——需要 `aligned_with: null` + `requires_dedicated_strategy_line: true`
+  - [Layer 1 — 症状 B]: BTC_Swing_V5(retired)残留在 XAU live.yaml enabled=true
+  - [Layer 2 — 中间层 B]: FIX-001 退役 V5 仅更新 BTC 配置和脑 JSON，遗漏 XAU 配置——无跨配置扫描
+  - [Layer 3 — 根因 B]: 无跨配置文件一致性检查。退役操作是"点修复"模式，依赖人工同步
+  - [Layer 1 — 症状 C]: 10+ 种出场原因被归为 "unknown" → 标签污染
+  - [Layer 2 — 中间层 C]: `_classify_exit_reason()` 手工维护，新出场逻辑未同步更新分类规则
+  - [Layer 3 — 根因 C]: 缺少"新出场原因必须注册"的强制机制
+- **证据引用**:
+  - Source 1: `configs/brains_btc/BTC_Swing_V9_H1_Survival.json:20-23` — training SL=3.0/TP=2.0
+  - Source 2: `configs/live_btc.yaml:58-59` — strategy line SL=2.0/TP=2.5
+  - Source 3: `git log bb5b386 -p -- configs/live.yaml` — V5 added to XAU Jun 6
+  - Source 4: `git show 1f59e29` — V5 retired in BTC only, missed XAU config
+  - Source 5: `core/execution/reentry_guard.py:21-50` — only 12 patterns before fix
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260610-003 (`CONFIG_SYMMETRY_DRIFT`)
+- **关联 FIX**: FIX-20260610-008
