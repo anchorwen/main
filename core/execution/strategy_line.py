@@ -1066,8 +1066,10 @@ class StrategyLine:
             regime_gate_mode=regime_gate_mode,
             last_entry_z=self._last_entry_z,
         )
-        if _trend_reject is not None:
+        if _trend_reject is not None and not _is_cold_explore:
             return _trend_reject
+        if _is_cold_explore:
+            _ct_vol_mult = 0.5  # half volume for counter-trend explore
         if "statarb" in name and entry_z_score != 0.0:
             self._last_entry_z = entry_z_score
 
