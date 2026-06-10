@@ -1510,6 +1510,30 @@ def main(argv: list[str] | None = None) -> int:
                 flush=True,
             )
 
+    # ── FIX-20260610-007: Direction-specific MetaFilter models ──
+    # XAU directional asymmetry: SHORT cascades vs LONG grinds.
+    # Separate models capture different feature importance patterns.
+    # Attached to config so strategy_line picks them up via getattr.
+    _base_dir = Path(args.base_dir)
+    for _dir_label, _dir_model in [("long", "lgb_xau_long_v1"), ("short", "lgb_xau_short_v1")]:
+        _dir_model_path = str(PROJECT_ROOT / "data" / "models" / f"meta_stage2_{_dir_model}.txt")
+        if Path(_dir_model_path).exists():
+            try:
+                _dir_filter = MetaSignalFilter(
+                    model_path=_dir_model_path, threshold=0.55, enabled=True, mode="binary",
+                )
+                if _dir_filter.load():
+                    setattr(config, f"meta_filter_{_dir_label}", _dir_filter)
+                    print(
+                        json.dumps(
+                            {"event": f"meta_filter_{_dir_label}_loaded", "time": _utc_iso(),
+                             "model": _dir_model_path, "features": len(_dir_filter._feature_names)},
+                            ensure_ascii=False,
+                        ), flush=True,
+                    )
+            except Exception:  # noqa: BLE001
+                pass
+
     # ── Initial state ──
     state = LiveCycleState(
         known_open_tickets=known_open_tickets,

@@ -1034,6 +1034,10 @@ class StrategyLine:
 
         # ── 4ab. MetaFilter gate (Strangler Fig #12: meta_filter_routing.py) ──
         from core.execution.meta_filter_routing import apply_meta_filter_gate
+        # FIX-20260610-007: Direction-specific MetaFilter routing.
+        # Per-direction models stored on config (set by live_intent_loop).
+        _mf_long = getattr(self.config, "meta_filter_long", None)
+        _mf_short = getattr(self.config, "meta_filter_short", None)
         _meta_p_win, _meta_reject = apply_meta_filter_gate(
             name=name, direction=direction, confidence=confidence,
             entry_z_score=entry_z_score, feature_vector=feature_vector,
@@ -1043,6 +1047,8 @@ class StrategyLine:
             total_count=total_count, regime_gate_mode=regime_gate_mode,
             _meta_p_win=_meta_p_win,
             _last_ou_result=getattr(self, "_last_ou_result", None),
+            meta_filter_long=_mf_long,
+            meta_filter_short=_mf_short,
         )
         if _meta_reject is not None and not _is_cold_explore:
             return _meta_reject

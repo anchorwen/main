@@ -42,6 +42,9 @@ def apply_meta_filter_gate(
     _meta_p_win: float | None = None,
     # ── OU cold-explore gate state ──
     _last_ou_result: dict[str, Any] | None = None,
+    # ── FIX-20260610-007: Direction-specific routing ──
+    meta_filter_long: Any = None,
+    meta_filter_short: Any = None,
 ) -> tuple[float | None, StrategyDecision | None]:
     """Apply MetaFilter gate and return (meta_p_win, rejected_decision_or_None).
 
@@ -55,15 +58,24 @@ def apply_meta_filter_gate(
       - swing (m15/m30/h1/h4/btc): z_score * 12.5 proxy (section 4ab extended)
       - barrier_12bar: Stage 1 probe score from Huber brain (section 4e)
     """
+    # ── FIX-20260610-007: Direction-specific routing ──
+    # When per-direction models are available, route to the matching one.
+    # This captures directional asymmetry (XAU shorts cascade, longs grind).
+    _active_filter = meta_filter
+    if direction == "long" and meta_filter_long is not None:
+        _active_filter = meta_filter_long
+    elif direction == "short" and meta_filter_short is not None:
+        _active_filter = meta_filter_short
+
     # ── Section 4ab: statarb + swing MetaFilter routing ──
     if (
-        meta_filter is not None
+        _active_filter is not None
         and ("statarb" in name or name in ("m15_swing", "m30_swing", "h1_swing", "h4_swing", "btc_swing"))
         and _meta_p_win is None
     ):
         try:
             _z_proxy = entry_z_score * 12.5
-            _result = meta_filter.filter_arrays(
+            _result = _active_filter.filter_arrays(
                 direction=direction,
                 s1_prediction=_z_proxy,
                 v9_array=feature_vector,
@@ -132,7 +144,7 @@ def apply_meta_filter_gate(
             )
 
     # ── Section 4e: barrier_12bar Meta-Labeling Gate ──
-    if meta_filter is not None and name == "barrier_12bar":
+    if _active_filter is not None and name == "barrier_12bar":
         from core.execution.meta_pipeline import extract_probe_score
 
         _s1_prediction: float | None = None
@@ -157,7 +169,7 @@ def apply_meta_filter_gate(
                             break
 
         if _s1_prediction is not None:
-            result = meta_filter.filter_arrays(
+            result = _active_filter.filter_arrays(
                 direction=direction,
                 s1_prediction=_s1_prediction,
                 v9_array=feature_vector,
