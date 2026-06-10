@@ -1015,6 +1015,23 @@ class StrategyLine:
                         reason="meta_filter_gate_exception_blocked",
                     )
 
+        # ── FIX-20260610-007-C: Cold explore bypasses MetaFilter ──
+        # When MetaFilter is in learning phase (COLD calibrator, few samples),
+        # bounded-volume explore trades bypass the filter to collect PIT data.
+        # Moved BEFORE MetaFilter gate so cold_explore isn't blocked by rejection.
+        _is_cold_explore: bool = False
+        _needs_exploration = (
+            _meta_p_win is None  # MetaFilter didn't produce p_win yet
+            and confidence >= 0.35  # brain has minimum conviction
+        )
+        if _needs_exploration and (
+            "statarb" in name or "ou" in name.lower()
+            or "swing" in name or "btc" in name
+        ):
+            _is_cold_explore = True
+            _p_win = 0.50
+            _p_win_source = "cold_explore_neutral"
+
         # ── 4ab. MetaFilter gate (Strangler Fig #12: meta_filter_routing.py) ──
         from core.execution.meta_filter_routing import apply_meta_filter_gate
         _meta_p_win, _meta_reject = apply_meta_filter_gate(
@@ -1027,8 +1044,10 @@ class StrategyLine:
             _meta_p_win=_meta_p_win,
             _last_ou_result=getattr(self, "_last_ou_result", None),
         )
-        if _meta_reject is not None:
+        if _meta_reject is not None and not _is_cold_explore:
             return _meta_reject
+        if _is_cold_explore:
+            _meta_p_win = 0.50  # force neutral for cold explore
 
         # ── 4aa-4d: Trend isolation gates (Strangler Fig #13: trend_isolation_gates.py) ──
         _ct_vol_mult = 1.0  # default, may be overridden by counter-trend penalise
@@ -1135,9 +1154,14 @@ class StrategyLine:
 
         # ── 6. Volume ──
         # Resolve p_win for Tier 2 Kelly sizing
-        _p_win: float = 0.5
-        _p_win_source: str = "neutral_default"
-        if _meta_p_win is not None:
+        _p_win = 0.5
+        _p_win_source = "neutral_default"
+        if _is_cold_explore:
+            # FIX-20260610-007-C: Cold explore bypasses all p_win resolution.
+            # Force p_win=0.50 (Kelly mult=1.0) for bounded-volume data collection.
+            _p_win = 0.50
+            _p_win_source = "cold_explore_neutral"
+        elif _meta_p_win is not None:
             _p_win = _meta_p_win  # Platt-calibrated P(TP|signal) from MetaFilter
             _p_win_source = "meta_filter"
         elif pnl_store is not None:
@@ -1145,31 +1169,6 @@ class StrategyLine:
 
             _p_win = resolve_p_win_from_brains(self.brains, pnl_store, direction)
             _p_win_source = "rolling_wr"
-
-        # ── 6a. COLD phase exploration budget (FIX-20260526-041) ──
-        # When ConformalOUGate is in COLD phase (calibrator samples < 50),
-        # the p_win gate creates a chicken-and-egg deadlock: trading requires
-        # calibration, but calibration requires trades.  Forced Exploration
-        # Budget: override p_win=0.50 (Kelly mult=1.0, no amplification) and
-        # bypass the hard min_p_win gate.  Risk is bounded by the COLD volume
-        # cap at 0.01 lot enforced below.  Total exploration budget: ~$7.50-15.
-        _is_cold_explore: bool = False
-        # FIX-20260610-007-C: Extend cold_explore to swing/btc strategies
-        # when MetaFilter or calibrator is in COLD phase.  Bounded-volume
-        # trades collect PIT training data to break the chicken-and-egg
-        # deadlock (calibrator needs trades → trades need calibration).
-        # Risk: ~$0.50-1.00 loss per explore trade, bounded by 0.01 lot cap.
-        _needs_exploration = (
-            _p_win_source in ("rolling_wr", "brain_confidence", "neutral_default", "meta_filter")
-            and _p_win < 0.52
-        )
-        if ("statarb" in name or "ou" in name.lower()
-                or "swing" in name or "btc" in name):
-            _ou_gate = getattr(self, "_last_ou_result", None)
-            if (_ou_gate is not None and _ou_gate.get("force_min_volume")) or _needs_exploration:
-                _is_cold_explore = True
-                _p_win = 0.50
-                _p_win_source = "cold_explore_neutral"
 
         # ── 6b. Brain confidence → p_win monotonic fallback (FIX-20260531-015) ──
         # Tier-3 fallback: when MetaFilter is unavailable AND PnLStore has
