@@ -299,7 +299,10 @@ def check_reentry_quality(
         # ceiling _MAX_THRESHOLD=0.82.
         # BTC worst-case: exit_conf=0.70 → 0.78 (below ceiling, rare but
         # reachable).  exit_conf=0.67 → 0.75 (P99 tail reachable).
-        _hesitation_threshold = min(max(exit_confidence + 0.08, 0.65), _MAX_THRESHOLD)
+        # FIX-20260610-007-B: margin 0.08→0.05 for faster data collection.
+        # More reentries → more trades → more training samples.
+        # Still bounded by _MAX_THRESHOLD (0.82) ceiling.
+        _hesitation_threshold = min(max(exit_confidence + 0.05, 0.65), _MAX_THRESHOLD)
         if new_confidence < _hesitation_threshold:
             return (
                 False,

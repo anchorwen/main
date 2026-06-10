@@ -1154,9 +1154,19 @@ class StrategyLine:
         # bypass the hard min_p_win gate.  Risk is bounded by the COLD volume
         # cap at 0.01 lot enforced below.  Total exploration budget: ~$7.50-15.
         _is_cold_explore: bool = False
-        if "statarb" in name or "ou" in name.lower():
+        # FIX-20260610-007-C: Extend cold_explore to swing/btc strategies
+        # when MetaFilter or calibrator is in COLD phase.  Bounded-volume
+        # trades collect PIT training data to break the chicken-and-egg
+        # deadlock (calibrator needs trades → trades need calibration).
+        # Risk: ~$0.50-1.00 loss per explore trade, bounded by 0.01 lot cap.
+        _needs_exploration = (
+            _p_win_source in ("rolling_wr", "brain_confidence", "neutral_default")
+            and _p_win < 0.52
+        )
+        if ("statarb" in name or "ou" in name.lower()
+                or "swing" in name or "btc" in name):
             _ou_gate = getattr(self, "_last_ou_result", None)
-            if _ou_gate is not None and _ou_gate.get("force_min_volume"):
+            if (_ou_gate is not None and _ou_gate.get("force_min_volume")) or _needs_exploration:
                 _is_cold_explore = True
                 _p_win = 0.50
                 _p_win_source = "cold_explore_neutral"
