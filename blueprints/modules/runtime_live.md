@@ -76,6 +76,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260610-004 | 2026-06-10 | cursor-agent | — | **MIA管道PnL缺失修复**: (1) `_enrich_mia_from_deals` close_volume=0时从MT5 deal数据恢复volume并重算PnL; truthiness→显式None检查。 (2) `_build_mia_close_entry` close_volume=0时保留数值供后续恢复。 (3) `_check_pre_close` mid从state._recent_mid_prices解析→不再传None。 DQAF-20260610-001 IC Mandate. ReB: TRAIL_TELEMETRY_BLINDSPOT. | RC-06 |
 | FIX-20260609-011 | 2026-06-09 | cursor-agent | — | **Governance degradation gate**: governance_state.json read per-cycle → strategy_evaluator checks live brain count → zero live → degrade. DQAF-20260609-011. | RC-07 |
 | FIX-20260609-010 | 2026-06-09 | cursor-agent | — | **Budget counter reset every cycle**: `_build_strategy_lines()` → fresh StrategyBudget every cycle, `restore_execution_state()` only cycle 1 → all cumulative breakers dead cycles 2+. Fix: per-cycle budget restore from disk before pending records. DQAF-20260609-001. | RC-03 |
 | FIX-20260609-007 | 2026-06-09 | cursor-agent | — | **Trail dispatch Strangler Fig extraction (P0)**: `compute_and_dispatch_trail()` → `core/runtime/trail_dispatch.py`. Handles trail SL, breakeven, trail TP, diag, snapshots, dispatch. `live_cycle.py`: 6565→6169 (-396). | RC-08 |

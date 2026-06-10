@@ -237,6 +237,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/check_preconditions.py",
         "scripts/daily_ops.py",
         "scripts/_diag_cycle_stall.py",
+        "scripts/analyze_trail_impact.py",
         "scripts/live_intent_loop.py",
         "scripts/live_launcher.py",
         "scripts/bridge_supervisor.py",

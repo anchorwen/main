@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-09T10:28:12Z
+> **自动生成**: 2026-06-10T01:23:20Z
 
 ## Package-Level Dependencies
 
@@ -467,6 +467,7 @@
 - `analyze_deps.py` → (无内部依赖)
 - `analyze_live_journal.py` → (无内部依赖)
 - `analyze_recent_losses.py` → (无内部依赖)
+- `analyze_trail_impact.py` → (无内部依赖)
 - `analyze_xau_recent_entries.py` → (无内部依赖)
 - `audit_btc_cross_validate.py` → (无内部依赖)
 - `audit_data_health.py` → (无内部依赖)
@@ -606,6 +607,7 @@
 - `run_train_batch.py` → (无内部依赖)
 - `scan_profitability_surface.py` → `core.training.profitability_calibrator`
 - `train.py` → `core.contracts.training.training_contract`, `core.deployment.brain_config_validator`, `core.deployment.brain_registration_gate`, `core.training.cpcv`, `core.training.custom_objectives`, `core.training.dataset`, `core.training.model_hashing`, `core.training.profitability_calibrator`, `core.training.training_registry`, `scripts.training.trainers.deep_res_mlp_trainer`, `scripts.training.trainers.lgb_trainer`, `scripts.training.trainers.online_mlp_trainer`, `scripts.training.trainers.transformer_trainer`, `scripts.training.trainers.xgb_trainer`
+- `train_btc_swing_v9.py` → (无内部依赖)
 - `train_daily_swing.py` → (无内部依赖)
 - `train_exit_metamodel.py` → (无内部依赖)
 - `train_from_csv.py` → `core.contracts.training.label_contract`, `core.contracts.training.training_recipe`

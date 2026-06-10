@@ -17,6 +17,7 @@
 
 | Docket ID | 日期 | 严重等级 | 症状简述 | IC 裁决 | 关联 FIX |
 |-----------|------|---------|---------|--------|----------|
+| DQAF-20260610-001 | 2026-06-10 | Sev 2 | BTC 移动止损修改前后对比: 0%胜率伪影→数据证伪→亏损来自改前旧仓位(trail卡死)，改后trail激活(+768pts)保本防守。根因非trail而是微生命周期+全long逆势+遥测盲区。 | **APPROVED → CLOSED** — IC Mandate: 冻结trail参数(衰减曲线已验证正确)，立即修复MIA管道PnL缺失(close_accepted/breakeven无PnL)。ReB: TRAIL_TELEMETRY_BLINDSPOT + MICRO_LIFESPAN_COUNTER_TREND | — |
 | DQAF-20260609-012 | 2026-06-09 | Sev 2 | BTC 大脑盈利能力诊断: V5 test_PF=1.81→live_PF=0.73, 归一化器XAU复制品, M5/12bar信号≈随机. 全TF网格搜索→BTC不支持R:R≥1.0. M15 SL=3.0/TP=2.0 EV=+0.456R 全场最佳. | **APPROVED → CLOSED** — FIX-20260609-012: B1审计→B2/B3重训管线→V9 H1 (EV+0.38R) + V10 M15 (EV+0.46R) shadow注册. ReB: BTC_SURVIVAL_ALPHA | FIX-20260609-012 |
 | DQAF-20260609-011 | 2026-06-09 | Sev 2 | 大脑治理真空: 4 candidate brains 零 live, 全票权开单, 0.1 lot 裸奔, PnL ~-$30/day. candidate 倒挂 (全票权) vs probation (0.5×). | **APPROVED → CLOSED** — FIX-20260609-011: (1) candidate vote_weight×0.5, (2) governance_state per-cycle 管线, (3) strategy_evaluator 无 live 降级 (conf<0.50→blocked, vol→0.01). ReB: GOVERNANCE_VACUUM_CADET_BRAINS | FIX-20260609-011 |
 | DQAF-20260609-002-UPDATE | 2026-06-09 | Sev 2 | 剥洋葱排查: BTC MetaFilter模型文件根本不存在(configs/brains_btc/),静默退化到rolling_wr(0.48),跨品种盲点模式 | **APPROVED → CLOSED** — FIX-002-UPDATE (Hard Floor Defense) + FIX-002-BTC (Path A: BTC MetaFilter V1训练, 47-dim LGB, val WR 70.9%). Path B (≥200笔实盘重训) 搁置. ReB: CROSS_SYMBOL_METAFILTER_BLINDSPOT | FIX-20260609-002-UPDATE, FIX-20260609-002-BTC |

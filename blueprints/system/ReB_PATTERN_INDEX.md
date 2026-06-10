@@ -337,3 +337,29 @@
 - **检测方法**:
   1. `python scripts/training/train_btc_swing_v9.py --build-only` 可复现全部网格搜索
   2. CI 中检测 brain config 的 SL/TP 参数是否落入该资产的已知正 EV 区域
+
+---
+
+### ReB-20260610-001
+- **Pattern Signature**: `TRAIL_TELEMETRY_BLINDSPOT`
+- **描述**: 移动止损(Chandelier Trail)通过 modify_sltp 持续调整 SL 水平，但平仓时的 exit label 永远不包含 'trail' 标签——无论 SL 被 trail 推了多少个 ATR，最终平仓一律标记为 `sl_hit_first` 或 `loss`。这导致 trail 的利润锁定贡献完全不可测量：无法区分"原始 SL 被命中"(trail 未生效) vs "已收紧的 SL 被命中"(trail 保护了部分利润)。整个 trail 子系统的运维只能间接通过 modify_sltp 记录和 snapshot 推测，形同盲飞。
+- **关联 FIX IDs**: —
+- **关联 Docket IDs**: DQAF-20260610-001
+- **预防策略**:
+  1. 平仓 dispatch 时比较 final_sl 与 initial_sl——如果不同，label 应为 `trail_sl_hit` 而非 `sl_hit_first`
+  2. 在 live_trade_journal 的 exit label 字段增加 trail 相关的子标签（如 `sl_hit_trailed`, `sl_hit_original`）
+  3. TrailStopEngine 输出 trail 贡献指标（sl_advance_count, final_sl_delta_from_entry）供遥测
+- **检测方法**: 搜索 live_trade_journal 中 `label=="trail"` 的计数 → 应为非零。当前 counter=0。
+
+---
+
+### ReB-20260610-002
+- **Pattern Signature**: `MICRO_LIFESPAN_COUNTER_TREND`
+- **描述**: 当大脑信号方向与宏观趋势相反时（急跌中生成 LONG 信号做反弹），配合激进防守参数（trail_activation_atr 0.3-0.5, breakeven 激活早），仓位呈现"微型生命周期"——平均持仓 21 分钟（4 根 M5 bar）。价格短暂反弹触发 trail 收紧 → 趋势重力重新压回 → 迅速击穿已收紧的 SL/breakeven → 保本微亏快速出场。这不是系统缺陷，而是逆势交易中防御机制正常工作的表现——系统用高换手率保护了本金，而非被单边碾压。
+- **关联 FIX IDs**: —
+- **关联 Docket IDs**: DQAF-20260610-001
+- **预防策略**:
+  1. 趋势隔离门禁(trend isolation gate)应作为第一道防线——逆势信号在 gate 层就应降权或拦截，而非依赖 trail 做后发补救
+  2. 当检测到仓位平均持仓时间 < N 个 bar 且全为单一方向时，触发"逆势微仓模式"告警
+  3. 大脑训练时应在标签中包含趋势方向信息，使模型学会"顺大势、逆小势"的区别
+- **检测方法**: `python scripts/analyze_trail_impact.py` 已包含持仓时间分析。定期运行监控 avg_hold_mins 和方向集中度。

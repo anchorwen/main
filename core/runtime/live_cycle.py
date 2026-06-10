@@ -420,11 +420,21 @@ def _check_pre_close(config: LiveCycleConfig, state: LiveCycleState) -> dict[str
                 ),
                 flush=True,
             )
+            # FIX-20260610-004: Resolve mid from recent prices for PnL estimation.
+            # Previously passed mid=None → pnl=None → label="close_accepted".
+            # With a real mid, dispatch_managed_close can estimate PnL and the
+            # journal gets a real win/loss/breakeven label.
+            _mid = None
+            if hasattr(state, "_recent_mid_prices") and state._recent_mid_prices:
+                try:
+                    _mid = float(state._recent_mid_prices[-1])
+                except (IndexError, TypeError, ValueError):
+                    _mid = None
             _dispatch_managed_close(
                 config,
                 pos,
                 reason=f"pre_close_flatten:{result['close_label']}",
-                mid=None,
+                mid=_mid,
                 state=state,
                 exit_watchdog=state.exit_watchdog,
             )
@@ -2016,6 +2026,14 @@ def _build_mia_close_entry(
         or known_entry.get("volume", 0.0)
         or known_entry.get("effective_volume_hint", 0.0)
     )
+    # FIX-20260610-004: When all volume sources return 0 (position state lost
+    # after partial close / MIA), use getattr with 0 default as last resort so
+    # we at least preserve a numeric close_volume.  A volume of 0 still allows
+    # downstream _enrich_mia_from_deals to recover the real volume from MT5
+    # deal data.  Previously close_volume=0.0 blocked PnL computation entirely,
+    # producing pnl=None→label="breakeven".
+    if close_volume <= 0.0:
+        close_volume = float(getattr(pos, "volume", 0) or 0)
     initial_sl = float(getattr(pos, "initial_sl", None) or known_entry.get("sl", 0.0) or 0.0)
     initial_tp = float(getattr(pos, "initial_tp", None) or known_entry.get("tp", 0.0) or 0.0)
     current_sl = float(getattr(pos, "current_sl", initial_sl) or initial_sl)
@@ -2115,24 +2133,46 @@ def _enrich_mia_from_deals(
         entry_price = mia_entry.get("detail", {}).get("entry_price") or mia_entry.get(
             "entry_price", 0
         )
-        close_volume = mia_entry.get("volume", 0)
-        if entry_price and close_price and close_volume:
-            if isinstance(entry_price, int | float) and entry_price > 0:
-                if side == "long":
-                    mia_entry["pnl"] = round((close_price - entry_price) * close_volume, 2)
-                elif side == "short":
-                    mia_entry["pnl"] = round((entry_price - close_price) * close_volume, 2)
-                # FIX-20260602-058: sync detail.pnl with recomputed PnL
-                if isinstance(mia_entry.get("detail"), dict):
-                    mia_entry["detail"]["pnl"] = mia_entry["pnl"]
-            if mia_entry.get("pnl", 0) is not None:
-                pnl = mia_entry["pnl"]
-                if pnl < 0:
-                    mia_entry["label"] = "loss"
-                elif pnl > 0:
-                    mia_entry["label"] = "win"
-                else:
-                    mia_entry["label"] = "breakeven"
+        close_volume = mia_entry.get("volume", 0) or 0.0
+
+        # FIX-20260610-004: When close_volume is 0 (position state lost volume
+        # tracking after partial close), try to recover volume from MT5 deal data.
+        # Each exit deal (entry=1) has a volume field — sum them for a real
+        # close_volume.  Previously the truthiness check `if close_volume:` was
+        # falsy for 0/0.0, silently skipping PnL recomputation and leaving
+        # pnl=None→label="breakeven" even when entry_price and close_price are
+        # both known.  Now (1) tries deal-volume recovery, (2) uses explicit
+        # None check so volume=0 still yields pnl=0 rather than pnl=None.
+        if close_volume <= 0.0 and deals:
+            _deal_volume = 0.0
+            for _d in deals:
+                if getattr(_d, "entry", -1) == 1:  # exit deal
+                    _dv = float(getattr(_d, "volume", 0) or 0)
+                    _deal_volume += _dv
+            if _deal_volume > 0:
+                close_volume = _deal_volume
+                mia_entry["volume"] = close_volume  # persist recovered volume
+
+        if isinstance(entry_price, int | float) and entry_price > 0 and close_price > 0:
+            # Use explicit numeric check — close_volume may legitimately be 0
+            # (fully closed by broker at breakeven exactly) and we still want
+            # pnl=0 rather than pnl=None which would degenerate to "breakeven"
+            # in _build_mia_close_entry.
+            if side == "long":
+                mia_entry["pnl"] = round((close_price - entry_price) * float(close_volume), 2)
+            elif side == "short":
+                mia_entry["pnl"] = round((entry_price - close_price) * float(close_volume), 2)
+            # FIX-20260602-058: sync detail.pnl with recomputed PnL
+            if isinstance(mia_entry.get("detail"), dict):
+                mia_entry["detail"]["pnl"] = mia_entry["pnl"]
+        if mia_entry.get("pnl") is not None:
+            pnl = mia_entry["pnl"]
+            if pnl < 0:
+                mia_entry["label"] = "loss"
+            elif pnl > 0:
+                mia_entry["label"] = "win"
+            else:
+                mia_entry["label"] = "breakeven"
 
         if close_reason == 4:
             mia_entry["label"] = "sl_hit_first"
@@ -3620,8 +3660,7 @@ def execute_live_cycle(
             # as MIA in a later cycle, we skip the duplicate journal write.
             _mia_seen: set[int] = getattr(state, "_mia_processed_tickets", set())
             _mia_closed = [
-                e for e in _mia_closed
-                if int(e.get("position_ticket", 0) or 0) not in _mia_seen
+                e for e in _mia_closed if int(e.get("position_ticket", 0) or 0) not in _mia_seen
             ]
             for _e in _mia_closed:
                 _t = int(_e.get("position_ticket", 0) or 0)
@@ -3746,11 +3785,13 @@ def execute_live_cycle(
                     _is_win = float(_mia_pnl) > 0
                     if not hasattr(state, "_pending_budget_records"):
                         state._pending_budget_records = []
-                    state._pending_budget_records.append({
-                        "strategy": _exit_strategy,
-                        "pnl": float(_mia_pnl),
-                        "is_win": _is_win,
-                    })
+                    state._pending_budget_records.append(
+                        {
+                            "strategy": _exit_strategy,
+                            "pnl": float(_mia_pnl),
+                            "is_win": _is_win,
+                        }
+                    )
                     print(
                         json.dumps(
                             {

@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-09T10:28:12Z
-> **扫描模块数**: 490
+> **自动生成**: 2026-06-10T01:23:20Z
+> **扫描模块数**: 492
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -241,7 +241,7 @@
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 11 | 306 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 18 | 1993 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 18 | 2015 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 114 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 8 | 313 | — | |
@@ -460,12 +460,12 @@
 | `execution_gateway_router.py` | ✅ active | ExecutionGatewayRouter | 5 | 30 | — | |
 | `execution_pipeline.py` | ✅ active | RuntimeExecutionPipeline | 4 | 106 | — | |
 | `execution_state.py` | ✅ active | — | 4 | 218 | — | |
-| `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 9 | 345 | — | |
+| `fault_handler.py` | ✅ active | FaultLevel, FaultTolerantContext | 11 | 409 | — | |
 | `gate_audit_recorder.py` | ✅ active | — | 1 | 61 | — | |
-| `golden_master.py` | ✅ active | — | 8 | 233 | — | |
+| `golden_master.py` | ✅ active | — | 8 | 249 | — | |
 | `integration_contracts.py` | ✅ active | OrderSizingPolicy, RuntimePipelineResult | 2 | 52 | — | |
-| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 26 | 6196 | — | |
-| `live_startup.py` | ✅ active | — | 10 | 311 | — | |
+| `live_cycle.py` | ✅ active | LiveCycleConfig, LiveCycleState | 26 | 6331 | — | |
+| `live_startup.py` | ✅ active | — | 10 | 343 | — | |
 | `market_ingress.py` | ✅ active | — | 5 | 224 | — | |
 | `order_dispatch.py` | ✅ active | _MinimalControlSnapshot | 10 | 298 | — | |
 | `position_registration.py` | ✅ active | — | 1 | 270 | — | |
@@ -477,7 +477,7 @@
 | `signal_order_builder.py` | ✅ active | SignalOrderRequestBuilder | 3 | 52 | — | |
 | `signal_pipeline.py` | ✅ active | — | 2 | 108 | — | |
 | `strategy_builder.py` | ✅ active | — | 6 | 798 | — | |
-| `strategy_evaluator.py` | ✅ active | — | 2 | 414 | — | |
+| `strategy_evaluator.py` | ✅ active | — | 2 | 470 | — | |
 | `summary_service.py` | ✅ active | RuntimeSummaryService | 11 | 143 | — | |
 | `trail_dispatch.py` | ✅ active | — | 1 | 218 | — | |
 
@@ -549,13 +549,14 @@
 | `analyze_deps.py` | ✅ active | — | 6 | 262 | — | |
 | `analyze_live_journal.py` | ✅ active | — | 6 | 517 | — | |
 | `analyze_recent_losses.py` | ✅ active | — | 1 | 315 | — | |
+| `analyze_trail_impact.py` | ✅ active | — | 8 | 423 | — | |
 | `analyze_xau_recent_entries.py` | ✅ active | — | 9 | 456 | — | |
 | `audit_btc_cross_validate.py` | ✅ active | — | 4 | 285 | — | |
 | `audit_data_health.py` | ✅ active | — | 2 | 128 | — | |
 | `backtest_runner.py` | ✅ active | — | 3 | 274 | — | |
 | `brain.py` | ✅ active | — | 12 | 734 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 580 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 581 | — | |
 | `check_preconditions.py` | ✅ active | — | 12 | 429 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `classify_ble001.py` | ✅ active | — | 1 | 63 | — | |
@@ -576,7 +577,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 369 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 5 | 2278 | — | |
+| `live_intent_loop.py` | ✅ active | — | 6 | 2319 | — | |
 | `live_launcher.py` | ✅ active | — | 13 | 831 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 484 | — | |
@@ -700,6 +701,7 @@
 | `run_train_batch.py` | ✅ active | — | 6 | 274 | — | |
 | `scan_profitability_surface.py` | ✅ active | — | 3 | 180 | — | |
 | `train.py` | ✅ active | ModelQualityException, PipelineResult | 24 | 2009 | — | |
+| `train_btc_swing_v9.py` | ✅ active | — | 18 | 963 | — | |
 | `train_daily_swing.py` | ✅ active | — | 10 | 640 | — | |
 | `train_exit_metamodel.py` | ✅ active | — | 7 | 343 | — | |
 | `train_from_csv.py` | ✅ active | MLP | 10 | 725 | — | |

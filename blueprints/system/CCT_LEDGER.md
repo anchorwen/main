@@ -467,3 +467,23 @@
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: ReB-20260609-012 (`BTC_SURVIVAL_ALPHA`)
 - **关联 FIX**: FIX-20260609-012
+
+---
+
+### CCT-20260610-001
+- **Docket ID**: DQAF-20260610-001
+- **日期**: 2026-06-10
+- **置信度**: confirmed (双源交叉验证: journal + snapshots)
+- **因果链**:
+  - [Layer 1 — 症状]: 移动止损修改后(AFTER) 16笔平仓 0%胜率 -$29.79 → 表面似trail修改导致退化
+  - [Layer 2 — 中间异常 A — 数据证伪]: 亏损全部来自修改前开仓的3笔旧仓位(#3838975389/#3840851050/#3843860976, trail完全卡死 ∆=0), 修改后2笔有trail的仓位(#3853350396 ∆=+768pts, #3854799088 ∆=+74pts)均保本出场. 11/16笔为close_accepted/breakeven且PnL=None(MIA清理).
+  - [Layer 2 — 中间异常 B — 微生命周期]: 修改后13笔新开仓平均持仓21分钟(4根M5 bar), 全部long方向. 逆势摸底(V9/V10 brain信号) + 宏观SHORT趋势 + trail_activation_atr 0.3-0.5激进防守 → 反弹短暂触及trail激活→衰竭被扫→保本微亏快速出场
+  - [Layer 2 — 中间异常 C — 遥测盲区]: 'trail' exit label 从未在188笔闭仓中出现. 69% AFTER平仓(11/16)无PnL记录. trail行为变化只能间接通过modify_sltp和snapshot推测
+  - [Layer 3 — 根因]: (A) 保本地板死锁(static trail_mult) → FIX-003衰减曲线已解除; (B) 逆势交易中激进防守的必然微生命周期→非bug,防御机制正常工作; (C) MIA管道PnL缺失→状态机同步泄漏, close_accepted/breakeven标签不记录PnL
+- **证据引用**:
+  - Source 1: `scripts/analyze_trail_impact.py` stdout — 21 BEFORE vs 2 AFTER SL迁移对比
+  - Source 2: `data_btc/live_trade_journal.jsonl` — 385条记录, 'trail'标签count=0, close_accepted/breakeven PnL=None
+  - Source 3: `data_btc/position_snapshots.jsonl` — 426条快照, SL迁移中位数BEFORE=0, AFTER=+420.9
+- **是否被推翻**: 否 (AR验证通过 — 0%胜率被证伪为遥测污染而非trail退化)
+- **关联 ReB Pattern**: ReB-20260610-001 (`TRAIL_TELEMETRY_BLINDSPOT`), ReB-20260610-002 (`MICRO_LIFESPAN_COUNTER_TREND`)
+- **关联 FIX**: — (诊断报告, 无代码修改; IC Mandate转入MIA管道修复)
