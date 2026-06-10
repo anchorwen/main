@@ -24,11 +24,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.44,
-        "profit_factor": 1.18,
-        "sharpe_ratio": 12.76,
+        "win_rate": 0.45,
+        "profit_factor": 1.29,
+        "sharpe_ratio": 19.86,
         "total_trades": 100,
-        "pnl_r": 731.81
+        "pnl_r": 1201.76
       }
     },
     "BTC_Swing_V7_MultiTF_LGB_v1": {
@@ -39,11 +39,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.44,
-        "profit_factor": 1.18,
-        "sharpe_ratio": 12.76,
+        "win_rate": 0.45,
+        "profit_factor": 1.29,
+        "sharpe_ratio": 19.86,
         "total_trades": 100,
-        "pnl_r": 731.81
+        "pnl_r": 1201.76
       }
     },
     "BTC_Swing_V8_MultiTF_LGB_v1": {
@@ -54,11 +54,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.44,
-        "profit_factor": 1.18,
-        "sharpe_ratio": 12.76,
+        "win_rate": 0.45,
+        "profit_factor": 1.29,
+        "sharpe_ratio": 19.86,
         "total_trades": 100,
-        "pnl_r": 731.81
+        "pnl_r": 1201.76
       }
     },
     "BTC_Swing_V10_M15_Survival": {
@@ -69,11 +69,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.44,
-        "profit_factor": 1.18,
-        "sharpe_ratio": 12.76,
+        "win_rate": 0.45,
+        "profit_factor": 1.29,
+        "sharpe_ratio": 19.86,
         "total_trades": 100,
-        "pnl_r": 731.81
+        "pnl_r": 1201.76
       }
     },
     "BTC_Swing_V9_H1_Survival": {
@@ -84,11 +84,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.44,
-        "profit_factor": 1.18,
-        "sharpe_ratio": 12.76,
+        "win_rate": 0.45,
+        "profit_factor": 1.29,
+        "sharpe_ratio": 19.86,
         "total_trades": 100,
-        "pnl_r": 731.81
+        "pnl_r": 1201.76
       }
     }
   },

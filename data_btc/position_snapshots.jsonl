@@ -422,3 +422,5 @@
 {"ticket": 3868460212, "time": "2026-06-10T15:39:59", "bars_held": 17, "unrealized_pnl_r": 0.620415, "current_volatility": 0.9678, "trailing_sl_distance": 0.0, "current_atr": 201.1864, "entry_atr": 207.8771}
 {"ticket": 3868015805, "time": "2026-06-10T15:44:59", "bars_held": 24, "unrealized_pnl_r": 1.528594, "current_volatility": 0.8449, "trailing_sl_distance": 21.595, "current_atr": 201.3514, "entry_atr": 238.3236}
 {"ticket": 3868460212, "time": "2026-06-10T15:44:59", "bars_held": 19, "unrealized_pnl_r": 1.228658, "current_volatility": 0.9686, "trailing_sl_distance": 0.0, "current_atr": 201.3514, "entry_atr": 207.8771}
+{"ticket": 3869140665, "time": "2026-06-10T15:58:20", "bars_held": 1, "unrealized_pnl_r": -0.598557, "current_volatility": 1.0503, "trailing_sl_distance": 974.97, "current_atr": 269.4657, "entry_atr": 256.5671}
+{"ticket": 3869140665, "time": "2026-06-10T15:59:59", "bars_held": 2, "unrealized_pnl_r": -0.789735, "current_volatility": 1.0277, "trailing_sl_distance": 974.97, "current_atr": 263.6736, "entry_atr": 256.5671}

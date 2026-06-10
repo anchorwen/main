@@ -273,7 +273,6 @@ class LiveCycleState:
     _btc_augmenter: Any = None  # BTCFeatureAugmenter — FIX-134 lazy-init for BTC feature pipeline
     # ── FIX-20260610-010: main eval decisions for Phase 10 gate alignment ──
     _last_eval_decisions: dict[str, dict[str, Any]] = field(default_factory=dict)
-    _last_eval_queued: bool = False  # whether exec queue dispatched this cycle
     # ── FIX-20260610-003: watchdog heartbeat ──
     last_heartbeat: float = 0.0
     # MIA close entries collected by _execute_management_phase, consumed by caller
@@ -4823,9 +4822,6 @@ def execute_live_cycle(
         except Exception:  # noqa: BLE001
             _gov_state = None  # Non-fatal: gate silently skips if unreadable
 
-        # ── FIX-20260610-010: Reset per-cycle dispatch flags ──
-        state._last_eval_queued = False
-
         # Evaluate all strategy lines
         eval_summary = _evaluate_strategy_lines(
             strategy_lines=strategies,
@@ -4922,8 +4918,6 @@ def execute_live_cycle(
                     "direction": _sr.get("direction", "neutral"),
                 }
         state._last_eval_decisions = _last_decisions
-        # FIX-20260610-010: also persist whether exec queue dispatched this cycle
-        state._last_eval_queued = eval_summary.get("queued", 0) > 0
 
         # Log strategy evaluation results
         print(
@@ -5746,66 +5740,17 @@ def execute_live_cycle(
             else:
                 confidence = max(0.30, confidence - 0.06 * _ts)
 
-    # ── FIX-20260610-010: Respect main eval safety gates [HARDENED Fail-Closed] ──
-    # Phase 10 consensus must NOT override a main eval rejection, and must NOT
-    # dispatch a SECOND order when the main eval already queued one this cycle.
-    # Two dispatch paths in one cycle → two positions for one signal.
-    _main_eval_dispatched = getattr(state, "_last_eval_queued", False)
-    if _main_eval_dispatched:
-        print(
-            json.dumps(
-                {
-                    "event": "consensus_blocked_by_main_eval",
-                    "time": _utc_iso(),
-                    "reason": "exec_queue_already_dispatched_this_cycle",
-                    "consensus_direction": direction,
-                    "consensus_confidence": round(confidence, 4),
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
+    # ── FIX-20260610-010: Phase 10 is LEGACY (rollback reference) ──
+    # When multi_strategy_enabled=True, the main eval path (L4175-L5394)
+    # already handles strategy evaluation, safety gates, AND dispatch via
+    # the execution queue.  Phase 10 is retained ONLY for rollback to
+    # multi_strategy_enabled=False.  It must NOT dispatch when the main
+    # eval path is active — one cycle, one dispatch path.
+    if config.multi_strategy_enabled:
+        # Main eval already dispatched via exec queue.  Phase 10 runs
+        # PnL ledger recording + shadow verification but NEVER dispatches.
         direction = "neutral"
         confidence = 0.0
-    else:
-        _active_groups: list[str] = (
-            consensus_extra.get("allocation", {}).get("active_groups", [])
-            if consensus_extra
-            else []
-        )
-        if _active_groups:
-            _all_blocked = True
-            _block_reasons: list[str] = []
-            for _group in _active_groups:
-                _decision = state._last_eval_decisions.get(_group)
-                if _decision is None:
-                    _block_reasons.append(f"{_group}:missing_record_fail_closed")
-                elif not _decision.get("should_trade", False):
-                    _block_reasons.append(
-                        f"{_group}:{_decision.get('reason', 'blocked')}"
-                    )
-                else:
-                    _all_blocked = False  # at least one strategy passed main eval
-            if _all_blocked:
-                print(
-                    json.dumps(
-                        {
-                            "event": "consensus_blocked_by_main_eval",
-                            "time": _utc_iso(),
-                            "active_groups": _active_groups,
-                            "consensus_direction": direction,
-                            "consensus_confidence": round(confidence, 4),
-                            "block_reasons": _block_reasons,
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-                direction = "neutral"
-                confidence = 0.0
-        elif not _active_groups and state._last_eval_decisions:
-            # No active groups but decisions exist — Phase 10 has nothing to do
-            pass  # direction is already handled by consensus result
 
     # ── Low confidence skip ──
     # Push to rolling buffer (all non-neutral signals)
