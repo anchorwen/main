@@ -1051,7 +1051,29 @@ class StrategyLine:
             meta_filter_short=_mf_short,
         )
         if _meta_reject is not None and not _is_cold_explore:
-            return _meta_reject
+            # ── FIX-20260611-001: Swing MetaFilter routing excision ──
+            # Swing strategies routed through Conformal OU gate get a garbage
+            # s1_prediction (brain raw_score * 12.5 → pseudo-z-score up to 12.5)
+            # → MetaFilter p_win ~0.24 → all trades killed.
+            # Fall back to rolling_wr from PnL ledger — the brain's actual
+            # historical win rate is more informative than a broken z-score proxy.
+            _is_swing = name in ("m15_swing", "m30_swing", "h1_swing", "h4_swing", "btc_swing")
+            if _is_swing and pnl_store is not None:
+                from core.execution.kelly_sizer import resolve_p_win_from_brains
+                _rolling = resolve_p_win_from_brains(self.brains, pnl_store, direction)
+                # Soft-bypass: if rolling WR >= 0.50, allow with p_win=0.55
+                # and let the V9 brains decide.  Below 0.50 → reject.
+                if _rolling >= 0.50:
+                    _meta_p_win = 0.55
+                    _p_win_source = "rolling_wr_soft_bypass"
+                    _meta_reject = None  # clear rejection
+                else:
+                    _meta_reject.reason = (
+                        f"rolling_wr_fallback_rejected:p_win={_rolling:.3f}_below_0.50"
+                    )
+                    return _meta_reject
+            else:
+                return _meta_reject
         if _is_cold_explore:
             _meta_p_win = 0.50  # force neutral for cold explore
 

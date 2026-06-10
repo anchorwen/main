@@ -2074,6 +2074,72 @@ def main(argv: list[str] | None = None) -> int:
 
             # ── Persist state every ~1 hour + check config hot-reload ──
             state.cycle_count += 1
+
+            # ── FIX-20260611-001: Brain promotion pipeline ──
+            # GovernanceRuleEngine was only wired into the containerized deployment
+            # path (scheduler_service.py), NOT live_intent_loop.  Brains stuck in
+            # "candidate" forever because nothing promoted them.  Run every 50 cycles.
+            if state.loop_iteration % 50 == 0:
+                try:
+                    from core.brains.services.brain_promotion import (
+                        BrainPromotionEvaluator,
+                    )
+                    from core.feedback.brain_pnl_ledger import BrainPnLStore
+                    from core.governance.governance_service import GovernanceService
+
+                    _pnl_path = Path(args.base_dir) / "brain_pnl_ledger.json"
+                    _gov_path = Path(args.base_dir) / "governance_state.json"
+                    if _pnl_path.exists() and _gov_path.exists():
+                        _pnl_store = BrainPnLStore.load(str(_pnl_path))
+                        _all_metrics = _pnl_store.get_all_metrics()
+                        _gov = GovernanceService(state_path=str(_gov_path))
+
+                        # Bridge BrainPnLMetrics → evaluator format
+                        _perf: dict[str, dict] = {}
+                        for _bid, _m in _all_metrics.items():
+                            _perf[_bid] = {
+                                "win_rate": _m.win_rate,
+                                "profit_factor": _m.profit_factor,
+                                "signal_count": _m.sample_count,
+                                "total_pnl": _m.total_pnl,
+                                "sharpe": getattr(_m, "sharpe", None) or 0.0,
+                                "recent_win_rate": getattr(_m, "recent_win_rate", None)
+                                or _m.win_rate,
+                                "consecutive_losses": getattr(
+                                    _m, "consecutive_losses", None
+                                )
+                                or 0,
+                            }
+
+                        _evaluator = BrainPromotionEvaluator(
+                            governance_service=_gov,
+                            performance_metrics=_perf,
+                            base_dir=args.base_dir,
+                        )
+                        _decisions = _evaluator.evaluate_all()
+
+                        _promoted = [
+                            d for d in _decisions if d.approved and d.action == "promote"
+                        ]
+                        if _promoted:
+                            for _d in _promoted:
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "brain_promoted",
+                                            "time": _utc_iso(),
+                                            "brain_id": _d.brain_id,
+                                            "from_status": _d.current_status,
+                                            "to_status": _d.target_status,
+                                            "reasons": _d.reasons,
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
+                except Exception:  # noqa: BLE001
+                    pass  # best-effort — non-critical for trading
+
             if hot_reload is not None and state.loop_iteration % 30 == 0:
                 try:
                     changes = hot_reload.check_and_reload()

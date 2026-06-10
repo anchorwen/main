@@ -424,3 +424,11 @@
 {"ticket": 3868460212, "time": "2026-06-10T15:44:59", "bars_held": 19, "unrealized_pnl_r": 1.228658, "current_volatility": 0.9686, "trailing_sl_distance": 0.0, "current_atr": 201.3514, "entry_atr": 207.8771}
 {"ticket": 3869140665, "time": "2026-06-10T15:58:20", "bars_held": 1, "unrealized_pnl_r": -0.598557, "current_volatility": 1.0503, "trailing_sl_distance": 974.97, "current_atr": 269.4657, "entry_atr": 256.5671}
 {"ticket": 3869140665, "time": "2026-06-10T15:59:59", "bars_held": 2, "unrealized_pnl_r": -0.789735, "current_volatility": 1.0277, "trailing_sl_distance": 974.97, "current_atr": 263.6736, "entry_atr": 256.5671}
+{"ticket": 3869140665, "time": "2026-06-10T16:05:00", "bars_held": 3, "unrealized_pnl_r": -1.553862, "current_volatility": 0.9726, "trailing_sl_distance": 974.97, "current_atr": 249.5379, "entry_atr": 256.5671}
+{"ticket": 3869140665, "time": "2026-06-10T16:05:48", "bars_held": 1, "unrealized_pnl_r": -1.536947, "current_volatility": 0.991, "trailing_sl_distance": 974.97, "current_atr": 254.25, "entry_atr": 256.5671}
+{"ticket": 3869140665, "time": "2026-06-10T16:09:59", "bars_held": 2, "unrealized_pnl_r": -1.521707, "current_volatility": 0.9549, "trailing_sl_distance": 974.97, "current_atr": 244.9943, "entry_atr": 256.5671}
+{"ticket": 3869140665, "time": "2026-06-10T16:14:59", "bars_held": 3, "unrealized_pnl_r": -1.90036, "current_volatility": 0.935, "trailing_sl_distance": 974.97, "current_atr": 239.89, "entry_atr": 256.5671}
+{"ticket": 3869140665, "time": "2026-06-10T16:20:00", "bars_held": 4, "unrealized_pnl_r": -2.029839, "current_volatility": 0.9229, "trailing_sl_distance": 974.97, "current_atr": 236.7964, "entry_atr": 256.5671}
+{"ticket": 3869140665, "time": "2026-06-10T16:24:59", "bars_held": 5, "unrealized_pnl_r": -2.28599, "current_volatility": 0.896, "trailing_sl_distance": 974.97, "current_atr": 229.8921, "entry_atr": 256.5671}
+{"ticket": 3869227352, "time": "2026-06-10T16:43:35", "bars_held": 1, "unrealized_pnl_r": -0.669335, "current_volatility": 1.0, "trailing_sl_distance": 399.26, "current_atr": 240.0593, "entry_atr": 240.0593}
+{"ticket": 3869227352, "time": "2026-06-10T16:45:00", "bars_held": 2, "unrealized_pnl_r": -1.011167, "current_volatility": 0.955, "trailing_sl_distance": 399.26, "current_atr": 229.2471, "entry_atr": 240.0593}
