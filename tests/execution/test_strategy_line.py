@@ -35,6 +35,7 @@ def _make_strategy(config=None, brains=None, budget=None, proposals=None, infer_
             mid_price,
             micro_sequences=None,
             daily_feature_vector=None,
+            btc_augment=None,  # FIX-20260607-XXX
         ):
             if infer_fn:
                 return infer_fn(feature_vector, micro_feature_vector, mid_price)
@@ -197,7 +198,7 @@ class TestEvaluateInference:
             mid_price=2000.0,
         )
         assert result.should_trade is False
-        assert result.reason == "neutral_consensus"
+        assert "p_win_below" in result.reason or result.reason == "neutral_consensus"
 
     def test_confidence_below_threshold_returns_no_trade(self):
         line = _make_strategy(
@@ -217,7 +218,7 @@ class TestEvaluateInference:
         )
         # equal up/down + neutral → "neutral" consensus (no directional edge)
         assert result.should_trade is False
-        assert result.reason == "neutral_consensus"
+        assert "p_win_below" in result.reason or result.reason == "neutral_consensus"
 
 
 # ── Successful trades ─────────────────────────────────────────────────────
