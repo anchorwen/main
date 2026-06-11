@@ -24,11 +24,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.36,
-        "profit_factor": 0.57,
-        "sharpe_ratio": -58.42,
+        "win_rate": 0.38,
+        "profit_factor": 0.69,
+        "sharpe_ratio": -36.63,
         "total_trades": 100,
-        "pnl_r": -938.57
+        "pnl_r": -595.99
       }
     },
     "BTC_Swing_V7_MultiTF_LGB_v1": {
@@ -39,11 +39,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.36,
-        "profit_factor": 0.57,
-        "sharpe_ratio": -58.42,
+        "win_rate": 0.38,
+        "profit_factor": 0.69,
+        "sharpe_ratio": -36.63,
         "total_trades": 100,
-        "pnl_r": -938.57
+        "pnl_r": -595.99
       }
     },
     "BTC_Swing_V8_MultiTF_LGB_v1": {
@@ -54,11 +54,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.36,
-        "profit_factor": 0.57,
-        "sharpe_ratio": -58.42,
+        "win_rate": 0.38,
+        "profit_factor": 0.69,
+        "sharpe_ratio": -36.63,
         "total_trades": 100,
-        "pnl_r": -938.57
+        "pnl_r": -595.99
       }
     },
     "BTC_Swing_V10_M15_Survival": {
@@ -69,11 +69,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.36,
-        "profit_factor": 0.57,
-        "sharpe_ratio": -58.42,
+        "win_rate": 0.38,
+        "profit_factor": 0.69,
+        "sharpe_ratio": -36.63,
         "total_trades": 100,
-        "pnl_r": -938.57
+        "pnl_r": -595.99
       }
     },
     "BTC_Swing_V9_H1_Survival": {
@@ -84,12 +84,28 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.36,
-        "profit_factor": 0.57,
-        "sharpe_ratio": -58.42,
+        "win_rate": 0.38,
+        "profit_factor": 0.69,
+        "sharpe_ratio": -36.63,
         "total_trades": 100,
-        "pnl_r": -938.57
+        "pnl_r": -595.99
       }
+    },
+    "BTC_Swing_V11_H1_Directional": {
+      "brain_id": "BTC_Swing_V11_H1_Directional",
+      "status": "candidate",
+      "registered_at": "2026-06-11T02:12:04.479343",
+      "last_transition_at": "2026-06-11T02:12:04.479343+00:00",
+      "transition_count": 1,
+      "freeze_count": 0
+    },
+    "BTC_Swing_V11_M15_Directional": {
+      "brain_id": "BTC_Swing_V11_M15_Directional",
+      "status": "candidate",
+      "registered_at": "2026-06-11T02:12:04.479343",
+      "last_transition_at": "2026-06-11T02:12:04.479343+00:00",
+      "transition_count": 1,
+      "freeze_count": 0
     }
   },
   "transition_log": [
@@ -518,6 +534,38 @@
       "to_status": "live",
       "reason": "pnl:stable",
       "timestamp": "2026-06-10T03:45:20.060088"
+    },
+    {
+      "brain_id": "BTC_Swing_V11_H1_Directional",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-11T02:12:04.479343",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V11_H1_Directional",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=candidate)",
+      "timestamp": "2026-06-11T02:12:04.479343+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V11_M15_Directional",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-11T02:12:04.479343",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V11_M15_Directional",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=candidate)",
+      "timestamp": "2026-06-11T02:12:04.479343+00:00",
+      "fix_id": "FIX-20260529-034"
     }
   ]
 }

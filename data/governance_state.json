@@ -10,11 +10,11 @@
       "freeze_count": 0,
       "exposure_limited": false,
       "performance_metrics": {
-        "win_rate": 0.4179,
+        "win_rate": 0.4316,
         "profit_factor": 0.7,
-        "sharpe_ratio": -29.74,
-        "total_trades": 3561,
-        "pnl_r": -1376.83
+        "sharpe_ratio": -29.83,
+        "total_trades": 3533,
+        "pnl_r": -1382.86
       }
     },
     "OU_Params_V7_M15": {
@@ -27,11 +27,11 @@
       "exposure_limited": false,
       "vote_weight": 1.5,
       "performance_metrics": {
-        "win_rate": 0.5026,
-        "profit_factor": 0.83,
-        "sharpe_ratio": -16.68,
-        "total_trades": 193,
-        "pnl_r": -59.89
+        "win_rate": 0.4975,
+        "profit_factor": 0.81,
+        "sharpe_ratio": -19.04,
+        "total_trades": 197,
+        "pnl_r": -69.3
       }
     },
     "Meta_Stage1_Huber_V1": {
@@ -43,11 +43,11 @@
       "freeze_count": 1,
       "freeze_reason": "The Great Reset: SL=2.0/TP=3.5 labels proven unprofitable with corrected 30pt spread/10pt slippage costs. EV surface collapse confirmed — TP>=2.5 all negative EV at SL=2.0. Retraining required with SL=3.0/TP=1.5 (EV=0.2004R). Stage 2 Meta Pipeline also pending retraining.",
       "performance_metrics": {
-        "win_rate": 0.4493,
-        "profit_factor": 0.81,
-        "sharpe_ratio": -18.31,
-        "total_trades": 1627,
-        "pnl_r": -369.65
+        "win_rate": 0.4671,
+        "profit_factor": 0.82,
+        "sharpe_ratio": -17.92,
+        "total_trades": 1565,
+        "pnl_r": -354.76
       },
       "archived_at": "2026-06-05T11:31:31Z",
       "archive_reason": "Meta Pipeline Gen1 probe — 1627 attr, -369.65R. Replaced by Binary_Cls then MetaLabel."
@@ -102,11 +102,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4371,
-        "profit_factor": 1.02,
-        "sharpe_ratio": 1.59,
-        "total_trades": 2153,
-        "pnl_r": 93.83
+        "win_rate": 0.4666,
+        "profit_factor": 1.03,
+        "sharpe_ratio": 2.23,
+        "total_trades": 2098,
+        "pnl_r": 129.68
       }
     },
     "Swing_V9_M15_V2": {
@@ -117,11 +117,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.6183,
-        "profit_factor": 3.5,
-        "sharpe_ratio": 104.91,
-        "total_trades": 875,
-        "pnl_r": 5343.96
+        "win_rate": 0.6594,
+        "profit_factor": 3.54,
+        "sharpe_ratio": 109.46,
+        "total_trades": 822,
+        "pnl_r": 5373.66
       }
     },
     "Brain_Trend_M30_V1": {
@@ -132,11 +132,11 @@
       "transition_count": 9,
       "freeze_count": 4,
       "performance_metrics": {
-        "win_rate": 0.435,
+        "win_rate": 0.4385,
         "profit_factor": 0.78,
-        "sharpe_ratio": -23.83,
-        "total_trades": 246,
-        "pnl_r": -76.54
+        "sharpe_ratio": -23.62,
+        "total_trades": 244,
+        "pnl_r": -75.58
       },
       "vote_weight": 0.8
     },
@@ -166,11 +166,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4396,
+        "win_rate": 0.4444,
         "profit_factor": 0.95,
-        "sharpe_ratio": -4.53,
-        "total_trades": 91,
-        "pnl_r": -4.36
+        "sharpe_ratio": -4.05,
+        "total_trades": 90,
+        "pnl_r": -3.87
       }
     },
     "Brain_Rev_M30_V2": {
@@ -181,11 +181,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4382,
-        "profit_factor": 0.96,
-        "sharpe_ratio": -3.56,
-        "total_trades": 89,
-        "pnl_r": -3.39
+        "win_rate": 0.4432,
+        "profit_factor": 0.97,
+        "sharpe_ratio": -3.07,
+        "total_trades": 88,
+        "pnl_r": -2.9
       },
       "archived_at": "2026-06-05T11:44:13Z",
       "archive_reason": "Training SL/TP=1.5/2.5 mismatched with strategy SL=2.5/TP=0.7. Wrong contract for mean_reversion family."
@@ -206,11 +206,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.5421,
-        "profit_factor": 2.29,
-        "sharpe_ratio": 68.34,
-        "total_trades": 878,
-        "pnl_r": 2595.69
+        "win_rate": 0.5848,
+        "profit_factor": 2.32,
+        "sharpe_ratio": 72.02,
+        "total_trades": 814,
+        "pnl_r": 2625.13
       }
     },
     "Brain_Trend_V10_M30": {
@@ -221,11 +221,11 @@
       "transition_count": 2,
       "freeze_count": 1,
       "performance_metrics": {
-        "win_rate": 0.381,
+        "win_rate": 0.3855,
         "profit_factor": 0.39,
-        "sharpe_ratio": -51.37,
-        "total_trades": 84,
-        "pnl_r": -82.08
+        "sharpe_ratio": -51.38,
+        "total_trades": 83,
+        "pnl_r": -81.6
       }
     },
     "Swing_V10_M15": {
@@ -244,11 +244,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.3629,
-        "profit_factor": 0.4,
-        "sharpe_ratio": -63.27,
-        "total_trades": 2455,
-        "pnl_r": -5501.64
+        "win_rate": 0.3866,
+        "profit_factor": 0.41,
+        "sharpe_ratio": -63.5,
+        "total_trades": 2403,
+        "pnl_r": -5467.01
       }
     },
     "Swing_V9_H1_V2": {
@@ -259,11 +259,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4668,
-        "profit_factor": 1.89,
-        "sharpe_ratio": 44.22,
-        "total_trades": 2633,
-        "pnl_r": 4592.7
+        "win_rate": 0.4899,
+        "profit_factor": 1.88,
+        "sharpe_ratio": 44.7,
+        "total_trades": 2586,
+        "pnl_r": 4603.46
       }
     },
     "Swing_LGB_M15_V1": {

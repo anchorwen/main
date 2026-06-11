@@ -24,10 +24,15 @@ brains:
     enabled: true
   - path: configs/brains_btc/BTC_Swing_V8_MultiTF_LGB_v1.json
     enabled: true
-  # ── FIX-20260609-012: V9/V10 next-gen survival brains (shadow) ──
+  # ── FIX-20260609-012: V9/V10 survival brains (replaced by V11 directional) ──
   - path: configs/brains_btc/BTC_Swing_V9_H1_Survival.json
-    enabled: true
+    enabled: false
   - path: configs/brains_btc/BTC_Swing_V10_M15_Survival.json
+    enabled: false
+  # ── FIX-20260611-004: V11 directional brains (bidirectional, replaces V9/V10) ──
+  - path: configs/brains_btc/BTC_Swing_V11_H1_Directional.json
+    enabled: true
+  - path: configs/brains_btc/BTC_Swing_V11_M15_Directional.json
     enabled: true
 gate:
   gate_policy_config: configs/live_gate_policy.json

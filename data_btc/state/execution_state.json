@@ -1,7 +1,7 @@
 {
   "version": 2,
   "schema_version": "execution_state.v2",
-  "saved_at_utc": "2026-06-11T01:10:23.581787",
+  "saved_at_utc": "2026-06-11T01:15:02.228130",
   "budgets": {
     "btc_swing": {
       "daily_pnl_pct": -7.0189,

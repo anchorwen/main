@@ -1563,6 +1563,18 @@
           "side": "",
           "recorded_at": ""
         }
+      },
+      {
+        "timestamp": "2026-06-11T01:15:55.114430",
+        "composite_score": 0.5919,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3872276295,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
       }
     ],
     "BTC_Swing_V6_MultiTF_LGB_v2": [
@@ -2029,6 +2041,18 @@
         "fill_grade": null,
         "dimensions": {
           "position_ticket": 3871727437,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-11T01:15:55.114430",
+        "composite_score": 0.5919,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3872276295,
           "symbol": "",
           "side": "",
           "recorded_at": ""
@@ -2503,6 +2527,18 @@
           "side": "",
           "recorded_at": ""
         }
+      },
+      {
+        "timestamp": "2026-06-11T01:15:55.114430",
+        "composite_score": 0.5919,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3872276295,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
       }
     ],
     "BTC_Swing_V10_M15_Survival": [
@@ -2829,6 +2865,18 @@
           "side": "",
           "recorded_at": ""
         }
+      },
+      {
+        "timestamp": "2026-06-11T01:15:55.114430",
+        "composite_score": 0.5919,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3872276295,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
       }
     ],
     "BTC_Swing_V9_H1_Survival": [
@@ -3151,6 +3199,18 @@
         "fill_grade": null,
         "dimensions": {
           "position_ticket": 3871727437,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-11T01:15:55.114430",
+        "composite_score": 0.5919,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3872276295,
           "symbol": "",
           "side": "",
           "recorded_at": ""

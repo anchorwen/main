@@ -2,18 +2,18 @@
   "version": 3,
   "positions": [
     {
-      "ticket": 3872276295,
+      "ticket": 3873364820,
       "cycles_held": 0,
       "breakeven_triggered": false,
       "partial_tp_done": false,
-      "entry_atr": 121.40428571428649,
-      "entry_price": 61571.87,
-      "brain_consensus_hash": "0e0190ba88c40921"
+      "entry_atr": 129.2414285714289,
+      "entry_price": 61979.62,
+      "brain_consensus_hash": "acdb7ae822648def"
     }
   ],
   "_last_brain_reeval_cycle": -1,
-  "_entry_consensus_score": 0.8764,
+  "_entry_consensus_score": 0.883,
   "_recovery_cycle": -1,
-  "_primary_ticket": 3872276295,
-  "saved_at_utc": "2026-06-11T00:08:29.166006"
+  "_primary_ticket": 3873364820,
+  "saved_at_utc": "2026-06-11T01:15:02.220128"
 }
