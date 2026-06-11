@@ -306,6 +306,8 @@ strategy_lines:
     exit:
       trail_enabled: true
       trail_atr_mult: 2.0
+      # ── FIX-20260611-017: trail_activation 0.5→1.0 — prevent premature breakeven kills ──
+      trail_activation_atr: 1.0
       flip_exit_enabled: true
       flip_threshold: 0.5
       time_exit_cycles: 72

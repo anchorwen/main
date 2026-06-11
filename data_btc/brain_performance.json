@@ -6,6 +6,8 @@
     "BTC_Swing_V1",
     "BTC_Swing_V10",
     "BTC_Swing_V10_M15_Survival",
+    "BTC_Swing_V11_H1_Directional",
+    "BTC_Swing_V11_M15_Directional",
     "BTC_Swing_V3",
     "BTC_Swing_V4",
     "BTC_Swing_V5",
@@ -3271,6 +3273,34 @@
         "fill_grade": null,
         "dimensions": {
           "position_ticket": 3873364820,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      }
+    ],
+    "BTC_Swing_V11_H1_Directional": [
+      {
+        "timestamp": "2026-06-11T07:54:25.297578",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3878416887,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      }
+    ],
+    "BTC_Swing_V11_M15_Directional": [
+      {
+        "timestamp": "2026-06-11T07:54:25.297578",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3878416887,
           "symbol": "",
           "side": "",
           "recorded_at": ""

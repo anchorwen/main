@@ -102,11 +102,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4431,
+        "win_rate": 0.4404,
         "profit_factor": 0.97,
-        "sharpe_ratio": -1.82,
-        "total_trades": 2672,
-        "pnl_r": -120.48
+        "sharpe_ratio": -2.04,
+        "total_trades": 2700,
+        "pnl_r": -135.91
       }
     },
     "Swing_V9_M15_V2": {
