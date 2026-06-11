@@ -190,7 +190,9 @@ def print_report(results: list[dict]) -> None:
         if d:
             level = d.get("staleness_level", "?")
             icon = {"NORMAL": "[NORMAL]", "YELLOW": "[YELLOW]", "ORANGE": "[ORANGE]", "RED": "[RED]"}.get(level, "[?]")
-            print(f"  Degradation: {icon} staleness={level}, overall={d.get('overall','?')}")
+            print(f"  Degradation: {icon} staleness={level} (data_health={d.get('overall','?')})")
+            if level == "NORMAL" and d.get("overall") == "CRITICAL":
+                print(f"    Note: Data stale/quality issues exist but key sources are fresh — trading allowed")
             if d.get("fails"):
                 print(f"    Fails: {', '.join(d['fails'][:3])}")
             if d.get("warns"):
