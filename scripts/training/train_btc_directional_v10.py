@@ -502,6 +502,7 @@ def main():
     parser = argparse.ArgumentParser(description="BTC Directional Brain V10")
     parser.add_argument("--timeframe", default="H1", choices=["H1", "M15", "M30", "H4"])
     parser.add_argument("--horizon", type=int, default=24)
+    parser.add_argument("--csv", default=None, help="Override CSV path")
     parser.add_argument("--data-dir", default=None)
     parser.add_argument("--model-dir", default=None)
     parser.add_argument("--cv-folds", type=int, default=5)
@@ -513,11 +514,14 @@ def main():
     data_dir = args.data_dir or f"data/training/btc_directional_{tf.lower()}"
     model_dir = args.model_dir or data_dir
 
-    csv_map = {"H1": "data/raw/btcusdc_h1_merged.csv",
-               "M15": "data/raw/btcusdc_m15_merged.csv",
-               "M30": "data/raw/btcusdc_m30_merged.csv",
-               "H4": "data/raw/btcusdc_h4_merged.csv"}
-    csv_path = csv_map.get(tf, f"data/raw/btcusdc_{tf.lower()}_merged.csv")
+    if args.csv:
+        csv_path = args.csv
+    else:
+        csv_map = {"H1": "data/raw/btcusdc_h1_merged.csv",
+                   "M15": "data/raw/btcusdc_m15_merged.csv",
+                   "M30": "data/raw/btcusdc_m30_merged.csv",
+                   "H4": "data/raw/btcusdc_h4_merged.csv"}
+        csv_path = csv_map.get(tf, f"data/raw/btcusdc_{tf.lower()}_merged.csv")
     tf_minutes = {"H1": 60.0, "M15": 15.0, "M30": 30.0, "H4": 240.0}[tf]
 
     np.random.seed(42)

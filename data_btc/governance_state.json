@@ -24,11 +24,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.0,
-        "profit_factor": 0.0,
-        "sharpe_ratio": 0.0,
-        "total_trades": 1,
-        "pnl_r": -21.56
+        "win_rate": 0.25,
+        "profit_factor": 0.2,
+        "sharpe_ratio": -185.32,
+        "total_trades": 40,
+        "pnl_r": -487.07
       }
     },
     "BTC_Swing_V7_MultiTF_LGB_v1": {
@@ -39,11 +39,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.0,
-        "profit_factor": 0.0,
-        "sharpe_ratio": 0.0,
-        "total_trades": 1,
-        "pnl_r": -21.56
+        "win_rate": 0.25,
+        "profit_factor": 0.2,
+        "sharpe_ratio": -185.32,
+        "total_trades": 40,
+        "pnl_r": -487.07
       }
     },
     "BTC_Swing_V8_MultiTF_LGB_v1": {
@@ -54,11 +54,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.0,
-        "profit_factor": 0.0,
-        "sharpe_ratio": 0.0,
-        "total_trades": 1,
-        "pnl_r": -21.56
+        "win_rate": 0.25,
+        "profit_factor": 0.2,
+        "sharpe_ratio": -185.32,
+        "total_trades": 40,
+        "pnl_r": -487.07
       }
     },
     "BTC_Swing_V10_M15_Survival": {
@@ -99,11 +99,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 1.0,
-        "profit_factor": 0.0,
-        "sharpe_ratio": 0.0,
-        "total_trades": 1,
-        "pnl_r": 1.16
+        "win_rate": 0.3,
+        "profit_factor": 0.29,
+        "sharpe_ratio": -125.15,
+        "total_trades": 40,
+        "pnl_r": -328.93
       }
     },
     "BTC_Swing_V11_M15_Directional": {
@@ -114,11 +114,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 1.0,
-        "profit_factor": 0.0,
-        "sharpe_ratio": 0.0,
-        "total_trades": 1,
-        "pnl_r": 1.16
+        "win_rate": 0.3,
+        "profit_factor": 0.29,
+        "sharpe_ratio": -125.15,
+        "total_trades": 40,
+        "pnl_r": -328.93
       }
     }
   },
