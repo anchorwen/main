@@ -12,17 +12,15 @@ Key design decisions:
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import time as _time_module
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.contracts.position_events import PositionClosed
+from core.contracts.position_events import PositionClosed, PositionOpened
 
-UTC = timezone.utc
+UTC = UTC
 _log = logging.getLogger(__name__)
 
 # ── MT5 DEAL reasons ──
@@ -254,10 +252,9 @@ class PositionCloseAdapter:
             # ── Close time ──
             _close_time = ""
             if _deal_time > 0:
-                try:
+                import contextlib as _ctxlib_ts
+                with _ctxlib_ts.suppress(ValueError, OSError):
                     _close_time = datetime.fromtimestamp(_deal_time, tz=UTC).isoformat()
-                except (ValueError, OSError):
-                    pass
 
             return PositionClosed(
                 position_ticket=ticket,
@@ -336,3 +333,52 @@ class PositionCloseAdapter:
                 })
         except Exception:
             _log.warning("PositionCloseAdapter: budget notify failed")
+
+    # ── Open event recording ────────────────────────────────────────────
+
+    def record_open(
+        self,
+        event: PositionOpened,
+        journal_path: str | Path,
+        state: Any = None,
+    ) -> bool:
+        """Write PositionOpened event to Journal (atomic anchor).
+
+        Dedup by message_id to prevent double-writes from bridge worker
+        and live_cycle both recording the same open.
+        """
+
+        _now = datetime.now(UTC).replace(tzinfo=None).isoformat()
+        _entry = event.to_journal_entry()
+        _entry["recorded_at"] = _now
+
+        _path = Path(journal_path)
+        _lock_dir = _path.parent / "locks"
+        try:
+            from core.ledger.services.journal_cleanup import _append_journal
+
+            _append_journal(_path, _entry, lock_dir=_lock_dir)
+        except Exception:
+            _log.exception(
+                "PositionCloseAdapter: open journal write failed for ticket=%s",
+                event.position_ticket,
+            )
+            return False
+
+        # Register in known_open_tickets for close detection
+        if state is not None:
+            known = getattr(state, "known_open_tickets", None)
+            if known is not None:
+                known[event.position_ticket] = {
+                    "entry_price": event.entry_price,
+                    "side": event.side,
+                    "strategy": event.strategy,
+                    "magic": event.magic,
+                    "volume": event.volume,
+                    "brain_ids": list(event.brain_ids),
+                    "message_id": event.message_id,
+                    "sl": event.sl,
+                    "tp": event.tp,
+                }
+
+        return True

@@ -3647,7 +3647,7 @@ def execute_live_cycle(
                         tick_size=0.01 if "XAU" in config.symbol else 1.0,
                     )
                     for _entry in _mia_closed:
-                        _evt = _mia_adapter._build_event(
+                        _mia_evt: Any = _mia_adapter._build_event(
                             ticket=int(_entry.get("position_ticket", 0) or 0),
                             open_entry=_entry,
                             closed_volume=float(_entry.get("volume", 0.01) or 0.01),
@@ -3655,8 +3655,8 @@ def execute_live_cycle(
                             symbol=config.symbol,
                             mt5_worker=mt5_worker,
                         )
-                        if _evt is not None:
-                            _mia_adapter.record(_evt, str(journal_path), state=state)
+                        if _mia_evt is not None:
+                            _mia_adapter.record(_mia_evt, str(journal_path), state=state)
             # ── Record exit for reentry guard ──
             for _entry in _mia_closed:
                 _exit_strategy = _entry.get("strategy", "")
@@ -6205,6 +6205,7 @@ def execute_live_cycle(
                                 "event": "position_registered_for_mgmt",
                                 "time": _utc_iso(),
                                 "ticket": pm_ticket,
+                                "strategy": _pm_strat_name,
                                 "side": side,
                                 "entry_price": ref_for_guard,
                                 "initial_sl": stop_loss,
@@ -6214,6 +6215,35 @@ def execute_live_cycle(
                         ),
                         flush=True,
                     )
+                    # ── FIX-20260611-005: Journal Open eventization ──
+                    try:
+                        from core.contracts.position_events import PositionOpened
+                        from core.runtime.position_close_adapter import (
+                            PositionCloseAdapter as _OpenAdapter,
+                        )
+
+                        _open_evt = PositionOpened(
+                            position_ticket=pm_ticket,
+                            symbol=config.symbol,
+                            side=side,
+                            strategy=_pm_strat_name or "",
+                            magic=int(dispatch_magic or 0) if 'dispatch_magic' in dir() else 0,
+                            entry_price=ref_for_guard,
+                            volume=config.volume or 0.01,
+                            sl=stop_loss,
+                            tp=take_profit,
+                            brain_ids=tuple(pm_supporting) if pm_supporting else (),
+                            confidence=confidence,
+                            message_id="",
+                        )
+                        _open_adapter = _OpenAdapter(
+                            tick_size=0.01 if "XAU" in config.symbol else 1.0,
+                        )
+                        _open_adapter.record_open(
+                            _open_evt, str(journal_path), state=state,
+                        )
+                    except Exception:  # noqa: BLE001
+                        pass  # best-effort — never block position registration
             except Exception as _reg_exc:  # noqa: BLE001
                 print(
                     json.dumps(

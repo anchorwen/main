@@ -3,23 +3,23 @@
   "brain_states": {
     "OU_Params_V6_Sniper": {
       "brain_id": "OU_Params_V6_Sniper",
-      "status": "probation",
+      "status": "live",
       "registered_at": "2026-05-04T10:51:17.123332",
       "last_transition_at": "2026-06-10T22:00:24.467464",
       "transition_count": 17,
       "freeze_count": 0,
       "exposure_limited": false,
       "performance_metrics": {
-        "win_rate": 0.4317,
+        "win_rate": 0.432,
         "profit_factor": 0.7,
-        "sharpe_ratio": -29.85,
-        "total_trades": 3560,
-        "pnl_r": -1390.05
+        "sharpe_ratio": -29.72,
+        "total_trades": 3565,
+        "pnl_r": -1385.2
       }
     },
     "OU_Params_V7_M15": {
       "brain_id": "OU_Params_V7_M15",
-      "status": "probation",
+      "status": "live",
       "registered_at": "2026-05-24T22:00:00.000000",
       "last_transition_at": "2026-06-10T22:00:24.467464",
       "transition_count": 10,
@@ -96,22 +96,22 @@
     },
     "Swing_V9_M30_V2": {
       "brain_id": "Swing_V9_M30_V2",
-      "status": "probation",
+      "status": "candidate",
       "registered_at": "2026-06-04T11:02:07.813219",
       "last_transition_at": "2026-06-10T22:00:24.467464",
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4568,
+        "win_rate": 0.455,
         "profit_factor": 1.01,
-        "sharpe_ratio": 0.62,
-        "total_trades": 2224,
-        "pnl_r": 37.57
+        "sharpe_ratio": 0.49,
+        "total_trades": 2268,
+        "pnl_r": 29.73
       }
     },
     "Swing_V9_M15_V2": {
       "brain_id": "Swing_V9_M15_V2",
-      "status": "live",
+      "status": "candidate",
       "registered_at": "2026-06-04T10:48:14.724913",
       "last_transition_at": "2026-06-10T22:00:24.467464",
       "transition_count": 2,
@@ -200,7 +200,7 @@
     },
     "Barrier_V9_12B_V2": {
       "brain_id": "Barrier_V9_12B_V2",
-      "status": "live",
+      "status": "candidate",
       "registered_at": "2026-06-02T01:33:58.375265",
       "last_transition_at": "2026-06-10T22:00:24.466464",
       "transition_count": 2,
@@ -244,26 +244,26 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.382,
+        "win_rate": 0.3817,
         "profit_factor": 0.41,
-        "sharpe_ratio": -62.83,
-        "total_trades": 2529,
-        "pnl_r": -5559.12
+        "sharpe_ratio": -62.34,
+        "total_trades": 2573,
+        "pnl_r": -5566.96
       }
     },
     "Swing_V9_H1_V2": {
       "brain_id": "Swing_V9_H1_V2",
-      "status": "live",
+      "status": "candidate",
       "registered_at": "2026-06-04T11:02:11.580065",
       "last_transition_at": "2026-06-10T22:00:24.467464",
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4875,
-        "profit_factor": 1.86,
-        "sharpe_ratio": 43.36,
-        "total_trades": 2712,
-        "pnl_r": 4579.53
+        "win_rate": 0.4837,
+        "profit_factor": 1.85,
+        "sharpe_ratio": 42.68,
+        "total_trades": 2756,
+        "pnl_r": 4546.77
       }
     },
     "Swing_LGB_M15_V1": {
@@ -290,48 +290,5 @@
       }
     }
   },
-  "transition_log": [
-    {
-      "brain_id": "Barrier_V9_12B_V2",
-      "from_status": "candidate",
-      "to_status": "live",
-      "reason": "pnl:stable",
-      "timestamp": "2026-06-10T22:00:24.466464"
-    },
-    {
-      "brain_id": "OU_Params_V6_Sniper",
-      "from_status": "live",
-      "to_status": "probation",
-      "reason": "pnl:warning",
-      "timestamp": "2026-06-10T22:00:24.467464"
-    },
-    {
-      "brain_id": "OU_Params_V7_M15",
-      "from_status": "live",
-      "to_status": "probation",
-      "reason": "pnl:warning",
-      "timestamp": "2026-06-10T22:00:24.467464"
-    },
-    {
-      "brain_id": "Swing_V9_H1_V2",
-      "from_status": "candidate",
-      "to_status": "live",
-      "reason": "pnl:stable",
-      "timestamp": "2026-06-10T22:00:24.467464"
-    },
-    {
-      "brain_id": "Swing_V9_M15_V2",
-      "from_status": "candidate",
-      "to_status": "live",
-      "reason": "pnl:high_alpha",
-      "timestamp": "2026-06-10T22:00:24.467464"
-    },
-    {
-      "brain_id": "Swing_V9_M30_V2",
-      "from_status": "candidate",
-      "to_status": "probation",
-      "reason": "pnl:degraded",
-      "timestamp": "2026-06-10T22:00:24.467464"
-    }
-  ]
+  "transition_log": []
 }

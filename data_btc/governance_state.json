@@ -25,10 +25,10 @@
       "freeze_count": 0,
       "performance_metrics": {
         "win_rate": 0.29,
-        "profit_factor": 0.36,
-        "sharpe_ratio": -108.43,
+        "profit_factor": 0.49,
+        "sharpe_ratio": -62.16,
         "total_trades": 100,
-        "pnl_r": -998.66
+        "pnl_r": -772.15
       }
     },
     "BTC_Swing_V7_MultiTF_LGB_v1": {
@@ -40,10 +40,10 @@
       "freeze_count": 0,
       "performance_metrics": {
         "win_rate": 0.29,
-        "profit_factor": 0.36,
-        "sharpe_ratio": -108.43,
+        "profit_factor": 0.49,
+        "sharpe_ratio": -62.16,
         "total_trades": 100,
-        "pnl_r": -998.66
+        "pnl_r": -772.15
       }
     },
     "BTC_Swing_V8_MultiTF_LGB_v1": {
@@ -55,10 +55,10 @@
       "freeze_count": 0,
       "performance_metrics": {
         "win_rate": 0.29,
-        "profit_factor": 0.36,
-        "sharpe_ratio": -108.43,
+        "profit_factor": 0.49,
+        "sharpe_ratio": -62.16,
         "total_trades": 100,
-        "pnl_r": -998.66
+        "pnl_r": -772.15
       }
     },
     "BTC_Swing_V10_M15_Survival": {
@@ -99,11 +99,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.34,
-        "profit_factor": 0.33,
-        "sharpe_ratio": -113.07,
+        "win_rate": 0.32,
+        "profit_factor": 0.29,
+        "sharpe_ratio": -102.07,
         "total_trades": 100,
-        "pnl_r": -1041.34
+        "pnl_r": -1267.85
       }
     },
     "BTC_Swing_V11_M15_Directional": {
@@ -114,11 +114,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.34,
-        "profit_factor": 0.33,
-        "sharpe_ratio": -113.07,
+        "win_rate": 0.32,
+        "profit_factor": 0.29,
+        "sharpe_ratio": -102.07,
         "total_trades": 100,
-        "pnl_r": -1041.34
+        "pnl_r": -1267.85
       }
     }
   },
@@ -579,6 +579,14 @@
       "to": "candidate",
       "reason": "auto-registered from disk config (config status=candidate)",
       "timestamp": "2026-06-11T02:12:04.479343+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V4",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-11T03:46:21.570092",
       "fix_id": "FIX-20260529-034"
     }
   ]

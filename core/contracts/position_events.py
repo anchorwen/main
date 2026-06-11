@@ -7,7 +7,7 @@ Journal is an append-only projection of this event stream.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -81,4 +81,60 @@ class PositionClosed:
             "trail_contribution": self.trail_contribution,
             "entry_price": self.entry_price,
             "exit_price": self.close_price,
+        }
+
+
+@dataclass(frozen=True)
+class PositionOpened:
+    """Immutable record of a position open.
+
+    Generated when MT5 confirms the order and position_manager registers it.
+    """
+
+    position_ticket: int
+    symbol: str
+    side: str  # "long" | "short"
+    strategy: str
+    magic: int
+    entry_price: float  # MUST be > 0
+    volume: float  # MUST be > 0
+    sl: float = 0.0
+    tp: float = 0.0
+    brain_ids: tuple[str, ...] = ()
+    brain_votes: tuple = ()
+    confidence: float = 0.0
+    p_win: float = 0.5
+    kelly_mult: float = 1.0
+    entry_context: dict | None = None
+    message_id: str = ""
+    recorded_at: str = ""
+
+    def to_journal_entry(self) -> dict:
+        """Convert to live_trade_journal.v2 format (open action)."""
+        return {
+            "schema_version": "live_trade_journal.v2",
+            "recorded_at": self.recorded_at,
+            "message_id": self.message_id,
+            "target": "exec_bridge",
+            "ack_status": "accepted",
+            "symbol": self.symbol,
+            "action": "open",
+            "side": self.side,
+            "volume": self.volume,
+            "pnl": None,
+            "label": None,
+            "position_ticket": self.position_ticket,
+            "magic": self.magic,
+            "strategy": self.strategy,
+            "entry_price": self.entry_price,
+            "sl": self.sl,
+            "tp": self.tp,
+            "brain_ids": list(self.brain_ids) if self.brain_ids else None,
+            "brain_votes": list(self.brain_votes) if self.brain_votes else None,
+            "confidence": self.confidence,
+            "p_win": self.p_win,
+            "kelly_mult": self.kelly_mult,
+            "entry_context": self.entry_context,
+            "effective_volume_hint": self.volume,
+            "execution_payload_schema": "live_mt5_execution_payload.v2",
         }
