@@ -123,7 +123,7 @@ def test_apply_weights_insufficient_data_defaults():
     weighter = DynamicBrainWeighter(tracker)
     proposals = [_FakeProposal("NewBrain")]
     weighter.apply_weights(proposals)
-    assert proposals[0].vote_weight == 1.0  # insufficient_data → 1.0
+    assert proposals[0].dynamic_scale == 1.0  # insufficient_data → 1.0 (FIX-011)
 
 
 def test_apply_weights_empty_proposals():
@@ -348,10 +348,11 @@ class TestPnLStoreIntegration:
         weighter = DynamicBrainWeighter(tracker, pnl_store=pnl)
         proposals = [_FakeProposal("B1"), _FakeProposal("B2")]
         weighter.apply_weights(proposals)
-        # B1 has P&L data → should get non-default weight
-        assert proposals[0].vote_weight != 1.0
+        # FIX-20260607-011: apply_weights sets dynamic_scale, not vote_weight
+        # B1 has P&L data → should get non-default dynamic_scale
+        assert proposals[0].dynamic_scale != 1.0
         # B2 has no data anywhere → remains default
-        assert proposals[1].vote_weight == 1.0
+        assert proposals[1].dynamic_scale == 1.0
 
     def test_no_pnl_store_unchanged_behavior(self):
         """Without pnl_store, behavior is identical to Phase 1."""
