@@ -2995,19 +2995,13 @@ def execute_live_cycle(
 
     if not config.no_mt5 and state.known_open_tickets and _run_reconciliation:
         try:
-            # ── FIX-20260611-005 Phase 2: Unified adapter replaces old reconciliation ──
-            from core.runtime.position_close_adapter import PositionCloseAdapter
+            # ── FIX-20260611-005 Phase 2: Strangler Fig #11 ──
+            from core.runtime.position_close_adapter import reconcile_and_record_closes
 
-            _adapter = PositionCloseAdapter(
-                tick_size=0.01 if "XAU" in config.symbol else 1.0,
+            _events = reconcile_and_record_closes(
+                state.known_open_tickets, mt5_worker, config.symbol,
+                str(journal_path), state,
             )
-            _events = _adapter.detect_and_build(
-                known_tickets=state.known_open_tickets,
-                mt5_worker=mt5_worker,
-                symbol=config.symbol,
-            )
-            for _evt in _events:
-                _adapter.record(_evt, str(journal_path), state=state)
 
             if _events:
                 # ── Update per-strategy losing-streak tracker ──
@@ -3639,24 +3633,14 @@ def execute_live_cycle(
             if not _mia_closed:
                 _mia_closed = []  # all deduped — skip journal write
             if _mia_closed:
-                # ── FIX-20260611-005 Phase 2: Unified adapter replaces manual journal write ──
+                # ── FIX-20260611-005 Phase 2: Strangler Fig #12 ──
                 with log_and_continue(component="MIA_Close:journal_write"):
-                    from core.runtime.position_close_adapter import PositionCloseAdapter
+                    from core.runtime.position_close_adapter import record_mia_closes
 
-                    _mia_adapter = PositionCloseAdapter(
-                        tick_size=0.01 if "XAU" in config.symbol else 1.0,
+                    record_mia_closes(
+                        _mia_closed, mt5_worker, config.symbol,
+                        str(journal_path), state,
                     )
-                    for _entry in _mia_closed:
-                        _mia_evt: Any = _mia_adapter._build_event(
-                            ticket=int(_entry.get("position_ticket", 0) or 0),
-                            open_entry=_entry,
-                            closed_volume=float(_entry.get("volume", 0.01) or 0.01),
-                            remaining_volume=0.0,
-                            symbol=config.symbol,
-                            mt5_worker=mt5_worker,
-                        )
-                        if _mia_evt is not None:
-                            _mia_adapter.record(_mia_evt, str(journal_path), state=state)
             # ── Record exit for reentry guard ──
             for _entry in _mia_closed:
                 _exit_strategy = _entry.get("strategy", "")
@@ -6215,15 +6199,14 @@ def execute_live_cycle(
                         ),
                         flush=True,
                     )
-                    # ── FIX-20260611-005: Journal Open eventization ──
+                    # ── FIX-20260611-005: Strangler Fig #13 — Journal Open ──
                     try:
-                        from core.contracts.position_events import PositionOpened
                         from core.runtime.position_close_adapter import (
-                            PositionCloseAdapter as _OpenAdapter,
+                            record_position_opened,
                         )
 
-                        _open_evt = PositionOpened(
-                            position_ticket=pm_ticket,
+                        record_position_opened(
+                            ticket=pm_ticket,
                             symbol=config.symbol,
                             side=side,
                             strategy=_pm_strat_name or "",
@@ -6232,15 +6215,10 @@ def execute_live_cycle(
                             volume=config.volume or 0.01,
                             sl=stop_loss,
                             tp=take_profit,
-                            brain_ids=tuple(pm_supporting) if pm_supporting else (),
+                            brain_ids=pm_supporting,
                             confidence=confidence,
-                            message_id="",
-                        )
-                        _open_adapter = _OpenAdapter(
-                            tick_size=0.01 if "XAU" in config.symbol else 1.0,
-                        )
-                        _open_adapter.record_open(
-                            _open_evt, str(journal_path), state=state,
+                            journal_path=str(journal_path),
+                            state=state,
                         )
                     except Exception:  # noqa: BLE001
                         pass  # best-effort — never block position registration

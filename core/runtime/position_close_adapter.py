@@ -20,6 +20,107 @@ from typing import Any
 
 from core.contracts.position_events import PositionClosed, PositionOpened
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Strangler Fig: delegation wrappers for live_cycle.py
+# Each wrapper encapsulates adapter lifecycle → live_cycle.py calls are 1-2 lines.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def reconcile_and_record_closes(
+    known_tickets: dict[int, dict],
+    mt5_worker: Any,
+    symbol: str,
+    journal_path: str,
+    state: Any = None,
+) -> list[PositionClosed]:
+    """Strangler Fig #11: reconcile MT5 positions, build events, record to Journal.
+
+    Replaces the old _reconcile_closed_positions() + manual journal write block.
+    Called from live_cycle.py reconciliation section.
+    """
+    adapter = PositionCloseAdapter(
+        tick_size=0.01 if "XAU" in symbol else 1.0,
+    )
+    events = adapter.detect_and_build(
+        known_tickets=known_tickets,
+        mt5_worker=mt5_worker,
+        symbol=symbol,
+    )
+    for evt in events:
+        adapter.record(evt, journal_path, state=state)
+    return events
+
+
+def record_mia_closes(
+    mia_entries: list[dict],
+    mt5_worker: Any,
+    symbol: str,
+    journal_path: str,
+    state: Any = None,
+) -> int:
+    """Strangler Fig #12: record MIA-detected closes through the adapter.
+
+    Replaces the old FileLock + manual journal append block.
+    Returns count of successfully recorded events.
+    """
+    adapter = PositionCloseAdapter(
+        tick_size=0.01 if "XAU" in symbol else 1.0,
+    )
+    recorded = 0
+    for entry in mia_entries:
+        evt = adapter._build_event(
+            ticket=int(entry.get("position_ticket", 0) or 0),
+            open_entry=entry,
+            closed_volume=float(entry.get("volume", 0.01) or 0.01),
+            remaining_volume=0.0,
+            symbol=symbol,
+            mt5_worker=mt5_worker,
+        )
+        if evt is not None and adapter.record(evt, journal_path, state=state):
+            recorded += 1
+    return recorded
+
+
+def record_position_opened(
+    ticket: int,
+    symbol: str,
+    side: str,
+    strategy: str,
+    magic: int,
+    entry_price: float,
+    volume: float,
+    sl: float,
+    tp: float,
+    brain_ids: list[str] | None,
+    confidence: float,
+    journal_path: str,
+    state: Any = None,
+) -> bool:
+    """Strangler Fig #13: record a new position open through the adapter.
+
+    Called from live_cycle.py at position_registered_for_mgmt point.
+    """
+    try:
+        adapter = PositionCloseAdapter(
+            tick_size=0.01 if "XAU" in symbol else 1.0,
+        )
+        evt = PositionOpened(
+            position_ticket=ticket,
+            symbol=symbol,
+            side=side,
+            strategy=strategy,
+            magic=magic,
+            entry_price=entry_price,
+            volume=volume,
+            sl=sl,
+            tp=tp,
+            brain_ids=tuple(brain_ids) if brain_ids else (),
+            confidence=confidence,
+        )
+        return adapter.record_open(evt, journal_path, state=state)
+    except Exception:
+        return False  # best-effort — never block position registration
+
 UTC = UTC
 _log = logging.getLogger(__name__)
 
