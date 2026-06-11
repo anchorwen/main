@@ -171,6 +171,23 @@ def run_governance_cycle(
                 if current_status == "retired":
                     continue
 
+                # ── FIX-20260611-020: Governance Manual Whitelist ──
+                # PnP ledger metrics are counterfactual (backtest/shadow),
+                # NOT live performance.  Injection + auto-transition is
+                # disabled while manual governance whitelist is active.
+                # Set False ONLY after record contamination is confirmed fixed.
+                _GOVERNANCE_MANUAL_MODE = True
+                if _GOVERNANCE_MANUAL_MODE:
+                    # Log what WOULD have happened for audit
+                    print(
+                        f"[GOV_MANUAL] Training: would inject brain={brain_id} "
+                        f"wr={metrics.win_rate:.3f} pf={metrics.profit_factor:.2f} "
+                        f"trades={metrics.sample_count} pnl={metrics.cumulative_pnl:.2f} "
+                        f"— SKIPPED (manual mode)",
+                        flush=True,
+                    )
+                    continue  # Skip injection + auto-transition for this brain
+
                 # P0.1: Inject performance_metrics into governance state
                 governance.set_performance_metrics(
                     brain_id,
