@@ -10,11 +10,11 @@
       "freeze_count": 0,
       "exposure_limited": false,
       "performance_metrics": {
-        "win_rate": 0.418,
+        "win_rate": 0.4179,
         "profit_factor": 0.7,
-        "sharpe_ratio": -29.82,
-        "total_trades": 3543,
-        "pnl_r": -1374.11
+        "sharpe_ratio": -29.74,
+        "total_trades": 3561,
+        "pnl_r": -1376.83
       }
     },
     "OU_Params_V7_M15": {
@@ -102,11 +102,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4352,
-        "profit_factor": 1.03,
-        "sharpe_ratio": 1.8,
-        "total_trades": 2130,
-        "pnl_r": 105.39
+        "win_rate": 0.4371,
+        "profit_factor": 1.02,
+        "sharpe_ratio": 1.59,
+        "total_trades": 2153,
+        "pnl_r": 93.83
       }
     },
     "Swing_V9_M15_V2": {
@@ -117,11 +117,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.617,
-        "profit_factor": 3.49,
-        "sharpe_ratio": 104.46,
-        "total_trades": 872,
-        "pnl_r": 5310.87
+        "win_rate": 0.6183,
+        "profit_factor": 3.5,
+        "sharpe_ratio": 104.91,
+        "total_trades": 875,
+        "pnl_r": 5343.96
       }
     },
     "Brain_Trend_M30_V1": {
@@ -244,11 +244,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.3606,
+        "win_rate": 0.3629,
         "profit_factor": 0.4,
-        "sharpe_ratio": -63.48,
-        "total_trades": 2432,
-        "pnl_r": -5490.09
+        "sharpe_ratio": -63.27,
+        "total_trades": 2455,
+        "pnl_r": -5501.64
       }
     },
     "Swing_V9_H1_V2": {
@@ -259,11 +259,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4685,
-        "profit_factor": 1.91,
-        "sharpe_ratio": 45.08,
-        "total_trades": 2606,
-        "pnl_r": 4649.31
+        "win_rate": 0.4668,
+        "profit_factor": 1.89,
+        "sharpe_ratio": 44.22,
+        "total_trades": 2633,
+        "pnl_r": 4592.7
       }
     },
     "Swing_LGB_M15_V1": {

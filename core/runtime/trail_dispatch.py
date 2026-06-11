@@ -136,22 +136,47 @@ def compute_and_dispatch_trail(
     _trail_dist = round(abs(pos.current_sl - pos.entry_price), 3) if pos.current_sl > 0 else 0.0
     with log_and_continue(component="PositionSnapshot:record"):
         _snap_path = Path(config.base_dir) / "position_snapshots.jsonl"
-        _snap = json.dumps(
-            {
-                "ticket": pos.ticket,
-                "time": _utc_iso(),
-                "bars_held": pos.cycles_held,
-                "unrealized_pnl_r": round(_pnl_r, 6),
-                "current_volatility": _vol_change,
-                "trailing_sl_distance": _trail_dist,
-                "current_atr": round(current_atr, 4),
-                "entry_atr": round(pos.entry_atr, 4),
-            },
-            ensure_ascii=False,
-        )
-        _snap_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(_snap_path, "a", encoding="utf-8") as _sf:
-            _sf.write(_snap + "\n")
+
+        # ── FIX-20260611-003: Data flywheel — enriched snapshot fields ──
+        _entry_price = getattr(pos, "entry_price", 0) or 0
+        _current_sl = getattr(pos, "current_sl", 0) or 0
+        _current_tp = getattr(pos, "current_tp", 0) or 0
+        _side = getattr(pos, "side", "?")
+        _strategy = getattr(pos, "strategy_name", "?")
+
+        # Write-time assertion: skip snapshot if core fields are missing
+        if _entry_price <= 0 or _current_sl <= 0:
+            import logging as _snap_log
+
+            _snap_log.getLogger(__name__).warning(
+                "[DATA_ASSERT] Position snapshot SKIPPED: ticket=%s "
+                "entry_price=%s sl=%s — core fields missing or zero",
+                pos.ticket,
+                _entry_price,
+                _current_sl,
+            )
+        else:
+            _snap = json.dumps(
+                {
+                    "ticket": pos.ticket,
+                    "time": _utc_iso(),
+                    "side": _side,
+                    "strategy": _strategy,
+                    "entry_price": _entry_price,
+                    "current_sl": _current_sl,
+                    "current_tp": _current_tp,
+                    "bars_held": pos.cycles_held,
+                    "unrealized_pnl_r": round(_pnl_r, 6),
+                    "current_volatility": _vol_change,
+                    "trailing_sl_distance": _trail_dist,
+                    "current_atr": round(current_atr, 4),
+                    "entry_atr": round(pos.entry_atr, 4),
+                },
+                ensure_ascii=False,
+            )
+            _snap_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(_snap_path, "a", encoding="utf-8") as _sf:
+                _sf.write(_snap + "\n")
 
     # ── Single dispatch ──
     _sl_changed = abs(_final_sl - pos.current_sl) >= config.exit_min_step

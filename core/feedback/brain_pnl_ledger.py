@@ -144,14 +144,34 @@ class BrainPnLStore:
         if direction == "neutral":
             return None
 
+        # ── FIX-20260611-003: Data flywheel — write-time assertions ──
+        _entry_price_f = float(entry_price)
+        _reject_reason = None
+        if _entry_price_f <= 0:
+            _reject_reason = f"entry_price={_entry_price_f} <= 0"
+        elif confidence < 0 or confidence > 1:
+            _reject_reason = f"confidence={confidence} out of [0,1]"
+        elif direction not in ("long", "short"):
+            _reject_reason = f"direction={direction} not long/short"
+        elif not brain_id or not symbol:
+            _reject_reason = "missing brain_id or symbol"
+        if _reject_reason is not None:
+            import logging as _assert_log
+
+            _assert_log.getLogger(__name__).warning(
+                "[DATA_ASSERT] PnL record_signal REJECTED: brain=%s reason=%s",
+                brain_id,
+                _reject_reason,
+            )
+            return None
+
         signal_id = f"{brain_id}_{datetime.now(UTC).timestamp():.6f}"
-        entry_price_f = float(entry_price)
         self._pending[signal_id] = {
             "signal_id": signal_id,
             "brain_id": brain_id,
             "symbol": symbol,
             "direction": direction,
-            "entry_price": entry_price_f,
+            "entry_price": _entry_price_f,
             "confidence": confidence,
             "expected_horizon": expected_horizon,
             "ttl": expected_horizon,
@@ -161,8 +181,8 @@ class BrainPnLStore:
             "entry_spread": entry_spread,
             "entry_slippage": entry_slippage,
             # MFE/MAE tracking fields (updated per-cycle via update_pending)
-            "mfe_price": entry_price_f,  # best price in trade direction
-            "mae_price": entry_price_f,  # worst price in trade direction
+            "mfe_price": _entry_price_f,  # best price in trade direction
+            "mae_price": _entry_price_f,  # worst price in trade direction
         }
         return signal_id
 
