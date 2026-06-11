@@ -117,6 +117,9 @@ def audit_symbol(name: str, data_dir: Path) -> dict:
 
 
 def main() -> int:
+    import io as _io
+
+    sys.stdout = _io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")  # FIX-20260611-022
     parser = argparse.ArgumentParser(description="Live health audit")
     parser.add_argument("--data-dir-btc", default="data_btc")
     parser.add_argument("--data-dir-xau", default="data")
@@ -146,24 +149,24 @@ def main() -> int:
             print(f"  Alert types: {r['alert_types']}")
 
         # ── Key diagnostics ──
-        print(f"\n  ── Trade Decisions ──")
+        print("\n  ── Trade Decisions ──")
         if r["approved_trades"]:
             for strat, count in r["approved_trades"].items():
                 print(f"    ✅ {strat}: {count} approved")
         if r["rejection_reasons"]:
-            print(f"    ❌ Rejection reasons:")
+            print("    ❌ Rejection reasons:")
             for reason, count in r["rejection_reasons"].items():
                 print(f"       [{count:3d}] {reason[:80]}")
         else:
-            print(f"    ⚠️  NO eval data — strategy evaluation not running!")
+            print("    ⚠️  NO eval data — strategy evaluation not running!")
 
         if r["strategy_directions"]:
-            print(f"\n  ── Strategy Directions ──")
+            print("\n  ── Strategy Directions ──")
             for strat, dirs in r["strategy_directions"].items():
                 print(f"    {strat}: {dirs}")
 
         if r["consensus_reasons"]:
-            print(f"\n  ── Consensus Phase ──")
+            print("\n  ── Consensus Phase ──")
             for reason, count in r["consensus_reasons"]:
                 print(f"    [{count:3d}] {reason}")
 
@@ -186,7 +189,7 @@ def main() -> int:
             print(f"\n  🚩 FLAGS: {', '.join(flags)}")
             all_passed = False
         else:
-            print(f"\n  ✅ HEALTHY")
+            print("\n  ✅ HEALTHY")
 
     print(f"\n{'='*60}")
     print(f"OVERALL: {'PASS' if all_passed else 'NEEDS REVIEW'}")

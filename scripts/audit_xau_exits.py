@@ -35,6 +35,9 @@ def load_journal(data_dir: str) -> list[dict]:
 
 
 def main() -> int:
+    import io as _io
+
+    sys.stdout = _io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")  # FIX-20260611-022
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", default="data")
     parser.add_argument("--days", type=int, default=7)
@@ -44,12 +47,12 @@ def main() -> int:
 
     # Filter to closes
     closes = [t for t in journal if t.get("action") == "close"]
-    print(f"=== XAU Exit Audit ===")
+    print("=== XAU Exit Audit ===")
     print(f"  Total journal entries: {len(journal)}")
     print(f"  Close entries: {len(closes)}")
 
     # ── Q1: PnL Distribution ──
-    print(f"\n── Q1: PnL Distribution ──")
+    print("\n── Q1: PnL Distribution ──")
     pnls = [t.get("pnl") for t in closes if t.get("pnl") is not None]
     pnl_null = sum(1 for t in closes if t.get("pnl") is None)
     wins = sum(1 for p in pnls if p > 0)
@@ -66,7 +69,7 @@ def main() -> int:
         print(f"  Avg loss: ${sum(p for p in pnls if p<0)/max(losses,1):.2f}")
 
     # ── Q2: Exit Reasons ──
-    print(f"\n── Q2: Exit Reasons ──")
+    print("\n── Q2: Exit Reasons ──")
     exit_labels = Counter(str(t.get("label", "?")) for t in closes)
     for label, count in exit_labels.most_common(15):
         # Show PnL for this label
@@ -76,7 +79,7 @@ def main() -> int:
         print(f"  [{count:3d}] {label:40s} WR={label_wr:.1%} PnL=${label_total:.2f}")
 
     # ── Q3: Exit by Strategy ──
-    print(f"\n── Q3: Exit by Strategy ──")
+    print("\n── Q3: Exit by Strategy ──")
     by_strategy = defaultdict(list)
     for t in closes:
         s = t.get("strategy", "unknown")
@@ -88,7 +91,7 @@ def main() -> int:
         print(f"  {s:25s}: {len(spnls):>4d} trades, WR={wr:.1%}, PnL=${sum(spnls):.2f}")
 
     # ── Q4: Direction Bias in Exits ──
-    print(f"\n── Q4: Exit Direction Bias ──")
+    print("\n── Q4: Exit Direction Bias ──")
     dir_pnls = defaultdict(list)
     for t in closes:
         side = t.get("side", "?")
@@ -100,7 +103,7 @@ def main() -> int:
         print(f"  {side:6s}: {len(spnls):>4d} closes, WR={wr:.1%}, PnL=${sum(spnls):.2f}")
 
     # ── Q5: Recent Closes (last 20) ──
-    print(f"\n── Q5: Last 20 Closes ──")
+    print("\n── Q5: Last 20 Closes ──")
     sorted_closes = sorted(closes, key=lambda t: str(t.get("recorded_at", "")), reverse=True)
     for t in sorted_closes[:20]:
         pnl = t.get("pnl")
@@ -118,7 +121,7 @@ def main() -> int:
               f"entry={str(entry):>10s} exit={str(exit_p):>10s} {label:35s} {trail} {brain}")
 
     # ── Q6: Data Quality Flags ──
-    print(f"\n── Q6: Data Quality Flags ──")
+    print("\n── Q6: Data Quality Flags ──")
     flags = []
     if pnl_null > len(closes) * 0.2:
         flags.append(f"HIGH_PNL_NULL: {pnl_null}/{len(closes)}")
@@ -139,7 +142,7 @@ def main() -> int:
         for f in flags:
             print(f"  🚩 {f}")
     else:
-        print(f"  ✅ No critical data quality flags")
+        print("  ✅ No critical data quality flags")
 
     return 0
 

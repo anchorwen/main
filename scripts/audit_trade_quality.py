@@ -83,7 +83,7 @@ def audit_symbol(name: str, data_dir: str, label: str) -> dict:
     events = load_intent_events(data_dir)
 
     # ── Q1: Data Integrity ──
-    print(f"\n  ── Q1: Data Integrity ──")
+    print("\n  ── Q1: Data Integrity ──")
     pnl_null = sum(1 for t in journal if t.get("pnl") is None and t.get("action") == "close")
     total_close = sum(1 for t in journal if t.get("action") == "close")
     missing_entry = sum(1 for t in journal if t.get("entry_price") is None)
@@ -96,7 +96,7 @@ def audit_symbol(name: str, data_dir: str, label: str) -> dict:
     print(f"    Missing exit_price: {missing_exit}")
 
     # ── Q2: Trade Quality ──
-    print(f"\n  ── Q2: Trade Quality (btc_swing / swing only) ──")
+    print("\n  ── Q2: Trade Quality (btc_swing / swing only) ──")
     swing_trades = [t for t in journal if "swing" in str(t.get("strategy", "")).lower()]
     if not swing_trades:
         swing_trades = [t for t in journal if t.get("action") == "close"]
@@ -133,7 +133,7 @@ def audit_symbol(name: str, data_dir: str, label: str) -> dict:
     print(f"    Exit reasons (top 8): {dict(exit_reasons.most_common(8))}")
 
     # ── Q3: Recent trades (last 10) ──
-    print(f"\n  ── Q3: Last 10 closed trades ──")
+    print("\n  ── Q3: Last 10 closed trades ──")
     sorted_trades = sorted(
         unique_trades,
         key=lambda t: str(t.get("close_time", "") or t.get("open_time", "")),
@@ -154,7 +154,7 @@ def audit_symbol(name: str, data_dir: str, label: str) -> dict:
               f"close={close_t} reason={exit_r}")
 
     # ── Q4: Position integrity from snapshots ──
-    print(f"\n  ── Q4: Position Snapshots ──")
+    print("\n  ── Q4: Position Snapshots ──")
     if snaps:
         # Group by ticket, get last snapshot each
         by_ticket = {}
@@ -173,7 +173,7 @@ def audit_symbol(name: str, data_dir: str, label: str) -> dict:
         print(f"    Closed positions: {len(closed)}")
 
         if active:
-            print(f"    Active:")
+            print("    Active:")
             for t, s in active.items():
                 pnl = s.get("current_pnl", 0)
                 entry = s.get("entry_price", 0)
@@ -184,10 +184,10 @@ def audit_symbol(name: str, data_dir: str, label: str) -> dict:
                 print(f"      ticket={t} {side} entry={entry} sl={sl} tp={tp} "
                       f"pnl=${pnl:.2f} open={open_t}")
     else:
-        print(f"    No snapshot data")
+        print("    No snapshot data")
 
     # ── Q5: Cycle activity health ──
-    print(f"\n  ── Q5: Cycle Activity ──")
+    print("\n  ── Q5: Cycle Activity ──")
     cycles = [e for e in events if e.get("event") == "cycle_end"]
     evals = [e for e in events if e.get("event") == "multi_strategy_eval"]
     dispatches = [e for e in events if e.get("event") == "intent_dispatched"]
@@ -208,7 +208,7 @@ def audit_symbol(name: str, data_dir: str, label: str) -> dict:
             for s in e.get("strategies", []):
                 if not s.get("should_trade"):
                     eval_reasons[s.get("reason", "?")[:60]] += 1
-        print(f"    Top rejection reasons:")
+        print("    Top rejection reasons:")
         for reason, count in eval_reasons.most_common(5):
             print(f"      [{count:3d}] {reason}")
 
@@ -217,7 +217,7 @@ def audit_symbol(name: str, data_dir: str, label: str) -> dict:
     if pnl_null > total_close * 0.2:
         flags.append(f"PNL_NULL_{pnl_null}/{total_close}")
     if missing_entry > len(journal) * 0.1:
-        flags.append(f"MISSING_ENTRY_PRICE")
+        flags.append("MISSING_ENTRY_PRICE")
     if len(cycles) == 0:
         flags.append("NO_CYCLES")
     if len(brain_alerts) > 10:
@@ -226,7 +226,7 @@ def audit_symbol(name: str, data_dir: str, label: str) -> dict:
     if flags:
         print(f"\n  🚩 FLAGS: {', '.join(flags)}")
     else:
-        print(f"\n  ✅ No critical flags")
+        print("\n  ✅ No critical flags")
 
     return {
         "symbol": label,
@@ -245,6 +245,9 @@ def audit_symbol(name: str, data_dir: str, label: str) -> dict:
 
 
 def main() -> int:
+    import io as _io
+
+    sys.stdout = _io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")  # FIX-20260611-022
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir-btc", default="data_btc")
     parser.add_argument("--data-dir-xau", default="data")
@@ -254,7 +257,7 @@ def main() -> int:
     xau = audit_symbol("xau", args.data_dir_xau, "XAU")
 
     print(f"\n{'='*70}")
-    print(f"  SUMMARY")
+    print("  SUMMARY")
     print(f"{'='*70}")
     print(f"  {'Symbol':8s} {'Trades':>8s} {'WR':>8s} {'PnL':>10s} {'Alerts':>8s} {'Flags'}")
     for r in [btc, xau]:
