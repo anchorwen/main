@@ -2644,6 +2644,42 @@ class DataHealthService:
             checked_at=_utc_iso(),
         )
 
+    # ── FIX-20260611-005: Governance event log integrity ──
+
+    @health_check(
+        tier=Tier.MEDIUM,
+        source="governance_events",
+        description="Governance event log exists and is append-only",
+    )
+    def check_governance_events(self) -> SourceCheckResult:
+        """Verify governance event log integrity."""
+        _path = os.path.join(self._base_dir, "governance_events.jsonl")
+        if not os.path.exists(_path):
+            return SourceCheckResult(
+                source="governance_events", tier=Tier.MEDIUM,
+                status=SourceStatus.PASS,
+                primary_code="GOV_EVENTS_EMPTY",
+                message="No governance events yet — log will be created on first promotion",
+                checked_at=_utc_iso(),
+            )
+        _count = _safe_jsonl_count(_path)
+        if _count is None:
+            return SourceCheckResult(
+                source="governance_events", tier=Tier.MEDIUM,
+                status=SourceStatus.WARN,
+                primary_code="GOV_EVENTS_UNREADABLE",
+                message="governance_events.jsonl exists but is unreadable",
+                checked_at=_utc_iso(),
+            )
+        return SourceCheckResult(
+            source="governance_events", tier=Tier.MEDIUM,
+            status=SourceStatus.PASS,
+            primary_code="GOV_EVENTS_OK",
+            message=f"Governance event log: {_count} events",
+            metrics={"event_count": _count or 0},
+            checked_at=_utc_iso(),
+        )
+
     def build_alert_context(self, report: HealthReport) -> dict[str, Any]:
         """Convert report to alert context keys for external evaluation.
 

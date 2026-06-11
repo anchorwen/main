@@ -2124,21 +2124,25 @@ def main(argv: list[str] | None = None) -> int:
                             d for d in _decisions if d.approved and d.action == "promote"
                         ]
                         if _promoted:
+                            # ── FIX-20260611-005: Governance event sourcing ──
+                            _gov_events_path = Path(args.base_dir) / "governance_events.jsonl"
                             for _d in _promoted:
-                                print(
-                                    json.dumps(
-                                        {
-                                            "event": "brain_promoted",
-                                            "time": _utc_iso(),
-                                            "brain_id": _d.brain_id,
-                                            "from_status": _d.current_status,
-                                            "to_status": _d.target_status,
-                                            "reasons": _d.reasons,
-                                        },
-                                        ensure_ascii=False,
-                                    ),
-                                    flush=True,
-                                )
+                                _gevt = {
+                                    "schema_version": "governance_event.v1",
+                                    "event": "brain_promoted",
+                                    "time": _utc_iso(),
+                                    "brain_id": _d.brain_id,
+                                    "from_status": _d.current_status,
+                                    "to_status": _d.target_status,
+                                    "reasons": _d.reasons,
+                                }
+                                print(json.dumps(_gevt, ensure_ascii=False), flush=True)
+                                # Append to governance event log (immutable)
+                                try:
+                                    with open(_gov_events_path, "a", encoding="utf-8") as _gf:
+                                        _gf.write(json.dumps(_gevt, ensure_ascii=False) + "\n")
+                                except Exception:  # noqa: BLE001
+                                    pass
                 except Exception:  # noqa: BLE001
                     pass  # best-effort — non-critical for trading
 

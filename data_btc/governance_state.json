@@ -26,9 +26,9 @@
       "performance_metrics": {
         "win_rate": 0.31,
         "profit_factor": 0.66,
-        "sharpe_ratio": -33.24,
+        "sharpe_ratio": -32.63,
         "total_trades": 100,
-        "pnl_r": -556.63
+        "pnl_r": -545.5
       }
     },
     "BTC_Swing_V7_MultiTF_LGB_v1": {
@@ -41,9 +41,9 @@
       "performance_metrics": {
         "win_rate": 0.31,
         "profit_factor": 0.66,
-        "sharpe_ratio": -33.24,
+        "sharpe_ratio": -32.63,
         "total_trades": 100,
-        "pnl_r": -556.63
+        "pnl_r": -545.5
       }
     },
     "BTC_Swing_V8_MultiTF_LGB_v1": {
@@ -56,9 +56,9 @@
       "performance_metrics": {
         "win_rate": 0.31,
         "profit_factor": 0.66,
-        "sharpe_ratio": -33.24,
+        "sharpe_ratio": -32.63,
         "total_trades": 100,
-        "pnl_r": -556.63
+        "pnl_r": -545.5
       }
     },
     "BTC_Swing_V10_M15_Survival": {
@@ -101,9 +101,9 @@
       "performance_metrics": {
         "win_rate": 0.35,
         "profit_factor": 0.28,
-        "sharpe_ratio": -88.59,
+        "sharpe_ratio": -89.4,
         "total_trades": 100,
-        "pnl_r": -1483.37
+        "pnl_r": -1494.5
       }
     },
     "BTC_Swing_V11_M15_Directional": {
@@ -116,9 +116,9 @@
       "performance_metrics": {
         "win_rate": 0.35,
         "profit_factor": 0.28,
-        "sharpe_ratio": -88.59,
+        "sharpe_ratio": -89.4,
         "total_trades": 100,
-        "pnl_r": -1483.37
+        "pnl_r": -1494.5
       }
     }
   },
