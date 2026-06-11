@@ -10,11 +10,11 @@
       "freeze_count": 0,
       "exposure_limited": false,
       "performance_metrics": {
-        "win_rate": 0.432,
+        "win_rate": 0.4323,
         "profit_factor": 0.7,
-        "sharpe_ratio": -29.72,
-        "total_trades": 3565,
-        "pnl_r": -1385.2
+        "sharpe_ratio": -29.67,
+        "total_trades": 3567,
+        "pnl_r": -1383.42
       }
     },
     "OU_Params_V7_M15": {
@@ -102,11 +102,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4549,
+        "win_rate": 0.4544,
         "profit_factor": 1.01,
-        "sharpe_ratio": 0.51,
-        "total_trades": 2275,
-        "pnl_r": 30.92
+        "sharpe_ratio": 0.41,
+        "total_trades": 2282,
+        "pnl_r": 24.74
       }
     },
     "Swing_V9_M15_V2": {
@@ -117,11 +117,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.6594,
+        "win_rate": 0.6582,
         "profit_factor": 3.54,
-        "sharpe_ratio": 109.46,
-        "total_trades": 822,
-        "pnl_r": 5373.66
+        "sharpe_ratio": 109.21,
+        "total_trades": 825,
+        "pnl_r": 5372.98
       }
     },
     "Brain_Trend_M30_V1": {
@@ -244,11 +244,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.3818,
+        "win_rate": 0.3815,
         "profit_factor": 0.41,
-        "sharpe_ratio": -62.24,
-        "total_trades": 2580,
-        "pnl_r": -5565.77
+        "sharpe_ratio": -62.22,
+        "total_trades": 2587,
+        "pnl_r": -5571.95
       }
     },
     "Swing_V9_H1_V2": {
@@ -259,11 +259,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4828,
+        "win_rate": 0.483,
         "profit_factor": 1.85,
-        "sharpe_ratio": 42.54,
-        "total_trades": 2763,
-        "pnl_r": 4539.1
+        "sharpe_ratio": 42.49,
+        "total_trades": 2770,
+        "pnl_r": 4538.84
       }
     },
     "Swing_LGB_M15_V1": {

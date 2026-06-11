@@ -261,6 +261,7 @@ class PositionCloseAdapter:
         if state is not None:
             self._notify_position_manager(event, state)
             self._notify_reentry_guard(event, state)
+            self._notify_pnl_ledger(event, state)
             self._notify_budget(event, state)
 
         return True
@@ -421,6 +422,37 @@ class PositionCloseAdapter:
                 _rs.record_exit(_rec)
         except Exception:
             _log.warning("PositionCloseAdapter: reentry_guard notify failed")
+
+    @staticmethod
+    def _notify_pnl_ledger(event: PositionClosed, state: Any) -> None:
+        """Settle all pending brain predictions for this closed position."""
+        try:
+            _ledger = getattr(state, "_pnl_ledger", None)
+            if _ledger is None:
+                return
+            # Settle pending signals matching this position_ticket
+            _settled = 0
+            for _sid in list(_ledger._pending.keys()):
+                _sig = _ledger._pending.get(_sid)
+                if _sig is None:
+                    continue
+                _pt = _sig.get("position_ticket", 0)
+                if _pt == event.position_ticket:
+                    _ledger.settle_one(
+                        _sid,
+                        close_price=event.close_price,
+                        close_time=event.close_time,
+                        spread=0.0,
+                        slippage=0.10,
+                    )
+                    _settled += 1
+            if _settled > 0:
+                _log.debug(
+                    "PnL Ledger: settled %s signals for ticket=%s",
+                    _settled, event.position_ticket,
+                )
+        except Exception:
+            _log.warning("PositionCloseAdapter: pnl_ledger notify failed")
 
     @staticmethod
     def _notify_budget(event: PositionClosed, state: Any) -> None:

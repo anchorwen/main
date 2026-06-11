@@ -183,6 +183,8 @@ class BrainPnLStore:
             # MFE/MAE tracking fields (updated per-cycle via update_pending)
             "mfe_price": _entry_price_f,  # best price in trade direction
             "mae_price": _entry_price_f,  # worst price in trade direction
+            # FIX-20260611-005: position linkage for per-position settlement
+            "position_ticket": metadata.get("position_ticket", 0) if metadata else 0,
         }
         return signal_id
 

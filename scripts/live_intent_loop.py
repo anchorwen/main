@@ -2002,6 +2002,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 break
             try:
+                # ── FIX-20260611-005: Stash pnl_ledger for adapter downstream notification ──
+                state._pnl_ledger = pnl_ledger
                 state, should_continue = execute_live_cycle(
                     config,
                     state,
