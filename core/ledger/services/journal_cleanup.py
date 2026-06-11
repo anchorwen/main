@@ -84,7 +84,33 @@ def _append_journal(path: Path, entry: dict[str, Any], *, lock_dir: Path | None 
 
     FIX-20260601-043: lock_dir enables FileLock serialisation with the MT5
     bridge worker and live_cycle reconciliation paths.
+
+    FIX-20260611-005: Dedup close entries by position_ticket — if a close
+    entry for the same ticket already exists, skip this write.  Prevents
+    the 76x duplicate bug (ticket=3807506009 in BTC) where management phase
+    re-writes the same close on every cycle.
     """
+    _action = entry.get("action", "")
+    _ticket = entry.get("position_ticket")
+    if _action == "close" and _ticket is not None:
+        # Tail-read check: scan last ~200 entries for existing close
+        try:
+            if path.exists():
+                _tail_lines = []
+                with open(path, encoding="utf-8") as _f:
+                    _lines = _f.readlines()
+                    _tail_lines = _lines[-200:]
+                for _line in _tail_lines:
+                    try:
+                        _existing = json.loads(_line)
+                        if (_existing.get("action") == "close"
+                                and _existing.get("position_ticket") == _ticket):
+                            return  # Already recorded — skip duplicate
+                    except json.JSONDecodeError:
+                        continue
+        except Exception:  # noqa: BLE001
+            pass  # Best-effort — if check fails, write anyway
+
     if lock_dir is not None:
         from core.infrastructure.distributed_lock import FileLock
         _lock = FileLock("live_trade_journal", lock_dir=str(lock_dir), ttl_seconds=10)

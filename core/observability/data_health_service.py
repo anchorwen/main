@@ -2537,6 +2537,113 @@ class DataHealthService:
             checked_at=_utc_iso(),
         )
 
+    # ── FIX-20260611-005: Journal completeness SLA (30-day auto-expiry) ──
+
+    @health_check(
+        tier=Tier.CRITICAL,
+        source="journal_completeness",
+        description="Journal close_price fill rate, dedup, trail coverage",
+    )
+    def check_journal_completeness(self) -> SourceCheckResult:
+        """SLA monitoring: close_price, duplicate detection, trail coverage.
+
+        FIX-20260611-005: Temporary patch — auto-expires 2026-07-11.
+        After Phase 2 (PositionClosed event sourcing), these checks
+        become structural guarantees, not runtime audits.
+        """
+        _expiry = "2026-07-11"
+        jl_path = os.path.join(self._base_dir, "live_trade_journal.jsonl")
+        if not os.path.exists(jl_path):
+            return SourceCheckResult(
+                source="journal_completeness", tier=Tier.CRITICAL,
+                status=SourceStatus.MISSING,
+                primary_code="JOURNAL_MISSING",
+                message="live_trade_journal.jsonl not found",
+                checked_at=_utc_iso(),
+            )
+
+        closes = []
+        tickets_seen: set = set()
+        dupes = 0
+        with open(jl_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if entry.get("action") != "close":
+                    continue
+                ticket = entry.get("position_ticket")
+                if ticket and ticket in tickets_seen:
+                    dupes += 1
+                if ticket:
+                    tickets_seen.add(ticket)
+                closes.append(entry)
+
+        total = len(closes)
+        if total == 0:
+            return SourceCheckResult(
+                source="journal_completeness", tier=Tier.CRITICAL,
+                status=SourceStatus.PASS, primary_code="JOURNAL_NO_CLOSES",
+                message="No close entries yet — nothing to check",
+                checked_at=_utc_iso(),
+            )
+
+        # close_price in detail
+        has_close_price = sum(
+            1 for e in closes
+            if (e.get("detail", {}).get("close_price") or 0) > 0
+        )
+        cp_rate = has_close_price / total
+
+        # trail_contribution
+        has_trail = sum(1 for e in closes if e.get("trail_contribution"))
+        trail_rate = has_trail / total
+
+        flags = []
+        if cp_rate < 0.30:
+            flags.append(f"CLOSE_PRICE_RATE={cp_rate:.1%}")
+        if dupes > 0:
+            flags.append(f"DUPES={dupes}")
+        if trail_rate < 0.10:
+            flags.append(f"TRAIL_RATE={trail_rate:.1%}")
+
+        if flags:
+            return SourceCheckResult(
+                source="journal_completeness",
+                tier=Tier.CRITICAL,
+                status=SourceStatus.FAIL,
+                primary_code="JOURNAL_SLA_VIOLATION",
+                message=(
+                    f"[EXPIRES {_expiry}] Journal SLA violation: {', '.join(flags)}. "
+                    f"close_price={cp_rate:.1%} trail={trail_rate:.1%} dupes={dupes}"
+                ),
+                metrics={
+                    "close_price_rate": round(cp_rate, 4),
+                    "trail_rate": round(trail_rate, 4),
+                    "duplicates": dupes,
+                    "total_closes": total,
+                    "expires": _expiry,
+                },
+                checked_at=_utc_iso(),
+            )
+        return SourceCheckResult(
+            source="journal_completeness", tier=Tier.CRITICAL,
+            status=SourceStatus.PASS, primary_code="JOURNAL_SLA_OK",
+            message=f"Journal SLA OK: close_price={cp_rate:.1%} trail={trail_rate:.1%} dupes={dupes}",
+            metrics={
+                "close_price_rate": round(cp_rate, 4),
+                "trail_rate": round(trail_rate, 4),
+                "duplicates": dupes,
+                "total_closes": total,
+                "expires": _expiry,
+            },
+            checked_at=_utc_iso(),
+        )
+
     def build_alert_context(self, report: HealthReport) -> dict[str, Any]:
         """Convert report to alert context keys for external evaluation.
 
