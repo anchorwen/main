@@ -268,6 +268,7 @@ class LiveCycleState:
     _strategies: dict[str, Any] | None = None  # FIX-072: cached strategy_lines for persistence
     _meta_filter_gate: Any = None  # MetaFilterGate (LightGBM 47-dim OU signal quality filter)
     _conformal_ou_gate: Any = None  # ConformalOUGate (physics-based OU signal quality gate)
+    _conformal_calibrator: Any = None  # FIX-20260611-022: shared calibrator for live updates
     _mtf_price_service: Any = None  # MTFPriceService — M15 bar reconstruction from M5 tick history
     _last_ou_params: dict[str, float] | None = None  # {z_score, half_life, theta} for meta labeler
     _btc_augmenter: Any = None  # BTCFeatureAugmenter — FIX-134 lazy-init for BTC feature pipeline
@@ -3023,6 +3024,16 @@ def execute_live_cycle(
                         _curr = 0
                     state.consecutive_sl_hits[_strategy] = _curr
 
+                    # ── FIX-20260611-022: Feed conformal calibrator ──
+                    _calib = getattr(state, "_conformal_calibrator", None)
+                    if _calib is not None:
+                        try:
+                            _label_int = 1 if _evt.pnl > 0 else 0
+                            for _brain_id in _evt.brain_ids:
+                                _calib.update(0.5, _label_int)
+                        except Exception:  # noqa: BLE001
+                            pass
+
                     # Update portfolio risk
                     if state.portfolio_risk_controller is not None:
                         import contextlib as _ctxlib_pf
@@ -3839,6 +3850,8 @@ def execute_live_cycle(
                 state_path=f"{config.base_dir}/conformal_calibrator_state.json",
             )
             _cal.cold_start_from_journal(f"{config.base_dir}/live_trade_journal.jsonl")
+            # ── FIX-20260611-022: Make calibrator accessible for live updates ──
+            state._conformal_calibrator = _cal
         except Exception:
             with fail_open_guard("ConformalCalibratorInit"):
                 raise
