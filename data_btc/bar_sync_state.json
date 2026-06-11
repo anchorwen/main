@@ -1,9 +1,9 @@
 {
   "schema_version": "bar_sync_state.v1",
-  "last_bar_time": 1781145600,
-  "last_bar_open": 61977.39,
-  "last_bar_close": 61979.59,
+  "last_bar_time": 1781147700,
+  "last_bar_open": 61995.49,
+  "last_bar_close": 61996.99,
   "lag_count": 0,
-  "total_bars_seen": 3235,
-  "last_sync_utc": "2026-06-11T02:39:59.615116+00:00"
+  "total_bars_seen": 3242,
+  "last_sync_utc": "2026-06-11T03:14:59.224603+00:00"
 }
