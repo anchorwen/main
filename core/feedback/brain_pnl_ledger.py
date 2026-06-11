@@ -165,7 +165,25 @@ class BrainPnLStore:
             )
             return None
 
-        signal_id = f"{brain_id}_{datetime.now(UTC).timestamp():.6f}"
+        # ── FIX-20260611-005: Cross-brain identity leak defense ──
+        # signal_id embeds brain_id — prevents two brains from sharing the
+        # same record.  The timestamp component ensures uniqueness per signal.
+        _ts = datetime.now(UTC).timestamp()
+        signal_id = f"{brain_id}_{_ts:.6f}"
+
+        # Check: does another brain already have a signal at the same timestamp?
+        # This detects shadow evaluator brain_id assignment bugs (BTC identity leak).
+        for _existing_sid, _existing_sig in self._pending.items():
+            if _existing_sig.get("brain_id") != brain_id:
+                _existing_ts = _existing_sid.rsplit("_", 1)[-1]
+                if abs(float(_existing_ts) - _ts) < 0.01 and _existing_sig.get("entry_price") == _entry_price_f:
+                    import logging as _dup_log
+                    _dup_log.getLogger(__name__).warning(
+                        "[IDENTITY_LEAK] PnL record_signal: brain=%s has same entry_price=%.2f "
+                        "as brain=%s at t=%.3f — possible identity leak in shadow evaluator",
+                        brain_id, _entry_price_f, _existing_sig["brain_id"], _ts,
+                    )
+
         self._pending[signal_id] = {
             "signal_id": signal_id,
             "brain_id": brain_id,
