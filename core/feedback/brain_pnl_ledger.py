@@ -215,11 +215,11 @@ class BrainPnLStore:
         # ── FIX-20260611-021: Event Sourcing — dual-write signal recorded ──
         if self._event_writer is not None:
             try:
-                from core.contracts.events import DataSource, PnLEvent
+                from core.contracts.events import PnLEvent
 
                 _event = PnLEvent(
                     timestamp=datetime.now(UTC),
-                    source=DataSource.LIVE,
+                    source=self._event_source,
                     event_type="SignalRecorded",
                     brain_id=brain_id,
                     symbol=symbol,
@@ -419,14 +419,14 @@ class BrainPnLStore:
         # ── FIX-20260611-021: Event Sourcing — dual-write to event stream ──
         if self._event_writer is not None:
             try:
-                from core.contracts.events import DataSource, PnLEvent
+                from core.contracts.events import PnLEvent
 
                 _settled_at = (
                     outcome.get("close_time") or datetime.now(UTC).replace(tzinfo=None).isoformat()
                 )
                 _event = PnLEvent(
                     timestamp=datetime.now(UTC),
-                    source=DataSource.LIVE,
+                    source=self._event_source,
                     event_type="SignalSettled",
                     brain_id=brain_id,
                     symbol=entry.get("symbol", ""),
@@ -532,7 +532,12 @@ class BrainPnLStore:
     _running_trade_count: int
     _current_date: str
 
-    def __init__(self, window_size: int = 100, event_writer: Any = None) -> None:
+    def __init__(
+        self,
+        window_size: int = 100,
+        event_writer: Any = None,
+        event_source: str = "live",
+    ) -> None:
         self._window_size = window_size
         self._pending: dict[str, dict[str, Any]] = {}
         self._settled: dict[str, list[dict[str, Any]]] = {}
@@ -547,6 +552,7 @@ class BrainPnLStore:
         self._current_date = ""
         # ── FIX-20260611-021: Event Sourcing — optional dual-write hook ──
         self._event_writer: Any = event_writer  # EventWriter | None
+        self._event_source: str = event_source  # "live" | "shadow"
 
     @staticmethod
     def _assess_health(
@@ -786,12 +792,16 @@ class BrainPnLStore:
         return p
 
     @classmethod
-    def load(cls, path: str | Path, event_writer: Any = None) -> BrainPnLStore:
+    def load(cls, path: str | Path, event_writer: Any = None, event_source: str = "live") -> BrainPnLStore:
         p = Path(path)
         if not p.exists():
-            return cls(event_writer=event_writer)
+            return cls(event_writer=event_writer, event_source=event_source)
         data = json.loads(p.read_text(encoding="utf-8"))
-        store = cls(window_size=data.get("window_size", 100), event_writer=event_writer)
+        store = cls(
+            window_size=data.get("window_size", 100),
+            event_writer=event_writer,
+            event_source=event_source,
+        )
         store._pending = data.get("pending", {})
         store._settled = data.get("settled", {})
         # ── FIX-20260603-065 P1: hydrate in-memory accumulators from disk ──

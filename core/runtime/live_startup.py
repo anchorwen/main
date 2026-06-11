@@ -292,7 +292,21 @@ def check_single_brain_governance(brain_id: str, base_dir: str) -> dict[str, Any
 
 
 def inject_performance_metrics(pnl_store: Any, base_dir: str) -> None:
-    """Inject per-brain performance metrics into governance state every cycle."""
+    """Inject per-brain performance metrics into governance state every cycle.
+
+    FIX-20260611-020: GOVERNANCE_MANUAL_MODE guard — PnP ledger metrics are
+    counterfactual (backtest/shadow), not live performance.  Injection is
+    disabled while manual governance whitelist is active.
+    """
+    # ── FIX-20260611-020: Skip injection in manual governance mode ──
+    # The governance_state performance_metrics should come from
+    # brain_performance.json (live tracking), NOT brain_pnl_ledger.json
+    # (counterfactual PnL).  Manual mode prevents backtest data from
+    # poisoning governance decisions.
+    _GOVERNANCE_SKIP_INJECTION = True  # Set False after record contamination fixed
+    if _GOVERNANCE_SKIP_INJECTION:
+        return
+
     from pathlib import Path as _P
 
     _gov_path = _P(base_dir) / "governance_state.json"

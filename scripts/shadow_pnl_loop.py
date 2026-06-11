@@ -306,20 +306,25 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     # ── PnL Ledger ──
+    # ── FIX-20260611-021: Event Sourcing — shadow events with source="shadow" ──
+    from core.data.event_writer import get_event_writer
+
+    _shadow_event_writer = get_event_writer(str(base_dir))
+
     pnl_path = (
         Path(args.pnl_ledger_path) if args.pnl_ledger_path else (base_dir / "brain_pnl_ledger.json")
     )
     if pnl_path.exists():
         try:
-            pnl_ledger = BrainPnLStore.load(pnl_path)
+            pnl_ledger = BrainPnLStore.load(pnl_path, event_writer=_shadow_event_writer, event_source="shadow")
             print(
                 f"[shadow_pnl] PnL ledger loaded: {pnl_ledger.total_settled} settled, {pnl_ledger.pending_count} pending",
                 flush=True,
             )
         except Exception:  # noqa: BLE001
-            pnl_ledger = BrainPnLStore(window_size=5000)
+            pnl_ledger = BrainPnLStore(window_size=5000, event_writer=_shadow_event_writer, event_source="shadow")
     else:
-        pnl_ledger = BrainPnLStore(window_size=5000)
+        pnl_ledger = BrainPnLStore(window_size=5000, event_writer=_shadow_event_writer, event_source="shadow")
 
     # ── Governance filter: skip retired brains when recording PnL ──
     retired_ids: set[str] = set()
