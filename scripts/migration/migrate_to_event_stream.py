@@ -51,22 +51,42 @@ def migrate_ledger(
     with open(ledger_path, encoding="utf-8") as fh:
         ledger = json.load(fh)
 
-    settled = ledger.get("settled", [])
-    if not settled:
+    settled_raw = ledger.get("settled", {})
+    if isinstance(settled_raw, list):
+        # Old format: flat list
+        settled_list = settled_raw
+    elif isinstance(settled_raw, dict):
+        # Current format: {brain_id: [entries]}
+        settled_list = []
+        for brain_entries in settled_raw.values():
+            if isinstance(brain_entries, list):
+                settled_list.extend(brain_entries)
+    else:
+        settled_list = []
+
+    if not settled_list:
         print(f"[SKIP] {ledger_path}: 0 settled entries")
         return 0
 
     written = 0
     skipped = 0
 
-    for entry in settled:
+    for entry in settled_list:
         try:
-            # Parse timestamp
-            ts_str = entry.get("settled_at") or entry.get("entry_time") or ""
+            # Parse timestamp — try multiple field names
+            ts_str = (
+                entry.get("close_time")
+                or entry.get("settled_at")
+                or entry.get("entry_time")
+                or ""
+            )
             try:
                 timestamp = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
             except (ValueError, AttributeError):
                 timestamp = datetime.now(UTC)
+
+            # PnL: try pnl_r first, then pnl_per_unit, then 0
+            pnl_val = entry.get("pnl_r") or entry.get("pnl_per_unit") or 0
 
             event = PnLEvent(
                 timestamp=timestamp,
@@ -76,8 +96,8 @@ def migrate_ledger(
                 symbol=entry.get("symbol", symbol),
                 direction=entry.get("direction"),
                 entry_price=entry.get("entry_price"),
-                exit_price=entry.get("exit_price"),
-                pnl_r=float(entry.get("pnl_r", 0) or 0),
+                exit_price=entry.get("close_price") or entry.get("exit_price"),
+                pnl_r=float(pnl_val),
                 confidence=float(entry.get("confidence", 0.5) or 0.5),
                 position_ticket=entry.get("position_ticket"),
                 generated_by="migration_script.v1",
@@ -125,8 +145,16 @@ def main() -> None:
             if ledger_path.exists():
                 with open(ledger_path, encoding="utf-8") as fh:
                     ledger = json.load(fh)
-                settled = ledger.get("settled", [])
-                print(f"[DRY-RUN] {ledger_path}: would migrate {len(settled)} entries")
+                settled_raw = ledger.get("settled", {})
+                if isinstance(settled_raw, list):
+                    total = len(settled_raw)
+                elif isinstance(settled_raw, dict):
+                    total = sum(
+                        len(v) for v in settled_raw.values() if isinstance(v, list)
+                    )
+                else:
+                    total = 0
+                print(f"[DRY-RUN] {ledger_path}: would migrate {total} entries")
             else:
                 print(f"[DRY-RUN] {ledger_path}: not found")
         else:
