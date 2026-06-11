@@ -138,11 +138,15 @@ def print_report(result: dict) -> int:
 
     for brain_id, info in sorted(result["brains"].items()):
         status = info["status"]
-        if status == "PASS":
-            old_t = info["old_trades"]
-            new_t = info["new_trades"]
-            wr_delta = info["new_wr"] - info["old_wr"]
-            pnl_delta = info["new_pnl"] - info["old_pnl"]
+        if status in ("PASS", "MISMATCH"):
+            old_t = info.get("old_trades", 0)
+            new_t = info.get("new_trades", 0)
+            old_wr = info.get("old_wr", 0)
+            new_wr = info.get("new_wr", 0)
+            old_pnl = info.get("old_pnl", 0)
+            new_pnl = info.get("new_pnl", 0)
+            wr_delta = new_wr - old_wr
+            pnl_delta = new_pnl - old_pnl
             print(
                 f"{brain_id:<40} {status:<10} {old_t:>6} {new_t:>6} "
                 f"{wr_delta:>+8.4f} {pnl_delta:>+10.2f}"
