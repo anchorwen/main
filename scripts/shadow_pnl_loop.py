@@ -311,20 +311,45 @@ def main(argv: list[str] | None = None) -> int:
 
     _shadow_event_writer = get_event_writer(str(base_dir))
 
-    pnl_path = (
-        Path(args.pnl_ledger_path) if args.pnl_ledger_path else (base_dir / "brain_pnl_ledger.json")
-    )
-    if pnl_path.exists():
+    # ── FIX-20260611-022: Event stream as primary recovery source ──
+    _stream_path = base_dir / "ledger_events.jsonl"
+    _loaded_from = "none"
+    pnl_ledger = None
+
+    if _stream_path.exists():
         try:
-            pnl_ledger = BrainPnLStore.load(pnl_path, event_writer=_shadow_event_writer, event_source="shadow")
-            print(
-                f"[shadow_pnl] PnL ledger loaded: {pnl_ledger.total_settled} settled, {pnl_ledger.pending_count} pending",
-                flush=True,
+            pnl_ledger = BrainPnLStore.load_from_stream(
+                _stream_path, event_writer=_shadow_event_writer, event_source="shadow"
             )
+            _loaded_from = "event_stream"
         except Exception:  # noqa: BLE001
-            pnl_ledger = BrainPnLStore(window_size=5000, event_writer=_shadow_event_writer, event_source="shadow")
-    else:
-        pnl_ledger = BrainPnLStore(window_size=5000, event_writer=_shadow_event_writer, event_source="shadow")
+            pass
+
+    if pnl_ledger is None:
+        pnl_path = (
+            Path(args.pnl_ledger_path)
+            if args.pnl_ledger_path
+            else (base_dir / "brain_pnl_ledger.json")
+        )
+        if pnl_path.exists():
+            try:
+                pnl_ledger = BrainPnLStore.load(
+                    pnl_path, event_writer=_shadow_event_writer, event_source="shadow"
+                )
+                _loaded_from = "old_json"
+            except Exception:  # noqa: BLE001
+                pass
+
+    if pnl_ledger is None:
+        pnl_ledger = BrainPnLStore(
+            window_size=5000, event_writer=_shadow_event_writer, event_source="shadow"
+        )
+        _loaded_from = "fresh"
+
+    print(
+        f"[shadow_pnl] PnL ledger loaded: {pnl_ledger.total_settled} settled, {pnl_ledger.pending_count} pending (from={_loaded_from})",
+        flush=True,
+    )
 
     # ── Governance filter: skip retired brains when recording PnL ──
     retired_ids: set[str] = set()

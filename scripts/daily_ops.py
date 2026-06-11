@@ -147,17 +147,26 @@ def _load_or_create_pnl_store(base_dir: str) -> Any:
     from consensus-round attribution), the PnL ledger records per-brain
     signals independently — no cross-brain contamination.
     """
+    from core.feedback.brain_pnl_ledger import BrainPnLStore
+
+    # 1. Try event stream first (FIX-20260611-022)
+    stream_path = Path(base_dir) / "ledger_events.jsonl"
+    if stream_path.exists():
+        try:
+            return BrainPnLStore.load_from_stream(stream_path)
+        except Exception:  # noqa: BLE001
+            pass
+
+    # 2. Fall back to old JSON
     ledger_path = Path(base_dir) / "brain_pnl_ledger.json"
     try:
-        from core.feedback.brain_pnl_ledger import BrainPnLStore
-
         if ledger_path.exists():
             return BrainPnLStore.load(ledger_path)
-        return BrainPnLStore()
     except Exception:  # noqa: BLE001
-        from core.feedback.brain_pnl_ledger import BrainPnLStore
+        pass
 
-        return BrainPnLStore()
+    # 3. Fresh store
+    return BrainPnLStore()
 
 
 def _step_label_builder(
@@ -625,6 +634,7 @@ def _step_retraining_check(
                     try:
                         from core.brains.brain_registry import load_brain_registry
                         from core.brains.services.dynamic_brain_weighter import DynamicBrainWeighter
+
                         _perf_path = base / "brain_performance.json"
                         if _perf_path.exists():
                             _registry = load_brain_registry(base_dir=str(base))
@@ -1127,7 +1137,9 @@ def _step_data_health(
                 "warn_count": sum(1 for s in report.sources if s.status.value == "warn"),
                 "fail_count": sum(1 for s in report.sources if s.status.value == "fail"),
                 "missing_count": sum(1 for s in report.sources if s.status.value == "missing"),
-                "cross_check_warnings": sum(1 for c in report.cross_checks if c.status.value != "pass"),
+                "cross_check_warnings": sum(
+                    1 for c in report.cross_checks if c.status.value != "pass"
+                ),
                 "orphan_count": len(report.orphans),
                 "primary_codes": report.primary_codes,
                 "alert_context": ctx,
@@ -1435,9 +1447,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--skip-fs-maintenance", action="store_true", help="Skip feature store maintenance"
     )
-    p.add_argument(
-        "--skip-data-health", action="store_true", help="Skip data health monitoring"
-    )
+    p.add_argument("--skip-data-health", action="store_true", help="Skip data health monitoring")
     p.add_argument("--output", type=Path, default=None, help="Write combined report JSON to file")
     p.add_argument(
         "--mt5-terminal-path", default=None, help="MT5 terminal64.exe path for P&L snapshot"

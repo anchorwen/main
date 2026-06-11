@@ -527,6 +527,8 @@ FIX-YYYYMMDD-NNN
 | FIX-20260611-021 | 2026-06-11 | data_infrastructure | Bug fixes: UUID ordering (line-based checkpoint) + checkpoint key mismatch (_ensure_brain_state). Both found by Hypothesis PBT. | RC-06 |
 | FIX-20260611-021 | 2026-06-11 | feedback_pnl | Activate dual-write: BrainPnLStore.load() + constructor accept event_writer parameter for EventWriter injection. | RC-06 |
 | FIX-20260611-021 | 2026-06-11 | runtime_live | Activate dual-write: live_intent_loop injects get_event_writer() into BrainPnLStore at all 3 initialization sites. | RC-06 |
+| FIX-20260611-022 | 2026-06-11 | runtime_live | Consumer migration: daily_ops.py _load_or_create_pnl_store() now tries load_from_stream() first, falls back to old JSON. | RC-06 |
+| FIX-20260611-022 | 2026-06-11 | feedback_pnl | Consumer migration: shadow_pnl_loop startup now tries load_from_stream() first, falls back to old JSON. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2162,6 +2164,30 @@ FIX-YYYYMMDD-NNN
 - **Module**: runtime_live
 - **Files**: scripts/live_intent_loop.py
 - **Description**: Activate dual-write: live_intent_loop injects get_event_writer() into BrainPnLStore at all 3 initialization sites.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260611-022
+- **Date**: 2026-06-11
+- **Author**: cursor-agent
+- **Commit**: b106eb2
+- **Type**: feat
+- **Module**: runtime_live
+- **Files**: scripts/daily_ops.py
+- **Description**: Consumer migration: daily_ops.py _load_or_create_pnl_store() now tries load_from_stream() first, falls back to old JSON.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260611-022
+- **Date**: 2026-06-11
+- **Author**: cursor-agent
+- **Commit**: b106eb2
+- **Type**: feat
+- **Module**: feedback_pnl
+- **Files**: scripts/shadow_pnl_loop.py
+- **Description**: Consumer migration: shadow_pnl_loop startup now tries load_from_stream() first, falls back to old JSON.
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
