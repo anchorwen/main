@@ -801,25 +801,48 @@ def main(argv: list[str] | None = None) -> int:
     _event_writer = get_event_writer(args.base_dir)
 
     pnl_ledger_path = Path(args.base_dir) / "brain_pnl_ledger.json"
+    _stream_path = Path(args.base_dir) / "ledger_events.jsonl"
     pnl_ledger: Any = None
-    try:
-        pnl_ledger = BrainPnLStore.load(pnl_ledger_path, event_writer=_event_writer)
-        print(
-            json.dumps(
-                {
-                    "event": "pnl_ledger_loaded",
-                    "time": _utc_iso(),
-                    "settled_count": pnl_ledger.total_settled,
-                    "pending_count": pnl_ledger.pending_count,
-                    "brain_ids": pnl_ledger.brain_ids,
-                    "event_writer": "active",
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
-    except Exception:  # noqa: BLE001
+
+    # ── FIX-20260611-022: Event stream is primary recovery source ──
+    # Try load_from_stream() first (immutable, crash-safe).
+    # Fall back to old JSON load() for backward compat.
+    _loaded_from = "none"
+    if _stream_path.exists():
+        try:
+            pnl_ledger = BrainPnLStore.load_from_stream(
+                _stream_path, event_writer=_event_writer
+            )
+            _loaded_from = "event_stream"
+        except Exception:  # noqa: BLE001
+            pass
+
+    if pnl_ledger is None and pnl_ledger_path.exists():
+        try:
+            pnl_ledger = BrainPnLStore.load(pnl_ledger_path, event_writer=_event_writer)
+            _loaded_from = "old_json"
+        except Exception:  # noqa: BLE001
+            pass
+
+    if pnl_ledger is None:
         pnl_ledger = BrainPnLStore(window_size=100, event_writer=_event_writer)
+        _loaded_from = "fresh"
+
+    print(
+        json.dumps(
+            {
+                "event": "pnl_ledger_loaded",
+                "time": _utc_iso(),
+                "settled_count": pnl_ledger.total_settled,
+                "pending_count": pnl_ledger.pending_count,
+                "brain_ids": pnl_ledger.brain_ids,
+                "event_writer": "active",
+                "loaded_from": _loaded_from,
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
 
     # ── Load open positions from journal ──
     _journal_path = Path(args.base_dir) / "live_trade_journal.jsonl"
