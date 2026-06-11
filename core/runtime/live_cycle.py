@@ -4965,115 +4965,29 @@ def execute_live_cycle(
             from core.execution.live_order_sender import dispatch_live_open_order
 
             # 陷阱三: net-out close orders intercepted at upper layer for Watchdog wrapping
+            # Strangler Fig extraction: handle_net_out_close() in net_out_close_handler.py
             _net_out_close_dispatch_fn = None
             if exit_watchdog is not None:
-                from core.execution.live_order_sender import dispatch_live_order as _net_dispatch
+                from core.execution.net_out_close_handler import handle_net_out_close
 
                 def _net_out_close_dispatch_fn(payload: dict) -> dict:
-                    _ticket = payload.get("position_ticket", 0)
-                    _vol = payload.get("volume", 0.01)
-                    _side = payload.get("side", "long")
-                    _reason = payload.get("comment", "net_out")
-                    _magic = payload.get("magic", 0)
-                    _brain_ids = payload.get("brain_ids")
-                    # ── Phase 2: cross-cycle exit retry cooldown ──
-                    # If this position has been rejected ≥3 consecutive
-                    # cycles, skip the exit attempt for 10 cycles to
-                    # prevent retry storms (DQAF-20260606-005).
-                    import time as _cooldown_time
-
-                    _now_ts = _cooldown_time.time()
-                    _cd_until = state._exit_reject_cooldown.get(int(_ticket), 0.0)
-                    if _now_ts < _cd_until:
-                        _remaining = int(_cd_until - _now_ts)
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "exit_cooldown_skipped",
-                                    "time": _utc_iso(),
-                                    "ticket": _ticket,
-                                    "reason": _reason,
-                                    "cooldown_remaining_s": _remaining,
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-                        return {
-                            "dispatched": False,
-                            "intent_id": "",
-                            "reason": "exit_cooldown_active",
-                        }
-                    # Calculate estimated PnL for journal recording
-                    _net_pnl = payload.get("pnl")
-                    if _net_pnl is None and mid_price is not None and _ticket:
-                        _net_entry = state.known_open_tickets.get(_ticket, {})
-                        _net_ep = _net_entry.get("entry_price")
-                        if not _net_ep:
-                            _net_ep = _net_entry.get("detail", {}).get("request", {}).get("price")
-                        if _net_ep and _vol:
-                            if _side == "long":
-                                _net_pnl = round((mid_price - float(_net_ep)) * _vol, 2)
-                            elif _side == "short":
-                                _net_pnl = round((float(_net_ep) - mid_price) * _vol, 2)
-                    _wd = exit_watchdog.execute_exit(
-                        position_ticket=_ticket,
-                        volume=_vol,
-                        side=_side,
-                        reason=_reason,
-                        magic=_magic,
-                        dispatch_fn=lambda p: _net_dispatch(
+                    _result, state._exit_reject_streak, state._exit_reject_cooldown = (
+                        handle_net_out_close(
+                            payload=payload,
+                            exit_reject_streak=state._exit_reject_streak,
+                            exit_reject_cooldown=state._exit_reject_cooldown,
+                            known_open_tickets=state.known_open_tickets,
+                            mid_price=mid_price,
+                            exit_watchdog=exit_watchdog,
                             base_dir=config.base_dir,
-                            broker=None,
                             symbol=config.symbol,
-                            execution_payload=p,
-                            skip_price_guard=True,
                             ignore_protection_flag=config.ignore_protection_flag,
                             protection_flag_path=config.protection_flag_path,
-                            adapter_name="mt5",
-                            extensions={"mt5_terminal_path": config.mt5_terminal_path},
-                        ),
-                        brain_ids=_brain_ids,
-                        pnl=_net_pnl,
+                            mt5_terminal_path=config.mt5_terminal_path,
+                            utc_iso_fn=_utc_iso,
+                        )
                     )
-                    # ── Phase 2: update reject streak / cooldown ──
-                    _tkt_key = int(_ticket)
-                    if _wd.success:
-                        state._exit_reject_streak.pop(_tkt_key, None)
-                        state._exit_reject_cooldown.pop(_tkt_key, None)
-                    else:
-                        _streak = state._exit_reject_streak.get(_tkt_key, 0) + 1
-                        state._exit_reject_streak[_tkt_key] = _streak
-                        if _streak >= 3:
-                            _cooldown_s = 300  # 10 cycles × 30s
-                            _cd_deadline = _now_ts + _cooldown_s
-                            state._exit_reject_cooldown[_tkt_key] = _cd_deadline
-                            print(
-                                json.dumps(
-                                    {
-                                        "event": "exit_cooldown_activated",
-                                        "time": _utc_iso(),
-                                        "ticket": _ticket,
-                                        "consecutive_rejects": _streak,
-                                        "cooldown_seconds": _cooldown_s,
-                                        "message": (
-                                            "Position exit has been rejected "
-                                            f"{_streak} times consecutively. "
-                                            "Cooling down for 10 cycles to "
-                                            "prevent retry storm."
-                                        ),
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                                flush=True,
-                            )
-                    return {
-                        "dispatched": _wd.success,
-                        "intent_id": "",
-                        "pnl": _net_pnl,  # FIX-138-Phase3: pass PnL through to notify_trade
-                    }
-
-                _net_out_close_dispatch_fn = _net_out_close_dispatch_fn
+                    return _result
 
             dispatch_results = exec_queue.flush(
                 partial(dispatch_live_open_order, entry_context=_entry_features_snapshot),
