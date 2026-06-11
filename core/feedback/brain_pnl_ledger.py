@@ -786,12 +786,12 @@ class BrainPnLStore:
         return p
 
     @classmethod
-    def load(cls, path: str | Path) -> BrainPnLStore:
+    def load(cls, path: str | Path, event_writer: Any = None) -> BrainPnLStore:
         p = Path(path)
         if not p.exists():
-            return cls()
+            return cls(event_writer=event_writer)
         data = json.loads(p.read_text(encoding="utf-8"))
-        store = cls(window_size=data.get("window_size", 100))
+        store = cls(window_size=data.get("window_size", 100), event_writer=event_writer)
         store._pending = data.get("pending", {})
         store._settled = data.get("settled", {})
         # ── FIX-20260603-065 P1: hydrate in-memory accumulators from disk ──

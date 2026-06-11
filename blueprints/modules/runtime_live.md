@@ -76,6 +76,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260611-021 | 2026-06-11 | cursor-agent | 49610cd | Activate dual-write: live_intent_loop injects get_event_writer() into BrainPnLStore at all 3 initialization sites. | contract-violation |
 | FIX-20260611-020 | 2026-06-11 | cursor-agent | 331f996 | Fail-Closed SL/TP assertion (strategy_evaluator.py) + mypy type fix (live_intent_loop.py: iterate _decisions not _applied). See execution-guards blueprint for governance manual whitelist details. | contract-violation |
 | FIX-20260611-019 | 2026-06-11 | cursor-agent | — | **Strangler Fig Phase 1: net_out close handler extraction**: ``_net_out_close_dispatch_fn`` inline closure (L4967-5076, 86 lines) → ``core/execution/net_out_close_handler.py`` (152 lines). Pure function contract: receives cooldown state explicitly, returns mutations. ``live_cycle.py``: 5774→5688 (-86). FIX-018 continuation. | RC-08 |
 | FIX-20260611-018 | 2026-06-11 | cursor-agent | — | **LEGACY dispatch死代码切除**: FIX-20260610-010 已通过 `direction="neutral"` 闸门使 Phase 10 dispatch 不可达(L5752-L6317, 567行). 死代码归档至 `legacy_dispatch_reference.py`. `live_cycle.py`: 6341→5774 (-567, -8.9%). BLE001: 45→34 (-11). Iron Law #10 存量表修正: 29→94. DQAF-20260611-018. | RC-08 |

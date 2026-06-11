@@ -794,12 +794,16 @@ def main(argv: list[str] | None = None) -> int:
         tracker = BrainPerformanceTracker(window_size=100)
 
     # ── Initialize P&L ledger ──
+    from core.data.event_writer import get_event_writer
     from core.feedback.brain_pnl_ledger import BrainPnLStore
+
+    # ── FIX-20260611-021: Event Sourcing — activate dual-write ──
+    _event_writer = get_event_writer(args.base_dir)
 
     pnl_ledger_path = Path(args.base_dir) / "brain_pnl_ledger.json"
     pnl_ledger: Any = None
     try:
-        pnl_ledger = BrainPnLStore.load(pnl_ledger_path)
+        pnl_ledger = BrainPnLStore.load(pnl_ledger_path, event_writer=_event_writer)
         print(
             json.dumps(
                 {
@@ -808,13 +812,14 @@ def main(argv: list[str] | None = None) -> int:
                     "settled_count": pnl_ledger.total_settled,
                     "pending_count": pnl_ledger.pending_count,
                     "brain_ids": pnl_ledger.brain_ids,
+                    "event_writer": "active",
                 },
                 ensure_ascii=False,
             ),
             flush=True,
         )
     except Exception:  # noqa: BLE001
-        pnl_ledger = BrainPnLStore(window_size=100)
+        pnl_ledger = BrainPnLStore(window_size=100, event_writer=_event_writer)
 
     # ── Load open positions from journal ──
     _journal_path = Path(args.base_dir) / "live_trade_journal.jsonl"
@@ -2094,7 +2099,7 @@ def main(argv: list[str] | None = None) -> int:
                     _pnl_path = Path(args.base_dir) / "brain_pnl_ledger.json"
                     _gov_path = Path(args.base_dir) / "governance_state.json"
                     if _pnl_path.exists() and _gov_path.exists():
-                        _pnl_store = BrainPnLStore.load(str(_pnl_path))
+                        _pnl_store = BrainPnLStore.load(str(_pnl_path), event_writer=_event_writer)
                         _all_metrics = _pnl_store.get_all_metrics()
 
                         # Load brain_states from governance

@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-11T11:23:48Z
+> **自动生成**: 2026-06-11T11:40:47Z
 > **扫描模块数**: 521
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -109,7 +109,7 @@
 |------|------|----|------|------|------|------|
 | `domain_keys.py` | 📄 config | — | 0 | 979 | — | |
 | `enums.py` | ✅ active | BrainRole, BrainStatus, DecisionAction, DecisionSide, RiskDecisionStatus, SystemMode, OverrideStatus, CommunicationMessageType, CommunicationPriority, DispatchStatus, ReplayGateDecision, ExecutionEventType, ReconciliationStatus | 0 | 109 | — | |
-| `events.py` | ✅ active | DataSource, EventType, PnLEvent, GovernanceTransitionEvent | 0 | 168 | — | |
+| `events.py` | ✅ active | DataSource, EventType, PnLEvent, GovernanceTransitionEvent | 0 | 169 | — | |
 | `exceptions.py` | ✅ active | DomainError, RiskError, RiskPolicyViolation, GovernanceError, InvalidTransitionError, BrainNotFoundError, ExecutionError, OrderNotFoundError, DuplicateOrderError, ProtocolError, DispatchError, IdempotencyError, ConfigurationError, ContractViolationError | 9 | 136 | — | |
 | `ids.py` | ✅ active | — | 14 | 57 | — | |
 | `position_events.py` | ✅ active | PositionClosed, PositionOpened | 2 | 140 | — | |
@@ -154,7 +154,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `event_writer.py` | ✅ active | EventWriter | 9 | 128 | — | |
-| `projections.py` | ✅ active | — | 6 | 237 | — | |
+| `projections.py` | ✅ active | — | 7 | 271 | — | |
 
 ## core/deployment
 
@@ -583,7 +583,7 @@
 | `brain.py` | ✅ active | — | 12 | 734 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 7 | 309 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 587 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 591 | — | |
 | `check_preconditions.py` | ✅ active | — | 12 | 429 | — | |
 | `ci_prepare_v9_shadow_fixtures.py` | ✅ active | — | 2 | 180 | — | |
 | `classify_ble001.py` | ✅ active | — | 1 | 63 | — | |
@@ -604,7 +604,7 @@
 | `live_data_quality_report.py` | ✅ active | — | 13 | 369 | — | |
 | `live_dispatch_policy.py` | ✅ active | — | 10 | 316 | — | |
 | `live_feature_quality_report.py` | ✅ active | — | 6 | 212 | — | |
-| `live_intent_loop.py` | ✅ active | — | 6 | 2475 | — | |
+| `live_intent_loop.py` | ✅ active | — | 6 | 2480 | — | |
 | `live_launcher.py` | ✅ active | — | 13 | 831 | — | |
 | `live_micro_rollout_gate.py` | ✅ active | — | 5 | 138 | — | |
 | `live_monitor.py` | ✅ active | — | 12 | 484 | — | |

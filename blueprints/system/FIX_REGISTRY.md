@@ -524,6 +524,9 @@ FIX-YYYYMMDD-NNN
 | FIX-20260611-020 | 2026-06-11 | deployment_config | Governance Manual Whitelist: _GOVERNANCE_MANUAL_MODE=True disables PnP-ledger→governance injection and automatic execute_transitions. Decisions logged via emit_brain_alert for human review. | RC-06 |
 | FIX-20260611-021 | 2026-06-11 | feedback_pnl | Event Sourcing Foundation: Optional EventWriter hook in BrainPnLStore (dual-write to ledger_events.jsonl). Zero-risk transition — hook is None by default. | RC-06 |
 | FIX-20260611-021 | 2026-06-11 | contracts_domain | Event Sourcing Foundation: PnLEvent + GovernanceTransitionEvent Pydantic models with extra=forbid, frozen=True, allow_inf_nan=False. | RC-06 |
+| FIX-20260611-021 | 2026-06-11 | data_infrastructure | Bug fixes: UUID ordering (line-based checkpoint) + checkpoint key mismatch (_ensure_brain_state). Both found by Hypothesis PBT. | RC-06 |
+| FIX-20260611-021 | 2026-06-11 | feedback_pnl | Activate dual-write: BrainPnLStore.load() + constructor accept event_writer parameter for EventWriter injection. | RC-06 |
+| FIX-20260611-021 | 2026-06-11 | runtime_live | Activate dual-write: live_intent_loop injects get_event_writer() into BrainPnLStore at all 3 initialization sites. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2123,6 +2126,42 @@ FIX-YYYYMMDD-NNN
 - **Module**: contracts_domain
 - **Files**: core/contracts/events.py
 - **Description**: Event Sourcing Foundation: PnLEvent + GovernanceTransitionEvent Pydantic models with extra=forbid, frozen=True, allow_inf_nan=False.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260611-021
+- **Date**: 2026-06-11
+- **Author**: cursor-agent
+- **Commit**: 49610cd
+- **Type**: fix
+- **Module**: data_infrastructure
+- **Files**: core/data/projections.py
+- **Description**: Bug fixes: UUID ordering (line-based checkpoint) + checkpoint key mismatch (_ensure_brain_state). Both found by Hypothesis PBT.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260611-021
+- **Date**: 2026-06-11
+- **Author**: cursor-agent
+- **Commit**: 49610cd
+- **Type**: feat
+- **Module**: feedback_pnl
+- **Files**: core/feedback/brain_pnl_ledger.py
+- **Description**: Activate dual-write: BrainPnLStore.load() + constructor accept event_writer parameter for EventWriter injection.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260611-021
+- **Date**: 2026-06-11
+- **Author**: cursor-agent
+- **Commit**: 49610cd
+- **Type**: feat
+- **Module**: runtime_live
+- **Files**: scripts/live_intent_loop.py
+- **Description**: Activate dual-write: live_intent_loop injects get_event_writer() into BrainPnLStore at all 3 initialization sites.
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)

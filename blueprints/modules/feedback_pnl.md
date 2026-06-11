@@ -35,6 +35,7 @@ cycle N+H:   settle_all(mid_price)  → only ttl=0 settled at horizon bar
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260611-021 | 2026-06-11 | cursor-agent | 49610cd | Activate dual-write: BrainPnLStore.load() + constructor accept event_writer parameter for EventWriter injection. | contract-violation |
 | FIX-20260611-021 | 2026-06-11 | cursor-agent | 520b371 | Event Sourcing Foundation: Optional EventWriter hook in BrainPnLStore (dual-write to ledger_events.jsonl). Zero-risk transition — hook is None by default. | contract-violation |
 | FIX-20260604-077 | 2026-06-04 | cursor-agent | — | **PnL ledger every-cycle save**: moved `pnl_ledger.save()` outside 60-cycle block. Recent trades (and their p_win impact) no longer lost on crash/restart. | RC-03 |
 | FIX-20260530-081 | 2026-05-30 | cursor-agent | — | PnL ledger retention: added `retention_prune(retention_days=90)` to `BrainPnLStore`. Called nightly from `daily_ops.py` after SSOT reconcile. Removes entries older than 90 days to prevent hot ledger unbounded growth. Returns per-brain prune counts for audit log. | RC-08 (incomplete-cleanup) |

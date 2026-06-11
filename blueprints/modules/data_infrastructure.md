@@ -11,4 +11,5 @@ Immutable event stream infrastructure (FIX-20260611-021). Replaces mutable JSON 
 
 ## Fix History
 
+| FIX-20260611-021 | 2026-06-11 | cursor-agent | 49610cd | Bug fixes: UUID ordering (line-based checkpoint) + checkpoint key mismatch (_ensure_brain_state). Both found by Hypothesis PBT. | contract-violation |
 | FIX-20260611-021 | 2026-06-11 | cursor-agent | — | **Event Sourcing Foundation**: Append-only event stream architecture. Contracts (Pydantic extra=forbid), Unified Writer (threading.Lock), Migration (source=migration tag), Projection Engine (checkpoint + incremental replay), Dual-Write Hook (opt-in EventWriter in BrainPnLStore). | RC-06 |

@@ -14,6 +14,9 @@ data/
 # Exception: core/data/ is source code (event stream infrastructure)
 !core/data/
 
+# Exception: tests/data/ is test code (PBT tests)
+!tests/data/
+
 提示词.txt
 data/raw/
 data/snapshots/

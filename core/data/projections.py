@@ -52,6 +52,28 @@ def _init_brain_state() -> dict[str, Any]:
     }
 
 
+def _ensure_brain_state(state: dict[str, Any], brain_id: str) -> dict[str, Any]:
+    """Get or create a brain accumulator with ALL required keys.
+
+    This is needed because checkpoint-restored state may use the derived
+    metrics format (win_rate, profit_factor, ...) rather than the raw
+    accumulator format (wins, losses, cumulative_pnl_r, ...).
+
+    Missing keys are filled from _init_brain_state() defaults.
+    """
+    if brain_id not in state:
+        state[brain_id] = _init_brain_state()
+        return state[brain_id]
+
+    bs = state[brain_id]
+    # Fill in any missing keys (checkpoint may have derived format)
+    defaults = _init_brain_state()
+    for key, default_val in defaults.items():
+        if key not in bs:
+            bs[key] = default_val
+    return bs
+
+
 def _apply_event(state: dict[str, Any], event: PnLEvent) -> None:
     """Apply a single PnLEvent to the governance state accumulator.
 
@@ -59,7 +81,7 @@ def _apply_event(state: dict[str, Any], event: PnLEvent) -> None:
     the accumulator dict and this function is purely mechanical.
     """
     brain_id = event.brain_id
-    bs = state.setdefault(brain_id, _init_brain_state())
+    bs = _ensure_brain_state(state, brain_id)
 
     bs["total_trades"] += 1
     if event.pnl_r > 0:
@@ -155,13 +177,13 @@ def project_governance_state(
         source_filter = {DataSource.LIVE}
 
     state: dict[str, Any] = {}
-    last_event_id: str | None = None
+    processed_lines: int = 0  # Line-based checkpoint (events are single-line)
 
     # ── Load checkpoint if available ──
     if checkpoint_path and checkpoint_path.exists():
         try:
             ck = json.loads(checkpoint_path.read_text(encoding="utf-8"))
-            last_event_id = ck.pop("_checkpoint_event_id", None)
+            processed_lines = ck.pop("_checkpoint_lines", 0)
             # Restore raw accumulators from checkpoint
             for bid, bs in ck.items():
                 if isinstance(bs, dict):
@@ -172,7 +194,13 @@ def project_governance_state(
     # ── Replay events after checkpoint ──
     if events_path.exists():
         with open(events_path, encoding="utf-8") as fh:
-            for line in fh:
+            for i, line in enumerate(fh):
+                # Skip already-processed lines via checkpoint
+                # (UUID-based event_id comparison is NOT monotonic —
+                #  random hex strings have no ordering guarantee)
+                if i < processed_lines:
+                    continue
+
                 line = line.strip()
                 if not line:
                     continue
@@ -182,36 +210,42 @@ def project_governance_state(
                     # Corrupt or malformed line → skip
                     continue
 
-                # Skip events already processed via checkpoint
-                if last_event_id and event.event_id <= last_event_id:
-                    continue
-
                 # Physically exclude non-target sources
                 if event.source not in source_filter:
                     continue
 
                 _apply_event(state, event)
-                last_event_id = event.event_id
+                processed_lines = i + 1  # Line index + 1 = count processed
+
+    # ── Save checkpoint (raw accumulator, not derived result) ──
+    if checkpoint_path:
+        save_checkpoint(state, processed_lines, checkpoint_path)
 
     # ── Derive metrics ──
     result = _derive_metrics(state)
-    if last_event_id:
-        result["_checkpoint_event_id"] = last_event_id
+    result["_checkpoint_lines"] = processed_lines
 
     return result
 
 
 def save_checkpoint(
-    state: dict[str, Any],
+    raw_state: dict[str, Any],
+    processed_lines: int,
     checkpoint_path: Path,
 ) -> None:
-    """Atomically save governance state checkpoint for incremental replay.
+    """Atomically save raw accumulator state for incremental replay.
+
+    Saves the RAW accumulator dict (not derived metrics) so that
+    _apply_event can correctly increment wins/losses/breakeven counters
+    during incremental replay.
 
     Uses tmp + os.replace for atomic write (no half-written checkpoints).
     """
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = dict(raw_state)
+    payload["_checkpoint_lines"] = processed_lines
     tmp_path = checkpoint_path.with_suffix(".tmp")
-    tmp_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    tmp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     os.replace(tmp_path, checkpoint_path)
 
 
