@@ -376,3 +376,14 @@
   2. 退役流程标准化: 退役大脑时必须(1)更新脑 JSON(status+vote_weight),(2)在所有引用该脑的配置文件中设 enabled=false,(3)运行 verify.py 确认
   3. 未来: governance_service 自动退役时同步更新所有配置文件引用
 - **检测方法**: `python scripts/verify.py --quick` 自动检测并报错。也可手动: `grep -r "BTC_Swing_V5" configs/live*.yaml`
+
+### ReB-20260612-001
+- **Pattern Signature**: `SILENT_FALLBACK_ZERO_OBSERVABILITY`
+- **描述**: 纯函数在降级路径上返回安全默认值 (0.40)，但不发出任何信号表明降级发生。下游消费方无法区分"真实统计值"与"兜底默认值"，导致系统在降级模式下裸奔而运维无感知。根本原因：返回值设计为裸 float，缺少 quality/source 元数据；fallback 路径无日志。本次实例：`resolve_p_win_from_brains()` 三条静默路径全部返回 0.40。
+- **关联 FIX IDs**: FIX-20260612-001
+- **关联 Docket IDs**: DQAF-20260612-004
+- **预防策略**:
+  1. 所有返回统计估计值的函数必须记录降级日志（含降级原因和影响范围）
+  2. 调用链透传 `source` + `degraded` 标记至 journal 供事后审计
+  3. Iron Law #10: BLE001 替换为 `fail_open_guard()` 确保异常至少被记录
+- **检测方法**: `grep -n "return 0\.40\|return 0\.5[0]*$" core/execution/pwin_chain.py` 检查是否仍有未日志化 fallback；`grep "FALLBACK_PATH" data_btc/logs/` 监控降级频率

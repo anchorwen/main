@@ -513,3 +513,20 @@
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: ReB-20260610-003 (`CONFIG_SYMMETRY_DRIFT`)
 - **关联 FIX**: FIX-20260610-008
+
+### CCT-20260612-004
+- **Docket ID**: DQAF-20260612-004
+- **日期**: 2026-06-12
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: `resolve_p_win_from_brains()` 三条 fallback 路径全部静默返回 0.40 (`pwin_chain.py:53/62/74`)
+  - [Layer 2 — 中间异常]: 调用方 `strategy_line.py:1209-1215` confidence override 掩盖了 fallback，journal 中 `p_win=0.40` 占比 0%——降级不可观测
+  - [Layer 3 — 根因]: RC-06 (contract-violation): 函数接口只返回 float 不返回质量标记。FIX-20260526-031 引入 fail-closed 0.40 时只改了值未加可观测性
+- **证据引用**:
+  - Source 1: `core/execution/pwin_chain.py:53` — `pnl_store is None → return 0.40` 无日志
+  - Source 2: `core/execution/pwin_chain.py:63` — `except Exception: pass  # noqa: BLE001` 吞一切
+  - Source 3: `data_btc/live_trade_journal.jsonl` — 98 opens, p_win=0.40 count=0
+  - Source 4: `data/live_trade_journal.jsonl` — 816 opens, p_win=0.40 count=0
+- **是否被推翻**: 否 — AR 反向假设（不需要改，下游有安全网）被推翻：BLE001 吞一切异常是真实风险
+- **关联 ReB Pattern**: ReB-20260612-001 (`SILENT_FALLBACK_ZERO_OBSERVABILITY`)
+- **关联 FIX**: FIX-20260612-001
