@@ -1071,6 +1071,7 @@ def main(argv: list[str] | None = None) -> int:
         if hasattr(args, "config") and args.config:
             try:
                 import yaml as _yaml_exit
+
                 with open(args.config, encoding="utf-8") as _fh_exit:
                     _exit_cfg = _yaml_exit.safe_load(_fh_exit).get("exit_management", {})
                 if isinstance(_exit_cfg, dict) and "trail_activation_atr" in _exit_cfg:
@@ -1424,13 +1425,9 @@ def main(argv: list[str] | None = None) -> int:
                     _mf_feature_ok = True
                     _mf_feature_diag = ""
                     try:
-                        _fs_schema_path = (
-                            Path(args.base_dir) / "feature_store" / "schemas.json"
-                        )
+                        _fs_schema_path = Path(args.base_dir) / "feature_store" / "schemas.json"
                         if _fs_schema_path.exists():
-                            _fs_schemas = json.loads(
-                                _fs_schema_path.read_text(encoding="utf-8")
-                            )
+                            _fs_schemas = json.loads(_fs_schema_path.read_text(encoding="utf-8"))
                             _v9_features: set[str] = set()
                             for _sc_name, _sc in _fs_schemas.items():
                                 if (
@@ -1441,9 +1438,7 @@ def main(argv: list[str] | None = None) -> int:
                                     _v9_features = set(_sc.get("fields", []))
                                     break
                             if _v9_features:
-                                _mf_model_features = set(
-                                    meta_signal_filter._feature_names
-                                )
+                                _mf_model_features = set(meta_signal_filter._feature_names)
                                 _missing = _v9_features - _mf_model_features
                                 if _missing:
                                     _mf_feature_ok = False
@@ -1486,7 +1481,8 @@ def main(argv: list[str] | None = None) -> int:
                                     "conformal_enabled": meta_signal_filter._conformal_mode,
                                     "conformal_max_age_days": meta_signal_filter._conformal_max_age_days,
                                     "ensemble_weights": list(meta_signal_filter._ensemble_weights),
-                                    "micro_scaler_loaded": meta_signal_filter._micro_scaler is not None,
+                                    "micro_scaler_loaded": meta_signal_filter._micro_scaler
+                                    is not None,
                                 },
                                 ensure_ascii=False,
                             ),
@@ -1520,16 +1516,24 @@ def main(argv: list[str] | None = None) -> int:
         if Path(_dir_model_path).exists():
             try:
                 _dir_filter = MetaSignalFilter(
-                    model_path=_dir_model_path, threshold=0.55, enabled=True, mode="binary",
+                    model_path=_dir_model_path,
+                    threshold=0.55,
+                    enabled=True,
+                    mode="binary",
                 )
                 if _dir_filter.load():
                     setattr(config, f"meta_filter_{_dir_label}", _dir_filter)
                     print(
                         json.dumps(
-                            {"event": f"meta_filter_{_dir_label}_loaded", "time": _utc_iso(),
-                             "model": _dir_model_path, "features": len(_dir_filter._feature_names)},
+                            {
+                                "event": f"meta_filter_{_dir_label}_loaded",
+                                "time": _utc_iso(),
+                                "model": _dir_model_path,
+                                "features": len(_dir_filter._feature_names),
+                            },
                             ensure_ascii=False,
-                        ), flush=True,
+                        ),
+                        flush=True,
                     )
             except Exception:  # noqa: BLE001
                 pass
@@ -1985,9 +1989,7 @@ def main(argv: list[str] | None = None) -> int:
                         pass
                     _os_module._exit(1)
 
-        _watchdog_thread = _threading.Thread(
-            target=_watchdog_loop, daemon=True, name="watchdog"
-        )
+        _watchdog_thread = _threading.Thread(target=_watchdog_loop, daemon=True, name="watchdog")
         _watchdog_thread.start()
 
         while True:
@@ -2113,10 +2115,7 @@ def main(argv: list[str] | None = None) -> int:
                                 "sharpe": getattr(_m, "sharpe", None) or 0.0,
                                 "recent_win_rate": getattr(_m, "recent_win_rate", None)
                                 or _m.win_rate,
-                                "consecutive_losses": getattr(
-                                    _m, "consecutive_losses", None
-                                )
-                                or 0,
+                                "consecutive_losses": getattr(_m, "consecutive_losses", None) or 0,
                             }
 
                         # Bug #1 fix: BrainPromotionEvaluator(thresholds=...), not (governance_service=...)
@@ -2126,12 +2125,13 @@ def main(argv: list[str] | None = None) -> int:
 
                         # Bug #3 fix: apply decisions to governance_state.json
                         _applied = apply_promotion_decisions(
-                            _decisions, _brain_states, _gov_path,
+                            _gov_path,
+                            _decisions,
                         )
 
-                        _promoted = [
-                            d for d in _applied if d.approved and d.action == "promote"
-                        ]
+                        # Iterate over _decisions (BrainPromotionDecision objects),
+                        # NOT _applied (list[str] change descriptions).
+                        _promoted = [d for d in _decisions if d.approved and d.action == "promote"]
                         if _promoted:
                             _gov_events_path = Path(args.base_dir) / "governance_events.jsonl"
                             for _d in _promoted:

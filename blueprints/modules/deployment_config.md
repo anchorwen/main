@@ -61,6 +61,7 @@ environment_config.json → EnvironmentConfig → ServiceContainer
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260611-020 | 2026-06-11 | cursor-agent | 331f996 | Governance Manual Whitelist: _GOVERNANCE_MANUAL_MODE=True disables PnP-ledger→governance injection and automatic execute_transitions. Decisions logged via emit_brain_alert for human review. | contract-violation |
 | FIX-20260605-126 | 2026-06-05 | cursor-agent | — | **Brain_Rev_M30_V1/V2 archived + Brain_Trend_M30_V1 promoted**: Rev brains killed by eval bug and SL/TP mismatch. Trend brain promoted shadow→candidate (active 7-day signals). Brain roster: 11 candidate, 2 live, 2 shadow, 5 archived. | RC-11 |
 | FIX-20260605-125 | 2026-06-05 | cursor-agent | — | **Meta Pipeline probe trio archived**: 3 brain configs (Huber/Binary_Cls/MetaLabel) → status=archived. Governance state synchronized. | RC-11 |
 | FIX-20260605-122 | 2026-06-05 | cursor-agent | ae0d006 | **Dead config cleanup**: Removed `portfolio_risk:` nested block from live.yaml — code reads `LiveCycleConfig` flat keys (`portfolio_max_gross`, `portfolio_max_net`, `portfolio_netting_mode`), not the nested YAML path. Zero Python code references `"portfolio_risk"` as a config key. | RC-09 |

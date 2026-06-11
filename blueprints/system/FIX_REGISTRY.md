@@ -519,6 +519,9 @@ FIX-YYYYMMDD-NNN
 | FIX-20260524-033 | 2026-05-24 | multi-module (38 files) | Batch mypy type safety: 140→0 errors across all modules. ServiceContainer DI narrowing with assert blocks in 22 entry points, dict type annotations for heterogeneous literals, import/dependency fixes, MODULE_SOURCE_MAP expansion (3 entries), mypy_baseline.json → {}. verify.py --full passes with 0 mypy, 0 ruff, 2670 tests. | RC-02 |
 | FIX-20260525-045 | 2026-05-25 | multi-module (20 files) | Phase 5 MEDIUM+LOW batch fixes (33 items): T1 per-family direction cooling, batched persistence, sentinel cleanup; T2 kelly epsilon threshold, protection file age check; T3 CPCV timestamp alignment, Scaler warnings, dtype unification; T4 EV cost deduction, NaN filtering, embargo warnings. 4 tactical guardrails deployed. | RC-06, RC-09, RC-05 |
 | FIX-20260529-039 | 2026-05-29 | deployment-config, execution-orders, runtime-live | Swing zero-trade unfreeze: 7 fixes (counter_trend block 0.40→0.70, confidence 0.45→0.35, min_rr 1.0→0.85, min_p_win 0.50→0.45, TP 1.5→2.0, reentry stale exit override, consecutive counter reset). m30_swing live position opened (ticket 3706933035). | RC-05, RC-09 |
+| FIX-20260611-020 | 2026-06-11 | execution-guards | Code Blue: Fail-Closed SL/TP assertion + Governance manual whitelist + mypy type fix. (1) strategy_evaluator.py: SL/TP Fail-Closed check rejects any should_trade=True decision with sl<=0 or tp<=0 in non-shadow mode. (2) scheduler_service.py: _GOVERNANCE_MANUAL_MODE disables PnP→governance injection and execute_transitions, logging pending decisions for human review. (3) live_intent_loop.py: fix mypy attr-defined errors — iterate _decisions (BrainPromotionDecision) instead of _applied (list[str]). Fixes ANOM-005 (BTC naked trading) + ANOM-002 (governance backtest illusion). | RC-06 |
+| FIX-20260611-020 | 2026-06-11 | runtime_live | Fail-Closed SL/TP assertion (strategy_evaluator.py) + mypy type fix (live_intent_loop.py: iterate _decisions not _applied). See execution-guards blueprint for governance manual whitelist details. | RC-06 |
+| FIX-20260611-020 | 2026-06-11 | deployment_config | Governance Manual Whitelist: _GOVERNANCE_MANUAL_MODE=True disables PnP-ledger→governance injection and automatic execute_transitions. Decisions logged via emit_brain_alert for human review. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2060,3 +2063,40 @@ FIX-YYYYMMDD-NNN
   [PASS] Config consistency: 0 errors, 6 warnings (legitimate XAU label_contract gaps)
   ```
 - **Related Docket**: DQAF-20260610-002 (entry/exit audit)
+
+
+### FIX-20260611-020
+- **Date**: 2026-06-11
+- **Author**: cursor-agent
+- **Commit**: 331f996
+- **Type**: fix
+- **Module**: execution-guards
+- **Files**: core/runtime/strategy_evaluator.py,core/deployment/scheduler_service.py,scripts/live_intent_loop.py
+- **Description**: Code Blue: Fail-Closed SL/TP assertion + Governance manual whitelist + mypy type fix. (1) strategy_evaluator.py: SL/TP Fail-Closed check rejects any should_trade=True decision with sl<=0 or tp<=0 in non-shadow mode. (2) scheduler_service.py: _GOVERNANCE_MANUAL_MODE disables PnP→governance injection and execute_transitions, logging pending decisions for human review. (3) live_intent_loop.py: fix mypy attr-defined errors — iterate _decisions (BrainPromotionDecision) instead of _applied (list[str]). Fixes ANOM-005 (BTC naked trading) + ANOM-002 (governance backtest illusion).
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: runtime-live,deployment-lifecycle
+
+### FIX-20260611-020
+- **Date**: 2026-06-11
+- **Author**: cursor-agent
+- **Commit**: 331f996
+- **Type**: fix
+- **Module**: runtime_live
+- **Files**: core/runtime/strategy_evaluator.py,scripts/live_intent_loop.py
+- **Description**: Fail-Closed SL/TP assertion (strategy_evaluator.py) + mypy type fix (live_intent_loop.py: iterate _decisions not _applied). See execution-guards blueprint for governance manual whitelist details.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260611-020
+- **Date**: 2026-06-11
+- **Author**: cursor-agent
+- **Commit**: 331f996
+- **Type**: fix
+- **Module**: deployment_config
+- **Files**: core/deployment/scheduler_service.py
+- **Description**: Governance Manual Whitelist: _GOVERNANCE_MANUAL_MODE=True disables PnP-ledger→governance injection and automatic execute_transitions. Decisions logged via emit_brain_alert for human review.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)

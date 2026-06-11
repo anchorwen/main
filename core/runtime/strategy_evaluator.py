@@ -346,6 +346,44 @@ def evaluate_strategy_lines(
                         flush=True,
                     )
 
+        # ── Cut 5: Fail-Closed SL/TP assertion (FIX-20260611-020) ───────
+        # Reject ANY trade decision that lacks valid SL/TP, regardless of
+        # confidence or brain votes.  SL=0 means "unlimited risk" which is
+        # never acceptable for automated trading.  Shadow-mode decisions
+        # are exempt (virtual tracking, no real order).
+        #
+        # Historical: DQAF-20260607-005 (FIX-140/141/142) established
+        # Fail-Closed dispatch after UnboundLocalError caused orphan
+        # positions.  This extends the pattern to the SL/TP dimension:
+        # FIX-20260611-017 fixed premature-breakeven from uninitialized
+        # lowest_low=0.0, but the symmetric risk (SL/TP uninitialized = 0)
+        # was left unprotected until now.
+        if (
+            decision.should_trade
+            and gate_mode != "shadow"
+            and (decision.sl <= 0 or decision.tp <= 0)
+        ):
+            decision.should_trade = False
+            decision.reason = f"fail_closed_sltp_missing(sl={decision.sl:.1f}_tp={decision.tp:.1f})"
+            print(
+                json.dumps(
+                    {
+                        "event": "fail_closed_sltp_rejected",
+                        "time": _utc_iso(),
+                        "strategy": sname,
+                        "direction": decision.direction,
+                        "sl": decision.sl,
+                        "tp": decision.tp,
+                        "hard_sl": decision.hard_sl,
+                        "confidence": round(decision.confidence, 4),
+                        "live_brains": _live_count if governance_state is not None else -1,
+                        "reason": decision.reason,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+
         # Apply session + health volume multipliers
         if decision.should_trade:
             combined_mult = session_volume_mult * health_volume_mult

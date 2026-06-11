@@ -184,6 +184,25 @@ class SchedulerService:
 
                     _logger = logging.getLogger(__name__)
 
+                    # ── FIX-20260611-020: Governance Manual Whitelist Mode ──
+                    # The PnP ledger (brain_pnl_ledger.json) tracks counterfactual
+                    # PnL — what each brain WOULD have earned if traded.  This is
+                    # BACKTEST/SHADOW data, NOT live trading performance.  The live
+                    # performance is in brain_performance.json.
+                    #
+                    # Until brain_performance is confirmed clean of record
+                    # contamination (V6/V7/V8 identical data), ALL automatic
+                    # governance lifecycle transitions are DISABLED.  Brains can
+                    # only be promoted/frozen/retired via manual CLI:
+                    #   python scripts/brain.py freeze <brain_id>
+                    #   python scripts/brain.py promote <brain_id>
+                    #
+                    # Set to False ONLY after:
+                    #   1. Record contamination root cause fixed and verified
+                    #   2. brain_performance confirmed as clean data source
+                    #   3. PnP ledger ↔ brain_performance cross-validation passes
+                    _GOVERNANCE_MANUAL_MODE = True
+
                     try:
                         pnl_path = _Path("data") / "brain_pnl_ledger.json"
                         if pnl_path.exists():
@@ -201,21 +220,63 @@ class SchedulerService:
                                     "recent_win_rate": m.recent_win_rate,
                                 }
                                 # P0.1: Inject performance_metrics into governance state
-                                container.governance_service.set_performance_metrics(
-                                    bid,
-                                    {
-                                        "win_rate": m.win_rate,
-                                        "profit_factor": m.profit_factor,
-                                        "sharpe_ratio": m.sharpe_ratio,
-                                        "total_trades": m.sample_count,
-                                        "pnl_r": round(m.cumulative_pnl, 2),
-                                    },
-                                )
+                                # MANUAL MODE: Skip injection — PnP ledger metrics are
+                                # counterfactual (backtest/shadow), not live performance.
+                                # Live data source is brain_performance.json.
+                                if not _GOVERNANCE_MANUAL_MODE:
+                                    container.governance_service.set_performance_metrics(
+                                        bid,
+                                        {
+                                            "win_rate": m.win_rate,
+                                            "profit_factor": m.profit_factor,
+                                            "sharpe_ratio": m.sharpe_ratio,
+                                            "total_trades": m.sample_count,
+                                            "pnl_r": round(m.cumulative_pnl, 2),
+                                        },
+                                    )
+                                else:
+                                    _logger.info(
+                                        "[GOV_MANUAL] Skipped PnP→governance injection "
+                                        "for brain=%s (pnl_r=%.2f wr=%.3f samples=%d)",
+                                        bid,
+                                        m.cumulative_pnl,
+                                        m.win_rate,
+                                        m.sample_count,
+                                    )
 
                             brain_states = container.governance_service.get_all_states()
                             evaluator = BrainPromotionEvaluator()
                             decisions = evaluator.evaluate_all(brain_states, perf)
-                            container.governance_rule_engine.execute_transitions(decisions)
+
+                            # ── FIX-20260611-020: Manual whitelist mode ──
+                            # Layer 2 (Decision): In manual mode, evaluate but don't
+                            # execute.  Log decisions for human review.
+                            if _GOVERNANCE_MANUAL_MODE:
+                                for d in decisions:
+                                    if d.action != "hold":
+                                        _logger.warning(
+                                            "[GOV_MANUAL] Would %s brain=%s (%s→%s) "
+                                            "reasons=%s — NOT EXECUTED (manual mode)",
+                                            d.action,
+                                            d.brain_id,
+                                            d.current_status,
+                                            d.target_status,
+                                            d.reasons,
+                                        )
+                                        # Emit alert so humans see pending decisions
+                                        emit_brain_alert(
+                                            d.brain_id,
+                                            "governance_manual_blocked",
+                                            {
+                                                "action": d.action,
+                                                "current_status": d.current_status,
+                                                "target_status": d.target_status,
+                                                "reasons": d.reasons,
+                                                "metrics": d.metrics_snapshot,
+                                            },
+                                        )
+                            else:
+                                container.governance_rule_engine.execute_transitions(decisions)
                     except Exception:
                         _logger.exception(
                             "CRITICAL: PnL-based governance evaluation failed — "
