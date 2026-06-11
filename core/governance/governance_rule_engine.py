@@ -156,6 +156,32 @@ class GovernanceRuleEngine:
         engine = cls(governance_service, audit_log)
         gs = governance_service
 
+        # ── FIX-20260611-017: Hard stop-loss — negative Sharpe for sufficient samples ──
+        # OU_Params_V6_Sniper: SR=-30, PnL_R=-1409, still "live" — missing validation (RC-07).
+        def _sr_freeze_condition(ctx):
+            _sr = ctx.get("sharpe_ratio") or ctx.get("sharpe") or 0.0
+            _count = ctx.get("sample_count", 0)
+            _status = ctx.get("current_status")
+            if _status not in ("live", "active"):
+                return False
+            if _count < 50:
+                return False  # insufficient sample — let promotion pipeline handle
+            if _sr >= -1.0:
+                return False  # borderline — not catastrophic
+            return True
+
+        engine.add_rule(
+            GovernanceRule(
+                name="auto_freeze_negative_sr",
+                condition_fn=_sr_freeze_condition,
+                action_fn=lambda ctx: {
+                    "transition_to": "frozen",
+                    "reason": f"auto_freeze_negative_sr: sharpe={ctx.get('sharpe_ratio', ctx.get('sharpe', 0)):.1f}",
+                },
+                priority=110,  # above auto_freeze_critical (100)
+            )
+        )
+
         engine.add_rule(
             GovernanceRule(
                 name="auto_freeze_critical",

@@ -3,18 +3,18 @@
   "brain_states": {
     "OU_Params_V6_Sniper": {
       "brain_id": "OU_Params_V6_Sniper",
-      "status": "live",
+      "status": "frozen",
       "registered_at": "2026-05-04T10:51:17.123332",
-      "last_transition_at": "2026-06-10T22:00:24.467464",
-      "transition_count": 17,
+      "last_transition_at": "2026-06-11T07:30:00",
+      "transition_count": 18,
       "freeze_count": 0,
       "exposure_limited": false,
       "performance_metrics": {
-        "win_rate": 0.4303,
+        "win_rate": 0.43,
         "profit_factor": 0.7,
-        "sharpe_ratio": -30.01,
-        "total_trades": 3616,
-        "pnl_r": -1410.29
+        "sharpe_ratio": -29.95,
+        "total_trades": 3623,
+        "pnl_r": -1409.48
       }
     },
     "OU_Params_V7_M15": {
@@ -27,11 +27,11 @@
       "exposure_limited": false,
       "vote_weight": 1.5,
       "performance_metrics": {
-        "win_rate": 0.4928,
+        "win_rate": 0.4929,
         "profit_factor": 0.81,
-        "sharpe_ratio": -19.07,
-        "total_trades": 207,
-        "pnl_r": -71.22
+        "sharpe_ratio": -19.26,
+        "total_trades": 211,
+        "pnl_r": -72.66
       }
     },
     "Meta_Stage1_Huber_V1": {
@@ -102,11 +102,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4452,
-        "profit_factor": 0.98,
-        "sharpe_ratio": -1.61,
-        "total_trades": 2644,
-        "pnl_r": -105.71
+        "win_rate": 0.4431,
+        "profit_factor": 0.97,
+        "sharpe_ratio": -1.82,
+        "total_trades": 2672,
+        "pnl_r": -120.48
       }
     },
     "Swing_V9_M15_V2": {
@@ -117,11 +117,11 @@
       "transition_count": 3,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.6539,
-        "profit_factor": 3.53,
-        "sharpe_ratio": 108.18,
-        "total_trades": 838,
-        "pnl_r": 5371.32
+        "win_rate": 0.6532,
+        "profit_factor": 3.52,
+        "sharpe_ratio": 107.84,
+        "total_trades": 842,
+        "pnl_r": 5369.88
       }
     },
     "Brain_Trend_M30_V1": {
