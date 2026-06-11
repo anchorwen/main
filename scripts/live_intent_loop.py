@@ -2221,7 +2221,8 @@ def main(argv: list[str] | None = None) -> int:
             # Runs every 60 cycles.  Checks feature store freshness,
             # journal growth, and training prerequisite conditions.
             # Alerts via LiveAlertHub when data quality degrades.
-            if state.loop_iteration % config.state_save_interval == 0:
+            # Bootstrap on first cycle to create state file immediately.
+            if state.loop_iteration == 1 or state.loop_iteration % config.state_save_interval == 0:
                 try:
                     from core.runtime.data_health_monitor import check_data_health
 
