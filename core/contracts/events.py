@@ -31,7 +31,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 # ── Data source constants ────────────────────────────────────────────────
 
 

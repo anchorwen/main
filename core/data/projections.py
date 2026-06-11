@@ -33,7 +33,6 @@ from typing import Any
 
 from core.contracts.events import DataSource, PnLEvent
 
-
 # ── Per-brain state accumulator ────────────────────────────────────────────
 
 
