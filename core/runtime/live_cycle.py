@@ -2995,87 +2995,54 @@ def execute_live_cycle(
 
     if not config.no_mt5 and state.known_open_tickets and _run_reconciliation:
         try:
-            _closed = _reconcile_closed_positions(
-                mt5_worker, config.symbol, str(journal_path), state.known_open_tickets, state=state
-            )
-            if _closed:
-                from core.infrastructure.distributed_lock import FileLock
+            # ── FIX-20260611-005 Phase 2: Unified adapter replaces old reconciliation ──
+            from core.runtime.position_close_adapter import PositionCloseAdapter
 
-                _jlock = FileLock(
-                    "live_trade_journal",
-                    lock_dir=str(journal_path.parent / ".locks"),
-                    ttl_seconds=10,
-                )
-                _jacquired = _jlock.acquire(blocking=True, timeout_seconds=5)
-                if _jacquired.acquired:
-                    try:
-                        _existing = (
-                            journal_path.read_text(encoding="utf-8")
-                            if journal_path.exists()
-                            else ""
-                        )
-                        with open(journal_path, "a", encoding="utf-8") as _jf:
-                            for _entry in _closed:
-                                _mid = _entry.get("message_id", "")
-                                if _mid and _mid in _existing:
-                                    continue
-                                _jf.write(json.dumps(_entry, ensure_ascii=False) + "\n")
-                    finally:
-                        _jlock.release()
+            _adapter = PositionCloseAdapter(
+                tick_size=0.01 if "XAU" in config.symbol else 1.0,
+            )
+            _events = _adapter.detect_and_build(
+                known_tickets=state.known_open_tickets,
+                mt5_worker=mt5_worker,
+                symbol=config.symbol,
+            )
+            for _evt in _events:
+                _adapter.record(_evt, str(journal_path), state=state)
+
+            if _events:
                 # ── Update per-strategy losing-streak tracker ──
-                for _entry in _closed:
-                    _label = _entry.get("label", "")
-                    _entry_brain_ids = _entry.get("brain_ids", [])
-                    # Prefer the strategy field from known_open_tickets; fall back
-                    # to brain-id inference for pre-existing journal entries.
-                    _strategy = _entry.get("strategy", "") or _strategy_from_brain_ids(
-                        _entry_brain_ids
+                for _evt in _events:
+                    _label = _evt.label
+                    _strategy = _evt.strategy or _strategy_from_brain_ids(
+                        list(_evt.brain_ids)
                     )
                     _curr = state.consecutive_sl_hits.get(_strategy, 0)
                     if _label in ("sl_hit_first", "loss"):
                         _curr += 1
-                        # ── Collect SL event for per-strategy graduated cooldown ──
                         state._pending_sl_records.append(
-                            {
-                                "strategy": _strategy,
-                                "timestamp": time.time(),
-                            }
+                            {"strategy": _strategy, "timestamp": time.time()}
                         )
                     elif _label in ("tp_hit_first", "win"):
                         _curr = 0
                     state.consecutive_sl_hits[_strategy] = _curr
 
-                    # Update portfolio risk VaR buffer with realised P&L
+                    # Update portfolio risk
                     if state.portfolio_risk_controller is not None:
-                        _pnl = _entry.get("pnl")
-                        if _pnl is not None:
-                            try:
-                                state.portfolio_risk_controller.update_returns(
-                                    _strategy, float(_pnl)
-                                )
-                            except Exception:  # noqa: BLE001
-                                logger.warning(
-                                    "PortfolioRiskController.update_returns failed "
-                                    "strategy=%s pnl=%s",
-                                    _strategy,
-                                    _pnl,
-                                )
+                        import contextlib as _ctxlib_pf
+                        with _ctxlib_pf.suppress(Exception):
+                            state.portfolio_risk_controller.update_returns(
+                                _strategy, _evt.pnl
+                            )
 
-                    # ── Collect for per-strategy budget recording (processed after
-                    #     strategies are built, since budgets live on StrategyLine) ──
-                    _pnl_val = _entry.get("pnl")
-                    if _pnl_val is not None:
-                        # Fetch equity from MT5 (must succeed or crash)
-                        _eq = 0.0
-                        if mt5_worker is not None:
-                            with FaultTolerantContext(
-                                level=FaultLevel.CRASH,
-                                component="MT5_IPC:account_info:PnL_to_equity",
-                            ):
-                                _acc = mt5_worker.account_info()
-                                _eq = float(getattr(_acc, "equity", 0)) if _acc is not None else 0.0
-                        # Convert dollar PnL to percentage of account equity
-                        _pnl_pct = float(_pnl_val) / _eq if _eq > 0 else 0.0
+                    # ── Budget recording ──
+                    if mt5_worker is not None:
+                        with FaultTolerantContext(
+                            level=FaultLevel.CRASH,
+                            component="MT5_IPC:account_info:PnL_to_equity",
+                        ):
+                            _acc = mt5_worker.account_info()
+                            _eq = float(getattr(_acc, "equity", 0)) if _acc is not None else 0.0
+                        _pnl_pct = _evt.pnl / _eq if _eq > 0 else 0.0
                         state._pending_budget_records.append(
                             {
                                 "strategy": _strategy,
@@ -3110,36 +3077,23 @@ def execute_live_cycle(
                         state.sl_streak_blocked_all_until = time.time() + 3600
 
                 # Remove closed tickets from tracking
-                for _entry in _closed:
-                    _ticket = _entry.get("position_ticket")
-                    if _ticket is not None:
-                        state.known_open_tickets.pop(_ticket, None)
+                for _evt in _events:
+                    if _evt.remaining_volume <= 0:
+                        state.known_open_tickets.pop(_evt.position_ticket, None)
 
-                # Sync position_manager: clear positions that were closed by MT5
+                # Sync position_manager
                 if state.position_manager is not None and state.position_manager.has_position():
                     for _pm_pos in list(state.position_manager.get_all_positions()):
                         if _pm_pos.ticket not in state.known_open_tickets:
                             state.position_manager.clear_position(ticket=_pm_pos.ticket)
-                            print(
-                                json.dumps(
-                                    {
-                                        "event": "position_manager_synced_clear",
-                                        "time": _utc_iso(),
-                                        "ticket": _pm_pos.ticket,
-                                        "reason": "mt5_already_closed",
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                                flush=True,
-                            )
 
                 print(
                     json.dumps(
                         {
                             "event": "positions_closed",
                             "time": _utc_iso(),
-                            "count": len(_closed),
-                            "tickets": [e["position_ticket"] for e in _closed],
+                            "count": len(_events),
+                            "tickets": [e.position_ticket for e in _events],
                             "sl_streak_by_strategy": dict(state.consecutive_sl_hits),
                         },
                         ensure_ascii=False,
