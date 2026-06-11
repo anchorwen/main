@@ -808,6 +808,81 @@ class BrainPnLStore:
         store._hydrate_accumulators()
         return store
 
+    @classmethod
+    def load_from_stream(
+        cls,
+        stream_path: str | Path,
+        event_writer: Any = None,
+        event_source: str = "live",
+        source_filter: set[str] | None = None,
+    ) -> BrainPnLStore:
+        """Rebuild BrainPnLStore from the event stream (ledger_events.jsonl).
+
+        FIX-20260611-021: This is the eventual replacement for load().
+        Instead of reading a mutable JSON snapshot, it replays the immutable
+        event stream to reconstruct the exact same in-memory state.
+
+        Only events matching ``source_filter`` are replayed.
+        Default: {"live", "migration"} — includes live trading and
+        migrated historical data, excludes shadow and backtest.
+
+        Args:
+            stream_path: Path to ledger_events.jsonl.
+            event_writer: Optional EventWriter for dual-write.
+            event_source: Source tag for new events from this store.
+            source_filter: Which event sources to replay.
+        """
+        if source_filter is None:
+            source_filter = {"live", "migration"}
+
+        store = cls(window_size=5000, event_writer=event_writer, event_source=event_source)
+
+        p = Path(stream_path)
+        if not p.exists():
+            return store
+
+        from core.contracts.events import PnLEvent
+
+        with open(p, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = PnLEvent.model_validate_json(line)
+                except (ValueError, TypeError, KeyError):
+                    continue
+
+                if event.source not in source_filter:
+                    continue
+
+                brain_id = event.brain_id
+                if brain_id not in store._settled:
+                    store._settled[brain_id] = []
+
+                # Reconstruct a settled entry from the event
+                entry = {
+                    "signal_id": event.event_id,
+                    "brain_id": brain_id,
+                    "symbol": event.symbol,
+                    "direction": event.direction or "neutral",
+                    "entry_price": event.entry_price or 0.0,
+                    "close_price": event.exit_price or 0.0,
+                    "close_time": event.timestamp.isoformat(),
+                    "pnl_per_unit": event.pnl_r,
+                    "confidence": event.confidence,
+                    "position_ticket": event.position_ticket,
+                    "is_win": event.pnl_r > 0,
+                }
+                store._settled[brain_id].append(entry)
+
+                # Keep only window_size entries per brain
+                if len(store._settled[brain_id]) > store._window_size:
+                    store._settled[brain_id].pop(0)
+
+        store._hydrate_accumulators()
+        return store
+
     def _hydrate_accumulators(self) -> None:
         """Rebuild in-memory PnL accumulators from settled disk data.
 
