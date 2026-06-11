@@ -2212,12 +2212,15 @@ def main(argv: list[str] | None = None) -> int:
 
             # ── FIX-20260604-077: persist PnL ledger EVERY cycle ──
             # Same root cause as FIX-075: 60-cycle save interval means recent
-            # trades (and their p_win impact) are lost on crash/restart.
-            # The PnL store drives resolve_p_win_from_brains() which gates
-            # every entry — stale p_win = inflated confidence = restart→trade.
+            # ── FIX-20260611-022: Event Stream Mode ──
+            # The event stream (EventWriter → ledger_events.jsonl) is now the
+            # authoritative write path.  Old JSON save() is redundant.
+            # Set _EVENT_STREAM_MODE=False to restore dual-write for debugging.
+            _EVENT_STREAM_MODE = True
             if pnl_ledger is not None:
                 try:
-                    pnl_ledger.save(pnl_ledger_path)
+                    if not _EVENT_STREAM_MODE:
+                        pnl_ledger.save(pnl_ledger_path)
                     _inject_performance_metrics(pnl_ledger, args.base_dir)
                 except Exception:  # noqa: BLE001
                     pass
@@ -2397,7 +2400,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
             if pnl_ledger is not None:
                 try:
-                    pnl_ledger.save(pnl_ledger_path)
+                    if not _EVENT_STREAM_MODE:
+                        pnl_ledger.save(pnl_ledger_path)
                     print(
                         json.dumps(
                             {

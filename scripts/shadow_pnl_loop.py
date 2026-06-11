@@ -681,9 +681,11 @@ def main(argv: list[str] | None = None) -> int:
                     )
 
                 # ── 9. Persist state ──
+                # FIX-20260611-022: EventWriter handles persistence.
+                # Old JSON save() is redundant in event stream mode.
                 if cycle_count - last_save_cycle >= args.save_interval:
                     try:
-                        pnl_ledger.save(pnl_path)
+                        # pnl_ledger.save(pnl_path)  # Replaced by EventWriter
                         if rolling_norm is not None:
                             rolling_norm.save_state(base_dir / "rolling_norm_state.json")
                         if regime_detector is not None:
@@ -732,24 +734,21 @@ def main(argv: list[str] | None = None) -> int:
             time.sleep(sleep_time)
 
     finally:
-        # ── Final persistence ──
-        try:
-            pnl_ledger.save(pnl_path)
-            print(
-                json.dumps(
-                    {
-                        "event": "shadow_pnl_loop_shutdown",
-                        "time": _utc_iso(),
-                        "cycles": cycle_count,
-                        "settled_total": pnl_ledger.total_settled,
-                        "pnl_ledger_path": str(pnl_path),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-        except Exception:  # noqa: BLE001
-            pass
+        # ── Final persistence (EventWriter handles this) ──
+        # FIX-20260611-022: pnl_ledger.save() replaced by EventWriter
+        print(
+            json.dumps(
+                {
+                    "event": "shadow_pnl_loop_shutdown",
+                    "time": _utc_iso(),
+                    "cycles": cycle_count,
+                    "settled_total": pnl_ledger.total_settled,
+                    "pnl_ledger_path": str(pnl_path),
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
         if rolling_norm is not None:
             try:  # noqa: SIM105
                 rolling_norm.save_state(base_dir / "rolling_norm_state.json")
