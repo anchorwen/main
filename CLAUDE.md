@@ -110,6 +110,25 @@
 - 使用约定式提交格式：`<type>(<scope>): [FIX-YYYYMMDD-NNN] <description>`
 - 如果修改影响到跨模块合约，同步更新依赖模块的 Cross-Module Contracts
 
+#### 7.1 收口检查清单 (Closing Checklist) — 每次改动后必须输出
+
+commit 完成后，在对话中显式输出以下收口块（铁律强制）：
+
+```
+收口完毕。
+
+未提交变更: <git status --short 计数>
+蓝图: <本次更新的模块蓝图文件名>
+Git: <branch> → <remote> 已推送
+本轮 commit: <commit 数量 + 简要描述>
+```
+
+**执行规则**：
+- 此清单不依赖 Agent 判断"是否需要收口"——只要执行了 commit，必须输出
+- 如果 `git status --short` 有未提交变更，必须标注具体文件
+- 如果蓝图未更新（纯机械操作），标注"蓝图: 无需更新"
+- 禁止在收口清单中省略任何字段
+
 ### 8. 根因诊疗协议 (Root Cause Diagnosis Protocol)
 - **发现问题后，不挖到根因不出方案，不画影响链路不写代码**
 - 执行五步：**STOP**（停）→ **LOOKUP**（查蓝图/依赖/历史）→ **DIG**（至少3层追问+横向搜索）→ **MAP**（影响链路+双品种验证）→ **PLAN**（一篮子方案，ExitPlanMode 审批）

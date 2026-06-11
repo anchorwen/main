@@ -9,11 +9,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.54,
-        "profit_factor": 1.01,
-        "sharpe_ratio": 1.08,
-        "total_trades": 100,
-        "pnl_r": 43.78
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "total_trades": 0,
+        "pnl_r": 0
       }
     },
     "BTC_Swing_V6_MultiTF_LGB_v2": {
@@ -24,11 +24,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.0,
-        "profit_factor": 0.0,
-        "sharpe_ratio": 0.0,
-        "total_trades": 0,
-        "pnl_r": 0.0
+        "win_rate": 0.3448,
+        "profit_factor": 0.46,
+        "sharpe_ratio": -77.86,
+        "total_trades": 29,
+        "pnl_r": -221.23
       }
     },
     "BTC_Swing_V7_MultiTF_LGB_v1": {
@@ -39,11 +39,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.0,
-        "profit_factor": 0.0,
-        "sharpe_ratio": 0.0,
-        "total_trades": 0,
-        "pnl_r": 0.0
+        "win_rate": 0.3448,
+        "profit_factor": 0.46,
+        "sharpe_ratio": -77.86,
+        "total_trades": 29,
+        "pnl_r": -221.23
       }
     },
     "BTC_Swing_V8_MultiTF_LGB_v1": {
@@ -54,11 +54,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.0,
-        "profit_factor": 0.0,
-        "sharpe_ratio": 0.0,
-        "total_trades": 0,
-        "pnl_r": 0.0
+        "win_rate": 0.3448,
+        "profit_factor": 0.46,
+        "sharpe_ratio": -77.86,
+        "total_trades": 29,
+        "pnl_r": -221.23
       }
     },
     "BTC_Swing_V10_M15_Survival": {
@@ -73,7 +73,7 @@
         "profit_factor": 0.0,
         "sharpe_ratio": 0.0,
         "total_trades": 0,
-        "pnl_r": 0.0
+        "pnl_r": 0
       }
     },
     "BTC_Swing_V9_H1_Survival": {
@@ -88,7 +88,7 @@
         "profit_factor": 0.0,
         "sharpe_ratio": 0.0,
         "total_trades": 0,
-        "pnl_r": 0.0
+        "pnl_r": 0
       }
     },
     "BTC_Swing_V11_H1_Directional": {
@@ -99,11 +99,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.0,
-        "profit_factor": 0.0,
-        "sharpe_ratio": 0.0,
-        "total_trades": 0,
-        "pnl_r": 0.0
+        "win_rate": 0.3103,
+        "profit_factor": 0.26,
+        "sharpe_ratio": -130.35,
+        "total_trades": 29,
+        "pnl_r": -370.37
       }
     },
     "BTC_Swing_V11_M15_Directional": {
@@ -114,11 +114,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.0,
-        "profit_factor": 0.0,
-        "sharpe_ratio": 0.0,
-        "total_trades": 0,
-        "pnl_r": 0.0
+        "win_rate": 0.3103,
+        "profit_factor": 0.26,
+        "sharpe_ratio": -130.35,
+        "total_trades": 29,
+        "pnl_r": -370.37
       }
     }
   },

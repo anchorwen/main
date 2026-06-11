@@ -2145,13 +2145,12 @@ def main(argv: list[str] | None = None) -> int:
                                     "reasons": _d.reasons,
                                 }
                                 print(json.dumps(_gevt, ensure_ascii=False), flush=True)
-                                try:
+                                with fail_open_guard("GovEventLog:append"):
                                     with open(_gov_events_path, "a", encoding="utf-8") as _gf:
                                         _gf.write(json.dumps(_gevt, ensure_ascii=False) + "\n")
-                                except Exception:  # noqa: BLE001
-                                    pass
-                except Exception:  # noqa: BLE001
-                    pass  # best-effort — non-critical for trading
+                except Exception:
+                    with fail_open_guard("BrainPromotionBridge"):
+                        raise  # surface hidden bugs instead of silent pass
 
             if hot_reload is not None and state.loop_iteration % 30 == 0:
                 try:
