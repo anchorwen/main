@@ -531,6 +531,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260611-022 | 2026-06-11 | runtime_live | Consumer migration: daily_ops.py _load_or_create_pnl_store() now tries load_from_stream() first, falls back to old JSON. | RC-06 |
 | FIX-20260611-022 | 2026-06-11 | feedback_pnl | Consumer migration: shadow_pnl_loop startup now tries load_from_stream() first, falls back to old JSON. | RC-06 |
 | FIX-20260611-022 | 2026-06-11 | deployment_lifecycle | Register data_infrastructure in EXPECTED_MODULES list (validate_blueprints.py). | RC-06 |
+| FIX-20260612-023 | 2026-06-11 | monitor_dashboard | Downgrade ConformalCalibrator cold-start alert from CRITICAL to WARNING. CRITICAL on every restart was alert noise — calibrator needs 50 closes to warm up. Now only WARNING during warmup. Also diagnosed duplicate alert dispatch bug (RULE-012 fires twice in 1s despite 300s cooldown). | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2202,6 +2203,18 @@ FIX-YYYYMMDD-NNN
 - **Module**: deployment_lifecycle
 - **Files**: scripts/validate_blueprints.py
 - **Description**: Register data_infrastructure in EXPECTED_MODULES list (validate_blueprints.py).
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260612-023
+- **Date**: 2026-06-11
+- **Author**: cursor-agent
+- **Commit**: 6753a86
+- **Type**: fix
+- **Module**: monitor_dashboard
+- **Files**: core/observability/data_health_service.py
+- **Description**: Downgrade ConformalCalibrator cold-start alert from CRITICAL to WARNING. CRITICAL on every restart was alert noise — calibrator needs 50 closes to warm up. Now only WARNING during warmup. Also diagnosed duplicate alert dispatch bug (RULE-012 fires twice in 1s despite 300s cooldown).
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
