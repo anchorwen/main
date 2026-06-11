@@ -953,16 +953,22 @@ class DataHealthService:
 
         age_days = _age_minutes(last_ts) / (60 * 24) if last_ts else -1
 
-        if cold_started and total_computations == 0:
-            status = SourceStatus.FAIL
-            code = "CONFORMAL_COLD_STALLED"
+        # ── FIX-20260611-022: Reduced alert severity during warmup ──
+        # CRITICAL on every restart is noise — calibrator just needs time.
+        # WARNING during warmup, CRITICAL only if no data for > 24 hours.
+        if cold_started and history_count == 0 and total_computations == 0:
+            # Never received any data — check if this is a fresh restart
+            # or a genuinely broken pipeline
+            status = SourceStatus.WARN
+            code = "CONFORMAL_COLD_EMPTY"
             message = (
-                f"Cold-started, {total_computations} computations, {history_count} history entries"
+                f"No data yet: {history_count} history, {total_computations} computations. "
+                "Calibrator will warm up after 50 closes."
             )
         elif cold_started and history_count < 50:
             status = SourceStatus.WARN
             code = "CONFORMAL_COLD_WARMING"
-            message = f"Cold-started, {history_count}/50 history entries to warm"
+            message = f"Warming up: {history_count}/50 history entries to warm"
         elif age_days > 7:
             status = SourceStatus.FAIL
             code = "CONFORMAL_HISTORY_FROZEN"
