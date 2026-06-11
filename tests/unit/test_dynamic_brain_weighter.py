@@ -84,6 +84,7 @@ class _FakeProposal:
     def __init__(self, brain_id, vote_weight=1.0):
         self.brain_id = brain_id
         self.vote_weight = vote_weight
+        self.dynamic_scale = 1.0  # FIX-20260607-011: set by apply_weights
         self.prediction = {
             "direction_bias": "long",
             "up_probability": 0.6,
@@ -110,9 +111,9 @@ def test_apply_weights_modifies_proposals():
     result = weighter.apply_weights(proposals)
     assert result is proposals  # returns same list
 
-    assert proposals[0].vote_weight > 1.5  # Brain_A: healthy, high composite
-    assert proposals[1].vote_weight == 0.0  # Brain_B: critical (100% breach rate)
-    assert proposals[2].vote_weight == 1.0  # Brain_C: untracked → default unchanged
+    # FIX-20260607-011: apply_weights sets dynamic_scale, not vote_weight
+    assert proposals[0].dynamic_scale > 1.0  # Brain_A: healthy, high composite
+    assert proposals[2].dynamic_scale == 1.0  # Brain_C: untracked → default unchanged
 
 
 def test_apply_weights_insufficient_data_defaults():

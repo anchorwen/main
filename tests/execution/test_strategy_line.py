@@ -286,10 +286,12 @@ class TestEvaluateSuccess:
 
 class TestCounterTrendGate:
     def test_counter_trend_block_when_direction_opposes_trend(self):
-        """When trend_direction != direction, _counter_trend_action may block."""
+        """Counter-trend logic was extracted to trend_isolation_gates.py
+        (FIX-007). evaluate() passes trend params through but does NOT
+        internally block/penalise counter-trend signals.
+        The signal should still evaluate normally."""
         line = _make_strategy(
             proposals=[
-                # Long signal but trend is "short"
                 make_proposal(
                     up_probability=0.85,
                     down_probability=0.15,
@@ -305,12 +307,11 @@ class TestCounterTrendGate:
             trend_direction="short",
             trend_strength=0.7,
         )
-        # Barrier at strength 0.7 > 0.30 block threshold → blocked
-        assert result.should_trade is False
-        assert "counter_trend_blocked" in result.reason
+        # Counter-trend handled upstream — evaluate() still processes trade
+        assert result.should_trade is True
 
     def test_counter_trend_allow_same_direction_trade(self):
-        """Same direction as trend should not be blocked."""
+        """Same direction as trend should evaluate normally."""
         line = _make_strategy(
             proposals=[
                 make_proposal(
@@ -328,12 +329,10 @@ class TestCounterTrendGate:
             trend_direction="long",
             trend_strength=0.7,
         )
-        # Same direction → should not be blocked by counter-trend
         assert result.should_trade is True
-        assert "counter_trend" not in result.reason
 
     def test_counter_trend_not_applied_when_trend_neutral(self):
-        """Neutral trend → counter-trend gate skipped."""
+        """Neutral trend → evaluates normally."""
         line = _make_strategy(
             proposals=[
                 make_proposal(
@@ -351,11 +350,12 @@ class TestCounterTrendGate:
             trend_direction="neutral",
             trend_strength=0.0,
         )
-        # No counter-trend block
-        assert "counter_trend" not in result.reason
+        assert result.should_trade is True
 
     def test_counter_trend_penalise_lowers_confidence(self):
-        """Penalise threshold: confidence is multiplied but may still be enough."""
+        """Counter-trend penalise is now handled by trend_isolation_gates
+        (FIX-007 extraction), NOT inside evaluate().  evaluate() passes
+        trend params through but does not apply counter-trend logic itself."""
         micro_config = StrategyLineConfig(name="micro_3bar", magic=90002, brain_types={"test"})
         line = _make_strategy(
             config=micro_config,
@@ -368,7 +368,6 @@ class TestCounterTrendGate:
                 ),
             ],
         )
-        # Micro block=0.50, penalise=0.25. trend_strength=0.30 > 0.25 → penalise (not block)
         result = line.evaluate(
             feature_vector=None,
             micro_feature_vector=None,
@@ -376,9 +375,8 @@ class TestCounterTrendGate:
             trend_direction="long",
             trend_strength=0.30,
         )
-        # Confidence should be lowered but still above threshold
+        # Counter-trend is handled upstream — evaluate() should still process the trade
         assert result.should_trade is True
-        assert result.confidence < 0.95  # penalised
 
 
 # ── _counter_trend_action helper ──────────────────────────────────────────
@@ -412,10 +410,12 @@ class TestCounterTrendAction:
         assert result["action"] == "allow"
 
     def test_unknown_strategy_uses_default_threshold(self):
+        # FIX-20260610-001: default block raised from 0.40 to 0.60
+        # 0.50 is now penalise (was block at old 0.40 threshold)
         result = _counter_trend_action("unknown_strategy", 0.50)
-        assert result["action"] == "block"  # 0.50 >= 0.40 default block
-        assert result["confidence_mult"] == 0.60
-        assert result["vol_mult"] == 0.65
+        assert result["action"] == "penalise"  # 0.50 >= 0.35 penalise, < 0.60 block
+        assert result["confidence_mult"] == 0.65
+        assert result["vol_mult"] == 0.70
 
 
 # ── Consensus computation ─────────────────────────────────────────────────
