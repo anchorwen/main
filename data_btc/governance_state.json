@@ -99,11 +99,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.29,
-        "profit_factor": 0.24,
-        "sharpe_ratio": -141.73,
+        "win_rate": 0.26,
+        "profit_factor": 0.23,
+        "sharpe_ratio": -141.44,
         "total_trades": 100,
-        "pnl_r": -1066.6
+        "pnl_r": -1081.24
       }
     },
     "BTC_Swing_V11_M15_Directional": {
@@ -114,11 +114,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.29,
-        "profit_factor": 0.24,
-        "sharpe_ratio": -141.73,
+        "win_rate": 0.26,
+        "profit_factor": 0.23,
+        "sharpe_ratio": -141.44,
         "total_trades": 100,
-        "pnl_r": -1066.6
+        "pnl_r": -1081.24
       }
     }
   },
