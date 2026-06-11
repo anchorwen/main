@@ -2319,6 +2319,7 @@ def _evaluate_strategy_lines(
     btc_augment: Any = None,  # FIX-20260607-XXX: pre-computed 37-dim BTC vector
     # ── FIX-20260609-011: governance degradation gate ──
     governance_state: dict[str, Any] | None = None,
+    degradation_constraints: Any | None = None,  # FIX-20260611-022
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue."""
     from core.runtime.strategy_evaluator import evaluate_strategy_lines as _impl
@@ -2370,6 +2371,7 @@ def _evaluate_strategy_lines(
         bootstrap_degraded=bootstrap_degraded,
         btc_augment=btc_augment,  # FIX-20260607-XXX
         governance_state=governance_state,
+        degradation_constraints=degradation_constraints,
     )
 
 
@@ -4754,6 +4756,31 @@ def execute_live_cycle(
         except Exception:  # noqa: BLE001
             _gov_state = None  # Non-fatal: gate silently skips if unreadable
 
+        # ── FIX-20260611-022: Evaluate data-health degradation ──
+        # Progressive risk reduction based on data quality.
+        # Staleness-based: if key sources haven't updated recently, reduce exposure.
+        _degrade_constraints: Any = None
+        try:
+            from core.observability.degradation import (
+                DegradationConstraints,
+                evaluate_staleness,
+            )
+
+            _dh_path = Path(config.base_dir) / "state" / "data_health_state.json"
+            if _dh_path.exists():
+                import json as _json_dh
+
+                _dh_raw = _json_dh.loads(_dh_path.read_text(encoding="utf-8"))
+                _sources = _dh_raw.get("sources", {})
+                _stale_level = evaluate_staleness(_sources)
+                if _stale_level is not None:
+                    _degrade_constraints = DegradationConstraints.for_level(
+                        _stale_level,
+                        reason=f"Data staleness detected (level={_stale_level.name})",
+                    )
+        except Exception:  # noqa: BLE001
+            _degrade_constraints = None  # Fail-open: degradation check must not crash
+
         # Evaluate all strategy lines
         eval_summary = _evaluate_strategy_lines(
             strategy_lines=strategies,
@@ -4806,6 +4833,7 @@ def execute_live_cycle(
             bootstrap_degraded=getattr(state, "_bootstrap_degraded", False),
             btc_augment=_btc_aug,  # FIX-20260607-XXX
             governance_state=_gov_state,
+            degradation_constraints=_degrade_constraints,
         )
 
         # ── Golden Master recording: capture outputs after evaluation ──

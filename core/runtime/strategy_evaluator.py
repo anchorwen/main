@@ -72,6 +72,8 @@ def evaluate_strategy_lines(
     btc_augment: Any = None,  # FIX-20260607-XXX: pre-computed 37-dim BTC vector
     # ── FIX-20260609-011: governance degradation gate ──
     governance_state: dict[str, Any] | None = None,
+    # ── FIX-20260611-022: data-health degradation constraints ──
+    degradation_constraints: Any | None = None,
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue.
 
@@ -383,6 +385,43 @@ def evaluate_strategy_lines(
                 ),
                 flush=True,
             )
+
+        # ── Cut 6: Data-health degradation → progressive risk reduction ──
+        # FIX-20260611-022: Computed upstream from DataHealthService output.
+        # NORMAL(100%) → YELLOW(40%) → ORANGE(15%,no new) → RED(0%,close-only).
+        if (
+            decision.should_trade
+            and gate_mode != "shadow"
+            and degradation_constraints is not None
+        ):
+            try:
+                from core.observability.degradation import apply_degradation_to_decision
+
+                _dv, _dt, _dr = apply_degradation_to_decision(
+                    degradation_constraints,
+                    decision.volume,
+                    decision.should_trade,
+                )
+                if _dr:
+                    decision.volume = _dv
+                    decision.should_trade = _dt
+                    decision.reason = (decision.reason or "") + _dr
+                    if not _dt:
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "degradation_blocked",
+                                    "time": _utc_iso(),
+                                    "strategy": sname,
+                                    "direction": decision.direction,
+                                    "reason": decision.reason,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+            except Exception:  # noqa: BLE001
+                pass
 
         # Apply session + health volume multipliers
         if decision.should_trade:
