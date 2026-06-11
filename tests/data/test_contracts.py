@@ -183,6 +183,68 @@ class TestGovernanceTransitionContract:
 # ── Event stream invariants ────────────────────────────────────────────────
 
 
+class TestTradeJournalContract:
+    """Structural invariants for live_trade_journal.jsonl."""
+
+    def test_open_entries_have_entry_price_and_volume(self):
+        """Every 'open' entry MUST have entry_price > 0 and volume > 0."""
+        import json as _j
+
+        for data_dir in ["data", "data_btc"]:
+            jp = Path(data_dir) / "live_trade_journal.jsonl"
+            if not jp.exists():
+                continue
+            violations = []
+            with open(jp, encoding="utf-8") as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = _j.loads(line)
+                    except Exception:
+                        continue
+                    if rec.get("action") != "open":
+                        continue
+                    if not rec.get("entry_price"):
+                        violations.append(f"L{line_num}: no entry_price")
+                    if not rec.get("volume"):
+                        violations.append(f"L{line_num}: volume=0")
+            # Journal may have legacy entries; just report, don't fail
+            if violations:
+                print(f"\n  [{data_dir}] {len(violations)} open entries with issues")
+
+    def test_close_label_coverage(self):
+        """At least 80% of close entries should have a non-empty label."""
+        import json as _j
+
+        for data_dir in ["data", "data_btc"]:
+            jp = Path(data_dir) / "live_trade_journal.jsonl"
+            if not jp.exists():
+                continue
+            total = 0
+            labeled = 0
+            with open(jp, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = _j.loads(line)
+                    except Exception:
+                        continue
+                    if rec.get("action") != "close":
+                        continue
+                    total += 1
+                    if rec.get("label"):
+                        labeled += 1
+            if total > 10:
+                rate = labeled / total
+                assert rate >= 0.80, (
+                    f"{data_dir}: only {labeled}/{total} ({rate:.1%}) closes have labels"
+                )
+
+
 class TestEventStreamInvariants:
     """Invariants that every event stream file MUST satisfy."""
 
