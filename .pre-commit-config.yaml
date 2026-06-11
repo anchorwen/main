@@ -1,10 +1,20 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.7
+  - repo: local
     hooks:
       - id: ruff
-        args: [--fix, --extend-select=BLE]  # BLE = no blind except Exception (new code only)
+        name: "ruff"
+        entry: ruff check --fix --extend-select=BLE
+        language: system
+        files: \.py$
+        stages: [pre-commit]
+        pass_filenames: true
       - id: ruff-format
+        name: "ruff-format"
+        entry: ruff format
+        language: system
+        files: \.py$
+        stages: [pre-commit]
+        pass_filenames: true
 
   # ------------------------------------------------------------------
   # mypy type-check — iron law gate
@@ -16,8 +26,7 @@ repos:
       - id: mypy-iron-law
         name: "[铁律] mypy type-check (no new errors)"
         entry: python scripts/pre_commit_mypy.py
-        language: python
-        additional_dependencies: [mypy>=1.10]
+        language: system
         files: \.py$
         stages: [pre-commit]
         pass_filenames: false
@@ -33,7 +42,7 @@ repos:
       - id: enforce-architecture-docs
         name: "[门禁] 架构文档自动刷新"
         entry: python roadmap/scripts/architecture_gate.py
-        language: python
+        language: system
         files: ^(core/|apps/|scripts/|configs/|main\.py)
         stages: [pre-commit]
         pass_filenames: false
@@ -46,7 +55,7 @@ repos:
       - id: blueprint-consistency
         name: "[门禁] 蓝图一致性验证"
         entry: python scripts/validate_blueprints.py
-        language: python
+        language: system
         files: ^(blueprints/|core/|apps/|scripts/)
         stages: [pre-commit]
         pass_filenames: false
@@ -61,7 +70,7 @@ repos:
       - id: verify-iron-law
         name: "[铁律 #1] 全量验证 (mypy+ruff+blueprint+artifact)"
         entry: python scripts/verify.py --quick
-        language: python
+        language: system
         files: \.py$
         stages: [pre-commit]
         pass_filenames: false
@@ -77,7 +86,7 @@ repos:
       - id: journal-freeze-gate
         name: "[铁律] 账本禁动 — 覆盖率<80% 拦截修改"
         entry: python scripts/journal_freeze_gate.py
-        language: python
+        language: system
         files: ^(core/contracts/label_contract\.py|core/ledger/)
         stages: [pre-commit]
         pass_filenames: false
