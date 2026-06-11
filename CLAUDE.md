@@ -331,9 +331,11 @@ python scripts/register_fix.py --help
 **存量站点分布** (供参考):
 | 文件 | 存量 |
 |------|------|
-| `live_cycle.py` | 7 |
-| `live_intent_loop.py` | 20 |
-| `strategy_line.py` | 2 |
+| `live_cycle.py` | 34 |
+| `live_intent_loop.py` | 51 |
+| `strategy_line.py` | 9 |
+| **合计** | **94** |
+> **注**: 2026-06-11 FIX-018 切除 legacy dispatch 死代码 (L5752-L6317, 567行), BLE001 105→94 (-11).
 
 ---
 

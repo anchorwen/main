@@ -76,6 +76,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260611-018 | 2026-06-11 | cursor-agent | — | **LEGACY dispatch死代码切除**: FIX-20260610-010 已通过 `direction="neutral"` 闸门使 Phase 10 dispatch 不可达(L5752-L6317, 567行). 死代码归档至 `legacy_dispatch_reference.py`. `live_cycle.py`: 6341→5774 (-567, -8.9%). BLE001: 45→34 (-11). Iron Law #10 存量表修正: 29→94. DQAF-20260611-018. | RC-08 |
 | FIX-20260610-006 | 2026-06-10 | cursor-agent | — | **Data health止血**: execution_state schema_version注入; trail_dispatch trail_advances计数器; live_cycle MIA close trail_contribution字段+sl_hit_trailed标签. | RC-06 |
 | FIX-20260610-007 | 2026-06-10 | cursor-agent | — | **系统解冻+数据收集加速**: budget跨日重置+leaderboard等权兜底+calibrator持久化; hesitation margin 0.08→0.05; cold_explore扩展到swing/btc策略(0.01 lot探索交易); MetaFilter V2事件感知; DingTalk适配器; 跨源对账修复. DQAF-20260610-001全量交付. | RC-03, RC-06, RC-12 |
 | FIX-20260610-004 | 2026-06-10 | cursor-agent | — | **MIA管道PnL缺失修复**: (1) `_enrich_mia_from_deals` close_volume=0时从MT5 deal数据恢复volume并重算PnL; truthiness→显式None检查。 (2) `_build_mia_close_entry` close_volume=0时保留数值供后续恢复。 (3) `_check_pre_close` mid从state._recent_mid_prices解析→不再传None。 DQAF-20260610-001 IC Mandate. ReB: TRAIL_TELEMETRY_BLINDSPOT. | RC-06 |
