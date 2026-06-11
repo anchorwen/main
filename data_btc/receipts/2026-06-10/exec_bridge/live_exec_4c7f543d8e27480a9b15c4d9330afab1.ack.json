@@ -1,0 +1,22 @@
+{
+  "message_id": "live_exec_4c7f543d8e27480a9b15c4d9330afab1",
+  "ack_status": "rejected",
+  "received_at": "2026-06-10T18:50:02",
+  "detail": {
+    "reason": "position_not_found",
+    "ticket": 3869723566
+  }
+}    "action": 1,
+      "symbol": "BTCUSDc",
+      "volume": 0.01,
+      "type": 1,
+      "position": 3869723566,
+      "price": 61725.0,
+      "deviation": 20,
+      "magic": 90401,
+      "comment": "",
+      "type_time": 0,
+      "type_filling": 1
+    }
+  }
+}

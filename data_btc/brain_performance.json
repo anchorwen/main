@@ -1467,6 +1467,102 @@
           "side": "",
           "recorded_at": ""
         }
+      },
+      {
+        "timestamp": "2026-06-10T18:51:34.723577",
+        "composite_score": 0.4072,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3869723570,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T19:06:34.952728",
+        "composite_score": 0.5,
+        "execution_outcome": "breakeven",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870350090,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T20:08:04.392530",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870498573,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T21:50:35.278877",
+        "composite_score": 0.4155,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870931970,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T21:55:35.358876",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870993275,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T23:12:04.957478",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3871035112,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-11T00:09:25.418653",
+        "composite_score": 0.5961,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3871726916,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-11T00:09:25.419653",
+        "composite_score": 0.595,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3871727437,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
       }
     ],
     "BTC_Swing_V6_MultiTF_LGB_v2": [
@@ -1837,6 +1933,102 @@
         "fill_grade": null,
         "dimensions": {
           "position_ticket": 3869566418,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T18:51:34.722576",
+        "composite_score": 0.4072,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3869723570,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T19:06:34.952728",
+        "composite_score": 0.5,
+        "execution_outcome": "breakeven",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870350090,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T20:08:04.392530",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870498573,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T21:50:35.278877",
+        "composite_score": 0.4155,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870931970,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T21:55:35.358876",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870993275,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T23:12:04.957478",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3871035112,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-11T00:09:25.418653",
+        "composite_score": 0.5961,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3871726916,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-11T00:09:25.419653",
+        "composite_score": 0.595,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3871727437,
           "symbol": "",
           "side": "",
           "recorded_at": ""
@@ -2215,6 +2407,102 @@
           "side": "",
           "recorded_at": ""
         }
+      },
+      {
+        "timestamp": "2026-06-10T18:51:34.723577",
+        "composite_score": 0.4072,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3869723570,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T19:06:34.952728",
+        "composite_score": 0.5,
+        "execution_outcome": "breakeven",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870350090,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T20:08:04.392530",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870498573,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T21:50:35.278877",
+        "composite_score": 0.4155,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870931970,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T21:55:35.358876",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870993275,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T23:12:04.957478",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3871035112,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-11T00:09:25.418653",
+        "composite_score": 0.5961,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3871726916,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-11T00:09:25.418653",
+        "composite_score": 0.595,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3871727437,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
       }
     ],
     "BTC_Swing_V10_M15_Survival": [
@@ -2445,6 +2733,102 @@
           "side": "",
           "recorded_at": ""
         }
+      },
+      {
+        "timestamp": "2026-06-10T18:51:34.723577",
+        "composite_score": 0.4072,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3869723570,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T19:06:34.952728",
+        "composite_score": 0.5,
+        "execution_outcome": "breakeven",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870350090,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T20:08:04.392530",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870498573,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T21:50:35.278877",
+        "composite_score": 0.4155,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870931970,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T21:55:35.358876",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870993275,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T23:12:04.957478",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3871035112,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-11T00:09:25.418653",
+        "composite_score": 0.5961,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3871726916,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-11T00:09:25.419653",
+        "composite_score": 0.595,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3871727437,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
       }
     ],
     "BTC_Swing_V9_H1_Survival": [
@@ -2671,6 +3055,102 @@
         "fill_grade": null,
         "dimensions": {
           "position_ticket": 3869566418,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T18:51:34.723577",
+        "composite_score": 0.4072,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3869723570,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T19:06:34.952728",
+        "composite_score": 0.5,
+        "execution_outcome": "breakeven",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870350090,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T20:08:04.392530",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870498573,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T21:50:35.278877",
+        "composite_score": 0.4155,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870931970,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T21:55:35.358876",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3870993275,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-10T23:12:04.957478",
+        "composite_score": 0.4499,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3871035112,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-11T00:09:25.418653",
+        "composite_score": 0.5961,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3871726916,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-11T00:09:25.419653",
+        "composite_score": 0.595,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3871727437,
           "symbol": "",
           "side": "",
           "recorded_at": ""

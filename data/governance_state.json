@@ -3,26 +3,26 @@
   "brain_states": {
     "OU_Params_V6_Sniper": {
       "brain_id": "OU_Params_V6_Sniper",
-      "status": "live",
+      "status": "probation",
       "registered_at": "2026-05-04T10:51:17.123332",
-      "last_transition_at": "2026-06-08T22:00:11.866443",
-      "transition_count": 16,
+      "last_transition_at": "2026-06-10T22:00:24.467464",
+      "transition_count": 17,
       "freeze_count": 0,
       "exposure_limited": false,
       "performance_metrics": {
-        "win_rate": 0.4544,
-        "profit_factor": 0.75,
-        "sharpe_ratio": -24.79,
-        "total_trades": 2907,
-        "pnl_r": -1006.5
+        "win_rate": 0.418,
+        "profit_factor": 0.7,
+        "sharpe_ratio": -29.82,
+        "total_trades": 3543,
+        "pnl_r": -1374.11
       }
     },
     "OU_Params_V7_M15": {
       "brain_id": "OU_Params_V7_M15",
-      "status": "live",
+      "status": "probation",
       "registered_at": "2026-05-24T22:00:00.000000",
-      "last_transition_at": "2026-06-08T22:00:11.866443",
-      "transition_count": 9,
+      "last_transition_at": "2026-06-10T22:00:24.467464",
+      "transition_count": 10,
       "freeze_count": 0,
       "exposure_limited": false,
       "vote_weight": 1.5,
@@ -96,32 +96,32 @@
     },
     "Swing_V9_M30_V2": {
       "brain_id": "Swing_V9_M30_V2",
-      "status": "candidate",
+      "status": "probation",
       "registered_at": "2026-06-04T11:02:07.813219",
-      "last_transition_at": "2026-06-04T11:02:07.813219",
-      "transition_count": 1,
+      "last_transition_at": "2026-06-10T22:00:24.467464",
+      "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4526,
-        "profit_factor": 1.02,
-        "sharpe_ratio": 1.47,
-        "total_trades": 1549,
-        "pnl_r": 67.71
+        "win_rate": 0.4352,
+        "profit_factor": 1.03,
+        "sharpe_ratio": 1.8,
+        "total_trades": 2130,
+        "pnl_r": 105.39
       }
     },
     "Swing_V9_M15_V2": {
       "brain_id": "Swing_V9_M15_V2",
-      "status": "candidate",
+      "status": "live",
       "registered_at": "2026-06-04T10:48:14.724913",
-      "last_transition_at": "2026-06-04T10:48:14.724913",
-      "transition_count": 1,
+      "last_transition_at": "2026-06-10T22:00:24.467464",
+      "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.6256,
-        "profit_factor": 3.21,
-        "sharpe_ratio": 111.28,
-        "total_trades": 398,
-        "pnl_r": 3530.23
+        "win_rate": 0.617,
+        "profit_factor": 3.49,
+        "sharpe_ratio": 104.46,
+        "total_trades": 872,
+        "pnl_r": 5310.87
       }
     },
     "Brain_Trend_M30_V1": {
@@ -200,17 +200,17 @@
     },
     "Barrier_V9_12B_V2": {
       "brain_id": "Barrier_V9_12B_V2",
-      "status": "candidate",
+      "status": "live",
       "registered_at": "2026-06-02T01:33:58.375265",
-      "last_transition_at": "2026-06-02T01:33:58.375265+00:00",
-      "transition_count": 1,
+      "last_transition_at": "2026-06-10T22:00:24.466464",
+      "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.5474,
-        "profit_factor": 2.18,
-        "sharpe_ratio": 71.08,
-        "total_trades": 464,
-        "pnl_r": 1829.77
+        "win_rate": 0.5421,
+        "profit_factor": 2.29,
+        "sharpe_ratio": 68.34,
+        "total_trades": 878,
+        "pnl_r": 2595.69
       }
     },
     "Brain_Trend_V10_M30": {
@@ -244,26 +244,26 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.3976,
-        "profit_factor": 0.38,
-        "sharpe_ratio": -68.27,
-        "total_trades": 1484,
-        "pnl_r": -4255.85
+        "win_rate": 0.3606,
+        "profit_factor": 0.4,
+        "sharpe_ratio": -63.48,
+        "total_trades": 2432,
+        "pnl_r": -5490.09
       }
     },
     "Swing_V9_H1_V2": {
       "brain_id": "Swing_V9_H1_V2",
-      "status": "candidate",
+      "status": "live",
       "registered_at": "2026-06-04T11:02:11.580065",
-      "last_transition_at": "2026-06-04T11:02:11.580065",
-      "transition_count": 1,
+      "last_transition_at": "2026-06-10T22:00:24.467464",
+      "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4976,
-        "profit_factor": 2.12,
-        "sharpe_ratio": 52.09,
-        "total_trades": 1656,
-        "pnl_r": 3969.86
+        "win_rate": 0.4685,
+        "profit_factor": 1.91,
+        "sharpe_ratio": 45.08,
+        "total_trades": 2606,
+        "pnl_r": 4649.31
       }
     },
     "Swing_LGB_M15_V1": {
@@ -290,5 +290,48 @@
       }
     }
   },
-  "transition_log": []
+  "transition_log": [
+    {
+      "brain_id": "Barrier_V9_12B_V2",
+      "from_status": "candidate",
+      "to_status": "live",
+      "reason": "pnl:stable",
+      "timestamp": "2026-06-10T22:00:24.466464"
+    },
+    {
+      "brain_id": "OU_Params_V6_Sniper",
+      "from_status": "live",
+      "to_status": "probation",
+      "reason": "pnl:warning",
+      "timestamp": "2026-06-10T22:00:24.467464"
+    },
+    {
+      "brain_id": "OU_Params_V7_M15",
+      "from_status": "live",
+      "to_status": "probation",
+      "reason": "pnl:warning",
+      "timestamp": "2026-06-10T22:00:24.467464"
+    },
+    {
+      "brain_id": "Swing_V9_H1_V2",
+      "from_status": "candidate",
+      "to_status": "live",
+      "reason": "pnl:stable",
+      "timestamp": "2026-06-10T22:00:24.467464"
+    },
+    {
+      "brain_id": "Swing_V9_M15_V2",
+      "from_status": "candidate",
+      "to_status": "live",
+      "reason": "pnl:high_alpha",
+      "timestamp": "2026-06-10T22:00:24.467464"
+    },
+    {
+      "brain_id": "Swing_V9_M30_V2",
+      "from_status": "candidate",
+      "to_status": "probation",
+      "reason": "pnl:degraded",
+      "timestamp": "2026-06-10T22:00:24.467464"
+    }
+  ]
 }

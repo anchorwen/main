@@ -5674,7 +5674,20 @@ def execute_live_cycle(
     # ── Record counterfactual signals for P&L tracking ──
     # Per-proposal try/except prevents one misbehaving brain from
     # silently dropping P&L records for all other brains.
-    if pnl_ledger is not None and mid_price is not None and mid_price > 0:
+    #
+    # FIX-20260611-003: When multi_strategy_enabled=True, Phase 10 runs
+    # brain inference EVERY cycle but NEVER dispatches (FIX-010).  The
+    # PnL recording below created phantom records at ~500/hr — flooding
+    # the ledger with entry=exit=mid_price entries that diluted rolling_wr,
+    # cascading into FIX-011-001's rolling_wr_fallback killing all swing
+    # trades.  Gate PnL recording same as dispatch: skip when the main
+    # eval path is authoritative.
+    if (
+        pnl_ledger is not None
+        and mid_price is not None
+        and mid_price > 0
+        and not config.multi_strategy_enabled  # ← FIX-20260611-003
+    ):
         _live_spread = float(_ask - _bid) if (_bid and _ask and _ask > _bid) else 0.0
         if config.multi_brain:
             _registry = BrainRegistry.instance()

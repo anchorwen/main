@@ -88,7 +88,7 @@ class BehavioralMetrics:
     intent_dispatched_count: int = 0
     strategy_rejections: int = 0
     cycle_count: int = 0
-    last_log_byte_offset: int = 0
+    last_line_count: int = 0  # line-number cursor (safer than byte seek/tell in text mode)
     intent_log_path: str = ""
 
 

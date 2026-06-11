@@ -227,6 +227,7 @@ class DataHealthService:
         # ── FIX-20260611-002: behavioral compliance incremental scanner ──
         self._cached_behavioral_metrics: Any = None
         self._position_exceeded_streak: int = 0
+        self._silent_cycle_streak: int = 0  # FIX-20260611-003
 
     # ── Threshold helpers ──────────────────────────────────────────────
 
@@ -2131,16 +2132,18 @@ class DataHealthService:
         _log_files = sorted(glob.glob(_log_pattern))
         _current_log_path = _log_files[-1] if _log_files else ""
 
-        # ── Preserve cursor across log rotation ──
-        _current_offset = 0
+        # ── Preserve line cursor across log rotation ──
+        # Line-count cursor: safer than byte seek/tell — text-mode tell()
+        # returns opaque offsets that are unreliable for seek().
+        _current_line = 0
         if self._cached_behavioral_metrics is not None:
             if self._cached_behavioral_metrics.intent_log_path == _current_log_path:
-                _current_offset = self._cached_behavioral_metrics.last_log_byte_offset
-            # else: log rotated → reset cursor to 0
+                _current_line = self._cached_behavioral_metrics.last_line_count
+            # else: log rotated → reset line cursor to 0
 
         # ── Reset counters each tick, preserve cursor (accumulation bug fix) ──
         self._cached_behavioral_metrics = BehavioralMetrics(
-            last_log_byte_offset=_current_offset,
+            last_line_count=_current_line,
             intent_log_path=_current_log_path,
         )
         _metrics = self._cached_behavioral_metrics
@@ -2151,9 +2154,13 @@ class DataHealthService:
         _max_lines = int(self._t("behavioral_max_lines_per_tick"))
         try:
             with open(_current_log_path, encoding="utf-8") as f:
-                f.seek(_current_offset)
+                _line_no = 0
                 _lines_read = 0
                 for _line in f:
+                    _line_no += 1
+                    # Skip already-processed lines (line-count cursor)
+                    if _line_no <= _current_line:
+                        continue
                     _lines_read += 1
                     if _lines_read > _max_lines:
                         break
@@ -2176,8 +2183,10 @@ class DataHealthService:
                     elif '"event": "cycle_end"' in _line:
                         _metrics.cycle_count += 1
 
-                # ── Update cursor for next tick ──
-                _metrics.last_log_byte_offset = f.tell()
+                # ── Update line cursor for next tick ──
+                # If we hit max_lines, cursor stays at last processed line
+                # — remaining lines picked up next tick
+                _metrics.last_line_count = _line_no
         except Exception:  # noqa: BLE001
             pass  # best-effort — never crash the audit tick
 
@@ -2218,12 +2227,25 @@ class DataHealthService:
         # ── Authoritative source: position_manager (MT5-synced), not intent log ──
         _max_positions = 2  # default; overridden by live_btc.yaml config
         _current = 0
-        if self._position_manager is not None:
-            try:
-                _positions = self._position_manager.get_all_positions()
-                _current = len(_positions)
-            except Exception:  # noqa: BLE001
-                pass
+        if self._position_manager is None:
+            # No position_manager available (e.g. standalone script usage) —
+            # skip check gracefully rather than failing.
+            return SourceCheckResult(
+                source="position_limit", tier=Tier.CRITICAL,
+                status=SourceStatus.PASS, primary_code="POSITION_LIMIT_NO_MANAGER",
+                message="position_manager not available — check skipped",
+                checked_at=_utc_iso(),
+            )
+        try:
+            _positions = self._position_manager.get_all_positions()
+            _current = len(_positions)
+        except Exception:  # noqa: BLE001
+            return SourceCheckResult(
+                source="position_limit", tier=Tier.CRITICAL,
+                status=SourceStatus.PASS, primary_code="POSITION_LIMIT_QUERY_FAILED",
+                message="Failed to query position_manager — assuming safe",
+                checked_at=_utc_iso(),
+            )
 
         # ── Read max_positions from config ──
         _cfg_path = os.path.join(self._base_dir, "..", "configs")
@@ -2354,6 +2376,7 @@ class DataHealthService:
         _rejections = self._cached_behavioral_metrics.strategy_rejections
 
         if _trades > 0:
+            self._silent_cycle_streak = 0
             return SourceCheckResult(
                 source="trade_activity", tier=Tier.HIGH,
                 status=SourceStatus.PASS, primary_code="TRADE_ACTIVITY_OK",
@@ -2362,6 +2385,7 @@ class DataHealthService:
                 checked_at=_utc_iso(),
             )
         if _rejections > 0:
+            self._silent_cycle_streak = 0
             return SourceCheckResult(
                 source="trade_activity", tier=Tier.HIGH,
                 status=SourceStatus.PASS,
@@ -2370,28 +2394,146 @@ class DataHealthService:
                 metrics={"trades": 0, "rejections": _rejections},
                 checked_at=_utc_iso(),
             )
-        # Zero trades AND zero rejections → system may be dead
-        _cycles = self._cached_behavioral_metrics.cycle_count
+        # Zero trades AND zero rejections — increment silent streak
+        self._silent_cycle_streak += 1
         _max_silent = int(self._t("trade_activity_max_silent_cycles"))
-        if _cycles >= _max_silent:
+        if self._silent_cycle_streak >= _max_silent:
             return SourceCheckResult(
                 source="trade_activity",
                 tier=Tier.HIGH,
                 status=SourceStatus.FAIL,
                 primary_code="TRADE_ACTIVITY_SILENT",
                 message=(
-                    f"0 trades AND 0 rejections across {_cycles} cycles — "
-                    f"system may be stalled (main eval not running?)"
+                    f"0 trades AND 0 rejections for {self._silent_cycle_streak} "
+                    f"consecutive audits (threshold: {_max_silent}) — "
+                    f"system may be stalled"
                 ),
-                metrics={"cycles_silent": _cycles, "max_silent": _max_silent},
+                metrics={"silent_streak": self._silent_cycle_streak, "max_silent": _max_silent},
                 checked_at=_utc_iso(),
             )
         return SourceCheckResult(
             source="trade_activity", tier=Tier.HIGH,
             status=SourceStatus.PASS,
             primary_code="TRADE_ACTIVITY_SILENT_BUT_RECENT",
-            message=f"0 trades in {_cycles} cycles, below alert threshold ({_max_silent})",
-            metrics={"cycles_silent": _cycles, "max_silent": _max_silent},
+            message=(
+                f"0 trades for {self._silent_cycle_streak} audits, "
+                f"below alert threshold ({_max_silent})"
+            ),
+            metrics={"silent_streak": self._silent_cycle_streak, "max_silent": _max_silent},
+            checked_at=_utc_iso(),
+        )
+
+    # ── FIX-20260611-003: PnL Ledger integrity (data flywheel gate) ──
+
+    @health_check(
+        tier=Tier.CRITICAL,
+        source="pnl_ledger_integrity",
+        description="PnL ledger phantom records and abnormal write rate",
+    )
+    def check_pnl_ledger_integrity(self) -> SourceCheckResult:
+        """Detect phantom PnL records (identical entry=exit, abnormal rate).
+
+        Phantom records occur when Phase 10 writes brain predictions at
+        high frequency without corresponding trades — entry_price never
+        changes, exit_price == entry_price, pnl = -spread_cost.
+        Detected via: (a) identical entry=exit ratio, (b) hourly write rate.
+        """
+        _ledger_path = os.path.join(self._base_dir, "brain_pnl_ledger.json")
+        _ledger = _safe_json_load(_ledger_path)
+        if _ledger is None:
+            return SourceCheckResult(
+                source="pnl_ledger_integrity", tier=Tier.CRITICAL,
+                status=SourceStatus.MISSING,
+                primary_code="PNL_LEDGER_MISSING",
+                message="brain_pnl_ledger.json not found",
+                checked_at=_utc_iso(),
+            )
+
+        settled = _ledger.get("settled", {})
+        if not settled:
+            return SourceCheckResult(
+                source="pnl_ledger_integrity", tier=Tier.CRITICAL,
+                status=SourceStatus.PASS, primary_code="PNL_LEDGER_EMPTY",
+                message="No settled entries — ledger is clean (or newly initialized)",
+                checked_at=_utc_iso(),
+            )
+
+        # ── Check 1: Phantom record ratio ──
+        _total = 0
+        _phantom = 0
+        _brain_phantom: dict[str, int] = {}
+        for bid, entries in settled.items():
+            if not entries:
+                continue
+            _total += len(entries)
+            for e in entries[-100:]:  # check last 100 per brain
+                _entry = e.get("entry_price", 0) or 0
+                _exit = e.get("close_price", 0) or e.get("exit_price", 0) or 0
+                if _entry > 0 and abs(_entry - _exit) < 0.01:
+                    _phantom += 1
+                    _brain_phantom[bid] = _brain_phantom.get(bid, 0) + 1
+
+        _phantom_pct = _phantom / max(_total, 1)
+        _max_phantom_pct = 0.30  # >30% identical entry=exit is abnormal
+
+        if _phantom_pct > _max_phantom_pct:
+            _worst = sorted(_brain_phantom.items(), key=lambda x: x[1], reverse=True)[:3]
+            return SourceCheckResult(
+                source="pnl_ledger_integrity",
+                tier=Tier.CRITICAL,
+                status=SourceStatus.FAIL,
+                primary_code="PNL_LEDGER_PHANTOM_FLOOD",
+                message=(
+                    f"{_phantom}/{_total} entries have identical entry=exit "
+                    f"({_phantom_pct:.1%}) — phantom record flood detected. "
+                    f"Worst brains: {_worst}"
+                ),
+                metrics={
+                    "phantom_count": _phantom,
+                    "total_scanned": _total,
+                    "phantom_pct": round(_phantom_pct, 4),
+                    "worst_brains": dict(_worst),
+                },
+                checked_at=_utc_iso(),
+            )
+
+        # ── Check 2: Abnormal hourly write rate ──
+        # Count entries in the last hour by close_time
+        from collections import Counter
+
+        _hourly: Counter[str] = Counter()
+        _now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+        _one_hour_ago = _now.replace(minute=0, second=0, microsecond=0)
+        for _bid, entries in settled.items():
+            for e in entries:
+                ct = str(e.get("close_time", ""))[:13]
+                if ct and ct >= _one_hour_ago.strftime("%Y-%m-%dT%H"):
+                    _hourly[ct] += 1
+
+        _max_hourly = 200  # normal: ~72/hr (6 brains × 12 cycles). 200 = generous
+        for _hour, _count in _hourly.items():
+            if _count > _max_hourly:
+                return SourceCheckResult(
+                    source="pnl_ledger_integrity",
+                    tier=Tier.CRITICAL,
+                    status=SourceStatus.FAIL,
+                    primary_code="PNL_LEDGER_RATE_SPIKE",
+                    message=(
+                        f"PnL ledger write rate spike: {_count} entries in hour {_hour} "
+                        f"(max: {_max_hourly}). Phantom record flood in progress."
+                    ),
+                    metrics={"hourly_rate": dict(_hourly), "max_hourly": _max_hourly},
+                    checked_at=_utc_iso(),
+                )
+
+        return SourceCheckResult(
+            source="pnl_ledger_integrity", tier=Tier.CRITICAL,
+            status=SourceStatus.PASS, primary_code="PNL_LEDGER_INTEGRITY_OK",
+            message=(
+                f"PnL ledger integrity OK: {_phantom}/{_total} phantom "
+                f"({_phantom_pct:.1%}), hourly rate within bounds"
+            ),
+            metrics={"phantom_pct": round(_phantom_pct, 4), "total": _total},
             checked_at=_utc_iso(),
         )
 
