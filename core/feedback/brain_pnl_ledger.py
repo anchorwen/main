@@ -176,12 +176,19 @@ class BrainPnLStore:
         for _existing_sid, _existing_sig in self._pending.items():
             if _existing_sig.get("brain_id") != brain_id:
                 _existing_ts = _existing_sid.rsplit("_", 1)[-1]
-                if abs(float(_existing_ts) - _ts) < 0.01 and _existing_sig.get("entry_price") == _entry_price_f:
+                if (
+                    abs(float(_existing_ts) - _ts) < 0.01
+                    and _existing_sig.get("entry_price") == _entry_price_f
+                ):
                     import logging as _dup_log
+
                     _dup_log.getLogger(__name__).warning(
                         "[IDENTITY_LEAK] PnL record_signal: brain=%s has same entry_price=%.2f "
                         "as brain=%s at t=%.3f — possible identity leak in shadow evaluator",
-                        brain_id, _entry_price_f, _existing_sig["brain_id"], _ts,
+                        brain_id,
+                        _entry_price_f,
+                        _existing_sig["brain_id"],
+                        _ts,
                     )
 
         self._pending[signal_id] = {
@@ -204,6 +211,30 @@ class BrainPnLStore:
             # FIX-20260611-005: position linkage for per-position settlement
             "position_ticket": metadata.get("position_ticket", 0) if metadata else 0,
         }
+
+        # ── FIX-20260611-021: Event Sourcing — dual-write signal recorded ──
+        if self._event_writer is not None:
+            try:
+                from core.contracts.events import DataSource, PnLEvent
+
+                _event = PnLEvent(
+                    timestamp=datetime.now(UTC),
+                    source=DataSource.LIVE,
+                    event_type="SignalRecorded",
+                    brain_id=brain_id,
+                    symbol=symbol,
+                    direction=direction,
+                    entry_price=_entry_price_f,
+                    exit_price=None,  # Not yet settled
+                    pnl_r=0.0,  # PnL determined at settlement
+                    confidence=confidence,
+                    position_ticket=metadata.get("position_ticket") if metadata else None,
+                    generated_by="brain_pnl_ledger.record_signal",
+                )
+                _ = self._event_writer.write(_event)
+            except (OSError, ValueError, TypeError):
+                pass  # EventWriter failure must never break the hot path
+
         return signal_id
 
     def update_pending(self, mid_price: float) -> int:
@@ -385,6 +416,32 @@ class BrainPnLStore:
         # ── O(1) accumulator update (Phase B: PnL alert rules) ──
         self._update_accumulators(outcome, brain_id)
 
+        # ── FIX-20260611-021: Event Sourcing — dual-write to event stream ──
+        if self._event_writer is not None:
+            try:
+                from core.contracts.events import DataSource, PnLEvent
+
+                _settled_at = (
+                    outcome.get("close_time") or datetime.now(UTC).replace(tzinfo=None).isoformat()
+                )
+                _event = PnLEvent(
+                    timestamp=datetime.now(UTC),
+                    source=DataSource.LIVE,
+                    event_type="SignalSettled",
+                    brain_id=brain_id,
+                    symbol=entry.get("symbol", ""),
+                    direction=direction,
+                    entry_price=entry_price,
+                    exit_price=close_price,
+                    pnl_r=round(pnl_per_unit / (entry_price * 0.01) if entry_price > 0 else 0.0, 4),
+                    confidence=float(entry.get("confidence", 0.5)),
+                    position_ticket=entry.get("position_ticket"),
+                    generated_by="brain_pnl_ledger._settle",
+                )
+                _ = self._event_writer.write(_event)
+            except (OSError, ValueError, TypeError):
+                pass  # EventWriter failure must never break the hot path
+
         # Keep only the most recent window_size outcomes
         if len(self._settled[brain_id]) > self._window_size:
             popped = self._settled[brain_id].pop(0)
@@ -475,7 +532,7 @@ class BrainPnLStore:
     _running_trade_count: int
     _current_date: str
 
-    def __init__(self, window_size: int = 100) -> None:
+    def __init__(self, window_size: int = 100, event_writer: Any = None) -> None:
         self._window_size = window_size
         self._pending: dict[str, dict[str, Any]] = {}
         self._settled: dict[str, list[dict[str, Any]]] = {}
@@ -488,6 +545,8 @@ class BrainPnLStore:
         self._running_win_count = 0
         self._running_trade_count = 0
         self._current_date = ""
+        # ── FIX-20260611-021: Event Sourcing — optional dual-write hook ──
+        self._event_writer: Any = event_writer  # EventWriter | None
 
     @staticmethod
     def _assess_health(

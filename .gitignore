@@ -11,6 +11,9 @@ __pycache__/
 # Local runtime / generated data (kept out of VCS; contains large jsonl outputs)
 data/
 
+# Exception: core/data/ is source code (event stream infrastructure)
+!core/data/
+
 提示词.txt
 data/raw/
 data/snapshots/

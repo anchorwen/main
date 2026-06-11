@@ -522,6 +522,8 @@ FIX-YYYYMMDD-NNN
 | FIX-20260611-020 | 2026-06-11 | execution-guards | Code Blue: Fail-Closed SL/TP assertion + Governance manual whitelist + mypy type fix. (1) strategy_evaluator.py: SL/TP Fail-Closed check rejects any should_trade=True decision with sl<=0 or tp<=0 in non-shadow mode. (2) scheduler_service.py: _GOVERNANCE_MANUAL_MODE disables PnP→governance injection and execute_transitions, logging pending decisions for human review. (3) live_intent_loop.py: fix mypy attr-defined errors — iterate _decisions (BrainPromotionDecision) instead of _applied (list[str]). Fixes ANOM-005 (BTC naked trading) + ANOM-002 (governance backtest illusion). | RC-06 |
 | FIX-20260611-020 | 2026-06-11 | runtime_live | Fail-Closed SL/TP assertion (strategy_evaluator.py) + mypy type fix (live_intent_loop.py: iterate _decisions not _applied). See execution-guards blueprint for governance manual whitelist details. | RC-06 |
 | FIX-20260611-020 | 2026-06-11 | deployment_config | Governance Manual Whitelist: _GOVERNANCE_MANUAL_MODE=True disables PnP-ledger→governance injection and automatic execute_transitions. Decisions logged via emit_brain_alert for human review. | RC-06 |
+| FIX-20260611-021 | 2026-06-11 | feedback_pnl | Event Sourcing Foundation: Optional EventWriter hook in BrainPnLStore (dual-write to ledger_events.jsonl). Zero-risk transition — hook is None by default. | RC-06 |
+| FIX-20260611-021 | 2026-06-11 | contracts_domain | Event Sourcing Foundation: PnLEvent + GovernanceTransitionEvent Pydantic models with extra=forbid, frozen=True, allow_inf_nan=False. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2097,6 +2099,30 @@ FIX-YYYYMMDD-NNN
 - **Module**: deployment_config
 - **Files**: core/deployment/scheduler_service.py
 - **Description**: Governance Manual Whitelist: _GOVERNANCE_MANUAL_MODE=True disables PnP-ledger→governance injection and automatic execute_transitions. Decisions logged via emit_brain_alert for human review.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260611-021
+- **Date**: 2026-06-11
+- **Author**: cursor-agent
+- **Commit**: 520b371
+- **Type**: feat
+- **Module**: feedback_pnl
+- **Files**: core/feedback/brain_pnl_ledger.py
+- **Description**: Event Sourcing Foundation: Optional EventWriter hook in BrainPnLStore (dual-write to ledger_events.jsonl). Zero-risk transition — hook is None by default.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260611-021
+- **Date**: 2026-06-11
+- **Author**: cursor-agent
+- **Commit**: 520b371
+- **Type**: feat
+- **Module**: contracts_domain
+- **Files**: core/contracts/events.py
+- **Description**: Event Sourcing Foundation: PnLEvent + GovernanceTransitionEvent Pydantic models with extra=forbid, frozen=True, allow_inf_nan=False.
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)

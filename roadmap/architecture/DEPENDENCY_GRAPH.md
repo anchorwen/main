@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-11T10:25:25Z
+> **自动生成**: 2026-06-11T11:23:48Z
 
 ## Package-Level Dependencies
 
@@ -89,6 +89,7 @@
 
 - `domain_keys.py` → (无内部依赖)
 - `enums.py` → (无内部依赖)
+- `events.py` → (无内部依赖)
 - `exceptions.py` → (无内部依赖)
 - `ids.py` → (无内部依赖)
 - `position_events.py` → (无内部依赖)
@@ -121,6 +122,11 @@
 - `label_contract.py` → (无内部依赖)
 - `training_contract.py` → (无内部依赖)
 - `training_recipe.py` → (无内部依赖)
+
+### `core/data/`
+
+- `event_writer.py` → (无内部依赖)
+- `projections.py` → `core.contracts.events`
 
 ### `core/deployment/`
 
@@ -259,7 +265,7 @@
 ### `core/feedback/`
 
 - `brain_performance_tracker.py` → (无内部依赖)
-- `brain_pnl_ledger.py` → (无内部依赖)
+- `brain_pnl_ledger.py` → `core.contracts.events`
 - `brain_quality_engine.py` → (无内部依赖)
 - `decision_scorer.py` → (无内部依赖)
 - `experience_replay.py` → (无内部依赖)
@@ -578,6 +584,10 @@
 ### `scripts/guards/`
 
 - `journal_quality.py` → (无内部依赖)
+
+### `scripts/migration/`
+
+- `migrate_to_event_stream.py` → `core.contracts.events`, `core.data.event_writer`
 
 ### `scripts/training/`
 

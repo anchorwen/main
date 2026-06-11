@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-11T10:25:25Z
-> **扫描模块数**: 517
+> **自动生成**: 2026-06-11T11:23:48Z
+> **扫描模块数**: 521
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -109,6 +109,7 @@
 |------|------|----|------|------|------|------|
 | `domain_keys.py` | 📄 config | — | 0 | 979 | — | |
 | `enums.py` | ✅ active | BrainRole, BrainStatus, DecisionAction, DecisionSide, RiskDecisionStatus, SystemMode, OverrideStatus, CommunicationMessageType, CommunicationPriority, DispatchStatus, ReplayGateDecision, ExecutionEventType, ReconciliationStatus | 0 | 109 | — | |
+| `events.py` | ✅ active | DataSource, EventType, PnLEvent, GovernanceTransitionEvent | 0 | 168 | — | |
 | `exceptions.py` | ✅ active | DomainError, RiskError, RiskPolicyViolation, GovernanceError, InvalidTransitionError, BrainNotFoundError, ExecutionError, OrderNotFoundError, DuplicateOrderError, ProtocolError, DispatchError, IdempotencyError, ConfigurationError, ContractViolationError | 9 | 136 | — | |
 | `ids.py` | ✅ active | — | 14 | 57 | — | |
 | `position_events.py` | ✅ active | PositionClosed, PositionOpened | 2 | 140 | — | |
@@ -147,6 +148,13 @@
 | `label_contract.py` | ✅ active | BarrierResult, LabelContract | 11 | 549 | — | |
 | `training_contract.py` | ✅ active | DatasetSpec, LabelSpec, ArchitectureSpec, ValidationSpec, QualityGateSpec, OutputSpec, TrainingContract | 12 | 474 | — | |
 | `training_recipe.py` | ✅ active | ModelIdentity, LabelContractRef, DataAugmentation, DataConfig, TrainingConfig, EvaluationConfig, TrainingRecipe | 6 | 386 | — | |
+
+## core/data
+
+| 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
+|------|------|----|------|------|------|------|
+| `event_writer.py` | ✅ active | EventWriter | 9 | 128 | — | |
+| `projections.py` | ✅ active | — | 6 | 237 | — | |
 
 ## core/deployment
 
@@ -299,7 +307,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `brain_performance_tracker.py` | ✅ active | BrainPerformanceTracker | 9 | 137 | — | |
-| `brain_pnl_ledger.py` | ✅ active | BrainPnLMetrics, BrainPnLStore | 24 | 816 | — | |
+| `brain_pnl_ledger.py` | ✅ active | BrainPnLMetrics, BrainPnLStore | 24 | 875 | — | |
 | `brain_quality_engine.py` | ✅ active | BrainQualityVerdict, BrainQualityEngine | 13 | 432 | — | |
 | `decision_scorer.py` | ✅ active | DecisionScorer | 5 | 120 | — | |
 | `experience_replay.py` | ✅ active | ExperienceReplayBuffer | 10 | 246 | — | |
@@ -670,6 +678,12 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `journal_quality.py` | ✅ active | — | 2 | 40 | — | |
+
+## scripts/migration
+
+| 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
+|------|------|----|------|------|------|------|
+| `migrate_to_event_stream.py` | ✅ active | — | 2 | 144 | — | |
 
 ## scripts/training
 
