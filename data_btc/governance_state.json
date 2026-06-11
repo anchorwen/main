@@ -24,11 +24,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.28,
-        "profit_factor": 0.34,
-        "sharpe_ratio": -112.97,
+        "win_rate": 0.29,
+        "profit_factor": 0.36,
+        "sharpe_ratio": -108.43,
         "total_trades": 100,
-        "pnl_r": -1099.36
+        "pnl_r": -998.66
       }
     },
     "BTC_Swing_V7_MultiTF_LGB_v1": {
@@ -39,11 +39,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.28,
-        "profit_factor": 0.34,
-        "sharpe_ratio": -112.97,
+        "win_rate": 0.29,
+        "profit_factor": 0.36,
+        "sharpe_ratio": -108.43,
         "total_trades": 100,
-        "pnl_r": -1099.36
+        "pnl_r": -998.66
       }
     },
     "BTC_Swing_V8_MultiTF_LGB_v1": {
@@ -54,11 +54,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.28,
-        "profit_factor": 0.34,
-        "sharpe_ratio": -112.97,
+        "win_rate": 0.29,
+        "profit_factor": 0.36,
+        "sharpe_ratio": -108.43,
         "total_trades": 100,
-        "pnl_r": -1099.36
+        "pnl_r": -998.66
       }
     },
     "BTC_Swing_V10_M15_Survival": {
@@ -99,11 +99,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.35,
-        "profit_factor": 0.38,
-        "sharpe_ratio": -96.66,
+        "win_rate": 0.34,
+        "profit_factor": 0.33,
+        "sharpe_ratio": -113.07,
         "total_trades": 100,
-        "pnl_r": -940.64
+        "pnl_r": -1041.34
       }
     },
     "BTC_Swing_V11_M15_Directional": {
@@ -114,11 +114,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.35,
-        "profit_factor": 0.38,
-        "sharpe_ratio": -96.66,
+        "win_rate": 0.34,
+        "profit_factor": 0.33,
+        "sharpe_ratio": -113.07,
         "total_trades": 100,
-        "pnl_r": -940.64
+        "pnl_r": -1041.34
       }
     }
   },

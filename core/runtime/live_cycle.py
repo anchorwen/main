@@ -3639,31 +3639,24 @@ def execute_live_cycle(
             if not _mia_closed:
                 _mia_closed = []  # all deduped — skip journal write
             if _mia_closed:
-                # ── Write to journal (same FileLock pattern as reconciliation) ──
+                # ── FIX-20260611-005 Phase 2: Unified adapter replaces manual journal write ──
                 with log_and_continue(component="MIA_Close:journal_write"):
-                    from core.infrastructure.distributed_lock import FileLock
+                    from core.runtime.position_close_adapter import PositionCloseAdapter
 
-                    _jlock = FileLock(
-                        "live_trade_journal",
-                        lock_dir=str(journal_path.parent / ".locks"),
-                        ttl_seconds=10,
+                    _mia_adapter = PositionCloseAdapter(
+                        tick_size=0.01 if "XAU" in config.symbol else 1.0,
                     )
-                    _jacquired = _jlock.acquire(blocking=True, timeout_seconds=5)
-                    if _jacquired.acquired:
-                        try:
-                            _existing = (
-                                journal_path.read_text(encoding="utf-8")
-                                if journal_path.exists()
-                                else ""
-                            )
-                            with open(journal_path, "a", encoding="utf-8") as _jf:
-                                for _entry in _mia_closed:
-                                    _mid = _entry.get("message_id", "")
-                                    if _mid and _mid in _existing:
-                                        continue
-                                    _jf.write(json.dumps(_entry, ensure_ascii=False) + "\n")
-                        finally:
-                            _jlock.release()
+                    for _entry in _mia_closed:
+                        _evt = _mia_adapter._build_event(
+                            ticket=int(_entry.get("position_ticket", 0) or 0),
+                            open_entry=_entry,
+                            closed_volume=float(_entry.get("volume", 0.01) or 0.01),
+                            remaining_volume=0.0,
+                            symbol=config.symbol,
+                            mt5_worker=mt5_worker,
+                        )
+                        if _evt is not None:
+                            _mia_adapter.record(_evt, str(journal_path), state=state)
             # ── Record exit for reentry guard ──
             for _entry in _mia_closed:
                 _exit_strategy = _entry.get("strategy", "")
