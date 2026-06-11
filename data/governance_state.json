@@ -10,11 +10,11 @@
       "freeze_count": 0,
       "exposure_limited": false,
       "performance_metrics": {
-        "win_rate": 0.4316,
+        "win_rate": 0.431,
         "profit_factor": 0.7,
-        "sharpe_ratio": -29.84,
-        "total_trades": 3594,
-        "pnl_r": -1397.06
+        "sharpe_ratio": -29.97,
+        "total_trades": 3608,
+        "pnl_r": -1407.15
       }
     },
     "OU_Params_V7_M15": {
@@ -27,11 +27,11 @@
       "exposure_limited": false,
       "vote_weight": 1.5,
       "performance_metrics": {
-        "win_rate": 0.4975,
+        "win_rate": 0.495,
         "profit_factor": 0.81,
-        "sharpe_ratio": -19.04,
-        "total_trades": 197,
-        "pnl_r": -69.3
+        "sharpe_ratio": -19.22,
+        "total_trades": 202,
+        "pnl_r": -70.89
       }
     },
     "Meta_Stage1_Huber_V1": {
@@ -102,11 +102,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.451,
-        "profit_factor": 0.99,
-        "sharpe_ratio": -0.58,
-        "total_trades": 2470,
-        "pnl_r": -36.82
+        "win_rate": 0.4461,
+        "profit_factor": 0.98,
+        "sharpe_ratio": -1.42,
+        "total_trades": 2587,
+        "pnl_r": -92.57
       }
     },
     "Swing_V9_M15_V2": {
@@ -244,11 +244,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.3834,
+        "win_rate": 0.3833,
         "profit_factor": 0.41,
-        "sharpe_ratio": -60.61,
-        "total_trades": 2775,
-        "pnl_r": -5633.52
+        "sharpe_ratio": -60.6,
+        "total_trades": 2776,
+        "pnl_r": -5633.91
       }
     },
     "Swing_V9_H1_V2": {
@@ -259,11 +259,11 @@
       "transition_count": 3,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4726,
+        "win_rate": 0.4725,
         "profit_factor": 1.8,
-        "sharpe_ratio": 40.02,
-        "total_trades": 2958,
-        "pnl_r": 4427.33
+        "sharpe_ratio": 40.01,
+        "total_trades": 2959,
+        "pnl_r": 4426.81
       }
     },
     "Swing_LGB_M15_V1": {

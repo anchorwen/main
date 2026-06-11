@@ -449,12 +449,15 @@ strategy_lines:
       trail_atr_mult_low: 1.8
       trail_atr_mult_high: 2.5
       breakeven_threshold_atr: 0.5
-      trail_activation_atr: 0.3
+      # ── FIX-20260611-017: StatArb exit unbundling ──
+      # trail_activation_atr: 0.3→1.0 — prevents trail from killing mean-reversion
+      # hesitation_cycles: 6→24 — mean-reversion needs time for price oscillation
+      trail_activation_atr: 1.0
       flip_exit_enabled: false
       time_exit_cycles: 40
       zscore_exit_enabled: true
       confidence_decay_exit: false
-      hesitation_cycles: 6
+      hesitation_cycles: 24
     budget:
       daily_loss_limit_pct: -0.03
       max_consecutive_losses: 7
