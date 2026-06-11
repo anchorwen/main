@@ -914,8 +914,9 @@ def _execute_management_phase(
                 _ctx["consecutive_losses"] = _consec_losses
                 _ctx["rolling_win_rate"] = round(_win_count / max(1, _trade_count), 4)
                 _ctx["total_trades_window"] = _trade_count
-            except Exception:  # noqa: BLE001
-                pass  # journal read is best-effort for alerts
+            except Exception:
+                with fail_open_guard("AlertContext:journal_enrich"):
+                    raise  # surface hidden journal corruption
 
             if pnl_ledger is not None:
                 with log_and_continue(component="AlertHub:PnL_context"):
