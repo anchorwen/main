@@ -2085,16 +2085,22 @@ def main(argv: list[str] | None = None) -> int:
                 try:
                     from core.brains.services.brain_promotion import (
                         BrainPromotionEvaluator,
+                        apply_promotion_decisions,
                     )
                     from core.feedback.brain_pnl_ledger import BrainPnLStore
-                    from core.governance.governance_service import GovernanceService
 
                     _pnl_path = Path(args.base_dir) / "brain_pnl_ledger.json"
                     _gov_path = Path(args.base_dir) / "governance_state.json"
                     if _pnl_path.exists() and _gov_path.exists():
                         _pnl_store = BrainPnLStore.load(str(_pnl_path))
                         _all_metrics = _pnl_store.get_all_metrics()
-                        _gov = GovernanceService(state_path=str(_gov_path))
+
+                        # Load brain_states from governance
+                        import json as _json_gov
+
+                        with open(_gov_path, encoding="utf-8") as _gf:
+                            _gov_data = _json_gov.load(_gf)
+                        _brain_states = _gov_data.get("brain_states", {})
 
                         # Bridge BrainPnLMetrics → evaluator format
                         _perf: dict[str, dict] = {}
@@ -2103,7 +2109,7 @@ def main(argv: list[str] | None = None) -> int:
                                 "win_rate": _m.win_rate,
                                 "profit_factor": _m.profit_factor,
                                 "signal_count": _m.sample_count,
-                                "total_pnl": _m.total_pnl,
+                                "total_pnl": getattr(_m, "total_pnl", 0.0) or 0.0,
                                 "sharpe": getattr(_m, "sharpe", None) or 0.0,
                                 "recent_win_rate": getattr(_m, "recent_win_rate", None)
                                 or _m.win_rate,
@@ -2113,18 +2119,20 @@ def main(argv: list[str] | None = None) -> int:
                                 or 0,
                             }
 
-                        _evaluator = BrainPromotionEvaluator(
-                            governance_service=_gov,
-                            performance_metrics=_perf,
-                            base_dir=args.base_dir,
+                        # Bug #1 fix: BrainPromotionEvaluator(thresholds=...), not (governance_service=...)
+                        _evaluator = BrainPromotionEvaluator()
+                        # Bug #2 fix: evaluate_all(brain_states, performance)
+                        _decisions = _evaluator.evaluate_all(_brain_states, _perf)
+
+                        # Bug #3 fix: apply decisions to governance_state.json
+                        _applied = apply_promotion_decisions(
+                            _decisions, _brain_states, _gov_path,
                         )
-                        _decisions = _evaluator.evaluate_all()
 
                         _promoted = [
-                            d for d in _decisions if d.approved and d.action == "promote"
+                            d for d in _applied if d.approved and d.action == "promote"
                         ]
                         if _promoted:
-                            # ── FIX-20260611-005: Governance event sourcing ──
                             _gov_events_path = Path(args.base_dir) / "governance_events.jsonl"
                             for _d in _promoted:
                                 _gevt = {
@@ -2137,7 +2145,6 @@ def main(argv: list[str] | None = None) -> int:
                                     "reasons": _d.reasons,
                                 }
                                 print(json.dumps(_gevt, ensure_ascii=False), flush=True)
-                                # Append to governance event log (immutable)
                                 try:
                                     with open(_gov_events_path, "a", encoding="utf-8") as _gf:
                                         _gf.write(json.dumps(_gevt, ensure_ascii=False) + "\n")

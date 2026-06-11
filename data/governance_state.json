@@ -10,11 +10,11 @@
       "freeze_count": 0,
       "exposure_limited": false,
       "performance_metrics": {
-        "win_rate": 0.4323,
+        "win_rate": 0.4318,
         "profit_factor": 0.7,
-        "sharpe_ratio": -29.69,
-        "total_trades": 3574,
-        "pnl_r": -1386.18
+        "sharpe_ratio": -29.82,
+        "total_trades": 3583,
+        "pnl_r": -1393.86
       }
     },
     "OU_Params_V7_M15": {
@@ -102,19 +102,19 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4513,
+        "win_rate": 0.451,
         "profit_factor": 1.0,
-        "sharpe_ratio": 0.14,
-        "total_trades": 2340,
-        "pnl_r": 8.54
+        "sharpe_ratio": -0.02,
+        "total_trades": 2355,
+        "pnl_r": -1.22
       }
     },
     "Swing_V9_M15_V2": {
       "brain_id": "Swing_V9_M15_V2",
-      "status": "candidate",
+      "status": "live",
       "registered_at": "2026-06-04T10:48:14.724913",
-      "last_transition_at": "2026-06-10T22:00:24.467464",
-      "transition_count": 2,
+      "last_transition_at": "2026-06-11T04:30:00",
+      "transition_count": 3,
       "freeze_count": 0,
       "performance_metrics": {
         "win_rate": 0.6582,
@@ -244,11 +244,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.3803,
+        "win_rate": 0.3805,
         "profit_factor": 0.41,
-        "sharpe_ratio": -61.67,
-        "total_trades": 2645,
-        "pnl_r": -5588.15
+        "sharpe_ratio": -61.6,
+        "total_trades": 2660,
+        "pnl_r": -5597.91
       }
     },
     "Swing_V9_H1_V2": {
@@ -259,11 +259,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4798,
+        "win_rate": 0.4791,
         "profit_factor": 1.83,
-        "sharpe_ratio": 41.68,
-        "total_trades": 2828,
-        "pnl_r": 4501.68
+        "sharpe_ratio": 41.52,
+        "total_trades": 2843,
+        "pnl_r": 4497.64
       }
     },
     "Swing_LGB_M15_V1": {
