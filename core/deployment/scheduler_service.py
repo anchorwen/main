@@ -244,6 +244,41 @@ class SchedulerService:
                                         m.sample_count,
                                     )
 
+                            # ── FIX-20260611-022: Event stream projection ──
+                            # Compute governance metrics from the immutable event
+                            # stream (source_filter={"live"} only).  This is the
+                            # CORRECT data source — no backtest contamination.
+                            try:
+                                from core.data.projections import project_governance_state
+
+                                _stream_path = _Path("data") / "ledger_events.jsonl"
+                                _stream_state = project_governance_state(_stream_path)
+                                _stream_brains = {
+                                    k: v
+                                    for k, v in _stream_state.items()
+                                    if not k.startswith("_")
+                                }
+                                if _stream_brains:
+                                    _logger.info(
+                                        "[GOV_MANUAL] Event stream projection: "
+                                        "%d brains with live data",
+                                        len(_stream_brains),
+                                    )
+                                    for _bid, _sm in sorted(_stream_brains.items()):
+                                        if _sm.get("total_trades", 0) > 0:
+                                            _logger.info(
+                                                "[GOV_MANUAL]   %s: trades=%d wr=%.3f pnl=%.1f",
+                                                _bid,
+                                                _sm["total_trades"],
+                                                _sm["win_rate"],
+                                                _sm["pnl_r"],
+                                            )
+                            except Exception:
+                                _logger.debug(
+                                    "[GOV_MANUAL] Event stream projection skipped "
+                                    "(stream not available)"
+                                )
+
                             brain_states = container.governance_service.get_all_states()
                             evaluator = BrainPromotionEvaluator()
                             decisions = evaluator.evaluate_all(brain_states, perf)
