@@ -14,14 +14,19 @@ Consolidated here for:
   - Single point of change for p_win logic
 
 Related FIXes: 018-032, 026-030, 026-031, 026-032, 026-035
-Known Issue: KI-004 — 3 silent fallback paths all return 0.40
+KI-004 RESOLVED (2026-06-12): All 3 fallback paths now emit structured
+  warning logs. BLE001 at get_metrics() replaced with fail_open_guard.
+  Callers should propagate p_win_degraded=True to the journal.
 """
 
 from __future__ import annotations
 
+import logging
 import math
 import statistics
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # ── resolve_p_win_from_brains ──────────────────────────────────────────────
 
@@ -51,6 +56,12 @@ def resolve_p_win_from_brains(
         direction: "long" or "short" — for directional win rate lookup.
     """
     if pnl_store is None:
+        logger.warning(
+            "[pwin_chain:FALLBACK_PATH_1] pnl_store is None — "
+            "returning fail-closed 0.40. Brain PnL metrics unavailable; "
+            "rolling win rate cannot be computed. p_win_source will be 'rolling_wr' "
+            "with p_win_degraded=True."
+        )
         return 0.40
 
     valid_rates: list[float] = []
@@ -60,7 +71,11 @@ def resolve_p_win_from_brains(
             continue
         try:
             m = pnl_store.get_metrics(str(brain_id), window=100)
-        except Exception:  # noqa: BLE001
+        except Exception:
+            from core.runtime.fault_handler import fail_open_guard
+
+            with fail_open_guard("PWinMetricsResolver"):
+                raise
             continue
         if m is None:
             continue
@@ -72,8 +87,30 @@ def resolve_p_win_from_brains(
             valid_rates.append(float(wr))
 
     if valid_rates:
-        return float(statistics.median(valid_rates))
+        _median = float(statistics.median(valid_rates))
+        logger.debug(
+            "[pwin_chain:OK] median win rate=%.4f from %d brains",
+            _median,
+            len(valid_rates),
+        )
+        return _median
 
+    # ── FALLBACK PATH 3: no brain produced a valid win rate ──
+    # Distinguish: (a) no brains registered vs (b) all brains below threshold
+    _brain_count = len(brains)
+    if _brain_count == 0:
+        logger.warning(
+            "[pwin_chain:FALLBACK_PATH_3a] No brains provided — "
+            "returning fail-closed 0.40. p_win_degraded=True."
+        )
+    else:
+        logger.warning(
+            "[pwin_chain:FALLBACK_PATH_3b] %d brain(s) checked, none produced "
+            "a valid win rate (sample_count < 10, win_rate <= 0, or "
+            "brain_id not found in PnL store). Returning fail-closed 0.40. "
+            "p_win_degraded=True.",
+            _brain_count,
+        )
     return 0.40
 
 

@@ -393,6 +393,8 @@ class ExecutionQueue:
                         confidence=getattr(decision, "confidence", None),
                         entry_context=decision.entry_context if decision.entry_context else None,
                         p_win=getattr(decision, "p_win", 0.0) or 0.0,
+                        p_win_source=getattr(decision, "p_win_source", "unknown") or "unknown",
+                        p_win_degraded=bool(getattr(decision, "p_win_degraded", False)),
                         kelly_mult=getattr(decision, "kelly_mult", 1.0) or 1.0,
                     )
                     _dispatched = True

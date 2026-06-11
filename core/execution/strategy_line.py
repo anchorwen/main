@@ -194,6 +194,10 @@ class StrategyDecision:
     entry_half_life: float = 0.0  # OU half-life at entry (0 = unknown / not OU)
     entry_context: dict[str, Any] = field(default_factory=dict)
     p_win: float = 0.5  # P(TP|signal) from MetaFilter or rolling PnL win rate
+    p_win_source: str = "unknown"  # Provenance: "meta_filter" | "rolling_wr" | "cold_explore_neutral" | "brain_confidence" | ...
+    p_win_degraded: bool = (
+        False  # True when p_win is a fallback estimate, not computed from real data
+    )
     kelly_mult: float = 1.0  # fractional Kelly multiplier (0.0 = EV veto)
     cold_explore: bool = (
         False  # forced exploration budget — bypass trailing, collect uncensored labels
@@ -1025,8 +1029,7 @@ class StrategyLine:
             and confidence >= 0.35  # brain has minimum conviction
         )
         if _needs_exploration and (
-            "statarb" in name or "ou" in name.lower()
-            or "swing" in name or "btc" in name
+            "statarb" in name or "ou" in name.lower() or "swing" in name or "btc" in name
         ):
             _is_cold_explore = True
             _p_win = 0.50
@@ -1034,17 +1037,25 @@ class StrategyLine:
 
         # ── 4ab. MetaFilter gate (Strangler Fig #12: meta_filter_routing.py) ──
         from core.execution.meta_filter_routing import apply_meta_filter_gate
+
         # FIX-20260610-007: Direction-specific MetaFilter routing.
         # Per-direction models stored on config (set by live_intent_loop).
         _mf_long = getattr(self.config, "meta_filter_long", None)
         _mf_short = getattr(self.config, "meta_filter_short", None)
         _meta_p_win, _meta_reject = apply_meta_filter_gate(
-            name=name, direction=direction, confidence=confidence,
-            entry_z_score=entry_z_score, feature_vector=feature_vector,
-            micro_feature_vector=micro_feature_vector, meta_filter=meta_filter,
-            proposals=proposals, config=self.config,
-            brain_ids=brain_ids, support_count=support_count,
-            total_count=total_count, regime_gate_mode=regime_gate_mode,
+            name=name,
+            direction=direction,
+            confidence=confidence,
+            entry_z_score=entry_z_score,
+            feature_vector=feature_vector,
+            micro_feature_vector=micro_feature_vector,
+            meta_filter=meta_filter,
+            proposals=proposals,
+            config=self.config,
+            brain_ids=brain_ids,
+            support_count=support_count,
+            total_count=total_count,
+            regime_gate_mode=regime_gate_mode,
             _meta_p_win=_meta_p_win,
             _last_ou_result=getattr(self, "_last_ou_result", None),
             meta_filter_long=_mf_long,
@@ -1060,6 +1071,7 @@ class StrategyLine:
             _is_swing = name in ("m15_swing", "m30_swing", "h1_swing", "h4_swing", "btc_swing")
             if _is_swing and pnl_store is not None:
                 from core.execution.kelly_sizer import resolve_p_win_from_brains
+
                 _rolling = resolve_p_win_from_brains(self.brains, pnl_store, direction)
                 # Soft-bypass: if rolling WR >= 0.50, allow with p_win=0.55
                 # and let the V9 brains decide.  Below 0.50 → reject.
@@ -1080,11 +1092,17 @@ class StrategyLine:
         # ── 4aa-4d: Trend isolation gates (Strangler Fig #13: trend_isolation_gates.py) ──
         _ct_vol_mult = 1.0  # default, may be overridden by counter-trend penalise
         from core.execution.trend_isolation_gates import apply_trend_isolation_gates
+
         _trend_reject = apply_trend_isolation_gates(
-            name=name, direction=direction, confidence=confidence,
-            entry_z_score=entry_z_score, regime_info=regime_info,
-            config=self.config, brain_ids=brain_ids,
-            support_count=support_count, total_count=total_count,
+            name=name,
+            direction=direction,
+            confidence=confidence,
+            entry_z_score=entry_z_score,
+            regime_info=regime_info,
+            config=self.config,
+            brain_ids=brain_ids,
+            support_count=support_count,
+            total_count=total_count,
             regime_gate_mode=regime_gate_mode,
             last_entry_z=self._last_entry_z,
         )
@@ -1106,7 +1124,12 @@ class StrategyLine:
                 "statarb_m15": {"penalise": 0.30, "h4_penalise": 0.20},
             }
             _ct_cfg = _CT_PENALISE.get(name)
-            if _ct_cfg and _h1_adx_ct > 0 and direction != "neutral" and _primary_dir_ct != "neutral":
+            if (
+                _ct_cfg
+                and _h1_adx_ct > 0
+                and direction != "neutral"
+                and _primary_dir_ct != "neutral"
+            ):
                 if direction != _primary_dir_ct:
                     _pen = _ct_cfg.get("penalise", 0.30)
                     if _h1_adx_ct >= _pen:
@@ -1275,6 +1298,29 @@ class StrategyLine:
         from core.execution.pwin_chain import adjust_p_win_for_z_strength as _z_strength
 
         _p_win = _z_strength(_p_win, name, entry_z_score)
+
+        # ── 6c. Determine if p_win is degraded (Phase 0 observable injection) ──
+        # DQAF-20260612-004: Track whether the final p_win is backed by real
+        # statistical evidence or is a fallback estimate.  This flag is written
+        # to the journal so post-trade analysis can separate genuine signals
+        # from degraded-mode trades.
+        #
+        # REAL data sources (degraded=False):
+        #   - meta_filter: Platt-calibrated P(TP|signal) from trained MetaFilter
+        #   - cold_explore_neutral: intentional exploration, bounded risk
+        #   - rolling_wr (p_win > 0.40): genuine rolling 100-trade win rate
+        #   - rolling_wr_soft_bypass: genuine rolling WR ≥ 0.50
+        #
+        # DEGRADED sources (degraded=True):
+        #   - neutral_default: pure default, no data at all
+        #   - brain_confidence: synthetic from confidence score, not real WR
+        #   - rolling_wr (p_win ≤ 0.40): resolve_p_win_from_brains() hit a
+        #     silent fallback path (KI-004) → fake 0.40
+        #   - rolling_wr_no_metafilter with fallback: same as above
+        _p_win_degraded = _p_win_source in (
+            "neutral_default",
+            "brain_confidence",
+        ) or (_p_win_source in ("rolling_wr", "rolling_wr_no_metafilter") and _p_win <= 0.40)
 
         # ── 5g. Hard p_win gate — physical isolation of Entry Conditions from Position Sizing ──
         # Mean-reversion strategies with p_win < 0.50 have lost statistical advantage.
@@ -1558,6 +1604,8 @@ class StrategyLine:
             entry_half_life=entry_half_life,
             entry_context=entry_context,
             p_win=_p_win,
+            p_win_source=_p_win_source,
+            p_win_degraded=_p_win_degraded,
             kelly_mult=kelly_result.fractional_mult,
             cold_explore=_is_cold_explore,
         )

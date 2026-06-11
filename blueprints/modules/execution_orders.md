@@ -54,11 +54,12 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Known Issues
 
-- **KI-004: p_win 静默回退陷阱** (2026-05-26) — `resolve_p_win_from_brains()` 有三个静默回退路径全部返回 0.40 (FIX-20260526-031 从 0.50 降为 Fail-Closed)。三个 failure mode: (1) pnl_store is None, (2) 所有 brain sample_count < 10 冷启动守卫, (3) brain_id 不匹配 PnL store key。当前已加诊断日志区分三个路径。若 future p_win 再次静态出现, 搜索 `resolve_p_win` 诊断日志排查。min_p_win=0.45 (statarb) / 0.50 (barrier_12bar) → 0.40 低于两者 → 确保盲区信号被拒。
+- **KI-004: p_win 静默回退陷阱** ✅ RESOLVED (FIX-20260612-001, 2026-06-12) — `resolve_p_win_from_brains()` 三条 fallback 路径已全部加 structured warning 日志 (`FALLBACK_PATH_1/3a/3b`), BLE001 替换为 `fail_open_guard("PWinMetricsResolver")`. `p_win_degraded` 标记透传至 journal 供事后审计.
 - **2026-05-29**: m15_swing/m30_swing counter_trend default-trap — 与FIX-20260523-004 (statarb_m15)相同模式：无`_counter_trend_action()`专属阈值→默认block=0.40→mild_trend中全部短线空头被硬阻断。Fixed by FIX-20260529-039 (Phase 2: strategy_line.py code change).
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260612-001 | 2026-06-12 | cursor-agent | — | **Phase 0: 静默降级可观测性注入 (KI-004 收口)**: pwin_chain.py BLE001→fail_open_guard + 3条告警; StrategyDecision 新增 p_win_source/p_win_degraded 透传至 journal. | RC-06 |
 | FIX-20260610-006 | 2026-06-10 | cursor-agent | — | **Trail telemetry structured**: ActivePosition.trail_advances计数器; managed_close dispatch payload注入trail_contribution{initial_sl,final_sl,trail_advances}. | RC-06 |
 | FIX-20260609-008 | 2026-06-09 | cursor-agent | — | **MetaFilter gate routing Strangler Fig (P1)**: `apply_meta_filter_gate()` → `meta_filter_routing.py`. Unified statarb/swing/barrier paths. `strategy_line.py`: 2377→2205 (-172). | RC-08 |
 | FIX-20260609-005 | 2026-06-09 | cursor-agent | — | **Per-strategy trail_activation_atr**: 9 strategies calibrated. `register_position` + dispatch wire per-position TrailPolicy. Live YAML: statarb=0.3, m15/m30=0.4, btc=0.5, h1=0.7, h4=0.8. | RC-09 |

@@ -247,6 +247,8 @@ def dispatch_live_open_order(
     # ── Trade context (passthrough — logged to journal for later analysis) ──
     entry_context: dict[str, Any] | None = None,
     p_win: float = 0.0,
+    p_win_source: str = "unknown",
+    p_win_degraded: bool = False,
     kelly_mult: float = 1.0,
 ) -> dict:
     """Open-market helper; dispatches via broker-agnostic :func:`dispatch_live_order`.
@@ -279,6 +281,10 @@ def dispatch_live_open_order(
         execution_payload["entry_context"] = dict(entry_context)
     if p_win > 0:
         execution_payload["p_win"] = round(p_win, 4)
+    if p_win_source != "unknown":
+        execution_payload["p_win_source"] = p_win_source
+    if p_win_degraded:
+        execution_payload["p_win_degraded"] = True
     if kelly_mult != 1.0:
         execution_payload["kelly_mult"] = round(kelly_mult, 4)
 
