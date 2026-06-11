@@ -76,6 +76,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260612-001 | 2026-06-12 | cursor-agent | — | **ENGINE_STALL restart loop fix**: stall check now skips alert if intent process uptime < STALL_MINUTES (15min). On restart, journal mtime reflects pre-crash state — not a stall. DQAF-20260612-001. | RC-05 |
 | FIX-20260611-022 | 2026-06-11 | cursor-agent | b106eb2 | Consumer migration: daily_ops.py _load_or_create_pnl_store() now tries load_from_stream() first, falls back to old JSON. | contract-violation |
 | FIX-20260611-021 | 2026-06-11 | cursor-agent | 49610cd | Activate dual-write: live_intent_loop injects get_event_writer() into BrainPnLStore at all 3 initialization sites. | contract-violation |
 | FIX-20260611-020 | 2026-06-11 | cursor-agent | 331f996 | Fail-Closed SL/TP assertion (strategy_evaluator.py) + mypy type fix (live_intent_loop.py: iterate _decisions not _applied). See execution-guards blueprint for governance manual whitelist details. | contract-violation |

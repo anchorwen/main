@@ -670,7 +670,12 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                         age_min = (now - dec_file.stat().st_mtime) / 60
                         if age_min < engine_age:
                             engine_age = age_min
-        if engine_age > STALL_MINUTES:
+        # ── FIX-20260612-001: Don't report stall right after restart ──
+        # If the intent process was restarted within STALL_MINUTES,
+        # the journal mtime reflects pre-crash state — NOT a stall.
+        # Give the new process time to produce its first trade decision.
+        _intent_uptime = (now - last_restart.get("intent", 0)) / 60
+        if engine_age > STALL_MINUTES and _intent_uptime > STALL_MINUTES:
             alerts.append(f"ENGINE_STALL: no new decisions for {engine_age:.0f}m")
 
         # 2. Bridge health — check heartbeat freshness
