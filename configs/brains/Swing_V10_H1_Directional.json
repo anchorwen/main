@@ -1,0 +1,48 @@
+{
+  "schema_version": "brain_registry_entry.v1",
+  "brain_id": "Swing_V10_H1_Directional",
+  "brain_type": "xgboost_v9",
+  "contract_group": "h1_swing",
+  "training_contract": "h1_swing",
+  "feature_schema": "swing_enhanced_35",
+  "feature_schema_id": "swing_enhanced_35",
+  "model_path": "data/models/xau_directional_h1/xgboost_fold0_s42.json",
+  "artifact_path": "data/models/xau_directional_h1/xgboost_fold0_s42.json",
+  "model_version": "xau_directional_v1",
+  "artifact_hash": "",
+  "status": "candidate",
+  "vote_weight": 0.5,
+  "magic": 90303,
+  "brain_role": "alpha_brain",
+  "training_horizon": 24,
+  "strategy": "h1_swing",
+  "timeframe": "H1",
+  "training_params": {
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 3.5,
+    "horizon": 24,
+    "n_estimators": 500,
+    "learning_rate": 0.02,
+    "max_depth": 5,
+    "objective": "regression"
+  },
+  "training_metrics": {
+    "directional_accuracy": 0.519,
+    "long_recall": 0.561,
+    "short_recall": 0.354,
+    "backtest_win_rate": 0.519
+  },
+  "label_contract": {
+    "sl_atr_mult": 2.0,
+    "tp_atr_mult": 3.5,
+    "contract_type": "directional",
+    "aligned_with": "configs/live.yaml",
+    "note": "XAU Directional V10 H1 — bidirectional XGBoost regression. Replaces LONG-biased Swing_V9_H1_V2."
+  },
+  "features": [],
+  "n_features": 35,
+  "n_train_samples": 10032,
+  "trained_at": "2026-06-11T00:00:00+00:00",
+  "governance": {"min_confidence": 0.5, "cooldown_cycles": 3},
+  "description": "XAU Directional H1 — bidirectional prediction. DirAcc=0.519, LongRec=0.561, ShortRec=0.354."
+}

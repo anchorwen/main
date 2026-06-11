@@ -102,11 +102,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4508,
+        "win_rate": 0.451,
         "profit_factor": 0.99,
         "sharpe_ratio": -0.58,
-        "total_trades": 2469,
-        "pnl_r": -37.15
+        "total_trades": 2470,
+        "pnl_r": -36.82
       }
     },
     "Swing_V9_M15_V2": {
@@ -244,11 +244,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.3832,
+        "win_rate": 0.3834,
         "profit_factor": 0.41,
-        "sharpe_ratio": -60.63,
-        "total_trades": 2774,
-        "pnl_r": -5633.84
+        "sharpe_ratio": -60.61,
+        "total_trades": 2775,
+        "pnl_r": -5633.52
       }
     },
     "Swing_V9_H1_V2": {
@@ -259,11 +259,11 @@
       "transition_count": 3,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4728,
+        "win_rate": 0.4726,
         "profit_factor": 1.8,
-        "sharpe_ratio": 40.04,
-        "total_trades": 2957,
-        "pnl_r": 4428.57
+        "sharpe_ratio": 40.02,
+        "total_trades": 2958,
+        "pnl_r": 4427.33
       }
     },
     "Swing_LGB_M15_V1": {
@@ -288,7 +288,32 @@
         "total_trades": 16,
         "pnl_r": -3.03
       }
+    },
+    "Swing_V10_H1_Directional": {
+      "brain_id": "Swing_V10_H1_Directional",
+      "status": "candidate",
+      "registered_at": "2026-06-11T05:41:18.703128",
+      "last_transition_at": "2026-06-11T05:41:18.703128+00:00",
+      "transition_count": 1,
+      "freeze_count": 0
     }
   },
-  "transition_log": []
+  "transition_log": [
+    {
+      "brain_id": "Swing_V10_H1_Directional",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-11T05:41:18.703128",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Swing_V10_H1_Directional",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=candidate)",
+      "timestamp": "2026-06-11T05:41:18.703128+00:00",
+      "fix_id": "FIX-20260529-034"
+    }
+  ]
 }
