@@ -92,6 +92,38 @@ def _append_journal(path: Path, entry: dict[str, Any], *, lock_dir: Path | None 
     """
     _action = entry.get("action", "")
     _ticket = entry.get("position_ticket")
+    _msg_id = entry.get("message_id", "")
+
+    # ── FIX-20260611-017: intent_id-based dedup ──
+    # Prevents cross-ticket message_id reuse (execution queue double-flush).
+    # If the same intent_id was already written for a DIFFERENT ticket,
+    # this is a dispatch-level bug — log CRITICAL and skip.
+    if _msg_id and _action in ("open", "close"):
+        try:
+            if path.exists():
+                _tail_lines = []
+                with open(path, encoding="utf-8") as _f:
+                    _lines = _f.readlines()
+                    _tail_lines = _lines[-500:]
+                for _line in _tail_lines:
+                    try:
+                        _existing = json.loads(_line)
+                        if _existing.get("message_id") == _msg_id:
+                            _existing_ticket = _existing.get("position_ticket")
+                            if _existing_ticket and _existing_ticket != _ticket:
+                                import logging as _dedup_log
+                                _dedup_log.getLogger(__name__).warning(
+                                    "[CRITICAL] Journal dedup: message_id=%s reused "
+                                    "across tickets %s vs %s — skipping duplicate write. "
+                                    "This indicates an execution queue double-flush bug.",
+                                    _msg_id, _existing_ticket, _ticket,
+                                )
+                            return  # Already recorded — skip
+                    except json.JSONDecodeError:
+                        continue
+        except Exception:  # noqa: BLE001
+            pass  # Best-effort
+
     if _action == "close" and _ticket is not None:
         # Tail-read check: scan last ~200 entries for existing close
         try:

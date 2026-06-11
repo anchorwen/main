@@ -10,11 +10,11 @@
       "freeze_count": 0,
       "exposure_limited": false,
       "performance_metrics": {
-        "win_rate": 0.4307,
+        "win_rate": 0.4305,
         "profit_factor": 0.7,
         "sharpe_ratio": -30.0,
-        "total_trades": 3613,
-        "pnl_r": -1409.44
+        "total_trades": 3614,
+        "pnl_r": -1409.45
       }
     },
     "OU_Params_V7_M15": {
@@ -27,11 +27,11 @@
       "exposure_limited": false,
       "vote_weight": 1.5,
       "performance_metrics": {
-        "win_rate": 0.495,
+        "win_rate": 0.4951,
         "profit_factor": 0.81,
-        "sharpe_ratio": -19.22,
-        "total_trades": 202,
-        "pnl_r": -70.89
+        "sharpe_ratio": -18.69,
+        "total_trades": 206,
+        "pnl_r": -69.65
       }
     },
     "Meta_Stage1_Huber_V1": {
@@ -102,11 +102,11 @@
       "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.446,
+        "win_rate": 0.4461,
         "profit_factor": 0.98,
-        "sharpe_ratio": -1.46,
-        "total_trades": 2592,
-        "pnl_r": -94.88
+        "sharpe_ratio": -1.53,
+        "total_trades": 2623,
+        "pnl_r": -100.55
       }
     },
     "Swing_V9_M15_V2": {
@@ -117,11 +117,11 @@
       "transition_count": 3,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.6555,
+        "win_rate": 0.6547,
         "profit_factor": 3.53,
-        "sharpe_ratio": 108.36,
-        "total_trades": 836,
-        "pnl_r": 5372.91
+        "sharpe_ratio": 108.29,
+        "total_trades": 837,
+        "pnl_r": 5372.9
       }
     },
     "Brain_Trend_M30_V1": {
