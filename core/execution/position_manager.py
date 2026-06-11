@@ -410,8 +410,12 @@ class ActivePositionManager:
         Individual trail_* arguments are still accepted for backward compat
         but are superseded by trail_policy when both are present.
         """
+        # FIX-20260611-017: Initialize extremes from entry_price, not 0.0.
+        # SHORT positions: lowest_low=entry_price ensures breakeven doesn't
+        # fire prematurely (unrealized_r = (entry - lowest_low)/ATR = 0,
+        # not (entry - 0)/ATR = 729 ATR!).  Updated each cycle by mgmt phase.
         high = current_high if current_high is not None else entry_price
-        low = entry_price  # worst-case for a long; for short we'd swap
+        low = entry_price  # both directions start at entry — updated per cycle
 
         # Phase B: TrailPolicy is the preferred path
         if trail_policy is not None:
@@ -1829,8 +1833,8 @@ class ActivePositionManager:
                 initial_tp=0.0,
                 current_sl=0.0,
                 current_tp=0.0,
-                highest_high=0.0,  # filled by MT5 recovery
-                lowest_low=0.0,  # filled by MT5 recovery
+                highest_high=float(d.get("entry_price", 0)),  # FIX-017: default to entry_price, not 0
+                lowest_low=float(d.get("entry_price", 0)),  # FIX-017: prevents premature breakeven
                 entry_atr=float(d.get("entry_atr", 2.0)),  # FIX-018: persisted since v3
                 entry_cycle=0,
                 cycles_held=int(d.get("cycles_held", 0)),
