@@ -58,6 +58,7 @@ EXPECTED_MODULES = [
     "contracts_domain",
     "contracts_ids",
     "contracts_training",
+    "data_infrastructure",
     "deployment_config",
     "deployment_lifecycle",
     "features_rolling",

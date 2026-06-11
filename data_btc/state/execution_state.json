@@ -1,7 +1,7 @@
 {
   "version": 2,
   "schema_version": "execution_state.v2",
-  "saved_at_utc": "2026-06-11T08:56:03.550201",
+  "saved_at_utc": "2026-06-11T13:54:59.675385",
   "budgets": {
     "btc_swing": {
       "daily_pnl_pct": -7.0189,
@@ -16,7 +16,15 @@
       "_sl_paused_rest_of_day": false
     }
   },
-  "cooldown_registry": {},
+  "cooldown_registry": {
+    "btc_swing": {
+      "deadline": 1781179561.031199,
+      "cooldown_sec": 60,
+      "type": "unknown_60s",
+      "exit_reason": "kalman_velocity_flip_short_v=4.2bps",
+      "exit_direction": "short"
+    }
+  },
   "family_entry_tracker": {},
   "sl_streak_blocks": {},
   "sl_streak_global_block": 0.0,

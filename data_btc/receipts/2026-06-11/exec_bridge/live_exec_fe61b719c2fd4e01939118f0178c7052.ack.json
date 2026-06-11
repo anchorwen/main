@@ -1,0 +1,9 @@
+{
+  "message_id": "live_exec_fe61b719c2fd4e01939118f0178c7052",
+  "ack_status": "rejected",
+  "received_at": "2026-06-11T11:45:05",
+  "detail": {
+    "reason": "position_not_found",
+    "ticket": 3879912020
+  }
+}
