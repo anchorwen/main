@@ -402,7 +402,7 @@ def repair_journal(
 
     # ── Backfill missing magic/strategy ──
     if not dry_run:
-        needs_rewrite = False
+        needs_rewrite = _dup_count > 0  # FIX-20260612-010: also rewrite for dup removal
         for e in entries:
             if not e.get("magic"):
                 m = _resolve_magic(e)
