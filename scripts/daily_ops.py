@@ -238,11 +238,13 @@ def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
     try:
         from scripts.live_shadow_ensemble import build_report
 
+        # FIX-20260612-021: resolve symbol from base_dir instead of hardcoding XAU
+        _symbol = "BTCUSDc" if "btc" in str(base_dir).lower() else "XAUUSDc"
         report = build_report(
             brains_dir=_resolve_brains_dir(base_dir),
             feature_store_dir=Path(base_dir) / "feature_store",
             parallel=True,
-            symbol="XAUUSDc",
+            symbol=_symbol,
         )
         return {
             "step": "shadow_ensemble",
