@@ -128,8 +128,9 @@ class FileLock(BaseLock):
                         }
                     )
                 )
-                # Atomic rename — fails if lock file already exists
-                tmp.rename(self._lock_path)
+                # Atomic replace — overwrites stale lock even if force_release failed
+                # (Windows: Path.rename raises FileExistsError if target exists)
+                os.replace(str(tmp), str(self._lock_path))
                 self._acquired = True
                 return LockAcquireResult(
                     acquired=True,
@@ -209,7 +210,8 @@ class FileLock(BaseLock):
         try:
             os.kill(pid, 0)
             return True
-        except OSError:
+        except (OSError, SystemError):
+            # Windows: os.kill(pid, 0) raises SystemError (signal 0 unsupported)
             return False
 
     def _force_release(self) -> None:
