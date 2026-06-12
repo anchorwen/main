@@ -469,7 +469,31 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     log_fh.write(f"[launcher] Intent loop started (pid={intent_proc.pid})\n")
     log_fh.flush()
 
-    # ── Stream output from both ──
+    # ── FIX-20260612-022: watchdog_daily_ops as managed subprocess ──
+    # Runs daily_ops.py every 6h via the watchdog script.  Prevents
+    # CAL_FEED_STALLED and DAILY_OPS_OVERDUE from recurring.
+    _watchdog_cmd = [
+        python, "-u",
+        str(PROJECT_ROOT / "scripts" / "watchdog_daily_ops.py"),
+        "--base-dir", str(cfg["base_dir"]),
+        "--interval-hours", "6",
+        "--max-age-hours", "24",
+        "--auto-run",
+    ]
+    _watchdog_log_path = logs_dir / f"watchdog_{_utc_compact()}.log"
+    _watchdog_log_fh = open(_watchdog_log_path, "a", encoding="utf-8")
+    _watchdog_proc = subprocess.Popen(
+        _watchdog_cmd,
+        stdout=_watchdog_log_fh,
+        stderr=subprocess.STDOUT,
+        text=True, bufsize=1, encoding="utf-8",
+        env=subprocess_env,
+    )
+    print(f"[launcher] Watchdog started (pid={_watchdog_proc.pid})", flush=True)
+    log_fh.write(f"[launcher] Watchdog started (pid={_watchdog_proc.pid})\n")
+    log_fh.flush()
+
+    # ── Stream output from all subprocesses ──
     stop_event = threading.Event()
 
     # No more pipe-based stream readers; subprocess output goes directly
@@ -525,8 +549,8 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         log_fh.flush()
         stop_event.set()
 
-        # Terminate both
-        for proc, name in [(bridge_proc, "bridge"), (intent_proc, "intent")]:
+        # Terminate all managed processes
+        for proc, name in [(_watchdog_proc, "watchdog"), (bridge_proc, "bridge"), (intent_proc, "intent")]:
             if proc.poll() is None:
                 msg2 = f"[launcher] Terminating {name} (pid={proc.pid})..."
                 print(msg2, flush=True)
@@ -547,7 +571,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         print(msg4, flush=True)
         log_fh.write(msg4 + "\n")
         log_fh.flush()
-        for _fh in [bridge_log_fh, intent_log_fh, log_fh]:
+        for _fh in [_watchdog_log_fh, bridge_log_fh, intent_log_fh, log_fh]:
             try:  # noqa: SIM105
                 _fh.close()
             except Exception:  # noqa: BLE001
@@ -791,6 +815,14 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                 if _restart_process("intent", intent_cmd) is None:
                     break  # give up after too many restarts
 
+            # Watchdog is non-critical — log exit but don't restart
+            _watchdog_rc = _watchdog_proc.poll()
+            if _watchdog_rc is not None:
+                msg_wd = f"[launcher] watchdog exited (code={_watchdog_rc}) — daily_ops auto-run disabled until restart"
+                print(msg_wd, flush=True)
+                log_fh.write(msg_wd + "\n")
+                log_fh.flush()
+
             # Stall detection (every 2nd check = ~10s)
             if int(time_module.time()) % 10 < CHECK_INTERVAL:
                 alerts = _check_stall()
@@ -803,7 +835,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         _on_signal(signal.SIGINT, None)
 
     # ── Cleanup: terminate any still-running subprocesses ──
-    for _proc, _name in [(bridge_proc, "bridge"), (intent_proc, "intent")]:
+    for _proc, _name in [(_watchdog_proc, "watchdog"), (bridge_proc, "bridge"), (intent_proc, "intent")]:
         if _proc.poll() is None:
             try:
                 _proc.terminate()
