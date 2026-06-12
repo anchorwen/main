@@ -128,9 +128,22 @@ def reconcile_closed_positions(
                 except (IndexError, ValueError):
                     pass
 
+        # ── FIX-20260612-003: Trail-aware SL label ──
+        # When close_reason == 4 (SL hit), check if the position had trail
+        # activity via state.position_manager → pos.trail_advances.
+        # If trail was actively tightening the SL, label as sl_hit_trailed
+        # instead of sl_hit_first — closes the TRAIL_TELEMETRY_BLINDSPOT.
+        trail_active = False
+        if state is not None:
+            _pm = getattr(state, "position_manager", None)
+            if _pm is not None:
+                _pos = _pm.get_position(ticket) if hasattr(_pm, "get_position") else None
+                if _pos is not None and getattr(_pos, "trail_advances", 0) > 0:
+                    trail_active = True
+
         label = None
         if close_reason in (4,):
-            label = "sl_hit_first"
+            label = "sl_hit_trailed" if trail_active else "sl_hit_first"
         elif close_reason in (5,):
             label = "tp_hit_first"
         elif pnl is not None:

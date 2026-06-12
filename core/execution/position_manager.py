@@ -266,6 +266,12 @@ class ActivePositionManager:
         # After PENDING_CLOSE_MAX_CYCLES, the lock auto-expires to allow retry.
         self._pending_close: dict[int, int] = {}
 
+        # FIX-20260612-003: Close attempt counter — tracks how many close
+        # dispatches have been issued for each ticket.  When the count exceeds
+        # PENDING_CLOSE_FLOOD_THRESHOLD, the lock becomes permanent (phantom
+        # flood guard).  Cleared when position is confirmed closed.
+        self._close_attempt_count: dict[int, int] = {}
+
     # ── Internal helpers ──────────────────────────────────────────────────
 
     def _get_pos(self, ticket: int | None = None) -> ActivePosition | None:
@@ -319,14 +325,16 @@ class ActivePositionManager:
         """Clear a specific position or all positions (ticket=None)."""
         if ticket is not None:
             self._positions.pop(ticket, None)
-            self._pending_close.pop(ticket, None)  # FIX-20260607-XXX: release lock
+            self._pending_close.pop(ticket, None)
+            self._close_attempt_count.pop(ticket, None)
             if self._primary_ticket == ticket:
                 self._primary_ticket = (
                     next(iter(self._positions), None) if self._positions else None
                 )
         else:
             self._positions.clear()
-            self._pending_close.clear()  # FIX-20260607-XXX: release all locks
+            self._pending_close.clear()
+            self._close_attempt_count.clear()
             self._primary_ticket = None
             self._last_brain_reeval_cycle = -1
             self._entry_consensus_score = 0.0
@@ -344,12 +352,19 @@ class ActivePositionManager:
     # Prevents the cross-cycle retry avalanche where each management cycle
     # spawns a fresh ExitWatchdog batch for the same ticket.  Once a close
     # has been dispatched, subsequent cycles must wait for it to resolve.
+    #
+    # FIX-20260612-003: Phantom flood guard — close_attempt_count tracks
+    # cumulative dispatches per ticket.  When it exceeds the flood threshold,
+    # the lock becomes permanent (prevents the 76-close/80min phantom flood
+    # pattern observed on ticket 3807506009).
 
-    PENDING_CLOSE_MAX_CYCLES: int = 3  # max cycles before lock auto-expires for retry
+    PENDING_CLOSE_MAX_CYCLES: int = 10  # cycles before lock auto-expires for retry (was 3)
+    PENDING_CLOSE_FLOOD_THRESHOLD: int = 3  # close attempts before permanent lock
 
     def mark_pending_close(self, ticket: int, cycle: int) -> None:
         """Record that a close has been dispatched for this ticket."""
         self._pending_close[ticket] = cycle
+        self._close_attempt_count[ticket] = self._close_attempt_count.get(ticket, 0) + 1
 
     def is_pending_close(self, ticket: int, current_cycle: int) -> bool:
         """True if a close is in-flight and hasn't timed out yet.
@@ -357,18 +372,28 @@ class ActivePositionManager:
         Returns False (allow retry) when:
         - Ticket is not in the pending set (never dispatched)
         - Lock has expired (> PENDING_CLOSE_MAX_CYCLES since dispatch)
+          AND flood threshold hasn't been exceeded
+
+        Returns True (permanent lock) when:
+        - Close attempt count >= PENDING_CLOSE_FLOOD_THRESHOLD
+          (phantom flood guard — prevents the 76-close/80min pattern)
         """
         dispatched_cycle = self._pending_close.get(ticket)
         if dispatched_cycle is None:
             return False
+        # ── Phantom flood guard ──
+        attempts = self._close_attempt_count.get(ticket, 0)
+        if attempts >= self.PENDING_CLOSE_FLOOD_THRESHOLD:
+            return True  # permanent lock — flood detected
         if current_cycle - dispatched_cycle >= self.PENDING_CLOSE_MAX_CYCLES:
-            self._pending_close.pop(ticket, None)  # auto-expire
+            self._pending_close.pop(ticket, None)
             return False
         return True
 
     def clear_pending_close(self, ticket: int) -> None:
         """Explicitly release the pending lock (called on watchdog success)."""
         self._pending_close.pop(ticket, None)
+        self._close_attempt_count.pop(ticket, None)
 
     def register_position(
         self,
