@@ -478,10 +478,9 @@ def repair_journal(
                 if _locked:
                     _lock.release()
                 if _temp_path.exists():
-                    try:
+                    import contextlib
+                    with contextlib.suppress(OSError):
                         _temp_path.unlink()
-                    except OSError:
-                        pass
 
     # ── Link integrity ──
     closed_tickets: set[int] = set()
