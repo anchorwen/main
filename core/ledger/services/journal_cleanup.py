@@ -413,14 +413,49 @@ def repair_journal(
             # FIX-20260601-043: full-file rewrite must be serialised with
             # the bridge worker and other journal writers to prevent the
             # truncation-in-progress corruption pattern.
+            #
+            # FIX-20260612-008: Re-read journal AFTER acquiring the lock
+            # to capture entries appended between the initial _load_journal()
+            # call and lock acquisition.  Without this, any bridge/live_cycle
+            # entry written during the detection phase is silently dropped
+            # when the rewrite overwrites the file with stale snapshot data.
+            # Observed: 16 bridge receipts from 7 restarts all missing from
+            # journal because repair_journal() read before bridge wrote, then
+            # overwrote after bridge wrote.
             if lock_dir is not None:
                 from core.infrastructure.distributed_lock import FileLock
                 _lock = FileLock("live_trade_journal", lock_dir=str(lock_dir), ttl_seconds=10)
                 _acquired = _lock.acquire(blocking=True, timeout_seconds=5)
                 if _acquired.acquired:
                     try:
+                        # ── FIX-20260612-008: re-read after lock to avoid
+                        # dropping entries appended between load and lock ──
+                        _fresh = _load_journal(journal_path)
+                        if len(_fresh) > len(entries):
+                            # Merge: replay our backfill changes onto fresh data
+                            _backfilled_ids = {
+                                e["message_id"]
+                                for e in entries
+                                if e.get("message_id") and (not e.get("magic") or not e.get("strategy"))
+                            }
+                            for _fe in _fresh:
+                                _fid = _fe.get("message_id", "")
+                                if _fid and _fid in _backfilled_ids:
+                                    # This entry was backfilled in our stale snapshot
+                                    # Apply the same backfill to the fresh copy
+                                    if not _fe.get("magic"):
+                                        _m = _resolve_magic(_fe)
+                                        if _m:
+                                            _fe["magic"] = _m
+                                    if not _fe.get("strategy"):
+                                        _s = _resolve_strategy(_fe)
+                                        if _s:
+                                            _fe["strategy"] = _s
+                            _to_write = _fresh
+                        else:
+                            _to_write = entries
                         journal_path.write_text(
-                            "\n".join(json.dumps(e, ensure_ascii=False, default=str) for e in entries) + "\n",
+                            "\n".join(json.dumps(e, ensure_ascii=False, default=str) for e in _to_write) + "\n",
                             encoding="utf-8",
                         )
                     finally:

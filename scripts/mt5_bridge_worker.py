@@ -118,17 +118,6 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
     """
     from core.infrastructure.distributed_lock import FileLock
 
-    mid = record.get("message_id", "")
-    _diag = {
-        "event": "journal_diag",
-        "stage": "enter",
-        "message_id": mid,
-        "journal_path": str(journal_path),
-        "journal_exists": journal_path.exists(),
-        "action": record.get("action", ""),
-    }
-    print(json.dumps(_diag, ensure_ascii=False, default=str), flush=True)
-
     journal_path.parent.mkdir(parents=True, exist_ok=True)
     lock = FileLock(
         "live_trade_journal", lock_dir=str(journal_path.parent / ".locks"), ttl_seconds=10
@@ -138,9 +127,8 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
         print(
             json.dumps(
                 {
-                    "event": "journal_diag",
-                    "stage": "lock_failed",
-                    "message_id": mid,
+                    "event": "journal_lock_failed",
+                    "message_id": record.get("message_id", ""),
                     "error": acquired.error or "timeout",
                 },
                 ensure_ascii=False,
@@ -149,29 +137,16 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
         )
         return
     try:
+        mid = record.get("message_id", "")
         if mid and journal_path.exists():
             try:
                 for line in journal_path.read_text(encoding="utf-8").splitlines():
                     if mid in line:
-                        print(
-                            json.dumps(
-                                {"event": "journal_diag", "stage": "dedup_skip", "message_id": mid},
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
                         return  # duplicate, skip
             except Exception:  # noqa: BLE001
                 pass  # journal dedup is best-effort — skip malformed lines
         with journal_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
-        print(
-            json.dumps(
-                {"event": "journal_diag", "stage": "written", "message_id": mid},
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
     finally:
         lock.release()
 
