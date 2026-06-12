@@ -545,6 +545,8 @@ FIX-YYYYMMDD-NNN
 | FIX-20260612-012 | 2026-06-12 | deployment-config | **label_contract for 5 brains**: BTC_Swing_V5 + 4 XAU brains (OU_Params_V6/V7, Swing_V9_M30/M15) were missing label_contract blocks causing config consistency warnings. Added aligned SL/TP contracts referencing respective live.yaml configs. | RC-09 |
 | FIX-20260612-013 | 2026-06-12 | runtime-live | **trail_activation_atr validator**: key was actively used by position_registration.py but missing from _EXPECTED_EXIT_KEYS set, causing spurious 'unknown keys' warnings on every cycle. | RC-07 |
 | FIX-20260612-014 | 2026-06-12 | journal-cleanup | **Temp-file + atomic swap for repair_journal**: replaced write_text() overwrite with temp-file + os.replace() pattern (same as compact_journal). Lock acquired BEFORE re-reading — eliminates stale-snapshot window permanently. Consolidates duplicate removal. Closes Deferred Architecture Fix #1. | RC-03 |
+| FIX-20260612-015 | 2026-06-12 | data-health | **Brain registry ↔ governance alignment cross-check**: new FULL-mode check detects triple-bookkeeping bugs (registry status≠governance, vote_weight=0, live.yaml disabled). Would have caught DQAF-20260612-002 before trading was blocked. 3 cross-checks now: journal-ledger, open-close, brain-gov alignment. | RC-09 |
+| FIX-20260612-016 | 2026-06-12 | alpha-registry | **AlphaRecord missing strategy_class/assets fields**: @dataclass(frozen=True) lacked fields that daily_ops _step_alpha_feed() passed. TypeError swallowed by fail_open_guard on both BTC+XAU. Added Optional fields. | RC-06 |
 
 ---
 ## Fix Details by Year
