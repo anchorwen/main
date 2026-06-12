@@ -1922,6 +1922,7 @@ _EXPECTED_EXIT_KEYS = {
     "trail_atr_mult",
     "trail_atr_mult_low",
     "trail_atr_mult_high",
+    "trail_activation_atr",
     "breakeven_threshold_atr",
 }
 
