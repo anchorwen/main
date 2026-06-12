@@ -9,10 +9,13 @@ call that main.py / BrainRunService can consume without knowing adapter internal
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from core.schemas.trading_contracts import BrainSignal, Direction
@@ -170,7 +173,14 @@ class BaseBrainAdapter(ABC):
                     dtype=np.float64,
                 )
             else:
-                # Legacy fallback: dict order dependent (fragile)
+                # Legacy fallback: dict order dependent (fragile).
+                # FIX-20260612-002: All brain configs should have 'features' populated
+                # by BrainFactory at load time. This fallback should never be reached.
+                logger.warning(
+                    "BaseBrainAdapter: no 'features' in brain_entry for %s — "
+                    "falling back to dict.values() positional extraction",
+                    self._brain_entry.get("brain_id", "unknown"),
+                )
                 feature_vector = np.array(list(feature_source.values()), dtype=np.float64)
         return self.inference(feature_vector)
 

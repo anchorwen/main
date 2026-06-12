@@ -8,6 +8,7 @@ and maps regression scores onto BrainDecisionProposal via tanh squashing.
 
 from __future__ import annotations
 
+import logging
 from collections import deque
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
@@ -16,6 +17,8 @@ import numpy as np
 
 from core.brains.adapters.base_adapter import BaseBrainAdapter
 from core.deployment.brain_alert import emit_brain_alert
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from core.schemas.trading_contracts import BrainSignal
@@ -139,8 +142,26 @@ class TransformerBrainAdapter(BaseBrainAdapter):
 
         if self._feature_adapter is not None and feature_source is not None:
             feature_vector = self._feature_adapter.build_model_input(feature_source).ravel()
-        elif feature_source is not None:
-            feature_vector = np.asarray(list(feature_source.values()), dtype=np.float64)
+        elif isinstance(feature_source, dict) and feature_source:
+            # ── Named lookup from brain config features (SSOT) ──
+            # FIX-20260612-002: Replace dict-order-dependent .values() with
+            # name-ordered projection from brain_entry["features"].
+            feature_names = self._brain_entry.get("features")
+            if feature_names:
+                feature_vector = np.asarray(
+                    [float(feature_source.get(n, 0.0)) for n in feature_names],
+                    dtype=np.float64,
+                )
+            else:
+                # Legacy fallback (fragile — should never be reached)
+                logger.warning(
+                    "TransformerBrainAdapter: no 'features' in brain_entry for %s — "
+                    "falling back to dict.values() positional extraction",
+                    self._brain_entry.get("brain_id", "unknown"),
+                )
+                feature_vector = np.asarray(
+                    list(feature_source.values()), dtype=np.float64
+                )
         else:
             feature_vector = np.zeros(NUM_FEATURES, dtype=np.float64)
         return self.inference(feature_vector)

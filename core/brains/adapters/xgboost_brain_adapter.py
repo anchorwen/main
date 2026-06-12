@@ -8,6 +8,7 @@ Maps raw XGBoost regression scores onto BrainDecisionProposal via score→direct
 from __future__ import annotations
 
 import json
+import logging
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
@@ -15,6 +16,8 @@ import numpy as np
 
 from core.brains.adapters.base_adapter import BaseBrainAdapter
 from core.deployment.brain_alert import emit_brain_alert
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from core.schemas.trading_contracts import BrainSignal
@@ -56,9 +59,51 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
             else:
                 feature_vector = feature_source.ravel().astype(np.float64)
         elif self._feature_adapter is not None and feature_source is not None:
+            # Path A: feature_adapter handles dict→vector with normalization
             feature_vector = self._feature_adapter.build_model_input(feature_source).ravel()
-        elif feature_source is not None:
-            feature_vector = np.asarray(list(feature_source.values()), dtype=np.float64)
+        elif isinstance(feature_source, dict) and feature_source:
+            # ── Path B: Named lookup from brain config features (SSOT) ──
+            # FIX-20260612-002: Replace dict-order-dependent .values()
+            # extraction with name-ordered projection from brain_entry["features"].
+            # This is the authoritative feature order guaranteed by BrainFactory
+            # at load time (validated against model .meta.json feature_names).
+            # Shadow validation: compare old vs new, alert on mismatch.
+            feature_names = self._brain_entry.get("features")
+            if feature_names:
+                new_vector = np.asarray(
+                    [float(feature_source.get(n, 0.0)) for n in feature_names],
+                    dtype=np.float64,
+                )
+                # ── Shadow validation (48h transitional, remove after 2026-06-14) ──
+                try:
+                    old_vector = np.asarray(
+                        list(feature_source.values()), dtype=np.float64
+                    )
+                    if not np.array_equal(old_vector[:len(new_vector)], new_vector):
+                        logger.warning(
+                            "[SHADOW_MISMATCH] XGBoost feature order skew detected "
+                            "for brain=%s schema=%s. "
+                            "Expected first 3: %s. "
+                            "Got raw dict keys first 3: %s.",
+                            self._brain_entry.get("brain_id", "?"),
+                            self._brain_entry.get("feature_schema_id", "?"),
+                            feature_names[:3],
+                            list(feature_source.keys())[:3],
+                        )
+                except Exception:
+                    pass  # Shadow validation is non-blocking
+                feature_vector = new_vector
+            else:
+                # Legacy fallback: dict-order-dependent (fragile).
+                # Should never be hit — BrainFactory validates features field at load.
+                logger.warning(
+                    "XGBoostBrainAdapter: no 'features' in brain_entry for %s — "
+                    "falling back to dict.values() positional extraction",
+                    self._brain_entry.get("brain_id", "unknown"),
+                )
+                feature_vector = np.asarray(
+                    list(feature_source.values()), dtype=np.float64
+                )
         else:
             feature_vector = np.zeros(self._num_features, dtype=np.float64)
         return self.inference(feature_vector)

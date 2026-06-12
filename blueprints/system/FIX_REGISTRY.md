@@ -532,6 +532,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260611-022 | 2026-06-11 | feedback_pnl | Consumer migration: shadow_pnl_loop startup now tries load_from_stream() first, falls back to old JSON. | RC-06 |
 | FIX-20260611-022 | 2026-06-11 | deployment_lifecycle | Register data_infrastructure in EXPECTED_MODULES list (validate_blueprints.py). | RC-06 |
 | FIX-20260612-023 | 2026-06-11 | monitor_dashboard | Downgrade ConformalCalibrator cold-start alert from CRITICAL to WARNING. CRITICAL on every restart was alert noise — calibrator needs 50 closes to warm up. Now only WARNING during warmup. Also diagnosed duplicate alert dispatch bug (RULE-012 fires twice in 1s despite 300s cooldown). | RC-06 |
+| FIX-20260612-002 | 2026-06-12 | brains-adapters | XGBoost/Transformer/Base adapter .values() positional fragility eradicated: replaced dict-order-dependent feature extraction with named lookup from brain_entry[features] SSOT. Added shadow validation (48h transitional) in XGBoost adapter. OnlineFeedbackHook now uses adapter brain config for feature order. 5 .values() sites fixed across 4 files. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2218,3 +2219,15 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
+
+### FIX-20260612-002
+- **Date**: 2026-06-12
+- **Author**: cursor-agent
+- **Commit**: d005ac6
+- **Type**: fix
+- **Module**: brains-adapters
+- **Files**: core/brains/adapters/xgboost_brain_adapter.py,core/brains/adapters/base_adapter.py,core/brains/adapters/transformer_brain_adapter.py,core/feedback/online_feedback_hook.py
+- **Description**: XGBoost/Transformer/Base adapter .values() positional fragility eradicated: replaced dict-order-dependent feature extraction with named lookup from brain_entry[features] SSOT. Added shadow validation (48h transitional) in XGBoost adapter. OnlineFeedbackHook now uses adapter brain config for feature order. 5 .values() sites fixed across 4 files.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: feedback-online

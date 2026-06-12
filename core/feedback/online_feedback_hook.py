@@ -17,6 +17,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 
@@ -200,6 +202,30 @@ class OnlineFeedbackHook:
 
         return best_row if best_delta <= self._max_delta else None
 
+    def _build_feature_array(self, features: dict[str, float]) -> np.ndarray:
+        """Build feature array with name-ordered projection when available.
+
+        FIX-20260612-002: Prefer adapter's brain config ``features`` list
+        (the SSOT for feature order) over dict-order-dependent ``.values()``.
+        Falls back to positional extraction only when the adapter has no
+        brain config features list (should never happen for registered brains).
+        """
+        feature_names = None
+        try:
+            brain_entry = getattr(self._adapter, "_brain_entry", None)
+            if isinstance(brain_entry, dict):
+                feature_names = brain_entry.get("features")
+        except Exception:
+            pass
+
+        if feature_names:
+            return np.array(
+                [float(features.get(n, 0.0)) for n in feature_names],
+                dtype=np.float64,
+            )
+        # Legacy fallback: dict-order-dependent (fragile)
+        return np.array(list(features.values()), dtype=np.float64)
+
     # ------------------------------------------------------------------
     # R-multiple extraction
     # ------------------------------------------------------------------
@@ -344,9 +370,9 @@ class OnlineFeedbackHook:
             if self._replay is not None:
                 # ── Replay buffer path ──
                 try:
-                    import numpy as np
-
-                    feat_arr = np.array(list(features.values()), dtype=np.float64)
+                    # FIX-20260612-002: Named feature extraction from adapter's
+                    # brain config (SSOT) — avoids dict-order-dependent .values()
+                    feat_arr = self._build_feature_array(features)
                     pnl, volume = self._extract_pnl_volume(entry)
                     self._replay.add(feat_arr, label, pnl, volume, trade_id=trade_id)
                     collected += 1
@@ -356,9 +382,9 @@ class OnlineFeedbackHook:
             else:
                 # ── Legacy direct partial_fit path ──
                 try:
-                    import numpy as np
-
-                    feat_arr = np.array(list(features.values()), dtype=np.float64)
+                    # FIX-20260612-002: Named feature extraction from adapter's
+                    # brain config (SSOT) — avoids dict-order-dependent .values()
+                    feat_arr = self._build_feature_array(features)
                     success = self._adapter.partial_fit(feat_arr, label)
                     if success:
                         collected += 1
