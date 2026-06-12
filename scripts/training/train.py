@@ -1367,7 +1367,8 @@ def run_pipeline(
     if ds_path.suffix == ".npz":
         try:
             raw = np.load(ds_path, allow_pickle=True)
-            pnl_raw = raw.get("pnl_r") or raw.get("pnl")
+            _pnl_r = raw.get("pnl_r")
+            pnl_raw = _pnl_r if _pnl_r is not None else raw.get("pnl")
             if pnl_raw is not None:
                 pnl_array = np.asarray(pnl_raw, dtype=np.float64)
         except (KeyError, AttributeError, TypeError):
@@ -1438,7 +1439,8 @@ def run_pipeline(
                 X_test, y_test = X_val, y_val
 
             # Handle pre-split PnL (train only; eval uses label-based returns)
-            train_pnl = pnl_array  # pnl_array already loaded from ds_path
+            n_train_pre = len(X_train)
+            train_pnl = pnl_array[:n_train_pre] if pnl_array is not None and len(pnl_array) >= n_train_pre else pnl_array
 
             # Recompute sample weights for train (after label remapping)
             if contract.dataset.sample_weighting != "none":
