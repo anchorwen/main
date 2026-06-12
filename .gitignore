@@ -35,3 +35,5 @@ batch_plans/
 cline_chat_backup/
 *.backup.*.md
 
+data_btc/live_trade_journal.jsonl
+data/live_trade_journal.jsonl
