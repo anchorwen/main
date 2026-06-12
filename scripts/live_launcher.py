@@ -449,6 +449,10 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     log_fh.write(f"[launcher] Bridge worker started (pid={bridge_proc.pid})\n")
     log_fh.flush()
 
+    # ── FIX-20260612-001: Initialize restart tracking BEFORE intent start ──
+    restart_counts: dict[str, int] = {"bridge": 0, "intent": 0}
+    last_restart: dict[str, float] = {"bridge": 0.0, "intent": time_module.time()}
+
     intent_proc = subprocess.Popen(
         intent_cmd,
         stdout=intent_log_fh,
@@ -556,9 +560,6 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     STALL_MINUTES = 15  # alert if no new decisions for this long
     CHECK_INTERVAL = 5  # seconds between health checks
     BRIDGE_STALL_MINUTES = 10  # alert if bridge processes no orders for this long
-
-    restart_counts: dict[str, int] = {"bridge": 0, "intent": 0}
-    last_restart: dict[str, float] = {"bridge": 0.0, "intent": 0.0}
 
     def _graduated_cooldown(count: int) -> float:
         """Progressive backoff: 5s → 10s → 30s → 60s as restart count increases."""
