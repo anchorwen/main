@@ -153,10 +153,12 @@ def check_symbol(base_dir: str, label: str) -> dict:
     return result
 
 
-def print_report(results: list[dict]) -> None:
+def print_report(results: list[dict], *, partial: bool = False) -> None:
     """Print a one-page health summary."""
     print("=" * 70)
     print(f"  SYSTEM HEALTH — {_utc_iso()[:19]}")
+    if partial:
+        print("  *** PARTIAL VIEW — not all systems checked ***")
     print("=" * 70)
 
     for r in results:
@@ -218,6 +220,20 @@ def print_report(results: list[dict]) -> None:
         if stale:
             print(f"    STALE: {', '.join(f'{k}={v:.0f}min' for k, v in stale)}")
 
+    # ── FIX-20260612-009: summary table ──
+    print(f"\n{'─' * 70}")
+    print("  SUMMARY")
+    for r in results:
+        label = r["label"]
+        deg = r.get("degradation", {})
+        deg_level = deg.get("level", "?")
+        stream_age = (r.get("stream", {}) or {}).get("last_event_age_min")
+        stream_ok = stream_age is not None and stream_age < 15
+        gm_age = (r.get("freshness", {}) or {}).get("golden_master")
+        gm_ok = gm_age is not None and gm_age < 15
+        status = "OK" if (stream_ok and gm_ok) else "DEGRADED"
+        print(f"  {label:4s}  stream={'fresh' if stream_ok else 'stale':6s}  gm={'fresh' if gm_ok else 'stale':6s}  degradation={deg_level:6s}  → {status}")
+
     print(f"\n{'=' * 70}")
     print("  END OF REPORT")
     print(f"{'=' * 70}")
@@ -233,11 +249,24 @@ def main() -> int:
                         help="Labels (default: XAU BTC)")
     args = parser.parse_args()
 
+    # ── FIX-20260612-009: partial-view warning ──
+    # When the operator only checks one symbol, explicitly warn which
+    # symbols are NOT being checked to prevent "XAU is offline" false
+    # positives caused by incomplete health queries.
+    _all_known = {"data": "XAU", "data_btc": "BTC"}
+    _checked = dict(zip(args.base_dir, args.label))
+    _unchecked = {d: l for d, l in _all_known.items() if d not in _checked}
+    if _unchecked:
+        _missing = ", ".join(f"{l} ({d})" for d, l in _unchecked.items())
+        print(f"\n  [PARTIAL VIEW] Only checking: {', '.join(f'{l} ({d})' for d, l in _checked.items())}")
+        print(f"  [PARTIAL VIEW] NOT checked: {_missing}")
+        print(f"  [PARTIAL VIEW] Run without --base-dir/--label for full picture.\n")
+
     results = []
     for base_dir, label in zip(args.base_dir, args.label):
         results.append(check_symbol(base_dir, label))
 
-    print_report(results)
+    print_report(results, partial=bool(_unchecked))
     return 0
 
 
