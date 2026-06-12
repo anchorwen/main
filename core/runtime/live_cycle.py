@@ -3658,6 +3658,31 @@ def execute_live_cycle(
             if not _mia_closed:
                 _mia_closed = []  # all deduped — skip journal write
             if _mia_closed:
+                # ── FIX-20260612-024: journal-based dedup ──
+                # Before writing MIA close entries, check if the journal
+                # already has a close entry for this ticket (written by
+                # the bridge).  If yes, skip — prevents duplicate close
+                # entries that cause JOURNAL_SLA_VIOLATION dupes.
+                _existing_close_tickets: set[int] = set()
+                try:
+                    _jp = str(journal_path)
+                    if Path(_jp).exists():
+                        for _line in Path(_jp).read_text(encoding="utf-8").splitlines():
+                            if not _line.strip(): continue
+                            if '"action": "close"' not in _line: continue
+                            # Fast substring extraction of position_ticket
+                            _pt = _line.split('"position_ticket":')[1].split(",")[0].strip() if '"position_ticket":' in _line else ""
+                            if _pt and _pt.isdigit():
+                                _existing_close_tickets.add(int(_pt))
+                except Exception:  # noqa: BLE001
+                    pass  # Non-blocking — skip dedup on read error
+                _mia_closed = [
+                    e for e in _mia_closed
+                    if int(e.get("position_ticket", 0) or 0) not in _existing_close_tickets
+                ]
+                if not _mia_closed:
+                    pass  # all tickets already have close entries — skip
+            if _mia_closed:
                 # ── FIX-20260611-005 Phase 2: Strangler Fig #12 ──
                 with log_and_continue(component="MIA_Close:journal_write"):
                     from core.runtime.position_close_adapter import record_mia_closes
