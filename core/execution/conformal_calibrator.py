@@ -296,6 +296,16 @@ class ConformalCalibrator:
             except (json.JSONDecodeError, OSError, ValueError, TypeError):
                 pass  # corrupt state → use in-memory values
 
+        # FIX-20260612-005: Transition cold_started → False when calibrator
+        # has accumulated enough history.  Previously cold_started stayed True
+        # forever (set by cold_start_from_journal(), never cleared), causing
+        # CONFORMAL_COLD_STALLED even with 51+ history entries.  The meaningful
+        # signal is history count, not computation count — history is what the
+        # Q10 percentile is computed FROM.
+        _cold = self._cold_started
+        if _cold and len(serializable) >= self._warmup_samples:
+            _cold = False
+
         self._state_path.write_text(
             json.dumps(
                 {
@@ -303,7 +313,7 @@ class ConformalCalibrator:
                     "clamp_hits_upper": _clamp_up,
                     "clamp_hits_lower": _clamp_lo,
                     "total_computations": _total,
-                    "cold_started": self._cold_started,
+                    "cold_started": _cold,
                 },
                 indent=2,
             ),
@@ -322,6 +332,13 @@ class ConformalCalibrator:
         self._clamp_hits_lower = int(data.get("clamp_hits_lower", 0))
         self._total_computations = int(data.get("total_computations", 0))
         self._cold_started = bool(data.get("cold_started", False))
+
+        # FIX-20260612-005: Backfill cold_started transition for state files
+        # written before this fix.  If we already have enough history, we're
+        # not cold — regardless of what the file says.
+        _loaded_history = data.get("history", [])
+        if self._cold_started and len(_loaded_history) >= self._warmup_samples:
+            self._cold_started = False
 
         for item in data.get("history", []):
             self._history.append(

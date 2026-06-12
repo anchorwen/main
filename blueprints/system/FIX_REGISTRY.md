@@ -535,6 +535,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260612-002 | 2026-06-12 | brains-adapters | XGBoost/Transformer/Base adapter .values() positional fragility eradicated: replaced dict-order-dependent feature extraction with named lookup from brain_entry[features] SSOT. Added shadow validation (48h transitional) in XGBoost adapter. OnlineFeedbackHook now uses adapter brain config for feature order. 5 .values() sites fixed across 4 files. | RC-06 |
 | FIX-20260612-003 | 2026-06-12 | execution-guards | P0+P1: Close-flood phantom guard + trail-aware SL label. PositionManager: added _close_attempt_count tracker with PENDING_CLOSE_FLOOD_THRESHOLD=3 to permanently lock tickets after repeated close failures (prevents 76-close/80min flood pattern). PENDING_CLOSE_MAX_CYCLES extended 3→10. Reconciliation: sl_hit_trailed when trail_advances>0 (closes TRAIL_TELEMETRY_BLINDSPOT). | RC-06 |
 | FIX-20260612-004 | 2026-06-12 | runtime-live | P2+P4: Bridge worker actual fill PnL capture + MIA deal history retry. Bridge: query history_deals_get() after close→extract deal.price/profit/volume→journal uses actual fill PnL over mid-price estimate. MIA: 3-retry loop with 1s delay for history_deals_get() (aligns with PositionCloseAdapter pattern)—fixes 23% MIA PnL failure rate (10/43 BTC). | RC-06 |
+| FIX-20260612-005 | 2026-06-12 | execution-guards | P5: ConformalCalibrator cold_started transition fix. cold_started now transitions to False when history >= warmup_samples (50) instead of staying True forever. _load_state() backfills transition for existing state files. Fixes CONFORMAL_COLD_STALLED false positive — calibrator was operating correctly (51 history entries) but flagged as stalled because cold_started never cleared. | RC-03 |
 
 ---
 ## Fix Details by Year
@@ -2257,3 +2258,15 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: execution-guards
+
+### FIX-20260612-005
+- **Date**: 2026-06-12
+- **Author**: cursor-agent
+- **Commit**: 10635d1
+- **Type**: fix
+- **Module**: execution-guards
+- **Files**: core/execution/conformal_calibrator.py
+- **Description**: P5: ConformalCalibrator cold_started transition fix. cold_started now transitions to False when history >= warmup_samples (50) instead of staying True forever. _load_state() backfills transition for existing state files. Fixes CONFORMAL_COLD_STALLED false positive — calibrator was operating correctly (51 history entries) but flagged as stalled because cold_started never cleared.
+- **Root Cause**: RC-03 — state-leak
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
