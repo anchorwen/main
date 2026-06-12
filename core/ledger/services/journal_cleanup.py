@@ -384,7 +384,7 @@ def repair_journal(
         elif action == "modify_sltp":
             report["modifies"] += 1
 
-        # Duplicate detection
+        # Duplicate detection — message_id
         msg_id = e.get("message_id", "")
         if msg_id and msg_id in seen_ids:
             tickets_to_remove.add(e.get("position_ticket", 0))
@@ -392,6 +392,29 @@ def repair_journal(
             report["duplicates_removed"] += 1
         if msg_id:
             seen_ids.add(msg_id)
+
+    # ── FIX-20260612-023: position_ticket duplicate detection ──
+    # Bridge close + reconciliation close produce two entries for the
+    # same ticket with different message_ids.  Keep the best one.
+    _close_entries = [(i, e) for i, e in enumerate(entries) if e.get("action") == "close"]
+    _ticket_groups: dict = {}
+    for _i, _e in _close_entries:
+        _t = _e.get("position_ticket")
+        if _t and isinstance(_t, int) and _t > 0:
+            _ticket_groups.setdefault(_t, []).append((_i, _e))
+    for _ticket, _group in _ticket_groups.items():
+        if len(_group) > 1:
+            # Keep best: closed > accepted > rejected, prefer larger abs(PnL)
+            def _sort_key(item):
+                _e = item[1]
+                _ack = {"closed": 0, "accepted": 1, "rejected": 2}
+                _has_cp = 1 if (_e.get("detail", {}).get("close_price") or 0) > 0 else 0
+                return (_ack.get(_e.get("ack_status", ""), 99), -_has_cp, -abs(_e.get("pnl") or 0))
+            _group.sort(key=_sort_key)
+            for _i, _e in _group[1:]:
+                if not entries[_i].get("_duplicate"):
+                    entries[_i]["_duplicate"] = True
+                    report["duplicates_removed"] += 1
 
     # ── Remove detected duplicates ──
     _dup_count = report["duplicates_removed"]
