@@ -13,9 +13,9 @@ brains:
   registry_entries:
   - path: configs/brains_btc/archive/BTC_Swing_V4.json
     enabled: false
-  # ── FIX-20260610-001: V5 retired — M5/12bar, 33.9% accuracy, fake PF=1.81 ──
+  # ── DQAF-20260612-002: V5 re-enabled — governance promoted to live ──
   - path: configs/brains_btc/BTC_Swing_V5.json
-    enabled: false
+    enabled: true
   - path: configs/brains_btc/archive/BTC_Swing_LGB_V1.json
     enabled: false
   - path: configs/brains_btc/BTC_Swing_V6_MultiTF_LGB_v2.json

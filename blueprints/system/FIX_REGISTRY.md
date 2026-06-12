@@ -536,6 +536,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260612-003 | 2026-06-12 | execution-guards | P0+P1: Close-flood phantom guard + trail-aware SL label. PositionManager: added _close_attempt_count tracker with PENDING_CLOSE_FLOOD_THRESHOLD=3 to permanently lock tickets after repeated close failures (prevents 76-close/80min flood pattern). PENDING_CLOSE_MAX_CYCLES extended 3→10. Reconciliation: sl_hit_trailed when trail_advances>0 (closes TRAIL_TELEMETRY_BLINDSPOT). | RC-06 |
 | FIX-20260612-004 | 2026-06-12 | runtime-live | P2+P4: Bridge worker actual fill PnL capture + MIA deal history retry. Bridge: query history_deals_get() after close→extract deal.price/profit/volume→journal uses actual fill PnL over mid-price estimate. MIA: 3-retry loop with 1s delay for history_deals_get() (aligns with PositionCloseAdapter pattern)—fixes 23% MIA PnL failure rate (10/43 BTC). | RC-06 |
 | FIX-20260612-005 | 2026-06-12 | execution-guards | P5: ConformalCalibrator cold_started transition fix. cold_started now transitions to False when history >= warmup_samples (50) instead of staying True forever. _load_state() backfills transition for existing state files. Fixes CONFORMAL_COLD_STALLED false positive — calibrator was operating correctly (51 history entries) but flagged as stalled because cold_started never cleared. | RC-03 |
+| FIX-20260612-006 | 2026-06-12 | runtime-live, deployment-config | **P0: no_live_brains triple-bookkeeping fix + SSOT Cut 4**. FIX-20260610-001 retired BTC_Swing_V5 in 3 places: (1) brain registry `status: retired`, (2) `vote_weight: 0.0`, (3) `live_btc.yaml enabled: false`. When governance promoted V5→live, all 3 residual blocks remained — strategy_builder excluded it, live.yaml disabled it, vote_weight=0 muted it. Result: 0 live brains detected → _live_count=0 → [degraded: no_live_brains] on all cycles. Fix: (a) re-enable all 3 config sites, (b) replace fragile `strategy.brains` nested-dict lookup with `decision.brain_ids` flat list[str] SSOT. DQAF-20260612-002. | RC-09, RC-11 |
 
 ---
 ## Fix Details by Year
@@ -2270,3 +2271,15 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-03 — state-leak
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
+
+### FIX-20260612-006
+- **Date**: 2026-06-12
+- **Author**: cursor-agent
+- **Commit**: (pending)
+- **Type**: fix
+- **Module**: runtime-live, deployment-config
+- **Files**: core/runtime/strategy_evaluator.py, configs/brains_btc/BTC_Swing_V5.json, configs/live_btc.yaml
+- **Description**: P0: Triple-bookkeeping residual blocks from FIX-20260610-001 prevented BTC_Swing_V5 from voting after governance promotion. Three config artifacts (registry status=retired, vote_weight=0.0, live.yaml enabled=false) acted in concert to silently exclude the only live brain. Additionally replaced fragile `strategy.brains` nested-dict brain_id extraction with `decision.brain_ids` flat list[str] — eliminating future dict-key-convention fragility. DQAF-20260612-002.
+- **Root Cause**: RC-09 (config-drift) + RC-11 (stale-data) — FIX-20260610-001 retired V5 in 3 places; governance re-promoted to live but none of the 3 sites were synced back.
+- **Prevention**: Brain retirement must be reversible via a single source of truth. Re-enabling a brain requires checking all 3 sites (registry JSON, live.yaml, vote_weight).
+- **Dependents Checked**: governance_state.json, strategy_builder.py

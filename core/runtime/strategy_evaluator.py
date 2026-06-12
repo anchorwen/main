@@ -301,11 +301,17 @@ def evaluate_strategy_lines(
         # and require higher confidence to prevent "cadet brains driving
         # heavy mechs" (observed: 4 candidate brains, 0.1 lot, -$30/day).
         if decision.should_trade and governance_state is not None:
-            _strat_brains = getattr(strategy, "brains", []) or []
+            # ── DQAF-20260612-002 / FIX-20260612-006: SSOT fix ──
+            # Bypass legacy strategy.brains nested-dict lookup (fragile: depends
+            # on "brain_id" key convention and is vulnerable to registry→governance
+            # status skew).  Use the flat list[str] from the decision object —
+            # these are the brain IDs that actually voted in this cycle, freshly
+            # resolved by strategy.evaluate().
+            _voted_brain_ids = getattr(decision, "brain_ids", [])
             _live_count = sum(
                 1
-                for _b in _strat_brains
-                if governance_state.get(_b.get("brain_id", ""), {}).get("status") == "live"
+                for bid in _voted_brain_ids
+                if governance_state.get(bid, {}).get("status") == "live"
             )
             if _live_count == 0:
                 _degraded_confidence_floor = 0.50
