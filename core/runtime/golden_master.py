@@ -27,16 +27,7 @@ _DEFAULT_PATH = "data/golden_master.jsonl"
 
 def _is_recording() -> bool:
     # Default ON — only disable when explicitly set to "0"
-    result = os.environ.get(_ENV_DISABLE) != "0"
-    # ── FIX-020 probe: log recording status ──
-    try:
-        import json as _j
-        _diag = {"event": "gm_diag", "stage": "is_recording", "env_val": os.environ.get(_ENV_DISABLE, "UNSET"), "result": result}
-        with open("data_btc/_gm_diag.jsonl", "a", encoding="utf-8") as _df:
-            _df.write(_j.dumps(_diag) + "\n")
-    except Exception:
-        pass
-    return result
+    return os.environ.get(_ENV_DISABLE) != "0"
 
 
 def _is_replaying() -> bool:
@@ -75,16 +66,6 @@ def record_cycle_inputs(
     """
     if not _is_recording():
         return None
-
-    # ── FIX-020 probe: confirm record_cycle_inputs proceeds ──
-    try:
-        import json as _j3
-        _diag = {"event": "gm_diag", "stage": "inputs_proceeding", "data_dir": data_dir, "cycle": cycle_count}
-        _dp = Path(data_dir) / "_gm_diag.jsonl"
-        with open(str(_dp), "a", encoding="utf-8") as _df:
-            _df.write(_j3.dumps(_diag) + "\n")
-    except Exception:
-        pass
 
     now_ts = time.time()
     fv_sample = (
@@ -129,15 +110,6 @@ def record_cycle_outputs(
     data_dir: str = "data",
 ) -> None:
     """Write per-strategy decision outputs and append the full record to disk."""
-    # ── FIX-020 probe ──
-    try:
-        import json as _j2
-        _diag = {"event": "gm_diag", "stage": "record_outputs", "capture_ok": capture is not None, "data_dir": data_dir}
-        _dp = Path(data_dir) / "_gm_diag.jsonl"
-        with open(str(_dp), "a", encoding="utf-8") as _df:
-            _df.write(_j2.dumps(_diag) + "\n")
-    except Exception:
-        pass
     if capture is None:
         return
 
