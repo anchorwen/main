@@ -388,9 +388,17 @@ def repair_journal(
         msg_id = e.get("message_id", "")
         if msg_id and msg_id in seen_ids:
             tickets_to_remove.add(e.get("position_ticket", 0))
+            e["_duplicate"] = True
             report["duplicates_removed"] += 1
         if msg_id:
             seen_ids.add(msg_id)
+
+    # ── Remove detected duplicates ──
+    _dup_count = report["duplicates_removed"]
+    if _dup_count > 0:
+        entries = [e for e in entries if not e.get("_duplicate")]
+        for e in entries:
+            e.pop("_duplicate", None)
 
     # ── Backfill missing magic/strategy ──
     if not dry_run:
