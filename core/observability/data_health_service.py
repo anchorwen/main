@@ -277,6 +277,7 @@ class DataHealthService:
         # Cross-source validation (FULL only)
         if include_extras:
             report.cross_checks = [
+                self._check_brain_registry_governance_alignment(),
                 self._check_journal_vs_pnl_ledger(),
                 self._check_open_vs_close_convergence(),
             ]
@@ -1777,6 +1778,134 @@ class DataHealthService:
     # ══════════════════════════════════════════════════════════════════════
     # CROSS-SOURCE VALIDATION (FULL mode only)
     # ══════════════════════════════════════════════════════════════════════
+
+    def _check_brain_registry_governance_alignment(self) -> CrossCheckResult:
+        """FIX-20260612-015: Detect brain registry ↔ governance mismatches.
+
+        The BTC_Swing_V5 incident (DQAF-20260612-002) was caused by
+        triple-bookkeeping: registry status=retired, vote_weight=0.0,
+        live.yaml enabled=false — while governance said live.
+        This check catches that class of bug before it causes no_live_brains.
+        """
+        import json as _json
+        import os as _os
+
+        warnings: list[str] = []
+        gov_path = _os.path.join(self._base_dir, "governance_state.json")
+        if not _os.path.exists(gov_path):
+            return CrossCheckResult(
+                check_name="brain_registry_governance_alignment",
+                status=SourceStatus.SKIPPED,
+                primary_code="BR_GOV_ALIGN_SKIPPED",
+                message="governance_state.json not found",
+                checked_at=_utc_iso(),
+            )
+
+        try:
+            gov = _json.loads(open(gov_path, encoding="utf-8").read())
+        except Exception:
+            return CrossCheckResult(
+                check_name="brain_registry_governance_alignment",
+                status=SourceStatus.SKIPPED,
+                primary_code="BR_GOV_ALIGN_SKIPPED",
+                message="governance_state.json unreadable",
+                checked_at=_utc_iso(),
+            )
+
+        brain_states = gov.get("brain_states", {})
+        if not brain_states:
+            return CrossCheckResult(
+                check_name="brain_registry_governance_alignment",
+                status=SourceStatus.PASS,
+                primary_code="BR_GOV_ALIGN_OK",
+                message="No brain states to check",
+                checked_at=_utc_iso(),
+            )
+
+        # Find live brains in governance
+        live_ids = {
+            bid for bid, bs in brain_states.items()
+            if isinstance(bs, dict) and bs.get("status") == "live"
+        }
+
+        # Try to load brain registry from configs (same dir pattern as live.yaml)
+        # Determine which brains dir to use from base_dir naming convention
+        if "btc" in str(self._base_dir).lower():
+            brains_dir = "configs/brains_btc"
+            yaml_path = "configs/live_btc.yaml"
+        else:
+            brains_dir = "configs/brains"
+            yaml_path = "configs/live.yaml"
+
+        # Check 1: Does each live governance brain have a registry entry?
+        registry_entries: dict[str, dict] = {}
+        if _os.path.isdir(brains_dir):
+            import glob as _glob
+            for f in _glob.glob(f"{brains_dir}/*.json"):
+                if ".normalization." in f:
+                    continue
+                try:
+                    entry = _json.loads(open(f, encoding="utf-8").read())
+                    if entry.get("schema_version") == "brain_registry_entry.v1":
+                        registry_entries[entry["brain_id"]] = entry
+                except Exception:
+                    pass
+
+        for bid in live_ids:
+            if bid not in registry_entries:
+                warnings.append(
+                    f"LIVE brain {bid} has NO registry entry in {brains_dir}"
+                )
+            else:
+                entry = registry_entries[bid]
+                if entry.get("status") in ("retired", "frozen"):
+                    warnings.append(
+                        f"LIVE brain {bid}: registry says {entry['status']} — status skew"
+                    )
+                if float(entry.get("vote_weight", 0) or 0) <= 0:
+                    warnings.append(
+                        f"LIVE brain {bid}: vote_weight=0 — muted in parliament"
+                    )
+
+        # Check 2: Is each live brain enabled in live.yaml?
+        try:
+            import yaml as _yaml
+            if _os.path.exists(yaml_path):
+                with open(yaml_path, encoding="utf-8") as _yf:
+                    yc = _yaml.safe_load(_yf)
+                disabled_paths: set[str] = set()
+                for re in (yc.get("brains", {}) or {}).get("registry_entries", []) or []:
+                    if not re.get("enabled", True):
+                        disabled_paths.add(str(re.get("path", "")))
+                for bid in live_ids:
+                    entry = registry_entries.get(bid, {})
+                    src = entry.get("_source_path", "") or f"{brains_dir}/{bid}.json"
+                    if src in disabled_paths or any(
+                        bid in dp for dp in disabled_paths
+                    ):
+                        warnings.append(
+                            f"LIVE brain {bid}: disabled in {yaml_path}"
+                        )
+        except Exception:
+            pass  # yaml not available — skip this check
+
+        if warnings:
+            return CrossCheckResult(
+                check_name="brain_registry_governance_alignment",
+                status=SourceStatus.FAIL,
+                primary_code="BR_GOV_MISALIGNED",
+                message=f"{len(warnings)} alignment issue(s): {'; '.join(warnings[:3])}",
+                metrics={"warnings": warnings},
+                checked_at=_utc_iso(),
+            )
+
+        return CrossCheckResult(
+            check_name="brain_registry_governance_alignment",
+            status=SourceStatus.PASS,
+            primary_code="BR_GOV_ALIGN_OK",
+            message=f"{len(live_ids)} live brain(s) aligned with registry",
+            checked_at=_utc_iso(),
+        )
 
     def _check_journal_vs_pnl_ledger(self) -> CrossCheckResult:
         """Audit PnL ledger: freshness of most recent settled entry.
