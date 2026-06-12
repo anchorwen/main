@@ -544,6 +544,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260612-011 | 2026-06-12 | data-health | **Bridge heartbeat key mismatch**: data_health_service checked `bridge_last_ack_utc`/`connected` but bridge writes `last_heartbeat_utc`/`mt5_connected`. Fixed key names to match actual bridge health report format. Eliminates BRIDGE_TIMESTAMP_UNREADABLE false positive. | RC-06 |
 | FIX-20260612-012 | 2026-06-12 | deployment-config | **label_contract for 5 brains**: BTC_Swing_V5 + 4 XAU brains (OU_Params_V6/V7, Swing_V9_M30/M15) were missing label_contract blocks causing config consistency warnings. Added aligned SL/TP contracts referencing respective live.yaml configs. | RC-09 |
 | FIX-20260612-013 | 2026-06-12 | runtime-live | **trail_activation_atr validator**: key was actively used by position_registration.py but missing from _EXPECTED_EXIT_KEYS set, causing spurious 'unknown keys' warnings on every cycle. | RC-07 |
+| FIX-20260612-014 | 2026-06-12 | journal-cleanup | **Temp-file + atomic swap for repair_journal**: replaced write_text() overwrite with temp-file + os.replace() pattern (same as compact_journal). Lock acquired BEFORE re-reading — eliminates stale-snapshot window permanently. Consolidates duplicate removal. Closes Deferred Architecture Fix #1. | RC-03 |
 
 ---
 ## Fix Details by Year
