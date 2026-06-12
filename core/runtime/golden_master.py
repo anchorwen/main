@@ -76,6 +76,16 @@ def record_cycle_inputs(
     if not _is_recording():
         return None
 
+    # ── FIX-020 probe: confirm record_cycle_inputs proceeds ──
+    try:
+        import json as _j3
+        _diag = {"event": "gm_diag", "stage": "inputs_proceeding", "data_dir": data_dir, "cycle": cycle_count}
+        _dp = Path(data_dir) / "_gm_diag.jsonl"
+        with open(str(_dp), "a", encoding="utf-8") as _df:
+            _df.write(_j3.dumps(_diag) + "\n")
+    except Exception:
+        pass
+
     now_ts = time.time()
     fv_sample = (
         [round(float(x), 6) for x in (list(feature_vector_sample)[:8] if hasattr(feature_vector_sample, '__iter__') else [])]
