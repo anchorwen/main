@@ -179,16 +179,26 @@ def _resolve_feature_vector(
     if store_dir is not None and store_dir.is_dir():
         try:
             from core.features.local_feature_store import LocalFeatureStore
-            from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+
+            # FIX-20260612-021: resolve schema from symbol
+            _is_btc = "btc" in str(symbol).lower()
+            _schema = "btc_macro_enhanced_37" if _is_btc else "v9_institutional_40"
+            _dim = 37 if _is_btc else 40
+            if _is_btc:
+                from core.features.schemas.btc_macro_enhanced_schema import BTC_MACRO_ENHANCED_37_FEATURES
+                _feature_names = BTC_MACRO_ENHANCED_37_FEATURES
+            else:
+                from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+                _feature_names = V9_INSTITUTIONAL_40_FEATURES
 
             store = LocalFeatureStore(str(store_dir))
-            record = store.latest(symbol, "M5", schema_name="v9_institutional_40")
+            record = store.latest(symbol, "M5", schema_name=_schema)
             if record is not None and record.values:
                 vec = np.array(
-                    [float(record.values.get(name, 0.0)) for name in V9_INSTITUTIONAL_40_FEATURES],
+                    [float(record.values.get(name, 0.0)) for name in _feature_names],
                     dtype=np.float64,
                 )
-                return vec, "store"
+                return vec, str(_dim)
         except Exception:  # noqa: BLE001
             pass
     return np.zeros(feature_dim, dtype=np.float64), "stub"
