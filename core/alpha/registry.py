@@ -72,9 +72,9 @@ class AlphaRegistry:
         registry = cls()
         for rec_data in data.get("records", []):
             record = AlphaRecord(
-                alpha_id=rec_data["alpha_id"],
-                name=rec_data["name"],
-                version=rec_data["version"],
+                alpha_id=rec_data.get("alpha_id", "unknown"),
+                name=rec_data.get("name", rec_data.get("alpha_id", "unknown")),
+                version=rec_data.get("version", "0.0.0"),
                 state=rec_data.get("state", "candidate"),
                 strategy_id=rec_data.get("strategy_id"),
                 tags=tuple(rec_data.get("tags", [])),

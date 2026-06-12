@@ -1399,12 +1399,12 @@ def run_daily_ops(
     # Parameter optimization suggestions for degraded brains
     # Runs after retraining_check so we know which brains are degraded
     if not skip_retraining:
-        retraining_results = [s for s in steps if s.get("step") == "retraining_check"]
+        retraining_results = [s for s in steps if s is not None and s.get("step") == "retraining_check"]
         retraining_result = retraining_results[-1] if retraining_results else None
         if retraining_result and retraining_result.get("degraded_count", 0) > 0:
             steps.append(_step_param_optimization(base_dir, retraining_result, dry_run=dry_run))
 
-    errors = [s for s in steps if s.get("status") == "error"]
+    errors = [s for s in steps if s is not None and s.get("status") == "error"]
     actions = sum(s.get("actions_applied", 0) + s.get("promotions", 0) for s in steps)
 
     return {
