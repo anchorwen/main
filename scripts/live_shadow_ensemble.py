@@ -47,12 +47,19 @@ def _discover_brain_entries(
     if not brains_dir.is_dir():
         return entries
     for p in sorted(brains_dir.glob("*.json")):
-        # Skip normalization configs
+        # Skip normalization configs and non-brain files (meta filters, etc.)
         if "normalization" in p.name.lower():
+            continue
+        if "meta_stage2" in p.name.lower():
             continue
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
+            continue
+        # FIX-021: only process brain_registry_entry files
+        if data.get("schema_version") != "brain_registry_entry.v1":
+            continue
+        if "brain_type" not in data:
             continue
         b_id = data.get("brain_id", "")
         if brain_ids and b_id not in brain_ids:
