@@ -23,6 +23,8 @@ class AlphaRecord:
     version: str
     state: AlphaLifecycleState | str = AlphaLifecycleState.CANDIDATE
     strategy_id: str | None = None
+    strategy_class: str | None = None  # FIX-016: e.g. "swing", "statarb"
+    assets: list[str] | None = None    # FIX-016: e.g. ["BTCUSDc"]
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
     tags: tuple[str, ...] = ()
