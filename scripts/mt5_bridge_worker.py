@@ -118,7 +118,6 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
     """
     from core.infrastructure.distributed_lock import FileLock
 
-    mid = record.get("message_id", "")
     journal_path.parent.mkdir(parents=True, exist_ok=True)
     lock = FileLock(
         "live_trade_journal", lock_dir=str(journal_path.parent / ".locks"), ttl_seconds=10
@@ -129,40 +128,25 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
             json.dumps(
                 {
                     "event": "journal_lock_failed",
-                    "message_id": mid,
+                    "message_id": record.get("message_id", ""),
                     "error": acquired.error or "timeout",
                 },
                 ensure_ascii=False,
             ),
             flush=True,
         )
-        # ── FIX-017 probe: write diagnostic to separate file ──
-        try:
-            with open(str(journal_path.parent / "_journal_diag.jsonl"), "a", encoding="utf-8") as _df:
-                _df.write(json.dumps({"stage": "lock_failed", "mid": mid, "error": str(acquired.error)}, ensure_ascii=False) + "\n")
-        except Exception:
-            pass
         return
     try:
+        mid = record.get("message_id", "")
         if mid and journal_path.exists():
             try:
                 for line in journal_path.read_text(encoding="utf-8").splitlines():
                     if mid in line:
-                        try:
-                            with open(str(journal_path.parent / "_journal_diag.jsonl"), "a", encoding="utf-8") as _df:
-                                _df.write(json.dumps({"stage": "dedup_skip", "mid": mid}, ensure_ascii=False) + "\n")
-                        except Exception:
-                            pass
                         return  # duplicate, skip
             except Exception:  # noqa: BLE001
-                pass
+                pass  # journal dedup is best-effort
         with journal_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
-        try:
-            with open(str(journal_path.parent / "_journal_diag.jsonl"), "a", encoding="utf-8") as _df:
-                _df.write(json.dumps({"stage": "written", "mid": mid, "action": record.get("action"), "ack": record.get("ack_status")}, ensure_ascii=False) + "\n")
-        except Exception:
-            pass
     finally:
         lock.release()
 
