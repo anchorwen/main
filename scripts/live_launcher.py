@@ -425,7 +425,10 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         time_module.sleep(1.0)  # let OS reclaim the PID
 
     # ── Launch subprocesses ──
-    subprocess_env = {**dict(os.environ), "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"}
+    # FIX-20260612-020: explicitly enable Golden Master recording.
+    # GOLDEN_MASTER_RECORD defaults ON (unset != "0") but parent shell
+    # may have it disabled.  Explicit "1" ensures recording for both BTC+XAU.
+    subprocess_env = {**dict(os.environ), "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1", "GOLDEN_MASTER_RECORD": "1"}
 
     # ── Separate log files for bridge and intent subprocess stdout ──
     # Writing directly to files avoids pipe-buffer deadlock: if the stream
