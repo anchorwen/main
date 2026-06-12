@@ -1131,18 +1131,17 @@ class DataHealthService:
         age_min = _age_minutes(last_sync)
         max_lag = int(self._t("bar_sync_max_lag_count"))
 
+        # FIX-20260612-019: lag_count is cumulative (includes downtime gaps).
+        # A high lag_count with a fresh last_sync means the system is catching up
+        # — not a current failure.  Only FAIL when sync is actually stale.
         if age_min > 15:
             status = SourceStatus.FAIL
             code = "BAR_SYNC_STALE"
             message = f"Bar sync stale: {age_min:.0f} min since last sync"
         elif lag > max_lag:
-            status = SourceStatus.FAIL
-            code = "BAR_SYNC_LAG_HIGH"
-            message = f"Bar sync lag {lag} exceeds threshold {max_lag}"
-        elif lag > max_lag // 2:
             status = SourceStatus.WARN
             code = "BAR_SYNC_LAG_ELEVATED"
-            message = f"Bar sync lag {lag}"
+            message = f"Bar sync lag {lag} (cumulative, age={age_min:.0f}min)"
         else:
             status = SourceStatus.PASS
             code = "BAR_SYNC_OK"
