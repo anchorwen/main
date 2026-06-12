@@ -3668,10 +3668,16 @@ def execute_live_cycle(
                     _jp = str(journal_path)
                     if Path(_jp).exists():
                         for _line in Path(_jp).read_text(encoding="utf-8").splitlines():
-                            if not _line.strip(): continue
-                            if '"action": "close"' not in _line: continue
+                            if not _line.strip():
+                                continue
+                            if '"action": "close"' not in _line:
+                                continue
                             # Fast substring extraction of position_ticket
-                            _pt = _line.split('"position_ticket":')[1].split(",")[0].strip() if '"position_ticket":' in _line else ""
+                            _pt = (
+                                _line.split('"position_ticket":')[1].split(",")[0].strip()
+                                if '"position_ticket":' in _line
+                                else ""
+                            )
                             if _pt and _pt.isdigit():
                                 _existing_close_tickets.add(int(_pt))
                 except Exception:  # noqa: BLE001
