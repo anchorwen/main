@@ -547,6 +547,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260612-014 | 2026-06-12 | journal-cleanup | **Temp-file + atomic swap for repair_journal**: replaced write_text() overwrite with temp-file + os.replace() pattern (same as compact_journal). Lock acquired BEFORE re-reading — eliminates stale-snapshot window permanently. Consolidates duplicate removal. Closes Deferred Architecture Fix #1. | RC-03 |
 | FIX-20260612-015 | 2026-06-12 | data-health | **Brain registry ↔ governance alignment cross-check**: new FULL-mode check detects triple-bookkeeping bugs (registry status≠governance, vote_weight=0, live.yaml disabled). Would have caught DQAF-20260612-002 before trading was blocked. 3 cross-checks now: journal-ledger, open-close, brain-gov alignment. | RC-09 |
 | FIX-20260612-016 | 2026-06-12 | alpha-registry | **AlphaRecord missing strategy_class/assets fields**: @dataclass(frozen=True) lacked fields that daily_ops _step_alpha_feed() passed. TypeError swallowed by fail_open_guard on both BTC+XAU. Added Optional fields. | RC-06 |
+| FIX-20260612-017 | 2026-06-12 | omega-protocol | **Ω Protocol structural enforcement**: upgraded omega_gate.py with FIX/DQAF ID requirement for all .py/.yaml/.json changes (commit-msg stage — cannot be bypassed by --no-verify). Added Iron Law #0-bis --no-verify prohibition clause to CLAUDE.md. Added check_omega_compliance.py for CI/CD. 3-layer defense against protocol drift. | RC-07 |
 
 ---
 ## Fix Details by Year
