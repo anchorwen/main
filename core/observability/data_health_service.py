@@ -756,12 +756,12 @@ class DataHealthService:
             )
 
         # Check heartbeat freshness
-        last_ack = bh.get("bridge_last_ack_utc", bh.get("last_ack_utc", ""))
+        last_ack = bh.get("last_heartbeat_utc", bh.get("bridge_last_ack_utc", bh.get("last_ack_utc", "")))
         age_sec = (_age_minutes(last_ack) * 60.0) if last_ack else -1
         max_age = self._t("bridge_heartbeat_max_age_seconds")
 
         pid = bh.get("pid", "?")
-        connected = bh.get("connected", bh.get("connection_ok", True))
+        connected = bh.get("mt5_connected", bh.get("connected", bh.get("connection_ok", True)))
         pending = bh.get("outbox_pending", bh.get("pending_count", 0))
 
         if age_sec < 0:
