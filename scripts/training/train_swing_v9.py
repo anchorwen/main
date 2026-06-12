@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 """Train XGBoost v9 swing brain from enhanced swing+micro dataset.
 
+DEPRECATED: Use train.py with an appropriate training contract instead.
+  python scripts/training/train.py --contract configs/training/m30_swing_xgboost.yaml
+
+This script is kept because train_btc_directional_v10.py and
+train_xau_directional_v1.py import it as a library for feature computation.
+
 Usage:
   python scripts/training/train_swing_v9.py \
     --dataset data/training/swing_m30_enhanced \

@@ -24,6 +24,8 @@ Usage:
 
 from __future__ import annotations
 
+from core.training.utils import utc_now_iso as _utc_now_iso  # noqa: F401
+
 import argparse
 import json
 import sys
@@ -53,16 +55,6 @@ N_HEADS = 4
 NUM_LAYERS = 2
 DROPOUT = 0.15
 NUM_CLASSES = 3  # -1 (sl), 0 (timeout), 1 (tp)
-
-
-def _utc_now_iso() -> str:
-    return (
-        datetime.now(UTC)
-        .replace(tzinfo=None)
-        .replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -64,11 +64,12 @@ Dataset CPCV CustomObj  Trainer    EvaluationReport
 | scripts/training/e2e_pipeline_validation.py | label_contract | E2E validation |
 
 ## Known Issues
-- `verify.py --full` mypy [FAIL] 来自预存错误（mt5_spread_probe, environment_config 等），不是训练模块引入
+- 8 helper scripts retain local `_utc_now_iso()` copies (cosmetic, low priority — core trainers + train.py already migrated to `core/training/utils.py`)
 - SHAP 分析需要 `shap` 包；未安装时 `run_shap_analysis()` 返回 None，`require_shap_stability` 门禁自动跳过
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260612-030 | 2026-06-12 | cursor-agent | — | **Training Module Overhaul Phase 1-4**: (1) Schema Dictator FAIL-FAST in train_from_csv.py — feature assembly order fixed to canonical v9_institutional_40, V9_FEATURE_NAMES imported from SSOT. (2) Entry slippage asymmetry fixed in train_btc_swing_v9.py — short entries now use bid-side entry (o - slippage). (3) 12+ mypy errors fixed across 4 files. (4) brain_trend_m30.yaml migrated to standard training_contract.v2.1. (5) BrainConfigBuilder created in core/training/brain_config.py with mandatory trained_by_commit_hash field. (6) Dead pipelines physically deleted: institutional_train.py, train_v6_m15_baseline.py, train_v6_multitf_v2.py. (7) 16x _utc_now_iso() deduped → core/training/utils.py. (8) 15 BLE001 bare-except markers in train.py eliminated. | RC-06, RC-09, RC-03 |
 | FIX-20260610-007 | 2026-06-10 | cursor-agent | — | **BTC MetaFilter V2 完整MLOps管线**: (1) build_btc_metafilter_v2_dataset.py — ASOF PIT join, 54样本40维V9特征, 0数据穿越. (2) train_btc_metafilter_v2.py — 极端正则化(max_depth=2,num_leaves=5,min_data_in_leaf=10), 5-Fold CV AUC=0.82, 字典同构验证. (3) MLOps Iron Laws #1-3. V1因train-serve特征空间错位(模型D1_*宏观→线上M5_*V9)被紧急禁用. | RC-12, RC-06 |
 | FIX-20260607-146 | 2026-06-07 | cursor-agent | — | **V6/V7/V8 training pipeline + BTC SL/TP enforcement**: build_swing_enhanced_dataset.py enforces SL=2.0/TP=2.5 for BTC. V6 M15 baseline (AUC=0.630), V6 MultiTF (AUC=0.656, 3-TF joint). V7 seed=77 (AUC=0.646). V8 2.9yr data (AUC=0.654, covers 2024 ETF bull run). Data export extended to 100K M15 bars (2023-07~2026-06). | RC-06 |
 |--------|------|--------|--------|---------|------------|

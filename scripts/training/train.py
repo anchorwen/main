@@ -712,8 +712,8 @@ def _auto_register_in_live_yaml(brain_config: dict[str, Any], config_path: Path)
     try:
         with open(live_yaml_path, encoding="utf-8") as f:
             live = _yaml.safe_load(f) or {}
-    except Exception:  # noqa: BLE001
-        print("[train] WARNING: Failed to read live.yaml, skip auto-register")
+    except (OSError, IOError, ImportError) as e:  # yaml import may fail
+        print(f"[train] WARNING: Failed to read live.yaml, skip auto-register: {e}")
         return
 
     entries = live.setdefault("brains", {}).setdefault("registry_entries", [])
@@ -737,7 +737,7 @@ def _auto_register_in_live_yaml(brain_config: dict[str, Any], config_path: Path)
         with open(live_yaml_path, "w", encoding="utf-8") as f:
             _yaml.safe_dump(live, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
         print(f"[train] Registered {brain_id} in live.yaml")
-    except Exception as e:  # noqa: BLE001
+    except (OSError, IOError, ValueError) as e:
         print(f"[train] WARNING: Failed to update live.yaml: {e}")
 
 
@@ -756,8 +756,8 @@ def _auto_register_in_governance(brain_config: dict[str, Any]) -> None:
                 "brain_states": {},
                 "transition_log": [],
             }
-    except Exception:  # noqa: BLE001
-        print("[train] WARNING: Failed to read governance_state.json")
+    except (OSError, IOError) as e:
+        print(f"[train] WARNING: Failed to read governance_state.json: {e}")
         return
 
     if brain_id in state.get("brain_states", {}):
@@ -787,7 +787,7 @@ def _auto_register_in_governance(brain_config: dict[str, Any]) -> None:
         with open(gov_path, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2, ensure_ascii=False)
         print(f"[train] Registered {brain_id} in governance_state.json (candidate)")
-    except Exception as e:  # noqa: BLE001
+    except (OSError, IOError, ValueError) as e:
         print(f"[train] WARNING: Failed to update governance_state.json: {e}")
 
 
@@ -825,7 +825,7 @@ def _write_model_meta_json(model_path: str | Path, contract: TrainingContract) -
                 fn = data.get("feature_names")
                 if fn is not None:
                     feature_names = fn.tolist() if isinstance(fn, np.ndarray) else list(fn)
-        except Exception:  # noqa: BLE001
+        except (KeyError, AttributeError, TypeError):
             pass
 
     if not feature_names:
@@ -854,10 +854,17 @@ def generate_brain_config(
 ) -> dict[str, Any]:
     """Generate a brain_registry_entry.v1 config dict for live deployment.
 
-    Shadow/candidate brains get vote_weight=0.0 — they generate proposals that
-    are recorded (for shadow trade counting) but don't influence ensemble decisions.
-    Live brains get vote_weight=0.6.
+    Delegates to the shared ``core.training.brain_config.build_brain_config()``
+    which enforces the institutional contract (artifact_hash, git commit hash,
+    magic, features from SSOT).
     """
+    from core.training.brain_config import (
+        ARCH_TO_BRAIN_TYPE,
+        _derive_contract_group,
+        build_brain_config,
+        resolve_feature_names_for_schema,
+    )
+
     arch = contract.architecture.type
     brain_type = ARCH_TO_BRAIN_TYPE.get(arch, f"{arch}_v1")
     ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
@@ -867,58 +874,28 @@ def generate_brain_config(
         timestamp=ts,
     )
     contract_group = _derive_contract_group(contract.contract_id)
-    magic = CONTRACT_GROUP_MAGIC.get(contract_group, 0)
+    features = resolve_feature_names_for_schema(contract.dataset.feature_schema)
 
-    initial_status = contract.output.initial_status
-    is_shadow = initial_status in ("shadow", "candidate")
-    vote_weight = 0.0 if is_shadow else 0.6
-
-    # Resolve feature names from schema — required by registration gate
-    from core.deployment.brain_config_validator import _get_schema_feature_names
-
-    features = _get_schema_feature_names(contract.dataset.feature_schema) or []
     if not features:
         print(
             f"[WARN] {brain_id}: Could not resolve features for schema "
             f"{contract.dataset.feature_schema}, registration gate will reject"
         )
 
-    config: dict[str, Any] = {
-        "schema_version": "brain_registry_entry.v1",
-        "brain_id": brain_id,
-        "brain_type": brain_type,
-        "brain_role": "alpha_brain",
-        "model_version": contract.contract_id,
-        "status": initial_status,
-        "vote_weight": vote_weight,
-        "magic": magic,
-        "artifact_path": model_path,
-        "artifact_hash": model_hash,
-        "feature_schema_id": contract.dataset.feature_schema,
-        "features": features,
-        "training_contract": contract.contract_id,
-        "normalization_config_path": "",
-        "deployment_scope": {
-            "symbols": ["XAUUSDc", "XAUUSD"],
-            "sessions": ["all"],
-            "regimes": ["trend", "volatile_trend", "mean_reversion", "ranging"],
-        },
-        "contract_group": contract_group,
-        "training_horizon": contract.label.horizon_bars,
-        "feature_schema": contract.dataset.feature_schema,
-        "_notes": (
-            f"{arch} {contract_group} — {contract.label.horizon_bars}-bar barrier. "
-            f"train_sharpe={metrics.get('train_sharpe', 0):.2f}, "
-            f"fw_sharpe={metrics.get('forward_sharpe', 0):.2f}, "
-            f"overfit_gap={metrics.get('overfit_gap', 0):.2f}, "
-            f"hash={model_hash[:12]}..."
-        ),
-        "_model_hash": model_hash,
-        "_created_at": datetime.now(UTC).isoformat(),
-        "_quality_gate_passed": metrics.get("quality_gate_passed", False),
-        "_shadow_target_trades": 50,
-    }
-    return config
+    return build_brain_config(
+        brain_id=brain_id,
+        brain_type=brain_type,
+        feature_schema_id=contract.dataset.feature_schema,
+        artifact_path=model_path,
+        artifact_hash=model_hash,
+        features=features or [],
+        contract_id=contract.contract_id,
+        contract_group=contract_group,
+        label_horizon_bars=contract.label.horizon_bars,
+        metrics=metrics,
+        initial_status=contract.output.initial_status,
+        model_version=contract.contract_id,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1075,7 +1052,7 @@ def run_optuna_search(
                 y_val, val_preds, regression=_resolve_train_mode(contract) == "reg"
             )
             forward_s = val_metrics.get("sharpe_ratio", -999.0)
-        except Exception:  # noqa: BLE001
+        except (ValueError, TypeError, KeyError):
             forward_s = -999.0
         finally:
             contract.architecture.custom_params = saved_params
@@ -1299,7 +1276,7 @@ def run_pipeline(
             if critical:
                 result.errors = critical
                 return result
-    except Exception as e:  # noqa: BLE001
+    except (ValueError, TypeError, KeyError, OSError, IOError) as e:
         result.errors = [f"Contract loading failed: {e}"]
         print(f"[train] ERROR: {e}")
         return result
@@ -1322,7 +1299,7 @@ def run_pipeline(
                     )
                     if cal_result.get("recommend_action"):
                         print(f"[train] → {cal_result['recommend_action']}")
-            except Exception as e:  # noqa: BLE001
+            except (ValueError, KeyError, OSError, ImportError) as e:
                 print(f"[train] WARNING: Profitability calibration failed (non-fatal): {e}")
         else:
             print(
@@ -1340,7 +1317,7 @@ def run_pipeline(
     # ── Load dataset ──
     try:
         ds = load_dataset(contract)
-    except Exception as e:  # noqa: BLE001
+    except (FileNotFoundError, ValueError, KeyError) as e:
         result.errors = [f"Dataset loading failed: {e}"]
         print(f"[train] ERROR: {e}")
         return result
@@ -1393,7 +1370,7 @@ def run_pipeline(
             pnl_raw = raw.get("pnl_r") or raw.get("pnl")
             if pnl_raw is not None:
                 pnl_array = np.asarray(pnl_raw, dtype=np.float64)
-        except Exception:  # noqa: BLE001
+        except (KeyError, AttributeError, TypeError):
             pass
 
     # ── Label preprocessing: directional (-1/0/1) → binary (0/1) ──
@@ -1475,8 +1452,8 @@ def run_pipeline(
 
             n_train, n_val, n_test = len(X_train), len(X_val), len(X_test)
             print(f"[train] Pre-split dataset: train={n_train}, val={n_val}, test={n_test}")
-    except Exception:  # noqa: BLE001
-        pass
+    except (ValueError, KeyError, TypeError):
+        print("[train] WARNING: Could not parse pre-split dataset, using sequential split")
 
     if not pre_split:
         n = ds.n_samples
@@ -1679,8 +1656,10 @@ def run_pipeline(
         result.metrics = best_metrics
         print(f"[train] Best seed: {best_seed} (forward_sharpe={best_sharpe:.4f})")
 
-    except Exception as e:  # noqa: BLE001
+    except (ValueError, RuntimeError, ImportError, OSError, MemoryError) as e:
         result.errors = [f"Training failed: {e}"]
+        import traceback
+        traceback.print_exc()
         print(f"[train] ERROR during training: {e}")
         import traceback
 
@@ -1750,7 +1729,7 @@ def run_pipeline(
                 result.metrics["cpcv_sharpe_std"] = round(cpcv_sharpe_std, 4)
                 print(f"[train] CPCV Sharpe: {cpcv_sharpe_mean:.4f} ± {cpcv_sharpe_std:.4f}")
 
-        except Exception as e:  # noqa: BLE001
+        except (ValueError, KeyError, RuntimeError) as e:
             print(f"[train] WARNING: CPCV evaluation failed (non-fatal): {e}")
 
     # ── Quality gates ──
@@ -1841,7 +1820,7 @@ def run_pipeline(
         model_hash = hash_model_file(model_path)
         result.model_hash = model_hash
         print(f"[train] Model hash: {model_hash}")
-    except Exception as e:  # noqa: BLE001
+    except (OSError, IOError) as e:
         print(f"[train] WARNING: Model hashing failed: {e}")
 
     # ── Registry ──
@@ -1871,7 +1850,7 @@ def run_pipeline(
         registry.add_or_update(record)
         result.run_id = record.run_id
         print(f"[train] Registered run: {record.run_id} (status={record.status})")
-    except Exception as e:  # noqa: BLE001
+    except (OSError, IOError, ValueError) as e:
         print(f"[train] WARNING: Registry write failed (non-fatal): {e}")
 
     # ── Brain config ──
@@ -1909,7 +1888,7 @@ def run_pipeline(
             # Auto-register in governance_state.json
             _auto_register_in_governance(brain_config)
             _print_register_reminder(config_path.name)
-        except Exception as e:  # noqa: BLE001
+        except (ValueError, RuntimeError, KeyError, OSError, IOError) as e:
             print(f"[train] WARNING: Brain config generation failed: {e}")
 
     # ── Finalize ──

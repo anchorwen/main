@@ -34,14 +34,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import math
 import os
 import sys
-import time as _time_module
-import warnings
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -251,7 +248,7 @@ def compute_feature_row(idx: int, o: np.ndarray, h: np.ndarray, l: np.ndarray,
 
     # ── D1 features ──
     bar_ts = daily_ts[idx] if idx < len(daily_ts) else 0
-    bar_date = datetime.fromtimestamp(bar_ts, tz=UTC).strftime("%Y-%m-%d") if bar_ts > 0 else ""
+    bar_date = datetime.fromtimestamp(float(bar_ts), tz=UTC).strftime("%Y-%m-%d") if bar_ts > 0 else ""
     day_idx = len(day_features) - 1
     d_feat = day_features.get(day_idx, {}) if day_features else {}
 
@@ -277,7 +274,7 @@ def compute_feature_row(idx: int, o: np.ndarray, h: np.ndarray, l: np.ndarray,
     risk_on_off = float(d_feat.get("Cross_Risk_On_Off", 0.0))
 
     # ── Derived calendar features ──
-    dt_obj = datetime.fromtimestamp(bar_ts, tz=UTC) if bar_ts > 0 else datetime.now(UTC)
+    dt_obj = datetime.fromtimestamp(float(bar_ts), tz=UTC) if bar_ts > 0 else datetime.now(UTC)
     weekday = dt_obj.weekday()
     weekday_sin = math.sin(2 * math.pi * weekday / 7.0)
     weekday_cos = math.cos(2 * math.pi * weekday / 7.0)
@@ -367,8 +364,9 @@ def compute_labels(
         pnl_r: realized PnL in R-multiples (only for SL/TP, NaN for timeout)
         hold_bars: how many bars until barrier was hit
 
-    Friction model (per entry):
-      - Entry price = open[i+1] + slippage (for longs, + for shorts)
+    Friction model (per entry, direction-aware):
+      - Long entry  = open[i+1] + slippage  (buy at ask, above mid)
+      - Short entry = open[i+1] - slippage  (sell at bid, below mid)
       - SL distance widened by spread (stop fills suffer adverse slippage)
       - TP distance tightened by spread (exit fills at bid/ask, not mid)
     """
@@ -378,8 +376,8 @@ def compute_labels(
     hold_bars = np.zeros(n, dtype=np.int16)
 
     for i in range(n - horizon - 1):
-        entry_price = o[i + 1] + slippage_points  # entry at next bar open + slippage
-        if entry_price <= 0:
+        ref_price = o[i + 1]
+        if ref_price <= 0:
             continue
 
         atr_val = _atr(h[:i + 2], l[:i + 2], c[:i + 2])
@@ -390,10 +388,14 @@ def compute_labels(
         tp_dist = tp_atr_mult * atr_val - spread_points
         tp_dist = max(tp_dist, sl_dist * 0.3)  # minimum TP = 0.3 × SL
 
-        sl_long = entry_price - sl_dist
-        tp_long = entry_price + tp_dist
-        sl_short = entry_price + sl_dist
-        tp_short = entry_price - tp_dist
+        # Direction-specific entry prices
+        entry_long = ref_price + slippage_points   # buy at ask
+        entry_short = ref_price - slippage_points  # sell at bid
+
+        sl_long = entry_long - sl_dist
+        tp_long = entry_long + tp_dist
+        sl_short = entry_short + sl_dist
+        tp_short = entry_short - tp_dist
 
         # Walk forward
         for j in range(i + 2, min(i + 2 + horizon, n)):
@@ -771,8 +773,6 @@ def train_models(
     n_seeds: int = 3,
 ) -> dict[str, Any]:
     """B3: Train XGBoost + LightGBM with walk-forward purged CV evaluation."""
-    import xgboost as xgb
-    import lightgbm as lgb
 
     print(f"[B3] Loading dataset from {data_dir}/...")
     data = np.load(os.path.join(data_dir, "train.npz"))
@@ -791,7 +791,7 @@ def train_models(
 
     os.makedirs(output_dir, exist_ok=True)
 
-    results = {"xgboost": [], "lightgbm": []}
+    results: dict[str, list[dict[str, Any]]] = {"xgboost": [], "lightgbm": []}
 
     for fold_split in cv_data["splits"]:
         fold = fold_split["fold"]

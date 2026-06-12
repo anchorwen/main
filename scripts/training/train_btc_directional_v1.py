@@ -30,13 +30,12 @@ import json
 import math
 import os
 import sys
-import time as _time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 
-UTC = timezone.utc
+UTC = UTC
 ROOT = Path(__file__).resolve().parent.parent.parent
 
 # ── Strategy Parameters (from live_btc.yaml btc_swing) ──
@@ -377,21 +376,21 @@ def main():
         # Evaluate
         y_pred = model.predict(X_val)
         # Directional accuracy: sign(pred) == sign(actual)
-        dir_correct = np.sum(np.sign(y_pred) == np.sign(y_val))
-        dir_acc = dir_correct / len(y_val)
+        dir_correct: int = np.sum(np.sign(y_pred) == np.sign(y_val))
+        dir_acc: float = dir_correct / len(y_val)
         # Binary: LONG vs SHORT accuracy
-        long_correct = np.sum((y_pred > 0) & (y_val > 0))
-        short_correct = np.sum((y_pred < 0) & (y_val < 0))
-        long_total = np.sum(y_val > 0)
-        short_total = np.sum(y_val < 0)
+        long_correct: int = np.sum((y_pred > 0) & (y_val > 0))
+        short_correct: int = np.sum((y_pred < 0) & (y_val < 0))
+        long_total: int = np.sum(y_val > 0)
+        short_total: int = np.sum(y_val < 0)
 
         print(f"      Directional accuracy: {dir_acc:.4f}")
         print(f"      LONG recall: {long_correct}/{long_total} ({long_correct / max(long_total, 1):.4f})")
         print(f"      SHORT recall: {short_correct}/{short_total} ({short_correct / max(short_total, 1):.4f})")
 
         # Check prediction balance
-        pred_long = np.sum(y_pred > 0.1)
-        pred_short = np.sum(y_pred < -0.1)
+        pred_long: int = np.sum(y_pred > 0.1)
+        pred_short: int = np.sum(y_pred < -0.1)
         pred_neutral = len(y_pred) - pred_long - pred_short
         print(f"      Predicted LONG: {pred_long} SHORT: {pred_short} NEUTRAL: {pred_neutral}")
 

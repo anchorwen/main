@@ -18,13 +18,14 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-UTC = timezone.utc
+UTC = UTC
 ROOT = Path(__file__).resolve().parent.parent.parent
 
 # ── Import V9 pipeline ──
@@ -391,7 +392,7 @@ def train_models(data_dir: str, output_dir: str, n_seeds: int = 3) -> dict:
         splits = json.load(f)
 
     os.makedirs(output_dir, exist_ok=True)
-    all_results = {"lightgbm": [], "xgboost": []}
+    all_results: dict[str, list[dict[str, Any]]] = {"lightgbm": [], "xgboost": []}
 
     for fold_idx, split in enumerate(splits):
         train_idx = split["train_idx"]
@@ -470,9 +471,9 @@ def train_models(data_dir: str, output_dir: str, n_seeds: int = 3) -> dict:
             agg[f"{k}_std"] = float(np.std(vals))
 
         # Aggregate backtest: concatenate raw trade R-values across all folds
-        all_rs = []
-        for f in fold_results:
-            all_rs.extend(f.get("trade_rs", []))
+        all_rs: list[float] = []
+        for entry in fold_results:
+            all_rs.extend(entry.get("trade_rs", []))
         if all_rs:
             r_arr = np.array(all_rs)
             cumulative = np.cumsum(r_arr)

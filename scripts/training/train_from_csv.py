@@ -1,5 +1,8 @@
 """First real training: CSV OHLC → barrier labels → feature dataset → train → ONNX.
 
+DEPRECATED: Use train.py with an appropriate training contract instead.
+  python scripts/training/train.py --contract configs/training/barrier_12bar_xgboost.yaml
+
 Uses the Recipe + Label Contract infrastructure to run a complete, reproducible
 training run from exported MT5 CSV data.
 
@@ -297,54 +300,12 @@ def build_barrier_labels_from_csv(
     return labels
 
 
-# V9 Institutional 40 feature names in ONNX input order.
-V9_FEATURE_NAMES = [
-    # M5
-    "M5_Ret_1",
-    "M5_Body_Ratio",
-    "M5_ATR_14",
-    "M5_RSI_14",
-    "M5_MACD",
-    "M5_Vol_ZScore",
-    "M5_Macro1_Corr",
-    "M5_Price_ZScore",
-    # M15
-    "M15_Ret_1",
-    "M15_Body_Ratio",
-    "M15_ATR_14",
-    "M15_RSI_14",
-    "M15_MACD",
-    "M15_Vol_ZScore",
-    "M15_Macro1_Corr",
-    "M15_Price_ZScore",
-    # M30
-    "M30_Ret_1",
-    "M30_Body_Ratio",
-    "M30_ATR_14",
-    "M30_RSI_14",
-    "M30_MACD",
-    "M30_Vol_ZScore",
-    "M30_Macro1_Corr",
-    "M30_Price_ZScore",
-    # H1
-    "H1_Ret_1",
-    "H1_Body_Ratio",
-    "H1_ATR_14",
-    "H1_RSI_14",
-    "H1_MACD",
-    "H1_Vol_ZScore",
-    "H1_Macro1_Corr",
-    "H1_Price_ZScore",
-    # Cross-timeframe
-    "M5_OU_Theta",
-    "M15_OU_Theta",
-    "M30_OU_Theta",
-    "H1_OU_Theta",
-    "M5_Hurst",
-    "M15_Hurst",
-    "M30_Hurst",
-    "H1_Hurst",
-]
+# ── SCHEMA DICTATOR: feature names imported from canonical SSOT ──
+# V9_FEATURE_NAMES is kept for backward compat; new code should import
+# get_schema_feature_names("v9_institutional_40") from core.features.schemas.registry.
+from core.features.schemas.registry import get_schema_feature_names as _get_schema_feature_names
+
+V9_FEATURE_NAMES = _get_schema_feature_names("v9_institutional_40")
 
 
 def build_features_from_csv(
@@ -358,10 +319,12 @@ def build_features_from_csv(
     """Build 40-dim V9 Institutional feature matrix X and label vector y.
 
     Computes 10 features per timeframe (M5/M15/M30/H1) via resampling,
-    then assembles 40-dim vectors at each labeled M5 entry bar.
+    then assembles 40-dim vectors at each labeled M5 entry bar in the
+    canonical v9_institutional_40 feature order (Schema Dictator).
     """
     n_m5 = len(closes)
     tf_factors = {"M5": 1, "M15": 3, "M30": 6, "H1": 12}
+    # 8 per-TF features (Ret_1..Price_ZScore). OU_Theta & Hurst appended per-TF after.
     base_features = (
         "Ret_1",
         "Body_Ratio",
@@ -371,9 +334,9 @@ def build_features_from_csv(
         "Vol_ZScore",
         "Macro1_Corr",
         "Price_ZScore",
-        "OU_Theta",
-        "Hurst",
     )
+    # Cross-timeframe features that come AFTER all per-TF blocks
+    cross_tf_features = ("OU_Theta", "Hurst")
 
     # ── Compute features for each timeframe ──
     tf_series: dict[str, dict[str, np.ndarray]] = {}
@@ -423,18 +386,22 @@ def build_features_from_csv(
     X = np.zeros((len(valid_indices), n_feat), dtype=np.float32)
     y = np.zeros(len(valid_indices), dtype=np.int32)
 
+    # ── Build canonical feature vectors (Schema Dictator order) ──
+    # Order: M5(8) → M15(8) → M30(8) → H1(8) → OU_Theta(M5→H1) → Hurst(M5→H1)
     for j, m5_idx in enumerate(valid_indices):
-        feat_vec = []
-        for tf_name, feat_list in [
-            ("M5", base_features),
-            ("M15", base_features),
-            ("M30", base_features),
-            ("H1", base_features),
-        ]:
+        feat_vec: list[float] = []
+        # Phase 1: 8 per-TF features (Ret_1..Price_ZScore) × 4 timeframes
+        for tf_name in ("M5", "M15", "M30", "H1"):
             map_idx = tf_index[tf_name](m5_idx)
             series = tf_series[tf_name]
-            for fn in feat_list:
+            for fn in base_features:
                 val = series[fn][map_idx]
+                feat_vec.append(float(np.nan_to_num(val, nan=0.0, posinf=0.0, neginf=0.0)))
+        # Phase 2: cross-TF features — OU_Theta per TF, then Hurst per TF
+        for fn in cross_tf_features:
+            for tf_name in ("M5", "M15", "M30", "H1"):
+                map_idx = tf_index[tf_name](m5_idx)
+                val = tf_series[tf_name][fn][map_idx]
                 feat_vec.append(float(np.nan_to_num(val, nan=0.0, posinf=0.0, neginf=0.0)))
 
         X[j] = np.array(feat_vec, dtype=np.float32)
@@ -446,6 +413,29 @@ def build_features_from_csv(
             y[j] = -1
         else:
             y[j] = 0
+
+    # ── SCHEMA DICTATOR FAIL-FAST: validate assembled feature order ──
+    _canonical = _get_schema_feature_names("v9_institutional_40")
+    _canonical_set = set(_canonical)
+    if set(V9_FEATURE_NAMES) != _canonical_set:
+        raise ValueError(
+            f"Schema Dictator: V9_FEATURE_NAMES ({len(V9_FEATURE_NAMES)} features) "
+            f"does not match canonical v9_institutional_40 schema "
+            f"({len(_canonical)} features)"
+        )
+    if X.shape[1] != len(_canonical):
+        raise ValueError(
+            f"Schema Dictator: assembled X has {X.shape[1]} features, "
+            f"expected {len(_canonical)}"
+        )
+    # Verify order: positional mismatch is a hard training blocker
+    for _i, (_expected, _actual) in enumerate(zip(_canonical, V9_FEATURE_NAMES, strict=True)):
+        if _expected != _actual:
+            raise ValueError(
+                f"Schema Dictator: feature [{_i}] mismatch: "
+                f"canonical={_expected!r}, V9_FEATURE_NAMES={_actual!r}"
+            )
+    print(f"[Schema Dictator] PASS: {len(_canonical)}-dim canonical order verified")
 
     return X, y
 

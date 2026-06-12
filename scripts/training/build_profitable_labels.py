@@ -48,8 +48,7 @@ from core.training.profitability_calibrator import (
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
-def _utc_now_iso() -> str:
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+from core.training.utils import utc_now_iso as _utc_now_iso  # noqa: F401
 
 
 # ── Data loading ────────────────────────────────────────────────────────────

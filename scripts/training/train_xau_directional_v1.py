@@ -20,13 +20,14 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-UTC = timezone.utc
+UTC = UTC
 ROOT = Path(__file__).resolve().parent.parent.parent
 
 sys.path.insert(0, str(ROOT / "scripts" / "training"))
@@ -210,7 +211,7 @@ def train_models(data_dir, output_dir):
     with open(os.path.join(data_dir, "cv_splits.json")) as f:
         splits = json.load(f)
     os.makedirs(output_dir, exist_ok=True)
-    results = {"lightgbm": [], "xgboost": []}
+    results: dict[str, list[dict[str, Any]]] = {"lightgbm": [], "xgboost": []}
     for fold_idx, split in enumerate(splits):
         train_idx, val_idx = split["train_idx"], split["test_idx"]
         X_tr, y_tr = X_all[train_idx], y_all[train_idx]
@@ -249,8 +250,8 @@ def train_models(data_dir, output_dir):
             vals = [f[k] for f in fr]
             agg[f"{k}_mean"] = float(np.mean(vals))
             agg[f"{k}_std"] = float(np.std(vals))
-        all_rs = []
-        for f in fr: all_rs.extend(f.get("trade_rs", []))
+        all_rs: list[float] = []
+        for entry in fr: all_rs.extend(entry.get("trade_rs", []))
         if all_rs:
             r_arr = np.array(all_rs)
             agg["bt_total_trades"] = len(r_arr)

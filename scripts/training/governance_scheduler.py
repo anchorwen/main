@@ -50,8 +50,7 @@ WR_HIGH_ALPHA = 0.55  # win rate threshold for high_alpha
 PF_HIGH_ALPHA = 1.5  # profit factor threshold for high_alpha
 
 
-def _utc_now_iso() -> str:
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+from core.training.utils import utc_now_iso as _utc_now_iso  # noqa: F401
 
 
 def _compute_pnl_based_status(

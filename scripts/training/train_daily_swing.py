@@ -1,5 +1,8 @@
 """Train D1 daily-swing models (XGBoost + LightGBM) for long-cycle trading.
 
+DEPRECATED: Use train.py with an appropriate training contract instead.
+  python scripts/training/train.py --contract configs/training/daily_swing_xgboost.yaml
+
 High-standard training pipeline:
   - Chronological train/val/test split with Purge & Embargo
   - Early stopping on validation set

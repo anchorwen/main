@@ -1,5 +1,12 @@
 """Training infrastructure — Dataset, Protocol, Checkpoint, ModelCard, ExperimentTracker, Registries."""
 
+from core.training.brain_config import (
+    ARCH_TO_BRAIN_TYPE,
+    CONTRACT_GROUP_MAGIC,
+    build_brain_config,
+    get_git_commit_hash,
+    resolve_feature_names_for_schema,
+)
 from core.training.checkpoint import CheckpointInfo, CheckpointManager
 from core.training.cpcv import (
     CPCVFold,
@@ -48,8 +55,16 @@ from core.training.trainer_protocol import (
     register_trainer,
 )
 from core.training.training_registry import TrainingRegistry, TrainingRunRecord, create_registry
+from core.training.utils import get_git_commit_hash as _utils_get_git_commit_hash
+from core.training.utils import utc_now_iso
 
 __all__ = [
+    # Brain Config
+    "ARCH_TO_BRAIN_TYPE",
+    "CONTRACT_GROUP_MAGIC",
+    "build_brain_config",
+    "get_git_commit_hash",
+    "resolve_feature_names_for_schema",
     # Dataset
     "TrainingDataset",
     "train_val_test_split",
@@ -109,4 +124,6 @@ __all__ = [
     "TrainingRegistry",
     "TrainingRunRecord",
     "create_registry",
+    # Utils
+    "utc_now_iso",
 ]

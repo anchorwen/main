@@ -19,8 +19,7 @@ from core.feedback.brain_pnl_ledger import BrainPnLMetrics, BrainPnLStore
 from core.feedback.brain_quality_engine import BrainQualityEngine
 
 
-def _utc_now_iso() -> str:
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+from core.training.utils import utc_now_iso as _utc_now_iso  # noqa: F401
 
 
 def build_parser() -> argparse.ArgumentParser:
