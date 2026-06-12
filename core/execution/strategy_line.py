@@ -1577,6 +1577,9 @@ class StrategyLine:
             "entry_spread": float(ask - bid)
             if (bid is not None and ask is not None and ask > bid)
             else 0.0,
+            # ── Phase 0: observable degradation injection ──
+            "p_win_source": _p_win_source,
+            "p_win_degraded": _p_win_degraded,
         }
 
         # ── Determine venue ──
