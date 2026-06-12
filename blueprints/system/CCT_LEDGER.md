@@ -549,3 +549,21 @@
 - **是否被推翻**: 否 — AR 反向假设 (CRITICAL 是误报) 被推翻
 - **关联 ReB Pattern**: ReB-20260612-002 (`PHANTOM_CLOSE_FLOOD`), ReB-20260612-003 (`TRAIL_LABEL_BLINDSPOT`), ReB-20260612-004 (`PNL_BACKFILL_GAP`), ReB-20260612-005 (`CALIBRATOR_COLD_STALLED`), ReB-20260612-006 (`POSITIONAL_FRAGILITY`)
 - **关联 FIX**: FIX-20260612-002, FIX-003, FIX-004, FIX-005
+
+## DQAF-20260612-002: no_live_brains 全交易阻塞
+
+- **Label**: TRIPLE_BOOKKEEPING_RESIDUAL
+- **Docket**: DQAF-20260612-002 (Sev 1)
+- **Causal Chain (3 Layers)**:
+  - **Layer 1 (症状)**: Golden Master 所有 12 周期标记 [degraded: no_live_brains], should_trade=True 但 decisions=0, 交易降级至 0.01 vol
+  - **Layer 2 (中间异常)**: strategy_evaluator.py Cut 4 计算出 _live_count=0. strategy.brains 含 7 个 brain, 无一在 governance_state 中 status=live
+  - **Layer 3 (根因)**: FIX-20260610-001 退役 BTC_Swing_V5 留下三处残留——(a) registry status=retired→strategy_builder 过滤, (b) vote_weight=0.0→投票权归零, (c) live_btc.yaml enabled=false→load_brain_entries 级别禁用. Governance 将 V5 升为 live 但上述三处均未同步.
+- **Evidence**:
+  - Source 1: live_btc.yaml:18 — BTC_Swing_V5 enabled: false
+  - Source 2: BTC_Swing_V5.json — status=retired, vote_weight=0.0
+  - Source 3: intent log — disabled_brains_filtered: before=8 after=5 (V5 被过滤)
+  - Source 4: governance_state.json — BTC_Swing_V5.status=live
+  - Source 5: _dqaf_probe_cut4.json — voted_ids=['V11_H1','V11_M15'] (V5 缺席)
+- **Fix**: 三步同步 + Cut 4 SSOT 重构 → FIX-20260612-006
+- **关联 ReB**: ReB-20260612-007 (TRIPLE_BOOKKEEPING_RESIDUAL), ReB-20260612-008 (GOVERNANCE_BRAIN_SOURCE_MISMATCH)
+- **关联 FIX**: FIX-20260612-006

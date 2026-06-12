@@ -453,3 +453,19 @@
   3. XGBoost adapter 48h 影子校验（新旧数组比对 + mismatch 告警）
   4. 禁止在特征组装路径使用 `dict.values()` — ruff 自定义规则检测
 - **检测方法**: `grep -rn "\.values()" core/brains/ core/feedback/` → 应为 0 结果（5 站点全部替换后）
+
+## ReB-20260612-007: TRIPLE_BOOKKEEPING_RESIDUAL
+
+- **Docket**: DQAF-20260612-002
+- **Pattern**: 退役大脑时在多处独立配置位置留下残留（registry status, vote_weight, live.yaml enabled），后续重新激活时任何一处未同步都会静默阻止大脑投票
+- **Signature**: 三处独立配置点中任一为 'retired/disabled/zero' 即可形成合力阻断——无任何一处是 SSOT
+- **Detection**: governance 有 live brain 但 voted_brain_ids 中缺失 + disabled_brains_filtered 日志 + strategy.brains 不包含该 brain_id
+- **Prevention**: 大脑退役/重激活应通过单一原子操作执行，或至少包含一致性检查（governance live ↔ registry status ↔ yaml enabled ↔ vote_weight）。参考 FIX-20260612-006。
+
+## ReB-20260612-008: GOVERNANCE_BRAIN_SOURCE_MISMATCH
+
+- **Docket**: DQAF-20260612-002
+- **Pattern**: 两套大脑状态源（brain registry JSON + governance_state.json）各自独立维护，状态变更未双向同步
+- **Signature**: governance 标记 brain 为 live，但 registry 仍为 retired/frozen，strategy_builder 使用 registry 状态过滤→governance 的 live 标记无效
+- **Detection**: 检查 governance_state live brains ∩ brain registry entries → 交集为空时告警
+- **Prevention**: strategy_builder 过滤时应同时检查 governance_state（如在 governance 中为 live，覆盖 registry retired）。参考 FIX-20260610-001 → FIX-20260612-006 根因链。
