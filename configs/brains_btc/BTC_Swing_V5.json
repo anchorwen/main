@@ -17,6 +17,7 @@
   "training_horizon": 12,
   "strategy": "btc_swing",
   "timeframe": "BTC",
+  "label_contract": {"sl_atr_mult": 2.0, "tp_atr_mult": 2.5, "contract_type": "btc_swing_12bar", "aligned_with": "configs/live_btc.yaml"},
   "training_params": {
     "sl_atr_mult": 2.0,
     "tp_atr_mult": 2.5,

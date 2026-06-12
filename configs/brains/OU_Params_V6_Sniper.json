@@ -33,5 +33,11 @@
   "features": [
     "price_return"
   ],
-  "artifact_hash": "feae3bfd9c79b92d20a4974e820f9e735ef2fa28aa7e43446a012a7860a700d7"
+  "artifact_hash": "feae3bfd9c79b92d20a4974e820f9e735ef2fa28aa7e43446a012a7860a700d7",
+  "label_contract": {
+    "sl_atr_mult": 1.5,
+    "tp_atr_mult": 3.0,
+    "contract_type": "ou_mean_reversion",
+    "aligned_with": "configs/live.yaml"
+  }
 }
