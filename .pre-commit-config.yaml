@@ -90,3 +90,18 @@ repos:
         files: ^(core/contracts/label_contract\.py|core/ledger/)
         stages: [pre-commit]
         pass_filenames: false
+
+  # ------------------------------------------------------------------
+  # Ω Protocol — physical commit-message gate
+  # Rejects commits without [Ω-Routing: Scene X -> ...] signature.
+  # Hot-path files require #10 in signature.
+  # FIX-20260612-002: Phase 1 of Systemic Operating System
+  # ------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: omega-routing
+        name: "[Ω] Routing signature required"
+        entry: python scripts/omega_gate.py
+        language: system
+        stages: [commit-msg]
+        pass_filenames: false

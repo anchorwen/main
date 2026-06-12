@@ -55,6 +55,95 @@
 
 ---
 
+## Ω 强制输出模板 (Forced Output Templates)
+
+每个 Ω 场景的每个铁律步骤，Agent **必须**输出对应的结构化标记。Pre-commit 和 Code Review 会验证这些标记的存在。
+缺失标记 = 流程违规 = commit 被物理拒绝。
+
+### Scene A: 修 Bug / 异常诊断
+
+```
+[Ω-Routing: Scene A → #9 → #8 → #12 → #6 → #5]
+
+=== IRON LAW #9: DQAF REPORT ===
+[DQAF_LITE_REPORT] 或 [DQAF_REPORT]
+- Docket ID: DQAF-YYYYMMDD-NNN
+- Severity: Sev 1/2/3/4
+- Evidence (双源): ...
+- DA Diagnosis: ...
+- AR Adversarial Check: ...
+- Causal Chain (2-3层): ...
+- Blast Radius (XAU/BTC): ...
+[AWAITING_IC_APPROVAL]
+
+=== IRON LAW #12: ROOT CAUSE LAYER ===
+Root Cause Layer: L1 | L2 | L3
+Fix Level Match: YES | NO (PATCH_NOT_ARCHITECTURE: <reason>)
+
+=== IRON LAW #6: BLUEPRINT CHECK ===
+Module: <module_name>
+Blueprint: blueprints/modules/<module>.md
+FIX_REGISTRY: searched, <N> related fixes found
+
+=== IRON LAW #5: PATTERN SEARCH ===
+Pattern: <pattern>
+Results: <N> matches across <files>
+
+[PRE-EDIT CHECKLIST — Iron Law #0]
+1-5 逐项论证
+[CHECKLIST PASSED]
+```
+
+### Scene B: 改代码 / 添功能
+
+```
+[Ω-Routing: Scene B → #0 → #6 → #5]
+
+[PRE-EDIT CHECKLIST — Iron Law #0]
+1-5 逐项论证
+[CHECKLIST PASSED]
+
+=== IRON LAW #6: BLUEPRINT CHECK ===
+Module: <module_name>
+Blueprint: blueprints/modules/<module>.md
+
+=== IRON LAW #5: PATTERN SEARCH ===
+Pattern: <pattern>
+Results: <N> matches
+```
+
+### Scene D: 分析实盘数据
+
+```
+[Ω-Routing: Scene D → #11]
+
+=== IRON LAW #11: SCRIPT OUTPUT (唯一合法证据源) ===
+<script stdout>
+[DONE] All statistics above are the sole source of truth.
+```
+
+### Scene E: 新建文件/模块
+
+```
+[Ω-Routing: Scene E → #6 → #0]
+
+=== IRON LAW #6: MODULE REGISTRATION ===
+Module: <module_name>
+Blueprint: blueprints/modules/<module>.md (新建/更新)
+MODULE_SOURCE_MAP: check_blueprint_compliance.py 已更新
+```
+
+### 提交模板 (All Scenes)
+
+```
+Stability: ↑/→/↓ (assessment)
+Repairability: ↑/→/↓ (assessment)
+Decoupling: ↑/→/↓ (assessment)
+Iterability: ↑/→/↓ (assessment)
+```
+
+---
+
 ### Iron Law #0: 编辑前强制安检 (Pre-Edit Mandatory Checklist) — 最高优先级
 
 **触发条件**: 调用 Edit 或 Write 工具修改以下任意文件类型之前：
