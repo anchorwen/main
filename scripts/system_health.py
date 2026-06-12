@@ -226,7 +226,7 @@ def print_report(results: list[dict], *, partial: bool = False) -> None:
     for r in results:
         label = r["label"]
         deg = r.get("degradation", {})
-        deg_level = deg.get("level", "?")
+        deg_level = deg.get("staleness_level", deg.get("overall", "?"))
         stream_age = (r.get("stream", {}) or {}).get("last_event_age_min")
         stream_ok = stream_age is not None and stream_age < 15
         gm_age = (r.get("freshness", {}) or {}).get("golden_master")
