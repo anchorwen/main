@@ -387,3 +387,69 @@
   2. 调用链透传 `source` + `degraded` 标记至 journal 供事后审计
   3. Iron Law #10: BLE001 替换为 `fail_open_guard()` 确保异常至少被记录
 - **检测方法**: `grep -n "return 0\.40\|return 0\.5[0]*$" core/execution/pwin_chain.py` 检查是否仍有未日志化 fallback；`grep "FALLBACK_PATH" data_btc/logs/` 监控降级频率
+
+---
+
+### ReB-20260612-002
+- **Pattern Signature**: `PHANTOM_CLOSE_FLOOD`
+- **描述**: 退出看门狗每次周期重新评估仓位是否需要平仓——若无 close-in-flight 状态追踪，已发送但未确认的平仓请求会在一段时间后重复发送。每次重试创建新 journal entry（不同 message_id），形成幽灵洪水。典型案例：ticket 3807506009 在 80 分钟内产生 76 条平仓记录（75 rejected + 1 closed）。根因：`PENDING_CLOSE_MAX_CYCLES=3` 太短 + 无 attempt counter 上限。
+- **关联 FIX IDs**: FIX-20260612-003
+- **关联 Docket IDs**: DQAF-20260612-001
+- **预防策略**:
+  1. `PositionManager` 追踪 `_close_attempt_count`，超过 `PENDING_CLOSE_FLOOD_THRESHOLD=3` 永久锁定
+  2. `PENDING_CLOSE_MAX_CYCLES` 延长至 10（50 分钟）给 MT5 充足处理时间
+  3. `clear_position()` 一次性清理 counter + lock
+- **检测方法**: `python -c "import json; from collections import Counter; ..."` 统计每 ticket 的 close entry 数 — 超过 5 条触发告警
+
+---
+
+### ReB-20260612-003
+- **Pattern Signature**: `TRAIL_LABEL_BLINDSPOT`
+- **描述**: 移动止损（Chandelier Trail）通过 247 条 `modify_sltp` 记录持续收紧 SL，但所有 246 条平仓记录中 `label='trail'` 计数为 0。Reconciliation 路径遇到 `close_reason=4 (SL)` 无条件分配 `sl_hit_first`，不检查 `trail_advances`。Bridge worker 按 PnL 符号分配 `loss`/`win`，忽略 `trail_contribution`。仅 MIA enrichment 路径正确分配 `sl_hit_trailed`（FIX-20260610-006 已修）。
+- **关联 FIX IDs**: FIX-20260612-003
+- **关联 Docket IDs**: DQAF-20260612-001
+- **预防策略**:
+  1. Reconciliation: `close_reason==4` → 检查 `state.position_manager.get_position(ticket).trail_advances > 0` → `sl_hit_trailed`
+  2. Bridge worker: 检查 payload 的 `trail_contribution.trail_advances > 0` → 调整 label
+  3. 所有平仓 label 路径统一检查 trail 历史
+- **检测方法**: `python -c "..."` 统计 journal 中 label='sl_hit_trailed' 计数 → 应随实盘交易增长
+
+---
+
+### ReB-20260612-004
+- **Pattern Signature**: `PNL_BACKFILL_GAP`
+- **描述**: 平仓 PnL 在两个独立路径中无法捕获：(a) Bridge worker 使用 dispatch 时的 mid-price 估算 PnL，journal 写入后永不更新实际成交价/利润；(b) MIA 检测调用 `history_deals_get()` 单次无重试——MT5 成交数据延迟 1-3 秒时 PnL 为 null（23% 失败率）。这两个缺口合计导致 17.6% PnL null rate (JOURNAL_PNL_NULL_RATE_HIGH)。
+- **关联 FIX IDs**: FIX-20260612-004
+- **关联 Docket IDs**: DQAF-20260612-001
+- **预防策略**:
+  1. Bridge worker: 平仓成功后立即查询 `history_deals_get(position=ticket)` 获取 `deal.price` + `deal.profit` → journal 使用实际成交 PnL
+  2. MIA enrichment: `history_deals_get()` 包装 3 次重试 + 1 秒延迟（对齐 PositionCloseAdapter 模式）
+  3. `detail.close_price` + `detail.profit` + `detail.fill_volume` 填入 journal 供审计
+- **检测方法**: `python scripts/analyze_live_journal.py --data-dir data_btc` → PnL null rate < 5%
+
+---
+
+### ReB-20260612-005
+- **Pattern Signature**: `CALIBRATOR_COLD_STALLED`
+- **描述**: ConformalCalibrator 的 `cold_started` 标志被 `cold_start_from_journal()` 设为 True 后永不改为 False——即使已积累 51+ 条历史记录（超过 warmup_samples=50）。`total_computations` 计数器因实盘无交易（无 brain proposal → gate filter 不触发 → `compute_threshold()` 从不被调用）保持为 0。两个指标叠加导致 `CONFORMAL_COLD_STALLED` 误报。Calibrator 实际运作正常（有足够历史数据计算 Q10 分位数），只是状态标志不反映真实就绪度。
+- **关联 FIX IDs**: FIX-20260612-005
+- **关联 Docket IDs**: DQAF-20260612-001
+- **预防策略**:
+  1. `_save_state()`: `history >= _warmup_samples` → `cold_started = False`
+  2. `_load_state()`: 对旧状态文件反向补填过渡（历史 ≥ 50 → 非 cold）
+  3. 就绪度判断基于历史计数而非计算计数——历史是 Q10 分位数的实际数据源
+- **检测方法**: 检查 `conformal_calibrator_state.json` → `cold_started` 应在 history≥50 后变为 false
+
+---
+
+### ReB-20260612-006
+- **Pattern Signature**: `POSITIONAL_FRAGILITY`
+- **描述**: 特征字典通过 `list(feature_source.values())` 转换为模型输入数组时，特征顺序依赖 Python dict 插入顺序（Python 3.7+ 稳定但不同代码路径构建顺序可能不同）。若上游字典键顺序错乱或多插特征，模型静默使用错误特征位置——MACD 值被当成 RSI 权重，产生垃圾预测。影响范围：3 个 adapter + 1 个 feedback hook 共 5 个 `.values()` 站点。LightGBM adapter 已通过命名查找修复（FIX-20260516-004），其余站点为遗留回退路径。
+- **关联 FIX IDs**: FIX-20260612-002
+- **关联 Docket IDs**: DQAF-20260612-001
+- **预防策略**:
+  1. 所有 adapter 使用 `brain_entry["features"]` 命名投影 → `[feature_source[n] for n in feature_names]`
+  2. BrainFactory 加载时验证 `features` 列表 ≡ `.meta.json feature_names`（已有）
+  3. XGBoost adapter 48h 影子校验（新旧数组比对 + mismatch 告警）
+  4. 禁止在特征组装路径使用 `dict.values()` — ruff 自定义规则检测
+- **检测方法**: `grep -rn "\.values()" core/brains/ core/feedback/` → 应为 0 结果（5 站点全部替换后）

@@ -530,3 +530,22 @@
 - **是否被推翻**: 否 — AR 反向假设（不需要改，下游有安全网）被推翻：BLE001 吞一切异常是真实风险
 - **关联 ReB Pattern**: ReB-20260612-001 (`SILENT_FALLBACK_ZERO_OBSERVABILITY`)
 - **关联 FIX**: FIX-20260612-001
+
+### CCT-20260612-001
+- **Docket ID**: DQAF-20260612-001
+- **日期**: 2026-06-12
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: data_health_overall=CRITICAL. trade_journal FAIL (PnL null 17.6%), journal_completeness FAIL (close_price 38%, dupes 89, trail 6.9%), conformal_calibrator FAIL (0 computations). 位置脆弱性 5× `.values()` 站点.
+  - [Layer 2 — 中间异常]: (a) 幽灵平仓洪水: ticket 3807506009 76次平仓/80分钟, 75 rejected. (b) PnL回填断裂: bridge worker 用 mid-price 估算 PnL, receipt 不更新实际成交价. (c) MIA PnL 捕获: 单次 history_deals_get 无重试 → 23% 失败率 (10/43). (d) Trail 标签盲点: reconciliation close_reason=4 一律 sl_hit_first, 不管 trail_advances. (e) calibrator cold_started 永不 False.
+  - [Layer 3 — 根因]: RC-06 (contract-violation): close-in-flight 去重缺失 + dict.values() 顺序依赖 + PnL 写入早于 fill 确认 + label taxonomy 缺失 trail 维度 + cold_started 无过渡逻辑
+- **证据引用**:
+  - Source 1: `data_btc/state/data_health_state.json` — overall=CRITICAL, 3 fail + 8 warn
+  - Source 2: `data_btc/live_trade_journal.jsonl` — 589 lines, 36/246 PnL null, 89 dupes, 0 trail label
+  - Source 3: `core/execution/position_manager.py:348` — PENDING_CLOSE_MAX_CYCLES=3 太短
+  - Source 4: `scripts/mt5_bridge_worker.py:665` — pnl=msg_payload.get("pnl") 估算值, 永不更新
+  - Source 5: `core/runtime/reconciliation.py:132-133` — close_reason=4 → sl_hit_first 无条件
+  - Source 6: `core/execution/conformal_calibrator.py:306` — cold_started 写入后永不改为 False
+- **是否被推翻**: 否 — AR 反向假设 (CRITICAL 是误报) 被推翻
+- **关联 ReB Pattern**: ReB-20260612-002 (`PHANTOM_CLOSE_FLOOD`), ReB-20260612-003 (`TRAIL_LABEL_BLINDSPOT`), ReB-20260612-004 (`PNL_BACKFILL_GAP`), ReB-20260612-005 (`CALIBRATOR_COLD_STALLED`), ReB-20260612-006 (`POSITIONAL_FRAGILITY`)
+- **关联 FIX**: FIX-20260612-002, FIX-003, FIX-004, FIX-005
