@@ -660,12 +660,22 @@ def _execute_management_phase(
                 state.known_open_tickets.get(pos.ticket, {}),
                 symbol=config.symbol,
             )
-            # Enrich with MT5 deal history (close_price, reason)
+            # Enrich with MT5 deal history (close_price, reason).
+            # FIX-20260612-004: Retry up to 3× with 1s delay — MT5 deal
+            # finalization can lag behind position disappearance by 1-3s.
+            # Without retry, ~23% of MIA closes (10/43 BTC) have null PnL
+            # because deals aren't available on the first query.
             with FaultTolerantContext(
                 level=FaultLevel.CRASH,
                 component="MT5_IPC:history_deals_get:MIA_enrich",
             ):
-                _deals = mt5_worker.history_deals_get(position=pos.ticket)
+                _deals = None
+                for _retry in range(3):
+                    _deals = mt5_worker.history_deals_get(position=pos.ticket)
+                    if _deals:
+                        break
+                    if _retry < 2:  # don't sleep after last attempt
+                        time.sleep(1.0)
                 if _deals:
                     _enrich_mia_from_deals(_mia_entry, _deals)
             state._pending_mia_closes.append(_mia_entry)

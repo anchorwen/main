@@ -76,6 +76,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260612-004 | 2026-06-12 | cursor-agent | 77697c0 | P2+P4: Bridge worker actual fill PnL capture + MIA deal history retry. Bridge: query history_deals_get() after close→extract deal.price/profit/volume→journal uses actual fill PnL over mid-price estimate. MIA: 3-retry loop with 1s delay for history_deals_get() (aligns with PositionCloseAdapter pattern)—fixes 23% MIA PnL failure rate (10/43 BTC). | contract-violation |
 | FIX-20260612-003 | 2026-06-12 | cursor-agent | — | **P0+P1: Close-flood phantom guard + trail-aware SL label**: reconciliation now checks state.position_manager.get_position(ticket).trail_advances > 0 → sl_hit_trailed instead of sl_hit_first (closes TRAIL_TELEMETRY_BLINDSPOT for reconciliation path). | RC-06 |
 | FIX-20260612-001 | 2026-06-12 | cursor-agent | — | **ENGINE_STALL restart loop fix**: stall check now skips alert if intent process uptime < STALL_MINUTES (15min). On restart, journal mtime reflects pre-crash state — not a stall. DQAF-20260612-001. | RC-05 |
 | FIX-20260611-022 | 2026-06-11 | cursor-agent | b106eb2 | Consumer migration: daily_ops.py _load_or_create_pnl_store() now tries load_from_stream() first, falls back to old JSON. | contract-violation |

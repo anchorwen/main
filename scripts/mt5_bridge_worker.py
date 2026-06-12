@@ -426,6 +426,29 @@ def _mt5_close_position(
             "order": getattr(result, "order", None),
             "request": request,
         }
+        # ── FIX-20260612-004: Query deal history for actual fill PnL ──
+        # The payload carries a mid-price PnL estimate from managed_close.py.
+        # After a successful close, query MT5 deal history to capture the
+        # actual fill price and broker-side profit (includes spread/commission).
+        # This closes the PnL backfill gap that leaves 17.6% of close entries
+        # with null PnL (JOURNAL_PNL_NULL_RATE_HIGH).
+        try:
+            deals = mt5.history_deals_get(position=ticket)
+            if deals:
+                exit_deals = [d for d in deals if getattr(d, "entry", -1) == 1]
+                if exit_deals:
+                    last_exit = max(exit_deals, key=lambda d: getattr(d, "time", 0))
+                    _fill_price = getattr(last_exit, "price", None)
+                    _fill_profit = getattr(last_exit, "profit", None)
+                    _fill_volume = getattr(last_exit, "volume", None)
+                    if _fill_price is not None and float(_fill_price) > 0:
+                        detail["close_price"] = float(_fill_price)
+                    if _fill_profit is not None:
+                        detail["profit"] = float(_fill_profit)
+                    if _fill_volume is not None:
+                        detail["fill_volume"] = float(_fill_volume)
+        except Exception:
+            pass  # Non-blocking: estimated PnL survives as fallback
         # 陷阱二: Partial close creates new ticket — capture via identifier
         if close_vol < pos_vol - 1e-9:
             for _ in range(5):
@@ -651,6 +674,9 @@ def process_one(
         _strategy = MAGIC_TO_STRATEGY.get(_magic, "")
     _open_msg_id = msg_payload.get("open_message_id", "")
     position_ticket = detail.get("order") or coerce_position_ticket(msg_payload)
+    # ── FIX-20260612-004: Prefer actual fill PnL over mid-price estimate ──
+    _actual_profit = detail.get("profit") if isinstance(detail, dict) else None
+    _pnl = _actual_profit if _actual_profit is not None else msg_payload.get("pnl")
     journal_record = {
         "schema_version": "live_trade_journal.v2",
         "recorded_at": _utc_now(),
@@ -662,7 +688,7 @@ def process_one(
         "action": action,
         "side": msg_payload.get("side"),
         "volume": vol_disp,
-        "pnl": msg_payload.get("pnl"),
+        "pnl": _pnl,
         "label": _label,
         "comment": _comment,
         "magic": _magic,

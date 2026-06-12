@@ -534,6 +534,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260612-023 | 2026-06-11 | monitor_dashboard | Downgrade ConformalCalibrator cold-start alert from CRITICAL to WARNING. CRITICAL on every restart was alert noise — calibrator needs 50 closes to warm up. Now only WARNING during warmup. Also diagnosed duplicate alert dispatch bug (RULE-012 fires twice in 1s despite 300s cooldown). | RC-06 |
 | FIX-20260612-002 | 2026-06-12 | brains-adapters | XGBoost/Transformer/Base adapter .values() positional fragility eradicated: replaced dict-order-dependent feature extraction with named lookup from brain_entry[features] SSOT. Added shadow validation (48h transitional) in XGBoost adapter. OnlineFeedbackHook now uses adapter brain config for feature order. 5 .values() sites fixed across 4 files. | RC-06 |
 | FIX-20260612-003 | 2026-06-12 | execution-guards | P0+P1: Close-flood phantom guard + trail-aware SL label. PositionManager: added _close_attempt_count tracker with PENDING_CLOSE_FLOOD_THRESHOLD=3 to permanently lock tickets after repeated close failures (prevents 76-close/80min flood pattern). PENDING_CLOSE_MAX_CYCLES extended 3→10. Reconciliation: sl_hit_trailed when trail_advances>0 (closes TRAIL_TELEMETRY_BLINDSPOT). | RC-06 |
+| FIX-20260612-004 | 2026-06-12 | runtime-live | P2+P4: Bridge worker actual fill PnL capture + MIA deal history retry. Bridge: query history_deals_get() after close→extract deal.price/profit/volume→journal uses actual fill PnL over mid-price estimate. MIA: 3-retry loop with 1s delay for history_deals_get() (aligns with PositionCloseAdapter pattern)—fixes 23% MIA PnL failure rate (10/43 BTC). | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2244,3 +2245,15 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: runtime-live
+
+### FIX-20260612-004
+- **Date**: 2026-06-12
+- **Author**: cursor-agent
+- **Commit**: 77697c0
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: scripts/mt5_bridge_worker.py,core/runtime/live_cycle.py
+- **Description**: P2+P4: Bridge worker actual fill PnL capture + MIA deal history retry. Bridge: query history_deals_get() after close→extract deal.price/profit/volume→journal uses actual fill PnL over mid-price estimate. MIA: 3-retry loop with 1s delay for history_deals_get() (aligns with PositionCloseAdapter pattern)—fixes 23% MIA PnL failure rate (10/43 BTC).
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: execution-guards
