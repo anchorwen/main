@@ -117,9 +117,13 @@ def compute_profitability_surface(
     min_profitability: float = 0.0,
     spread_points: float = 30,
     slippage_points: float = 10,
-    tick_value: float = 0.01,
-    tick_size: float = 0.01,
+    tick_value: float,
+    tick_size: float,
     volume: float = 0.01,
+    # ── Guardrails (P1a) ──
+    min_samples: int = 50,
+    max_reward_risk: float | None = 8.0,
+    min_sl_atr: float | None = 0.8,
 ) -> ProfitabilitySurface:
     """Compute the expected-value surface for a grid of (SL, TP) configurations.
 
@@ -131,7 +135,7 @@ def compute_profitability_surface(
         horizon_bars: Max bars to look forward for barrier hit.
         atr_period: ATR lookback period.
         sl_range: SL multipliers to test. Default: [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
-        tp_range: TP multipliers to test. Default: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0]
+        tp_range: TP multipliers to test. Default: [1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0]
         entry_stride: Test every Nth bar as entry (1 = every bar).
         warmup_bars: Skip first N bars (need ATR history).
         side: Entry direction ("long", "short", "both").
@@ -139,8 +143,9 @@ def compute_profitability_surface(
         min_profitability: Filter threshold for reporting.
         spread_points: Raw MT5 spread in points (not pips). Default 30 for XAUUSDc.
         slippage_points: Raw MT5 slippage in points. Default 10 for XAUUSDc.
-        tick_value: MT5 SYMBOL_TRADE_TICK_VALUE (monetary value of one tick).
-        tick_size: MT5 SYMBOL_TRADE_TICK_SIZE (price step per tick).
+        tick_value: MT5 SYMBOL_TRADE_TICK_VALUE (monetary value of one tick). REQUIRED.
+        tick_size: MT5 SYMBOL_TRADE_TICK_SIZE (price step per tick). REQUIRED.
+            XAUUSDc = 0.001 (3-digit), BTC/USD pairs = 0.01 (2-digit).
         volume: Trade volume in lots (default 0.01 for cent accounts).
 
     Returns:
@@ -150,6 +155,29 @@ def compute_profitability_surface(
         sl_range = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
     if tp_range is None:
         tp_range = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0]
+
+    # ── P1a Guardrail: pre-filter SL/TP grid ──
+    _filtered_sl: list[float] = []
+    _filtered_tp: list[float] = []
+    for _sl in sl_range:
+        if min_sl_atr is not None and _sl < min_sl_atr:
+            continue  # SL too tight → normal micro-volatility would sweep the stop
+        _filtered_sl.append(_sl)
+    for _tp in tp_range:
+        _ok = True
+        if max_reward_risk is not None:
+            for _sl in _filtered_sl:
+                if _tp / _sl > max_reward_risk:
+                    _ok = False  # RR too high → likely a wick/pin-bar artifact
+                    break
+        if _ok:
+            _filtered_tp.append(_tp)
+    if len(_filtered_sl) != len(sl_range):
+        print(f"[calibrate] Guardrail: SL range filtered {len(sl_range)} → {len(_filtered_sl)} (min_sl_atr={min_sl_atr})")
+    if len(_filtered_tp) != len(tp_range):
+        print(f"[calibrate] Guardrail: TP range filtered {len(tp_range)} → {len(_filtered_tp)} (max_reward_risk={max_reward_risk})")
+    sl_range = _filtered_sl
+    tp_range = _filtered_tp
 
     n_bars = len(closes)
     max_horizon_idx = n_bars - horizon_bars - 1
@@ -252,8 +280,8 @@ def compute_profitability_surface(
     points: list[ProfitabilityPoint] = []
     for (sl, tp), (tp_c, sl_c, to_c) in sorted(grid.items()):
         total = tp_c + sl_c + to_c
-        if total < 30:
-            continue  # statistically unreliable
+        if total < min_samples:
+            continue  # statistically unreliable (P1a: configurable threshold)
 
         tp_rate = tp_c / total
         sl_rate = sl_c / total

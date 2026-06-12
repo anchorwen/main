@@ -258,8 +258,8 @@ class LabelContract:
     # Cost formula: cost_in_price = points * tick_size (MT5-native, physics-grounded)
     spread_points: float = 30  # raw MT5 points (not pips)
     slippage_points: float = 10  # conservative estimate for normal market conditions
-    tick_value: float = 0.01  # SYMBOL_TRADE_TICK_VALUE for XAUUSDc
-    tick_size: float = 0.01  # SYMBOL_TRADE_TICK_SIZE for XAUUSDc (MT5: 0.01, not 0.001)
+    tick_value: float = 0.01  # SYMBOL_TRADE_TICK_VALUE for XAUUSDc cent account
+    tick_size: float = 0.001  # SYMBOL_TRADE_TICK_SIZE: XAUUSDc=0.001 (3-digit), BTC pairs=0.01
 
     # Metadata
     timeout_label: str = "timeout"

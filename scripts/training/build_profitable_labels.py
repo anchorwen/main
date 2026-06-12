@@ -332,6 +332,8 @@ def main(argv: list[str] | None = None) -> int:
         side=args.sides,
         symbol="XAUUSDc",
         timeframe="M5",
+        tick_value=0.01,
+        tick_size=0.001,
     )
 
     # Display surface summary

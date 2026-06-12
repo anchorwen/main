@@ -1151,6 +1151,8 @@ def calibrate_label_contract(
         timeframe=timeframe,
         spread_points=contract.label.spread_points,
         slippage_points=contract.label.slippage_points,
+        tick_value=contract.label.tick_value,
+        tick_size=contract.label.tick_size,
     )
 
     if not surface.points:
@@ -1527,6 +1529,7 @@ def run_pipeline(
         best_model: Any = None
         best_metrics: dict[str, Any] = {}
         best_seed = seeds[0]
+        seed_forward_sharpes: list[float] = []  # P1b: multi-seed robustness tracking
 
         for seed in seeds:
             print(f"[train] Training {arch} with seed={seed}...")
@@ -1628,6 +1631,7 @@ def run_pipeline(
                     )
 
             forward_sharpe = forward_metrics.get("sharpe_ratio", -999.0)
+            seed_forward_sharpes.append(forward_sharpe)  # P1b: track for CV
             print(
                 f"[train]   seed={seed}: train_sharpe={train_fin.get('sharpe_ratio', 'N/A')}, "
                 f"forward_sharpe={forward_sharpe}"
@@ -1657,6 +1661,24 @@ def run_pipeline(
 
         result.metrics = best_metrics
         print(f"[train] Best seed: {best_seed} (forward_sharpe={best_sharpe:.4f})")
+
+        # ── P1b: Multi-seed robustness (Coefficient of Variation) ──
+        _n_seeds = len(seed_forward_sharpes)
+        if _n_seeds > 1:
+            _valid_sharpes = [s for s in seed_forward_sharpes if s > -900.0]
+            if len(_valid_sharpes) >= 2:
+                _mean_fs = float(np.mean(_valid_sharpes))
+                _std_fs = float(np.std(_valid_sharpes, ddof=1))
+                _cv = _std_fs / max(abs(_mean_fs), 0.01)
+                result.metrics["seed_sharpe_mean"] = round(_mean_fs, 4)
+                result.metrics["seed_sharpe_std"] = round(_std_fs, 4)
+                result.metrics["seed_sharpe_cv"] = round(_cv, 4)
+                if _cv > 0.3:
+                    print(
+                        f"[train] WARNING: Seed instability (CV={_cv:.2f} > 0.30). "
+                        f"mean_fs={_mean_fs:.4f}, std_fs={_std_fs:.4f}. "
+                        f"Model may be fragile — consider more regularization or more seeds."
+                    )
 
     except (ValueError, RuntimeError, ImportError, OSError, MemoryError) as e:
         result.errors = [f"Training failed: {e}"]

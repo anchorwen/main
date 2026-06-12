@@ -103,7 +103,7 @@ def main() -> None:
         spread_points=30,
         slippage_points=10,
         tick_value=0.01,
-        tick_size=0.01,
+        tick_size=0.001,  # XAUUSDc 3-digit precision
     )
 
     # ── Classify each config ──
