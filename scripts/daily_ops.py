@@ -856,6 +856,8 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
                 registry.register(
                     AlphaRecord(
                         alpha_id="btc_swing",
+                        name="btc_swing",
+                        version="1.0.0",
                         state=AlphaLifecycleState.ACTIVE,
                         strategy_class="swing",
                         assets=["BTCUSDc"],
