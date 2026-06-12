@@ -184,6 +184,35 @@ Iterability: ↑/→/↓ (assessment)
 
 ---
 
+### Iron Law #0-bis: `--no-verify` 禁止条款 (No-Bypass Clause) — FIX-20260612-017
+
+**触发条件**: 任何 `git commit` 操作前自动触发。
+
+**核心约束**: `git commit --no-verify` **仅在以下场景合法**:
+
+| 场景 | 条件 |
+|------|------|
+| pre-commit hook 因运行时文件锁失败 | data_btc/data 目录下的 .jsonl/.lock 文件被 live 进程持有 |
+| 纯文档提交 | 仅包含 .md 文件 |
+| 紧急回滚 | 明确声明 `EMERGENCY_ROLLBACK` + 原因 |
+
+**禁止行为**:
+- 以"加快速度"为由跳过 pre-commit 验证
+- 以"已验证过"为由跳过 mypy/ruff/blueprint 门禁
+- 任何未在上述豁免表中的 `--no-verify` 使用
+
+**每次使用 `--no-verify` 时必须在 commit message 中说明原因**，格式: `--no-verify: <reason>`。此说明由 `omega_gate.py` 的 `commit-msg` hook 检查（即使使用 `--no-verify`，commit-msg hook 仍然触发）。
+
+**新增 Ω Gate (FIX-017)**:
+- `scripts/omega_gate.py` 已升级，现在同时检查:
+  1. `[Ω-Routing: Scene X → ...]` 签名
+  2. 热路径文件的 `#10` 标记
+  3. `.py/.yaml/.json` 修改的 FIX/DQAF ID
+  4. 纯机械操作豁免声明
+- Gate 在 `commit-msg` 阶段触发——**即使使用 `--no-verify` 也无法绕过**
+
+---
+
 ### 1. 每次代码修改后必须验证
 - 完成任何 `.py` 文件修改后，必须运行 `python scripts/verify.py --full` 并通过
 - 如果 `--full` 不通过，**不得声明工作完成**

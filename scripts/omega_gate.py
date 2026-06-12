@@ -127,6 +127,35 @@ def main() -> int:
     if hot_path_staged:
         print(f"[Ω] Hot-path check PASSED: {HOT_PATH_IRON_LAW} in signature for {len(hot_path_staged)} file(s).")
 
+    # ── Check 4: FIX/DQAF ID required for .py/.yaml/.json changes ──
+    # Iron Law #0: every non-exempt change to covered files must carry a docket ID.
+    covered_staged = {
+        f for f in staged
+        if f.endswith((".py", ".yaml", ".yml", ".json"))
+        and not any(f.startswith(d) for d in ("data/", "data_btc/", "__pycache__/", ".claude/"))
+    }
+    has_fix = bool(re.search(r"FIX-\d{8}-\d{3}", commit_msg))
+    has_dqaf = bool(re.search(r"DQAF-\d{8}-\d{3}", commit_msg))
+    is_exempt = bool(re.search(
+        r"(?i)(?:pure.?mechanical|formatting|docs?.only|config.value|exempt|豁免|no.dqaf.needed)",
+        commit_msg,
+    ))
+
+    if covered_staged and not has_fix and not has_dqaf and not is_exempt:
+        print("=" * 60)
+        print("[Ω] COMMIT REJECTED: Covered files changed without FIX/DQAF ID.")
+        print("[Ω] Changed files requiring docket ID:")
+        for f in sorted(covered_staged):
+            print(f"[Ω]   {f}")
+        print("[Ω] Commit message MUST include FIX-YYYYMMDD-NNN or DQAF-YYYYMMDD-NNN.")
+        print("[Ω] Exemptions: add 'pure mechanical'/'formatting'/'config value' to msg.")
+        print("=" * 60)
+        return 1
+
+    if covered_staged:
+        docket_type = "FIX" if has_fix else ("DQAF" if has_dqaf else "exempt")
+        print(f"[Ω] Docket check PASSED: {docket_type} ID for {len(covered_staged)} covered file(s).")
+
     print("[Ω] Gate PASSED.")
     return 0
 
