@@ -418,62 +418,70 @@ def repair_journal(
                     needs_rewrite = True
 
         if needs_rewrite:
-            # FIX-20260601-043: full-file rewrite must be serialised with
-            # the bridge worker and other journal writers to prevent the
-            # truncation-in-progress corruption pattern.
-            #
-            # FIX-20260612-008: Re-read journal AFTER acquiring the lock
-            # to capture entries appended between the initial _load_journal()
-            # call and lock acquisition.  Without this, any bridge/live_cycle
-            # entry written during the detection phase is silently dropped
-            # when the rewrite overwrites the file with stale snapshot data.
-            # Observed: 16 bridge receipts from 7 restarts all missing from
-            # journal because repair_journal() read before bridge wrote, then
-            # overwrote after bridge wrote.
+            # FIX-20260612-014: Use temp-file + atomic swap pattern (same as
+            # compact_journal) instead of write_text() overwrite.
+            # Lock is acquired BEFORE re-reading, so bridge writes are
+            # blocked during the entire operation — no stale-snapshot window.
+            # This eliminates the FIX-008 lock-then-reread workaround.
+            import os as _os
+            _temp_path = journal_path.with_suffix(".jsonl.repair_tmp")
+
             if lock_dir is not None:
                 from core.infrastructure.distributed_lock import FileLock
                 _lock = FileLock("live_trade_journal", lock_dir=str(lock_dir), ttl_seconds=10)
                 _acquired = _lock.acquire(blocking=True, timeout_seconds=5)
-                if _acquired.acquired:
-                    try:
-                        # ── FIX-20260612-008: re-read after lock to avoid
-                        # dropping entries appended between load and lock ──
-                        _fresh = _load_journal(journal_path)
-                        if len(_fresh) > len(entries):
-                            # Merge: replay our backfill changes onto fresh data
-                            _backfilled_ids = {
-                                e["message_id"]
-                                for e in entries
-                                if e.get("message_id") and (not e.get("magic") or not e.get("strategy"))
-                            }
-                            for _fe in _fresh:
-                                _fid = _fe.get("message_id", "")
-                                if _fid and _fid in _backfilled_ids:
-                                    # This entry was backfilled in our stale snapshot
-                                    # Apply the same backfill to the fresh copy
-                                    if not _fe.get("magic"):
-                                        _m = _resolve_magic(_fe)
-                                        if _m:
-                                            _fe["magic"] = _m
-                                    if not _fe.get("strategy"):
-                                        _s = _resolve_strategy(_fe)
-                                        if _s:
-                                            _fe["strategy"] = _s
-                            _to_write = _fresh
-                        else:
-                            _to_write = entries
-                        journal_path.write_text(
-                            "\n".join(json.dumps(e, ensure_ascii=False, default=str) for e in _to_write) + "\n",
-                            encoding="utf-8",
-                        )
-                    finally:
-                        _lock.release()
-                # If lock denied, skip rewrite — better stale data than corruption
+                if not _acquired.acquired:
+                    return report  # lock denied — skip
+                _locked = True
             else:
-                journal_path.write_text(
-                    "\n".join(json.dumps(e, ensure_ascii=False, default=str) for e in entries) + "\n",
+                _locked = False
+
+            try:
+                # Re-read under lock to capture all entries
+                _final_entries = _load_journal(journal_path)
+                # Apply backfill to the fresh snapshot
+                _backfill_map: dict[str, dict[str, Any]] = {}
+                for e in entries:
+                    _mid = e.get("message_id", "")
+                    if _mid and (not e.get("magic") or not e.get("strategy")):
+                        _backfill_map[_mid] = {
+                            "magic": e.get("magic") or _resolve_magic(e),
+                            "strategy": e.get("strategy") or _resolve_strategy(e),
+                        }
+                for _fe in _final_entries:
+                    _fid = _fe.get("message_id", "")
+                    if _fid in _backfill_map:
+                        _bf = _backfill_map[_fid]
+                        if not _fe.get("magic") and _bf["magic"]:
+                            _fe["magic"] = _bf["magic"]
+                        if not _fe.get("strategy") and _bf["strategy"]:
+                            _fe["strategy"] = _bf["strategy"]
+                # Remove duplicates (FIX-010)
+                _seen: set[str] = set()
+                _deduped: list[dict[str, Any]] = []
+                for _e in _final_entries:
+                    _mid = _e.get("message_id", "")
+                    if _mid and _mid in _seen:
+                        continue
+                    if _mid:
+                        _seen.add(_mid)
+                    _deduped.append(_e)
+                report["duplicates_removed"] += len(_final_entries) - len(_deduped)
+
+                # Write to temp file, then atomic swap
+                _temp_path.write_text(
+                    "\n".join(json.dumps(e, ensure_ascii=False, default=str) for e in _deduped) + "\n",
                     encoding="utf-8",
                 )
+                _os.replace(_temp_path, journal_path)
+            finally:
+                if _locked:
+                    _lock.release()
+                if _temp_path.exists():
+                    try:
+                        _temp_path.unlink()
+                    except OSError:
+                        pass
 
     # ── Link integrity ──
     closed_tickets: set[int] = set()
