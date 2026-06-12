@@ -11,7 +11,7 @@ label:
   tp_atr_mult: 1.5
   horizon_bars: 12
   profitability_calibrated: true
-  label_mapping: drop_timeout_binary
+  # label_mapping not needed — dataset already in binary {0,1} format
   spread_points: 30
   slippage_points: 10
   tick_size: 0.001
