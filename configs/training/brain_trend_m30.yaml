@@ -9,10 +9,10 @@ dataset:
 
 label:
   contract_id: "label-trend-1.0.0"
-  sl_atr_mult: 1.5
-  tp_atr_mult: 2.5
+  sl_atr_mult: 3.0
+  tp_atr_mult: 1.5
   horizon_bars: 12
-  profitability_calibrated: false
+  profitability_calibrated: true
   label_mapping: drop_timeout_binary
 
 architecture:
