@@ -185,10 +185,14 @@ def _resolve_feature_vector(
             _schema = "btc_macro_enhanced_37" if _is_btc else "v9_institutional_40"
             _dim = 37 if _is_btc else 40
             if _is_btc:
-                from core.features.schemas.btc_macro_enhanced_schema import BTC_MACRO_ENHANCED_37_FEATURES
+                from core.features.schemas.btc_macro_enhanced_schema import (
+                    BTC_MACRO_ENHANCED_37_FEATURES,
+                )
                 _feature_names = BTC_MACRO_ENHANCED_37_FEATURES
             else:
-                from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+                from core.features.schemas.v9_institutional_schema import (
+                    V9_INSTITUTIONAL_40_FEATURES,
+                )
                 _feature_names = V9_INSTITUTIONAL_40_FEATURES
 
             store = LocalFeatureStore(str(store_dir))
