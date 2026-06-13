@@ -59,6 +59,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260613-087 | 2026-06-13 | cursor-agent | d44b678 | Entry Spread Propagation: fixed _entry_features_snapshot fallback (added bid/ask/spread), fixed ZMQ bridge worker msg_payload variable (was outer envelope, now inner payload). Retroactive audit: 113 tainted opens (XAU 57.8%, BTC 36.1%), EV bias ~6-32. L3 tech debt: entry_context needs mandatory Pydantic validation to eliminate soft fallback. | contract-violation |
 | FIX-20260613-081 | 2026-06-13 | cursor-agent | a29d3fc | SL trail parameters: trail_activation_atr 0.5→0.3 (earlier activation), breakeven_threshold_atr 1.5→1.0 (earlier breakeven lock), sl.min_sl_distance 80→100 (slightly wider). Data-driven: 55% positions had active trail but zero trail_advances (never locked profit before reversal). | boundary-error |
 | FIX-20260613-040 | 2026-06-13 | cursor-agent | — | **BLE001: 2 truly bare except:pass → fail_open_guard** in execution_queue (PriceFetch) + exit_watchdog (ZMQResolveAck). Iron Law #10 incremental upgrade. BLE001: 86→84 (-2 bare). | RC-07 |
 | FIX-20260613-039 | 2026-06-13 | cursor-agent | — | **ExitReason enum SSOT + StrategyDecision audit fields**: exit_reason.py created with 15 canonical categories. StrategyDecision gains decision_hash/evaluated_at/code_version audit fields for entry provenance tracking. | RC-06, RC-12 |

@@ -1106,6 +1106,7 @@ def run_zmq_worker(
             try:
                 payload: dict[str, Any] = json.loads(raw)
                 envelope = payload.get("envelope", {})
+                msg_payload: dict[str, Any] = envelope.get("payload", {})
                 msg_id = envelope.get("message_id", "unknown")
             except json.JSONDecodeError:
                 print("[zmq_bridge] Invalid JSON received", flush=True)
@@ -1134,19 +1135,20 @@ def run_zmq_worker(
 
             # ── Execute via existing MT5 logic ──
             try:
-                action = normalize_action(payload.get("action"))
-                # _send_to_mt5 returns (ack_status, detail_dict)
+                action = normalize_action(msg_payload.get("action"))
+                # _send_to_mt5 expects outer payload (with envelope key)
                 ack_status, detail = _send_to_mt5(
                     mt5, payload,
                     default_volume=default_volume,
                     deviation=deviation,
                     magic=magic,
                 )
-                # ── FIX-20260613-062: Write journal entry (was missing in ZMQ path) ──
+                # ── FIX-20260613-062 + FIX-20260613-087: journal entry ──
+                # Pass msg_payload (inner), not payload (outer envelope)
                 _write_zmq_journal_entry(
                     journal_path=journal_path,
                     message_id=msg_id,
-                    msg_payload=payload,
+                    msg_payload=msg_payload,
                     action=action,
                     ack_status=ack_status,
                     detail=detail,

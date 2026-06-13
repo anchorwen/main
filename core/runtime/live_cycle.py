@@ -3891,6 +3891,10 @@ def execute_live_cycle(
     _entry_features_snapshot: dict[str, Any] = {
         "schema_version": "v9_institutional",
         "vector": tuple(np.nan_to_num(np.asarray(feature_vector, dtype=np.float64)).tolist()),
+        # FIX-20260613-087: entry_spread must propagate to journal for accurate EV
+        "entry_spread": float(round(_ask - _bid, 2)) if (_bid is not None and _ask is not None and _ask > _bid) else 0.0,
+        "bid": _bid,
+        "ask": _ask,
     }
 
     # ── Meta-filter gate + Conformal OU Gate (lazy init on first live cycle) ──

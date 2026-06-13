@@ -609,6 +609,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260613-083 | 2026-06-13 | execution-guards | R1 Gate 4h silence protection: if all trades blocked by RegimeDirectionGate for >48 consecutive cycles (~4h), relax from block to penalty-only. Prevents BTC zero-open silence when trend=LONG and all brains are SHORT. Silence counter resets when any trade passes (trend-aligned or above penalty threshold). | RC-05 |
 | FIX-20260613-084 | 2026-06-13 | training | R3 Step A feature shift analysis: 40/40 features RED (KS p=0.000), XAU→BTC direct model transfer CANCELLED. Hurst similarity 0.062 confirms temporal patterns transferable — V9 training methodology applies to BTC. Fallback: BTC-from-scratch with R4 regime labels. | RC-07 |
 | FIX-20260613-086 | 2026-06-13 | execution-exit-watchdog | Watchdog Encapsulation: multi-dimensional evaluator with time_decay + price_decay triggers. Model-independent structural exits. | RC-07 |
+| FIX-20260613-087 | 2026-06-13 | execution-orders | Entry Spread Propagation: fixed _entry_features_snapshot fallback (added bid/ask/spread), fixed ZMQ bridge worker msg_payload variable (was outer envelope, now inner payload). Retroactive audit: 113 tainted opens (XAU 57.8%, BTC 36.1%), EV bias ~6-32. L3 tech debt: entry_context needs mandatory Pydantic validation to eliminate soft fallback. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2629,5 +2630,17 @@ FIX-YYYYMMDD-NNN
 - **Files**: core/execution/exit_watchdog.py,scripts/live_intent_loop.py,configs/live_btc.yaml
 - **Description**: Watchdog Encapsulation: multi-dimensional evaluator with time_decay + price_decay triggers. Model-independent structural exits.
 - **Root Cause**: RC-07 — missing-validation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260613-087
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: d44b678
+- **Type**: fix
+- **Module**: execution-orders
+- **Files**: core/runtime/live_cycle.py,scripts/mt5_bridge_worker.py,scripts/audit_entry_spread.py
+- **Description**: Entry Spread Propagation: fixed _entry_features_snapshot fallback (added bid/ask/spread), fixed ZMQ bridge worker msg_payload variable (was outer envelope, now inner payload). Retroactive audit: 113 tainted opens (XAU 57.8%, BTC 36.1%), EV bias ~6-32. L3 tech debt: entry_context needs mandatory Pydantic validation to eliminate soft fallback.
+- **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
