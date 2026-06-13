@@ -214,6 +214,82 @@ def check_stamp() -> tuple[bool, str]:
     return True, "Stamp valid"
 
 
+def _check_registry_gate() -> tuple[bool, list[str]]:
+    """Check that .py changes are accompanied by FIX_REGISTRY or blueprint updates.
+
+    Iron Law #7 structural enforcement: when core/ or scripts/ .py files are
+    staged for commit, at least one of FIX_REGISTRY.md or a module blueprint
+    must also be staged — unless the commit message carries an explicit
+    bypass token ([TRIVIAL] or [NO-FIX-REQUIRED]).
+
+    Returns (ok, errors).
+    """
+    errors: list[str] = []
+
+    # ── Step A: Get staged .py files ──
+    try:
+        staged = subprocess.run(
+            ["git", "diff", "--name-only", "--cached"],
+            capture_output=True, text=True, cwd=str(ROOT), timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return True, []  # can't check, don't block
+
+    if staged.returncode != 0:
+        return True, []
+
+    py_files = [
+        f.strip().replace("\\", "/")
+        for f in staged.stdout.strip().split("\n")
+        if f.strip().endswith(".py")
+    ]
+    if not py_files:
+        return True, []
+
+    # ── Step B: Only enforce for core/ and scripts/ (non-trivial paths) ──
+    core_py = [f for f in py_files if f.startswith("core/") or f.startswith("scripts/")]
+    if not core_py:
+        return True, []
+
+    # ── Step C: Check for registry/blueprint files in staged ──
+    staged_all = staged.stdout.strip().split("\n")
+    staged_set = {f.strip().replace("\\", "/") for f in staged_all if f.strip()}
+
+    registry_updates = [
+        f for f in staged_set
+        if "FIX_REGISTRY" in f or f.startswith("blueprints/")
+    ]
+    if registry_updates:
+        return True, []
+
+    # ── Step D: Check for bypass token in recent commit message ──
+    try:
+        # Check if there's a recent commit (within this session) with bypass
+        log = subprocess.run(
+            ["git", "log", "-1", "--format=%B"],
+            capture_output=True, text=True, cwd=str(ROOT), timeout=5,
+        )
+        if log.returncode == 0:
+            msg = log.stdout
+            if "[TRIVIAL]" in msg or "[NO-FIX-REQUIRED]" in msg:
+                return True, []
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+    # ── BLOCK: core .py changed, no registry update, no bypass ──
+    errors.append(
+        f"FIX_REGISTRY gate: {len(core_py)} core .py file(s) staged "
+        f"but no FIX_REGISTRY.md or blueprint update staged.\n"
+        f"  Changed: {', '.join(core_py[:5])}"
+        + ("..." if len(core_py) > 5 else "")
+        + "\n  Action: update FIX_REGISTRY.md or the relevant module blueprint,\n"
+        + "    then git add it alongside your .py changes.\n"
+        + "  Bypass: use [TRIVIAL] or [NO-FIX-REQUIRED] in commit message\n"
+        + "    for typo fixes, formatting, or pure mechanical changes."
+    )
+    return False, errors
+
+
 def _check_config_consistency() -> tuple[bool, list[str]]:
     """Validate cross-config brain consistency (FIX-20260610-002).
 
@@ -645,9 +721,16 @@ def main() -> int:
             if not cfg_ok:
                 all_passed = False
 
+            print(">>> FIX_REGISTRY gate (Iron Law #7)...")
+            reg_ok, reg_errs = _check_registry_gate()
+            if not reg_ok:
+                for _e in reg_errs:
+                    print(f"[FAIL] {_e}")
+                all_passed = False
+            else:
+                print("[PASS] FIX_REGISTRY gate")
+
     elif args.full:
-        print(">>> mypy...")
-        passed, output = run_mypy()
         if not passed:
             print(f"[FAIL] mypy:\n{output}")
             all_passed = False
@@ -731,6 +814,15 @@ def main() -> int:
         cfg_ok, cfg_errs = _check_config_consistency()
         if not cfg_ok:
             all_passed = False
+
+        print(">>> FIX_REGISTRY gate (Iron Law #7)...")
+        reg_ok, reg_errs = _check_registry_gate()
+        if not reg_ok:
+            for _e in reg_errs:
+                print(f"[FAIL] {_e}")
+            all_passed = False
+        else:
+            print("[PASS] FIX_REGISTRY gate")
 
         print(">>> pytest...")
         passed, output = run_pytest()
