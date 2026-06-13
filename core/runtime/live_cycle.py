@@ -357,6 +357,28 @@ def _compute_tf_ou_hurst(mid_prices: list[float]) -> tuple[float, float]:
     return ou_theta, hurst
 
 
+def _save_recent_prices(state: Any, base_dir: str) -> None:
+    """Persist _recent_mid_prices so physics override is warm after restart.
+
+    FIX-20260613-090: Without this, _compute_tf_ou_hurst() needs 21 M5 bars
+    (~105 min) to produce valid OU Theta + Hurst values after every restart.
+    Persisting the rolling buffer eliminates this cold-start entirely.
+    """
+    try:
+        _rp = state._recent_mid_prices
+        if len(_rp) < 3:
+            return
+        _path = Path(base_dir) / "state" / "recent_prices.json"
+        _tmp = _path.with_suffix(_path.suffix + ".tmp")
+        _tmp.write_text(
+            json.dumps({"prices": [round(float(x), 2) for x in _rp[-50:]]}),
+            encoding="utf-8",
+        )
+        os.replace(_tmp, _path)
+    except Exception:  # noqa: BLE001
+        pass  # non-fatal — gate falls back to ADX-only
+
+
 # ── Daily ops auto-scheduler ────────────────────────────────────────────
 
 # FIX-20260531-009: state paths derived from config.base_dir at call site
@@ -3241,6 +3263,8 @@ def execute_live_cycle(
             state._recent_mid_prices.append(mid_price)
             if len(state._recent_mid_prices) > 50:
                 state._recent_mid_prices.pop(0)
+            if state.loop_iteration % 5 == 0:
+                _save_recent_prices(state, config.base_dir)
         # MTF service needs fresh ticks — skip when stale
         print(
             json.dumps(
@@ -3259,6 +3283,10 @@ def execute_live_cycle(
         state._recent_mid_prices.append(mid_price)
         if len(state._recent_mid_prices) > 50:
             state._recent_mid_prices.pop(0)
+        # FIX-20260613-090: persist warm prices so physics override is
+        # immediately available after restart (no ~105min cold-start).
+        if state.loop_iteration % 5 == 0:
+            _save_recent_prices(state, config.base_dir)
 
     # ── MTF Price Service: M15 bar reconstruction from M5 tick history ──
     if not hasattr(state, "_mtf_price_service") or state._mtf_price_service is None:
@@ -4639,6 +4667,23 @@ def execute_live_cycle(
                 from core.runtime.execution_state import restore_execution_state
 
                 restore_execution_state(state, strategies, data_dir=config.base_dir)
+            except Exception:  # noqa: BLE001
+                pass
+
+        # ── FIX-20260613-090: restore _recent_mid_prices from disk ──
+        # Eliminates the ~105min cold-start warmup for OU Theta + Hurst
+        # physics override.  Without this, _compute_tf_ou_hurst() returns
+        # (0.0, 0.5) until 21 cycles have accumulated M5 mid prices.
+        if state.loop_iteration == 1 and len(state._recent_mid_prices) < 21:
+            _rp_path = Path(config.base_dir) / "state" / "recent_prices.json"
+            try:
+                if _rp_path.exists():
+                    _rp_data = json.loads(_rp_path.read_text(encoding="utf-8"))
+                    _rp_list = _rp_data.get("prices", [])
+                    if isinstance(_rp_list, list) and len(_rp_list) >= 3:
+                        state._recent_mid_prices = [
+                            float(x) for x in _rp_list[-50:] if isinstance(x, int | float)
+                        ]
             except Exception:  # noqa: BLE001
                 pass
 
