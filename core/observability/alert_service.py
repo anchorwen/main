@@ -197,7 +197,9 @@ class AlertService:
                     "severity": rule.severity,
                     "fired_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
                     "context_snapshot": {
-                        k: v for k, v in context.items() if isinstance(v, str | int | float | bool)
+                        k: v
+                        for k, v in context.items()
+                        if isinstance(v, str | int | float | bool | list | dict)
                     },
                 }
                 for ch in channels:
