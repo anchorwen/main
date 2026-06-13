@@ -173,10 +173,29 @@ class ExitWatchdog:
 
         Structural risk: price action is deteriorating with momentum.
         Model-independent — pure price action check.
+
+        Domain isolation (IC Review):
+          - Trailing Stop Engine owns PROFITABLE positions (unrealized_pnl > 0
+            or SL already moved).  Watchdog must NOT interfere.
+          - ExitWatchdog price_decay owns LOSING positions where SL has
+            never been moved and price is approaching the initial SL.
+          - Mutual exclusion: if either condition is violated, return False.
         """
         if current_bars < self.price_decay_bars:
             return False
-        # Check SL proximity
+
+        # ── Mutual Exclusion Assertion 1: position must be losing ──
+        unrealized_r = float(getattr(position, "unrealized_pnl_r", 0) or 0)
+        if unrealized_r > 0:
+            return False  # Trail Stop Engine's domain — watchdog hands off
+
+        # ── Mutual Exclusion Assertion 2: SL must NOT have been moved ──
+        trail_advances = int(getattr(position, "trail_advances", 0) or 0)
+        breakeven_triggered = bool(getattr(position, "breakeven_triggered", False))
+        if trail_advances > 0 or breakeven_triggered:
+            return False  # Trail is active — watchdog hands off
+
+        # ── Watchdog domain: losing position, no trail, approaching SL ──
         sl = float(getattr(position, "current_sl", 0) or 0)
         entry = float(getattr(position, "entry_price", 0) or 0)
         side = str(getattr(position, "side", "") or "")
