@@ -120,6 +120,8 @@ class LiveCycleConfig:
     exit_min_step: float = 0.15
     market_type: str = "forex_24_5"  # FIX-082: "crypto_24_7" for BTC, "forex_24_5" for gold
     adapter_name: str = "mt5"  # FIX-20260613-059: transport adapter (mt5=file, mt5_zmq=ZMQ)
+    zmq_order_endpoint: str = ""  # FIX-20260613-059c: per-symbol ZMQ routing
+    zmq_ack_endpoint: str = ""
 
     # ── FIX-20260613-048: Staleness Contract ──
     # Maximum allowed age of the latest tick before the cycle is skipped.
@@ -5095,7 +5097,7 @@ def execute_live_cycle(
                     return _result
 
             dispatch_results = exec_queue.flush(
-                partial(dispatch_live_open_order, adapter_name=config.adapter_name, entry_context=_entry_features_snapshot),
+                partial(dispatch_live_open_order, adapter_name=config.adapter_name, zmq_order_endpoint=config.zmq_order_endpoint, zmq_ack_endpoint=config.zmq_ack_endpoint, entry_context=_entry_features_snapshot),
                 journal_path=str(journal_path),
                 mt5_terminal_path=config.mt5_terminal_path,
                 symbol=config.symbol,

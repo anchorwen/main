@@ -308,6 +308,8 @@ def main(argv: list[str] | None = None) -> int:
     _yaml_market_type: str = "forex_24_5"  # FIX-082: read from live.yaml
     _yaml_regime_map: dict[str, dict[str, str]] | None = None
     _yaml_adapter_name: str = "mt5"  # FIX-20260613-059: ZMQ vs file transport
+    _yaml_zmq_order: str = ""  # FIX-20260613-059c: ZMQ endpoint routing
+    _yaml_zmq_ack: str = ""
     _yaml_portfolio_max_net: float | None = None  # FIX-20260601-037
     _yaml_portfolio_max_gross: float | None = None
     # ── FIX-20260605-120: reentry thresholds ──
@@ -334,6 +336,11 @@ def main(argv: list[str] | None = None) -> int:
             _adapter_cfg = full_cfg.get("adapter", {})
             if isinstance(_adapter_cfg, dict):
                 _yaml_adapter_name = str(_adapter_cfg.get("name", "mt5"))
+            # ZMQ endpoint routing: each symbol has its own port pair
+            _zmq_cfg = full_cfg.get("zmq", {})
+            if isinstance(_zmq_cfg, dict):
+                _yaml_zmq_order = str(_zmq_cfg.get("order_endpoint", ""))
+                _yaml_zmq_ack = str(_zmq_cfg.get("ack_endpoint", ""))
             # ── Portfolio risk limits: per-symbol lot-based exposure (FIX-20260601-037) ──
             _yaml_portfolio_max_net = full_cfg.get("portfolio_max_net")
             _yaml_portfolio_max_gross = full_cfg.get("portfolio_max_gross")
@@ -492,6 +499,8 @@ def main(argv: list[str] | None = None) -> int:
         risk_budget_usd=_yaml_risk_budget if _yaml_risk_budget is not None else 10.0,
         equity_risk_pct=_yaml_equity_risk_pct if _yaml_equity_risk_pct is not None else 0.0,
         adapter_name=_yaml_adapter_name,
+        zmq_order_endpoint=_yaml_zmq_order,
+        zmq_ack_endpoint=_yaml_zmq_ack,
         market_type=_yaml_market_type,
         no_mt5=args.no_mt5,
         once=args.once,
