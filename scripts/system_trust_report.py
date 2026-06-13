@@ -248,7 +248,7 @@ def section_2_brain_portfolio(data: dict) -> dict:
     return portfolios
 
 
-def _print_section_2(portfolios: dict) -> list[str]:
+def _print_section_2(portfolios: dict, data: dict) -> list[str]:
     flags: list[str] = []
     print("── 2. BRAIN PORTFOLIO HEALTH ──")
     for sym in DATA_DIRS:
@@ -262,14 +262,27 @@ def _print_section_2(portfolios: dict) -> list[str]:
                   f"{b['pf']:>6.2f} {b['wr']:>6.3f} {b['pnl_r']:>8.1f} "
                   f"{b['trades']:>7d} {vw:>6s}")
 
+        # Count live journal participation per brain
+        journal = data.get(sym, {}).get("live_trade_journal", [])
+        if isinstance(journal, dict):
+            journal = []
+        live_journal_trades: dict[str, int] = {}
+        for entry in journal:
+            if isinstance(entry, dict):
+                for bid in (entry.get("brain_ids") or []):
+                    live_journal_trades[bid] = live_journal_trades.get(bid, 0) + 1
+
         # Flags
         for b in brains:
+            lj_trades = live_journal_trades.get(b["brain_id"], 0)
             if b["status"] == "live" and b["pf"] < 1.0 and b["trades"] > 0:
                 print(f"    ⚠ LIVE_BRAIN_NEGATIVE_EV: {b['brain_id']} PF={b['pf']:.2f} trades={b['trades']}")
                 flags.append(f"WARN|{sym}|live_negative_ev:{b['brain_id']}")
-            if b["status"] == "live" and b["trades"] == 0:
-                print(f"    ⚠ LIVE_BRAIN_NO_TRADES: {b['brain_id']} (0 trades)")
+            if b["status"] == "live" and b["trades"] == 0 and lj_trades == 0:
+                print(f"    ⚠ LIVE_BRAIN_NO_TRADES: {b['brain_id']} (0 training + 0 live trades)")
                 flags.append(f"WARN|{sym}|live_no_trades:{b['brain_id']}")
+            elif b["status"] == "live" and b["trades"] == 0 and lj_trades > 0:
+                print(f"    ℹ LIVE_BRAIN_TRADING: {b['brain_id']} (0 training trades, {lj_trades} live journal entries)")
             if b["pf"] > 1.0 and b["status"] in ("candidate", "probation"):
                 print(f"    ℹ PROFITABLE_NOT_PROMOTED: {b['brain_id']} PF={b['pf']:.2f} status={b['status']}")
     return flags
@@ -782,7 +795,7 @@ def main() -> int:
 
     # Section 2: Brain Portfolio
     portfolios = section_2_brain_portfolio(data)
-    all_flags.extend(_print_section_2(portfolios))
+    all_flags.extend(_print_section_2(portfolios, data))
 
     # Section 3: Frozen Participation
     s3 = section_3_frozen_participation(data, portfolios)
