@@ -1354,7 +1354,7 @@ def main(argv: list[str] | None = None) -> int:
         # ── Post-recovery audit: detect all MT5 positions and report unmanaged ones ──
         all_mt5_positions: Any = []
         with FaultTolerantContext(
-            level=FaultLevel.ERROR, component="MT5_IPC:positions_get:post_audit"
+            level=FaultLevel.DEGRADE, component="MT5_IPC:positions_get:post_audit"
         ):
             all_mt5_positions = mt5_worker.positions_get(symbol=args.symbol)
         if all_mt5_positions:
