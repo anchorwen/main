@@ -736,6 +736,43 @@ strategy_lines:
       max_consecutive_losses: 2
     direction_balance:
       long_bias_discount: 0.0
+  structural_swing_v1:
+    enabled: true
+    mode: probation
+    _comment: 'FIX-20260613-C: Zero-ML rule-based strategy. Backtest +252R, Sharpe 0.93.'
+    timeframe: M5
+    magic: 90501
+    strategy_family: rule_based
+    rule_engine: structural_swing_v1
+    min_valid_brains: 0
+    brain_types: []
+    _comment_brainless: 'Pure math — no ML models. Calibrated SL=3.0/TP=1.5 labels are the alpha.'
+    base_volume: 0.01
+    max_volume: 0.01
+    max_positions_per_direction: 1
+    cooldown_bars: 3
+    sl:
+      base_atr_mult: 3.0
+      hard_sl_ratio: 3.0
+      dynamic: false
+      min_sl_distance: 0.0
+      min_rr_ratio: 0.0
+    tp:
+      base_atr_mult: 1.5
+      partial_tp_enabled: false
+    exit:
+      trail_enabled: false
+      flip_exit_enabled: false
+      time_exit_cycles: 12
+      _comment_timeout: 'M5×12=1h. Calibration shows 35.6% timeout rate at -0.60R avg.'
+      hesitation_cycles: 0
+    budget:
+      daily_loss_limit_pct: -0.05
+      max_consecutive_losses: 10
+    direction_balance:
+      long_bias_discount: 0.0
+    _monitoring:
+      _comment_timeout_tracking: 'Track timeout PnL separately for ML training data collection'
 regime_gate:
   adx:
     trending_threshold: 30
