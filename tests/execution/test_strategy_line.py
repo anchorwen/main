@@ -35,7 +35,7 @@ def _make_strategy(config=None, brains=None, budget=None, proposals=None, infer_
             mid_price,
             micro_sequences=None,
             daily_feature_vector=None,
-            btc_augment=None,  # FIX-20260607-XXX
+            btc_augment=None,  # FIX-20260613-052: resolved placeholder
         ):
             if infer_fn:
                 return infer_fn(feature_vector, micro_feature_vector, mid_price)

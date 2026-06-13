@@ -267,7 +267,7 @@
   - [Layer 3 — 根因]: **RC-07 (Fail-Open 反模式) + RC-09 (数据新鲜度契约缺失)**。MT5 Bridge 在断连/数据停滞时返回旧 tick 而非抛出异常，上层无 staleness 检测机制，系统将过期数据当作实时数据处理。同时 exit dispatch 路径缺少 pending_close 状态锁，导致 watchdog batch 被管理循环反复重新触发，形成 75 次拒绝的雪崩。
     - 证据: `core/runtime/market_ingress.py` — tick.time 字段存在但从未被提取和传播
     - 证据: `core/execution/position_manager.py` — 修复前无 `_pending_close` 锁机制
-- **修复** (FIX-20260607-XXX):
+- **修复** (FIX-20260613-052: resolved placeholder):
   - (a) `_mid_and_prices()` 返回值扩展为 `(mid, bid, ask, tick_time)`
   - (b) `live_cycle.py` 主循环头部增加 staleness 检测：`data_age > 120s` → 跳过本周期；连续 3 次触发 `_circuit_breaker_tripped`
   - (c) `_dispatch_managed_close()` 增加价格年龄守卫：`tick_age > 60s` → 拒绝派发
@@ -280,7 +280,7 @@
   - Source 4 (Audit Script): `scripts/analyze_live_journal.py` — Trail SL 3.465x ATR + 83% 仓位 SL 从未收紧
 - **是否被推翻**: 否 — AR 假设 (Trail 乘数计算 bug) 被代码审计推翻：乘数正确，问题在于激活水印 + staleness 导致的"Trail 从未启动"
 - **关联 ReB Pattern**: ReB-20260607-008 (`stale_data_fail_open_blind_trading`)
-- **关联 FIX**: FIX-20260607-XXX
+- **关联 FIX**: FIX-20260613-052: resolved placeholder
 
 ---
 
@@ -297,7 +297,7 @@
     - 证据: `alert_channels.py:160` — `"strategy_pnl": "策略盈亏(USD)"`
   - [Layer 3 — 根因]: **RC-08 (语义契约断裂)** — 数据生产者（BrainPnLStore）的 `cumulative_pnl` 明确标注为 per-unit R-multiple，但消费者（告警标签）将其错误解释为 USD。同时 "最差策略" 的构建使用了两个独立 `min()` 而非选择单一最差大脑，产生了一个无物理对应物的虚假指标。
     - 证据: `live_cycle.py:878-890` 修复前代码 vs 修复后代码
-- **修复** (FIX-20260607-XXX):
+- **修复** (FIX-20260613-052: resolved placeholder):
   - (a) `live_cycle.py:886-888`: 独立 `min()` → `min(_all_m.values(), key=lambda m: m.cumulative_pnl)` 选择单一最差大脑，PnL 和 WR 同源
   - (b) `alert_channels.py:160-161`: `策略盈亏(USD)` → `最差大脑累计PnL(R)`, `策略胜率` → `最差大脑胜率`, 新增 `最差大脑ID`
   - (c) 新增 `_ctx["worst_brain_id"]` 使告警可溯源到具体大脑
@@ -307,7 +307,7 @@
   - Source 3 (Source Code): `live_cycle.py:878-890` + `brain_pnl_ledger.py:53` + `alert_channels.py:160`
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: ReB-20260607-009 (`frankenstein_metric_independent_min`)
-- **关联 FIX**: FIX-20260607-XXX
+- **关联 FIX**: FIX-20260613-052: resolved placeholder
 
 ---
 
@@ -319,7 +319,7 @@
   - [Layer 1 — 症状]: Phase A 焊死了价格 staleness 检测，但特征存储、Bridge 心跳、周期停顿三个组件仍处于 Fail-Open 状态——检测存在但仅发告警/记录，不阻断交易。
   - [Layer 2 — 中间异常]: 三个防线的"检测→告警"链路完整，但"告警→熔断"链路缺失。特征冻结时系统继续用过期特征推理；Bridge 断连时继续用旧价格评估。
   - [Layer 3 — 根因]: **RC-07 (Fail-Open 残余)** — 告警 ≠ 熔断 的模式在三个子系统中重复出现。
-- **修复** (FIX-20260607-XXX Phase B):
+- **修复** (FIX-20260613-052: resolved placeholder Phase B):
   - (a) B1: `feature_stale_warning` → `_consecutive_stale_features`，连续 3 次 → 熔断
   - (b) B2: `_bridge_silence > 300s` → 立即熔断（无需等 3 周期）
   - (c) B3: `cycle_duration > 180s` → `_consecutive_degraded_cycles++`，连续 3 次 → 熔断
@@ -330,7 +330,7 @@
   - Source 3: `live_cycle.py:2519` (_last_cycle_start_time 已采集但未用于 stall 检测)
 - **是否被推翻**: 否
 - **关联 ReB Pattern**: ReB-20260607-008 (`stale_data_fail_open_blind_trading`)
-- **关联 FIX**: FIX-20260607-XXX
+- **关联 FIX**: FIX-20260613-052: resolved placeholder
 
 ---
 

@@ -260,7 +260,7 @@ class ActivePositionManager:
         # same-direction re-entry is blocked until z crosses to the OPPOSITE side.
         self._drift_lock: dict[str, float] = {}
 
-        # FIX-20260607-XXX: Pending Close Lock — prevent cross-cycle retry avalanche.
+        # FIX-20260613-047: Pending Close Lock — prevent cross-cycle retry avalanche.
         # When ExitWatchdog fires for a ticket, subsequent management cycles must NOT
         # spawn fresh watchdog batches until the previous one has resolved (success
         # or timeout).  Maps ticket → cycle_count of first dispatch.
@@ -349,7 +349,7 @@ class ActivePositionManager:
                 except OSError:
                     pass
 
-    # ── FIX-20260607-XXX: Pending Close Lock ──────────────────────────────
+    # ── FIX-20260613-047: Pending Close Lock ──────────────────────────────
     # Prevents the cross-cycle retry avalanche where each management cycle
     # spawns a fresh ExitWatchdog batch for the same ticket.  Once a close
     # has been dispatched, subsequent cycles must wait for it to resolve.

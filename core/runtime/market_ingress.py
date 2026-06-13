@@ -84,7 +84,7 @@ def _mid_and_prices(
     data_age = time.time() - tick_time_unix against the staleness threshold
     before using the price for trading decisions.
 
-    FIX-20260607-XXX: Staleness Contract — tick.time is now propagated to
+    FIX-20260613-048: Staleness Contract — tick.time is now propagated to
     callers so live_cycle can detect data pipeline freezes (e.g. MT5
     disconnection causing repeated stale ticks).
     """

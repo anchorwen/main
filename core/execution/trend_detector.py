@@ -96,7 +96,7 @@ class KalmanTrendFilter:
         self._velocity_uncertainty: float = np.sqrt(self._P[1, 1])
         self._bar_count: int = 0
 
-    # ── Volatility Anchoring (FIX-20260607-XXX) ──────────────────────────
+    # ── Volatility Anchoring (FIX-20260613-052: resolved placeholder) ──────────────────────────
 
     def anchor_to_atr(self, atr_value: float, *, k_r: float = 0.5, k_q: float = 0.1) -> None:
         """Re-anchor measurement and process noise to the asset's actual ATR.

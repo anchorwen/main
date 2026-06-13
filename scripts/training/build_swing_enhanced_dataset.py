@@ -878,7 +878,7 @@ def main() -> None:
                 f"[label_contract] {_lc['contract_id']}: " f"sl_atr={_sl_mult}, tp_atr={_tp_mult}"
             )
 
-    # ── FIX-20260607-XXX: BTC SL/TP contract enforcement ──
+    # ── FIX-20260613-051: BTC SL/TP contract enforcement ──
     # The live system uses SL=2.0/TP=2.5 (configs/live_btc.yaml).  Training
     # labels MUST match the live execution contract, otherwise the model learns
     # to predict outcomes under a different risk:reward profile than what the

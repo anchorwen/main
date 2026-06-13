@@ -311,7 +311,7 @@ class RegimeGate:
         self._h4_bar_count: int = 0
         self._h4_accum: list[float] = []
 
-        # ── FIX-20260607-XXX: ATR anchoring for Kalman noise matrices ──
+        # ── FIX-20260613-049: ATR anchoring for Kalman noise matrices ──
         # Eliminates magnitude hallucination: R=2.0 is designed for XAU at
         # $4,300 but applied to BTC at $61,000 — a 14,000× mismatch.  After
         # the first ATR_PERIOD M5 bars, compute ATR and re-anchor Q and R
@@ -435,7 +435,7 @@ class RegimeGate:
         self._h4_accum.append(close)
         self._m5_bar_count += 1
 
-        # ── FIX-20260607-XXX: ATR anchoring trigger ──
+        # ── FIX-20260613-049: ATR anchoring trigger ──
         # Accumulate True Range values on every M5 bar.  On the ATR_PERIOD-th
         # bar (14), compute the initial ATR and anchor all four Kalman filters
         # to the asset's actual volatility.  One-shot — _kalman_anchored

@@ -1,0 +1,17 @@
+{
+  "envelope": {
+    "message_id": "test_journal_probe_001",
+    "target": "exec_bridge",
+    "payload": {
+      "action": 6,
+      "symbol": "BTCUSDc",
+      "position": 3889445178,
+      "sl": 63394.99,
+      "tp": 63133.27,
+      "magic": 90410,
+      "volume": 0.01,
+      "comment": "diagnostic_probe",
+      "execution_payload_schema": "live_mt5_execution_payload.v2"
+    }
+  }
+}

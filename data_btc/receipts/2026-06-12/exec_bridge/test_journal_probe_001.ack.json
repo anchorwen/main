@@ -1,0 +1,9 @@
+{
+  "message_id": "test_journal_probe_001",
+  "ack_status": "acknowledged",
+  "received_at": "2026-06-12T06:03:04",
+  "detail": {
+    "reason": "unsupported_action",
+    "action": "6"
+  }
+}

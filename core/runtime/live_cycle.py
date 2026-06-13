@@ -120,7 +120,7 @@ class LiveCycleConfig:
     exit_min_step: float = 0.15
     market_type: str = "forex_24_5"  # FIX-082: "crypto_24_7" for BTC, "forex_24_5" for gold
 
-    # ── FIX-20260607-XXX: Staleness Contract ──
+    # ── FIX-20260613-048: Staleness Contract ──
     # Maximum allowed age of the latest tick before the cycle is skipped.
     # 120s for BTC (crypto 24/7, tick expected every few seconds).
     # XAU would use 60s (forex 24/5, tick expected sub-second).
@@ -261,7 +261,7 @@ class LiveCycleState:
     _last_bridge_ack_time: float = 0.0  # Unix ts of last successful broker.fetch_prices()
     _last_cycle_start_time: float = 0.0  # wall clock at start of current cycle
     _last_tick_age: float = (
-        0.0  # FIX-20260607-XXX: age of latest tick (seconds) for staleness guard
+        0.0  # FIX-20260613-052: resolved placeholder: age of latest tick (seconds) for staleness guard
     )
     _cooldown_registry: Any = None  # CooldownRegistry (Cut 1: Absolute Refractory Period)
     _family_entry_tracker: Any = None  # FamilyEntryTracker (Cut 2: Cross-Strategy Spacing)
@@ -287,7 +287,7 @@ class LiveCycleState:
     )
     _circuit_breaker_trip_reason: str = ""  # DQAF-20260608-003: which path tripped the breaker
 
-    # FIX-20260607-XXX: Staleness Contract — consecutive cycles with stale data
+    # FIX-20260613-048: Staleness Contract — consecutive cycles with stale data
     # triggers circuit breaker (data pipeline freeze → fail-closed).
     _consecutive_stale_cycles: int = 0
     _consecutive_stale_features: int = 0  # Phase B: feature store staleness → circuit breaker
@@ -535,7 +535,7 @@ def _dispatch_managed_close(
 ) -> bool:
     """Issue a close order for a managed position and record exit for re-entry guard.
 
-    FIX-20260607-XXX: Price Age Guard — refuses to dispatch a close order
+    FIX-20260613-052: resolved placeholder: Price Age Guard — refuses to dispatch a close order
     when the latest price tick is older than close_price_max_age_seconds.
     Sending a close at a stale price guarantees rejection (deviation exceeded)
     and feeds the retry avalanche.  Better to let MT5's server-side SL/TP
@@ -931,7 +931,7 @@ def _execute_management_phase(
 
             if pnl_ledger is not None:
                 with log_and_continue(component="AlertHub:PnL_context"):
-                    # FIX-20260607-XXX: "Frankenstein" logic fix.
+                    # FIX-20260613-052: resolved placeholder: "Frankenstein" logic fix.
                     # Previously _worst_pnl and _worst_wr were independently
                     # min()'d across all brains — they could come from two
                     # DIFFERENT brains (e.g. pnl from V4, wr from LGB_V1),
@@ -1273,7 +1273,7 @@ def _execute_management_phase(
         )
         return False
 
-    # ── 6.7 Pending Close Lock (FIX-20260607-XXX) ──
+    # ── 6.7 Pending Close Lock (FIX-20260613-052: resolved placeholder) ──
     # Prevents cross-cycle retry avalanche: when ExitWatchdog is already
     # trying to close this position, subsequent management cycles must NOT
     # spawn fresh watchdog batches.  The lock auto-expires after
@@ -1480,7 +1480,7 @@ def _execute_management_phase(
                 # bleed_stop from firing before the position has had reasonable
                 # time to develop (FIX-20260522-027).
                 #
-                # ── FIX-20260607-XXX: H4 Trend Protection Umbrella ──
+                # ── FIX-20260613-050: H4 Trend Protection Umbrella ──
                 # When the H4/H1 macro trend still supports the position
                 # direction, M5-level noise exits (brain_flip, confidence_decay,
                 # bleed_stop) are PHYSICALLY BLOCKED.  The position gets room
@@ -1672,7 +1672,7 @@ def _execute_management_phase(
                 should_exit = False
                 exit_reason = ""
                 if _flip_enabled:
-                    # ── FIX-20260607-XXX: Trend Protection — block M5 brain_flip ──
+                    # ── FIX-20260613-050: Trend Protection — block M5 brain_flip ──
                     # When H4 trend supports the position, physically block
                     # brain_flip and confidence_decay exits.  The brain changing
                     # its mind on a 5-minute bar is NOT a valid exit signal when
@@ -2328,7 +2328,7 @@ def _evaluate_strategy_lines(
     reentry_bleed_penalty: float | None = None,
     # ── FIX-20260606-138: Fail-Closed on bootstrap degradation ──
     bootstrap_degraded: bool = False,
-    btc_augment: Any = None,  # FIX-20260607-XXX: pre-computed 37-dim BTC vector
+    btc_augment: Any = None,  # FIX-20260613-046: pre-computed 37-dim BTC vector
     # ── FIX-20260609-011: governance degradation gate ──
     governance_state: dict[str, Any] | None = None,
     degradation_constraints: Any | None = None,  # FIX-20260611-022
@@ -2381,7 +2381,7 @@ def _evaluate_strategy_lines(
         reentry_bleed_cooldown=reentry_bleed_cooldown,
         reentry_bleed_penalty=reentry_bleed_penalty,
         bootstrap_degraded=bootstrap_degraded,
-        btc_augment=btc_augment,  # FIX-20260607-XXX
+        btc_augment=btc_augment,  # FIX-20260613-052: resolved placeholder
         governance_state=governance_state,
         degradation_constraints=degradation_constraints,
     )
@@ -2667,7 +2667,7 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-    # ── Phase B: Cycle stall detection (FIX-20260607-XXX) ──
+    # ── Phase B: Cycle stall detection (FIX-20260613-052: resolved placeholder) ──
     # A single cycle taking longer than cycle_stall_threshold_seconds is a
     # strong signal of pipeline blockage (MT5 hang, feature computation stall,
     # IPC deadlock).  Increment the degraded counter so that 3 consecutive
@@ -3150,7 +3150,7 @@ def execute_live_cycle(
     mid_price: float | None = None
     _bid: float | None = None
     _ask: float | None = None
-    _tick_time: float = 0.0  # FIX-20260607-XXX: for staleness detection
+    _tick_time: float = 0.0  # FIX-20260613-048: for staleness detection
     if broker is not None:
         with FaultTolerantContext(
             level=FaultLevel.DEGRADE,
@@ -3161,7 +3161,7 @@ def execute_live_cycle(
         # _mid_and_prices has internal FTC(CRASH) — let it propagate
         mid_price, _bid, _ask, _tick_time = _mid_and_prices(mt5_worker, config.symbol)
 
-    # ── FIX-20260607-XXX: Staleness Contract (Iron Law #11 Data Analytics) ──
+    # ── FIX-20260613-048: Staleness Contract (Iron Law #11 Data Analytics) ──
     # Data pipeline freeze detection: if MT5 returns the same stale tick for
     # multiple cycles, the system is "blind" — all trading decisions based on
     # this data are invalid.  Fail-closed: skip the cycle, and trip the
@@ -4782,7 +4782,7 @@ def execute_live_cycle(
                 "Golden Master record_cycle_inputs failed: %s", _gm_exc
             )
 
-        # ── FIX-20260607-XXX: BTC 37-dim feature augmentation ──
+        # ── FIX-20260613-052: resolved placeholder: BTC 37-dim feature augmentation ──
         # Compute btc_augment for BTC brains using btc_macro_enhanced_37 schema.
         # Must be computed BEFORE strategy evaluation so SwingStrategy._run_inference()
         # can pass it to assemble_features_by_schema(), avoiding the legacy
@@ -4906,7 +4906,7 @@ def execute_live_cycle(
             reentry_bleed_penalty=config.reentry_bleed_penalty,
             # ── FIX-20260606-138: Fail-Closed on bootstrap degradation ──
             bootstrap_degraded=getattr(state, "_bootstrap_degraded", False),
-            btc_augment=_btc_aug,  # FIX-20260607-XXX
+            btc_augment=_btc_aug,  # FIX-20260613-052: resolved placeholder
             governance_state=_gov_state,
             degradation_constraints=_degrade_constraints,
         )
@@ -5570,7 +5570,7 @@ def execute_live_cycle(
                                     "Fix the augmenter before trusting brain inference.\n%s",
                                     _btc_tb.format_exc(),
                                 )
-                                # FIX-20260607-XXX: Do NOT silently fall back.
+                                # FIX-20260613-052: resolved placeholder: Do NOT silently fall back.
                                 # btc_aug remains None → assemble_swing_features()
                                 # will zero-fill slots [35-36] via legacy path.
                                 # This is intentionally visible — the operator

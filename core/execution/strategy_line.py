@@ -464,7 +464,7 @@ class StrategyLine:
         mid_price: float | None,
         micro_sequences: dict[str, Any] | None = None,
         daily_feature_vector: Any = None,
-        btc_augment: Any = None,  # FIX-20260607-XXX: pre-computed 37-dim BTC vector
+        btc_augment: Any = None,  # FIX-20260613-046: pre-computed 37-dim BTC vector
     ) -> list[Any]:
         """Run brain inference for this strategy's brains.
 
@@ -521,7 +521,7 @@ class StrategyLine:
         meta_filter_gate: Any = None,
         conformal_ou_gate: Any = None,
         micro_feature_dict: dict[str, float] | None = None,
-        btc_augment: Any = None,  # FIX-20260607-XXX: pre-computed 37-dim BTC vector
+        btc_augment: Any = None,  # FIX-20260613-046: pre-computed 37-dim BTC vector
     ) -> StrategyDecision:
         """Run the full strategy evaluation for one cycle.
 
@@ -630,7 +630,7 @@ class StrategyLine:
                 mid_price,
                 micro_sequences,
                 daily_feature_vector,
-                btc_augment,  # FIX-20260607-XXX
+                btc_augment,  # FIX-20260613-052: resolved placeholder
             )
         except Exception:  # noqa: BLE001
             return StrategyDecision(

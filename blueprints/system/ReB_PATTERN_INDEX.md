@@ -192,7 +192,7 @@
 ### ReB-20260607-008
 - **Pattern Signature**: `stale_data_fail_open_blind_trading`
 - **描述**: 数据源（MT5 Bridge）在断连或数据停滞时返回过期 tick 而非抛出异常，数据获取层（market_ingress）未提取并传播 tick 时间戳，决策层（live_cycle）无 staleness 检查，系统在数据管道冰封时继续用过期价格做特征计算、开仓、平仓决策。同时平仓派发路径缺少 pending 状态锁，watchdog batch 被管理循环反复重新触发形成百次级重试拒绝雪崩。本质是**两道 Fail-Open**：(1) 数据层——过期数据被当作实时数据处理，(2) 执行层——已派发的平仓指令可被后续周期无脑重建。
-- **关联 FIX IDs**: FIX-20260607-XXX (Staleness Contract + Pending Close Lock)
+- **关联 FIX IDs**: FIX-20260613-052: resolved placeholder (Staleness Contract + Pending Close Lock)
 - **关联 Docket IDs**: DQAF-20260607-006
 - **预防策略**:
   1. **Staleness Contract (数据新鲜度契约)**: 所有价格获取函数必须返回时间戳，调用方在每次决策前验证 `time.time() - tick_time < max_age`。连续超限 → circuit_breaker 熔断
@@ -210,7 +210,7 @@
 ### ReB-20260607-009
 - **Pattern Signature**: `frankenstein_metric_independent_min`
 - **描述**: 当需要报告"最差策略"的性能指标时，对多个子组件的 PnL 和 WinRate **独立取 min()**，导致最终报告的两个指标可能来自**不同的大脑/策略**。告警描述的"策略"在物理世界中不存在——是多个实体的碎片拼接（缝合怪）。本质是聚合语义错误：`min()` 应该作用于**整个实体**（选择最差的那个），而非作用于**各个字段**（拼接各字段的最差值）。
-- **关联 FIX IDs**: FIX-20260607-XXX
+- **关联 FIX IDs**: FIX-20260613-052: resolved placeholder
 - **关联 Docket IDs**: DQAF-20260607-007
 - **预防策略**:
   1. 对多实体聚合场景，始终使用 `min(items, key=lambda x: x.field)` 选择单一实体，而非对各字段独立 `min()`

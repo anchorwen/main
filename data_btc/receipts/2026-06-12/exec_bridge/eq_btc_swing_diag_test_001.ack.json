@@ -1,0 +1,9 @@
+{
+  "message_id": "eq_btc_swing_diag_test_001",
+  "ack_status": "acknowledged",
+  "received_at": "2026-06-12T07:38:56",
+  "detail": {
+    "reason": "unsupported_action",
+    "action": "1"
+  }
+}

@@ -1882,7 +1882,7 @@ FIX-YYYYMMDD-NNN
 - **Files Modified**: `configs/live_btc.yaml` — V7/V8 added as shadow (vote_weight=0.0)
 - **Data Export**: Extended raw CSV data via MT5 terminal — M15 now covers 2023-07-31~2026-06-07 (100K bars, 2.9yr). Key addition: 2024 ETF bull run ($25k→$74k).
 - **Key Finding**: V6 vs V7 AUC difference -0.009 (within random seed variance) → data saturation confirmed at 17 months. V8 AUC=0.654 (same as V6's 0.656) but uses only 5 trees vs 34 → more robust, less overfit.
-- **Critical Discovery**: btc_augment fix (FIX-20260607-XXX) not only fixed V6 — it also corrected V4/V5 feature input. V4/V5 produced their FIRST LONG signal (conf=0.596) after 506 consecutive SHORT-only cycles. Confirms the legacy XAU-centric feature path was suppressing LONG predictions.
+- **Critical Discovery**: btc_augment fix (FIX-20260613-052: resolved placeholder) not only fixed V6 — it also corrected V4/V5 feature input. V4/V5 produced their FIRST LONG signal (conf=0.596) after 506 consecutive SHORT-only cycles. Confirms the legacy XAU-centric feature path was suppressing LONG predictions.
 - **Verification**:
   ```
   [PASS] mypy — 0 errors
