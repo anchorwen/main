@@ -1,7 +1,7 @@
 # Training
 
 ## Purpose
-训练基础设施：数据集管理、CPCV交叉验证、Sharpe对齐自定义目标函数、模型哈希、SQLite训练注册库、标准化评估报告（含SHAP可解释性）、统一训练管线入口。
+训练基础设施：数据集管理、CPCV交叉验证、Sharpe对齐自定义目标函数、模型哈希、SQLite训练注册库、标准化评估报告（含SHAP可解释性）、统一训练管线入口、大脑配置生成器、盈利性校准引擎（含搜索护栏）、多Seed鲁棒性评分。
 
 ## Key Files
 | File | Role |
@@ -17,7 +17,9 @@
 | `core/training/model_card.py` | ModelCard / ModelCardGenerator 模型卡片 |
 | `core/training/experiment_tracker.py` | ExperimentTracker 实验追踪 |
 | `core/training/registries.py` | LOSS_REGISTRY, METRIC_REGISTRY, OPTIMIZER_REGISTRY, SCHEDULER_REGISTRY |
-| `core/training/profitability_calibrator.py` | 标签盈利性校准 |
+| `core/training/profitability_calibrator.py` | 标签盈利性校准 + P1搜索护栏(min_samples/max_reward_risk/min_sl_atr) |
+| `core/training/brain_config.py` | BrainConfigBuilder 统一大脑配置产出 (artifact_hash + trained_by_commit_hash) |
+| `core/training/utils.py` | 共享工具：utc_now_iso(), get_git_commit_hash() |
 
 ## Data Flow
 ```
@@ -57,18 +59,23 @@ Dataset CPCV CustomObj  Trainer    EvaluationReport
 ## Outbound Dependents
 | Module | What it imports | Why |
 |--------|-----------------|-----|
-| scripts/training/train.py | Dataset, CPCV, custom_objectives, evaluation_report, model_hashing, registry | Unified pipeline |
-| scripts/training/trainers/* | custom_objectives, trainer_protocol | Trainer implementation |
+| scripts/training/train.py | Dataset, CPCV, custom_objectives, evaluation_report, model_hashing, registry, brain_config | Unified pipeline + brain config generation |
+| scripts/training/trainers/* | custom_objectives, trainer_protocol, utils | Trainer implementation |
 | scripts/training/dataset_builder.py | dataset, profitability_calibrator | Dataset construction |
 | scripts/daily_ops.py | label_contract (via contracts/training) | Daily operations |
 | scripts/training/e2e_pipeline_validation.py | label_contract | E2E validation |
+| scripts/training/generate_brain_config.py | brain_config.BrainConfigBuilder | Brain config generation |
+| scripts/training/register_brain.py | brain_config.BrainConfigBuilder | Brain registration |
 
 ## Known Issues
 - 8 helper scripts retain local `_utc_now_iso()` copies (cosmetic, low priority — core trainers + train.py already migrated to `core/training/utils.py`)
 - SHAP 分析需要 `shap` 包；未安装时 `run_shap_analysis()` 返回 None，`require_shap_stability` 门禁自动跳过
+- V9 宏观特征(RSI/MACD/Hurst)无法预测 M5 barrier 标签方向 —— 50轮 Optuna best forward Sharpe=-1.02。需微观特征(OIM/velocity/spread)或切换问题域。ML 研发已归档，当前优先级：Socket 桥接 > 微观特征工程 > BTC 方向。
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260613-031 | 2026-06-13 | cursor-agent | — | **Calibration + Guardrails + Multi-Seed CV (P0+P1)**: (P0) tick_size/tick_value promoted to REQUIRED params in compute_profitability_surface() — no silent defaults. label_contract.py tick_size 0.01→0.001. train.py forwards tick_size/tick_value from contract. 4 call sites fixed. (P1a) Optuna guardrails: min_samples(50), max_reward_risk(8.0), min_sl_atr(0.8) — pre-filter grid before main loop. (P1b) Multi-seed CV: seed_sharpe_mean/std/cv stored in metrics; CV>0.30 warning for fragile models. | RC-06 |
+| FIX-20260613-030 | 2026-06-13 | cursor-agent | — | **M5 Calibration + Live Fire Test**: calibrate_labels.py on XAUUSDc M5 (50K bars). Best config SL=3.0/TP=1.5 → EV=+0.20R, TP rate=47.6%. Guardrail filtered SL=0.5. 5 barrier_12bar contracts updated with calibrated params. Full Optuna 50 trials + multi-seed 5: best forward Sharpe=-1.02 — V9 macro features cannot predict barrier labels on M5. Quality gates correctly blocked all models. LightGBM smoke test also negative (-1.78). Conclusion: feature engineering needed (microstructure). | RC-06, RC-09 |
 | FIX-20260612-030 | 2026-06-12 | cursor-agent | — | **Training Module Overhaul Phase 1-4**: (1) Schema Dictator FAIL-FAST in train_from_csv.py — feature assembly order fixed to canonical v9_institutional_40, V9_FEATURE_NAMES imported from SSOT. (2) Entry slippage asymmetry fixed in train_btc_swing_v9.py — short entries now use bid-side entry (o - slippage). (3) 12+ mypy errors fixed across 4 files. (4) brain_trend_m30.yaml migrated to standard training_contract.v2.1. (5) BrainConfigBuilder created in core/training/brain_config.py with mandatory trained_by_commit_hash field. (6) Dead pipelines physically deleted: institutional_train.py, train_v6_m15_baseline.py, train_v6_multitf_v2.py. (7) 16x _utc_now_iso() deduped → core/training/utils.py. (8) 15 BLE001 bare-except markers in train.py eliminated. | RC-06, RC-09, RC-03 |
 | FIX-20260610-007 | 2026-06-10 | cursor-agent | — | **BTC MetaFilter V2 完整MLOps管线**: (1) build_btc_metafilter_v2_dataset.py — ASOF PIT join, 54样本40维V9特征, 0数据穿越. (2) train_btc_metafilter_v2.py — 极端正则化(max_depth=2,num_leaves=5,min_data_in_leaf=10), 5-Fold CV AUC=0.82, 字典同构验证. (3) MLOps Iron Laws #1-3. V1因train-serve特征空间错位(模型D1_*宏观→线上M5_*V9)被紧急禁用. | RC-12, RC-06 |
 | FIX-20260607-146 | 2026-06-07 | cursor-agent | — | **V6/V7/V8 training pipeline + BTC SL/TP enforcement**: build_swing_enhanced_dataset.py enforces SL=2.0/TP=2.5 for BTC. V6 M15 baseline (AUC=0.630), V6 MultiTF (AUC=0.656, 3-TF joint). V7 seed=77 (AUC=0.646). V8 2.9yr data (AUC=0.654, covers 2024 ETF bull run). Data export extended to 100K M15 bars (2023-07~2026-06). | RC-06 |
@@ -135,9 +142,11 @@ Dataset CPCV CustomObj  Trainer    EvaluationReport
 | `make_xgb_sharpe_obj(pnl)` → `(grad, hess)` callable | xgb_trainer | Stable |
 | `lightgbm_sharpe_obj(y_true, y_pred, pnl)` → `(grad, hess)` | lgb_trainer | Stable |
 | `compute_financial_metrics(y_true, y_pred, pnl)` → `dict` | evaluation_report | Stable |
+| `compute_profitability_surface(highs,lows,closes,*,tick_value,tick_size,...)` → `ProfitabilitySurface` | calibrate_labels, train.py | Stable (P0: tick_value/tick_size required) |
 | `TrainingEvalReport.check_quality_gates(spec)` → `(passed, results)` | train.py | Stable |
 | `hash_model_file(path)` → `str` (SHA256) | registry, train.py | Stable |
 | `TrainingRegistry.add_run(record)` → `None` | train.py | Stable |
+| `build_brain_config(contract,model_path,hash,metrics,...)` → `dict` | train.py, register_brain | Stable |
 
 ## Verification
 ```bash

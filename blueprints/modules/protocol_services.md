@@ -16,6 +16,11 @@ Communication layer: message dispatch, adapter registry, intent building, decisi
 | `core/protocol/services/idempotency.py` | `IdempotencyStore` — file-backed idempotency keys |
 | `core/protocol/services/override_resolver.py` | `OverrideResolver` — active override resolution |
 | `core/protocol/event_bar_sync.py` | `BarSyncPoller` — event-driven M5 bar synchronization with MT5 |
+| `core/protocol/services/mt5_communication_adapter.py` | `MT5CommunicationAdapter` — file-based MT5 handoff (生产) |
+| `core/protocol/services/zmq_communication_adapter.py` | `ZMQCommunicationAdapter` — ZeroMQ PUSH adapter (<1ms, Phase 1) |
+| `core/protocol/services/zmq_receipt_listener.py` | `ZMQReceiptListener` + `resolve_ack()` — ZMQ PUB/SUB ACK (ZMQ fast path + file fallback) |
+| `scripts/mt5_bridge_worker.py` | MT5 bridge daemon — `--file` (file polling) or `--zmq` (PULL+PUB) mode |
+| `scripts/benchmark_zmq_latency.py` | ZMQ vs File IPC latency benchmark |
 
 ## Data Flow
 ```
@@ -23,7 +28,20 @@ DecisionIntent → DecisionCompiler → IntentMessageBuilder → CommunicationEn
                                                                   ↓
                                                       CommunicationDispatcher
                                                                   ↓
-                                                    AdapterRegistry → VenueAdapter
+                                              ┌───────────────────┴───────────────────┐
+                                              ↓                                       ↓
+                                    MT5CommunicationAdapter               ZMQCommunicationAdapter
+                                    (file IPC: .mt5.json outbox)          (ZMQ PUSH tcp://127.0.0.1:5556)
+                                              ↓                                       ↓
+                                    mt5_bridge_worker --file              mt5_bridge_worker --zmq
+                                    (poll 1s → read → MT5 API)            (PULL recv → MT5 API)
+                                              ↓                                       ↓
+                                    write .ack.json to receipts/          PUB push ACK to tcp://127.0.0.1:5557
+                                              ↓                                       ↓
+                                    ACK consumers poll files              ZMQReceiptListener (SUB)
+                                    (200ms interval)                      resolve_ack() → instant
+                                                                              ↓ (fallback)
+                                                                         file polling
 ```
 
 ## Inbound Dependencies
@@ -45,6 +63,7 @@ DecisionIntent → DecisionCompiler → IntentMessageBuilder → CommunicationEn
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260613-032 | 2026-06-13 | cursor-agent | — | **ZeroMQ Socket Bridge Phase 1 (12,500x latency reduction)**: (1) ZMQCommunicationAdapter — PUSH socket replaces file outbox write. (2) ZMQReceiptListener + resolve_ack() — PUB/SUB replaces file ACK polling with ZMQ fast path + file fallback. (3) mt5_bridge_worker.py --zmq mode — PULL recv + PUB ACK broadcast. (4) service_container.py — adapter_name="mt5_zmq" routing. (5) All 3 ACK consumers (live_order_sender, execution_queue, exit_watchdog) migrated to resolve_ack(). (6) benchmark_zmq_latency.py: P50=72us, P99=148us vs file IPC ~1,000,000us. Backward-compat: adapter_name="mt5" preserves file IPC. | RC-05, RC-09 |
 | FIX-20260605-122 | 2026-06-05 | cursor-agent | ae0d006 | **BarSyncPoller strict_mode**: New `strict_mode` parameter — when True (production), RuntimeError if MT5Worker unavailable instead of silent fallback to direct `mt5.initialize()`. Wired `strict_mode=True` in live_intent_loop.py. Defense-in-depth against accidental non-worker MT5 access. Note: BarSyncPoller already had correct Worker-first routing; strict_mode adds a hard guardrail for misconfiguration. | RC-09 |
 | FIX-20260531-003 | 2026-05-31 | cursor-agent | — | DistributedLock .tmp file cleanup: `FileLock.acquire()` left stale `.tmp` staging file after failed acquire (rename failed → OSError). Added `tmp.unlink(missing_ok=True)` in OSError handler. Prevents lock directory clutter and potential confusion in stale lock detection. | RC-06 (resource-leak) |
 | FIX-20260529-040 | 2026-05-29 | cursor-agent | — | CircuitBreaker.trip(reason) + _last_trip_reason field: enables instant OPEN on CRITICAL alert | RC-12 |
