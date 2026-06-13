@@ -445,10 +445,23 @@ class ExitWatchdog:
         return payload
 
     def _poll_ack(self, intent_id: str, timeout: float = 5.0) -> dict[str, Any] | None:
-        """Poll for bridge ACK file. Returns parsed ACK dict or None."""
+        """Resolve bridge ACK — ZMQ fast path first, file polling fallback."""
         if not intent_id:
             return None
 
+        try:
+            from core.protocol.services.zmq_receipt_listener import resolve_ack
+
+            return resolve_ack(
+                intent_id,
+                base_dir=str(self.data_dir),
+                timeout=timeout,
+                poll_interval=self.ack_poll_interval,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+        # Pure file fallback if ZMQ not available
         deadline = time.monotonic() + timeout
         today = datetime.now(UTC).strftime("%Y-%m-%d")
         ack_path = self.data_dir / "receipts" / today / "exec_bridge" / f"{intent_id}.ack.json"

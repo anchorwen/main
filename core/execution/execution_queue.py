@@ -299,39 +299,30 @@ class ExecutionQueue:
                     if isinstance(_close_result, dict):
                         _intent_id = _close_result.get("intent_id")
                         if _intent_id:
-                            import json as _json
+                            try:
+                                from core.protocol.services.zmq_receipt_listener import resolve_ack
 
-                            _today = _time.strftime("%Y-%m-%d")
-                            _receipt_dir = _Path(base_dir) / "receipts" / _today / "exec_bridge"
-                            _receipt_path = _receipt_dir / f"{_intent_id}.ack.json"
-                            if _receipt_dir.exists():
-                                _deadline = _time.monotonic() + 30.0
-                                _poll_iters = 0
-                                while _time.monotonic() < _deadline and _poll_iters < 120:
-                                    if _receipt_path.exists():
-                                        try:
-                                            _ack = _json.loads(
-                                                _receipt_path.read_text(encoding="utf-8")
-                                            )
-                                            if _ack.get("ack_status") == "accepted":
-                                                _close_confirmed = True
-                                                # 陷阱二: extract new_ticket from partial close ACK
-                                                _ack_detail = _ack.get("detail", {})
-                                                if _ack_detail.get("new_ticket"):
-                                                    _net_out_ticket_update = {
-                                                        "old_ticket": _ack_detail["old_ticket"],
-                                                        "new_ticket": _ack_detail["new_ticket"],
-                                                        "close_volume": _close_vol,
-                                                    }
-                                                break
-                                        except Exception as _ack_exc:  # noqa: BLE001
-                                            logger.warning(
-                                                "ACK poll read error for intent_id=%s: %s",
-                                                _intent_id,
-                                                _ack_exc,
-                                            )
-                                    _time.sleep(0.5)
-                                    _poll_iters += 1
+                                _ack = resolve_ack(
+                                    _intent_id,
+                                    base_dir=str(base_dir),
+                                    timeout=30.0,
+                                    poll_interval=0.5,
+                                )
+                                if _ack and _ack.get("ack_status") == "accepted":
+                                    _close_confirmed = True
+                                    _ack_detail = _ack.get("detail", {})
+                                    if _ack_detail.get("new_ticket"):
+                                        _net_out_ticket_update = {
+                                            "old_ticket": _ack_detail["old_ticket"],
+                                            "new_ticket": _ack_detail["new_ticket"],
+                                            "close_volume": _close_vol,
+                                        }
+                            except Exception as _ack_exc:  # noqa: BLE001
+                                logger.warning(
+                                    "ACK resolve error for intent_id=%s: %s",
+                                    _intent_id,
+                                    _ack_exc,
+                                )
                         else:
                             # When intent_id is empty, honour the dispatched flag from the
                             # close result.  Net-out closes routed through ExitWatchdog
