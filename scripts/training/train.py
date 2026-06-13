@@ -1250,6 +1250,7 @@ def run_pipeline(
     *,
     smoke: bool = False,
     price_data_path: str | Path | None = None,
+    allow_dirty: bool = False,
 ) -> PipelineResult:
     """Execute the full training pipeline from contract.
 
@@ -1260,12 +1261,62 @@ def run_pipeline(
             profitability calibration (.npz or .parquet). If provided
             and contract.label.profitability_calibrated is False,
             runs calibrate_label_contract() before training.
+        allow_dirty: If True, allow training with uncommitted source changes
+            (DEVELOPMENT ONLY — never in production).
 
     Returns:
         PipelineResult with status, metrics, model path, and errors.
     """
     t_start = time.perf_counter()
     result = PipelineResult(contract_id="", status="FAILED")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # CRYPTOGRAPHIC HASH-LOCK: refuse to train on dirty working tree
+    # ═══════════════════════════════════════════════════════════════════════════
+    if not allow_dirty:
+        import subprocess
+
+        try:
+            dirty = subprocess.run(
+                ["git", "status", "--porcelain"],
+                capture_output=True, text=True, timeout=10,
+                cwd=str(Path(__file__).resolve().parents[2]),
+            )
+            if dirty.returncode == 0:
+                dirty_files = [
+                    line[3:] for line in dirty.stdout.strip().split("\n")
+                    if line.strip() and not line.startswith("??")  # untracked files allowed
+                ]
+                # Only block for source code changes (.py, .yaml, .json)
+                source_dirty = [
+                    f for f in dirty_files
+                    if f.endswith((".py", ".yaml", ".yml", ".json"))
+                    and not Path(f).parts[0].startswith("data")  # exclude data/ data_btc/ etc.
+                ]
+                if source_dirty:
+                    print("[train] [HASH-LOCK] DIRTY WORKING TREE", flush=True)
+                    print("[train] The following source files have uncommitted changes:", flush=True)
+                    for f in sorted(source_dirty):
+                        print(f"  - {f}", flush=True)
+                    print(
+                        "[train] Training on a dirty tree breaks model lineage — "
+                        "trained_by_commit_hash would point to a commit that does not "
+                        "contain the code that produced this model.",
+                        flush=True,
+                    )
+                    print(
+                        "[train] Options:\n"
+                        "  1. Commit your changes: git add <files> && git commit\n"
+                        "  2. Stash temporarily:    git stash && train.py ... && git stash pop\n"
+                        "  3. Development override: --allow-dirty (NEVER in production)",
+                        flush=True,
+                    )
+                    raise SystemExit(
+                        f"Hash-lock: {len(source_dirty)} source file(s) uncommitted. "
+                        "Commit changes or use --allow-dirty."
+                    )
+        except (OSError, subprocess.TimeoutExpired):
+            pass  # git not available — skip check (e.g., Docker container)
 
     # ── Load contract ──
     try:
@@ -1955,6 +2006,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Smoke test: 0 Optuna trials, 1 seed",
     )
     p.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="DEVELOPMENT ONLY: allow training with uncommitted source changes",
+    )
+    p.add_argument(
         "--price-data",
         type=Path,
         default=None,
@@ -1986,6 +2042,7 @@ def main(argv: list[str] | None = None) -> int:
         contract_path=args.contract,
         smoke=args.smoke,
         price_data_path=args.price_data,
+        allow_dirty=args.allow_dirty,
     )
 
     # Print summary
