@@ -46,6 +46,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--health-path",
+        default=None,
+        help="Explicit path for mt5_bridge_health.json (SSOT; derived from --receipt-dir if unset)",
+    )
     # ── ZMQ mode ──
     parser.add_argument(
         "--zmq",
@@ -818,7 +823,11 @@ def run_worker(args: argparse.Namespace) -> int:
         except Exception as exc:  # noqa: BLE001
             print(f"[bridge] WARN: MT5 unavailable: {exc}", flush=True)
 
-    health_path = Path(args.receipt_dir).parent / "reports" / "mt5_bridge_health.json"
+    health_path = (
+        Path(args.health_path)
+        if args.health_path
+        else Path(args.receipt_dir).parent / "reports" / "mt5_bridge_health.json"
+    )
     health_path.parent.mkdir(parents=True, exist_ok=True)
     _last_health_write = 0.0
     _last_heartbeat_check = 0.0
@@ -864,8 +873,21 @@ def run_worker(args: argparse.Namespace) -> int:
                     "mt5_connected": mt5 is not None,
                     "outbox_pending": len(_list_pending(outbox_dir)),
                 }
-                with log_and_continue(component="Bridge:health_write"):
+                try:
                     health_path.write_text(json.dumps(_hb, ensure_ascii=False), encoding="utf-8")
+                except OSError as _he:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "bridge_health_write_failed",
+                                "error": str(_he)[:200],
+                                "health_path": str(health_path),
+                                "time": _utc_now(),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
                 _last_health_write = _now
 
             # ── MT5 heartbeat + exponential backoff reconnect ──
@@ -948,7 +970,8 @@ def _write_zmq_health(
     try:
         health_path.write_text(json.dumps(_hb, ensure_ascii=False), encoding="utf-8")
     except OSError:
-        pass
+        pass  # health file is best-effort; main loop continues
+
 
 
 def _zmq_send_ack(pub: Any, message_id: str, ack: dict[str, Any]) -> None:
@@ -1079,7 +1102,7 @@ def run_zmq_worker(
                 envelope = payload.get("envelope", {})
                 msg_id = envelope.get("message_id", "unknown")
             except json.JSONDecodeError:
-                print(f"[zmq_bridge] Invalid JSON received", flush=True)
+                print("[zmq_bridge] Invalid JSON received", flush=True)
                 continue
 
             # ── Guard: MT5 must be initialized ──
@@ -1237,7 +1260,11 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as exc:  # noqa: BLE001
                 print(f"[zmq_bridge] WARN: MT5 unavailable: {exc}", flush=True)
 
-        health_path = Path(args.receipt_dir).parent / "reports" / "mt5_bridge_health.json"
+        health_path = (
+            Path(args.health_path)
+            if args.health_path
+            else Path(args.receipt_dir).parent / "reports" / "mt5_bridge_health.json"
+        )
         health_path.parent.mkdir(parents=True, exist_ok=True)
 
         return run_zmq_worker(

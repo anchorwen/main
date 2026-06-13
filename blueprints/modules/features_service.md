@@ -74,6 +74,9 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 | FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: local_feature_store.py resolve_version(). Previously registered as FIX-20260518-045. | process-violation |
 | FIX-20260524-044 | 2026-05-24 | cursor-agent | — | T3-C1: MicrostructureComputer _compute_tick_features now accepts reference_time parameter — backtest passes historical bar timestamp, live defaults to datetime.now(UTC). Prevents look-ahead bias where datetime.now() returned system clock in historical replay. T3-H1: V9MicroComputer NaN sentinel replaced with 0.0 — prevents NaN propagation through feature vectors to model inference. T3-H2: V9FeatureAdapter validates normalization_strategy from model metadata — warns on train/inference mismatch to prevent silent distribution shift. | RC-03, RC-06 |
 | FIX-20260521-002 | 2026-05-21 | cursor-agent | — | FeatureBrainRegistry.list_active_entries() ignored 'enabled' field — only filtered by status. Added `e.get("enabled", True)` check. V3 necrotic brains bypassed enabled:false and voted in parliament. | RC-09 |
+| FIX-20260530-064 | 2026-05-30 | cursor-agent | — | Strangler Fig #4: _build_meta_feature_vector (121 lines) → core/features/meta_feature_builder.py. live_cycle.py 7100→6665 lines. | RC-08 |
+| FIX-20260606-133 | 2026-06-06 | cursor-agent | — | **BTC feature assembler gap documented (Phase 5b Step A/B)**: Found 5/37 (13.5%) feature slots incorrect in live. Root cause of 8.4x confidence std collapse. | RC-06 |
+| FIX-20260606-134 | 2026-06-06 | cursor-agent | — | **BTCFeatureAugmenter — Phase 5b Step B.2**: New `btc_feature_augmenter.py` with 3 production safeguards. Fixes [12] XAUUSDc_return, [30] AUDJPYc_return. XAU pipeline frozen. | RC-06 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

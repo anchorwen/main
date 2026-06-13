@@ -15,6 +15,7 @@ import signal
 import sys
 import time
 import traceback
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -1339,10 +1340,34 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 if _health_path.exists():
                     _hb = json.loads(_health_path.read_text(encoding="utf-8"))
-                    if _hb.get("mt5_connected"):  # transport=zmq preferred but not required (BTC #FIX-058 compat)
-                        _bridge_ready = True
-                        break
-            except (OSError, json.JSONDecodeError, KeyError):
+                    if _hb.get("mt5_connected"):
+                        # ── FIX-20260613-064: Freshness gate ──
+                        # Accept heartbeat only if ≤60s old.  A stale file
+                        # with mt5_connected=true (e.g. from a dead bridge PID)
+                        # must not satisfy the readiness barrier.
+                        _hb_ts = _hb.get("last_heartbeat_utc", "")
+                        if _hb_ts:
+                            _hb_dt = datetime.fromisoformat(_hb_ts.replace("Z", "+00:00"))
+                            _hb_age = (
+                                datetime.now(UTC).replace(tzinfo=None)
+                                - _hb_dt.replace(tzinfo=None)
+                            ).total_seconds()
+                            if _hb_age <= 60:
+                                _bridge_ready = True
+                                break
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "mt5_barrier_stale_heartbeat",
+                                        "time": _utc_iso(),
+                                        "heartbeat_age_s": round(_hb_age, 1),
+                                        "health_path": str(_health_path),
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+            except (OSError, json.JSONDecodeError, KeyError, ValueError):
                 pass
             _startup_time.sleep(0.5)  # 500ms poll — not time-based wait, event-polling
         if not _bridge_ready:

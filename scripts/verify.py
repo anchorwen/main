@@ -731,6 +731,7 @@ def main() -> int:
                 print("[PASS] FIX_REGISTRY gate")
 
     elif args.full:
+        passed, output = run_mypy()
         if not passed:
             print(f"[FAIL] mypy:\n{output}")
             all_passed = False

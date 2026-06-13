@@ -47,6 +47,7 @@ BrainQualityVerdict → GovernanceRuleEngine.evaluate() → lifecycle_action
 | FIX-20260514-005 | 2026-05-14 | cursor-agent | a4a1005 | Remove break-after-first-match, collect all matching rules per brain, apply most severe result, differentiate priorities (retire=110, freeze=100) | contract-violation |
 | FIX-20260524-040 | 2026-05-24 | cursor-agent | — | DEFERRED architecture debt: dual governance pipeline merge (BrainPromotionEvaluator vs GovernanceRuleEngine), leaderboard consumer gap, stability monitor unused, AB test framework not activated. No code changes — registered for future sprints. | RC-12 |
 | FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: governance_rule_engine.py (execute_transitions) + shadow_tracker.py (health_signal). Previously registered as FIX-20260517-017, FIX-20260517-015. | process-violation |
+| FIX-20260607-148 | 2026-06-07 | cursor-agent | — | **BLE001 Phase 2 tactical deferral**: 29 FAIL_OPEN sites audited — 90% are state-persistence/shutdown-cleanup (best-effort degradation, acceptable). High-risk trading-path silent-failures already covered by FIX-138 (Fail-Closed bootstrap) + FIX-140 (dispatch circuit-breaker). Established Incremental-Upgrade doctrine: replace `except: pass` with `fail_open_guard()` when next touching each hot-path file. `fail_open_guard` tool deployed (FIX-146). BLE001 count: 566→0. ruff: 0 warnings. mypy production: 0. | RC-07 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

@@ -101,6 +101,10 @@ environment_config.json → EnvironmentConfig → ServiceContainer
 | FIX-20260521-005 | 2026-05-21 | cursor-agent | — | 全量类型注解清扫：v9_live_computer.py _returns()返回类型np.ndarray→float；main_v9_shadow.py 15个mypy错误→0(operator/vars-annotated/type-var/index/assignment/dict-item/unused-ignore)；label_builder.py变量trade遮蔽重命名为unlinked_trade。 | RC-02 |
 | FIX-20260528-015 | 2026-05-28 | cursor-agent | — | path_defaults.py: DEFAULT_BRAIN_ENTRY updated from deleted deep_res_mlp_v1.json to Meta_Stage1_Binary_Cls_V1.json. Eliminates brain_entry_load_failed at startup. | RC-09 |
 | FIX-20260521-006 | 2026-05-21 | cursor-agent | — | 状态清理+artifact修正：(1) governance_state.json清除16个僵尸脑条目(24→8)+27个transition_log条目；(2) live.yaml移除已删除的lightgbm_h1_swing引用；(3) deep_res_mlp_v1.json artifact_path指向现存v2模型。 | RC-09 |
+| FIX-20260530-069 | 2026-05-30 | cursor-agent | — | SL/TP alignment: (1) m30_reversion strategy line (magic=90321, sl=2.5/tp=0.7) for Brain_Rev, (2) Swing TP 2.0→1.5 aligns with training, (3) hard SL/TP assertion in startup integrity (SL tightening >10% = hard fail), (4) MAGIC_TO_STRATEGY +barrier_12bar_meta+m30_reversion. | RC-06 |
+| FIX-20260602-051 | 2026-06-02 | cursor-agent | — | Defense 3 default brains_dir bypass: `configs/brains/` doesn't contain "xau" → false positive block on brain registration. | RC-09 |
+| FIX-20260612-012 | 2026-06-12 | cursor-agent | — | **label_contract for 5 brains**: BTC_Swing_V5 + 4 XAU brains (OU_Params_V6/V7, Swing_V9_M30/M15) were missing label_contract blocks causing config consistency warnings. Added aligned SL/TP contracts referencing respective live.yaml configs. | RC-09 |
+| FIX-20260612-016 | 2026-06-12 | cursor-agent | — | **AlphaRecord missing strategy_class/assets fields**: @dataclass(frozen=True) lacked fields that daily_ops _step_alpha_feed() passed. TypeError swallowed by fail_open_guard on both BTC+XAU. Added Optional fields. | RC-06 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

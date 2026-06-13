@@ -248,6 +248,8 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         str(PROJECT_ROOT / cfg["base_dir"] / "live_trade_journal.jsonl"),
         "--protection-flag-path",
         str(PROJECT_ROOT / cfg["base_dir"] / "live_dispatch_block.flag"),
+        "--health-path",
+        str(PROJECT_ROOT / cfg["base_dir"] / "reports" / "mt5_bridge_health.json"),
         "--mt5-terminal-path",
         cfg["mt5_terminal_path"],
         "--deviation",

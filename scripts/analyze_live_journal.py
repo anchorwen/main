@@ -411,13 +411,14 @@ def print_report(journal: dict, snapshots: dict) -> None:
     detail = direction.get("brain_detail", [])
     for d in detail[-15:]:
         time_str = d.get("time", "?")[:19] if d.get("time") else "?"
+        trade_side = d.get('trade_side') or '?'
         print(
-            f"    {time_str}  trade={d['trade_side']:<6s}  "
+            f"    {time_str}  trade={trade_side:<6s}  "
             f"n_brains={d['n_brains']}  "
             f"ids={d['brain_ids']}  "
             f"dirs={d['directions']}"
         )
-        if d["n_brains"] <= 3:
+        if d["n_brains"] is not None and d["n_brains"] <= 3:
             print(f"      up_probs={d['up_probs']}  down_probs={d['down_probs']}")
 
     # ── Section 5: Entry Stats ──

@@ -105,6 +105,18 @@ class FileLock(BaseLock):
 
     def acquire(self, *, blocking: bool = False, timeout_seconds: float = 0.0) -> LockAcquireResult:
         t0 = time.time()
+
+        # ── Guard: same instance cannot re-acquire ──
+        if self._acquired:
+            return LockAcquireResult(
+                acquired=False,
+                lock_name=self._name,
+                holder_id=self._holder_id,
+                expires_at="",
+                wait_ms=(time.time() - t0) * 1000,
+                error="Lock already held by this instance",
+            )
+
         self._holder_id = uuid.uuid4().hex[:12]
 
         if self._lock_path.exists() and self._is_stale():
@@ -113,24 +125,27 @@ class FileLock(BaseLock):
 
         deadline = t0 + timeout_seconds if blocking and timeout_seconds > 0 else t0
 
+        _lock_data = json.dumps(
+            {
+                "name": self._name,
+                "holder_id": self._holder_id,
+                "pid": os.getpid(),
+                "acquired_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                "ttl_seconds": self._ttl,
+            }
+        )
+
         while True:
             try:
-                # Write lock file atomically via temp + rename
-                tmp = self._lock_path.with_suffix(".tmp")
-                tmp.write_text(
-                    json.dumps(
-                        {
-                            "name": self._name,
-                            "holder_id": self._holder_id,
-                            "pid": os.getpid(),
-                            "acquired_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
-                            "ttl_seconds": self._ttl,
-                        }
-                    )
-                )
-                # Atomic replace — overwrites stale lock even if force_release failed
-                # (Windows: Path.rename raises FileExistsError if target exists)
-                os.replace(str(tmp), str(self._lock_path))
+                # Atomic exclusive create — os.O_CREAT|O_EXCL fails with
+                # FileExistsError if the lock file already exists.
+                # This is the cross-platform equivalent of O_CREAT|O_EXCL
+                # and does NOT suffer from os.replace()'s overwrite semantics.
+                fd = os.open(str(self._lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                try:
+                    os.write(fd, _lock_data.encode("utf-8"))
+                finally:
+                    os.close(fd)
                 self._acquired = True
                 return LockAcquireResult(
                     acquired=True,
@@ -139,32 +154,31 @@ class FileLock(BaseLock):
                     expires_at=datetime.now(UTC).replace(tzinfo=None).isoformat(),
                     wait_ms=(time.time() - t0) * 1000,
                 )
+            except FileExistsError:
+                # Lock file already exists — held by another process
+                pass
             except OSError:
-                # FileExists on Windows, OSError on Unix when target exists
-                # Clean up stale .tmp file left by this failed acquire attempt
-                try:  # noqa: SIM105
-                    tmp.unlink(missing_ok=True)
-                except Exception:  # noqa: BLE001
-                    pass
-                if not blocking:
-                    return LockAcquireResult(
-                        acquired=False,
-                        lock_name=self._name,
-                        holder_id="",
-                        expires_at="",
-                        wait_ms=(time.time() - t0) * 1000,
-                        error="Lock held by another process",
-                    )
-                if time.time() >= deadline:
-                    return LockAcquireResult(
-                        acquired=False,
-                        lock_name=self._name,
-                        holder_id="",
-                        expires_at="",
-                        wait_ms=(time.time() - t0) * 1000,
-                        error="Timeout waiting for lock",
-                    )
-                time.sleep(0.05)
+                # Permission error, disk full, etc.
+                pass
+            if not blocking:
+                return LockAcquireResult(
+                    acquired=False,
+                    lock_name=self._name,
+                    holder_id="",
+                    expires_at="",
+                    wait_ms=(time.time() - t0) * 1000,
+                    error="Lock held by another process",
+                )
+            if time.time() >= deadline:
+                return LockAcquireResult(
+                    acquired=False,
+                    lock_name=self._name,
+                    holder_id="",
+                    expires_at="",
+                    wait_ms=(time.time() - t0) * 1000,
+                    error="Timeout waiting for lock",
+                )
+            time.sleep(0.05)
 
     def release(self) -> bool:
         if not self._acquired:

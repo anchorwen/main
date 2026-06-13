@@ -65,6 +65,11 @@ Web-based real-time monitoring dashboard for the live trading system. Single-fil
 | FIX-20260518-028 | 2026-05-18 | cursor-agent | — | Phase 3: Unified health aggregator — _build_unified_health() reads 7 data sources, /api/health/full endpoint with 10s cache, overall_status: healthy|degraded|critical, frontend single-request rendering with fallback to individual endpoints. | missing-feature, observability-gap |
 | FIX-20260517-023 | 2026-05-17 | cursor-agent | — | Panel redesign: 全局汉化 + 布局重整 5行→4行+tab + 新增 /api/brain/{id} 端点 (SVG sparkline PnL 走势/方向分布/治理/训练指标) + P0 shadow/live 同文件修复 + 异常日志改进 + 新建 monitor_dashboard 蓝图。 | missing-feature, config-drift |
 | FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: schema v2 + logging + unified health cache. Previously registered as FIX-20260517-023, FIX-20260518-028. | process-violation |
+| FIX-20260602-059 | 2026-06-02 | cursor-agent | — | **Trade notifications to DingTalk**: `LiveAlertHub.notify_trade()` sends real-time open/close push. Hooked into dispatch path in live_cycle.py. Config thresholds also reloaded. | RC-12 |
+| FIX-20260603-067 | 2026-06-03 | cursor-agent | — | **Gate telemetry funnel**: per-cycle gate reason counters flushed every 12 cycles to `reports/telemetry_gates.jsonl`. Enables strategy funnel analysis. | RC-12 |
+| FIX-20260612-009 | 2026-06-12 | cursor-agent | — | **Partial-view warning**: system_health.py now prints explicit warning + summary footer when only one symbol is checked. Prevents "XAU is offline" false positive from incomplete health queries. | RC-07 |
+| FIX-20260612-011 | 2026-06-12 | cursor-agent | — | **Bridge heartbeat key mismatch**: data_health_service checked `bridge_last_ack_utc`/`connected` but bridge writes `last_heartbeat_utc`/`mt5_connected`. Fixed key names to match actual bridge health report format. Eliminates BRIDGE_TIMESTAMP_UNREADABLE false positive. | RC-06 |
+| FIX-20260612-015 | 2026-06-12 | cursor-agent | — | **Brain registry ↔ governance alignment cross-check**: new FULL-mode check detects triple-bookkeeping bugs (registry status≠governance, vote_weight=0, live.yaml disabled). Would have caught DQAF-20260612-002 before trading was blocked. 3 cross-checks now: journal-ledger, open-close, brain-gov alignment. | RC-09 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

@@ -50,6 +50,8 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260613-066 | 2026-06-13 | cursor-agent | c992678 | Audit Script None Defense: analyze_live_journal.py guards trade_side and n_brains against None before format strings. Prevents TypeError crash in Section 4 and ensures Section 5-6 output. | missing-null-check |
+| FIX-20260613-065 | 2026-06-13 | cursor-agent | c992678 | Blueprint Reconciliation Script: reconcile_fix_registry.py batch backfills 63 orphan + 28 missing FIX entries across 13 module blueprints. One-shot backlog clearance for Iron Law #7 compliance. | contract-violation |
 | FIX-20260613-039 | 2026-06-13 | cursor-agent | — | **MODULE_SOURCE_MAP: exit_reason.py → execution_reentry**. New canonical SSOT file for exit reason taxonomy. | RC-09 |
 | FIX-20260613-038 | 2026-06-13 | cursor-agent | — | **MODULE_SOURCE_MAP: rule_engine_strategy + meta_filter_routing + managed_close + trend_isolation_gates + net_out_close_handler**: 5 previously unmapped execution/ files registered (orphan trap #3). Also backtest_structural_swing→training. | RC-09 |
 | FIX-20260611-022 | 2026-06-11 | cursor-agent | 19e002b | Register data_infrastructure in EXPECTED_MODULES list (validate_blueprints.py). | contract-violation |
@@ -102,6 +104,10 @@ startup → LifecycleManager.initialize()
 | FIX-20260519-002 | 2026-05-19 | cursor-agent | — | Commit catch-up: verify.py blueprint compliance check in --quick mode. New feature. | process-violation |
 | FIX-20260519-003 | 2026-05-19 | cursor-agent | — | MODULE_SOURCE_MAP: added correlation_sizer.py to execution_orders, kelly_sizer.py to execution_guards, startup_validator.py to brains_validation. | config-drift |
 | FIX-20260519-004 | 2026-05-19 | cursor-agent | — | Defense-in-depth deadlock prevention: check_blueprint_compliance.py --check defaults to staged-only (--all for deep audit), classify_diff supports cached_only, validate_blueprints.py unified changed_all tracking removes dead code + second-pass git calls, verify.py --full uses --all. Breaks the unstaged-files-from-prior-sessions false-violation loop at all three check paths. | RC-06 |
+| FIX-20260530-078 | 2026-05-30 | cursor-agent | — | 36 unit tests for fault_handler (20) + meta_signal_filter (16). Both modules previously had zero test coverage — crash-loop, KBInterrupt guard, filter logic now tested. | RC-07 |
+| FIX-20260602-056 | 2026-06-02 | cursor-agent | — | **test_contract_group_pipeline updated for FIX-052**: `test_pipeline_only_one_group_active_reduced_confidence` expected old self-normalized conf=0.65. Updated to FIX-052 raw-conf behavior (0.85×0.65≈0.55). | RC-06 |
+| FIX-20260606-132 | 2026-06-06 | cursor-agent | — | **BTC leaderboard PnL-based fallback**: `_step_retraining_check()` now falls back to PnL-based `BrainLeaderboard.rank()` when decision-based leaderboard returns 0 decisions. | RC-12 |
+| FIX-20260612-007 | 2026-06-12 | cursor-agent | — | AlphaRegistry.load() resilience: replaced direct dict access for `name`/`version` with .get() defaults. Also guarded daily_ops step list comprehensions against None entries from fail_open_guard-wrapped steps. Fixes daily_ops crash in retraining step. | RC-07 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

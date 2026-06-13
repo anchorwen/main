@@ -556,6 +556,47 @@ FIX-YYYYMMDD-NNN
 | FIX-20260612-015 | 2026-06-12 | data-health | **Brain registry ↔ governance alignment cross-check**: new FULL-mode check detects triple-bookkeeping bugs (registry status≠governance, vote_weight=0, live.yaml disabled). Would have caught DQAF-20260612-002 before trading was blocked. 3 cross-checks now: journal-ledger, open-close, brain-gov alignment. | RC-09 |
 | FIX-20260612-016 | 2026-06-12 | alpha-registry | **AlphaRecord missing strategy_class/assets fields**: @dataclass(frozen=True) lacked fields that daily_ops _step_alpha_feed() passed. TypeError swallowed by fail_open_guard on both BTC+XAU. Added Optional fields. | RC-06 |
 | FIX-20260612-017 | 2026-06-12 | omega-protocol | **Ω Protocol structural enforcement**: upgraded omega_gate.py with FIX/DQAF ID requirement for all .py/.yaml/.json changes (commit-msg stage — cannot be bypassed by --no-verify). Added Iron Law #0-bis --no-verify prohibition clause to CLAUDE.md. Added check_omega_compliance.py for CI/CD. 3-layer defense against protocol drift. | RC-07 |
+| FIX-20260529-031b | 2026-05-29 | deployment-lifecycle | cursor-agent | RC-06 |
+| FIX-20260529-036 | 2026-05-29 | deployment-config | cursor-agent | RC-06 |
+| FIX-20260529-037 | 2026-05-29 | deployment-config | cursor-agent | RC-06 |
+| FIX-20260529-038 | 2026-05-29 | execution-orders | cursor-agent | RC-06 |
+| FIX-20260529-038 | 2026-05-29 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260531-004 | 2026-05-31 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260531-013 | 2026-05-31 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260531-014 | 2026-05-31 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260531-024 | 2026-05-31 | training | cursor-agent | RC-06 |
+| FIX-20260531-025 | 2026-05-31 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260531-026 | 2026-05-31 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260531-027 | 2026-05-31 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260531-028 | 2026-05-31 | training | cursor-agent | RC-06 |
+| FIX-20260531-029 | 2026-06-01 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260606-138 | 2026-06-06 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260606-138-Phase0 | 2026-06-06 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260606-138-Phase2 | 2026-06-06 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260606-138-Phase3 | 2026-06-06 | execution-orders | cursor-agent | RC-06 |
+| FIX-20260606-138-Phase3 | 2026-06-06 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260608-007 | 2026-06-08 | deployment-lifecycle | agent | RC-06 |
+| FIX-20260608-007 | 2026-06-08 | execution-guards | agent | RC-06 |
+| FIX-20260608-007 | 2026-06-08 | execution-orders | agent | RC-06 |
+| FIX-20260608-007 | 2026-06-08 | runtime-live | agent | RC-06 |
+| FIX-20260610-009 | 2026-06-10 | execution-orders | cursor-agent | RC-06 |
+| FIX-20260610-009 | 2026-06-10 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260610-010 | 2026-06-10 | execution-orders | cursor-agent | RC-06 |
+| FIX-20260610-010 | 2026-06-10 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260612-030 | 2026-06-12 | training | cursor-agent | RC-06 |
+| FIX-20260613-030 | 2026-06-13 | training | cursor-agent | RC-06 |
+| FIX-20260613-031 | 2026-06-13 | training | cursor-agent | RC-06 |
+| FIX-20260613-032 | 2026-06-13 | protocol-services | cursor-agent | RC-06 |
+| FIX-20260613-033 | 2026-06-13 | training | cursor-agent | RC-06 |
+| FIX-20260613-034 | 2026-06-13 | protocol-services | cursor-agent | RC-06 |
+| FIX-20260613-039 | 2026-06-13 | deployment-lifecycle | cursor-agent | RC-06 |
+| FIX-20260613-039 | 2026-06-13 | execution-orders | cursor-agent | RC-06 |
+| FIX-20260613-039 | 2026-06-13 | execution-reentry | cursor-agent | RC-06 |
+| FIX-20260613-040 | 2026-06-13 | execution-orders | cursor-agent | RC-06 |
+| FIX-20260613-064 | 2026-06-13 | runtime-live | Bridge Health SSOT: explicit --health-path argument + timestamp freshness gate in MT5 readiness barrier. Replaced log_and_continue with explicit OSError handling for health writes. Launcher now passes --health-path explicitly. | RC-09 |
+| FIX-20260613-065 | 2026-06-13 | deployment-lifecycle | Blueprint Reconciliation Script: reconcile_fix_registry.py batch backfills 63 orphan + 28 missing FIX entries across 13 module blueprints. One-shot backlog clearance for Iron Law #7 compliance. | RC-06 |
+| FIX-20260613-066 | 2026-06-13 | deployment-lifecycle | Audit Script None Defense: analyze_live_journal.py guards trade_side and n_brains against None before format strings. Prevents TypeError crash in Section 4 and ensures Section 5-6 output. | RC-01 |
+| FIX-20260613-067 | 2026-06-13 | data-infrastructure | FileLock Atomic Exclusive Create: replaced os.replace() (always overwrites) with os.O_CREAT|O_EXCL for true cross-process mutual exclusion. Added same-instance re-acquire guard. 23/23 tests pass. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2386,3 +2427,51 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-09 (config-drift) — ZMQ bridge upgrade was deployed but dispatch path was never updated to use ZMQ. Config said mt5_zmq but code ignored it.
 - **Prevention**: When upgrading transport layer, ALL dispatch sites must be audited. Hardcoded adapter names are an anti-pattern — always read from config.
 - **Dependents Checked**: XAU dispatch (same live_cycle.py code), all 6 dispatch call sites traced.
+
+### FIX-20260613-064
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: c992678
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: scripts/mt5_bridge_worker.py,scripts/live_intent_loop.py,scripts/live_launcher.py
+- **Description**: Bridge Health SSOT: explicit --health-path argument + timestamp freshness gate in MT5 readiness barrier. Replaced log_and_continue with explicit OSError handling for health writes. Launcher now passes --health-path explicitly.
+- **Root Cause**: RC-09 — config-drift
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260613-065
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: c992678
+- **Type**: feat
+- **Module**: deployment-lifecycle
+- **Files**: scripts/reconcile_fix_registry.py
+- **Description**: Blueprint Reconciliation Script: reconcile_fix_registry.py batch backfills 63 orphan + 28 missing FIX entries across 13 module blueprints. One-shot backlog clearance for Iron Law #7 compliance.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260613-066
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: c992678
+- **Type**: fix
+- **Module**: deployment-lifecycle
+- **Files**: scripts/analyze_live_journal.py
+- **Description**: Audit Script None Defense: analyze_live_journal.py guards trade_side and n_brains against None before format strings. Prevents TypeError crash in Section 4 and ensures Section 5-6 output.
+- **Root Cause**: RC-01 — missing-null-check
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260613-067
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: c992678
+- **Type**: fix
+- **Module**: data-infrastructure
+- **Files**: core/infrastructure/distributed_lock.py
+- **Description**: FileLock Atomic Exclusive Create: replaced os.replace() (always overwrites) with os.O_CREAT|O_EXCL for true cross-process mutual exclusion. Added same-instance re-acquire guard. 23/23 tests pass.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
