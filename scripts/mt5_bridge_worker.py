@@ -997,6 +997,27 @@ def run_zmq_worker(
                 print(f"[zmq_bridge] Invalid JSON received", flush=True)
                 continue
 
+            # ── Guard: MT5 must be initialized ──
+            if mt5 is None:
+                _zmq_send_ack(
+                    pub, msg_id,
+                    {
+                        "ack_status": "rejected",
+                        "detail": {"reason": "MT5 not initialized — pass --mt5-terminal-path"},
+                        "received_at": _utc_now(),
+                    },
+                )
+                print(
+                    json.dumps(
+                        {"zmq_error": {"message_id": msg_id, "error": "MT5 not initialized"}},
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+                if once:
+                    return 1
+                continue
+
             # ── Execute via existing MT5 logic ──
             try:
                 # _send_to_mt5 returns (ack_status, detail_dict)
