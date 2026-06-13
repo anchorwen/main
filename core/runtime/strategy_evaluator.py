@@ -14,6 +14,7 @@ from typing import Any
 
 import numpy as np
 
+from core.execution.cross_strategy_coordinator import CrossStrategyCoordinator
 from core.execution.execution_queue import ExecutionQueue
 from core.execution.portfolio_risk import PortfolioRiskController, RiskVerdict
 from core.execution.pre_trade_guards import check_feature_vector, repair_feature_vector
@@ -77,6 +78,8 @@ def evaluate_strategy_lines(
     governance_state: dict[str, Any] | None = None,
     # ── FIX-20260611-022: data-health degradation constraints ──
     degradation_constraints: Any | None = None,
+    # ── P4-2: Cross-strategy coordinator (2026-06-13) ──
+    cross_strategy_coordinator: CrossStrategyCoordinator | None = None,
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue.
 
@@ -578,6 +581,39 @@ def evaluate_strategy_lines(
                 flush=True,
             )
             continue
+
+        # ── P4-2: Cross-strategy coordinator ──────────────────────────
+        # Block if another strategy already holds an opposing position.
+        # Opposing positions cancel each other's edge while paying
+        # spread+slippage twice — a guaranteed net loss.
+        if cross_strategy_coordinator is not None:
+            _conflict = cross_strategy_coordinator.check(
+                pending_strategy=sname,
+                pending_direction=decision.direction,
+                current_positions=current_positions,
+            )
+            if _conflict.blocked:
+                strategy_results[-1]["should_trade"] = False
+                strategy_results[-1]["reason"] = _conflict.reason
+                strategy_results[-1]["conflict"] = [
+                    {"strategy": o.strategy_name, "direction": o.direction, "ticket": o.ticket}
+                    for o in _conflict.opposing_positions
+                ]
+                print(
+                    json.dumps(
+                        {
+                            "event": "cross_strategy_blocked",
+                            "time": _utc_iso(),
+                            "strategy": sname,
+                            "direction": decision.direction,
+                            "opposing": [o.strategy_name for o in _conflict.opposing_positions],
+                            "reason": _conflict.reason,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+                continue
 
         # Queue for execution
         execution_queue.enqueue(sname, decision, risk_result)

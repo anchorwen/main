@@ -112,6 +112,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/execution/managed_close.py",
         "core/execution/trend_isolation_gates.py",
         "core/execution/net_out_close_handler.py",
+        "core/execution/cross_strategy_coordinator.py",
         "core/execution/paper_gateway.py",
         "scripts/mt5_bridge_worker.py",
         "scripts/mt5_spread_probe.py",
