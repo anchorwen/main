@@ -2717,7 +2717,25 @@ def execute_live_cycle(
     # breaker on the same cycle → death spiral.  Now ALL counters are cleared.
     #
     # Reset condition: cooldown elapsed AND all 3 trigger conditions clear.
-    if state._circuit_breaker_tripped:
+    # FIX-20260613-090: budget_breached trips are immune to auto-reset.
+    # They persist until cross-day when StrategyBudget._reset_daily() clears
+    # the per-strategy pause.  The circuit breaker is then cleared at the top
+    # of the strategy evaluation section when no strategies are paused.
+    if state._circuit_breaker_tripped and state._circuit_breaker_trip_reason == "budget_breached":
+        # Check if all strategy budgets have recovered (cross-day reset)
+        _any_paused = False
+        for _strat in getattr(state, "_strategies", {}).values():
+            _budget = getattr(_strat, "budget", None)
+            if _budget is not None and _budget.check_pause():
+                _any_paused = True
+                break
+        if not _any_paused:
+            state._circuit_breaker_tripped = False
+            state._circuit_breaker_tripped_at = 0.0
+            state._circuit_breaker_trip_reason = ""
+            state.block_new_entries = False
+
+    if state._circuit_breaker_tripped and state._circuit_breaker_trip_reason != "budget_breached":
         _cooldown_elapsed = (
             time.time() - state._circuit_breaker_tripped_at
         ) > config.circuit_breaker_cooldown_seconds
@@ -4976,6 +4994,40 @@ def execute_live_cycle(
             ),
             flush=True,
         )
+
+        # ── FIX-20260613-090: Budget breach → global circuit breaker ──
+        # Per-strategy budget pauses now cascade to the global block_new_entries
+        # flag, implementing the fail-closed latch pattern.  Any strategy that
+        # breaches its daily_loss_limit or max_consecutive_losses blocks ALL
+        # new entries for the rest of the day (cross-day reset via _reset_daily).
+        _budget_breached = False
+        for _sr in eval_summary.get("strategy_results", []):
+            if _sr.get("reason") == "budget_paused":
+                _budget_breached = True
+                break
+        if _budget_breached and not state._circuit_breaker_tripped:
+            state._circuit_breaker_tripped = True
+            state._circuit_breaker_tripped_at = time.time()
+            state._circuit_breaker_trip_reason = "budget_breached"
+            state.block_new_entries = True
+            _breached_names = [
+                _sr.get("strategy", "?")
+                for _sr in eval_summary.get("strategy_results", [])
+                if _sr.get("reason") == "budget_paused"
+            ]
+            print(
+                json.dumps(
+                    {
+                        "event": "circuit_breaker_budget_breach_trip",
+                        "time": _utc_iso(),
+                        "strategies": _breached_names,
+                        "trip_reason": "budget_breached",
+                        "severity": "CRITICAL",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
 
         # Feed brain predictions to signal health monitor for drift detection
         if state.signal_health_monitor is not None:

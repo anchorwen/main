@@ -299,16 +299,57 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
     if not journal_path.exists():
         return {"step": "calibrator_feed", "status": "skipped", "reason": "no_journal"}
 
-    # Track last processed position to avoid re-scanning entire journal
+    # ── FIX-20260613-090: record-id watermark replaces brittle line-number pointer ──
+    # Journal compaction (compact_journal) prunes old rejected entries and rewrites
+    # the file, invalidating line-number offsets.  We now use (recorded_at, message_id)
+    # as an append-only watermark that survives compaction.
     state_path = Path(base_dir) / "calibrator_feed_state.json"
-    last_pos = 0
+    last_recorded_at = ""
+    last_message_id = ""
+    _state: dict[str, Any] = {}
     if state_path.exists():
         with fail_open_guard("CalibratorFeedStateRead"):
-            last_pos = json.loads(state_path.read_text(encoding="utf-8")).get("last_line", 0)
+            _state = json.loads(state_path.read_text(encoding="utf-8"))
+            last_recorded_at = _state.get("last_recorded_at", "")
+            last_message_id = _state.get("last_message_id", "")
+            # Migration: old format used "last_line" — derive watermark from it
+            if not last_recorded_at and "last_line" in _state:
+                _old_pos = _state["last_line"]
 
-    # Read new lines since last position
+    # Read all lines (typically <1000; reading full file is fast and safe)
     lines = journal_path.read_text(encoding="utf-8").splitlines()
-    new_lines = lines[last_pos:]
+
+    # Migrate from legacy last_line if needed
+    if not last_recorded_at and "last_line" in _state:
+        _old_pos = _state["last_line"]
+        # Compaction safety: if the pointer exceeds the file, cap at the last line
+        if _old_pos > 0 and _old_pos <= len(lines):
+            try:
+                _mig_entry = json.loads(lines[_old_pos - 1])
+                last_recorded_at = _mig_entry.get("recorded_at", "")
+                last_message_id = _mig_entry.get("message_id", "")
+            except Exception:  # noqa: BLE001
+                pass
+        if not last_recorded_at and lines:
+            try:
+                _mig_entry = json.loads(lines[-1])
+                last_recorded_at = _mig_entry.get("recorded_at", "")
+                last_message_id = _mig_entry.get("message_id", "")
+            except Exception:  # noqa: BLE001
+                pass
+
+    # Filter to lines strictly after the watermark
+    new_lines: list[str] = []
+    for _l in lines:
+        try:
+            _e = json.loads(_l)
+        except Exception:  # noqa: BLE001
+            continue
+        _ts = _e.get("recorded_at", "")
+        _mid = _e.get("message_id", "")
+        if _ts > last_recorded_at or (_ts == last_recorded_at and _mid != last_message_id):
+            new_lines.append(_l)
+
     if not new_lines:
         return {"step": "calibrator_feed", "status": "ok", "new_samples": 0, "total": 0}
 
@@ -381,12 +422,24 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             cal.update(float(p_win), label, timestamp_utc=str(ts))
             new_samples += 1
 
-    # Save position for next run
+    # Save watermark for next run (record-id based, compaction-safe)
+    _last_ts = last_recorded_at
+    _last_mid = last_message_id
+    for _l in reversed(new_lines):
+        try:
+            _e = json.loads(_l)
+            _last_ts = _e.get("recorded_at", _last_ts)
+            _last_mid = _e.get("message_id", _last_mid)
+            break
+        except Exception:  # noqa: BLE001
+            continue
     with fail_open_guard("CalibratorFeedStateSave"):
         state_path.write_text(
             json.dumps(
                 {
-                    "last_line": len(lines),
+                    "last_recorded_at": _last_ts,
+                    "last_message_id": _last_mid,
+                    "last_line": len(lines),  # retained for backward compatibility
                     "updated_utc": datetime.now(UTC).isoformat(),
                     "sample_count": cal.describe().get("sample_count", 0),
                 }
@@ -874,17 +927,51 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
         else:
             perf_store = AlphaPerformanceStore()
 
-        # ── Track last processed journal line ──
-        last_line = 0
+        # ── FIX-20260613-090: record-id watermark replaces brittle line-number pointer ──
+        last_recorded_at = ""
+        last_message_id = ""
+        _st: dict[str, Any] = {}
         if state_path.exists():
             with fail_open_guard("AlphaFeed:read_state"):
-                last_line = json.loads(state_path.read_text(encoding="utf-8")).get("last_line", 0)
+                _st = json.loads(state_path.read_text(encoding="utf-8"))
+                last_recorded_at = _st.get("last_recorded_at", "")
+                last_message_id = _st.get("last_message_id", "")
 
         if not journal_path.exists():
             return {"step": "alpha_feed", "status": "skipped", "reason": "no_journal"}
 
         lines = journal_path.read_text(encoding="utf-8").splitlines()
-        new_lines = lines[last_line:]
+
+        # Migrate from legacy last_line if needed
+        if not last_recorded_at and "last_line" in _st:
+            _old_pos = _st["last_line"]
+            if _old_pos > 0 and _old_pos <= len(lines):
+                try:
+                    _mig_entry = json.loads(lines[_old_pos - 1])
+                    last_recorded_at = _mig_entry.get("recorded_at", "")
+                    last_message_id = _mig_entry.get("message_id", "")
+                except Exception:  # noqa: BLE001
+                    pass
+            if not last_recorded_at and lines:
+                try:
+                    _mig_entry = json.loads(lines[-1])
+                    last_recorded_at = _mig_entry.get("recorded_at", "")
+                    last_message_id = _mig_entry.get("message_id", "")
+                except Exception:  # noqa: BLE001
+                    pass
+
+        # Filter to lines strictly after the watermark (compaction-safe)
+        new_lines: list[str] = []
+        for _l in lines:
+            try:
+                _e = json.loads(_l)
+            except Exception:  # noqa: BLE001
+                continue
+            _ts = _e.get("recorded_at", "")
+            _mid = _e.get("message_id", "")
+            if _ts > last_recorded_at or (_ts == last_recorded_at and _mid != last_message_id):
+                new_lines.append(_l)
+
         if not new_lines:
             return {"step": "alpha_feed", "status": "ok", "new_snapshots": 0}
 
@@ -948,9 +1035,25 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
         if not dry_run and new_snapshots > 0:
             with fail_open_guard("AlphaFeed:save_perf"):
                 perf_store.save(perf_path)
+            # FIX-20260613-090: use record-id watermark (compaction-safe)
+            _last_ts = last_recorded_at
+            _last_mid = last_message_id
+            for _l in reversed(new_lines):
+                try:
+                    _e = json.loads(_l)
+                    _last_ts = _e.get("recorded_at", _last_ts)
+                    _last_mid = _e.get("message_id", _last_mid)
+                    break
+                except Exception:  # noqa: BLE001
+                    continue
             with fail_open_guard("AlphaFeed:save_state"):
                 state_path.write_text(
-                    json.dumps({"last_line": len(lines), "updated_utc": now_utc}),
+                    json.dumps({
+                        "last_recorded_at": _last_ts,
+                        "last_message_id": _last_mid,
+                        "last_line": len(lines),
+                        "updated_utc": now_utc,
+                    }),
                     encoding="utf-8",
                 )
 

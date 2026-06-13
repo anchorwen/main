@@ -1909,44 +1909,55 @@ class DataHealthService:
     def _check_journal_vs_pnl_ledger(self) -> CrossCheckResult:
         """Audit PnL ledger: freshness of most recent settled entry.
 
-        FIX-20260610-007: Replaced the broken count comparison (journal trade
-        count vs PnL ledger brain-entry count = apples vs oranges) with a
-        meaningful freshness check — when was the last brain-trade-outcome
-        recorded?  If the PnL ledger hasn't been updated in >24h, the
-        settlement pipeline may be stalled.
+        FIX-20260613-090: Reads from ledger_events.jsonl (event stream) instead
+        of brain_pnl_ledger.json.  Since FIX-20260611-022 (Event Sourcing
+        migration), _EVENT_STREAM_MODE=True permanently disables the JSON
+        snapshot save — the authoritative record is the event stream.
         """
-        pl_path = os.path.join(self._base_dir, "brain_pnl_ledger.json")
-        if not os.path.exists(pl_path):
+        el_path = os.path.join(self._base_dir, "ledger_events.jsonl")
+        if not os.path.exists(el_path):
             return CrossCheckResult(
                 check_name="pnl_ledger_freshness",
                 status=SourceStatus.SKIPPED,
                 primary_code="CROSS_PNL_LEDGER_MISSING",
-                message="brain_pnl_ledger.json not found",
+                message="ledger_events.jsonl not found",
                 checked_at=_utc_iso(),
             )
 
+        # Scan the event stream in reverse for the latest SignalSettled event
+        total_settled = 0
+        latest_ts = ""
         try:
-            pl = json.loads(open(pl_path, encoding="utf-8").read())
+            with open(el_path, encoding="utf-8") as f:
+                # Read last ~100KB for efficiency (event stream can be large)
+                f.seek(0, 2)  # end of file
+                file_size = f.tell()
+                scan_size = min(file_size, 100_000)
+                f.seek(max(0, file_size - scan_size))
+                # Skip partial first line from seek
+                f.readline()
+                for line in f:
+                    if '"SignalSettled"' in line:
+                        total_settled += 1
+                        try:
+                            _ev = json.loads(line)
+                            _ct = (
+                                _ev.get("data", {})
+                                .get("trade_outcome", {})
+                                .get("close_time", "")
+                            )
+                            if _ct and (not latest_ts or _ct > latest_ts):
+                                latest_ts = _ct
+                        except Exception:  # noqa: BLE001
+                            pass
         except Exception:  # noqa: BLE001
             return CrossCheckResult(
                 check_name="pnl_ledger_freshness",
                 status=SourceStatus.FAIL,
                 primary_code="CROSS_PNL_LEDGER_CORRUPT",
-                message="brain_pnl_ledger.json unreadable",
+                message="ledger_events.jsonl unreadable",
                 checked_at=_utc_iso(),
             )
-
-        settled = pl.get("settled", {})
-        total_settled = 0
-        latest_ts = ""
-        for brain_trades in settled.values():
-            if isinstance(brain_trades, list):
-                total_settled += len(brain_trades)
-                for trade in brain_trades:
-                    if isinstance(trade, dict):
-                        ct = trade.get("close_time", "")
-                        if ct and (not latest_ts or ct > latest_ts):
-                            latest_ts = ct
 
         if total_settled == 0:
             return CrossCheckResult(

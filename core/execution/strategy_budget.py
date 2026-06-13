@@ -39,7 +39,7 @@ class StrategyBudget:
     strategy_name: str
     daily_loss_limit_pct: float = -0.03  # e.g. -3% of account
     max_consecutive_losses: int = 5
-    cooldown_minutes: int = 30
+    cooldown_minutes: int = 0  # FIX-20260613-090: 0 = never auto-unpause (fail-closed latch)
 
     # Runtime state
     daily_pnl_pct: float = 0.0

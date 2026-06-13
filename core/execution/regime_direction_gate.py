@@ -42,7 +42,13 @@ class RegimeDirectionGate:
         self._total_cycles: int = 0
 
     def _resolve_trend(self, regime_info: dict[str, Any]) -> str:
-        """Determine trend direction from regime info.
+        """Determine trend direction from regime info — ADX-gated.
+
+        FIX-20260613-090: Previously, an explicit trend_direction (e.g. "long")
+        always took priority #1, overriding ADX-based ranging detection.  This
+        caused the gate to block counter-trend signals even in non-trending
+        markets (detected_regime="normal", ADX < 25).  Now the explicit
+        trend_direction is validated against ADX before being trusted.
 
         Returns: "up", "down", or "ranging"
         """
@@ -50,30 +56,33 @@ class RegimeDirectionGate:
         plus_di = float(regime_info.get("plus_di", 0) or 0)
         minus_di = float(regime_info.get("minus_di", 0) or 0)
 
-        # Also accept trend_direction string from golden_master inputs
         trend_str = str(regime_info.get("trend_direction", "")).lower()
         detected_regime = str(regime_info.get("detected_regime", regime_info.get("primary_regime", ""))).lower()
 
-        # Priority 1: explicit trend_direction from golden master
-        if trend_str in ("long", "up", "bullish"):
-            return "up"
-        if trend_str in ("short", "down", "bearish"):
-            return "down"
-
-        # Priority 2: DI-based with ADX confirmation
+        # Priority 1: DI-based with ADX confirmation (most reliable)
         if adx >= self._adx_threshold and plus_di > 0 and minus_di > 0:
             if plus_di > minus_di:
                 return "up"
             else:
                 return "down"
 
-        # Priority 3: regime string
-        if "bullish" in detected_regime or "trending_up" in detected_regime:
+        # Priority 2: explicit trend_direction gated by ADX
+        # If ADX < threshold, the trend signal is weak — treat as ranging
+        # even if trend_direction is explicitly set.  This prevents the gate
+        # from blocking counter-trend signals in non-trending markets.
+        if adx >= self._adx_threshold:
+            if trend_str in ("long", "up", "bullish"):
+                return "up"
+            if trend_str in ("short", "down", "bearish"):
+                return "down"
+
+        # Priority 3: regime string (only trusting trending_* labels)
+        if "trending_up" in detected_regime:
             return "up"
-        if "bearish" in detected_regime or "trending_down" in detected_regime:
+        if "trending_down" in detected_regime:
             return "down"
 
-        # Default: ranging
+        # Default: ranging — passthrough all signals
         return "ranging"
 
     def filter(
