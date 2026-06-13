@@ -100,15 +100,22 @@ def main() -> int:
     signature = sig_match.group(0)
     print(f"[Ω] Signature found: {signature}")
 
-    # ── Check 2: Scene requires minimal iron law references ──
+    # ── Check 2: Scene requires minimal iron law references (BLOCKING) ──
+    # FIX-20260613-061: Upgraded from WARNING to hard fail.
+    # The Ω chain is not optional — missing steps = incomplete diagnosis.
     scene_match = re.search(r"Scene\s+([A-G])", signature)
     if scene_match:
         scene = scene_match.group(1).upper()
         required = SCENE_REQUIRES_IRON_LAW.get(scene, [])
         missing = [law for law in required if law not in signature]
         if missing:
-            print(f"[Ω] WARNING: Scene {scene} should include {missing} in signature.")
-            print("[Ω] (Non-blocking — amend if this is a full routing chain.)")
+            print("=" * 60)
+            print(f"[Ω] COMMIT REJECTED: Scene {scene} requires {missing} in signature.")
+            print(f"[Ω] Current signature: {signature}")
+            print(f"[Ω] Required chain for Scene {scene}: {' -> '.join(required)}")
+            print("[Ω] See CLAUDE.md for the full execution protocol.")
+            print("=" * 60)
+            return 1
     else:
         print("[Ω] WARNING: Could not parse scene from signature.")
 
@@ -116,7 +123,7 @@ def main() -> int:
     hot_path_staged = staged & HOT_PATH_FILES
     if hot_path_staged and HOT_PATH_IRON_LAW not in signature:
         print("=" * 60)
-        print(f"[Ω] COMMIT REJECTED: Hot-path files modified without #10:")
+        print("[Ω] COMMIT REJECTED: Hot-path files modified without #10:")
         for f in sorted(hot_path_staged):
             print(f"[Ω]   {f}")
         print(f"[Ω] Signature MUST include {HOT_PATH_IRON_LAW} when touching hot-path files.")
@@ -155,6 +162,30 @@ def main() -> int:
     if covered_staged:
         docket_type = "FIX" if has_fix else ("DQAF" if has_dqaf else "exempt")
         print(f"[Ω] Docket check PASSED: {docket_type} ID for {len(covered_staged)} covered file(s).")
+
+    # ── Check 5: FIX_REGISTRY cross-reference (FIX-20260613-061) ────────
+    # When a FIX ID is claimed in the commit, it MUST exist in the registry.
+    # This closes the loop: diagnosis → fix → registration → commit.
+    if has_fix:
+        fix_ids = set(re.findall(r"FIX-\d{8}-\d{3}", commit_msg))
+        registry_path = ROOT / "blueprints" / "system" / "FIX_REGISTRY.md"
+        if registry_path.exists():
+            registry_text = registry_path.read_text(encoding="utf-8")
+            missing_in_registry = [
+                fid for fid in fix_ids if fid not in registry_text
+            ]
+            if missing_in_registry:
+                print("=" * 60)
+                print("[Ω] COMMIT REJECTED: FIX ID(s) not registered in FIX_REGISTRY.md:")
+                for fid in missing_in_registry:
+                    print(f"[Ω]   {fid}")
+                print(f"[Ω] Update {registry_path} before committing.")
+                print("[Ω] Run: python scripts/register_fix.py --help")
+                print("=" * 60)
+                return 1
+            print(f"[Ω] Registry check PASSED: {len(fix_ids)} FIX ID(s) found in registry.")
+        else:
+            print("[Ω] WARNING: FIX_REGISTRY.md not found — skipping cross-reference.")
 
     print("[Ω] Gate PASSED.")
     return 0
