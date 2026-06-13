@@ -265,6 +265,7 @@ def dispatch_live_open_order(
     p_win_source: str = "unknown",
     p_win_degraded: bool = False,
     kelly_mult: float = 1.0,
+    adapter_name: str = "mt5",
 ) -> dict:
     """Open-market helper; dispatches via broker-agnostic :func:`dispatch_live_order`.
 
@@ -327,7 +328,7 @@ def dispatch_live_open_order(
             skip_price_guard=True,
             ignore_protection_flag=ignore_protection_flag,
             protection_flag_path=protection_flag_path,
-            adapter_name="mt5",
+            adapter_name=adapter_name,
             extensions={"mt5_terminal_path": mt5_terminal_path},
         )
         _validate_ack_sl_tp(result, stop_loss, take_profit, base_dir=base_dir)
@@ -352,7 +353,7 @@ def dispatch_live_open_order(
         skip_price_guard=skip_price_guard,
         ignore_protection_flag=ignore_protection_flag,
         protection_flag_path=protection_flag_path,
-        adapter_name="mt5",
+        adapter_name=adapter_name,
         extensions={"mt5_terminal_path": mt5_terminal_path},
     )
     _validate_ack_sl_tp(result, stop_loss, take_profit, base_dir=base_dir)

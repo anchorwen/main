@@ -5095,7 +5095,7 @@ def execute_live_cycle(
                     return _result
 
             dispatch_results = exec_queue.flush(
-                partial(dispatch_live_open_order, entry_context=_entry_features_snapshot),
+                partial(dispatch_live_open_order, adapter_name=config.adapter_name, entry_context=_entry_features_snapshot),
                 journal_path=str(journal_path),
                 mt5_terminal_path=config.mt5_terminal_path,
                 symbol=config.symbol,
