@@ -211,24 +211,37 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     log_fh.flush()
 
     # ── Bridge worker command ──
+    # Read transport mode from adapter config (default: file IPC)
+    adapter_cfg = cfg.get("adapter", {})
+    use_zmq = adapter_cfg.get("name") == "mt5_zmq" if isinstance(adapter_cfg, dict) else False
+    zmq_cfg = cfg.get("zmq", {}) if isinstance(cfg.get("zmq"), dict) else {}
+
     bridge_cmd = [
         python,
         "-u",
         str(PROJECT_ROOT / "scripts" / "mt5_bridge_worker.py"),
-        "--outbox-dir",
-        str(PROJECT_ROOT / cfg["base_dir"] / "mt5_outbox"),
-        "--receipt-dir",
-        str(PROJECT_ROOT / cfg["base_dir"] / "receipts"),
-        "--archive-dir",
-        str(PROJECT_ROOT / cfg["base_dir"] / "mt5_outbox_processed"),
+    ]
+
+    if use_zmq:
+        bridge_cmd.append("--zmq")
+        bridge_cmd.extend([
+            "--zmq-order-endpoint", zmq_cfg.get("order_endpoint", "tcp://127.0.0.1:5556"),
+            "--zmq-ack-endpoint", zmq_cfg.get("ack_endpoint", "tcp://127.0.0.1:5557"),
+        ])
+    else:
+        bridge_cmd.extend([
+            "--outbox-dir", str(PROJECT_ROOT / cfg["base_dir"] / "mt5_outbox"),
+            "--receipt-dir", str(PROJECT_ROOT / cfg["base_dir"] / "receipts"),
+            "--archive-dir", str(PROJECT_ROOT / cfg["base_dir"] / "mt5_outbox_processed"),
+        ])
+
+    bridge_cmd.extend([
         "--journal-path",
         str(PROJECT_ROOT / cfg["base_dir"] / "live_trade_journal.jsonl"),
         "--protection-flag-path",
         str(PROJECT_ROOT / cfg["base_dir"] / "live_dispatch_block.flag"),
         "--mt5-terminal-path",
         cfg["mt5_terminal_path"],
-        "--poll-seconds",
-        str(cfg["bridge"]["poll_seconds"]),
         "--deviation",
         str(cfg["bridge"]["deviation"]),
         "--magic",
@@ -237,7 +250,11 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         str(cfg["volume"]),
         "--default-symbol",
         cfg["symbol"],
-    ]
+    ])
+    if not use_zmq:
+        bridge_cmd.extend([
+            "--poll-seconds", str(cfg["bridge"]["poll_seconds"]),
+        ])
 
     # ── Intent loop command ──
     intent_cmd = [
