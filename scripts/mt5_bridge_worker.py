@@ -74,7 +74,6 @@ def _utc_now() -> str:
     return (
         datetime.now(UTC)
         .replace(tzinfo=None)
-        .replace(microsecond=0)
         .isoformat()
         .replace("+00:00", "Z")
     )
@@ -141,7 +140,7 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
 
     journal_path.parent.mkdir(parents=True, exist_ok=True)
     lock = FileLock(
-        "live_trade_journal", lock_dir=str(journal_path.parent / ".locks"), ttl_seconds=10
+        "live_trade_journal", lock_dir=str(journal_path.parent / "locks"), ttl_seconds=10
     )
     acquired = lock.acquire(blocking=True, timeout_seconds=5)
     if not acquired.acquired:
@@ -447,14 +446,21 @@ def _mt5_close_position(
             "order": getattr(result, "order", None),
             "request": request,
         }
-        # ── FIX-20260612-004: Query deal history for actual fill PnL ──
-        # The payload carries a mid-price PnL estimate from managed_close.py.
+        # ── FIX-20260612-004 + FIX-20260613-077: Deal history for actual fill PnL ──
         # After a successful close, query MT5 deal history to capture the
-        # actual fill price and broker-side profit (includes spread/commission).
-        # This closes the PnL backfill gap that leaves 17.6% of close entries
-        # with null PnL (JOURNAL_PNL_NULL_RATE_HIGH).
+        # actual fill price.  1s timeout prevents blocking the bridge loop.
+        # When this succeeds, reconciliation can skip writing a duplicate close.
         try:
+            import time as _time
+            _deal_start = _time.time()
             deals = mt5.history_deals_get(position=ticket)
+            _deal_elapsed = _time.time() - _deal_start
+            if _deal_elapsed > 0.5:
+                print(json.dumps({
+                    "event": "bridge_deal_history_slow",
+                    "ticket": ticket, "elapsed_s": round(_deal_elapsed, 3),
+                    "time": _utc_now(),
+                }, ensure_ascii=False), flush=True)
             if deals:
                 exit_deals = [d for d in deals if getattr(d, "entry", -1) == 1]
                 if exit_deals:

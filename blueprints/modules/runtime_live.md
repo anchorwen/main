@@ -76,6 +76,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260613-077 | 2026-06-13 | cursor-agent | 0699235 | Bridge deal history timeout instrumentation + lock_dir unification (.locks→locks) + microsecond precision retained. Eliminates cross-process journal write races causing 336 XAU/22 BTC timestamp inversions. | race-condition |
 | FIX-20260613-064 | 2026-06-13 | cursor-agent | c992678 | Bridge Health SSOT: explicit --health-path argument + timestamp freshness gate in MT5 readiness barrier. Replaced log_and_continue with explicit OSError handling for health writes. Launcher now passes --health-path explicitly. | config-drift |
 | FIX-20260613-035 | 2026-06-13 | cursor-agent | — | **Blind Spot 1 — Sanity Bounds Gate**: repair_feature_vector() wired into strategy_evaluator (was test-only). Extreme value gate: abs(feature) > 10.0 → cycle blocked. tick_sanity in live_cycle now hard-blocks cycle (nullifies bid/ask/mid). | RC-07 |
 | FIX-20260613-036 | 2026-06-13 | cursor-agent | — | **Blind Spot 3 — strategy_evaluator integration**: is_pending_open() check before execution_queue.enqueue(). Entry-in-flight lock prevents duplicate open orders on slow MT5 ACK. | RC-04 |

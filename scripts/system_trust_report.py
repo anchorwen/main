@@ -77,6 +77,7 @@ DATA_FILES = [
     "state/daily_ops_state.json",
     "state/data_health_state.json",
     "golden_master.jsonl",
+    "ledger_events.jsonl",
     "reports/leaderboard.json",
     "reports/live_labels.jsonl",
     "live_trade_journal.jsonl",
@@ -664,6 +665,7 @@ def _print_section_6(alignment: dict) -> list[str]:
     else:
         print("\n  ✅ No cross-asset brain contamination detected")
 
+
     mismatches = alignment.get("mismatches", {})
     for sym in DATA_DIRS:
         issues = mismatches.get(sym, [])
@@ -709,6 +711,56 @@ def compute_verdict(all_flags: list[str]) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Section 6b: Candidate Signal Diversity (FIX-20260613-078)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _check_signal_diversity(data: dict, portfolios: dict) -> list[str]:
+    """Detect candidate/probation brains with >90% directional agreement.
+
+    Uses ledger_events (SignalSettled) for per-brain direction distribution.
+    Near-identical signals from two brains add no diversity to Parliament
+    and amplify single-direction risk.
+    """
+    flags: list[str] = []
+    print("\n── 6b. CANDIDATE SIGNAL DIVERSITY ──")
+    from collections import Counter as _Counter
+    for sym in DATA_DIRS:
+        events = data.get(sym, {}).get("ledger_events", [])
+        if isinstance(events, dict):
+            events = []
+        brain_dirs: dict[str, list[str]] = {}
+        for e in events:
+            if isinstance(e, dict) and e.get("event_type") == "SignalSettled":
+                bid = e.get("brain_id", "")
+                d = e.get("direction", "")
+                if bid and d:
+                    brain_dirs.setdefault(bid, []).append(d)
+        candidates = [b for b in portfolios.get(sym, [])
+                      if b["status"] in ("candidate", "probation") and b["trades"] >= 20]
+        found = 0
+        for i in range(len(candidates)):
+            for j in range(i + 1, len(candidates)):
+                a, b = candidates[i], candidates[j]
+                a_dirs = brain_dirs.get(a["brain_id"], [])
+                b_dirs = brain_dirs.get(b["brain_id"], [])
+                if len(a_dirs) < 20 or len(b_dirs) < 20:
+                    continue
+                a_top = _Counter(a_dirs).most_common(1)[0]
+                b_top = _Counter(b_dirs).most_common(1)[0]
+                if a_top[0] == b_top[0] and a_top[0] in ("long", "short"):
+                    agree_a = a_top[1] / len(a_dirs) * 100
+                    agree_b = b_top[1] / len(b_dirs) * 100
+                    if agree_a > 90 and agree_b > 90:
+                        print(f"  ⚠ {sym}: {a['brain_id']} & {b['brain_id']} "
+                              f"both {min(agree_a, agree_b):.0f}%+ {a_top[0]} — near-identical, low diversity")
+                        flags.append(f"WARN|{sym}|candidate_signal_cloning:{a['brain_id']}+{b['brain_id']}")
+                        found += 1
+        if found == 0:
+            print(f"  {sym}: ✅ No candidate signal cloning detected")
+    return flags
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -747,6 +799,9 @@ def main() -> int:
     # Section 6: Config Alignment
     s6 = section_6_config_alignment(portfolios)
     all_flags.extend(_print_section_6(s6))
+
+    # Section 6b: Candidate signal diversity (FIX-20260613-078)
+    all_flags.extend(_check_signal_diversity(data, portfolios))
 
     # VERDICT
     verdict = compute_verdict(all_flags)

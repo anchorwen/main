@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260613-078 | 2026-06-13 | cursor-agent | 0699235 | STR Section 6b: candidate signal diversity detection. Flags brain pairs with >90% directional agreement using ledger_events SignalSettled data. Detected V11_H1≡V11_M15 (100% short) + XAU Brain_Trend cloning. | missing-validation |
 | FIX-20260613-073 | 2026-06-13 | cursor-agent | 5a01fec | SL Performance Diagnostic: Iron Law #11 script. Revealed 97% BTC SL exits have zero trail advancement — SL hit before trail activates. TP exits net +61 positive. | missing-validation |
 | FIX-20260613-072 | 2026-06-13 | cursor-agent | 0460a51 | System Trust Report: deterministic single-script health check. 6 sections with auto-VERDICT. Frozen contamination detection (weight>0=FAIL, weight=0=WARN). Iron Law #11 compliant. | contract-violation |
 | FIX-20260613-066 | 2026-06-13 | cursor-agent | c992678 | Audit Script None Defense: analyze_live_journal.py guards trade_side and n_brains against None before format strings. Prevents TypeError crash in Section 4 and ensures Section 5-6 output. | missing-null-check |

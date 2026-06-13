@@ -601,6 +601,8 @@ FIX-YYYYMMDD-NNN
 | FIX-20260613-073 | 2026-06-13 | deployment-lifecycle | SL Performance Diagnostic: Iron Law #11 script. Revealed 97% BTC SL exits have zero trail advancement — SL hit before trail activates. TP exits net +61 positive. | RC-07 |
 | FIX-20260613-074 | 2026-06-13 | brains-services | Promotion-before-throttle: reversed check order so probation→live promotion runs BEFORE throttle check. Previously recent_wr<38% throttle intercepted probation brains before they could reach promotion evaluation. Swing_V9_M15_V2 (PF=3.51) was stuck in promote→throttle→promote loop. | RC-06 |
 | FIX-20260613-076 | 2026-06-13 | protocol-governance | cmd_reconcile no longer overwrites runtime governance promotions with config defaults. Config status is now treated as registration default only — governance owns the lifecycle. Preserves transition_log across saves. OU_Params_V7_M15 config fixed (live→candidate, matching PF=0.80 performance). | RC-06 |
+| FIX-20260613-077 | 2026-06-13 | runtime-live | Bridge deal history timeout instrumentation + lock_dir unification (.locks→locks) + microsecond precision retained. Eliminates cross-process journal write races causing 336 XAU/22 BTC timestamp inversions. | RC-04 |
+| FIX-20260613-078 | 2026-06-13 | deployment-lifecycle | STR Section 6b: candidate signal diversity detection. Flags brain pairs with >90% directional agreement using ledger_events SignalSettled data. Detected V11_H1≡V11_M15 (100% short) + XAU Brain_Trend cloning. | RC-07 |
 
 ---
 ## Fix Details by Year
@@ -2525,5 +2527,29 @@ FIX-YYYYMMDD-NNN
 - **Files**: scripts/brain.py,configs/brains/OU_Params_V7_M15.json
 - **Description**: cmd_reconcile no longer overwrites runtime governance promotions with config defaults. Config status is now treated as registration default only — governance owns the lifecycle. Preserves transition_log across saves. OU_Params_V7_M15 config fixed (live→candidate, matching PF=0.80 performance).
 - **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260613-077
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: 0699235
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: scripts/mt5_bridge_worker.py
+- **Description**: Bridge deal history timeout instrumentation + lock_dir unification (.locks→locks) + microsecond precision retained. Eliminates cross-process journal write races causing 336 XAU/22 BTC timestamp inversions.
+- **Root Cause**: RC-04 — race-condition
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260613-078
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: 0699235
+- **Type**: feat
+- **Module**: deployment-lifecycle
+- **Files**: scripts/system_trust_report.py
+- **Description**: STR Section 6b: candidate signal diversity detection. Flags brain pairs with >90% directional agreement using ledger_events SignalSettled data. Detected V11_H1≡V11_M15 (100% short) + XAU Brain_Trend cloning.
+- **Root Cause**: RC-07 — missing-validation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
