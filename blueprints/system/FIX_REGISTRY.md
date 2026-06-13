@@ -597,6 +597,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260613-065 | 2026-06-13 | deployment-lifecycle | Blueprint Reconciliation Script: reconcile_fix_registry.py batch backfills 63 orphan + 28 missing FIX entries across 13 module blueprints. One-shot backlog clearance for Iron Law #7 compliance. | RC-06 |
 | FIX-20260613-066 | 2026-06-13 | deployment-lifecycle | Audit Script None Defense: analyze_live_journal.py guards trade_side and n_brains against None before format strings. Prevents TypeError crash in Section 4 and ensures Section 5-6 output. | RC-01 |
 | FIX-20260613-067 | 2026-06-13 | data-infrastructure | FileLock Atomic Exclusive Create: replaced os.replace() (always overwrites) with os.O_CREAT|O_EXCL for true cross-process mutual exclusion. Added same-instance re-acquire guard. 23/23 tests pass. | RC-06 |
+| FIX-20260613-072 | 2026-06-13 | deployment-lifecycle | System Trust Report: deterministic single-script health check. 6 sections with auto-VERDICT. Frozen contamination detection (weight>0=FAIL, weight=0=WARN). Iron Law #11 compliant. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2472,6 +2473,18 @@ FIX-YYYYMMDD-NNN
 - **Module**: data-infrastructure
 - **Files**: core/infrastructure/distributed_lock.py
 - **Description**: FileLock Atomic Exclusive Create: replaced os.replace() (always overwrites) with os.O_CREAT|O_EXCL for true cross-process mutual exclusion. Added same-instance re-acquire guard. 23/23 tests pass.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260613-072
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: 0460a51
+- **Type**: feat
+- **Module**: deployment-lifecycle
+- **Files**: scripts/system_trust_report.py
+- **Description**: System Trust Report: deterministic single-script health check. 6 sections with auto-VERDICT. Frozen contamination detection (weight>0=FAIL, weight=0=WARN). Iron Law #11 compliant.
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
