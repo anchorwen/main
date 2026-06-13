@@ -53,6 +53,16 @@ def _utc_now_iso() -> str:
     return datetime.now(UTC).replace(tzinfo=None).isoformat()
 
 
+_STATUS_RANK = {"shadow": 0, "candidate": 1, "probation": 2, "live": 3, "frozen": -1, "retired": -2, "archived": -2}
+
+
+def _status_rank(status: str | None) -> int:
+    """Numerical rank for lifecycle comparison. Higher = more active."""
+    if status is None:
+        return -99
+    return _STATUS_RANK.get(status, 0)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # register
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -496,6 +506,10 @@ def cmd_reconcile(
         perf_data = json.loads(perf_path.read_text(encoding="utf-8"))
 
     # ── 1. Config → Governance status alignment ──
+    # FIX-20260613-076: Config status is a REGISTRATION DEFAULT, not an override.
+    # Once a brain is in governance, the governance system owns its lifecycle.
+    # Runtime promotions (candidate→probation→live) must NOT be reverted to
+    # config defaults.  Only register NEW brains that are missing from governance.
     print("\n── 1. Governance status alignment ──")
     for bid, info in brain_configs.items():
         cfg = info["config"]
@@ -503,24 +517,34 @@ def cmd_reconcile(
         cfg_vw = cfg.get("vote_weight", 0.5)
         gov_state = gov_states.get(bid, {})
         gov_status = gov_state.get("status")
-        gov_vw = gov_state.get("vote_weight")
 
         if gov_status is None:
-            print(f"  MISSING: {bid} not in governance — registering as {cfg_status}")
+            # New brain — register with config default status
+            print(f"  NEW: {bid} not in governance — registering as {cfg_status}")
             if auto_fix:
-                gov_states[bid] = {"status": cfg_status, "vote_weight": cfg_vw}
+                gov_states[bid] = {
+                    "status": cfg_status,
+                    "vote_weight": cfg_vw,
+                    "registered_at": _utc_now_iso(),
+                    "last_transition_at": _utc_now_iso(),
+                    "transition_count": 1,
+                    "freeze_count": 0,
+                }
                 issues_fixed += 1
         elif gov_status != cfg_status:
-            print(f"  DRIFT: {bid} config={cfg_status} gov={gov_status} → align to {cfg_status}")
-            if auto_fix:
-                gov_states[bid]["status"] = cfg_status
-                issues_fixed += 1
-
-        if gov_vw is not None and gov_vw != cfg_vw:
-            print(f"  VOTE_DRIFT: {bid} config={cfg_vw} gov={gov_vw} → align to {cfg_vw}")
-            if auto_fix:
-                gov_states[bid]["vote_weight"] = cfg_vw
-                issues_fixed += 1
+            # Brain already in governance — config is informational only.
+            # Runtime governance owns the lifecycle.  Log drift for human review
+            # but do NOT auto-correct.
+            direction = "↑" if _status_rank(gov_status) > _status_rank(cfg_status) else "↓"
+            print(f"  INFO: {bid} gov={gov_status} cfg={cfg_status} {direction}"
+                  f" — governance owns lifecycle, not auto-correcting")
+            # Vote weight sync: only apply if gov has no explicit vote_weight
+            gov_vw = gov_state.get("vote_weight")
+            if gov_vw is None and cfg_vw != 0.5:
+                print(f"  VOTE_INIT: {bid} vote_weight default → {cfg_vw}")
+                if auto_fix:
+                    gov_states[bid]["vote_weight"] = cfg_vw
+                    issues_fixed += 1
 
     # ── 2. Frozen/retired brains → disable in live.yaml ──
     print("\n── 2. live.yaml enabled status ──")
@@ -591,10 +615,16 @@ def cmd_reconcile(
     # ── 5. Save ──
     if auto_fix and issues_fixed > 0:
         print(f"\n[reconcile] Saving {issues_fixed} fixes...")
-        # FIX-20260604-088: locked, atomic write via GovernanceService
+        # FIX-20260604-088 + FIX-20260613-076: locked, atomic write via GovernanceService
+        # Preserve transition_log from the original file (don't wipe promotion history)
         from core.governance.governance_service import GovernanceService
         _svc = GovernanceService()
         _svc._brain_states = gov_states
+        try:
+            _existing = GovernanceService.load(str(gov_path))
+            _svc._transition_log = _existing._transition_log
+        except Exception:
+            pass  # No existing transition log to preserve
         _svc.save(str(gov_path), lock_timeout=30.0)
         live_path.write_text(live_yaml, encoding="utf-8")
         if cleanup_ledger:

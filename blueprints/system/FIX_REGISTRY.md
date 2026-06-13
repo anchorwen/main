@@ -600,6 +600,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260613-072 | 2026-06-13 | deployment-lifecycle | System Trust Report: deterministic single-script health check. 6 sections with auto-VERDICT. Frozen contamination detection (weight>0=FAIL, weight=0=WARN). Iron Law #11 compliant. | RC-06 |
 | FIX-20260613-073 | 2026-06-13 | deployment-lifecycle | SL Performance Diagnostic: Iron Law #11 script. Revealed 97% BTC SL exits have zero trail advancement — SL hit before trail activates. TP exits net +61 positive. | RC-07 |
 | FIX-20260613-074 | 2026-06-13 | brains-services | Promotion-before-throttle: reversed check order so probation→live promotion runs BEFORE throttle check. Previously recent_wr<38% throttle intercepted probation brains before they could reach promotion evaluation. Swing_V9_M15_V2 (PF=3.51) was stuck in promote→throttle→promote loop. | RC-06 |
+| FIX-20260613-076 | 2026-06-13 | protocol-governance | cmd_reconcile no longer overwrites runtime governance promotions with config defaults. Config status is now treated as registration default only — governance owns the lifecycle. Preserves transition_log across saves. OU_Params_V7_M15 config fixed (live→candidate, matching PF=0.80 performance). | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2511,6 +2512,18 @@ FIX-YYYYMMDD-NNN
 - **Module**: brains-services
 - **Files**: core/brains/services/brain_promotion.py
 - **Description**: Promotion-before-throttle: reversed check order so probation→live promotion runs BEFORE throttle check. Previously recent_wr<38% throttle intercepted probation brains before they could reach promotion evaluation. Swing_V9_M15_V2 (PF=3.51) was stuck in promote→throttle→promote loop.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260613-076
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: e4b1d82
+- **Type**: fix
+- **Module**: protocol-governance
+- **Files**: scripts/brain.py,configs/brains/OU_Params_V7_M15.json
+- **Description**: cmd_reconcile no longer overwrites runtime governance promotions with config defaults. Config status is now treated as registration default only — governance owns the lifecycle. Preserves transition_log across saves. OU_Params_V7_M15 config fixed (live→candidate, matching PF=0.80 performance).
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
