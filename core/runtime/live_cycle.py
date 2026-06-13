@@ -3291,11 +3291,16 @@ def execute_live_cycle(
     # ── MTF Price Service: M15 bar reconstruction from M5 tick history ──
     if not hasattr(state, "_mtf_price_service") or state._mtf_price_service is None:
         state._mtf_price_service = MTFPriceService()
-        # Bootstrap from historical M5 closes so M15 bars are available immediately
+        # Bootstrap from historical M5 closes so M15 bars are available immediately.
+        # FIX-20260613-090: also hydrate _recent_mid_prices from MT5 so the
+        # physics override (OU Theta + Hurst) is warm on cycle 1.  MT5 is the
+        # Single Source of Truth for market data — unlike disk persistence,
+        # this guarantees continuous, gap-free price series regardless of how
+        # long the system was offline.
         if not config.no_mt5 and mt5_worker is not None:
             with FaultTolerantContext(
                 level=FaultLevel.DEGRADE,
-                component="MT5_IPC:copy_rates_from_pos:MTF_bootstrap",
+                component="MT5_IPC:copy_rates_from_pos:bootstrap",
             ):
                 _hist_rates = mt5_worker.copy_rates_from_pos(
                     config.symbol, 5, 0, 200
@@ -3303,6 +3308,24 @@ def execute_live_cycle(
                 if _hist_rates is not None and len(_hist_rates) >= 6:
                     _closes = [float(r[4]) for r in _hist_rates]
                     state._mtf_price_service.bootstrap(_closes)
+                    # Hydrate physics indicators: use mid=(H+L)/2 for OU/Hurst
+                    if len(state._recent_mid_prices) < 21:
+                        _hydrated = [
+                            (float(r[2]) + float(r[3])) / 2.0 for r in _hist_rates[-50:]
+                        ]
+                        state._recent_mid_prices = _hydrated
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "physics_hydrated",
+                                    "time": _utc_iso(),
+                                    "source": "mt5_copy_rates",
+                                    "prices_loaded": len(_hydrated),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
     if mid_price is not None and mid_price > 0 and state._mtf_price_service is not None:
         with log_and_continue(component="MTFPrice:feed_tick"):
             _now_s = int(datetime.now(UTC).timestamp())
@@ -4670,20 +4693,36 @@ def execute_live_cycle(
             except Exception:  # noqa: BLE001
                 pass
 
-        # ── FIX-20260613-090: restore _recent_mid_prices from disk ──
-        # Eliminates the ~105min cold-start warmup for OU Theta + Hurst
-        # physics override.  Without this, _compute_tf_ou_hurst() returns
-        # (0.0, 0.5) until 21 cycles have accumulated M5 mid prices.
+        # ── FIX-20260613-090: disk fallback for _recent_mid_prices ──
+        # MT5 backfill (above) is the primary hydration source.  Disk persistence
+        # serves as a fallback when MT5 is slow/unavailable during startup.
+        # Freshness guard: reject persisted data older than 5 minutes (1 M5 bar)
+        # to prevent feeding discontinuous price series into OU/Hurst formulas.
         if state.loop_iteration == 1 and len(state._recent_mid_prices) < 21:
             _rp_path = Path(config.base_dir) / "state" / "recent_prices.json"
             try:
                 if _rp_path.exists():
-                    _rp_data = json.loads(_rp_path.read_text(encoding="utf-8"))
-                    _rp_list = _rp_data.get("prices", [])
-                    if isinstance(_rp_list, list) and len(_rp_list) >= 3:
-                        state._recent_mid_prices = [
-                            float(x) for x in _rp_list[-50:] if isinstance(x, int | float)
-                        ]
+                    _age_s = time.time() - _rp_path.stat().st_mtime
+                    if _age_s < 300:  # 5 min = 1 M5 bar — tolerate at most 1 missing bar
+                        _rp_data = json.loads(_rp_path.read_text(encoding="utf-8"))
+                        _rp_list = _rp_data.get("prices", [])
+                        if isinstance(_rp_list, list) and len(_rp_list) >= 3:
+                            state._recent_mid_prices = [
+                                float(x) for x in _rp_list[-50:] if isinstance(x, int | float)
+                            ]
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "physics_hydrated",
+                                        "time": _utc_iso(),
+                                        "source": "disk_fallback",
+                                        "prices_loaded": len(state._recent_mid_prices),
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                    # else: stale >5min — skip, fall through to cold warm-up
             except Exception:  # noqa: BLE001
                 pass
 
