@@ -198,14 +198,14 @@ data_health:
 description: Quant OS live — BTCUSDc (Cent account, isolated from XAUUSDc)
 exit_management:
   brain_reeval_interval: 5
-  breakeven_threshold_atr: 1.5
+  breakeven_threshold_atr: 1.0
   confidence_drop_threshold: 0.15
   enabled: true
   flip_exit_threshold: 0.5
   max_hold_cycles: 120
   min_sl_step: 1.0
   require_min_r: 0.3
-  trail_activation_atr: 0.5
+  trail_activation_atr: 0.3
   trail_atr_mult: 2.0
   trail_atr_mult_high: 3.0
   trail_atr_mult_low: 1.5
@@ -309,7 +309,7 @@ strategy_lines:
       flip_threshold: 0.5
       hesitation_cycles: 12
       time_exit_cycles: 72
-      trail_activation_atr: 0.5
+      trail_activation_atr: 0.3
       trail_atr_mult: 2.0
       trail_enabled: true
     magic: 90410
@@ -323,7 +323,7 @@ strategy_lines:
       dynamic: true
       hard_sl_ratio: 1.5
       min_rr_ratio: 0.85
-      min_sl_distance: 80.0
+      min_sl_distance: 100.0
     spread_points: 200
     strategy_family: trend_following
     timeframe: M5
