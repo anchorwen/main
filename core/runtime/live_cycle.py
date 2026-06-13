@@ -4305,6 +4305,20 @@ def execute_live_cycle(
                 state._regime_gate_stale_counter = 0  # successful classify resets stale counter
                 if regime_info:
                     regime_info["regime_gate"] = regime_gate_result
+                    # ── FIX-20260613-090: inject physics-based regime indicators ──
+                    # OU Theta + Hurst provide a mean-reversion override that is
+                    # independent of ADX.  When both confirm strong mean-reversion
+                    # (Theta > 0.5, Hurst < 0.48), the gate treats the market as
+                    # "ranging" regardless of ADX — counter-trend signals are
+                    # physically justified.
+                    # Target: phase out ADX gating entirely once brains are
+                    # retrained with V9_Micro features.
+                    try:
+                        _phys_ou, _phys_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
+                        regime_info["ou_theta_m5"] = float(_phys_ou)
+                        regime_info["hurst_m5"] = float(_phys_hurst)
+                    except Exception:  # noqa: BLE001
+                        pass  # fail-safe: gate falls back to ADX-only logic
                 trend_direction = regime_gate_result.get("primary_trend", "neutral")
                 trend_strength = regime_gate_result.get("h1_trend_strength", 0.0)
                 h4_trend_strength = regime_gate_result.get("h4_trend_strength", 0.0)
