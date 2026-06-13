@@ -1284,7 +1284,7 @@ def run_pipeline(
             )
             if dirty.returncode == 0:
                 dirty_files = [
-                    line[3:] for line in dirty.stdout.strip().split("\n")
+                    line[2:].strip() for line in dirty.stdout.strip().split("\n")
                     if line.strip() and not line.startswith("??")  # untracked files allowed
                 ]
                 # Only block for source code changes (.py, .yaml, .json)
