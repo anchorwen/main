@@ -673,9 +673,13 @@ class BrainLifecycleManager:
             )
 
             # ── find brains in this contract_group ──
+            # FIX-20260613-053: Only check ACTIVE brains for ensemble consistency.
+            # Disabled/frozen/retired brains don't vote — their training contracts
+            # are irrelevant to live execution.  Previously ALL brains in the
+            # registry were checked, producing false ENSEMBLE_MISMATCH warnings.
             group_brains: list[dict] = []
             for _bid, cfg in disk_brains.items():
-                if cfg.get("contract_group") == sname:
+                if cfg.get("contract_group") == sname and cfg.get("enabled", True):
                     group_brains.append(cfg)
 
             if not group_brains:
