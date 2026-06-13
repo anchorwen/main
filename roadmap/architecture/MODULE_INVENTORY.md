@@ -1,7 +1,7 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-13T05:03:37Z
-> **扫描模块数**: 539
+> **自动生成**: 2026-06-13T05:08:04Z
+> **扫描模块数**: 540
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
 ## apps/engine
@@ -217,6 +217,7 @@
 | `dynamic_sl_tp.py` | ✅ active | StrategyFamily, DynamicSLTP | 3 | 244 | — | |
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 180 | — | |
 | `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 8 | 497 | — | |
+| `exit_reason.py` | ✅ active | ExitReason | 6 | 227 | — | |
 | `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 8 | 498 | — | |
 | `fill_simulator.py` | ✅ active | FillSimulationConfig, FillSimulator | 8 | 125 | — | |
 | `fix_contracts.py` | ✅ active | FixSessionConfig, FixMessage, FixExecutionReport | 4 | 69 | — | |
@@ -247,13 +248,13 @@
 | `pwin_chain.py` | ✅ active | — | 3 | 220 | — | |
 | `quality_analyzer.py` | ✅ active | SlippageTracker, ExecutionQualityAnalyzer | 15 | 351 | — | |
 | `quality_contracts.py` | ✅ active | ExecutionBenchmark, ExecutionQualityMetric, ImplementationShortfall, ExecutionQualityReport | 3 | 138 | — | |
-| `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 7 | 550 | — | |
+| `reentry_guard.py` | ✅ active | ExitRecord, ReentryState | 6 | 499 | — | |
 | `regime_gate.py` | ✅ active | RegimeModulation, OURegime2D, RegimeGate | 42 | 841 | — | |
 | `rule_engine_strategy.py` | ✅ active | RuleEngineStrategyWrapper | 4 | 221 | — | |
 | `schema_versions.py` | 📄 config | — | 0 | 3 | — | |
 | `statarb_strategy.py` | ✅ active | StatArbStrategy | 1 | 76 | — | |
 | `strategy_budget.py` | ✅ active | StrategyBudget | 11 | 318 | — | |
-| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 18 | 2106 | — | |
+| `strategy_line.py` | 🧪 stub | StrategyDecision, StrategyLineConfig, StrategyLine | 18 | 2110 | — | |
 | `strategy_type.py` | ✅ active | StrategyType | 0 | 30 | — | |
 | `swing_strategy.py` | ✅ active | SwingStrategy | 1 | 130 | — | |
 | `trail_stop_engine.py` | ✅ active | TrailPolicy, TrailStopEngine | 8 | 313 | — | |
@@ -596,7 +597,7 @@
 | `brain.py` | ✅ active | — | 12 | 734 | — | |
 | `bridge_supervisor.py` | ✅ active | — | 4 | 122 | — | |
 | `build_btc_metafilter_v2_dataset.py` | ✅ active | — | 7 | 309 | — | |
-| `check_blueprint_compliance.py` | ✅ active | — | 10 | 597 | — | |
+| `check_blueprint_compliance.py` | ✅ active | — | 10 | 600 | — | |
 | `check_import_boundaries.py` | ✅ active | Violation | 3 | 155 | — | |
 | `check_omega_compliance.py` | ✅ active | Violation | 7 | 223 | — | |
 | `check_preconditions.py` | ✅ active | — | 12 | 429 | — | |

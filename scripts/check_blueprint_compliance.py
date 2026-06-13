@@ -118,7 +118,10 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/test_meta_pipeline.py",
         "scripts/position_snapshot.py",
     ],
-    "execution_reentry": ["core/execution/reentry_guard.py"],
+    "execution_reentry": [
+        "core/execution/reentry_guard.py",
+        "core/execution/exit_reason.py",
+    ],
     "risk_policies": ["core/risk/risk_policies.py", "core/risk/risk_evaluation_service.py"],
     "risk_regime": [
         "core/risk/regime_detector.py",

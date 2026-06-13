@@ -7,6 +7,7 @@ Re-entry quality gates that prevent overtrading after stop-loss hits. Implements
 | File | Role |
 |------|------|
 | `core/execution/reentry_guard.py` | `_classify_exit_reason()`, `check_reentry_quality()` |
+| `core/execution/exit_reason.py` | `ExitReason` enum, `classify()` — canonical SSOT (FIX-20260613-039) |
 | `core/constants.py` | `SL_REENTRY_COOLDOWN_SECONDS`, `SL_REENTRY_CONFIDENCE_IMPROVEMENT` |
 
 ## Data Flow
@@ -30,6 +31,7 @@ Trade close event → _classify_exit_reason() → check_reentry_quality()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260613-039 | 2026-06-13 | cursor-agent | — | **ExitReason enum — canonical SSOT**: Extracted 15-category taxonomy from `_classify_exit_reason()` substring matcher into `ExitReason` enum (str subclass) in `core/execution/exit_reason.py`. Each member carries cooldown_tier + is_model_driven/is_risk_driven/is_structural metadata. `classify()` replaces post-hoc string matching. `reentry_guard.py` migrated to use enum. Backward-compatible `_classify_exit_reason` shim preserved. | RC-06, RC-12 |
 | FIX-20260610-008 | 2026-06-10 | cursor-agent | — | **Exit reason classification hardening**: `_classify_exit_reason()`补全7种模式→3个新规范类别(kalman_flip/net_out/watchdog/emergency_close). meta_exit子类型6种(pnl_urgency/time_decay/regime_misalignment/consensus_drift/vol_expansion/ml_p_win)全部归入meta_exit. partial_tp→tp_hit. 31/31 pattern tests pass. DQAF-20260610-002. | RC-07 |
 | FIX-20260609-010 | 2026-06-09 | cursor-agent | — | **Hesitation threshold BTC calibration**: FIX-001 added `_MAX_THRESHOLD=0.82` + 2h TTL but +0.15 margin with floor 0.70 still produced unreachable thresholds for BTC tree models (P99≈0.685). 150 consecutive cycles blocked 2026-06-08/09. Fix: margin +0.15→+0.08, floor 0.70→0.65. Ordering: brain_flip+0.05 < hesitation+0.08 < sl_hit+0.10. DQAF-20260609-001. | RC-05 |
 | FIX-20260609-001 | 2026-06-09 | cursor-agent | — | **Hesitation permanent deadlock: TTL + _MAX_THRESHOLD ceiling**: `hesitation` was the ONLY exit category lacking both a TTL hard unlock and the `_MAX_THRESHOLD` ceiling (FIX-117 added it to brain_flip/sl_hit/ou_revert/unknown_close but MISSED hesitation). When exit_confidence was high (BTC 0.7668), threshold `max(0.7668+0.15, 0.70)=0.9168` exceeded BTC model P99 (~0.685), creating a MATHEMATICAL DEADLOCK with no time-based escape — BTC blocked 23h/148 cycles. Fix: (a) add `_MAX_THRESHOLD=0.82` ceiling → `min(max(exit_confidence+0.15, 0.70), _MAX_THRESHOLD)`, (b) add TTL hard unlock: after `max(2h, hl×tf×2.0×60)`, only confidence>0.50 required. Same proven pattern as brain_flip (FIX-127/130), sl_hit (FIX-011), meta_exit (FIX-127). ReB Pattern: ReB-20260609-001. | RC-05 |

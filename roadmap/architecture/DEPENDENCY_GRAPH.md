@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-13T05:03:37Z
+> **自动生成**: 2026-06-13T05:08:04Z
 
 ## Package-Level Dependencies
 
@@ -185,6 +185,7 @@
 - `dynamic_sl_tp.py` → (无内部依赖)
 - `execution_manager.py` → `core.contracts.exceptions`, `core.observability.metric_names`
 - `execution_queue.py` → `core.execution.live_order_sender`, `core.protocol.services.zmq_receipt_listener`
+- `exit_reason.py` → (无内部依赖)
 - `exit_watchdog.py` → `core.protocol.services.zmq_receipt_listener`, `core.runtime.fault_handler`
 - `fill_simulator.py` → `core.contracts.ids`, `core.execution.gateway_contracts`
 - `fix_contracts.py` → (无内部依赖)
@@ -215,7 +216,7 @@
 - `pwin_chain.py` → `core.runtime.fault_handler`
 - `quality_analyzer.py` → `core.execution.gateway_contracts`, `core.execution.quality_contracts`, `core.execution.schema_versions`
 - `quality_contracts.py` → (无内部依赖)
-- `reentry_guard.py` → (无内部依赖)
+- `reentry_guard.py` → `core.execution.exit_reason`
 - `regime_gate.py` → `core.execution.trend_detector`
 - `rule_engine_strategy.py` → `core.execution.strategy_line`, `core.strategies.structural_swing_v1`
 - `schema_versions.py` → (无内部依赖)

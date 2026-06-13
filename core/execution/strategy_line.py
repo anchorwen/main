@@ -204,6 +204,10 @@ class StrategyDecision:
         False  # forced exploration budget — bypass trailing, collect uncensored labels
     )
     gate_diag: dict[str, Any] = field(default_factory=dict)  # gate audit diagnostics
+    # ── P2-2 Audit trail fields (2026-06-13) ──────────────────────────
+    decision_hash: str = ""  # SHA-256 of key decision fields (idempotency + audit)
+    evaluated_at: str = ""  # ISO-8601 UTC timestamp of evaluation
+    code_version: str = ""  # git commit hash of running code
     # entry_context carries passthrough data for the journal:
     #   {"atr": float, "regime": str, "vol_regime": str, "trend_direction": str,
     #    "macro_regime": str, "brain_predictions": [dict, ...],

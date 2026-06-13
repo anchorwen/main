@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260613-039 | 2026-06-13 | cursor-agent | — | **MODULE_SOURCE_MAP: exit_reason.py → execution_reentry**. New canonical SSOT file for exit reason taxonomy. | RC-09 |
 | FIX-20260613-038 | 2026-06-13 | cursor-agent | — | **MODULE_SOURCE_MAP: rule_engine_strategy + meta_filter_routing + managed_close + trend_isolation_gates + net_out_close_handler**: 5 previously unmapped execution/ files registered (orphan trap #3). Also backtest_structural_swing→training. | RC-09 |
 | FIX-20260611-022 | 2026-06-11 | cursor-agent | 19e002b | Register data_infrastructure in EXPECTED_MODULES list (validate_blueprints.py). | contract-violation |
 | FIX-20260610-008 | 2026-06-10 | cursor-agent | — | 配置一致性静态闸门 (`scripts/verify.py` +140: `_check_config_consistency()`). V9/V10补全label_contract(SL=3.0/TP=2.0生存模式,需专属策略线). V5 XAU残留清理(`live.yaml` enabled→false). DQAF-20260610-002. | RC-09, RC-12 |
