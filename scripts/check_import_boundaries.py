@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ast
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
@@ -69,17 +70,100 @@ RULES = [
     },
 ]
 
-# Known exceptions (documented, with justification)
-KNOWN_EXCEPTIONS: dict[str, set[str]] = {
-    # MetaFilter requires LGB model inference in live trading path.
-    # This is an architectural choice, not an accidental leak.
-    # TODO: extract MetaFilter into a separate ZMQ sub-process (Phase 2).
-    "core/execution/meta_exit_engine.py": {"lightgbm"},
-    "core/execution/meta_signal_filter.py": {"lightgbm"},
-    # Daily ops scheduler invokes governance cycle (lazy import inside function).
-    # TODO: move governance_scheduler.py and daily_ops.py to core/ module.
-    "core/runtime/daily_ops_scheduler.py": {"scripts"},
-}
+# ═══════════════════════════════════════════════════════════════════════════════
+# Exception Registry (FIX-20260613-044)
+#
+# Each exception carries a migration plan with trigger condition and target
+# milestone.  Exceptions without a plan are treated as violations.
+# Exceptions past their target milestone are re-evaluated on next audit.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class _ExceptionEntry:
+    """Formal import-boundary exception with migration plan."""
+    file: str
+    forbidden_module: str
+    rule: str
+    justification: str
+    migration_plan: str
+    trigger: str  # condition that unlocks migration
+    target_milestone: str  # e.g. "2026-Q3", "P3"
+    fix_id: str
+
+
+_EXCEPTION_REGISTRY: list[_ExceptionEntry] = [
+    _ExceptionEntry(
+        file="core/execution/meta_exit_engine.py",
+        forbidden_module="lightgbm",
+        rule="execution-never-imports-ml-libs",
+        justification=(
+            "MetaExitEngine runs LightGBM inference in the live trading path "
+            "to compute multi-factor exit urgency scores.  This is intentional "
+            "architecture — the model must run in-process for sub-5ms latency.  "
+            "Currently shadow-only (telemetry logged, closes never dispatched)."
+        ),
+        migration_plan=(
+            "Extract MetaFilter + MetaExit into a dedicated ZMQ sub-process "
+            "('meta_worker') that receives feature snapshots and returns "
+            "urgency scores.  The execution layer sends requests via ZMQ "
+            "REQ/REP; the meta worker loads the LGB model once at startup."
+        ),
+        trigger=(
+            "MetaExit activates live close dispatch (currently shadow-only).  "
+            "Before activation, the LGB import must be extracted to avoid "
+            "importing ML libraries in the order-execution critical path."
+        ),
+        target_milestone="P4: MetaExit activation (see P4-1 in upgrade roadmap)",
+        fix_id="FIX-20260613-044",
+    ),
+    _ExceptionEntry(
+        file="core/execution/meta_signal_filter.py",
+        forbidden_module="lightgbm",
+        rule="execution-never-imports-ml-libs",
+        justification=(
+            "MetaSignalFilter runs LightGBM MetaFilter inference on every "
+            "strategy evaluation cycle.  Same architectural constraint as "
+            "meta_exit_engine — model must run in-process for latency."
+        ),
+        migration_plan=(
+            "Same ZMQ sub-process extraction as meta_exit_engine.  Both "
+            "LightGBM models (MetaFilter + MetaExit) should live in the "
+            "same meta_worker process, sharing model loading overhead."
+        ),
+        trigger=(
+            "MetaFilter is Promoted from probation to live mode for at "
+            "least 2 strategies.  Currently MetaFilter is used by statarb "
+            "and swing strategies."
+        ),
+        target_milestone="P4: ZMQ Meta Worker (see P4-1 in upgrade roadmap)",
+        fix_id="FIX-20260613-044",
+    ),
+    _ExceptionEntry(
+        file="core/runtime/daily_ops_scheduler.py",
+        forbidden_module="scripts",
+        rule="features-never-imports-scripts",
+        justification=(
+            "DailyOpsScheduler invokes the governance cycle which lives in "
+            "scripts/daily_ops.py.  The lazy import only fires once per day "
+            "(not in the hot trading path).  Moving daily_ops to core/ would "
+            "break the intentional separation between operational scripts "
+            "and runtime modules."
+        ),
+        migration_plan=(
+            "Extract governance scheduler interface into core/runtime/ and "
+            "have daily_ops register as a plugin.  The scheduler calls a "
+            "registered callback; daily_ops.py injects itself at startup."
+        ),
+        trigger="Next time daily_ops_scheduler.py is modified for any reason.",
+        target_milestone="P3: routine refactor",
+        fix_id="FIX-20260613-044",
+    ),
+]
+
+# Build the lookup dict for O(1) exception checking during AST scan.
+KNOWN_EXCEPTIONS: dict[str, set[str]] = {}
+for _entry in _EXCEPTION_REGISTRY:
+    KNOWN_EXCEPTIONS.setdefault(_entry.file, set()).add(_entry.forbidden_module)
 
 
 def check_file(file_path: Path, rule: dict) -> list[Violation]:
