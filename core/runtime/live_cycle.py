@@ -119,6 +119,7 @@ class LiveCycleConfig:
     exit_require_min_r: float = 0.3
     exit_min_step: float = 0.15
     market_type: str = "forex_24_5"  # FIX-082: "crypto_24_7" for BTC, "forex_24_5" for gold
+    adapter_name: str = "mt5"  # FIX-20260613-059: transport adapter (mt5=file, mt5_zmq=ZMQ)
 
     # ── FIX-20260613-048: Staleness Contract ──
     # Maximum allowed age of the latest tick before the cycle is skipped.
@@ -499,7 +500,7 @@ def _dispatch_modify_trail(
             skip_price_guard=True,
             ignore_protection_flag=config.ignore_protection_flag,
             protection_flag_path=config.protection_flag_path,
-            adapter_name="mt5",
+            adapter_name=config.adapter_name,
             extensions={"mt5_terminal_path": config.mt5_terminal_path},
         )
     except Exception as exc:  # noqa: BLE001
@@ -1066,7 +1067,7 @@ def _execute_management_phase(
                             skip_price_guard=True,
                             ignore_protection_flag=config.ignore_protection_flag,
                             protection_flag_path=config.protection_flag_path,
-                            adapter_name="mt5",
+                            adapter_name=config.adapter_name,
                             extensions={"mt5_terminal_path": config.mt5_terminal_path},
                         )
 
@@ -1113,7 +1114,7 @@ def _execute_management_phase(
                         skip_price_guard=True,
                         ignore_protection_flag=config.ignore_protection_flag,
                         protection_flag_path=config.protection_flag_path,
-                        adapter_name="mt5",
+                        adapter_name=config.adapter_name,
                         extensions={"mt5_terminal_path": config.mt5_terminal_path},
                     )
                     _ptp_dispatched = True
@@ -4460,7 +4461,7 @@ def execute_live_cycle(
                                                             skip_price_guard=True,
                                                             ignore_protection_flag=config.ignore_protection_flag,
                                                             protection_flag_path=config.protection_flag_path,
-                                                            adapter_name="mt5",
+                                                            adapter_name=config.adapter_name,
                                                             extensions={
                                                                 "mt5_terminal_path": config.mt5_terminal_path
                                                             },
@@ -4506,7 +4507,7 @@ def execute_live_cycle(
                                                     skip_price_guard=True,
                                                     ignore_protection_flag=config.ignore_protection_flag,
                                                     protection_flag_path=config.protection_flag_path,
-                                                    adapter_name="mt5",
+                                                    adapter_name=config.adapter_name,
                                                     extensions={
                                                         "mt5_terminal_path": config.mt5_terminal_path
                                                     },
@@ -5430,7 +5431,7 @@ def execute_live_cycle(
                                                 skip_price_guard=True,
                                                 ignore_protection_flag=config.ignore_protection_flag,
                                                 protection_flag_path=config.protection_flag_path,
-                                                adapter_name="mt5",
+                                                adapter_name=config.adapter_name,
                                                 extensions={
                                                     "mt5_terminal_path": config.mt5_terminal_path
                                                 },
