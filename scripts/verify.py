@@ -600,6 +600,26 @@ def main() -> int:
                 print(f"[FAIL] blueprint compliance check error: {exc}")
                 all_passed = False
 
+            print(">>> import boundaries (Iron Law #3)...")
+            try:
+                result = subprocess.run(
+                    [sys.executable, str(ROOT / "scripts" / "check_import_boundaries.py"), "--quiet"],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    cwd=str(ROOT),
+                    timeout=10,
+                )
+                if result.returncode != 0:
+                    print("[FAIL] Import boundary violation(s) detected")
+                    all_passed = False
+                else:
+                    print("[PASS] Import boundaries enforced")
+            except Exception as exc:  # noqa: BLE001
+                print(f"[FAIL] import-linter error: {exc}")
+                all_passed = False
+
             print(">>> artifact parameter contract...")
             try:
                 result = subprocess.run(
@@ -665,6 +685,26 @@ def main() -> int:
                 all_passed = False
         except Exception as exc:  # noqa: BLE001
             print(f"[FAIL] blueprint compliance check error: {exc}")
+            all_passed = False
+
+        print(">>> import boundaries (Iron Law #3)...")
+        try:
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "check_import_boundaries.py"), "--quiet"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=str(ROOT),
+                timeout=10,
+            )
+            if result.returncode != 0:
+                print("[FAIL] Import boundary violation(s) detected")
+                all_passed = False
+            else:
+                print("[PASS] Import boundaries enforced")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[FAIL] import-linter error: {exc}")
             all_passed = False
 
         print(">>> artifact parameter contract...")
