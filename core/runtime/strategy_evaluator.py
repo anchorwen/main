@@ -222,10 +222,17 @@ def evaluate_strategy_lines(
             )
             continue
 
-        # ── Extreme value gate: reject any feature with abs(value) > 10.0 ──
+        # ── Extreme value gate: catch genuine data corruption (e.g. float
+        # overflow, corrupted memory).  Threshold is deliberately high (1e6)
+        # because non-normalized features (BTC co_ratio, tick_velocity, XAU
+        # macro ratios) can legitimately reach 200-500.  Values > 1e6 are
+        # almost certainly floating-point errors or memory corruption.
+        # NaN/Inf are already handled by repair_feature_vector() above.
+        # FIX-20260613-058: threshold raised from 10.0→1e6 after BTC false
+        # positives on co_ratio=221.1 blocked all btc_swing trades.
         _fv_arr = np.asarray(_fv, dtype=np.float64).ravel()
         _fv_clean = _fv_arr[np.isfinite(_fv_arr)]
-        if len(_fv_clean) > 0 and np.max(np.abs(_fv_clean)) > 10.0:
+        if len(_fv_clean) > 0 and np.max(np.abs(_fv_clean)) > 1e6:
             _max_val = float(np.max(np.abs(_fv_clean)))
             _max_idx = int(np.argmax(np.abs(_fv_clean)))
             print(
