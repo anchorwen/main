@@ -23,6 +23,7 @@ import json
 import math
 import time
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -422,7 +423,8 @@ class ActivePositionManager:
         trail_atr_mult_high: float | None = None,
         breakeven_threshold_atr: float | None = None,
         trail_policy: TrailPolicy | None = None,  # Phase B: preferred over scattered attrs
-        trail_activation_atr: float | None = None,  # DQAF-005: per-strategy override (None=use PM default)
+        trail_activation_atr: float
+        | None = None,  # DQAF-005: per-strategy override (None=use PM default)
         cold_explore: bool = False,  # bypass trailing for uncensored calibration labels
     ) -> ActivePosition:
         """Record a newly-opened position (or recover one after restart).
@@ -1359,7 +1361,9 @@ class ActivePositionManager:
 
     @staticmethod
     def _write_meta_exit_telemetry(
-        snap: Any, evaluation: Any, ticket: int,
+        snap: Any,
+        evaluation: Any,
+        ticket: int,
     ) -> None:
         """Write ExitFeatureSnapshot + MetaExit prediction to telemetry log.
 
@@ -1746,12 +1750,7 @@ class ActivePositionManager:
                 "_entry_consensus_score": self._entry_consensus_score,
                 "_recovery_cycle": self._recovery_cycle,
                 "_primary_ticket": self._primary_ticket,
-                "saved_at_utc": (
-                    __import__("datetime")
-                    .datetime.now(__import__("datetime").UTC)
-                    .replace(tzinfo=None)
-                    .isoformat()
-                ),
+                "saved_at_utc": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             }
             import os as _os
 
@@ -1858,7 +1857,9 @@ class ActivePositionManager:
                 initial_tp=0.0,
                 current_sl=0.0,
                 current_tp=0.0,
-                highest_high=float(d.get("entry_price", 0)),  # FIX-017: default to entry_price, not 0
+                highest_high=float(
+                    d.get("entry_price", 0)
+                ),  # FIX-017: default to entry_price, not 0
                 lowest_low=float(d.get("entry_price", 0)),  # FIX-017: prevents premature breakeven
                 entry_atr=float(d.get("entry_atr", 2.0)),  # FIX-018: persisted since v3
                 entry_cycle=0,

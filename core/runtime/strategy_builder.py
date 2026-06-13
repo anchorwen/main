@@ -12,6 +12,7 @@ from typing import Any
 from core.config.asset_registry import get_asset
 from core.execution.barrier_strategy import BarrierStrategy
 from core.execution.micro_strategy import MicroStrategy
+from core.execution.rule_engine_strategy import RuleEngineStrategyWrapper
 from core.execution.statarb_strategy import StatArbStrategy
 from core.execution.strategy_budget import StrategyBudget
 from core.execution.strategy_line import StrategyLineConfig
@@ -107,6 +108,7 @@ def build_strategy_lines(
         "m30_swing": "m30_swing",
         "h1_swing": "h1_swing",
         "h4_swing": "h4_swing",
+        "structural_swing_v1": "rule_based",
     }
 
     _STRATEGY_FAMILY_MAP: dict[str, str] = {
@@ -794,5 +796,72 @@ def build_strategy_lines(
                 ),
             ),
         )
+
+    # ── Rule-engine strategies (no ML brains, pure math) ──────────────────
+    # Blind Spot / Phase 1 (2026-06-13): StructuralSwingV1 was defined in
+    # core/strategies/ and configured in live.yaml but never instantiated
+    # because strategy_builder only knew about Barrier/Micro/StatArb/Swing.
+    # Scan for rule_engine entries and create RuleEngineStrategyWrapper.
+    _rule_engine_names: list[str] = []
+    for _sname, _scfg in config.strategy_configs.items():
+        if _scfg.get("rule_engine") and _cfg(_sname, "enabled", True):
+            _rule_engine_names.append(_sname)
+
+    for _sname in _rule_engine_names:
+        _re_name = config.strategy_configs[_sname].get("rule_engine", "")
+        if _re_name == "structural_swing_v1":
+            from core.strategies.structural_swing_v1 import StructuralSwingV1
+
+            _sl_cfg = _cfg(_sname, "sl", {})
+            _tp_cfg = _cfg(_sname, "tp", {})
+            _tick_size = 0.001 if config.symbol.startswith("XAU") else 0.01
+
+            _engine = StructuralSwingV1(
+                sl_atr_mult=float(_sl_cfg.get("base_atr_mult", 3.0)),
+                tp_atr_mult=float(_tp_cfg.get("base_atr_mult", 1.5)),
+                horizon_bars=int(_cfg(_sname, "exit", {}).get("time_exit_cycles", 12)),
+                spread_points=float(_cfg(_sname, "spread_points", 30)),
+                slippage_points=float(_cfg(_sname, "slippage_points", 10)),
+                tick_size=_tick_size,
+            )
+            strategies[_sname] = RuleEngineStrategyWrapper(
+                strategy_name=_sname,
+                magic=int(_cfg(_sname, "magic", 90501)),
+                rule_engine=_engine,
+                cooldown_bars=int(_cfg(_sname, "cooldown_bars", 3)),
+                max_positions_per_direction=int(_cfg(_sname, "max_positions_per_direction", 1)),
+                base_volume=float(_cfg(_sname, "base_volume", 0.01)),
+            )
+            print(
+                json.dumps(
+                    {
+                        "event": "rule_engine_strategy_created",
+                        "time": _utc_iso(),
+                        "strategy": _sname,
+                        "rule_engine": _re_name,
+                        "magic": _cfg(_sname, "magic", 90501),
+                        "sl_atr_mult": _engine.sl_mult,
+                        "tp_atr_mult": _engine.tp_mult,
+                        "horizon_bars": _engine.horizon,
+                        "message": "Zero-ML rule-based strategy integrated into live pipeline",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        else:
+            print(
+                json.dumps(
+                    {
+                        "event": "rule_engine_unknown",
+                        "time": _utc_iso(),
+                        "strategy": _sname,
+                        "rule_engine": _re_name,
+                        "warning": "Unknown rule_engine type — strategy will NOT be created",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
 
     return strategies

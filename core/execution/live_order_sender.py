@@ -30,6 +30,30 @@ from core.protocol.schema_versions import SCHEMA_COMMUNICATION_ENVELOPE
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Blind Spot 4 (2026-06-13): Hard-Coded Blast Limits
+#
+# These are the FINAL physical guillotine — they CANNOT be overridden by any
+# config file (live.yaml, governance_state.json, etc.).  Unlike SL/TP which
+# already have hardcoded ceilings (MAX_SL_ATR=4.0, MAX_TP_ATR=6.0 in
+# dynamic_sl_tp.py), volume had NO non-configurable ceiling — a single typo
+# in live.yaml (base_volume: 1.00 instead of 0.01) could bypass every
+# software gate and cause catastrophic loss.
+#
+# Pattern: same design as MAX_SL_ATR / MAX_TP_ATR — absolute, non-negotiable.
+# ═══════════════════════════════════════════════════════════════════════════════
+MAX_ALLOWED_LOT_SIZE: float = 0.05  # 0.05 lots XAU ≈ $500/ATR move — more than any strategy uses
+MAX_DAILY_DRAWDOWN_USD: float = -200.0  # absolute daily loss floor, non-overridable
+
+
+class FatalRiskViolation(RuntimeError):
+    """Hardcoded blast limit triggered — non-configurable safety ceiling.
+
+    Raised when a dispatch payload violates an absolute physical limit
+    (volume ceiling, daily drawdown floor).  This is NOT catchable by
+    normal error handlers — it must trip the circuit breaker.
+    """
+
 
 def _coerce_positive_float_sg(value: Any) -> float | None:
     try:
@@ -85,12 +109,7 @@ def _validate_ack_sl_tp(
     Phase 2 bridge worker).  Validates against requested values with 0.5 pip
     tolerance.  Full blocking upgrade after 50+ live trades confirm stability.
     """
-    import json as _json
     import logging
-    import time as _time
-    from datetime import UTC
-    from datetime import datetime as _datetime
-    from pathlib import Path as _Path
 
     logger = logging.getLogger("live_order_sender")
     intent_id = result.get("intent_id", "")
@@ -254,6 +273,19 @@ def dispatch_live_open_order(
     post-trade analysis.  It is never interpreted by the bridge itself.
     """
     iid = intent_id or f"live_open_{uuid.uuid4().hex}"
+
+    # ── Blind Spot 4: Hard-Coded Blast Limit ──────────────────────────
+    # This is the FINAL physical guillotine.  It CANNOT be bypassed by
+    # config.  If volume exceeds the hardcoded ceiling, raise a fatal
+    # error that trips the circuit breaker — no order reaches MT5.
+    if volume is not None and volume > MAX_ALLOWED_LOT_SIZE:
+        raise FatalRiskViolation(
+            f"Volume {volume} exceeds hardcoded blast limit "
+            f"{MAX_ALLOWED_LOT_SIZE}.  Intent ID: {iid}.  "
+            f"This is a NON-CONFIGURABLE safety ceiling.  "
+            f"Check live.yaml for fat-finger errors."
+        )
+
     execution_payload: dict[str, Any] = {
         "intent_id": iid,
         "action": "open",

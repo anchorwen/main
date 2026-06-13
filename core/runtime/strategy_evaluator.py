@@ -12,8 +12,11 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
+import numpy as np
+
 from core.execution.execution_queue import ExecutionQueue
 from core.execution.portfolio_risk import PortfolioRiskController, RiskVerdict
+from core.execution.pre_trade_guards import check_feature_vector, repair_feature_vector
 from core.execution.regime_gate import RegimeGate
 
 
@@ -169,6 +172,83 @@ def evaluate_strategy_lines(
         _fv = feature_vector
         if sname == "barrier_12bar_meta" and meta_feature_vector is not None:
             _fv = meta_feature_vector
+
+        # ── Blind Spot 1: Sanity Bounds Gate ───────────────────────────
+        # Repair NaN/Inf in feature vector before inference, then check
+        # for extreme outliers (abs(Z) > 10.0).  A single poisoned feature
+        # value can trigger spurious high-confidence signals from tree-based
+        # models (XGB/LGB).  Drop the cycle if irreparable.
+        _fv, _repair_log = repair_feature_vector(_fv)
+        if _repair_log["repaired"]:
+            print(
+                json.dumps(
+                    {
+                        "event": "feature_vector_repaired",
+                        "time": _utc_iso(),
+                        "strategy": sname,
+                        "nan_filled": _repair_log["nan_filled"],
+                        "inf_filled": _repair_log["inf_filled"],
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        _fv_check = check_feature_vector(_fv, max_nan_ratio=0.0)
+        if not _fv_check["passed"]:
+            print(
+                json.dumps(
+                    {
+                        "event": "feature_vector_blocked",
+                        "time": _utc_iso(),
+                        "strategy": sname,
+                        "issues": _fv_check["issues"],
+                        "reason": "sanity_bounds_gate",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            strategy_results.append(
+                {
+                    "strategy": sname,
+                    "should_trade": False,
+                    "direction": "neutral",
+                    "confidence": 0.0,
+                    "reason": "sanity_bounds_gate:" + ",".join(_fv_check["issues"]),
+                }
+            )
+            continue
+
+        # ── Extreme value gate: reject any feature with abs(value) > 10.0 ──
+        _fv_arr = np.asarray(_fv, dtype=np.float64).ravel()
+        _fv_clean = _fv_arr[np.isfinite(_fv_arr)]
+        if len(_fv_clean) > 0 and np.max(np.abs(_fv_clean)) > 10.0:
+            _max_val = float(np.max(np.abs(_fv_clean)))
+            _max_idx = int(np.argmax(np.abs(_fv_clean)))
+            print(
+                json.dumps(
+                    {
+                        "event": "extreme_feature_blocked",
+                        "time": _utc_iso(),
+                        "strategy": sname,
+                        "max_abs_value": _max_val,
+                        "feature_index": _max_idx,
+                        "reason": "extreme_value_gate",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            strategy_results.append(
+                {
+                    "strategy": sname,
+                    "should_trade": False,
+                    "direction": "neutral",
+                    "confidence": 0.0,
+                    "reason": f"extreme_value_gate:max_abs={_max_val:.1f}_at_idx_{_max_idx}",
+                }
+            )
+            continue
 
         decision = strategy.evaluate(
             feature_vector=_fv,
@@ -395,11 +475,7 @@ def evaluate_strategy_lines(
         # ── Cut 6: Data-health degradation → progressive risk reduction ──
         # FIX-20260611-022: Computed upstream from DataHealthService output.
         # NORMAL(100%) → YELLOW(40%) → ORANGE(15%,no new) → RED(0%,close-only).
-        if (
-            decision.should_trade
-            and gate_mode != "shadow"
-            and degradation_constraints is not None
-        ):
+        if decision.should_trade and gate_mode != "shadow" and degradation_constraints is not None:
             try:
                 from core.observability.degradation import apply_degradation_to_decision
 
@@ -478,6 +554,29 @@ def evaluate_strategy_lines(
         if risk_result.verdict.value == "rejected":
             strategy_results[-1]["risk"] = "rejected"
             strategy_results[-1]["risk_reason"] = risk_result.reason
+            continue
+
+        # ── Blind Spot 3: Entry-in-flight lock ────────────────────────
+        # If an open order is still awaiting ACK from MT5, block the
+        # next cycle from dispatching a duplicate.  Without this, a slow
+        # MT5 response (>5s) causes the next cycle to see "no position"
+        # and dispatch a second open — doubling exposure.
+        if execution_queue.is_pending_open(sname):
+            strategy_results[-1]["should_trade"] = False
+            strategy_results[-1]["reason"] = "blocked_entry_in_flight"
+            print(
+                json.dumps(
+                    {
+                        "event": "entry_in_flight_blocked",
+                        "time": _utc_iso(),
+                        "strategy": sname,
+                        "direction": decision.direction,
+                        "reason": "pending_open_order_not_yet_acked",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
             continue
 
         # Queue for execution

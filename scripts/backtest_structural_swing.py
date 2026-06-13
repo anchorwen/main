@@ -112,13 +112,18 @@ def simulate_trade(
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="backtest_structural_swing")
     p.add_argument("--data", required=True, help="Path to M5 OHLC CSV")
-    p.add_argument("--h1-csv", default=None, help="Path to H1 OHLC CSV (optional; resamples from M5 if missing)")
+    p.add_argument(
+        "--h1-csv",
+        default=None,
+        help="Path to H1 OHLC CSV (optional; resamples from M5 if missing)",
+    )
     p.add_argument("--sl-mult", type=float, default=3.0)
     p.add_argument("--tp-mult", type=float, default=1.5)
     p.add_argument("--horizon", type=int, default=12)
     p.add_argument("--spread-points", type=float, default=30)
     p.add_argument("--slippage-points", type=float, default=10)
     p.add_argument("--ema-threshold", type=float, default=0.5)
+    p.add_argument("--tick-size", type=float, default=0.001, help="XAU=0.001, BTC=0.01")
     return p
 
 
@@ -143,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[backtest] H1 data: {args.h1_csv} ({len(df_h1)} bars)")
     else:
         # Resample M5 to H1 (12 bars per H1)
-        h1_closes = c[::12].repeat(12)[:len(c)]
+        h1_closes = c[::12].repeat(12)[: len(c)]
         print("[backtest] H1 data: resampled from M5 (12:1)")
 
     n_bars = len(c)
@@ -158,6 +163,7 @@ def main(argv: list[str] | None = None) -> int:
         spread_points=args.spread_points,
         slippage_points=args.slippage_points,
         ema_threshold_atr_mult=args.ema_threshold,
+        tick_size=args.tick_size,
     )
     print(f"\n[backtest] Strategy: {strat.to_dict()}")
 
@@ -208,9 +214,13 @@ def main(argv: list[str] | None = None) -> int:
             continue
 
         signal = SwingSignal(
-            direction=direction, entry_price=round(entry, 3),
-            stop_loss=round(sl, 3), take_profit=round(tp, 3),
-            atr=round(float(_atr_val), 4), ema_diff=round(float(_diff), 4), bar_index=i,
+            direction=direction,
+            entry_price=round(entry, 3),
+            stop_loss=round(sl, 3),
+            take_profit=round(tp, 3),
+            atr=round(float(_atr_val), 4),
+            ema_diff=round(float(_diff), 4),
+            bar_index=i,
         )
 
         result = simulate_trade(o, h, l, c, i + 1, signal, args.horizon)
@@ -254,10 +264,14 @@ def main(argv: list[str] | None = None) -> int:
     print("BACKTEST RESULTS")
     print("=" * 70)
     print(f"  Signals evaluated:     {total_signals}")
-    print(f"  Filtered by trend:     {filtered_by_trend} ({filtered_by_trend/max(total_signals,1)*100:.1f}%)")
+    print(
+        f"  Filtered by trend:     {filtered_by_trend} ({filtered_by_trend/max(total_signals,1)*100:.1f}%)"
+    )
     print(f"  Trades executed:       {n_trades}")
     print(f"  Bars covered:          {n_bars - warmup}")
-    print(f"  Avg trades/day:        {n_trades / ((n_bars - warmup) / 288):.1f}  (M5: 288 bars/day)")
+    print(
+        f"  Avg trades/day:        {n_trades / ((n_bars - warmup) / 288):.1f}  (M5: 288 bars/day)"
+    )
     print()
     _mean_pnl = float(np.mean(pnl_r))
     _std_pnl = float(np.std(pnl_r))
@@ -267,18 +281,30 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  Sharpe:                {_mean_pnl/max(_std_pnl,0.001)*np.sqrt(n_trades):.2f}")
     print(f"  Max drawdown:          {max_dd:+.2f}R")
     print()
-    print(f"  TP hits:    {tp_count:>4d} ({tp_count/n_trades*100:5.1f}%)  PnL: {tp_pnl:+.2f}R  avg: {tp_pnl/max(tp_count,1):+.4f}R")
-    print(f"  SL hits:    {sl_count:>4d} ({sl_count/n_trades*100:5.1f}%)  PnL: {sl_pnl:+.2f}R  avg: {sl_pnl/max(sl_count,1):+.4f}R")
-    print(f"  Timeouts:   {to_count:>4d} ({to_count/n_trades*100:5.1f}%)  PnL: {to_pnl:+.2f}R  avg: {to_pnl/max(to_count,1):+.4f}R")
+    print(
+        f"  TP hits:    {tp_count:>4d} ({tp_count/n_trades*100:5.1f}%)  PnL: {tp_pnl:+.2f}R  avg: {tp_pnl/max(tp_count,1):+.4f}R"
+    )
+    print(
+        f"  SL hits:    {sl_count:>4d} ({sl_count/n_trades*100:5.1f}%)  PnL: {sl_pnl:+.2f}R  avg: {sl_pnl/max(sl_count,1):+.4f}R"
+    )
+    print(
+        f"  Timeouts:   {to_count:>4d} ({to_count/n_trades*100:5.1f}%)  PnL: {to_pnl:+.2f}R  avg: {to_pnl/max(to_count,1):+.4f}R"
+    )
 
     if to_count > 0:
         to_pnls = [t["pnl_r"] for t in trades if t["outcome"] == "timeout"]
-        print(f"    Timeout PnL dist: mean={np.mean(to_pnls):+.4f}R, median={np.median(to_pnls):+.4f}R, "
-              f"P5={np.percentile(to_pnls,5):+.4f}R, P95={np.percentile(to_pnls,95):+.4f}R")
+        print(
+            f"    Timeout PnL dist: mean={np.mean(to_pnls):+.4f}R, median={np.median(to_pnls):+.4f}R, "
+            f"P5={np.percentile(to_pnls,5):+.4f}R, P95={np.percentile(to_pnls,95):+.4f}R"
+        )
 
     print()
-    print(f"  Long trades:  {len(long_trades):>4d}  PnL: {sum(t['pnl_r'] for t in long_trades):+.2f}R")
-    print(f"  Short trades: {len(short_trades):>4d}  PnL: {sum(t['pnl_r'] for t in short_trades):+.2f}R")
+    print(
+        f"  Long trades:  {len(long_trades):>4d}  PnL: {sum(t['pnl_r'] for t in long_trades):+.2f}R"
+    )
+    print(
+        f"  Short trades: {len(short_trades):>4d}  PnL: {sum(t['pnl_r'] for t in short_trades):+.2f}R"
+    )
 
     # Statistical significance
     abs_pnl = np.abs(pnl_r)
@@ -293,18 +319,20 @@ def main(argv: list[str] | None = None) -> int:
         float(np.mean(random_paths >= actual)),
         float(np.mean(random_paths <= actual)),
     )
-    print(f"\n  Bootstrap: actual={actual:+.2f}R, random 95%=[{np.percentile(random_paths,5):+.2f}, {np.percentile(random_paths,95):+.2f}]")
+    print(
+        f"\n  Bootstrap: actual={actual:+.2f}R, random 95%=[{np.percentile(random_paths,5):+.2f}, {np.percentile(random_paths,95):+.2f}]"
+    )
     print(f"  P(two-sided): {p_val:.4f}  {'SIGNIFICANT' if p_val<0.05 else 'NOT significant'}")
 
     # PnL curve (last 20 trades for quick visual)
-    print(f"\n  Cumulative PnL (last 50 trades):")
+    print("\n  Cumulative PnL (last 50 trades):")
     recent = cum[-50:] if len(cum) >= 50 else cum
-    for i, val in enumerate(recent):
+    for _i, val in enumerate(recent):
         bar = "█" * max(1, int(abs(val) * 3))
         sign = "+" if val >= 0 else ""
         print(f"    {sign}{val:>6.1f}R  {bar}")
 
-    print(f"\n[DONE] All statistics above are the sole source of truth.")
+    print("\n[DONE] All statistics above are the sole source of truth.")
     return 0
 
 

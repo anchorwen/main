@@ -59,6 +59,9 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260613-037 | 2026-06-13 | cursor-agent | — | **Blind Spot 4 — Hard-Coded Blast Limits**: `MAX_ALLOWED_LOT_SIZE=0.05` + `FatalRiskViolation` in live_order_sender.py. Final non-configurable volume ceiling. Mirrors MAX_SL_ATR/MAX_TP_ATR pattern. | RC-07 |
+| FIX-20260613-036 | 2026-06-13 | cursor-agent | — | **Blind Spot 3 — Entry-in-flight Lock**: ExecutionQueue gains _pending_open dict + flood lock (mirrors proven _pending_close). 30s auto-expire, 3-attempt permanent lock. strategy_evaluator checks is_pending_open() before enqueue. | RC-04 |
+| FIX-20260613-038 | 2026-06-13 | cursor-agent | — | **Phase 1 Cleanup**: `rule_engine_strategy.py` created — bridges StructuralSwingV1 to StrategyLine interface. strategy_builder.py detects rule_engine field. strategy_line.py/meta_filter_routing.py: 7 __import__("datetime") → datetime.now(UTC). | RC-06, RC-09, RC-12 |
 | FIX-20260612-001 | 2026-06-12 | cursor-agent | — | **Phase 0: 静默降级可观测性注入 (KI-004 收口)**: pwin_chain.py BLE001→fail_open_guard + 3条告警; StrategyDecision 新增 p_win_source/p_win_degraded 透传至 journal. | RC-06 |
 | FIX-20260610-006 | 2026-06-10 | cursor-agent | — | **Trail telemetry structured**: ActivePosition.trail_advances计数器; managed_close dispatch payload注入trail_contribution{initial_sl,final_sl,trail_advances}. | RC-06 |
 | FIX-20260609-008 | 2026-06-09 | cursor-agent | — | **MetaFilter gate routing Strangler Fig (P1)**: `apply_meta_filter_gate()` → `meta_filter_routing.py`. Unified statarb/swing/barrier paths. `strategy_line.py`: 2377→2205 (-172). | RC-08 |

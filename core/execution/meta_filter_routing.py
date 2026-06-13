@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -70,7 +71,10 @@ def apply_meta_filter_gate(
     # ── Section 4ab: statarb + swing MetaFilter routing ──
     if (
         _active_filter is not None
-        and ("statarb" in name or name in ("m15_swing", "m30_swing", "h1_swing", "h4_swing", "btc_swing"))
+        and (
+            "statarb" in name
+            or name in ("m15_swing", "m30_swing", "h1_swing", "h4_swing", "btc_swing")
+        )
         and _meta_p_win is None
     ):
         try:
@@ -89,7 +93,7 @@ def apply_meta_filter_gate(
                     json.dumps(
                         {
                             "event": "kelly_diag",
-                            "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+                            "time": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                             "strategy": name,
                             "stage": "meta_filter_rejected_statarb",
                             "z_score": round(entry_z_score, 4),
@@ -123,7 +127,7 @@ def apply_meta_filter_gate(
                 json.dumps(
                     {
                         "event": "kelly_diag",
-                        "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+                        "time": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                         "strategy": name,
                         "stage": "meta_filter_p_win_statarb",
                         "z_score": round(entry_z_score, 4),
@@ -181,11 +185,13 @@ def apply_meta_filter_gate(
                     json.dumps(
                         {
                             "event": "kelly_diag",
-                            "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+                            "time": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                             "strategy": name,
                             "stage": "meta_filter_rejected",
                             "s1_prediction": round(_s1_prediction, 6) if _s1_prediction else None,
-                            "result_p_win": round(float(_diag_p_win), 4) if _diag_p_win is not None else None,
+                            "result_p_win": round(float(_diag_p_win), 4)
+                            if _diag_p_win is not None
+                            else None,
                             "passed": False,
                             "reason": result.reason if result.reason else "threshold",
                         },
@@ -207,14 +213,16 @@ def apply_meta_filter_gate(
                     supporting_count=support_count,
                     total_count=total_count,
                     regime_mode=regime_gate_mode,
-                    reason=f"meta_filter_rejected:{result.reason}" if result.reason else "meta_filter_rejected",
+                    reason=f"meta_filter_rejected:{result.reason}"
+                    if result.reason
+                    else "meta_filter_rejected",
                 )
             _meta_p_win = float(result.p_win)
             print(
                 json.dumps(
                     {
                         "event": "kelly_diag",
-                        "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+                        "time": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                         "strategy": name,
                         "stage": "meta_filter_p_win",
                         "s1_prediction": round(_s1_prediction, 6),

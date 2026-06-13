@@ -3014,17 +3014,18 @@ def execute_live_cycle(
             from core.runtime.position_close_adapter import reconcile_and_record_closes
 
             _events = reconcile_and_record_closes(
-                state.known_open_tickets, mt5_worker, config.symbol,
-                str(journal_path), state,
+                state.known_open_tickets,
+                mt5_worker,
+                config.symbol,
+                str(journal_path),
+                state,
             )
 
             if _events:
                 # ── Update per-strategy losing-streak tracker ──
                 for _evt in _events:
                     _label = _evt.label
-                    _strategy = _evt.strategy or _strategy_from_brain_ids(
-                        list(_evt.brain_ids)
-                    )
+                    _strategy = _evt.strategy or _strategy_from_brain_ids(list(_evt.brain_ids))
                     _curr = state.consecutive_sl_hits.get(_strategy, 0)
                     if _label in ("sl_hit_first", "loss"):
                         _curr += 1
@@ -3048,10 +3049,9 @@ def execute_live_cycle(
                     # Update portfolio risk
                     if state.portfolio_risk_controller is not None:
                         import contextlib as _ctxlib_pf
+
                         with _ctxlib_pf.suppress(Exception):
-                            state.portfolio_risk_controller.update_returns(
-                                _strategy, _evt.pnl
-                            )
+                            state.portfolio_risk_controller.update_returns(_strategy, _evt.pnl)
 
                     # ── Budget recording ──
                     if mt5_worker is not None:
@@ -3266,10 +3266,18 @@ def execute_live_cycle(
 
             tick_ok = check_tick_sanity(_bid, _ask, config.symbol)
             if not tick_ok["passed"]:
+                # ── Blind Spot 1b: hard-block the cycle on dirty tick data ──
+                # Previously this was log-only — the cycle continued with
+                # potentially poisoned prices.  Now we nullify bid/ask so
+                # ALL downstream trading logic (spread gate, feature assembly,
+                # strategy evaluate, order dispatch) naturally bails out.
+                _bid = None
+                _ask = None
+                mid_price = None
                 print(
                     json.dumps(
                         {
-                            "event": "tick_sanity_failed",
+                            "event": "tick_sanity_blocked_cycle",
                             "time": _utc_iso(),
                             "bid": tick_ok["bid"],
                             "ask": tick_ok["ask"],
@@ -3683,7 +3691,8 @@ def execute_live_cycle(
                 except Exception:  # noqa: BLE001
                     pass  # Non-blocking — skip dedup on read error
                 _mia_closed = [
-                    e for e in _mia_closed
+                    e
+                    for e in _mia_closed
                     if int(e.get("position_ticket", 0) or 0) not in _existing_close_tickets
                 ]
                 if not _mia_closed:
@@ -3694,8 +3703,11 @@ def execute_live_cycle(
                     from core.runtime.position_close_adapter import record_mia_closes
 
                     record_mia_closes(
-                        _mia_closed, mt5_worker, config.symbol,
-                        str(journal_path), state,
+                        _mia_closed,
+                        mt5_worker,
+                        config.symbol,
+                        str(journal_path),
+                        state,
                     )
             # ── Record exit for reentry guard ──
             for _entry in _mia_closed:
@@ -4709,8 +4721,12 @@ def execute_live_cycle(
             if _ou_parms is not None:
                 state._last_ou_params = _ou_parms
                 # FIX-20260613-B: Record OU z-score/half-life in entry_context for audit trail
-                _entry_features_snapshot["ou_z_score"] = round(float(_ou_parms.get("z_score", 0.0)), 4)
-                _entry_features_snapshot["ou_half_life"] = round(float(_ou_parms.get("half_life", 0.0)), 1)
+                _entry_features_snapshot["ou_z_score"] = round(
+                    float(_ou_parms.get("z_score", 0.0)), 4
+                )
+                _entry_features_snapshot["ou_half_life"] = round(
+                    float(_ou_parms.get("half_life", 0.0)), 1
+                )
                 _entry_features_snapshot["ou_theta"] = round(float(_ou_parms.get("theta", 0.0)), 4)
 
         # ── Circuit breaker: skip all new entries when drawdown kill is active ──
@@ -4922,6 +4938,7 @@ def execute_live_cycle(
                 )
             except Exception as _gm_exc:  # noqa: BLE001
                 import logging as _gm_log
+
                 _gm_log.getLogger(__name__).warning(
                     "Golden Master record_cycle_outputs failed: %s", _gm_exc
                 )

@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -646,7 +647,7 @@ class StrategyLine:
                             _json.dumps(
                                 {
                                     "event": "huber_bps_trapline",
-                                    "time": __import__("datetime").datetime.utcnow().isoformat()
+                                    "time": datetime.now(UTC).isoformat().replace("+00:00", "Z")
                                     + "Z",
                                     "brain_id": _brain_id,
                                     "raw_bps": round(float(_raw), 6),
@@ -1510,7 +1511,7 @@ class StrategyLine:
             _json.dumps(
                 {
                     "event": "kelly_sizing",
-                    "time": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+                    "time": datetime.now(UTC).isoformat().replace("+00:00", "Z") + "Z",
                     "strategy": name,
                     "p_win": round(_p_win, 4),
                     "p_win_source": _p_win_source,

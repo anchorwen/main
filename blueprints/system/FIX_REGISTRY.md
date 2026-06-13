@@ -52,6 +52,10 @@ FIX-YYYYMMDD-NNN
 | FIX-20260609-009 | 2026-06-09 | execution-orders | **Trend isolation gates Strangler Fig extraction (P1)**: `apply_trend_isolation_gates()` extracted from sections 4aa-4d (232 lines) → `core/execution/trend_isolation_gates.py` (196 lines). Unified counter-trend, multi-TF, inflection gates. `strategy_line.py`: 2377→1993 (-384 after 008+009). | RC-08 |
 | FIX-20260609-008 | 2026-06-09 | execution-orders | **MetaFilter gate routing Strangler Fig extraction (P1)**: `apply_meta_filter_gate()` extracted from `StrategyLine.evaluate()` sections 4ab+4e (202 lines) → `core/execution/meta_filter_routing.py` (218 lines). Unified statarb/swing/barrier MetaFilter paths. `strategy_line.py`: 2377→2205 (-172). | RC-08 |
 | FIX-20260612-001 | 2026-06-12 | execution-guards, execution-orders | **Phase 0: 静默降级可观测性注入 (KI-004 收口)**: (1) `pwin_chain.py`: BLE001 at `get_metrics()` → `fail_open_guard("PWinMetricsResolver")`, 3条 fallback 路径各加 structured warning 日志 (`FALLBACK_PATH_1/3a/3b`). (2) `StrategyDecision`: 新增 `p_win_source` + `p_win_degraded` 字段, `evaluate()` 在 p_win 链结束后自动判定降级状态. (3) `dispatch_live_open_order()` → `execution_queue` 透传新字段至 journal. 零逻辑变更, 纯可观测性. DQAF-20260612-004. | RC-06 |
+| FIX-20260613-035 | 2026-06-13 | execution-guards, runtime-live | **Blind Spot 1 — Sanity Bounds Gate**: (1) `repair_feature_vector()` connected to live pipeline in strategy_evaluator.py (was unit-test only). (2) Extreme value gate: abs(feature) > 10.0 → cycle blocked. (3) `tick_sanity` failure now blocks cycle (was log-only). Prevents dirty tick data from poisoning tree-based model inference. | RC-07 |
+| FIX-20260613-036 | 2026-06-13 | execution-orders, runtime-live | **Blind Spot 3 — Entry-in-flight Lock**: `ExecutionQueue` now maintains `_pending_open` dict (mirrors proven `_pending_close` in position_manager). 30s auto-expire, 3-attempt flood → permanent lock. `strategy_evaluator.py` checks `is_pending_open()` before enqueue. Prevents duplicate open orders when MT5 ACK > cycle interval. | RC-04 |
+| FIX-20260613-037 | 2026-06-13 | execution-orders | **Blind Spot 4 — Hard-Coded Blast Limits**: `MAX_ALLOWED_LOT_SIZE=0.05` + `FatalRiskViolation` in `live_order_sender.py`. Final non-configurable volume ceiling (mirrors MAX_SL_ATR/MAX_TP_ATR in dynamic_sl_tp.py). Prevents fat-finger config typos from bypassing every software gate. | RC-07 |
+| FIX-20260613-038 | 2026-06-13 | execution-orders, runtime, deployment-config, strategies | **Phase 1 Cleanup — OU freeze + StructuralSwingV1 + __import__ purge**: (1) `statarb_dynamic`/`statarb_m15` + `OU_Params_V6_Sniper` frozen (enabled:false). (2) `StructuralSwingV1` integrated via `RuleEngineStrategyWrapper` + `strategy_builder.py` rule_engine detection. (3) 7 `__import__("datetime")` anti-patterns replaced with `datetime.now(UTC)`. (4) `_utc_iso()` in strategy_evaluator removed incorrect `.replace(tzinfo=None)`. | RC-06, RC-09, RC-12 |
 | FIX-20260609-007 | 2026-06-09 | runtime-live | **Trail dispatch Strangler Fig extraction (P0)**: `compute_and_dispatch_trail()` extracted from `_execute_management_phase()` → `core/runtime/trail_dispatch.py` (218 lines). Handles Chandelier trail, breakeven, trail TP, diag logging, snapshot recording, single modify_sltp dispatch. `live_cycle.py`: 6565→6169 (-396 lines after FIX-006+007). | RC-08 |
 | FIX-20260609-006 | 2026-06-09 | runtime-live | **Position registration Strangler Fig extraction**: `register_dispatched_positions()` extracted from `live_cycle.py` L5342-5518 (255 lines) → `core/runtime/position_registration.py` (270 lines). Triggered by FIX-005 modification of TrailPolicy construction. `live_cycle.py`: 6565→6332 lines (-233). Fixed pre-existing bug: legacy dispatch used undefined `ticket` from extracted loop scope → `pm_ticket`. | RC-08 |
 | FIX-20260609-005 | 2026-06-09 | execution-orders, deployment-config | **Per-strategy trail_activation_atr + dead config elimination**: (1) 9 strategies each received data-driven `trail_activation_atr` in YAML exit blocks (statarb=0.3, m15/m30=0.4, btc_swing=0.5, h1=0.7, h4=0.8). (2) `register_position` gained `trail_activation_atr` param → constructs per-position TrailPolicy. (3) `live_cycle.py` dispatch wires `_exit_cfg.trail_activation_atr` → `TrailPolicy(trail_activation_atr=...)`. Previously all XAU strategies shared 1.0 default regardless of holding period archetype. ReB: `DEAD_CONFIG_STRATEGY_EXIT_TRAIL`. | RC-09, RC-06 |
@@ -2294,3 +2298,51 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-09 (config-drift) + RC-11 (stale-data) — FIX-20260610-001 retired V5 in 3 places; governance re-promoted to live but none of the 3 sites were synced back.
 - **Prevention**: Brain retirement must be reversible via a single source of truth. Re-enabling a brain requires checking all 3 sites (registry JSON, live.yaml, vote_weight).
 - **Dependents Checked**: governance_state.json, strategy_builder.py
+
+### FIX-20260613-035
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: (pending)
+- **Type**: fix
+- **Module**: execution-guards, runtime-live
+- **Files**: core/runtime/strategy_evaluator.py, core/runtime/live_cycle.py
+- **Description**: Blind Spot 1 — Sanity Bounds Gate. (1) `repair_feature_vector()` wired into live pipeline at strategy_evaluator.py:173 — was previously only called in unit tests. Repairs NaN (forward-fill) and Inf (median replace) before brain inference. (2) Extreme value gate: any feature with abs(value) > 10.0 after repair → cycle blocked (tree-based models are sensitive to outliers). (3) `tick_sanity` failure in live_cycle.py now nullifies bid/ask/mid_price to block the ENTIRE cycle — was previously log-only (cycle continued with potentially poisoned prices).
+- **Root Cause**: RC-07 (missing-validation) — feature value sanity was checked structurally (Schema Dictator validates column count/order) but not numerically (NaN, Inf, Z > 10). Tree-based models (XGB/LGB) produce spurious high-confidence signals on extreme inputs.
+- **Prevention**: Every feature vector entering brain inference must pass: (a) repair NaN/Inf (auto-fix), (b) extreme value gate (abs > 10 → drop cycle). Tick sanity failure must be a hard block, not a warning.
+- **Dependents Checked**: core/runtime/signal_health.py, core/features/feature_assembler.py, core/brains/adapters/
+
+### FIX-20260613-036
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: (pending)
+- **Type**: fix
+- **Module**: execution-orders, runtime-live
+- **Files**: core/execution/execution_queue.py, core/runtime/strategy_evaluator.py
+- **Description**: Blind Spot 3 — Entry-in-flight Lock. (1) `ExecutionQueue` gains `_pending_open` dict (strategy_name → monotonic time), `_open_attempt_count` dict, and `_open_flood_locked` set — mirrors the proven `_pending_close` lock pattern from position_manager.py. (2) `is_pending_open()` check in strategy_evaluator.py before enqueue blocks duplicate open orders when MT5 ACK is slower than the cycle interval. (3) Auto-expire after 30s, permanent flood lock after 3 attempts. Without this, a slow MT5 response (>5s) causes the next management cycle to see "no position yet" and dispatch a second open — doubling exposure.
+- **Root Cause**: RC-04 (race-condition) — close-in-flight lock existed (position_manager._pending_close) but open-in-flight had zero protection. The bridge-side 2-second in-memory dedup window was insufficient for MT5 latency spikes.
+- **Prevention**: Every async dispatch must have a lifecycle lock: pending → confirmed/rejected → cleared. Open and close paths must be symmetric in protection.
+- **Dependents Checked**: position_manager.py (_pending_close pattern), mt5_bridge_worker.py (bridge dedup)
+
+### FIX-20260613-037
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: (pending)
+- **Type**: fix
+- **Module**: execution-orders
+- **Files**: core/execution/live_order_sender.py
+- **Description**: Blind Spot 4 — Hard-Coded Blast Limits. (1) `MAX_ALLOWED_LOT_SIZE = 0.05` (non-configurable volume ceiling) + `FatalRiskViolation` exception class. (2) Check in `dispatch_live_open_order()` raises FatalRiskViolation if volume exceeds ceiling — this trips the circuit breaker. Mirrors the SL/TP hardcoded ceilings (MAX_SL_ATR=4.0, MAX_TP_ATR=6.0 in dynamic_sl_tp.py) which protected SL/TP but volume had no equivalent. A single typo in live.yaml (base_volume: 1.00 instead of 0.01) could previously reach MT5 unblocked.
+- **Root Cause**: RC-07 (missing-validation) — SL/TP had hardcoded ceilings since FIX-20260607 but volume was entirely config-driven with no non-configurable ceiling anywhere in the pipeline.
+- **Prevention**: Every value that could cause catastrophic loss if mistyped must have a hardcoded absolute ceiling at the final dispatch chokepoint. Config-driven limits are defense-in-depth, not the final gate.
+- **Dependents Checked**: dynamic_sl_tp.py (MAX_SL_ATR pattern), strategy_budget.py, portfolio_risk.py
+
+### FIX-20260613-038
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: (pending)
+- **Type**: fix
+- **Module**: execution-orders, runtime, deployment-config, strategies
+- **Files**: configs/live.yaml, core/runtime/strategy_builder.py, core/execution/rule_engine_strategy.py (NEW), core/execution/strategy_line.py, core/execution/meta_filter_routing.py, core/execution/position_manager.py, core/runtime/strategy_evaluator.py
+- **Description**: Phase 1 Cleanup. (1) `statarb_dynamic`/`statarb_m15` frozen (enabled:false) + `OU_Params_V6_Sniper` brain disabled — strategy was -10.28R/373 trades (p=0.035 significant loss). (2) `StructuralSwingV1` integrated via new `RuleEngineStrategyWrapper` (core/execution/rule_engine_strategy.py) + `strategy_builder.py` rule_engine detection — previously existed only for backtesting. (3) 7 `__import__("datetime")` anti-patterns replaced with `datetime.now(UTC)` in strategy_line.py, meta_filter_routing.py, position_manager.py. (4) Strategy evaluator _utc_iso() bug fixed: `.replace(tzinfo=None)` → standard `.replace("+00:00", "Z")`.
+- **Root Cause**: RC-06 (contract-violation) for OU strategy — brain proved statistically loss-making but remained enabled because freeze decision was documented but not executed. RC-09 (config-drift) for StructuralSwingV1 — config existed but no code instantiated it. RC-12 (missing-feature) for __import__ anti-patterns.
+- **Prevention**: Freeze decisions must be executed at config level immediately, not deferred. New strategy types need both config AND factory code. Dynamic imports (`__import__`) are an anti-pattern — use normal module-level imports.
+- **Dependents Checked**: live_btc.yaml (BTC OU V6 also frozen in FIX-011), contract_groups.py, verify.py config consistency check

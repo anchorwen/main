@@ -19,7 +19,7 @@ features:
 brains:
   registry_entries:
   - path: configs/brains/OU_Params_V6_Sniper.json
-    enabled: true
+    enabled: false
   - path: configs/brains/OU_Params_V7_M15.json
     enabled: true
   - path: configs/brains/Meta_Stage1_Huber_V1.json
@@ -422,7 +422,7 @@ strategy_lines:
     direction_balance:
       long_bias_discount: 0.0
   statarb_dynamic:
-    enabled: true
+    enabled: false
     timeframe: M5
     magic: 90003
     strategy_family: mean_reversion
@@ -468,7 +468,7 @@ strategy_lines:
       long_bias_discount: 0.1
     min_p_win: 0.45
   statarb_m15:
-    enabled: true
+    enabled: false
     timeframe: M15
     magic: 90103
     strategy_family: mean_reversion

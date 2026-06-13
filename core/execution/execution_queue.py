@@ -65,7 +65,17 @@ class DispatchResult:
 
 
 class ExecutionQueue:
-    """Serializes multi-strategy dispatch with stagger delay."""
+    """Serializes multi-strategy dispatch with stagger delay.
+
+    Blind Spot 3 (2026-06-13): entry-in-flight lock prevents duplicate open
+    orders when MT5 ACK is slow (>5s).  Without this, a second management
+    cycle sees no position yet and dispatches a duplicate — doubling exposure.
+    Pattern mirrors the proven _pending_close lock in position_manager.py.
+    """
+
+    # ── Entry-in-flight constants ──
+    PENDING_OPEN_TIMEOUT_SEC: float = 30.0  # auto-expire lock after 30s
+    PENDING_OPEN_FLOOD_THRESHOLD: int = 3  # permanent-lock after 3 attempts
 
     def __init__(
         self,
@@ -77,6 +87,52 @@ class ExecutionQueue:
         self.priority_map = priority_map or DEFAULT_PRIORITY
         self._last_dispatch_time: float = 0.0
         self._queue: list[QueuedDecision] = []
+        # ── Entry-in-flight lock (Blind Spot 3) ──
+        self._pending_open: dict[str, float] = {}  # strategy_name → monotonic time
+        self._open_attempt_count: dict[str, int] = {}  # cumulative attempts per strategy
+        self._open_flood_locked: set[str] = set()  # permanent-locked strategies
+
+    # ── Entry-in-flight API (Blind Spot 3) ──────────────────────────────
+
+    def is_pending_open(self, strategy_name: str) -> bool:
+        """Check whether an open order is still in-flight for this strategy.
+
+        Returns True if the strategy has a pending open that hasn't timed out
+        or been permanently flood-locked.
+        """
+        if strategy_name in self._open_flood_locked:
+            return True
+        dispatched_at = self._pending_open.get(strategy_name)
+        if dispatched_at is None:
+            return False
+        if _time.monotonic() - dispatched_at > self.PENDING_OPEN_TIMEOUT_SEC:
+            # Auto-expire stale lock
+            del self._pending_open[strategy_name]
+            self._open_attempt_count.pop(strategy_name, None)
+            return False
+        return True
+
+    def _mark_pending_open(self, strategy_name: str) -> None:
+        """Record that an open order was dispatched for this strategy."""
+        self._pending_open[strategy_name] = _time.monotonic()
+        self._open_attempt_count[strategy_name] = self._open_attempt_count.get(strategy_name, 0) + 1
+        if self._open_attempt_count[strategy_name] >= self.PENDING_OPEN_FLOOD_THRESHOLD:
+            self._open_flood_locked.add(strategy_name)
+            import logging as _flood_log
+
+            _flood_log.getLogger(__name__).critical(
+                "FATAL: strategy=%s hit open flood threshold (%d attempts) — permanent-locked. "
+                "Manual intervention required.",
+                strategy_name,
+                self._open_attempt_count[strategy_name],
+            )
+
+    def _clear_pending_open(self, strategy_name: str) -> None:
+        """Clear the entry-in-flight lock on confirmed dispatch or rejection."""
+        self._pending_open.pop(strategy_name, None)
+        self._open_attempt_count.pop(strategy_name, None)
+
+    # ── End entry-in-flight API ─────────────────────────────────────────
 
     def enqueue(self, strategy_name: str, decision: Any, risk_result: Any) -> None:
         """Add a decision to the queue."""
@@ -252,8 +308,6 @@ class ExecutionQueue:
                 # Close/reduce existing opposing position
                 _close_confirmed = False
                 try:
-                    from pathlib import Path as _Path
-
                     from core.execution.live_order_sender import dispatch_live_order
 
                     _close_vol = (
@@ -362,6 +416,9 @@ class ExecutionQueue:
             _last_error = ""
             _journal_entry = None
 
+            # ── Blind Spot 3: mark entry-in-flight BEFORE first attempt ──
+            self._mark_pending_open(queued.strategy_name)
+
             for _attempt in range(_max_attempts):
                 try:
                     _journal_entry = dispatch_fn(
@@ -415,6 +472,8 @@ class ExecutionQueue:
                     )
                 )
             else:
+                # ── Blind Spot 3: clear entry-in-flight on definitive failure ──
+                self._clear_pending_open(queued.strategy_name)
                 results.append(
                     DispatchResult(
                         strategy_name=queued.strategy_name,
