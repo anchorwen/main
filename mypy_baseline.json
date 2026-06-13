@@ -1,4 +1,22 @@
 {
+  "core/runtime/position_registration.py": 1,
   "scripts/analyze_live_journal.py": 11,
-  "scripts/tuning/tune_btc_kalman_h4.py": 3
+  "scripts/analyze_recent_losses.py": 1,
+  "scripts/analyze_xau_recent_entries.py": 12,
+  "scripts/audit_2day.py": 5,
+  "scripts/audit_data_exhaustive.py": 3,
+  "scripts/audit_data_final.py": 1,
+  "scripts/audit_data_module.py": 1,
+  "scripts/audit_deep_fullstack.py": 5,
+  "scripts/audit_phase_c_fix5.py": 2,
+  "scripts/audit_pnl_ledger_integrity.py": 5,
+  "scripts/audit_trade_quality.py": 8,
+  "scripts/audit_xau_exits.py": 12,
+  "scripts/backfill_journal_pnl.py": 15,
+  "scripts/check_import_boundaries.py": 1,
+  "scripts/system_health.py": 3,
+  "scripts/training/train.py": 2,
+  "scripts/tuning/tune_btc_kalman_h4.py": 3,
+  "scripts/verify_event_stream.py": 7,
+  "tests/data/test_contracts.py": 2
 }
