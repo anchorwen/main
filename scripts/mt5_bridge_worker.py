@@ -957,6 +957,70 @@ def _zmq_send_ack(pub: Any, message_id: str, ack: dict[str, Any]) -> None:
     pub.send_string(f"ack {json.dumps(ack, ensure_ascii=False)}")
 
 
+def _write_zmq_journal_entry(
+    *,
+    journal_path: Path,
+    message_id: str,
+    msg_payload: dict[str, Any],
+    action: str,
+    ack_status: str,
+    detail: Any,
+    default_volume: float = 0.01,
+    target: str = "exec_bridge",
+) -> None:
+    """Build and write a journal entry for a ZMQ-processed order.
+
+    FIX-20260613-062: The ZMQ worker path was missing journal writes entirely.
+    This function builds the same journal record as the file-mode path.
+    """
+    _magic = msg_payload.get("magic")
+    if isinstance(_magic, int):
+        from core.contracts.strategy_magic import MAGIC_TO_STRATEGY as _M2S
+        _strategy = _M2S.get(_magic, "")
+    else:
+        _strategy = ""
+    position_ticket = coerce_position_ticket(msg_payload)
+    _label = _derive_label(action, msg_payload, detail) if detail else None
+    _actual_profit = detail.get("profit") if isinstance(detail, dict) else None
+    _pnl = _actual_profit if _actual_profit is not None else msg_payload.get("pnl")
+    vol_disp = detail.get("volume") if isinstance(detail, dict) else None
+    if vol_disp is None:
+        vol_disp = msg_payload.get("volume") or default_volume
+
+    record: dict[str, Any] = {
+        "schema_version": "live_trade_journal.v2",
+        "recorded_at": _utc_now(),
+        "message_id": message_id,
+        "target": target,
+        "ack_status": ack_status,
+        "detail": detail,
+        "symbol": msg_payload.get("symbol"),
+        "action": action,
+        "side": msg_payload.get("side"),
+        "volume": vol_disp,
+        "pnl": _pnl,
+        "label": _label,
+        "comment": msg_payload.get("comment", ""),
+        "magic": _magic,
+        "strategy": _strategy,
+        "effective_volume_hint": effective_volume(msg_payload, default_volume=default_volume),
+        "position_ticket": position_ticket,
+        "execution_payload_schema": msg_payload.get("execution_payload_schema"),
+        "sl": msg_payload.get("sl", msg_payload.get("stop_loss")),
+        "tp": msg_payload.get("tp", msg_payload.get("take_profit")),
+        "outbox_path": "",  # ZMQ mode — no file
+        "archive_path": "",  # ZMQ mode — no file
+        "receipt_path": "",  # ZMQ mode — no file
+        "brain_ids": msg_payload.get("brain_ids"),
+        "brain_votes": msg_payload.get("brain_votes"),
+        "confidence": msg_payload.get("confidence"),
+        "p_win": msg_payload.get("p_win"),
+        "kelly_mult": msg_payload.get("kelly_mult"),
+        "entry_context": msg_payload.get("entry_context"),
+    }
+    _append_journal(journal_path, record)
+
+
 def run_zmq_worker(
     *,
     order_endpoint: str = "tcp://127.0.0.1:5556",
@@ -1041,12 +1105,24 @@ def run_zmq_worker(
 
             # ── Execute via existing MT5 logic ──
             try:
+                action = normalize_action(payload.get("action"))
                 # _send_to_mt5 returns (ack_status, detail_dict)
                 ack_status, detail = _send_to_mt5(
                     mt5, payload,
                     default_volume=default_volume,
                     deviation=deviation,
                     magic=magic,
+                )
+                # ── FIX-20260613-062: Write journal entry (was missing in ZMQ path) ──
+                _write_zmq_journal_entry(
+                    journal_path=journal_path,
+                    message_id=msg_id,
+                    msg_payload=payload,
+                    action=action,
+                    ack_status=ack_status,
+                    detail=detail,
+                    default_volume=default_volume,
+                    target="exec_bridge",
                 )
                 _zmq_send_ack(
                     pub, msg_id,

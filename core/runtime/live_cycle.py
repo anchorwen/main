@@ -637,7 +637,7 @@ def _execute_management_phase(
         # MT5 IPC — FTC(CRASH) lets the crash propagate (no outer try/except)
         _mt5_pos = None
         with FaultTolerantContext(
-            level=FaultLevel.CRASH,
+            level=FaultLevel.DEGRADE,
             component="MT5_IPC:positions_get:MIA_guard",
         ):
             from core.runtime.fault_handler import (
@@ -669,7 +669,7 @@ def _execute_management_phase(
             # Without retry, ~23% of MIA closes (10/43 BTC) have null PnL
             # because deals aren't available on the first query.
             with FaultTolerantContext(
-                level=FaultLevel.CRASH,
+                level=FaultLevel.DEGRADE,
                 component="MT5_IPC:history_deals_get:MIA_enrich",
             ):
                 _deals = None
@@ -686,7 +686,7 @@ def _execute_management_phase(
             state.known_open_tickets.pop(pos.ticket, None)
             # Save position state immediately — don't wait for periodic save
             with FaultTolerantContext(
-                level=FaultLevel.CRASH,
+                level=FaultLevel.DEGRADE,
                 component="pos_state_save_mia_close",
             ):
                 pm.save_state(config.position_state_path)
@@ -969,7 +969,7 @@ def _execute_management_phase(
     _m5_high, _m5_low, _m5_spread = None, None, 0
     if mt5_worker is not None:
         with FaultTolerantContext(
-            level=FaultLevel.CRASH,
+            level=FaultLevel.DEGRADE,
             component="MT5_IPC:copy_rates_from_pos:M5_OHLC_tracking",
         ):
             _m5_rates = mt5_worker.copy_rates_from_pos(config.symbol, 5, 0, 1)  # TIMEFRAME_M5
@@ -2769,7 +2769,7 @@ def execute_live_cycle(
     # ── On first cycle, reconcile positions closed during downtime ──
     if state.loop_iteration == 1 and state.known_open_tickets and not config.no_mt5:
         with FaultTolerantContext(
-            level=FaultLevel.CRASH,
+            level=FaultLevel.DEGRADE,
             component="MT5_IPC:positions_get:startup_reconciliation",
         ):
             _positions = mt5_worker.positions_get(symbol=config.symbol) or []
@@ -3059,7 +3059,7 @@ def execute_live_cycle(
                     # ── Budget recording ──
                     if mt5_worker is not None:
                         with FaultTolerantContext(
-                            level=FaultLevel.CRASH,
+                            level=FaultLevel.DEGRADE,
                             component="MT5_IPC:account_info:PnL_to_equity",
                         ):
                             _acc = mt5_worker.account_info()
@@ -3248,7 +3248,7 @@ def execute_live_cycle(
         # Bootstrap from historical M5 closes so M15 bars are available immediately
         if not config.no_mt5 and mt5_worker is not None:
             with FaultTolerantContext(
-                level=FaultLevel.CRASH,
+                level=FaultLevel.DEGRADE,
                 component="MT5_IPC:copy_rates_from_pos:MTF_bootstrap",
             ):
                 _hist_rates = mt5_worker.copy_rates_from_pos(
@@ -3825,7 +3825,7 @@ def execute_live_cycle(
             # ── Save position state immediately ──
             if state.position_manager is not None:
                 with FaultTolerantContext(
-                    level=FaultLevel.CRASH,
+                    level=FaultLevel.DEGRADE,
                     component="PositionState:save_after_mia_close",
                 ):
                     state.position_manager.save_state(config.position_state_path)
@@ -4145,7 +4145,7 @@ def execute_live_cycle(
         logger.warning("Broker equity fetch failed — falling back to MT5 direct query")
     if _account_equity is None and mt5_worker is not None:
         with FaultTolerantContext(
-            level=FaultLevel.CRASH,
+            level=FaultLevel.DEGRADE,
             component="MT5_IPC:account_info:equity_risk_budget",
         ):
             _acc = mt5_worker.account_info()
@@ -4380,7 +4380,7 @@ def execute_live_cycle(
                 if config.intraday_drawdown_kill_enabled:
                     # Fetch current equity from MT5 account (must succeed or crash)
                     with FaultTolerantContext(
-                        level=FaultLevel.CRASH,
+                        level=FaultLevel.DEGRADE,
                         component="MT5_IPC:account_info:drawdown_kill",
                     ):
                         _acc = mt5_worker.account_info()
@@ -4625,7 +4625,7 @@ def execute_live_cycle(
         # ── Query MT5 for ALL open positions (by magic → strategy mapping) ──
         if not config.no_mt5 and mt5_worker is not None:
             with FaultTolerantContext(
-                level=FaultLevel.CRASH,
+                level=FaultLevel.DEGRADE,
                 component="MT5_IPC:positions_get:portfolio_risk",
             ):  # fmt: skip
                 from core.contracts.strategy_magic import MAGIC_TO_STRATEGY as _MAGIC_TO_STRATEGY
@@ -5373,7 +5373,7 @@ def execute_live_cycle(
                     # MT5 IPC — FTC(CRASH), extracted from legacy try/except
                     _acc = None
                     with FaultTolerantContext(
-                        level=FaultLevel.CRASH,
+                        level=FaultLevel.DEGRADE,
                         component="MT5_IPC:account_info:drawdown_kill_legacy",
                     ):
                         _acc = mt5_worker.account_info()
