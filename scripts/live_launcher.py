@@ -54,7 +54,11 @@ def _utc_compact() -> str:
 
 
 def load_live_config(config_path: Path) -> dict[str, Any]:
-    """Load live.yaml and extract live_trading section."""
+    """Load live.yaml and extract live_trading section.
+
+    Also forwards top-level ``adapter`` and ``zmq`` sections so the
+    launcher can auto-select the correct bridge transport (file vs ZMQ).
+    """
     import yaml
 
     with open(config_path, encoding="utf-8") as fh:
@@ -69,6 +73,10 @@ def load_live_config(config_path: Path) -> dict[str, Any]:
         lt["mt5_terminal_path"] = cfg.get("mt5", {}).get("terminal_path", "")
     if not lt.get("mt5_terminal_path"):
         raise ValueError("mt5_terminal_path is required in live_trading or mt5 section")
+
+    # Forward adapter + zmq config for bridge transport selection
+    lt["adapter"] = cfg.get("adapter", {})
+    lt["zmq"] = cfg.get("zmq", {})
 
     return lt
 
