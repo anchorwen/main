@@ -573,22 +573,31 @@ def section_6_config_alignment(portfolios: dict) -> dict:
     """
     alignment: dict[str, dict] = {"XAU": {}, "BTC": {}}
 
-    # Collect brain_ids from config directories
+    # Collect brain_ids from live config YAML registry_entries
     config_brains: dict[str, set[str]] = {"XAU": set(), "BTC": set()}
-    for sym, cfg_dir_name in [("XAU", "brains"), ("BTC", "brains_btc")]:
-        cfg_dir = ROOT / "configs" / cfg_dir_name
-        if cfg_dir.is_dir():
-            for f in cfg_dir.glob("*.json"):
-                if "normalization" in f.name or "meta_stage" in f.name:
-                    continue
-                bid = f.stem
-                try:
-                    cfg = _read_json(f)
-                    if isinstance(cfg, dict) and cfg.get("status") == "shadow":
-                        continue  # shadow brains treated as unregistered
-                except Exception:
-                    pass
-                config_brains[sym].add(bid)
+    config_enabled: dict[str, dict[str, bool]] = {"XAU": {}, "BTC": {}}
+    for sym, yaml_path in [("XAU", "configs/live.yaml"), ("BTC", "configs/live_btc.yaml")]:
+        try:
+            import yaml  # noqa: F401 — optional dependency
+            with open(ROOT / yaml_path, encoding="utf-8") as f:
+                cfg = yaml.safe_load(f)
+            entries = cfg.get("brains", {}).get("registry_entries", [])
+            for entry in entries:
+                if isinstance(entry, dict):
+                    path = entry.get("path", "")
+                    bid = path.replace("\\", "/").split("/")[-1].replace(".json", "")
+                    if bid and "normalization" not in bid and "meta_stage" not in bid:
+                        config_brains[sym].add(bid)
+                        config_enabled[sym][bid] = entry.get("enabled", False)
+        except Exception:
+            # Fallback: scan configs/brains*/ directory
+            cfg_dir = ROOT / "configs" / ("brains" if sym == "XAU" else "brains_btc")
+            if cfg_dir.is_dir():
+                for f in cfg_dir.glob("*.json"):
+                    if "normalization" in f.name or "meta_stage" in f.name:
+                        continue
+                    config_brains[sym].add(f.stem)
+                    config_enabled[sym][f.stem] = True
 
     # Collect governance brain_ids
     gov_brains: dict[str, set[str]] = {}
@@ -623,7 +632,14 @@ def section_6_config_alignment(portfolios: dict) -> dict:
             if b and b["status"] not in ("archived", "shadow"):
                 issues.append({"type": "in_gov_not_config", "brain_id": bid, "status": b["status"]})
         for bid in in_cfg_not_gov:
-            issues.append({"type": "in_config_not_gov", "brain_id": bid})
+            enabled = config_enabled.get(sym, {}).get(bid, False)
+            issues.append({"type": "in_config_not_gov", "brain_id": bid, "config_enabled": enabled})
+        # Additional: config enabled but gov frozen
+        for bid in gov_set & config_brains.get(sym, set()):
+            b = next((b for b in portfolios.get(sym, []) if b["brain_id"] == bid), None)
+            enabled = config_enabled.get(sym, {}).get(bid, False)
+            if b and b["status"] == "frozen" and enabled:
+                issues.append({"type": "config_enabled_but_gov_frozen", "brain_id": bid})
         mismatches[sym] = issues
 
     alignment["cross_asset"] = cross_asset
@@ -654,8 +670,12 @@ def _print_section_6(alignment: dict) -> list[str]:
         if issues:
             print(f"\n  ⚠ {sym} config-gov mismatches ({len(issues)}):")
             for issue in issues:
-                print(f"    {issue['type']}: {issue['brain_id']}"
-                      f"{' (status=' + issue.get('status', '') + ')' if issue.get('status') else ''}")
+                extra = ""
+                if issue.get("status"):
+                    extra += f" status={issue['status']}"
+                if "config_enabled" in issue:
+                    extra += f" config_enabled={issue['config_enabled']}"
+                print(f"    {issue['type']}: {issue['brain_id']}{extra}")
             flags.append(f"WARN|{sym}|config_gov_mismatch:{len(issues)}")
         else:
             print(f"\n  {sym}: ✅ Config-governance aligned")
