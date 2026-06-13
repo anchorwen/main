@@ -1324,7 +1324,7 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 if _health_path.exists():
                     _hb = json.loads(_health_path.read_text(encoding="utf-8"))
-                    if _hb.get("mt5_connected") and _hb.get("transport") == "zmq":
+                    if _hb.get("mt5_connected"):  # transport=zmq preferred but not required (BTC #FIX-058 compat)
                         _bridge_ready = True
                         break
             except (OSError, json.JSONDecodeError, KeyError):
