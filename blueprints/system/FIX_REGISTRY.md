@@ -612,6 +612,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260613-087 | 2026-06-13 | execution-orders | Entry Spread Propagation: fixed _entry_features_snapshot fallback (added bid/ask/spread), fixed ZMQ bridge worker msg_payload variable (was outer envelope, now inner payload). Retroactive audit: 113 tainted opens (XAU 57.8%, BTC 36.1%), EV bias ~6-32. L3 tech debt: entry_context needs mandatory Pydantic validation to eliminate soft fallback. | RC-06 |
 | FIX-20260613-088 | 2026-06-13 | monitor-dashboard, observability | **DingTalk Institutional-Grade Structured Alert Enhancement** (Iron Law #13): (D1) event_schema.py — BaseTelemetryEvent + DataHealthPayload frozen dataclasses. (D2) localization.py — SSOT RuleRegistry extracts all CN translations from alert_channels.py. (D3 reserved) runbook_id binding. data_health_schema.py build_alert_context() now returns list[dict] (not \\n-string). DingTalkAlertChannel._format() renders structured sections (故障源/警告源 bullet lists) + Type B runbook SOP with P0 actions/diagnostic commands/escalation path. RULE_NAME_CN +6, CONTEXT_KEY_CN +8. Fixes: operator could not identify failing source from data_source_critical_failure alert (only saw count=1). | RC-06 |
 | FIX-20260613-088r | 2026-06-13 | observability | **AlertService context_snapshot filter fix**: isinstance check only allowed str\|int\|float\|bool — list[dict] structured payloads were dropped at the AlertService→Channel boundary. Extended to str\|int\|float\|bool\|list\|dict. Without this fix the D1 pipeline was broken in production. | RC-06 |
+| FIX-20260613-089 | 2026-06-13 | observability | **journal_completeness dupes threshold desensitization**: raised `dupes > 0` → `dupes > 5` in `check_journal_completeness()`. Original threshold caused alert fatigue (CRITICAL alert for 2 dupes with zero PnL impact). In async retry-reentrant architecture, occasional dupes are expected until Phase 2 Event Sourcing delivers idempotent journal writes. Tech debt: `TODO-20260711-journal-idempotency`. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2658,3 +2659,27 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-06 — contract-violation (build_alert_context discarded HealthReport source-level detail)
 - **Prevention**: Iron Law #13 mandates all telemetry carry structured typed payloads — string concatenation forbidden at source
 - **Dependents Checked**: live_alert_hub.py, data_health_monitor.py, daily_ops.py, service_container.py — no changes needed
+
+### FIX-20260613-088r
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: bd0d0dd
+- **Type**: fix
+- **Module**: observability
+- **Files**: core/observability/alert_service.py
+- **Description**: AlertService context_snapshot filter only allowed str|int|float|bool — list[dict] structured payloads (data_health_failed_sources) were dropped at the AlertService→Channel boundary. Extended filter to accept list|dict. Without this fix the D1 structured data pipeline was broken in production.
+- **Root Cause**: RC-06 — contract-violation (premature type narrowing in alert context filter)
+- **Prevention**: Channel-level rendering (D2) requires the full payload to pass through the intermediate layers unfiltered
+- **Dependents Checked**: (none)
+
+### FIX-20260613-089
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: (pending)
+- **Type**: fix
+- **Module**: observability
+- **Files**: core/observability/data_health_service.py
+- **Description**: Raised `dupes > 0` → `dupes > 5` in `check_journal_completeness()`. Original threshold caused alert fatigue — CRITICAL alert for 2 duplicate journal entries (zero PnL impact; position_ticket dedup already handles duplicates in aggregation). In async retry-reentrant MT5 bridge write architecture, occasional dupes are expected. Tech debt: `TODO-20260711-journal-idempotency` — Phase 2 Event Sourcing will make journal writes naturally idempotent, after which this check can be removed entirely.
+- **Root Cause**: RC-06 — contract-violation (threshold calibrated for ideal synchronous system, not real-world async bridge with retry)
+- **Prevention**: Thresholds that directly gate CRITICAL alerts must be validated against 7+ days of production data before activation
+- **Dependents Checked**: (none)

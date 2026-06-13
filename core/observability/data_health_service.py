@@ -2740,7 +2740,7 @@ class DataHealthService:
         flags = []
         if cp_rate < 0.30:
             flags.append(f"CLOSE_PRICE_RATE={cp_rate:.1%}")
-        if dupes > 0:
+        if dupes > 5:
             flags.append(f"DUPES={dupes}")
         if trail_rate < 0.10:
             flags.append(f"TRAIL_RATE={trail_rate:.1%}")
