@@ -598,6 +598,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260613-066 | 2026-06-13 | deployment-lifecycle | Audit Script None Defense: analyze_live_journal.py guards trade_side and n_brains against None before format strings. Prevents TypeError crash in Section 4 and ensures Section 5-6 output. | RC-01 |
 | FIX-20260613-067 | 2026-06-13 | data-infrastructure | FileLock Atomic Exclusive Create: replaced os.replace() (always overwrites) with os.O_CREAT|O_EXCL for true cross-process mutual exclusion. Added same-instance re-acquire guard. 23/23 tests pass. | RC-06 |
 | FIX-20260613-072 | 2026-06-13 | deployment-lifecycle | System Trust Report: deterministic single-script health check. 6 sections with auto-VERDICT. Frozen contamination detection (weight>0=FAIL, weight=0=WARN). Iron Law #11 compliant. | RC-06 |
+| FIX-20260613-073 | 2026-06-13 | deployment-lifecycle | SL Performance Diagnostic: Iron Law #11 script. Revealed 97% BTC SL exits have zero trail advancement — SL hit before trail activates. TP exits net +61 positive. | RC-07 |
 
 ---
 ## Fix Details by Year
@@ -2486,5 +2487,17 @@ FIX-YYYYMMDD-NNN
 - **Files**: scripts/system_trust_report.py
 - **Description**: System Trust Report: deterministic single-script health check. 6 sections with auto-VERDICT. Frozen contamination detection (weight>0=FAIL, weight=0=WARN). Iron Law #11 compliant.
 - **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260613-073
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: 5a01fec
+- **Type**: feat
+- **Module**: deployment-lifecycle
+- **Files**: scripts/diagnose_sl_performance.py
+- **Description**: SL Performance Diagnostic: Iron Law #11 script. Revealed 97% BTC SL exits have zero trail advancement — SL hit before trail activates. TP exits net +61 positive.
+- **Root Cause**: RC-07 — missing-validation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)

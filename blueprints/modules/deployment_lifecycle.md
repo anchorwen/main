@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260613-073 | 2026-06-13 | cursor-agent | 5a01fec | SL Performance Diagnostic: Iron Law #11 script. Revealed 97% BTC SL exits have zero trail advancement — SL hit before trail activates. TP exits net +61 positive. | missing-validation |
 | FIX-20260613-072 | 2026-06-13 | cursor-agent | 0460a51 | System Trust Report: deterministic single-script health check. 6 sections with auto-VERDICT. Frozen contamination detection (weight>0=FAIL, weight=0=WARN). Iron Law #11 compliant. | contract-violation |
 | FIX-20260613-066 | 2026-06-13 | cursor-agent | c992678 | Audit Script None Defense: analyze_live_journal.py guards trade_side and n_brains against None before format strings. Prevents TypeError crash in Section 4 and ensures Section 5-6 output. | missing-null-check |
 | FIX-20260613-065 | 2026-06-13 | cursor-agent | c992678 | Blueprint Reconciliation Script: reconcile_fix_registry.py batch backfills 63 orphan + 28 missing FIX entries across 13 module blueprints. One-shot backlog clearance for Iron Law #7 compliance. | contract-violation |
