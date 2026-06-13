@@ -494,6 +494,8 @@ def compute_financial_metrics(
     Returns:
         Dict with sharpe_ratio, win_rate, profit_factor, max_drawdown, etc.
     """
+    baseline_returns: np.ndarray | None = None
+
     if regression:
         # Regression: use sign(prediction) as trade direction,
         # actual forward return (y_true) as realized PnL.
@@ -552,10 +554,13 @@ def compute_financial_metrics(
             baseline_pos = 2.0 * baseline_preds.astype(np.float64) - 1.0
             baseline_returns = baseline_pos * direction
 
-    # Baseline Sharpe (always-predict-majority)
-    baseline_mean = float(np.mean(baseline_returns))
-    baseline_std = float(np.std(baseline_returns)) + 1e-10
-    baseline_sharpe = baseline_mean / baseline_std * np.sqrt(annual_factor)
+    # Baseline Sharpe (always-predict-majority for classification; skip for regression)
+    if baseline_returns is not None:
+        baseline_mean = float(np.mean(baseline_returns))
+        baseline_std = float(np.std(baseline_returns)) + 1e-10
+        baseline_sharpe = baseline_mean / baseline_std * np.sqrt(annual_factor)
+    else:
+        baseline_sharpe = 0.0
 
     # Sharpe ratio (excess over baseline isolates model skill)
     mean_ret = float(np.mean(returns))
