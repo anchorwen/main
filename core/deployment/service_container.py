@@ -280,6 +280,16 @@ class ServiceContainer:
                 outbox_dir=outbox_dir,
             )
 
+        if adapter_name == "mt5_zmq":
+            from core.protocol.services.zmq_communication_adapter import ZMQCommunicationAdapter
+
+            terminal_path = extensions.get("mt5_terminal_path", "")
+            order_endpoint = extensions.get("zmq_order_endpoint", "tcp://127.0.0.1:5556")
+            return ZMQCommunicationAdapter(
+                terminal_path=terminal_path,
+                order_endpoint=order_endpoint,
+            )
+
         if adapter_name == "fix":
             from core.execution.fix_contracts import FixSessionConfig
             from core.protocol.services.fix_communication_adapter import FixCommunicationAdapter

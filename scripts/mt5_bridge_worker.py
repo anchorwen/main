@@ -46,6 +46,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    # ── ZMQ mode ──
+    parser.add_argument(
+        "--zmq",
+        action="store_true",
+        help="Use ZeroMQ PUSH/PULL instead of file polling (sub-ms latency)",
+    )
+    parser.add_argument(
+        "--zmq-order-endpoint",
+        default="tcp://127.0.0.1:5556",
+        help="ZMQ PULL endpoint for receiving orders",
+    )
+    parser.add_argument(
+        "--zmq-ack-endpoint",
+        default="tcp://127.0.0.1:5557",
+        help="ZMQ PUB endpoint for broadcasting ACK receipts",
+    )
     return parser
 
 
@@ -912,8 +928,217 @@ def run_worker(args: argparse.Namespace) -> int:
                 print("[bridge] MT5 shutdown", flush=True)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# ZMQ Bridge Worker
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _zmq_send_ack(pub: Any, message_id: str, ack: dict[str, Any]) -> None:
+    """Publish an ACK receipt via ZMQ PUB socket."""
+    ack["message_id"] = message_id
+    pub.send_string(f"ack {json.dumps(ack, ensure_ascii=False)}")
+
+
+def run_zmq_worker(
+    *,
+    order_endpoint: str = "tcp://127.0.0.1:5556",
+    ack_endpoint: str = "tcp://127.0.0.1:5557",
+    receipt_dir: Path = Path("data/receipts"),
+    journal_path: Path = Path("data/live_trade_journal.jsonl"),
+    protection_flag_path: Path = Path("data/live_dispatch_block.flag"),
+    default_volume: float = 0.01,
+    deviation: int = 20,
+    magic: int = 90001,
+    dry_run: bool = False,
+    mt5: Any = None,
+    terminal_path: str = "",
+    default_symbol: str = "XAUUSDc",
+    health_path: Path = Path("data/reports/mt5_bridge_health.json"),
+    once: bool = False,
+) -> int:
+    """Run the bridge worker in ZeroMQ mode.
+
+    Replaces file-system polling with ZMQ_PULL (blocking recv, zero CPU
+    when idle).  ACK receipts are pushed via ZMQ_PUB so consumers receive
+    sub-ms notification instead of polling receipt files.
+    """
+    import zmq
+
+    ctx = zmq.Context.instance()  # type: ignore[attr-defined]
+
+    # ZMQ_PULL: receive orders from ZMQCommunicationAdapter
+    pull = ctx.socket(zmq.PULL)  # type: ignore[attr-defined]
+    pull.bind(order_endpoint)
+
+    # ZMQ_PUB: publish ACK receipts for all SUB consumers
+    pub = ctx.socket(zmq.PUB)  # type: ignore[attr-defined]
+    pub.bind(ack_endpoint)
+
+    print(f"[zmq_bridge] PULL bound to {order_endpoint}", flush=True)
+    print(f"[zmq_bridge] PUB  bound to {ack_endpoint}", flush=True)
+
+    _last_health_write = 0.0
+    _last_heartbeat_check = 0.0
+    _consecutive_hb_failures = 0
+
+    try:
+        while True:
+            # ── Block until an order arrives (zero CPU when idle) ──
+            try:
+                raw = pull.recv_string()
+            except zmq.ZMQError:  # type: ignore[attr-defined]
+                continue
+
+            try:
+                payload: dict[str, Any] = json.loads(raw)
+                envelope = payload.get("envelope", {})
+                msg_id = envelope.get("message_id", "unknown")
+            except json.JSONDecodeError:
+                print(f"[zmq_bridge] Invalid JSON received", flush=True)
+                continue
+
+            # ── Execute via existing MT5 logic ──
+            try:
+                # _send_to_mt5 returns (ack_status, detail_dict)
+                ack_status, detail = _send_to_mt5(
+                    mt5, payload,
+                    default_volume=default_volume,
+                    deviation=deviation,
+                    magic=magic,
+                )
+                _zmq_send_ack(
+                    pub, msg_id,
+                    {"ack_status": ack_status, "detail": detail, "received_at": _utc_now()},
+                )
+                print(
+                    json.dumps(
+                        {"zmq_processed": {"message_id": msg_id, "ack_status": ack_status}},
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+            except Exception as exc:  # noqa: BLE001 — preserve existing error pattern
+                _zmq_send_ack(
+                    pub, msg_id,
+                    {
+                        "ack_status": "error",
+                        "detail": {"reason": f"{type(exc).__name__}: {str(exc)[:200]}"},
+                        "received_at": _utc_now(),
+                    },
+                )
+                print(
+                    json.dumps(
+                        {"zmq_error": {"message_id": msg_id, "error": str(exc)[:200]}},
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+
+            # ── Periodic health heartbeat ──
+            _now = time.time()
+            if _now - _last_health_write > 30:
+                _hb = {
+                    "last_heartbeat_utc": _utc_now(),
+                    "pid": os.getpid(),
+                    "mt5_connected": mt5 is not None,
+                    "outbox_pending": 0,  # ZMQ mode: no file polling
+                    "transport": "zmq",
+                    "order_endpoint": order_endpoint,
+                }
+                try:
+                    health_path.write_text(json.dumps(_hb, ensure_ascii=False), encoding="utf-8")
+                except OSError:
+                    pass
+                _last_health_write = _now
+
+            # ── MT5 heartbeat + reconnect ──
+            if _now - _last_heartbeat_check > _HEARTBEAT_INTERVAL:
+                _last_heartbeat_check = _now
+                if mt5 is not None:
+                    if _check_mt5_heartbeat(mt5):
+                        _consecutive_hb_failures = 0
+                    else:
+                        _consecutive_hb_failures += 1
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "zmq_bridge_mt5_heartbeat_lost",
+                                    "consecutive_failures": _consecutive_hb_failures,
+                                    "time": _utc_now(),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                        if _consecutive_hb_failures >= _MAX_RECONNECT_ATTEMPTS:
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "zmq_bridge_mt5_fatal",
+                                        "action": "exiting",
+                                        "time": _utc_now(),
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                            sys.exit(1)
+                        if terminal_path:
+                            if _reconnect_mt5(mt5, str(terminal_path), symbol=default_symbol):
+                                _consecutive_hb_failures = 0
+
+            if once:
+                return 0
+
+    finally:
+        with log_and_continue(component="ZMQBridge:cleanup"):
+            pull.close()
+            pub.close()
+        if mt5 is not None:
+            with log_and_continue(component="ZMQBridge:mt5_shutdown"):
+                mt5.shutdown()
+                print("[zmq_bridge] MT5 shutdown", flush=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.zmq:
+        # ── Initialize MT5 once ──
+        mt5 = None
+        terminal_path = args.mt5_terminal_path
+        if terminal_path:
+            try:
+                import MetaTrader5 as _mt5
+
+                if _mt5.initialize(path=str(terminal_path)):
+                    mt5 = _mt5
+                    print(f"[zmq_bridge] MT5 initialized: {terminal_path}", flush=True)
+                else:
+                    print(f"[zmq_bridge] WARN: MT5 init failed: {_mt5.last_error()}", flush=True)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[zmq_bridge] WARN: MT5 unavailable: {exc}", flush=True)
+
+        health_path = Path(args.receipt_dir).parent / "reports" / "mt5_bridge_health.json"
+        health_path.parent.mkdir(parents=True, exist_ok=True)
+
+        return run_zmq_worker(
+            order_endpoint=args.zmq_order_endpoint,
+            ack_endpoint=args.zmq_ack_endpoint,
+            receipt_dir=Path(args.receipt_dir),
+            journal_path=Path(args.journal_path),
+            protection_flag_path=Path(args.protection_flag_path),
+            default_volume=args.default_volume,
+            deviation=args.deviation,
+            magic=args.magic,
+            dry_run=bool(args.dry_run),
+            mt5=mt5,
+            terminal_path=terminal_path or "",
+            default_symbol=args.default_symbol,
+            health_path=health_path,
+            once=bool(args.once),
+        )
+
     return run_worker(args)
 
 

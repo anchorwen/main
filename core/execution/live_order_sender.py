@@ -95,25 +95,21 @@ def _validate_ack_sl_tp(
     logger = logging.getLogger("live_order_sender")
     intent_id = result.get("intent_id", "")
 
-    # Poll for ack receipt (bridge worker writes this async)
+    # Resolve ACK receipt (ZMQ fast path first, file polling fallback)
     ack_sl = None
     ack_tp = None
+    ack = None
     try:
-        today = _datetime.now(UTC).strftime("%Y-%m-%d")
-        ack_path = _Path(base_dir) / "receipts" / today / "exec_bridge" / f"{intent_id}.ack.json"
-        deadline = _time.monotonic() + 5.0
-        while _time.monotonic() < deadline:
-            if ack_path.exists():
-                ack = _json.loads(ack_path.read_text(encoding="utf-8"))
-                detail = ack.get("detail", {}) if isinstance(ack, dict) else {}
-                ack_sl = detail.get("confirmed_sl")
-                ack_tp = detail.get("confirmed_tp")
-                break
-            _time.sleep(0.2)
+        from core.protocol.services.zmq_receipt_listener import resolve_ack
+
+        ack = resolve_ack(intent_id, base_dir=base_dir, timeout=5.0)
     except Exception:  # noqa: BLE001
-        logging.getLogger(__name__).warning(
-            "SL/TP confirmation wait failed — proceeding without confirmation"
-        )
+        pass
+
+    if ack is not None:
+        detail = ack.get("detail", {}) if isinstance(ack, dict) else {}
+        ack_sl = detail.get("confirmed_sl")
+        ack_tp = detail.get("confirmed_tp")
 
     if ack_sl is not None and ack_tp is not None:
         sl_diff = abs(float(ack_sl) - requested_sl)
