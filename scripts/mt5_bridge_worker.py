@@ -933,6 +933,24 @@ def run_worker(args: argparse.Namespace) -> int:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+def _write_zmq_health(
+    health_path: Path, mt5: Any, order_endpoint: str
+) -> None:
+    """Write bridge health heartbeat indicating ZMQ transport mode."""
+    _hb = {
+        "last_heartbeat_utc": _utc_now(),
+        "pid": os.getpid(),
+        "mt5_connected": mt5 is not None,
+        "outbox_pending": 0,
+        "transport": "zmq",
+        "order_endpoint": order_endpoint,
+    }
+    try:
+        health_path.write_text(json.dumps(_hb, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+
+
 def _zmq_send_ack(pub: Any, message_id: str, ack: dict[str, Any]) -> None:
     """Publish an ACK receipt via ZMQ PUB socket."""
     ack["message_id"] = message_id
@@ -980,6 +998,9 @@ def run_zmq_worker(
     _last_health_write = 0.0
     _last_heartbeat_check = 0.0
     _consecutive_hb_failures = 0
+
+    # Write initial health heartbeat immediately so monitoring can confirm ZMQ mode
+    _write_zmq_health(health_path, mt5, order_endpoint)
 
     try:
         while True:
