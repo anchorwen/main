@@ -49,6 +49,17 @@ class RegimeDirectionGate:
         self._long_blocked_streak: int = 0
         self._short_blocked_streak: int = 0
         self._total_cycles: int = 0
+        # ── FIX-20260613-090: rolling physics buffers for self-calibration ──
+        # Hardcoded thresholds (Theta > 0.5, Hurst < 0.48) have no empirical
+        # basis in our system's data.  Instead, the gate self-calibrates:
+        # it collects recent (Theta, Hurst) pairs and only triggers the
+        # physics override when BOTH values are in the extreme tail of their
+        # own rolling distribution — Theta > P75 AND Hurst < P25.
+        # This adapts to whatever volatility regime the market is in.
+        self._ou_history: list[float] = []  # rolling window of OU Theta
+        self._hurst_history: list[float] = []  # rolling window of Hurst
+        self._physics_window: int = 288  # ~24h of M5 bars
+        self._physics_min_samples: int = 50  # need enough data before trusting
 
     def _resolve_trend(self, regime_info: dict[str, Any]) -> str:
         """Determine trend direction — physics-first, ADX as fallback.
@@ -63,21 +74,38 @@ class RegimeDirectionGate:
         """
         import math
 
-        # ═══ Priority 0: Physics-based mean-reversion override ═══
-        # If OU Theta > 0.5 (strong pull) AND Hurst < 0.48 (mean-reverting),
-        # the market has a physical restoring force — counter-trend signals
-        # are statistically justified.  This overrides ALL price-momentum
-        # indicators (ADX, trend_direction, DI).
+        # ═══ Priority 0: Self-calibrating physics-based override ═══
+        # No hardcoded thresholds — the gate maintains rolling distributions
+        # of OU Theta and Hurst, and triggers only when BOTH values are in
+        # the extreme tail of their own history.
+        # Condition: Theta > its own P75 AND Hurst < its own P25
+        # This means: "mean-reversion is unusually strong AND persistence
+        # is unusually low, relative to recent market conditions."
         ou_theta = float(regime_info.get("ou_theta_m5", float("nan")))
         hurst_m5 = float(regime_info.get("hurst_m5", float("nan")))
 
         if not (math.isnan(ou_theta) or math.isnan(hurst_m5)):
             # Guardrail: only trust values in physically plausible ranges
             if 0.0 < ou_theta < 2.0 and 0.0 < hurst_m5 < 1.0:
-                # 0.5 = strong mean-reversion pull
-                # 0.48 = Hurst margin below 0.5 (pure random walk)
-                if ou_theta > 0.5 and hurst_m5 < 0.48:
-                    return "ranging"
+                # Skip default/value from cold start (ou=0.0, hurst=0.5)
+                if not (abs(ou_theta) < 0.0001 and abs(hurst_m5 - 0.5) < 0.0001):
+                    # Accumulate rolling history
+                    self._ou_history.append(ou_theta)
+                    self._hurst_history.append(hurst_m5)
+                    if len(self._ou_history) > self._physics_window:
+                        self._ou_history.pop(0)
+                    if len(self._hurst_history) > self._physics_window:
+                        self._hurst_history.pop(0)
+
+                    # Self-calibrate: only trigger with sufficient history
+                    if len(self._ou_history) >= self._physics_min_samples:
+                        _ou_sorted = sorted(self._ou_history)
+                        _hurst_sorted = sorted(self._hurst_history)
+                        _ou_p75 = _ou_sorted[int(len(_ou_sorted) * 0.75)]
+                        _hurst_p25 = _hurst_sorted[int(len(_hurst_sorted) * 0.25)]
+                        # Override: strong pull AND weak persistence vs own history
+                        if ou_theta > _ou_p75 and hurst_m5 < _hurst_p25:
+                            return "ranging"
 
         # ═══ Priority 1: DI-based with ADX confirmation ═══
         adx = float(regime_info.get("adx", 0) or 0)
@@ -174,6 +202,20 @@ class RegimeDirectionGate:
             logger.warning(msg)
             stale_warnings.append(msg)
 
+        # ── Self-calibration diagnostics ──
+        _phys_state: dict[str, Any] = {"active": False, "samples": 0}
+        if len(self._ou_history) >= self._physics_min_samples:
+            _ou_s = sorted(self._ou_history)
+            _hu_s = sorted(self._hurst_history)
+            _phys_state = {
+                "active": True,
+                "samples": len(self._ou_history),
+                "ou_p75": round(_ou_s[int(len(_ou_s) * 0.75)], 4),
+                "hurst_p25": round(_hu_s[int(len(_hu_s) * 0.25)], 4),
+                "ou_current": round(float(regime_info.get("ou_theta_m5", 0)), 4),
+                "hurst_current": round(float(regime_info.get("hurst_m5", 0.5)), 4),
+            }
+
         audit = {
             "gate": "RegimeDirectionGate",
             "trend": trend,
@@ -186,6 +228,7 @@ class RegimeDirectionGate:
             "short_blocked_streak": self._short_blocked_streak,
             "stale_warnings": stale_warnings,
             "cycle": self._total_cycles,
+            "physics_calibration": _phys_state,
         }
         return passed, audit
 
