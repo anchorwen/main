@@ -35,6 +35,54 @@ def _get_r1_silence_state() -> dict[str, int]:
     return _r1_silence_state
 
 
+# ── Physics calibration state (FIX-20260613-090) ──
+# Self-calibrating rolling window of (OU Theta, Hurst) pairs.
+# The override triggers when BOTH values are in the extreme tail of their
+# own distribution — Theta > P75 AND Hurst < P25.  This adapts to whatever
+# volatility regime the market is in, avoiding hardcoded thresholds.
+_physics_state: dict[str, list[float]] = {"ou": [], "hurst": []}
+_PHYSICS_WINDOW: int = 288  # ~24h of M5 bars
+_PHYSICS_MIN_SAMPLES: int = 50
+
+
+def _check_physics_override(regime_info: dict) -> bool:
+    """Update rolling physics window and return True if mean-reversion confirmed.
+
+    Reads ou_theta_m5/hurst_m5 from regime_info (injected by live_cycle).
+    Self-calibrates: only triggers when Theta > P75(own history) AND
+    Hurst < P25(own history) — i.e., mean-reversion is unusually strong
+    AND persistence is unusually low relative to recent conditions.
+    """
+    import math
+
+    ou = float(regime_info.get("ou_theta_m5", float("nan")))
+    hu = float(regime_info.get("hurst_m5", float("nan")))
+    if math.isnan(ou) or math.isnan(hu):
+        return False
+    if not (0.0 < ou < 2.0 and 0.0 < hu < 1.0):
+        return False
+    # Reject default values from cold start
+    if abs(ou) < 0.0001 and abs(hu - 0.5) < 0.0001:
+        return False
+
+    s = _physics_state
+    s["ou"].append(ou)
+    s["hurst"].append(hu)
+    if len(s["ou"]) > _PHYSICS_WINDOW:
+        s["ou"].pop(0)
+    if len(s["hurst"]) > _PHYSICS_WINDOW:
+        s["hurst"].pop(0)
+
+    if len(s["ou"]) < _PHYSICS_MIN_SAMPLES:
+        return False
+
+    ou_s = sorted(s["ou"])
+    hu_s = sorted(s["hurst"])
+    ou_p75 = ou_s[int(len(ou_s) * 0.75)]
+    hu_p25 = hu_s[int(len(hu_s) * 0.25)]
+    return ou > ou_p75 and hu < hu_p25
+
+
 def evaluate_strategy_lines(
     *,
     strategy_lines: dict[str, Any],
@@ -303,6 +351,13 @@ def evaluate_strategy_lines(
         # Ranging markets (trend_direction="neutral"/"") → full passthrough.
         # FIX-083: 4h silence protection — if R1 blocks ALL trades for >4h,
         # relax to penalty-only to prevent system-wide trading silence.
+        #
+        # FIX-20260613-090: Physics override — self-calibrating OU Theta + Hurst
+        # If both confirm extreme mean-reversion relative to recent history,
+        # override trend_direction to "neutral" (treat as ranging regardless
+        # of ADX/trend signals).
+        if _check_physics_override(regime_info):
+            trend_direction = "neutral"
         if decision.should_trade and trend_direction in ("long", "short"):
             _opposing = (
                 (trend_direction == "long" and decision.direction == "short")
