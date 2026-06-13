@@ -4,7 +4,7 @@
 > **Format**: Each task has a unique ID, priority, trigger condition, deadline, and status.
 > **Review cadence**: Every Monday UTC 00:00 — check all PENDING tasks for trigger conditions.
 >
-> **Last reviewed**: 2026-05-27
+> **Last reviewed**: 2026-06-13
 
 ## Status Codes
 
@@ -20,24 +20,64 @@
 
 ## Active Tasks
 
+### TASK-20260613-003 — P2: MQL5 Native EA Bridge (Phase 2)
+
+- **Priority**: P2 (Future)
+- **Status**: PENDING
+- **Created**: 2026-06-13
+- **Trigger**: Manual — when (a) Linux VPS deployment needed, OR (b) MetaTrader5 Python package instability becomes blocking
+- **Description**:
+  Phase 1 ZMQ bridge already achieves 12,500x latency reduction purely in Python. Phase 2 would replace the Python MetaTrader5 package with a native MQL5 EA:
+  1. Place `libzmq.dll` in MT5 `Libraries/`
+  2. Create `mt5_zmq_bridge.mq5` EA — ZMQ_REP recv orders + native `OrderSend()` execution
+  3. Remove MetaTrader5 Python package dependency entirely
+  4. Enables Linux VPS → Windows MT5 order dispatch
+- **Files affected**: NEW: `mql5/mt5_zmq_bridge.mq5`, `mql5/zmq_bridge.mqh`
+- **Dependencies**: Phase 1 stable in production for 2+ weeks
+
+### TASK-20260613-002 — P2: Micro-Structure Feature Engineering (Async R&D)
+
+- **Priority**: P2 (Background R&D)
+- **Status**: PENDING
+- **Created**: 2026-06-13
+- **Trigger**: Manual — CPU idle cycles available for background training
+- **Target deadline**: 2026-06-27 (2-week research sprint)
+- **Description**:
+  V9 macro features (RSI/MACD/Hurst) cannot predict M5 barrier labels (50 Optuna trials, best Sharpe=-1.02).
+  v9_micro_49 dataset already exists at `data/training/v9_micro_49_train.npz` (40 V9 + 9 microstructure).
+  Actions:
+  1. Configure `barrier_12bar_regression_huber_v9micro.yaml` with calibrated SL=3.0/TP=1.5
+  2. Run `train.py --contract barrier_12bar_regression_huber_v9micro.yaml` with Optuna 50 trials
+  3. Let it run as background task; check results weekly
+  4. If positive Sharpe → shadow brain; if still negative → investigate alternative features
+- **Files affected**: `configs/training/barrier_12bar_regression_huber_v9micro.yaml`
+- **Dependencies**: None (fully autonomous)
+
+### TASK-20260613-001 — P1: ZMQ Bridge Production Activation
+
+- **Priority**: P1 (Short-term)
+- **Status**: PENDING
+- **Created**: 2026-06-13
+- **Trigger**: Manual — schedule during low-volatility session for safe cutover
+- **Target deadline**: 2026-06-16
+- **Description**:
+  Switch live trading from file IPC to ZMQ bridge:
+  1. Start `python scripts/mt5_bridge_worker.py --zmq --mt5-terminal-path "D:\MetaTrader 5\terminal64.exe"`
+  2. Set `adapter_name: "mt5_zmq"` in `live.yaml` (or `configs/live_btc.yaml` for BTC)
+  3. Monitor bridge health via `data/reports/mt5_bridge_health.json` (transport: "zmq")
+  4. Verify OU strategy order latency in trade journal
+  5. If any issue: revert `adapter_name: "mt5"` and restart bridge worker without --zmq
+- **Files affected**: `live.yaml`, `configs/live_btc.yaml`
+- **Dependencies**: ZMQ bridge tested in shadow mode for 2+ hours
+
 ### TASK-20260527-001 — P1: barrier_12bar Full Pipeline Rebuild (SL=2.0/TP=2.0)
 
 - **Priority**: P1 (Medium-term)
-- **Status**: PENDING
+- **Status**: DONE (superseded by FIX-20260613-030)
 - **Created**: 2026-05-27
-- **Trigger**: Manual — schedule when 4-6 hours of engineering time available
-- **Target deadline**: 2026-06-10 (before next major strategy activation)
+- **Resolved**: 2026-06-13
 - **Description**:
-  barrier_12bar training contract uses SL=3.0/TP=1.5 (RR=0.5), requiring p_win > 66.7% for positive EV.
-  MetaFilter outputs p_win ~55-58%, so Kelly is structurally negative regardless of model quality.
-  Full Pipeline Rebuild needed: relabel → rebuild calibrated_dataset → rebuild meta_features →
-  retrain Stage 1 LGB → retrain Stage 2 MetaFilter (48-dim LGB+MLP) → rebuild Platt → update configs.
-  Target: SL=2.0/TP=2.0 (RR=1.0, breakeven 50%) or SL=2.0/TP=2.5 (RR=1.25, breakeven 44.4%).
-- **Files affected**:
-  - Training: `scripts/training/build_calibrated_dataset.py`, `build_meta_features.py`, `train.py`
-  - Config: `meta_stage1_binary_cls_v1.json`, `meta_stage2_filter_v3.json`, `live.yaml`
-  - Brains: `meta_stage1_metalabel_binary_v1.json` (if also redoing MetaLabel)
-- **Dependencies**: None
+  Calibration (FIX-20260613-030) found SL=3.0/TP=1.5 is the optimal config (EV=+0.20R, TP rate=47.6%), not SL=2.0/TP=2.0 as originally hypothesized. However, 50-round Optuna could not produce a positive-Sharpe model on V9 macro features. ML R&D archived — micro-structure features needed. See TASK-20260613-001.
 - **Notes**: Architect directive — do NOT lower min_rr_ratio as a shortcut. Fix the physics, not the gate.
 
 ### TASK-20260527-002 — P2: statarb_m15 Reentry Guard TTL (half_life × 5)

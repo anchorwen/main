@@ -4,6 +4,58 @@
 
 ## Fix Details
 
+### FIX-20260613-032 — ZeroMQ Socket Bridge Phase 1: 12,500x order dispatch latency reduction
+
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: ff9f792, 16566f7
+- **Type**: feat
+- **Module**: protocol-services, execution
+- **Files**: core/protocol/services/zmq_communication_adapter.py, core/protocol/services/zmq_receipt_listener.py, scripts/mt5_bridge_worker.py, core/deployment/service_container.py, core/execution/live_order_sender.py, core/execution/execution_queue.py, core/execution/exit_watchdog.py, scripts/benchmark_zmq_latency.py
+- **Description**:
+  Replaced file-polling IPC (~1,000,000us latency) with ZeroMQ PUSH/PULL/PUB/SUB (<100us latency). ZMQCommunicationAdapter (PUSH) replaces file outbox write. ZMQReceiptListener + resolve_ack() (SUB) replaces file ACK polling with ZMQ fast path + file fallback. mt5_bridge_worker.py --zmq mode uses PULL recv + PUB ACK broadcast. All 3 ACK consumers migrated to resolve_ack(). Backward-compat: adapter_name="mt5" preserves file IPC. Benchmark: P50=72us, P99=148us, 12,500x speedup.
+- **Root Cause**: RC-05 — file IPC ~1s polling + file I/O = 1,000,000us latency. OU mean-reversion strategies are latency-sensitive.
+- **Prevention**: All IPC paths now have ZMQ fast path with file fallback. adapter_name flag enables A/B testing during transition.
+
+### FIX-20260613-031 — Cost-Aware Calibration + Guardrails + Multi-Seed CV (P0+P1)
+
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: 606ea5c, 97d6510
+- **Type**: feat
+- **Module**: training
+- **Files**: core/training/profitability_calibrator.py, core/contracts/training/label_contract.py, scripts/training/train.py, scripts/training/calibrate_labels.py, scripts/training/scan_profitability_surface.py, configs/training/ (5 contracts)
+- **Description**:
+  **(P0)** tick_size/tick_value promoted to REQUIRED params (no silent defaults). label_contract.py tick_size 0.01→0.001. train.py forwards tick params from contract. 4 call sites fixed. **(P1a)** Optuna guardrails: min_samples(50), max_reward_risk(8.0), min_sl_atr(0.8) — pre-filter SL/TP grid before main loop. **(P1b)** Multi-seed CV: seed_sharpe_cv stored; CV>0.30 warns for fragile models.
+- **Root Cause**: RC-06 — conflicting tick_size defaults (0.001 vs 0.01) caused 10x friction overestimate in calibrator.
+- **Prevention**: Required params (no defaults) = compile-time TypeError if call site forgets.
+
+### FIX-20260613-030 — M5 Barrier Label Calibration + Full Optuna Live Fire Test
+
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: 97d6510
+- **Type**: feat
+- **Module**: training
+- **Files**: scripts/training/calibrate_labels.py, scripts/training/train.py, configs/training/ (5 contracts updated)
+- **Description**:
+  calibrate_labels.py on XAUUSDc M5 (50K bars, tick_size=0.001). Best config SL=3.0/TP=1.5 → EV=+0.20R, TP rate=47.6%. guardrail filtered SL=0.5. Full Optuna 50 trials + multi-seed 5 on barrier_12bar_xgboost_v3: best forward Sharpe=-1.02. LightGBM smoke: -1.78. Conclusion: V9 macro features (RSI/MACD/Hurst) cannot predict M5 barrier labels. Quality gates correctly blocked all models.
+- **Root Cause**: RC-09 — V9 institutional features (price returns, ATR, RSI, MACD, Hurst) are macro/meso indicators with insufficient predictive signal for M5 granularity 12-bar (1h) barrier direction.
+- **Prevention**: ML research archived. Next: micro-structure features (OIM, velocity, spread, order book depth) or switch problem domain.
+
+### FIX-20260612-030 — Training Module Institutional Overhaul (Phases 1-4)
+
+- **Date**: 2026-06-12
+- **Author**: cursor-agent
+- **Commit**: 472e610, 073c1ef, 4196efe
+- **Type**: refactor
+- **Module**: training
+- **Files**: core/training/brain_config.py (NEW), core/training/utils.py (NEW), core/training/__init__.py, scripts/training/train.py, scripts/training/train_from_csv.py, scripts/training/train_btc_swing_v9.py, scripts/training/train_btc_directional_v10.py, scripts/training/train_btc_directional_v1.py, scripts/training/train_xau_directional_v1.py, scripts/training/trainers/ (6 files), configs/training/ (15 contracts), scripts/training/institutional_train.py (DELETED), scripts/training/train_v6_m15_baseline.py (DELETED), scripts/training/train_v6_multitf_v2.py (DELETED)
+- **Description**:
+  (1) Schema Dictator FAIL-FAST in train_from_csv.py — canonical V9_INSTITUTIONAL_40_FEATURES from SSOT. (2) Entry slippage asymmetry fix. (3) 12+ mypy errors fixed. (4) brain_trend_m30.yaml fixed. (5) BrainConfigBuilder with trained_by_commit_hash. (6) Dead pipelines deleted (-1380 lines). (7) 16x _utc_now_iso() deduped. (8) 15 BLE001 bare-except eliminated in train.py.
+- **Root Cause**: RC-06, RC-09, RC-03 — accumulated technical debt over 80+ historical fixes.
+- **Prevention**: Institutional principles codified: Schema Dictator SSOT, physical deletion > deprecation, training=offline crash-loud.
+
 ### FIX-20260608-005 — Managed close notification gap: dispatch_managed_close() never called notify_trade
 
 - **Date**: 2026-06-08
