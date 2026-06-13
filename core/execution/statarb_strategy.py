@@ -24,6 +24,7 @@ from typing import Any
 import numpy as np
 
 from core.execution.strategy_line import StrategyLine
+from core.runtime.fault_handler import fail_open_guard
 
 
 class StatArbStrategy(StrategyLine):
@@ -53,13 +54,11 @@ class StatArbStrategy(StrategyLine):
                 price = float(mid_price) if mid_price else 0.0
                 prop = b_info["adapter"].inference(np.array([price], dtype=np.float32))
                 bid = b_info.get("brain_id", "unknown")
-                try:
+                with fail_open_guard(f"StatArb:ProposalBuild:{bid}"):
                     if not getattr(prop, "brain_id", None):
                         prop.brain_id = bid
-                except Exception:  # noqa: BLE001
-                    pass
                 proposals.append(prop)
-            except Exception as _exc:  # noqa: BLE001
+            except Exception as _exc:
                 print(
                     json.dumps(
                         {
