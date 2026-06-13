@@ -35,5 +35,9 @@ batch_plans/
 cline_chat_backup/
 *.backup.*.md
 
+# BTC runtime data (same principle as data/)
+data_btc/
+!core/data_btc/
+
 data_btc/live_trade_journal.jsonl
 data/live_trade_journal.jsonl
