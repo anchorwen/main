@@ -256,6 +256,10 @@ live_trading:
   symbol: BTCUSDc
   tp_atr_mult: 2.5
   use_exit_watchdog: true
+  watchdog_config:
+    time_decay_cycles: 60
+    price_decay_bars: 5
+    price_decay_sl_proximity: 0.5
   use_limit_orders: false
   volume: 0.01
 mt5:

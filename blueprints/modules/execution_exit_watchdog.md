@@ -44,3 +44,5 @@ After 30s:   L2 forced liquidation via broker.close_position()
 
 ## Fix History
 See [execution_orders.md](execution_orders.md) for consolidated Fix History.
+
+| FIX-20260613-086 | 2026-06-13 | cursor-agent | ad6795e | Watchdog Encapsulation: multi-dimensional evaluator with time_decay + price_decay triggers. Model-independent structural exits. | missing-validation |

@@ -1756,17 +1756,28 @@ def main(argv: list[str] | None = None) -> int:
             )
 
     # ── Initialize ExitWatchdog (heartbeat-protected exit dispatch) ──
+    # FIX-20260613-086: watchdog_config from live YAML for structural triggers
     exit_watchdog: Any = None
     if args.use_exit_watchdog:
         try:
             from core.execution.exit_watchdog import ExitWatchdog
 
-            exit_watchdog = ExitWatchdog(data_dir=args.base_dir)
+            _wd_cfg = cfg.get("watchdog_config", {}) if isinstance(cfg, dict) else {}
+            exit_watchdog = ExitWatchdog(
+                data_dir=args.base_dir,
+                time_decay_cycles=int(_wd_cfg.get("time_decay_cycles", 60)),
+                price_decay_bars=int(_wd_cfg.get("price_decay_bars", 5)),
+                price_decay_sl_proximity=float(_wd_cfg.get("price_decay_sl_proximity", 0.5)),
+            )
             print(
                 json.dumps(
                     {
                         "event": "exit_watchdog_initialized",
                         "time": _utc_iso(),
+                        "structural_triggers": {
+                            "time_decay_cycles": exit_watchdog.time_decay_cycles,
+                            "price_decay_bars": exit_watchdog.price_decay_bars,
+                        },
                     },
                     ensure_ascii=False,
                 ),
