@@ -4,6 +4,58 @@
 
 ## Fix Details
 
+### FIX-20260613-036 — ZMQ bridge health heartbeat never fires
+
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: f2ca968
+- **Type**: fix
+- **Module**: protocol-services
+- **Files**: scripts/mt5_bridge_worker.py
+- **Description**:
+  ZMQ worker's `pull.recv_string()` blocks indefinitely when no orders arrive. Periodic health heartbeat (30s) and MT5 reconnect checks were after the blocking recv, making them unreachable during idle periods. Added `_write_zmq_health()` called once at startup (before main loop) to ensure health file immediately reflects ZMQ transport mode. Periodic heartbeat still fires after each order is processed.
+- **Root Cause**: RC-06 — blocking recv before health/heartbeat code path (code-ordering defect).
+- **DQAF**: DQAF-20260613-004
+
+### FIX-20260613-035 — live_launcher config scope truncation: adapter.name invisible
+
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: 1d541d5
+- **Type**: fix
+- **Module**: deployment, protocol-services
+- **Files**: scripts/live_launcher.py
+- **Description**:
+  load_live_config() only returned the `live_trading` subsection from live.yaml. Top-level `adapter` and `zmq` sections were invisible to the launcher, so `adapter.name: mt5_zmq` was never detected → bridge always started in file mode regardless of config. Fixed by forwarding `cfg["adapter"]` and `cfg["zmq"]` into the returned dict, reusing the existing mt5_terminal_path workaround pattern.
+- **Root Cause**: RC-06 — config loading function truncated scope (L2: logic defect).
+- **DQAF**: DQAF-20260613-003
+
+### FIX-20260613-034 — ZMQ worker crashes when MT5 not initialized
+
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: 442b718
+- **Type**: fix
+- **Module**: protocol-services
+- **Files**: scripts/mt5_bridge_worker.py
+- **Description**:
+  run_zmq_worker() called _send_to_mt5(mt5, payload) without null-checking mt5 first. When bridge was started without --mt5-terminal-path or MT5 init failed, mt5 remained None → AttributeError crash on mt5.symbol_info(). Added explicit `if mt5 is None` guard that returns a clear "rejected" ACK with reason message instead of crashing.
+- **Root Cause**: RC-06 — missing defensive null guard (L1: syntax/logic defect).
+- **DQAF**: DQAF-20260613-002
+
+### FIX-20260613-033 — baseline_returns UnboundLocalError in regression training path
+
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: c01972f
+- **Type**: fix
+- **Module**: training
+- **Files**: scripts/training/train.py
+- **Description**:
+  compute_financial_metrics(regression=True) referenced baseline_returns at line 556, but the variable was only defined inside `if not regression:` branch (lines 545-553). Regression path crashed with UnboundLocalError on first Optuna trial. Fixed by declaring `baseline_returns: np.ndarray | None = None` before the if/else and guarding the Sharpe subtraction.
+- **Root Cause**: RC-02 — variable scope error (L1: syntax/logic defect).
+- **DQAF**: DQAF-20260613-001
+
 ### FIX-20260613-032 — ZeroMQ Socket Bridge Phase 1: 12,500x order dispatch latency reduction
 
 - **Date**: 2026-06-13
