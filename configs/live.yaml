@@ -1,7 +1,7 @@
 schema_version: live_config.v2
 description: Quant OS live & shadow unified configuration
 adapter:
-  name: mt5
+  name: mt5_zmq  # Phase 1 ZMQ bridge (2026-06-13). Revert to "mt5" for file IPC fallback.
 fix:
   sender_comp_id: ''
   target_comp_id: ''
