@@ -4708,6 +4708,10 @@ def execute_live_cycle(
             )
             if _ou_parms is not None:
                 state._last_ou_params = _ou_parms
+                # FIX-20260613-B: Record OU z-score/half-life in entry_context for audit trail
+                _entry_features_snapshot["ou_z_score"] = round(float(_ou_parms.get("z_score", 0.0)), 4)
+                _entry_features_snapshot["ou_half_life"] = round(float(_ou_parms.get("half_life", 0.0)), 1)
+                _entry_features_snapshot["ou_theta"] = round(float(_ou_parms.get("theta", 0.0)), 4)
 
         # ── Circuit breaker: skip all new entries when drawdown kill is active ──
         # FIX-080: intraday drawdown kill now physically blocks new entries via
