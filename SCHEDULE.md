@@ -4,7 +4,7 @@
 > **Format**: Each task has a unique ID, priority, trigger condition, deadline, and status.
 > **Review cadence**: Every Monday UTC 00:00 — check all PENDING tasks for trigger conditions.
 >
-> **Last reviewed**: 2026-06-13
+> **Last reviewed**: 2026-06-13 (Session close-out)
 
 ## Status Codes
 
@@ -19,6 +19,19 @@
 ---
 
 ## Active Tasks
+
+### TASK-20260613-004 — P2: MetaFilter Extraction (Import Air-Gap Cleanup)
+
+- **Priority**: P2 (Future refactor)
+- **Status**: PENDING
+- **Created**: 2026-06-13
+- **Trigger**: Manual — when MetaFilter architecture review is scheduled
+- **Description**:
+  Two known import boundary violations (meta_exit_engine.py, meta_signal_filter.py import lightgbm).
+  Extract MetaFilter inference into a separate ZMQ sub-process to fully enforce Iron Law #3 air-gap.
+  Currently documented as KNOWN_EXCEPTIONS in check_import_boundaries.py.
+- **Files affected**: core/execution/meta_exit_engine.py, core/execution/meta_signal_filter.py
+- **Dependencies**: ZMQ bridge stable in production (2+ weeks)
 
 ### TASK-20260613-003 — P2: MQL5 Native EA Bridge (Phase 2)
 
@@ -56,19 +69,14 @@
 ### TASK-20260613-001 — P1: ZMQ Bridge Production Activation
 
 - **Priority**: P1 (Short-term)
-- **Status**: PENDING
+- **Status**: DONE
 - **Created**: 2026-06-13
-- **Trigger**: Manual — schedule during low-volatility session for safe cutover
-- **Target deadline**: 2026-06-16
+- **Resolved**: 2026-06-13
 - **Description**:
-  Switch live trading from file IPC to ZMQ bridge:
-  1. Start `python scripts/mt5_bridge_worker.py --zmq --mt5-terminal-path "D:\MetaTrader 5\terminal64.exe"`
-  2. Set `adapter_name: "mt5_zmq"` in `live.yaml` (or `configs/live_btc.yaml` for BTC)
-  3. Monitor bridge health via `data/reports/mt5_bridge_health.json` (transport: "zmq")
-  4. Verify OU strategy order latency in trade journal
-  5. If any issue: revert `adapter_name: "mt5"` and restart bridge worker without --zmq
-- **Files affected**: `live.yaml`, `configs/live_btc.yaml`
-- **Dependencies**: ZMQ bridge tested in shadow mode for 2+ hours
+  ✅ XAU + BTC ZMQ bridges active (PIDs 21864/9420, transport=zmq)
+  ✅ live.yaml + live_btc.yaml: adapter.name=mt5_zmq
+  ✅ live_launcher auto-detects ZMQ from config
+  ✅ main.py live works identically — one command starts everything
 
 ### TASK-20260527-001 — P1: barrier_12bar Full Pipeline Rebuild (SL=2.0/TP=2.0)
 
