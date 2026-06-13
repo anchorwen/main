@@ -610,6 +610,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260613-084 | 2026-06-13 | training | R3 Step A feature shift analysis: 40/40 features RED (KS p=0.000), XAU→BTC direct model transfer CANCELLED. Hurst similarity 0.062 confirms temporal patterns transferable — V9 training methodology applies to BTC. Fallback: BTC-from-scratch with R4 regime labels. | RC-07 |
 | FIX-20260613-086 | 2026-06-13 | execution-exit-watchdog | Watchdog Encapsulation: multi-dimensional evaluator with time_decay + price_decay triggers. Model-independent structural exits. | RC-07 |
 | FIX-20260613-087 | 2026-06-13 | execution-orders | Entry Spread Propagation: fixed _entry_features_snapshot fallback (added bid/ask/spread), fixed ZMQ bridge worker msg_payload variable (was outer envelope, now inner payload). Retroactive audit: 113 tainted opens (XAU 57.8%, BTC 36.1%), EV bias ~6-32. L3 tech debt: entry_context needs mandatory Pydantic validation to eliminate soft fallback. | RC-06 |
+| FIX-20260613-088 | 2026-06-13 | monitor-dashboard, observability | **DingTalk Institutional-Grade Structured Alert Enhancement** (Iron Law #13): (D1) event_schema.py — BaseTelemetryEvent + DataHealthPayload frozen dataclasses. (D2) localization.py — SSOT RuleRegistry extracts all CN translations from alert_channels.py. (D3 reserved) runbook_id binding. data_health_schema.py build_alert_context() now returns list[dict] (not \\n-string). DingTalkAlertChannel._format() renders structured sections (故障源/警告源 bullet lists) + Type B runbook SOP with P0 actions/diagnostic commands/escalation path. RULE_NAME_CN +6, CONTEXT_KEY_CN +8. Fixes: operator could not identify failing source from data_source_critical_failure alert (only saw count=1). | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2644,3 +2645,15 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
+
+### FIX-20260613-088
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: (pending)
+- **Type**: feat
+- **Module**: monitor-dashboard, observability
+- **Files**: core/observability/event_schema.py (NEW), core/observability/localization.py (NEW), core/observability/data_health_schema.py, core/observability/alert_channels.py
+- **Description**: **Iron Law #13 — Universal Telemetry Protocol.** (D1) event_schema.py defines BaseTelemetryEvent (frozen dataclass) and DataHealthPayload (list[dict] payloads). (D2) localization.py SSOT RuleRegistry — 17 rule names + 22 context keys + severity labels extracted from alert_channels.py hardcoded dicts, with runbook_id bindings. (D3 reserved) for Self-Healing Engine. data_health_schema.py build_alert_context() now emits structured list[dict] (never \\n-joined strings). alert_channels.py DingTalkAlertChannel._format() renders dedicated bullet sections (故障源/警告源), Type B runbook SOP with P0 actions + diagnostic commands + escalation path. Fixes: data_source_critical_failure alert now shows per-source name/code/message instead of just aggregate count.
+- **Root Cause**: RC-06 — contract-violation (build_alert_context discarded HealthReport source-level detail)
+- **Prevention**: Iron Law #13 mandates all telemetry carry structured typed payloads — string concatenation forbidden at source
+- **Dependents Checked**: live_alert_hub.py, data_health_monitor.py, daily_ops.py, service_container.py — no changes needed

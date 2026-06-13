@@ -14,6 +14,7 @@ import urllib.parse
 import urllib.request
 
 from core.observability.alert_service import AlertChannel
+from core.observability.localization import RuleRegistry
 
 _SLACK_WEBHOOK_ENV = "QUANTOS_SLACK_WEBHOOK_URL"
 
@@ -116,52 +117,12 @@ class DingTalkAlertChannel(AlertChannel):
     indicators.
     """
 
-    SEVERITY_PREFIX = {
-        "critical": "🔴 [CRITICAL]",
-        "error": "🟠 [ERROR]",
-        "warning": "🟡 [WARNING]",
-        "info": "🔵 [INFO]",
-    }
-
-    SEVERITY_CN = {
-        "critical": "严重",
-        "error": "错误",
-        "warning": "警告",
-        "info": "信息",
-    }
-
-    RULE_NAME_CN = {
-        "high_error_rate": "高错误率",
-        "circuit_breaker_open": "断路器已断开",
-        "bridge_heartbeat_missed": "MT5桥接心跳丢失",
-        "brain_frozen": "大脑冻结",
-        "position_limit_near": "仓位接近上限",
-        "cycle_stall": "周期停滞",
-        "system_online": "系统上线",
-        "daily_loss_exceeded": "日亏损超限",
-        "consecutive_losses": "连续亏损超限",
-        "win_rate_collapse": "胜率崩塌",
-        "strategy_degradation": "策略性能下降",
-    }
-
-    CONTEXT_KEY_CN = {
-        "error_rate": "周期错误率",
-        "circuit_state": "断路器状态",
-        "frozen_brain_count": "冻结大脑数",
-        "position_utilization": "仓位利用率",
-        "bridge_last_ack_seconds": "桥接最后响应",
-        "cycle_duration_seconds": "周期耗时",
-        "message": "消息",
-        "rules_active": "活跃规则",
-        "channels": "通知通道",
-        "daily_pnl_usd": "当日盈亏(USD)",
-        "consecutive_losses": "连续亏损次数",
-        "rolling_win_rate": "滚动胜率",
-        "strategy_pnl": "最差大脑累计PnL(R)",
-        "strategy_win_rate": "最差大脑胜率",
-        "worst_brain_id": "最差大脑ID",
-        "total_trades_window": "窗口内交易数",
-    }
+    # ── Localization: delegated to SSOT RuleRegistry (D2) ──
+    # Class-level aliases preserved for backward compatibility.
+    SEVERITY_PREFIX = RuleRegistry.SEVERITY_PREFIX
+    SEVERITY_CN = RuleRegistry.SEVERITY_CN
+    RULE_NAME_CN = RuleRegistry.RULE_NAME_CN
+    CONTEXT_KEY_CN = RuleRegistry.CONTEXT_KEY_CN
 
     def __init__(
         self,
@@ -198,10 +159,10 @@ class DingTalkAlertChannel(AlertChannel):
 
     def _format(self, alert: dict) -> dict:
         severity = alert.get("severity", "warning")
-        prefix = self.SEVERITY_PREFIX.get(severity, "⚪")
-        severity_cn = self.SEVERITY_CN.get(severity, severity)
+        prefix = RuleRegistry.severity_prefix(severity)
+        severity_cn = RuleRegistry.severity_cn(severity)
         rule = alert.get("rule_name", "unknown")
-        rule_cn = self.RULE_NAME_CN.get(rule, rule)
+        rule_cn = RuleRegistry.rule_name(rule)
         fired_at = alert.get("fired_at", "")
         symbol = alert.get("symbol", "")
         context = alert.get("context_snapshot", {})
@@ -214,7 +175,9 @@ class DingTalkAlertChannel(AlertChannel):
         text = alert.get("text", "")
         if title and text:
             agg_line = (
-                f"\n\n> ⚠️ 同类告警在过去窗口内发生了 **{aggregated}** 次" if aggregated > 1 else ""
+                f"\n\n> ⚠️ 同类告警在过去窗口内发生了 **{aggregated}** 次"
+                if aggregated > 1
+                else ""
             )
             return {
                 "msgtype": "markdown",
@@ -229,36 +192,50 @@ class DingTalkAlertChannel(AlertChannel):
                 },
             }
 
-        # ── Type B (Phase 2): actionable incident with runbook SOP ──
+        # ── Build markdown body ──
+        body_lines: list[str] = []
+        if symbol_line:
+            body_lines.append(symbol_line.rstrip("\n"))
+        body_lines.append(f"## {prefix} QUANT OS 告警: {rule_cn}\n")
+        body_lines.append(f"**严重级别:** `{severity_cn}`  ")
+        body_lines.append(f"**触发时间:** {fired_at}  \n")
+
+        # ── Structured sections (D1): render list[dict] as dedicated bullet blocks ──
+        structured_keys = RuleRegistry.STRUCTURED_CONTEXT_KEYS
+        scalar_context: dict[str, object] = {}
+        for k, v in context.items():
+            if k in structured_keys and isinstance(v, list) and v:
+                body_lines.append(self._render_structured_section(k, v))
+            elif k not in structured_keys:
+                scalar_context[k] = v
+            # If a structured key is present but empty, skip it silently
+
+        # ── Summary: remaining scalar context keys ──
+        if scalar_context:
+            body_lines.append("**📊 汇总:**  ")
+            for k, v in scalar_context.items():
+                cn_key = RuleRegistry.context_key(k)
+                val_str = str(v) if not isinstance(v, str | int | float) else v
+                body_lines.append(f"- **{cn_key}**: `{val_str}`  ")
+
+        # ── Type B: runbook SOP section ──
         runbook = alert.get("runbook", {})
         if runbook.get("available"):
-            # TODO Phase 2: render runbook actions, diagnostic commands,
-            # and escalation path into the markdown body.
-            pass
+            body_lines.append(self._render_runbook(runbook))
 
-        # ── Type C (default / backward-compatible): state snapshot ──
-        ctx_lines = (
-            "\n".join(f"- **{self.CONTEXT_KEY_CN.get(k, k)}**: `{v}`" for k, v in context.items())
-            or "_无上下文_"
-        )
-
+        # ── Aggregation notice + footer ──
         agg_line = (
-            f"\n\n> ⚠️ 同类告警在过去窗口内发生了 **{aggregated}** 次" if aggregated > 1 else ""
+            f"\n> ⚠️ 同类告警在过去窗口内发生了 **{aggregated}** 次"
+            if aggregated > 1
+            else ""
         )
+        body_lines.append(f"{agg_line}\n\n---\nQuantOs 实盘告警系统")
 
         return {
             "msgtype": "markdown",
             "markdown": {
                 "title": f"QUANT OS 告警: {rule_cn}",
-                "text": (
-                    f"{symbol_line}"
-                    f"## {prefix} QUANT OS 告警: {rule_cn}\n\n"
-                    f"**严重级别:** `{severity_cn}`  \n"
-                    f"**触发时间:** {fired_at}  \n\n"
-                    f"**上下文:**\n{ctx_lines}"
-                    f"{agg_line}"
-                    f"\n\n---\nQuantOs 实盘告警系统"
-                ),
+                "text": "\n".join(body_lines),
             },
         }
 
@@ -274,6 +251,78 @@ class DingTalkAlertChannel(AlertChannel):
 
         signature = base64.b64encode(sign).decode("utf-8")
         return f"{url}&timestamp={timestamp}&sign={urllib.parse.quote(signature)}"
+
+    @staticmethod
+    def _render_structured_section(key: str, items: list[dict[str, str]]) -> str:
+        """Render a structured context key as a dedicated Markdown bullet section.
+
+        Called by ``_format()`` when context values are ``list[dict]``
+        (Iron Law #13 D1 — structured payloads, not \\n-joined strings).
+        """
+        emoji_map: dict[str, str] = {
+            "data_health_failed_sources": "🔴 故障源",
+            "data_health_warned_sources": "🟡 警告源",
+        }
+        heading = emoji_map.get(key, f"📋 {RuleRegistry.context_key(key)}")
+        lines = [f"### {heading}"]
+        for item in items:
+            src = item.get("source", "?")
+            code = item.get("code", "")
+            msg = item.get("message", "")
+            line = f"- **{src}** — `{code}`"
+            if msg:
+                line += f"\n  > {msg}"
+            lines.append(line)
+        lines.append("")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _render_runbook(runbook: dict) -> str:
+        """Render runbook SOP actions, diagnostic commands, and escalation path.
+
+        Iron Law #13 D3 (Closed-Loop Remediation): when a rule fires with a
+        runbook, the channel renders the full SOP so the operator can act
+        without leaving the DingTalk interface.  In a future phase the
+        ``runbook_id`` field will also be consumed by the Self-Healing Engine
+        for automated remediation.
+        """
+        lines: list[str] = ["---", "### 📖 故障处置手册 (Runbook)"]
+        title = runbook.get("title", "")
+        summary = runbook.get("summary", "")
+        if title:
+            lines.append(f"**{title}**")
+        if summary:
+            lines.append(f"> {summary}")
+            lines.append("")
+
+        actions: list[dict] = runbook.get("actions", [])
+        if actions:
+            lines.append("**SOP 操作步骤:**")
+            for a in actions:
+                order = a.get("order", "?")
+                action = a.get("action", "?")
+                desc = a.get("description", "")
+                priority = a.get("priority", "")
+                prio_badge = f" `[{priority}]`" if priority else ""
+                lines.append(f"{order}. **{action}**{prio_badge}")
+                if desc:
+                    lines.append(f"   > {desc}")
+            lines.append("")
+
+        diag_cmds: list[str] = runbook.get("diagnostic_commands", [])
+        if diag_cmds:
+            lines.append("**诊断命令:**")
+            for cmd in diag_cmds:
+                lines.append(f"```bash\n{cmd}\n```")
+            lines.append("")
+
+        escalation: list[str] = runbook.get("escalation_path", [])
+        if escalation:
+            path_str = " → ".join(escalation)
+            lines.append(f"**升级路径:** {path_str}")
+            lines.append("")
+
+        return "\n".join(lines)
 
 
 class CompositeAlertChannel(AlertChannel):

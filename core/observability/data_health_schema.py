@@ -211,6 +211,10 @@ def build_alert_context(report: HealthReport) -> dict[str, Any]:
 
     Called externally (daily_ops / live_intent_loop) — NOT inside
     DataHealthService (Iron Law #3: generator/dispatcher separation).
+
+    Iron Law #13 (D1 — Data as Contract): source-level detail is carried as
+    ``list[dict]`` — never pre-flattened into ``\\n``-joined strings.
+    Channel renderers iterate the lists and produce bullet-point sections.
     """
     fail_count = sum(
         1 for s in report.sources if s.status in (SourceStatus.FAIL, SourceStatus.MISSING)
@@ -218,7 +222,28 @@ def build_alert_context(report: HealthReport) -> dict[str, Any]:
     warn_count = sum(1 for s in report.sources if s.status == SourceStatus.WARN)
     cross_fail = sum(1 for c in report.cross_checks if c.status != SourceStatus.PASS)
 
+    # Structured source detail (D1): list[dict] — channel renders as bullets
+    failed_sources: list[dict[str, str]] = [
+        {
+            "source": s.source,
+            "code": s.primary_code,
+            "message": s.message[:200] if s.message else "",
+        }
+        for s in report.sources
+        if s.status in (SourceStatus.FAIL, SourceStatus.MISSING)
+    ]
+    warned_sources: list[dict[str, str]] = [
+        {
+            "source": s.source,
+            "code": s.primary_code,
+            "message": s.message[:200] if s.message else "",
+        }
+        for s in report.sources
+        if s.status == SourceStatus.WARN
+    ]
+
     return {
+        # Aggregate counts (for RULE-012..016 threshold evaluation)
         "data_health_critical_fail_count": fail_count,
         "data_health_warn_count": warn_count,
         "cross_source_discrepancy_count": cross_fail,
@@ -228,6 +253,9 @@ def build_alert_context(report: HealthReport) -> dict[str, Any]:
             if "STALE" in s.primary_code or "STALENESS" in s.primary_code
         ),
         "data_health_overall": report.alert_level,
+        # Structured payload (D1): list[dict] — channel renders as bullet sections
+        "data_health_failed_sources": failed_sources,
+        "data_health_warned_sources": warned_sources,
     }
 
 
