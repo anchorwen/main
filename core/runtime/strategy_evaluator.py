@@ -288,6 +288,30 @@ def evaluate_strategy_lines(
             btc_augment=btc_augment,  # FIX-20260613-052: resolved placeholder
         )
 
+        # ── Cut 1a: Regime Direction Gate (FIX-20260613-079) ──
+        # Counter-trend trades are penalised when trend is confirmed.
+        # Ranging markets (trend_direction="neutral"/"") → full passthrough.
+        if decision.should_trade and trend_direction in ("long", "short"):
+            _opposing = (
+                (trend_direction == "long" and decision.direction == "short")
+                or (trend_direction == "short" and decision.direction == "long")
+            )
+            if _opposing:
+                _orig_conf = decision.confidence
+                decision.confidence = round(decision.confidence * 0.5, 4)
+                if decision.confidence < 0.35:
+                    decision.should_trade = False
+                    decision.reason = (
+                        f"regime_direction_gate:counter_trend"
+                        f"_{decision.direction}_vs_{trend_direction}"
+                        f"_conf_{_orig_conf:.3f}_penalised_to_{decision.confidence:.3f}"
+                    )
+                else:
+                    decision.reason = (
+                        f"{decision.reason or 'ok'}"
+                        f"+regime_dir_penalty:{trend_direction}"
+                    )
+
         # ── Cut 1: Post-evaluate cooldown check (direction known) ──
         if decision.should_trade and cooldown_registry is not None:
             _cd_allowed, _cd_reason = cooldown_registry.check_cooldown(sname, decision.direction)
