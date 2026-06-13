@@ -25,6 +25,16 @@ def _utc_iso() -> str:
     return datetime.now(UTC).replace(tzinfo=None).isoformat()
 
 
+# ── R1 Gate silence protection state (FIX-20260613-083) ──
+# Module-level dict tracks consecutive R1-blocked cycles to prevent
+# persistent zero-open silence in trending markets (>4h → relax).
+_r1_silence_state: dict[str, int] = {"consecutive_blocks": 0, "last_block_cycle": 0}
+
+
+def _get_r1_silence_state() -> dict[str, int]:
+    return _r1_silence_state
+
+
 def evaluate_strategy_lines(
     *,
     strategy_lines: dict[str, Any],
@@ -288,9 +298,11 @@ def evaluate_strategy_lines(
             btc_augment=btc_augment,  # FIX-20260613-052: resolved placeholder
         )
 
-        # ── Cut 1a: Regime Direction Gate (FIX-20260613-079) ──
+        # ── Cut 1a: Regime Direction Gate (FIX-20260613-079 + FIX-20260613-083) ──
         # Counter-trend trades are penalised when trend is confirmed.
         # Ranging markets (trend_direction="neutral"/"") → full passthrough.
+        # FIX-083: 4h silence protection — if R1 blocks ALL trades for >4h,
+        # relax to penalty-only to prevent system-wide trading silence.
         if decision.should_trade and trend_direction in ("long", "short"):
             _opposing = (
                 (trend_direction == "long" and decision.direction == "short")
@@ -300,17 +312,39 @@ def evaluate_strategy_lines(
                 _orig_conf = decision.confidence
                 decision.confidence = round(decision.confidence * 0.5, 4)
                 if decision.confidence < 0.35:
-                    decision.should_trade = False
-                    decision.reason = (
-                        f"regime_direction_gate:counter_trend"
-                        f"_{decision.direction}_vs_{trend_direction}"
-                        f"_conf_{_orig_conf:.3f}_penalised_to_{decision.confidence:.3f}"
-                    )
+                    # ── 4h silence protection ──
+                    # Track consecutive R1 blocks.  If ALL trades have been
+                    # blocked for >48 cycles (~4h at 5-min), relax to penalty-only
+                    # to prevent zero-open silence in persistent trending markets.
+                    _r1_state = _get_r1_silence_state()
+                    _r1_state["consecutive_blocks"] += 1
+                    _r1_state["last_block_cycle"] = cycle_count
+                    if _r1_state["consecutive_blocks"] > 48:
+                        decision.should_trade = True  # override block
+                        decision.reason = (
+                            f"regime_direction_gate:silence_protection"
+                            f"_counter_trend_{decision.direction}_vs_{trend_direction}"
+                            f"_conf_{_orig_conf:.3f}_relaxed_to_penalty_only"
+                            f"_silence_{_r1_state['consecutive_blocks']}_cycles"
+                        )
+                    else:
+                        decision.should_trade = False
+                        decision.reason = (
+                            f"regime_direction_gate:counter_trend"
+                            f"_{decision.direction}_vs_{trend_direction}"
+                            f"_conf_{_orig_conf:.3f}_penalised_to_{decision.confidence:.3f}"
+                        )
                 else:
+                    _r1_state = _get_r1_silence_state()
+                    _r1_state["consecutive_blocks"] = 0  # reset: trade passed penalty
                     decision.reason = (
                         f"{decision.reason or 'ok'}"
                         f"+regime_dir_penalty:{trend_direction}"
                     )
+            else:
+                # Trade is trend-aligned — reset silence counter
+                _r1_state = _get_r1_silence_state()
+                _r1_state["consecutive_blocks"] = 0
 
         # ── Cut 1: Post-evaluate cooldown check (direction known) ──
         if decision.should_trade and cooldown_registry is not None:

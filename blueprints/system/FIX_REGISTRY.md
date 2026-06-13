@@ -606,6 +606,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260613-079 | 2026-06-13 | execution-guards | RegimeDirectionGate: counter-trend confidence penalty when trend is confirmed (long/short). Ranging markets full passthrough. Applied as Cut 1a in strategy_evaluator.py — opposing brain signals get 0.5x confidence multiplier, blocked if <0.35. Eliminates ALL-LONG brains voting in downtrend and ALL-SHORT in uptrend. | RC-07 |
 | FIX-20260613-080 | 2026-06-13 | protocol-governance | Brain portfolio cleanup: archived 3 XAU NO_DATA brains (10-14d 0 trades), froze 3 Brain_Trend brains (PF<1.0 + 100% SHORT cloning), fixed BTC V6/V7/V8 config enabled→false. STR WARN 18→15. | RC-06 |
 | FIX-20260613-081 | 2026-06-13 | execution-orders | SL trail parameters: trail_activation_atr 0.5→0.3 (earlier activation), breakeven_threshold_atr 1.5→1.0 (earlier breakeven lock), sl.min_sl_distance 80→100 (slightly wider). Data-driven: 55% positions had active trail but zero trail_advances (never locked profit before reversal). | RC-05 |
+| FIX-20260613-083 | 2026-06-13 | execution-guards | R1 Gate 4h silence protection: if all trades blocked by RegimeDirectionGate for >48 consecutive cycles (~4h), relax from block to penalty-only. Prevents BTC zero-open silence when trend=LONG and all brains are SHORT. Silence counter resets when any trade passes (trend-aligned or above penalty threshold). | RC-05 |
 
 ---
 ## Fix Details by Year
@@ -2589,6 +2590,18 @@ FIX-YYYYMMDD-NNN
 - **Module**: execution-orders
 - **Files**: configs/live_btc.yaml
 - **Description**: SL trail parameters: trail_activation_atr 0.5→0.3 (earlier activation), breakeven_threshold_atr 1.5→1.0 (earlier breakeven lock), sl.min_sl_distance 80→100 (slightly wider). Data-driven: 55% positions had active trail but zero trail_advances (never locked profit before reversal).
+- **Root Cause**: RC-05 — boundary-error
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260613-083
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: f5c9e30
+- **Type**: fix
+- **Module**: execution-guards
+- **Files**: core/runtime/strategy_evaluator.py
+- **Description**: R1 Gate 4h silence protection: if all trades blocked by RegimeDirectionGate for >48 consecutive cycles (~4h), relax from block to penalty-only. Prevents BTC zero-open silence when trend=LONG and all brains are SHORT. Silence counter resets when any trade passes (trend-aligned or above penalty threshold).
 - **Root Cause**: RC-05 — boundary-error
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
