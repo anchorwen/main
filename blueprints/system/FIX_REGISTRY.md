@@ -607,6 +607,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260613-080 | 2026-06-13 | protocol-governance | Brain portfolio cleanup: archived 3 XAU NO_DATA brains (10-14d 0 trades), froze 3 Brain_Trend brains (PF<1.0 + 100% SHORT cloning), fixed BTC V6/V7/V8 config enabled→false. STR WARN 18→15. | RC-06 |
 | FIX-20260613-081 | 2026-06-13 | execution-orders | SL trail parameters: trail_activation_atr 0.5→0.3 (earlier activation), breakeven_threshold_atr 1.5→1.0 (earlier breakeven lock), sl.min_sl_distance 80→100 (slightly wider). Data-driven: 55% positions had active trail but zero trail_advances (never locked profit before reversal). | RC-05 |
 | FIX-20260613-083 | 2026-06-13 | execution-guards | R1 Gate 4h silence protection: if all trades blocked by RegimeDirectionGate for >48 consecutive cycles (~4h), relax from block to penalty-only. Prevents BTC zero-open silence when trend=LONG and all brains are SHORT. Silence counter resets when any trade passes (trend-aligned or above penalty threshold). | RC-05 |
+| FIX-20260613-084 | 2026-06-13 | training | R3 Step A feature shift analysis: 40/40 features RED (KS p=0.000), XAU→BTC direct model transfer CANCELLED. Hurst similarity 0.062 confirms temporal patterns transferable — V9 training methodology applies to BTC. Fallback: BTC-from-scratch with R4 regime labels. | RC-07 |
 
 ---
 ## Fix Details by Year
@@ -2603,5 +2604,17 @@ FIX-YYYYMMDD-NNN
 - **Files**: core/runtime/strategy_evaluator.py
 - **Description**: R1 Gate 4h silence protection: if all trades blocked by RegimeDirectionGate for >48 consecutive cycles (~4h), relax from block to penalty-only. Prevents BTC zero-open silence when trend=LONG and all brains are SHORT. Silence counter resets when any trade passes (trend-aligned or above penalty threshold).
 - **Root Cause**: RC-05 — boundary-error
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260613-084
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: e897db5
+- **Type**: feat
+- **Module**: training
+- **Files**: scripts/analyze_feature_shift.py
+- **Description**: R3 Step A feature shift analysis: 40/40 features RED (KS p=0.000), XAU→BTC direct model transfer CANCELLED. Hurst similarity 0.062 confirms temporal patterns transferable — V9 training methodology applies to BTC. Fallback: BTC-from-scratch with R4 regime labels.
+- **Root Cause**: RC-07 — missing-validation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)

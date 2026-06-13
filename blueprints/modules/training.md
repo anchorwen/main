@@ -74,6 +74,7 @@ Dataset CPCV CustomObj  Trainer    EvaluationReport
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260613-084 | 2026-06-13 | cursor-agent | e897db5 | R3 Step A feature shift analysis: 40/40 features RED (KS p=0.000), XAU→BTC direct model transfer CANCELLED. Hurst similarity 0.062 confirms temporal patterns transferable — V9 training methodology applies to BTC. Fallback: BTC-from-scratch with R4 regime labels. | missing-validation |
 | FIX-20260613-038 | 2026-06-13 | cursor-agent | — | **MODULE_SOURCE_MAP + ruff fix**: backtest_structural_swing.py added to training module in MODULE_SOURCE_MAP (was unmapped orphan, trap #3). B007 unused loop variable fixed. | RC-09 |
 | FIX-20260613-033 | 2026-06-13 | cursor-agent | — | baseline_returns UnboundLocalError in regression path: variable only defined in classification branch, crashes Optuna on first trial. Declared before if/else + guarded Sharpe subtraction. DQAF-001. | RC-02 |
 | FIX-20260613-031 | 2026-06-13 | cursor-agent | — | **Calibration + Guardrails + Multi-Seed CV (P0+P1)**: (P0) tick_size/tick_value promoted to REQUIRED params in compute_profitability_surface() — no silent defaults. label_contract.py tick_size 0.01→0.001. train.py forwards tick_size/tick_value from contract. 4 call sites fixed. (P1a) Optuna guardrails: min_samples(50), max_reward_risk(8.0), min_sl_atr(0.8) — pre-filter grid before main loop. (P1b) Multi-seed CV: seed_sharpe_mean/std/cv stored in metrics; CV>0.30 warning for fragile models. | RC-06 |
