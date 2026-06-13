@@ -54,6 +54,7 @@ BrainRegistryService → brain_entries → BrainFactory → adapters
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260613-074 | 2026-06-13 | cursor-agent | 6856291 | Promotion-before-throttle: reversed check order so probation→live promotion runs BEFORE throttle check. Previously recent_wr<38% throttle intercepted probation brains before they could reach promotion evaluation. Swing_V9_M15_V2 (PF=3.51) was stuck in promote→throttle→promote loop. | contract-violation |
 | FIX-20260610-007 | 2026-06-10 | cursor-agent | — | **Leaderboard equal-weight fallback**: rank() vote_weights空/全零→1/N兜底, 彻底消除全局权重0瘫痪. | RC-06 |
 | FIX-20260607-147 | 2026-06-07 | cursor-agent | — | **Vote weight decoupling**: `apply_weights()` stamps `p.dynamic_scale` instead of overwriting `p.vote_weight`. Config base_weight preserved as binary permission gate. Prevents shadow brains (config vote_weight=0.0) from accumulating collective dynamic weight to override voting brains. DQAF-011. | RC-09 |
 | FIX-20260605-126 | 2026-06-05 | cursor-agent | — | **Brain_Rev_M30_V1/V2 archived + Brain_Trend_M30_V1 promoted shadow→candidate (vw=0.8)**: Rev killed by eval bug and SL/TP mismatch. Trend promoted based on 7-day signal activity. Final roster: 11 candidate, 2 live, 2 shadow, 5 archived. | RC-11 |

@@ -231,7 +231,24 @@ class BrainPromotionEvaluator:
                     metrics_snapshot=metrics_snapshot,
                 )
 
-        # ── Throttle checks (active/probation only) ──
+        # ── State-specific promotion logic ──
+        # FIX-20260613-074: Promotion check runs BEFORE throttle check.
+        # Previously throttle (line 235) intercepted probation brains with
+        # cold recent-20 streaks before they could reach promotion evaluation.
+        # Now: if you qualify for promotion, you get promoted regardless of
+        # recent streak.  Throttle only applies to brains that did NOT qualify.
+        if status == "candidate":
+            return self._eval_candidate(brain_id, status, metrics_snapshot, t)
+        elif status == "probation":
+            decision = self._eval_probation(brain_id, status, metrics_snapshot, t)
+            if decision.approved and decision.action == "promote":
+                return decision  # promotion wins over throttle
+        elif status in ("active", "live"):
+            decision = self._eval_active(brain_id, status, metrics_snapshot, t)
+            if decision.approved and decision.action == "promote":
+                return decision
+
+        # ── Throttle checks (active/probation/live only, AFTER promotion eval) ──
         if status in ("active", "live", "probation") and signal_count >= t.min_signals_probation:
             if pf < t.throttle_pf:
                 return BrainPromotionDecision(
@@ -254,13 +271,11 @@ class BrainPromotionEvaluator:
                     metrics_snapshot=metrics_snapshot,
                 )
 
-        # ── State-specific promotion logic ──
-        if status == "candidate":
-            return self._eval_candidate(brain_id, status, metrics_snapshot, t)
-        elif status == "probation":
-            return self._eval_probation(brain_id, status, metrics_snapshot, t)
-        elif status in ("active", "live"):
-            return self._eval_active(brain_id, status, metrics_snapshot, t)
+        # ── Fallback: return the promotion decision (hold or demote) ──
+        if status == "probation" and 'decision' in locals():
+            return decision
+        elif status in ("active", "live") and 'decision' in locals():
+            return decision
         else:
             return BrainPromotionDecision(
                 brain_id=brain_id,
