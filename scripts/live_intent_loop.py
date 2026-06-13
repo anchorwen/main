@@ -1295,10 +1295,66 @@ def main(argv: list[str] | None = None) -> int:
                         flush=True,
                     )
 
+        # ── FIX-20260613-057: Deterministic MT5 Readiness Barrier ────────
+        # Before the post-recovery audit (which calls positions_get), the
+        # MT5 bridge must have confirmed its connection is live.  Without
+        # this barrier, the intent loop races ahead and crashes because
+        # MT5 initialization takes 2-5 seconds while the intent loop starts
+        # in <100ms.  This race caused 2401 restarts in 7 days (85% died at
+        # cycle=1).  ReB: STARTUP_RACE_POSITIONS_GET_BEFORE_MT5_READY.
+        import time as _startup_time
+
+        _health_path = Path(args.base_dir) / "reports" / "mt5_bridge_health.json"
+        _barrier_timeout = 60.0  # seconds — generous: covers slow MT5 + auth
+        _barrier_start = _startup_time.monotonic()
+        _bridge_ready = False
+        print(
+            json.dumps(
+                {
+                    "event": "mt5_barrier_waiting",
+                    "time": _utc_iso(),
+                    "health_path": str(_health_path),
+                    "timeout_s": _barrier_timeout,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        while _startup_time.monotonic() - _barrier_start < _barrier_timeout:
+            try:
+                if _health_path.exists():
+                    _hb = json.loads(_health_path.read_text(encoding="utf-8"))
+                    if _hb.get("mt5_connected") and _hb.get("transport") == "zmq":
+                        _bridge_ready = True
+                        break
+            except (OSError, json.JSONDecodeError, KeyError):
+                pass
+            _startup_time.sleep(0.5)  # 500ms poll — not time-based wait, event-polling
+        if not _bridge_ready:
+            # After 60s with no MT5 ready signal, the bridge is genuinely dead.
+            # This IS a legitimate CRASH — not a race condition.
+            raise RuntimeError(
+                f"CRITICAL: MT5 bridge failed to signal readiness within "
+                f"{_barrier_timeout}s.  Health file: {_health_path}.  "
+                f"Check MT5 terminal, ZMQ bridge, and broker connection."
+            )
+        _barrier_elapsed = _startup_time.monotonic() - _barrier_start
+        print(
+            json.dumps(
+                {
+                    "event": "mt5_barrier_passed",
+                    "time": _utc_iso(),
+                    "elapsed_s": round(_barrier_elapsed, 1),
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+
         # ── Post-recovery audit: detect all MT5 positions and report unmanaged ones ──
         all_mt5_positions: Any = []
         with FaultTolerantContext(
-            level=FaultLevel.CRASH, component="MT5_IPC:positions_get:post_audit"
+            level=FaultLevel.ERROR, component="MT5_IPC:positions_get:post_audit"
         ):
             all_mt5_positions = mt5_worker.positions_get(symbol=args.symbol)
         if all_mt5_positions:
