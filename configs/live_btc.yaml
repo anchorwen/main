@@ -1,7 +1,10 @@
 schema_version: live_config.v2
 description: Quant OS live — BTCUSDc (Cent account, isolated from XAUUSDc)
 adapter:
-  name: mt5
+  name: mt5_zmq  # Phase 1 ZMQ bridge. Revert to "mt5" for file IPC fallback.
+zmq:
+  order_endpoint: tcp://127.0.0.1:5558  # separate port from XAU (5556)
+  ack_endpoint: tcp://127.0.0.1:5559    # separate port from XAU (5557)
 mt5:
   terminal_path: D:\MetaTrader 5\terminal64.exe
   default_symbol: BTCUSDc
