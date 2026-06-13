@@ -4348,6 +4348,8 @@ def execute_live_cycle(
                             "detected_regime": regime_gate_result.get("regime", "?"),
                             "strategy_gates": regime_gate_result.get("strategy_gates", {}),
                             "global_activation": _global_act,
+                            "ou_theta_m5": regime_info.get("ou_theta_m5") if regime_info else None,
+                            "hurst_m5": regime_info.get("hurst_m5") if regime_info else None,
                         },
                         ensure_ascii=False,
                     ),
