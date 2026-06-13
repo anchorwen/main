@@ -604,6 +604,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260613-077 | 2026-06-13 | runtime-live | Bridge deal history timeout instrumentation + lock_dir unification (.locks→locks) + microsecond precision retained. Eliminates cross-process journal write races causing 336 XAU/22 BTC timestamp inversions. | RC-04 |
 | FIX-20260613-078 | 2026-06-13 | deployment-lifecycle | STR Section 6b: candidate signal diversity detection. Flags brain pairs with >90% directional agreement using ledger_events SignalSettled data. Detected V11_H1≡V11_M15 (100% short) + XAU Brain_Trend cloning. | RC-07 |
 | FIX-20260613-079 | 2026-06-13 | execution-guards | RegimeDirectionGate: counter-trend confidence penalty when trend is confirmed (long/short). Ranging markets full passthrough. Applied as Cut 1a in strategy_evaluator.py — opposing brain signals get 0.5x confidence multiplier, blocked if <0.35. Eliminates ALL-LONG brains voting in downtrend and ALL-SHORT in uptrend. | RC-07 |
+| FIX-20260613-080 | 2026-06-13 | protocol-governance | Brain portfolio cleanup: archived 3 XAU NO_DATA brains (10-14d 0 trades), froze 3 Brain_Trend brains (PF<1.0 + 100% SHORT cloning), fixed BTC V6/V7/V8 config enabled→false. STR WARN 18→15. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2564,5 +2565,17 @@ FIX-YYYYMMDD-NNN
 - **Files**: core/execution/regime_direction_gate.py,core/runtime/strategy_evaluator.py
 - **Description**: RegimeDirectionGate: counter-trend confidence penalty when trend is confirmed (long/short). Ranging markets full passthrough. Applied as Cut 1a in strategy_evaluator.py — opposing brain signals get 0.5x confidence multiplier, blocked if <0.35. Eliminates ALL-LONG brains voting in downtrend and ALL-SHORT in uptrend.
 - **Root Cause**: RC-07 — missing-validation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260613-080
+- **Date**: 2026-06-13
+- **Author**: cursor-agent
+- **Commit**: 422871f
+- **Type**: fix
+- **Module**: protocol-governance
+- **Files**: data/governance_state.json,configs/live_btc.yaml
+- **Description**: Brain portfolio cleanup: archived 3 XAU NO_DATA brains (10-14d 0 trades), froze 3 Brain_Trend brains (PF<1.0 + 100% SHORT cloning), fixed BTC V6/V7/V8 config enabled→false. STR WARN 18→15.
+- **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)

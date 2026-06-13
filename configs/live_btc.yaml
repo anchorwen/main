@@ -1,348 +1,340 @@
-schema_version: live_config.v2
-description: Quant OS live — BTCUSDc (Cent account, isolated from XAUUSDc)
 adapter:
-  name: mt5_zmq  # Phase 1 ZMQ bridge. Revert to "mt5" for file IPC fallback.
-zmq:
-  order_endpoint: tcp://127.0.0.1:5558  # separate port from XAU (5556)
-  ack_endpoint: tcp://127.0.0.1:5559    # separate port from XAU (5557)
-mt5:
-  terminal_path: D:\MetaTrader 5\terminal64.exe
-  default_symbol: BTCUSDc
-  normalization_config: configs/brains_btc/v9_institutional_01.normalization.json
-features:
-  store_dir: data_btc/feature_store
-  update_interval_seconds: 60
-brains:
-  registry_entries:
-  - path: configs/brains_btc/archive/BTC_Swing_V4.json
-    enabled: false
-  # ── DQAF-20260612-002: V5 re-enabled — governance promoted to live ──
-  - path: configs/brains_btc/BTC_Swing_V5.json
-    enabled: true
-  - path: configs/brains_btc/archive/BTC_Swing_LGB_V1.json
-    enabled: false
-  - path: configs/brains_btc/BTC_Swing_V6_MultiTF_LGB_v2.json
-    enabled: true
-  - path: configs/brains_btc/BTC_Swing_V7_MultiTF_LGB_v1.json
-    enabled: true
-  - path: configs/brains_btc/BTC_Swing_V8_MultiTF_LGB_v1.json
-    enabled: true
-  # ── FIX-20260609-012: V9/V10 survival brains (replaced by V11 directional) ──
-  - path: configs/brains_btc/BTC_Swing_V9_H1_Survival.json
-    enabled: false
-  - path: configs/brains_btc/BTC_Swing_V10_M15_Survival.json
-    enabled: false
-  # ── FIX-20260611-004: V11 directional brains (bidirectional, replaces V9/V10) ──
-  - path: configs/brains_btc/BTC_Swing_V11_H1_Directional.json
-    enabled: true
-  - path: configs/brains_btc/BTC_Swing_V11_M15_Directional.json
-    enabled: true
-gate:
-  gate_policy_config: configs/live_gate_policy.json
-  auto_recovery:
-    enabled: false
-    consecutive_pass_cycles: 5
-pipeline:
-  staging_dir: data_btc/staging
-  data_dir: data_btc
-training:
-  plan_generator: scripts/training/generate_batch_plan.py
-  lanes_config: scripts/training/lane_trainers.json
-live_trading:
-  mt5_terminal_path: D:\MetaTrader 5\terminal64.exe
-  symbol: BTCUSDc
-  volume: 0.01
-  interval_seconds: 60
-  confidence_threshold: 0.35
-  risk_budget_usd: 30.0
-  equity_risk_pct: 0.0
-  min_lot: 0.01
-  max_lot: 0.1
-  lot_step: 0.01
-  intraday_drawdown_kill:
-    enabled: true
-    kill_pct: 0.03
-    reset_hour_utc: 0
-  sl_atr_mult: 2.0
-  tp_atr_mult: 2.5
-  cooldown_seconds: 300
-  reentry_cooldown_sl_seconds: 300
-  reentry_cooldown_bleed_seconds: 600
-  reentry_confidence_penalty: 0.15
-  max_positions: 2
-  multi_brain: true
-  brains_dir: configs/brains_btc
-  normalization_config: configs/brains_btc/v9_institutional_01.normalization.json
-  feature_store_dir: data_btc/feature_store
-  bridge:
-    poll_seconds: 3
-    deviation: 20
-    magic: 90401
-  base_dir: data_btc
-  bar_sync: true
-  bar_sync_timeout: 360
-  use_exit_watchdog: true
-  use_limit_orders: false
-  market_type: crypto_24_7
-  session_detect_override: crypto_24_7
-  price_bounds:
-    min: 5000
-    max: 200000
-  spread_guard_max: 2000
-exit_management:
-  enabled: true
-  trail_atr_mult: 2.0
-  trail_atr_mult_low: 1.5
-  trail_atr_mult_high: 3.0
-  breakeven_threshold_atr: 1.5
-  trail_activation_atr: 0.5
-  brain_reeval_interval: 5
-  flip_exit_threshold: 0.5
-  confidence_drop_threshold: 0.15
-  max_hold_cycles: 120
-  require_min_r: 0.3
-  min_sl_step: 1.0
-regime_gate:
-  adx:
-    trending_threshold: 30
-    mild_trend_threshold: 20
-  atr_percentile:
-    high_vol_threshold: 80
-    low_vol_threshold: 20
-  regime_map:
-    trending:
-      btc_swing: full
-    mild_trend:
-      btc_swing: full
-    ranging:
-      btc_swing: reduced
-    high_vol:
-      btc_swing: reduced
-    normal:
-      btc_swing: full
-reentry:
-  sl_cooldown_seconds: 300
-  sl_confidence_penalty: 0.15
-  bleed_cooldown_seconds: 600
-  bleed_confidence_penalty: 0.15
+  name: mt5_zmq
 alert:
-  enabled: true
-  thresholds:
-    daily_loss_limit: -30.0
-    consecutive_losers: 5
-    win_rate_collapse: 0.25
-    circuit_breaker_trip: true
-    strategy_degradation_loss: -15.0
-    strategy_degradation_wr: 0.35
-    single_trade_loss_threshold: -10.0
-    warning_cooldown_minutes: 60
-    critical_cooldown_minutes: 15
   channels:
-    slack: false
     dingtalk: true
     dingtalk_webhook_url: https://oapi.dingtalk.com/robot/send?access_token=f33f64c01a0323ee7859fab62495addd0ad75c02182425f91b5ffe4ffbf9ce46
     log: true
+    slack: false
+  enabled: true
+  thresholds:
+    circuit_breaker_trip: true
+    consecutive_losers: 5
+    critical_cooldown_minutes: 15
+    daily_loss_limit: -30.0
+    single_trade_loss_threshold: -10.0
+    strategy_degradation_loss: -15.0
+    strategy_degradation_wr: 0.35
+    warning_cooldown_minutes: 60
+    win_rate_collapse: 0.25
 alert_system:
   rules:
-  - id: RULE-001
-    name: high_error_rate
-    context_key: error_rate
-    operator: gt
-    threshold: 0.1
-    severity: critical
+  - context_key: error_rate
     cooldown_seconds: 60
-  - id: RULE-002
+    id: RULE-001
+    name: high_error_rate
+    operator: gt
+    severity: critical
+    threshold: 0.1
+  - context_key: circuit_state
+    cooldown_seconds: 120
+    id: RULE-002
     name: circuit_breaker_open
-    context_key: circuit_state
     operator: eq
+    severity: critical
     threshold: open
-    severity: critical
+  - context_key: bridge_last_ack_seconds
     cooldown_seconds: 120
-  - id: RULE-003
+    id: RULE-003
     name: bridge_heartbeat_missed
-    context_key: bridge_last_ack_seconds
     operator: gt
+    severity: critical
     threshold: 120
-    severity: critical
-    cooldown_seconds: 120
-  - id: RULE-004
+  - context_key: frozen_brain_count
+    cooldown_seconds: 600
+    id: RULE-004
     name: brain_frozen
-    context_key: frozen_brain_count
     operator: gt
+    severity: warning
     threshold: 0
-    severity: warning
-    cooldown_seconds: 600
-  - id: RULE-005
+  - context_key: position_utilization
+    cooldown_seconds: 300
+    id: RULE-005
     name: position_limit_near
-    context_key: position_utilization
     operator: gt
+    severity: warning
     threshold: 0.8
-    severity: warning
+  - context_key: cycle_duration_seconds
     cooldown_seconds: 300
-  - id: RULE-006
+    id: RULE-006
     name: cycle_stall
-    context_key: cycle_duration_seconds
     operator: gt
+    severity: critical
     threshold: 180
-    severity: critical
+  - context_key: daily_pnl_usd
     cooldown_seconds: 300
-  - id: RULE-007
+    id: RULE-007
     name: daily_loss_exceeded
-    context_key: daily_pnl_usd
     operator: lt
+    severity: critical
     threshold: -30.0
-    severity: critical
-    cooldown_seconds: 300
-  - id: RULE-008
+  - context_key: consecutive_losses
+    cooldown_seconds: 600
+    id: RULE-008
     name: consecutive_losses
-    context_key: consecutive_losses
     operator: gt
-    threshold: 5
     severity: warning
+    threshold: 5
+  - composite_kind: win_rate_collapse
     cooldown_seconds: 600
-  - id: RULE-009
-    name: win_rate_collapse
-    type: composite
-    composite_kind: win_rate_collapse
-    threshold: 0.25
+    id: RULE-009
     min_window: 20
+    name: win_rate_collapse
     severity: critical
-    cooldown_seconds: 600
-  - id: RULE-010
-    name: strategy_degradation
+    threshold: 0.25
     type: composite
-    composite_kind: strategy_degradation
-    wr_threshold: 0.35
+  - composite_kind: strategy_degradation
+    cooldown_seconds: 1800
+    id: RULE-010
+    name: strategy_degradation
     pnl_threshold: -15.0
     severity: warning
-    cooldown_seconds: 1800
-  - id: RULE-011
-    name: high_throttle_rate
-    context_key: throttle_rate
-    operator: gt
-    threshold: 0.3
-    severity: warning
+    type: composite
+    wr_threshold: 0.35
+  - context_key: throttle_rate
     cooldown_seconds: 300
-  # ── FIX-20260610-005: Data Health Monitoring rules ──
-  - id: RULE-012
-    name: data_source_critical_failure
-    context_key: data_health_critical_fail_count
+    id: RULE-011
+    name: high_throttle_rate
     operator: gt
-    threshold: 0
-    severity: critical
+    severity: warning
+    threshold: 0.3
+  - context_key: data_health_critical_fail_count
     cooldown_seconds: 300
     description: Any CRITICAL-tier data source in fail or missing status
-  - id: RULE-013
-    name: data_health_degraded
-    context_key: data_health_warn_count
+    id: RULE-012
+    name: data_source_critical_failure
     operator: gt
-    threshold: 2
-    severity: warning
+    severity: critical
+    threshold: 0
+  - context_key: data_health_warn_count
     cooldown_seconds: 600
     description: More than 2 data sources in warn status
-  - id: RULE-014
-    name: cross_source_discrepancy
-    context_key: cross_source_discrepancy_count
+    id: RULE-013
+    name: data_health_degraded
     operator: gt
-    threshold: 0
-    severity: critical
+    severity: warning
+    threshold: 2
+  - context_key: cross_source_discrepancy_count
     cooldown_seconds: 600
     description: Any cross-source validation failure
-  - id: RULE-015
-    name: orphan_subsystem_detected
-    context_key: orphan_subsystem_count
+    id: RULE-014
+    name: cross_source_discrepancy
     operator: gt
+    severity: critical
     threshold: 0
-    severity: warning
+  - context_key: orphan_subsystem_count
     cooldown_seconds: 1800
     description: Subsystem with zero-data pattern detected (pipeline never wired)
-  - id: RULE-016
-    name: state_file_stale
-    context_key: stale_state_file_count
+    id: RULE-015
+    name: orphan_subsystem_detected
     operator: gt
-    threshold: 0
     severity: warning
+    threshold: 0
+  - context_key: stale_state_file_count
     cooldown_seconds: 600
     description: State file not updated within expected cadence
-portfolio_max_net: 0.3
-portfolio_max_gross: 0.5
+    id: RULE-016
+    name: state_file_stale
+    operator: gt
+    severity: warning
+    threshold: 0
+brains:
+  registry_entries:
+  - enabled: false
+    path: configs/brains_btc/archive/BTC_Swing_V4.json
+  - enabled: true
+    path: configs/brains_btc/BTC_Swing_V5.json
+  - enabled: false
+    path: configs/brains_btc/archive/BTC_Swing_LGB_V1.json
+  - enabled: false
+    path: configs/brains_btc/BTC_Swing_V6_MultiTF_LGB_v2.json
+  - enabled: false
+    path: configs/brains_btc/BTC_Swing_V7_MultiTF_LGB_v1.json
+  - enabled: false
+    path: configs/brains_btc/BTC_Swing_V8_MultiTF_LGB_v1.json
+  - enabled: false
+    path: configs/brains_btc/BTC_Swing_V9_H1_Survival.json
+  - enabled: false
+    path: configs/brains_btc/BTC_Swing_V10_M15_Survival.json
+  - enabled: true
+    path: configs/brains_btc/BTC_Swing_V11_H1_Directional.json
+  - enabled: true
+    path: configs/brains_btc/BTC_Swing_V11_M15_Directional.json
 capital_allocator:
   base_volume: 0.01
-  min_volume: 0.01
   max_volume: 0.1
-  require_unanimous: false
+  min_volume: 0.01
   regime:
+    high_vol_mult: 0.7
     low_vol_mult: 1.2
     normal_mult: 1.0
-    high_vol_mult: 0.7
+  require_unanimous: false
   vol_reference_atr: 100.0
 correlation_tracker:
   ema_alpha: 0.05
   min_updates: 3
+data_health:
+  enabled: true
+  full_check_time_utc: 06:00
+  thresholds:
+    bar_sync_max_lag_count: 10
+    brain_perf_min_records_per_brain: 5
+    bridge_heartbeat_max_age_seconds: 120
+    cross_source_close_settled_tolerance_pct: 0.05
+    cross_source_journal_pnl_tolerance_pct: 0.1
+    cross_source_open_close_max_age_hours: 24
+    execution_state_max_age_minutes: 15
+    feature_store_expected_growth_per_hour: 12
+    feature_store_max_age_minutes: 15
+    feature_store_max_nan_pct: 0.05
+    feature_store_max_zero_pct: 0.3
+    governance_min_live_brains: 1
+    journal_close_open_ratio_min: 0.3
+    journal_max_entry_age_hours: 168
+    journal_pnl_null_max_pct: 0.1
+    meta_filter_max_atr_freeze_hours: 6
+    pnl_ledger_max_settled_pending_ratio: 10.0
+    state_file_staleness_minutes: 60
+description: Quant OS live — BTCUSDc (Cent account, isolated from XAUUSDc)
+exit_management:
+  brain_reeval_interval: 5
+  breakeven_threshold_atr: 1.5
+  confidence_drop_threshold: 0.15
+  enabled: true
+  flip_exit_threshold: 0.5
+  max_hold_cycles: 120
+  min_sl_step: 1.0
+  require_min_r: 0.3
+  trail_activation_atr: 0.5
+  trail_atr_mult: 2.0
+  trail_atr_mult_high: 3.0
+  trail_atr_mult_low: 1.5
+features:
+  store_dir: data_btc/feature_store
+  update_interval_seconds: 60
+gate:
+  auto_recovery:
+    consecutive_pass_cycles: 5
+    enabled: false
+  gate_policy_config: configs/live_gate_policy.json
+live_trading:
+  bar_sync: true
+  bar_sync_timeout: 360
+  base_dir: data_btc
+  brains_dir: configs/brains_btc
+  bridge:
+    deviation: 20
+    magic: 90401
+    poll_seconds: 3
+  confidence_threshold: 0.35
+  cooldown_seconds: 300
+  equity_risk_pct: 0.0
+  feature_store_dir: data_btc/feature_store
+  interval_seconds: 60
+  intraday_drawdown_kill:
+    enabled: true
+    kill_pct: 0.03
+    reset_hour_utc: 0
+  lot_step: 0.01
+  market_type: crypto_24_7
+  max_lot: 0.1
+  max_positions: 2
+  min_lot: 0.01
+  mt5_terminal_path: D:\MetaTrader 5\terminal64.exe
+  multi_brain: true
+  normalization_config: configs/brains_btc/v9_institutional_01.normalization.json
+  price_bounds:
+    max: 200000
+    min: 5000
+  reentry_confidence_penalty: 0.15
+  reentry_cooldown_bleed_seconds: 600
+  reentry_cooldown_sl_seconds: 300
+  risk_budget_usd: 30.0
+  session_detect_override: crypto_24_7
+  sl_atr_mult: 2.0
+  spread_guard_max: 2000
+  symbol: BTCUSDc
+  tp_atr_mult: 2.5
+  use_exit_watchdog: true
+  use_limit_orders: false
+  volume: 0.01
+mt5:
+  default_symbol: BTCUSDc
+  normalization_config: configs/brains_btc/v9_institutional_01.normalization.json
+  terminal_path: D:\MetaTrader 5\terminal64.exe
+pipeline:
+  data_dir: data_btc
+  staging_dir: data_btc/staging
+portfolio_max_gross: 0.5
+portfolio_max_net: 0.3
+reentry:
+  bleed_confidence_penalty: 0.15
+  bleed_cooldown_seconds: 600
+  sl_confidence_penalty: 0.15
+  sl_cooldown_seconds: 300
+regime_gate:
+  adx:
+    mild_trend_threshold: 20
+    trending_threshold: 30
+  atr_percentile:
+    high_vol_threshold: 80
+    low_vol_threshold: 20
+  regime_map:
+    high_vol:
+      btc_swing: reduced
+    mild_trend:
+      btc_swing: full
+    normal:
+      btc_swing: full
+    ranging:
+      btc_swing: reduced
+    trending:
+      btc_swing: full
+schema_version: live_config.v2
 strategy_lines:
   btc_swing:
-    enabled: true
-    mode: live
-    timeframe: M5
-    magic: 90410
-    strategy_family: trend_following
-    min_valid_brains: 1
-    confidence_threshold: 0.35
+    base_volume: 0.01
     brain_types:
     - xgboost_v9
-    base_volume: 0.01
+    budget:
+      daily_loss_limit_pct: -0.03
+      max_consecutive_losses: 5
+    confidence_threshold: 0.35
+    direction_balance:
+      long_bias_discount: 0.0
+    enabled: true
+    exit:
+      confidence_decay_exit: true
+      flip_exit_enabled: true
+      flip_threshold: 0.5
+      hesitation_cycles: 12
+      time_exit_cycles: 72
+      trail_activation_atr: 0.5
+      trail_atr_mult: 2.0
+      trail_enabled: true
+    magic: 90410
+    max_spread_points: 3000
     max_volume: 0.1
     min_p_win: 0.45
-    spread_points: 200
-    max_spread_points: 3000
+    min_valid_brains: 1
+    mode: live
     sl:
       base_atr_mult: 2.0
-      hard_sl_ratio: 1.5
       dynamic: true
-      min_sl_distance: 80.0
+      hard_sl_ratio: 1.5
       min_rr_ratio: 0.85
+      min_sl_distance: 80.0
+    spread_points: 200
+    strategy_family: trend_following
+    timeframe: M5
     tp:
       base_atr_mult: 2.5
       partial_tp_enabled: true
       partial_tp_r: 1.0
       partial_tp_ratio: 0.5
-    exit:
-      trail_enabled: true
-      trail_atr_mult: 2.0
-      # ── FIX-20260611-017: trail_activation 0.5→1.0 — prevent premature breakeven kills ──
-      trail_activation_atr: 1.0
-      flip_exit_enabled: true
-      flip_threshold: 0.5
-      time_exit_cycles: 72
-      confidence_decay_exit: true
-      hesitation_cycles: 12
-      trail_activation_atr: 0.5
-    budget:
-      daily_loss_limit_pct: -0.03
-      max_consecutive_losses: 5
-    direction_balance:
-      long_bias_discount: 0.0
-
-# ── FIX-20260610-005: Data Health Monitoring ──
-data_health:
-  enabled: true
-  full_check_time_utc: "06:00"
-  thresholds:
-    feature_store_max_age_minutes: 15
-    feature_store_max_zero_pct: 0.30
-    feature_store_max_nan_pct: 0.05
-    feature_store_expected_growth_per_hour: 12
-    journal_pnl_null_max_pct: 0.10
-    journal_close_open_ratio_min: 0.30
-    journal_max_entry_age_hours: 168
-    execution_state_max_age_minutes: 15
-    governance_min_live_brains: 1
-    meta_filter_max_atr_freeze_hours: 6
-    bridge_heartbeat_max_age_seconds: 120
-    bar_sync_max_lag_count: 10
-    state_file_staleness_minutes: 60
-    brain_perf_min_records_per_brain: 5
-    pnl_ledger_max_settled_pending_ratio: 10.0
-    cross_source_journal_pnl_tolerance_pct: 0.10
-    cross_source_close_settled_tolerance_pct: 0.05
-    cross_source_open_close_max_age_hours: 24
+training:
+  lanes_config: scripts/training/lane_trainers.json
+  plan_generator: scripts/training/generate_batch_plan.py
+zmq:
+  ack_endpoint: tcp://127.0.0.1:5559
+  order_endpoint: tcp://127.0.0.1:5558

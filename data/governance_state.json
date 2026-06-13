@@ -21,8 +21,8 @@
       "brain_id": "OU_Params_V7_M15",
       "status": "probation",
       "registered_at": "2026-05-24T22:00:00.000000",
-      "last_transition_at": "2026-06-13T05:07:18",
-      "transition_count": 11,
+      "last_transition_at": "2026-06-13T09:46:22.544235",
+      "transition_count": 12,
       "freeze_count": 0,
       "exposure_limited": false,
       "vote_weight": 1.5,
@@ -98,8 +98,8 @@
       "brain_id": "Swing_V9_M30_V2",
       "status": "probation",
       "registered_at": "2026-06-04T11:02:07.813219",
-      "last_transition_at": "2026-06-13T05:07:18",
-      "transition_count": 3,
+      "last_transition_at": "2026-06-13T10:37:18",
+      "transition_count": 4,
       "freeze_count": 0,
       "performance_metrics": {
         "win_rate": 0.4362,
@@ -111,10 +111,10 @@
     },
     "Swing_V9_M15_V2": {
       "brain_id": "Swing_V9_M15_V2",
-      "status": "probation",
+      "status": "live",
       "registered_at": "2026-06-04T10:48:14.724913",
-      "last_transition_at": "2026-06-13T05:07:18",
-      "transition_count": 4,
+      "last_transition_at": "2026-06-13T10:37:18",
+      "transition_count": 6,
       "freeze_count": 0,
       "performance_metrics": {
         "win_rate": 0.6517,
@@ -126,11 +126,11 @@
     },
     "Brain_Trend_M30_V1": {
       "brain_id": "Brain_Trend_M30_V1",
-      "status": "candidate",
+      "status": "frozen",
       "registered_at": "2026-05-30T03:44:49.097429",
-      "last_transition_at": "2026-06-04T22:00:23.662856",
-      "transition_count": 9,
-      "freeze_count": 4,
+      "last_transition_at": "2026-06-13T10:56:34.150704",
+      "transition_count": 10,
+      "freeze_count": 5,
       "performance_metrics": {
         "win_rate": 0.4385,
         "profit_factor": 0.78,
@@ -138,7 +138,8 @@
         "total_trades": 244,
         "pnl_r": -75.58
       },
-      "vote_weight": 0.8
+      "vote_weight": 0.0,
+      "freeze_reason": "FIX-20260613-080: PF<1.0 + 100% SHORT signal cloning (STR 6b detected). Zero Parliament diversity contribution."
     },
     "Brain_Rev_M30_V1": {
       "brain_id": "Brain_Rev_M30_V1",
@@ -152,26 +153,30 @@
     },
     "Barrier_V9_12B_V1": {
       "brain_id": "Barrier_V9_12B_V1",
-      "status": "candidate",
+      "status": "archived",
       "registered_at": "2026-05-30T05:30:18.291074",
-      "last_transition_at": "2026-05-30T05:30:18.291074",
-      "transition_count": 1,
-      "freeze_count": 0
+      "last_transition_at": "2026-06-13T10:56:34.150704",
+      "transition_count": 2,
+      "freeze_count": 0,
+      "archived_at": "2026-06-13T10:56:34.150704",
+      "archive_reason": "FIX-20260613-080: 10-14 days registered, 0 trades, superseded by V2/V3 generation"
     },
     "Brain_Trend_M30_V2": {
       "brain_id": "Brain_Trend_M30_V2",
-      "status": "probation",
+      "status": "frozen",
       "registered_at": "2026-06-02T01:22:13.740886",
-      "last_transition_at": "2026-06-13T05:07:18",
-      "transition_count": 2,
-      "freeze_count": 0,
+      "last_transition_at": "2026-06-13T10:56:34.150704",
+      "transition_count": 4,
+      "freeze_count": 1,
       "performance_metrics": {
         "win_rate": 0.4444,
         "profit_factor": 0.95,
         "sharpe_ratio": -4.05,
         "total_trades": 90,
         "pnl_r": -3.87
-      }
+      },
+      "freeze_reason": "FIX-20260613-080: PF<1.0 + 100% SHORT signal cloning (STR 6b detected). Zero Parliament diversity contribution.",
+      "vote_weight": 0.0
     },
     "Brain_Rev_M30_V2": {
       "brain_id": "Brain_Rev_M30_V2",
@@ -192,18 +197,20 @@
     },
     "Swing_M15_V3": {
       "brain_id": "Swing_M15_V3",
-      "status": "candidate",
+      "status": "archived",
       "registered_at": "2026-06-02T01:31:59.623568",
-      "last_transition_at": "2026-06-02T01:31:59.623568",
-      "transition_count": 1,
-      "freeze_count": 0
+      "last_transition_at": "2026-06-13T10:56:34.150704",
+      "transition_count": 2,
+      "freeze_count": 0,
+      "archived_at": "2026-06-13T10:56:34.150704",
+      "archive_reason": "FIX-20260613-080: 10-14 days registered, 0 trades, superseded by V2/V3 generation"
     },
     "Barrier_V9_12B_V2": {
       "brain_id": "Barrier_V9_12B_V2",
-      "status": "probation",
+      "status": "live",
       "registered_at": "2026-06-02T01:33:58.375265",
-      "last_transition_at": "2026-06-13T05:07:18",
-      "transition_count": 3,
+      "last_transition_at": "2026-06-13T09:46:22.544235",
+      "transition_count": 5,
       "freeze_count": 0,
       "performance_metrics": {
         "win_rate": 0.5848,
@@ -215,26 +222,30 @@
     },
     "Brain_Trend_V10_M30": {
       "brain_id": "Brain_Trend_V10_M30",
-      "status": "probation",
+      "status": "frozen",
       "registered_at": "2026-06-03T06:12:30.964500",
-      "last_transition_at": "2026-06-13T05:07:18",
-      "transition_count": 3,
-      "freeze_count": 1,
+      "last_transition_at": "2026-06-13T10:56:34.150704",
+      "transition_count": 5,
+      "freeze_count": 2,
       "performance_metrics": {
         "win_rate": 0.3855,
         "profit_factor": 0.39,
         "sharpe_ratio": -51.38,
         "total_trades": 83,
         "pnl_r": -81.6
-      }
+      },
+      "freeze_reason": "FIX-20260613-080: PF<1.0 + 100% SHORT signal cloning (STR 6b detected). Zero Parliament diversity contribution.",
+      "vote_weight": 0.0
     },
     "Swing_V10_M15": {
       "brain_id": "Swing_V10_M15",
-      "status": "candidate",
+      "status": "archived",
       "registered_at": "2026-06-03T06:12:33.153993",
-      "last_transition_at": "2026-06-03T06:12:33.153993",
-      "transition_count": 1,
-      "freeze_count": 0
+      "last_transition_at": "2026-06-13T10:56:34.150704",
+      "transition_count": 2,
+      "freeze_count": 0,
+      "archived_at": "2026-06-13T10:56:34.150704",
+      "archive_reason": "FIX-20260613-080: 10-14 days registered, 0 trades, superseded by V2/V3 generation"
     },
     "Swing_V9_H4_V2": {
       "brain_id": "Swing_V9_H4_V2",
@@ -253,10 +264,10 @@
     },
     "Swing_V9_H1_V2": {
       "brain_id": "Swing_V9_H1_V2",
-      "status": "probation",
+      "status": "live",
       "registered_at": "2026-06-04T11:02:11.580065",
-      "last_transition_at": "2026-06-11T05:00:00",
-      "transition_count": 3,
+      "last_transition_at": "2026-06-13T10:37:18",
+      "transition_count": 5,
       "freeze_count": 0,
       "performance_metrics": {
         "win_rate": 0.4725,
@@ -300,30 +311,36 @@
   },
   "transition_log": [
     {
-      "brain_id": "Swing_V10_H1_Directional",
-      "from": null,
-      "to": "candidate",
-      "reason": "brain_registered",
-      "timestamp": "2026-06-11T05:41:18.703128",
-      "fix_id": "FIX-20260529-034"
+      "brain_id": "Barrier_V9_12B_V2",
+      "from_status": "candidate",
+      "to_status": "live",
+      "action": "promote",
+      "reason": "FIX-076: restored after cmd_reconcile wipe",
+      "evaluated_at": "2026-06-13T09:46:22.544235"
     },
     {
-      "brain_id": "Swing_V10_H1_Directional",
-      "from": null,
-      "to": "candidate",
-      "reason": "auto-registered from disk config (config status=candidate)",
-      "timestamp": "2026-06-11T05:41:18.703128+00:00",
-      "fix_id": "FIX-20260529-034"
+      "brain_id": "Swing_V9_M15_V2",
+      "from_status": "candidate",
+      "to_status": "probation",
+      "action": "promote",
+      "reason": "FIX-076: restored after cmd_reconcile wipe",
+      "evaluated_at": "2026-06-13T09:46:22.544235"
+    },
+    {
+      "brain_id": "Swing_V9_H1_V2",
+      "from_status": "candidate",
+      "to_status": "probation",
+      "action": "promote",
+      "reason": "FIX-076: restored after cmd_reconcile wipe",
+      "evaluated_at": "2026-06-13T09:46:22.544235"
     },
     {
       "brain_id": "OU_Params_V7_M15",
-      "from_status": "live",
+      "from_status": "candidate",
       "to_status": "probation",
-      "action": "throttle",
-      "reasons": [
-        "profit_factor(0.74) < 0.80"
-      ],
-      "evaluated_at": "2026-06-13T05:07:18"
+      "action": "promote",
+      "reason": "FIX-076: restored after cmd_reconcile wipe",
+      "evaluated_at": "2026-06-13T09:46:22.544235"
     },
     {
       "brain_id": "Swing_V9_M30_V2",
@@ -333,17 +350,17 @@
       "reasons": [
         "candidate_thresholds_met: wr=42.44%, pf=0.92"
       ],
-      "evaluated_at": "2026-06-13T05:07:18"
+      "evaluated_at": "2026-06-13T10:37:18"
     },
     {
       "brain_id": "Swing_V9_M15_V2",
-      "from_status": "live",
-      "to_status": "probation",
-      "action": "throttle",
+      "from_status": "probation",
+      "to_status": "live",
+      "action": "promote",
       "reasons": [
-        "recent_win_rate(30.00%) < 38%"
+        "probation_thresholds_met: wr=63.65%, pf=3.46"
       ],
-      "evaluated_at": "2026-06-13T05:07:18"
+      "evaluated_at": "2026-06-13T10:37:18"
     },
     {
       "brain_id": "Brain_Trend_M30_V2",
@@ -353,17 +370,7 @@
       "reasons": [
         "candidate_thresholds_met: wr=44.44%, pf=0.95"
       ],
-      "evaluated_at": "2026-06-13T05:07:18"
-    },
-    {
-      "brain_id": "Barrier_V9_12B_V2",
-      "from_status": "candidate",
-      "to_status": "probation",
-      "action": "promote",
-      "reasons": [
-        "candidate_thresholds_met: wr=58.48%, pf=2.32"
-      ],
-      "evaluated_at": "2026-06-13T05:07:18"
+      "evaluated_at": "2026-06-13T10:37:18"
     },
     {
       "brain_id": "Brain_Trend_V10_M30",
@@ -373,7 +380,65 @@
       "reasons": [
         "profit_factor(0.39) < 0.60 — probation (protected)"
       ],
-      "evaluated_at": "2026-06-13T05:07:18"
+      "evaluated_at": "2026-06-13T10:37:18"
+    },
+    {
+      "brain_id": "Swing_V9_H1_V2",
+      "from_status": "probation",
+      "to_status": "live",
+      "action": "promote",
+      "reasons": [
+        "probation_thresholds_met: wr=47.25%, pf=1.80"
+      ],
+      "evaluated_at": "2026-06-13T10:37:18"
+    },
+    {
+      "brain_id": "Barrier_V9_12B_V1",
+      "from_status": "candidate",
+      "to_status": "archived",
+      "action": "archive",
+      "reason": "FIX-080 portfolio cleanup",
+      "evaluated_at": "2026-06-13T10:56:34.150704"
+    },
+    {
+      "brain_id": "Swing_M15_V3",
+      "from_status": "candidate",
+      "to_status": "archived",
+      "action": "archive",
+      "reason": "FIX-080 portfolio cleanup",
+      "evaluated_at": "2026-06-13T10:56:34.150704"
+    },
+    {
+      "brain_id": "Swing_V10_M15",
+      "from_status": "candidate",
+      "to_status": "archived",
+      "action": "archive",
+      "reason": "FIX-080 portfolio cleanup",
+      "evaluated_at": "2026-06-13T10:56:34.150704"
+    },
+    {
+      "brain_id": "Brain_Trend_M30_V1",
+      "from_status": "candidate",
+      "to_status": "frozen",
+      "action": "freeze",
+      "reason": "FIX-080 portfolio cleanup",
+      "evaluated_at": "2026-06-13T10:56:34.150704"
+    },
+    {
+      "brain_id": "Brain_Trend_M30_V2",
+      "from_status": "candidate",
+      "to_status": "frozen",
+      "action": "freeze",
+      "reason": "FIX-080 portfolio cleanup",
+      "evaluated_at": "2026-06-13T10:56:34.150704"
+    },
+    {
+      "brain_id": "Brain_Trend_V10_M30",
+      "from_status": "candidate",
+      "to_status": "frozen",
+      "action": "freeze",
+      "reason": "FIX-080 portfolio cleanup",
+      "evaluated_at": "2026-06-13T10:56:34.150704"
     }
   ]
 }
