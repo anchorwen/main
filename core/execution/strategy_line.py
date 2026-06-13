@@ -25,6 +25,30 @@ from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
 
 logger = logging.getLogger(__name__)
 
+# ── Cached git commit hash (lazy, once per process lifetime) ──────────────
+_GIT_HASH_CACHE: str | None = None
+
+
+def _get_cached_git_hash() -> str:
+    """Return the current HEAD commit hash, cached for process lifetime."""
+    global _GIT_HASH_CACHE
+    if _GIT_HASH_CACHE is not None:
+        return _GIT_HASH_CACHE
+    try:
+        import subprocess as _sp
+
+        result = _sp.run(
+            ["git", "rev-parse", "--short=8", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            _GIT_HASH_CACHE = result.stdout.strip()
+        else:
+            _GIT_HASH_CACHE = "unknown"
+    except Exception:
+        _GIT_HASH_CACHE = "unknown"
+    return _GIT_HASH_CACHE
+
 # ── Bandit sizing constants (v3.1) ──
 
 SIGMOID_Z_MID = 1.75  # Z-score midpoint for sigmoid
@@ -208,6 +232,14 @@ class StrategyDecision:
     decision_hash: str = ""  # SHA-256 of key decision fields (idempotency + audit)
     evaluated_at: str = ""  # ISO-8601 UTC timestamp of evaluation
     code_version: str = ""  # git commit hash of running code
+
+    def __post_init__(self) -> None:
+        """Auto-populate audit fields if not explicitly set."""
+        if not self.evaluated_at:
+            self.evaluated_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        if not self.code_version:
+            self.code_version = _get_cached_git_hash()
+        # decision_hash computed lazily when first accessed (avoid import cost)
     # entry_context carries passthrough data for the journal:
     #   {"atr": float, "regime": str, "vol_regime": str, "trend_direction": str,
     #    "macro_regime": str, "brain_predictions": [dict, ...],
