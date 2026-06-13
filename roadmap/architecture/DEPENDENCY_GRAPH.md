@@ -1,6 +1,6 @@
 # DEPENDENCY GRAPH — 模块依赖关系
 
-> **自动生成**: 2026-06-13T05:08:04Z
+> **自动生成**: 2026-06-13T05:15:16Z
 
 ## Package-Level Dependencies
 
@@ -184,7 +184,7 @@
 - `correlation_sizer.py` → (无内部依赖)
 - `dynamic_sl_tp.py` → (无内部依赖)
 - `execution_manager.py` → `core.contracts.exceptions`, `core.observability.metric_names`
-- `execution_queue.py` → `core.execution.live_order_sender`, `core.protocol.services.zmq_receipt_listener`
+- `execution_queue.py` → `core.execution.live_order_sender`, `core.protocol.services.zmq_receipt_listener`, `core.runtime.fault_handler`
 - `exit_reason.py` → (无内部依赖)
 - `exit_watchdog.py` → `core.protocol.services.zmq_receipt_listener`, `core.runtime.fault_handler`
 - `fill_simulator.py` → `core.contracts.ids`, `core.execution.gateway_contracts`

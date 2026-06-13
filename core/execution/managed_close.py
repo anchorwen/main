@@ -112,7 +112,7 @@ def dispatch_managed_close(
                         ),
                         flush=True,
                     )
-                except Exception as _cd_exc:  # noqa: BLE001
+                except Exception as _cd_exc:
                     print(
                         json.dumps(
                             {
@@ -126,7 +126,7 @@ def dispatch_managed_close(
                         ),
                         flush=True,
                     )
-        except Exception as _ew_exc:  # noqa: BLE001
+        except Exception as _ew_exc:
             print(
                 json.dumps(
                     {
@@ -261,7 +261,7 @@ def dispatch_managed_close(
                     _oe = state.known_open_tickets.get(pos.ticket, {})
                     if _oe:
                         _oe["_engine_close_pnl"] = pnl
-        except Exception as _wd_exc:  # noqa: BLE001
+        except Exception as _wd_exc:
             print(
                 json.dumps(
                     {
@@ -289,7 +289,7 @@ def dispatch_managed_close(
                 extensions={"mt5_terminal_path": config.mt5_terminal_path},
             )
             _close_dispatched = True
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             print(
                 json.dumps(
                     {

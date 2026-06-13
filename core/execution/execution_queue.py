@@ -17,6 +17,8 @@ import time as _time
 from dataclasses import dataclass
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 logger = logging.getLogger(__name__)
 
 
@@ -222,11 +224,9 @@ class ExecutionQueue:
         # Pre-fetch current price for validation if broker is available
         _current_price: float | None = None
         if broker is not None:
-            try:
+            with fail_open_guard("ExecutionQueue:PriceFetch"):
                 _mid, _bid, _ask = broker.fetch_prices(symbol)
                 _current_price = _mid
-            except Exception:  # noqa: BLE001
-                _current_price = None
         else:
             logger.warning(
                 "ExecutionQueue.flush: no broker provided — price guard validation skipped"
@@ -283,7 +283,7 @@ class ExecutionQueue:
                             )
                             self._last_dispatch_time = _time.monotonic()
                             continue
-                except Exception as _pg_exc:  # noqa: BLE001
+                except Exception as _pg_exc:
                     logger.error(
                         "price_guard validation exception for strategy=%s: %s",
                         queued.strategy_name,
@@ -371,7 +371,7 @@ class ExecutionQueue:
                                             "new_ticket": _ack_detail["new_ticket"],
                                             "close_volume": _close_vol,
                                         }
-                            except Exception as _ack_exc:  # noqa: BLE001
+                            except Exception as _ack_exc:
                                 logger.warning(
                                     "ACK resolve error for intent_id=%s: %s",
                                     _intent_id,
@@ -384,7 +384,7 @@ class ExecutionQueue:
                             # confirmation would open a new position against a still-open
                             # opposing position when the close actually failed.
                             _close_confirmed = bool(_close_result.get("dispatched", False))
-                except Exception as _net_out_exc:  # noqa: BLE001
+                except Exception as _net_out_exc:
                     logger.error(
                         "net-out close dispatch failed for strategy=%s ticket=%s: %s",
                         queued.strategy_name,
@@ -447,7 +447,7 @@ class ExecutionQueue:
                     )
                     _dispatched = True
                     break
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     _last_error = str(exc)
                     if _attempt < _max_attempts - 1:
                         _time.sleep(1.5)

@@ -36,7 +36,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import log_and_continue
+from core.runtime.fault_handler import fail_open_guard, log_and_continue
 
 # -- Constants --
 
@@ -196,7 +196,7 @@ class ExitWatchdog:
                                 attempts=attempts,
                                 alerts=alerts,
                             )
-                    except Exception as _l2_exc:  # noqa: BLE001
+                    except Exception as _l2_exc:
                         import logging as _lg
 
                         _lg.getLogger(__name__).critical(
@@ -252,7 +252,7 @@ class ExitWatchdog:
             try:
                 result = dispatch_fn(payload)
                 att.dispatch_success = bool(result.get("dispatched", False))
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 att.error = f"dispatch_exception:{exc}"
                 attempts.append(att)
                 continue
@@ -330,7 +330,7 @@ class ExitWatchdog:
                         attempts=attempts,
                         alerts=alerts,
                     )
-            except Exception as _l2f_exc:  # noqa: BLE001
+            except Exception as _l2f_exc:
                 import logging as _lg
 
                 _lg.getLogger(__name__).critical(
@@ -449,7 +449,7 @@ class ExitWatchdog:
         if not intent_id:
             return None
 
-        try:
+        with fail_open_guard("ExitWatchdog:ZMQResolveAck"):
             from core.protocol.services.zmq_receipt_listener import resolve_ack
 
             return resolve_ack(
@@ -458,8 +458,6 @@ class ExitWatchdog:
                 timeout=timeout,
                 poll_interval=self.ack_poll_interval,
             )
-        except Exception:  # noqa: BLE001
-            pass
 
         # Pure file fallback if ZMQ not available
         deadline = time.monotonic() + timeout

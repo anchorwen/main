@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-13T05:08:04Z
+> **自动生成**: 2026-06-13T05:15:16Z
 > **扫描模块数**: 540
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -218,7 +218,7 @@
 | `execution_manager.py` | ✅ active | ExecutionManager | 7 | 180 | — | |
 | `execution_queue.py` | ✅ active | ExecutionQueueFatalError, QueuedDecision, DispatchResult, ExecutionQueue | 8 | 497 | — | |
 | `exit_reason.py` | ✅ active | ExitReason | 6 | 227 | — | |
-| `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 8 | 498 | — | |
+| `exit_watchdog.py` | ✅ active | ExitAttempt, ExitWatchdogResult, ExitWatchdog | 8 | 496 | — | |
 | `fill_simulator.py` | ✅ active | FillSimulationConfig, FillSimulator | 8 | 125 | — | |
 | `fix_contracts.py` | ✅ active | FixSessionConfig, FixMessage, FixExecutionReport | 4 | 69 | — | |
 | `fix_execution_mapper.py` | ✅ active | FixExecutionReportMapper | 5 | 75 | — | |

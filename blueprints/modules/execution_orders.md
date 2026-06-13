@@ -59,6 +59,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260613-040 | 2026-06-13 | cursor-agent | — | **BLE001: 2 truly bare except:pass → fail_open_guard** in execution_queue (PriceFetch) + exit_watchdog (ZMQResolveAck). Iron Law #10 incremental upgrade. BLE001: 86→84 (-2 bare). | RC-07 |
 | FIX-20260613-039 | 2026-06-13 | cursor-agent | — | **ExitReason enum SSOT + StrategyDecision audit fields**: exit_reason.py created with 15 canonical categories. StrategyDecision gains decision_hash/evaluated_at/code_version audit fields for entry provenance tracking. | RC-06, RC-12 |
 | FIX-20260613-037 | 2026-06-13 | cursor-agent | — | **Blind Spot 4 — Hard-Coded Blast Limits**: `MAX_ALLOWED_LOT_SIZE=0.05` + `FatalRiskViolation` in live_order_sender.py. Final non-configurable volume ceiling. Mirrors MAX_SL_ATR/MAX_TP_ATR pattern. | RC-07 |
 | FIX-20260613-036 | 2026-06-13 | cursor-agent | — | **Blind Spot 3 — Entry-in-flight Lock**: ExecutionQueue gains _pending_open dict + flood lock (mirrors proven _pending_close). 30s auto-expire, 3-attempt permanent lock. strategy_evaluator checks is_pending_open() before enqueue. | RC-04 |
