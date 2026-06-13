@@ -322,21 +322,23 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
     # Migrate from legacy last_line if needed
     if not last_recorded_at and "last_line" in _state:
         _old_pos = _state["last_line"]
-        # Compaction safety: if the pointer exceeds the file, cap at the last line
         if _old_pos > 0 and _old_pos <= len(lines):
+            # Normal case: pointer is valid, derive watermark from the
+            # last-processed line's timestamp
             try:
                 _mig_entry = json.loads(lines[_old_pos - 1])
                 last_recorded_at = _mig_entry.get("recorded_at", "")
                 last_message_id = _mig_entry.get("message_id", "")
             except Exception:  # noqa: BLE001
                 pass
-        if not last_recorded_at and lines:
-            try:
-                _mig_entry = json.loads(lines[-1])
-                last_recorded_at = _mig_entry.get("recorded_at", "")
-                last_message_id = _mig_entry.get("message_id", "")
-            except Exception:  # noqa: BLE001
-                pass
+        elif _old_pos > len(lines):
+            # Compaction pruned lines — the pointer is now beyond EOF.
+            # Use empty watermark to force a full rescan.  The calibrator
+            # may briefly double-count ~55 existing samples, but this is
+            # infinitely better than permanent zero-processing stall.
+            last_recorded_at = ""
+            last_message_id = ""
+        # else: _old_pos == 0 (first run) — leave watermark empty
 
     # Filter to lines strictly after the watermark
     new_lines: list[str] = []
@@ -952,13 +954,10 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
                     last_message_id = _mig_entry.get("message_id", "")
                 except Exception:  # noqa: BLE001
                     pass
-            if not last_recorded_at and lines:
-                try:
-                    _mig_entry = json.loads(lines[-1])
-                    last_recorded_at = _mig_entry.get("recorded_at", "")
-                    last_message_id = _mig_entry.get("message_id", "")
-                except Exception:  # noqa: BLE001
-                    pass
+            elif _old_pos > len(lines):
+                # Compaction pruned lines — force full rescan
+                last_recorded_at = ""
+                last_message_id = ""
 
         # Filter to lines strictly after the watermark (compaction-safe)
         new_lines: list[str] = []
