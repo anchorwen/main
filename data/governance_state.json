@@ -107,14 +107,15 @@
         "sharpe_ratio": -2.88,
         "total_trades": 2788,
         "pnl_r": -194.73
-      }
+      },
+      "vote_weight": 1.0
     },
     "Swing_V9_M15_V2": {
       "brain_id": "Swing_V9_M15_V2",
       "status": "live",
       "registered_at": "2026-06-04T10:48:14.724913",
-      "last_transition_at": "2026-06-13T10:37:18",
-      "transition_count": 6,
+      "last_transition_at": "2026-06-14T15:26:25",
+      "transition_count": 8,
       "freeze_count": 0,
       "performance_metrics": {
         "win_rate": 0.6517,
@@ -122,7 +123,8 @@
         "sharpe_ratio": 107.28,
         "total_trades": 847,
         "pnl_r": 5361.9
-      }
+      },
+      "vote_weight": 1.0
     },
     "Brain_Trend_M30_V1": {
       "brain_id": "Brain_Trend_M30_V1",
@@ -159,7 +161,8 @@
       "transition_count": 2,
       "freeze_count": 0,
       "archived_at": "2026-06-13T10:56:34.150704",
-      "archive_reason": "FIX-20260613-080: 10-14 days registered, 0 trades, superseded by V2/V3 generation"
+      "archive_reason": "FIX-20260613-080: 10-14 days registered, 0 trades, superseded by V2/V3 generation",
+      "vote_weight": 1.0
     },
     "Brain_Trend_M30_V2": {
       "brain_id": "Brain_Trend_M30_V2",
@@ -203,7 +206,8 @@
       "transition_count": 2,
       "freeze_count": 0,
       "archived_at": "2026-06-13T10:56:34.150704",
-      "archive_reason": "FIX-20260613-080: 10-14 days registered, 0 trades, superseded by V2/V3 generation"
+      "archive_reason": "FIX-20260613-080: 10-14 days registered, 0 trades, superseded by V2/V3 generation",
+      "vote_weight": 1.0
     },
     "Barrier_V9_12B_V2": {
       "brain_id": "Barrier_V9_12B_V2",
@@ -218,14 +222,15 @@
         "sharpe_ratio": 72.02,
         "total_trades": 814,
         "pnl_r": 2625.13
-      }
+      },
+      "vote_weight": 1.0
     },
     "Brain_Trend_V10_M30": {
       "brain_id": "Brain_Trend_V10_M30",
-      "status": "frozen",
+      "status": "probation",
       "registered_at": "2026-06-03T06:12:30.964500",
-      "last_transition_at": "2026-06-13T10:56:34.150704",
-      "transition_count": 5,
+      "last_transition_at": "2026-06-14T14:36:03",
+      "transition_count": 6,
       "freeze_count": 2,
       "performance_metrics": {
         "win_rate": 0.3855,
@@ -245,7 +250,8 @@
       "transition_count": 2,
       "freeze_count": 0,
       "archived_at": "2026-06-13T10:56:34.150704",
-      "archive_reason": "FIX-20260613-080: 10-14 days registered, 0 trades, superseded by V2/V3 generation"
+      "archive_reason": "FIX-20260613-080: 10-14 days registered, 0 trades, superseded by V2/V3 generation",
+      "vote_weight": 1.0
     },
     "Swing_V9_H4_V2": {
       "brain_id": "Swing_V9_H4_V2",
@@ -266,8 +272,8 @@
       "brain_id": "Swing_V9_H1_V2",
       "status": "live",
       "registered_at": "2026-06-04T11:02:11.580065",
-      "last_transition_at": "2026-06-13T10:37:18",
-      "transition_count": 5,
+      "last_transition_at": "2026-06-14T15:26:25",
+      "transition_count": 7,
       "freeze_count": 0,
       "performance_metrics": {
         "win_rate": 0.4725,
@@ -275,7 +281,8 @@
         "sharpe_ratio": 40.01,
         "total_trades": 2959,
         "pnl_r": 4426.81
-      }
+      },
+      "vote_weight": 1.0
     },
     "Swing_LGB_M15_V1": {
       "brain_id": "Swing_LGB_M15_V1",
@@ -439,6 +446,56 @@
       "action": "freeze",
       "reason": "FIX-080 portfolio cleanup",
       "evaluated_at": "2026-06-13T10:56:34.150704"
+    },
+    {
+      "brain_id": "Swing_V9_M15_V2",
+      "from_status": "live",
+      "to_status": "probation",
+      "action": "throttle",
+      "reasons": [
+        "recent_win_rate(30.00%) < 38%"
+      ],
+      "evaluated_at": "2026-06-14T14:36:03"
+    },
+    {
+      "brain_id": "Brain_Trend_V10_M30",
+      "from_status": "frozen",
+      "to_status": "probation",
+      "action": "throttle",
+      "reasons": [
+        "profit_factor(0.39) < 0.60 — probation (protected)"
+      ],
+      "evaluated_at": "2026-06-14T14:36:03"
+    },
+    {
+      "brain_id": "Swing_V9_H1_V2",
+      "from_status": "live",
+      "to_status": "probation",
+      "action": "throttle",
+      "reasons": [
+        "recent_win_rate(25.00%) < 38%"
+      ],
+      "evaluated_at": "2026-06-14T14:36:03"
+    },
+    {
+      "brain_id": "Swing_V9_M15_V2",
+      "from_status": "probation",
+      "to_status": "live",
+      "action": "promote",
+      "reasons": [
+        "probation_thresholds_met: wr=63.65%, pf=3.46"
+      ],
+      "evaluated_at": "2026-06-14T15:26:25"
+    },
+    {
+      "brain_id": "Swing_V9_H1_V2",
+      "from_status": "probation",
+      "to_status": "live",
+      "action": "promote",
+      "reasons": [
+        "probation_thresholds_met: wr=47.25%, pf=1.80"
+      ],
+      "evaluated_at": "2026-06-14T15:26:25"
     }
   ]
 }

@@ -366,7 +366,7 @@ def test_v9_shadow_load_feature_source_from_json():
     feature_source = load_feature_source_from_json("D:/cursor/data/snapshots/v9_shadow_long.json")
 
     assert len(feature_source) == 40
-    assert feature_source["H1_Hurst"] == -1.1
+    assert feature_source["H1_Hurst"] == 0.05  # FIX-016: valid Hurst floor
     assert feature_source["M5_Ret_1"] == 0.0012
 
 
@@ -379,7 +379,7 @@ def test_v9_shadow_load_feature_source_from_json_supports_embedded_features_shap
                 "description": "embedded description",
                 "features": {
                     "M5_Ret_1": 0.123,
-                    "H1_Hurst": -1.1,
+                    "H1_Hurst": 0.05,
                 },
             }
         ),
@@ -390,7 +390,7 @@ def test_v9_shadow_load_feature_source_from_json_supports_embedded_features_shap
 
     assert len(feature_source) == 40
     assert feature_source["M5_Ret_1"] == 0.123
-    assert feature_source["H1_Hurst"] == -1.1
+    assert feature_source["H1_Hurst"] == 0.05  # FIX-016: valid Hurst floor
     assert feature_source["M15_RSI_14"] == 0.0
 
 
@@ -408,7 +408,7 @@ def test_v9_shadow_load_short_feature_source_from_json():
     feature_source = load_feature_source_from_json("D:/cursor/data/snapshots/v9_shadow_short.json")
 
     assert len(feature_source) == 40
-    assert abs(feature_source["M15_RSI_14"]) == 145.0
+    assert abs(feature_source["M15_RSI_14"]) == 29.0   # FIX-016: M15_RSI ×(-0.5) instead of ×(-2.5)
     assert abs(feature_source["M15_Hurst"]) == 0.65
 
 
@@ -427,8 +427,8 @@ def test_v9_shadow_load_feature_batch_from_json():
     assert (
         batch[2]["description"] == "Invert the M15 feature group to trigger an open short decision."
     )
-    assert batch[1]["feature_source"]["H1_Hurst"] == -1.1
-    assert abs(batch[2]["feature_source"]["M15_RSI_14"]) == 145.0
+    assert batch[1]["feature_source"]["H1_Hurst"] == 0.05  # FIX-016: valid Hurst floor
+    assert abs(batch[2]["feature_source"]["M15_RSI_14"]) == 29.0   # FIX-016: M15_RSI ×(-0.5) instead of ×(-2.5)
 
 
 def test_v9_shadow_load_feature_samples_from_dir():
@@ -455,11 +455,11 @@ def test_v9_shadow_load_feature_samples_from_dir():
         "Default reference sample expected to remain passive and abstain.",
         "Invert the M15 feature group to trigger an open short decision.",
     ]
-    assert samples[0]["feature_source"]["H1_Hurst"] == -0.85
-    assert samples[1]["feature_source"]["H1_Hurst"] == -0.45
-    assert samples[2]["feature_source"]["H1_Hurst"] == -1.1
+    assert samples[0]["feature_source"]["H1_Hurst"] == 0.12  # FIX-016: valid Hurst for edge_allow
+    assert samples[1]["feature_source"]["H1_Hurst"] == 0.35  # FIX-016: valid Hurst for edge_deny
+    assert samples[2]["feature_source"]["H1_Hurst"] == 0.05  # FIX-016: valid Hurst floor
     assert samples[3]["feature_source"]["H1_Hurst"] == 0.21
-    assert abs(samples[4]["feature_source"]["M15_RSI_14"]) == 145.0
+    assert abs(samples[4]["feature_source"]["M15_RSI_14"]) == 29.0   # FIX-016: M15_RSI ×(-0.5) instead of ×(-2.5)
 
 
 def test_v9_shadow_load_feature_samples_from_dir_uses_embedded_metadata(tmp_path):
@@ -471,7 +471,7 @@ def test_v9_shadow_load_feature_samples_from_dir_uses_embedded_metadata(tmp_path
                 "description": "custom description",
                 "features": {
                     "M5_Ret_1": 0.456,
-                    "H1_Hurst": -1.1,
+                    "H1_Hurst": 0.05,
                 },
             }
         ),
@@ -485,7 +485,7 @@ def test_v9_shadow_load_feature_samples_from_dir_uses_embedded_metadata(tmp_path
     assert samples[0]["description"] == "custom description"
     assert samples[0]["feature_file"] == str(sample_path)
     assert samples[0]["feature_source"]["M5_Ret_1"] == 0.456
-    assert samples[0]["feature_source"]["H1_Hurst"] == -1.1
+    assert samples[0]["feature_source"]["H1_Hurst"] == 0.05  # FIX-016: valid Hurst floor
     assert samples[0]["feature_source"]["M15_RSI_14"] == 0.0
 
 
