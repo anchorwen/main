@@ -446,3 +446,5 @@ python -m pytest tests/ -k "runtime or live or cycle" -q
 | FQD-20260614 | 2026-06-14 | cursor-agent | `f2e6167` | **Feature Quality Dictator**: variance/NaN/outlier auto-scan for all features in training dataset. First run caught 6 dead micro features. | RC-07 |
 | DQAF-20260614-P0 | 2026-06-14 | cursor-agent | `d13137b` | **Omega Gate --no-verify audit**: exemption claim verified against actual staged files. Closes --no-verify abuse loophole. | RC-07 |
 | DQAF-20260614-DH | 2026-06-14 | cursor-agent | `b6c4c6f` | **Data Health Contract**: severity-tiered (FATAL/WARN), fault-tolerant, configuration-driven data governance for all 6 data domains. FATAL → circuit breaker lock. | RC-07 |
+| DQAF-20260614-012 | 2026-06-14 | cursor-agent | `a82afdb` | **MetaExit deal reason mapping**: expanded MT5 deal reason map from {4,5} to {0-7}, eliminating 42% unknown_close exits. | RC-06 |
+| DQAF-20260614-013 | 2026-06-14 | cursor-agent | `6cc31aa` | **Live Labels real-time write**: reconciliation now writes label to live_labels.jsonl immediately on close, not just offline batch. Unlabeled rate: 16.8% → 14.1%. | RC-07 |
