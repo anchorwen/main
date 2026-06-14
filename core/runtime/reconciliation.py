@@ -11,6 +11,7 @@ import json
 import logging
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
@@ -220,6 +221,49 @@ def reconcile_closed_positions(
             "brain_ids": open_entry.get("brain_ids"),
         }
         closed_entries.append(close_entry)
+
+        # ── DQAF-20260614-005c: SignalSettled from startup reconciliation ──
+        # This path handles ALL real closes (the reconcile_mt5_close_events
+        # path in live_cycle.py uses PositionCloseAdapter and rarely fires).
+        # Without this, SignalSettled stays 0 forever — all closes go through
+        # this reconciliation path at startup.
+        _brain_ids = open_entry.get("brain_ids")
+        if _brain_ids and pnl != 0:
+            try:
+                from core.contracts.events import PnLEvent
+                from core.data.event_writer import EventWriter
+
+                _ledger_path = str(
+                    Path(journal_path).parent / "ledger_events.jsonl"
+                )
+                _writer = EventWriter(_ledger_path)
+                _settled_ts = datetime.now(UTC)
+                _entry_price = float(open_entry.get("entry_price", 0) or 0)
+                _close_price_f = float(close_price) if close_price else 0.0
+                _pnl_r = (
+                    (_close_price_f - _entry_price) / _entry_price
+                    if _entry_price > 0 and side == "long"
+                    else (_entry_price - _close_price_f) / _entry_price
+                    if _entry_price > 0
+                    else 0.0
+                )
+                for _bid in _brain_ids:
+                    _event = PnLEvent(
+                        timestamp=_settled_ts,
+                        source="live",
+                        event_type="SignalSettled",
+                        brain_id=str(_bid),
+                        symbol=symbol,
+                        direction=side,
+                        entry_price=_entry_price,
+                        exit_price=_close_price_f,
+                        pnl_r=round(_pnl_r, 6),
+                        position_ticket=ticket,
+                        generated_by="reconciliation._reconcile_closed_positions",
+                    )
+                    _writer.write(_event)
+            except Exception:
+                pass  # best-effort
 
         # ── Record exit for re-entry guard (native MT5 SL/TP) ──
         if state is not None:
