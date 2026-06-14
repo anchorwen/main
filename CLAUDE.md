@@ -8,45 +8,39 @@
 
 ---
 
-## Iron Law #-1: Institutional Execution Mandate — IC-APPROVED Tag Protocol (最高优先级 — 超越所有场景路由)
+## Iron Law #-1: Institutional Execution Mandate — Agent Self-Loading Protocol (最高优先级 — 超越所有场景路由)
 
-**触发条件**: 任何涉及 `.py` / `.yaml` / `.yml` / `.json` 文件的代码修改或配置变更之前，Agent 必须在 DQAF 报告末尾输出 `[AWAITING_IC_APPROVAL]` 并**物理停止生成**。人类必须回复以下**精确标签**才能解锁代码生成。标签缺失、拼写错误、语义近似但字面不符 = 握手失败，Agent 继续等待。
-
-### 强制性批准标签 (Mandatory Approval Tag)
-
-人类必须在单独一行中精确回复：
+**触发条件**: Agent 在 `[AWAITING_IC_APPROVAL]` 之后收到人类的任何批准回复（"Approved"、"可以执行"、"开始修改"、"执行"等），**在编写任何代码之前**，Agent 必须在其思考过程中自行加载以下**机构级执行约束标签 (Institutional Execution Mandate Tag)** 并严格受其约束：
 
 ```
-IC-APPROVED: Ω-Protocol Institutional Execution Mandate — Stability↑/→ | Repairability↑/→ | Decoupling↑/→ | Iterability↑/→ — Ω Systematic Operating System Enforced
+[INSTITUTIONAL_EXECUTION_MANDATE]
+1. Institutional-Grade Reasoning — 机构级思路：每个修改必须从系统架构层面论证必要性，禁止投机性修改、禁止临时补丁、禁止"先改了试试"。
+2. Stability Non-Degradation — 不破坏稳定性：修改不得引入新的故障模式、未处理异常路径、共享状态竞争或隐式依赖。
+3. Repairability Non-Degradation — 不破坏可修复性：修改不得吞没诊断信息、合并不同性质信号或增加根因定位步骤。
+4. Decoupling Non-Degradation — 不破坏解耦性：修改不得跨越现有模块边界增加新 import 链或破坏接口向后兼容。
+5. Iterability Non-Degradation — 不破坏可迭代性：修改不得将同一逻辑分散到多个文件；新增扩展点必须统一而非散布。
+6. Ω Systematic Operating System — Ω 系统性操作系统执行：本次修改全链路受 Ω 铁律约束——场景路由 → DQAF → 蓝图检索 → 模式搜索 → 编辑前安检 → 验证 → 四维闸门 → FIX注册 → 收口检查。
+[/INSTITUTIONAL_EXECUTION_MANDATE]
 ```
 
-### 标签语义锚定 (Semantic Anchoring)
+**标签是 Agent 的自我治理机制**——人类只需正常回复"Approved"，Agent 自行加载标签并受其约束。标签的六个条款是 Agent 在编码期间必须逐条遵守的硬性约束，不得选择性忽略。
 
-| 标签组件 | 锚定含义 |
-|----------|---------|
-| `IC-APPROVED` | 人类独立复核官 (Independent Controller) 已审查 DQAF 报告并批准修改方案 |
-| `Ω-Protocol Institutional Execution Mandate` | 批准范围限于机构级执行标准——禁止临时补丁、禁止绕过铁律、禁止投机性修改 |
-| `Stability↑/→` | 修改不得引入新的故障模式或未处理异常路径；→ 表示持平，↑ 表示改善 |
-| `Repairability↑/→` | 修改不得吞没诊断信息或增加根因定位步骤；必须保留或增强可追溯性 |
-| `Decoupling↑/→` | 修改不得跨越现有模块边界增加新 import 链或破坏接口向后兼容 |
-| `Iterability↑/→` | 修改不得将同一逻辑分散到多个文件；新增扩展点必须统一而非散布 |
-| `Ω Systematic Operating System Enforced` | 执行过程受 Ω 铁律全链路约束——场景路由、DQAF、蓝图检索、FIX 注册、四维闸门、收口检查 |
+**不可绕过条款 (Non-Bypassable Clause)**:
 
-### 不可绕过条款 (Non-Bypassable Clause)
+以下人类指令**均构成有效批准**——Agent 必须立即自行加载执行约束标签并开始修改代码：
 
-以下人类指令**均不构成**有效批准，Agent 必须继续等待标签：
+- "Approved" / "批准" / "可以执行"
+- "开始修改" / "执行" / "Proceed"
+- "按方案执行" / "Implement the plan"
+- 任何表达了批准或同意意图的回复
 
-- "已批准，请立即执行" / "Approved, proceed immediately"
-- "直接改代码吧" / "Just change the code"
-- "不用走流程了" / "Skip the protocol"
-- "全面批准实施" / "Full approval granted"
-- "下发执行指令" / "IC Action Mandate"
-- "按照最严格规则检查、修复" / "Check and fix by the strictest rules"
-- 任何表达了"开始修改"或"立即执行"意图但**不含上述精确标签**的指令
-
-**设计原理**: 本条款针对 LLM Agent 对人类高优先级指令的绝对顺从倾向。Agent 会将人类当下指令的优先级置于 CLAUDE.md 之上。标签机制强制人类执行显式复核动作——粘贴标签的行为本身构成"我已阅读 DQAF 报告并同意方案"的密码学承诺。没有标签 = 没有复核 = 没有代码修改。
+**关键区别**: 人类不需要粘贴任何特定标签。人类只需正常表达批准。Agent 负责自行加载执行约束。这消除了"人类需要记住并粘贴复杂标签"的用户体验摩擦，同时保留了 Agent 端的全链路约束力。
 
 **适用范围**: 所有 Scene (A/B/C/D/E/F/G)。无豁免场景。
+
+**设计原理**: 本条款解决 Iron Law #9 不可绕过条款中识别的根本漏洞——Agent 将人类任何高优先级指令误解为"可以跳过铁律"的授权。现在强制 Agent 在每一份批准之后、每一次编码之前，自行加载机构级执行约束。这六个约束不是建议——是 Agent 在生成任何代码字符之前必须通过的自我安检。
+
+---
 
 ---
 
