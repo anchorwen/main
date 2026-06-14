@@ -268,6 +268,8 @@ class FeatureService:
                             persisted = {
                                 name: float(features.get(name, 0.0)) for name in feat_names
                             }
+                            _event_time = datetime.now(UTC).replace(tzinfo=None)
+                            _ingested_at = datetime.now(UTC).replace(tzinfo=None)
                             self._store.write_records(
                                 [
                                     FeatureRecord(
@@ -275,13 +277,52 @@ class FeatureService:
                                         schema_version=resolved_version,
                                         symbol=symbol,
                                         timeframe=self._store_timeframe,
-                                        event_time=datetime.now(UTC).replace(tzinfo=None),
+                                        event_time=_event_time,
                                         values=persisted,
                                         source="mt5_live",
-                                        ingested_at=datetime.now(UTC).replace(tzinfo=None),
+                                        ingested_at=_ingested_at,
                                     )
                                 ]
                             )
+
+                            # ── DQAF-20260614-004: Also persist micro features ──
+                            # The microstructure schema (v4.3_microstructure_9) was
+                            # registered but never written to the store, causing the
+                            # MetaFilter training dataset to miss 6 critical features
+                            # (tick_return, hl_ratio, co_ratio, avg_spread, OIM,
+                            # tick_velocity).  Without these, the training output is
+                            # 40-dim instead of the required 47-dim.
+                            _MICRO_SCHEMA = "v4.3_microstructure_9"
+                            try:
+                                _micro_version = self._store.resolve_version(
+                                    schema_name=_MICRO_SCHEMA,
+                                    symbol=symbol,
+                                    timeframe=self._store_timeframe,
+                                )
+                                if _micro_version is not None:
+                                    _micro_names = _schema_feature_names(_MICRO_SCHEMA)
+                                    _micro_persisted = {
+                                        name: float(features.get(name, 0.0))
+                                        for name in _micro_names
+                                    }
+                                    self._store.write_records(
+                                        [
+                                            FeatureRecord(
+                                                schema_name=_MICRO_SCHEMA,
+                                                schema_version=_micro_version,
+                                                symbol=symbol,
+                                                timeframe=self._store_timeframe,
+                                                event_time=_event_time,
+                                                values=_micro_persisted,
+                                                source="mt5_live",
+                                                ingested_at=_ingested_at,
+                                            )
+                                        ]
+                                    )
+                            except Exception:
+                                # Micro feature storage is best-effort; failure
+                                # must not block the primary v9 store write.
+                                pass
                     except Exception:
                         logging.exception(
                             (

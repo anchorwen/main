@@ -1,0 +1,830 @@
+#!/usr/bin/env python3
+"""Daily training readiness validator — enforces TrainingPipelineContract at every stage.
+
+Institutional Data SLA: each pipeline stage has a formal input/output contract.
+This script validates ALL stages against the contract every day.  Any violation
+triggers an immediate alert — problems are caught within 24 hours, not on
+training day.
+
+Iron Law #11: Script stdout is the sole source of truth.
+Iron Law #12: Architecture-first — this is the contract enforcement layer that
+              prevents silent pipeline drift (L3 architecture defect).
+
+Usage:
+  python scripts/check_training_readiness.py --contract configs/contracts/training_pipeline_btc_metafilter_v3.json --data-dir data_btc
+  python scripts/check_training_readiness.py --all  # validate all contracts
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from collections import Counter
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+
+# ── Scoring ────────────────────────────────────────────────────────────
+class StageVerdict:
+    PASS = "PASS"
+    WARN = "WARN"
+    FAIL = "FAIL"
+    SKIP = "SKIP"
+
+
+def _red(s: str) -> str: return f"\033[91m{s}\033[0m"
+def _yellow(s: str) -> str: return f"\033[93m{s}\033[0m"
+def _green(s: str) -> str: return f"\033[92m{s}\033[0m"
+
+
+# ── Contract loader ─────────────────────────────────────────────────────
+def load_contract(contract_path: str) -> dict[str, Any]:
+    with open(contract_path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Stage 1: Feature Store
+# ══════════════════════════════════════════════════════════════════════════
+
+def validate_stage_1_feature_store(
+    contract: dict[str, Any], data_dir: str
+) -> dict[str, Any]:
+    """Validate Feature Store against contract Stage 1."""
+    stage = contract["stages"]["stage_1_feature_store"]
+    outputs = stage["outputs"]
+    results: list[dict[str, Any]] = []
+
+    fs_path = Path(data_dir) / "feature_store" / "records"
+    symbol_dir = None
+    if fs_path.exists():
+        for d in fs_path.iterdir():
+            if d.is_dir() and "BTC" in d.name.upper():
+                symbol_dir = d
+                break
+
+    if symbol_dir is None:
+        return {
+            "stage": "stage_1_feature_store",
+            "verdict": StageVerdict.FAIL,
+            "results": [{"check": "feature_store_exists", "verdict": StageVerdict.FAIL,
+                         "detail": "No BTC feature store directory found"}],
+        }
+
+    # Find the M5 timeframe file
+    m5_dir = None
+    for d in symbol_dir.iterdir():
+        if d.is_dir() and "M5" in d.name:
+            m5_dir = d
+            break
+
+    if m5_dir is None:
+        return {
+            "stage": "stage_1_feature_store",
+            "verdict": StageVerdict.FAIL,
+            "results": [{"check": "m5_timeframe_exists", "verdict": StageVerdict.FAIL,
+                         "detail": f"No M5 timeframe in {symbol_dir}"}],
+        }
+
+    feat_file = m5_dir / "features.jsonl"
+    if not feat_file.exists():
+        return {
+            "stage": "stage_1_feature_store",
+            "verdict": StageVerdict.FAIL,
+            "results": [{"check": "features_file_exists", "verdict": StageVerdict.FAIL,
+                         "detail": f"{feat_file} not found"}],
+        }
+
+    # ── Read all feature records ──
+    records: list[dict[str, Any]] = []
+    with open(feat_file, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+
+    # ── Check 1: Schema presence ──
+    schema_counter = Counter(r.get("schema_name", "?") for r in records)
+    for _schema_key, schema_spec in outputs.items():
+        schema_name = schema_spec["schema_name"]
+        count = schema_counter.get(schema_name, 0)
+        min_records = schema_spec.get("min_records", 100)
+        if count >= min_records:
+            results.append({
+                "check": f"schema_{schema_name}_present",
+                "verdict": StageVerdict.PASS,
+                "detail": f"{count} records (min: {min_records})",
+                "metric": count,
+            })
+        else:
+            results.append({
+                "check": f"schema_{schema_name}_present",
+                "verdict": StageVerdict.FAIL,
+                "detail": f"Only {count} records (need {min_records}). Schema registered but never written to store — pipeline gap.",
+                "metric": count,
+            })
+
+    # ── Check 2: Dimension match ──
+    for _schema_key, schema_spec in outputs.items():
+        schema_name = schema_spec["schema_name"]
+        expected_dim = schema_spec["dimension"]
+        schema_records = [r for r in records if r.get("schema_name") == schema_name]
+        if not schema_records:
+            continue
+        actual_dim = len(schema_records[0].get("values", {}))
+        if actual_dim == expected_dim:
+            results.append({
+                "check": f"schema_{schema_name}_dimension",
+                "verdict": StageVerdict.PASS,
+                "detail": f"{actual_dim} dim (expected: {expected_dim})",
+            })
+        else:
+            results.append({
+                "check": f"schema_{schema_name}_dimension",
+                "verdict": StageVerdict.FAIL,
+                "detail": f"{actual_dim} dim (expected: {expected_dim})",
+            })
+
+    # ── Check 3: Freshness ──
+    if records:
+        latest_ts = max(
+            r.get("event_time", "") for r in records if r.get("event_time")
+        )
+        try:
+            latest_dt = datetime.fromisoformat(str(latest_ts)[:26])
+            if latest_dt.tzinfo is None:
+                latest_dt = latest_dt.replace(tzinfo=UTC)
+            age_min = (datetime.now(UTC) - latest_dt).total_seconds() / 60
+            max_age = outputs.get("v9_institutional_40", {}).get("max_age_minutes", 15)
+            if age_min <= max_age:
+                results.append({
+                    "check": "freshness",
+                    "verdict": StageVerdict.PASS,
+                    "detail": f"{age_min:.0f} min old (max: {max_age} min)",
+                    "metric": round(age_min, 1),
+                })
+            else:
+                results.append({
+                    "check": "freshness",
+                    "verdict": StageVerdict.FAIL,
+                    "detail": f"{age_min:.0f} min old (max: {max_age} min) — pipeline stalled",
+                    "metric": round(age_min, 1),
+                })
+        except (ValueError, TypeError):
+            results.append({
+                "check": "freshness",
+                "verdict": StageVerdict.WARN,
+                "detail": "Cannot parse event_time",
+            })
+
+    # ── Check 4: NaN rate ──
+    nan_records = 0
+    total_checked = 0
+    for r in records[-500:]:  # Check last 500 for efficiency
+        vals = r.get("values", {})
+        if isinstance(vals, dict):
+            total_checked += 1
+            if any(v is None or (isinstance(v, float) and v != v) for v in vals.values()):
+                nan_records += 1
+    max_nan_pct = outputs.get("v9_institutional_40", {}).get("max_nan_pct", 0.05)
+    if total_checked > 0:
+        nan_rate = nan_records / total_checked
+        if nan_rate <= max_nan_pct:
+            results.append({
+                "check": "nan_rate",
+                "verdict": StageVerdict.PASS,
+                "detail": f"{nan_rate:.1%} NaN records (max: {max_nan_pct:.1%})",
+                "metric": round(nan_rate, 4),
+            })
+        else:
+            results.append({
+                "check": "nan_rate",
+                "verdict": StageVerdict.FAIL,
+                "detail": f"{nan_rate:.1%} NaN records (max: {max_nan_pct:.1%})",
+                "metric": round(nan_rate, 4),
+            })
+
+    # ── Check 5: Co-timestamp coverage (v9_40 + micro_9 at same timestamps) ──
+    v9_name = outputs.get("v9_institutional_40", {}).get("schema_name", "v9_institutional_40")
+    micro_name = outputs.get("v4.3_microstructure_9", {}).get("schema_name", "v4.3_microstructure_9")
+    v9_times = {r.get("event_time") for r in records if r.get("schema_name") == v9_name}
+    micro_times = {r.get("event_time") for r in records if r.get("schema_name") == micro_name}
+    if v9_times and micro_times:
+        overlap = len(v9_times & micro_times)
+        overlap_pct = overlap / len(v9_times)
+        if overlap_pct >= 0.80:
+            results.append({
+                "check": "co_timestamp_coverage",
+                "verdict": StageVerdict.PASS,
+                "detail": f"{overlap}/{len(v9_times)} timestamps have both schemas ({overlap_pct:.1%})",
+                "metric": round(overlap_pct, 4),
+            })
+        else:
+            results.append({
+                "check": "co_timestamp_coverage",
+                "verdict": StageVerdict.FAIL,
+                "detail": f"Only {overlap}/{len(v9_times)} timestamps have both schemas ({overlap_pct:.1%}). Micro features not stored alongside v9.",
+                "metric": round(overlap_pct, 4),
+            })
+    elif v9_times and not micro_times:
+        results.append({
+            "check": "co_timestamp_coverage",
+            "verdict": StageVerdict.FAIL,
+            "detail": "v9_institutional_40 records exist but v4.3_microstructure_9 records are completely absent. Micro feature computation/storage is not wired.",
+            "metric": 0.0,
+        })
+
+    # ── Aggregate verdict ──
+    fails = [r for r in results if r["verdict"] == StageVerdict.FAIL]
+    warns = [r for r in results if r["verdict"] == StageVerdict.WARN]
+    if fails:
+        verdict = StageVerdict.FAIL
+    elif warns:
+        verdict = StageVerdict.WARN
+    else:
+        verdict = StageVerdict.PASS
+
+    return {
+        "stage": "stage_1_feature_store",
+        "verdict": verdict,
+        "results": results,
+        "schema_distribution": dict(schema_counter.most_common()),
+        "total_records": len(records),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Stage 2: Journal
+# ══════════════════════════════════════════════════════════════════════════
+
+def validate_stage_2_journal(
+    contract: dict[str, Any], data_dir: str
+) -> dict[str, Any]:
+    """Validate Journal against contract Stage 2."""
+    stage = contract["stages"]["stage_2_journal"]
+    outputs = stage["outputs"]
+    results: list[dict[str, Any]] = []
+
+    journal_path = Path(data_dir) / "live_trade_journal.jsonl"
+    if not journal_path.exists():
+        return {
+            "stage": "stage_2_journal",
+            "verdict": StageVerdict.FAIL,
+            "results": [{"check": "journal_exists", "verdict": StageVerdict.FAIL,
+                         "detail": f"{journal_path} not found"}],
+        }
+
+    # ── Load all entries ──
+    entries: list[dict[str, Any]] = []
+    with open(journal_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entries.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+
+    closed = [e for e in entries if e.get("ack_status") == "closed"]
+    accepted = [e for e in entries if e.get("ack_status") == "accepted"]
+
+    # ── Check 1: Closed trade count ──
+    closed_spec = outputs["closed_trades"]
+    min_closed = closed_spec["min_count"]
+    if len(closed) >= min_closed:
+        results.append({
+            "check": "closed_trade_count",
+            "verdict": StageVerdict.PASS,
+            "detail": f"{len(closed)} closed trades (min: {min_closed})",
+            "metric": len(closed),
+        })
+    else:
+        gap = min_closed - len(closed)
+        # Estimate days remaining
+        daily_rate = max(1, len(closed) / max(1, _date_span_days(closed)))
+        days_left = gap / daily_rate if daily_rate > 0 else gap
+        results.append({
+            "check": "closed_trade_count",
+            "verdict": StageVerdict.FAIL,
+            "detail": f"{len(closed)}/{min_closed} ({gap} short). Est ~{days_left:.0f} days at {daily_rate:.0f} trades/day.",
+            "metric": len(closed),
+            "gap": gap,
+            "daily_rate": round(daily_rate, 1),
+            "est_days_remaining": round(days_left, 1),
+        })
+
+    # ── Check 2: PnL completeness ──
+    pnl_null = sum(1 for e in closed if e.get("pnl") is None)
+    pnl_null_pct = pnl_null / len(closed) if closed else 0
+    max_null = closed_spec.get("max_pnl_null_pct", 0.05)
+    if pnl_null_pct <= max_null:
+        results.append({
+            "check": "pnl_completeness",
+            "verdict": StageVerdict.PASS,
+            "detail": f"{pnl_null}/{len(closed)} null PnL ({pnl_null_pct:.1%})",
+            "metric": round(pnl_null_pct, 4),
+        })
+    else:
+        results.append({
+            "check": "pnl_completeness",
+            "verdict": StageVerdict.FAIL,
+            "detail": f"{pnl_null}/{len(closed)} null PnL ({pnl_null_pct:.1%})",
+            "metric": round(pnl_null_pct, 4),
+        })
+
+    # ── Check 3: Label coverage ──
+    valid_labels = set(closed_spec.get("valid_labels", ["win", "loss"]))
+    trainable = [e for e in closed if e.get("label") in valid_labels]
+    results.append({
+        "check": "label_coverage",
+        "verdict": StageVerdict.PASS if len(trainable) >= min_closed * 0.3 else StageVerdict.WARN,
+        "detail": f"{len(trainable)} trainable labels (valid: {sorted(valid_labels)})",
+        "metric": len(trainable),
+    })
+
+    # ── Check 4: Open→Close linkage ──
+    open_entries = [e for e in accepted if e.get("action") == "open"]
+    close_with_open_msg = sum(
+        1 for e in closed if e.get("open_message_id")
+    )
+    results.append({
+        "check": "open_close_linkage",
+        "verdict": StageVerdict.PASS if close_with_open_msg > 0 else StageVerdict.WARN,
+        "detail": f"{close_with_open_msg}/{len(closed)} closed entries have open_message_id. {len(open_entries)} open entries available for p_win join.",
+        "metric": close_with_open_msg,
+    })
+
+    # ── Check 5: p_win coverage on open entries ──
+    open_spec = outputs["open_entries"]
+    min_pwin_cov = open_spec.get("p_win_coverage_min", 0.30)
+    open_with_pwin = sum(1 for e in open_entries if e.get("p_win") is not None)
+    pwin_cov = open_with_pwin / len(open_entries) if open_entries else 0
+    if pwin_cov >= min_pwin_cov:
+        results.append({
+            "check": "p_win_coverage",
+            "verdict": StageVerdict.PASS,
+            "detail": f"{open_with_pwin}/{len(open_entries)} open entries have p_win ({pwin_cov:.1%})",
+            "metric": round(pwin_cov, 4),
+        })
+    else:
+        results.append({
+            "check": "p_win_coverage",
+            "verdict": StageVerdict.FAIL,
+            "detail": f"{open_with_pwin}/{len(open_entries)} open entries have p_win ({pwin_cov:.1%}). Need ≥{min_pwin_cov:.0%}. p_win not propagated from strategy decision.",
+            "metric": round(pwin_cov, 4),
+        })
+
+    # ── Check 6: entry_context coverage ──
+    min_ec_cov = open_spec.get("entry_context_coverage_min", 0.30)
+    open_with_ec = sum(1 for e in open_entries if e.get("entry_context") is not None)
+    ec_cov = open_with_ec / len(open_entries) if open_entries else 0
+    if ec_cov >= min_ec_cov:
+        results.append({
+            "check": "entry_context_coverage",
+            "verdict": StageVerdict.PASS,
+            "detail": f"{open_with_ec}/{len(open_entries)} open entries have entry_context ({ec_cov:.1%})",
+            "metric": round(ec_cov, 4),
+        })
+    else:
+        results.append({
+            "check": "entry_context_coverage",
+            "verdict": StageVerdict.FAIL,
+            "detail": f"{open_with_ec}/{len(open_entries)} open entries have entry_context ({ec_cov:.1%})",
+            "metric": round(ec_cov, 4),
+        })
+
+    fails = [r for r in results if r["verdict"] == StageVerdict.FAIL]
+    warns = [r for r in results if r["verdict"] == StageVerdict.WARN]
+    verdict = StageVerdict.FAIL if fails else (StageVerdict.WARN if warns else StageVerdict.PASS)
+
+    # ── Label distribution summary ──
+    label_dist = Counter(e.get("label") for e in closed)
+
+    return {
+        "stage": "stage_2_journal",
+        "verdict": verdict,
+        "results": results,
+        "closed_count": len(closed),
+        "open_count": len(open_entries),
+        "trainable_labels": len(trainable),
+        "label_distribution": dict(label_dist.most_common()),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Stage 3: Dataset Builder (simulation)
+# ══════════════════════════════════════════════════════════════════════════
+
+def validate_stage_3_dataset_builder(
+    contract: dict[str, Any], data_dir: str
+) -> dict[str, Any]:
+    """Simulate ASOF join and validate against contract Stage 3."""
+    stage = contract["stages"]["stage_3_dataset_builder"]
+    model_target = contract["model_target"]
+    results: list[dict[str, Any]] = []
+
+    expected_dim = model_target["input_dimension"]
+    expected_features = model_target["feature_names_ssot"]
+
+    # ── Try to build a dataset with the current builder script ──
+    builder_script = Path("scripts/build_btc_metafilter_v2_dataset.py")
+    if not builder_script.exists():
+        return {
+            "stage": "stage_3_dataset_builder",
+            "verdict": StageVerdict.SKIP,
+            "results": [{"check": "builder_script_exists", "verdict": StageVerdict.FAIL,
+                         "detail": f"{builder_script} not found"}],
+        }
+
+    # Run a dry dataset build and capture output
+    import subprocess
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".npz", delete=False) as tmp:
+        tmp_path = tmp.name
+
+    try:
+        result = subprocess.run(
+            [sys.executable, str(builder_script), "--data-dir", data_dir, "--output", tmp_path],
+            capture_output=True, text=True, timeout=60,
+        )
+
+        if result.returncode != 0:
+            results.append({
+                "check": "builder_execution",
+                "verdict": StageVerdict.FAIL,
+                "detail": f"Builder failed: {result.stderr[:200]}",
+            })
+        else:
+            results.append({
+                "check": "builder_execution",
+                "verdict": StageVerdict.PASS,
+                "detail": "Dataset built successfully",
+            })
+
+            # Check the NPZ output
+            import numpy as np
+            data = np.load(tmp_path, allow_pickle=True)
+            X = data.get("X", data.get("features"))
+            y = data.get("y", data.get("labels"))
+            feature_names = list(data.get("feature_names", []))
+
+            if X is not None:
+                actual_dim = X.shape[1] if len(X.shape) > 1 else len(X)
+                n_samples = X.shape[0] if len(X.shape) > 1 else 0
+
+                # Check dimension
+                if actual_dim == expected_dim:
+                    results.append({
+                        "check": "dataset_dimension",
+                        "verdict": StageVerdict.PASS,
+                        "detail": f"{actual_dim} dim matches model ({expected_dim})",
+                    })
+                else:
+                    results.append({
+                        "check": "dataset_dimension",
+                        "verdict": StageVerdict.FAIL,
+                        "detail": f"{actual_dim} dim ≠ model {expected_dim} dim. Training would produce incompatible model.",
+                        "gap": expected_dim - actual_dim,
+                    })
+
+                # Check feature order
+                if feature_names:
+                    # Check if features are a SUBSET of expected (we may be missing some)
+                    expected_set = set(expected_features)
+                    actual_set = set(feature_names)
+                    missing = expected_set - actual_set
+                    extra = actual_set - expected_set
+                    if not missing and not extra:
+                        results.append({
+                            "check": "feature_order_match",
+                            "verdict": StageVerdict.PASS,
+                            "detail": "All 47 features present, no extras",
+                        })
+                    else:
+                        detail_parts = []
+                        if missing:
+                            detail_parts.append(f"Missing {len(missing)}: {sorted(list(missing))[:5]}...")
+                        if extra:
+                            detail_parts.append(f"Extra {len(extra)}: {sorted(list(extra))[:5]}...")
+                        results.append({
+                            "check": "feature_order_match",
+                            "verdict": StageVerdict.FAIL,
+                            "detail": "; ".join(detail_parts),
+                            "missing": sorted(list(missing)),
+                            "extra": sorted(list(extra)),
+                        })
+
+                # Check sample count
+                min_samples = model_target.get("min_training_samples", 200)
+                if n_samples >= min_samples:
+                    results.append({
+                        "check": "sample_count",
+                        "verdict": StageVerdict.PASS,
+                        "detail": f"{n_samples} samples (min: {min_samples})",
+                        "metric": n_samples,
+                    })
+                else:
+                    gap = min_samples - n_samples
+                    results.append({
+                        "check": "sample_count",
+                        "verdict": StageVerdict.FAIL,
+                        "detail": f"{n_samples}/{min_samples} ({gap} short)",
+                        "metric": n_samples,
+                        "gap": gap,
+                    })
+
+                # Check ASOF join rate
+                journal_closed = _count_journal_closed(data_dir)
+                if journal_closed > 0:
+                    asof_rate = n_samples / journal_closed
+                    min_rate = stage["outputs"]["dataset"].get("min_asof_join_rate", 0.80)
+                    if asof_rate >= min_rate:
+                        results.append({
+                            "check": "asof_join_rate",
+                            "verdict": StageVerdict.PASS,
+                            "detail": f"{asof_rate:.1%} ({n_samples}/{journal_closed})",
+                            "metric": round(asof_rate, 4),
+                        })
+                    else:
+                        results.append({
+                            "check": "asof_join_rate",
+                            "verdict": StageVerdict.FAIL,
+                            "detail": f"{asof_rate:.1%} ({n_samples}/{journal_closed}). < {min_rate:.0%} minimum.",
+                            "metric": round(asof_rate, 4),
+                        })
+
+                # Check label distribution
+                if y is not None:
+                    pos_count = int(sum(1 for v in y if v == 1))
+                    pos_pct = pos_count / len(y) if len(y) > 0 else 0
+                    min_pos = model_target.get("min_positive_label_pct", 0.15)
+                    if pos_pct >= min_pos:
+                        results.append({
+                            "check": "label_distribution",
+                            "verdict": StageVerdict.PASS,
+                            "detail": f"{pos_count}/{len(y)} positive ({pos_pct:.1%})",
+                        })
+                    else:
+                        results.append({
+                            "check": "label_distribution",
+                            "verdict": StageVerdict.WARN,
+                            "detail": f"Only {pos_count}/{len(y)} positive ({pos_pct:.1%}). < {min_pos:.0%} minimum — model may struggle to learn.",
+                        })
+
+    finally:
+        import contextlib
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
+
+    fails = [r for r in results if r["verdict"] == StageVerdict.FAIL]
+    warns = [r for r in results if r["verdict"] == StageVerdict.WARN]
+    verdict = StageVerdict.FAIL if fails else (StageVerdict.WARN if warns else StageVerdict.PASS)
+
+    return {
+        "stage": "stage_3_dataset_builder",
+        "verdict": verdict,
+        "results": results,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Stage 4: Model Alignment
+# ══════════════════════════════════════════════════════════════════════════
+
+def validate_stage_4_model(
+    contract: dict[str, Any], data_dir: str
+) -> dict[str, Any]:
+    """Validate existing model against contract Stage 4."""
+    model_target = contract["model_target"]
+    results: list[dict[str, Any]] = []
+
+    model_dir = Path(model_target["path"])
+    if not model_dir.exists():
+        return {
+            "stage": "stage_4_model",
+            "verdict": StageVerdict.SKIP,
+            "results": [{"check": "model_exists", "verdict": StageVerdict.SKIP,
+                         "detail": f"{model_dir} not found — no model to validate yet"}],
+        }
+
+    # ── Check feature_names.json ──
+    fn_path = model_dir / "feature_names.json"
+    if fn_path.exists():
+        with open(fn_path, encoding="utf-8") as f:
+            model_features = json.load(f)
+
+        expected = model_target["feature_names_ssot"]
+        if isinstance(model_features, list) and len(model_features) == len(expected):
+            if model_features == expected:
+                results.append({
+                    "check": "model_feature_isomorphism",
+                    "verdict": StageVerdict.PASS,
+                    "detail": f"Model features match contract exactly ({len(model_features)} dim)",
+                })
+            else:
+                mismatches = [
+                    i for i, (a, b) in enumerate(zip(model_features, expected, strict=False)) if a != b
+                ]
+                results.append({
+                    "check": "model_feature_isomorphism",
+                    "verdict": StageVerdict.FAIL,
+                    "detail": f"{len(mismatches)} positions differ between model and contract. Model must be retrained.",
+                    "mismatch_positions": mismatches[:10],
+                })
+        else:
+            results.append({
+                "check": "model_feature_count",
+                "verdict": StageVerdict.FAIL,
+                "detail": f"Model has {len(model_features) if isinstance(model_features, list) else '?'} features, contract expects {len(expected)}",
+            })
+    else:
+        results.append({
+            "check": "feature_names_file",
+            "verdict": StageVerdict.WARN,
+            "detail": f"{fn_path} not found — cannot validate feature isomorphism",
+        })
+
+    # ── Check training report ──
+    report_path = model_dir / "meta_filter_report.json"
+    if report_path.exists():
+        with open(report_path, encoding="utf-8") as f:
+            report = json.load(f)
+        n_samples = report.get("n_samples", 0)
+        results.append({
+            "check": "model_training_samples",
+            "verdict": StageVerdict.PASS if n_samples >= model_target.get("min_training_samples", 200) else StageVerdict.WARN,
+            "detail": f"Trained on {n_samples} samples (contract min: {model_target.get('min_training_samples', 200)})",
+        })
+
+    fails = [r for r in results if r["verdict"] == StageVerdict.FAIL]
+    warns = [r for r in results if r["verdict"] == StageVerdict.WARN]
+    verdict = StageVerdict.FAIL if fails else (StageVerdict.WARN if warns else StageVerdict.PASS)
+
+    return {
+        "stage": "stage_4_model",
+        "verdict": verdict,
+        "results": results,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Helpers
+# ══════════════════════════════════════════════════════════════════════════
+
+def _date_span_days(closed_entries: list[dict[str, Any]]) -> int:
+    dates = set()
+    for e in closed_entries:
+        ts = e.get("recorded_at", "")
+        if ts:
+            dates.add(ts[:10])
+    return max(1, len(dates))
+
+
+def _count_journal_closed(data_dir: str) -> int:
+    journal_path = Path(data_dir) / "live_trade_journal.jsonl"
+    if not journal_path.exists():
+        return 0
+    count = 0
+    with open(journal_path, encoding="utf-8") as f:
+        for line in f:
+            try:
+                e = json.loads(line.strip())
+                if e.get("ack_status") == "closed":
+                    count += 1
+            except json.JSONDecodeError:
+                continue
+    return count
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Reporter
+# ══════════════════════════════════════════════════════════════════════════
+
+def _icon(v: str) -> str:
+    if v == StageVerdict.PASS:
+        return _green("[PASS]")
+    if v == StageVerdict.WARN:
+        return _yellow("[WARN]")
+    if v == StageVerdict.FAIL:
+        return _red("[FAIL]")
+    return "[SKIP]"
+
+
+def print_report(contract_id: str, stage_results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Print readiness report and return machine-readable summary."""
+    print(f"{'='*70}")
+    print(f"  Training Readiness Report: {contract_id}")
+    print(f"  Generated at: {datetime.now(UTC).isoformat()}")
+    print(f"{'='*70}")
+
+    overall = StageVerdict.PASS
+    for sr in stage_results:
+        verdict = sr["verdict"]
+        stage = sr["stage"]
+        if verdict == StageVerdict.FAIL:
+            overall = StageVerdict.FAIL
+        elif verdict == StageVerdict.WARN and overall == StageVerdict.PASS:
+            overall = StageVerdict.WARN
+
+        print(f"\n── {stage} {_icon(verdict)}")
+        for r in sr.get("results", []):
+            icon = _icon(r["verdict"])
+            print(f"   {icon} {r['check']}: {r['detail']}")
+
+    print(f"\n{'='*70}")
+    print(f"  OVERALL: {_icon(overall)}")
+    if overall == StageVerdict.PASS:
+        print("  All pipeline stages ready for training.")
+    elif overall == StageVerdict.FAIL:
+        print("  Pipeline has blocking issues — training would fail or produce unusable model.")
+    else:
+        print("  Pipeline has warnings — training possible but suboptimal.")
+    print(f"{'='*70}")
+
+    return {
+        "contract_id": contract_id,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "overall_verdict": overall,
+        "stages": stage_results,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Main
+# ══════════════════════════════════════════════════════════════════════════
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Daily training readiness validator — enforces TrainingPipelineContract"
+    )
+    parser.add_argument(
+        "--contract",
+        default="configs/contracts/training_pipeline_btc_metafilter_v3.json",
+        help="Path to training pipeline contract JSON",
+    )
+    parser.add_argument("--data-dir", default="data_btc", help="Data directory")
+    parser.add_argument("--all", action="store_true", help="Validate all contracts in configs/contracts/")
+    parser.add_argument(
+        "--output", default=None,
+        help="Write machine-readable report to JSON file (default: data_btc/reports/training_readiness.json)",
+    )
+    args = parser.parse_args()
+
+    contract_paths = []
+    if args.all:
+        contracts_dir = Path("configs/contracts")
+        if contracts_dir.exists():
+            contract_paths = list(contracts_dir.glob("*.json"))
+    else:
+        contract_paths = [Path(args.contract)]
+
+    if not contract_paths:
+        print("No contracts found.")
+        return 1
+
+    all_reports = []
+    exit_code = 0
+
+    for cp in contract_paths:
+        if not cp.exists():
+            print(f"Contract not found: {cp}")
+            exit_code = 1
+            continue
+
+        contract = load_contract(str(cp))
+        contract_id = contract["contract_id"]
+
+        stage_results = [
+            validate_stage_1_feature_store(contract, args.data_dir),
+            validate_stage_2_journal(contract, args.data_dir),
+            validate_stage_3_dataset_builder(contract, args.data_dir),
+            validate_stage_4_model(contract, args.data_dir),
+        ]
+
+        report = print_report(contract_id, stage_results)
+        all_reports.append(report)
+
+        if report["overall_verdict"] == StageVerdict.FAIL:
+            exit_code = 1
+
+    # ── Write machine-readable report ──
+    output_path = args.output or f"{args.data_dir}/reports/training_readiness.json"
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(all_reports if args.all else all_reports[0], f, indent=2, ensure_ascii=False)
+    print(f"\nReport saved to: {output_path}")
+
+    return exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
