@@ -347,6 +347,25 @@ Git: <branch> → <remote> 已推送
 
 ## 验证命令
 
+### Pre-push CI-Mirror Gate (防红叉)
+
+**每次 `git push` 自动触发**，在代码到达 GitHub 之前运行 CI 完全等价的检查：
+- `ruff check core/ apps/ scripts/` (全量，非仅变更文件)
+- `mypy baseline check` (新类型错误阻断)
+
+```bash
+# 一次性安装 (新机器):
+pre-commit install --hook-type pre-push
+
+# 手动运行:
+python scripts/hook_pre_push.py
+
+# 紧急绕过 (需在 commit message 中说明原因):
+git push --no-verify
+```
+
+**设计原理**: 本地 pre-commit 只检查变更文件，CI 检查全量代码。如果长期 `--no-verify` 绕过本地 hook，lint 债务只在 CI 层面可见 → 每次 push 都是 CI 红叉赌博。Pre-push hook 关闭了这个缺口。
+
 ```bash
 # 快速验证 (mypy + ruff + 蓝图合规, ~10s)
 # 每次修改 .py 后必须运行并通过（铁律 #1）
