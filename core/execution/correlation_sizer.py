@@ -76,8 +76,16 @@ def apply_sqrt_n_discount(
 
         # Apply discount and round to lot_step
         for d in cluster:
-            raw = getattr(d, "volume", 0.0) * discount
-            stepped = max(0.0, round(raw / lot_step) * lot_step)
+            raw = getattr(d, "volume", 0.0)
+            # Guard against NaN/Inf — treat as zero (no position)
+            if math.isnan(raw) or math.isinf(raw):
+                d.volume = 0.0
+                d.should_trade = False
+                prefix = f"{getattr(d, 'reason', '')} | " if getattr(d, "reason", "") else ""
+                d.reason = f"{prefix}sqrt_n_dropped:invalid_volume"
+                continue
+            discounted = raw * discount
+            stepped = max(0.0, round(discounted / lot_step) * lot_step)
             if stepped < min_lot:
                 # Mark for drop — will be handled below
                 d.volume = 0.0

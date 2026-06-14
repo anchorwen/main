@@ -12,6 +12,7 @@ Features computed per bar:
 
 from __future__ import annotations
 
+import math
 from collections import deque
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
@@ -20,6 +21,32 @@ import numpy as np
 
 if TYPE_CHECKING:
     from core.execution.mt5_worker import MT5Worker
+
+# ── Division guard (FIX-20260614-015) ────────────────────────────────────
+# Python's `if value else default` catches 0.0 but NOT NaN or Inf.
+# NaN is truthy → `if float('nan')` evaluates to True → passes through
+# to arithmetic → contaminates all downstream features → silent brain poisoning.
+#
+# _safe_div() replaces ALL implicit truthiness guards with explicit
+# math.isfinite() + non-zero checks, blocking NaN/Inf at the source.
+
+
+def _safe_div(numerator: float, denominator: float, fallback: float = 0.0) -> float:
+    """Divide numerator by denominator, returning fallback for unsafe inputs.
+
+    An input is unsafe if it is:
+      - NaN (truthy in Python — passes `if x` check)
+      - Inf or -Inf
+
+    A denominator is also unsafe if it is exactly 0.0.
+
+    This prevents silent NaN/Inf propagation into the 9-dim feature vector
+    that feeds brain inference.  Both numerator AND denominator are checked
+    because NaN can enter via either path (e.g. NaN price in OHLC bar).
+    """
+    if not math.isfinite(numerator) or not math.isfinite(denominator) or denominator == 0.0:
+        return fallback
+    return numerator / denominator
 
 CROSS_SYMBOLS = ["XAGUSDc", "EURUSDc", "USDJPYc"]
 CROSS_FEATURE_NAMES = ["XAGUSDc_return", "EURUSDc_return", "USDJPYc_return"]
@@ -311,7 +338,7 @@ class MicrostructureFeatureComputer:
             if idx > -len(closes):
                 prev = closes[idx - 1]
                 curr = closes[idx]
-                ret.append(float((curr - prev) / prev * 100.0) if prev else 0.0)
+                ret.append(_safe_div(curr - prev, prev, 0.0) * 100.0)
             else:
                 ret.append(0.0)
         return ret
@@ -353,9 +380,9 @@ class MicrostructureFeatureComputer:
 
         # OHLC-derived
         close = bar["close"]
-        row[0] = float((close - prev_close) / prev_close * 100.0) if prev_close else 0.0
-        row[1] = float((bar["high"] - bar["low"]) / close) if close else 0.0
-        row[2] = float(close / bar["open"]) if bar["open"] else 1.0
+        row[0] = _safe_div(close - prev_close, prev_close, 0.0) * 100.0
+        row[1] = _safe_div(bar["high"] - bar["low"], close, 0.0)
+        row[2] = _safe_div(close, bar["open"], 1.0)
 
         # Tick-derived (snapshot, same for all bars)
         row[3] = tick_features.get("avg_spread", 0.0)
@@ -376,11 +403,9 @@ class MicrostructureFeatureComputer:
         open_v = float(bar_row[1])
         high = float(bar_row[2])
         low = float(bar_row[3])
-        result["tick_return"] = (
-            float((close - prev_close) / prev_close * 100.0) if prev_close else 0.0
-        )
-        result["hl_ratio"] = float((high - low) / close) if close else 0.0
-        result["co_ratio"] = float(close / open_v) if open_v else 1.0
+        result["tick_return"] = _safe_div(close - prev_close, prev_close, 0.0) * 100.0
+        result["hl_ratio"] = _safe_div(high - low, close, 0.0)
+        result["co_ratio"] = _safe_div(close, open_v, 1.0)
 
     @staticmethod
     def _fill_ohlc_defaults(result: dict) -> None:
@@ -473,7 +498,7 @@ class MicrostructureFeatureComputer:
             if rates is not None and len(rates) >= 2:
                 c0 = float(rates[-2][4])
                 c1 = float(rates[-1][4])
-                result[name] = float((c1 - c0) / c0 * 100.0) if c0 else 0.0
+                result[name] = _safe_div(c1 - c0, c0, 0.0) * 100.0
             else:
                 result[name] = 0.0
 
@@ -503,7 +528,7 @@ class MicrostructureFeatureComputer:
                 if idx > -len(closes):
                     prev = closes[idx - 1]
                     curr = closes[idx]
-                    returns.append(float((curr - prev) / prev * 100.0) if prev else 0.0)
+                    returns.append(_safe_div(curr - prev, prev, 0.0) * 100.0)
                 else:
                     returns.append(0.0)
             cross[name] = returns
