@@ -1762,7 +1762,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             from core.execution.exit_watchdog import ExitWatchdog
 
-            _wd_cfg = cfg.get("watchdog_config", {}) if isinstance(cfg, dict) else {}
+            _wd_cfg = full_cfg.get("live_trading", {}).get("watchdog_config", {}) if isinstance(full_cfg, dict) else {}
             exit_watchdog = ExitWatchdog(
                 data_dir=args.base_dir,
                 time_decay_cycles=int(_wd_cfg.get("time_decay_cycles", 60)),
