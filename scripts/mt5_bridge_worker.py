@@ -265,13 +265,18 @@ def _send_to_mt5(
         return "acknowledged", {"reason": "unsupported_action", "action": action}
 
     if route == "market_open":
+        # DQAF-20260614-010: Use strategy magic from payload, not bridge default.
+        # Previously the bridge --magic arg (90401) was passed unconditionally,
+        # causing ALL ZMQ orders to open under the wrong magic number.
+        _strategy_magic = msg_payload.get("magic") or envelope.get("payload", {}).get("magic")
+        _effective_magic = int(_strategy_magic) if _strategy_magic is not None else magic
         return _mt5_market_open(
             mt5,
             envelope=envelope,
             msg_payload=msg_payload,
             default_volume=default_volume,
             deviation=deviation,
-            magic=magic,
+            magic=_effective_magic,
         )
     if route == "close":
         return _mt5_close_position(
