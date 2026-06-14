@@ -1008,7 +1008,16 @@ def _write_zmq_journal_entry(
         _strategy = _M2S.get(_magic, "")
     else:
         _strategy = ""
+    # DQAF-20260614-009: For open orders, the ticket is in MT5's response
+    # (detail["order"]), NOT in the request (msg_payload).  coerce_position_ticket
+    # only checks the request, so open orders always got ticket=None.
     position_ticket = coerce_position_ticket(msg_payload)
+    if position_ticket is None and isinstance(detail, dict):
+        import contextlib
+        _order_ticket = detail.get("order")
+        if _order_ticket is not None:
+            with contextlib.suppress(TypeError, ValueError):
+                position_ticket = int(_order_ticket)
     _label = _derive_label(action, msg_payload, detail) if detail else None
     _actual_profit = detail.get("profit") if isinstance(detail, dict) else None
     _pnl = _actual_profit if _actual_profit is not None else msg_payload.get("pnl")
@@ -1161,7 +1170,7 @@ def run_zmq_worker(
                 )
                 print(
                     json.dumps(
-                        {"zmq_processed": {"message_id": msg_id, "ack_status": ack_status}},
+                        {"zmq_processed": {"message_id": msg_id, "ack_status": ack_status, "detail": detail}},
                         ensure_ascii=False,
                     ),
                     flush=True,
