@@ -285,44 +285,11 @@ class FeatureService:
                                 ]
                             )
 
-                            # ── DQAF-20260614-004: Also persist micro features ──
-                            # The microstructure schema (v4.3_microstructure_9) was
-                            # registered but never written to the store, causing the
-                            # MetaFilter training dataset to miss 6 critical features
-                            # (tick_return, hl_ratio, co_ratio, avg_spread, OIM,
-                            # tick_velocity).  Without these, the training output is
-                            # 40-dim instead of the required 47-dim.
-                            _MICRO_SCHEMA = "v4.3_microstructure_9"
-                            try:
-                                _micro_version = self._store.resolve_version(
-                                    schema_name=_MICRO_SCHEMA,
-                                    symbol=symbol,
-                                    timeframe=self._store_timeframe,
-                                )
-                                if _micro_version is not None:
-                                    _micro_names = _schema_feature_names(_MICRO_SCHEMA)
-                                    _micro_persisted = {
-                                        name: float(features.get(name, 0.0))
-                                        for name in _micro_names
-                                    }
-                                    self._store.write_records(
-                                        [
-                                            FeatureRecord(
-                                                schema_name=_MICRO_SCHEMA,
-                                                schema_version=_micro_version,
-                                                symbol=symbol,
-                                                timeframe=self._store_timeframe,
-                                                event_time=_event_time,
-                                                values=_micro_persisted,
-                                                source="mt5_live",
-                                                ingested_at=_ingested_at,
-                                            )
-                                        ]
-                                    )
-                            except Exception:
-                                # Micro feature storage is best-effort; failure
-                                # must not block the primary v9 store write.
-                                pass
+                            # ── DQAF-20260614-011: Micro features now written from
+                            # live_cycle with real values AND matching event_time.
+                            # FeatureService's V9LiveFeatureComputer doesn't produce
+                            # micro fields — writing here created zero-valued records
+                            # that raced with the real ones from live_cycle.
                     except Exception:
                         logging.exception(
                             (

@@ -4021,7 +4021,17 @@ def execute_live_cycle(
                             timeframe="M5",
                         )
                         if _micro_version is not None:
+                            # DQAF-20260614-011: Use the SAME event_time as the v9
+                            # record just written by FeatureService.  Previously
+                            # datetime.now() was called independently, producing
+                            # different timestamps — making co-timestamp merge
+                            # impossible (0% coverage) and 6 micro features dead.
                             _now = datetime.now(UTC).replace(tzinfo=None)
+                            _latest_v9 = _micro_store.latest(
+                                config.symbol, "M5", schema_name="v9_institutional_40"
+                            )
+                            if _latest_v9 is not None and _latest_v9.event_time is not None:
+                                _now = _latest_v9.event_time
                             _micro_values = {
                                 fn: float(micro_features.get(fn, 0.0))
                                 for fn in MICROSTRUCTURE_9_FEATURES
