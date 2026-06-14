@@ -4007,51 +4007,58 @@ def execute_live_cycle(
                 # Filter to only the 9 registered schema fields —
                 # MicrostructureFeatureComputer may return extras like OFI.
                 if micro_features:
-                    try:
-                        from core.features.local_feature_store import LocalFeatureStore
-                        from core.features.schemas.microstructure_schema import (
-                            MICROSTRUCTURE_9_FEATURES,
-                        )
-                        from core.features.store_contracts import FeatureRecord
+                    # DQAF-20260614-011b: Skip write if all micro values are zero.
+                    # compute_all() may return zeros when MT5 tick data isn't ready
+                    # yet (first call in cycle).  The second call (~10ms later in
+                    # management phase) returns real values.  Writing zeros would
+                    # create a co-timestamp-matched dead record.
+                    from core.features.schemas.microstructure_schema import (
+                        MICROSTRUCTURE_9_FEATURES,
+                    )
+                    _all_zero = all(
+                        abs(float(micro_features.get(fn, 0.0))) < 1e-15
+                        for fn in MICROSTRUCTURE_9_FEATURES
+                    )
+                    if not _all_zero:
+                        try:
+                            from core.features.local_feature_store import LocalFeatureStore
+                            from core.features.store_contracts import FeatureRecord
 
-                        _micro_store = LocalFeatureStore(config.feature_store_dir)
-                        _micro_version = _micro_store.resolve_version(
-                            schema_name="v4.3_microstructure_9",
-                            symbol=config.symbol,
-                            timeframe="M5",
-                        )
-                        if _micro_version is not None:
-                            # DQAF-20260614-011: Use the SAME event_time as the v9
-                            # record just written by FeatureService.  Previously
-                            # datetime.now() was called independently, producing
-                            # different timestamps — making co-timestamp merge
-                            # impossible (0% coverage) and 6 micro features dead.
-                            _now = datetime.now(UTC).replace(tzinfo=None)
-                            _latest_v9 = _micro_store.latest(
-                                config.symbol, "M5", schema_name="v9_institutional_40"
+                            _micro_store = LocalFeatureStore(config.feature_store_dir)
+                            _micro_version = _micro_store.resolve_version(
+                                schema_name="v4.3_microstructure_9",
+                                symbol=config.symbol,
+                                timeframe="M5",
                             )
-                            if _latest_v9 is not None and _latest_v9.event_time is not None:
-                                _now = _latest_v9.event_time
-                            _micro_values = {
-                                fn: float(micro_features.get(fn, 0.0))
-                                for fn in MICROSTRUCTURE_9_FEATURES
-                            }
-                            _micro_store.write_records(
-                                [
-                                    FeatureRecord(
-                                        schema_name="v4.3_microstructure_9",
-                                        schema_version=_micro_version,
-                                        symbol=config.symbol,
-                                        timeframe="M5",
-                                        event_time=_now,
-                                        values=_micro_values,
-                                        source="mt5_live",
-                                        ingested_at=_now,
-                                    )
-                                ]
-                            )
-                    except Exception:
-                        pass  # best-effort — micro store write must not block cycle
+                            if _micro_version is not None:
+                                # DQAF-20260614-011: Use the SAME event_time as the v9
+                                # record just written by FeatureService.
+                                _now = datetime.now(UTC).replace(tzinfo=None)
+                                _latest_v9 = _micro_store.latest(
+                                    config.symbol, "M5", schema_name="v9_institutional_40"
+                                )
+                                if _latest_v9 is not None and _latest_v9.event_time is not None:
+                                    _now = _latest_v9.event_time
+                                _micro_values = {
+                                    fn: float(micro_features.get(fn, 0.0))
+                                    for fn in MICROSTRUCTURE_9_FEATURES
+                                }
+                                _micro_store.write_records(
+                                    [
+                                        FeatureRecord(
+                                            schema_name="v4.3_microstructure_9",
+                                            schema_version=_micro_version,
+                                            symbol=config.symbol,
+                                            timeframe="M5",
+                                            event_time=_now,
+                                            values=_micro_values,
+                                            source="mt5_live",
+                                            ingested_at=_now,
+                                        )
+                                    ]
+                                )
+                        except Exception:
+                            pass  # best-effort — micro store write must not block cycle
         else:
             micro_feature_vector = np.zeros(_schema_dim("v4.3_microstructure_9"), dtype=np.float64)
 
