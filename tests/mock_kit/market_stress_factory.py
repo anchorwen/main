@@ -35,8 +35,6 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 try:
     from hypothesis import strategies as st
-    from hypothesis.extra.numpy import arrays as hnp_arrays
-    from hypothesis.extra.pandas import data_frames, column, range_indexes
 
     _HYPOTHESIS_AVAILABLE = True
 except ImportError:

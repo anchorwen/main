@@ -20,7 +20,6 @@ from core.contracts.events import (
 )
 from core.data.event_writer import EventWriter, reset_event_writer
 
-
 # ── PnLEvent contract ──────────────────────────────────────────────────────
 
 

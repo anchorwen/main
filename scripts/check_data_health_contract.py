@@ -525,7 +525,7 @@ def main() -> int:
         "probes": probes,
     }
     card = _build_dingtalk_card(report)
-    print(f"\n── DingTalk Alert Card ──")
+    print("\n── DingTalk Alert Card ──")
     print(card)
 
     # ── Write report ──

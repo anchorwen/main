@@ -139,7 +139,7 @@ def main() -> None:
         print("ERROR: --base-dir and --symbol must have the same count")
         sys.exit(1)
 
-    for base_dir, symbol in zip(args.base_dir, args.symbol):
+    for base_dir, symbol in zip(args.base_dir, args.symbol, strict=False):
         ledger_path = Path(base_dir) / "brain_pnl_ledger.json"
         if args.dry_run:
             if ledger_path.exists():

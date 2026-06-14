@@ -13,13 +13,13 @@ import argparse
 import json
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def load_journal(data_dir: str) -> list[dict[str, Any]]:
@@ -289,7 +289,7 @@ def main(argv: list[str] | None = None) -> int:
     data_dir = args.data_dir
 
     print(f"[analyze_ou_pnl] Data dir: {data_dir}")
-    print(f"[analyze_ou_pnl] Iron Law #11: All statistics below are from script stdout only.\n")
+    print("[analyze_ou_pnl] Iron Law #11: All statistics below are from script stdout only.\n")
 
     entries = load_journal(data_dir)
     ou_closes = filter_ou_closes(entries)
@@ -315,7 +315,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"    Opens: {ss['opens']}  Closes: {ss['closes']}")
         print(f"    PnL: {ss['pnl']:+.2f}  WR: {ss['win_rate']:.1%}  Avg: {ss['avg_pnl']:+.4f}")
         if ss["brain_pnl"]:
-            print(f"    Brain PnL:")
+            print("    Brain PnL:")
             for bid, bp in sorted(ss["brain_pnl"].items(), key=lambda x: x[1]):
                 print(f"      {bid:<35s} {bp:>+8.2f}")
 
@@ -330,7 +330,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  SL hits:   {exits['sl_hit_pnl']:+.2f}")
     print(f"  OU revert: {exits['ou_revert_pnl']:+.2f}")
     print(f"  Managed:   {exits['managed_pnl']:+.2f}")
-    print(f"\n  Top 10 labels by PnL:")
+    print("\n  Top 10 labels by PnL:")
     for label, ls in list(exits["by_label"].items())[:10]:
         print(f"    {label:<40s} {ls['pnl']:>+8.2f} ({ls['count']} trades)")
 
@@ -350,7 +350,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  Confidence (mean):      {sig['confidence_mean']}")
     print(f"  P(win) at entry:        {sig['p_win_mean']}")
     if sig['z_discrimination'] is not None and sig['z_discrimination'] < 0.2:
-        print(f"  ⚠️  Z-score has almost NO discriminatory power (separation < 0.2)")
+        print("  ⚠️  Z-score has almost NO discriminatory power (separation < 0.2)")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Phase 4: Time Decay
@@ -362,7 +362,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  Trading days: {decay['trading_days']}")
     print(f"  Cumulative PnL: {decay['cumulative_pnl']:+.2f}")
     print(f"  Max losing streak: {decay['max_losing_streak_pnl']:+.2f} over {decay['max_losing_streak_days']} days")
-    print(f"\n  Daily PnL:")
+    print("\n  Daily PnL:")
     for date_key, dp in decay["daily_pnl"].items():
         bar = "█" * max(1, int(abs(dp["pnl"]) * 5))
         sign = "+" if dp["pnl"] >= 0 else ""
@@ -392,7 +392,7 @@ def main(argv: list[str] | None = None) -> int:
     ou_wins = sum(1 for e in ou_closes if float(e.get("pnl", 0) or 0) > 0)
     print(f"  Total OU PnL: {total_ou_pnl:+.2f}")
     print(f"  Win rate: {ou_wins}/{len(ou_closes)} ({ou_wins/max(len(ou_closes),1)*100:.1f}%)")
-    print(f"\n[DONE] All statistics above are the sole source of truth.")
+    print("\n[DONE] All statistics above are the sole source of truth.")
 
     return 0
 

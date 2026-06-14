@@ -187,11 +187,11 @@ def analyze(data_dir: str, last_n: int) -> dict[str, Any]:
     print(f"\n{sep}")
     print(f"  实盘交易审计 — 最近 {last_n} 笔")
     print(f"  数据源: {journal_path}")
-    print(f"  去重口径: 按 position_ticket，优先 ack_status=closed > accepted，排除 rejected")
-    print(f"  胜率口径: PnL>0=win / PnL<0=loss / PnL≈0=be（不含 be 的胜率）")
+    print("  去重口径: 按 position_ticket，优先 ack_status=closed > accepted，排除 rejected")
+    print("  胜率口径: PnL>0=win / PnL<0=loss / PnL≈0=be（不含 be 的胜率）")
     print(f"{sep}")
 
-    print(f"\n── 全量概览 ──")
+    print("\n── 全量概览 ──")
     print(f"  已平仓:      {total_closed} 笔")
     print(f"  盈利:        {total_wins} 笔  平均 +${avg_win:.2f}")
     print(f"  亏损:        {total_losses} 笔  平均 -${abs(avg_loss):.2f}")
@@ -202,7 +202,7 @@ def analyze(data_dir: str, last_n: int) -> dict[str, Any]:
     print(f"  被拒平仓记录: {rejected_count} 条 (已排除)")
     print(f"  未平仓:      {len(ticket_entries) - total_closed} 笔")
 
-    print(f"\n── 出场标签分布 ──")
+    print("\n── 出场标签分布 ──")
     total_for_pct = total_closed if total_closed > 0 else 1
     for label, count in label_counter.most_common(20):
         pct = count / total_for_pct * 100
@@ -225,7 +225,7 @@ def analyze(data_dir: str, last_n: int) -> dict[str, Any]:
         print(f"  {t['recorded_at'] or '?':22s} {t['ticket']:<14} {t['side'] or '?':6s} {entry_str:>10s} {sl_str:>8s} {tp_str:>8s} {pnl_str:>8s} {ack:<9s} {t['label'] or '?':42s} {brain_str}")
 
     # ── Streak analysis ──
-    print(f"\n── 亏损连续性分析 ──")
+    print("\n── 亏损连续性分析 ──")
     print(f"  当前连续亏损: {loss_streak} 笔")
     print(f"  最近 {last_n} 笔 PnL 序列: {''.join(recent_pnl_sequence)}")
 
@@ -261,7 +261,7 @@ def analyze(data_dir: str, last_n: int) -> dict[str, Any]:
             side_pnl[t["side"]].append(t["pnl"])
             side_trades[t["side"]].append(t)
 
-    print(f"\n── 方向分析 ──")
+    print("\n── 方向分析 ──")
     for side, pnls in sorted(side_pnl.items()):
         total = sum(pnls)
         wins_s = sum(1 for p in pnls if p > 0)
@@ -271,7 +271,7 @@ def analyze(data_dir: str, last_n: int) -> dict[str, Any]:
         print(f"  {side:6s}: {len(pnls)}笔  胜率={wr:.1%}  avg=${avg_pnl:+.2f}  PnL=${total:+.2f}")
 
     # ── Direction switch analysis ──
-    print(f"\n── 最近方向切换 ──")
+    print("\n── 最近方向切换 ──")
     prev_side = None
     switches = []
     for t in trades:
@@ -289,7 +289,7 @@ def analyze(data_dir: str, last_n: int) -> dict[str, Any]:
             for b in t["brain_ids"]:
                 brain_pnl[b].append(t["pnl"])
 
-    print(f"\n── Brain PnL 贡献 ──")
+    print("\n── Brain PnL 贡献 ──")
     for brain, pnls in sorted(brain_pnl.items(), key=lambda x: sum(x[1])):
         total = sum(pnls)
         wins_b = sum(1 for p in pnls if p > 0)

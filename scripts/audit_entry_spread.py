@@ -94,13 +94,13 @@ def main() -> int:
         print(f"  Closes: {r['total_closes']} (tainted: {r['tainted_closes']}, {r['taint_pct_closes']}%)")
         total_tainted += r['tainted_opens']
 
-    print(f"\n── Summary ──")
+    print("\n── Summary ──")
     print(f"  Total tainted opens: {total_tainted}")
-    print(f"  Impact: EV over-estimated by ~0.14-0.28 USD per tainted open")
+    print("  Impact: EV over-estimated by ~0.14-0.28 USD per tainted open")
     print(f"  Estimated EV bias: ${total_tainted * 0.14:.0f} - ${total_tainted * 0.28:.0f}")
-    print(f"  Action: FIX-087 closed the data gap. Future opens will have entry_spread.")
-    print(f"  Historical: tainted entries should be excluded from training or tagged.")
-    print(f"\n[DONE] All statistics above are the sole source of truth.")
+    print("  Action: FIX-087 closed the data gap. Future opens will have entry_spread.")
+    print("  Historical: tainted entries should be excluded from training or tagged.")
+    print("\n[DONE] All statistics above are the sole source of truth.")
     return 0
 
 

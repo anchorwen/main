@@ -206,9 +206,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"\n  File: {v.file}")
                 print(f"  Reason: {v.reason}")
             print(f"\n  Changed files requiring Ω markers: {', '.join(covered)}")
-            print(f"\n  Required: FIX-YYYYMMDD-NNN or DQAF-YYYYMMDD-NNN in commit message.")
-            print(f"  Exemption: add 'pure mechanical' / 'formatting' to commit message.")
-            print(f"  Example: fix(module): [FIX-20260612-XXX] description")
+            print("\n  Required: FIX-YYYYMMDD-NNN or DQAF-YYYYMMDD-NNN in commit message.")
+            print("  Exemption: add 'pure mechanical' / 'formatting' to commit message.")
+            print("  Example: fix(module): [FIX-20260612-XXX] description")
             print("=" * 70 + "\n")
         return 1
 

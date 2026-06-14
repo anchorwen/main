@@ -14,11 +14,8 @@ Tests cover:
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from core.execution.exit_watchdog import (
     ACK_POLL_INTERVAL,
@@ -30,7 +27,6 @@ from core.execution.exit_watchdog import (
     ExitWatchdog,
     ExitWatchdogResult,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Dataclass integrity
@@ -354,8 +350,9 @@ class TestIsHealthy:
 
         # Write a recent CRITICAL alert matching the actual format
         # is_healthy() checks: "CRITICAL" in rec.get("event", "")
-        from datetime import UTC, datetime as _dt
         import json as _json
+        from datetime import UTC
+        from datetime import datetime as _dt
 
         now_iso = _dt.now(UTC).isoformat().replace("+00:00", "Z")
         alert = {

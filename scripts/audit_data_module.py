@@ -13,12 +13,12 @@ from pathlib import Path
 def load_jsonl(path):
     if not Path(path).exists():
         return []
-    with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    with open(path, encoding='utf-8', errors='replace') as f:
         return [json.loads(l) for l in f if l.strip()]
 
 
 def load_json(path):
-    with open(path, 'r', encoding='utf-8') as f:
+    with open(path, encoding='utf-8') as f:
         return json.load(f)
 
 
@@ -183,7 +183,7 @@ for name, gpath, cpath in [
     ("BTC", "data_btc/governance_state.json", "configs/live_btc.yaml"),
 ]:
     import yaml
-    with open(cpath, 'r', encoding='utf-8') as f:
+    with open(cpath, encoding='utf-8') as f:
         cfg = yaml.safe_load(f)
 
     gov = load_json(gpath)
@@ -242,7 +242,7 @@ for name, store_dir in [("XAU", "data/feature_store"), ("BTC", "data_btc/feature
                 continue  # BTC tracking XAU is expected
 
             # Count recent records
-            with open(feat_path, 'r', encoding='utf-8', errors='replace') as f:
+            with open(feat_path, encoding='utf-8', errors='replace') as f:
                 lines = [l for l in f if l.strip()]
 
             check(f"{name} {sym}/{tf}", age_min < 15,
@@ -280,7 +280,7 @@ for name, path in [("XAU", "data/golden_master.jsonl"), ("BTC", "data_btc/golden
     mtime = os.path.getmtime(path)
     age_min = (now - mtime) / 60
 
-    with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    with open(path, encoding='utf-8', errors='replace') as f:
         lines = [l for l in f if l.strip()]
 
     # Check for empty/zero records
@@ -353,4 +353,4 @@ print(f"\n{'='*60}")
 print("SUMMARY")
 print("=" * 60)
 print(f"  Audit complete at {datetime.now().isoformat()[:19]}")
-print(f"  All checks above are the sole source of truth per Iron Law #11.")
+print("  All checks above are the sole source of truth per Iron Law #11.")

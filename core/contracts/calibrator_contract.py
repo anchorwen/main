@@ -14,7 +14,6 @@ Usage:
 from __future__ import annotations
 
 import math
-from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -27,7 +26,7 @@ class CalibratorHistoryEntry(BaseModel):
     timestamp: str = Field(..., min_length=1)
 
     @model_validator(mode="after")
-    def p_win_must_be_finite(self) -> "CalibratorHistoryEntry":
+    def p_win_must_be_finite(self) -> CalibratorHistoryEntry:
         if math.isnan(self.p_win) or math.isinf(self.p_win):
             raise ValueError(f"p_win cannot be NaN or Inf, got: {self.p_win}")
         return self

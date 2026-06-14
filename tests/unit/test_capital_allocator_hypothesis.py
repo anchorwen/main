@@ -23,13 +23,11 @@ INVARIANTS (allocate_capacity):
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 from typing import Any
 
 import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
-
 
 # ---------------------------------------------------------------------------
 # Hypothesis strategies
@@ -109,7 +107,7 @@ def test_volume_bounds_never_exceeded(
     )
 
     assert not math.isnan(result), f"NaN volume: inputs={base_volume},{agreement},{regime},{vol_atr}"
-    assert not math.isinf(result), f"Inf volume"
+    assert not math.isinf(result), "Inf volume"
     assert result >= min_volume - 0.001, (
         f"Volume {result} below min_volume {min_volume}"
     )
@@ -337,10 +335,10 @@ class TestAllocateCapacity:
         self, total_budget: float, n_brains: int, max_concentration: float
     ) -> None:
         """Sum of allocations must never exceed total_budget."""
-        from core.execution.capital_allocator import CapitalAllocator
-
         # Generate random weights (non-negative, not all zero)
         import numpy as np
+
+        from core.execution.capital_allocator import CapitalAllocator
         rng = np.random.default_rng(42 + n_brains)
         weights_raw = rng.random(n_brains).tolist()
         total_w = sum(weights_raw)
@@ -368,9 +366,9 @@ class TestAllocateCapacity:
         self, total_budget: float, n_brains: int, max_concentration: float
     ) -> None:
         """No single brain may exceed total_budget × max_concentration."""
-        from core.execution.capital_allocator import CapitalAllocator
-
         import numpy as np
+
+        from core.execution.capital_allocator import CapitalAllocator
         rng = np.random.default_rng(99 + n_brains)
         weights_raw = rng.random(n_brains).tolist()
         total_w = sum(weights_raw)

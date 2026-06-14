@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import sys
 from collections import defaultdict
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 if sys.platform == "win32":
@@ -176,7 +176,7 @@ def _inject(sym: str, cfg: dict) -> dict:
     print(f"\n── {sym} ──")
     print(f"  Labels: {len(labels)}, Matched: {matched}, Unmatched: {unmatched}")
     print(f"  Output: {out_path}")
-    print(f"\n  Regime-Conditioned Win Rate:")
+    print("\n  Regime-Conditioned Win Rate:")
     print(f"  {'Trend':<12s} {'Trades':>7s} {'Wins':>6s} {'Losses':>6s} {'WR':>7s} {'PnL_sum':>9s}")
     print(f"  {'-'*12} {'-'*7} {'-'*6} {'-'*6} {'-'*7} {'-'*9}")
     for trend in ["long", "short", "neutral"]:
@@ -199,7 +199,7 @@ def main() -> int:
     for sym, cfg in DATA_SETS.items():
         _inject(sym, cfg)
 
-    print(f"\n[DONE] All statistics above are the sole source of truth.")
+    print("\n[DONE] All statistics above are the sole source of truth.")
     return 0
 
 

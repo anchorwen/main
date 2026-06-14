@@ -21,9 +21,8 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-import numpy as np
 import pytest
-from hypothesis import assume, given, settings
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 

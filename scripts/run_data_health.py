@@ -138,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {RED}Orphans detected: {len(result['orphans'])}{RESET}")
 
     if not args.summary_only:
-        print(f"\n  Source details:")
+        print("\n  Source details:")
         for s in result["sources"]:
             status_color = {"pass": GREEN, "warn": YELLOW, "fail": RED, "missing": RED, "skipped": ""}
             sc = status_color.get(s["status"], "")
@@ -147,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"           {s['message'][:150]}")
 
         if result["cross_checks"]:
-            print(f"\n  Cross-source validation:")
+            print("\n  Cross-source validation:")
             for c in result["cross_checks"]:
                 sc = status_color.get(c["status"], "")
                 print(f"    {sc}{c['status']:7s}{RESET} {c['check_name']} — {c['message'][:120]}")

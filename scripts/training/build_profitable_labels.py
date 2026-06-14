@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -49,7 +48,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 from core.training.utils import utc_now_iso as _utc_now_iso  # noqa: F401
-
 
 # ── Data loading ────────────────────────────────────────────────────────────
 

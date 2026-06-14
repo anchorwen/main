@@ -28,7 +28,6 @@ Sections:
 from __future__ import annotations
 
 import json
-import os
 import sys
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
@@ -383,7 +382,7 @@ def _print_section_3(results: dict) -> list[str]:
                 print(f"    ⚠ WARN: Frozen brains in {sym} closes (all weight=0, audit residual)")
                 flags.append(f"WARN|{sym}|frozen_contamination_zero_weight:{r['frozen_weight_zero']}")
         else:
-            print(f"    ✅ No frozen brain contamination")
+            print("    ✅ No frozen brain contamination")
     return flags
 
 
@@ -476,7 +475,7 @@ def _print_section_4(quality: dict) -> list[str]:
         print(f"    avg_win=${q['avg_win']:.2f} avg_loss=${q['avg_loss']:.2f} "
               f"max_win=${q['max_win']:.2f} max_loss=${q['max_loss']:.2f}")
         print(f"    Sides: {q.get('sides', {})}")
-        print(f"    PnL by label:")
+        print("    PnL by label:")
         for label, stats in q.get("by_label", {}).items():
             lbl = label or "(none)"
             print(f"      {lbl:<45s} count={stats['count']:>3d}  PnL=${stats['pnl']:>+10.2f}  "
@@ -780,7 +779,7 @@ def _check_signal_diversity(data: dict, portfolios: dict) -> list[str]:
 def main() -> int:
     print("=" * 80)
     print(f"  SYSTEM TRUST REPORT — {NOW_ISO[:19]}")
-    print(f"  Iron Law #11 Compliant — All statistics from script stdout")
+    print("  Iron Law #11 Compliant — All statistics from script stdout")
     print("=" * 80)
 
     # Load all data
@@ -827,7 +826,7 @@ def main() -> int:
         print(f"    ⚠ {w}")
     print(f"{'=' * 80}")
 
-    print(f"\n[DONE] All statistics above are the sole source of truth.")
+    print("\n[DONE] All statistics above are the sole source of truth.")
     return 1 if verdict["verdict"] == "CRITICAL" else 0
 
 

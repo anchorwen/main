@@ -35,7 +35,7 @@ def main(data_dir: str) -> int:
             except json.JSONDecodeError:
                 continue
 
-    print(f"=== Journal Raw Stats ===")
+    print("=== Journal Raw Stats ===")
     print(f"Total raw lines: {len(raw_entries)}")
 
     # ── Separate opens and closes ──
@@ -145,7 +145,7 @@ def main(data_dir: str) -> int:
 
     # ── OUTPUT: Per-strategy summary ──
     print(f"\n{'='*80}")
-    print(f"=== Per-Strategy Performance ===")
+    print("=== Per-Strategy Performance ===")
     print(f"{'='*80}")
     for sname in sorted(strat_stats.keys()):
         s = strat_stats[sname]
@@ -171,7 +171,7 @@ def main(data_dir: str) -> int:
         # Per-brain within strategy
         brains = s["brains"]
         if brains:
-            print(f"    --- Per-Brain Breakdown ---")
+            print("    --- Per-Brain Breakdown ---")
             for bid in sorted(brains.keys(), key=lambda b: brains[b]["trades"], reverse=True):
                 bs = brains[bid]
                 bt = bs["trades"]
@@ -192,7 +192,7 @@ def main(data_dir: str) -> int:
     all_wr = all_wins / (all_wins + all_losses) * 100 if (all_wins + all_losses) > 0 else 0.0
 
     print(f"\n{'='*80}")
-    print(f"=== OVERALL ===")
+    print("=== OVERALL ===")
     print(f"  Total Trades: {all_trades}  Wins: {all_wins}  Losses: {all_losses}  BE: {all_be}")
     print(f"  Win Rate: {all_wr:.1f}%")
     print(f"  Total PnL: ${all_pnl:,.2f}")
@@ -204,7 +204,7 @@ def main(data_dir: str) -> int:
     for close in ticket_closes.values():
         lbl = close.get("label", "unknown")
         label_counts[str(lbl)] += 1
-    print(f"\n  Label Distribution:")
+    print("\n  Label Distribution:")
     for lbl, cnt in sorted(label_counts.items(), key=lambda x: -x[1]):
         print(f"    {lbl}: {cnt}")
 
@@ -215,7 +215,7 @@ def main(data_dir: str) -> int:
     if timestamps:
         print(f"\n  Time Range: {timestamps[0][:19]} → {timestamps[-1][:19]}")
 
-    print(f"\n[DONE] All statistics above are the sole source of truth. (Iron Law #11)")
+    print("\n[DONE] All statistics above are the sole source of truth. (Iron Law #11)")
     return 0
 
 

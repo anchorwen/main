@@ -135,16 +135,16 @@ def main() -> int:
         print(f"  Trail advances = 0: {r['trail_advances_zero_pct']}% of SL exits")
 
         # Diagnosis
-        print(f"\n  Diagnosis:")
+        print("\n  Diagnosis:")
         if r["trail_advances_zero_pct"] > 80:
             print(f"  ❌ {r['trail_advances_zero_pct']:.0f}% of SL exits had ZERO trail advancement.")
-            print(f"     Price hit SL before any trailing could activate.")
+            print("     Price hit SL before any trailing could activate.")
             if r["sl_pnl"] < 0 and r["tp_pnl"] > 0:
                 print(f"     TP exits are net positive (${r['tp_pnl']:+.2f}) — entry direction")
-                print(f"     may be correct but SL is too tight for the volatility regime.")
+                print("     may be correct but SL is too tight for the volatility regime.")
             elif r["sl_pnl"] < 0 and r["tp_pnl"] <= 0:
-                print(f"     Both SL and TP exits are negative — directional accuracy")
-                print(f"     is the primary concern, not SL distance.")
+                print("     Both SL and TP exits are negative — directional accuracy")
+                print("     is the primary concern, not SL distance.")
 
     print(f"\n{'=' * 70}")
     print("[DONE] All statistics above are the sole source of truth.")

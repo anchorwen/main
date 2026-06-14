@@ -40,7 +40,7 @@ def main(data_dir: str) -> int:
                 if ou is not None and hu is not None:
                     physics_events.append(evt)
 
-    print(f"=== Physics Events from Intent Logs ===")
+    print("=== Physics Events from Intent Logs ===")
     print(f"Total regime_gate_cycle events with physics data: {len(physics_events)}")
 
     if not physics_events:
@@ -90,7 +90,7 @@ def main(data_dir: str) -> int:
         1 for e in physics_events
         if e["ou_theta_m5"] > 0.5 and e["hurst_m5"] < 0.48
     )
-    print(f"\n=== Override Trigger Rate ===")
+    print("\n=== Override Trigger Rate ===")
     print(f"  Theta > 0.5 AND Hurst < 0.48: {override_count}/{n} ({override_count/n*100:.1f}%)")
 
     # ── 4. Regime distribution when override WOULD trigger ──
@@ -100,7 +100,7 @@ def main(data_dir: str) -> int:
             regime = e.get("detected_regime", "?")
             override_regimes[regime] += 1
     if override_regimes:
-        print(f"\n  Regimes when override triggers:")
+        print("\n  Regimes when override triggers:")
         for r, c in sorted(override_regimes.items(), key=lambda x: -x[1]):
             print(f"    {r}: {c} ({c/override_count*100:.1f}%)")
 
@@ -111,7 +111,7 @@ def main(data_dir: str) -> int:
         regime_physics[regime]["ou"].append(e["ou_theta_m5"])
         regime_physics[regime]["hu"].append(e["hurst_m5"])
 
-    print(f"\n=== Per-Regime Physics Breakdown ===")
+    print("\n=== Per-Regime Physics Breakdown ===")
     for regime in sorted(regime_physics.keys()):
         rp = regime_physics[regime]
         rn = len(rp["ou"])
@@ -129,7 +129,7 @@ def main(data_dir: str) -> int:
         print(f"    Override would trigger: {override_in_regime}/{rn} ({override_in_regime/rn*100:.1f}%)")
 
     # ── 6. Threshold sensitivity analysis ──
-    print(f"\n=== Threshold Sensitivity ===")
+    print("\n=== Threshold Sensitivity ===")
     print(f"  {'Theta >':<12} {'Hurst <':<12} {'Trigger %':<12} {'Events':<8}")
     for theta_t in [0.3, 0.4, 0.5, 0.6, 0.7]:
         for hurst_t in [0.40, 0.45, 0.48, 0.50, 0.55]:
@@ -141,7 +141,7 @@ def main(data_dir: str) -> int:
             marker = " ← CURRENT" if (theta_t == 0.5 and hurst_t == 0.48) else ""
             print(f"  {theta_t:<12} {hurst_t:<12} {pct_val:<12.1f} {cnt:<8}{marker}")
 
-    print(f"\n[DONE] All statistics above are the sole source of truth. (Iron Law #11)")
+    print("\n[DONE] All statistics above are the sole source of truth. (Iron Law #11)")
     return 0
 
 

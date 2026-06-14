@@ -194,7 +194,7 @@ def print_report(results: list[dict], *, partial: bool = False) -> None:
             icon = {"NORMAL": "[NORMAL]", "YELLOW": "[YELLOW]", "ORANGE": "[ORANGE]", "RED": "[RED]"}.get(level, "[?]")
             print(f"  Degradation: {icon} staleness={level} (data_health={d.get('overall','?')})")
             if level == "NORMAL" and d.get("overall") == "CRITICAL":
-                print(f"    Note: Data stale/quality issues exist but key sources are fresh — trading allowed")
+                print("    Note: Data stale/quality issues exist but key sources are fresh — trading allowed")
             if d.get("fails"):
                 print(f"    Fails: {', '.join(d['fails'][:3])}")
             if d.get("warns"):
@@ -254,16 +254,16 @@ def main() -> int:
     # symbols are NOT being checked to prevent "XAU is offline" false
     # positives caused by incomplete health queries.
     _all_known = {"data": "XAU", "data_btc": "BTC"}
-    _checked = dict(zip(args.base_dir, args.label))
+    _checked = dict(zip(args.base_dir, args.label, strict=False))
     _unchecked = {d: l for d, l in _all_known.items() if d not in _checked}
     if _unchecked:
         _missing = ", ".join(f"{l} ({d})" for d, l in _unchecked.items())
         print(f"\n  [PARTIAL VIEW] Only checking: {', '.join(f'{l} ({d})' for d, l in _checked.items())}")
         print(f"  [PARTIAL VIEW] NOT checked: {_missing}")
-        print(f"  [PARTIAL VIEW] Run without --base-dir/--label for full picture.\n")
+        print("  [PARTIAL VIEW] Run without --base-dir/--label for full picture.\n")
 
     results = []
-    for base_dir, label in zip(args.base_dir, args.label):
+    for base_dir, label in zip(args.base_dir, args.label, strict=False):
         results.append(check_symbol(base_dir, label))
 
     print_report(results, partial=bool(_unchecked))

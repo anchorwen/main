@@ -24,18 +24,17 @@ Usage:
 
 from __future__ import annotations
 
-from core.training.utils import utc_now_iso as _utc_now_iso  # noqa: F401
-
 import argparse
 import json
 import sys
 import time
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
+
+from core.training.utils import utc_now_iso as _utc_now_iso  # noqa: F401
 
 THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = THIS_DIR.parent.parent.parent

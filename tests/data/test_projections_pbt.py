@@ -11,19 +11,16 @@ Run::
 
 from __future__ import annotations
 
-import json
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from core.contracts.events import DataSource, PnLEvent
 from core.data.event_writer import EventWriter, reset_event_writer
 from core.data.projections import project_governance_state
-
 
 # ── Strategy generators ────────────────────────────────────────────────────
 

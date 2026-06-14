@@ -6,7 +6,6 @@ strategy_evaluator, signal_pipeline, and extracted domain services.
 
 from __future__ import annotations
 
-import pytest
 
 
 # ---------------------------------------------------------------------------

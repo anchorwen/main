@@ -242,7 +242,7 @@ def main() -> None:
     since = datetime.now(UTC) - timedelta(days=args.days)
 
     print("=" * 72)
-    print(f"Phase C + Fix 5 Joint Review Audit")
+    print("Phase C + Fix 5 Joint Review Audit")
     print(f"Data dir: {args.data_dir}")
     print(f"Period: {since.strftime('%Y-%m-%d')} -> {datetime.now(UTC).strftime('%Y-%m-%d')} ({args.days} days)")
     print("=" * 72)
@@ -298,7 +298,7 @@ def main() -> None:
         print(f"  Fix 5: [DEFER] No 'ranging' regime detected in {f5['total_cycles']} cycles.")
         if trending:
             print(f"    Market is mostly 'trending' ({trending.get('cycles',0)} cycles, {trending.get('pct',0)}%). MetaFilter h1/h4 p_win={trending.get('p_win_mean')}.")
-            print(f"    Re-evaluate when ranging conditions appear.")
+            print("    Re-evaluate when ranging conditions appear.")
 
     # Phase C
     if pc['partial_tp_snapshots'] > 0:
@@ -306,16 +306,16 @@ def main() -> None:
         if pc['ofi_mean'] is not None and abs(pc['ofi_mean']) >= 1.5:
             print(f"    OFI z-score significant (|z|={abs(pc['ofi_mean']):.2f} >= 1.5). Can replace order book depth.")
         else:
-            print(f"    OFI data insufficient to assess. Continue observation.")
+            print("    OFI data insufficient to assess. Continue observation.")
     else:
         # Check if OFI is even being computed
         print(f"  Phase C: [DEFER] No partial TP triggered in {args.days} days.")
         if pc['ofi_available_cycles'] == 0:
-            print(f"    OFI/OIM computation may not be wired to golden master or snapshots. Check microstructure_computer.py -> live_cycle.py -> partial TP gate.")
+            print("    OFI/OIM computation may not be wired to golden master or snapshots. Check microstructure_computer.py -> live_cycle.py -> partial TP gate.")
         elif pc['partial_close_journal'] > 0:
             print(f"    {pc['partial_close_journal']} partial closes in journal but snapshots don't show PTP triggers. Snapshot fields may be incomplete.")
         else:
-            print(f"    No partial TP opportunities in current market. Gate is functional but waiting for conditions.")
+            print("    No partial TP opportunities in current market. Gate is functional but waiting for conditions.")
 
     print()
     print("=" * 72)

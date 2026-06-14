@@ -5,4 +5,3 @@ Pydantic model factories, schema version fixtures, serialization roundtrip helpe
 
 from __future__ import annotations
 
-import pytest

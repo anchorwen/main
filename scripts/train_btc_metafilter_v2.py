@@ -50,7 +50,7 @@ def load_dataset(data_dir: str, dataset_path: str | None) -> tuple[np.ndarray, n
     X = data["X"]
     y = data["y"]
     feature_names = list(data["feature_names"]) if "feature_names" in data else [f"f{i}" for i in range(X.shape[1])]
-    print(f"Loaded: X={X.shape}, y distribution: {dict(zip(*np.unique(y, return_counts=True)))}")
+    print(f"Loaded: X={X.shape}, y distribution: {dict(zip(*np.unique(y, return_counts=True), strict=False))}")
     print(f"  WR: {y.sum()}/{len(y)} = {y.sum()/len(y)*100:.1f}%")
     return X, y, feature_names
 
@@ -65,8 +65,8 @@ def train_with_cv(
 
     Returns dict with: model, cv_auc_mean, cv_auc_std, passed_gate, params.
     """
-    from sklearn.model_selection import StratifiedKFold
     from sklearn.metrics import roc_auc_score
+    from sklearn.model_selection import StratifiedKFold
 
     params = {
         "objective": "binary",
@@ -210,7 +210,7 @@ def main() -> None:
     final_model = train_final(X, y, feature_names, result["params"])
 
     # Feature importance
-    importance = list(zip(feature_names, final_model.feature_importance(importance_type="gain")))
+    importance = list(zip(feature_names, final_model.feature_importance(importance_type="gain"), strict=False))
     importance.sort(key=lambda x: x[1], reverse=True)
     print("\nTop 10 features by gain:")
     for name, gain in importance[:10]:

@@ -27,7 +27,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -338,7 +337,7 @@ def main(argv: list[str] | None = None) -> int:
         if ok:
             print(f"  Journal rewritten: {journal_path}")
         else:
-            print(f"  [FAIL] Could not rewrite journal")
+            print("  [FAIL] Could not rewrite journal")
             return 1
 
     return 0

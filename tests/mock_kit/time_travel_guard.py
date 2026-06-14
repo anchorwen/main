@@ -47,9 +47,10 @@ Design notes:
 from __future__ import annotations
 
 import traceback
+from collections.abc import Callable
 from contextlib import contextmanager
-from dataclasses import dataclass, field
-from typing import Any, Callable
+from dataclasses import dataclass
+from typing import Any
 
 import pandas as pd
 

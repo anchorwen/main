@@ -24,11 +24,11 @@ Usage:
 
 from __future__ import annotations
 
-from core.training.utils import utc_now_iso as _utc_now_iso  # noqa: F401
-
 import argparse
 import json
 import sys
+
+from core.training.utils import utc_now_iso as _utc_now_iso  # noqa: F401
 
 # Ensure UTF-8 stdout on Windows (torch.onnx prints emoji)
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
@@ -36,7 +36,6 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
 import time
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 

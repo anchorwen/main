@@ -5,8 +5,6 @@ FIX-20260611-022: Four-level degradation decision tree tests.
 
 from __future__ import annotations
 
-import pytest
-
 from core.observability.degradation import (
     DegradationConstraints,
     DegradationLevel,

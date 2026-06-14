@@ -23,7 +23,7 @@ def warn(label, detail=""):
 
 def load_jsonl(path):
     if not Path(path).exists(): return None
-    with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    with open(path, encoding='utf-8', errors='replace') as f:
         lines = [l.strip() for l in f if l.strip()]
     results, errors = [], 0
     for line in lines:
@@ -34,7 +34,7 @@ def load_jsonl(path):
 def load_json(path):
     if not Path(path).exists(): return None
     try:
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(path, encoding='utf-8') as f:
             return json.load(f), None
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
         return None, str(e)
@@ -222,7 +222,7 @@ for symbol in ["XAU", "BTC"]:
     if gov:
         import yaml
         cpath = "configs/live.yaml" if symbol == "XAU" else "configs/live_btc.yaml"
-        with open(cpath, 'r', encoding='utf-8') as f:
+        with open(cpath, encoding='utf-8') as f:
             cfg = yaml.safe_load(f)
         enabled_brains = set()
         for entry in cfg.get("brains", {}).get("registry_entries", []):
@@ -384,7 +384,7 @@ for symbol in ["XAU", "BTC"]:
     if es:
         import yaml
         cpath = "configs/live.yaml" if symbol == "XAU" else "configs/live_btc.yaml"
-        with open(cpath, 'r', encoding='utf-8') as f:
+        with open(cpath, encoding='utf-8') as f:
             cfg = yaml.safe_load(f)
         config_strats = set(n for n, sl in cfg.get("strategy_lines", {}).items() if sl.get("enabled", True))
         exec_budgets = set(es.get("budgets", {}).keys())
@@ -428,7 +428,7 @@ for symbol in ["XAU", "BTC"]:
 # FINAL VERDICT
 # ═══════════════════════════════════════════════════════════
 print(f"\n{'='*70}")
-print(f"  FINAL VERDICT")
+print("  FINAL VERDICT")
 print(f"{'='*70}")
 
 n_pass = len(RESULTS["PASS"])
@@ -439,7 +439,7 @@ total = n_pass + n_fail + n_warn
 print(f"\n  Checks: {total} total | PASS: {n_pass} | FAIL: {n_fail} | WARN: {n_warn}")
 
 if n_fail == 0 and n_warn == 0:
-    print(f"\n  *** DATA MODULE: 高枕无忧 ***")
+    print("\n  *** DATA MODULE: 高枕无忧 ***")
 elif n_fail == 0:
     print(f"\n  *** DATA MODULE: STABLE ({n_warn} minor warnings) ***")
 else:

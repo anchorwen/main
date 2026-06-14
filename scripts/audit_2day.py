@@ -5,7 +5,7 @@ from collections import Counter, defaultdict
 TARGET = ['2026-06-10', '2026-06-11']
 
 def load_jsonl(path):
-    with open(path, 'r', encoding='utf-8') as f:
+    with open(path, encoding='utf-8') as f:
         return [json.loads(l) for l in f if l.strip()]
 
 # ── Journal Analysis ──
@@ -113,7 +113,7 @@ for name, apath in [('XAU', 'data/logs/alert_audit.jsonl'), ('BTC', 'data_btc/lo
 
 # ── Labels Analysis ──
 print(f"\n{'='*70}")
-print(f"  Labels — June 10-11")
+print("  Labels — June 10-11")
 print(f"{'='*70}")
 
 for name, lpath, sym in [('XAU', 'data/reports/live_labels.jsonl', 'XAUUSDc'), ('BTC', 'data_btc/reports/live_labels.jsonl', 'BTCUSDc')]:
@@ -131,11 +131,11 @@ for name, lpath, sym in [('XAU', 'data/reports/live_labels.jsonl', 'XAUUSDc'), (
             pid = lb.get('open_message_id', '')[:40] if lb.get('open_message_id') else ''
             print(f"    ticket={lb.get('position_ticket')} side={lb.get('side')} label={lb.get('label')} pnl={lb.get('pnl')} entry={lb.get('entry_price')} exit={lb.get('exit_price')} msg={pid}")
     else:
-        print(f"    NONE")
+        print("    NONE")
 
 # ── Intent Log Key Events ──
 print(f"\n{'='*70}")
-print(f"  Intent Log Key Events — June 10-11")
+print("  Intent Log Key Events — June 10-11")
 print(f"{'='*70}")
 
 for name, pattern in [('XAU', 'data/logs/intent_*.log'), ('BTC', 'data_btc/logs/intent_*.log')]:
@@ -145,7 +145,7 @@ for name, pattern in [('XAU', 'data/logs/intent_*.log'), ('BTC', 'data_btc/logs/
         fname = fpath.replace('\\', '/').split('/')[-1]
         if '20260610' not in fname and '20260611' not in fname:
             continue
-        with open(fpath, 'r', encoding='utf-8') as f:
+        with open(fpath, encoding='utf-8') as f:
             lines = f.readlines()
 
         cycles = 0
@@ -190,15 +190,15 @@ for name, pattern in [('XAU', 'data/logs/intent_*.log'), ('BTC', 'data_btc/logs/
         if last_cycle:
             print(f"      Last cycle_end: {last_cycle}")
         if no_trade_reasons:
-            print(f"      Top no-trade reasons:")
+            print("      Top no-trade reasons:")
             for reason, count in no_trade_reasons.most_common(5):
                 print(f"        [{count}x] {reason[:100]}")
 
 # ── Final Cross Summary ──
 print(f"\n{'='*70}")
-print(f"  FINAL CROSS-SYMBOL SUMMARY (June 10-11)")
+print("  FINAL CROSS-SYMBOL SUMMARY (June 10-11)")
 print(f"{'='*70}")
-print(f"  XAU: active only on June 10, dead since ~16:35 UTC June 10")
-print(f"  BTC: active only on June 10, dead since ~16:35 UTC June 10")
-print(f"  ROOT CAUSE: SIGINT killed both loops, no automatic restart")
-print(f"  UPTIME LOST: ~16+ hours and counting")
+print("  XAU: active only on June 10, dead since ~16:35 UTC June 10")
+print("  BTC: active only on June 10, dead since ~16:35 UTC June 10")
+print("  ROOT CAUSE: SIGINT killed both loops, no automatic restart")
+print("  UPTIME LOST: ~16+ hours and counting")

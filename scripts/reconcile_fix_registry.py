@@ -13,7 +13,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -344,15 +343,15 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\n── MISSING (module only): {result['missing_total']}")
 
     if not dry_run:
-        print(f"\n── APPLIED:")
+        print("\n── APPLIED:")
         print(f"   +{result['orphan_added']} rows to module blueprints")
         print(f"   +{result['missing_added']} rows to FIX_REGISTRY.md")
-        print(f"\n[OK] Reconciliation applied. Run validate_blueprints.py to verify.")
+        print("\n[OK] Reconciliation applied. Run validate_blueprints.py to verify.")
     else:
-        print(f"\n── WOULD APPLY:")
+        print("\n── WOULD APPLY:")
         print(f"   +{result['orphan_assignable']} rows to module blueprints")
         print(f"   +{result['missing_total']} rows to FIX_REGISTRY.md")
-        print(f"\n  Run with --apply to execute.")
+        print("\n  Run with --apply to execute.")
 
     return 0
 

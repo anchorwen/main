@@ -14,11 +14,11 @@ ISSUES = []
 
 def load_jsonl(path):
     if not Path(path).exists(): return []
-    with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    with open(path, encoding='utf-8', errors='replace') as f:
         return [json.loads(l) for l in f if l.strip()]
 
 def load_json(path):
-    with open(path, 'r', encoding='utf-8') as f:
+    with open(path, encoding='utf-8') as f:
         return json.load(f)
 
 def issue(severity, area, msg):
@@ -111,11 +111,11 @@ result = subprocess.run(["python", "scripts/verify.py", "--quick"], capture_outp
 if result.returncode != 0:
     issue("P0", "Verify", f"verify.py --quick FAILED: {result.stdout[-300:]}")
 else:
-    print(f"  [OK] verify.py --quick: PASSED")
+    print("  [OK] verify.py --quick: PASSED")
 
 # 2b. BLE001 count
 for fpath in ["core/runtime/live_cycle.py", "scripts/live_intent_loop.py", "core/execution/strategy_line.py"]:
-    with open(fpath, 'r', encoding='utf-8') as f:
+    with open(fpath, encoding='utf-8') as f:
         count = f.read().count("noqa: BLE001")
     print(f"  BLE001 in {fpath.split('/')[-1]}: {count}")
 
@@ -126,7 +126,7 @@ anti_patterns = {
     "pass  # noqa": "swallowed exception with noqa",
 }
 for fpath in ["core/runtime/live_cycle.py", "scripts/live_intent_loop.py"]:
-    with open(fpath, 'r', encoding='utf-8') as f:
+    with open(fpath, encoding='utf-8') as f:
         content = f.read()
     for pattern, desc in anti_patterns.items():
         count = content.count(pattern)
@@ -150,7 +150,7 @@ for name, pattern in [("XAU", "data/logs/intent_*.log"), ("BTC", "data_btc/logs/
 
     for log_path in logs:
         prev_event = None
-        with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
+        with open(log_path, encoding='utf-8', errors='replace') as f:
             for line in f:
                 if not line.strip(): continue
                 try:
@@ -181,11 +181,11 @@ for name, pattern in [("XAU", "data/logs/intent_*.log"), ("BTC", "data_btc/logs/
         issue("P1", "Runtime", f"{name}: {total_cycles} cycles with 0 dispatches")
 
     if error_events:
-        print(f"    Top errors:")
+        print("    Top errors:")
         for err, count in error_events.most_common(5):
             print(f"      [{count}x] {err[:100]}")
 
-    print(f"    Top no-trade reasons:")
+    print("    Top no-trade reasons:")
     for reason, count in no_trade_reasons.most_common(5):
         print(f"      [{count}x] {reason[:100]}")
 
@@ -228,7 +228,7 @@ section("5. CONFIGURATION INTEGRITY")
 
 import yaml
 for cpath, label in [("configs/live.yaml","XAU"), ("configs/live_btc.yaml","BTC")]:
-    with open(cpath, 'r', encoding='utf-8') as f:
+    with open(cpath, encoding='utf-8') as f:
         cfg = yaml.safe_load(f)
 
     # Check brain files exist and are valid JSON
@@ -239,7 +239,7 @@ for cpath, label in [("configs/live.yaml","XAU"), ("configs/live_btc.yaml","BTC"
             issue("P0", "Config", f"{label}: enabled brain file MISSING: {path}")
             continue
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(path, encoding='utf-8') as f:
                 bcfg = json.load(f)
             # Check required fields
             for field in ["brain_id","brain_type","feature_schema_id","artifact_path"]:
@@ -258,7 +258,7 @@ for cpath, label in [("configs/live.yaml","XAU"), ("configs/live_btc.yaml","BTC"
         if not entry.get("enabled"): continue
         path = entry["path"]
         if os.path.exists(path):
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(path, encoding='utf-8') as f:
                 bcfg = json.load(f)
             enabled_btypes.add(bcfg.get("brain_type",""))
 
@@ -270,7 +270,7 @@ for cpath, label in [("configs/live.yaml","XAU"), ("configs/live_btc.yaml","BTC"
 
 # Check MT5 terminal paths
 for cpath, label in [("configs/live.yaml","XAU"), ("configs/live_btc.yaml","BTC")]:
-    with open(cpath, 'r', encoding='utf-8') as f:
+    with open(cpath, encoding='utf-8') as f:
         cfg = yaml.safe_load(f)
     mt5_path = cfg.get("mt5",{}).get("terminal_path","")
     if mt5_path and not os.path.exists(mt5_path):
@@ -288,7 +288,7 @@ for name, log_pattern in [("XAU", "data/logs/intent_*.log"), ("BTC", "data_btc/l
 
     kelly_stats = defaultdict(list)
     for log_path in logs:
-        with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
+        with open(log_path, encoding='utf-8', errors='replace') as f:
             for line in f:
                 if "kelly_diag" not in line: continue
                 try:

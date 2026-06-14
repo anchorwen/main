@@ -22,7 +22,7 @@ def load_labels(data_dir: str) -> list[dict]:
         print(f"ERROR: {labels_path} not found", file=sys.stderr)
         return []
     labels = []
-    with open(labels_path, "r", encoding="utf-8") as f:
+    with open(labels_path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -123,7 +123,7 @@ def analyze(symbol: str, labels: list[dict]):
 
     # Daily table (last 30 days)
     print(f"\n  {'─'*60}")
-    print(f"  Daily Breakdown (last 30 days with activity)")
+    print("  Daily Breakdown (last 30 days with activity)")
     print(f"  {'─'*60}")
     print(f"  {'Date':<12} {'Trades':>7} {'Wins':>5} {'Losses':>7} {'Win%':>6} {'PnL':>10}")
     print(f"  {'─'*60}")
@@ -141,7 +141,7 @@ def analyze(symbol: str, labels: list[dict]):
 
     # Weekly aggregates
     print(f"\n  {'─'*60}")
-    print(f"  Weekly Aggregates")
+    print("  Weekly Aggregates")
     print(f"  {'─'*60}")
     weekly: dict[str, dict] = defaultdict(lambda: {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0})
     for date in sorted_dates:
@@ -193,7 +193,7 @@ def main():
 
     # Cross-symbol comparison
     print(f"\n{'='*70}")
-    print(f"  Cross-Symbol Comparison")
+    print("  Cross-Symbol Comparison")
     print(f"{'='*70}")
     print(f"  {'Metric':<25} {'XAUUSDc':>15} {'BTCUSDc':>15}")
     print(f"  {'─'*55}")
@@ -210,7 +210,7 @@ def main():
     print(f"  {'Avg Trades/Day (active)':<25} {xau_avg:>14.1f} {btc_avg:>14.1f}")
 
     # Recent trend: last 5 active days each
-    print(f"\n  Recent Trend (last 5 active days):")
+    print("\n  Recent Trend (last 5 active days):")
     print(f"  {'XAU':<45} {'BTC':<45}")
     print(f"  {'─'*90}")
     xau_recent = sorted(xau_stats['daily_trades'].keys())[-5:]
@@ -228,7 +228,7 @@ def main():
 
     # Anomaly detection
     print(f"\n{'='*70}")
-    print(f"  Anomaly Flags")
+    print("  Anomaly Flags")
     print(f"{'='*70}")
     flags = []
 
@@ -267,8 +267,8 @@ def main():
         for f in flags:
             print(f"  [!] {f}")
 
-    print(f"\n[DONE] Script completed. All statistics above are the sole source of truth.")
-    print(f"        Do not supplement or modify these numbers in any diagnostic report.")
+    print("\n[DONE] Script completed. All statistics above are the sole source of truth.")
+    print("        Do not supplement or modify these numbers in any diagnostic report.")
 
 
 if __name__ == "__main__":

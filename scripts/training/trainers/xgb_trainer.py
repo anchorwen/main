@@ -19,17 +19,16 @@ Usage:
 
 from __future__ import annotations
 
-from core.training.utils import utc_now_iso as _utc_now_iso  # noqa: F401
-
 import argparse
 import json
 import sys
 import time
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+from core.training.utils import utc_now_iso as _utc_now_iso  # noqa: F401
 
 DEFAULT_PARAMS_CLS: dict[str, Any] = {
     "n_estimators": 200,

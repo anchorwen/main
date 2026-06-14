@@ -153,7 +153,7 @@ def send_dingtalk(webhook_url: str, title: str, text: str) -> bool:
             result = json.loads(resp.read().decode("utf-8"))
             ok = result.get("errcode") == 0
             if ok:
-                print(f"DingTalk: sent OK")
+                print("DingTalk: sent OK")
             else:
                 print(f"DingTalk: error {result.get('errcode')} — {result.get('errmsg', '')}")
             return ok

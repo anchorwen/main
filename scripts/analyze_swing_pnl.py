@@ -15,13 +15,13 @@ import argparse
 import json
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-UTC = timezone.utc
+UTC = UTC
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Data loading
@@ -370,7 +370,7 @@ def main(argv: list[str] | None = None) -> int:
     data_dir = args.data_dir
 
     print(f"[analyze_swing_pnl] Data dir: {data_dir}")
-    print(f"[analyze_swing_pnl] Iron Law #11: All statistics below are from script stdout only.\n")
+    print("[analyze_swing_pnl] Iron Law #11: All statistics below are from script stdout only.\n")
 
     # ── Load data ──
     entries = load_journal(data_dir)
@@ -518,7 +518,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  Statistical significance: CONFIRMED (p={boot.get('p_value_two_sided'):.4f})")
     else:
         print(f"  Statistical significance: NOT CONFIRMED (p={boot.get('p_value_two_sided'):.4f})")
-    print(f"\n[DONE] All statistics above are the sole source of truth.")
+    print("\n[DONE] All statistics above are the sole source of truth.")
 
     return 0
 

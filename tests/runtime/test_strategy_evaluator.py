@@ -12,7 +12,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import numpy as np
-import pytest
 
 from core.runtime.strategy_evaluator import evaluate_strategy_lines
 

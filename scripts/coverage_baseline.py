@@ -277,7 +277,7 @@ def cmd_update() -> int:
 def cmd_check() -> int:
     """Check for coverage regression against baseline."""
     if not BASELINE_PATH.exists():
-        print(f"ERROR: No baseline found. Run --update first.")
+        print("ERROR: No baseline found. Run --update first.")
         return 1
 
     with open(BASELINE_PATH, encoding="utf-8") as f:
@@ -318,17 +318,17 @@ def cmd_check() -> int:
                 )
 
     if regressions:
-        print(f"\n[WARN] COVERAGE REGRESSION DETECTED:")
+        print("\n[WARN] COVERAGE REGRESSION DETECTED:")
         for r in regressions:
             print(f"   {r}")
         return 1
 
     if improvements:
-        print(f"\n[OK] Coverage improvements:")
+        print("\n[OK] Coverage improvements:")
         for imp in improvements:
             print(f"   {imp}")
 
-    print(f"\n[OK] No coverage regression detected.")
+    print("\n[OK] No coverage regression detected.")
     show_tiers(tiers)
     return 0
 

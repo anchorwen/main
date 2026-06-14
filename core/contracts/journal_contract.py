@@ -15,11 +15,10 @@ Usage:
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field, field_validator
-
 
 # ── Accepted (open) entry ──────────────────────────────────────────────
 

@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import json
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -156,7 +155,7 @@ def main() -> int:
     D = xau.shape[1]
 
     # ── 1. Per-feature distribution shift ──
-    print(f"\n── 1. Distribution Shift (KS test + Wasserstein) ──")
+    print("\n── 1. Distribution Shift (KS test + Wasserstein) ──")
     print(f"  {'Feature':<25s} {'KS_pval':>8s} {'Wasserstein':>12s} {'Class':>8s}")
     print(f"  {'-'*25} {'-'*8} {'-'*12} {'-'*8}")
 
@@ -207,7 +206,7 @@ def main() -> int:
             print(f"  {name:<25s} {ks_p:>8.4f} {ws:>12.4f} {classification:>8s}")
 
     # ── 2. Temporal structure comparison ──
-    print(f"\n── 2. Temporal Structure (Hurst Exponent) ──")
+    print("\n── 2. Temporal Structure (Hurst Exponent) ──")
     # Use M5_Hurst if available, otherwise M5_Ret_1 for Hurst estimation
     ret_idx = None
     hurst_idx = None
@@ -231,10 +230,10 @@ def main() -> int:
     print(f"  BTC Hurst: {btc_hurst:.4f}")
     print(f"  Difference: {hurst_diff:.4f}")
     if hurst_diff > 0.15:
-        print(f"  ❌ HIGH NEGATIVE TRANSFER RISK: Hurst difference > 0.15")
-        print(f"     XAU and BTC have fundamentally different memory structures.")
+        print("  ❌ HIGH NEGATIVE TRANSFER RISK: Hurst difference > 0.15")
+        print("     XAU and BTC have fundamentally different memory structures.")
     else:
-        print(f"  ✅ Hurst difference acceptable (≤ 0.15)")
+        print("  ✅ Hurst difference acceptable (≤ 0.15)")
 
     # ── 3. Transferability Index ──
     total = green + yellow + red
@@ -245,29 +244,29 @@ def main() -> int:
 
     transfer_index = max(0, base_score + yellow_penalty * 0.5 - hurst_penalty)
 
-    print(f"\n── 3. Transferability Index ──")
+    print("\n── 3. Transferability Index ──")
     print(f"  GREEN:   {green}/{total} ({green/max(total,1)*100:.0f}%)")
     print(f"  YELLOW:  {yellow}/{total} ({yellow/max(total,1)*100:.0f}%)")
     print(f"  RED:     {red}/{total} ({red/max(total,1)*100:.0f}%)")
     print(f"  Hurst penalty: -{hurst_penalty:.0f}")
-    print(f"  ───────────────────────")
+    print("  ───────────────────────")
     print(f"  TRANSFER INDEX: {transfer_index:.0f}/100")
 
     # ── 4. Decision ──
-    print(f"\n── 4. Decision ──")
+    print("\n── 4. Decision ──")
     if transfer_index >= 70:
-        print(f"  ✅ PROCEED to R3 Step B (model transfer + fine-tune)")
+        print("  ✅ PROCEED to R3 Step B (model transfer + fine-tune)")
         print(f"     Transferability Index {transfer_index:.0f}% ≥ 70%")
     else:
-        print(f"  ❌ FALLBACK: BTC-only training with regime labels")
+        print("  ❌ FALLBACK: BTC-only training with regime labels")
         print(f"     Transferability Index {transfer_index:.0f}% < 70%")
-        print(f"     R3 model transfer cancelled — R4 regime labels will be")
-        print(f"     used for BTC-from-scratch training instead.")
+        print("     R3 model transfer cancelled — R4 regime labels will be")
+        print("     used for BTC-from-scratch training instead.")
 
     if hurst_diff > 0.15:
-        print(f"  ⚠  Hurst warning: use L2=0.2 (stronger regularization) if proceeding")
+        print("  ⚠  Hurst warning: use L2=0.2 (stronger regularization) if proceeding")
 
-    print(f"\n[DONE] All statistics above are the sole source of truth.")
+    print("\n[DONE] All statistics above are the sole source of truth.")
     return 0
 
 

@@ -717,7 +717,7 @@ def _auto_register_in_live_yaml(brain_config: dict[str, Any], config_path: Path)
     try:
         with open(live_yaml_path, encoding="utf-8") as f:
             live = _yaml.safe_load(f) or {}
-    except (OSError, IOError, ImportError) as e:  # yaml import may fail
+    except (OSError, ImportError) as e:  # yaml import may fail
         print(f"[train] WARNING: Failed to read live.yaml, skip auto-register: {e}")
         return
 
@@ -742,7 +742,7 @@ def _auto_register_in_live_yaml(brain_config: dict[str, Any], config_path: Path)
         with open(live_yaml_path, "w", encoding="utf-8") as f:
             _yaml.safe_dump(live, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
         print(f"[train] Registered {brain_id} in live.yaml")
-    except (OSError, IOError, ValueError) as e:
+    except (OSError, ValueError) as e:
         print(f"[train] WARNING: Failed to update live.yaml: {e}")
 
 
@@ -761,7 +761,7 @@ def _auto_register_in_governance(brain_config: dict[str, Any]) -> None:
                 "brain_states": {},
                 "transition_log": [],
             }
-    except (OSError, IOError) as e:
+    except OSError as e:
         print(f"[train] WARNING: Failed to read governance_state.json: {e}")
         return
 
@@ -792,7 +792,7 @@ def _auto_register_in_governance(brain_config: dict[str, Any]) -> None:
         with open(gov_path, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2, ensure_ascii=False)
         print(f"[train] Registered {brain_id} in governance_state.json (candidate)")
-    except (OSError, IOError, ValueError) as e:
+    except (OSError, ValueError) as e:
         print(f"[train] WARNING: Failed to update governance_state.json: {e}")
 
 
@@ -1334,7 +1334,7 @@ def run_pipeline(
             if critical:
                 result.errors = critical
                 return result
-    except (ValueError, TypeError, KeyError, OSError, IOError) as e:
+    except (ValueError, TypeError, KeyError, OSError) as e:
         result.errors = [f"Contract loading failed: {e}"]
         print(f"[train] ERROR: {e}")
         return result
@@ -1900,7 +1900,7 @@ def run_pipeline(
         model_hash = hash_model_file(model_path)
         result.model_hash = model_hash
         print(f"[train] Model hash: {model_hash}")
-    except (OSError, IOError) as e:
+    except OSError as e:
         print(f"[train] WARNING: Model hashing failed: {e}")
 
     # ── Registry ──
@@ -1930,7 +1930,7 @@ def run_pipeline(
         registry.add_or_update(record)
         result.run_id = record.run_id
         print(f"[train] Registered run: {record.run_id} (status={record.status})")
-    except (OSError, IOError, ValueError) as e:
+    except (OSError, ValueError) as e:
         print(f"[train] WARNING: Registry write failed (non-fatal): {e}")
 
     # ── Brain config ──
@@ -1968,7 +1968,7 @@ def run_pipeline(
             # Auto-register in governance_state.json
             _auto_register_in_governance(brain_config)
             _print_register_reminder(config_path.name)
-        except (ValueError, RuntimeError, KeyError, OSError, IOError) as e:
+        except (ValueError, RuntimeError, KeyError, OSError) as e:
             print(f"[train] WARNING: Brain config generation failed: {e}")
 
     # ── Finalize ──

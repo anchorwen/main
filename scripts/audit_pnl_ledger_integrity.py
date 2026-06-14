@@ -20,12 +20,12 @@ from pathlib import Path
 def load_jsonl(path):
     if not Path(path).exists():
         return []
-    with open(path, 'r', encoding='utf-8') as f:
+    with open(path, encoding='utf-8') as f:
         return [json.loads(l) for l in f if l.strip()]
 
 
 def load_json(path):
-    with open(path, 'r', encoding='utf-8') as f:
+    with open(path, encoding='utf-8') as f:
         return json.load(f)
 
 
@@ -44,7 +44,7 @@ def audit_pnl_ledger(name, ledger_path, journal_path):
 
     # ── Phase 1: Dedup check ──
     print(f"\n  {'─'*70}")
-    print(f"  Phase 1: Deduplication Audit")
+    print("  Phase 1: Deduplication Audit")
     print(f"  {'─'*70}")
 
     all_dup_details = []
@@ -79,7 +79,7 @@ def audit_pnl_ledger(name, ledger_path, journal_path):
 
     # ── Phase 2: Phantom records ──
     print(f"\n  {'─'*70}")
-    print(f"  Phase 2: Phantom Record Audit (entry==exit within 0.01)")
+    print("  Phase 2: Phantom Record Audit (entry==exit within 0.01)")
     print(f"  {'─'*70}")
 
     phantom_details = []
@@ -129,7 +129,7 @@ def audit_pnl_ledger(name, ledger_path, journal_path):
 
     # ── Phase 3: Price Realism ──
     print(f"\n  {'─'*70}")
-    print(f"  Phase 3: Price Realism Audit")
+    print("  Phase 3: Price Realism Audit")
     print(f"  {'─'*70}")
 
     # XAU rough price ranges for the period
@@ -167,7 +167,7 @@ def audit_pnl_ledger(name, ledger_path, journal_path):
 
     # ── Phase 4: Time Pattern Analysis ──
     print(f"\n  {'─'*70}")
-    print(f"  Phase 4: Time Pattern / Flood Detection")
+    print("  Phase 4: Time Pattern / Flood Detection")
     print(f"  {'─'*70}")
 
     for brain_id, records in settled.items():
@@ -209,7 +209,7 @@ def audit_pnl_ledger(name, ledger_path, journal_path):
 
     # ── Phase 5: Per-Brain Summary Table ──
     print(f"\n  {'─'*70}")
-    print(f"  Phase 5: Per-Brain Integrity Summary")
+    print("  Phase 5: Per-Brain Integrity Summary")
     print(f"  {'─'*70}")
     print(f"  {'Brain':<35s} {'Total':>6} {'Dups':>5} {'Phantoms':>8} {'0-Price':>7} {'WR':>6} {'AvgPnL':>8} {'VERDICT'}")
     print(f"  {'─'*85}")
@@ -279,7 +279,7 @@ def audit_pnl_ledger(name, ledger_path, journal_path):
     # ── Phase 6: Cross-reference with Trade Journal ──
     if journal_path and Path(journal_path).exists():
         print(f"\n  {'─'*70}")
-        print(f"  Phase 6: Cross-Reference with Trade Journal")
+        print("  Phase 6: Cross-Reference with Trade Journal")
         print(f"  {'─'*70}")
 
         journal = load_jsonl(journal_path)
@@ -309,13 +309,13 @@ def audit_pnl_ledger(name, ledger_path, journal_path):
                 matched += 1  # placeholder
 
         print(f"  Journal unique order tickets: {len(journal_tickets)}")
-        print(f"  (Cross-reference by position_ticket requires schema alignment)")
-        print(f"  PnL ledger uses signal_id; journal uses order ticket.")
-        print(f"  Direct matching not possible without bridge schema.")
+        print("  (Cross-reference by position_ticket requires schema alignment)")
+        print("  PnL ledger uses signal_id; journal uses order ticket.")
+        print("  Direct matching not possible without bridge schema.")
 
     # ── Final Trustworthy Brains ──
     print(f"\n{'='*80}")
-    print(f"  FINAL VERDICT: Brain Trustworthiness")
+    print("  FINAL VERDICT: Brain Trustworthiness")
     print(f"{'='*80}")
 
     clean_brains = [v for v in verdicts if v['verdict'] == 'CLEAN']
@@ -351,11 +351,11 @@ btc_verdicts = audit_pnl_ledger(
 
 # ── Cross-symbol summary ──
 print(f"\n{'='*80}")
-print(f"  CROSS-SYMBOL SUMMARY")
+print("  CROSS-SYMBOL SUMMARY")
 print(f"{'='*80}")
 all_clean_xau = [v for v in xau_verdicts if v['verdict'] == 'CLEAN']
 all_clean_btc = [v for v in btc_verdicts if v['verdict'] == 'CLEAN']
 print(f"  XAU: {len(all_clean_xau)}/{len(xau_verdicts)} brains CLEAN")
 print(f"  BTC: {len(all_clean_btc)}/{len(btc_verdicts)} brains CLEAN")
 
-print(f"\n[DONE] All statistics above are the sole source of truth.")
+print("\n[DONE] All statistics above are the sole source of truth.")
