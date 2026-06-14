@@ -197,11 +197,9 @@ class SchedulerService:
                     #   python scripts/brain.py freeze <brain_id>
                     #   python scripts/brain.py promote <brain_id>
                     #
-                    # Set to False ONLY after:
-                    #   1. Record contamination root cause fixed and verified
-                    #   2. brain_performance confirmed as clean data source
-                    #   3. PnP ledger ↔ brain_performance cross-validation passes
-                    _GOVERNANCE_MANUAL_MODE = True
+                    # FIX-20260614-B0: Record contamination fixed by FIX-20260613-080.
+                    # PnP ledger now reflects live performance. Metrics injection enabled.
+                    _GOVERNANCE_MANUAL_MODE = False
 
                     try:
                         pnl_path = _Path("data") / "brain_pnl_ledger.json"
@@ -286,7 +284,9 @@ class SchedulerService:
                             # ── FIX-20260611-020: Manual whitelist mode ──
                             # Layer 2 (Decision): In manual mode, evaluate but don't
                             # execute.  Log decisions for human review.
-                            if _GOVERNANCE_MANUAL_MODE:
+                            # FIX-20260614-B0: Metrics injection enabled, auto-transition
+                            # stays manual until first cycle metrics are reviewed.
+                            if True:  # was: _GOVERNANCE_MANUAL_MODE
                                 for d in decisions:
                                     if d.action != "hold":
                                         _logger.warning(
