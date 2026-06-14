@@ -157,8 +157,24 @@ def reconcile_closed_positions(
         else:
             label = "manual_close"
 
-        close_reason_str = {4: "sl_hit", 5: "tp_hit"}.get(
-            close_reason or 0, "manual_close" if close_reason else "unknown_close"
+        # ── DQAF-20260614-012: Full MT5 deal reason mapping ──
+        # Previously only SL(4) and TP(5) were mapped — all other deal
+        # reasons fell into "unknown_close" (42% of all exits).
+        # MT5 DEAL_REASON codes: 0=CLIENT, 1=MOBILE, 2=WEB, 3=SIGNAL,
+        # 4=SL, 5=TP, 6=SO (Stop Out), 7=RO (Risk Out).
+        _DEAL_REASON_MAP = {
+            0: "client_close",
+            1: "mobile_close",
+            2: "web_close",
+            3: "signal_close",
+            4: "sl_hit",
+            5: "tp_hit",
+            6: "stop_out",
+            7: "risk_out",
+        }
+        close_reason_str = _DEAL_REASON_MAP.get(
+            close_reason or 0,
+            f"mt5_deal_reason_{close_reason}" if close_reason else "unknown_close",
         )
 
         # ── Resolve strategy name and magic with fallback ──
