@@ -92,16 +92,60 @@ def main(data_dir: str) -> int:
         s = config_status[bid]
         print(f"  [{s['status'].upper()}] {bid}: type={s['brain_type']} tf={s['timeframe']} weight={'OK' if s['weight_exists'] else 'MISSING'}")
 
-    # ── 3. Live Journal Performance ──
+    # ── 3. Per-Brain Signal Accuracy (SignalSettled — SSOT) ──
+    # WARNING: Journal brain_ids shows voting PARTICIPATION, NOT accuracy.
+    # The correct per-brain performance source is ledger_events SignalSettled
+    # events — each brain's individual prediction settled against actual outcome.
     print()
     print("=" * 80)
-    print("SECTION 3: LIVE TRADING PERFORMANCE (Journal — deduped by ticket)")
+    print("SECTION 3: PER-BRAIN SIGNAL ACCURACY (SignalSettled — SSOT)")
+    print("=" * 80)
+
+    ledger_path = base / "ledger_events.jsonl"
+    signal_stats: dict[str, dict] = defaultdict(
+        lambda: {"signals": 0, "wins": 0, "losses": 0, "pnl_r": 0.0}
+    )
+
+    if ledger_path.exists():
+        with open(ledger_path, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    e = json.loads(line.strip())
+                except json.JSONDecodeError:
+                    continue
+                if e.get("event_type") != "SignalSettled":
+                    continue
+                bid = str(e.get("brain_id", "?"))
+                pnl_r = float(e.get("pnl_r", 0) or 0)
+                ss = signal_stats[bid]
+                ss["signals"] += 1
+                ss["pnl_r"] += pnl_r
+                if pnl_r > 0:
+                    ss["wins"] += 1
+                elif pnl_r < 0:
+                    ss["losses"] += 1
+
+    print(f"  {'Brain':<40} {'Signals':>7} {'Wins':>6} {'Losses':>6} {'WR':>7} {'PnL(R)':>10} {'Status'}")
+    print(f"  {'-'*40} {'-'*7} {'-'*6} {'-'*6} {'-'*7} {'-'*10} {'-'*10}")
+    for bid in sorted(signal_stats.keys(), key=lambda b: signal_stats[b]["signals"], reverse=True):
+        ss = signal_stats[bid]
+        s = ss["signals"]
+        if s == 0:
+            continue
+        w, l = ss["wins"], ss["losses"]
+        wr = w / (w + l) * 100 if (w + l) > 0 else 0.0
+        pnl_r = ss["pnl_r"]
+        status = "ACTIVE" if w + l >= 100 else ("NEW" if w + l < 20 else "OBSERVE")
+        print(f"  {bid:<40} {s:>7} {w:>6} {l:>6} {wr:>6.1f}% {pnl_r:>10.2f}  {status}")
+
+    # ── 3b. Strategy-level Journal (for reference only) ──
+    print()
+    print("=" * 80)
+    print("SECTION 3b: STRATEGY-LEVEL TRADES (Journal — voting participation, NOT per-brain)")
     print("=" * 80)
 
     journal_path = base / "live_trade_journal.jsonl"
-    if not journal_path.exists():
-        print("  Journal not found")
-    else:
+    if journal_path.exists():
         closes: list[dict] = []
         with open(journal_path, encoding="utf-8") as f:
             for line in f:
@@ -112,7 +156,6 @@ def main(data_dir: str) -> int:
                 if e.get("ack_status") == "closed":
                     closes.append(e)
 
-        # Dedup by position_ticket (keep last)
         ticket_close: dict = {}
         for c in closes:
             t = c.get("position_ticket")
@@ -120,62 +163,18 @@ def main(data_dir: str) -> int:
                 continue
             t = int(t)
             if t in ticket_close:
-                existing_ts = ticket_close[t].get("recorded_at", "")
-                if c.get("recorded_at", "") > existing_ts:
+                if c.get("recorded_at", "") > ticket_close[t].get("recorded_at", ""):
                     ticket_close[t] = c
             else:
                 ticket_close[t] = c
 
-        # Per-brain aggregation
-        brain_stats: dict[str, dict] = defaultdict(
-            lambda: {"trades": 0, "wins": 0, "losses": 0, "be": 0, "pnl": 0.0}
-        )
-
-        for close in ticket_close.values():
-            brain_ids = close.get("brain_ids")
-            pnl = close.get("pnl")
-            if pnl is None:
-                continue
-            pnl = float(pnl)
-            is_win = pnl > 0
-            is_loss = pnl < 0
-
-            if isinstance(brain_ids, list):
-                for bid in brain_ids:
-                    bs = brain_stats[str(bid)]
-                    bs["trades"] += 1
-                    bs["pnl"] += pnl
-                    if is_win:
-                        bs["wins"] += 1
-                    elif is_loss:
-                        bs["losses"] += 1
-                    else:
-                        bs["be"] += 1
-            else:
-                bid = str(close.get("strategy", "unknown"))
-                bs = brain_stats[bid]
-                bs["trades"] += 1
-                bs["pnl"] += pnl
-                if is_win:
-                    bs["wins"] += 1
-                elif is_loss:
-                    bs["losses"] += 1
-                else:
-                    bs["be"] += 1
-
-        print(f"  {'Brain':<40} {'Trades':>7} {'Wins':>6} {'Losses':>6} {'WR':>7} {'PnL':>10} {'Verdict'}")
-        print(f"  {'-'*40} {'-'*7} {'-'*6} {'-'*6} {'-'*7} {'-'*10} {'-'*10}")
-        for bid in sorted(brain_stats.keys(), key=lambda b: brain_stats[b]["trades"], reverse=True):
-            bs = brain_stats[bid]
-            t = bs["trades"]
-            if t == 0:
-                continue
-            w = bs["wins"]
-            l = bs["losses"]
-            wr = w / (w + l) * 100 if (w + l) > 0 else 0.0
-            pnl = bs["pnl"]
-            verdict = "KEEP" if wr >= 40 or pnl > 0 else ("OBSERVE" if t < 20 else "RETIRE")
-            print(f"  {bid:<40} {t:>7} {w:>6} {l:>6} {wr:>6.1f}% {pnl:>9.2f}  {verdict}")
+        total_pnl = sum(float(c.get("pnl", 0) or 0) for c in ticket_close.values())
+        total_trades = len(ticket_close)
+        wins = sum(1 for c in ticket_close.values() if float(c.get("pnl", 0) or 0) > 0)
+        losses = sum(1 for c in ticket_close.values() if float(c.get("pnl", 0) or 0) < 0)
+        wr = wins / (wins + losses) * 100 if (wins + losses) > 0 else 0
+        print(f"  Strategy Total: {total_trades} trades, {wins}W/{losses}L, WR={wr:.1f}%, PnL=\${total_pnl:.2f}")
+        print(f"  WARNING: brain_ids in journal = voting coalition, NOT individual accuracy")
 
     # ── 4. CROSS-REFERENCE MATRIX ──
     print()

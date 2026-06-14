@@ -140,7 +140,9 @@ alert_system:
     threshold: 0
 brains:
   registry_entries:
-  # ── FIX-20260613-090-deploy: Elite V9/V10 fleet (probation) ──
+  # ── FIX-20260613-090-deploy: Active probation fleet ──
+  - enabled: true
+    path: configs/brains_btc/BTC_Swing_V4.json
   - enabled: true
     path: configs/brains_btc/BTC_Swing_V10_M15_Survival.json
   - enabled: true
