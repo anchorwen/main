@@ -105,3 +105,26 @@ repos:
         language: system
         stages: [commit-msg]
         pass_filenames: false
+
+  # ------------------------------------------------------------------
+  # CI-Mirror Gate — pre-push: mirrors GitHub Actions before allowing push
+  # Runs ruff (full codebase) + mypy (baseline) — same as ci-windows.yml.
+  # Blocks push if checks fail.  No stash — safe with live processes.
+  # Install: pre-commit install --hook-type pre-push
+  # Override: git push --no-verify  (requires reason in commit message)
+  # ------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: ci-mirror-ruff
+        name: "[CI-Mirror] Ruff full-codebase (core/ apps/ scripts/)"
+        entry: python -m ruff check core/ apps/ scripts/
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+      - id: ci-mirror-mypy
+        name: "[CI-Mirror] Mypy baseline check"
+        entry: python scripts/pre_commit_mypy.py
+        language: system
+        pass_filenames: false
+        require_serial: true
+        stages: [pre-push]
