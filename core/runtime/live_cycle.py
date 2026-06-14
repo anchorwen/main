@@ -5597,6 +5597,7 @@ def execute_live_cycle(
                 mid_price=mid_price,
                 bid=_bid,
                 ask=_ask,
+                mt5_worker=mt5_worker,
                 _utc_iso_fn=_utc_iso,
                 _DEFAULT_HORIZON=_DEFAULT_HORIZON,
             )

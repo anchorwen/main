@@ -37,6 +37,7 @@ def register_dispatched_positions(
     mid_price: float | None,
     bid: float | None = None,
     ask: float | None = None,
+    mt5_worker: Any = None,
     _utc_iso_fn: Any = None,
     _DEFAULT_HORIZON: int = 12,
 ) -> dict[str, Any]:
@@ -137,6 +138,40 @@ def register_dispatched_positions(
                                 break
                     except Exception:  # noqa: BLE001
                         continue
+
+        # ── DQAF-20260614-008: MT5 direct query fallback ──
+        # When both journal and outbox fail (Bridge silent after restart),
+        # query MT5 positions directly by magic number.  The main process
+        # has MT5 access via mt5_worker — no Bridge dependency needed.
+        if ticket is None and mt5_worker is not None and decision.magic > 0:
+            try:
+                import MetaTrader5 as _mt5_module
+
+                _magic = decision.magic
+                _symbol = config.symbol if hasattr(config, "symbol") else "BTCUSDc"
+                _positions = _mt5_module.positions_get(symbol=_symbol)
+                if _positions:
+                    for _pos in _positions:
+                        if _pos.magic == _magic:
+                            ticket = _pos.ticket
+                            if _pos.price_open > 0:
+                                entry_from_journal = float(_pos.price_open)
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "position_ticket_mt5_fallback",
+                                        "time": _utc_iso(),
+                                        "strategy": dr.strategy_name,
+                                        "ticket": ticket,
+                                        "source": "mt5_direct",
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                            break
+            except Exception:  # noqa: BLE001
+                pass
 
         if ticket is None:
             print(
