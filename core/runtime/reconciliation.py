@@ -238,6 +238,32 @@ def reconcile_closed_positions(
         }
         closed_entries.append(close_entry)
 
+        # ── DQAF-20260614-013: Write live label on every close ──
+        # Previously labels were only assigned by daily_ops offline batch
+        # (_step_label_builder), leaving 16.8% of trades unlabeled between
+        # runs.  Now every close event writes a label record immediately.
+        try:
+            _labels_path = Path(journal_path).parent / "reports" / "live_labels.jsonl"
+            _labels_path.parent.mkdir(parents=True, exist_ok=True)
+            _label_entry = {
+                "position_ticket": ticket,
+                "entry_time": open_entry.get("recorded_at", ""),
+                "close_time": close_time_iso,
+                "pnl": pnl,
+                "label": label,
+                "side": side,
+                "entry_price": float(open_entry.get("entry_price", 0) or 0),
+                "close_price": float(close_price) if close_price else 0.0,
+                "exit_reason": close_reason_str,
+                "strategy": _resolved_strategy,
+                "symbol": symbol,
+                "generated_by": "reconciliation.reconcile_closed_positions",
+            }
+            with open(_labels_path, "a", encoding="utf-8") as _lf:
+                _lf.write(json.dumps(_label_entry, ensure_ascii=False) + "\n")
+        except Exception:
+            pass  # best-effort — label write must not block reconciliation
+
         # ── DQAF-20260614-005c: SignalSettled from startup reconciliation ──
         # This path handles ALL real closes (the reconcile_mt5_close_events
         # path in live_cycle.py uses PositionCloseAdapter and rarely fires).
