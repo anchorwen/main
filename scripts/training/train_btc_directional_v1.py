@@ -176,11 +176,28 @@ def compute_features(
         X[i, 18] = math.sin(2 * math.pi * weekday / 7.0)  # Derived_Weekday_Sin
         X[i, 19] = math.cos(2 * math.pi * weekday / 7.0)  # Derived_Weekday_Cos
 
-    # ── TF features (slots 33-34) ──
-    X[:, 33] = 0.0  # TF_OU_Theta (placeholder)
-    X[:, 34] = 0.5  # TF_Hurst (placeholder)
+    # ── TF features (slots 33-34) — FIX-20260614-B1 ──
+    # Production OU/Hurst from live feature computer (absolute parity with inference).
+    from core.features.computers.v9_live_computer import _hurst as _live_hurst
+    from core.features.computers.v9_live_computer import _ou_theta as _live_ou_theta
 
-    # ── NaN safety ──
+    # Compute per-bar OU Theta and Hurst using production lookback windows
+    for i in range(n_tf):
+        start = max(0, i - 100)  # full history window for context
+        price_slice = close_tf[start : i + 1]
+        X[i, 33] = _live_ou_theta(price_slice)
+        X[i, 34] = _live_hurst(price_slice)
+
+    # ── Warm-up row removal: drop bars where OU/Hurst hasn't converged ──
+    # First N bars have insufficient history for OU_LOOKBACK(20) + HURST_MAX_LAG(20).
+    # These produce fallback values (0.0, 0.5) — drop them rather than feeding
+    # un-converged macro features into the model.
+    min_warmup = 30  # conservative: EMA(26) + OU_LOOKBACK(20) + buffer
+    if n_tf > min_warmup:
+        X = X[min_warmup:]
+        timestamps = timestamps[min_warmup:]
+
+    # ── NaN safety (post-drop, only Inf remains from division edge cases) ──
     X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
 
     return X, timestamps
