@@ -115,38 +115,33 @@ def register_dispatched_positions(
                         break
                 _time_module.sleep(0.5)
 
-        # ── DQAF-20260614-008: MT5 direct query (primary fallback) ──
-        # Query MT5 positions directly by magic number.  This is the most
-        # reliable fallback — no Bridge, no filesystem, no async dependency.
-        if ticket is None and mt5_worker is not None and decision.magic > 0:
-            try:
-                import MetaTrader5 as _mt5_module
-
-                _magic = decision.magic
-                _symbol = config.symbol if hasattr(config, "symbol") else "BTCUSDc"
-                _positions = _mt5_module.positions_get(symbol=_symbol)
-                if _positions:
-                    for _pos in _positions:
-                        if _pos.magic == _magic:
-                            ticket = _pos.ticket
-                            if _pos.price_open > 0:
-                                entry_from_journal = float(_pos.price_open)
-                            print(
-                                json.dumps(
-                                    {
-                                        "event": "position_ticket_mt5_fallback",
-                                        "time": _utc_iso(),
-                                        "strategy": dr.strategy_name,
-                                        "ticket": ticket,
-                                        "source": "mt5_direct",
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                                flush=True,
-                            )
-                            break
-            except Exception:  # noqa: BLE001
-                pass
+        # ── DQAF-20260614-008: Extended journal retry ──
+        # Bridge may take >5s after restart.  The retry was 10×0.5s=5s.
+        # Extended to 60×0.5s=30s to cover Bridge cold-start latency.
+        # No MT5 direct call — MetaTrader5 C++ API requires thread-local
+        # initialization (mt5.initialize()) and hangs the main thread.
+        if ticket is None and intent_id and journal_path is not None:
+            for _retry in range(50):  # additional 50 retries = 25 more seconds
+                if journal_path.exists():
+                    for line in journal_path.read_text(encoding="utf-8").splitlines():
+                        line = line.strip()
+                        if not line or intent_id not in line:
+                            continue
+                        try:
+                            rec = json.loads(line)
+                            _mid = rec.get("message_id", "")
+                            _omid = rec.get("open_message_id", "")
+                            if _mid == intent_id or _omid == intent_id:
+                                t = rec.get("position_ticket")
+                                if t is not None and isinstance(t, int) and t > 0:
+                                    ticket = t
+                                if ticket is not None:
+                                    break
+                        except Exception:  # noqa: BLE001
+                            pass
+                    if ticket is not None:
+                        break
+                _time_module.sleep(0.5)
 
         if ticket is None:
             print(
