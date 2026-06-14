@@ -2788,6 +2788,61 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-06 — contract-violation (magic) + RC-10 — dependency-order (ZMQ start order)
 - **Prevention**: Startup order must be enforced with explicit readiness gates; strategy parameters must override bridge defaults.
 
+### DQAF-20260614-005c/005d — SignalSettled from reconciliation path + entry_price fix
+- **Date**: 2026-06-14
+- **Author**: cursor-agent
+- **Commits**: `29edc67`, `34b3eb1`
+- **Type**: fix
+- **Module**: runtime
+- **Files**: `core/runtime/reconciliation.py`
+- **Description**: (c) SignalSettled was only written from PositionCloseAdapter path — but ALL actual closes go through reconciliation.py's reconcile_closed_positions(). Result: 2162 TTL events, 0 real. Now writes SignalSettled from BOTH paths. (d) entry_price was 0 for all 337 events because known_open_tickets stores entry_price inconsistently. Added fallback to detail.entry_price.
+- **Root Cause**: RC-06 — contract-violation (two reconciliation paths, SignalSettled only on one)
+- **Prevention**: Event sourcing must have a single write path.
+
+### DQAF-20260614-011/011b — Micro-v9 co-timestamp alignment + zero-value skip
+- **Date**: 2026-06-14
+- **Author**: cursor-agent
+- **Commits**: `7d0fd6d`, `c6083a3`
+- **Type**: fix
+- **Module**: features
+- **Files**: `core/features/feature_service.py`, `core/runtime/live_cycle.py`
+- **Description**: (011) FeatureService and live_cycle each called datetime.now() independently → micro and v9 records had different event_time → co-timestamp merge 0% → 6 dead micro features in training dataset. Fix: live_cycle uses latest v9 event_time. Also removed dead micro write from FeatureService (V9LiveFeatureComputer doesn't produce micro fields). (011b) compute_all() returns all-zeros when MT5 tick data isn't ready → writing zeros creates co-timestamp-matched dead records. Fix: skip write if all 9 micro values are zero.
+- **Root Cause**: RC-06 — contract-violation (two write paths, independent timestamps)
+- **Prevention**: All feature writes at the same logical moment must share a single event_time.
+
+### FQD-20260614 — Feature Quality Dictator
+- **Date**: 2026-06-14
+- **Author**: cursor-agent
+- **Commit**: `f2e6167`
+- **Type**: feat
+- **Module**: pipeline
+- **Files**: `scripts/check_training_readiness.py`
+- **Description**: Three mandatory statistical assertions applied to EVERY feature in the training dataset, dynamically discovered from the contract schema: (1) Variance > 1e-6 — zero-variance features = dead weight + matrix singularity, (2) No NaN/Inf — silent poison, (3) Outlier bounds. First run caught 6/47 dead micro features. No hardcoded feature names — reads schema dynamically.
+- **Root Cause**: RC-07 — missing-validation (structure checked, content not checked)
+- **Prevention**: Content validation must be automatic for all features, not manual per-feature.
+
+### DQAF-20260614-P0 — Omega Gate --no-verify physical audit
+- **Date**: 2026-06-14
+- **Author**: cursor-agent
+- **Commit**: `d13137b`
+- **Type**: feat
+- **Module**: omega-protocol
+- **Files**: `scripts/omega_gate.py`
+- **Description**: Every --no-verify usage is now audited against actual staged files. 'live process file locks' requires data_btc/*.jsonl in staged files. 'documentation-only' requires ALL staged files to be .md. 'emergency rollback' requires EMERGENCY_ROLLBACK marker. Mismatched exemption claim → COMMIT REJECTED. Closes the loophole exploited in 15+ commits on 2026-06-14.
+- **Root Cause**: RC-07 — missing-validation (--no-verify reason not verified against actual files)
+- **Prevention**: Commit-level assertions must be validated against physical reality.
+
+### DQAF-20260614-DH — Data Health Contract (all domains)
+- **Date**: 2026-06-14
+- **Author**: cursor-agent
+- **Commit**: `b6c4c6f`
+- **Type**: feat
+- **Module**: governance, observability
+- **Files**: `configs/contracts/data_health_contract.json` (NEW), `scripts/check_data_health_contract.py` (NEW)
+- **Description**: Configuration-driven, severity-graded (FATAL/WARN), fault-tolerant data governance. One contract defines SLA for ALL data domains: Alpha Registry (FATAL), Leaderboard (FATAL), Live Labels (WARN), Retraining Signal (WARN), Meta Exit (WARN), Brain Performance (WARN). FATAL violations → circuit breaker lock (no new positions). WARN → DingTalk alert + block retraining. Each probe runs in isolated sandbox — one crash cannot kill the audit. First run: 2 FATAL (alpha trade_count=0, V5 zombie), 3 WARN (labels 16.8%, retraining 0, exit 37.5%), 1 PASS.
+- **Root Cause**: RC-07 — missing-validation (no cross-domain data quality enforcement)
+- **Prevention**: All data domains must have contract-defined SLA with automated daily enforcement.
+
 ### R1-20260614 — V4 Brain Governance Promotion
 - **Date**: 2026-06-14
 - **Author**: cursor-agent (per R1 profitability review)
