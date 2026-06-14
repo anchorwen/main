@@ -1,0 +1,3107 @@
+{
+  "timestamp": 1781431470.6984358,
+  "per_file": {
+    "core/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/alpha/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 8,
+      "covered": 8,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/alpha/contracts.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 50,
+      "covered": 50,
+      "branches": 8,
+      "branches_covered": 8
+    },
+    "core/alpha/lifecycle_service.py": {
+      "line_pct": 97.6,
+      "branch_pct": 83.3,
+      "lines": 42,
+      "covered": 41,
+      "branches": 6,
+      "branches_covered": 5
+    },
+    "core/alpha/ou_optimizer.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 251,
+      "covered": 0,
+      "branches": 96,
+      "branches_covered": 0
+    },
+    "core/alpha/performance_store.py": {
+      "line_pct": 95.8,
+      "branch_pct": 81.8,
+      "lines": 95,
+      "covered": 91,
+      "branches": 22,
+      "branches_covered": 18
+    },
+    "core/alpha/portfolio_allocator.py": {
+      "line_pct": 91.0,
+      "branch_pct": 75.0,
+      "lines": 89,
+      "covered": 81,
+      "branches": 16,
+      "branches_covered": 12
+    },
+    "core/alpha/promotion_gate.py": {
+      "line_pct": 96.0,
+      "branch_pct": 84.8,
+      "lines": 126,
+      "covered": 121,
+      "branches": 46,
+      "branches_covered": 39
+    },
+    "core/alpha/registry.py": {
+      "line_pct": 98.0,
+      "branch_pct": 90.0,
+      "lines": 49,
+      "covered": 48,
+      "branches": 10,
+      "branches_covered": 9
+    },
+    "core/alpha/risk_budget.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 23,
+      "covered": 23,
+      "branches": 2,
+      "branches_covered": 2
+    },
+    "core/alpha/schema_versions.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 8,
+      "covered": 8,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/backtest/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 6,
+      "covered": 6,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/backtest/data_feed.py": {
+      "line_pct": 74.7,
+      "branch_pct": 50.0,
+      "lines": 75,
+      "covered": 56,
+      "branches": 14,
+      "branches_covered": 7
+    },
+    "core/backtest/engine.py": {
+      "line_pct": 99.2,
+      "branch_pct": 90.0,
+      "lines": 130,
+      "covered": 129,
+      "branches": 40,
+      "branches_covered": 36
+    },
+    "core/backtest/execution_simulator.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 56,
+      "covered": 56,
+      "branches": 4,
+      "branches_covered": 4
+    },
+    "core/backtest/metrics.py": {
+      "line_pct": 100.0,
+      "branch_pct": 87.5,
+      "lines": 28,
+      "covered": 28,
+      "branches": 8,
+      "branches_covered": 7
+    },
+    "core/backtest/portfolio.py": {
+      "line_pct": 96.9,
+      "branch_pct": 85.3,
+      "lines": 97,
+      "covered": 94,
+      "branches": 34,
+      "branches_covered": 29
+    },
+    "core/backtest/strategy_adapter.py": {
+      "line_pct": 69.0,
+      "branch_pct": 71.9,
+      "lines": 100,
+      "covered": 69,
+      "branches": 32,
+      "branches_covered": 23
+    },
+    "core/brains/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/brains/adapters/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 11,
+      "covered": 11,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/brains/adapters/base_adapter.py": {
+      "line_pct": 70.7,
+      "branch_pct": 57.1,
+      "lines": 75,
+      "covered": 53,
+      "branches": 14,
+      "branches_covered": 8
+    },
+    "core/brains/adapters/lightgbm_brain_adapter.py": {
+      "line_pct": 72.8,
+      "branch_pct": 55.0,
+      "lines": 81,
+      "covered": 59,
+      "branches": 20,
+      "branches_covered": 11
+    },
+    "core/brains/adapters/meta_filter_adapter.py": {
+      "line_pct": 23.2,
+      "branch_pct": 0.0,
+      "lines": 82,
+      "covered": 19,
+      "branches": 26,
+      "branches_covered": 0
+    },
+    "core/brains/adapters/online_learner_adapter.py": {
+      "line_pct": 13.1,
+      "branch_pct": 0.0,
+      "lines": 283,
+      "covered": 37,
+      "branches": 70,
+      "branches_covered": 0
+    },
+    "core/brains/adapters/params_brain_adapter.py": {
+      "line_pct": 51.2,
+      "branch_pct": 13.3,
+      "lines": 127,
+      "covered": 65,
+      "branches": 30,
+      "branches_covered": 4
+    },
+    "core/brains/adapters/transformer_brain_adapter.py": {
+      "line_pct": 61.5,
+      "branch_pct": 27.8,
+      "lines": 122,
+      "covered": 75,
+      "branches": 36,
+      "branches_covered": 10
+    },
+    "core/brains/adapters/v9_onnx_brain_adapter.py": {
+      "line_pct": 31.2,
+      "branch_pct": 7.5,
+      "lines": 144,
+      "covered": 45,
+      "branches": 40,
+      "branches_covered": 3
+    },
+    "core/brains/adapters/xgboost_brain_adapter.py": {
+      "line_pct": 59.5,
+      "branch_pct": 30.0,
+      "lines": 121,
+      "covered": 72,
+      "branches": 40,
+      "branches_covered": 12
+    },
+    "core/brains/brain_registry.py": {
+      "line_pct": 71.1,
+      "branch_pct": 61.1,
+      "lines": 90,
+      "covered": 64,
+      "branches": 18,
+      "branches_covered": 11
+    },
+    "core/brains/online_mlp_model.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 153,
+      "covered": 0,
+      "branches": 4,
+      "branches_covered": 0
+    },
+    "core/brains/schema_versions.py": {
+      "line_pct": 0.0,
+      "branch_pct": 100.0,
+      "lines": 1,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/brains/services/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/brains/services/ab_test.py": {
+      "line_pct": 93.1,
+      "branch_pct": 79.2,
+      "lines": 130,
+      "covered": 121,
+      "branches": 24,
+      "branches_covered": 19
+    },
+    "core/brains/services/brain_attribution_service.py": {
+      "line_pct": 38.1,
+      "branch_pct": 13.6,
+      "lines": 181,
+      "covered": 69,
+      "branches": 66,
+      "branches_covered": 9
+    },
+    "core/brains/services/brain_factory.py": {
+      "line_pct": 60.0,
+      "branch_pct": 52.6,
+      "lines": 85,
+      "covered": 51,
+      "branches": 38,
+      "branches_covered": 20
+    },
+    "core/brains/services/brain_leaderboard.py": {
+      "line_pct": 28.5,
+      "branch_pct": 0.0,
+      "lines": 130,
+      "covered": 37,
+      "branches": 38,
+      "branches_covered": 0
+    },
+    "core/brains/services/brain_promotion.py": {
+      "line_pct": 50.6,
+      "branch_pct": 20.3,
+      "lines": 156,
+      "covered": 79,
+      "branches": 64,
+      "branches_covered": 13
+    },
+    "core/brains/services/brain_registry_loader.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 5,
+      "covered": 5,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/brains/services/brain_registry_service.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 60,
+      "covered": 0,
+      "branches": 26,
+      "branches_covered": 0
+    },
+    "core/brains/services/brain_run_service.py": {
+      "line_pct": 39.4,
+      "branch_pct": 18.8,
+      "lines": 127,
+      "covered": 50,
+      "branches": 32,
+      "branches_covered": 6
+    },
+    "core/brains/services/dynamic_brain_weighter.py": {
+      "line_pct": 48.1,
+      "branch_pct": 42.2,
+      "lines": 214,
+      "covered": 103,
+      "branches": 116,
+      "branches_covered": 49
+    },
+    "core/brains/services/inference_guard.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 108,
+      "covered": 0,
+      "branches": 18,
+      "branches_covered": 0
+    },
+    "core/brains/services/onnx_worker.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 43,
+      "covered": 0,
+      "branches": 10,
+      "branches_covered": 0
+    },
+    "core/brains/services/stability_monitor.py": {
+      "line_pct": 93.2,
+      "branch_pct": 82.1,
+      "lines": 74,
+      "covered": 69,
+      "branches": 28,
+      "branches_covered": 23
+    },
+    "core/config/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/config/asset_registry.py": {
+      "line_pct": 76.5,
+      "branch_pct": 0.0,
+      "lines": 17,
+      "covered": 13,
+      "branches": 2,
+      "branches_covered": 0
+    },
+    "core/constants.py": {
+      "line_pct": 0.0,
+      "branch_pct": 100.0,
+      "lines": 39,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/contracts/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/contracts/calibrator_contract.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 40,
+      "covered": 0,
+      "branches": 14,
+      "branches_covered": 0
+    },
+    "core/contracts/domain/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/contracts/domain/brain_decision_proposal.py": {
+      "line_pct": 96.3,
+      "branch_pct": 50.0,
+      "lines": 27,
+      "covered": 26,
+      "branches": 2,
+      "branches_covered": 1
+    },
+    "core/contracts/domain/communication_envelope.py": {
+      "line_pct": 84.4,
+      "branch_pct": 50.0,
+      "lines": 32,
+      "covered": 27,
+      "branches": 10,
+      "branches_covered": 5
+    },
+    "core/contracts/domain/communication_record.py": {
+      "line_pct": 90.3,
+      "branch_pct": 50.0,
+      "lines": 31,
+      "covered": 28,
+      "branches": 6,
+      "branches_covered": 3
+    },
+    "core/contracts/domain/decision_candidate.py": {
+      "line_pct": 95.7,
+      "branch_pct": 50.0,
+      "lines": 23,
+      "covered": 22,
+      "branches": 2,
+      "branches_covered": 1
+    },
+    "core/contracts/domain/decision_intent.py": {
+      "line_pct": 88.1,
+      "branch_pct": 50.0,
+      "lines": 42,
+      "covered": 37,
+      "branches": 8,
+      "branches_covered": 4
+    },
+    "core/contracts/domain/decision_record.py": {
+      "line_pct": 82.4,
+      "branch_pct": 50.0,
+      "lines": 34,
+      "covered": 28,
+      "branches": 6,
+      "branches_covered": 3
+    },
+    "core/contracts/domain/dispatch_request.py": {
+      "line_pct": 90.0,
+      "branch_pct": 50.0,
+      "lines": 20,
+      "covered": 18,
+      "branches": 4,
+      "branches_covered": 2
+    },
+    "core/contracts/domain/dispatch_result.py": {
+      "line_pct": 91.2,
+      "branch_pct": 62.5,
+      "lines": 34,
+      "covered": 31,
+      "branches": 8,
+      "branches_covered": 5
+    },
+    "core/contracts/domain/execution_event.py": {
+      "line_pct": 90.2,
+      "branch_pct": 66.7,
+      "lines": 41,
+      "covered": 37,
+      "branches": 12,
+      "branches_covered": 8
+    },
+    "core/contracts/domain/protocol_override.py": {
+      "line_pct": 0.0,
+      "branch_pct": 100.0,
+      "lines": 18,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/contracts/domain/replay_execution_record.py": {
+      "line_pct": 95.8,
+      "branch_pct": 78.6,
+      "lines": 72,
+      "covered": 69,
+      "branches": 14,
+      "branches_covered": 11
+    },
+    "core/contracts/domain/risk_verdict.py": {
+      "line_pct": 82.4,
+      "branch_pct": 50.0,
+      "lines": 34,
+      "covered": 28,
+      "branches": 6,
+      "branches_covered": 3
+    },
+    "core/contracts/domain/system_mode_state.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 16,
+      "covered": 16,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/contracts/domain_keys.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 901,
+      "covered": 901,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/contracts/enums.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 83,
+      "covered": 83,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/contracts/events.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 39,
+      "covered": 39,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/contracts/exceptions.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 35,
+      "covered": 35,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/contracts/ids.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 29,
+      "covered": 29,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/contracts/journal_contract.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 108,
+      "covered": 0,
+      "branches": 22,
+      "branches_covered": 0
+    },
+    "core/contracts/position_events.py": {
+      "line_pct": 0.0,
+      "branch_pct": 100.0,
+      "lines": 50,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/contracts/schema_versions.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 2,
+      "covered": 2,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/contracts/serialization/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/contracts/serialization/json_codec.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 21,
+      "covered": 21,
+      "branches": 10,
+      "branches_covered": 10
+    },
+    "core/contracts/strategy_magic.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 3,
+      "covered": 3,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/contracts/training/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 4,
+      "covered": 4,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/contracts/training/label_contract.py": {
+      "line_pct": 68.0,
+      "branch_pct": 51.4,
+      "lines": 181,
+      "covered": 123,
+      "branches": 72,
+      "branches_covered": 37
+    },
+    "core/contracts/training/training_contract.py": {
+      "line_pct": 88.3,
+      "branch_pct": 66.7,
+      "lines": 222,
+      "covered": 196,
+      "branches": 90,
+      "branches_covered": 60
+    },
+    "core/contracts/training/training_recipe.py": {
+      "line_pct": 90.9,
+      "branch_pct": 65.0,
+      "lines": 143,
+      "covered": 130,
+      "branches": 40,
+      "branches_covered": 26
+    },
+    "core/contracts/validators.py": {
+      "line_pct": 73.4,
+      "branch_pct": 57.9,
+      "lines": 79,
+      "covered": 58,
+      "branches": 38,
+      "branches_covered": 22
+    },
+    "core/data/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/data/event_writer.py": {
+      "line_pct": 73.3,
+      "branch_pct": 25.0,
+      "lines": 45,
+      "covered": 33,
+      "branches": 8,
+      "branches_covered": 2
+    },
+    "core/data/projections.py": {
+      "line_pct": 77.3,
+      "branch_pct": 73.1,
+      "lines": 110,
+      "covered": 85,
+      "branches": 52,
+      "branches_covered": 38
+    },
+    "core/data/wap.py": {
+      "line_pct": 98.8,
+      "branch_pct": 81.8,
+      "lines": 83,
+      "covered": 82,
+      "branches": 22,
+      "branches_covered": 18
+    },
+    "core/deployment/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/deployment/atomic_file_writer.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 76,
+      "covered": 0,
+      "branches": 22,
+      "branches_covered": 0
+    },
+    "core/deployment/blue_green.py": {
+      "line_pct": 94.8,
+      "branch_pct": 94.7,
+      "lines": 252,
+      "covered": 239,
+      "branches": 38,
+      "branches_covered": 36
+    },
+    "core/deployment/brain_alert.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 9,
+      "covered": 9,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/deployment/brain_config_validator.py": {
+      "line_pct": 91.0,
+      "branch_pct": 86.0,
+      "lines": 122,
+      "covered": 111,
+      "branches": 50,
+      "branches_covered": 43
+    },
+    "core/deployment/brain_lifecycle_manager.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 714,
+      "covered": 0,
+      "branches": 344,
+      "branches_covered": 0
+    },
+    "core/deployment/brain_registration_gate.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 218,
+      "covered": 0,
+      "branches": 74,
+      "branches_covered": 0
+    },
+    "core/deployment/capability_registry.py": {
+      "line_pct": 97.4,
+      "branch_pct": 50.0,
+      "lines": 38,
+      "covered": 37,
+      "branches": 2,
+      "branches_covered": 1
+    },
+    "core/deployment/compliance_audit.py": {
+      "line_pct": 98.3,
+      "branch_pct": 94.0,
+      "lines": 120,
+      "covered": 118,
+      "branches": 50,
+      "branches_covered": 47
+    },
+    "core/deployment/compliance_control_matrix.py": {
+      "line_pct": 98.8,
+      "branch_pct": 95.5,
+      "lines": 84,
+      "covered": 83,
+      "branches": 22,
+      "branches_covered": 21
+    },
+    "core/deployment/compliance_export.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 96,
+      "covered": 96,
+      "branches": 10,
+      "branches_covered": 10
+    },
+    "core/deployment/config_hot_reload.py": {
+      "line_pct": 87.0,
+      "branch_pct": 80.8,
+      "lines": 77,
+      "covered": 67,
+      "branches": 26,
+      "branches_covered": 21
+    },
+    "core/deployment/deployment_executor.py": {
+      "line_pct": 98.3,
+      "branch_pct": 90.0,
+      "lines": 119,
+      "covered": 117,
+      "branches": 50,
+      "branches_covered": 45
+    },
+    "core/deployment/deployment_plan.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 54,
+      "covered": 54,
+      "branches": 14,
+      "branches_covered": 14
+    },
+    "core/deployment/domain_keys.py": {
+      "line_pct": 0.0,
+      "branch_pct": 100.0,
+      "lines": 1,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/deployment/environment_config.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 69,
+      "covered": 69,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/deployment/evidence_bundle.py": {
+      "line_pct": 98.7,
+      "branch_pct": 91.7,
+      "lines": 77,
+      "covered": 76,
+      "branches": 12,
+      "branches_covered": 11
+    },
+    "core/deployment/feature_update_producer.py": {
+      "line_pct": 63.6,
+      "branch_pct": 100.0,
+      "lines": 11,
+      "covered": 7,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/deployment/final_audit.py": {
+      "line_pct": 96.8,
+      "branch_pct": 77.8,
+      "lines": 63,
+      "covered": 61,
+      "branches": 18,
+      "branches_covered": 14
+    },
+    "core/deployment/governance_summary.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 16,
+      "covered": 16,
+      "branches": 2,
+      "branches_covered": 2
+    },
+    "core/deployment/health_check.py": {
+      "line_pct": 97.6,
+      "branch_pct": 83.3,
+      "lines": 41,
+      "covered": 40,
+      "branches": 6,
+      "branches_covered": 5
+    },
+    "core/deployment/lifecycle_manager.py": {
+      "line_pct": 96.7,
+      "branch_pct": 83.3,
+      "lines": 60,
+      "covered": 58,
+      "branches": 18,
+      "branches_covered": 15
+    },
+    "core/deployment/operational_support.py": {
+      "line_pct": 94.8,
+      "branch_pct": 92.9,
+      "lines": 58,
+      "covered": 55,
+      "branches": 14,
+      "branches_covered": 13
+    },
+    "core/deployment/operations_timeline.py": {
+      "line_pct": 98.9,
+      "branch_pct": 96.9,
+      "lines": 91,
+      "covered": 90,
+      "branches": 32,
+      "branches_covered": 31
+    },
+    "core/deployment/ops_maturity.py": {
+      "line_pct": 98.3,
+      "branch_pct": 94.4,
+      "lines": 59,
+      "covered": 58,
+      "branches": 18,
+      "branches_covered": 17
+    },
+    "core/deployment/path_defaults.py": {
+      "line_pct": 60.6,
+      "branch_pct": 0.0,
+      "lines": 33,
+      "covered": 20,
+      "branches": 8,
+      "branches_covered": 0
+    },
+    "core/deployment/permission_audit.py": {
+      "line_pct": 94.0,
+      "branch_pct": 86.4,
+      "lines": 133,
+      "covered": 125,
+      "branches": 44,
+      "branches_covered": 38
+    },
+    "core/deployment/postmortem_report.py": {
+      "line_pct": 97.2,
+      "branch_pct": 92.5,
+      "lines": 106,
+      "covered": 103,
+      "branches": 40,
+      "branches_covered": 37
+    },
+    "core/deployment/release_certification.py": {
+      "line_pct": 93.0,
+      "branch_pct": 72.7,
+      "lines": 100,
+      "covered": 93,
+      "branches": 22,
+      "branches_covered": 16
+    },
+    "core/deployment/release_gate.py": {
+      "line_pct": 95.1,
+      "branch_pct": 100.0,
+      "lines": 82,
+      "covered": 78,
+      "branches": 10,
+      "branches_covered": 10
+    },
+    "core/deployment/release_pipeline.py": {
+      "line_pct": 98.6,
+      "branch_pct": 90.0,
+      "lines": 69,
+      "covered": 68,
+      "branches": 10,
+      "branches_covered": 9
+    },
+    "core/deployment/release_readiness.py": {
+      "line_pct": 98.9,
+      "branch_pct": 85.7,
+      "lines": 94,
+      "covered": 93,
+      "branches": 14,
+      "branches_covered": 12
+    },
+    "core/deployment/release_registry.py": {
+      "line_pct": 99.1,
+      "branch_pct": 76.9,
+      "lines": 115,
+      "covered": 114,
+      "branches": 26,
+      "branches_covered": 20
+    },
+    "core/deployment/replay_isolation.py": {
+      "line_pct": 97.9,
+      "branch_pct": 75.0,
+      "lines": 48,
+      "covered": 47,
+      "branches": 4,
+      "branches_covered": 3
+    },
+    "core/deployment/rollback_drill.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 59,
+      "covered": 59,
+      "branches": 10,
+      "branches_covered": 10
+    },
+    "core/deployment/runbook_engine.py": {
+      "line_pct": 95.7,
+      "branch_pct": 94.0,
+      "lines": 164,
+      "covered": 157,
+      "branches": 50,
+      "branches_covered": 47
+    },
+    "core/deployment/scheduled_task_registry.py": {
+      "line_pct": 83.3,
+      "branch_pct": 100.0,
+      "lines": 12,
+      "covered": 10,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/deployment/scheduler_service.py": {
+      "line_pct": 88.1,
+      "branch_pct": 65.4,
+      "lines": 226,
+      "covered": 199,
+      "branches": 78,
+      "branches_covered": 51
+    },
+    "core/deployment/schema_versions.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 27,
+      "covered": 27,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/deployment/service_container.py": {
+      "line_pct": 93.3,
+      "branch_pct": 64.3,
+      "lines": 360,
+      "covered": 336,
+      "branches": 42,
+      "branches_covered": 27
+    },
+    "core/deployment/startup_validator.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 36,
+      "covered": 0,
+      "branches": 14,
+      "branches_covered": 0
+    },
+    "core/deployment/state_persistence.py": {
+      "line_pct": 100.0,
+      "branch_pct": 66.7,
+      "lines": 48,
+      "covered": 48,
+      "branches": 12,
+      "branches_covered": 8
+    },
+    "core/deployment/validation_mode.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 5,
+      "covered": 5,
+      "branches": 2,
+      "branches_covered": 2
+    },
+    "core/execution/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 21,
+      "covered": 21,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/execution/barrier_strategy.py": {
+      "line_pct": 90.9,
+      "branch_pct": 75.0,
+      "lines": 44,
+      "covered": 40,
+      "branches": 16,
+      "branches_covered": 12
+    },
+    "core/execution/broker_adapter.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 13,
+      "covered": 13,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/execution/capital_allocator.py": {
+      "line_pct": 79.4,
+      "branch_pct": 71.2,
+      "lines": 175,
+      "covered": 139,
+      "branches": 80,
+      "branches_covered": 57
+    },
+    "core/execution/conformal_calibrator.py": {
+      "line_pct": 87.5,
+      "branch_pct": 76.8,
+      "lines": 192,
+      "covered": 168,
+      "branches": 82,
+      "branches_covered": 63
+    },
+    "core/execution/conformal_ou_gate.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 205,
+      "covered": 0,
+      "branches": 76,
+      "branches_covered": 0
+    },
+    "core/execution/correlation_sizer.py": {
+      "line_pct": 58.8,
+      "branch_pct": 37.5,
+      "lines": 34,
+      "covered": 20,
+      "branches": 8,
+      "branches_covered": 3
+    },
+    "core/execution/cross_strategy_coordinator.py": {
+      "line_pct": 50.0,
+      "branch_pct": 0.0,
+      "lines": 42,
+      "covered": 21,
+      "branches": 14,
+      "branches_covered": 0
+    },
+    "core/execution/dynamic_sl_tp.py": {
+      "line_pct": 95.5,
+      "branch_pct": 87.5,
+      "lines": 67,
+      "covered": 64,
+      "branches": 24,
+      "branches_covered": 21
+    },
+    "core/execution/execution_manager.py": {
+      "line_pct": 90.1,
+      "branch_pct": 77.8,
+      "lines": 81,
+      "covered": 73,
+      "branches": 36,
+      "branches_covered": 28
+    },
+    "core/execution/execution_queue.py": {
+      "line_pct": 69.7,
+      "branch_pct": 53.6,
+      "lines": 175,
+      "covered": 122,
+      "branches": 56,
+      "branches_covered": 30
+    },
+    "core/execution/exit_reason.py": {
+      "line_pct": 85.7,
+      "branch_pct": 73.3,
+      "lines": 84,
+      "covered": 72,
+      "branches": 30,
+      "branches_covered": 22
+    },
+    "core/execution/exit_watchdog.py": {
+      "line_pct": 64.3,
+      "branch_pct": 46.5,
+      "lines": 244,
+      "covered": 157,
+      "branches": 86,
+      "branches_covered": 40
+    },
+    "core/execution/fill_simulator.py": {
+      "line_pct": 94.1,
+      "branch_pct": 87.5,
+      "lines": 68,
+      "covered": 64,
+      "branches": 32,
+      "branches_covered": 28
+    },
+    "core/execution/fix_contracts.py": {
+      "line_pct": 97.9,
+      "branch_pct": 87.5,
+      "lines": 47,
+      "covered": 46,
+      "branches": 8,
+      "branches_covered": 7
+    },
+    "core/execution/fix_execution_mapper.py": {
+      "line_pct": 69.6,
+      "branch_pct": 45.0,
+      "lines": 46,
+      "covered": 32,
+      "branches": 20,
+      "branches_covered": 9
+    },
+    "core/execution/fix_gateway_adapter.py": {
+      "line_pct": 91.5,
+      "branch_pct": 78.6,
+      "lines": 71,
+      "covered": 65,
+      "branches": 14,
+      "branches_covered": 11
+    },
+    "core/execution/fix_message_builder.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 23,
+      "covered": 23,
+      "branches": 2,
+      "branches_covered": 2
+    },
+    "core/execution/gateway_contracts.py": {
+      "line_pct": 95.3,
+      "branch_pct": 75.0,
+      "lines": 64,
+      "covered": 61,
+      "branches": 12,
+      "branches_covered": 9
+    },
+    "core/execution/kelly_sizer.py": {
+      "line_pct": 75.9,
+      "branch_pct": 50.0,
+      "lines": 29,
+      "covered": 22,
+      "branches": 10,
+      "branches_covered": 5
+    },
+    "core/execution/limit_order_monitor.py": {
+      "line_pct": 94.6,
+      "branch_pct": 62.5,
+      "lines": 129,
+      "covered": 122,
+      "branches": 24,
+      "branches_covered": 15
+    },
+    "core/execution/live_order_sender.py": {
+      "line_pct": 28.9,
+      "branch_pct": 17.7,
+      "lines": 142,
+      "covered": 41,
+      "branches": 62,
+      "branches_covered": 11
+    },
+    "core/execution/managed_close.py": {
+      "line_pct": 66.3,
+      "branch_pct": 56.5,
+      "lines": 95,
+      "covered": 63,
+      "branches": 46,
+      "branches_covered": 26
+    },
+    "core/execution/market_efficiency.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 23,
+      "covered": 0,
+      "branches": 10,
+      "branches_covered": 0
+    },
+    "core/execution/market_impact.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 40,
+      "covered": 40,
+      "branches": 4,
+      "branches_covered": 4
+    },
+    "core/execution/meta_exit_engine.py": {
+      "line_pct": 74.5,
+      "branch_pct": 60.6,
+      "lines": 188,
+      "covered": 140,
+      "branches": 66,
+      "branches_covered": 40
+    },
+    "core/execution/meta_filter_gate.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 78,
+      "covered": 0,
+      "branches": 22,
+      "branches_covered": 0
+    },
+    "core/execution/meta_filter_routing.py": {
+      "line_pct": 25.0,
+      "branch_pct": 12.5,
+      "lines": 60,
+      "covered": 15,
+      "branches": 32,
+      "branches_covered": 4
+    },
+    "core/execution/meta_pipeline.py": {
+      "line_pct": 22.0,
+      "branch_pct": 6.5,
+      "lines": 159,
+      "covered": 35,
+      "branches": 62,
+      "branches_covered": 4
+    },
+    "core/execution/meta_signal_filter.py": {
+      "line_pct": 38.2,
+      "branch_pct": 19.9,
+      "lines": 364,
+      "covered": 139,
+      "branches": 136,
+      "branches_covered": 27
+    },
+    "core/execution/micro_strategy.py": {
+      "line_pct": 61.8,
+      "branch_pct": 50.0,
+      "lines": 34,
+      "covered": 21,
+      "branches": 8,
+      "branches_covered": 4
+    },
+    "core/execution/mt5_broker_adapter.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 72,
+      "covered": 0,
+      "branches": 16,
+      "branches_covered": 0
+    },
+    "core/execution/mt5_worker.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 180,
+      "covered": 0,
+      "branches": 54,
+      "branches_covered": 0
+    },
+    "core/execution/net_out_close_handler.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 46,
+      "covered": 0,
+      "branches": 16,
+      "branches_covered": 0
+    },
+    "core/execution/order_state_machine.py": {
+      "line_pct": 91.8,
+      "branch_pct": 75.0,
+      "lines": 49,
+      "covered": 45,
+      "branches": 16,
+      "branches_covered": 12
+    },
+    "core/execution/paper_gateway.py": {
+      "line_pct": 94.9,
+      "branch_pct": 87.5,
+      "lines": 78,
+      "covered": 74,
+      "branches": 24,
+      "branches_covered": 21
+    },
+    "core/execution/portfolio_risk.py": {
+      "line_pct": 63.4,
+      "branch_pct": 41.2,
+      "lines": 216,
+      "covered": 137,
+      "branches": 68,
+      "branches_covered": 28
+    },
+    "core/execution/position_manager.py": {
+      "line_pct": 42.3,
+      "branch_pct": 21.2,
+      "lines": 763,
+      "covered": 323,
+      "branches": 320,
+      "branches_covered": 68
+    },
+    "core/execution/pre_trade_guards.py": {
+      "line_pct": 47.2,
+      "branch_pct": 30.8,
+      "lines": 288,
+      "covered": 136,
+      "branches": 130,
+      "branches_covered": 40
+    },
+    "core/execution/pwin_chain.py": {
+      "line_pct": 23.5,
+      "branch_pct": 9.4,
+      "lines": 68,
+      "covered": 16,
+      "branches": 32,
+      "branches_covered": 3
+    },
+    "core/execution/quality_analyzer.py": {
+      "line_pct": 54.9,
+      "branch_pct": 33.3,
+      "lines": 142,
+      "covered": 78,
+      "branches": 48,
+      "branches_covered": 16
+    },
+    "core/execution/quality_contracts.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 71,
+      "covered": 71,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/execution/reentry_guard.py": {
+      "line_pct": 56.1,
+      "branch_pct": 43.0,
+      "lines": 187,
+      "covered": 105,
+      "branches": 128,
+      "branches_covered": 55
+    },
+    "core/execution/regime_direction_gate.py": {
+      "line_pct": 18.9,
+      "branch_pct": 0.0,
+      "lines": 95,
+      "covered": 18,
+      "branches": 44,
+      "branches_covered": 0
+    },
+    "core/execution/regime_gate.py": {
+      "line_pct": 76.9,
+      "branch_pct": 56.4,
+      "lines": 372,
+      "covered": 286,
+      "branches": 94,
+      "branches_covered": 53
+    },
+    "core/execution/rule_engine_strategy.py": {
+      "line_pct": 48.8,
+      "branch_pct": 0.0,
+      "lines": 41,
+      "covered": 20,
+      "branches": 12,
+      "branches_covered": 0
+    },
+    "core/execution/schema_versions.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 1,
+      "covered": 1,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/execution/statarb_strategy.py": {
+      "line_pct": 95.2,
+      "branch_pct": 75.0,
+      "lines": 21,
+      "covered": 20,
+      "branches": 4,
+      "branches_covered": 3
+    },
+    "core/execution/strategy_budget.py": {
+      "line_pct": 56.2,
+      "branch_pct": 29.0,
+      "lines": 146,
+      "covered": 82,
+      "branches": 62,
+      "branches_covered": 18
+    },
+    "core/execution/strategy_line.py": {
+      "line_pct": 63.5,
+      "branch_pct": 47.6,
+      "lines": 614,
+      "covered": 390,
+      "branches": 248,
+      "branches_covered": 118
+    },
+    "core/execution/strategy_type.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 10,
+      "covered": 10,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/execution/swing_strategy.py": {
+      "line_pct": 24.2,
+      "branch_pct": 0.0,
+      "lines": 33,
+      "covered": 8,
+      "branches": 10,
+      "branches_covered": 0
+    },
+    "core/execution/trail_stop_engine.py": {
+      "line_pct": 92.7,
+      "branch_pct": 80.9,
+      "lines": 137,
+      "covered": 127,
+      "branches": 68,
+      "branches_covered": 55
+    },
+    "core/execution/trend_detector.py": {
+      "line_pct": 85.2,
+      "branch_pct": 58.0,
+      "lines": 305,
+      "covered": 260,
+      "branches": 88,
+      "branches_covered": 51
+    },
+    "core/execution/trend_isolation_gates.py": {
+      "line_pct": 27.5,
+      "branch_pct": 26.9,
+      "lines": 51,
+      "covered": 14,
+      "branches": 26,
+      "branches_covered": 7
+    },
+    "core/features/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 5,
+      "covered": 5,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/features/adapters/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/features/adapters/microstructure_feature_adapter.py": {
+      "line_pct": 62.0,
+      "branch_pct": 28.6,
+      "lines": 50,
+      "covered": 31,
+      "branches": 14,
+      "branches_covered": 4
+    },
+    "core/features/adapters/v9_feature_adapter.py": {
+      "line_pct": 70.0,
+      "branch_pct": 60.0,
+      "lines": 50,
+      "covered": 35,
+      "branches": 20,
+      "branches_covered": 12
+    },
+    "core/features/computers/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/features/computers/btc_feature_augmenter.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 127,
+      "covered": 0,
+      "branches": 42,
+      "branches_covered": 0
+    },
+    "core/features/computers/daily_computer.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 397,
+      "covered": 0,
+      "branches": 132,
+      "branches_covered": 0
+    },
+    "core/features/computers/live_daily_provider.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 109,
+      "covered": 0,
+      "branches": 40,
+      "branches_covered": 0
+    },
+    "core/features/computers/microstructure_computer.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 303,
+      "covered": 0,
+      "branches": 68,
+      "branches_covered": 0
+    },
+    "core/features/computers/v9_live_computer.py": {
+      "line_pct": 21.1,
+      "branch_pct": 1.9,
+      "lines": 185,
+      "covered": 39,
+      "branches": 52,
+      "branches_covered": 1
+    },
+    "core/features/computers/v9_micro_computer.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 43,
+      "covered": 0,
+      "branches": 8,
+      "branches_covered": 0
+    },
+    "core/features/data_augmentation.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 34,
+      "covered": 0,
+      "branches": 14,
+      "branches_covered": 0
+    },
+    "core/features/feature_assembler.py": {
+      "line_pct": 31.0,
+      "branch_pct": 14.7,
+      "lines": 58,
+      "covered": 18,
+      "branches": 34,
+      "branches_covered": 5
+    },
+    "core/features/feature_service.py": {
+      "line_pct": 39.7,
+      "branch_pct": 10.0,
+      "lines": 146,
+      "covered": 58,
+      "branches": 40,
+      "branches_covered": 4
+    },
+    "core/features/feature_snapshot.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 18,
+      "covered": 18,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/features/local_feature_store.py": {
+      "line_pct": 52.3,
+      "branch_pct": 33.6,
+      "lines": 218,
+      "covered": 114,
+      "branches": 110,
+      "branches_covered": 37
+    },
+    "core/features/meta_feature_builder.py": {
+      "line_pct": 61.5,
+      "branch_pct": 40.0,
+      "lines": 65,
+      "covered": 40,
+      "branches": 30,
+      "branches_covered": 12
+    },
+    "core/features/rolling_normalizer.py": {
+      "line_pct": 30.7,
+      "branch_pct": 0.0,
+      "lines": 101,
+      "covered": 31,
+      "branches": 12,
+      "branches_covered": 0
+    },
+    "core/features/schemas/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/features/schemas/btc_macro_enhanced_schema.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 7,
+      "covered": 7,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/features/schemas/daily_swing_schema.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 2,
+      "covered": 2,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/features/schemas/microstructure_schema.py": {
+      "line_pct": 75.0,
+      "branch_pct": 100.0,
+      "lines": 4,
+      "covered": 3,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/features/schemas/registry.py": {
+      "line_pct": 72.3,
+      "branch_pct": 52.9,
+      "lines": 65,
+      "covered": 47,
+      "branches": 34,
+      "branches_covered": 18
+    },
+    "core/features/schemas/swing_enhanced_schema.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 10,
+      "covered": 10,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/features/schemas/v9_institutional_schema.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 1,
+      "covered": 1,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/features/schemas/v9_micro_schema.py": {
+      "line_pct": 87.5,
+      "branch_pct": 100.0,
+      "lines": 8,
+      "covered": 7,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/features/store_contracts.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 40,
+      "covered": 40,
+      "branches": 2,
+      "branches_covered": 2
+    },
+    "core/features/update_job.py": {
+      "line_pct": 96.6,
+      "branch_pct": 100.0,
+      "lines": 29,
+      "covered": 28,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/feedback/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/feedback/brain_performance_tracker.py": {
+      "line_pct": 96.2,
+      "branch_pct": 90.0,
+      "lines": 78,
+      "covered": 75,
+      "branches": 30,
+      "branches_covered": 27
+    },
+    "core/feedback/brain_pnl_ledger.py": {
+      "line_pct": 76.2,
+      "branch_pct": 63.6,
+      "lines": 387,
+      "covered": 295,
+      "branches": 140,
+      "branches_covered": 89
+    },
+    "core/feedback/brain_quality_engine.py": {
+      "line_pct": 76.6,
+      "branch_pct": 40.0,
+      "lines": 128,
+      "covered": 98,
+      "branches": 40,
+      "branches_covered": 16
+    },
+    "core/feedback/decision_scorer.py": {
+      "line_pct": 85.1,
+      "branch_pct": 66.7,
+      "lines": 67,
+      "covered": 57,
+      "branches": 30,
+      "branches_covered": 20
+    },
+    "core/feedback/experience_replay.py": {
+      "line_pct": 92.5,
+      "branch_pct": 100.0,
+      "lines": 93,
+      "covered": 86,
+      "branches": 18,
+      "branches_covered": 18
+    },
+    "core/feedback/feedback_loop.py": {
+      "line_pct": 94.1,
+      "branch_pct": 85.7,
+      "lines": 34,
+      "covered": 32,
+      "branches": 14,
+      "branches_covered": 12
+    },
+    "core/feedback/online_feedback_hook.py": {
+      "line_pct": 19.0,
+      "branch_pct": 4.1,
+      "lines": 253,
+      "covered": 48,
+      "branches": 98,
+      "branches_covered": 4
+    },
+    "core/feedback/outcome_collector.py": {
+      "line_pct": 83.6,
+      "branch_pct": 66.7,
+      "lines": 55,
+      "covered": 46,
+      "branches": 30,
+      "branches_covered": 20
+    },
+    "core/feedback/param_optimizer.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 86,
+      "covered": 0,
+      "branches": 38,
+      "branches_covered": 0
+    },
+    "core/feedback/performance_analytics.py": {
+      "line_pct": 92.9,
+      "branch_pct": 85.7,
+      "lines": 113,
+      "covered": 105,
+      "branches": 42,
+      "branches_covered": 36
+    },
+    "core/governance/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/governance/governance_rule_engine.py": {
+      "line_pct": 68.8,
+      "branch_pct": 44.1,
+      "lines": 154,
+      "covered": 106,
+      "branches": 68,
+      "branches_covered": 30
+    },
+    "core/governance/governance_service.py": {
+      "line_pct": 89.8,
+      "branch_pct": 69.2,
+      "lines": 127,
+      "covered": 114,
+      "branches": 26,
+      "branches_covered": 18
+    },
+    "core/governance/shadow_tracker.py": {
+      "line_pct": 37.5,
+      "branch_pct": 0.0,
+      "lines": 80,
+      "covered": 30,
+      "branches": 26,
+      "branches_covered": 0
+    },
+    "core/infrastructure/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/infrastructure/distributed_lock.py": {
+      "line_pct": 82.7,
+      "branch_pct": 67.5,
+      "lines": 196,
+      "covered": 162,
+      "branches": 40,
+      "branches_covered": 27
+    },
+    "core/ledger/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/ledger/governance_sources.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 4,
+      "covered": 4,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/ledger/schema_versions.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 3,
+      "covered": 3,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/ledger/services/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/ledger/services/communication_inspection_service.py": {
+      "line_pct": 98.5,
+      "branch_pct": 96.4,
+      "lines": 133,
+      "covered": 131,
+      "branches": 56,
+      "branches_covered": 54
+    },
+    "core/ledger/services/communication_operations_service.py": {
+      "line_pct": 99.1,
+      "branch_pct": 95.0,
+      "lines": 117,
+      "covered": 116,
+      "branches": 20,
+      "branches_covered": 19
+    },
+    "core/ledger/services/communication_record_reader.py": {
+      "line_pct": 96.7,
+      "branch_pct": 90.0,
+      "lines": 30,
+      "covered": 29,
+      "branches": 10,
+      "branches_covered": 9
+    },
+    "core/ledger/services/communication_record_writer.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 10,
+      "covered": 10,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/ledger/services/communication_replay_executor.py": {
+      "line_pct": 98.4,
+      "branch_pct": 88.1,
+      "lines": 126,
+      "covered": 124,
+      "branches": 42,
+      "branches_covered": 37
+    },
+    "core/ledger/services/communication_replay_gate.py": {
+      "line_pct": 97.3,
+      "branch_pct": 95.5,
+      "lines": 75,
+      "covered": 73,
+      "branches": 44,
+      "branches_covered": 42
+    },
+    "core/ledger/services/communication_replay_service.py": {
+      "line_pct": 98.5,
+      "branch_pct": 94.1,
+      "lines": 130,
+      "covered": 128,
+      "branches": 68,
+      "branches_covered": 64
+    },
+    "core/ledger/services/communication_trace_refs.py": {
+      "line_pct": 81.6,
+      "branch_pct": 55.0,
+      "lines": 49,
+      "covered": 40,
+      "branches": 20,
+      "branches_covered": 11
+    },
+    "core/ledger/services/decision_record_writer.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 12,
+      "covered": 12,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/ledger/services/execution_event_reader.py": {
+      "line_pct": 93.0,
+      "branch_pct": 92.9,
+      "lines": 43,
+      "covered": 40,
+      "branches": 14,
+      "branches_covered": 13
+    },
+    "core/ledger/services/execution_event_writer.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 13,
+      "covered": 13,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/ledger/services/execution_reconciliation_service.py": {
+      "line_pct": 81.9,
+      "branch_pct": 62.0,
+      "lines": 94,
+      "covered": 77,
+      "branches": 50,
+      "branches_covered": 31
+    },
+    "core/ledger/services/gate_decision_refs.py": {
+      "line_pct": 81.2,
+      "branch_pct": 50.0,
+      "lines": 16,
+      "covered": 13,
+      "branches": 6,
+      "branches_covered": 3
+    },
+    "core/ledger/services/journal_cleanup.py": {
+      "line_pct": 40.9,
+      "branch_pct": 28.9,
+      "lines": 374,
+      "covered": 153,
+      "branches": 194,
+      "branches_covered": 56
+    },
+    "core/ledger/services/replay_execution_reader.py": {
+      "line_pct": 96.4,
+      "branch_pct": 90.0,
+      "lines": 28,
+      "covered": 27,
+      "branches": 10,
+      "branches_covered": 9
+    },
+    "core/ledger/services/replay_execution_writer.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 11,
+      "covered": 11,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/ledger/services/replay_plan_refs.py": {
+      "line_pct": 81.4,
+      "branch_pct": 60.0,
+      "lines": 43,
+      "covered": 35,
+      "branches": 20,
+      "branches_covered": 12
+    },
+    "core/ledger/services/replay_record_refs.py": {
+      "line_pct": 97.1,
+      "branch_pct": 90.9,
+      "lines": 70,
+      "covered": 68,
+      "branches": 22,
+      "branches_covered": 20
+    },
+    "core/ledger/services/replay_trace_refs.py": {
+      "line_pct": 77.8,
+      "branch_pct": 50.0,
+      "lines": 36,
+      "covered": 28,
+      "branches": 16,
+      "branches_covered": 8
+    },
+    "core/ledger/storage/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/ledger/storage/jsonl_ledger_store.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 15,
+      "covered": 15,
+      "branches": 2,
+      "branches_covered": 2
+    },
+    "core/ledger/stream_names.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 9,
+      "covered": 9,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/market/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/market/calendar.py": {
+      "line_pct": 47.8,
+      "branch_pct": 46.7,
+      "lines": 92,
+      "covered": 44,
+      "branches": 30,
+      "branches_covered": 14
+    },
+    "core/market/mtf_price_service.py": {
+      "line_pct": 29.2,
+      "branch_pct": 0.0,
+      "lines": 72,
+      "covered": 21,
+      "branches": 20,
+      "branches_covered": 0
+    },
+    "core/market/position_tracker.py": {
+      "line_pct": 98.3,
+      "branch_pct": 100.0,
+      "lines": 60,
+      "covered": 59,
+      "branches": 8,
+      "branches_covered": 8
+    },
+    "core/market/signal_processor.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 61,
+      "covered": 61,
+      "branches": 16,
+      "branches_covered": 16
+    },
+    "core/metrics/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 2,
+      "covered": 2,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/metrics/brinson_attribution.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 67,
+      "covered": 67,
+      "branches": 8,
+      "branches_covered": 8
+    },
+    "core/metrics/factor_attribution.py": {
+      "line_pct": 90.7,
+      "branch_pct": 77.3,
+      "lines": 75,
+      "covered": 68,
+      "branches": 22,
+      "branches_covered": 17
+    },
+    "core/metrics/financial_metrics.py": {
+      "line_pct": 14.4,
+      "branch_pct": 0.0,
+      "lines": 118,
+      "covered": 17,
+      "branches": 34,
+      "branches_covered": 0
+    },
+    "core/metrics/portfolio_optimizer.py": {
+      "line_pct": 93.5,
+      "branch_pct": 83.3,
+      "lines": 124,
+      "covered": 116,
+      "branches": 36,
+      "branches_covered": 30
+    },
+    "core/observability/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/observability/alert_channels.py": {
+      "line_pct": 24.0,
+      "branch_pct": 6.5,
+      "lines": 171,
+      "covered": 41,
+      "branches": 46,
+      "branches_covered": 3
+    },
+    "core/observability/alert_runbook_bridge.py": {
+      "line_pct": 98.2,
+      "branch_pct": 100.0,
+      "lines": 57,
+      "covered": 56,
+      "branches": 4,
+      "branches_covered": 4
+    },
+    "core/observability/alert_service.py": {
+      "line_pct": 90.3,
+      "branch_pct": 78.3,
+      "lines": 165,
+      "covered": 149,
+      "branches": 46,
+      "branches_covered": 36
+    },
+    "core/observability/audit_log.py": {
+      "line_pct": 100.0,
+      "branch_pct": 90.0,
+      "lines": 52,
+      "covered": 52,
+      "branches": 10,
+      "branches_covered": 9
+    },
+    "core/observability/data_health_schema.py": {
+      "line_pct": 98.9,
+      "branch_pct": 50.0,
+      "lines": 94,
+      "covered": 93,
+      "branches": 2,
+      "branches_covered": 1
+    },
+    "core/observability/data_health_service.py": {
+      "line_pct": 73.0,
+      "branch_pct": 64.0,
+      "lines": 1239,
+      "covered": 904,
+      "branches": 478,
+      "branches_covered": 306
+    },
+    "core/observability/degradation.py": {
+      "line_pct": 98.0,
+      "branch_pct": 93.1,
+      "lines": 98,
+      "covered": 96,
+      "branches": 58,
+      "branches_covered": 54
+    },
+    "core/observability/diagnostics_dashboard.py": {
+      "line_pct": 94.4,
+      "branch_pct": 87.5,
+      "lines": 54,
+      "covered": 51,
+      "branches": 24,
+      "branches_covered": 21
+    },
+    "core/observability/event_bus.py": {
+      "line_pct": 88.9,
+      "branch_pct": 70.0,
+      "lines": 45,
+      "covered": 40,
+      "branches": 10,
+      "branches_covered": 7
+    },
+    "core/observability/event_schema.py": {
+      "line_pct": 0.0,
+      "branch_pct": 100.0,
+      "lines": 31,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/observability/live_alert_hub.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 211,
+      "covered": 0,
+      "branches": 44,
+      "branches_covered": 0
+    },
+    "core/observability/localization.py": {
+      "line_pct": 81.8,
+      "branch_pct": 100.0,
+      "lines": 33,
+      "covered": 27,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/observability/message_broker.py": {
+      "line_pct": 82.8,
+      "branch_pct": 66.7,
+      "lines": 134,
+      "covered": 111,
+      "branches": 24,
+      "branches_covered": 16
+    },
+    "core/observability/metric_names.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 29,
+      "covered": 29,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/observability/metrics_collector.py": {
+      "line_pct": 96.4,
+      "branch_pct": 83.3,
+      "lines": 55,
+      "covered": 53,
+      "branches": 12,
+      "branches_covered": 10
+    },
+    "core/observability/mlflow_bridge.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 70,
+      "covered": 0,
+      "branches": 18,
+      "branches_covered": 0
+    },
+    "core/observability/schema_versions.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 1,
+      "covered": 1,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/observability/slo_service.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 70,
+      "covered": 70,
+      "branches": 8,
+      "branches_covered": 8
+    },
+    "core/observability/tracing.py": {
+      "line_pct": 97.2,
+      "branch_pct": 87.5,
+      "lines": 72,
+      "covered": 70,
+      "branches": 8,
+      "branches_covered": 7
+    },
+    "core/parliament/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/parliament/contract_groups.py": {
+      "line_pct": 80.0,
+      "branch_pct": 76.2,
+      "lines": 250,
+      "covered": 200,
+      "branches": 80,
+      "branches_covered": 61
+    },
+    "core/parliament/group_consensus.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 57,
+      "covered": 0,
+      "branches": 22,
+      "branches_covered": 0
+    },
+    "core/parliament/parliament_service.py": {
+      "line_pct": 97.0,
+      "branch_pct": 97.4,
+      "lines": 132,
+      "covered": 128,
+      "branches": 38,
+      "branches_covered": 37
+    },
+    "core/parliament/schema_versions.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 1,
+      "covered": 1,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/protocol/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/protocol/event_bar_sync.py": {
+      "line_pct": 32.6,
+      "branch_pct": 6.9,
+      "lines": 279,
+      "covered": 91,
+      "branches": 58,
+      "branches_covered": 4
+    },
+    "core/protocol/live_execution_contract.py": {
+      "line_pct": 83.3,
+      "branch_pct": 85.0,
+      "lines": 48,
+      "covered": 40,
+      "branches": 20,
+      "branches_covered": 17
+    },
+    "core/protocol/schema_versions.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 6,
+      "covered": 6,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/protocol/services/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/protocol/services/communication_adapter.py": {
+      "line_pct": 0.0,
+      "branch_pct": 100.0,
+      "lines": 3,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/protocol/services/communication_adapter_registry.py": {
+      "line_pct": 94.7,
+      "branch_pct": 77.3,
+      "lines": 38,
+      "covered": 36,
+      "branches": 22,
+      "branches_covered": 17
+    },
+    "core/protocol/services/communication_dispatcher.py": {
+      "line_pct": 89.1,
+      "branch_pct": 73.7,
+      "lines": 92,
+      "covered": 82,
+      "branches": 38,
+      "branches_covered": 28
+    },
+    "core/protocol/services/decision_compiler.py": {
+      "line_pct": 78.2,
+      "branch_pct": 55.6,
+      "lines": 55,
+      "covered": 43,
+      "branches": 18,
+      "branches_covered": 10
+    },
+    "core/protocol/services/file_queue_communication_adapter.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 21,
+      "covered": 21,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/protocol/services/file_queue_receipt_reader.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 19,
+      "covered": 19,
+      "branches": 4,
+      "branches_covered": 4
+    },
+    "core/protocol/services/fix_communication_adapter.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 37,
+      "covered": 0,
+      "branches": 4,
+      "branches_covered": 0
+    },
+    "core/protocol/services/idempotency.py": {
+      "line_pct": 87.9,
+      "branch_pct": 79.2,
+      "lines": 66,
+      "covered": 58,
+      "branches": 24,
+      "branches_covered": 19
+    },
+    "core/protocol/services/intent_message_builder.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 16,
+      "covered": 16,
+      "branches": 2,
+      "branches_covered": 2
+    },
+    "core/protocol/services/mt5_communication_adapter.py": {
+      "line_pct": 95.8,
+      "branch_pct": 50.0,
+      "lines": 24,
+      "covered": 23,
+      "branches": 2,
+      "branches_covered": 1
+    },
+    "core/protocol/services/override_resolver.py": {
+      "line_pct": 31.2,
+      "branch_pct": 12.5,
+      "lines": 16,
+      "covered": 5,
+      "branches": 8,
+      "branches_covered": 1
+    },
+    "core/protocol/services/resilience.py": {
+      "line_pct": 92.9,
+      "branch_pct": 94.4,
+      "lines": 98,
+      "covered": 91,
+      "branches": 18,
+      "branches_covered": 17
+    },
+    "core/protocol/services/stub_communication_adapter.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 8,
+      "covered": 8,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/protocol/services/venue_router.py": {
+      "line_pct": 94.0,
+      "branch_pct": 83.3,
+      "lines": 50,
+      "covered": 47,
+      "branches": 6,
+      "branches_covered": 5
+    },
+    "core/protocol/services/zmq_communication_adapter.py": {
+      "line_pct": 85.7,
+      "branch_pct": 33.3,
+      "lines": 42,
+      "covered": 36,
+      "branches": 6,
+      "branches_covered": 2
+    },
+    "core/protocol/services/zmq_receipt_listener.py": {
+      "line_pct": 73.2,
+      "branch_pct": 52.9,
+      "lines": 123,
+      "covered": 90,
+      "branches": 34,
+      "branches_covered": 18
+    },
+    "core/risk/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/risk/regime_detector.py": {
+      "line_pct": 17.1,
+      "branch_pct": 0.0,
+      "lines": 152,
+      "covered": 26,
+      "branches": 36,
+      "branches_covered": 0
+    },
+    "core/risk/risk_evaluation_service.py": {
+      "line_pct": 93.9,
+      "branch_pct": 81.6,
+      "lines": 66,
+      "covered": 62,
+      "branches": 38,
+      "branches_covered": 31
+    },
+    "core/risk/risk_policies.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 66,
+      "covered": 66,
+      "branches": 22,
+      "branches_covered": 22
+    },
+    "core/risk/schema_versions.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 1,
+      "covered": 1,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/runtime/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 16,
+      "covered": 16,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/runtime/alpha_budget_contracts.py": {
+      "line_pct": 90.8,
+      "branch_pct": 81.6,
+      "lines": 65,
+      "covered": 59,
+      "branches": 38,
+      "branches_covered": 31
+    },
+    "core/runtime/alpha_budget_usage_reporter.py": {
+      "line_pct": 100.0,
+      "branch_pct": 92.9,
+      "lines": 37,
+      "covered": 37,
+      "branches": 14,
+      "branches_covered": 13
+    },
+    "core/runtime/alpha_budget_usage_store.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 38,
+      "covered": 38,
+      "branches": 4,
+      "branches_covered": 4
+    },
+    "core/runtime/alpha_risk_budget_gate.py": {
+      "line_pct": 98.2,
+      "branch_pct": 94.4,
+      "lines": 57,
+      "covered": 56,
+      "branches": 18,
+      "branches_covered": 17
+    },
+    "core/runtime/approval_contracts.py": {
+      "line_pct": 96.7,
+      "branch_pct": 75.0,
+      "lines": 30,
+      "covered": 29,
+      "branches": 4,
+      "branches_covered": 3
+    },
+    "core/runtime/cycle_replay.py": {
+      "line_pct": 94.7,
+      "branch_pct": 78.6,
+      "lines": 57,
+      "covered": 54,
+      "branches": 14,
+      "branches_covered": 11
+    },
+    "core/runtime/daily_ops_scheduler.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 87,
+      "covered": 0,
+      "branches": 12,
+      "branches_covered": 0
+    },
+    "core/runtime/data_health_monitor.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 21,
+      "covered": 0,
+      "branches": 8,
+      "branches_covered": 0
+    },
+    "core/runtime/evidence_contracts.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 23,
+      "covered": 23,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/runtime/evidence_reader.py": {
+      "line_pct": 100.0,
+      "branch_pct": 90.0,
+      "lines": 31,
+      "covered": 31,
+      "branches": 10,
+      "branches_covered": 9
+    },
+    "core/runtime/evidence_writer.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 12,
+      "covered": 12,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/runtime/execution_gates.py": {
+      "line_pct": 98.3,
+      "branch_pct": 96.2,
+      "lines": 58,
+      "covered": 57,
+      "branches": 26,
+      "branches_covered": 25
+    },
+    "core/runtime/execution_gateway_router.py": {
+      "line_pct": 90.0,
+      "branch_pct": 83.3,
+      "lines": 20,
+      "covered": 18,
+      "branches": 6,
+      "branches_covered": 5
+    },
+    "core/runtime/execution_pipeline.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 52,
+      "covered": 52,
+      "branches": 10,
+      "branches_covered": 10
+    },
+    "core/runtime/execution_state.py": {
+      "line_pct": 79.2,
+      "branch_pct": 86.8,
+      "lines": 96,
+      "covered": 76,
+      "branches": 38,
+      "branches_covered": 33
+    },
+    "core/runtime/fault_handler.py": {
+      "line_pct": 71.9,
+      "branch_pct": 70.0,
+      "lines": 135,
+      "covered": 97,
+      "branches": 30,
+      "branches_covered": 21
+    },
+    "core/runtime/gate_audit_recorder.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 19,
+      "covered": 0,
+      "branches": 2,
+      "branches_covered": 0
+    },
+    "core/runtime/golden_master.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 101,
+      "covered": 0,
+      "branches": 50,
+      "branches_covered": 0
+    },
+    "core/runtime/integration_contracts.py": {
+      "line_pct": 97.1,
+      "branch_pct": 87.5,
+      "lines": 34,
+      "covered": 33,
+      "branches": 8,
+      "branches_covered": 7
+    },
+    "core/runtime/legacy_dispatch_reference.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/runtime/live_cycle.py": {
+      "line_pct": 8.1,
+      "branch_pct": 0.0,
+      "lines": 2249,
+      "covered": 182,
+      "branches": 1026,
+      "branches_covered": 0
+    },
+    "core/runtime/live_startup.py": {
+      "line_pct": 23.5,
+      "branch_pct": 25.6,
+      "lines": 187,
+      "covered": 44,
+      "branches": 78,
+      "branches_covered": 20
+    },
+    "core/runtime/market_ingress.py": {
+      "line_pct": 18.2,
+      "branch_pct": 0.0,
+      "lines": 110,
+      "covered": 20,
+      "branches": 38,
+      "branches_covered": 0
+    },
+    "core/runtime/order_dispatch.py": {
+      "line_pct": 16.7,
+      "branch_pct": 5.0,
+      "lines": 144,
+      "covered": 24,
+      "branches": 40,
+      "branches_covered": 2
+    },
+    "core/runtime/position_close_adapter.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 207,
+      "covered": 0,
+      "branches": 64,
+      "branches_covered": 0
+    },
+    "core/runtime/position_registration.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 112,
+      "covered": 0,
+      "branches": 60,
+      "branches_covered": 0
+    },
+    "core/runtime/reconciliation.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 166,
+      "covered": 0,
+      "branches": 88,
+      "branches_covered": 0
+    },
+    "core/runtime/restart_state.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 161,
+      "covered": 0,
+      "branches": 74,
+      "branches_covered": 0
+    },
+    "core/runtime/schema_versions.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 14,
+      "covered": 14,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/runtime/shadow_recorder.py": {
+      "line_pct": 75.4,
+      "branch_pct": 55.0,
+      "lines": 118,
+      "covered": 89,
+      "branches": 40,
+      "branches_covered": 22
+    },
+    "core/runtime/signal_health.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 228,
+      "covered": 0,
+      "branches": 86,
+      "branches_covered": 0
+    },
+    "core/runtime/signal_order_builder.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 25,
+      "covered": 25,
+      "branches": 8,
+      "branches_covered": 8
+    },
+    "core/runtime/signal_pipeline.py": {
+      "line_pct": 21.2,
+      "branch_pct": 0.0,
+      "lines": 33,
+      "covered": 7,
+      "branches": 12,
+      "branches_covered": 0
+    },
+    "core/runtime/strategy_builder.py": {
+      "line_pct": 85.8,
+      "branch_pct": 70.4,
+      "lines": 120,
+      "covered": 103,
+      "branches": 54,
+      "branches_covered": 38
+    },
+    "core/runtime/strategy_evaluator.py": {
+      "line_pct": 18.3,
+      "branch_pct": 7.5,
+      "lines": 208,
+      "covered": 38,
+      "branches": 106,
+      "branches_covered": 8
+    },
+    "core/runtime/summary_service.py": {
+      "line_pct": 97.1,
+      "branch_pct": 83.3,
+      "lines": 69,
+      "covered": 67,
+      "branches": 24,
+      "branches_covered": 20
+    },
+    "core/runtime/trail_dispatch.py": {
+      "line_pct": 8.8,
+      "branch_pct": 0.0,
+      "lines": 68,
+      "covered": 6,
+      "branches": 22,
+      "branches_covered": 0
+    },
+    "core/schemas/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/schemas/trading_contracts.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 44,
+      "covered": 44,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/simulation/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/simulation/spread_model.py": {
+      "line_pct": 88.3,
+      "branch_pct": 83.3,
+      "lines": 60,
+      "covered": 53,
+      "branches": 12,
+      "branches_covered": 10
+    },
+    "core/state/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/state/schema_versions.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 1,
+      "covered": 1,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/state/services/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/state/services/control_snapshot.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 10,
+      "covered": 10,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/state/services/control_snapshot_service.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 11,
+      "covered": 11,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/state/stores/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 0,
+      "covered": 0,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/state/stores/override_store.py": {
+      "line_pct": 33.3,
+      "branch_pct": 5.0,
+      "lines": 36,
+      "covered": 12,
+      "branches": 20,
+      "branches_covered": 1
+    },
+    "core/state/stores/system_mode_store.py": {
+      "line_pct": 41.4,
+      "branch_pct": 16.7,
+      "lines": 58,
+      "covered": 24,
+      "branches": 6,
+      "branches_covered": 1
+    },
+    "core/strategies/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 3,
+      "covered": 3,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/strategies/contracts.py": {
+      "line_pct": 96.4,
+      "branch_pct": 80.0,
+      "lines": 55,
+      "covered": 53,
+      "branches": 10,
+      "branches_covered": 8
+    },
+    "core/strategies/examples.py": {
+      "line_pct": 94.4,
+      "branch_pct": 83.3,
+      "lines": 36,
+      "covered": 34,
+      "branches": 6,
+      "branches_covered": 5
+    },
+    "core/strategies/registry.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 40,
+      "covered": 40,
+      "branches": 8,
+      "branches_covered": 8
+    },
+    "core/strategies/schema_versions.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 2,
+      "covered": 2,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/strategies/structural_swing_v1.py": {
+      "line_pct": 35.9,
+      "branch_pct": 0.0,
+      "lines": 92,
+      "covered": 33,
+      "branches": 26,
+      "branches_covered": 0
+    },
+    "core/training/__init__.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 15,
+      "covered": 15,
+      "branches": 0,
+      "branches_covered": 0
+    },
+    "core/training/brain_config.py": {
+      "line_pct": 26.2,
+      "branch_pct": 0.0,
+      "lines": 42,
+      "covered": 11,
+      "branches": 14,
+      "branches_covered": 0
+    },
+    "core/training/checkpoint.py": {
+      "line_pct": 32.2,
+      "branch_pct": 0.0,
+      "lines": 87,
+      "covered": 28,
+      "branches": 22,
+      "branches_covered": 0
+    },
+    "core/training/cpcv.py": {
+      "line_pct": 93.5,
+      "branch_pct": 84.6,
+      "lines": 93,
+      "covered": 87,
+      "branches": 26,
+      "branches_covered": 22
+    },
+    "core/training/custom_objectives.py": {
+      "line_pct": 71.4,
+      "branch_pct": 63.6,
+      "lines": 147,
+      "covered": 105,
+      "branches": 44,
+      "branches_covered": 28
+    },
+    "core/training/dataset.py": {
+      "line_pct": 18.1,
+      "branch_pct": 0.0,
+      "lines": 188,
+      "covered": 34,
+      "branches": 64,
+      "branches_covered": 0
+    },
+    "core/training/evaluation_report.py": {
+      "line_pct": 79.6,
+      "branch_pct": 63.9,
+      "lines": 167,
+      "covered": 133,
+      "branches": 36,
+      "branches_covered": 23
+    },
+    "core/training/experiment_tracker.py": {
+      "line_pct": 40.2,
+      "branch_pct": 9.4,
+      "lines": 117,
+      "covered": 47,
+      "branches": 32,
+      "branches_covered": 3
+    },
+    "core/training/model_card.py": {
+      "line_pct": 58.3,
+      "branch_pct": 0.0,
+      "lines": 72,
+      "covered": 42,
+      "branches": 14,
+      "branches_covered": 0
+    },
+    "core/training/model_hashing.py": {
+      "line_pct": 100.0,
+      "branch_pct": 100.0,
+      "lines": 19,
+      "covered": 19,
+      "branches": 4,
+      "branches_covered": 4
+    },
+    "core/training/profitability_calibrator.py": {
+      "line_pct": 0.0,
+      "branch_pct": 0.0,
+      "lines": 164,
+      "covered": 0,
+      "branches": 74,
+      "branches_covered": 0
+    },
+    "core/training/registries.py": {
+      "line_pct": 53.6,
+      "branch_pct": 16.7,
+      "lines": 138,
+      "covered": 74,
+      "branches": 24,
+      "branches_covered": 4
+    },
+    "core/training/trainer_protocol.py": {
+      "line_pct": 73.3,
+      "branch_pct": 0.0,
+      "lines": 30,
+      "covered": 22,
+      "branches": 2,
+      "branches_covered": 0
+    },
+    "core/training/training_registry.py": {
+      "line_pct": 96.8,
+      "branch_pct": 82.6,
+      "lines": 157,
+      "covered": 152,
+      "branches": 46,
+      "branches_covered": 38
+    },
+    "core/training/utils.py": {
+      "line_pct": 46.2,
+      "branch_pct": 0.0,
+      "lines": 13,
+      "covered": 6,
+      "branches": 2,
+      "branches_covered": 0
+    }
+  },
+  "tiers": {
+    "1": {
+      "line_pct": 50.8,
+      "branch_pct": 31.0,
+      "total_lines": 15108,
+      "covered_lines": 7678,
+      "file_count": 136
+    },
+    "2": {
+      "line_pct": 38.5,
+      "branch_pct": 23.9,
+      "total_lines": 5419,
+      "covered_lines": 2089,
+      "file_count": 64
+    },
+    "3": {
+      "line_pct": 70.8,
+      "branch_pct": 56.3,
+      "total_lines": 11901,
+      "covered_lines": 8421,
+      "file_count": 143
+    },
+    "4": {
+      "line_pct": 63.3,
+      "branch_pct": 43.4,
+      "total_lines": 2001,
+      "covered_lines": 1266,
+      "file_count": 24
+    }
+  }
+}
