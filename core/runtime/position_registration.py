@@ -75,6 +75,11 @@ def register_dispatched_positions(
         brain_votes_from_journal: list[dict[str, Any]] | None = None
 
         # ── Retry up to 10 times (5s total) — bridge writes journal async ──
+        # DQAF-20260614-007: The MT5 bridge writes follow-up entries with
+        # open_message_id referencing the original intent.  Previously we
+        # only checked message_id, missing the bridge's ticket-bearing
+        # entries — causing position_register_skip and breaking the
+        # SignalSettled chain (no position_ticket → no brain→trade link).
         if intent_id and journal_path is not None:
             for _retry in range(10):
                 if journal_path.exists():
@@ -84,7 +89,10 @@ def register_dispatched_positions(
                             continue
                         try:
                             rec = json.loads(line)
-                            if rec.get("message_id") == intent_id:
+                            # Match either message_id (original) or open_message_id (bridge follow-up)
+                            _mid = rec.get("message_id", "")
+                            _omid = rec.get("open_message_id", "")
+                            if _mid == intent_id or _omid == intent_id:
                                 t = rec.get("position_ticket")
                                 if t is not None and isinstance(t, int) and t > 0:
                                     ticket = t
