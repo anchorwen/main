@@ -114,6 +114,30 @@ def register_dispatched_positions(
                         break
                 _time_module.sleep(0.5)
 
+        # ── DQAF-20260614-007b: Fallback — check MT5 outbox_processed ──
+        # The bridge writes accepted journal entries BEFORE receiving the
+        # MT5 ticket.  When MT5 responds slowly (>5s), the journal retry
+        # loop gives up.  The processed outbox file has the real ticket.
+        if ticket is None and intent_id:
+            _processed_dir = Path(config.base_dir) / "mt5_outbox_processed"
+            if _processed_dir.exists():
+                import glob as _glob
+                _pattern = str(_processed_dir / "**" / "*.json")
+                for _pf in sorted(_glob.glob(_pattern, recursive=True), reverse=True):
+                    try:
+                        _prec = json.loads(Path(_pf).read_text(encoding="utf-8"))
+                        if _prec.get("intent_id") == intent_id:
+                            _t = _prec.get("position_ticket") or _prec.get("result", {}).get("order")
+                            if _t is not None and isinstance(_t, int) and _t > 0:
+                                ticket = _t
+                                # Also try to get entry_price from outbox
+                                _ep = _prec.get("entry_price") or _prec.get("result", {}).get("price")
+                                if _ep is not None and isinstance(_ep, int | float) and _ep > 0:
+                                    entry_from_journal = float(_ep)
+                                break
+                    except Exception:  # noqa: BLE001
+                        continue
+
         if ticket is None:
             print(
                 json.dumps(
