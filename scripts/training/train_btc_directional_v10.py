@@ -253,16 +253,22 @@ def build_dataset(
     features = np.zeros((n_bars, N_FEATURES), dtype=np.float32)
     start_bar = MIN_BARS
 
+    prev_ou_d10: float | None = None
+    prev_hurst_d10: float | None = None
     for i in range(start_bar, n_bars - horizon - 1):
         if (i - start_bar) % 50000 == 0 and i > start_bar:
             print(f"  ... {i}/{n_bars} bars ({100*i/n_bars:.0f}%)")
-        row = v9.compute_feature_row(
+        row, tf_ou, tf_hurst = v9.compute_feature_row(
             i, o, h, l, c, v, spreads, day_features,
             daily_ts_f, daily_o, daily_h, daily_l, daily_c,
-            c,  # btc_price_hist
+            c,
             tf_minutes=timeframe_minutes,
+            prev_ou=prev_ou_d10,
+            prev_hurst=prev_hurst_d10,
         )
         features[i] = np.asarray(row, dtype=np.float32)
+        prev_ou_d10 = tf_ou
+        prev_hurst_d10 = tf_hurst
 
     # ── Directional labels ──
     print(f"[B2] Computing DIRECTIONAL labels (SL={sl_atr_mult}ATR, TP={tp_atr_mult}ATR, spread={spread_points})...")

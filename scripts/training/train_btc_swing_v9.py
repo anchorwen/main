@@ -87,9 +87,18 @@ BTC_MICRO_9 = [
 BTC_CROSS_2 = ["Cross_BTC_Gold_Ratio", "Cross_BTC_Gold_Ratio_ROC"]
 
 TF_SPECIFIC_2 = ["TF_OU_Theta", "TF_Hurst"]
+# FIX-20260614-B3-feat: Second-order regime features.
+# Raw OU/Hurst are too slow for per-bar tree splits → derivatives capture
+# the REGIME TRANSITION, not the absolute level.
+REGIME_DERIVED_4 = [
+    "TF_delta_OU",       # OU acceleration: OU(t) - OU(t-1)
+    "TF_delta_Hurst",    # Hurst velocity: Hurst(t) - Hurst(t-1)
+    "TF_OU_x_Hurst",     # Combined signal: high OU + low Hurst = mean-reversion
+    "TF_OU_div_ADX",     # Mean-reversion strength relative to trend
+]
 
-ALL_FEATURE_NAMES = BTC_MACRO_24 + BTC_MICRO_9 + BTC_CROSS_2 + TF_SPECIFIC_2
-N_FEATURES = len(ALL_FEATURE_NAMES)  # 37
+ALL_FEATURE_NAMES = BTC_MACRO_24 + BTC_MICRO_9 + BTC_CROSS_2 + TF_SPECIFIC_2 + REGIME_DERIVED_4
+N_FEATURES = len(ALL_FEATURE_NAMES)  # 37 → 41
 
 
 # ── Feature Computers ─────────────────────────────────────────────────────────
@@ -201,8 +210,14 @@ def compute_feature_row(idx: int, o: np.ndarray, h: np.ndarray, l: np.ndarray,
                         daily_c: np.ndarray,
                         btc_price_hist: np.ndarray,
                         tf_minutes: float = 5.0,
-                        ) -> list[float]:
-    """Compute 37-dim BTC feature vector at bar *idx*."""
+                        prev_ou: float | None = None,
+                        prev_hurst: float | None = None,
+                        ) -> tuple[list[float], float, float]:
+    """Compute 41-dim BTC feature vector at bar *idx*.
+
+    Returns (row, ou_val, hurst_val) — ou_val/hurst_val are returned so
+    the caller can track them as prev_ou/prev_hurst for the next bar.
+    """
     end = idx + 1
     price_slice = c[:end]
     o_slice, h_slice, l_slice, c_slice = o[:end], h[:end], l[:end], c[:end]
@@ -282,9 +297,17 @@ def compute_feature_row(idx: int, o: np.ndarray, h: np.ndarray, l: np.ndarray,
     tf_ou = _ou_theta(price_slice)  # FIX-B3: production parity, dt=1 implicit
     tf_hurst = _hurst(price_slice)
 
+    # ── FIX-20260614-B3-feat: Second-order regime derivatives ──
+    # Raw OU/Hurst are too slow for per-bar tree splits.
+    # Derivatives capture the REGIME TRANSITION — what changed since last bar?
+    delta_ou = tf_ou - prev_ou if prev_ou is not None else 0.0
+    delta_hurst = tf_hurst - prev_hurst if prev_hurst is not None else 0.0
+    ou_x_hurst = tf_ou * (1.0 - tf_hurst)  # high OU + low Hurst = strong mean-reversion
+    # ADX from D1 features (slot 7) — guard against zero
+    adx_val = d1_adx if d1_adx > 1.0 else 1.0
+    ou_div_adx = tf_ou / adx_val
+
     # ── Assemble in schema order ──
-    row = BTC_MACRO_24 + BTC_MICRO_9 + BTC_CROSS_2 + TF_SPECIFIC_2
-    # We'll use dict-based assembly for clarity
     values_map: dict[str, float] = {
         # BTC_MACRO_24
         "D1_Ret_1": d1_ret, "D1_Body_Ratio": d1_body, "D1_ATR_14": d1_atr,
@@ -306,8 +329,11 @@ def compute_feature_row(idx: int, o: np.ndarray, h: np.ndarray, l: np.ndarray,
         "Cross_BTC_Gold_Ratio": btc_gold_ratio, "Cross_BTC_Gold_Ratio_ROC": btc_gold_ratio_roc,
         # TF_SPECIFIC_2
         "TF_OU_Theta": tf_ou, "TF_Hurst": tf_hurst,
+        # REGIME_DERIVED_4
+        "TF_delta_OU": delta_ou, "TF_delta_Hurst": delta_hurst,
+        "TF_OU_x_Hurst": ou_x_hurst, "TF_OU_div_ADX": ou_div_adx,
     }
-    return [values_map.get(name, 0.0) for name in ALL_FEATURE_NAMES]
+    return [values_map.get(name, 0.0) for name in ALL_FEATURE_NAMES], tf_ou, tf_hurst
 
 
 # ── Label Creation (forward barrier with friction) ──────────────────────────
@@ -558,20 +584,26 @@ def build_dataset(
     hold_bars = hold_long.copy()
 
     # ── Compute features ──
-    print(f"[B2] Computing 37-dim features for {n_bars} bars...")
+    print(f"[B2] Computing {N_FEATURES}-dim features for {n_bars} bars...")
     features = np.zeros((n_bars, N_FEATURES), dtype=np.float32)
     start_bar = MIN_BARS
+    prev_ou: float | None = None
+    prev_hurst: float | None = None
 
     for i in range(start_bar, n_bars - horizon - 1):
         if (i - start_bar) % 50000 == 0 and i > start_bar:
             print(f"  ... {i}/{n_bars} bars ({100*i/n_bars:.0f}%)")
-        row = compute_feature_row(
+        row, tf_ou, tf_hurst = compute_feature_row(
             i, o, h, l, c, v, spreads, day_features,
             daily_ts_f, daily_o, daily_h, daily_l, daily_c,
-            c,  # btc_price_hist = close prices
+            c,
             tf_minutes=timeframe_minutes,
+            prev_ou=prev_ou,
+            prev_hurst=prev_hurst,
         )
         features[i] = np.asarray(row, dtype=np.float32)
+        prev_ou = tf_ou
+        prev_hurst = tf_hurst
 
     # ── Filter to labeled bars with valid features ──
     valid_idx = np.arange(start_bar, n_bars - horizon - 1)
