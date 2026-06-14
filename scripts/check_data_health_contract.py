@@ -341,6 +341,20 @@ def probe_brain_performance(domain: dict, data_dir: str) -> dict[str, Any]:
 # ═══════════════════════════════════════════════════════════════════════
 
 def _domain_result(domain: str, severity: str, results: list) -> dict[str, Any]:
+    # Respect contract severity: clamp assertion verdicts to domain max
+    MAX_VERDICT = {
+        "INFO": Severity.PASS,
+        "WARN": Severity.WARN,
+        "FATAL": Severity.FATAL,
+    }
+    max_allowed = MAX_VERDICT.get(severity, Severity.FATAL)
+    verdict_order = {Severity.PASS: 0, Severity.WARN: 1, Severity.FATAL: 2}
+
+    for r in results:
+        if verdict_order.get(r["verdict"], 0) > verdict_order.get(max_allowed, 0):
+            r["detail"] = f"[{severity}] {r['detail']}"
+            r["verdict"] = max_allowed
+
     fatals = [r for r in results if r["verdict"] == Severity.FATAL]
     warns = [r for r in results if r["verdict"] == Severity.WARN]
     if fatals:
