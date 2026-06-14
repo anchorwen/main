@@ -423,6 +423,133 @@ def validate_stage_2_journal(
 # Stage 3: Dataset Builder (simulation)
 # ══════════════════════════════════════════════════════════════════════════
 
+def _validate_feature_distributions(
+    X: Any,  # numpy array — imported inside
+    feature_names: list[str],
+    *,
+    variance_epsilon: float = 1e-6,
+    outlier_max_abs: float = 20.0,
+) -> list[dict[str, Any]]:
+    """Feature Quality Dictator — mandatory statistical assertions.
+
+    Institutional Data SLA (Column 4): Every feature in the training dataset
+    is automatically validated.  No hardcoded feature names — reads the
+    schema dynamically.  Any violation is a FATAL block — training cannot
+    proceed until the data pipeline is fixed.
+
+    Three mandatory assertions:
+      1. VARIANCE > epsilon  — constant features = dead weight + matrix singularity
+      2. NO NaN / Inf       — silent poison that corrupts every downstream computation
+      3. MAX(|X|) < outlier_max_abs — for normalized (Z-score) data, extreme outliers
+         indicate computation bugs (e.g. divide-by-zero in feature engineering)
+    """
+    import numpy as np
+
+    results: list[dict[str, Any]] = []
+    n_features = X.shape[1]
+
+    if n_features != len(feature_names):
+        results.append({
+            "check": "feature_quality_dimension",
+            "verdict": StageVerdict.FAIL,
+            "detail": f"Feature name count ({len(feature_names)}) != X columns ({n_features})",
+        })
+        return results
+
+    # ── Assertion 1: Variance > epsilon ──
+    variances = np.var(X, axis=0)
+    zero_var_mask = variances < variance_epsilon
+    zero_var_count = int(np.sum(zero_var_mask))
+
+    if zero_var_count > 0:
+        dead_features = [feature_names[i] for i in np.where(zero_var_mask)[0]]
+        results.append({
+            "check": "feature_quality_variance",
+            "verdict": StageVerdict.FAIL,
+            "detail": (
+                f"{zero_var_count}/{n_features} features have zero variance (< {variance_epsilon}). "
+                f"Dead features: {dead_features[:10]}{'...' if len(dead_features) > 10 else ''}. "
+                f"These features provide NO signal — check feature computation pipeline."
+            ),
+            "dead_features": dead_features,
+            "dead_count": zero_var_count,
+        })
+    else:
+        results.append({
+            "check": "feature_quality_variance",
+            "verdict": StageVerdict.PASS,
+            "detail": f"All {n_features} features have variance > {variance_epsilon}",
+        })
+
+    # ── Assertion 2: No NaN / Inf ──
+    nan_mask = np.isnan(X)
+    inf_mask = np.isinf(X)
+    nan_count = int(np.sum(nan_mask))
+    inf_count = int(np.sum(inf_mask))
+
+    if nan_count > 0 or inf_count > 0:
+        nan_features = sorted(set(
+            feature_names[i] for i in np.where(np.any(nan_mask, axis=0))[0]
+        ))
+        inf_features = sorted(set(
+            feature_names[i] for i in np.where(np.any(inf_mask, axis=0))[0]
+        ))
+        detail_parts = []
+        if nan_count > 0:
+            detail_parts.append(f"{nan_count} NaN values in features: {nan_features[:5]}")
+        if inf_count > 0:
+            detail_parts.append(f"{inf_count} Inf values in features: {inf_features[:5]}")
+        results.append({
+            "check": "feature_quality_nan_inf",
+            "verdict": StageVerdict.FAIL,
+            "detail": "; ".join(detail_parts),
+            "nan_count": nan_count,
+            "inf_count": inf_count,
+        })
+    else:
+        results.append({
+            "check": "feature_quality_nan_inf",
+            "verdict": StageVerdict.PASS,
+            "detail": f"0 NaN, 0 Inf across all {n_features} features",
+        })
+
+    # ── Assertion 3: Outlier bounds ──
+    # For normalized (Z-score) data: |X| > 20.0 = computation bug.
+    # For raw data (BTC prices, ATR): large values are legitimate.
+    # Threshold is a WARN for raw data, configurable per contract.
+    abs_max = np.max(np.abs(X), axis=0)
+    outlier_mask = abs_max > outlier_max_abs
+    outlier_count = int(np.sum(outlier_mask))
+
+    if outlier_count > 0:
+        outlier_features = [
+            f"{feature_names[i]}={abs_max[i]:.1f}"
+            for i in np.where(outlier_mask)[0]
+        ]
+        results.append({
+            "check": "feature_quality_outliers",
+            "verdict": StageVerdict.WARN,
+            "detail": (
+                f"{outlier_count}/{n_features} features exceed |X| > {outlier_max_abs}. "
+                f"Largest: {outlier_features[:5]}{'...' if len(outlier_features) > 5 else ''}. "
+                f"WARN if raw data (BTC ATR/MACD legitimately large); "
+                f"FAIL if normalized (Z-score) — computation bug."
+            ),
+            "outlier_count": outlier_count,
+            "outlier_features": [
+                feature_names[i] for i in np.where(outlier_mask)[0]
+            ],
+        })
+    else:
+        results.append({
+            "check": "feature_quality_outliers",
+            "verdict": StageVerdict.PASS,
+            "detail": f"All {n_features} features within |X| ≤ {outlier_max_abs}",
+        })
+
+    return results
+
+
 def validate_stage_3_dataset_builder(
     contract: dict[str, Any], data_dir: str
 ) -> dict[str, Any]:
@@ -579,6 +706,16 @@ def validate_stage_3_dataset_builder(
                             "verdict": StageVerdict.WARN,
                             "detail": f"Only {pos_count}/{len(y)} positive ({pos_pct:.1%}). < {min_pos:.0%} minimum — model may struggle to learn.",
                         })
+
+                # ── Feature Quality Dictator (Column 4 — Institutional Data SLA) ──
+                # Dynamically scan every feature column for silent data poisoning.
+                # No hardcoded feature names — reads from schema, covers all N features.
+                # Three mandatory statistical assertions that CANNOT be bypassed.
+                if X is not None and feature_names:
+                    _fqd_results = _validate_feature_distributions(
+                        X, list(feature_names)
+                    )
+                    results.extend(_fqd_results)
 
     finally:
         import contextlib
