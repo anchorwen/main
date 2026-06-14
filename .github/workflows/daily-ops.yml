@@ -52,87 +52,28 @@ jobs:
 
       - name: Daily Ops — Shadow Ensemble
         id: shadow
-        run: >
-          python -c "
-          import json, sys
-          sys.path.insert(0, 'D:/cursor')
-          from scripts.daily_ops import _step_shadow_ensemble
-          r = _step_shadow_ensemble('D:/cursor/data')
-          print(json.dumps(r, indent=2, default=str))
-          sys.exit(0 if r['status'] == 'ok' else 0)
-          "
+        run: python -c "import json, sys; sys.path.insert(0, 'D:/cursor'); from scripts.daily_ops import _step_shadow_ensemble; r = _step_shadow_ensemble('D:/cursor/data'); print(json.dumps(r, indent=2, default=str)); sys.exit(0 if r['status'] == 'ok' else 0)"
 
       - name: Daily Ops — Feedback Loop
         id: feedback
-        run: >
-          python -c "
-          import json, sys
-          sys.path.insert(0, 'D:/cursor')
-          from scripts.daily_ops import _step_feedback_loop
-          dry = '${{ inputs.dry_run }}' != 'false'
-          r = _step_feedback_loop('D:/cursor/data', dry_run=dry)
-          print(json.dumps(r, indent=2, default=str))
-          sys.exit(0)
-          "
+        run: python -c "import json, sys; sys.path.insert(0, 'D:/cursor'); from scripts.daily_ops import _step_feedback_loop; dry = '${{ inputs.dry_run }}' != 'false'; r = _step_feedback_loop('D:/cursor/data', dry_run=dry); print(json.dumps(r, indent=2, default=str)); sys.exit(0)"
 
       - name: Daily Ops — Governance Cycle
         id: governance
-        run: >
-          python -c "
-          import json, sys
-          sys.path.insert(0, 'D:/cursor')
-          from scripts.daily_ops import _step_governance
-          dry = '${{ inputs.dry_run }}' != 'false'
-          r = _step_governance('D:/cursor/data', dry_run=dry)
-          print(json.dumps(r, indent=2, default=str))
-          sys.exit(0)
-          "
+        run: python -c "import json, sys; sys.path.insert(0, 'D:/cursor'); from scripts.daily_ops import _step_governance; dry = '${{ inputs.dry_run }}' != 'false'; r = _step_governance('D:/cursor/data', dry_run=dry); print(json.dumps(r, indent=2, default=str)); sys.exit(0)"
 
       - name: Daily Ops — Champion/Challenger
         id: champion
-        run: >
-          python -c "
-          import json, sys
-          sys.path.insert(0, 'D:/cursor')
-          from scripts.daily_ops import _step_champion_challenger
-          dry = '${{ inputs.dry_run }}' != 'false'
-          r = _step_champion_challenger('D:/cursor/data', dry_run=dry)
-          print(json.dumps(r, indent=2, default=str))
-          sys.exit(0)
-          "
+        run: python -c "import json, sys; sys.path.insert(0, 'D:/cursor'); from scripts.daily_ops import _step_champion_challenger; dry = '${{ inputs.dry_run }}' != 'false'; r = _step_champion_challenger('D:/cursor/data', dry_run=dry); print(json.dumps(r, indent=2, default=str)); sys.exit(0)"
 
       - name: Daily Ops — Retraining Check
         id: retraining
-        run: >
-          python -c "
-          import json, sys
-          sys.path.insert(0, 'D:/cursor')
-          from scripts.daily_ops import _step_retraining_check
-          r = _step_retraining_check('D:/cursor/data')
-          print(json.dumps(r, indent=2, default=str))
-          sys.exit(0)
-          "
+        run: python -c "import json, sys; sys.path.insert(0, 'D:/cursor'); from scripts.daily_ops import _step_retraining_check; r = _step_retraining_check('D:/cursor/data'); print(json.dumps(r, indent=2, default=str)); sys.exit(0)"
 
       - name: Daily Ops — Recap
         id: recap
-        run: >
-          python -c "
-          import json, sys
-          sys.path.insert(0, 'D:/cursor')
-          from scripts.daily_ops import _step_daily_recap
-          r = _step_daily_recap('D:/cursor/data')
-          print(json.dumps(r, indent=2, default=str))
-          sys.exit(0)
-          "
+        run: python -c "import json, sys; sys.path.insert(0, 'D:/cursor'); from scripts.daily_ops import _step_daily_recap; r = _step_daily_recap('D:/cursor/data'); print(json.dumps(r, indent=2, default=str)); sys.exit(0)"
 
       - name: Daily Ops — Combined Report
         if: always()
-        run: >
-          python -c "
-          import json, sys
-          sys.path.insert(0, 'D:/cursor')
-          from scripts.daily_ops import run_daily_ops
-          dry = '${{ inputs.dry_run }}' != 'false'
-          r = run_daily_ops('D:/cursor/data', dry_run=dry)
-          print(json.dumps(r, indent=2, default=str))
-          "
+        run: python -c "import json, sys; sys.path.insert(0, 'D:/cursor'); from scripts.daily_ops import run_daily_ops; dry = '${{ inputs.dry_run }}' != 'false'; r = run_daily_ops('D:/cursor/data', dry_run=dry); print(json.dumps(r, indent=2, default=str))"
