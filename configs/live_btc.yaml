@@ -300,6 +300,7 @@ strategy_lines:
     base_volume: 0.01
     brain_types:
     - xgboost_v9
+    - lightgbm_v1
     budget:
       daily_loss_limit_pct: -0.03
       max_consecutive_losses: 5
@@ -322,7 +323,7 @@ strategy_lines:
     max_volume: 0.1
     min_p_win: 0.45
     min_valid_brains: 1
-    mode: live
+    mode: probation  # FIX-20260613-090-deploy: V9/V10 probation — observe before full capital
     sl:
       base_atr_mult: 2.0
       dynamic: true
