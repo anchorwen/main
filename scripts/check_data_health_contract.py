@@ -540,7 +540,7 @@ def main() -> int:
     }
     card = _build_dingtalk_card(report)
     print("\n── DingTalk Alert Card ──")
-    print(card)
+    print(card.encode(sys.stdout.encoding, errors='replace').decode(sys.stdout.encoding))
 
     # ── Write report ──
     output_path = args.output or f"{args.data_dir}/reports/data_health_contract_report.json"
