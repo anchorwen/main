@@ -708,6 +708,9 @@ def build_strategy_lines(
                 max_consecutive_losses=_cfg("btc_swing", "budget", {}).get(
                     "max_consecutive_losses", 5
                 ),
+                cooldown_minutes=_cfg("btc_swing", "budget", {}).get(
+                    "cooldown_minutes", 0
+                ),
             ),
         )
 

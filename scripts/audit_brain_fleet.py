@@ -174,7 +174,7 @@ def main(data_dir: str) -> int:
         losses = sum(1 for c in ticket_close.values() if float(c.get("pnl", 0) or 0) < 0)
         wr = wins / (wins + losses) * 100 if (wins + losses) > 0 else 0
         print(f"  Strategy Total: {total_trades} trades, {wins}W/{losses}L, WR={wr:.1f}%, PnL=\${total_pnl:.2f}")
-        print(f"  WARNING: brain_ids in journal = voting coalition, NOT individual accuracy")
+        print("  WARNING: brain_ids in journal = voting coalition, NOT individual accuracy")
 
     # ── 4. CROSS-REFERENCE MATRIX ──
     print()
@@ -184,7 +184,7 @@ def main(data_dir: str) -> int:
     print(f"  {'Brain':<35} {'Train':>8} {'Deploy':>8} {'LiveWR':>8} {'LivePnL':>9} {'Verdict'}")
     print(f"  {'-'*35} {'-'*8} {'-'*8} {'-'*8} {'-'*9} {'-'*10}")
 
-    all_bids = set(list(training_reports.keys()) + list(config_status.keys()) + list(brain_stats.keys()))
+    all_bids = set(list(training_reports.keys()) + list(config_status.keys()) + list(signal_stats.keys()))
     for bid in sorted(all_bids):
         # Map config name to training name
         train_key = None
@@ -206,25 +206,25 @@ def main(data_dir: str) -> int:
 
         cfg = config_status.get(bid, {})
         deploy_status = cfg.get("status", "NONE")
-        bs = brain_stats.get(bid, {})
-        live_trades = bs.get("trades", 0)
+        bs = signal_stats.get(bid, {})
+        live_trades = bs.get("signals", 0)
         live_wr = bs["wins"] / (bs["wins"] + bs["losses"]) * 100 if (bs.get("wins", 0) + bs.get("losses", 0)) > 0 else 0
-        live_pnl = bs.get("pnl", 0)
+        live_pnl = bs.get("pnl_r", 0)
 
         train_str = f"{train_wr:.1%}" if train_wr is not None else "N/A"
         live_wr_str = f"{live_wr:.1f}%" if live_trades > 0 else "N/A"
 
         # Verdict logic
         if deploy_status == "active" and live_trades > 0 and live_wr < 30:
-            verdict = "⚠️ RETIRE (live <30%)"
+            verdict = "[!!] RETIRE (live <30%)"
         elif deploy_status == "active" and train_wr is not None and train_wr < 0.40:
-            verdict = "⚠️ RETIRE (train <40%)"
+            verdict = "[!!] RETIRE (train <40%)"
         elif deploy_status == "active" and train_wr is not None and train_wr > 0.70:
-            verdict = "✅ PROMOTE (train >70%)"
+            verdict = "[OK] PROMOTE (train >70%)"
         elif deploy_status == "archived" and live_trades > 0 and live_wr >= 40:
-            verdict = "⚠️ REVIEW (good live, archived)"
+            verdict = "[??] REVIEW (good live, archived)"
         elif deploy_status == "archived":
-            verdict = "✅ correct (archived)"
+            verdict = "[OK] correct (archived)"
         elif live_trades == 0 and train_wr is None:
             verdict = "UNKNOWN"
         else:
@@ -241,30 +241,30 @@ def main(data_dir: str) -> int:
     issues = []
     # Check: V11s had 0 live WR → correct to retire
     for bid in ["BTC_Swing_V11_H1_Directional", "BTC_Swing_V11_M15_Directional"]:
-        bs = brain_stats.get(bid, {})
-        t = bs.get("trades", 0)
+        bs = signal_stats.get(bid, {})
+        t = bs.get("signals", 0)
         w = bs.get("wins", 0)
         l = bs.get("losses", 0)
         if t > 0 and w == 0:
-            issues.append(f"✅ CORRECT: {bid} retired — 0 wins in {t} trades")
+            issues.append(f"[OK] CORRECT: {bid} retired — 0 wins in {t} trades")
         elif t == 0:
-            issues.append(f"⚠️ {bid} retired — but had 0 live trades (no data)")
+            issues.append(f"[??] {bid} retired — but had 0 live trades (no data)")
 
     # Check: V10_M15 training quality
     if "btc_v10_m15_survival" in training_reports:
         best = max(m["val_wr"] for m in training_reports["btc_v10_m15_survival"].values())
         folds = list(training_reports["btc_v10_m15_survival"].values())[0]["folds"]
         if best > 0.80:
-            issues.append(f"⚠️ FLAG: btc_v10_m15 CV WR={best:.1%} with {folds} folds — verify no look-ahead bias")
+            issues.append(f"[!!] FLAG: btc_v10_m15 CV WR={best:.1%} with {folds} folds — verify no look-ahead bias")
         if folds < 5:
-            issues.append(f"⚠️ FLAG: btc_v10_m15 only {folds} folds — low statistical confidence")
+            issues.append(f"[!!] FLAG: btc_v10_m15 only {folds} folds — low statistical confidence")
 
     # Check: V9_H1 training quality
     if "btc_swing_v9_h1" in training_reports:
         best = max(m["val_wr"] for m in training_reports["btc_swing_v9_h1"].values())
         folds = list(training_reports["btc_swing_v9_h1"].values())[0]["folds"]
         if best > 0.80:
-            issues.append(f"⚠️ FLAG: btc_swing_v9_h1 CV WR={best:.1%} with {folds} folds — verify no look-ahead bias")
+            issues.append(f"[!!] FLAG: btc_swing_v9_h1 CV WR={best:.1%} with {folds} folds — verify no look-ahead bias")
 
     for issue in issues:
         print(f"  {issue}")

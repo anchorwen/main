@@ -258,7 +258,11 @@ class ConformalCalibrator:
             self._history.append((float(p_win), int(label), ts))
             loaded += 1
 
-        self._cold_started = True
+        # DQAF-20260614-002: Only set cold_started if we don't yet have enough
+        # history to be warm.  Previously this was unconditionally set to True,
+        # which made is_warm permanently False, preventing compute_threshold()
+        # from ever being called, keeping total_computations=0 forever.
+        self._cold_started = len(self._history) < self._warmup_samples
         if loaded > 0:
             self._save_state()
             logger.info(

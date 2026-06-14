@@ -278,8 +278,19 @@ class StrategyBudget:
 
         Only restores fields that exist in *saved* — backward-compatible with
         older snapshot versions that may lack newer fields.
+
+        DQAF-20260614-001: Cross-day stale counters are now reset immediately
+        instead of being deferred to the next record_trade() call.  This
+        prevents stale daily_pnl_pct=-7% and paused=false from persisting
+        across restarts when no new trades close.
         """
         _now = _time.time()
+        _today = self._today()
+
+        # ── DQAF-20260614-001: Detect cross-day state BEFORE loading counters ──
+        _saved_day = str(saved.get("last_trade_day", ""))
+        _stale_day = (_saved_day != _today)  # True if saved state is from a prior day
+
         if "daily_pnl_pct" in saved:
             self.daily_pnl_pct = float(saved["daily_pnl_pct"])
         if "consecutive_losses" in saved:
@@ -288,24 +299,26 @@ class StrategyBudget:
             self.total_trades_today = int(saved["total_trades_today"])
         if "total_wins_today" in saved:
             self.total_wins_today = int(saved["total_wins_today"])
-        if "paused" in saved:
-            self.paused = bool(saved["paused"])
-        if "paused_at" in saved:
-            self.paused_at = float(saved["paused_at"])
-        # FIX-20260610-007: Force-unpause on cross-day restore.
-        # If the saved state is from a previous day, the daily loss limit
-        # has reset — the pause should not survive into the new day.
-        if self.paused and self.last_trade_day == "":
-            self.paused = False
-            self.paused_at = 0.0
-        if "last_trade_day" in saved:
-            _saved_day = str(saved["last_trade_day"])
-            _today = self._today()
-            if _saved_day == _today:
+
+        if _stale_day:
+            # ── DQAF-20260614-001: Cross-day — reset ALL daily counters immediately ──
+            # Previously we deferred reset to record_trade(), which meant stale
+            # counters (daily_pnl_pct=-7%, paused=false) persisted indefinitely
+            # when no new trades closed after restart.  Now reset eagerly.
+            self._reset_daily()
+        else:
+            # Same-day restore — preserve paused state
+            if "paused" in saved:
+                self.paused = bool(saved["paused"])
+            if "paused_at" in saved:
+                self.paused_at = float(saved["paused_at"])
+            # FIX-20260610-007: Force-unpause on cross-day restore.
+            if self.paused and self.last_trade_day == "":
+                self.paused = False
+                self.paused_at = 0.0
+            if "last_trade_day" in saved:
                 self.last_trade_day = _saved_day
-            else:
-                # Stale day — counters will reset on next record_trade()
-                self.last_trade_day = ""
+
         if "_sl_timestamps" in saved:
             _cutoff = _now - SL_COOLDOWN_WINDOW
             self._sl_timestamps = [t for t in saved["_sl_timestamps"] if t > _cutoff]

@@ -559,16 +559,23 @@ class DataHealthService:
             )
 
         brain_states = gv.get("brain_states", gv.get("brains", {}))
+        # DQAF-20260614-003 (RC-06): Governance schema uses "state" key, not "status".
+        # Also count probation/candidate as operational — they aren't a vacuum.
+        # Terminal states: retired, frozen, archived, shadow, error.
+        _TERMINAL = {"retired", "frozen", "archived", "shadow", "error"}
+
+        def _is_operational(brain_dict: dict) -> bool:
+            raw_state = str(
+                brain_dict.get("state", brain_dict.get("status", ""))
+            ).lower()
+            return raw_state not in _TERMINAL and raw_state != ""
+
         if isinstance(brain_states, list):
-            live_count = sum(
-                1 for b in brain_states if isinstance(b, dict) and b.get("status") == "live"
-            )
+            live_count = sum(1 for b in brain_states if isinstance(b, dict) and _is_operational(b))
             total_count = len(brain_states)
         elif isinstance(brain_states, dict):
             live_count = sum(
-                1
-                for v in brain_states.values()
-                if isinstance(v, dict) and v.get("status") == "live"
+                1 for v in brain_states.values() if isinstance(v, dict) and _is_operational(v)
             )
             total_count = len(brain_states)
         else:
@@ -584,11 +591,14 @@ class DataHealthService:
         elif live_count < min_live:
             status = SourceStatus.FAIL
             code = "GOV_NO_LIVE_BRAINS"
-            message = f"Zero live brains ({live_count}/{total_count}) — GOVERNANCE_VACUUM"
+            message = (
+                f"Fewer operational brains ({live_count}/{total_count}) "
+                f"than minimum ({min_live}) — GOVERNANCE_VACUUM"
+            )
         else:
             status = SourceStatus.PASS
             code = "GOV_OK"
-            message = f"{live_count}/{total_count} brains live"
+            message = f"{live_count}/{total_count} brains operational"
 
         return SourceCheckResult(
             source="governance_state",
