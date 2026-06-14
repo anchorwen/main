@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from contextlib import suppress
 from pathlib import Path
 
 DATA_DIR = Path("data_btc")
@@ -22,10 +23,8 @@ def load_jsonl(path: Path) -> list[dict]:
         for line in f:
             line = line.strip()
             if line:
-                try:
+                with suppress(json.JSONDecodeError):
                     events.append(json.loads(line))
-                except json.JSONDecodeError:
-                    pass
     return events
 
 
