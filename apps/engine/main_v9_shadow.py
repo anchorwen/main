@@ -216,28 +216,45 @@ def load_feature_samples_from_dir(path: str) -> list[dict]:
 
 
 def build_long_actionable_stub_feature_source() -> dict:
+    """H1_Hurst=0.05 (extremely low persistence, valid in [0,1]) → triggers open long.
+
+    Was -1.1 before FIX-20260613-090 physics guards — negative Hurst is
+    physically impossible and now rejected by regime_direction_gate's
+    self-calibrating physics override (0.0 < hurst < 1.0 guard).
+    """
     feature_source = build_stub_feature_source()
-    feature_source["H1_Hurst"] = -1.1
+    feature_source["H1_Hurst"] = 0.05  # minimum valid — near-zero persistence
     return feature_source
 
 
 def build_short_actionable_stub_feature_source() -> dict:
+    """Invert M15 features to -0.5 magnitude (clamped, not -2.5×) → triggers short.
+
+    Was ×(-2.5) before — produced extreme out-of-range values rejected by
+    physics guards.  -0.5 multiplier keeps values within training distribution.
+    """
     feature_source = build_stub_feature_source()
     for name in V9_INSTITUTIONAL_40_FEATURES:
         if name.startswith("M15_"):
-            feature_source[name] = feature_source[name] * -2.5
+            feature_source[name] = feature_source[name] * -0.5
     return feature_source
 
 
 def build_edge_allow_stub_feature_source() -> dict:
+    """H1_Hurst=0.12 (low persistence, borderline long) → risk-allowed.
+
+    Was -0.85 — physically impossible, now rejected."""
     feature_source = build_stub_feature_source()
-    feature_source["H1_Hurst"] = -0.85
+    feature_source["H1_Hurst"] = 0.12
     return feature_source
 
 
 def build_edge_deny_stub_feature_source() -> dict:
+    """H1_Hurst=0.35 (moderate persistence, trending) → risk-blocked.
+
+    Was -0.45 — physically impossible, now rejected."""
     feature_source = build_stub_feature_source()
-    feature_source["H1_Hurst"] = -0.45
+    feature_source["H1_Hurst"] = 0.35
     return feature_source
 
 
