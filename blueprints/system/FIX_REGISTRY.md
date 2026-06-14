@@ -2684,4 +2684,114 @@ FIX-YYYYMMDD-NNN
 - **Description**: Raised `dupes > 0` → `dupes > 5` in `check_journal_completeness()`. Original threshold caused alert fatigue — CRITICAL alert for 2 duplicate journal entries (zero PnL impact; position_ticket dedup already handles duplicates in aggregation). In async retry-reentrant MT5 bridge write architecture, occasional dupes are expected. Tech debt: `TODO-20260711-journal-idempotency` — Phase 2 Event Sourcing will make journal writes naturally idempotent, after which this check can be removed entirely.
 - **Root Cause**: RC-06 — contract-violation (threshold calibrated for ideal synchronous system, not real-world async bridge with retry)
 - **Prevention**: Thresholds that directly gate CRITICAL alerts must be validated against 7+ days of production data before activation
+
+---
+
+## 2026-06-14 — Institutional Pipeline Hardening (16 commits, 10 DQAF dockets)
+
+### DQAF-20260614-001 — Budget daily loss not pausing
+- **Date**: 2026-06-14
+- **Author**: cursor-agent
+- **Commit**: `8db3d6a`
+- **Type**: fix
+- **Module**: execution
+- **Files**: `core/execution/strategy_budget.py`, `core/runtime/strategy_builder.py`
+- **Description**: load_state() deferred cross-day reset to record_trade(), causing stale daily_pnl_pct=-7% to persist across restarts. Fix: eager _reset_daily() on cross-day detection in load_state(). Also pass cooldown_minutes from config to StrategyBudget constructor.
+- **Root Cause**: RC-03 — state-leak (stale budget state persisted across restarts)
+- **Prevention**: State load must reset stale counters immediately, not defer to next write.
+
+### DQAF-20260614-002 — Calibrator total_computations=0
+- **Date**: 2026-06-14
+- **Author**: cursor-agent
+- **Commits**: `8db3d6a`, `229570c`, `5ab5634`
+- **Type**: fix
+- **Module**: execution
+- **Files**: `core/execution/conformal_calibrator.py`, `core/runtime/live_cycle.py`
+- **Description**: (a) cold_start_from_journal() unconditionally set _cold_started=True → is_warm permanently False → compute_threshold() never called. Fix: cold_started = len(history) < warmup. (b) MetaFilterGate had calibrator but evaluate() never called; MetaSignalFilter was used but had no calibrator. Fix: per-cycle heartbeat in live_cycle. (c) Heartbeat incremented in-memory counter but _save_state() never called → daily_ops calibrator overwrote. Fix: persist immediately after compute_threshold().
+- **Root Cause**: RC-07 — missing-validation (cold_start state machine had unreachable warm state)
+- **Prevention**: State transitions must be validated against all possible paths.
+
+### DQAF-20260614-003 — Governance false vacuum alert
+- **Date**: 2026-06-14
+- **Author**: cursor-agent
+- **Commit**: `8db3d6a`
+- **Type**: fix
+- **Module**: observability
+- **Files**: `core/observability/data_health_service.py`
+- **Description**: data_health used key "status" but governance schema uses "state"; also didn't count probation/candidate as operational. Fix: use both keys, count non-terminal brains.
+- **Root Cause**: RC-06 — contract-violation (key name mismatch between governance and health check)
+- **Prevention**: Schema key names must be validated at integration boundaries.
+
+### DQAF-20260614-004 — Training pipeline contract vacuum (L3 architecture)
+- **Date**: 2026-06-14
+- **Author**: cursor-agent
+- **Commits**: `19bdca9`, `56a2367`, `08dd6e9`, `f762745`
+- **Type**: feat
+- **Module**: pipeline, features
+- **Files**: `configs/contracts/training_pipeline_btc_metafilter_v3.json` (NEW), `scripts/check_training_readiness.py` (NEW), `core/features/local_feature_store.py`, `core/features/feature_service.py`, `core/runtime/live_cycle.py`, `scripts/build_btc_metafilter_v2_dataset.py`
+- **Description**: (a) No cross-stage contract — every pipeline stage drifted silently. Created TrainingPipelineContract (SSOT) + daily check_training_readiness.py. (b) Micro features never stored — Feature Store only had v9_institutional_40. Fix: write v4.3_microstructure_9 alongside v9. (c) Dataset builder produced 40-dim instead of 47-dim. Fix: merge v9+micro at matching timestamps, add ou_z_entry, read contract feature order. (d) Schema Dictatorship: _validate_record now enforces exact field count + NaN rejection + actionable errors. (e) Bitemporal knowledge-time filtering: ASOF join now requires ingested_at ≤ trade_time.
+- **Root Cause**: RC-12 — missing-feature (pipeline lacked contract enforcement entirely)
+- **Prevention**: Every new data pipeline must have a TrainingPipelineContract before going live.
+
+### DQAF-20260614-005 — SignalSettled TTL fiction data
+- **Date**: 2026-06-14
+- **Author**: cursor-agent
+- **Commits**: `6598b65`, `aebb003`
+- **Type**: fix
+- **Module**: runtime
+- **Files**: `core/runtime/live_cycle.py`
+- **Description**: BrainPnLStore used TTL-based bar settlement (mid_price after N bars), not actual trade PnL. All SignalSettled had ticket=0. Fix: in reconciliation path, write PnLEvent (SignalSettled) for each brain with real position_ticket and PnL from PositionClosed event. Include breakeven trades.
+- **Root Cause**: RC-11 — stale-data (measurement system used simulation, not ground truth)
+- **Prevention**: Performance measurement must use actual trade outcomes, not simulation.
+
+### DQAF-20260614-006 — exit_watchdog_init_failed
+- **Date**: 2026-06-14
+- **Author**: cursor-agent
+- **Commit**: `2ff1936`
+- **Type**: fix
+- **Module**: runtime
+- **Files**: `scripts/live_intent_loop.py`
+- **Description**: Variable 'cfg' referenced but not defined in watchdog init. Fix: cfg → full_cfg with correct YAML path live_trading.watchdog_config.
+- **Root Cause**: RC-01 — missing-null-check / undefined variable
+- **Prevention**: (none — typo)
+
+### DQAF-20260614-007/008 — position_register_skip → SignalSettled chain broken
+- **Date**: 2026-06-14
+- **Author**: cursor-agent
+- **Commits**: `5902298`, `5ea8647`, `850f287`, `b80225b`
+- **Type**: fix
+- **Module**: execution
+- **Files**: `core/runtime/position_registration.py`, `core/runtime/live_cycle.py`
+- **Description**: (a) Registration retry loop only checked message_id, missing bridge's open_message_id follow-up. (b) Outbox glob('**/*.json') scanned entire tree, hit permission-denied files, hung process. (c) Raw MetaTrader5.positions_get() called from uninitialized thread → hung process. Fix: match both message_id + open_message_id; remove unsafe glob; remove cross-thread MT5 call; extend retry window to 30s.
+- **Root Cause**: RC-06 — contract-violation (bridge writes ticket in different field than registration reads)
+- **Prevention**: Inter-process communication contracts must validate field names at both producer and consumer.
+
+### DQAF-20260614-009 — ZMQ Bridge writes ticket=None for all open orders
+- **Date**: 2026-06-14
+- **Author**: cursor-agent
+- **Commit**: `bcc706e`
+- **Type**: fix
+- **Module**: bridge
+- **Files**: `scripts/mt5_bridge_worker.py`
+- **Description**: _write_zmq_journal_entry() used coerce_position_ticket(msg_payload) which reads from the REQUEST. For open orders, the ticket is in MT5's RESPONSE (detail["order"]). Fix: fall back to detail["order"] when coerce_position_ticket returns None. Also log rejection detail for diagnosis.
+- **Root Cause**: RC-06 — contract-violation (ticket read from wrong data structure)
+- **Prevention**: Producer/consumer field contracts must be validated end-to-end.
+
+### DQAF-20260614-010 — 4 duplicate orders with wrong magic (Sev 1)
+- **Date**: 2026-06-14
+- **Author**: cursor-agent
+- **Commits**: `22fa830`, `3f6ed78`
+- **Type**: fix
+- **Module**: bridge, runtime
+- **Files**: `scripts/mt5_bridge_worker.py`, `scripts/live_intent_loop.py`
+- **Description**: (a) Bridge used --magic default (90401) unconditionally, ignoring strategy magic from payload. Fix: read magic from msg_payload first. (b) ZMQ slow joiner: PUSH connected before PULL bound → 4 buffered messages arrived simultaneously → 4 duplicate orders. Fix: Bridge readiness gate — wait up to 30s for Bridge health to confirm ZMQ transport ready before entering dispatch loop.
+- **Root Cause**: RC-06 — contract-violation (magic) + RC-10 — dependency-order (ZMQ start order)
+- **Prevention**: Startup order must be enforced with explicit readiness gates; strategy parameters must override bridge defaults.
+
+### R1-20260614 — V4 Brain Governance Promotion
+- **Date**: 2026-06-14
+- **Author**: cursor-agent (per R1 profitability review)
+- **Type**: governance
+- **Files**: `data_btc/governance_state.json`
+- **Description**: V4 promoted candidate→live after 47 trades, WR=48.9%, PnL=+$90.64. V9_H1 and V10_M15 remain candidate (32% WR).
 - **Dependents Checked**: (none)
