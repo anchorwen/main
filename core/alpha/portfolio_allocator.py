@@ -121,22 +121,50 @@ class AlphaPortfolioAllocator:
         )
 
     def _quality_score(self, metrics: dict[str, Any]) -> float:
+        # ── Execution-quality metrics (preferred) ──
         fill_ratio = self._metric(metrics, "fill_ratio", 0.0)
         denied = self._metric(metrics, "denied_count", 0.0)
         slippage = self._metric(metrics, "average_slippage_bps", 0.0)
         orders_per_signal = self._metric(metrics, "orders_per_signal", 0.0)
         signal_count = self._metric(metrics, "signal_count", 0.0)
-        activity = min(signal_count / 10.0, 1.0)
-        denied_penalty = min(denied * 0.15, 0.75)
-        slippage_penalty = min(max(slippage, 0.0) / 50.0, 0.5)
-        conversion = min(orders_per_signal, 1.0)
-        score = (
-            (fill_ratio * 0.45)
-            + (conversion * 0.25)
-            + (activity * 0.30)
-            - denied_penalty
-            - slippage_penalty
+
+        # ── FIX-20260613-090-alloc: PnL-based fallback ──
+        # _step_alpha_feed writes trade_count/win_rate/profit_factor, but
+        # _quality_score reads signal_count/fill_ratio.  When execution
+        # metrics are unavailable (all zero), derive quality from PnL.
+        trade_count = self._metric(metrics, "trade_count", 0.0)
+        win_rate = self._metric(metrics, "win_rate", 0.0)
+        profit_factor = self._metric(metrics, "profit_factor", 0.0)
+
+        has_execution_metrics = (
+            fill_ratio > 0 or signal_count > 0 or orders_per_signal > 0
         )
+        has_pnl_metrics = trade_count > 0
+
+        if has_execution_metrics:
+            # Standard execution-quality scoring
+            activity = min(signal_count / 10.0, 1.0)
+            denied_penalty = min(denied * 0.15, 0.75)
+            slippage_penalty = min(max(slippage, 0.0) / 50.0, 0.5)
+            conversion = min(orders_per_signal, 1.0)
+            score = (
+                (fill_ratio * 0.45)
+                + (conversion * 0.25)
+                + (activity * 0.30)
+                - denied_penalty
+                - slippage_penalty
+            )
+        elif has_pnl_metrics:
+            # PnL-based fallback: scale win_rate to [0,1] and weight by activity
+            # WR=50% → 0.5 baseline; PF>1.0 adds bonus; activity caps at 1.0
+            activity = min(trade_count / 10.0, 1.0)
+            wr_score = max(0.0, win_rate) * 0.60       # win_rate dominant
+            pf_bonus = min(max(profit_factor - 1.0, 0.0) / 10.0, 0.30)  # PF>1 bonus
+            activity_score = activity * 0.10
+            score = wr_score + pf_bonus + activity_score
+        else:
+            score = 0.0
+
         return max(0.0, min(1.0, score))
 
     def _zero(
