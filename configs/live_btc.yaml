@@ -140,26 +140,28 @@ alert_system:
     threshold: 0
 brains:
   registry_entries:
+  # ── FIX-20260613-090-deploy: Elite V9/V10 fleet (probation) ──
+  - enabled: true
+    path: configs/brains_btc/BTC_Swing_V10_M15_Survival.json
+  - enabled: true
+    path: configs/brains_btc/BTC_Swing_V9_H1_Survival.json
+  # ── Retired fleet (archived) ──
   - enabled: false
     path: configs/brains_btc/archive/BTC_Swing_V4.json
-  - enabled: true
-    path: configs/brains_btc/BTC_Swing_V5.json
+  - enabled: false
+    path: configs/brains_btc/archive/BTC_Swing_V5.json
   - enabled: false
     path: configs/brains_btc/archive/BTC_Swing_LGB_V1.json
   - enabled: false
-    path: configs/brains_btc/BTC_Swing_V6_MultiTF_LGB_v2.json
+    path: configs/brains_btc/archive/BTC_Swing_V6_MultiTF_LGB_v2.json
   - enabled: false
-    path: configs/brains_btc/BTC_Swing_V7_MultiTF_LGB_v1.json
+    path: configs/brains_btc/archive/BTC_Swing_V7_MultiTF_LGB_v1.json
   - enabled: false
-    path: configs/brains_btc/BTC_Swing_V8_MultiTF_LGB_v1.json
+    path: configs/brains_btc/archive/BTC_Swing_V8_MultiTF_LGB_v1.json
   - enabled: false
-    path: configs/brains_btc/BTC_Swing_V9_H1_Survival.json
+    path: configs/brains_btc/archive/BTC_Swing_V11_H1_Directional.json
   - enabled: false
-    path: configs/brains_btc/BTC_Swing_V10_M15_Survival.json
-  - enabled: true
-    path: configs/brains_btc/BTC_Swing_V11_H1_Directional.json
-  - enabled: true
-    path: configs/brains_btc/BTC_Swing_V11_M15_Directional.json
+    path: configs/brains_btc/archive/BTC_Swing_V11_M15_Directional.json
 capital_allocator:
   base_volume: 0.01
   max_volume: 0.1
