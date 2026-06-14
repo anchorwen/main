@@ -3096,7 +3096,10 @@ def execute_live_cycle(
                     # signal against the ACTUAL trade PnL from the close event.
                     # This is the ground truth — if a brain voted LONG and the
                     # trade lost money, the brain records a loss.
-                    if _evt.brain_ids and _evt.pnl != 0:
+                    # Settle ALL closed trades with brain attribution,
+                    # including breakeven (pnl=0).  Breakeven is informative —
+                    # the brain voted but the trade neither won nor lost.
+                    if _evt.brain_ids:
                         try:
                             from core.contracts.events import PnLEvent
                             from core.data.event_writer import EventWriter
