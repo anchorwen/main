@@ -1,0 +1,148 @@
+{
+  "$schema": "data_health_contract.v1",
+  "contract_id": "data_health_global",
+  "description": "Institutional Data Governance — every data domain has a formal SLA. FATAL violations trigger circuit-breaker lock (no new positions). WARN violations block retraining but allow live trading. Each probe runs in an isolated sandbox — one failure cannot crash the audit.",
+
+  "global": {
+    "lock_file": "data_btc/reports/training_readiness.json",
+    "lock_status_field": "overall_verdict",
+    "circuit_breaker_on_fatal": true
+  },
+
+  "domains": {
+    "alpha_registry": {
+      "description": "Alpha Portfolio Allocator — must track real trade performance",
+      "severity": "FATAL",
+      "blast_radius": "Alpha Allocation: $100K capital idle — no brain receives funding without performance data",
+      "source": "data_btc/alpha_registry.json",
+      "assertions": {
+        "record_count_min": {
+          "check": "len(records) >= 1",
+          "expected": ">= 1",
+          "message": "Zero alpha records — allocator has nothing to allocate"
+        },
+        "trade_count_nonzero": {
+          "check": "any(r.metrics.trade_count > 0 for r in records)",
+          "expected": "trade_count > 0",
+          "message": "Alpha records exist but all have trade_count=0 — feed pipeline not wired"
+        },
+        "win_rate_valid": {
+          "check": "any(r.metrics.win_rate > 0 for r in records)",
+          "expected": "win_rate > 0",
+          "message": "All alpha records have win_rate=0 — performance tracking broken"
+        }
+      }
+    },
+
+    "leaderboard": {
+      "description": "Brain Leaderboard — must be consistent with config and governance",
+      "severity": "FATAL",
+      "blast_radius": "Brain Selection: frozen/retired brains may receive capital, live brains may be muted",
+      "source": "data_btc/reports/leaderboard.json",
+      "cross_reference": {
+        "config": "configs/live_btc.yaml",
+        "governance": "data_btc/governance_state.json"
+      },
+      "assertions": {
+        "no_zombie_brains": {
+          "check": "no brain with status='live' in leaderboard has enabled=false in config",
+          "expected": "leaderboard status matches config enabled flag",
+          "message": "Leaderboard shows live brains that are disabled in config — zombie brains consuming signals"
+        },
+        "no_frozen_as_live": {
+          "check": "governance status matches leaderboard status",
+          "expected": "governance state consistent with leaderboard",
+          "message": "Brain status mismatch between governance and leaderboard"
+        }
+      }
+    },
+
+    "live_labels": {
+      "description": "Live Trade Labels — training data quality gate",
+      "severity": "WARN",
+      "blast_radius": "Training Data: unlabeled trades contaminate supervised learning datasets",
+      "source": "data_btc/reports/live_labels.jsonl",
+      "assertions": {
+        "unlabeled_rate_max": {
+          "check": "unlabeled_rate < 0.15",
+          "expected": "< 15%",
+          "message": "Unlabeled rate exceeds 15% — training labels contaminated"
+        },
+        "label_in_whitelist": {
+          "check": "all labels in ['win','loss','breakeven','tp_hit_first','sl_hit_first','sl_hit_trailed']",
+          "expected": "labels in whitelist",
+          "message": "Unknown label values detected — label taxonomy broken"
+        }
+      }
+    },
+
+    "retraining_signal": {
+      "description": "Brain Retraining Assessment — must periodically evaluate brain degradation",
+      "severity": "WARN",
+      "blast_radius": "Brain Quality: degraded brains continue trading without retraining trigger",
+      "source": "data_btc/reports/retraining_signal_prev.json",
+      "assertions": {
+        "brains_assessed_nonzero": {
+          "check": "total_brains_assessed > 0",
+          "expected": "> 0",
+          "message": "Zero brains assessed — retraining pipeline may be idle or dead"
+        },
+        "urgency_defined": {
+          "check": "urgency in ['ok','warning','critical']",
+          "expected": "valid urgency value",
+          "message": "Urgency field missing or invalid"
+        }
+      }
+    },
+
+    "meta_exit": {
+      "description": "Meta Exit Telemetry — exit reason classification quality",
+      "severity": "WARN",
+      "blast_radius": "Exit Quality: 42% unknown_close means training labels rely on PnL sign, not exit mechanism",
+      "source": "data_btc/live_trade_journal.jsonl",
+      "assertions": {
+        "unknown_close_rate_max": {
+          "check": "unknown_close_rate < 0.35",
+          "expected": "< 35%",
+          "message": "More than 35% of exits have unknown reason — exit classifier broken"
+        },
+        "trail_data_present": {
+          "check": "trail_count > 0",
+          "expected": "> 0",
+          "message": "Zero trail exits recorded — trail telemetry blind spot"
+        }
+      }
+    },
+
+    "brain_performance": {
+      "description": "Per-brain performance metrics — must record SignalSettled for active brains",
+      "severity": "WARN",
+      "blast_radius": "Brain Evaluation: probation brains have no independent performance data",
+      "source": "data_btc/ledger_events.jsonl",
+      "assertions": {
+        "active_brains_have_signals": {
+          "check": "each active brain has >= 1 SignalSettled with position_ticket > 0",
+          "expected": ">= 1 real SignalSettled per active brain",
+          "message": "Active brains have zero real SignalSettled events — performance measurement blind"
+        }
+      }
+    }
+  },
+
+  "alerting": {
+    "dingtalk": {
+      "enabled": true,
+      "webhook_url_env": "DINGTALK_WEBHOOK_URL",
+      "card_title": "QuantOS Data Health — SLA Violation",
+      "include_blast_radius": true,
+      "include_remediation": true
+    }
+  },
+
+  "metadata": {
+    "author": "quant-os",
+    "created_at": "2026-06-14",
+    "rationale": "Institutional Data Governance: configuration-driven, severity-graded, fault-tolerant. One contract, one validator, all data domains. FATAL locks trading, WARN blocks training, each probe runs in isolated sandbox.",
+    "supersedes": "ad-hoc data_health checks in data_health_service.py (partial, hardcoded, non-configurable)"
+  }
+}
