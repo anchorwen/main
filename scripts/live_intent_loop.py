@@ -2127,6 +2127,51 @@ def main(argv: list[str] | None = None) -> int:
         _watchdog_thread = _threading.Thread(target=_watchdog_loop, daemon=True, name="watchdog")
         _watchdog_thread.start()
 
+        # ── DQAF-20260614-010: Bridge readiness gate ──
+        # ZMQ slow joiner: PUSH connects before PULL binds → first N
+        # messages are lost.  When the Bridge finally binds, ALL buffered
+        # messages arrive simultaneously → duplicate orders (Sev 1).
+        # Fix: wait until Bridge health confirms ZMQ transport is ready
+        # before entering the dispatch loop.
+        if not args.no_mt5:
+            _bridge_health_path = Path(args.base_dir) / "reports" / "mt5_bridge_health.json"
+            _bridge_ready = False
+            for _retry in range(30):  # 30 × 1s = 30s max wait
+                try:
+                    if _bridge_health_path.exists():
+                        _hb = json.loads(_bridge_health_path.read_text(encoding="utf-8"))
+                        if _hb.get("transport") == "zmq" and _hb.get("mt5_connected"):
+                            _bridge_ready = True
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "bridge_ready",
+                                        "time": _utc_iso(),
+                                        "pid": _hb.get("pid"),
+                                        "transport": "zmq",
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                            break
+                except Exception:  # noqa: BLE001
+                    pass
+                time.sleep(1.0)
+            if not _bridge_ready:
+                print(
+                    json.dumps(
+                        {
+                            "event": "bridge_not_ready",
+                            "time": _utc_iso(),
+                            "severity": "WARNING",
+                            "message": "Bridge not ready after 30s — proceeding but orders may be lost",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+
         while True:
             state.last_heartbeat = time.time()
             if _shutdown_flag[0]:
