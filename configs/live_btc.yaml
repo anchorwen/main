@@ -144,9 +144,10 @@ brains:
   - enabled: true
     path: configs/brains_btc/BTC_Swing_V4.json
   - enabled: true
-    path: configs/brains_btc/BTC_Swing_V10_M15_Survival.json
-  - enabled: true
     path: configs/brains_btc/BTC_Swing_V9_H1_Survival.json
+  # ── DQAF-20260615-001: V10_M15 shadowed — identical to V9_H1 (29 signals, 10W/19L both) ──
+  - enabled: false
+    path: configs/brains_btc/BTC_Swing_V10_M15_Survival.json
   # ── Retired fleet (archived) ──
   - enabled: false
     path: configs/brains_btc/archive/BTC_Swing_V4.json
