@@ -7,6 +7,21 @@ from pathlib import Path
 from core.features.store_contracts import FeatureQuery, FeatureRecord, FeatureSchema
 
 
+class FeatureValidationError(ValueError):
+    """Raised when a FeatureRecord fails schema validation at write time.
+
+    Institutional Data SLA (Column 1 — Schema Dictatorship):
+    Dirty data is rejected at the boundary.  The error message includes
+    the exact mismatch so operators can diagnose the root cause without
+    grep-ing through log files.
+    """
+
+    def __init__(self, message: str, schema_name: str = "", details: dict | None = None):
+        super().__init__(message)
+        self.schema_name = schema_name
+        self.details = details or {}
+
+
 def _normalize_dt(dt):
     """Return a naive UTC datetime regardless of input timezone."""
     if dt.tzinfo is not None:
@@ -85,16 +100,99 @@ class LocalFeatureStore:
         return records[-1] if records else None
 
     def _validate_record(self, record: FeatureRecord) -> None:
+        """Validate a FeatureRecord against its registered schema at write time.
+
+        Column 1 — Schema Dictatorship (Institutional Data SLA):
+        This is the DATA BOUNDARY.  Every record must pass these checks
+        before it enters the Feature Store.  Dirty data is rejected here —
+        it never reaches downstream consumers.
+
+        Checks (fail-fast, in order):
+          1. Schema registration — schema must exist in schemas.json
+          2. Exact field count — |record| == |schema| (no extra, no missing)
+          3. Field name match — every schema field must be present
+          4. NaN rejection — no NaN, None, or Inf values permitted
+        """
         schemas = self._load_schemas()
         key = self._schema_key(
             record.schema_name, record.schema_version, record.symbol, record.timeframe
         )
         if key not in schemas:
-            raise ValueError(f"Feature schema not registered: {key}")
-        required_fields = set(schemas[key]["fields"])
-        missing = required_fields - set(record.values)
-        if missing:
-            raise ValueError(f"Feature record missing fields: {sorted(missing)}")
+            raise FeatureValidationError(
+                f"Schema not registered: {key} — register it in schemas.json first",
+                schema_name=record.schema_name,
+                details={"key": key},
+            )
+
+        schema_fields: list[str] = list(schemas[key]["fields"])
+        expected_count = len(schema_fields)
+        actual_count = len(record.values)
+
+        # ── Check 1: Exact field count ──
+        if actual_count != expected_count:
+            extra = set(record.values) - set(schema_fields)
+            missing = set(schema_fields) - set(record.values)
+            raise FeatureValidationError(
+                f"Feature vector dimension mismatch for schema '{record.schema_name}': "
+                f"expected {expected_count} fields, got {actual_count}. "
+                f"Extra fields: {sorted(extra) if extra else 'none'}. "
+                f"Missing fields: {sorted(missing) if missing else 'none'}.",
+                schema_name=record.schema_name,
+                details={
+                    "expected_count": expected_count,
+                    "actual_count": actual_count,
+                    "extra_fields": sorted(extra),
+                    "missing_fields": sorted(missing),
+                },
+            )
+
+        # ── Check 2: Field name exact match ──
+        required_fields = set(schema_fields)
+        actual_fields = set(record.values)
+        missing_names = required_fields - actual_fields
+        if missing_names:
+            raise FeatureValidationError(
+                f"Feature record missing required fields for schema "
+                f"'{record.schema_name}': {sorted(missing_names)}",
+                schema_name=record.schema_name,
+                details={"missing_fields": sorted(missing_names)},
+            )
+
+        # ── Check 3: NaN / None / Inf rejection ──
+        # Institutional Data SLA: NaN in feature store poisons every
+        # downstream computation.  Reject at the boundary.
+        nan_fields: list[str] = []
+        inf_fields: list[str] = []
+        none_fields: list[str] = []
+        for name, value in record.values.items():
+            if value is None:
+                none_fields.append(name)
+            elif isinstance(value, float):
+                import math
+                if math.isnan(value):
+                    nan_fields.append(name)
+                elif math.isinf(value):
+                    inf_fields.append(name)
+
+        if nan_fields or inf_fields or none_fields:
+            parts: list[str] = []
+            if none_fields:
+                parts.append(f"None values: {none_fields}")
+            if nan_fields:
+                parts.append(f"NaN values: {nan_fields}")
+            if inf_fields:
+                parts.append(f"Inf values: {inf_fields}")
+            raise FeatureValidationError(
+                f"Feature record contains invalid values for schema "
+                f"'{record.schema_name}': {'; '.join(parts)}. "
+                f"NaN/None/Inf are forbidden in the Feature Store.",
+                schema_name=record.schema_name,
+                details={
+                    "none_fields": none_fields,
+                    "nan_fields": nan_fields,
+                    "inf_fields": inf_fields,
+                },
+            )
 
     def _matches(self, record: FeatureRecord, query: FeatureQuery) -> bool:
         if query.schema_name and record.schema_name != query.schema_name:

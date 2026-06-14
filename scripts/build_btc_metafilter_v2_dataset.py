@@ -184,8 +184,16 @@ def load_feature_store(data_dir: str, symbol: str = "BTCUSDc") -> list[dict[str,
         for mf in MICRO_FIELDS:
             if mf not in merged_vals:
                 merged_vals[mf] = 0.0
+        # ── Column 3: Capture ingested_at for knowledge-time filtering ──
+        # ingested_at is the system knowledge time — when this feature
+        # record was actually written to the store.  Using it in ASOF join
+        # prevents look-ahead bias (reading features that weren't yet known
+        # at trade entry time).
+        _ingested = v9_rec.get("ingested_at", "")
+
         merged.append({
             "event_time": et,
+            "ingested_at": _ingested,
             "values": merged_vals,
         })
 
@@ -230,27 +238,50 @@ def asof_join(
     features: list[dict[str, Any]],
     contract_feature_names: list[str],
 ) -> tuple[np.ndarray, np.ndarray, list[dict[str, Any]]]:
-    """PIT ASOF join: for each trade, find last feature BEFORE open time.
+    """PIT ASOF join with knowledge-time filtering (Column 3 — Bitemporal).
 
     MLOps Iron Law #1: backward-looking join only.  Never use future data.
+
+    Column 3 — Knowledge-Time Filtering (Look-Ahead Bias Elimination):
+      For each trade at time T, we can only use features whose:
+        (a) event_time  <= T  (the feature describes a state at or before T)
+        (b) ingested_at <= T  (the system KNEW about this feature at time T)
+
+      Without condition (b), a feature record that arrived late (e.g. due to
+      network delay) could be read by the ASOF join even though the live
+      system at time T did not yet have access to it.  This is the most
+      insidious form of look-ahead bias — the model learns from data that
+      was physically unavailable at decision time.
 
     DQAF-20260614-004: Feature vector now includes ou_z_entry from the trade's
     open entry (the 47th feature), appended after the 46 merged store features.
     """
-    # Sort features by event_time for binary search
-    feat_times = []
+    # ── Parse feature timestamps (event_time + ingested_at) ──
+    # Each entry: (event_dt, ingested_dt_or_None, feature_index)
+    feat_entries: list[tuple[datetime, datetime | None, int]] = []
     for i, f in enumerate(features):
-        ts = f.get("event_time", "")
-        if ts:
+        et = f.get("event_time", "")
+        it = f.get("ingested_at", "")
+        if not et:
+            continue
+        try:
+            event_dt = datetime.fromisoformat(str(et)[:26])
+            if event_dt.tzinfo is None:
+                event_dt = event_dt.replace(tzinfo=UTC)
+        except (ValueError, TypeError):
+            continue
+        ingested_dt = None
+        if it:
             try:
-                dt = datetime.fromisoformat(str(ts)[:26])
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=UTC)
-                feat_times.append((dt, i))
+                ingested_dt = datetime.fromisoformat(str(it)[:26])
+                if ingested_dt.tzinfo is None:
+                    ingested_dt = ingested_dt.replace(tzinfo=UTC)
             except (ValueError, TypeError):
-                continue
+                pass
+        feat_entries.append((event_dt, ingested_dt, i))
 
-    feat_times.sort(key=lambda x: x[0])
+    # Sort by event_time for binary search
+    feat_entries.sort(key=lambda x: x[0])
 
     X_rows = []
     y_rows = []
@@ -258,6 +289,7 @@ def asof_join(
     matched = 0
     skipped_future = 0
     skipped_missing = 0
+    skipped_not_known = 0
 
     for trade in trades:
         open_ts = trade["open_time"]
@@ -272,12 +304,12 @@ def asof_join(
             skipped_missing += 1
             continue
 
-        # Binary search: find last feature with event_time <= open_dt
-        lo, hi = 0, len(feat_times) - 1
+        # ── Binary search: find last feature with event_time <= open_dt ──
+        lo, hi = 0, len(feat_entries) - 1
         best_idx = -1
         while lo <= hi:
             mid = (lo + hi) // 2
-            if feat_times[mid][0] <= open_dt:
+            if feat_entries[mid][0] <= open_dt:
                 best_idx = mid
                 lo = mid + 1
             else:
@@ -287,7 +319,30 @@ def asof_join(
             skipped_future += 1
             continue
 
-        feat_idx = feat_times[best_idx][1]
+        # ── Column 3: Knowledge-time filter ──
+        # Walk backward from best_idx to find the most recent feature that
+        # was actually KNOWN at trade time.  This eliminates look-ahead bias
+        # from late-arriving feature records.
+        usable_idx = -1
+        for candidate_idx in range(best_idx, -1, -1):
+            _event_dt, _ingested_dt, _feat_i = feat_entries[candidate_idx]
+            if _ingested_dt is None:
+                # No ingested_at — record predates this fix.
+                # Accept it (backward-compatible with pre-Column-3 data).
+                usable_idx = candidate_idx
+                break
+            if _ingested_dt <= open_dt:
+                # Feature was known at trade time — use it.
+                usable_idx = candidate_idx
+                break
+            # Feature arrived after trade time — not known, skip it,
+            # continue walking backward.
+
+        if usable_idx < 0:
+            skipped_not_known += 1
+            continue
+
+        feat_idx = feat_entries[usable_idx][2]
         feat = features[feat_idx]
         values = feat.get("values", {})
         if not values or not isinstance(values, dict):
@@ -322,7 +377,9 @@ def asof_join(
         })
         matched += 1
 
-    print(f"ASOF join: {matched} matched, {skipped_future} no prior feature, {skipped_missing} missing data")
+    print(f"ASOF join: {matched} matched, {skipped_future} no prior feature, "
+          f"{skipped_not_known} not-yet-known at trade time, "
+          f"{skipped_missing} missing data")
     if matched == 0:
         return np.array([]), np.array([]), []
 
