@@ -5085,6 +5085,7 @@ def execute_live_cycle(
             _heartbeat_cal = getattr(state, "_conformal_calibrator", None)
             if _heartbeat_cal is not None and _heartbeat_cal.is_warm:
                 _heartbeat_cal.compute_threshold()
+                _heartbeat_cal._save_state()  # DQAF-002c: persist immediately
 
         # Evaluate all strategy lines
         eval_summary = _evaluate_strategy_lines(
