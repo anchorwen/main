@@ -3954,9 +3954,14 @@ def execute_live_cycle(
                 # FeatureService only stores v9_institutional_40.  Micro
                 # features are needed for MetaFilter training (47-dim).
                 # Write them here directly from the live cycle.
+                # Filter to only the 9 registered schema fields —
+                # MicrostructureFeatureComputer may return extras like OFI.
                 if micro_features:
                     try:
                         from core.features.local_feature_store import LocalFeatureStore
+                        from core.features.schemas.microstructure_schema import (
+                            MICROSTRUCTURE_9_FEATURES,
+                        )
                         from core.features.store_contracts import FeatureRecord
 
                         _micro_store = LocalFeatureStore(config.feature_store_dir)
@@ -3967,6 +3972,10 @@ def execute_live_cycle(
                         )
                         if _micro_version is not None:
                             _now = datetime.now(UTC).replace(tzinfo=None)
+                            _micro_values = {
+                                fn: float(micro_features.get(fn, 0.0))
+                                for fn in MICROSTRUCTURE_9_FEATURES
+                            }
                             _micro_store.write_records(
                                 [
                                     FeatureRecord(
@@ -3975,9 +3984,7 @@ def execute_live_cycle(
                                         symbol=config.symbol,
                                         timeframe="M5",
                                         event_time=_now,
-                                        values={
-                                            k: float(v) for k, v in micro_features.items()
-                                        },
+                                        values=_micro_values,
                                         source="mt5_live",
                                         ingested_at=_now,
                                     )
