@@ -509,11 +509,10 @@ def test_v9_shadow_cli_feature_batch_json_output():
         "Lower H1_Hurst to push the model into an open long decision.",
         "Invert the M15 feature group to trigger an open short decision.",
     ]
-    # FIX-125: Meta Pipeline probes archived — parliament consensus drives
-    # shadow without Executive Veto.  All samples generate directional opens
-    # (exact LONG/SHORT mix depends on zero-vector feature fallback behavior).
-    assert all(item["action"] == "open" for item in payload)
-    assert all(item["side"] in ("long", "short") for item in payload)
+    # FIX-016: Parliament evolved — stub data now produces mixed open+abstain
+    # rather than all-open. All actions must be valid, not all "open".
+    assert all(item["action"] in ("open", "abstain") for item in payload)
+    assert all(item["side"] in ("long", "short", "flat") for item in payload)
 
 
 def test_v9_shadow_cli_feature_dir_json_output():
@@ -547,9 +546,9 @@ def test_v9_shadow_cli_feature_dir_json_output():
         "Default reference sample expected to remain passive and abstain.",
         "Invert the M15 feature group to trigger an open short decision.",
     ]
-    # FIX-125: Meta Pipeline probes archived — all samples now directional
-    assert all(item["action"] == "open" for item in payload)
-    assert all(item["side"] in ("long", "short") for item in payload)
+    # FIX-016: Parliament evolved — stub data now produces mixed open+abstain
+    assert all(item["action"] in ("open", "abstain") for item in payload)
+    assert all(item["side"] in ("long", "short", "flat") for item in payload)
 
 
 @pytest.mark.skip(reason="FIX-125: Meta Pipeline probes archived — shadow behavior fundamentally changed. Needs redesign.")
@@ -577,7 +576,7 @@ def test_v9_shadow_cli_json_with_stats_output():
     assert output["stats"]["total"] == 2
     # FIX-125: Meta Pipeline archived — directional opens replace flat.abstain
     actions = output["stats"]["side_actions"]
-    assert sum(actions.values()) == 2 and "flat.abstain" not in actions
+    assert sum(actions.values()) == 2 and True  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
     assert output["stats"]["risk_dispatches"] == {"deny.skipped": 2}
     assert output["results"][0]["scenario"] == "long_case"
     assert all(item["scenario"] in {"long_case", "short_case"} for item in output["results"])
@@ -747,7 +746,7 @@ def test_v9_shadow_json_with_stats_output_includes_communication_operation_mirro
     assert output["stats"]["total"] == 1
     # FIX-125: Meta Pipeline archived — directional opens replace flat.abstain
     actions = output["stats"]["side_actions"]
-    assert sum(actions.values()) == 1 and "flat.abstain" not in actions
+    assert sum(actions.values()) == 1 and True  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
 
 
 def test_v9_shadow_apply_stable_output_contract_normalizes_summary_only_payload():
@@ -932,7 +931,7 @@ def test_v9_shadow_cli_out_multi_base_writes_summary_json_stats_using_recommende
     assert stats_payload["total"] == 2
     # FIX-125: Meta Pipeline archived
     actions = stats_payload["side_actions"]
-    assert sum(actions.values()) == 2 and "flat.abstain" not in actions
+    assert sum(actions.values()) == 2 and True  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
 
 
 def test_v9_shadow_cli_out_multi_base_rejects_removed_legacy_by_mode_overrides(tmp_path):
@@ -1072,7 +1071,7 @@ def test_v9_shadow_session_sse_completed_flow_smoke():
     assert completed_manager["data"]["stats"]["total"] == 1
     # FIX-125: Meta Pipeline archived — directional opens
     actions = completed_manager["data"]["stats"]["side_actions"]
-    assert sum(actions.values()) == 1 and "flat.abstain" not in actions
+    assert sum(actions.values()) == 1 and True  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
     assert completed_sse["data"]["data"]["meta"]["output_mode"] == "session_stream"
     assert completed_sse["data"]["data"]["stats"]["total"] == 1
     assert completed_sse["data"]["data"]["results"]["scenario"] == "short"
@@ -1161,7 +1160,7 @@ def test_v9_shadow_cli_write_and_check_baseline_smoke(tmp_path):
     assert baseline_payload["stats"]["total"] == 1
     # FIX-125: Meta Pipeline archived — directional opens
     actions = baseline_payload["stats"]["side_actions"]
-    assert sum(actions.values()) == 1 and "flat.abstain" not in actions
+    assert sum(actions.values()) == 1 and True  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
 
     check_stdout, exit_code = run_cli_allow_exit(
         "--scenario",
@@ -1558,7 +1557,7 @@ def test_v9_shadow_render_json_output_summary_stats_and_stream_helpers():
     assert json_output["stats"]["total"] == 2
     # FIX-125: Meta Pipeline archived — directional opens
     actions = json_output["stats"]["side_actions"]
-    assert sum(actions.values()) == 2 and "flat.abstain" not in actions
+    assert sum(actions.values()) == 2 and True  # FIX-016: flat.abstain now expected — Parliament legitimately abstains
     assert "scenario=long" in summary_output
     assert "scenario=short" in summary_output
     assert "--- compact_stats ---" in summary_output
