@@ -5073,6 +5073,19 @@ def execute_live_cycle(
         except Exception:  # noqa: BLE001
             _degrade_constraints = None  # Fail-open: degradation check must not crash
 
+        # ── DQAF-20260614-002: Per-cycle calibrator heartbeat ──
+        # compute_threshold() updates the adaptive Q10 from rolling history.
+        # Must be called at least once per cycle so total_computations > 0
+        # and the MetaFilter can transition from fixed → adaptive threshold.
+        # Previously, MetaFilterGate had a calibrator but evaluate() was never
+        # called; MetaSignalFilter was called but had no calibrator.  This
+        # heartbeat bypasses the gate wiring gap — the calibrator computes
+        # regardless of which gate consumes the threshold.
+        with contextlib.suppress(Exception):
+            _heartbeat_cal = getattr(state, "_conformal_calibrator", None)
+            if _heartbeat_cal is not None and _heartbeat_cal.is_warm:
+                _heartbeat_cal.compute_threshold()
+
         # Evaluate all strategy lines
         eval_summary = _evaluate_strategy_lines(
             strategy_lines=strategies,
