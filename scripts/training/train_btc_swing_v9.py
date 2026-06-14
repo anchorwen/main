@@ -183,50 +183,11 @@ def _vol_zscore(c: np.ndarray, lookback: int = VOL_ZS_LOOKBACK) -> float:
     return (vol - mean_vol) / mean_vol if mean_vol > 0 else 0.0
 
 
-def _ou_theta(price: np.ndarray, lookback: int = OU_LOOKBACK,
-              tf_minutes: float = 5.0) -> float:
-    if len(price) < lookback + 1:
-        return 0.0
-    window = price[-lookback:]
-    y = window[1:]
-    x = window[:-1]
-    x_mean = float(np.mean(x))
-    y_mean = float(np.mean(y))
-    beta_num = float(np.sum((x - x_mean) * (y - y_mean)))
-    beta_den = float(np.sum((x - x_mean) ** 2))
-    if beta_den == 0:
-        return 0.0
-    beta = beta_num / beta_den
-    dt = tf_minutes / (1440.0 * 365.0)  # bar interval in years
-    theta = -math.log(max(beta, 0.001)) / dt if beta > 0 else 1.0
-    return min(theta, 200.0)
-
-
-def _hurst(price: np.ndarray, max_lag: int = HURST_MAX_LAG) -> float:
-    if len(price) < max_lag + 2:
-        return 0.5
-    returns = np.diff(np.log(price[-max_lag - 2:]))
-    lags = np.arange(2, min(max_lag, len(returns)))
-    if len(lags) < 3:
-        return 0.5
-    tau_vals = []
-    for lag in lags:
-        segments = len(returns) // lag
-        if segments < 2:
-            continue
-        stds = []
-        for s in range(segments):
-            chunk = returns[s * lag:(s + 1) * lag]
-            if len(chunk) > 1:
-                stds.append(float(np.std(chunk)))
-        if stds:
-            tau_vals.append((float(np.log(lag)), float(np.log(np.mean(stds)))))
-    if len(tau_vals) < 3:
-        return 0.5
-    xs = np.array([t[0] for t in tau_vals])
-    ys = np.array([t[1] for t in tau_vals])
-    slope = float(np.polyfit(xs, ys, 1)[0])
-    return max(0.1, min(1.0, slope))
+# FIX-20260614-B3: Production parity — import live OU/Hurst directly.
+# The training pipeline must use the EXACT same math as the live feature
+# computer.  V9's local implementations used dt-adjusted OU (bar→years)
+# and log-return Hurst — both differed from production (dt=1, price-level).
+from core.features.computers.v9_live_computer import _hurst, _ou_theta
 
 
 # ── Feature Computation ──────────────────────────────────────────────────────
@@ -318,7 +279,7 @@ def compute_feature_row(idx: int, o: np.ndarray, h: np.ndarray, l: np.ndarray,
             btc_gold_ratio_roc = (btc_gold_ratio - prev_ratio) / prev_ratio if prev_ratio > 0 else 0.0
 
     # ── TF-specific (timeframe-aware dt for OU_Theta) ──
-    tf_ou = _ou_theta(price_slice, tf_minutes=tf_minutes)
+    tf_ou = _ou_theta(price_slice)  # FIX-B3: production parity, dt=1 implicit
     tf_hurst = _hurst(price_slice)
 
     # ── Assemble in schema order ──
