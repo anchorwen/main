@@ -163,7 +163,61 @@ def main() -> int:
         docket_type = "FIX" if has_fix else ("DQAF" if has_dqaf else "exempt")
         print(f"[Ω] Docket check PASSED: {docket_type} ID for {len(covered_staged)} covered file(s).")
 
-    # ── Check 5: FIX_REGISTRY cross-reference (FIX-20260613-061) ────────
+    # ── Check 5: --no-verify audit (Iron Law #0-bis enforcement) ────────
+    # DQAF-20260614-P0: Every --no-verify must carry a VALID exemption reason.
+    # The exemption must match the actual staged files — e.g. claiming
+    # 'live process file locks' when no data_btc/*.jsonl is staged = REJECT.
+    no_verify_match = re.search(r"--no-verify:\s*(.+?)$", commit_msg, re.MULTILINE)
+    if no_verify_match:
+        reason = no_verify_match.group(1).strip()
+
+        VALID_EXEMPTIONS = {
+            "live process file locks": lambda: any(
+                f.startswith(("data_btc/", "data/")) and f.endswith((".jsonl", ".lock"))
+                for f in staged
+            ),
+            "documentation-only": lambda: all(
+                f.endswith(".md") for f in staged
+            ),
+            "emergency rollback": lambda: "EMERGENCY_ROLLBACK" in commit_msg.upper(),
+        }
+
+        is_valid = False
+        matched_rule = ""
+        for rule, check_fn in VALID_EXEMPTIONS.items():
+            if rule in reason.lower():
+                if check_fn():
+                    is_valid = True
+                    matched_rule = rule
+                    break
+                else:
+                    print("=" * 60)
+                    print("[Ω] COMMIT REJECTED: --no-verify exemption MISMATCH.")
+                    print(f"[Ω] Claimed: '{reason}'")
+                    print(f"[Ω] Rule '{rule}' requires specific staged files that are NOT present.")
+                    print(f"[Ω] Staged files ({len(staged)}):")
+                    for f in sorted(staged)[:10]:
+                        print(f"[Ω]   {f}")
+                    if len(staged) > 10:
+                        print(f"[Ω]   ... and {len(staged) - 10} more")
+                    print("[Ω] --no-verify is only allowed for:")
+                    print("[Ω]   1. data_btc/*.jsonl locked by live process")
+                    print("[Ω]   2. Documentation-only (.md files)")
+                    print("[Ω]   3. Emergency rollback (EMERGENCY_ROLLBACK)")
+                    print("=" * 60)
+                    return 1
+
+        if not is_valid:
+            print("=" * 60)
+            print("[Ω] COMMIT REJECTED: --no-verify with unrecognized reason.")
+            print(f"[Ω] Reason: '{reason}'")
+            print("[Ω] Allowed reasons: live process file locks | documentation-only | emergency rollback")
+            print("=" * 60)
+            return 1
+
+        print(f"[Ω] --no-verify audit PASSED: valid exemption '{matched_rule}'.")
+
+    # ── Check 6: FIX_REGISTRY cross-reference (FIX-20260613-061) ────────
     # When a FIX ID is claimed in the commit, it MUST exist in the registry.
     # This closes the loop: diagnosis → fix → registration → commit.
     if has_fix:
