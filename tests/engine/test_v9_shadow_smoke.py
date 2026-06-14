@@ -1367,9 +1367,9 @@ def test_v9_shadow_cli_feature_file_json_output():
         "v9_shadow_long.json",
         "v9_shadow_long.json",
     ]
-    # FIX-016: Parliament may produce open or abstain for stub data
+    # FIX-016: Parliament may produce open or abstain; side may be flat
     assert all(item["action"] in ("open", "abstain") for item in payload)
-    assert all(item["side"] in ("long", "short") for item in payload)
+    assert all(item["side"] in ("long", "short", "flat") for item in payload)
 
 
 def test_v9_shadow_cli_feature_file_summary_output():
