@@ -280,12 +280,13 @@ def reconcile_closed_positions(
                 )
                 _writer = EventWriter(_ledger_path)
                 _settled_ts = datetime.now(UTC)
-                # entry_price may be at top level OR nested in detail
+                # entry_price may be at: top level, detail.entry_price,
+                # or detail.request.price (MT5 order fill price)
                 _entry_price = float(open_entry.get("entry_price", 0) or 0)
                 if _entry_price <= 0:
                     _detail = open_entry.get("detail", {})
                     if isinstance(_detail, dict):
-                        _ep = _detail.get("entry_price", 0)
+                        _ep = _detail.get("entry_price", 0) or _detail.get("request", {}).get("price", 0)
                         if _ep:
                             _entry_price = float(_ep)
                 _close_price_f = float(close_price) if close_price else 0.0
