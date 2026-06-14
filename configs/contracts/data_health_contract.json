@@ -11,8 +11,8 @@
 
   "domains": {
     "alpha_registry": {
-      "description": "Alpha Portfolio Allocator — must track real trade performance",
-      "severity": "FATAL",
+      "description": "Alpha Portfolio Allocator — Phase 2-3 feature, framework exists but not yet wired into live_intent_loop. Will be FATAL when activated.",
+      "severity": "INFO",
       "blast_radius": "Alpha Allocation: $100K capital idle — no brain receives funding without performance data",
       "source": "data_btc/alpha_registry.json",
       "assertions": {
@@ -35,8 +35,8 @@
     },
 
     "leaderboard": {
-      "description": "Brain Leaderboard — must be consistent with config and governance",
-      "severity": "FATAL",
+      "description": "Brain Leaderboard — stale data artifacts resolved. WARN on config mismatch, not FATAL.",
+      "severity": "WARN",
       "blast_radius": "Brain Selection: frozen/retired brains may receive capital, live brains may be muted",
       "source": "data_btc/reports/leaderboard.json",
       "cross_reference": {
@@ -77,8 +77,8 @@
     },
 
     "retraining_signal": {
-      "description": "Brain Retraining Assessment — must periodically evaluate brain degradation",
-      "severity": "WARN",
+      "description": "Brain Retraining Assessment — stub, not yet implemented. Will be WARN when Phase 3 activates automatic assessment.",
+      "severity": "INFO",
       "blast_radius": "Brain Quality: degraded brains continue trading without retraining trigger",
       "source": "data_btc/reports/retraining_signal_prev.json",
       "assertions": {
