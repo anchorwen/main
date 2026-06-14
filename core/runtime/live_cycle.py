@@ -3950,6 +3950,41 @@ def execute_live_cycle(
                 micro_feature_vector = micro_feature_adapter.build_model_input(
                     micro_features
                 ).ravel()
+                # ── DQAF-20260614-004: Persist micro features to store ──
+                # FeatureService only stores v9_institutional_40.  Micro
+                # features are needed for MetaFilter training (47-dim).
+                # Write them here directly from the live cycle.
+                if micro_features:
+                    try:
+                        from core.features.local_feature_store import LocalFeatureStore
+                        from core.features.store_contracts import FeatureRecord
+
+                        _micro_store = LocalFeatureStore(config.feature_store_dir)
+                        _micro_version = _micro_store.resolve_version(
+                            schema_name="v4.3_microstructure_9",
+                            symbol=config.symbol,
+                            timeframe="M5",
+                        )
+                        if _micro_version is not None:
+                            _now = datetime.now(UTC).replace(tzinfo=None)
+                            _micro_store.write_records(
+                                [
+                                    FeatureRecord(
+                                        schema_name="v4.3_microstructure_9",
+                                        schema_version=_micro_version,
+                                        symbol=config.symbol,
+                                        timeframe="M5",
+                                        event_time=_now,
+                                        values={
+                                            k: float(v) for k, v in micro_features.items()
+                                        },
+                                        source="mt5_live",
+                                        ingested_at=_now,
+                                    )
+                                ]
+                            )
+                    except Exception:
+                        pass  # best-effort — micro store write must not block cycle
         else:
             micro_feature_vector = np.zeros(_schema_dim("v4.3_microstructure_9"), dtype=np.float64)
 
