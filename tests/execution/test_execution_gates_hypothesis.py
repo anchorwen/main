@@ -99,21 +99,21 @@ class TestRegimeDirectionGate:
         defaults.update(overrides)
         return defaults
 
-    def test_strong_uptrend_resolves_up(self) -> None:
-        """ADX=30, +DI > -DI → 'up'."""
+    def test_strong_uptrend_passthrough(self) -> None:
+        """FIX-20260614-B2: ADX=30, +DI > -DI → 'ranging' (Feature-Not-Gate)."""
         from core.execution.regime_direction_gate import RegimeDirectionGate
 
         gate = RegimeDirectionGate()
         result = gate._resolve_trend(self._make_regime_info(adx=30, plus_di=35, minus_di=15))
-        assert result == "up"
+        assert result == "ranging"  # Feature-Not-Gate: ADX no longer blocks
 
-    def test_strong_downtrend_resolves_down(self) -> None:
-        """ADX=30, -DI > +DI → 'down'."""
+    def test_strong_downtrend_passthrough(self) -> None:
+        """FIX-20260614-B2: ADX=30, -DI > +DI → 'ranging' (Feature-Not-Gate)."""
         from core.execution.regime_direction_gate import RegimeDirectionGate
 
         gate = RegimeDirectionGate()
         result = gate._resolve_trend(self._make_regime_info(adx=30, plus_di=15, minus_di=35))
-        assert result == "down"
+        assert result == "ranging"  # Feature-Not-Gate: ADX no longer blocks
 
     def test_ranging_with_low_adx(self) -> None:
         """ADX=10 (< 25 threshold) → 'ranging' (full passthrough)."""
@@ -123,8 +123,12 @@ class TestRegimeDirectionGate:
         result = gate._resolve_trend(self._make_regime_info(adx=10, plus_di=20, minus_di=15))
         assert result == "ranging"
 
-    def test_filter_blocks_counter_trend_in_uptrend(self) -> None:
-        """In uptrend, 'short' signals must be blocked."""
+    def test_filter_passthrough_all_signals_regardless_of_trend(self) -> None:
+        """FIX-20260614-B2: All signals pass through — model learned regime awareness.
+
+        blocked_short is still tracked in audit for diagnostics, but no signal
+        is actually blocked.  The capital_allocator handles micro-sizing downstream.
+        """
         from core.execution.regime_direction_gate import RegimeDirectionGate
 
         gate = RegimeDirectionGate()
@@ -135,9 +139,10 @@ class TestRegimeDirectionGate:
         ]
         filtered, audit = gate.filter(signals, self._make_regime_info())
 
-        assert len(filtered) == 2
-        assert all(s["direction"] == "long" for s in filtered)
-        assert len(audit["blocked_short"]) == 1
+        # All 3 signals pass through (Feature-Not-Gate)
+        assert len(filtered) == 3
+        # Audit: with trend="ranging", blocked counters are always empty
+        # (counter-trend tracking only activates for "up"/"down" which no longer occur)
 
     def test_filter_passthrough_in_ranging(self) -> None:
         """In ranging, ALL signals must pass through unblocked."""
@@ -161,33 +166,29 @@ class TestRegimeDirectionGate:
         filtered, audit = gate.filter([], self._make_regime_info())
         assert filtered == []
 
-    def test_trend_direction_string_variants(self) -> None:
-        """Various trend_direction strings must resolve correctly."""
+    def test_trend_direction_strings_all_passthrough(self) -> None:
+        """FIX-20260614-B2: All trend_direction strings → 'ranging' (Feature-Not-Gate)."""
         from core.execution.regime_direction_gate import RegimeDirectionGate
 
         gate = RegimeDirectionGate(adx_threshold=25)
-        # "long" with ADX=30
-        assert gate._resolve_trend(self._make_regime_info(adx=30, plus_di=0, minus_di=0, trend_direction="long")) == "up"
-        # "up"
-        assert gate._resolve_trend(self._make_regime_info(adx=30, plus_di=0, minus_di=0, trend_direction="up")) == "up"
-        # "bullish"
-        assert gate._resolve_trend(self._make_regime_info(adx=30, plus_di=0, minus_di=0, trend_direction="bullish")) == "up"
-        # "short"
-        assert gate._resolve_trend(self._make_regime_info(adx=30, plus_di=0, minus_di=0, trend_direction="short")) == "down"
+        for direction in ("long", "up", "bullish", "short", "down", "bearish"):
+            assert gate._resolve_trend(
+                self._make_regime_info(adx=30, plus_di=0, minus_di=0, trend_direction=direction)
+            ) == "ranging"
 
-    def test_physics_override_requires_sufficient_history(self) -> None:
-        """With NaN OU/Hurst, gate falls through to ADX (no crash)."""
+    def test_physics_override_with_nan_falls_through_to_ranging(self) -> None:
+        """FIX-20260614-B2: NaN OU/Hurst → physics path skipped → 'ranging' default."""
         from core.execution.regime_direction_gate import RegimeDirectionGate
 
         gate = RegimeDirectionGate()
-        # NaN ou_theta/hurst_m5 → physics path skipped → ADX used
+        # NaN ou_theta/hurst_m5 → physics path skipped → Feature-Not-Gate defaults to "ranging"
         result = gate._resolve_trend(
             self._make_regime_info(
                 adx=30, plus_di=35, minus_di=15,
                 ou_theta_m5=float("nan"), hurst_m5=float("nan"),
             )
         )
-        assert result == "up"  # ADX path → uptrend
+        assert result == "ranging"  # Feature-Not-Gate: no ADX fallback, default passthrough
 
 
 # ============================================================================

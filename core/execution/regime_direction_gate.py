@@ -107,33 +107,24 @@ class RegimeDirectionGate:
                         if ou_theta > _ou_p75 and hurst_m5 < _hurst_p25:
                             return "ranging"
 
-        # ═══ Priority 1: DI-based with ADX confirmation ═══
+        # ═══ FIX-20260614-B2: Feature-Not-Gate migration complete ═══
+        # Priority 1-3 (ADX/DI/trend_direction/regime_string) removed.
+        # The brain now learns regime awareness natively from OU/Hurst
+        # features in the 40-dim vector.  ADX metrics are recorded for
+        # diagnostic audit only — no trade is ever blocked by trend.
+        #
+        # Priority 0 (physics override: Theta > P75 AND Hurst < P25)
+        # remains as the FINAL hard circuit breaker — extreme mean-
+        # reversion environments where the physics itself demands caution.
         adx = float(regime_info.get("adx", 0) or 0)
-        plus_di = float(regime_info.get("plus_di", 0) or 0)
-        minus_di = float(regime_info.get("minus_di", 0) or 0)
+        if adx > 0:
+            logger.info(
+                "[DIAGNOSTIC_REGIME] Feature-Not-Gate: all signals pass through. "
+                "Legacy ADX=%.2f (threshold=%s) — recorded for audit only.",
+                adx, self._adx_threshold,
+            )
 
-        if adx >= self._adx_threshold and plus_di > 0 and minus_di > 0:
-            if plus_di > minus_di:
-                return "up"
-            else:
-                return "down"
-
-        # ═══ Priority 2: explicit trend_direction gated by ADX ═══
-        trend_str = str(regime_info.get("trend_direction", "")).lower()
-        if adx >= self._adx_threshold:
-            if trend_str in ("long", "up", "bullish"):
-                return "up"
-            if trend_str in ("short", "down", "bearish"):
-                return "down"
-
-        # ═══ Priority 3: regime string ═══
-        detected_regime = str(regime_info.get("detected_regime", regime_info.get("primary_regime", ""))).lower()
-        if "trending_up" in detected_regime:
-            return "up"
-        if "trending_down" in detected_regime:
-            return "down"
-
-        # Default: ranging — passthrough all signals
+        # Default: ranging — passthrough ALL signals
         return "ranging"
 
     def filter(
@@ -163,12 +154,17 @@ class RegimeDirectionGate:
             direction = str(sig.get("direction", "")).lower()
             brain_id = str(sig.get("brain_id", "?"))
 
+            # FIX-20260614-B2: Feature-Not-Gate — no trend-based blocking.
+            # All signals pass through.  The model learned regime awareness
+            # from OU/Hurst features during retraining (Phase B1).
+            # ADX metrics are recorded in the audit payload for post-trade
+            # analysis and capital_allocator micro-sizing.
             if trend == "up" and direction == "short":
                 blocked_short.append(brain_id)
-                continue
+                # Continue to pass-through — NOT blocked
             elif trend == "down" and direction == "long":
                 blocked_long.append(brain_id)
-                continue
+                # Continue to pass-through — NOT blocked
 
             passed.append(sig)
 
@@ -183,24 +179,10 @@ class RegimeDirectionGate:
         else:
             self._short_blocked_streak = 0
 
-        # Stale-shield warnings
+        # Streak tracking retained for diagnostic audit (FIX-20260614-B2).
+        # No warnings — counter-trend signals are no longer blocked.
+        # The model's regime awareness replaces the external gate.
         stale_warnings: list[str] = []
-        if self._long_blocked_streak >= self._stale_warn_cycles:
-            msg = (
-                f"RegimeDirectionGate: LONG brains blocked for "
-                f"{self._long_blocked_streak} consecutive cycles "
-                f"(trend={trend}).  Verify trend signal is not stale."
-            )
-            logger.warning(msg)
-            stale_warnings.append(msg)
-        if self._short_blocked_streak >= self._stale_warn_cycles:
-            msg = (
-                f"RegimeDirectionGate: SHORT brains blocked for "
-                f"{self._short_blocked_streak} consecutive cycles "
-                f"(trend={trend}).  Verify trend signal is not stale."
-            )
-            logger.warning(msg)
-            stale_warnings.append(msg)
 
         # ── Self-calibration diagnostics ──
         _phys_state: dict[str, Any] = {"active": False, "samples": 0}

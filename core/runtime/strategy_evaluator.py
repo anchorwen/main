@@ -35,12 +35,12 @@ def _get_r1_silence_state() -> dict[str, int]:
     return _r1_silence_state
 
 
-# ── Regime Direction Gate (FIX-20260613-090-wire) ──
-# FIX-20260613-090: Wired the previously-dead RegimeDirectionGate class into
-# the live evaluation pipeline.  The gate owns the self-calibrating physics
-# rolling window (OU Theta + Hurst) and provides _resolve_trend() which
-# includes the physics-based mean-reversion override.
-# TODO: phase out ADX gating when brains retrained with V9_Micro features.
+# ── Regime Direction Gate (FIX-20260614-B2: Feature-Not-Gate complete) ──
+# FIX-20260613-090: Wired the RegimeDirectionGate into the live pipeline.
+# FIX-20260614-B2: ADX gating phased out — brains now learn regime awareness
+# natively from OU/Hurst features.  Priority 0 physics override (Theta > P75
+# AND Hurst < P25 → extreme mean-reversion → "ranging") remains as circuit breaker.
+# The gate now provides diagnostic audit only — all signals pass through.
 from core.execution.regime_direction_gate import RegimeDirectionGate
 
 _direction_gate = RegimeDirectionGate(adx_threshold=25, stale_warn_cycles=48)
