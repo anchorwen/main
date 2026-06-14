@@ -409,7 +409,7 @@ def test_v9_shadow_load_short_feature_source_from_json():
 
     assert len(feature_source) == 40
     assert abs(feature_source["M15_RSI_14"]) == 29.0   # FIX-016: M15_RSI ×(-0.5) instead of ×(-2.5)
-    assert abs(feature_source["M15_Hurst"]) == 0.65
+    assert abs(feature_source["M15_Hurst"]) == 0.13  # FIX-016: 0.26 × |-0.5| = 0.13
 
 
 def test_v9_shadow_load_feature_batch_from_json():
