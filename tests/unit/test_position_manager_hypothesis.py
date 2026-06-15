@@ -542,3 +542,217 @@ class TestMIALifecycle:
         remaining = pm.get_all_positions()
         assert len(remaining) == 1
         assert remaining[0].ticket == 301
+
+
+# ============================================================================
+# ROUND 3: Micro-exit evaluator parametrized barrage
+# ============================================================================
+
+
+# ---------------------------------------------------------------------------
+# R-Milestones
+# ---------------------------------------------------------------------------
+class TestRMilestones:
+    """check_r_milestones: pure R-multiple state tracker."""
+
+    @pytest.mark.parametrize("r,expected", [
+        (0.5, None),
+        (1.2, "1R"),
+        (2.1, "2R"),
+        (3.5, "3R"),
+    ])
+    def test_r_milestone_triggers(self, r, expected) -> None:
+        """At R >= threshold, milestone must fire exactly once. Below → None."""
+        pm = _make_pm()
+        entry = 2000.0
+        sl = 1900.0  # risk = 100
+        pm.register_position(ticket=1, side="long", entry_price=entry, volume=0.01,
+                             initial_sl=sl, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0)
+        mid = entry + r * abs(entry - sl)
+        result = pm.check_r_milestones(mid, ticket=1)
+        assert result == expected, f"R={r}: expected {expected}, got {result}"
+
+    def test_milestone_fires_only_once(self) -> None:
+        """1R milestone fires first call, then None on second call."""
+        pm = _make_pm()
+        pm.register_position(ticket=2, side="long", entry_price=2000.0, volume=0.01,
+                             initial_sl=1900.0, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0)
+        mid = 2000.0 + 1.5 * 100.0  # 1.5R
+        assert pm.check_r_milestones(mid, ticket=2) == "1R"
+        assert pm.check_r_milestones(mid, ticket=2) is None  # already hit
+
+    def test_higher_milestone_still_fires(self) -> None:
+        """After 1R, 2R still fires when reached."""
+        pm = _make_pm()
+        pm.register_position(ticket=3, side="long", entry_price=2000.0, volume=0.01,
+                             initial_sl=1900.0, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0)
+        assert pm.check_r_milestones(2000.0 + 1.5 * 100.0, ticket=3) == "1R"
+        assert pm.check_r_milestones(2000.0 + 2.5 * 100.0, ticket=3) == "2R"
+
+
+# ---------------------------------------------------------------------------
+# Partial TP
+# ---------------------------------------------------------------------------
+class TestPartialTP:
+    """should_partial_tp: R-multiple triggered scale-out."""
+
+    def test_below_threshold_no_trigger(self) -> None:
+        """R < partial_tp_r → no trigger."""
+        pm = _make_pm()
+        pm.register_position(ticket=10, side="long", entry_price=2000.0, volume=0.10,
+                             initial_sl=1900.0, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0,
+                             partial_tp_r=2.0, partial_tp_ratio=0.3)
+        trigger, close_vol, remain_vol = pm.should_partial_tp(mid=2100.0, ticket=10)
+        assert not trigger, f"R=1.0 < partial_tp_r=2.0 should not trigger"
+
+    def test_at_threshold_triggers_scale_out(self) -> None:
+        """R >= partial_tp_r → trigger partial close."""
+        pm = _make_pm()
+        pm.register_position(ticket=11, side="long", entry_price=2000.0, volume=0.10,
+                             initial_sl=1900.0, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0,
+                             partial_tp_r=2.0, partial_tp_ratio=0.3)
+        trigger, close_vol, remain_vol = pm.should_partial_tp(mid=2200.0, ticket=11)
+        assert trigger, f"R=2.0 >= 2.0 should trigger"
+        assert close_vol == 0.03  # 0.10 * 0.3 = 0.03
+        assert remain_vol == 0.07
+
+    def test_partial_tp_triggered_flag_prevents_repeat(self) -> None:
+        """The partial_tp_triggered flag (set by caller after execution) blocks re-trigger.
+
+        should_partial_tp reads the flag but the caller (management loop) sets it.
+        We simulate this by manually setting the flag after first trigger.
+        """
+        pm = _make_pm()
+        pm.register_position(ticket=12, side="long", entry_price=2000.0, volume=0.10,
+                             initial_sl=1900.0, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0,
+                             partial_tp_r=2.0, partial_tp_ratio=0.3)
+        # First: triggers correctly
+        trigger1, cv1, rv1 = pm.should_partial_tp(mid=2200.0, ticket=12)
+        assert trigger1
+        # Simulate that the caller executed the partial TP and set the flag
+        pos = pm.get_position(12)
+        pos.partial_tp_triggered = True
+        # Second: blocked by flag
+        trigger2, _, _ = pm.should_partial_tp(mid=2300.0, ticket=12)
+        assert not trigger2, "partial_tp_triggered flag should prevent repeat"
+
+
+# ---------------------------------------------------------------------------
+# Micro Partial TP (OFI)
+# ---------------------------------------------------------------------------
+class TestMicroPartialTP:
+    """should_micro_partial_tp: microstructure (OFI) triggered scale-out."""
+
+    def test_ofi_below_threshold_no_trigger(self) -> None:
+        """OFI not extreme enough → no micro TP."""
+        pm = _make_pm()
+        pm.register_position(ticket=20, side="long", entry_price=2000.0, volume=0.10,
+                             initial_sl=1900.0, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0,
+                             partial_tp_r=3.0, partial_tp_ratio=0.5,
+                             ofi_partial_tp_threshold=2.5, ofi_partial_tp_r_mult=0.5)
+        trigger, _, _ = pm.should_micro_partial_tp(mid=2150.0, ofi_z=1.0, ticket=20)
+        assert not trigger, "OFI=1.0 < threshold=2.5"
+
+    def test_ofi_extreme_triggers_at_reduced_r(self) -> None:
+        """Extreme OFI + reduced R threshold → micro TP fires."""
+        pm = _make_pm()
+        pm.register_position(ticket=21, side="long", entry_price=2000.0, volume=0.10,
+                             initial_sl=1900.0, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0,
+                             partial_tp_r=3.0, partial_tp_ratio=0.5,
+                             ofi_partial_tp_threshold=2.5, ofi_partial_tp_r_mult=0.5)
+        # reduced_r = 3.0 * 0.5 = 1.5R. mid=2150 → R=1.5 >= 1.5, OFI=3.0 > 2.5
+        trigger, close_vol, remain_vol = pm.should_micro_partial_tp(mid=2150.0, ofi_z=3.0, ticket=21)
+        assert trigger
+        assert close_vol == 0.05  # 0.10 * 0.5
+
+
+# ---------------------------------------------------------------------------
+# OU Mean-Reversion Exit
+# ---------------------------------------------------------------------------
+class TestOUExit:
+    """should_exit_ou_based: pure mean-reversion exit logic."""
+
+    @pytest.mark.parametrize("entry_z,current_z,z_exit,expected,reason_contains", [
+        (0.5, 0.1, 0.3, False, "low_entry_z"),       # entry too weak
+        (2.0, 2.0, 0.3, False, "waiting_for_reversion"), # still extreme
+        (2.0, 0.1, 0.3, True, "revert_target"),       # reverted to mean
+        (1.5, 0.2, 0.3, True, "revert_target"),       # at threshold
+        (1.49, 0.2, 0.3, False, "low_entry_z"),       # just below threshold
+        (2.0, 0.29, 0.3, True, "revert_target"),      # below z_exit
+        (2.0, 0.31, 0.3, False, "waiting_for_reversion"), # still above z_exit
+    ])
+    def test_ou_exit_scenarios(self, entry_z, current_z, z_exit, expected, reason_contains) -> None:
+        """Table-driven OU exit logic: Gate 1 (entry_z >= 1.5) + Gate 2 (current_z < z_exit)."""
+        pm = _make_pm()
+        pm.register_position(ticket=30, side="long", entry_price=2000.0, volume=0.01,
+                             initial_sl=1900.0, initial_tp=2200.0, entry_atr=10.0, entry_cycle=0,
+                             entry_z_score=entry_z)
+        should_exit, reason = pm.should_exit_ou_based(current_z, z_exit=z_exit, ticket=30)
+        assert should_exit == expected, f"entry_z={entry_z}, current_z={current_z}: expected {expected}, got {reason}"
+        assert reason_contains in reason, f"Reason '{reason}' should contain '{reason_contains}'"
+
+
+# ---------------------------------------------------------------------------
+# Inflection Entry Gate (bonus: pure static method)
+# ---------------------------------------------------------------------------
+class TestInflectionGate:
+    """should_enter_inflection: Z-score inflection entry gate."""
+
+    @pytest.mark.parametrize("current_z,prev_z,z_entry,expected", [
+        (-2.0, -3.0, 1.3, True),    # short: inflecting up toward zero
+        (-2.0, -1.0, 1.3, False),   # short: still moving away (more negative)
+        (2.0, 3.0, 1.3, True),      # long: inflecting down toward zero
+        (2.0, 1.0, 1.3, False),     # long: still moving away (more positive)
+        (1.0, None, 1.3, True),     # first bar: always allow
+        (0.5, 1.5, 1.3, False),     # below threshold
+    ])
+    def test_inflection_scenarios(self, current_z, prev_z, z_entry, expected) -> None:
+        """Z-score must be moving back toward zero after crossing threshold."""
+        from core.execution.position_manager import ActivePositionManager
+        ok, reason = ActivePositionManager.should_enter_inflection(current_z, prev_z, z_entry)
+        assert ok == expected, f"z={current_z}, prev={prev_z}: expected {expected}, got {reason}"
+
+
+# ---------------------------------------------------------------------------
+# Bleed Stop (bonus: pure static method)
+# ---------------------------------------------------------------------------
+class TestBleedStop:
+    """should_exit_bleed: Time-bleed stop — exit if position bleeds for too long."""
+
+    def test_no_bleed_with_positive_pnl(self) -> None:
+        """Positive bar PnLs → no bleed."""
+        from core.execution.position_manager import ActivePositionManager as APM
+        pos = ActivePosition(ticket=1, side="long", entry_price=2000.0, volume=0.01,
+                             initial_sl=1900.0, initial_tp=2200.0,
+                             current_sl=1900.0, current_tp=2200.0,
+                             highest_high=2000.0, lowest_low=2000.0,
+                             entry_atr=10.0, entry_cycle=0)
+        ok, _ = APM.should_exit_bleed(pos, current_pnl_r=0.1)  # single positive → no bleed
+        assert not ok
+
+    def test_bleed_detected_with_consecutive_losses(self) -> None:
+        """3 consecutive negative bars → bleed."""
+        from core.execution.position_manager import ActivePositionManager as APM
+        pos = ActivePosition(ticket=2, side="long", entry_price=2000.0, volume=0.01,
+                             initial_sl=1900.0, initial_tp=2200.0,
+                             current_sl=1900.0, current_tp=2200.0,
+                             highest_high=2000.0, lowest_low=2000.0,
+                             entry_atr=10.0, entry_cycle=0)
+        # Feed 3 consecutive negative PnLs
+        APM.should_exit_bleed(pos, current_pnl_r=-0.5)
+        APM.should_exit_bleed(pos, current_pnl_r=-0.6)
+        ok, reason = APM.should_exit_bleed(pos, current_pnl_r=-0.7)
+        assert ok, f"3 consecutive negatives should trigger bleed, got: {reason}"
+        assert "bleed_stop" in reason
+
+    def test_short_history_no_bleed(self) -> None:
+        """Less than bleed_bars of history → no bleed."""
+        from core.execution.position_manager import ActivePositionManager as APM
+        pos = ActivePosition(ticket=3, side="long", entry_price=2000.0, volume=0.01,
+                             initial_sl=1900.0, initial_tp=2200.0,
+                             current_sl=1900.0, current_tp=2200.0,
+                             highest_high=2000.0, lowest_low=2000.0,
+                             entry_atr=10.0, entry_cycle=0)
+        APM.should_exit_bleed(pos, current_pnl_r=-0.6)
+        ok, _ = APM.should_exit_bleed(pos, current_pnl_r=-0.7)  # only 2 bars → no
+        assert not ok
