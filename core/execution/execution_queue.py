@@ -153,6 +153,7 @@ class ExecutionQueue:
         protection_flag_path: str = "",
         broker: Any = None,
         close_dispatch_fn: Any = None,
+        adapter_name: str = "mt5",
     ) -> list[DispatchResult]:
         """Process all queued decisions in priority order with stagger delay.
 
@@ -189,6 +190,7 @@ class ExecutionQueue:
                 protection_flag_path=protection_flag_path,
                 broker=broker,
                 close_dispatch_fn=close_dispatch_fn,
+                adapter_name=adapter_name,
             )
         except Exception as _fatal_exc:
             import logging as _fatal_log
@@ -215,6 +217,7 @@ class ExecutionQueue:
         protection_flag_path: str = "",
         broker: Any = None,
         close_dispatch_fn: Any = None,
+        adapter_name: str = "mt5",
     ) -> list[DispatchResult]:
         """Internal flush implementation — wrapped by fail-closed guard."""
         # Sort by priority (lowest first)
@@ -346,7 +349,7 @@ class ExecutionQueue:
                             skip_price_guard=True,
                             ignore_protection_flag=ignore_protection_flag,
                             protection_flag_path=protection_flag_path,
-                            adapter_name="mt5",
+                            adapter_name=adapter_name,
                             extensions={"mt5_terminal_path": mt5_terminal_path},
                         )
                     # ── Close confirmation poll (timeout 30 s, max 120 iterations) ──

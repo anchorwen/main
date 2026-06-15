@@ -232,7 +232,7 @@ def dispatch_managed_close(
                     skip_price_guard=True,
                     ignore_protection_flag=config.ignore_protection_flag,
                     protection_flag_path=config.protection_flag_path,
-                    adapter_name="mt5",
+                    adapter_name=config.adapter_name,
                     extensions={"mt5_terminal_path": config.mt5_terminal_path},
                 ),
                 brain_ids=_close_brain_ids,
@@ -285,7 +285,7 @@ def dispatch_managed_close(
                 skip_price_guard=True,
                 ignore_protection_flag=config.ignore_protection_flag,
                 protection_flag_path=config.protection_flag_path,
-                adapter_name="mt5",
+                adapter_name=config.adapter_name,
                 extensions={"mt5_terminal_path": config.mt5_terminal_path},
             )
             _close_dispatched = True

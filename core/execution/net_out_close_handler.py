@@ -40,6 +40,7 @@ def handle_net_out_close(
     ignore_protection_flag: bool,
     protection_flag_path: str,
     mt5_terminal_path: str,
+    adapter_name: str = "mt5",
     utc_iso_fn: Callable[[], str],
 ) -> tuple[dict[str, Any], dict[int, int], dict[int, float]]:
     """Execute a net-out close through the exit watchdog with cooldown gating.
@@ -129,7 +130,7 @@ def handle_net_out_close(
             skip_price_guard=True,
             ignore_protection_flag=ignore_protection_flag,
             protection_flag_path=protection_flag_path,
-            adapter_name="mt5",
+            adapter_name=adapter_name,
             extensions={"mt5_terminal_path": mt5_terminal_path},
         ),
         brain_ids=_brain_ids,
