@@ -798,8 +798,20 @@ class CooldownRegistry:
 # other family members must wait ≥ the shortest timeframe in the family
 # before entering the SAME direction.  This prevents the "collective trapping"
 # where a single large candle triggers all timeframes simultaneously.
-_SWING_FAMILY = frozenset({"m15_swing", "m30_swing", "h1_swing", "h4_swing"})
+_SWING_FAMILY = frozenset({
+    "m15_swing", "m30_swing", "h1_swing", "h4_swing",    # XAU
+    "btc_swing", "btc_swing_h1",                          # BTC (DQAF-20260615-011)
+})
 _SWING_FAMILY_MIN_TF_SEC = 900  # M15 = 15 min — the shortest bar in the family
+
+# ── DQAF-20260615-011: Per-strategy gap override ────────────────────────────
+# H1-level strategies need ≥1 full bar cycle between same-direction entries.
+# 10-minute echo-trades on a 60-minute model are a severe risk vulnerability
+# (see CCT_LEDGER: Uncontrolled Risk Exposure Stacking).  Defaults to
+# _SWING_FAMILY_MIN_TF_SEC when no override is defined.
+_STRATEGY_FAMILY_GAP_SEC: dict[str, float] = {
+    "btc_swing_h1": 3600,   # 60 min — one full H1 bar
+}
 
 
 class FamilyEntryTracker:

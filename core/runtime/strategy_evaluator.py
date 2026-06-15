@@ -387,12 +387,19 @@ def evaluate_strategy_lines(
 
         # ── Cut 2: Post-evaluate family spacing check (direction known) ──
         if decision.should_trade and family_entry_tracker is not None:
-            from core.execution.pre_trade_guards import strategy_to_family
+            from core.execution.pre_trade_guards import (
+                _STRATEGY_FAMILY_GAP_SEC,
+                _SWING_FAMILY_MIN_TF_SEC,
+                strategy_to_family,
+            )
 
             _fam = strategy_to_family(sname)
             if _fam != sname:
+                # DQAF-20260615-011: per-strategy gap override —
+                # H1 models need ≥1 full bar (3600s) between entries
+                _min_gap = _STRATEGY_FAMILY_GAP_SEC.get(sname, _SWING_FAMILY_MIN_TF_SEC)
                 _fs_allowed, _fs_reason = family_entry_tracker.check_spacing(
-                    _fam, decision.direction, sname
+                    _fam, decision.direction, sname, min_gap_sec=_min_gap
                 )
                 if not _fs_allowed:
                     decision.should_trade = False
