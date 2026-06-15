@@ -9,7 +9,7 @@
   "model_path": "data_btc/models/btc_37/BTC_Swing_V2_model.json",
   "artifact_path": "data_btc/models/btc_37/BTC_Swing_V2_model.json",
   "model_version": "btc_swing_v4",
-  "artifact_hash": "a7fdd0edcbb830804d37824f0cda2194b479bc1e39b86105512aa4b02f3c861b",
+  "artifact_hash": "3d7071d2c1443aaa256990a60962cc65f400c922d5f3eb88edd8ea1aa9270f82",
   "status": "candidate",
   "vote_weight": 1.0,
   "magic": 90410,

@@ -9,7 +9,7 @@
   "model_path": "data_btc/models/btc_swing_v9_h1/lightgbm_fold0_s42.txt",
   "artifact_path": "data_btc/models/btc_swing_v9_h1/lightgbm_fold0_s42.txt",
   "model_version": "btc_swing_v5",
-  "artifact_hash": "57ca505d1fce3c9fa8c84528401b926a3e4a8bd1cb10d710614349ea25407b30",
+  "artifact_hash": "acda8190d6a88eb2a45805bef5936ce6e93540ecc69e113451d0f877fea2860c",
   "status": "shadow",
   "vote_weight": 0.0,
   "magic": 90410,
