@@ -76,11 +76,7 @@
     "TF_OU_Theta",
     "TF_Hurst",
     "TF_delta_OU",
-    "TF_delta_Hurst",
-    "TF_OU_x_Hurst",
-    "TF_OU_div_ADX",
-    "Cross_BTC_Gold_Ratio",
-    "Cross_BTC_Gold_Ratio_ROC"
+    "TF_delta_Hurst"
   ],
   "n_features": 37,
   "n_train_samples": 4357,
