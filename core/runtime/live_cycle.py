@@ -2673,12 +2673,14 @@ def execute_live_cycle(
                         _close_side = "buy" if _side == "short" else "sell"
                         with fail_open_guard("CircuitBreakerClose"):
                             _cb_result = mt5_worker.order_send(
-                                symbol=config.symbol,
-                                order_type=1,  # Market
-                                volume=_vol,
-                                side=_close_side,
-                                ticket=_ticket,
-                                magic=getattr(_pos, "magic", 0),
+                                {
+                                    "symbol": config.symbol,
+                                    "order_type": 1,  # Market
+                                    "volume": _vol,
+                                    "side": _close_side,
+                                    "ticket": _ticket,
+                                    "magic": getattr(_pos, "magic", 0),
+                                }
                             )
                             _closed_any = True
                             print(
