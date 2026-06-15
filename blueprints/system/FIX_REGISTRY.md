@@ -2890,3 +2890,47 @@ FIX-YYYYMMDD-NNN
 - **Description**: (1) BrainRegistry per-asset: BTC intent loop calls BrainRegistry.instance('configs/brains_btc') before any other code loads brains — previously loaded XAU brain data with wrong horizons. (2) meta_exit_snapshots per-asset: _write_meta_exit_telemetry() was hardcoded to 'data/' (XAU) — now accepts data_dir param wired from position_manager._data_dir. (3) BTC brain model_paths: V9_H1, V10_M15, V12_H1 configs pointed to data/models/ (XAU directory) — files moved to data_btc/models/, configs updated.
 - **Root Cause**: RC-06 — contract-violation (hardcoded paths, singleton defaults, cross-directory references)
 - **Prevention**: Every hardcoded path must use config.base_dir. Singletons must be initialized before first use. Brain config model_path must match asset's data directory.
+
+---
+
+## [TECH_DEBT - ARCHITECTURE WAITING LIST]
+
+> 已知架构技术债 — 当前不触发，未来清债路线图。  
+> 每个条目包含触发条件，达到条件时自动升级为 Active Fix。
+
+| Debt ID | Date Registered | Severity | Module | Summary | Trigger Condition |
+|---------|----------------|----------|--------|---------|-------------------|
+| TECH_DEBT-001 | 2026-06-15 | L3 | runtime-live | **`_build_mia_close_entry(symbol="XAUUSDc")` 幽灵默认值**: 调用方 line 684 已显式传参，BTC 不受影响。但默认值本身是 DQAF-20260615-006 同一模式的架构残留。 | 新增调用方未传 symbol 参数 |
+| TECH_DEBT-002 | 2026-06-15 | L2/L3 | runtime-live | **Journal 全量扫描 O(N) 性能炸弹**: MIA Dedup 2 每次刷盘全量读取 `live_trade_journal.jsonl` 做 ticket 去重。journal >10,000 行时单次扫描 100-500ms → 主循环卡顿 → MIA 超时雪崩。应引入内存 Journal Index `set(closed_tickets)` O(1) 替代 O(N)。 | journal 行数 > 10,000 |
+| TECH_DEBT-003 | 2026-06-15 | L2 | runtime-live | **三层去重过度设计**: MIA Dedup 1+2+3 (内存 set + journal 扫描 + bridge 已写检测) 是历史补丁堆叠产物。应建立 SSOT 仓位状态机引擎统一去重入口。 | 下次大版本重构 MIA 管线 |
+
+### TECH_DEBT-001 Detail — MIA `symbol` 幽灵默认值
+
+- **文件**: `core/runtime/live_cycle.py:2048`
+- **现状**: `def _build_mia_close_entry(pos, known_entry, *, symbol: str = "XAUUSDc")`
+- **调用方**: line 684 显式传 `symbol=config.symbol` — BTC 安全
+- **修复**: 删除默认值，改为 `symbol: str` (必需参数)
+- **关联**: DQAF-20260615-006/C1-C8 — 同一 L3 模式
+
+### TECH_DEBT-002 Detail — Journal 全量扫描
+
+- **文件**: `core/runtime/live_cycle.py:3788-3806`
+- **现状**: 每次 MIA 刷盘 → `Path(jp).read_text()` → 逐行 `splitlines()` → 搜索 `"action": "close"` → 提取 ticket
+- **场景**: 系统运行 6 个月, journal ~50,000 行 → 全量扫描 ~200ms → 主循环卡顿
+- **修复方案**:
+  1. 在 `LiveCycleState` 中增加 `_closed_tickets_cache: set[int]`
+  2. 启动时从 journal 构建缓存
+  3. journal 写入时同步更新缓存 (在 `record_mia_closes` 中 add)
+  4. Dedup 2 改为 `ticket in state._closed_tickets_cache` — O(1)
+- **关联**: 管道阶段 5 — Dedup 2
+
+### TECH_DEBT-003 Detail — 三层去重过度设计
+
+- **文件**: `core/runtime/live_cycle.py:3767-3813`
+- **三层防御**:
+  1. `_mia_processed_tickets` (session 级内存 set) — FIX-20260610-002
+  2. journal 全量扫描去重 (检测 bridge 竞态) — FIX-20260612-024
+  3. journal 行级 `action: close` 检测 — 同上
+- **历史原因**: 每层都是独立事故后追加的补丁
+- **修复方案**: 下一大版本建立统一的 `PositionStateMachine`，以 `position_ticket` 为 SSOT key，所有状态变更 (open/close/MIA/modify) 通过状态机 → 去重是状态机内建属性而非外部防线
+- **关联**: Iron Law #12 — 禁止补丁累积 (同模块 Deferred Architecture Fix >3 禁止继续补丁)
