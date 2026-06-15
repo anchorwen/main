@@ -76,9 +76,13 @@
     "TF_OU_Theta",
     "TF_Hurst",
     "TF_delta_OU",
-    "TF_delta_Hurst"
+    "TF_delta_Hurst",
+    "TF_OU_x_Hurst",
+    "TF_OU_div_ADX",
+    "Cross_BTC_Gold_Ratio",
+    "Cross_BTC_Gold_Ratio_ROC"
   ],
-  "n_features": 37,
+  "n_features": 41,
   "n_train_samples": 4357,
   "trained_at": "2026-06-14T17:42:23.718287+00:00",
   "label_contract": {
