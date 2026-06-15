@@ -74,9 +74,9 @@ def update_registry() -> None:
     if old in content:
         content = content.replace(old, new)
         REGISTRY_PATH.write_text(content, encoding="utf-8")
-        print(f"  [OK] Registry: btc_macro_enhanced_37 37 → 41")
+        print("  [OK] Registry: btc_macro_enhanced_37 37 → 41")
     else:
-        print(f"  [SKIP] Registry already at 41 or unexpected format — check manually")
+        print("  [SKIP] Registry already at 41 or unexpected format — check manually")
 
 
 def update_brain_config(cfg_path: Path) -> None:
