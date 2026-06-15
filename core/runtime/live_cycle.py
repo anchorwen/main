@@ -4427,11 +4427,16 @@ def execute_live_cycle(
         # ── Feed pending budget records from reconciliation ──
         if state._pending_budget_records:
             for _rec in state._pending_budget_records:
-                _sname = _rec["strategy"]
+                _sname = _rec.get("strategy", "")
                 _strat = strategies.get(_sname)
                 if _strat is not None and _strat.budget is not None:
                     with log_and_continue(component="Budget:record_trade"):
-                        _strat.budget.record_trade(_rec["pnl"], _rec["is_win"])
+                        # FIX-20260615-009g: defensive defaults for breakeven (PnL=0)
+                        # edge case — some close paths may omit is_win when PnL=0.
+                        _strat.budget.record_trade(
+                            _rec.get("pnl", 0.0),
+                            _rec.get("is_win", False),
+                        )
             state._pending_budget_records.clear()
 
         # ── Feed pending SL records for graduated per-SL cooldown ──

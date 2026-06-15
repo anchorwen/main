@@ -12,7 +12,7 @@
   "artifact_hash": "a04f400e952af1738605db011793abceeed07805cbf82a2b4a31cda7677cfdb1",
   "status": "shadow",
   "vote_weight": 0.0,
-  "magic": 90410,
+  "magic": 90411,
   "brain_role": "alpha_brain",
   "training_horizon": 24,
   "strategy": "btc_swing",
