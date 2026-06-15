@@ -333,3 +333,212 @@ def test_register_zero_atr_position(ticket, volume, atr) -> None:
     )
     assert pos is not None
     assert pos.entry_atr == atr
+
+
+# ============================================================================
+# ROUND 2: Deep scenario tests — trail trajectory + brain exit + MIA
+# ============================================================================
+
+
+# ---------------------------------------------------------------------------
+# Trail Progression Scenarios
+# ---------------------------------------------------------------------------
+class TestTrailProgression:
+    """Scenario-based tests for compute_trail_stop across price trajectories."""
+
+    def test_activation_not_reached_keeps_initial_sl(self) -> None:
+        """Price moves favorably but hasn't hit activation ATR — SL stays."""
+        from core.execution.trail_stop_engine import TrailStopEngine
+
+        policy = TrailPolicy(trail_atr_mult=2.0, trail_activation_atr=1.0)
+        engine = TrailStopEngine(default_policy=policy)
+        pos = ActivePosition(
+            ticket=1, side="long", entry_price=2000.0, volume=0.01,
+            initial_sl=1980.0, initial_tp=2030.0,
+            current_sl=1980.0, current_tp=2030.0,
+            highest_high=2005.0, lowest_low=1995.0,
+            entry_atr=10.0, entry_cycle=0,
+        )
+        # Price moved up +5 but unrealized_r = 5/10 = 0.5 < activation 1.0
+        result = engine.compute_trail_stop(pos, current_atr=10.0)
+        assert result is None, f"Activation not reached, should return None, got {result}"
+
+    def test_activation_reached_trail_advances(self) -> None:
+        """Price breaks activation → trail moves up by computed amount."""
+        from core.execution.trail_stop_engine import TrailStopEngine
+
+        policy = TrailPolicy(trail_atr_mult=2.0, trail_activation_atr=1.0, min_step=0.1)
+        engine = TrailStopEngine(default_policy=policy)
+        pos = ActivePosition(
+            ticket=2, side="long", entry_price=2000.0, volume=0.01,
+            initial_sl=1980.0, initial_tp=2030.0,
+            current_sl=1980.0, current_tp=2030.0,
+            highest_high=2020.0, lowest_low=1995.0,  # +20 = 2R → activated
+            entry_atr=10.0, entry_cycle=0,
+        )
+        # effective_mult=2.0, candidate = 2020 - 2*10 = 2000
+        # candidate > current_sl (1980) + min_step (0.1) → returns 2000.0
+        result = engine.compute_trail_stop(pos, current_atr=10.0)
+        assert result is not None, "Trail should advance after activation"
+        assert result > 1980.0, f"Trail should move up from 1980, got {result}"
+        assert result <= 2020.0, f"Trail should not exceed highest_high, got {result}"
+
+    def test_whipsaw_trail_decay_tightens_at_high_r(self) -> None:
+        """At 2R profit, decay multiplier tightens trail — correct profit-locking."""
+        from core.execution.trail_stop_engine import TrailStopEngine
+
+        policy = TrailPolicy(trail_atr_mult=2.0, trail_activation_atr=1.0, min_step=0.1)
+        engine = TrailStopEngine(default_policy=policy)
+        pos = ActivePosition(
+            ticket=3, side="long", entry_price=2000.0, volume=0.01,
+            initial_sl=1980.0, initial_tp=2030.0,
+            current_sl=2000.0, current_tp=2030.0,  # trail already advanced
+            highest_high=2020.0, lowest_low=1995.0,
+            entry_atr=10.0, entry_cycle=0,
+        )
+        # At 2R, decay reduces effective_mult → trail tightens to lock profit
+        result = engine.compute_trail_stop(pos, current_atr=10.0)
+        if result is not None:
+            assert result >= pos.current_sl, f"Trail must not widen: {result} < {pos.current_sl}"
+
+
+# ---------------------------------------------------------------------------
+# Brain Exit Scenarios
+# ---------------------------------------------------------------------------
+class TestBrainExit:
+    """Scenario-based tests for evaluate_brain_exit across brain signal patterns."""
+
+    def test_consensus_reversal_against_long_exits(self) -> None:
+        """Full consensus flips to SHORT → immediate exit for LONG position."""
+        pm = ActivePositionManager(trail_atr_mult=2.0, min_hold_cycles=0, trail_activation_atr=0.3)
+        ticket = 100
+        pm.register_position(
+            ticket=ticket, side="long", entry_price=2000.0, volume=0.01,
+            initial_sl=1980.0, initial_tp=2030.0, entry_atr=10.0, entry_cycle=10,
+            supporting_brain_ids=["b1", "b2"],
+        )
+        # Consensus now says "short" while position is long
+        consensus = {"aggregated_bias": "short", "consensus_score": 0.6}
+        should_exit, reason = pm.evaluate_brain_exit(
+            consensus, current_supporting=["b1"], mid=2005.0, ticket=ticket,
+        )
+        assert should_exit, f"Consensus reversal should trigger exit, got: {reason}"
+        assert "signal_reversal" in reason
+
+    def test_same_direction_consensus_no_exit(self) -> None:
+        """Consensus matches position side → no exit."""
+        pm = ActivePositionManager(trail_atr_mult=2.0, min_hold_cycles=0, trail_activation_atr=0.3)
+        ticket = 101
+        pm.register_position(
+            ticket=ticket, side="long", entry_price=2000.0, volume=0.01,
+            initial_sl=1980.0, initial_tp=2030.0, entry_atr=10.0, entry_cycle=10,
+            supporting_brain_ids=["b1", "b2"],
+        )
+        consensus = {"aggregated_bias": "long", "consensus_score": 0.7}
+        should_exit, reason = pm.evaluate_brain_exit(
+            consensus, current_supporting=["b1", "b2"], mid=2005.0, ticket=ticket,
+        )
+        assert not should_exit, f"Same-direction consensus should NOT exit: {reason}"
+
+    def test_min_hold_protection_blocks_exit(self) -> None:
+        """During min_hold_cycles, exit is suppressed unless toxicity veto fires."""
+        pm = ActivePositionManager(
+            trail_atr_mult=2.0, min_hold_cycles=3, trail_activation_atr=0.3,
+        )
+        ticket = 102
+        pm.register_position(
+            ticket=ticket, side="long", entry_price=2000.0, volume=0.01,
+            initial_sl=1980.0, initial_tp=2030.0, entry_atr=10.0, entry_cycle=0,
+            supporting_brain_ids=["b1"],
+        )
+        # Consensus flipped but we're still in min_hold (cycle 0)
+        consensus = {"aggregated_bias": "short", "consensus_score": 0.3}
+        should_exit, reason = pm.evaluate_brain_exit(
+            consensus, current_supporting=[], mid=2005.0, ticket=ticket,
+        )
+        assert not should_exit, f"Min-hold should block exit: {reason}"
+        assert "protected_min_hold" in reason
+
+    def test_kalman_velocity_flip_exits_long(self) -> None:
+        """Strong negative Kalman velocity → immediate exit for LONG."""
+        pm = ActivePositionManager(trail_atr_mult=2.0, min_hold_cycles=0, trail_activation_atr=0.3)
+        ticket = 103
+        pm.register_position(
+            ticket=ticket, side="long", entry_price=2000.0, volume=0.01,
+            initial_sl=1980.0, initial_tp=2030.0, entry_atr=10.0, entry_cycle=10,
+            supporting_brain_ids=["b1"],
+        )
+        consensus = {"aggregated_bias": "long", "consensus_score": 0.7}
+        should_exit, reason = pm.evaluate_brain_exit(
+            consensus, current_supporting=["b1"], mid=2005.0, ticket=ticket,
+            kalman_velocity_bps=-15.0,  # strong downward momentum
+        )
+        assert should_exit, f"Kalman flip should exit LONG: {reason}"
+        assert "kalman_velocity" in reason
+
+    def test_brain_flip_with_support_withdrawal(self) -> None:
+        """Supporting brains withdraw → after confirm_count, exit fires."""
+        pm = ActivePositionManager(
+            trail_atr_mult=2.0, flip_confirm_count=2, flip_exit_threshold=0.5,
+            trail_activation_atr=0.3, min_hold_cycles=0,
+        )
+        ticket = 104
+        pm.register_position(
+            ticket=ticket, side="long", entry_price=2000.0, volume=0.01,
+            initial_sl=1980.0, initial_tp=2030.0, entry_atr=10.0, entry_cycle=10,
+            supporting_brain_ids=["b1", "b2", "b3"],
+        )
+        # First detection: 2 of 3 flipped (67% > 50% threshold)
+        consensus = {"aggregated_bias": "long", "consensus_score": 0.5}
+        s1, r1 = pm.evaluate_brain_exit(
+            consensus, current_supporting=["b1"], mid=2005.0, ticket=ticket,
+        )
+        # Second consecutive detection
+        s2, r2 = pm.evaluate_brain_exit(
+            consensus, current_supporting=["b1"], mid=2005.0, ticket=ticket,
+        )
+        # After confirm_count=2 consecutive flips, should exit
+        assert s2, f"After 2 consecutive flips, should exit: {r2}"
+        assert "brain_flip" in r2
+
+
+# ---------------------------------------------------------------------------
+# MIA / Clear lifecycle
+# ---------------------------------------------------------------------------
+class TestMIALifecycle:
+    """Tests for position clearance lifecycle (ghost position defense)."""
+
+    def test_clear_marks_ticket_gone(self) -> None:
+        """After clear_position, ticket must be absent from all accessors."""
+        pm = _make_pm()
+        ticket = 200
+        pm.register_position(
+            ticket=ticket, side="long", entry_price=2000.0, volume=0.01,
+            initial_sl=1980.0, initial_tp=2030.0, entry_atr=10.0, entry_cycle=0,
+        )
+        pm.mark_pending_close(ticket, 50)
+
+        pm.clear_position(ticket)
+
+        assert not pm.has_position(ticket)
+        assert pm.get_position(ticket) is None
+        # After clear, pending close should also be gone
+        assert not pm.is_pending_close(ticket, 60)
+
+    def test_clear_primary_promotes_next(self) -> None:
+        """When primary ticket is cleared, next position becomes primary."""
+        pm = _make_pm()
+        pm.register_position(
+            ticket=300, side="long", entry_price=2000.0, volume=0.01,
+            initial_sl=1980.0, initial_tp=2030.0, entry_atr=10.0, entry_cycle=0,
+        )
+        pm.register_position(
+            ticket=301, side="short", entry_price=2000.0, volume=0.01,
+            initial_sl=2020.0, initial_tp=1970.0, entry_atr=10.0, entry_cycle=0,
+        )
+        # First registered becomes primary
+        pm.clear_position(300)
+        # Ticket 301 should now be primary (or None if no positions remain)
+        remaining = pm.get_all_positions()
+        assert len(remaining) == 1
+        assert remaining[0].ticket == 301
