@@ -27,6 +27,23 @@
 
 ---
 
+### CCT-20260615-011
+- **Docket ID**: DQAF-20260615-011
+- **日期**: 2026-06-15
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: 钉钉告警显示"最差大脑"为 `BTC_Swing_V11_M15_Directional`，累积PnL(R) -1452.68，胜率 0.1579。但该大脑已归档禁用（`enabled=False`），不在 `governance_state.json` 活跃列表中。告警"最差大脑"指标与实盘日记账 $4.61/日 无法对账。
+  - [Layer 2 — 中间异常]: (A) `get_all_metrics()` 返回所有大脑（含退役/归档），min(cumulative_pnl) 选中的永远是历史最长的退役大脑。(B) `load_from_stream()` 将事件流的 `pnl_r`（R-multiple, 相对值）直接赋值给 `pnl_per_unit`（美元/单位, 绝对值）→ 同一字段承载两种不可比量纲 → 累积求和无数学意义。
+  - [Layer 3 — 根因]: RC-06 (contract-violation) + RC-11 (stale-data)。Event Sourcing 迁移中 `pnl_r ↔ pnl_per_unit` 的序列化契约未定义单位转换。退役大脑的历史数据未从告警评比中排除——"幸存者偏差"的逆向版本：尸体统治排行榜。
+- **证据引用**:
+  - Source 1: `data_btc/ledger_events.jsonl` — 1227事件(仅live+migration)中 V11 pnl_r 累积=-1452.69
+  - Source 2: `configs/live_btc.yaml` — V11路径在 `archive/` 下, `enabled=False`
+  - Source 3: `data_btc/governance_state.json` — V11不在 brain_states 中
+  - Source 4: `brain_pnl_ledger.py:872` — `"pnl_per_unit": event.pnl_r` 单位错配
+  - Source 5: `brain_pnl_ledger.py:904` — `_t.get("pnl", 0)` 读取不存在的字段名
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260615-011 (ARCHIVED_BRAIN_ALERT_POLLUTION)
+
 ### CCT-20260608-001a
 - **Docket ID**: DQAF-20260608-001
 - **日期**: 2026-06-08
