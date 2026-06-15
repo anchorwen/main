@@ -174,7 +174,7 @@ def dispatch_live_order(
     skip_price_guard: bool = False,
     ignore_protection_flag: bool = False,
     protection_flag_path: str = "data/live_dispatch_block.flag",
-    adapter_name: str = "mt5",
+    adapter_name: str,  # FIX-20260615-010/L3: required — no silent fallback to file mode
     extensions: dict[str, Any] | None = None,
 ) -> dict:
     """Broker-agnostic order dispatch — the canonical entry point for all venues.
@@ -278,7 +278,7 @@ def dispatch_live_open_order(
     p_win_source: str = "unknown",
     p_win_degraded: bool = False,
     kelly_mult: float = 1.0,
-    adapter_name: str = "mt5",
+    adapter_name: str,  # FIX-20260615-010/L3: required
     zmq_order_endpoint: str = "",
     zmq_ack_endpoint: str = "",
 ) -> dict:

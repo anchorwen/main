@@ -40,7 +40,7 @@ def handle_net_out_close(
     ignore_protection_flag: bool,
     protection_flag_path: str,
     mt5_terminal_path: str,
-    adapter_name: str = "mt5",
+    adapter_name: str,  # FIX-20260615-010/L3: required
     utc_iso_fn: Callable[[], str],
 ) -> tuple[dict[str, Any], dict[int, int], dict[int, float]]:
     """Execute a net-out close through the exit watchdog with cooldown gating.
