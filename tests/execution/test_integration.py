@@ -180,7 +180,11 @@ class TestMultiStrategyPipeline:
         # Barrier: long signal
         barrier = _make_strategy(
             config=StrategyLineConfig(
-                name="barrier_12bar", magic=90001, brain_types={"test"}, min_valid_brains=1
+                base_dir="data",
+                name="barrier_12bar",
+                magic=90001,
+                brain_types={"test"},
+                min_valid_brains=1,
             ),
             proposals=[
                 make_proposal(
@@ -194,7 +198,11 @@ class TestMultiStrategyPipeline:
         # Micro: short signal
         micro = _make_strategy(
             config=StrategyLineConfig(
-                name="micro_3bar", magic=90002, brain_types={"test"}, min_valid_brains=1
+                base_dir="data",
+                name="micro_3bar",
+                magic=90002,
+                brain_types={"test"},
+                min_valid_brains=1,
             ),
             proposals=[
                 make_proposal(
@@ -208,7 +216,11 @@ class TestMultiStrategyPipeline:
         # StatArb: long signal (oversold reversion)
         statarb = _make_strategy(
             config=StrategyLineConfig(
-                name="statarb_dynamic", magic=90003, brain_types={"test"}, min_valid_brains=1
+                base_dir="data",
+                name="statarb_dynamic",
+                magic=90003,
+                brain_types={"test"},
+                min_valid_brains=1,
             ),
             proposals=[
                 make_proposal(

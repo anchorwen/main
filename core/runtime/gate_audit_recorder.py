@@ -30,8 +30,8 @@ def record_gate_block(
     strategy_name: str,
     direction: str,
     reason: str,
+    base_dir: str,  # FIX-20260615-006/C8: required — no default
     gate_diag: dict[str, Any] | None = None,
-    base_dir: str = "data",
     symbol: str = "XAUUSDc",
 ) -> None:
     """Record one gate-block event to the daily audit file.

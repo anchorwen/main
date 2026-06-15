@@ -1,5 +1,78 @@
 {
   "schema_version": "alpha_performance_store.v1",
-  "alpha_count": 0,
-  "summaries": []
+  "alpha_count": 1,
+  "summaries": [
+    {
+      "schema_version": "alpha_performance_summary.v1",
+      "alpha_id": "btc_swing",
+      "snapshot_count": 1,
+      "latest": {
+        "schema_version": "alpha_performance_snapshot.v1",
+        "alpha_id": "btc_swing",
+        "captured_at": "2026-06-14T15:59:05.349182",
+        "source": "trade_journal",
+        "window": "daily",
+        "metrics": {
+          "total_pnl": -1.25,
+          "trade_count": 3,
+          "win_rate": 0.0,
+          "profit_factor": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 1.25,
+          "wins": 0,
+          "losses": 1
+        }
+      },
+      "aggregates": {
+        "total_pnl": {
+          "latest": -1.25,
+          "average": -1.25,
+          "min": -1.25,
+          "max": -1.25
+        },
+        "trade_count": {
+          "latest": 3.0,
+          "average": 3.0,
+          "min": 3.0,
+          "max": 3.0
+        },
+        "win_rate": {
+          "latest": 0.0,
+          "average": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "profit_factor": {
+          "latest": 0.0,
+          "average": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "avg_win": {
+          "latest": 0.0,
+          "average": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "avg_loss": {
+          "latest": 1.25,
+          "average": 1.25,
+          "min": 1.25,
+          "max": 1.25
+        },
+        "wins": {
+          "latest": 0.0,
+          "average": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "losses": {
+          "latest": 1.0,
+          "average": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        }
+      }
+    }
+  ]
 }

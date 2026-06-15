@@ -49,6 +49,7 @@ Market data → detect_session() → check_var() → compute_position_size()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260615-006 | 2026-06-15 | cursor-agent | — | **XAU/BTC L3 交叉感染: MetaFilterGate(model_dir) + build_meta_filter_array(feature_names_path) 移除默认值** | L3 — base_dir="data" 默认值 |
 | FIX-20260613-083 | 2026-06-13 | cursor-agent | f5c9e30 | R1 Gate 4h silence protection: if all trades blocked by RegimeDirectionGate for >48 consecutive cycles (~4h), relax from block to penalty-only. Prevents BTC zero-open silence when trend=LONG and all brains are SHORT. Silence counter resets when any trade passes (trend-aligned or above penalty threshold). | boundary-error |
 | FIX-20260613-079 | 2026-06-13 | cursor-agent | 53cf419 | RegimeDirectionGate: counter-trend confidence penalty when trend is confirmed (long/short). Ranging markets full passthrough. Applied as Cut 1a in strategy_evaluator.py — opposing brain signals get 0.5x confidence multiplier, blocked if <0.35. Eliminates ALL-LONG brains voting in downtrend and ALL-SHORT in uptrend. | missing-validation |
 | FIX-20260612-005 | 2026-06-12 | cursor-agent | 10635d1 | P5: ConformalCalibrator cold_started transition fix. cold_started now transitions to False when history >= warmup_samples (50) instead of staying True forever. _load_state() backfills transition for existing state files. Fixes CONFORMAL_COLD_STALLED false positive — calibrator was operating correctly (51 history entries) but flagged as stalled because cold_started never cleared. | state-leak |

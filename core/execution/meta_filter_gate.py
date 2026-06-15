@@ -33,7 +33,7 @@ def build_meta_filter_array(
     micro_features: dict[str, float],
     ou_z_entry: float = 1.3,
     *,
-    feature_names_path: str | Path = "data/models/meta_filter_v3/feature_names.json",
+    feature_names_path: str | Path,
 ) -> np.ndarray:
     """Build a 47-dim array in training order from live feature pipeline.
 
@@ -105,7 +105,7 @@ class MetaFilterGate:
 
     def __init__(
         self,
-        model_dir: str | Path = "data/models/meta_filter_v3",
+        model_dir: str | Path,
         threshold: float = 0.50,
         ou_z_entry: float = 1.3,
         calibrator=None,  # ConformalCalibrator | None
@@ -202,7 +202,7 @@ _global_gate: MetaFilterGate | None = None
 
 
 def get_meta_filter_gate(
-    model_dir: str = "data/models/meta_filter_v3",
+    model_dir: str,
     threshold: float = 0.50,
     ou_z_entry: float = 1.3,
     calibrator=None,  # ConformalCalibrator | None

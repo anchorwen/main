@@ -826,9 +826,7 @@ def main(argv: list[str] | None = None) -> int:
     _loaded_from = "none"
     if _stream_path.exists():
         try:
-            pnl_ledger = BrainPnLStore.load_from_stream(
-                _stream_path, event_writer=_event_writer
-            )
+            pnl_ledger = BrainPnLStore.load_from_stream(_stream_path, event_writer=_event_writer)
             _loaded_from = "event_stream"
         except Exception:  # noqa: BLE001
             pass
@@ -893,6 +891,7 @@ def main(argv: list[str] | None = None) -> int:
         # any other code calls BrainRegistry.instance().  Without this, BTC
         # process loads XAU brain data → polluted PnL records + wrong horizons.
         from core.brains.brain_registry import BrainRegistry
+
         BrainRegistry.reset()
         BrainRegistry.instance(str(args.brains_dir))
         entries = _load_brain_entries_from_dir(args.brains_dir)
@@ -1359,8 +1358,7 @@ def main(argv: list[str] | None = None) -> int:
                         if _hb_ts:
                             _hb_dt = datetime.fromisoformat(_hb_ts.replace("Z", "+00:00"))
                             _hb_age = (
-                                datetime.now(UTC).replace(tzinfo=None)
-                                - _hb_dt.replace(tzinfo=None)
+                                datetime.now(UTC).replace(tzinfo=None) - _hb_dt.replace(tzinfo=None)
                             ).total_seconds()
                             if _hb_age <= 60:
                                 _bridge_ready = True
@@ -1646,7 +1644,7 @@ def main(argv: list[str] | None = None) -> int:
     # Attached to config so strategy_line picks them up via getattr.
     _base_dir = Path(args.base_dir)
     for _dir_label, _dir_model in [("long", "lgb_xau_long_v1"), ("short", "lgb_xau_short_v1")]:
-        _dir_model_path = str(PROJECT_ROOT / "data" / "models" / f"meta_stage2_{_dir_model}.txt")
+        _dir_model_path = str(_base_dir / "models" / f"meta_stage2_{_dir_model}.txt")
         if Path(_dir_model_path).exists():
             try:
                 _dir_filter = MetaSignalFilter(
@@ -1772,7 +1770,11 @@ def main(argv: list[str] | None = None) -> int:
         try:
             from core.execution.exit_watchdog import ExitWatchdog
 
-            _wd_cfg = full_cfg.get("live_trading", {}).get("watchdog_config", {}) if isinstance(full_cfg, dict) else {}
+            _wd_cfg = (
+                full_cfg.get("live_trading", {}).get("watchdog_config", {})
+                if isinstance(full_cfg, dict)
+                else {}
+            )
             exit_watchdog = ExitWatchdog(
                 data_dir=args.base_dir,
                 time_decay_cycles=int(_wd_cfg.get("time_decay_cycles", 60)),

@@ -39,7 +39,9 @@ def _get_cached_git_hash() -> str:
 
         result = _sp.run(
             ["git", "rev-parse", "--short=8", "HEAD"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0:
             _GIT_HASH_CACHE = result.stdout.strip()
@@ -48,6 +50,7 @@ def _get_cached_git_hash() -> str:
     except Exception:
         _GIT_HASH_CACHE = "unknown"
     return _GIT_HASH_CACHE
+
 
 # ── Bandit sizing constants (v3.1) ──
 
@@ -240,6 +243,7 @@ class StrategyDecision:
         if not self.code_version:
             self.code_version = _get_cached_git_hash()
         # decision_hash computed lazily when first accessed (avoid import cost)
+
     # entry_context carries passthrough data for the journal:
     #   {"atr": float, "regime": str, "vol_regime": str, "trend_direction": str,
     #    "macro_regime": str, "brain_predictions": [dict, ...],
@@ -253,6 +257,7 @@ class StrategyLineConfig:
     name: str
     magic: int
     brain_types: set[str]
+    base_dir: str  # FIX-20260615-006/C1: required — no default, caller MUST provide
     symbol: str = "XAUUSDc"  # FIX-20260531-008: config-driven, not hardcoded
     strategy_family: str = ""  # Phase 4: "mean_reversion" | "trend_following" | "" (auto-infer)
     base_volume: float = 0.01
@@ -825,7 +830,7 @@ class StrategyLine:
                 consensus_direction=direction,
                 consensus_confidence=confidence,
                 symbol=getattr(self.config, "symbol", "XAUUSDc"),
-                base_dir="data",
+                base_dir=self.config.base_dir,
                 brain_status_map=_status_map,
             )
         except Exception:  # noqa: BLE001

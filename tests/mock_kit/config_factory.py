@@ -40,6 +40,7 @@ def create_strategy_line_config(
         brain_types = {"xgboost_v9", "lightgbm_v1"}
 
     return StrategyLineConfig(
+        base_dir="data",
         name=name,
         magic=magic,
         brain_types=brain_types,

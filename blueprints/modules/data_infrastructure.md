@@ -11,6 +11,7 @@ Immutable event stream infrastructure (FIX-20260611-021). Replaces mutable JSON 
 
 ## Fix History
 
+| FIX-20260615-006 | 2026-06-15 | cursor-agent | — | **XAU/BTC L3 交叉感染: get_event_writer(base_dir) 移除默认值** — 现在调用方必须显式提供 base_dir。 | L3 — base_dir="data" 默认值 |
 | FIX-20260613-067 | 2026-06-13 | cursor-agent | c992678 | FileLock Atomic Exclusive Create: replaced os.replace() (always overwrites) with os.O_CREAT|O_EXCL for true cross-process mutual exclusion. Added same-instance re-acquire guard. 23/23 tests pass. | contract-violation |
 | FIX-20260611-021 | 2026-06-11 | cursor-agent | 49610cd | Bug fixes: UUID ordering (line-based checkpoint) + checkpoint key mismatch (_ensure_brain_state). Both found by Hypothesis PBT. | contract-violation |
 | FIX-20260611-021 | 2026-06-11 | cursor-agent | — | **Event Sourcing Foundation**: Append-only event stream architecture. Contracts (Pydantic extra=forbid), Unified Writer (threading.Lock), Migration (source=migration tag), Projection Engine (checkpoint + incremental replay), Dual-Write Hook (opt-in EventWriter in BrainPnLStore). | RC-06 |

@@ -18,6 +18,7 @@ def _make_config(**overrides: object) -> SimpleNamespace:
     """Create a minimal LiveCycleConfig-compatible namespace for testing."""
     defaults: dict[str, object] = {
         "symbol": "XAUUSDc",
+        "base_dir": "data",  # FIX-20260615-006/C1: required by StrategyLineConfig
         "strategy_configs": {},
         "sl_atr_mult": 2.0,
         "tp_atr_mult": 3.5,

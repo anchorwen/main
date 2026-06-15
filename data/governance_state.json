@@ -10,11 +10,11 @@
       "freeze_count": 0,
       "exposure_limited": false,
       "performance_metrics": {
-        "win_rate": 0.43,
+        "win_rate": 0.4292,
         "profit_factor": 0.7,
-        "sharpe_ratio": -29.95,
-        "total_trades": 3623,
-        "pnl_r": -1409.48
+        "sharpe_ratio": -30.12,
+        "total_trades": 3660,
+        "pnl_r": -1429.3
       }
     },
     "OU_Params_V7_M15": {
@@ -27,11 +27,11 @@
       "exposure_limited": false,
       "vote_weight": 1.5,
       "performance_metrics": {
-        "win_rate": 0.4932,
-        "profit_factor": 0.8,
-        "sharpe_ratio": -20.22,
-        "total_trades": 219,
-        "pnl_r": -78.01
+        "win_rate": 0.4674,
+        "profit_factor": 0.74,
+        "sharpe_ratio": -26.17,
+        "total_trades": 261,
+        "pnl_r": -111.62
       }
     },
     "Meta_Stage1_Huber_V1": {
@@ -102,11 +102,11 @@
       "transition_count": 4,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.4362,
-        "profit_factor": 0.96,
-        "sharpe_ratio": -2.88,
-        "total_trades": 2788,
-        "pnl_r": -194.73
+        "win_rate": 0.4244,
+        "profit_factor": 0.92,
+        "sharpe_ratio": -5.28,
+        "total_trades": 3174,
+        "pnl_r": -383.09
       },
       "vote_weight": 1.0
     },
@@ -114,31 +114,31 @@
       "brain_id": "Swing_V9_M15_V2",
       "status": "live",
       "registered_at": "2026-06-04T10:48:14.724913",
-      "last_transition_at": "2026-06-14T15:26:25",
-      "transition_count": 8,
+      "last_transition_at": "2026-06-14T21:50:53",
+      "transition_count": 14,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.6517,
-        "profit_factor": 3.51,
-        "sharpe_ratio": 107.28,
-        "total_trades": 847,
-        "pnl_r": 5361.9
+        "win_rate": 0.6365,
+        "profit_factor": 3.46,
+        "sharpe_ratio": 104.22,
+        "total_trades": 883,
+        "pnl_r": 5339.49
       },
       "vote_weight": 1.0
     },
     "Brain_Trend_M30_V1": {
       "brain_id": "Brain_Trend_M30_V1",
-      "status": "frozen",
+      "status": "candidate",
       "registered_at": "2026-05-30T03:44:49.097429",
-      "last_transition_at": "2026-06-13T10:56:34.150704",
-      "transition_count": 10,
+      "last_transition_at": "2026-06-15T00:40:52.473799+00:00",
+      "transition_count": 12,
       "freeze_count": 5,
       "performance_metrics": {
-        "win_rate": 0.4385,
-        "profit_factor": 0.78,
-        "sharpe_ratio": -23.62,
-        "total_trades": 244,
-        "pnl_r": -75.58
+        "win_rate": 0.4382,
+        "profit_factor": 0.79,
+        "sharpe_ratio": -22.35,
+        "total_trades": 251,
+        "pnl_r": -72.58
       },
       "vote_weight": 0.0,
       "freeze_reason": "FIX-20260613-080: PF<1.0 + 100% SHORT signal cloning (STR 6b detected). Zero Parliament diversity contribution."
@@ -166,10 +166,10 @@
     },
     "Brain_Trend_M30_V2": {
       "brain_id": "Brain_Trend_M30_V2",
-      "status": "frozen",
+      "status": "candidate",
       "registered_at": "2026-06-02T01:22:13.740886",
-      "last_transition_at": "2026-06-13T10:56:34.150704",
-      "transition_count": 4,
+      "last_transition_at": "2026-06-15T00:40:52.473799+00:00",
+      "transition_count": 7,
       "freeze_count": 1,
       "performance_metrics": {
         "win_rate": 0.4444,
@@ -207,7 +207,14 @@
       "freeze_count": 0,
       "archived_at": "2026-06-13T10:56:34.150704",
       "archive_reason": "FIX-20260613-080: 10-14 days registered, 0 trades, superseded by V2/V3 generation",
-      "vote_weight": 1.0
+      "vote_weight": 1.0,
+      "performance_metrics": {
+        "win_rate": 0.4286,
+        "profit_factor": 999.0,
+        "sharpe_ratio": 216.0,
+        "total_trades": 7,
+        "pnl_r": 3.0
+      }
     },
     "Barrier_V9_12B_V2": {
       "brain_id": "Barrier_V9_12B_V2",
@@ -272,8 +279,8 @@
       "brain_id": "Swing_V9_H1_V2",
       "status": "live",
       "registered_at": "2026-06-04T11:02:11.580065",
-      "last_transition_at": "2026-06-14T15:26:25",
-      "transition_count": 7,
+      "last_transition_at": "2026-06-14T21:50:53",
+      "transition_count": 13,
       "freeze_count": 0,
       "performance_metrics": {
         "win_rate": 0.4725,
@@ -496,6 +503,355 @@
         "probation_thresholds_met: wr=47.25%, pf=1.80"
       ],
       "evaluated_at": "2026-06-14T15:26:25"
+    },
+    {
+      "brain_id": "Swing_V9_M15_V2",
+      "from_status": "live",
+      "to_status": "probation",
+      "action": "throttle",
+      "reasons": [
+        "recent_win_rate(30.00%) < 38%"
+      ],
+      "evaluated_at": "2026-06-14T17:38:12"
+    },
+    {
+      "brain_id": "Swing_V9_H1_V2",
+      "from_status": "live",
+      "to_status": "probation",
+      "action": "throttle",
+      "reasons": [
+        "recent_win_rate(25.00%) < 38%"
+      ],
+      "evaluated_at": "2026-06-14T17:38:12"
+    },
+    {
+      "brain_id": "Swing_V9_M15_V2",
+      "from_status": "probation",
+      "to_status": "live",
+      "action": "promote",
+      "reasons": [
+        "probation_thresholds_met: wr=63.65%, pf=3.46"
+      ],
+      "evaluated_at": "2026-06-14T18:28:45"
+    },
+    {
+      "brain_id": "Swing_V9_H1_V2",
+      "from_status": "probation",
+      "to_status": "live",
+      "action": "promote",
+      "reasons": [
+        "probation_thresholds_met: wr=47.25%, pf=1.80"
+      ],
+      "evaluated_at": "2026-06-14T18:28:45"
+    },
+    {
+      "brain_id": "Swing_V9_M15_V2",
+      "from_status": "live",
+      "to_status": "probation",
+      "action": "throttle",
+      "reasons": [
+        "recent_win_rate(30.00%) < 38%"
+      ],
+      "evaluated_at": "2026-06-14T19:19:17"
+    },
+    {
+      "brain_id": "Swing_V9_H1_V2",
+      "from_status": "live",
+      "to_status": "probation",
+      "action": "throttle",
+      "reasons": [
+        "recent_win_rate(25.00%) < 38%"
+      ],
+      "evaluated_at": "2026-06-14T19:19:17"
+    },
+    {
+      "brain_id": "Swing_V9_M15_V2",
+      "from_status": "probation",
+      "to_status": "live",
+      "action": "promote",
+      "reasons": [
+        "probation_thresholds_met: wr=63.65%, pf=3.46"
+      ],
+      "evaluated_at": "2026-06-14T20:09:50"
+    },
+    {
+      "brain_id": "Swing_V9_H1_V2",
+      "from_status": "probation",
+      "to_status": "live",
+      "action": "promote",
+      "reasons": [
+        "probation_thresholds_met: wr=47.25%, pf=1.80"
+      ],
+      "evaluated_at": "2026-06-14T20:09:50"
+    },
+    {
+      "brain_id": "Swing_V9_M15_V2",
+      "from_status": "live",
+      "to_status": "probation",
+      "action": "throttle",
+      "reasons": [
+        "recent_win_rate(30.00%) < 38%"
+      ],
+      "evaluated_at": "2026-06-14T21:00:22"
+    },
+    {
+      "brain_id": "Swing_V9_H1_V2",
+      "from_status": "live",
+      "to_status": "probation",
+      "action": "throttle",
+      "reasons": [
+        "recent_win_rate(25.00%) < 38%"
+      ],
+      "evaluated_at": "2026-06-14T21:00:22"
+    },
+    {
+      "brain_id": "Swing_V9_M15_V2",
+      "from_status": "probation",
+      "to_status": "live",
+      "action": "promote",
+      "reasons": [
+        "probation_thresholds_met: wr=63.65%, pf=3.46"
+      ],
+      "evaluated_at": "2026-06-14T21:50:53"
+    },
+    {
+      "brain_id": "Swing_V9_H1_V2",
+      "from_status": "probation",
+      "to_status": "live",
+      "action": "promote",
+      "reasons": [
+        "probation_thresholds_met: wr=47.25%, pf=1.80"
+      ],
+      "evaluated_at": "2026-06-14T21:50:53"
+    },
+    {
+      "brain_id": "ARB_Params_V8_M15_S53",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "ARB_Params_V8_M5_S53",
+      "from": null,
+      "to": "probation",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Brain_Trend_M30_V1",
+      "from_status": "frozen",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-06-14T22:01:01.693825"
+    },
+    {
+      "brain_id": "Brain_Trend_M30_V2",
+      "from_status": "frozen",
+      "to_status": "probation",
+      "reason": "pnl:degraded",
+      "timestamp": "2026-06-14T22:01:01.693825"
+    },
+    {
+      "brain_id": "CRT.sur.chlg.g2026.1",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "DeepResMLP_V1_Institutional",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "DeepResMLP_V2_New",
+      "from": null,
+      "to": "probation",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "LightGBM_M15_Swing_24bar",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "LightGBM_V1_Institutional",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "LightGBM_V2_Retrained",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "LightGBM_V3_New",
+      "from": null,
+      "to": "probation",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Microstructure_Transformer_V5.0",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Online_MLP_V1",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "SurvivalAlpha_Ensemble",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "TreeAlpha_Ensemble",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "V9_Institutional_01",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "XGBoost_V10_Retrained",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "XGBoost_V11_New",
+      "from": null,
+      "to": "probation",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "XGBoost_V4.5_Microstructure",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "XGBoost_V9_Institutional",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "lgb_barrier_12bar_lightgbm_v3_20260517_084114",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "lightgbm_h1_swing_lightgbm_v1_20260514_165620",
+      "from": null,
+      "to": "probation",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "xgb_barrier_12bar_xgboost_v3_20260517_084031",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "xgboost_h1_swing_xgboost_v1_20260514_165620",
+      "from": null,
+      "to": "probation",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "xgboost_m15_swing_xgboost_v1_20260514_165620",
+      "from": null,
+      "to": "probation",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "xgboost_m30_swing_xgboost_v1_20260514_165620",
+      "from": null,
+      "to": "probation",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T22:01:01.693825",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Brain_Trend_M30_V2",
+      "from_status": "probation",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-06-14T22:01:07.169056"
+    },
+    {
+      "brain_id": "Brain_Trend_M30_V1",
+      "from": "retired",
+      "to": "candidate",
+      "reason": "SSOT reconciliation: active config on disk overrides retired governance",
+      "timestamp": "2026-06-15T00:40:52.473799+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "Brain_Trend_M30_V2",
+      "from": "retired",
+      "to": "candidate",
+      "reason": "SSOT reconciliation: active config on disk overrides retired governance",
+      "timestamp": "2026-06-15T00:40:52.473799+00:00",
+      "fix_id": "FIX-20260529-034"
     }
   ]
 }

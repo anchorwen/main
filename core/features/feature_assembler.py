@@ -211,12 +211,16 @@ def _build_swing_vector(
         if btc_augment is not None and len(btc_augment) == 41:
             return np.asarray(btc_augment, dtype=np.float64)
 
-        # Legacy path (pre-FIX-134): XAU-centric assembly with documented gaps.
-        # Slot [12]=Cross_Gold_Silver_Ratio (should be XAUUSDc_return)
-        # Slot [30]=XAGUSDc_return (should be AUDJPYc_return)
-        # Slots [35-36]=hardcoded zeros (should be BTC/XAU ratio + ROC)
-        fv_37 = np.concatenate([fv_35, np.zeros(2, dtype=np.float64)])
-        return fv_37
+        # ── FIX-20260615-006/C4: Fail-closed — NO silent fallback to XAU features ──
+        # When the BTCFeatureAugmenter is unavailable (None or wrong length),
+        # the BTC brain MUST NOT receive XAU-centric features (gold/silver ratio,
+        # silver returns, hardcoded zeros for BTC/XAU ratio slots).
+        # Raise FeatureGenerationError to abort this cycle — the caller
+        # (live_cycle) catches this and skips trading for this frame.
+        raise RuntimeError(
+            f"BTC feature augmenter unavailable or wrong dim: "
+            f"btc_augment={'None' if btc_augment is None else f'len={len(btc_augment)}'}"
+        )
 
     if canonical == "swing_enhanced_29":
         return np.array(

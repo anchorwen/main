@@ -59,6 +59,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260615-006 | 2026-06-15 | cursor-agent | — | **XAU/BTC L3 architecture fix (C1/C3/C6/C8)**: StrategyLineConfig.base_dir required; record_brain_votes(base_dir) removes default; MetaFilterGate model_dir removes default; resolve_protection_flag_path prefers base_dir; record_gate_block(base_dir) required. | L3 — base_dir="data" defaults in shared functions |
 | FIX-20260613-087 | 2026-06-13 | cursor-agent | d44b678 | Entry Spread Propagation: fixed _entry_features_snapshot fallback (added bid/ask/spread), fixed ZMQ bridge worker msg_payload variable (was outer envelope, now inner payload). Retroactive audit: 113 tainted opens (XAU 57.8%, BTC 36.1%), EV bias ~6-32. L3 tech debt: entry_context needs mandatory Pydantic validation to eliminate soft fallback. | contract-violation |
 | FIX-20260613-081 | 2026-06-13 | cursor-agent | a29d3fc | SL trail parameters: trail_activation_atr 0.5→0.3 (earlier activation), breakeven_threshold_atr 1.5→1.0 (earlier breakeven lock), sl.min_sl_distance 80→100 (slightly wider). Data-driven: 55% positions had active trail but zero trail_advances (never locked profit before reversal). | boundary-error |
 | FIX-20260613-040 | 2026-06-13 | cursor-agent | — | **BLE001: 2 truly bare except:pass → fail_open_guard** in execution_queue (PriceFetch) + exit_watchdog (ZMQResolveAck). Iron Law #10 incremental upgrade. BLE001: 86→84 (-2 bare). | RC-07 |

@@ -101,6 +101,8 @@ def evaluate_strategy_lines(
     degradation_constraints: Any | None = None,
     # ── P4-2: Cross-strategy coordinator (2026-06-13) ──
     cross_strategy_coordinator: CrossStrategyCoordinator | None = None,
+    # ── FIX-20260615-006/C8: required — no default ──
+    base_dir: str = "",
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue.
 
@@ -323,9 +325,8 @@ def evaluate_strategy_lines(
         if _gate_trend == "ranging":
             trend_direction = "neutral"  # bypass counter-trend penalty
         if decision.should_trade and trend_direction in ("long", "short"):
-            _opposing = (
-                (trend_direction == "long" and decision.direction == "short")
-                or (trend_direction == "short" and decision.direction == "long")
+            _opposing = (trend_direction == "long" and decision.direction == "short") or (
+                trend_direction == "short" and decision.direction == "long"
             )
             if _opposing:
                 _orig_conf = decision.confidence
@@ -357,8 +358,7 @@ def evaluate_strategy_lines(
                     _r1_state = _get_r1_silence_state()
                     _r1_state["consecutive_blocks"] = 0  # reset: trade passed penalty
                     decision.reason = (
-                        f"{decision.reason or 'ok'}"
-                        f"+regime_dir_penalty:{trend_direction}"
+                        f"{decision.reason or 'ok'}" f"+regime_dir_penalty:{trend_direction}"
                     )
             else:
                 # Trade is trend-aligned — reset silence counter
@@ -624,6 +624,7 @@ def evaluate_strategy_lines(
                     direction=decision.direction,
                     reason=decision.reason,
                     gate_diag=getattr(decision, "gate_diag", None) or None,
+                    base_dir=base_dir,
                 )
             except Exception:  # noqa: BLE001
                 pass

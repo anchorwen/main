@@ -28,7 +28,9 @@ def micro_brain():
 class TestMicroStrategyInference:
     def test_passes_micro_feature_vector_to_adapter(self, micro_brain):
         strat = MicroStrategy(
-            config=StrategyLineConfig(name="micro_3bar", magic=90002, brain_types={"xgboost_v4.5"}),
+            config=StrategyLineConfig(
+                base_dir="data", name="micro_3bar", magic=90002, brain_types={"xgboost_v4.5"}
+            ),
             brains=[micro_brain],
         )
         micro_fv = [0.5] * 9
@@ -43,7 +45,9 @@ class TestMicroStrategyInference:
 
     def test_brain_id_stamped(self, micro_brain):
         strat = MicroStrategy(
-            config=StrategyLineConfig(name="micro_3bar", magic=90002, brain_types={"xgboost_v4.5"}),
+            config=StrategyLineConfig(
+                base_dir="data", name="micro_3bar", magic=90002, brain_types={"xgboost_v4.5"}
+            ),
             brains=[micro_brain],
         )
         proposals = strat._run_inference([], [], 2000.0)
@@ -57,7 +61,9 @@ class TestMicroStrategyInference:
             micro_brain,
         ]
         strat = MicroStrategy(
-            config=StrategyLineConfig(name="micro_3bar", magic=90002, brain_types={"xgboost_v4.5"}),
+            config=StrategyLineConfig(
+                base_dir="data", name="micro_3bar", magic=90002, brain_types={"xgboost_v4.5"}
+            ),
             brains=brains,
         )
         proposals = strat._run_inference([], [], 2000.0)
@@ -65,7 +71,9 @@ class TestMicroStrategyInference:
 
     def test_empty_brains_returns_empty(self):
         strat = MicroStrategy(
-            config=StrategyLineConfig(name="micro_3bar", magic=90002, brain_types={"xgboost_v4.5"}),
+            config=StrategyLineConfig(
+                base_dir="data", name="micro_3bar", magic=90002, brain_types={"xgboost_v4.5"}
+            ),
             brains=[],
         )
         proposals = strat._run_inference([], [], 2000.0)

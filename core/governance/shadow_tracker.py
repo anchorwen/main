@@ -46,7 +46,7 @@ class ShadowBrainMetrics:
 class ShadowTracker:
     """Reads brain_votes JSONL files and computes per-brain shadow metrics."""
 
-    base_dir: str = "data"
+    base_dir: str
     shadow_target: int = 50
 
     def _votes_dir(self) -> Path:

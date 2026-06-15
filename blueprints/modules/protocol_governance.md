@@ -32,6 +32,7 @@ BrainQualityVerdict → GovernanceRuleEngine.evaluate() → lifecycle_action
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260615-006 | 2026-06-15 | cursor-agent | — | **XAU/BTC L3 交叉感染: ShadowTracker(base_dir) 移除默认值→必需参数** | L3 — base_dir="data" 默认值 |
 | FIX-20260613-080 | 2026-06-13 | cursor-agent | 422871f | Brain portfolio cleanup: archived 3 XAU NO_DATA brains (10-14d 0 trades), froze 3 Brain_Trend brains (PF<1.0 + 100% SHORT cloning), fixed BTC V6/V7/V8 config enabled→false. STR WARN 18→15. | contract-violation |
 | FIX-20260613-076 | 2026-06-13 | cursor-agent | e4b1d82 | cmd_reconcile no longer overwrites runtime governance promotions with config defaults. Config status is now treated as registration default only — governance owns the lifecycle. Preserves transition_log across saves. OU_Params_V7_M15 config fixed (live→candidate, matching PF=0.80 performance). | contract-violation |
 | FIX-20260529-043 | 2026-05-29 | cursor-agent | — | PR#1 GovernanceService thread-safety: added threading.RLock() protecting all _brain_states/_transition_log reads/writes. save() changed from direct write_text() to atomic tmp+os.replace. RLock used because transition() internally calls register_brain(). | RC-04 |

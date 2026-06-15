@@ -38,6 +38,14 @@
       "last_transition_at": "2026-06-14T15:40:08.073129+00:00",
       "transition_count": 1,
       "freeze_count": 0
+    },
+    "BTC_Swing_V12_H1_Survival": {
+      "brain_id": "BTC_Swing_V12_H1_Survival",
+      "status": "candidate",
+      "registered_at": "2026-06-14T17:50:05.467103",
+      "last_transition_at": "2026-06-14T17:50:05.467103+00:00",
+      "transition_count": 1,
+      "freeze_count": 0
     }
   },
   "transition_log": [
@@ -521,6 +529,22 @@
       "to": "candidate",
       "reason": "auto-registered from disk config (config status=candidate)",
       "timestamp": "2026-06-14T15:40:08.073129+00:00",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V12_H1_Survival",
+      "from": null,
+      "to": "candidate",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-14T17:50:05.467103",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V12_H1_Survival",
+      "from": null,
+      "to": "candidate",
+      "reason": "auto-registered from disk config (config status=shadow)",
+      "timestamp": "2026-06-14T17:50:05.467103+00:00",
       "fix_id": "FIX-20260529-034"
     }
   ]

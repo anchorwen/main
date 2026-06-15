@@ -162,7 +162,7 @@ class SchedulerService:
                             if state.get("status") == "candidate"
                         ]
                         if candidate_ids:
-                            tracker = ShadowTracker(base_dir="data")
+                            tracker = ShadowTracker(base_dir=str(container.config.base_dir))
                             shadow_map = build_shadow_summary(tracker, candidate_ids)
                             summary_map.update(shadow_map)
                     except Exception:  # noqa: BLE001
@@ -202,7 +202,7 @@ class SchedulerService:
                     _GOVERNANCE_MANUAL_MODE = False
 
                     try:
-                        pnl_path = _Path("data") / "brain_pnl_ledger.json"
+                        pnl_path = _Path(str(container.config.base_dir)) / "brain_pnl_ledger.json"
                         if pnl_path.exists():
                             pnl_store = BrainPnLStore.load(str(pnl_path))
                             all_metrics = pnl_store.get_all_metrics()
@@ -249,12 +249,12 @@ class SchedulerService:
                             try:
                                 from core.data.projections import project_governance_state
 
-                                _stream_path = _Path("data") / "ledger_events.jsonl"
+                                _stream_path = (
+                                    _Path(str(container.config.base_dir)) / "ledger_events.jsonl"
+                                )
                                 _stream_state = project_governance_state(_stream_path)
                                 _stream_brains = {
-                                    k: v
-                                    for k, v in _stream_state.items()
-                                    if not k.startswith("_")
+                                    k: v for k, v in _stream_state.items() if not k.startswith("_")
                                 }
                                 if _stream_brains:
                                     _logger.info(

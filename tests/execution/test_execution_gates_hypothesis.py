@@ -9,11 +9,9 @@ Phase 3: Targets the highest-risk 0% coverage files in core/execution/.
 from __future__ import annotations
 
 import math
-from unittest.mock import MagicMock, patch
 
 import numpy as np
-import pytest
-from hypothesis import assume, given, settings
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 
@@ -172,9 +170,12 @@ class TestRegimeDirectionGate:
 
         gate = RegimeDirectionGate(adx_threshold=25)
         for direction in ("long", "up", "bullish", "short", "down", "bearish"):
-            assert gate._resolve_trend(
-                self._make_regime_info(adx=30, plus_di=0, minus_di=0, trend_direction=direction)
-            ) == "ranging"
+            assert (
+                gate._resolve_trend(
+                    self._make_regime_info(adx=30, plus_di=0, minus_di=0, trend_direction=direction)
+                )
+                == "ranging"
+            )
 
     def test_physics_override_with_nan_falls_through_to_ranging(self) -> None:
         """FIX-20260614-B2: NaN OU/Hurst → physics path skipped → 'ranging' default."""
@@ -184,8 +185,11 @@ class TestRegimeDirectionGate:
         # NaN ou_theta/hurst_m5 → physics path skipped → Feature-Not-Gate defaults to "ranging"
         result = gate._resolve_trend(
             self._make_regime_info(
-                adx=30, plus_di=35, minus_di=15,
-                ou_theta_m5=float("nan"), hurst_m5=float("nan"),
+                adx=30,
+                plus_di=35,
+                minus_di=15,
+                ou_theta_m5=float("nan"),
+                hurst_m5=float("nan"),
             )
         )
         assert result == "ranging"  # Feature-Not-Gate: no ADX fallback, default passthrough
@@ -202,12 +206,27 @@ class TestMetaFilterGate:
         from core.execution.meta_filter_gate import build_meta_filter_array
 
         feat_vec = np.random.default_rng(42).normal(0, 1, (40,)).astype(np.float32)
-        micro = {name: 0.0 for name in [
-            "tick_return", "hl_ratio", "co_ratio", "avg_spread", "OIM",
-            "tick_velocity", "XAGUSDc_return", "EURUSDc_return", "USDJPYc_return",
-        ]}
+        micro = {
+            name: 0.0
+            for name in [
+                "tick_return",
+                "hl_ratio",
+                "co_ratio",
+                "avg_spread",
+                "OIM",
+                "tick_velocity",
+                "XAGUSDc_return",
+                "EURUSDc_return",
+                "USDJPYc_return",
+            ]
+        }
 
-        result = build_meta_filter_array(feat_vec, micro, ou_z_entry=1.3)
+        result = build_meta_filter_array(
+            feat_vec,
+            micro,
+            ou_z_entry=1.3,
+            feature_names_path="data/models/meta_filter_v3/feature_names.json",
+        )
 
         assert isinstance(result, np.ndarray)
         assert result.dtype == np.float32
@@ -219,12 +238,24 @@ class TestMetaFilterGate:
         from core.execution.meta_filter_gate import build_meta_filter_array
 
         short_vec = np.array([1.0, 2.0, 3.0], dtype=np.float32)  # only 3 features
-        micro = {name: 0.0 for name in [
-            "tick_return", "hl_ratio", "co_ratio", "avg_spread", "OIM",
-            "tick_velocity", "XAGUSDc_return", "EURUSDc_return", "USDJPYc_return",
-        ]}
+        micro = {
+            name: 0.0
+            for name in [
+                "tick_return",
+                "hl_ratio",
+                "co_ratio",
+                "avg_spread",
+                "OIM",
+                "tick_velocity",
+                "XAGUSDc_return",
+                "EURUSDc_return",
+                "USDJPYc_return",
+            ]
+        }
 
-        result = build_meta_filter_array(short_vec, micro)
+        result = build_meta_filter_array(
+            short_vec, micro, feature_names_path="data/models/meta_filter_v3/feature_names.json"
+        )
         assert isinstance(result, np.ndarray)
 
     def test_missing_micro_features_default_zero(self) -> None:
@@ -232,7 +263,11 @@ class TestMetaFilterGate:
         from core.execution.meta_filter_gate import build_meta_filter_array
 
         feat_vec = np.zeros(40, dtype=np.float32)
-        result = build_meta_filter_array(feat_vec, {})  # empty micro dict
+        result = build_meta_filter_array(
+            feat_vec,
+            {},  # empty micro dict
+            feature_names_path="data/models/meta_filter_v3/feature_names.json",
+        )
 
         assert isinstance(result, np.ndarray)
         assert result.dtype == np.float32

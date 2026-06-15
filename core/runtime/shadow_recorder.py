@@ -211,9 +211,9 @@ def record_brain_votes(
     strategy_name: str,
     consensus_direction: str,
     consensus_confidence: float,
-    symbol: str = "XAUUSDc",
-    base_dir: str = "data",
+    base_dir: str,
     *,
+    symbol: str = "XAUUSDc",
     brain_status_map: dict[str, str] | None = None,
     cycle_iteration: int = 0,
 ) -> str:

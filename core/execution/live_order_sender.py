@@ -66,21 +66,34 @@ def _coerce_positive_float_sg(value: Any) -> float | None:
 
 
 def resolve_protection_flag_path(base_dir: str, protection_flag_path: str) -> Path:
-    """Resolve flag path when relative: prefer PROJECT_ROOT, then cwd, then base_dir."""
+    """Resolve flag path: prefer base_dir, then PROJECT_ROOT, then cwd."""
     raw = Path(protection_flag_path)
     if raw.is_absolute():
         return raw
+    # FIX-20260615-006/C6: Prefer base_dir first so BTC's flag resolves to
+    # data_btc/ not data/.  Previously PROJECT_ROOT was checked first, which
+    # caused BTC to resolve to XAU's protection flag.
+    base = Path(base_dir)
+    base = base.resolve() if base.is_absolute() else (PROJECT_ROOT / base).resolve()
+    # For multi-part paths (e.g. "data/live_dispatch_block.flag"), strip the
+    # directory prefix and resolve under base_dir.  For bare filenames, just
+    # put under base_dir.
+    base_candidate = (base / raw.name).resolve()
+    if base_candidate.exists():
+        return base_candidate
+    # Also try with full relative path appended to base_dir
+    if len(raw.parts) > 1:
+        full_candidate = (base / raw).resolve()
+        if full_candidate.exists():
+            return full_candidate
     project_candidate = (PROJECT_ROOT / raw).resolve()
     if project_candidate.exists():
         return project_candidate
     cwd_candidate = (Path.cwd() / raw).resolve()
     if cwd_candidate.exists():
         return cwd_candidate
-    base = Path(base_dir)
-    base = base.resolve() if base.is_absolute() else (PROJECT_ROOT / base).resolve()
-    if len(raw.parts) == 1:
-        return (base / raw).resolve()
-    return (base / raw.name).resolve()
+    # Return base_dir-resolved path as default (may not exist yet)
+    return base_candidate
 
 
 def _validate_sl_tp(

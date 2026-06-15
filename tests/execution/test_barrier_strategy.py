@@ -31,7 +31,7 @@ class TestBarrierStrategyInference:
     def test_passes_feature_vector_to_adapter(self, barrier_brain):
         strat = BarrierStrategy(
             config=StrategyLineConfig(
-                name="barrier_12bar", magic=90001, brain_types={"xgboost_v9"}
+                base_dir="data", name="barrier_12bar", magic=90001, brain_types={"xgboost_v9"}
             ),
             brains=[barrier_brain],
         )
@@ -49,7 +49,7 @@ class TestBarrierStrategyInference:
     def test_brain_id_stamped_on_proposal(self, barrier_brain):
         strat = BarrierStrategy(
             config=StrategyLineConfig(
-                name="barrier_12bar", magic=90001, brain_types={"xgboost_v9"}
+                base_dir="data", name="barrier_12bar", magic=90001, brain_types={"xgboost_v9"}
             ),
             brains=[barrier_brain],
         )
@@ -65,7 +65,7 @@ class TestBarrierStrategyInference:
         ]
         strat = BarrierStrategy(
             config=StrategyLineConfig(
-                name="barrier_12bar", magic=90001, brain_types={"xgboost_v9"}
+                base_dir="data", name="barrier_12bar", magic=90001, brain_types={"xgboost_v9"}
             ),
             brains=brains,
         )
@@ -77,7 +77,7 @@ class TestBarrierStrategyInference:
     def test_empty_brains_returns_empty(self):
         strat = BarrierStrategy(
             config=StrategyLineConfig(
-                name="barrier_12bar", magic=90001, brain_types={"xgboost_v9"}
+                base_dir="data", name="barrier_12bar", magic=90001, brain_types={"xgboost_v9"}
             ),
             brains=[],
         )

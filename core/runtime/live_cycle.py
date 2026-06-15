@@ -96,7 +96,7 @@ class LiveCycleConfig:
     no_mt5: bool = False
     once: bool = False
     ignore_protection_flag: bool = False
-    protection_flag_path: str = "data/live_dispatch_block.flag"
+    protection_flag_path: str = "live_dispatch_block.flag"
     mt5_terminal_path: str = ""
     brain_entry: dict[str, Any] = field(default_factory=dict)
     brain_type: str = "onnx_v9"
@@ -263,9 +263,7 @@ class LiveCycleState:
     alert_hub: Any = None  # LiveAlertHub instance (FIX-20260529-040)
     _last_bridge_ack_time: float = 0.0  # Unix ts of last successful broker.fetch_prices()
     _last_cycle_start_time: float = 0.0  # wall clock at start of current cycle
-    _last_tick_age: float = (
-        0.0  # FIX-20260613-052: resolved placeholder: age of latest tick (seconds) for staleness guard
-    )
+    _last_tick_age: float = 0.0  # FIX-20260613-052: resolved placeholder: age of latest tick (seconds) for staleness guard
     _cooldown_registry: Any = None  # CooldownRegistry (Cut 1: Absolute Refractory Period)
     _family_entry_tracker: Any = None  # FamilyEntryTracker (Cut 2: Cross-Strategy Spacing)
     _strategies: dict[str, Any] | None = None  # FIX-072: cached strategy_lines for persistence
@@ -2357,6 +2355,7 @@ def _evaluate_strategy_lines(
     # ── FIX-20260609-011: governance degradation gate ──
     governance_state: dict[str, Any] | None = None,
     degradation_constraints: Any | None = None,  # FIX-20260611-022
+    base_dir: str = "",  # FIX-20260615-006/C8
 ) -> dict[str, Any]:
     """Run independent strategy evaluations + portfolio risk + execution queue."""
     from core.runtime.strategy_evaluator import evaluate_strategy_lines as _impl
@@ -2409,6 +2408,7 @@ def _evaluate_strategy_lines(
         btc_augment=btc_augment,  # FIX-20260613-052: resolved placeholder
         governance_state=governance_state,
         degradation_constraints=degradation_constraints,
+        base_dir=base_dir,
     )
 
 
@@ -2963,10 +2963,6 @@ def execute_live_cycle(
                 # watchdog will handle it normally.  If it's a ghost, it gets
                 # closed.  If it's real, management resumes.
                 # ── FIX-20260607-141: enrich orphan adoption with MT5 data ──
-                # Previously, orphan adoption stored only minimal metadata
-                # (source + adopted_at).  The exit watchdog needs SL, TP, entry
-                # price, direction, and volume to manage the position properly.
-                # Without enrichment, the watchdog may ignore or mismanage
                 # adopted positions.
                 for _ot in sorted(_orphans):
                     _pos_data: dict[str, Any] = {
@@ -3104,9 +3100,7 @@ def execute_live_cycle(
                             from core.contracts.events import PnLEvent
                             from core.data.event_writer import EventWriter
 
-                            _ledger_path = str(
-                                Path(config.base_dir) / "ledger_events.jsonl"
-                            )
+                            _ledger_path = str(Path(config.base_dir) / "ledger_events.jsonl")
                             _writer = EventWriter(_ledger_path)
                             _settled_ts = datetime.now(UTC)
 
@@ -3360,9 +3354,7 @@ def execute_live_cycle(
                     state._mtf_price_service.bootstrap(_closes)
                     # Hydrate physics indicators: use mid=(H+L)/2 for OU/Hurst
                     if len(state._recent_mid_prices) < 21:
-                        _hydrated = [
-                            (float(r[2]) + float(r[3])) / 2.0 for r in _hist_rates[-50:]
-                        ]
+                        _hydrated = [(float(r[2]) + float(r[3])) / 2.0 for r in _hist_rates[-50:]]
                         state._recent_mid_prices = _hydrated
                         print(
                             json.dumps(
@@ -4015,6 +4007,7 @@ def execute_live_cycle(
                     from core.features.schemas.microstructure_schema import (
                         MICROSTRUCTURE_9_FEATURES,
                     )
+
                     _all_zero = all(
                         abs(float(micro_features.get(fn, 0.0))) < 1e-15
                         for fn in MICROSTRUCTURE_9_FEATURES
@@ -4070,7 +4063,9 @@ def execute_live_cycle(
         "schema_version": "v9_institutional",
         "vector": tuple(np.nan_to_num(np.asarray(feature_vector, dtype=np.float64)).tolist()),
         # FIX-20260613-087: entry_spread must propagate to journal for accurate EV
-        "entry_spread": float(round(_ask - _bid, 2)) if (_bid is not None and _ask is not None and _ask > _bid) else 0.0,
+        "entry_spread": float(round(_ask - _bid, 2))
+        if (_bid is not None and _ask is not None and _ask > _bid)
+        else 0.0,
         "bid": _bid,
         "ask": _ask,
     }
@@ -4100,7 +4095,7 @@ def execute_live_cycle(
             from core.execution.meta_filter_gate import MetaFilterGate
 
             _mg = MetaFilterGate(
-                model_dir="data/models/meta_filter_v3",
+                model_dir=f"{config.base_dir}/models/meta_filter_v3",
                 threshold=META_FILTER_GATE_THRESHOLD,
                 calibrator=_cal,
             )
@@ -5157,6 +5152,7 @@ def execute_live_cycle(
             btc_augment=_btc_aug,  # FIX-20260613-052: resolved placeholder
             governance_state=_gov_state,
             degradation_constraints=_degrade_constraints,
+            base_dir=config.base_dir,  # FIX-20260615-006/C8
         )
 
         # ── Golden Master recording: capture outputs after evaluation ──
@@ -5376,7 +5372,13 @@ def execute_live_cycle(
                     return _result
 
             dispatch_results = exec_queue.flush(
-                partial(dispatch_live_open_order, adapter_name=config.adapter_name, zmq_order_endpoint=config.zmq_order_endpoint, zmq_ack_endpoint=config.zmq_ack_endpoint, entry_context=_entry_features_snapshot),
+                partial(
+                    dispatch_live_open_order,
+                    adapter_name=config.adapter_name,
+                    zmq_order_endpoint=config.zmq_order_endpoint,
+                    zmq_ack_endpoint=config.zmq_ack_endpoint,
+                    entry_context=_entry_features_snapshot,
+                ),
                 journal_path=str(journal_path),
                 mt5_terminal_path=config.mt5_terminal_path,
                 symbol=config.symbol,

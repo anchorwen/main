@@ -222,6 +222,8 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/features/schemas/v9_institutional_schema.py",
         "core/features/schemas/swing_enhanced_schema.py",
         "core/features/schemas/registry.py",
+        "core/features/feature_assembler.py",
+        "core/features/rolling_normalizer.py",
         "core/market/calendar.py",
         "core/deployment/feature_update_producer.py",
         "scripts/features/feature_store_warmer.py",

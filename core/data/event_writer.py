@@ -102,7 +102,7 @@ _writer: EventWriter | None = None
 _writer_lock = threading.Lock()
 
 
-def get_event_writer(base_dir: str = "data") -> EventWriter:
+def get_event_writer(base_dir: str) -> EventWriter:
     """Get or create the process-global EventWriter singleton.
 
     Args:

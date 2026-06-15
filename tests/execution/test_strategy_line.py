@@ -18,7 +18,7 @@ def _make_strategy(config=None, brains=None, budget=None, proposals=None, infer_
     """Create a fully wired StrategyLine subclass for testing."""
     if config is None:
         config = StrategyLineConfig(
-            name="test_line", magic=99999, brain_types={"test"}, min_valid_brains=1
+            base_dir="data", name="test_line", magic=99999, brain_types={"test"}, min_valid_brains=1
         )
     if brains is None:
         # Build a minimal brain list with adapter-like entries
@@ -49,7 +49,7 @@ def _make_strategy(config=None, brains=None, budget=None, proposals=None, infer_
 
 class TestStrategyLineConfig:
     def test_default_values(self):
-        cfg = StrategyLineConfig(name="test", magic=99999, brain_types={"test"})
+        cfg = StrategyLineConfig(base_dir="data", name="test", magic=99999, brain_types={"test"})
         assert cfg.base_volume == 0.01
         assert cfg.max_volume == 0.05
         assert cfg.confidence_threshold == 0.40
@@ -57,6 +57,7 @@ class TestStrategyLineConfig:
 
     def test_custom_values(self):
         cfg = StrategyLineConfig(
+            base_dir="data",
             name="custom",
             magic=12345,
             brain_types={"a"},
@@ -356,7 +357,9 @@ class TestCounterTrendGate:
         """Counter-trend penalise is now handled by trend_isolation_gates
         (FIX-007 extraction), NOT inside evaluate().  evaluate() passes
         trend params through but does not apply counter-trend logic itself."""
-        micro_config = StrategyLineConfig(name="micro_3bar", magic=90002, brain_types={"test"})
+        micro_config = StrategyLineConfig(
+            base_dir="data", name="micro_3bar", magic=90002, brain_types={"test"}
+        )
         line = _make_strategy(
             config=micro_config,
             proposals=[
@@ -496,6 +499,7 @@ class TestConsensus:
     def test_long_bias_discount(self):
         """With long_bias_discount > 0, LONG confidence gets discounted."""
         config = StrategyLineConfig(
+            base_dir="data",
             name="test",
             magic=99999,
             brain_types={"test"},
@@ -533,7 +537,12 @@ class TestVolume:
 
     def test_volume_reduced_by_gate(self):
         config = StrategyLineConfig(
-            name="test", magic=99999, brain_types={"test"}, base_volume=0.04, max_volume=0.10
+            base_dir="data",
+            name="test",
+            magic=99999,
+            brain_types={"test"},
+            base_volume=0.04,
+            max_volume=0.10,
         )
         line = _make_strategy(config=config)
         vol_full = line._compute_volume(
@@ -553,7 +562,12 @@ class TestVolume:
 
     def test_volume_high_vol_regime_reduces(self):
         config = StrategyLineConfig(
-            name="test", magic=99999, brain_types={"test"}, base_volume=0.04, max_volume=0.10
+            base_dir="data",
+            name="test",
+            magic=99999,
+            brain_types={"test"},
+            base_volume=0.04,
+            max_volume=0.10,
         )
         line = _make_strategy(config=config)
         vol_normal = line._compute_volume(
@@ -569,7 +583,12 @@ class TestVolume:
 
     def test_volume_low_vol_regime_expands(self):
         config = StrategyLineConfig(
-            name="test", magic=99999, brain_types={"test"}, base_volume=0.04, max_volume=0.10
+            base_dir="data",
+            name="test",
+            magic=99999,
+            brain_types={"test"},
+            base_volume=0.04,
+            max_volume=0.10,
         )
         line = _make_strategy(config=config)
         vol_normal = line._compute_volume(
@@ -591,6 +610,7 @@ class TestMinRRGuard:
     def test_rr_below_minimum_blocks(self):
         """With very tight TP vs SL, the min RR guard should block."""
         config = StrategyLineConfig(
+            base_dir="data",
             name="test",
             magic=99999,
             brain_types={"test"},

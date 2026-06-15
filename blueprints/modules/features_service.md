@@ -50,6 +50,7 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260615-006 | 2026-06-15 | cursor-agent | — | **XAU/BTC L3 交叉感染 (C4/C5): BTC 特征静默回退→Fail-Closed RuntimeError; btc_macro_enhanced_37 维度 37→41** | L3 — 静默回退到 XAU 特征 |
 | FIX-20260608-004r | 2026-06-08 | cursor-agent | — | **Multi-TF Feature Store ROLLED BACK**: `_resolve_timeframe()` removed — pure M5 stream restored. 40-dim vector already is the multi-TF holographic snapshot. | RC-12 |
 | FIX-20260608-004 | 2026-06-08 | cursor-agent | — | **Multi-TF Feature Store (SUPERSEDED)**: Dynamic timeframe labeling added to `produce_from_live_computer()`. | RC-12 |
 | FIX-20260604-081 | 2026-06-04 | cursor-agent | — | **BTC 37-dim macro enhanced schema**: `btc_macro_enhanced_schema.py` (AUDJPYc, XAUUSDc, BTC/XAU ratio+ROC). Registered in `_IMPLEMENTED_SCHEMAS`, `SCHEMA_DIMENSIONS`, `feature_assembler`. Physically isolated from XAU. ffill→ROC guard. | RC-06 |
