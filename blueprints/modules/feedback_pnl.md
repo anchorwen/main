@@ -35,6 +35,7 @@ cycle N+H:   settle_all(mid_price)  → only ttl=0 settled at horizon bar
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260615-011 | 2026-06-15 | cursor-agent | — | **Ghost Brain Pollution + Unit Mixing**: `load_from_stream()`: pnl_r→pnl_per_unit reconstruction; `_hydrate_accumulators()`: field name fix `pnl`→`pnl_per_unit` + timestamp fallback `close_time`. DQAF-20260615-011. | RC-06 (contract-violation: unit mismatch), RC-11 (stale-data: archived brain pollution) |
 | FIX-20260611-022 | 2026-06-11 | cursor-agent | b106eb2 | Consumer migration: shadow_pnl_loop startup now tries load_from_stream() first, falls back to old JSON. | contract-violation |
 | FIX-20260611-021 | 2026-06-11 | cursor-agent | 49610cd | Activate dual-write: BrainPnLStore.load() + constructor accept event_writer parameter for EventWriter injection. | contract-violation |
 | FIX-20260611-021 | 2026-06-11 | cursor-agent | 520b371 | Event Sourcing Foundation: Optional EventWriter hook in BrainPnLStore (dual-write to ledger_events.jsonl). Zero-risk transition — hook is None by default. | contract-violation |

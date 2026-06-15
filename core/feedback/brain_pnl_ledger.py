@@ -860,19 +860,31 @@ class BrainPnLStore:
                 if brain_id not in store._settled:
                     store._settled[brain_id] = []
 
-                # Reconstruct a settled entry from the event
+                # Reconstruct a settled entry from the event.
+                # FIX-20260615-011: event.pnl_r is an R-multiple
+                #   pnl_r = pnl_per_unit / (entry_price * 0.01)
+                # Reverse: pnl_per_unit ≈ pnl_r * entry_price * 0.01
+                # This restores the dollar-per-unit value for unit consistency
+                # with entries settled live by _settle().
+                _event_entry_price = float(event.entry_price or 0.0)
+                _event_pnl_r = float(event.pnl_r or 0.0)
+                if _event_entry_price > 0:
+                    _pnl_per_unit = _event_pnl_r * _event_entry_price * 0.01
+                else:
+                    _pnl_per_unit = _event_pnl_r  # fallback (should not happen)
                 entry = {
                     "signal_id": event.event_id,
                     "brain_id": brain_id,
                     "symbol": event.symbol,
                     "direction": event.direction or "neutral",
-                    "entry_price": event.entry_price or 0.0,
+                    "entry_price": _event_entry_price,
                     "close_price": event.exit_price or 0.0,
                     "close_time": event.timestamp.isoformat(),
-                    "pnl_per_unit": event.pnl_r,
+                    "pnl_per_unit": round(_pnl_per_unit, 6),
+                    "pnl_r": _event_pnl_r,  # preserve original R-multiple for audit
                     "confidence": event.confidence,
                     "position_ticket": event.position_ticket,
-                    "is_win": event.pnl_r > 0,
+                    "is_win": _event_pnl_r > 0,
                 }
                 store._settled[brain_id].append(entry)
 
@@ -901,8 +913,15 @@ class BrainPnLStore:
 
         for _bid, _trades in self._settled.items():
             for _t in _trades:
-                _pnl = _t.get("pnl", 0) or 0.0
-                _ts_str = _t.get("settled_at", "") or _t.get("entry_time", "")
+                # FIX-20260615-011: field is "pnl_per_unit", not "pnl"
+                _pnl = _t.get("pnl_per_unit", 0) or 0.0
+                # FIX-20260615-011: stream-loaded entries use "close_time",
+                # not "settled_at" or "entry_time". Try all three.
+                _ts_str = (
+                    _t.get("settled_at", "")
+                    or _t.get("entry_time", "")
+                    or _t.get("close_time", "")
+                )
                 try:
                     _ts = datetime.fromisoformat(_ts_str)
                     if _ts.date() == _today:

@@ -20,6 +20,17 @@
 
 ---
 
+### ReB-20260615-011
+- **Pattern Signature**: `ARCHIVED_BRAIN_ALERT_POLLUTION`
+- **描述**: 退役/归档大脑的历史 counterfactual PnL 数据永久占据告警"最差大脑"评比位置。因为 `get_all_metrics()` 返回所有大脑（含已禁用/归档），而累积 PnL 随历史长度单调增长 → 退役大脑(最长的历史、最极端的累积值)永远"赢"过活跃大脑。告警面板对活跃大脑的实时退化完全失聪——这是"幸存者偏差"的逆向版本：尸体统治排行榜。
+- **关联 FIX IDs**: FIX-20260615-011
+- **关联 Docket IDs**: DQAF-20260615-011
+- **预防策略**:
+  1. 任何跨大脑排名/评比必须先过滤治理活性状态 → 仅评估 operational (非 terminal) 大脑
+  2. `get_all_metrics()` 应接受可选的 `active_brain_ids: set[str] | None` 参数
+  3. 每次大脑退役时，CI 检查是否有告警/排行榜仍然引用退役大脑
+- **检测方法**: 对比 `governance_state.json` 活跃大脑列表与告警"最差大脑"输出 → 出现非活跃大脑 → 触发本 Pattern
+
 ### ReB-20260608-001
 - **Pattern Signature**: `CIRCUIT_BREAKER_RESET_ASYM`
 - **描述**: 熔断器有 N 个触发路径（bridge_silence / cycle_stall×3 / ExecutionQueueFatalError / staleness），但自愈逻辑仅覆盖其中一部分（只检查 `consecutive_degraded_cycles > 0`）。未被自愈逻辑覆盖的触发路径导致熔断器永久卡死。本质是状态机转换表不完备——触发边与自愈边不是 N:N 映射。

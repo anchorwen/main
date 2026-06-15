@@ -970,7 +970,57 @@ def _execute_management_phase(
                     # producing a misleading "strategy" metric that describes
                     # no actual brain.  Now: find the single brain with the
                     # worst cumulative_pnl, and use ITS win_rate too.
+                    #
+                    # FIX-20260615-011: ARCHIVED_BRAIN_ALERT_POLLUTION —
+                    # Archived/retired brains with years of counterfactual PnL
+                    # permanently dominate the "worst brain" slot, silencing
+                    # alerts for active brain degradation.
+                    # Filter to only OPERATIONAL brains (state ∈ governance,
+                    # excluding terminal states: retired, frozen, archived,
+                    # shadow, error).  Reuses the same logic as
+                    # DataHealthService.check_governance_state().
+                    _TERMINAL_STATES = {"retired", "frozen", "archived", "shadow", "error"}
+
+                    def _is_operational(brain_dict: dict) -> bool:
+                        _raw = str(
+                            brain_dict.get("state", brain_dict.get("status", ""))
+                        ).lower()
+                        return _raw not in _TERMINAL_STATES and _raw != ""
+
+                    _active_brain_ids: set[str] = set()
+                    try:
+                        _gov_path = Path(config.base_dir) / "governance_state.json"
+                        if _gov_path.exists():
+                            _gov_raw = json.loads(
+                                _gov_path.read_text(encoding="utf-8")
+                            )
+                            _brain_states = _gov_raw.get("brain_states", {})
+                            if isinstance(_brain_states, dict):
+                                for _bid, _bs in _brain_states.items():
+                                    if isinstance(_bs, dict) and _is_operational(_bs):
+                                        _active_brain_ids.add(_bid)
+                            elif isinstance(_brain_states, list):
+                                for _b in _brain_states:
+                                    if isinstance(_b, dict) and _is_operational(_b):
+                                        _bid = _b.get("brain_id", _b.get("id", ""))
+                                        if _bid:
+                                            _active_brain_ids.add(_bid)
+                    except Exception:  # noqa: BLE001
+                        pass  # governance unreadable → no filter (degrade gracefully)
+
                     _all_m = pnl_ledger.get_all_metrics()
+                    # Filter to active brains only when governance is available
+                    if _all_m and _active_brain_ids:
+                        _active_m = {
+                            _bid: _m
+                            for _bid, _m in _all_m.items()
+                            if _bid in _active_brain_ids
+                        }
+                        if _active_m:
+                            _all_m = _active_m
+                        # else: no active brains have metrics → use full set
+                        # as fallback (empty metrics would hide genuine issues)
+
                     if _all_m:
                         _worst_m = min(
                             _all_m.values(),
