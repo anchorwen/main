@@ -20,6 +20,17 @@
 
 ---
 
+### ReB-20260615-012
+- **Pattern Signature**: `ORPHAN_ENTRY_ALERT_POLLUTION`
+- **描述**: 启动管道生成的合成 orphan close 条目 (label=`auto_orphan_*`, pnl=0, position_ticket=None) 涌入告警上下文的滚动窗口计算。由于无 ticket 绕过去重、pnl=0 计为亏损，真实胜率被稀释至灾难级 (0.91%)。修复: 告警上下文构建器中按 label 过滤 `auto_orphan_` 前缀——纯展示层修复，0 行动及实盘逻辑。
+- **关联 FIX IDs**: FIX-20260615-012
+- **关联 Docket IDs**: DQAF-20260615-012
+- **预防策略**:
+  1. 任何向 journal 写入 synthetic 条目的函数必须使用可识别的 label 前缀 (如 `auto_orphan_`)
+  2. 告警/统计模块在遍历 journal 时应显式定义包含/排除的 label 集合
+  3. CI 检查: 新 synthetic label 出现时自动注册到排除列表
+- **检测方法**: `grep auto_orphan_ data/live_trade_journal.jsonl | wc -l` > 100 → 触发本 Pattern
+
 ### ReB-20260615-011
 - **Pattern Signature**: `ARCHIVED_BRAIN_ALERT_POLLUTION`
 - **描述**: 退役/归档大脑的历史 counterfactual PnL 数据永久占据告警"最差大脑"评比位置。因为 `get_all_metrics()` 返回所有大脑（含已禁用/归档），而累积 PnL 随历史长度单调增长 → 退役大脑(最长的历史、最极端的累积值)永远"赢"过活跃大脑。告警面板对活跃大脑的实时退化完全失聪——这是"幸存者偏差"的逆向版本：尸体统治排行榜。

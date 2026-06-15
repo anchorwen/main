@@ -27,6 +27,21 @@
 
 ---
 
+### CCT-20260615-012
+- **Docket ID**: DQAF-20260615-012
+- **日期**: 2026-06-15
+- **置信度**: confirmed
+- **因果链**:
+  - [Layer 1 — 症状]: XAU 钉钉告警显示胜率 0.91% (7/767)，断路器断开。当日盈亏仅 $0.39，但窗口内"交易数"高达 767。
+  - [Layer 2 — 中间异常]: 767 笔"交易"中 752 笔是 `auto_orphan_rejected` 合成 close 条目 (pnl=0, position_ticket=None)。这些条目由 `cleanup_orphan_opens()` 在启动时生成，为历史 rejected open 写 synthetic close。由于没有 ticket，绕过了告警上下文的去重逻辑 (`if _pos_tkt is not None`)。pnl=0 被计为"亏损"→752:7 的比例将真实胜率从 46.67% 稀释至 0.91%。
+  - [Layer 3 — 根因]: RC-06 (contract-violation) — 告警上下文构建器未区分 `auto_orphan_*` 合成条目与真实交易。`cleanup_orphan_opens()` 生成的 synthetic close 是合法审计记录，但不应参与实时告警统计。
+- **证据引用**:
+  - Source 1: `data/live_trade_journal.jsonl` — 2671 orphan close, 752 today
+  - Source 2: `core/ledger/services/journal_cleanup.py:275-318` — cleanup_orphan_opens() 生成逻辑
+  - Source 3: `core/runtime/live_cycle.py:903-959` — 告警上下文 journal 扫描逻辑
+- **是否被推翻**: 否
+- **关联 ReB Pattern**: ReB-20260615-012 (ORPHAN_ENTRY_ALERT_POLLUTION)
+
 ### CCT-20260615-011
 - **Docket ID**: DQAF-20260615-011
 - **日期**: 2026-06-15

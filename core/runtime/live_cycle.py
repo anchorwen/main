@@ -930,6 +930,14 @@ def _execute_management_phase(
                             continue
                         if _d != _today:
                             continue
+                        # [FIX-20260615-012] Filter out synthetic orphan closures
+                        # (auto_orphan_rejected/stale/no_ticket) from alert context.
+                        # These have pnl=0, position_ticket=None, and are generated
+                        # by cleanup_orphan_opens() at startup — not real trades.
+                        # Counting them in the rolling win-rate window dilutes the
+                        # true win rate and triggers false circuit-breaker trips.
+                        if str(_e.get("label", "")).startswith("auto_orphan_"):
+                            continue
                         # ── Phase 0 filter 2: dedup by open position ──
                         # Prefer detail.request.position (the actual MT5
                         # position ticket being closed).  Fall back to the
