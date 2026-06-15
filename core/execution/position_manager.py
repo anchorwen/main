@@ -339,6 +339,18 @@ class ActivePositionManager:
             self._primary_ticket = None
             self._last_brain_reeval_cycle = -1
             self._entry_consensus_score = 0.0
+        # ── FIX-20260615-Contract: Post-condition — atomic removal ──
+        if ticket is not None:
+            assert ticket not in self._positions, (
+                f"FATAL: ticket {ticket} still in _positions after clear"
+            )
+            assert ticket not in self._pending_close, (
+                f"FATAL: ticket {ticket} still in _pending_close after clear"
+            )
+        else:
+            assert len(self._positions) == 0, "FATAL: _positions not empty after clear-all"
+            assert len(self._pending_close) == 0, "FATAL: _pending_close not empty after clear-all"
+
         if not self._positions:
             self._recovery_cycle = -1
             if self._last_state_path is not None:
@@ -586,6 +598,15 @@ class ActivePositionManager:
         pos = self._positions.get(ticket)
         if pos is None:
             return {}
+
+        # ── FIX-20260615-Contract: Runtime pre-conditions ──
+        # These guards catch corrupted state BEFORE it poisons downstream logic.
+        # Unit tests cover the evaluators (51.4%); these asserts defend the
+        # orchestration layer (48.6%) at runtime — Fail-Fast, never trade blind.
+        assert pos.ticket > 0, f"FATAL: invalid ticket {pos.ticket}"
+        assert pos.entry_price > 0, f"FATAL: zero/negative entry_price {pos.entry_price} on ticket {pos.ticket}"
+        assert pos.current_sl > 0, f"FATAL: zero/negative current_sl {pos.current_sl} on ticket {pos.ticket}"
+        assert pos.entry_atr > 0, f"FATAL: zero/negative entry_atr {pos.entry_atr} on ticket {pos.ticket}"
 
         pos.cycles_held += 1
         if self._recovery_cycle >= 0:
