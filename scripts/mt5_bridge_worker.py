@@ -135,6 +135,12 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
     The lock serialises concurrent writes from the bridge worker, live_cycle
     reconciliation, and any other journal producer, eliminating the
     read-then-write race that caused duplicate entries and corruption.
+
+    Phase 2 (DQAF-20260615-010/Phase2): If the lock cannot be acquired after
+    a single retry, the entry is written to a per-process overflow file
+    (``journal_overflow_{pid}.jsonl``).  The ``daily_ops`` reconciliation
+    pipeline merges overflow files back into the main journal during
+    non-trading hours — zero data loss, zero hot-path blocking.
     """
     from core.infrastructure.distributed_lock import FileLock
 
@@ -142,19 +148,44 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
     lock = FileLock(
         "live_trade_journal", lock_dir=str(journal_path.parent / "locks"), ttl_seconds=10
     )
-    acquired = lock.acquire(blocking=True, timeout_seconds=5)
-    if not acquired.acquired:
-        print(
-            json.dumps(
-                {
-                    "event": "journal_lock_failed",
-                    "message_id": record.get("message_id", ""),
-                    "error": acquired.error or "timeout",
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
+    # One retry with a shorter timeout — most lock contention is transient
+    for attempt in (1, 2):
+        acquired = lock.acquire(blocking=True, timeout_seconds=3 if attempt == 1 else 2)
+        if acquired.acquired:
+            break
+    else:
+        # ── Phase 2: Overflow sidecar — never silently drop a journal entry ──
+        overflow_path = journal_path.parent / f"journal_overflow_{os.getpid()}.jsonl"
+        try:
+            with overflow_path.open("a", encoding="utf-8") as _of:
+                _of.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+            print(
+                json.dumps(
+                    {
+                        "event": "journal_overflow_written",
+                        "message_id": record.get("message_id", ""),
+                        "overflow_path": str(overflow_path),
+                        "lock_error": acquired.error if hasattr(acquired, 'error') else "timeout",
+                        "action": "daily_ops will merge during next reconciliation",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        except Exception:
+            # Last resort — print to stdout so at least the operator sees it
+            print(
+                json.dumps(
+                    {
+                        "event": "journal_overflow_failed",
+                        "message_id": record.get("message_id", ""),
+                        "overflow_path": str(overflow_path),
+                        "error": "overflow write failed — journal entry LOST",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
         return
     try:
         mid = record.get("message_id", "")
@@ -1080,12 +1111,21 @@ def run_zmq_worker(
     default_symbol: str = "XAUUSDc",
     health_path: Path = Path("data/reports/mt5_bridge_health.json"),
     once: bool = False,
+    # ── Phase 3: WAL dual-write — file outbox as durability fallback ──
+    outbox_dir: Path = Path("data/mt5_outbox"),
+    archive_dir: Path = Path("data/mt5_outbox_processed"),
 ) -> int:
     """Run the bridge worker in ZeroMQ mode.
 
-    Replaces file-system polling with ZMQ_PULL (blocking recv, zero CPU
-    when idle).  ACK receipts are pushed via ZMQ_PUB so consumers receive
-    sub-ms notification instead of polling receipt files.
+    Phase 3 (DQAF-20260615-010/Phase3): Non-blocking ZMQ poll (1s timeout)
+    with a 5-second file-outbox fallback scan.  This closes the durability
+    gap: if the dispatcher's WAL write succeeded but ZMQ PUSH failed (crash,
+    network, breaker), the bridge finds the orphaned outbox file and
+    processes it.  Message-level dedup prevents double-execution when both
+    ZMQ and file deliver the same order.
+
+    ZMQ_PULL delivers orders from ZMQCommunicationAdapter.
+    ZMQ_PUB publishes ACK receipts for all SUB consumers.
     """
     import zmq
 
@@ -1101,112 +1141,183 @@ def run_zmq_worker(
 
     print(f"[zmq_bridge] PULL bound to {order_endpoint}", flush=True)
     print(f"[zmq_bridge] PUB  bound to {ack_endpoint}", flush=True)
+    print(f"[zmq_bridge] File fallback: outbox={outbox_dir} archive={archive_dir}", flush=True)
 
     _last_health_write = 0.0
     _last_heartbeat_check = 0.0
+    _last_file_poll = 0.0
     _consecutive_hb_failures = 0
+    # ── Phase 3: message_id dedup — prevents double-execution ──
+    # When the dispatcher dual-writes (file→ZMQ), the same order may arrive
+    # via both channels.  This set tracks processed message_ids so the file
+    # poll skips orders already handled via ZMQ.  Capped at 500 entries.
+    _processed_ids: set[str] = set()
+    _MAX_PROCESSED_IDS = 500
 
     # Write initial health heartbeat immediately so monitoring can confirm ZMQ mode
     _write_zmq_health(health_path, mt5, order_endpoint)
 
     try:
         while True:
-            # ── Block until an order arrives (zero CPU when idle) ──
+            # ── Phase 3: Non-blocking ZMQ poll (1s timeout) ──────────────
+            # Previously used blocking recv_string() which prevented file
+            # polling.  Now polls with 1s timeout so we can periodically
+            # scan the file outbox for orphaned WAL entries.
+            _zmq_msg = None
             try:
-                raw = pull.recv_string()
+                if pull.poll(timeout=1000):  # 1s
+                    _zmq_msg = pull.recv_string()
             except zmq.ZMQError:  # type: ignore[attr-defined]
-                continue
+                pass
 
-            try:
-                payload: dict[str, Any] = json.loads(raw)
-                envelope = payload.get("envelope", {})
-                msg_payload: dict[str, Any] = envelope.get("payload", {})
-                msg_id = envelope.get("message_id", "unknown")
-            except json.JSONDecodeError:
-                print("[zmq_bridge] Invalid JSON received", flush=True)
-                continue
+            _now = time.time()
 
-            # ── Guard: MT5 must be initialized ──
-            if mt5 is None:
-                _zmq_send_ack(
-                    pub, msg_id,
-                    {
-                        "ack_status": "rejected",
-                        "detail": {"reason": "MT5 not initialized — pass --mt5-terminal-path"},
-                        "received_at": _utc_now(),
-                    },
-                )
-                print(
-                    json.dumps(
-                        {"zmq_error": {"message_id": msg_id, "error": "MT5 not initialized"}},
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-                if once:
-                    return 1
-                continue
+            if _zmq_msg is not None:
+                try:
+                    payload: dict[str, Any] = json.loads(_zmq_msg)
+                    envelope = payload.get("envelope", {})
+                    msg_payload: dict[str, Any] = envelope.get("payload", {})
+                    msg_id = envelope.get("message_id", "unknown")
+                except json.JSONDecodeError:
+                    print("[zmq_bridge] Invalid JSON received", flush=True)
+                else:
+                    # ── Guard: MT5 must be initialized ──
+                    if mt5 is None:
+                        _zmq_send_ack(
+                            pub, msg_id,
+                            {
+                                "ack_status": "rejected",
+                                "detail": {"reason": "MT5 not initialized — pass --mt5-terminal-path"},
+                                "received_at": _utc_now(),
+                            },
+                        )
+                        print(
+                            json.dumps(
+                                {"zmq_error": {"message_id": msg_id, "error": "MT5 not initialized"}},
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                        if once:
+                            return 1
+                    else:
+                        # ── Execute via existing MT5 logic ──
+                        try:
+                            action = normalize_action(msg_payload.get("action"))
+                            ack_status, detail = _send_to_mt5(
+                                mt5, payload,
+                                default_volume=default_volume,
+                                deviation=deviation,
+                                magic=magic,
+                            )
+                            _write_zmq_journal_entry(
+                                journal_path=journal_path,
+                                message_id=msg_id,
+                                msg_payload=msg_payload,
+                                action=action,
+                                ack_status=ack_status,
+                                detail=detail,
+                                default_volume=default_volume,
+                                target="exec_bridge",
+                            )
+                            _zmq_send_ack(
+                                pub, msg_id,
+                                {"ack_status": ack_status, "detail": detail, "received_at": _utc_now()},
+                            )
+                            print(
+                                json.dumps(
+                                    {"zmq_processed": {"message_id": msg_id, "ack_status": ack_status, "detail": detail}},
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                            # ── Phase 3: Track processed ID for file-poll dedup ──
+                            _processed_ids.add(msg_id)
+                            if len(_processed_ids) > _MAX_PROCESSED_IDS:
+                                # Evict oldest half to bound memory
+                                _processed_ids = set(list(_processed_ids)[-_MAX_PROCESSED_IDS // 2:])
+                        except Exception as exc:  # noqa: BLE001
+                            _zmq_send_ack(
+                                pub, msg_id,
+                                {
+                                    "ack_status": "error",
+                                    "detail": {"reason": f"{type(exc).__name__}: {str(exc)[:200]}"},
+                                    "received_at": _utc_now(),
+                                },
+                            )
+                            print(
+                                json.dumps(
+                                    {"zmq_error": {"message_id": msg_id, "error": str(exc)[:200]}},
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
 
-            # ── Execute via existing MT5 logic ──
-            try:
-                action = normalize_action(msg_payload.get("action"))
-                # _send_to_mt5 expects outer payload (with envelope key)
-                ack_status, detail = _send_to_mt5(
-                    mt5, payload,
-                    default_volume=default_volume,
-                    deviation=deviation,
-                    magic=magic,
-                )
-                # ── FIX-20260613-062 + FIX-20260613-087: journal entry ──
-                # Pass msg_payload (inner), not payload (outer envelope)
-                _write_zmq_journal_entry(
-                    journal_path=journal_path,
-                    message_id=msg_id,
-                    msg_payload=msg_payload,
-                    action=action,
-                    ack_status=ack_status,
-                    detail=detail,
-                    default_volume=default_volume,
-                    target="exec_bridge",
-                )
-                _zmq_send_ack(
-                    pub, msg_id,
-                    {"ack_status": ack_status, "detail": detail, "received_at": _utc_now()},
-                )
-                print(
-                    json.dumps(
-                        {"zmq_processed": {"message_id": msg_id, "ack_status": ack_status, "detail": detail}},
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-            except Exception as exc:  # noqa: BLE001 — preserve existing error pattern
-                _zmq_send_ack(
-                    pub, msg_id,
-                    {
-                        "ack_status": "error",
-                        "detail": {"reason": f"{type(exc).__name__}: {str(exc)[:200]}"},
-                        "received_at": _utc_now(),
-                    },
-                )
-                print(
-                    json.dumps(
-                        {"zmq_error": {"message_id": msg_id, "error": str(exc)[:200]}},
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+            # ── Phase 3: File outbox fallback — 5s slow poll ─────────────
+            # Picks up orders that were WAL-persisted to the file outbox but
+            # never arrived via ZMQ (crash, breaker OPEN, network partition).
+            if _now - _last_file_poll > 5.0:
+                _last_file_poll = _now
+                _pending = _list_pending(outbox_dir)
+                if _pending:
+                    for _path in _pending:
+                        _file_msg = _load_message(_path)
+                        if _file_msg is None:
+                            continue
+                        _f_env = _file_msg.get("envelope", {})
+                        _f_msg_id = str(_f_env.get("message_id", _path.stem))
+                        # Dedup: skip if already processed via ZMQ
+                        if _f_msg_id in _processed_ids:
+                            # File is orphaned duplicate — archive it
+                            _rel = _path.relative_to(outbox_dir) if outbox_dir in _path.parents else Path(_path.name)
+                            _arc = archive_dir / _rel
+                            _arc.parent.mkdir(parents=True, exist_ok=True)
+                            _safe_move(_path, _arc)
+                            continue
+                        if mt5 is None:
+                            continue
+                        try:
+                            _ = process_one(
+                                _path,
+                                outbox_dir=outbox_dir,
+                                receipt_dir=receipt_dir,
+                                archive_dir=archive_dir,
+                                journal_path=journal_path,
+                                protection_flag_path=protection_flag_path,
+                                default_volume=default_volume,
+                                deviation=deviation,
+                                magic=magic,
+                                dry_run=bool(dry_run),
+                                mt5=mt5,
+                            )
+                            _processed_ids.add(_f_msg_id)
+                            print(
+                                json.dumps(
+                                    {"file_fallback_processed": {"message_id": _f_msg_id, "path": str(_path)}},
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                        except Exception as _f_exc:
+                            print(
+                                json.dumps(
+                                    {"file_fallback_error": {"message_id": _f_msg_id, "error": str(_f_exc)[:200]}},
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
 
             # ── Periodic health heartbeat ──
-            _now = time.time()
             if _now - _last_health_write > 30:
                 _hb = {
                     "last_heartbeat_utc": _utc_now(),
                     "pid": os.getpid(),
                     "mt5_connected": mt5 is not None,
-                    "outbox_pending": 0,  # ZMQ mode: no file polling
+                    "outbox_pending": len(_list_pending(outbox_dir)),
                     "transport": "zmq",
                     "order_endpoint": order_endpoint,
+                    "phase3_wal": True,
+                    "processed_ids": len(_processed_ids),
                 }
                 try:
                     health_path.write_text(json.dumps(_hb, ensure_ascii=False), encoding="utf-8")
@@ -1304,6 +1415,8 @@ def main(argv: list[str] | None = None) -> int:
             default_symbol=args.default_symbol,
             health_path=health_path,
             once=bool(args.once),
+            outbox_dir=Path(args.outbox_dir),
+            archive_dir=Path(args.archive_dir),
         )
 
     return run_worker(args)

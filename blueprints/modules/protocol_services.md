@@ -20,6 +20,7 @@ Communication layer: message dispatch, adapter registry, intent building, decisi
 | `core/protocol/services/zmq_communication_adapter.py` | `ZMQCommunicationAdapter` — ZeroMQ PUSH adapter (<1ms, Phase 1) |
 | `core/protocol/services/zmq_receipt_listener.py` | `ZMQReceiptListener` + `resolve_ack()` — ZMQ PUB/SUB ACK (ZMQ fast path + file fallback) |
 | `scripts/mt5_bridge_worker.py` | MT5 bridge daemon — `--file` (file polling) or `--zmq` (PULL+PUB) mode |
+| `core/contracts/domain/dispatch_context.py` | `DispatchContext` — frozen dataclass bundling all 7 dispatch routing params (DQAF-010/Phase1) |
 | `scripts/benchmark_zmq_latency.py` | ZMQ vs File IPC latency benchmark |
 
 ## Data Flow
@@ -63,6 +64,9 @@ DecisionIntent → DecisionCompiler → IntentMessageBuilder → CommunicationEn
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260615-010 | 2026-06-15 | cursor-agent | d8042be, d50fda7 | **DispatchContext — Type-Safe Execution Context (Phase 1)**: (1) Created ``DispatchContext`` frozen dataclass bundling all 7 dispatch routing params (adapter_name, base_dir, symbol, mt5_terminal_path, zmq_endpoints, protection_flag). (2) Refactored ``dispatch_live_open_order``, ``handle_net_out_close``, ``dispatch_managed_close`` — all now receive ``ctx: DispatchContext`` instead of 7-20 scattered kwargs. (3) Fixed P0-1 crash: ``live_cycle.py`` closure forgot ``adapter_name`` → TypeError in net_out close path. (4) ``build_dispatch_context(config)`` factory for ergonomic construction. Compile-time safety: mypy catches missing ctx fields at pre-push. | L3 — architecture: primitive obsession with scattered kwargs, no compile-time guard against missing params |
+| FIX-20260615-010-P3 | 2026-06-15 | cursor-agent | — | **Phase 3 — WAL 双写持久化 (File-First + ZMQ Best-Effort)**: (1) ``CommunicationDispatcher`` 增加 ``file_wal_adapter`` 参数 — dispatch 时**先写文件** (WAL 持久化担保) → 再推 ZMQ (低延迟加速)。ZMQ 失败时返回 DEGRADED (文件已存)。(2) ``ServiceContainer`` 在 ZMQ 模式自动装配 file WAL adapter 并注入 Dispatcher。(3) ``mt5_bridge_worker.run_zmq_worker()`` 从阻塞 ``recv_string`` 改为非阻塞 ``poll(1s)`` + 5 秒文件 outbox 兜底扫描。 ``_processed_ids`` set 提供 message_id 级去重,防止双通道重复执行。(4) ``live_launcher.py`` 已透传 ``--outbox-dir``/``--archive-dir``。 | L3 — durability: ZMQ PUSH 不可靠,进程崩溃时缓冲区清零。WAL 确保"只要 Dispatcher 返回成功,订单必定在磁盘上" |
+| FIX-20260613-059 | 2026-06-13 | cursor-agent | d8042be, 8b834c0 | **ZMQ Dispatch Deadlock + Adapter Hardcode Extermination**: live_cycle.py hardcoded adapter_name=\"mt5\" (6 sites) + managed_close.py (2 sites) + net_out_close_handler.py (1 site) + execution_queue.py (1 site) while bridge ran in ZMQ mode. 14 BTC orders stuck in file outbox. Fix: all 10 sites → config.adapter_name. Follow-up d50fda7 removed defaults from 3 functions → TypeError on missing param. | RC-09 |
 | FIX-20260613-036 | 2026-06-13 | cursor-agent | — | ZMQ worker health heartbeat: blocking recv prevented periodic 30s health writes when idle. Added _write_zmq_health() at startup + per-order update. DQAF-004. | RC-06 |
 | FIX-20260613-035 | 2026-06-13 | cursor-agent | — | live_launcher config scope truncation: load_live_config() returned only live_trading subsection, adapter.name invisible. Forwarded adapter+zmq from top-level config. DQAF-003. | RC-06 |
 | FIX-20260613-034 | 2026-06-13 | cursor-agent | — | ZMQ worker MT5 null guard: added `if mt5 is None` check before _send_to_mt5() with clear rejection ACK. DQAF-002. | RC-06 |

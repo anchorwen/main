@@ -255,17 +255,13 @@ def dispatch_live_order(
 
 def dispatch_live_open_order(
     *,
-    base_dir: str,
-    mt5_terminal_path: str,
-    symbol: str,
+    ctx: Any,  # DispatchContext — immutable routing bundle (DQAF-20260615-010/Phase1)
     side: str,
     stop_loss: float,
     take_profit: float,
     intent_id: str | None = None,
     correlation_id: str | None = None,
     skip_price_guard: bool = False,
-    ignore_protection_flag: bool = False,
-    protection_flag_path: str = "data/live_dispatch_block.flag",
     volume: float | None = None,
     magic: int | None = None,
     hard_sl: float = 0.0,
@@ -278,15 +274,19 @@ def dispatch_live_open_order(
     p_win_source: str = "unknown",
     p_win_degraded: bool = False,
     kelly_mult: float = 1.0,
-    adapter_name: str,  # FIX-20260615-010/L3: required
-    zmq_order_endpoint: str = "",
-    zmq_ack_endpoint: str = "",
 ) -> dict:
     """Open-market helper; dispatches via broker-agnostic :func:`dispatch_live_order`.
 
-    ``entry_context`` carries feature vectors, regime, ATR, brain predictions,
-    and other metadata that the bridge passes through to the journal for
-    post-trade analysis.  It is never interpreted by the bridge itself.
+    Args:
+        ctx: :class:`DispatchContext` — all routing params (adapter_name, base_dir,
+            symbol, mt5_terminal_path, zmq endpoints, protection flag) bundled
+            into a single frozen object.  Eliminates 7 scattered kwargs that
+            previously caused P0-1 (closure forgot adapter_name → TypeError).
+        side: ``"long"`` or ``"short"``.
+        stop_loss: Hard stop-loss price.
+        take_profit: Hard take-profit price.
+        entry_context: Feature vectors, regime, ATR, brain predictions — logged
+            to journal but never interpreted by the bridge itself.
     """
     iid = intent_id or f"live_open_{uuid.uuid4().hex}"
 
@@ -332,25 +332,27 @@ def dispatch_live_open_order(
     if kelly_mult != 1.0:
         execution_payload["kelly_mult"] = round(kelly_mult, 4)
 
+    _extensions = {
+        "mt5_terminal_path": ctx.mt5_terminal_path,
+        "zmq_order_endpoint": ctx.zmq_order_endpoint,
+        "zmq_ack_endpoint": ctx.zmq_ack_endpoint,
+    }
+
     if skip_price_guard:
         result = dispatch_live_order(
-            base_dir=base_dir,
+            base_dir=ctx.base_dir,
             broker=None,
-            symbol=symbol,
+            symbol=ctx.symbol,
             execution_payload=execution_payload,
             intent_id=iid,
             correlation_id=correlation_id,
             skip_price_guard=True,
-            ignore_protection_flag=ignore_protection_flag,
-            protection_flag_path=protection_flag_path,
-            adapter_name=adapter_name,
-            extensions={
-                "mt5_terminal_path": mt5_terminal_path,
-                "zmq_order_endpoint": zmq_order_endpoint,
-                "zmq_ack_endpoint": zmq_ack_endpoint,
-            },
+            ignore_protection_flag=ctx.ignore_protection_flag,
+            protection_flag_path=ctx.protection_flag_path,
+            adapter_name=ctx.adapter_name,
+            extensions=_extensions,
         )
-        _validate_ack_sl_tp(result, stop_loss, take_profit, base_dir=base_dir)
+        _validate_ack_sl_tp(result, stop_loss, take_profit, base_dir=ctx.base_dir)
         return result
 
     from core.execution.mt5_broker_adapter import MT5BrokerAdapter
@@ -363,21 +365,17 @@ def dispatch_live_open_order(
         )
     broker = MT5BrokerAdapter(worker)
     result = dispatch_live_order(
-        base_dir=base_dir,
+        base_dir=ctx.base_dir,
         broker=broker,
-        symbol=symbol,
+        symbol=ctx.symbol,
         execution_payload=execution_payload,
         intent_id=iid,
         correlation_id=correlation_id,
         skip_price_guard=skip_price_guard,
-        ignore_protection_flag=ignore_protection_flag,
-        protection_flag_path=protection_flag_path,
-        adapter_name=adapter_name,
-        extensions={
-            "mt5_terminal_path": mt5_terminal_path,
-            "zmq_order_endpoint": zmq_order_endpoint,
-            "zmq_ack_endpoint": zmq_ack_endpoint,
-        },
+        ignore_protection_flag=ctx.ignore_protection_flag,
+        protection_flag_path=ctx.protection_flag_path,
+        adapter_name=ctx.adapter_name,
+        extensions=_extensions,
     )
-    _validate_ack_sl_tp(result, stop_loss, take_profit, base_dir=base_dir)
+    _validate_ack_sl_tp(result, stop_loss, take_profit, base_dir=ctx.base_dir)
     return result

@@ -456,8 +456,11 @@ def _check_pre_close(config: LiveCycleConfig, state: LiveCycleState) -> dict[str
                     _mid = float(state._recent_mid_prices[-1])
                 except (IndexError, TypeError, ValueError):
                     _mid = None
+            from core.contracts.domain.dispatch_context import build_dispatch_context
+
             _dispatch_managed_close(
                 config,
+                build_dispatch_context(config),
                 pos,
                 reason=f"pre_close_flatten:{result['close_label']}",
                 mid=_mid,
@@ -544,6 +547,7 @@ def _dispatch_modify_trail(
 
 def _dispatch_managed_close(
     config: LiveCycleConfig,
+    ctx: Any,  # DispatchContext — immutable routing bundle (DQAF-20260615-010/Phase1)
     pos: Any,
     *,
     reason: str = "",
@@ -588,6 +592,7 @@ def _dispatch_managed_close(
 
     return _impl(
         config=config,
+        ctx=ctx,
         pos=pos,
         reason=reason,
         mid=mid,
@@ -624,6 +629,10 @@ def _execute_management_phase(
     If *ticket* is given, manages that specific position; otherwise manages
     the primary (backward compat).  Returns True if the position was closed.
     """
+    from core.contracts.domain.dispatch_context import build_dispatch_context
+
+    dispatch_ctx = build_dispatch_context(config)
+
     pm = state.position_manager
     if pm is None or not pm.has_position(ticket=ticket):
         return False
@@ -1252,6 +1261,7 @@ def _execute_management_phase(
         if _emergency_r < 0 and _gr_r < _emergency_r:
             _dispatched = _dispatch_managed_close(
                 config,
+                dispatch_ctx,
                 pos,
                 reason="grace_period_emergency",
                 mid=mid,
@@ -1626,6 +1636,7 @@ def _execute_management_phase(
                         pm.mark_pending_close(pos.ticket, state.loop_iteration)
                         _dispatched = _dispatch_managed_close(
                             config,
+                            dispatch_ctx,
                             pos,
                             reason=_bleed_reason,
                             mid=mid,
@@ -1681,6 +1692,7 @@ def _execute_management_phase(
                                     pm.mark_pending_close(pos.ticket, state.loop_iteration)
                                     _dispatched = _dispatch_managed_close(
                                         config,
+                                        dispatch_ctx,
                                         pos,
                                         reason=ou_reason,
                                         mid=mid,
@@ -1763,6 +1775,7 @@ def _execute_management_phase(
                     pm.mark_pending_close(pos.ticket, state.loop_iteration)
                     _dispatched = _dispatch_managed_close(
                         config,
+                        dispatch_ctx,
                         pos,
                         reason=exit_reason,
                         mid=mid,
@@ -1878,6 +1891,7 @@ def _execute_management_phase(
             pm.mark_pending_close(pos.ticket, state.loop_iteration)
             _dispatched = _dispatch_managed_close(
                 config,
+                dispatch_ctx,
                 pos,
                 reason=hesitate_reason,
                 mid=mid,
@@ -1921,6 +1935,7 @@ def _execute_management_phase(
             pm.mark_pending_close(pos.ticket, state.loop_iteration)
             _dispatched = _dispatch_managed_close(
                 config,
+                dispatch_ctx,
                 pos,
                 reason=exit_reason,
                 mid=mid,
@@ -2541,6 +2556,14 @@ def execute_live_cycle(
     precedent.
     """
     import numpy as np  # ensure np available in all code paths (local imports at L4506/L6503 may not execute)
+
+    # ── DQAF-20260615-010/Phase1: Immutable dispatch routing context ──
+    # Built once at cycle start, reused by all dispatch calls.  Eliminates
+    # the 7-scattered-kwargs anti-pattern that caused P0-1 (closure forgot
+    # adapter_name → TypeError in net_out close path).
+    from core.contracts.domain.dispatch_context import build_dispatch_context
+
+    dispatch_ctx = build_dispatch_context(config)
 
     state.loop_iteration += 1
 
@@ -5397,17 +5420,13 @@ def execute_live_cycle(
                 def _net_out_close_dispatch_fn(payload: dict) -> dict:
                     _result, state._exit_reject_streak, state._exit_reject_cooldown = (
                         handle_net_out_close(
+                            ctx=dispatch_ctx,
                             payload=payload,
                             exit_reject_streak=state._exit_reject_streak,
                             exit_reject_cooldown=state._exit_reject_cooldown,
                             known_open_tickets=state.known_open_tickets,
                             mid_price=mid_price,
                             exit_watchdog=exit_watchdog,
-                            base_dir=config.base_dir,
-                            symbol=config.symbol,
-                            ignore_protection_flag=config.ignore_protection_flag,
-                            protection_flag_path=config.protection_flag_path,
-                            mt5_terminal_path=config.mt5_terminal_path,
                             utc_iso_fn=_utc_iso,
                         )
                     )
@@ -5416,9 +5435,7 @@ def execute_live_cycle(
             dispatch_results = exec_queue.flush(
                 partial(
                     dispatch_live_open_order,
-                    adapter_name=config.adapter_name,
-                    zmq_order_endpoint=config.zmq_order_endpoint,
-                    zmq_ack_endpoint=config.zmq_ack_endpoint,
+                    ctx=dispatch_ctx,
                     entry_context=_entry_features_snapshot,
                 ),
                 journal_path=str(journal_path),

@@ -29,18 +29,13 @@ from core.execution.live_order_sender import dispatch_live_order as _net_dispatc
 
 def handle_net_out_close(
     *,
+    ctx: Any,  # DispatchContext — immutable routing bundle (DQAF-20260615-010/Phase1)
     payload: dict[str, Any],
     exit_reject_streak: dict[int, int],
     exit_reject_cooldown: dict[int, float],
     known_open_tickets: dict[int, dict[str, Any]],
     mid_price: float | None,
     exit_watchdog: Any,
-    base_dir: str,
-    symbol: str,
-    ignore_protection_flag: bool,
-    protection_flag_path: str,
-    mt5_terminal_path: str,
-    adapter_name: str,  # FIX-20260615-010/L3: required
     utc_iso_fn: Callable[[], str],
 ) -> tuple[dict[str, Any], dict[int, int], dict[int, float]]:
     """Execute a net-out close through the exit watchdog with cooldown gating.
@@ -48,6 +43,8 @@ def handle_net_out_close(
     Extracted from ``live_cycle.py`` inline closure ``_net_out_close_dispatch_fn``.
 
     Args:
+        ctx: :class:`DispatchContext` — all routing params (adapter_name, base_dir,
+            symbol, mt5_terminal_path, zmq endpoints, protection flag).
         payload: Close dispatch payload with keys:
             position_ticket, volume, side, comment, magic, brain_ids, pnl.
         exit_reject_streak: Per-ticket consecutive reject counter.
@@ -55,8 +52,6 @@ def handle_net_out_close(
         known_open_tickets: Map of ticket → journal entry for PnL estimation.
         mid_price: Current mid price for PnL estimation.
         exit_watchdog: ExitWatchdog instance for safe close execution.
-        base_dir: Base data directory path.
-        symbol: Trading symbol (e.g. "XAUUSDc").
         ignore_protection_flag: Whether to skip protection flag check.
         protection_flag_path: Path to protection flag file.
         mt5_terminal_path: Path to MT5 terminal executable.
@@ -123,15 +118,15 @@ def handle_net_out_close(
         reason=_reason,
         magic=_magic,
         dispatch_fn=lambda p: _net_dispatch(
-            base_dir=base_dir,
+            base_dir=ctx.base_dir,
             broker=None,
-            symbol=symbol,
+            symbol=ctx.symbol,
             execution_payload=p,
             skip_price_guard=True,
-            ignore_protection_flag=ignore_protection_flag,
-            protection_flag_path=protection_flag_path,
-            adapter_name=adapter_name,
-            extensions={"mt5_terminal_path": mt5_terminal_path},
+            ignore_protection_flag=ctx.ignore_protection_flag,
+            protection_flag_path=ctx.protection_flag_path,
+            adapter_name=ctx.adapter_name,
+            extensions={"mt5_terminal_path": ctx.mt5_terminal_path},
         ),
         brain_ids=_brain_ids,
         pnl=_net_pnl,

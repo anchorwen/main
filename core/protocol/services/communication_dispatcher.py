@@ -30,6 +30,7 @@ class CommunicationDispatcher:
         live_dispatch_enabled: bool = True,
         live_allowed_symbols: tuple[str, ...] = (),
         metrics=None,
+        file_wal_adapter=None,  # Phase 3: WAL adapter for dual-write durability
     ):
         self._adapter = adapter
         self._adapter_registry = adapter_registry
@@ -39,6 +40,7 @@ class CommunicationDispatcher:
         self._live_dispatch_enabled = live_dispatch_enabled
         self._live_allowed_symbols = tuple(live_allowed_symbols)
         self._metrics = metrics
+        self._file_wal_adapter = file_wal_adapter  # Phase 3
 
     def dispatch(self, envelope, *, route_policy=None, transport_hints=None, governance=None):
         route_policy = route_policy or {}
@@ -184,6 +186,35 @@ class CommunicationDispatcher:
                 trace={"deadline_at": envelope.deadline_at},
             )
 
+        # ── Phase 3: Write-Ahead Log (WAL) — file-first durability ───────
+        # File outbox write MUST succeed before we attempt ZMQ.  If the
+        # process crashes between the file write and the ZMQ send, the
+        # bridge worker's slow file poll (5s interval) picks up the orphan.
+        # This is the "D" in ACID for our dispatch pipeline.
+        wal_result: DispatchResult | None = None
+        if self._file_wal_adapter is not None:
+            try:
+                wal_result = self._file_wal_adapter.dispatch(request, envelope)
+            except Exception as wal_exc:
+                if self._metrics:
+                    self._metrics.inc(DISPATCH_FAILED)
+                return DispatchResult(
+                    schema_version=SCHEMA_DISPATCH_RESULT,
+                    dispatch_id=request.dispatch_id,
+                    message_id=envelope.message_id,
+                    status=DispatchStatus.FAILED,
+                    recorded_at=request.requested_at,
+                    target=envelope.target,
+                    adapter_name="wal_guard",
+                    failure_reason=f"WAL write failed: {wal_exc}",
+                    attempts=[{
+                        "adapter_name": "wal_guard",
+                        "status": "failed",
+                        "reason": f"WAL write failed: {wal_exc}",
+                    }],
+                    trace={"wal_failed": True},
+                )
+
         primary_adapter = self._resolve_adapter(
             envelope,
             route_policy=route_policy,
@@ -204,6 +235,14 @@ class CommunicationDispatcher:
                     "reason": None,
                 }
             )
+            # ── Phase 3: Merge WAL metadata into primary result ──────────
+            if wal_result is not None:
+                result.transport_metadata = {
+                    **(result.transport_metadata or {}),
+                    "wal_outbox_path": wal_result.transport_metadata.get("outbox_path", ""),
+                    "wal_bytes_written": wal_result.transport_metadata.get("bytes_written", 0),
+                    "wal_delivery_channel": wal_result.protocol_metadata.get("delivery_channel", ""),
+                }
             if self._metrics:
                 self._metrics.inc(DISPATCH_TRANSPORT_DELIVERED)
             return result
@@ -215,6 +254,23 @@ class CommunicationDispatcher:
                     "reason": str(exc),
                 }
             )
+            # ── Phase 3: If WAL succeeded, return DEGRADED instead of FAILED ──
+            # The file outbox already has the order — bridge slow poll will pick it up.
+            # ZMQ was an acceleration, not the durability guarantee.
+            if wal_result is not None:
+                wal_result.status = DispatchStatus.DEGRADED
+                wal_result.degrade_reason = f"primary={exc}; wal_persisted"
+                wal_result.fallback_adapter_name = "wal_file_outbox"
+                wal_result.attempts = attempts
+                wal_result.trace = {
+                    **wal_result.trace,
+                    "primary_adapter": primary_adapter_name,
+                    "primary_error": str(exc),
+                    "wal_persisted": True,
+                }
+                if self._metrics:
+                    self._metrics.inc(DISPATCH_PROTOCOL_VALIDATED)
+                return wal_result
             fallback_adapter = self._resolve_fallback_adapter(route_policy)
             if fallback_adapter is None:
                 if self._metrics:

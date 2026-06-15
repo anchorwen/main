@@ -19,6 +19,7 @@ def _utc_iso() -> str:
 
 def dispatch_managed_close(
     config: Any,  # LiveCycleConfig
+    ctx: Any,  # DispatchContext — immutable routing bundle (DQAF-20260615-010/Phase1)
     pos: Any,
     *,
     reason: str = "",
@@ -38,6 +39,11 @@ def dispatch_managed_close(
 
     When *exit_watchdog* is provided, wraps the dispatch with heartbeat-protected
     retry and escalation (Pitfall 3 safeguard).
+
+    Args:
+        config: LiveCycleConfig for strategy/budget/reentry state.
+        ctx: DispatchContext for all routing params (adapter_name, base_dir,
+            symbol, mt5_terminal_path, zmq endpoints, protection flag).
     """
     from core.execution.live_order_sender import dispatch_live_order
     from core.execution.reentry_guard import ExitRecord, ensure_reentry_state
@@ -225,15 +231,15 @@ def dispatch_managed_close(
                 reason=reason,
                 magic=payload.get("magic", 0),
                 dispatch_fn=lambda p: dispatch_live_order(
-                    base_dir=config.base_dir,
+                    base_dir=ctx.base_dir,
                     broker=None,
-                    symbol=config.symbol,
+                    symbol=ctx.symbol,
                     execution_payload=p,
                     skip_price_guard=True,
-                    ignore_protection_flag=config.ignore_protection_flag,
-                    protection_flag_path=config.protection_flag_path,
-                    adapter_name=config.adapter_name,
-                    extensions={"mt5_terminal_path": config.mt5_terminal_path},
+                    ignore_protection_flag=ctx.ignore_protection_flag,
+                    protection_flag_path=ctx.protection_flag_path,
+                    adapter_name=ctx.adapter_name,
+                    extensions={"mt5_terminal_path": ctx.mt5_terminal_path},
                 ),
                 brain_ids=_close_brain_ids,
                 pnl=pnl,
@@ -278,15 +284,15 @@ def dispatch_managed_close(
     else:
         try:
             dispatch_live_order(
-                base_dir=config.base_dir,
+                base_dir=ctx.base_dir,
                 broker=None,
-                symbol=config.symbol,
+                symbol=ctx.symbol,
                 execution_payload=payload,
                 skip_price_guard=True,
-                ignore_protection_flag=config.ignore_protection_flag,
-                protection_flag_path=config.protection_flag_path,
-                adapter_name=config.adapter_name,
-                extensions={"mt5_terminal_path": config.mt5_terminal_path},
+                ignore_protection_flag=ctx.ignore_protection_flag,
+                protection_flag_path=ctx.protection_flag_path,
+                adapter_name=ctx.adapter_name,
+                extensions={"mt5_terminal_path": ctx.mt5_terminal_path},
             )
             _close_dispatched = True
         except Exception as exc:
@@ -335,7 +341,7 @@ def dispatch_managed_close(
             if _ah is not None:
                 _ah.notify_trade(
                     action="close",
-                    symbol=config.symbol,
+                    symbol=ctx.symbol,
                     side=pos.side,
                     volume=pos.volume,
                     price=mid,

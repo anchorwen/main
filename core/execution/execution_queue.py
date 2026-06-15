@@ -425,15 +425,10 @@ class ExecutionQueue:
             for _attempt in range(_max_attempts):
                 try:
                     _journal_entry = dispatch_fn(
-                        base_dir=base_dir,
-                        mt5_terminal_path=mt5_terminal_path,
-                        symbol=symbol,
                         side=decision.direction,
                         stop_loss=decision.sl,
                         take_profit=decision.tp,
                         intent_id=_intent_id,
-                        ignore_protection_flag=ignore_protection_flag,
-                        protection_flag_path=protection_flag_path,
                         volume=risk.adjusted_volume
                         if risk.adjusted_volume > 0
                         else decision.volume,
@@ -442,7 +437,6 @@ class ExecutionQueue:
                         brain_ids=decision.brain_ids,
                         brain_votes=getattr(decision, "brain_votes", None) or None,
                         confidence=getattr(decision, "confidence", None),
-                        entry_context=decision.entry_context if decision.entry_context else None,
                         p_win=getattr(decision, "p_win", 0.0) or 0.0,
                         p_win_source=getattr(decision, "p_win_source", "unknown") or "unknown",
                         p_win_degraded=bool(getattr(decision, "p_win_degraded", False)),

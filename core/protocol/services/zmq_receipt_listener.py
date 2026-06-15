@@ -203,17 +203,21 @@ def resolve_ack(
     _logger = logging.getLogger(__name__)
 
     # ── ZMQ fast path ──
-    try:
+    # Phase 2 (DQAF-20260615-010/Phase2): BLE001 → fail_open_guard.
+    # ZMQ receipt errors are non-fatal — the file fallback below will
+    # catch any missed ACKs.  fail_open_guard ensures the error is logged
+    # AND the loop continues rather than silently swallowing the exception.
+    from core.runtime.fault_handler import fail_open_guard
+
+    with fail_open_guard("ZMQ:ResolveAck"):
         listener = get_zmq_listener(auto_start=True)
         if listener is not None:
             ack = listener.get_receipt(message_id, timeout=timeout)
             if ack is not None:
                 return ack
-    except Exception:  # noqa: BLE001
-        pass
 
     # ── File polling fallback ──
-    try:
+    with fail_open_guard("ZMQ:FileAckFallback"):
         today = _datetime.now(UTC).strftime("%Y-%m-%d")
         ack_path = _Path(base_dir) / "receipts" / today / "exec_bridge" / f"{message_id}.ack.json"
         deadline = _time.monotonic() + timeout
@@ -222,7 +226,5 @@ def resolve_ack(
                 ack = _json.loads(ack_path.read_text(encoding="utf-8"))
                 return ack if isinstance(ack, dict) else None
             _time.sleep(poll_interval)
-    except Exception:  # noqa: BLE001
-        _logger.warning("File ACK polling failed for %s", message_id)
 
     return None

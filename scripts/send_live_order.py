@@ -119,18 +119,17 @@ def _fetch_reference_price(*, mt5_terminal_path: str, symbol: str, side: str) ->
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        from core.contracts.domain.dispatch_context import build_dispatch_context
+
+        ctx = build_dispatch_context(args)
         out = dispatch_live_open_order(
-            base_dir=args.base_dir,
-            mt5_terminal_path=args.mt5_terminal_path,
-            symbol=args.symbol,
+            ctx=ctx,
             side=args.side,
             stop_loss=float(args.stop_loss),
             take_profit=float(args.take_profit),
             intent_id=args.intent_id,
             correlation_id=args.correlation_id,
             skip_price_guard=args.skip_price_guard,
-            ignore_protection_flag=args.ignore_protection_flag,
-            protection_flag_path=args.protection_flag_path,
             volume=args.volume,
         )
     except RuntimeError as exc:

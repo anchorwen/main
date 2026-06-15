@@ -253,11 +253,35 @@ class ServiceContainer:
             )
 
         adapter = self._resolve_comm_adapter()
+        # ── Phase 3: WAL adapter for dual-write durability ──────────────
+        # When using ZMQ (fast but lossy), the file adapter provides the
+        # Write-Ahead Log guarantee.  The dispatcher writes to file FIRST,
+        # then fires ZMQ as a best-effort acceleration.  If ZMQ fails or
+        # the process crashes, the bridge worker's 5s slow poll finds the
+        # orphaned outbox file.
+        file_wal_adapter = None
+        if self.config.adapter_name == "mt5_zmq":
+            from pathlib import Path as _Path
+
+            from core.protocol.services.mt5_communication_adapter import (
+                MT5CommunicationAdapter,
+            )
+
+            _ext = getattr(self.config, "extensions", {}) or {}
+            file_wal_adapter = MT5CommunicationAdapter(
+                terminal_path=_ext.get("mt5_terminal_path", ""),
+                outbox_dir=(
+                    _ext.get("mt5_outbox_dir")
+                    or _ext.get("dispatch_outbox_dir")
+                    or str(_Path(self.config.base_dir) / "mt5_outbox")
+                ),
+            )
         self.dispatcher = CommunicationDispatcher(
             adapter=adapter,
             idempotency_store=self.idempotency_store,
             live_read_only=self.config.live_read_only,
             metrics=self.metrics,
+            file_wal_adapter=file_wal_adapter,
         )
 
     def _resolve_comm_adapter(self):
@@ -281,13 +305,29 @@ class ServiceContainer:
             )
 
         if adapter_name == "mt5_zmq":
+            from core.protocol.services.mt5_communication_adapter import MT5CommunicationAdapter
             from core.protocol.services.zmq_communication_adapter import ZMQCommunicationAdapter
 
             terminal_path = extensions.get("mt5_terminal_path", "")
             order_endpoint = extensions.get("zmq_order_endpoint", "tcp://127.0.0.1:5556")
+            # ── Phase 2: Create file adapter as transparent fallback ─────
+            # When the ZMQ circuit breaker trips (3 consecutive failures),
+            # dispatch automatically degrades to the file adapter without
+            # the caller needing to know.  The same outbox directory that
+            # the bridge worker polls in --file mode.
+            outbox_dir = (
+                extensions.get("mt5_outbox_dir")
+                or extensions.get("dispatch_outbox_dir")
+                or str(Path(self.config.base_dir) / "mt5_outbox")
+            )
+            file_fallback = MT5CommunicationAdapter(
+                terminal_path=terminal_path,
+                outbox_dir=outbox_dir,
+            )
             return ZMQCommunicationAdapter(
                 terminal_path=terminal_path,
                 order_endpoint=order_endpoint,
+                fallback_adapter=file_fallback,
             )
 
         if adapter_name == "fix":
