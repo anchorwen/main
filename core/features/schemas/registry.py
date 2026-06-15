@@ -48,9 +48,12 @@ SCHEMA_DIMENSIONS: dict[str, int] = {
 }
 
 # Canonical name resolution (alias → canonical)
+# ── FIX-20260615-010/P0: swing_enhanced_37 alias REMOVED ──
+# Was: "swing_enhanced_37" → "btc_macro_enhanced_37" (cross-asset contamination).
+# Any brain/config referencing swing_enhanced_37 will now raise KeyError
+# at schema resolution, forcing explicit fix to correct schema.
 SCHEMA_ALIASES: dict[str, str] = {
     "swing_24": "daily_swing_24",
-    "swing_enhanced_37": "btc_macro_enhanced_37",  # FIX-135: training script output alias
 }
 
 # ── Lazy cache for feature name resolution ─────────────────────────
