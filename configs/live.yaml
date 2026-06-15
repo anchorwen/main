@@ -36,10 +36,7 @@ brains:
     enabled: false
   - path: configs/brains/Brain_Rev_M30_V1.json
     enabled: false
-  - path: configs/brains/lgb_barrier_12bar_lightgbm_v3_20260517_084114.json
-    enabled: false
-  - path: configs/brains/xgb_barrier_12bar_xgboost_v3_20260517_084031.json
-    enabled: false
+  # ── FIX-20260615-010: Phantom entries removed — files do not exist on disk ──
   - path: configs/brains/Barrier_V9_12B_V1.json
     enabled: false
   - path: configs/brains/Brain_Trend_M30_V2.json
