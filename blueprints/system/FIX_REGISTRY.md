@@ -2948,7 +2948,12 @@ FIX-YYYYMMDD-NNN
 - **修复路径**:
   1. 用 41 维特征 (`BTC_MACRO_ENHANCED_37_FEATURES` 全量) 重训练 V4, V9, V12
   2. 验证重训练模型 `num_feature() == 41`
-  3. 更新 registry `btc_macro_enhanced_37: 37 → 41`
-  4. 更新全部 3 个 config `n_features: 37 → 41` + `features` 列表
+  3. 运行一键恢复脚本: `python scripts/restore_btc_schema_41.py`
+  4. 重启 BTC 进程验证 `brain_count: 3, brain_ids: [V4, V9, V12]`
+- **一键恢复脚本**: `scripts/restore_btc_schema_41.py` (待模型重训练完成后执行)
+  - 将 registry `btc_macro_enhanced_37`: 37 → 41
+  - 将 V4/V9/V12 config `n_features`: 37 → 41
+  - 将 V4/V9/V12 config `features` 列表扩充至 41 (追加 4 个 regime derivatives)
+  - 执行前自动检查模型 `num_feature() == 41`，任一大脑不满足则拒绝执行
 - **关联**: DQAF-20260615-006/C5, DQAF-20260615-009, FIX-B3-feat
-- **补丁豁免 (PATCH_NOT_ARCHITECTURE)**: 回滚 registry 至 37 是 L1 补丁。L3 修复需重训练 3 个大脑模型。
+- **补丁豁免 (PATCH_NOT_ARCHITECTURE)**: 回滚 registry 至 37 是 L1 补丁。L3 修复需重训练 3 个大脑模型 (41 维)。
