@@ -44,7 +44,7 @@ SCHEMA_DIMENSIONS: dict[str, int] = {
     "swing_enhanced_29": 29,  # 21 swing macro + 6 micro + 2 TF (XAU cross-asset removed for BTC)
     "swing_enhanced_21": 21,  # 21 swing macro only — pure daily, no micro/TF
     # FIX-20260604-081: BTC-specific 37-dim macro-enhanced schema
-    "btc_macro_enhanced_37": 41,  # 24 BTC macro + 9 BTC micro + 2 TF + 2 BTC/XAU ratio + 4 regime derivatives
+    "btc_macro_enhanced_37": 37,  # FIX-20260615-009: ROLLED BACK from 41 — models trained at 37 dims, schema defines 41 but models NOT retrained. See TECH_DEBT-004.
 }
 
 # Canonical name resolution (alias → canonical)

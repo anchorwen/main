@@ -82,7 +82,7 @@
     "Cross_BTC_Gold_Ratio",
     "Cross_BTC_Gold_Ratio_ROC"
   ],
-  "n_features": 41,
+  "n_features": 37,
   "n_train_samples": 4357,
   "trained_at": "2026-06-14T17:42:23.718287+00:00",
   "label_contract": {
