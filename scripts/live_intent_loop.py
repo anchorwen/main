@@ -887,6 +887,14 @@ def main(argv: list[str] | None = None) -> int:
     parliament: Any = None
 
     if args.multi_brain:
+        # ── DQAF-20260615-007: Per-asset BrainRegistry isolation ──
+        # BrainRegistry singleton defaults to configs/brains (XAU).  BTC must
+        # explicitly initialize the singleton with configs/brains_btc BEFORE
+        # any other code calls BrainRegistry.instance().  Without this, BTC
+        # process loads XAU brain data → polluted PnL records + wrong horizons.
+        from core.brains.brain_registry import BrainRegistry
+        BrainRegistry.reset()
+        BrainRegistry.instance(str(args.brains_dir))
         entries = _load_brain_entries_from_dir(args.brains_dir)
 
         # ── Filter disabled brains (live.yaml brain_registry_entries enabled:false) ──
@@ -1137,6 +1145,8 @@ def main(argv: list[str] | None = None) -> int:
             pnl_store=pnl_ledger,
             meta_exit_engine=meta_exit_engine,
         )
+        # ── DQAF-20260615-007: Per-asset data isolation ──
+        position_manager._data_dir = args.base_dir
 
         # ── Restart recovery: try persisted state first, fall back to MT5 ──
         recovered = False

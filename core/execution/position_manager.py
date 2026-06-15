@@ -1370,7 +1370,8 @@ class ActivePositionManager:
         # dedicated JSONL file for future model retraining.  This closes
         # the train-serve feature gap: the training script can read this
         # file and use the SAME 20 features the runtime engine uses.
-        self._write_meta_exit_telemetry(snap, evaluation, pos.ticket)
+        self._write_meta_exit_telemetry(snap, evaluation, pos.ticket,
+                                       data_dir=getattr(self, "_data_dir", "data"))
 
         # Save current R for next cycle's trajectory comparison
         pos.prev_r = round(r_now, 4)
@@ -1385,6 +1386,7 @@ class ActivePositionManager:
         snap: Any,
         evaluation: Any,
         ticket: int,
+        data_dir: str = "data",
     ) -> None:
         """Write ExitFeatureSnapshot + MetaExit prediction to telemetry log.
 
@@ -1394,7 +1396,7 @@ class ActivePositionManager:
         ExitFeatureSnapshot that the runtime engine actually consumes,
         enabling future retraining with complete feature parity.
 
-        Written to ``data/meta_exit_snapshots.jsonl`` (append-only, JSONL).
+        Written to ``<data_dir>/meta_exit_snapshots.jsonl`` (append-only, JSONL).
         One line per management-cycle evaluation.  Zero impact on existing
         consumers — this is a dedicated, purpose-built training dataset.
         """
@@ -1402,7 +1404,8 @@ class ActivePositionManager:
         import time as _time
         from pathlib import Path as _Path
 
-        _path = _Path("data") / "meta_exit_snapshots.jsonl"
+        # ── DQAF-20260615-007: Per-asset data_dir ──
+        _path = _Path(data_dir) / "meta_exit_snapshots.jsonl"
         try:
             _path.parent.mkdir(parents=True, exist_ok=True)
             _record = {
