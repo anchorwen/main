@@ -51,7 +51,7 @@ def assemble_features_by_schema(
     micro_features: Any = None,
     tf_ou: float = 0.0,
     tf_hurst: float = 0.5,
-    btc_augment: np.ndarray | None = None,  # FIX-134/138: pre-augmented 37-dim BTC vector
+    btc_augment: np.ndarray | None = None,  # FIX-134/138: pre-augmented 41-dim BTC vector
 ) -> np.ndarray:
     """Build a feature vector for a brain given its declared feature schema.
 
@@ -64,7 +64,7 @@ def assemble_features_by_schema(
         micro_features: Optional 9-dim microstructure vector (for enhanced swing).
         tf_ou: Timeframe-specific OU-theta value (for enhanced swing).
         tf_hurst: Timeframe-specific Hurst exponent (for enhanced swing).
-        btc_augment: Pre-computed 37-dim BTC feature vector from
+        btc_augment: Pre-computed 41-dim BTC feature vector from
             ``BTCFeatureAugmenter.augment()``.  Only used when
             *schema_name* is ``btc_macro_enhanced_37`` — the augmenter
             corrects cross-asset slots that differ between XAU and BTC.
@@ -153,7 +153,7 @@ def _build_swing_vector(
     micro_features: Any = None,
     tf_ou: float = 0.0,
     tf_hurst: float = 0.5,
-    btc_augment: np.ndarray | None = None,  # FIX-134: pre-augmented 37-dim BTC vector
+    btc_augment: np.ndarray | None = None,  # FIX-134: pre-augmented 41-dim BTC vector
 ) -> np.ndarray:
     """Build a swing feature vector from components using schema metadata.
 
@@ -208,7 +208,7 @@ def _build_swing_vector(
         # pre-computed 37-dim vector with corrected cross-asset slots.
         # Otherwise fall back to the legacy assembly path (XAU-centric
         # features with hardcoded zeros for ratio slots).
-        if btc_augment is not None and len(btc_augment) == 37:
+        if btc_augment is not None and len(btc_augment) == 41:
             return np.asarray(btc_augment, dtype=np.float64)
 
         # Legacy path (pre-FIX-134): XAU-centric assembly with documented gaps.

@@ -1,4 +1,4 @@
-"""BTC Macro Enhanced feature schema — 37 features for BTC swing models.
+"""BTC Macro Enhanced feature schema — 41 features for BTC swing models.
 
 FIX-20260604-081: BTC-specific cross-pair matrix.
   - Removed: XAGUSDc_return (industrial noise), Cross_Gold_Silver_Ratio
@@ -12,7 +12,7 @@ Feature groups:
   TF_SPECIFIC (2):  Trading-timeframe OU Theta + Hurst exponent
   BTC_MACRO (2):    BTC/XAU ratio + ROC
 
-Total: 37 dimensions.
+Total: 41 dimensions (37 + 4 regime derivatives).
 
 Physically isolated from swing_enhanced_35 — XAU models are unaffected.
 """
@@ -34,6 +34,14 @@ _BTC_MICRO_FEATURES = [
 _TF_SPECIFIC_FEATURES = [
     "TF_OU_Theta",
     "TF_Hurst",
+]
+
+# FIX-20260614-B3-feat: Second-order regime derivatives (37->41 dim)
+_REGIME_DERIVED_FEATURES = [
+    "TF_delta_OU",
+    "TF_delta_Hurst",
+    "TF_OU_x_Hurst",
+    "TF_OU_div_ADX",
 ]
 
 # ── BTC-specific macro features (2) ──
@@ -76,14 +84,15 @@ BTC_MACRO_ENHANCED_37_FEATURES = (
     _BTC_MACRO_24
     + _BTC_MICRO_FEATURES
     + _TF_SPECIFIC_FEATURES
+    + _REGIME_DERIVED_FEATURES
     + _BTC_MACRO_FEATURES
 )
 
 # ── Verify dimension ──
-assert len(BTC_MACRO_ENHANCED_37_FEATURES) == 37, (
+assert len(BTC_MACRO_ENHANCED_37_FEATURES) == 41, (
     f"BTC schema dimension mismatch: {len(BTC_MACRO_ENHANCED_37_FEATURES)} != 37"
 )
 # ── Verify uniqueness ──
-assert len(set(BTC_MACRO_ENHANCED_37_FEATURES)) == 37, (
+assert len(set(BTC_MACRO_ENHANCED_37_FEATURES)) == 41, (
     "BTC schema has duplicate feature names"
 )

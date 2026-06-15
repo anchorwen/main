@@ -82,6 +82,10 @@ class BTCFeatureAugmenter:
         self._xau_price_fail_count = 0  # FIX-138: XAU price fetch for BTC/XAU ratio
         self._first_augment_logged = False  # one-shot confirmation on first success
 
+        # ── FIX-20260614-B3-feat: Stateful regime derivative tracking ──
+        self._prev_ou: float | None = None
+        self._prev_hurst: float | None = None
+
     # ── Public API ──────────────────────────────────────────────────────
 
     def augment(
@@ -93,7 +97,7 @@ class BTCFeatureAugmenter:
         tf_ou: float = 0.0,
         tf_hurst: float = 0.5,
     ) -> np.ndarray:
-        """Build corrected 37-dim BTC feature vector.
+        """Build corrected 41-dim BTC feature vector (FIX-B3: 37→41).
 
         Args:
             daily_arr_24: 24-dim from DailyFeatureComputer.
@@ -103,7 +107,7 @@ class BTCFeatureAugmenter:
             tf_hurst:     Hurst exponent value.
 
         Returns:
-            np.ndarray of shape (37,) with corrected BTC feature slots.
+            np.ndarray of shape (41,) with corrected BTC feature slots.
 
         Feature layout (training order):
             [0-11]   daily_arr[0:12]
@@ -115,6 +119,10 @@ class BTCFeatureAugmenter:
             [33-34]  tf_ou, tf_hurst
             [35]     Cross_BTC_Gold_Ratio (computed, or zero-filled)
             [36]     Cross_BTC_Gold_Ratio_ROC (computed, or zero-filled)
+            [37]     TF_delta_OU       = tf_ou - prev_ou (regime acceleration)
+            [38]     TF_delta_Hurst    = tf_hurst - prev_hurst (regime velocity)
+            [39]     TF_OU_x_Hurst     = tf_ou * (1-tf_hurst) (mean-reversion signal)
+            [40]     TF_OU_div_ADX     = tf_ou / max(ADX,1) (regime vs trend)
         """
         daily = np.asarray(daily_arr_24, dtype=np.float64).ravel()
         micro = np.asarray(micro_arr_9, dtype=np.float64).ravel()
@@ -129,53 +137,67 @@ class BTCFeatureAugmenter:
         audjpy_return = self._compute_audjpyc_return()
         btc_xau_ratio, btc_xau_ratio_roc = self._compute_btc_xau_ratio(btc_price)
 
-        # ── Assemble 37-dim vector ──
-        fv_37 = np.zeros(37, dtype=np.float64)
+        # ── FIX-B3-feat: Stateful regime derivatives ──
+        delta_ou = tf_ou - self._prev_ou if self._prev_ou is not None else 0.0
+        delta_hurst = tf_hurst - self._prev_hurst if self._prev_hurst is not None else 0.0
+        ou_x_hurst = tf_ou * (1.0 - tf_hurst)
+        ou_div_adx = tf_ou / max(float(daily[7]), 1.0)  # D1_ADX_14 at slot 7
+        # Update state for next bar
+        self._prev_ou = tf_ou
+        self._prev_hurst = tf_hurst
+
+        # ── Assemble 41-dim vector ──
+        fv = np.zeros(41, dtype=np.float64)
 
         # Block 0: daily features [0-11]
-        fv_37[0:12] = daily[0:12]
+        fv[0:12] = daily[0:12]
 
         # Slot [12]: XAUUSDc_return
-        fv_37[12] = xau_return
+        fv[12] = xau_return
 
         # Block 1: daily features [13-23]
-        fv_37[13:24] = daily[13:24]
+        fv[13:24] = daily[13:24]
 
         # Block 2: micro features [24-29]
-        fv_37[24:30] = micro[0:6]
+        fv[24:30] = micro[0:6]
 
         # Slot [30]: AUDJPYc_return
-        fv_37[30] = audjpy_return
+        fv[30] = audjpy_return
 
         # Block 3: micro features [31-32]
-        fv_37[31:33] = micro[7:9]
+        fv[31:33] = micro[7:9]
 
         # Block 4: TF features [33-34]
-        fv_37[33] = float(tf_ou) if (tf_ou is not None and math.isfinite(float(tf_ou))) else 0.0
-        fv_37[34] = (
+        fv[33] = float(tf_ou) if (tf_ou is not None and math.isfinite(float(tf_ou))) else 0.0
+        fv[34] = (
             float(tf_hurst) if (tf_hurst is not None and math.isfinite(float(tf_hurst))) else 0.5
         )
 
         # Slots [35-36]: BTC/XAU ratio
-        fv_37[35] = btc_xau_ratio
-        fv_37[36] = btc_xau_ratio_roc
+        fv[35] = btc_xau_ratio
+        fv[36] = btc_xau_ratio_roc
+
+        # ── FIX-B3-feat: Regime derivative slots [37-40] ──
+        fv[37] = delta_ou
+        fv[38] = delta_hurst
+        fv[39] = ou_x_hurst
+        fv[40] = ou_div_adx
 
         # ── Safeguard 3: Post-assertion ──
-        assert fv_37.shape == (
-            37,
-        ), f"CRITICAL: BTCFeatureAugmenter output shape {fv_37.shape} != (37,)"
-        assert not np.isnan(fv_37).any(), "CRITICAL: NaN detected in BTC augmented feature vector"
+        assert fv.shape == (
+            41,
+        ), f"CRITICAL: BTCFeatureAugmenter output shape {fv.shape} != (41,)"
+        assert not np.isnan(fv).any(), "CRITICAL: NaN detected in BTC augmented feature vector"
 
-        # ── Phase 6a: one-shot confirmation of cross-asset slot activation ──
         if not self._first_augment_logged:
             self._first_augment_logged = True
             _log.info(
-                "BTCFeatureAugmenter: 37-dim pipeline activated. "
-                "Cross-asset slots: [12]=%.6f [30]=%.6f [35]=%.6f [36]=%.6f",
-                fv_37[12], fv_37[30], fv_37[35], fv_37[36],
+                "BTCFeatureAugmenter: 41-dim pipeline activated (FIX-B3). "
+                "Regime slots: [37]=%.4f [38]=%.4f [39]=%.4f [40]=%.4f",
+                fv[37], fv[38], fv[39], fv[40],
             )
 
-        return fv_37
+        return fv
 
     # ── Private helpers ─────────────────────────────────────────────────
 
