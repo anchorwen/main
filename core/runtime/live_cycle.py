@@ -1371,6 +1371,8 @@ def _execute_management_phase(
                 elif "swing" in schema_id or "daily" in schema_id or "btc_macro" in schema_id:
                     # FIX-20260531-021 / FIX-20260610-009: Data-driven assembly via schema registry
                     # btc_macro added 2026-06-10 — BTC brains fell to else → raw 40-dim.
+                    # FIX-20260615-009d: Use state._btc_augmenter for btc_macro schema
+                    # to eliminate cold-start RuntimeError on cycle 1 with open positions.
                     if daily_feature_provider is not None:
                         with FaultTolerantContext(
                             level=FaultLevel.DEGRADE,
@@ -1380,11 +1382,28 @@ def _execute_management_phase(
                             tf_ou, tf_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
                             from core.features.schemas.registry import assemble_swing_features
 
+                            # Compute btc_augment for management-phase inference
+                            _mgmt_btc_aug: Any = None
+                            if "btc_macro" in str(schema_id):
+                                _mgmt_aug = getattr(state, "_btc_augmenter", None)
+                                if _mgmt_aug is not None:
+                                    try:
+                                        _mgmt_btc_aug = _mgmt_aug.augment(
+                                            fv_24,
+                                            None,  # micro features not available in mgmt phase
+                                            btc_price=mid or 0.0,
+                                            tf_ou=tf_ou,
+                                            tf_hurst=tf_hurst,
+                                        )
+                                    except Exception:
+                                        _mgmt_btc_aug = None  # degrade: fall through to None
+
                             fv = assemble_swing_features(
                                 schema_id,
                                 daily_features=fv_24,
                                 tf_ou=tf_ou,
                                 tf_hurst=tf_hurst,
+                                btc_augment=_mgmt_btc_aug,
                             )
                             raw = b_info["adapter"].infer(fv)
                             prop = b_info["adapter"].get_signal(raw)
@@ -3687,6 +3706,22 @@ def execute_live_cycle(
                 _live_spread = float(_ask - _bid) if (_bid and _ask and _ask > _bid) else 0.0
                 pnl_ledger.update_pending(mid_price)
                 pnl_ledger.settle_all(mid_price, spread=_live_spread, slippage=0.10)
+
+        # ── FIX-20260615-009d: Cold-start race condition fix ──
+        # BTCFeatureAugmenter MUST be initialised BEFORE _execute_management_phase
+        # because management-phase brain inference for btc_macro schema brains
+        # needs the augmenter to assemble 41-dim feature vectors.  Previously the
+        # augmenter was created 1300 lines later during main eval, causing a
+        # deterministic RuntimeError on cycle 1 of every cold start with open positions.
+        if config.symbol == "BTCUSDc" and feature_service is not None:
+            _aug = getattr(state, "_btc_augmenter", None)
+            if _aug is None:
+                from core.features.computers.btc_feature_augmenter import (
+                    BTCFeatureAugmenter,
+                )
+
+                _aug = BTCFeatureAugmenter(feature_service, mt5_worker=mt5_worker)
+                state._btc_augmenter = _aug
 
         # ── Dynamic exit management phase ──
         # Runs whenever positions are registered, regardless of position limit.
