@@ -2381,6 +2381,8 @@ def main(argv: list[str] | None = None) -> int:
                         circuit_breaker_trip_reason=getattr(
                             state, "_circuit_breaker_trip_reason", ""
                         ),
+                        # ── DQAF-20260615-004 ──
+                        known_open_tickets=getattr(state, "known_open_tickets", None),
                     )
                 except Exception:  # noqa: BLE001
                     pass
@@ -2631,6 +2633,8 @@ def main(argv: list[str] | None = None) -> int:
                         circuit_breaker_trip_reason=getattr(
                             state, "_circuit_breaker_trip_reason", ""
                         ),
+                        # ── DQAF-20260615-004 ──
+                        known_open_tickets=getattr(state, "known_open_tickets", None),
                     )
                 except Exception:  # noqa: BLE001
                     pass

@@ -44,6 +44,8 @@ def save_execution_state(
     consecutive_stale_cycles: int = 0,
     consecutive_stale_features: int = 0,
     circuit_breaker_trip_reason: str = "",
+    # ── DQAF-20260615-004: known_open_tickets persistence ──
+    known_open_tickets: dict[str, Any] | None = None,
 ) -> None:
     """Snapshot all execution guard state to disk (atomic write via tmp+replace)."""
     p = Path(save_path)
@@ -53,10 +55,11 @@ def save_execution_state(
         pass
 
     payload: dict[str, Any] = {
-        "version": 2,  # bumped — new fields
-        "schema_version": "execution_state.v2",  # FIX-20260610-006: versioned contract
+        "version": 3,  # DQAF-20260615-004: + known_open_tickets
+        "schema_version": "execution_state.v3",
         "saved_at_utc": _utc_iso(),
         "budgets": {},
+        "known_open_tickets": {},
         "cooldown_registry": {},
         "family_entry_tracker": {},
         "sl_streak_blocks": sl_streak_blocks or {},
@@ -70,6 +73,12 @@ def save_execution_state(
         "consecutive_stale_features": consecutive_stale_features,
         "circuit_breaker_trip_reason": circuit_breaker_trip_reason,
     }
+    # ── DQAF-20260615-004: Persist known_open_tickets ──
+    if known_open_tickets:
+        payload["known_open_tickets"] = {
+            str(t): {k: v for k, v in data.items()}
+            for t, data in known_open_tickets.items()
+        }
 
     # ── Strategy budgets ──
     for sname, strategy in strategies.items():
