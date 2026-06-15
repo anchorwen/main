@@ -2856,3 +2856,36 @@ FIX-YYYYMMDD-NNN
 - **Files**: `data_btc/governance_state.json`
 - **Description**: V4 promoted candidate→live after 47 trades, WR=48.9%, PnL=+$90.64. V9_H1 and V10_M15 remain candidate (32% WR).
 - **Dependents Checked**: (none)
+
+### DQAF-20260615-004 — Orphan Position Guarantee: known_open_tickets persistence
+- **Date**: 2026-06-15
+- **Author**: cursor-agent
+- **Commits**: `716b74d`
+- **Type**: fix
+- **Module**: runtime
+- **Files**: `core/runtime/execution_state.py`, `scripts/live_intent_loop.py`
+- **Description**: known_open_tickets (brain_ids, entry_price, message_id per position) was never persisted to disk. Restart lost all brain→position links → orphan positions had no SignalSettled attribution. Now saved to execution_state.json (v3 schema) on every cycle. Fix also prevents XAU process from managing BTC positions after restart.
+- **Root Cause**: RC-03 — state-leak (critical state not persisted across sessions)
+- **Prevention**: Any in-memory dict that links two data domains must be persisted to execution state.
+
+### DQAF-20260615-005 — Cross-asset contamination: BTC_Swing_V5 in XAU config
+- **Date**: 2026-06-15
+- **Author**: cursor-agent
+- **Commits**: `243dbf0`
+- **Type**: fix
+- **Module**: config
+- **Files**: `configs/live.yaml`
+- **Description**: BTC_Swing_V5 was listed in XAU's live.yaml registry_entries. XAU's live_intent_loop loaded BTC brain configs and attempted to manage BTC positions on the wrong MT5 terminal (EXNESS2). 43 BTC trail stops sent to XAU terminal — all rejected. This was the root cause of position 3896547122's exit watchdog critical_timeout. Entry removed from XAU config.
+- **Root Cause**: RC-06 — contract-violation (cross-asset brain reference)
+- **Prevention**: Configs must NEVER reference brains from a different asset. Data Health Contract should alert on cross-asset brain references.
+
+### DQAF-20260615-007 — Cross-asset isolation project (3 HIGH fixes)
+- **Date**: 2026-06-15
+- **Author**: cursor-agent
+- **Commits**: `5d67945`
+- **Type**: fix
+- **Module**: runtime, config, features
+- **Files**: `scripts/live_intent_loop.py`, `core/execution/position_manager.py`, `configs/brains_btc/BTC_Swing_V9_H1_Survival.json`, `configs/brains_btc/BTC_Swing_V10_M15_Survival.json`, `configs/brains_btc/BTC_Swing_V12_H1_Survival.json`
+- **Description**: (1) BrainRegistry per-asset: BTC intent loop calls BrainRegistry.instance('configs/brains_btc') before any other code loads brains — previously loaded XAU brain data with wrong horizons. (2) meta_exit_snapshots per-asset: _write_meta_exit_telemetry() was hardcoded to 'data/' (XAU) — now accepts data_dir param wired from position_manager._data_dir. (3) BTC brain model_paths: V9_H1, V10_M15, V12_H1 configs pointed to data/models/ (XAU directory) — files moved to data_btc/models/, configs updated.
+- **Root Cause**: RC-06 — contract-violation (hardcoded paths, singleton defaults, cross-directory references)
+- **Prevention**: Every hardcoded path must use config.base_dir. Singletons must be initialized before first use. Brain config model_path must match asset's data directory.
