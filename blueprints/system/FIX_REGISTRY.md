@@ -2903,7 +2903,7 @@ FIX-YYYYMMDD-NNN
 | TECH_DEBT-001 | 2026-06-15 | L3 | runtime-live | **`_build_mia_close_entry(symbol="XAUUSDc")` 幽灵默认值**: 调用方 line 684 已显式传参，BTC 不受影响。但默认值本身是 DQAF-20260615-006 同一模式的架构残留。 | 新增调用方未传 symbol 参数 |
 | TECH_DEBT-002 | 2026-06-15 | L2/L3 | runtime-live | **Journal 全量扫描 O(N) 性能炸弹**: MIA Dedup 2 每次刷盘全量读取 `live_trade_journal.jsonl` 做 ticket 去重。journal >10,000 行时单次扫描 100-500ms → 主循环卡顿 → MIA 超时雪崩。应引入内存 Journal Index `set(closed_tickets)` O(1) 替代 O(N)。 | journal 行数 > 10,000 |
 | TECH_DEBT-003 | 2026-06-15 | L2 | runtime-live | **三层去重过度设计**: MIA Dedup 1+2+3 (内存 set + journal 扫描 + bridge 已写检测) 是历史补丁堆叠产物。应建立 SSOT 仓位状态机引擎统一去重入口。 | 下次大版本重构 MIA 管线 |
-| TECH_DEBT-004 | 2026-06-15 | L3 | features, brains | **btc_macro_enhanced_37 schema 维度分裂**: schema 定义 41 维 (FIX-B3-feat 新增 4 regime derivatives), 但 V4/V9/V12 模型文件均为 37 维训练产物。Registry 当前回滚至 37 以维持模型可加载。需用 41 维特征重训练全部 3 个大脑后, 将 registry 升级至 41。DQAF-20260615-009。 | 任一 BTC 大脑重训练完成 |
+| TECH_DEBT-004 | 2026-06-15 | ~~L3~~ **RESOLVED** | features, brains | ~~**btc_macro_enhanced_37 schema 维度分裂**~~ → **2026-06-15 清偿**: V4/V9/V12 全部用 41 维特征重训练完毕。H1: 60,545 samples, LGB WR=88.85%. M15: 83,016 samples, XGB WR=49.14%. Registry 37→41, configs 37→41. 沙箱推理通过。Commit 8741e23。 | ✅ RESOLVED |
 
 ### TECH_DEBT-001 Detail — MIA `symbol` 幽灵默认值
 
@@ -2957,3 +2957,4 @@ FIX-YYYYMMDD-NNN
   - 执行前自动检查模型 `num_feature() == 41`，任一大脑不满足则拒绝执行
 - **关联**: DQAF-20260615-006/C5, DQAF-20260615-009, FIX-B3-feat
 - **补丁豁免 (PATCH_NOT_ARCHITECTURE)**: 回滚 registry 至 37 是 L1 补丁。L3 修复需重训练 3 个大脑模型 (41 维)。
+- **✅ 2026-06-15 RESOLVED**: V4/V9/V12 全部用 41 维重训练 + 部署 + 沙箱推理通过 + 实盘 BTC 重启验证通过 (brain_count=3, 0 dimension_mismatch, 0 BrainFactory errors, brain predictions active). Commit 8741e23.

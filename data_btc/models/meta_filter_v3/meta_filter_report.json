@@ -1,0 +1,64 @@
+{
+  "dataset": "data\\training\\meta_labeling_v3\\full.npz",
+  "n_samples": 1217,
+  "n_features": 47,
+  "blind_pos_rate": 0.5615,
+  "results": {
+    "lightgbm": {
+      "best_seed": 46,
+      "metrics": {
+        "accuracy": 0.6025,
+        "precision": 0.6163,
+        "recall": 0.7737,
+        "specificity": 0.3832,
+        "f1": 0.6861,
+        "pass_rate": 0.7049,
+        "post_filter_wr": 0.6163,
+        "n_pass": 172,
+        "n_block": 72
+      },
+      "top_features": [
+        {
+          "name": "M5_Macro1_Corr",
+          "importance": 83.0
+        },
+        {
+          "name": "H1_RSI_14",
+          "importance": 63.0
+        },
+        {
+          "name": "M5_Body_Ratio",
+          "importance": 62.0
+        },
+        {
+          "name": "H1_Macro1_Corr",
+          "importance": 56.0
+        },
+        {
+          "name": "M15_OU_Theta",
+          "importance": 53.0
+        },
+        {
+          "name": "H1_MACD",
+          "importance": 48.0
+        },
+        {
+          "name": "M30_Macro1_Corr",
+          "importance": 46.0
+        },
+        {
+          "name": "M5_Vol_ZScore",
+          "importance": 39.0
+        },
+        {
+          "name": "M5_Hurst",
+          "importance": 35.0
+        },
+        {
+          "name": "avg_spread",
+          "importance": 35.0
+        }
+      ]
+    }
+  }
+}
