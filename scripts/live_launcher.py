@@ -235,6 +235,9 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         bridge_cmd.extend([
             "--zmq-order-endpoint", zmq_cfg.get("order_endpoint", "tcp://127.0.0.1:5556"),
             "--zmq-ack-endpoint", zmq_cfg.get("ack_endpoint", "tcp://127.0.0.1:5557"),
+            # Phase 3: WAL dual-write — pass outbox/archive for 5s slow poll
+            "--outbox-dir", str(PROJECT_ROOT / cfg["base_dir"] / "mt5_outbox"),
+            "--archive-dir", str(PROJECT_ROOT / cfg["base_dir"] / "mt5_outbox_processed"),
         ])
     else:
         bridge_cmd.extend([

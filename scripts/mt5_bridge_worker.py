@@ -1260,7 +1260,30 @@ def run_zmq_worker(
                 _last_file_poll = _now
                 _pending = _list_pending(outbox_dir)
                 if _pending:
+                    _MAX_FILE_AGE_SEC = 3600  # 1 hour — skip stale orders
                     for _path in _pending:
+                        # ── Age guard: skip files older than 1 hour ──────
+                        # Historical outbox files (from before Phase 3 or
+                        # from a prior bridge session) should be archived
+                        # without re-execution.  Their orders have long
+                        # since expired and re-sending them would be wrong.
+                        try:
+                            _file_age = _now - _path.stat().st_mtime
+                        except OSError:
+                            _file_age = 0.0
+                        if _file_age > _MAX_FILE_AGE_SEC:
+                            _rel = _path.relative_to(outbox_dir) if outbox_dir in _path.parents else Path(_path.name)
+                            _arc = archive_dir / _rel
+                            _arc.parent.mkdir(parents=True, exist_ok=True)
+                            _safe_move(_path, _arc)
+                            print(
+                                json.dumps(
+                                    {"file_fallback_stale_archived": {"path": str(_path), "age_hours": round(_file_age / 3600, 1)}},
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
+                            continue
                         _file_msg = _load_message(_path)
                         if _file_msg is None:
                             continue
