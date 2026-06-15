@@ -56,9 +56,17 @@
 
 | Brain ID | 问题 | 当前状态 |
 |----------|------|---------|
-| **Swing_V10_H1_Directional** | schema=`swing_enhanced_37`→BTC alias (41维), 模型37维, 配置声明35维→三方不一致 | disabled in live.yaml |
+| **Swing_V10_H1_Directional** | ✅ 35-dim swing_enhanced_35 (P2 retrained 2026-06-15) | **active** — XGB DirAcc=51.8%, sandbox passed |
 
-### DISABLED (15) — 在 live.yaml 中但未启用
+### P0→P1→P2 完成 (2026-06-15)
+
+| Phase | 动作 | Commit |
+|-------|------|--------|
+| P0 | swing_enhanced_37 别名斩首 | d3c7e2a |
+| P1 | train_xau_directional_v2.py — 35-dim XAU 管线 | c821e54 |
+| P2 | V10_H1 重训练 + 部署 + 沙箱 | c7c80b7 |
+
+### DISABLED (14) — 在 live.yaml 中但未启用
 
 | Brain ID | TF | Schema | 维度 | 原因 |
 |----------|-----|--------|------|------|
@@ -127,33 +135,18 @@
 
 ## 五、关键问题与修复路线
 
-### 🔴 P0: swing_enhanced_37 别名是定时炸弹
+### ✅ P0: swing_enhanced_37 别名斩首 (COMPLETE — d3c7e2a)
 
-```
-"swing_enhanced_37" → "btc_macro_enhanced_37" (BTC 41维)
-```
+别名已从 SCHEMA_ALIASES 删除。任何引用 swing_enhanced_37 的代码现在抛出 KeyError。
 
-任何 XAU 大脑引用此 schema → 静默解析为 BTC 特征 → 维度不匹配 → 大脑被丢弃。
+### ✅ P1: XAU 方向性训练管线修复 (COMPLETE — c821e54)
 
-**修复**: 删除此别名。改为在 `SCHEMA_DIMENSIONS` 中显式注册 `swing_enhanced_37` (如果曾经存在) 或彻底移除。BTC 训练脚本直接使用 `btc_macro_enhanced_37`。
+`train_xau_directional_v2.py` — 自包含 35-dim XAU 管线，无 BTC 依赖。
 
-### 🔴 P1: XAU 方向性训练管线断裂
+### ✅ P2: V10_H1 重训练 (COMPLETE — c7c80b7)
 
-`train_xau_directional_v1.py` 调用 `v9.compute_feature_row()` 返回值已从 37 维 list 变为 `(41维list, float, float)` tuple → 无法构建新数据集。
-
-**修复**: 
-1. 将 XAU 方向性训练脚本改为使用 XAU 专属特征计算机
-2. 输出 schema 应为 `swing_enhanced_35` (35 维)
-3. 用 SL=2.0/TP=3.5 (h1_swing 参数) 重建 H1 训练集
-
-### 🟠 P2: V10_H1 重训
-
-当前状态: 模型 37 维, schema 声明 35 维, 实际 schema=BTC 41 维 → 三方分裂。
-
-**修复路径**:
-1. 修复 P1 (训练管线)
-2. 用 35 维特征 + `swing_enhanced_35` schema 重训
-3. 部署 → 替换 V9_H1_V2 → 恢复方向性 H1 大脑
+V10_H1 35-dim 重训练完成：XGBoost DirAcc=51.8%, sandbox passed, live.yaml enabled。
+h1_swing 现 2 大脑: V9_H1_V2 + V10_H1_Directional。
 
 ### 🟡 P3: Phantom 条目清理
 
