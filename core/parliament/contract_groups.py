@@ -181,7 +181,18 @@ H4_SWING_GROUP: dict[str, Any] = {
     "description": "H4 multi-day swing — 18-bar (~3d) barrier, SL=2.0xATR, TP=4.0xATR",
 }
 
-# Group 5e: BTC swing (M30 12-bar, isolated 904xx magic, crypto 24/7)
+# Group 5e: BTC swing H1 Survival (SL=3.0/TP=2.0, magic=90411)
+# DQAF-20260615-002: Dedicated line for V9_H1 — matches training SL/TP.
+BTC_SWING_H1_GROUP: dict[str, Any] = {
+    "name": "btc_swing_h1",
+    "horizon_cycles": 144,
+    "brain_types": {"lightgbm_v1"},
+    "contract": "btc_swing_h1_survival",
+    "voting_mode": "weighted",
+    "description": "BTC H1 Survival — SL=3.0xATR, TP=2.0xATR, high-WR mode",
+}
+
+# Group 5f: BTC swing (M30 12-bar, isolated 90410 magic, crypto 24/7)
 BTC_SWING_GROUP: dict[str, Any] = {
     "name": "btc_swing",
     "horizon_cycles": 36,
@@ -206,6 +217,7 @@ ALL_GROUPS: tuple[dict[str, Any], ...] = (
     H1_SWING_GROUP,
     H4_SWING_GROUP,
     BTC_SWING_GROUP,
+    BTC_SWING_H1_GROUP,
 )
 
 # Primary lookup: contract_group name → group definition

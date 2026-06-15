@@ -170,6 +170,7 @@ def build_strategy_lines(
     h1_swing_brains = _known_groups["h1_swing"]
     h4_swing_brains = _known_groups["h4_swing"]
     btc_swing_brains = _known_groups["btc_swing"]
+    btc_swing_h1_brains = _known_groups.get("btc_swing_h1", {})  # type: ignore[var-annotated]
 
     def _cfg(name: str, key: str, default: Any) -> Any:
         return config.strategy_configs.get(name, {}).get(key, default)
@@ -711,6 +712,45 @@ def build_strategy_lines(
                 cooldown_minutes=_cfg("btc_swing", "budget", {}).get(
                     "cooldown_minutes", 0
                 ),
+            ),
+        )
+
+    # ── DQAF-20260615-002: Dedicated Survival strategy for V9_H1 ──
+    if btc_swing_h1_brains:
+        strategies["btc_swing_h1"] = SwingStrategy(
+            StrategyLineConfig(
+                symbol=config.symbol,
+                contract_size=get_asset(config.symbol).contract_size,
+                name="btc_swing_h1",
+                strategy_family=_STRATEGY_FAMILY_MAP.get("btc_swing_h1", "trend_following"),
+                magic=90411,
+                brain_types={"lightgbm_v1"},
+                base_volume=_vol_cfg("btc_swing_h1"),
+                max_volume=_cfg("btc_swing_h1", "max_volume", 0.1),
+                base_sl_atr_mult=_cfg("btc_swing_h1", "sl", {}).get("base_atr_mult", 3.0),
+                base_tp_atr_mult=_cfg("btc_swing_h1", "tp", {}).get("base_atr_mult", 2.0),
+                hard_sl_ratio=_cfg("btc_swing_h1", "sl", {}).get("hard_sl_ratio", 2.0),
+                min_sl_distance=_cfg("btc_swing_h1", "sl", {}).get("min_sl_distance", 150.0),
+                min_rr_ratio=_cfg("btc_swing_h1", "sl", {}).get("min_rr_ratio", 0.5),
+                confidence_threshold=_cfg("btc_swing_h1", "confidence_threshold", 0.40),
+                spread_points=_cfg("btc_swing_h1", "spread_points", 200),
+                max_spread_points=_cfg("btc_swing_h1", "max_spread_points", 3000),
+                min_p_win=_cfg("btc_swing_h1", "min_p_win", 0.55),
+                long_bias_discount=_cfg("btc_swing_h1", "direction_balance", {}).get("long_bias_discount", 0.0),
+                exit_flip_enabled=_exit_cfg("btc_swing_h1", "flip_exit_enabled", False),
+                exit_time_cycles=_exit_cfg("btc_swing_h1", "time_exit_cycles", 144),
+                exit_zscore_enabled=_exit_cfg("btc_swing_h1", "zscore_exit_enabled", False),
+                exit_min_r=_exit_cfg("btc_swing_h1", "min_r_for_hold", 0.3),
+                min_valid_brains=_cfg("btc_swing_h1", "min_valid_brains", 1),
+                timeframe=_cfg("btc_swing_h1", "timeframe", "H1"),
+                exit_hesitation_cycles=_exit_cfg("btc_swing_h1", "hesitation_cycles", 24),
+            ),
+            btc_swing_h1_brains,
+            budget=StrategyBudget(
+                "btc_swing_h1",
+                daily_loss_limit_pct=_cfg("btc_swing_h1", "budget", {}).get("daily_loss_limit_pct", -0.04),
+                max_consecutive_losses=_cfg("btc_swing_h1", "budget", {}).get("max_consecutive_losses", 4),
+                cooldown_minutes=_cfg("btc_swing_h1", "budget", {}).get("cooldown_minutes", 0),
             ),
         )
 

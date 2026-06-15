@@ -301,11 +301,58 @@ regime_gate:
       btc_swing: full
 schema_version: live_config.v2
 strategy_lines:
+  # ── DQAF-20260615-002: Dedicated Survival strategy for V9_H1 ──
+  # Training SL=3.0/TP=2.0 (CCT-20260610-002).  Without this line,
+  # V9_H1 ran at SL=2.0 (33% tighter than training) → WR=34.5%.
+  # This line matches training parameters — the brain gets the
+  # drawdown tolerance it was optimised for.
+  btc_swing_h1:
+    base_volume: 0.01
+    brain_types:
+    - lightgbm_v1
+    budget:
+      daily_loss_limit_pct: -0.04     # wider SL → larger individual losses
+      max_consecutive_losses: 4       # survival WR=90% → 4L is already extreme
+      cooldown_minutes: 0             # fail-closed
+    confidence_threshold: 0.40        # higher — survival needs conviction
+    direction_balance:
+      long_bias_discount: 0.0
+    enabled: true
+    exit:
+      confidence_decay_exit: true
+      flip_exit_enabled: false        # survival: don't flip, wait for SL/TP
+      flip_threshold: 0.5
+      hesitation_cycles: 24           # H1 bars: longer patience
+      time_exit_cycles: 144           # H1 × 144 = 6 days max hold
+      trail_activation_atr: 0.5       # trail later — let the wide SL work
+      trail_atr_mult: 3.0             # wide trail matches wide SL
+      trail_enabled: true
+    magic: 90411
+    max_spread_points: 3000
+    max_volume: 0.1
+    min_p_win: 0.55                   # SL>TP requires high WR to be +EV
+    min_valid_brains: 1
+    mode: probation                   # observe before full capital
+    sl:
+      base_atr_mult: 3.0              # matches V9_H1 training SL
+      dynamic: true
+      hard_sl_ratio: 2.0
+      min_rr_ratio: 0.5               # SL>TP: RR=0.67 is expected
+      min_sl_distance: 150.0
+    spread_points: 200
+    strategy_family: trend_following
+    timeframe: H1
+    tp:
+      base_atr_mult: 2.0              # matches V9_H1 training TP
+      partial_tp_enabled: false       # survival: all-or-nothing
+      partial_tp_r: 0.0
+      partial_tp_ratio: 0.0
+
   btc_swing:
     base_volume: 0.01
     brain_types:
     - xgboost_v9
-    - lightgbm_v1
+    # lightgbm_v1 moved to btc_swing_h1 (DQAF-20260615-002)
     budget:
       daily_loss_limit_pct: -0.03
       max_consecutive_losses: 5

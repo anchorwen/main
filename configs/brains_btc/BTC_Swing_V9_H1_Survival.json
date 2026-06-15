@@ -2,7 +2,7 @@
   "schema_version": "brain_registry_entry.v1",
   "brain_id": "BTC_Swing_V9_H1_Survival",
   "brain_type": "lightgbm_v1",
-  "contract_group": "btc_swing",
+  "contract_group": "btc_swing_h1",
   "training_contract": "btc_swing",
   "feature_schema": "btc_macro_enhanced_37",
   "feature_schema_id": "btc_macro_enhanced_37",
