@@ -1,0 +1,33 @@
+{
+  "schema_version": "xau_directional_v2.v1",
+  "timeframe": "H1",
+  "sl_atr_mult": 2.0,
+  "tp_atr_mult": 3.5,
+  "n_features": 35,
+  "feature_schema": "swing_enhanced_35",
+  "models": {
+    "lightgbm": {
+      "directional_accuracy_mean": 0.4399415848954963,
+      "directional_accuracy_std": 0.22324402049188377,
+      "long_recall_mean": 0.6816371681415929,
+      "long_recall_std": 0.410723638373546,
+      "short_recall_mean": 0.10130208333333332,
+      "short_recall_std": 0.20260416666666664,
+      "bt_total_trades": 6295,
+      "bt_win_rate": 0.5472597299444003,
+      "bt_total_r": 3178.75
+    },
+    "xgboost": {
+      "directional_accuracy_mean": 0.517530799519959,
+      "directional_accuracy_std": 0.05332915272533938,
+      "long_recall_mean": 0.48941280906584295,
+      "long_recall_std": 0.20708043294632725,
+      "short_recall_mean": 0.4097584231145216,
+      "short_recall_std": 0.2717087659133087,
+      "bt_total_trades": 7379,
+      "bt_win_rate": 0.5136197316709581,
+      "bt_total_r": 3043.5
+    }
+  },
+  "trained_at": "2026-06-15T10:58:33.012589+00:00"
+}

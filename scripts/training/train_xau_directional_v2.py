@@ -413,33 +413,47 @@ def compute_directional_labels(
     horizon: int, sl_atr_mult: float, tp_atr_mult: float,
     spread_points: float, slippage_points: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Bidirectional labels with real friction."""
-    n_bars = len(o)
-    labels = np.zeros(n_bars, dtype=np.float32)
-    pnl_r = np.zeros(n_bars, dtype=np.float32)
-    hold_bars = np.zeros(n_bars, dtype=np.int32)
-    atr = np.zeros(n_bars)
-    for i in range(100, n_bars):
+    """Directional labels — V1-compatible: entry at NEXT bar open, select winning direction."""
+    n = len(o)
+    labels = np.zeros(n, dtype=np.float32)
+    pnl_r = np.zeros(n, dtype=np.float32)
+    atr = np.zeros(n)
+    for i in range(14, n):
         atr[i] = _atr(h[:i + 1], l[:i + 1], c[:i + 1])
-    for i in range(100, n_bars - horizon - 1):
-        sl_dist = sl_atr_mult * atr[i]
-        tp_dist = tp_atr_mult * atr[i]
-        # Long entry
-        long_entry = c[i] + slippage_points
-        long_sl = long_entry - sl_dist - spread_points
-        long_tp = long_entry + tp_dist - spread_points
-        # Short entry
-        short_entry = c[i] - slippage_points
-        short_sl = short_entry + sl_dist + spread_points
-        short_tp = short_entry - tp_dist + spread_points
-        # Simulate both
-        l_res, l_r, l_bars = _simulate_one_trade(o, h, l, c, i, horizon, long_entry, long_sl, long_tp, "long")
-        s_res, s_r, s_bars = _simulate_one_trade(o, h, l, c, i, horizon, short_entry, short_sl, short_tp, "short")
-        # Combine: LONG=+1 label, SHORT=-1 label
-        labels[i] = float(l_res) + float(s_res)
-        pnl_r[i] = l_r + s_r
-        hold_bars[i] = max(l_bars, s_bars)
-    return labels, pnl_r, hold_bars
+    half_sp = spread_points / 2.0
+    n_long = n_short = n_neutral = 0
+    for i in range(14, n - horizon - 1):
+        if atr[i] <= 0:
+            continue
+        sl_raw = sl_atr_mult * atr[i]
+        tp_raw = max(tp_atr_mult * atr[i], sl_raw * 0.3)
+        # Long simulation: entry at next bar open + half_spread + slippage
+        entry_long = o[i + 1] + half_sp + slippage_points
+        lo, _, _ = _simulate_one_trade(
+            o, h, l, c, i, horizon,
+            entry_long, entry_long - sl_raw, entry_long + tp_raw, "long",
+        )
+        # Short simulation: entry at next bar open - half_spread - slippage
+        entry_short = o[i + 1] - half_sp - slippage_points
+        so, _, _ = _simulate_one_trade(
+            o, h, l, c, i, horizon,
+            entry_short, entry_short + sl_raw, entry_short - tp_raw, "short",
+        )
+        # Select winning direction — discard conflicting/neutral signals
+        if lo == 1 and so != 1:
+            labels[i] = 1.0
+            pnl_r[i] = tp_raw / max(sl_raw, 1e-9)
+            n_long += 1
+        elif so == 1 and lo != 1:
+            labels[i] = -1.0
+            pnl_r[i] = tp_raw / max(sl_raw, 1e-9)
+            n_short += 1
+        else:
+            n_neutral += 1
+    total = n_long + n_short + n_neutral
+    if total > 0:
+        print(f"  Labels: LONG={n_long} ({100*n_long/total:.1f}%) SHORT={n_short} ({100*n_short/total:.1f}%) NEUTRAL={n_neutral} ({100*n_neutral/total:.1f}%)")
+    return labels, pnl_r, np.zeros(n, dtype=np.int32)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
