@@ -1469,7 +1469,11 @@ class StrategyLine:
         # (FIX-086), add an absolute floor: if p_win is below the
         # RR-implied breakeven, the trade is unconditionally negative EV
         # regardless of timeout/trailing exit mechanics.
-        if _is_low_rr and _p_win < _rr_breakeven:
+        # FIX-20260615-009h: cold-explore bypass — allow minimum-volume
+        # exploration trades through even when RR < 1.0, matching the
+        # hard p_win gate pattern at line 1395.  Without this, MetaFilter-
+        # absent strategies with low RR are permanently blocked.
+        if _is_low_rr and _p_win < _rr_breakeven and not _is_cold_explore:
             return StrategyDecision(
                 strategy_name=name,
                 magic=self.config.magic,

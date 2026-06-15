@@ -53,12 +53,12 @@ brains:
   - path: configs/brains/Swing_V10_M15.json
     enabled: false
   - path: configs/brains/Swing_V9_H4_V2.json
-    enabled: false  # 99% LONG bias — replaced by V10 directional
+    enabled: true  # FIX-20260615-009h: RE-ENABLED — h4_swing had zero enabled brains
   - path: configs/brains/Swing_V9_H1_V2.json
-    enabled: false  # 90% SHORT bias — replaced by V10 directional
+    enabled: true  # FIX-20260615-009h: RE-ENABLED — V10 schema broken (swing_enhanced_37→BTC alias)
   # ── FIX-20260611-005: XAU Directional brains ──
   - path: configs/brains/Swing_V10_H1_Directional.json
-    enabled: true
+    enabled: false  # FIX-20260615-009h: DISABLED — schema 'swing_enhanced_37'=BTC alias, model 37-dim≠swing_enhanced_35(35)
   - path: configs/brains/Swing_LGB_M30_V1.json
     enabled: false
   - path: configs/brains/Swing_LGB_M15_V1.json
