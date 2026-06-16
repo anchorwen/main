@@ -292,6 +292,8 @@ class LiveCycleState:
     # triggers circuit breaker (data pipeline freeze → fail-closed).
     _consecutive_stale_cycles: int = 0
     _consecutive_stale_features: int = 0  # Phase B: feature store staleness → circuit breaker
+    # ── DQAF-20260616-002/P0.1: zombie cycle fuse ──
+    _consecutive_cycle_errors: int = 0  # consecutive except-cycle errors → sys.exit(1) at 5
 
     # Regime gate fail-closed: stale counter for fail-open → fail-closed migration
     _regime_gate_stale_counter: int = 0
@@ -2747,13 +2749,41 @@ def execute_live_cycle(
         # Market close-all protects capital when the system is in an
         # unknown or degraded state.
         if not config.no_mt5 and mt5_worker is not None:
+            # ── DQAF-20260616-002/P0.2: Circuit breaker MT5 calls with timeout ──
+            # Circuit breaker triggers during extreme market conditions (high
+            # volatility, server lag).  Use 10s for positions_get (query) and
+            # 15s for order_send (execution) — tight enough to avoid indefinite
+            # block, loose enough to tolerate stressed MT5 server response.
+            from core.runtime.fault_handler import (
+                _MT5_TIMEOUT_SENTINEL,
+                mt5_call_with_timeout,
+            )
             try:
-                _open_positions = mt5_worker.positions_get(symbol=config.symbol) or []
+                _open_positions = mt5_call_with_timeout(
+                    mt5_worker.positions_get, symbol=config.symbol, timeout=10.0
+                )
+                if _open_positions is _MT5_TIMEOUT_SENTINEL:
+                    _open_positions = None  # timeout → skip close, retry next breaker cycle
+                    print(
+                        json.dumps(
+                            {
+                                "event": "circuit_breaker_positions_get_timeout",
+                                "time": _utc_iso(),
+                                "timeout_s": 10.0,
+                                "reason": "MT5 positions_get blocked >10s — skip close this cycle",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                else:
+                    _open_positions = _open_positions or []
                 # ── FIX-20260608-005: bridge liveness heartbeat ──
                 # positions_get() success proves MT5 bridge is alive even
                 # during management-only mode.  Update heartbeat so the
                 # cooldown-based auto-reset can detect bridge recovery.
-                state._last_bridge_ack_time = time.time()
+                if _open_positions is not None:
+                    state._last_bridge_ack_time = time.time()
                 if _open_positions:
                     _closed_any = False
                     for _pos in _open_positions:
@@ -2762,7 +2792,8 @@ def execute_live_cycle(
                         _vol = float(getattr(_pos, "volume", 0) or 0)
                         _close_side = "buy" if _side == "short" else "sell"
                         with fail_open_guard("CircuitBreakerClose"):
-                            _cb_result = mt5_worker.order_send(
+                            _cb_result = mt5_call_with_timeout(
+                                mt5_worker.order_send,
                                 {
                                     "symbol": config.symbol,
                                     "order_type": 1,  # Market
@@ -2770,9 +2801,26 @@ def execute_live_cycle(
                                     "side": _close_side,
                                     "ticket": _ticket,
                                     "magic": getattr(_pos, "magic", 0),
-                                }
+                                },
+                                timeout=15.0,
                             )
-                            _closed_any = True
+                            if _cb_result is _MT5_TIMEOUT_SENTINEL:
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "circuit_breaker_order_send_timeout",
+                                            "time": _utc_iso(),
+                                            "ticket": _ticket,
+                                            "side": _side,
+                                            "timeout_s": 15.0,
+                                            "reason": "MT5 order_send blocked >15s",
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
+                            else:
+                                _closed_any = True
                             print(
                                 json.dumps(
                                     {
@@ -2988,6 +3036,20 @@ def execute_live_cycle(
     # only contains actually-open positions.  Otherwise _active_open_mids
     # includes stale entries → bootstrap skips the most recent close →
     # falls back to ancient exit → stale_exit_allowed → restart-immediate-trade.
+    # ── DQAF-20260616-002/P0.3: Phase 1 boundary log ──
+    print(
+        json.dumps(
+            {
+                "event": "phase_transition",
+                "phase": "1_startup_bootstrap",
+                "phase_label": "Startup & restart bootstrap",
+                "time": _utc_iso(),
+                "cycle": state.cycle_count,
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
     if state.loop_iteration == 1 and not config.no_mt5:
         _bootstrap_restart_state(state, str(journal_path), config)
         for _rs in state._reentry_states.values():
@@ -3152,6 +3214,20 @@ def execute_live_cycle(
     # Run on every Nth cycle (reconciliation_interval), AND on the very first
     # cycle after a restart if known_open_tickets was bootstrapped from the
     # journal — this prevents a dispatch from slipping through before the
+    # ── DQAF-20260616-002/P0.3: Phase 2 boundary log ──
+    print(
+        json.dumps(
+            {
+                "event": "phase_transition",
+                "phase": "2_reconcile_positions",
+                "phase_label": "Reconcile closed positions",
+                "time": _utc_iso(),
+                "cycle": state.cycle_count,
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
     # first scheduled reconciliation detects a stop-loss cascade.
     _run_reconciliation = state.loop_iteration % config.reconciliation_interval == 0
     if not state._initial_reconciliation_done and state.known_open_tickets:
@@ -4089,6 +4165,20 @@ def execute_live_cycle(
     # Moved BEFORE position-limit check so the feature store stays fresh even
     # when every strategy is at max positions.  A stale store silently degrades
     # signal quality on the next cycle that DOES trade.
+    # ── DQAF-20260616-002/P0.3: Phase 4 boundary log ──
+    print(
+        json.dumps(
+            {
+                "event": "phase_transition",
+                "phase": "4_feature_computation",
+                "phase_label": "Feature computation",
+                "time": _utc_iso(),
+                "cycle": state.cycle_count,
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
     micro_sequences: dict[str, np.ndarray] = {}
     # micro_feature_dict initialised above (before management phase) — reused here
     from core.features.schemas.registry import get_schema_dimension as _schema_dim
@@ -4441,6 +4531,20 @@ def execute_live_cycle(
     _vol_targeted = False
 
     # ── Fetch account equity (used for risk budget + portfolio VaR threshold) ──
+    # ── DQAF-20260616-002/P0.3: Phase 6 boundary log ──
+    print(
+        json.dumps(
+            {
+                "event": "phase_transition",
+                "phase": "6_risk_budget",
+                "phase_label": "Account equity & risk budget",
+                "time": _utc_iso(),
+                "cycle": state.cycle_count,
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
     _account_equity: float | None = None
     try:
         if broker is not None:
@@ -5231,6 +5335,20 @@ def execute_live_cycle(
                 _heartbeat_cal.compute_threshold()
                 _heartbeat_cal._save_state()  # DQAF-002c: persist immediately
 
+        # ── DQAF-20260616-002/P0.3: Phase 7 boundary log ──
+        print(
+            json.dumps(
+                {
+                    "event": "phase_transition",
+                    "phase": "7_strategy_evaluation",
+                    "phase_label": "Multi-strategy evaluation",
+                    "time": _utc_iso(),
+                    "cycle": state.cycle_count,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
         # Evaluate all strategy lines
         eval_summary = _evaluate_strategy_lines(
             strategy_lines=strategies,

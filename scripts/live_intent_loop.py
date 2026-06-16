@@ -2227,6 +2227,10 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 state.last_heartbeat = time.time()  # FIX-003: cycle completed
                 _degraded_wakeup = False  # consumed, reset for next cycle
+                # ── DQAF-20260616-002/P0.1: Reset consecutive error counter ──
+                # A successful cycle resets the zombie-state fuse so that only
+                # truly persistent silent-degrade loops trigger the kill-switch.
+                state._consecutive_cycle_errors = 0
                 # Reload tracker if daily_ops enriched it with realized P&L
                 if state._tracker_reload_pending:
                     try:
@@ -2250,6 +2254,16 @@ def main(argv: list[str] | None = None) -> int:
                     state._circuit_breaker_tripped = True
                     state._circuit_breaker_tripped_at = time.time()
                     state.block_new_entries = True
+
+                # ── DQAF-20260616-002/P0.1: Consecutive cycle error fuse ──────
+                # A single swallowed exception can corrupt the state machine and
+                # cause all subsequent cycles to silently skip the trading path
+                # (zombie state — heartbeat alive, no trades).  This fuse counts
+                # consecutive failing cycles and force-kills the process after 5,
+                # letting the launcher restart with a clean state.
+                # Persisted on state so it survives across loop iterations.
+                _consec = getattr(state, "_consecutive_cycle_errors", 0) + 1
+                state._consecutive_cycle_errors = _consec
                 _tb = traceback.format_exc()
                 print(
                     json.dumps(
@@ -2260,11 +2274,54 @@ def main(argv: list[str] | None = None) -> int:
                             "error_type": type(exc).__name__,
                             "traceback": _tb,
                             "circuit_breaker_tripped": state._circuit_breaker_tripped,
+                            "consecutive_cycle_errors": _consec,
                         },
                         ensure_ascii=False,
                     ),
                     flush=True,
                 )
+                if _consec >= 5:
+                    # ── Fuse blown: log final traceback to alert_audit ──
+                    _fuse_msg = (
+                        f"[DQAF-20260616-002] ZOMBIE_CYCLE_FUSE_BLOWN: "
+                        f"{_consec} consecutive cycle failures. "
+                        f"Last error: {type(exc).__name__}: {exc!s:.500}. "
+                        f"Force-exiting to break silent-degrade loop."
+                    )
+                    try:
+                        from core.feedback.live_alert_hub import LiveAlertHub
+                        _ah = getattr(state, "_alert_hub", None)
+                        if _ah is None:
+                            _ah = LiveAlertHub(
+                                log_dir=f"{config.base_dir}/logs",
+                                ding_webhook_url=getattr(config, "ding_webhook_url", ""),
+                            )
+                        _ah.fire(
+                            "zombie_cycle_fuse_blown",
+                            severity="critical",
+                            title="[DQAF-002] 连续循环异常熔断触发",
+                            detail={
+                                "consecutive_errors": _consec,
+                                "last_error_type": type(exc).__name__,
+                                "last_error": str(exc)[:500],
+                                "last_traceback": _tb[:2000],
+                                "cycle_count": getattr(state, "cycle_count", -1),
+                            },
+                        )
+                    except Exception:
+                        pass
+                    # Write kill log (same pattern as watchdog for diagnostics)
+                    try:
+                        with open("watchdog_kill.log", "a", encoding="utf-8") as _wf:
+                            _wf.write(
+                                f"[{_utc_iso()}] ZOMBIE_CYCLE_FUSE PID={_os_module.getpid()}. "
+                                f"consecutive_errors={_consec}. "
+                                f"last_error={type(exc).__name__}: {exc!s:.300}\n"
+                                f"traceback_head={_tb[:1000]}\n"
+                            )
+                    except OSError:
+                        pass
+                    _os_module._exit(3)  # exit code 3 = zombie cycle fuse (distinct from watchdog=1)
                 if args.once:
                     break
 

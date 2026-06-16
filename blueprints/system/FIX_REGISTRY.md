@@ -33,6 +33,7 @@ FIX-YYYYMMDD-NNN
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
 | FIX-20260616-002 | 2026-06-16 | runtime-live | **Strangler Fig #14 — OU/Hurst pure function extraction**: `_compute_tf_ou_hurst()` (32-line pure math, OU Theta + Hurst R/S) extracted from `live_cycle.py` → `core/runtime/ou_hurst.py`. Zero-I/O, deterministic function with 13 parameterized tests. Replaced 1 BLE001 site (`_save_recent_prices`) with `fail_open_guard("RecentPricesSave")`. Removed unused `import math` from live_cycle.py. BLE001: 42→41. Iron Law #10 compliance: 1 BLE001 replaced on hot path modification. | RC-08 |
+| FIX-20260616-101 | 2026-06-16 | runtime-live, fault-handler | **Zombie Cycle Fuse + MT5 Timeout Hardening + Phase Telemetry (DQAF-20260616-002)**: (P0.1) live_intent_loop 主循环 except handler 新增连续失败计数器 `_consecutive_cycle_errors` — ≥5 → `sys.exit(3)` 熔断打破假活循环, 退出前写 alert_audit + watchdog_kill.log. (P0.2) 断路器关仓路径 `positions_get`/`order_send` 加装 `mt5_call_with_timeout` (10s/15s). (P0.3) live_cycle 5 个关键 Phase 加入 `phase_transition` 边界日志. (P1.2) execution_state.save() 加入 state invariant auto_heal: `circuit_breaker_tripped_at` 残留清理 + `trip_reason` 缺失默认值. | DQAF-20260616-002 |
 | FIX-20260616-100 | 2026-06-16 | execution-guards, runtime-live | **L3 Architecture Fix — Reentry Guard Strategy-Type Awareness (DQAF-20260616-001)**: 三层修复: (L1/L2) exit_reason.classify() 词汇表补全 + restart_state _reason 用 label 而非 MT5 端原因. (L3) reentry_guard 新增 `is_rule_based` 参数 → rule-based 策略使用时间冷却 (max(120s, 40% bar)) 而非 ML 置信度阈值 → 永久消除 rule-based 策略被 ML 门禁死锁的结构性漏洞. Magic 90501 双侧死锁已确认解除. | RC-07 |
 | FIX-20260616-003 | 2026-06-16 | execution, strategies | **Direction Selection Fallacy + P3 classify() extension (DQAF-20260616-003)**: (Main) RuleEngineStrategyWrapper 奇偶校验→永远 SHORT 修复为 trend_direction 趋势信号. (P3) classify() 新增 "close_accepted"→TIME_EXPIRED — m30_swing 的 8 次 close_accepted 退出此前落入 UNKNOWN 导致 reentry guard 阻塞. | RC-05 |
 | FIX-20260616-001 | 2026-06-16 | runtime-live, observability | **Alert Sentinel Hardening: 告警中枢防线加固**: (F1) error_rate 从 state 退化计数派生→RULE-001 恢复. (F2) frozen_brain_count 从 governance 读取→RULE-004 恢复. (F6) governance 读取失败时 Fail-Close 指标(空数组)不 fallback 到全量大脑. (F7) 去重 key 含 symbol→BTC/XAU 告警不再互相压制. DQAF-20260615-012 Audit. | RC-06, RC-09 |
@@ -3137,3 +3138,14 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-05 — boundary-error: 计数器值域假设不成立, 3%2=1 恒真导致 else 分支不可达
 - **Prevention**: (1) 方向选择逻辑必须基于趋势信号而非计数器奇偶, (2) 每个分支必须有单元测试证明可达性
 - **Dependents Checked**: reentry_guard.py (via _classify_exit_reason shim, zero code change needed), strategy_evaluator.py (no change), managed_close.py (no change)
+
+### FIX-20260616-101
+- **Date**: 2026-06-16
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live, fault-handler
+- **Files**: scripts/live_intent_loop.py, core/runtime/live_cycle.py, core/runtime/execution_state.py
+- **Description**: Zombie Cycle Fuse + MT5 Timeout Hardening + Phase Telemetry (DQAF-20260616-002). 诊断确认 09:20→17:19 共 ~8h 假活状态 (进程在运行但不产生交易/快照/账本). 根因: 单次异常被 BLE001 吞咽后状态机损坏 → 所有后续 cycle 静默跳过策略评估 → 心跳正常 watchdog 不触发. 四层修复: (P0.1) 主循环 except handler 新增 `_consecutive_cycle_errors` 计数器 (state 持久化), ≥5 → `sys.exit(3)` 熔断, 退出前写 alert_audit + watchdog_kill.log. 成功完成 cycle 时计数器重置. (P0.2) 断路器关仓路径 `positions_get`/`order_send` 加装 `mt5_call_with_timeout` (10s/15s) — 极端行情下 MT5 响应慢, 短超时可致关仓失败=敞口. (P0.3) live_cycle 5 个关键 Phase 边界加入 `phase_transition` 日志 (Phase 1/2/4/6/7) — 下次假活可在 2 分钟内定位卡点. (P1.2) execution_state.save() 加入 state invariant auto_heal: `circuit_breaker_tripped=false ∧ tripped_at>0` → 自动清零; `circuit_breaker_tripped=true ∧ trip_reason=""` → 默认 "unknown_trip". 日志 tag="auto_heal" 支持 grep 周度对账.
+- **Root Cause**: RC-07 — missing-validation: 异常吞咽缺乏熔断机制. 主循环 except Exception 可无限次静默失败而不退出 → 状态机在无自检的情况下进入永久降级循环 (ZOMBIE_CYCLE_SILENT_DEGRADE 模式)
+- **Prevention**: (1) 所有 catch-all except 必须配备连续失败计数器 + 硬熔断阈值 ≤10, (2) 断路器路径 MT5 调用必须带 timeout (5-15s), (3) 关键 Phase 边界必须有 timestamp 日志, (4) execution_state 持久化必须自检关键 invariant 并 auto_heal
+- **Dependents Checked**: execution_state.load_execution_state() (compatible with auto-healed fields), live_intent_loop main loop (counter on state object, no new imports), circuit breaker (timeout sentinel handled with skip logic)

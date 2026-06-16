@@ -94,6 +94,36 @@ def save_execution_state(
     if family_entry_tracker is not None and hasattr(family_entry_tracker, "get_state"):
         payload["family_entry_tracker"] = family_entry_tracker.get_state()
 
+    # ── DQAF-20260616-002/P1.2: State machine invariant checks ────────────
+    # Auto-heal detectable inconsistencies before persisting.  These are
+    # tagged "auto_heal" for easy grep-based weekly reconciliation
+    # (count the drifts that occurred without crashing the system).
+    _heals: list[str] = []
+    if not circuit_breaker_tripped and circuit_breaker_tripped_at > 0:
+        _heals.append(
+            f"auto_heal:circuit_breaker_tripped_at_reset:"
+            f"breaker_not_tripped_but_timestamp={circuit_breaker_tripped_at:.0f}"
+        )
+        circuit_breaker_tripped_at = 0.0
+        payload["circuit_breaker_tripped_at"] = 0.0
+    if circuit_breaker_tripped and not circuit_breaker_trip_reason:
+        _heals.append("auto_heal:circuit_breaker_trip_reason_defaulted")
+        circuit_breaker_trip_reason = "unknown_trip"
+        payload["circuit_breaker_trip_reason"] = "unknown_trip"
+    if _heals:
+        print(
+            json.dumps(
+                {
+                    "event": "state_invariant_auto_heal",
+                    "time": _utc_iso(),
+                    "heal_count": len(_heals),
+                    "heals": _heals,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+
     # ── Atomic write ──
     try:
         tmp = p.with_suffix(p.suffix + ".tmp")
