@@ -190,7 +190,18 @@ class FeatureRouter:
                 for name, val in zip(_btc_names, _btc, strict=False):
                     lake[name] = float(val)
 
-        # Source 8: Caller-provided extras (future-proof injection point)
+        # Source 8: OFI Lite (Order Flow Imbalance from tick collector)
+        try:
+            from core.features.ofi_collector import get_ofi_collector
+            _ofi_collector = get_ofi_collector()
+            if _ofi_collector.is_warm:
+                _ofi = _ofi_collector.settle_m5_bar()
+                for k, v in _ofi.items():
+                    lake[k] = float(v) if (v is not None and np.isfinite(float(v))) else 0.0
+        except Exception:
+            pass  # OFI collector not available — lake just lacks these keys
+
+        # Source 9: Caller-provided extras (future-proof injection point)
         if extra_features:
             for k, v in extra_features.items():
                 lake[k] = float(v) if (v is not None and np.isfinite(float(v))) else 0.0

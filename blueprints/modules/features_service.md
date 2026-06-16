@@ -50,6 +50,7 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260616-097 | 2026-06-16 | cursor-agent | a7ae2ad | OFI Lite: Tick Rule order flow imbalance from MT5 symbol_info_tick. OFI_M5, OFI_ZScore_20, OFI_Cumulative_1H. Thread-safe, graceful degradation. Wired into market_ingress + Feature Lake. | contract-violation |
 | FIX-20260616-092 | 2026-06-16 | cursor-agent | e148ceb | Feature Router: dictionary-based lake + contract registry + Fail-Fast dispatch. BTC 41-dim, XAU 35-dim. FeatureMissingError/SchemaNotFoundError circuit-breakers. | contract-violation |
 | FIX-20260616-091 | 2026-06-16 | cursor-agent | d5c848d | Dimension cleanup: disabled BTC V4 (37-dim receiving 41-dim input — tensor alignment shift risk). Global rename btc_macro_enhanced_37→btc_macro_enhanced_41 (schema was ALWAYS 41 dims, name was lying). XAU Price_ZScore already correct in latest feature store records. TECH_DEBT-004: V4 41-dim retrain registered. | contract-violation |
 | FIX-20260615-006 | 2026-06-15 | cursor-agent | — | **XAU/BTC L3 交叉感染 (C4/C5): BTC 特征静默回退→Fail-Closed RuntimeError; btc_macro_enhanced_37 维度 37→41** | L3 — 静默回退到 XAU 特征 |
