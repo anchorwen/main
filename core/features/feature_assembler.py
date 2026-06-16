@@ -204,7 +204,7 @@ def _build_swing_vector(
 
     _router = get_router()
     _lake = _router.build_lake(
-        legacy_v9_vector=legacy_v9_vector,
+        legacy_v9_vector=daily_features,  # daily_features IS the V9 40-dim vector here
         daily_features=daily_features,
         micro_features=micro_features,
         tf_ou=_ou,

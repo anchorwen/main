@@ -15,7 +15,7 @@ from typing import Any
 
 from core.features.schemas.btc_macro_enhanced_schema import (
     BTC_MACRO_ENHANCED_37_FEATURES,
-    BTC_MACRO_ENHANCED_41_FEATURES,
+    BTC_MACRO_ENHANCED_41_FEATURES,  # noqa: F401 — canonical name, imported for re-export
 )
 from core.features.schemas.daily_swing_schema import DAILY_SWING_24_FEATURES
 from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
