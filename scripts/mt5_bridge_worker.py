@@ -865,42 +865,6 @@ def run_worker(args: argparse.Namespace) -> int:
         except Exception as exc:  # noqa: BLE001
             print(f"[bridge] WARN: MT5 unavailable: {exc}", flush=True)
 
-    # ── FIX-20260616-097: OFI TickPoller daemon thread ──
-    # Polls symbol_info_tick every 1s, deduplicates by time_msc,
-    # and feeds the OFICollector.  Runs as daemon — dies with the process.
-    _ofi_poller_stop = False
-    if mt5 is not None and args.default_symbol:
-        import threading as _thr
-
-        def _ofi_tick_poller() -> None:
-            _last_msc = 0
-            _symbol = str(args.default_symbol)
-            print(f"[bridge] OFI TickPoller started (symbol={_symbol}, interval=1s)", flush=True)
-            while not _ofi_poller_stop:
-                try:
-                    _tick = mt5.symbol_info_tick(_symbol)
-                    if _tick is not None:
-                        _msc = int(getattr(_tick, "time_msc", 0) or 0)
-                        if _msc > _last_msc:
-                            _last_msc = _msc
-                            try:
-                                from core.features.ofi_collector import get_ofi_collector
-                                _ofi = get_ofi_collector()
-                                _ofi.on_tick(
-                                    price=float(getattr(_tick, "last", 0) or 0),
-                                    bid=float(getattr(_tick, "bid", 0) or 0),
-                                    ask=float(getattr(_tick, "ask", 0) or 0),
-                                    volume=float(getattr(_tick, "volume", 0) or 0),
-                                )
-                            except Exception:
-                                pass  # OFI best-effort
-                except Exception:
-                    pass  # Poll failure — retry next cycle
-                _thr.Event().wait(1.0)  # 1s interval
-
-        _poller = _thr.Thread(target=_ofi_tick_poller, daemon=True, name="ofi-tick-poller")
-        _poller.start()
-
     health_path = (
         Path(args.health_path)
         if args.health_path
