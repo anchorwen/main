@@ -361,18 +361,13 @@ DAILY_OPS_STATE_PATH = "data/state/daily_ops_state.json"  # legacy default; over
 
 def _load_daily_ops_state(base_dir: str) -> float:
     """Restore last daily_ops timestamp from disk. Returns 0.0 if not found."""
-    try:
+    # ── DQAF-20260616-101/P1.3: BLE001 → log_and_continue ──
+    with log_and_continue("DailyOpsStateRead"):
         state_path = os.path.join(base_dir, "state", "daily_ops_state.json")
         if os.path.exists(state_path):
             with open(state_path) as f:
                 data = json.load(f)
             return float(data.get("last_daily_ops_utc", 0.0))
-    except Exception as _exc:  # noqa: BLE001
-        import logging as _logging
-
-        _logging.getLogger(__name__).warning(
-            "Failed to read daily_ops_state: %s", _exc, exc_info=True
-        )
     return 0.0
 
 
@@ -492,7 +487,8 @@ def _dispatch_modify_trail(
         if _open_msg_id:
             payload["open_message_id"] = _open_msg_id
 
-    try:
+    # ── DQAF-20260616-101/P1.3: BLE001 → fail_open_guard ──
+    with fail_open_guard("TrailSLDispatch"):
         dispatch_live_order(
             base_dir=config.base_dir,
             broker=None,
@@ -503,21 +499,6 @@ def _dispatch_modify_trail(
             protection_flag_path=config.protection_flag_path,
             adapter_name=config.adapter_name,
             extensions={"mt5_terminal_path": config.mt5_terminal_path},
-        )
-    except Exception as exc:  # noqa: BLE001
-        print(
-            json.dumps(
-                {
-                    "event": "trail_dispatch_error",
-                    "time": _utc_iso(),
-                    "error": f"{type(exc).__name__}: {str(exc)[:200]}",
-                    "level": "DEGRADE",
-                    "reason": reason,
-                    "new_sl": new_sl,
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
         )
 
 
@@ -1070,7 +1051,12 @@ def _execute_management_phase(
             level=FaultLevel.DEGRADE,
             component="MT5_IPC:copy_rates_from_pos:M5_OHLC_tracking",
         ):
-            _m5_rates = mt5_worker.copy_rates_from_pos(config.symbol, 5, 0, 1)  # TIMEFRAME_M5
+            # ── DQAF-20260616-101/P1.1: timeout-wrapped MT5 call ──
+            _m5_rates = mt5_call_with_timeout(
+                mt5_worker.copy_rates_from_pos, config.symbol, 5, 0, 1, timeout=5.0
+            )  # TIMEFRAME_M5
+            if _m5_rates is _MT5_TIMEOUT_SENTINEL:
+                _m5_rates = None  # timeout → skip OHLC tracking this cycle
             if _m5_rates is not None and len(_m5_rates) > 0:
                 _m5_bar = _m5_rates[0]
                 _m5_high = float(_m5_bar["high"])
@@ -1751,7 +1737,8 @@ def _execute_management_phase(
                 ):
                     for b_info in brains:
                         if b_info.get("brain_type") == "ou_params_v6":
-                            try:
+                            # ── DQAF-20260616-101/P1.3: BLE001 → log_and_continue ──
+                            with log_and_continue("OUBrainExit"):
                                 raw_ou = b_info["adapter"].infer(np.array([mid], dtype=np.float32))
                                 ou_z = float(raw_ou.get("z_score", 0.0))
                                 should_ou_exit, ou_reason = pm.should_exit_ou_based(
@@ -1788,8 +1775,7 @@ def _execute_management_phase(
                                     if _dispatched:
                                         pm.clear_position(ticket=pos.ticket)
                                     return True
-                            except Exception:  # noqa: BLE001
-                                logger.warning("OU brain exit failed — continuing management")
+                            # (BLE001 replaced with log_and_continue("OUBrainExit") — DQAF-20260616-101/P1.3)
                             break  # only one OU brain
 
                 should_exit = False
@@ -2631,8 +2617,36 @@ def execute_live_cycle(
     # the 7-scattered-kwargs anti-pattern that caused P0-1 (closure forgot
     # adapter_name → TypeError in net_out close path).
     from core.contracts.domain.dispatch_context import build_dispatch_context
+    from core.runtime.fault_handler import (  # DQAF-20260616-101/P1.1: MT5 timeout for all call sites
+        _MT5_TIMEOUT_SENTINEL,
+        mt5_call_with_timeout,
+    )
 
     dispatch_ctx = build_dispatch_context(config)
+
+    # ── DQAF-20260616-002/P2: Phase telemetry file writer ────────────────
+    # Writes phase_transition events to both stdout (for live tail -f) and
+    # data_btc/logs/phase_telemetry.jsonl (for post-mortem baseline analysis).
+    # Single-line JSON append — ~80 bytes/event, zero measurable overhead.
+    _telemetry_path = Path(config.base_dir) / "logs" / "phase_telemetry.jsonl"
+
+    def _log_phase_transition(phase: str, phase_label: str) -> None:
+        _entry = json.dumps(
+            {
+                "event": "phase_transition",
+                "phase": phase,
+                "phase_label": phase_label,
+                "time": _utc_iso(),
+                "cycle": state.cycle_count,
+            },
+            ensure_ascii=False,
+        )
+        print(_entry, flush=True)
+        try:
+            with open(_telemetry_path, "a", encoding="utf-8") as _ptf:
+                _ptf.write(_entry + "\n")
+        except OSError:
+            pass  # disk full / permission — non-fatal, stdout still works
 
     state.loop_iteration += 1
 
@@ -2758,7 +2772,8 @@ def execute_live_cycle(
                 _MT5_TIMEOUT_SENTINEL,
                 mt5_call_with_timeout,
             )
-            try:
+            # ── DQAF-20260616-101/P1.3: BLE001 → fail_open_guard ──
+            with fail_open_guard("CircuitBreakerCloseAll"):
                 _open_positions = mt5_call_with_timeout(
                     mt5_worker.positions_get, symbol=config.symbol, timeout=10.0
                 )
@@ -2839,18 +2854,7 @@ def execute_live_cycle(
                         # After emergency close, reset the circuit breaker
                         state._circuit_breaker_tripped = False
                         state.block_new_entries = True  # keep blocked — manual review needed
-            except Exception as _cb_exc:  # noqa: BLE001
-                print(
-                    json.dumps(
-                        {
-                            "event": "circuit_breaker_close_all_failed",
-                            "time": _utc_iso(),
-                            "error": str(_cb_exc)[:200],
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+            # (BLE001 replaced with fail_open_guard("CircuitBreakerCloseAll") — DQAF-20260616-101/P1.3)
     # ── Phase B: Cycle stall detection (FIX-20260613-052: resolved placeholder) ──
     # A single cycle taking longer than cycle_stall_threshold_seconds is a
     # strong signal of pipeline blockage (MT5 hang, feature computation stall,
@@ -2971,7 +2975,14 @@ def execute_live_cycle(
             level=FaultLevel.DEGRADE,
             component="MT5_IPC:positions_get:startup_reconciliation",
         ):
-            _positions = mt5_worker.positions_get(symbol=config.symbol) or []
+            # ── DQAF-20260616-101/P1.1: timeout-wrapped MT5 call ──
+            _positions = mt5_call_with_timeout(
+                mt5_worker.positions_get, symbol=config.symbol, timeout=5.0
+            )
+            if _positions is _MT5_TIMEOUT_SENTINEL:
+                _positions = []  # timeout → skip reconciliation this cycle
+            else:
+                _positions = _positions or []
         with log_and_continue(component="StartupReconciliation"):
             _open_tickets = {p.ticket for p in _positions}
             _gone_tickets = set(state.known_open_tickets.keys()) - _open_tickets
@@ -3037,19 +3048,7 @@ def execute_live_cycle(
     # includes stale entries → bootstrap skips the most recent close →
     # falls back to ancient exit → stale_exit_allowed → restart-immediate-trade.
     # ── DQAF-20260616-002/P0.3: Phase 1 boundary log ──
-    print(
-        json.dumps(
-            {
-                "event": "phase_transition",
-                "phase": "1_startup_bootstrap",
-                "phase_label": "Startup & restart bootstrap",
-                "time": _utc_iso(),
-                "cycle": state.cycle_count,
-            },
-            ensure_ascii=False,
-        ),
-        flush=True,
-    )
+    _log_phase_transition("1_startup_bootstrap", "Startup & restart bootstrap")
     if state.loop_iteration == 1 and not config.no_mt5:
         _bootstrap_restart_state(state, str(journal_path), config)
         for _rs in state._reentry_states.values():
@@ -3123,7 +3122,14 @@ def execute_live_cycle(
                                 except (TypeError, ValueError):
                                     pass
                     _ap_tickets.discard(0)  # remove any zero placeholder
-            _mt5_positions = mt5_worker.positions_get(symbol=config.symbol) or []
+            # ── DQAF-20260616-101/P1.1: timeout-wrapped MT5 call ──
+            _mt5_positions = mt5_call_with_timeout(
+                mt5_worker.positions_get, symbol=config.symbol, timeout=5.0
+            )
+            if _mt5_positions is _MT5_TIMEOUT_SENTINEL:
+                _mt5_positions = []  # timeout → skip orphan detection this cycle
+            else:
+                _mt5_positions = _mt5_positions or []
             _mt5_tickets = {p.ticket for p in _mt5_positions}
             _orphans = _mt5_tickets - _ap_tickets - set(state.known_open_tickets.keys())
             if _orphans:
@@ -3215,19 +3221,7 @@ def execute_live_cycle(
     # cycle after a restart if known_open_tickets was bootstrapped from the
     # journal — this prevents a dispatch from slipping through before the
     # ── DQAF-20260616-002/P0.3: Phase 2 boundary log ──
-    print(
-        json.dumps(
-            {
-                "event": "phase_transition",
-                "phase": "2_reconcile_positions",
-                "phase_label": "Reconcile closed positions",
-                "time": _utc_iso(),
-                "cycle": state.cycle_count,
-            },
-            ensure_ascii=False,
-        ),
-        flush=True,
-    )
+    _log_phase_transition("2_reconcile_positions", "Reconcile closed positions")
     # first scheduled reconciliation detects a stop-loss cascade.
     _run_reconciliation = state.loop_iteration % config.reconciliation_interval == 0
     if not state._initial_reconciliation_done and state.known_open_tickets:
@@ -3533,9 +3527,12 @@ def execute_live_cycle(
                 level=FaultLevel.DEGRADE,
                 component="MT5_IPC:copy_rates_from_pos:bootstrap",
             ):
-                _hist_rates = mt5_worker.copy_rates_from_pos(
-                    config.symbol, 5, 0, 200
+                # ── DQAF-20260616-101/P1.1: timeout-wrapped MT5 call ──
+                _hist_rates = mt5_call_with_timeout(
+                    mt5_worker.copy_rates_from_pos, config.symbol, 5, 0, 200, timeout=5.0
                 )  # TIMEFRAME_M5
+                if _hist_rates is _MT5_TIMEOUT_SENTINEL:
+                    _hist_rates = None  # timeout → skip bootstrap this cycle
                 if _hist_rates is not None and len(_hist_rates) >= 6:
                     _closes = [float(r[4]) for r in _hist_rates]
                     state._mtf_price_service.bootstrap(_closes)
@@ -4166,19 +4163,7 @@ def execute_live_cycle(
     # when every strategy is at max positions.  A stale store silently degrades
     # signal quality on the next cycle that DOES trade.
     # ── DQAF-20260616-002/P0.3: Phase 4 boundary log ──
-    print(
-        json.dumps(
-            {
-                "event": "phase_transition",
-                "phase": "4_feature_computation",
-                "phase_label": "Feature computation",
-                "time": _utc_iso(),
-                "cycle": state.cycle_count,
-            },
-            ensure_ascii=False,
-        ),
-        flush=True,
-    )
+    _log_phase_transition("4_feature_computation", "Feature computation")
     micro_sequences: dict[str, np.ndarray] = {}
     # micro_feature_dict initialised above (before management phase) — reused here
     from core.features.schemas.registry import get_schema_dimension as _schema_dim
@@ -4532,19 +4517,7 @@ def execute_live_cycle(
 
     # ── Fetch account equity (used for risk budget + portfolio VaR threshold) ──
     # ── DQAF-20260616-002/P0.3: Phase 6 boundary log ──
-    print(
-        json.dumps(
-            {
-                "event": "phase_transition",
-                "phase": "6_risk_budget",
-                "phase_label": "Account equity & risk budget",
-                "time": _utc_iso(),
-                "cycle": state.cycle_count,
-            },
-            ensure_ascii=False,
-        ),
-        flush=True,
-    )
+    _log_phase_transition("6_risk_budget", "Account equity & risk budget")
     _account_equity: float | None = None
     try:
         if broker is not None:
@@ -5092,7 +5065,12 @@ def execute_live_cycle(
             ):  # fmt: skip
                 from core.contracts.strategy_magic import MAGIC_TO_STRATEGY as _MAGIC_TO_STRATEGY
 
-                _mt5_positions = mt5_worker.positions_get(symbol=config.symbol)
+                # ── DQAF-20260616-101/P1.1: timeout-wrapped MT5 call ──
+                _mt5_positions = mt5_call_with_timeout(
+                    mt5_worker.positions_get, symbol=config.symbol, timeout=5.0
+                )
+                if _mt5_positions is _MT5_TIMEOUT_SENTINEL:
+                    _mt5_positions = None  # timeout → skip portfolio mapping this cycle
                 _mt5_ok = True  # query succeeded
                 if _mt5_positions:
                     for _mp in _mt5_positions:
@@ -5336,19 +5314,7 @@ def execute_live_cycle(
                 _heartbeat_cal._save_state()  # DQAF-002c: persist immediately
 
         # ── DQAF-20260616-002/P0.3: Phase 7 boundary log ──
-        print(
-            json.dumps(
-                {
-                    "event": "phase_transition",
-                    "phase": "7_strategy_evaluation",
-                    "phase_label": "Multi-strategy evaluation",
-                    "time": _utc_iso(),
-                    "cycle": state.cycle_count,
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
+        _log_phase_transition("7_strategy_evaluation", "Multi-strategy evaluation")
         # Evaluate all strategy lines
         eval_summary = _evaluate_strategy_lines(
             strategy_lines=strategies,
