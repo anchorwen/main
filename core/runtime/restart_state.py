@@ -214,10 +214,17 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
         _close_price = _entry.get("detail", {}).get("close_price") or 0.0
         _ticket = _entry.get("position_ticket", 0)
         # Prefer the software-side close reason from `comment` (set by
-        # managed_close / exit_watchdog).  Falls back to the MT5-side
-        # `detail.reason` only when no software reason was recorded.
+        # managed_close / exit_watchdog).  Falls back to SW-assigned
+        # `label` ("win"/"loss"/"breakeven"/"sl_hit_first"/etc.),
+        # then to the MT5-side `detail.reason` only when neither exists.
+        #
+        # DQAF-20260616-001: previously `label` was skipped in the fallback
+        # chain → exits with no `comment` (e.g. structural_swing_v1) had
+        # _reason="mt5_deal_reason_3" → classify()→UNKNOWN → permanent
+        # reentry deadlock for rule-based strategies on restart.
         _reason = (
             _entry.get("comment", "").strip()
+            or str(_label or "").strip()
             or _entry.get("detail", {}).get("reason", "")
             or "unknown_close"
         )
