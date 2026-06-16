@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import os
 import time
 from dataclasses import dataclass, field
@@ -40,6 +39,7 @@ from core.runtime.fault_handler import (
 
 # ── Strategy line imports ──
 # ── Extracted sub-modules (P2 refactor) ──
+from core.runtime.ou_hurst import compute_tf_ou_hurst
 from core.runtime.trail_dispatch import compute_and_dispatch_trail
 
 logger = logging.getLogger(__name__)
@@ -323,36 +323,12 @@ def _log_cycle_end(iteration: int) -> None:
 def _compute_tf_ou_hurst(mid_prices: list[float]) -> tuple[float, float]:
     """Compute TF_OU_Theta and TF_Hurst from rolling M5 mid prices.
 
-    Mirrors build_swing_enhanced_dataset.py:_ou_theta() and _hurst().
-    Uses the most recent 21 M5 close prices (≈105 min history).
-    Returns (ou_theta, hurst) — defaults (0.0, 0.5) on insufficient data.
+    Strangler Fig #14: delegation wrapper — implementation extracted to
+    ``core/runtime/ou_hurst.py``.  This shim preserves the 4 existing
+    call sites inside live_cycle.py while the pure function lives in
+    an independently testable module.
     """
-    if len(mid_prices) < 21:
-        return 0.0, 0.5
-    window = np.array(mid_prices[-21:], dtype=np.float64)
-    # OU Theta: AR(1) mean-reversion coefficient
-    y = window[1:]
-    x = window[:-1]
-    x_mean = float(np.mean(x))
-    y_mean = float(np.mean(y))
-    beta_num = float(np.sum((x - x_mean) * (y - y_mean)))
-    beta_den = float(np.sum((x - x_mean) ** 2))
-    if beta_den == 0:
-        ou_theta = 0.0
-    else:
-        beta = np.clip(beta_num / beta_den, 1e-8, 0.99999999)
-        ou_theta = float(-math.log(beta))
-    # Hurst: R/S exponent
-    s = float(np.std(window))
-    if s == 0:
-        hurst = 0.5
-    else:
-        mean_v = float(np.mean(window))
-        z = np.cumsum(window - mean_v)
-        r = float(np.max(z) - np.min(z))
-        rs = r / s
-        hurst = float(math.log(rs) / math.log(20)) if rs > 0 else 0.5
-    return ou_theta, hurst
+    return compute_tf_ou_hurst(mid_prices)
 
 
 def _save_recent_prices(state: Any, base_dir: str) -> None:
@@ -362,7 +338,7 @@ def _save_recent_prices(state: Any, base_dir: str) -> None:
     (~105 min) to produce valid OU Theta + Hurst values after every restart.
     Persisting the rolling buffer eliminates this cold-start entirely.
     """
-    try:
+    with fail_open_guard("RecentPricesSave"):
         _rp = state._recent_mid_prices
         if len(_rp) < 3:
             return
@@ -373,8 +349,6 @@ def _save_recent_prices(state: Any, base_dir: str) -> None:
             encoding="utf-8",
         )
         os.replace(_tmp, _path)
-    except Exception:  # noqa: BLE001
-        pass  # non-fatal — gate falls back to ADX-only
 
 
 # ── Daily ops auto-scheduler ────────────────────────────────────────────

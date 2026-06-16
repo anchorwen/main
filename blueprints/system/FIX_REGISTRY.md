@@ -32,6 +32,7 @@ FIX-YYYYMMDD-NNN
 
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
+| FIX-20260616-002 | 2026-06-16 | runtime-live | **Strangler Fig #14 — OU/Hurst pure function extraction**: `_compute_tf_ou_hurst()` (32-line pure math, OU Theta + Hurst R/S) extracted from `live_cycle.py` → `core/runtime/ou_hurst.py`. Zero-I/O, deterministic function with 13 parameterized tests. Replaced 1 BLE001 site (`_save_recent_prices`) with `fail_open_guard("RecentPricesSave")`. Removed unused `import math` from live_cycle.py. BLE001: 42→41. Iron Law #10 compliance: 1 BLE001 replaced on hot path modification. | RC-08 |
 | FIX-20260616-001 | 2026-06-16 | runtime-live, observability | **Alert Sentinel Hardening: 告警中枢防线加固**: (F1) error_rate 从 state 退化计数派生→RULE-001 恢复. (F2) frozen_brain_count 从 governance 读取→RULE-004 恢复. (F6) governance 读取失败时 Fail-Close 指标(空数组)不 fallback 到全量大脑. (F7) 去重 key 含 symbol→BTC/XAU 告警不再互相压制. DQAF-20260615-012 Audit. | RC-06, RC-09 |
 | FIX-20260615-012 | 2026-06-15 | runtime-live | **Orphan Entry Alert Pollution: 告警上下文排除 auto_orphan_ 合成条目 (DQAF-20260615-012)**: live_cycle.py alert context builder 新增 `auto_orphan_` label 过滤 — 752 条合成 orphan close (pnl=0, 无 ticket) 不再稀释滚动胜率。修复前: XAU WR=0.91%→断路器误断开; 修复后: WR=46.67%→正常。ReB: ORPHAN_ENTRY_ALERT_POLLUTION. | RC-06 |
 | FIX-20260615-011 | 2026-06-15 | feedback-pnl, runtime-live | **Ghost Brain Pollution + Unit Mixing: 告警"最差大脑"数据污染歼灭 (DQAF-20260615-011)**: (1) `load_from_stream()` 将 pnl_r (R-multiple) 错误赋值给 pnl_per_unit (美元) — 反向还原 `pnl_r * entry_price * 0.01`。 (2) `_hydrate_accumulators()` 读错误字段 `pnl`→`pnl_per_unit` + timestamp 补全 `close_time`。 (3) `live_cycle.py` 最差大脑选择新增 governance 活性过滤 — 退役/归档大脑排除。修复前: V11 幽灵大脑(-1452.68 R)永久霸占最差位置; 修复后: BTC_Swing_V4(-2630 USD)实至名归。ReB: ARCHIVED_BRAIN_ALERT_POLLUTION. | RC-06, RC-11 |
@@ -3100,3 +3101,14 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
+
+### FIX-20260616-002
+- **Date**: 2026-06-16
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: runtime-live
+- **Files**: core/runtime/live_cycle.py, core/runtime/ou_hurst.py (new), tests/runtime/test_ou_hurst.py (new)
+- **Description**: Strangler Fig #14 — OU/Hurst pure function extraction. `_compute_tf_ou_hurst()` (32-line pure math) extracted from live_cycle.py → `core/runtime/ou_hurst.py`. Zero I/O, deterministic, mirrors training-side `_ou_theta()`/`_hurst()`. Replaced 1 BLE001 site (`_save_recent_prices`) with `fail_open_guard("RecentPricesSave")`. Added 13 parameterized tests. Removed unused `import math`. BLE001: 42→41.
+- **Root Cause**: RC-08 — incomplete-cleanup (Strangler Fig extraction backlog)
+- **Prevention**: (1) Pure functions live in dedicated modules with zero project imports, (2) fail_open_guard for non-fatal I/O, (3) Iron Law #10 triggered on hot path modification
+- **Dependents Checked**: 4 internal call sites preserved via delegation wrapper, zero external callers
