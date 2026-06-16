@@ -626,6 +626,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260614-B3-LIVE | 2026-06-15 | features, configs | P0: Live 37->41 feature parity — ONNX shape mismatch prevention. BTCFeatureAugmenter now statefully tracks prev_ou/prev_hurst, computes 4 regime derivatives, outputs 41-dim. Schema extended 37->41. feature_assembler updated. Brain config -> 41 features. | RC-06 |
 | FIX-20260616-090 | 2026-06-16 | training | MetaFilter Path B: dataset builder (96 samples, 42-dim) + LightGBM trainer (max_depth=3). OOF AUC 0.348 — insufficient, shadow mode only. Retrain at 200 matchable. | RC-06 |
 | FIX-20260616-091 | 2026-06-16 | features-service | Dimension cleanup: disabled BTC V4 (37-dim receiving 41-dim input — tensor alignment shift risk). Global rename btc_macro_enhanced_37→btc_macro_enhanced_41 (schema was ALWAYS 41 dims, name was lying). XAU Price_ZScore already correct in latest feature store records. TECH_DEBT-004: V4 41-dim retrain registered. | RC-06 |
+| FIX-20260616-092 | 2026-06-16 | features-service | Feature Router: dictionary-based lake + contract registry + Fail-Fast dispatch. BTC 41-dim, XAU 35-dim. FeatureMissingError/SchemaNotFoundError circuit-breakers. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2983,6 +2984,18 @@ FIX-YYYYMMDD-NNN
 - **Module**: features-service
 - **Files**: core/features/schemas/registry.py,configs/live_btc.yaml,core/features/feature_assembler.py,core/features/feature_service.py,core/execution/swing_strategy.py,core/runtime/live_cycle.py,core/execution/meta_signal_filter.py,data_btc/feature_store/schemas.json,configs/brains_btc/BTC_Swing_V4.json,configs/brains_btc/BTC_Swing_V9_H1_Survival.json,configs/brains_btc/BTC_Swing_V12_H1_Survival.json
 - **Description**: Dimension cleanup: disabled BTC V4 (37-dim receiving 41-dim input — tensor alignment shift risk). Global rename btc_macro_enhanced_37→btc_macro_enhanced_41 (schema was ALWAYS 41 dims, name was lying). XAU Price_ZScore already correct in latest feature store records. TECH_DEBT-004: V4 41-dim retrain registered.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260616-092
+- **Date**: 2026-06-16
+- **Author**: cursor-agent
+- **Commit**: e148ceb
+- **Type**: feat
+- **Module**: features-service
+- **Files**: core/features/feature_router.py,core/features/feature_assembler.py,core/features/schemas/registry.py,core/features/schemas/btc_macro_enhanced_schema.py
+- **Description**: Feature Router: dictionary-based lake + contract registry + Fail-Fast dispatch. BTC 41-dim, XAU 35-dim. FeatureMissingError/SchemaNotFoundError circuit-breakers.
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)

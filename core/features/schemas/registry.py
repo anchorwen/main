@@ -13,7 +13,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.features.schemas.btc_macro_enhanced_schema import BTC_MACRO_ENHANCED_37_FEATURES
+from core.features.schemas.btc_macro_enhanced_schema import (
+    BTC_MACRO_ENHANCED_37_FEATURES,
+    BTC_MACRO_ENHANCED_41_FEATURES,
+)
 from core.features.schemas.daily_swing_schema import DAILY_SWING_24_FEATURES
 from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
 from core.features.schemas.swing_enhanced_schema import (
@@ -54,6 +57,7 @@ SCHEMA_DIMENSIONS: dict[str, int] = {
 # at schema resolution, forcing explicit fix to correct schema.
 SCHEMA_ALIASES: dict[str, str] = {
     "swing_24": "daily_swing_24",
+    "btc_macro_enhanced_37": "btc_macro_enhanced_41",  # FIX-091: legacy alias
 }
 
 # ── Lazy cache for feature name resolution ─────────────────────────
@@ -108,7 +112,10 @@ def get_schema_feature_names(schema_name: str) -> list[str]:
 
     names: list[str]
 
-    if canonical == "v9_institutional_40":
+    if canonical == "btc_macro_enhanced_41":
+        from core.features.schemas.btc_macro_enhanced_schema import BTC_MACRO_ENHANCED_41_FEATURES
+        names = list(BTC_MACRO_ENHANCED_41_FEATURES)
+    elif canonical == "v9_institutional_40":
         names = list(V9_INSTITUTIONAL_40_FEATURES)
     elif canonical == "v9_micro_49":
         names = list(V9_MICRO_49_FEATURES)

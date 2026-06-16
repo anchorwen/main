@@ -88,9 +88,12 @@ BTC_MACRO_ENHANCED_37_FEATURES = (
     + _BTC_MACRO_FEATURES
 )
 
+# ── Canonical name (FIX-20260616-091: renamed 37→41) ──
+BTC_MACRO_ENHANCED_41_FEATURES = BTC_MACRO_ENHANCED_37_FEATURES
+
 # ── Verify dimension ──
-assert len(BTC_MACRO_ENHANCED_37_FEATURES) == 41, (
-    f"BTC schema dimension mismatch: {len(BTC_MACRO_ENHANCED_37_FEATURES)} != 37"
+assert len(BTC_MACRO_ENHANCED_41_FEATURES) == 41, (
+    f"BTC schema dimension mismatch: {len(BTC_MACRO_ENHANCED_41_FEATURES)} != 41"
 )
 # ── Verify uniqueness ──
 assert len(set(BTC_MACRO_ENHANCED_37_FEATURES)) == 41, (

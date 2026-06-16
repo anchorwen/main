@@ -197,6 +197,25 @@ def _build_swing_vector(
     _ou = float(tf_ou) if (tf_ou is not None and math.isfinite(float(tf_ou))) else 0.0
     _hur = float(tf_hurst) if (tf_hurst is not None and math.isfinite(float(tf_hurst))) else 0.5
 
+    # ── FIX-20260616-092: Feature Router dispatch ──
+    # Use the dictionary-based router for schemas with full contract support.
+    # Falls back to legacy concatenation for unknown schemas.
+    from core.features.feature_router import get_router
+
+    _router = get_router()
+    _lake = _router.build_lake(
+        legacy_v9_vector=legacy_v9_vector,
+        daily_features=daily_features,
+        micro_features=micro_features,
+        tf_ou=_ou,
+        tf_hurst=_hur,
+        btc_augment=btc_augment,
+    )
+    try:
+        return _router.dispatch(_lake, canonical)
+    except (KeyError, RuntimeError):
+        pass  # Schema not in router contracts — fall through to legacy path
+
     fv_35 = np.concatenate([daily_arr[:24], micro_arr[:9], [_ou, _hur]])
 
     if canonical == "swing_enhanced_35":
