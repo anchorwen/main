@@ -627,6 +627,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260616-090 | 2026-06-16 | training | MetaFilter Path B: dataset builder (96 samples, 42-dim) + LightGBM trainer (max_depth=3). OOF AUC 0.348 — insufficient, shadow mode only. Retrain at 200 matchable. | RC-06 |
 | FIX-20260616-091 | 2026-06-16 | features-service | Dimension cleanup: disabled BTC V4 (37-dim receiving 41-dim input — tensor alignment shift risk). Global rename btc_macro_enhanced_37→btc_macro_enhanced_41 (schema was ALWAYS 41 dims, name was lying). XAU Price_ZScore already correct in latest feature store records. TECH_DEBT-004: V4 41-dim retrain registered. | RC-06 |
 | FIX-20260616-092 | 2026-06-16 | features-service | Feature Router: dictionary-based lake + contract registry + Fail-Fast dispatch. BTC 41-dim, XAU 35-dim. FeatureMissingError/SchemaNotFoundError circuit-breakers. | RC-06 |
+| FIX-20260616-093 | 2026-06-16 | training | MetaFilter V2: cleaned dataset (83 samples, PnL>0 filter, abnormal close filter), max_depth=2, min_data_in_leaf=15 per IC hardening. OOF AUC=0.416 (improved from 0.348). Precision/Recall calibration: no threshold meets 50% recall + 30% win-kill criteria. Shadow mode only. Retrain at 200 clean samples. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2996,6 +2997,18 @@ FIX-YYYYMMDD-NNN
 - **Module**: features-service
 - **Files**: core/features/feature_router.py,core/features/feature_assembler.py,core/features/schemas/registry.py,core/features/schemas/btc_macro_enhanced_schema.py
 - **Description**: Feature Router: dictionary-based lake + contract registry + Fail-Fast dispatch. BTC 41-dim, XAU 35-dim. FeatureMissingError/SchemaNotFoundError circuit-breakers.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260616-093
+- **Date**: 2026-06-16
+- **Author**: cursor-agent
+- **Commit**: b28f2e6
+- **Type**: feat
+- **Module**: training
+- **Files**: scripts/build_metafilter_dataset.py,scripts/train_metafilter_path_b.py
+- **Description**: MetaFilter V2: cleaned dataset (83 samples, PnL>0 filter, abnormal close filter), max_depth=2, min_data_in_leaf=15 per IC hardening. OOF AUC=0.416 (improved from 0.348). Precision/Recall calibration: no threshold meets 50% recall + 30% win-kill criteria. Shadow mode only. Retrain at 200 clean samples.
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)

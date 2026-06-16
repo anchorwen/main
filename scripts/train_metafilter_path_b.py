@@ -45,10 +45,12 @@ def main() -> int:
     cv = TimeSeriesSplit(n_splits=5)
     from lightgbm import LGBMClassifier
 
+    # ── FIX-20260616-093: IC Hardening — max_depth=2, min_data_in_leaf=15 ──
     model = LGBMClassifier(
-        n_estimators=50,
-        max_depth=3,
+        n_estimators=80,
+        max_depth=2,
         min_child_samples=15,
+        min_data_in_leaf=15,
         subsample=0.8,
         colsample_bytree=0.6,
         class_weight="balanced",
@@ -79,6 +81,41 @@ def main() -> int:
         blocked = (oof_preds <= threshold).sum()
         blocked_wins = ((oof_preds <= threshold) & (y == 1)).sum()
         print(f"  Threshold p{pct}={threshold:.3f}: blocks {blocked}/{len(y)} trades, kills {blocked_wins} wins")
+
+    # ── FIX-20260616-093: Precision/Recall calibration matrix ──
+    print("\n=== Calibration Report: Precision/Recall Matrix ===")
+    print(f"  {'Threshold':<12s} {'Blocked':>7s} {'KillsWins':>10s} {'Recall':>8s} {'Precision':>10s} {'F1':>8s}")
+    print(f"  {'-'*12} {'-'*7} {'-'*10} {'-'*8} {'-'*10} {'-'*8}")
+    for pct in [25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75]:
+        threshold = round(float(np.percentile(oof_preds, pct)), 3)
+        blocked = int((oof_preds <= threshold).sum())
+        killed_wins = int(((oof_preds <= threshold) & (y == 1)).sum())
+        total_losses = int((y == 0).sum())
+        blocked_losses = int(((oof_preds <= threshold) & (y == 0)).sum())
+        recall = blocked_losses / max(total_losses, 1) * 100  # % of losses caught
+        precision = (blocked - killed_wins) / max(blocked, 1) * 100  # % of blocks that were correct
+        f1 = 2 * recall * precision / max(recall + precision, 1)
+        print(f"  {threshold:<12.3f} {blocked:>7d} {killed_wins:>10d} {recall:>7.1f}% {precision:>9.1f}% {f1:>7.1f}%")
+
+    # Recommendation
+    print("\n=== Recommendation ===")
+    # Find threshold that catches >=50% of losses with <=30% win kill rate
+    best_pct = None
+    for pct in [30, 35, 40, 45, 50]:
+        threshold = np.percentile(oof_preds, pct)
+        blocked_losses = int(((oof_preds <= threshold) & (y == 0)).sum())
+        killed_wins = int(((oof_preds <= threshold) & (y == 1)).sum())
+        recall = blocked_losses / max((y == 0).sum(), 1)
+        win_kill_rate = killed_wins / max((y == 1).sum(), 1)
+        if recall >= 0.50 and win_kill_rate <= 0.30:
+            best_pct = pct
+            break
+    if best_pct:
+        print(f"  Recommended: p{best_pct}={np.percentile(oof_preds, best_pct):.3f}")
+        print("  Rationale: catches >=50% losses while killing <=30% wins")
+    else:
+        print("  No threshold meets the >=50% recall, <=30% win-kill criteria")
+        print(f"  Conservative fallback: p40={np.percentile(oof_preds, 40):.3f}")
 
     # Train final model on full data
     model.fit(X, y)

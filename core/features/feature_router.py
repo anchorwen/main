@@ -17,8 +17,9 @@ Usage:
 
 from __future__ import annotations
 
-import numpy as np
 from typing import Any
+
+import numpy as np
 
 
 class FeatureMissingError(KeyError):
@@ -34,8 +35,8 @@ class SchemaNotFoundError(KeyError):
 # ═══════════════════════════════════════════════════════════════════════════
 
 from core.features.schemas.registry import (
-    get_schema_feature_names,
     get_schema_dimension,
+    get_schema_feature_names,
 )
 
 # Load all feature name lists from the SSOT registry
@@ -143,7 +144,7 @@ class FeatureRouter:
             _v9 = np.asarray(legacy_v9_vector, dtype=np.float64).ravel()
             _v9_names = get_schema_feature_names("v9_institutional_40")
             if _v9_names and len(_v9) >= len(_v9_names):
-                for name, val in zip(_v9_names, _v9):
+                for name, val in zip(_v9_names, _v9, strict=False):
                     lake[name] = float(val)
 
         # Source 2: V9 Micro 49-dim (when available)
@@ -151,7 +152,7 @@ class FeatureRouter:
         if _v9_micro_names and legacy_v9_vector is not None:
             _v9_full = np.asarray(legacy_v9_vector, dtype=np.float64).ravel()
             if len(_v9_full) >= 49:
-                for name, val in zip(_v9_micro_names, _v9_full):
+                for name, val in zip(_v9_micro_names, _v9_full, strict=False):
                     lake[name] = float(val)
 
         # Source 3: Daily swing macro (24-dim: D1/H4/cross-market/calendar)
@@ -159,7 +160,7 @@ class FeatureRouter:
             _daily = np.asarray(daily_features, dtype=np.float64).ravel()
             _daily_names = get_schema_feature_names("daily_swing_24")
             if _daily_names and len(_daily) >= len(_daily_names):
-                for name, val in zip(_daily_names, _daily):
+                for name, val in zip(_daily_names, _daily, strict=False):
                     lake[name] = float(val)
 
         # Source 4: Microstructure (9-dim: tick-level)
@@ -168,7 +169,7 @@ class FeatureRouter:
             for _schema_name in ("v4.5_microstructure_9", "v2_microstructure_9"):
                 _micro_names = get_schema_feature_names(_schema_name)
                 if _micro_names and len(_micro) >= len(_micro_names):
-                    for name, val in zip(_micro_names, _micro):
+                    for name, val in zip(_micro_names, _micro, strict=False):
                         lake[name] = float(val)
                     break  # Use the first schema that matches
 
@@ -186,7 +187,7 @@ class FeatureRouter:
             _btc = np.asarray(btc_augment, dtype=np.float64).ravel()
             _btc_names = get_schema_feature_names("btc_macro_enhanced_41")
             if _btc_names and len(_btc) >= len(_btc_names):
-                for name, val in zip(_btc_names, _btc):
+                for name, val in zip(_btc_names, _btc, strict=False):
                     lake[name] = float(val)
 
         # Source 8: Caller-provided extras (future-proof injection point)

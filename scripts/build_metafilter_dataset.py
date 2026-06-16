@@ -67,12 +67,29 @@ def main() -> int:
                 fs_index[ts] = entry
     print(f"Feature store: {len(fs_index)} unique minutes")
 
-    # Build samples
+    # Build samples with quality filtering
     samples = []
+    skipped_noise = 0
+    skipped_abnormal = 0
     for ticket, open_entry in ticket_open.items():
         if ticket not in ticket_close:
             continue
         close_entry = ticket_close[ticket]
+        pnl = close_entry.get("pnl") or 0.0
+
+        # ── Quality filter 1: remove PnL=0 noise (breakevens, system glitches) ──
+        if abs(pnl) < 0.001:
+            skipped_noise += 1
+            continue
+
+        # ── Quality filter 2: remove abnormal closes ──
+        reason = ""
+        if isinstance(close_entry.get("detail"), dict):
+            reason = str(close_entry["detail"].get("reason", "")).lower()
+        if reason in ("position_not_found", "client_close", "unknown"):
+            skipped_abnormal += 1
+            continue
+
         ts = str(open_entry.get("recorded_at", ""))[:16]
         if ts not in fs_index:
             continue
@@ -82,16 +99,26 @@ def main() -> int:
         if not values or not isinstance(values, dict):
             continue
 
-        # 41-dim feature vector
+        # 41-dim feature vector (sorted keys for deterministic order)
         feature_names = sorted(values.keys())
         vec = [float(values.get(k, 0.0) or 0.0) for k in feature_names]
 
-        # Get brain confidence from open entry
+        # Verify dimension via Router contract (FIX-092)
+        from core.features.feature_router import FeatureRouter
+        _router = FeatureRouter()
+        _lake = _router.build_lake(legacy_v9_vector=vec)
+        try:
+            _tensor = _router.dispatch(_lake, "v9_institutional_40")
+            if len(_tensor) != 40:
+                continue  # dimension mismatch, skip
+        except Exception:
+            continue
+
+        # Brain confidence as 42nd feature
         confidence = float(open_entry.get("confidence", 0.5) or 0.5)
-        vec.append(confidence)  # 42nd dimension
+        vec.append(confidence)
 
         # Label
-        pnl = close_entry.get("pnl") or 0.0
         is_win = 1 if pnl > 0 else 0
 
         samples.append({
