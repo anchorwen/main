@@ -381,19 +381,41 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     if _safeguards:
         _echo(f"  Safeguards: {', '.join(_safeguards)}")
 
-    # ── Clean stale lock files from previous crashed sessions ──
+    # ── Clean stale lock files from previous crashed or hung sessions ──
+    # DQAF-20260616-004: previously only checked PID aliveness (os.kill(pid,0)).
+    # A hung process has a live PID but never refreshes its lock → TTL expires.
+    # Now also checks TTL: if age > ttl_seconds, the lock is stale even if the
+    # process is technically alive (it's hung and will never recover).
     _lock_dir = PROJECT_ROOT / cfg["base_dir"] / "locks"
     if _lock_dir.exists():
+        _now_utc = datetime.now(UTC).replace(tzinfo=None)
         for _lf in _lock_dir.glob("*.lock"):
             try:
                 _data = json.loads(_lf.read_text(encoding="utf-8"))
                 _pid = _data.get("pid", 0)
-                if _pid:
-                    try:
-                        os.kill(_pid, 0)
-                    except OSError:
-                        _lf.unlink()
-                        _echo(f"  Stale lock cleaned: {_lf.name} (pid={_pid} dead)")
+                if not _pid:
+                    continue
+                _stale = False
+                # Check 1: PID dead → definitely stale
+                try:
+                    os.kill(_pid, 0)
+                except OSError:
+                    _stale = True
+                    _reason = f"pid={_pid} dead"
+                # Check 2: PID alive but TTL expired → hung process
+                if not _stale:
+                    _acquired_at = _data.get("acquired_at", "")
+                    _ttl = _data.get("ttl_seconds", 300)
+                    if _acquired_at:
+                        _age = (
+                            _now_utc - datetime.fromisoformat(_acquired_at).replace(tzinfo=None)
+                        ).total_seconds()
+                        if _age > _ttl:
+                            _stale = True
+                            _reason = f"pid={_pid} alive but TTL expired ({_age:.0f}s > {_ttl}s)"
+                if _stale:
+                    _lf.unlink()
+                    _echo(f"  Stale lock cleaned: {_lf.name} ({_reason})")
             except Exception:  # noqa: BLE001
                 pass
 

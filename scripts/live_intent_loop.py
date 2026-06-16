@@ -2328,6 +2328,20 @@ def main(argv: list[str] | None = None) -> int:
             # ── Persist state every ~1 hour + check config hot-reload ──
             state.cycle_count += 1
 
+            # ── DQAF-20260616-004: Refresh distributed lock TTL ──────────
+            # Without refresh, a healthy process appears stale after 300s.
+            # A hung process stops refreshing → TTL expires → launcher auto-cleans.
+            # Refresh every cycle (~60s) to maintain a 300s TTL window.
+            if _live_lock is not None and state.cycle_count % 1 == 0:
+                if not _live_lock.refresh():
+                    print(
+                        json.dumps(
+                            {"event": "lock_refresh_failed", "time": _utc_iso()},
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+
             # ── FIX-20260611-001: Brain promotion pipeline ──
             # GovernanceRuleEngine was only wired into the containerized deployment
             # path (scheduler_service.py), NOT live_intent_loop.  Brains stuck in

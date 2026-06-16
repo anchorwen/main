@@ -72,6 +72,10 @@ class BaseLock:
     def release(self) -> bool:
         raise NotImplementedError
 
+    def refresh(self) -> bool:
+        """Update the acquired_at timestamp. Optional — default no-op."""
+        return self.is_held
+
     @property
     def is_held(self) -> bool:
         raise NotImplementedError
@@ -179,6 +183,39 @@ class FileLock(BaseLock):
                     error="Timeout waiting for lock",
                 )
             time.sleep(0.05)
+
+    def refresh(self) -> bool:
+        """Update the acquired_at timestamp to extend the TTL.
+
+        Must be called periodically (e.g. every 60s) during long-running
+        operations.  If the lock file is missing or corrupted, returns False
+        (the lock is considered lost).
+
+        DQAF-20260616-004: Without refresh, a healthy long-running process
+        appears stale after TTL expiry, and a hung process cannot be
+        distinguished from a healthy one.
+        """
+        if not self._acquired:
+            return False
+        try:
+            if not self._lock_path.exists():
+                self._acquired = False
+                return False
+            _lock_data = json.dumps(
+                {
+                    "name": self._name,
+                    "holder_id": self._holder_id,
+                    "pid": os.getpid(),
+                    "acquired_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                    "ttl_seconds": self._ttl,
+                }
+            )
+            _tmp_path = self._lock_path.with_suffix(".tmp")
+            _tmp_path.write_text(_lock_data, encoding="utf-8")
+            os.replace(str(_tmp_path), str(self._lock_path))
+            return True
+        except OSError:
+            return False
 
     def release(self) -> bool:
         if not self._acquired:
