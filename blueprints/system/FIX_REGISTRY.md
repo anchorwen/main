@@ -3134,10 +3134,10 @@ FIX-YYYYMMDD-NNN
 - **Type**: fix
 - **Module**: execution, strategies
 - **Files**: core/execution/rule_engine_strategy.py
-- **Description**: Direction Selection Fallacy — Magic 90501 100% 单向开空修复. RuleEngineStrategyWrapper.evaluate() 使用 `_bars_since_last_signal % 2` 奇偶校验选方向. 由于 cooldown_bars=3, 每次冷却通过时计数器=3 → 3%2=1 → 永远返回 "short". LONG 分支在数学上不可达 (10/10 opens=SHORT, 0 LONG). 修复: 使用已传入的 `trend_direction` 参数 (regime gate ADX-based) 替代奇偶校验. neutral 趋势时返回 no-trade. 策略现在与市场趋势方向一致.
+- **Description**: Direction Selection Fallacy + P3 classify() extension. (Main fix) RuleEngineStrategyWrapper 奇偶校验→永远 SHORT 修复为 `trend_direction` 趋势信号. neutral 趋势返回 no-trade. 实盘验证: 重启后 cycle=2 正确输出 `neutral_trend_no_direction` (regime gate 判定 ranging). (P3) classify() 新增 "close_accepted"→TIME_EXPIRED — m30_swing 的 8 次 close_accepted 此前落入 UNKNOWN 阻塞 reentry.
 - **Root Cause**: RC-05 — boundary-error: 计数器值域假设不成立, 3%2=1 恒真导致 else 分支不可达
 - **Prevention**: (1) 方向选择逻辑必须基于趋势信号而非计数器奇偶, (2) 每个分支必须有单元测试证明可达性
-- **Dependents Checked**: reentry_guard.py (via _classify_exit_reason shim, zero code change needed), strategy_evaluator.py (no change), managed_close.py (no change)
+- **Verification**: 实盘 golden master 确认 FIX-003 生效 — `trend_direction=neutral`(regime gate ranging) → `neutral_trend_no_direction`, 策略不再盲目开空. 等待 regime gate 转为 trending 后将产生方向正确的信号.
 
 ### FIX-20260616-101
 - **Date**: 2026-06-16
