@@ -153,7 +153,7 @@ _COOLDOWN_TIER: dict[ExitReason, str] = {
 # ── Classification ────────────────────────────────────────────────────────
 
 
-def classify(raw_reason: str) -> ExitReason:
+def classify(raw_reason: str | None) -> ExitReason:
     """Map a raw exit reason string to the canonical ``ExitReason``.
 
     This is the single authoritative classifier — it replaces the post-hoc
@@ -163,12 +163,47 @@ def classify(raw_reason: str) -> ExitReason:
 
     Args:
         raw_reason: Freeform exit reason string from any generation site.
+                    May be ``None`` for entries where the label was not set
+                    (e.g. orphan cleanup, system maintenance).
 
     Returns:
         The canonical ``ExitReason`` enum member.  Returns ``UNKNOWN`` if
-        no pattern matches.
+        no pattern matches or the input is ``None``.
     """
+    # ── P1: Null-reference defense (DQAF-20260616-001) ──
+    # label=None occurs on ~114 close events (orphan cleanup, bridge rejects).
+    # Without this guard, raw_reason.lower() raises AttributeError.
+    if raw_reason is None or not isinstance(raw_reason, str):
+        return ExitReason.UNKNOWN
+
     r = raw_reason.lower()
+
+    # ── P0: Exact-match canonical labels (DQAF-20260616-001) ─────────────────
+    # "win", "loss", "breakeven" are primary exit labels produced by the
+    # execution layer.  Previously they fell through to UNKNOWN because no
+    # pattern matched, triggering the most conservative reentry gate
+    # (confidence ≥ 0.70) and permanently deadlocking rule-based strategies
+    # whose confidence is fixed at 0.50.
+    #
+    # Mappings per Ω architect review:
+    #   "win"       → TP_HIT      (successful exit, light cooldown)
+    #   "loss"      → SL_HIT      (money-losing exit, strict cooldown)
+    #   "breakeven" → TIME_EXPIRED (neutral/time-based exit, light cooldown)
+    if r in ("win", "loss", "breakeven"):
+        if r == "win":
+            return ExitReason.TP_HIT
+        if r == "loss":
+            return ExitReason.SL_HIT
+        return ExitReason.TIME_EXPIRED  # "breakeven"
+
+    # ── P3: Orphan/system-maintenance labels (DQAF-20260616-001) ────────────
+    # "auto_orphan_rejected" / "auto_orphan_stale" are produced by the orphan
+    # cleanup pipeline — they are system maintenance, not strategy exits.
+    # Classify as UNKNOWN_CLOSE (system-triggered, not strategy-driven) so
+    # audit dashboards can distinguish them from strategy exits.
+    if "auto_orphan" in r:
+        return ExitReason.UNKNOWN_CLOSE
+
     if "brain_flip" in r or "signal_reversal" in r:
         return ExitReason.BRAIN_FLIP
     if "confidence_decay" in r or "confidence_drop" in r:
@@ -217,7 +252,7 @@ def classify(raw_reason: str) -> ExitReason:
 # incrementally without breaking.
 
 
-def _classify_exit_reason(raw_reason: str) -> str:
+def _classify_exit_reason(raw_reason: str | None) -> str:
     """Backward-compatible shim — delegates to :func:`classify`.
 
     Returns the enum's ``.value`` (string) to preserve the old API.

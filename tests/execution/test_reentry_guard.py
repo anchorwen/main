@@ -45,6 +45,32 @@ class TestClassifyExitReason:
     def test_unknown(self):
         assert _classify_exit_reason("some_random_reason_xyz") == "unknown"
 
+    # ── DQAF-20260616-001: P0 — canonical execution labels ──
+    def test_win_is_tp_hit(self):
+        """'win' label → TP_HIT (successful exit, light cooldown)."""
+        assert _classify_exit_reason("win") == "tp_hit"
+
+    def test_loss_is_sl_hit(self):
+        """'loss' label → SL_HIT (money-losing exit, strict cooldown)."""
+        assert _classify_exit_reason("loss") == "sl_hit"
+
+    def test_breakeven_is_time_expired(self):
+        """'breakeven' label → TIME_EXPIRED (neutral/time-based exit)."""
+        assert _classify_exit_reason("breakeven") == "time_expired"
+
+    # ── DQAF-20260616-001: P1 — null-reference defense ──
+    def test_none_label_returns_unknown_no_crash(self):
+        """None label → UNKNOWN without crashing (AttributeError defense)."""
+        from core.execution.exit_reason import classify as classify_enum
+
+        assert classify_enum(None) == "unknown"
+
+    # ── DQAF-20260616-001: P3 — orphan/maintenance labels ──
+    def test_auto_orphan_is_unknown_close(self):
+        """Orphan cleanup labels → UNKNOWN_CLOSE (system maintenance)."""
+        assert _classify_exit_reason("auto_orphan_rejected") == "unknown_close"
+        assert _classify_exit_reason("auto_orphan_stale") == "unknown_close"
+
 
 class TestCheckReentryQuality:
     # ── momentum_pause (confidence_drop/decay) — lenient same-direction reentry ──
