@@ -50,6 +50,7 @@ class OFICollector:
         self._buy_volume: float = 0.0
         self._sell_volume: float = 0.0
         self._tick_count: int = 0
+        self._bar_settled: bool = False  # Guard against double-settlement
 
         # Rolling history
         self._ofi_history: deque[float] = deque(maxlen=window)
@@ -78,6 +79,7 @@ class OFICollector:
             volume = 1.0  # Unit counting mode — each tick is one event
 
         with self._lock:
+            self._bar_settled = False  # New tick → bar is active again
             if self._prev_price is None:
                 self._prev_price = price
                 return  # First tick — just set baseline
@@ -109,11 +111,17 @@ class OFICollector:
     def settle_m5_bar(self) -> dict[str, float]:
         """Close current M5 bar and return OFI features.
 
+        Idempotent: returns empty dict if already settled this bar (guard
+        against double-settlement from multiple Feature Lake consumers).
+
         Returns dict with keys: OFI_M5, OFI_ZScore_20, OFI_Cumulative_1H,
         OFI_Tick_Count, OFI_Total_Volume.
-        Call this at each 5-minute boundary, then a new bar begins.
         """
         with self._lock:
+            if self._bar_settled:
+                return {}  # Already settled — no new data
+            self._bar_settled = True
+
             buy = self._buy_volume
             sell = self._sell_volume
             ticks = self._tick_count

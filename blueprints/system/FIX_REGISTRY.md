@@ -641,6 +641,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260616-095 | 2026-06-16 | execution-orders | V4 re-enabled: model verified 41-dim (num_feature=41 from XGBoost learner_model_param), +4 across 105 trades. Router serves btc_macro_enhanced_41. P1 entry_spread confirmed working — 160/163 opens have entry_spread=10.0 (98% coverage). | RC-06 |
 | FIX-20260616-096 | 2026-06-16 | training | IC audit fixes: (Sev1) inject_regime open_recorded_at priority — eliminates future leakage; ADX default 25.0→15.0 neutral. (Sev2) analyze_feature_shift max_samples 5000→30000 (quarter coverage); Hurst min_lag 10→30; build_regime_snapshots hardcoded RSI/MACD documented as degraded source. Regime data rebuilt. | RC-06 |
 | FIX-20260616-097 | 2026-06-16 | features-service | OFI Lite: Tick Rule order flow imbalance from MT5 symbol_info_tick. OFI_M5, OFI_ZScore_20, OFI_Cumulative_1H. Thread-safe, graceful degradation. Wired into market_ingress + Feature Lake. | RC-06 |
+| FIX-20260616-098 | 2026-06-16 | features-service | OFI TickPoller: 1s daemon thread in bridge worker, time_msc dedup, double-settlement guard. 300x higher tick density (1s vs 5min). | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -3070,6 +3071,18 @@ FIX-YYYYMMDD-NNN
 - **Module**: features-service
 - **Files**: core/features/ofi_collector.py,core/runtime/market_ingress.py,core/features/feature_router.py
 - **Description**: OFI Lite: Tick Rule order flow imbalance from MT5 symbol_info_tick. OFI_M5, OFI_ZScore_20, OFI_Cumulative_1H. Thread-safe, graceful degradation. Wired into market_ingress + Feature Lake.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260616-098
+- **Date**: 2026-06-16
+- **Author**: cursor-agent
+- **Commit**: e460817
+- **Type**: feat
+- **Module**: features-service
+- **Files**: scripts/mt5_bridge_worker.py,core/features/ofi_collector.py
+- **Description**: OFI TickPoller: 1s daemon thread in bridge worker, time_msc dedup, double-settlement guard. 300x higher tick density (1s vs 5min).
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
