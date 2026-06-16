@@ -48,7 +48,7 @@ FEATURE_NAMES = [
 ]
 
 
-def _load_features(path: Path, max_samples: int = 5000) -> tuple[np.ndarray, list[str]]:
+def _load_features(path: Path, max_samples: int = 30000) -> tuple[np.ndarray, list[str]]:
     """Load feature vectors from JSONL, return (N, D) array + feature names."""
     vectors = []
     feature_names = None
@@ -95,11 +95,11 @@ def _hurst_exponent(ts: np.ndarray, max_lag: int = 100) -> float:
     """Estimate Hurst exponent using R/S analysis."""
     if len(ts) < 100:
         return 0.5
-    lags = np.unique(np.logspace(1, np.log10(min(max_lag, len(ts) // 4)), 20).astype(int))
+    lags = np.unique(np.logspace(2, np.log10(min(max_lag, len(ts) // 4)), 20).astype(int))
     rs_values = []
     for lag in lags:
-        if lag < 10:
-            continue
+        if lag < 30:
+            continue  # FIX-096: min lag 30 (not 10) for statistical stability
         segments = len(ts) // lag
         if segments < 4:
             continue

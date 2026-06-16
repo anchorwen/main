@@ -102,9 +102,12 @@ def _inject(sym: str, cfg: dict) -> dict:
 
     with open(out_path, "w", encoding="utf-8") as f:
         for label in labels:
-            # Find label timestamp — prefer close_recorded_at (actual trade close time)
+            # ── FIX-20260616-096: MUST use open_recorded_at (entry-time snapshot).
+            #   Using close_recorded_at injects FUTURE regime data into the label —
+            #   the model would learn from information it cannot know at decision time.
+            #   This is classic Look-Ahead Bias — Severity 1.
             label_ts = None
-            for ts_field in ("close_recorded_at", "open_recorded_at", "timestamp", "event_time", "recorded_at"):
+            for ts_field in ("open_recorded_at", "close_recorded_at", "timestamp", "event_time", "recorded_at"):
                 val = label.get(ts_field, "")
                 if val:
                     label_ts = _parse_ts(str(val))

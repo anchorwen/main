@@ -57,7 +57,11 @@ def _build(sym: str, gm_path: Path, fs_path: Path | None, out_path: Path) -> int
             if ts[:19] in gm_timestamps:
                 continue  # already covered by GM
             values = entry.get("values", {})
-            # Derive regime from RSI (extreme values → trending, middle → ranging)
+            # ── FIX-20260616-096: Degraded-source warning ──
+            # These hardcoded RSI/MACD thresholds are a fallback for when
+            # Golden Master data is unavailable.  They are asset-specific
+            # (not universal) and should only be used for gap-filling.
+            # Preferred source: Golden Master trend_direction.
             rsi = float(values.get("M5_RSI_14", 50) or 50)
             macd = float(values.get("M5_MACD", 0) or 0)
             atr = float(values.get("M5_ATR_14", 0) or 0)

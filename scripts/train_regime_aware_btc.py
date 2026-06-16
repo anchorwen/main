@@ -43,10 +43,13 @@ REGIME_KEYS = [
 def _regime_vector(regime_ctx: dict) -> list[float]:
     td = str(regime_ctx.get("trend_direction", "neutral"))
     trend_num = 1.0 if td in ("long", "up") else (-1.0 if td in ("short", "down") else 0.0)
+    # ── FIX-20260616-096: ADX default must be NEUTRAL (15.0), not trending (25.0).
+    #   25.0 is the canonical "trend forming" threshold — using it as default
+    #   would silently assume strong trend when data is missing.
     return [
         trend_num,
         float(regime_ctx.get("trend_strength", 0.0) or 0.0),
-        float(regime_ctx.get("adx", 25.0) or 25.0),
+        float(regime_ctx.get("adx", 15.0) or 15.0),   # neutral/ranging
         float(regime_ctx.get("atr_percentile", 0.5) or 0.5),
         float(regime_ctx.get("hurst", 0.5) or 0.5),
     ]
