@@ -878,6 +878,7 @@ def run_worker(args: argparse.Namespace) -> int:
     # ── FIX-20260616-099: OFI TickPoller → atomic IPC file ──
     # Bridge subprocess polls ticks → OFI collector → atomic write to
     # ofi_snapshot.json.  Live cycle reads this file in Feature Lake.
+    _ofi_collector = None
     _ofi_path = health_path.parent / "ofi_snapshot.json"
     if mt5 is not None and args.default_symbol:
         import threading as _thr2
@@ -1207,6 +1208,39 @@ def run_zmq_worker(
     # Write initial health heartbeat immediately so monitoring can confirm ZMQ mode
     _write_zmq_health(health_path, mt5, order_endpoint)
 
+    # ── FIX-20260616-099: OFI TickPoller for ZMQ mode ──
+    _ofi_collector_zmq = None
+    _ofi_path_zmq = health_path.parent / "ofi_snapshot.json"
+    if mt5 is not None:
+        import threading as _thr3
+
+        from core.features.ofi_collector import OFICollector
+        _ofi_collector_zmq = OFICollector()
+
+        def _ofi_poller_zmq() -> None:
+            _last_msc = 0
+            _sym = str(default_symbol)
+            print(f"[zmq_bridge] OFI TickPoller started (symbol={_sym}, 1s)", flush=True)
+            _ev = _thr3.Event()
+            while True:
+                try:
+                    _t = mt5.symbol_info_tick(_sym)
+                    if _t is not None:
+                        _msc = int(getattr(_t, "time_msc", 0) or 0)
+                        if _msc > _last_msc:
+                            _last_msc = _msc
+                            _ofi_collector_zmq.on_tick(
+                                price=float(getattr(_t, "last", 0) or 0),
+                                bid=float(getattr(_t, "bid", 0) or 0),
+                                ask=float(getattr(_t, "ask", 0) or 0),
+                                volume=float(getattr(_t, "volume", 0) or 0),
+                            )
+                except Exception:
+                    pass
+                _ev.wait(1.0)
+
+        _thr3.Thread(target=_ofi_poller_zmq, daemon=True, name="ofi-tick-poller-zmq").start()
+
     try:
         while True:
             # ── Phase 3: Non-blocking ZMQ poll (1s timeout) ──────────────
@@ -1397,7 +1431,16 @@ def run_zmq_worker(
                 except OSError:
                     pass
                 _last_health_write = _now
-
+                # ── OFI snapshot → atomic IPC file ──
+                if _ofi_collector_zmq is not None:
+                    try:
+                        _ofi_data = _ofi_collector_zmq.settle_m5_bar()
+                        if _ofi_data:
+                            _ofi_tmp = _ofi_path_zmq.with_suffix(".tmp")
+                            _ofi_tmp.write_text(json.dumps(_ofi_data, ensure_ascii=False), encoding="utf-8")
+                            os.replace(str(_ofi_tmp), str(_ofi_path_zmq))
+                    except OSError:
+                        pass
             # ── MT5 heartbeat + reconnect ──
             if _now - _last_heartbeat_check > _HEARTBEAT_INTERVAL:
                 _last_heartbeat_check = _now
