@@ -74,6 +74,7 @@ class BackgroundDeliveryWorker(threading.Thread):
         alert_queue: queue.Queue[dict[str, Any]],
         channel: CompositeAlertChannel,
         runbook_bridge: AlertRunbookBridge,
+        symbol: str = "",
     ) -> None:
         super().__init__(daemon=False, name="alert-delivery-worker")
         self._queue = alert_queue
@@ -84,6 +85,7 @@ class BackgroundDeliveryWorker(threading.Thread):
         self._dedup_cache: dict[str, tuple[float, int]] = {}
         self._delivered: int = 0
         self._suppressed: int = 0
+        self._symbol = symbol  # FIX-20260616-001: cross-symbol namespace isolation
 
     def run(self) -> None:
         while not self._stop_event.is_set():
@@ -122,23 +124,29 @@ class BackgroundDeliveryWorker(threading.Thread):
             return alert
 
         rule = alert.get("rule_name", "")
+        # FIX-20260616-001: Cross-symbol namespace isolation.
+        # Previously dedup key was rule_name only — BTC's "win_rate_collapse"
+        # could suppress XAU's identical rule.  Now each symbol has independent
+        # dedup windows, preventing cross-contamination.
+        _symbol = getattr(self, "_symbol", "")
+        dedup_key = f"{_symbol}:{rule}" if _symbol else rule
         now = time.monotonic()
-        if rule in self._dedup_cache:
-            first_time, count = self._dedup_cache[rule]
+        if dedup_key in self._dedup_cache:
+            first_time, count = self._dedup_cache[dedup_key]
             if now - first_time < self._DEDUP_WINDOW:
-                self._dedup_cache[rule] = (first_time, count + 1)
+                self._dedup_cache[dedup_key] = (first_time, count + 1)
                 if count >= self._MAX_DEDUP:
-                    del self._dedup_cache[rule]
+                    del self._dedup_cache[dedup_key]
                     alert["aggregated_count"] = count + 1
                     return alert
                 return None
             else:
                 if count > 0:
                     alert["aggregated_count"] = count + 1
-                del self._dedup_cache[rule]
+                del self._dedup_cache[dedup_key]
                 return alert
         else:
-            self._dedup_cache[rule] = (now, 0)
+            self._dedup_cache[dedup_key] = (now, 0)
             return alert
 
     def signal_stop(self) -> None:
@@ -233,7 +241,9 @@ class LiveAlertHub:
         self._runbook = AlertRunbookBridge.with_default_mappings()
 
         # ── Layer 3: Async delivery worker ──
-        self._worker = BackgroundDeliveryWorker(self._alert_queue, composite, self._runbook)
+        self._worker = BackgroundDeliveryWorker(
+            self._alert_queue, composite, self._runbook, symbol=self._symbol
+        )
         self._worker.start()
 
         # ── Layer 1: AlertService + rules ──

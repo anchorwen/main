@@ -856,8 +856,29 @@ def _execute_management_phase(
     if _ah is not None:
         with log_and_continue(component="AlertHub:dispatch"):
             # Build context from in-memory state only (Guardrail 3)
-            _ctx_error_rate = 0.0
+            # FIX-20260616-001: error_rate was hardcoded to 0.0 — RULE-001 was
+            # permanently silent.  Derive a composite health score from the
+            # degradation pipeline (already maintained by the circuit breaker).
+            _degraded = getattr(state, "_consecutive_degraded_cycles", 0)
+            _stale = getattr(state, "_consecutive_stale_cycles", 0)
+            _total = max(1, getattr(state, "cycle_count", 0))
+            _ctx_error_rate = round(min(1.0, (_degraded + _stale) / _total), 4)
+            # FIX-20260616-001: frozen_brain_count was hardcoded to 0 — RULE-004
+            # was permanently silent.  Count frozen brains from governance.
             _ctx_frozen = 0
+            try:
+                _gv_path = Path(config.base_dir) / "governance_state.json"
+                if _gv_path.exists():
+                    _gv_raw = json.loads(_gv_path.read_text(encoding="utf-8"))
+                    _brain_states = _gv_raw.get("brain_states", {})
+                    if isinstance(_brain_states, dict):
+                        _ctx_frozen = sum(
+                            1 for _bs in _brain_states.values()
+                            if isinstance(_bs, dict)
+                            and str(_bs.get("state", _bs.get("status", ""))).lower() == "frozen"
+                        )
+            except Exception:  # noqa: BLE001
+                pass  # Non-critical: frozen check degrades gracefully
             _ctx_pos_util = 0.0
             _ctx_bridge_last_ack = time.time() - getattr(
                 state, "_last_bridge_ack_time", time.time()
@@ -1014,10 +1035,18 @@ def _execute_management_phase(
                                         if _bid:
                                             _active_brain_ids.add(_bid)
                     except Exception:  # noqa: BLE001
-                        pass  # governance unreadable → no filter (degrade gracefully)
+                        # FIX-20260616-001: Architect's Amendment — Fail-Close for metrics.
+                        # If governance is unreadable, we MUST NOT fall back to unfiltered
+                        # data (which includes archived/retired ghost brains from FIX-011).
+                        # Keep _active_brain_ids as empty set → worst-brain computation
+                        # will be skipped (Missing > Corrupted principle).
+                        _active_brain_ids = set()
 
                     _all_m = pnl_ledger.get_all_metrics()
-                    # Filter to active brains only when governance is available
+                    # Filter to active brains only when governance provides them.
+                    # If _active_brain_ids is empty (governance unreadable), skip
+                    # worst-brain computation entirely rather than risking ghost
+                    # brain pollution from unfiltered data.
                     if _all_m and _active_brain_ids:
                         _active_m = {
                             _bid: _m
@@ -1026,6 +1055,12 @@ def _execute_management_phase(
                         }
                         if _active_m:
                             _all_m = _active_m
+                        else:
+                            # No active brains have metrics — don't use stale data
+                            _all_m = {}
+                    elif _all_m and not _active_brain_ids:
+                        # Governance unavailable — skip worst-brain to avoid pollution
+                        _all_m = {}
                         # else: no active brains have metrics → use full set
                         # as fallback (empty metrics would hide genuine issues)
 
