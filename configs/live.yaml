@@ -764,6 +764,14 @@ strategy_lines:
       time_exit_cycles: 12
       _comment_timeout: 'M5×12=1h. Calibration shows 35.6% timeout rate at -0.60R avg.'
       hesitation_cycles: 0
+      # ── DQAF-20260616-001: Disable breakeven guard ──
+      # Training labels assume exactly 3 outcomes (TP=+1.5ATR, SL=-3.0ATR, timeout=12b).
+      # Default breakeven at 1.0ATR introduces a 4th outcome not in the calibration model,
+      # invalidating the EV=+0.2044R estimate.  At R:R=0.50, the breakeven guard needs to
+      # save >2 SLs per killed TP to be net-positive — but P(TP)=47.6% >> P(SL)=16.8%,
+      # so it is structurally net-negative for this specific risk:reward profile.
+      # 999 = effectively disabled (requires price to move 999×ATR before breakeven).
+      breakeven_threshold_atr: 999
     budget:
       daily_loss_limit_pct: -0.05
       max_consecutive_losses: 10
