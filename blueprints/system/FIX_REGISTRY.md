@@ -624,6 +624,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260614-B0B1 | 2026-06-15 | governance, training | **Route B Phase 0-1: Governance unfreeze + BTC training OU/Hurst parity**: (B0) Removed _GOVERNANCE_MANUAL_MODE flag from governance_scheduler.py and scheduler_service.py — 5,123 BTC SignalSettled events now flow into governance_state.performance_metrics. Auto-transition stays manual (if True guard preserved) pending first-cycle metrics review. (B1) Replaced X[:,33]=0.0 and X[:,34]=0.5 placeholders in train_btc_directional_v1.py::compute_features() with live production _ou_theta() and _hurst() imported directly from core.features.computers.v9_live_computer — absolute inference parity. First 30 warm-up bars dropped (not zero-filled). Root cause: FIX-20260611-020 manual mode + placeholder constants caused BTC brains to train blind to regime. | RC-06, RC-09 |
 | FIX-20260614-B2 | 2026-06-15 | execution | **Feature-Not-Gate migration complete — ADX hard-gate removed**: _resolve_trend() Priority 1-3 (ADX/DI/trend_direction/regime_string blocking) replaced with diagnostic logging + default "ranging". filter() now passes ALL signals through — counter-trend blocking eliminated. Stale-shield warnings removed (noop when nothing is blocked). Priority 0 physics override (Theta > P75 AND Hurst < P25) remains as final circuit breaker. strategy_evaluator.py TODO comment removed. Completes FIX-20260613-090 Phase 2. 9 historical ADX gate FIX entries (030/033/035/039/001/079/083/058/090) now superseded by model-native regime awareness. | RC-02, RC-06 |
 | FIX-20260614-B3-LIVE | 2026-06-15 | features, configs | P0: Live 37->41 feature parity — ONNX shape mismatch prevention. BTCFeatureAugmenter now statefully tracks prev_ou/prev_hurst, computes 4 regime derivatives, outputs 41-dim. Schema extended 37->41. feature_assembler updated. Brain config -> 41 features. | RC-06 |
+| FIX-20260616-090 | 2026-06-16 | training | MetaFilter Path B: dataset builder (96 samples, 42-dim) + LightGBM trainer (max_depth=3). OOF AUC 0.348 — insufficient, shadow mode only. Retrain at 200 matchable. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2960,3 +2961,15 @@ FIX-YYYYMMDD-NNN
 - **关联**: DQAF-20260615-006/C5, DQAF-20260615-009, FIX-B3-feat
 - **补丁豁免 (PATCH_NOT_ARCHITECTURE)**: 回滚 registry 至 37 是 L1 补丁。L3 修复需重训练 3 个大脑模型 (41 维)。
 - **✅ 2026-06-15 RESOLVED**: V4/V9/V12 全部用 41 维重训练 + 部署 + 沙箱推理通过 + 实盘 BTC 重启验证通过 (brain_count=3, 0 dimension_mismatch, 0 BrainFactory errors, brain predictions active). Commit 8741e23.
+
+### FIX-20260616-090
+- **Date**: 2026-06-16
+- **Author**: cursor-agent
+- **Commit**: 5429094
+- **Type**: feat
+- **Module**: training
+- **Files**: scripts/build_metafilter_dataset.py,scripts/train_metafilter_path_b.py
+- **Description**: MetaFilter Path B: dataset builder (96 samples, 42-dim) + LightGBM trainer (max_depth=3). OOF AUC 0.348 — insufficient, shadow mode only. Retrain at 200 matchable.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)

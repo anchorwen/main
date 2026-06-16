@@ -74,6 +74,7 @@ Dataset CPCV CustomObj  Trainer    EvaluationReport
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260616-090 | 2026-06-16 | cursor-agent | 5429094 | MetaFilter Path B: dataset builder (96 samples, 42-dim) + LightGBM trainer (max_depth=3). OOF AUC 0.348 — insufficient, shadow mode only. Retrain at 200 matchable. | contract-violation |
 | FIX-20260613-084 | 2026-06-13 | cursor-agent | e897db5 | R3 Step A feature shift analysis: 40/40 features RED (KS p=0.000), XAU→BTC direct model transfer CANCELLED. Hurst similarity 0.062 confirms temporal patterns transferable — V9 training methodology applies to BTC. Fallback: BTC-from-scratch with R4 regime labels. | missing-validation |
 | FIX-20260613-038 | 2026-06-13 | cursor-agent | — | **MODULE_SOURCE_MAP + ruff fix**: backtest_structural_swing.py added to training module in MODULE_SOURCE_MAP (was unmapped orphan, trap #3). B007 unused loop variable fixed. | RC-09 |
 | FIX-20260613-033 | 2026-06-13 | cursor-agent | — | baseline_returns UnboundLocalError in regression path: variable only defined in classification branch, crashes Optuna on first trial. Declared before if/else + guarded Sharpe subtraction. DQAF-001. | RC-02 |
