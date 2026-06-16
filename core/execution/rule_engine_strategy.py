@@ -155,17 +155,32 @@ class RuleEngineStrategyWrapper:
                 reason="shadow_mode",
             )
 
-        # ── Direction: always allow both (no trend filter in MVP) ──
-        # We need a binary direction.  Use a simple heuristic:
-        # if we already have a long position, prefer short to balance;
-        # otherwise alternate based on bar parity (ensures mixed exposure).
-        # In practice, cooldown_bars=3 + max_positions_per_direction=1
-        # prevents clustering.
-        _bar_parity = self._bars_since_last_signal % 2
-        if _bar_parity == 0:
+        # ── Direction: use regime gate trend_direction ──────────────────
+        # DQAF-20260616-003: previously used _bars_since_last_signal % 2
+        # (bar parity) as a direction selector.  With cooldown_bars=3,
+        # the counter is always 3 when the cooldown check passes →
+        # 3 % 2 = 1 → always SHORT → LONG branch mathematically unreachable.
+        #
+        # The regime gate already computes trend_direction from ADX, which
+        # is a superior signal to bar parity.  Use it directly.
+        # Fall back to "neutral" (no trade) when trend is indeterminate.
+        if trend_direction == "long":
             direction = "long"
-        else:
+        elif trend_direction == "short":
             direction = "short"
+        else:
+            return StrategyDecision(
+                strategy_name=self._name,
+                magic=self._magic,
+                should_trade=False,
+                direction="neutral",
+                confidence=0.0,
+                volume=0.0,
+                sl=0.0,
+                tp=0.0,
+                hard_sl=0.0,
+                reason="neutral_trend_no_direction",
+            )
 
         # ── Compute barriers (Bid/Ask-aware) ──
         ref_price = float(mid_price)
