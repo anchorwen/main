@@ -43,6 +43,8 @@ def check_reentry_quality(
     sl_penalty_override: float | None = None,
     bleed_cooldown_override: float | None = None,
     bleed_penalty_override: float | None = None,
+    # ── DQAF-20260616-001/P2: L3 architecture — rule-based strategy gate ──
+    is_rule_based: bool = False,
 ) -> tuple[bool, str]:
     """Return ``(allowed, reason)`` for re-entering after a managed exit.
 
@@ -55,6 +57,13 @@ def check_reentry_quality(
     ``half_life * timeframe_minutes * 2.5 * 60`` seconds, the lock is
     forcibly broken regardless of price confirmation — the mean has shifted,
     the old exit reference is stale.
+
+    *is_rule_based* (DQAF-20260616-001/P2): when True, the strategy has no
+    ML model (``brain_types: []``, ``min_valid_brains: 0``) and its confidence
+    is fixed (typically 0.50).  ML confidence thresholds are meaningless for
+    such strategies — applying them creates a permanent deadlock.  Instead,
+    rule-based strategies use a time-based cooldown scaled to the timeframe
+    (min 120s, 40% of bar period) with no confidence check.
     """
     if new_direction not in ("long", "short"):
         return False, "neutral_signal"
@@ -64,7 +73,6 @@ def check_reentry_quality(
     import time as _time
 
     elapsed = (now_timestamp if now_timestamp is not None else _time.time()) - exit_timestamp
-    category = classify(exit_reason_raw)
 
     # ── Stale exit override (FIX-20260529-039) ──
     # Exits older than 24h are irrelevant — market microstructure, volatility
@@ -74,6 +82,29 @@ def check_reentry_quality(
     _STALE_EXIT_SECONDS: float = 86400.0  # 24 hours
     if elapsed > _STALE_EXIT_SECONDS:
         return True, f"stale_exit_allowed_{elapsed:.0f}s_gt_{_STALE_EXIT_SECONDS:.0f}s"
+
+    # ── L3 Architecture: Rule-based strategy reentry gate ──────────────────
+    # DQAF-20260616-001/P2: Rule-based strategies (structural_swing_v1, etc.)
+    # have fixed confidence and no ML model to improve it.  ML confidence
+    # thresholds (e.g. "≥0.70") create a mathematical deadlock — the strategy
+    # can NEVER satisfy them.  This is a design defect in the reentry guard:
+    # it assumes all strategies have ML-derived confidence that can improve.
+    #
+    # Rule-based reentry uses a time-based cooldown scaled to the timeframe:
+    #   cooldown = max(120s, timeframe_minutes * 60 * 0.4)
+    #   M5:  120s,  M15: 360s,  M30: 720s,  H1: 1440s,  H4: 5760s
+    # After the cooldown expires, the strategy's own rule engine is the
+    # sole authority — no confidence check is applied.
+    if is_rule_based:
+        _rule_cooldown = max(120.0, timeframe_minutes * 60.0 * 0.4)
+        if elapsed < _rule_cooldown:
+            return (
+                False,
+                f"rule_based_cooldown_{elapsed:.0f}s_lt_{_rule_cooldown:.0f}s",
+            )
+        return True, "rule_based_reentry_allowed"
+
+    category = classify(exit_reason_raw)
 
     # ── Absolute ceiling on reentry thresholds ──────────────────────────
     # Tree models (XGBoost/LightGBM) rarely output confidence > 0.82 in
@@ -431,6 +462,8 @@ class ReentryState:
         sl_penalty: float | None = None,
         bleed_cooldown: float | None = None,
         bleed_penalty: float | None = None,
+        # ── DQAF-20260616-001/P2: L3 architecture ──
+        is_rule_based: bool = False,
     ) -> tuple[bool, str, float]:
         """Check re-entry quality and return (allowed, reason, volume_scale).
 
@@ -438,6 +471,10 @@ class ReentryState:
         (time-to-live) hard unlock — when elapsed time since the previous
         exit exceeds half_life × timeframe_minutes × 2.5, the lock is
         forcibly broken even if price confirmation hasn't occurred.
+
+        *is_rule_based* (DQAF-20260616-001/P2): when True, the strategy uses
+        time-based cooldown instead of ML confidence thresholds (see
+        :func:`check_reentry_quality` for details).
         """
         if self.last_exit is None:
             # First entry ever — always allowed
@@ -463,6 +500,7 @@ class ReentryState:
             sl_penalty_override=sl_penalty,
             bleed_cooldown_override=bleed_cooldown,
             bleed_penalty_override=bleed_penalty,
+            is_rule_based=is_rule_based,
         )
         if not allowed:
             return False, reason, 0.0

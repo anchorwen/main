@@ -72,6 +72,116 @@ class TestClassifyExitReason:
         assert _classify_exit_reason("auto_orphan_stale") == "unknown_close"
 
 
+# ── DQAF-20260616-001/P2: L3 Architecture — rule-based reentry gate ──
+
+class TestRuleBasedReentryGate:
+    """Rule-based strategies use time-based cooldown, NOT ML confidence thresholds.
+
+    DQAF-20260616-001 diagnosed a permanent deadlock: structural_swing_v1
+    (confidence=0.50, no ML brains) was blocked by the UNKNOWN exit category
+    requiring confidence≥0.70.  The L2 fix (classifier vocabulary) + L3 fix
+    (strategy-type-aware reentry gate) together eliminate this class of bug.
+    """
+
+    def test_within_cooldown_blocked(self):
+        """Rule-based: 30s elapsed < 120s cooldown → blocked."""
+        import time
+        now = time.time()
+        allowed, reason = check_reentry_quality(
+            exit_reason_raw="any_reason",
+            exit_direction="short",
+            exit_confidence=0.5,
+            exit_price=4300.0,
+            exit_timestamp=now - 30,
+            now_timestamp=now,
+            new_direction="short",
+            new_confidence=0.5,
+            mid_price=4310.0,
+            is_rule_based=True,
+        )
+        assert allowed is False
+        assert "cooldown" in reason
+        assert "120s" in reason
+
+    def test_after_cooldown_allowed_no_confidence_check(self):
+        """Rule-based: after cooldown → allowed regardless of confidence."""
+        import time
+        now = time.time()
+        allowed, reason = check_reentry_quality(
+            exit_reason_raw="any_reason",
+            exit_direction="short",
+            exit_confidence=0.5,
+            exit_price=4300.0,
+            exit_timestamp=now - 200,
+            now_timestamp=now,
+            new_direction="short",
+            new_confidence=0.5,  # 0.50 would fail ML thresholds, passes rule-based
+            mid_price=4310.0,
+            is_rule_based=True,
+        )
+        assert allowed is True
+        assert reason == "rule_based_reentry_allowed"
+
+    def test_opposite_direction_always_allowed(self):
+        """Rule-based: opposite direction skips cooldown entirely."""
+        import time
+        now = time.time()
+        allowed, reason = check_reentry_quality(
+            exit_reason_raw="any_reason",
+            exit_direction="short",
+            exit_confidence=0.5,
+            exit_price=4300.0,
+            exit_timestamp=now - 30,
+            now_timestamp=now,
+            new_direction="long",  # opposite
+            new_confidence=0.5,
+            mid_price=4310.0,
+            is_rule_based=True,
+        )
+        assert allowed is True
+        assert "opposite_direction" in reason
+
+    def test_ml_strategy_still_uses_confidence(self):
+        """ML strategy (is_rule_based=False) still uses category-based checks."""
+        import time
+        now = time.time()
+        allowed, reason = check_reentry_quality(
+            exit_reason_raw="sl_hit_first",
+            exit_direction="short",
+            exit_confidence=0.5,
+            exit_price=4300.0,
+            exit_timestamp=now - 200,
+            now_timestamp=now,
+            new_direction="short",
+            new_confidence=0.5,
+            mid_price=4310.0,
+            is_rule_based=False,
+        )
+        # sl_hit confidence: 0.50 < 0.50+0.10=0.60 → blocked
+        assert allowed is False
+        assert "sl_recovery_confidence_insufficient" in reason
+
+    def test_h1_timeframe_scaled_cooldown(self):
+        """Rule-based H1: cooldown = max(120, 60*60*0.4) = 1440s."""
+        import time
+        now = time.time()
+        allowed, reason = check_reentry_quality(
+            exit_reason_raw="any_reason",
+            exit_direction="short",
+            exit_confidence=0.5,
+            exit_price=4300.0,
+            exit_timestamp=now - 1400,
+            now_timestamp=now,
+            new_direction="short",
+            new_confidence=0.5,
+            mid_price=4310.0,
+            timeframe_minutes=60.0,
+            is_rule_based=True,
+        )
+        assert allowed is False
+        assert "1440s" in reason
+
+
 class TestCheckReentryQuality:
     # ── momentum_pause (confidence_drop/decay) — lenient same-direction reentry ──
     # FIX-116: momentum_pause has 60s cooldown (vs 120s for brain_flip),

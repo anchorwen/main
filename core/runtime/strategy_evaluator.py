@@ -438,6 +438,18 @@ def evaluate_strategy_lines(
         if decision.should_trade and reentry_states is not None:
             from core.execution.reentry_guard import ensure_reentry_state
 
+            # ── DQAF-20260616-001/P2: Detect rule-based strategies ──────────
+            # Strategies with no ML brains (brain_types=[], min_valid_brains=0)
+            # have fixed confidence that cannot improve.  The reentry guard
+            # must use time-based cooldown instead of ML confidence thresholds,
+            # otherwise the strategy is permanently deadlocked.
+            _strategy_cfg = getattr(strategy, "config", None)
+            _is_rule_based = (
+                _strategy_cfg is not None
+                and len(getattr(_strategy_cfg, "brain_types", [None])) == 0
+                and getattr(_strategy_cfg, "min_valid_brains", 1) == 0
+            )
+
             _rs = ensure_reentry_state(reentry_states, sname)
             _allowed, _rr_reason, _cons_count_f = _rs.check_and_record_entry(
                 direction=decision.direction,
@@ -449,6 +461,7 @@ def evaluate_strategy_lines(
                 sl_penalty=reentry_sl_penalty,
                 bleed_cooldown=reentry_bleed_cooldown,
                 bleed_penalty=reentry_bleed_penalty,
+                is_rule_based=_is_rule_based,
             )
             if not _allowed:
                 decision.should_trade = False
