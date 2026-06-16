@@ -74,6 +74,7 @@ Dataset CPCV CustomObj  Trainer    EvaluationReport
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260616-094 | 2026-06-16 | cursor-agent | 408b358 | R4 Step B: Regime-aware BTC brain training. 86 samples, 45-dim. Direction balance LONG 41%/SHORT 59% (was 100% LONG). AUC 0.447. Regime label injection successfully de-locked direction bias. | contract-violation |
 | FIX-20260616-093 | 2026-06-16 | cursor-agent | b28f2e6 | MetaFilter V2: cleaned dataset (83 samples, PnL>0 filter, abnormal close filter), max_depth=2, min_data_in_leaf=15 per IC hardening. OOF AUC=0.416 (improved from 0.348). Precision/Recall calibration: no threshold meets 50% recall + 30% win-kill criteria. Shadow mode only. Retrain at 200 clean samples. | contract-violation |
 | FIX-20260616-090 | 2026-06-16 | cursor-agent | 5429094 | MetaFilter Path B: dataset builder (96 samples, 42-dim) + LightGBM trainer (max_depth=3). OOF AUC 0.348 — insufficient, shadow mode only. Retrain at 200 matchable. | contract-violation |
 | FIX-20260613-084 | 2026-06-13 | cursor-agent | e897db5 | R3 Step A feature shift analysis: 40/40 features RED (KS p=0.000), XAU→BTC direct model transfer CANCELLED. Hurst similarity 0.062 confirms temporal patterns transferable — V9 training methodology applies to BTC. Fallback: BTC-from-scratch with R4 regime labels. | missing-validation |
