@@ -2,8 +2,6 @@
 
 Iron Law #11 compliant — all findings from code audit + live data analysis.
 """
-import json
-from collections import defaultdict
 
 # ── Fact base ──
 
