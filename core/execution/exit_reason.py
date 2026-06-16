@@ -196,6 +196,13 @@ def classify(raw_reason: str | None) -> ExitReason:
             return ExitReason.SL_HIT
         return ExitReason.TIME_EXPIRED  # "breakeven"
 
+    # ── P3: Operational labels (DQAF-20260616-003) ────────────────────────
+    # "close_accepted" — MT5 accepted the close order.  This is a normal
+    # operational close with no negative signal.  Map to TIME_EXPIRED
+    # (neutral, light cooldown) to avoid blocking reentry.
+    if r == "close_accepted":
+        return ExitReason.TIME_EXPIRED
+
     # ── P3: Orphan/system-maintenance labels (DQAF-20260616-001) ────────────
     # "auto_orphan_rejected" / "auto_orphan_stale" are produced by the orphan
     # cleanup pipeline — they are system maintenance, not strategy exits.
