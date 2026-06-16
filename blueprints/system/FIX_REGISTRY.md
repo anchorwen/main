@@ -625,6 +625,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260614-B2 | 2026-06-15 | execution | **Feature-Not-Gate migration complete — ADX hard-gate removed**: _resolve_trend() Priority 1-3 (ADX/DI/trend_direction/regime_string blocking) replaced with diagnostic logging + default "ranging". filter() now passes ALL signals through — counter-trend blocking eliminated. Stale-shield warnings removed (noop when nothing is blocked). Priority 0 physics override (Theta > P75 AND Hurst < P25) remains as final circuit breaker. strategy_evaluator.py TODO comment removed. Completes FIX-20260613-090 Phase 2. 9 historical ADX gate FIX entries (030/033/035/039/001/079/083/058/090) now superseded by model-native regime awareness. | RC-02, RC-06 |
 | FIX-20260614-B3-LIVE | 2026-06-15 | features, configs | P0: Live 37->41 feature parity — ONNX shape mismatch prevention. BTCFeatureAugmenter now statefully tracks prev_ou/prev_hurst, computes 4 regime derivatives, outputs 41-dim. Schema extended 37->41. feature_assembler updated. Brain config -> 41 features. | RC-06 |
 | FIX-20260616-090 | 2026-06-16 | training | MetaFilter Path B: dataset builder (96 samples, 42-dim) + LightGBM trainer (max_depth=3). OOF AUC 0.348 — insufficient, shadow mode only. Retrain at 200 matchable. | RC-06 |
+| FIX-20260616-091 | 2026-06-16 | features-service | Dimension cleanup: disabled BTC V4 (37-dim receiving 41-dim input — tensor alignment shift risk). Global rename btc_macro_enhanced_37→btc_macro_enhanced_41 (schema was ALWAYS 41 dims, name was lying). XAU Price_ZScore already correct in latest feature store records. TECH_DEBT-004: V4 41-dim retrain registered. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -2970,6 +2971,18 @@ FIX-YYYYMMDD-NNN
 - **Module**: training
 - **Files**: scripts/build_metafilter_dataset.py,scripts/train_metafilter_path_b.py
 - **Description**: MetaFilter Path B: dataset builder (96 samples, 42-dim) + LightGBM trainer (max_depth=3). OOF AUC 0.348 — insufficient, shadow mode only. Retrain at 200 matchable.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260616-091
+- **Date**: 2026-06-16
+- **Author**: cursor-agent
+- **Commit**: d5c848d
+- **Type**: fix
+- **Module**: features-service
+- **Files**: core/features/schemas/registry.py,configs/live_btc.yaml,core/features/feature_assembler.py,core/features/feature_service.py,core/execution/swing_strategy.py,core/runtime/live_cycle.py,core/execution/meta_signal_filter.py,data_btc/feature_store/schemas.json,configs/brains_btc/BTC_Swing_V4.json,configs/brains_btc/BTC_Swing_V9_H1_Survival.json,configs/brains_btc/BTC_Swing_V12_H1_Survival.json
+- **Description**: Dimension cleanup: disabled BTC V4 (37-dim receiving 41-dim input — tensor alignment shift risk). Global rename btc_macro_enhanced_37→btc_macro_enhanced_41 (schema was ALWAYS 41 dims, name was lying). XAU Price_ZScore already correct in latest feature store records. TECH_DEBT-004: V4 41-dim retrain registered.
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)

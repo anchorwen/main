@@ -78,7 +78,7 @@ class SwingStrategy(StrategyLine):
                 # LightGBM/XGBoost adapters.  getattr silently returned "",
                 # cascading into ``or "v9_institutional"`` → 40-dim V9 vector
                 # for ALL brains regardless of their training contract.
-                # BTC brains (37-dim btc_macro_enhanced_37) received 40-dim
+                # BTC brains (37-dim btc_macro_enhanced_41) received 40-dim
                 # vectors → dimension mismatch → raw_score=0.0 fallback.
                 # This single line spawned RC-06 across 5 failed patches
                 # (FIX-022, FIX-025, FIX-017, FIX-081, FIX-135).

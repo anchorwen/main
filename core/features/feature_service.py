@@ -24,7 +24,7 @@ _IMPLEMENTED_SCHEMAS: set[str] = {
     "swing_enhanced_35",  # 24 swing macro + 9 micro + 2 TF-specific (OU_Theta, Hurst)
     "swing_enhanced_29",  # 21 swing macro + 6 micro + 2 TF (XAU cross-asset removed for BTC)
     "swing_enhanced_21",  # 21 swing macro only — pure daily, no micro/TF
-    "btc_macro_enhanced_37",  # FIX-081: BTC 37-dim (AUDJPY, XAU, BTC/XAU ratio + ROC)
+    "btc_macro_enhanced_41",  # FIX-081: BTC 37-dim (AUDJPY, XAU, BTC/XAU ratio + ROC)
     "v6_price_series_1",  # OU Params Z-Score
 }
 

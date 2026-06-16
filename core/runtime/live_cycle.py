@@ -5135,7 +5135,7 @@ def execute_live_cycle(
             )
 
         # ── FIX-20260613-052: resolved placeholder: BTC 37-dim feature augmentation ──
-        # Compute btc_augment for BTC brains using btc_macro_enhanced_37 schema.
+        # Compute btc_augment for BTC brains using btc_macro_enhanced_41 schema.
         # Must be computed BEFORE strategy evaluation so SwingStrategy._run_inference()
         # can pass it to assemble_features_by_schema(), avoiding the legacy
         # XAU-centric fallback path (which has incorrect cross-asset slots).
@@ -5164,7 +5164,7 @@ def execute_live_cycle(
 
                 _btc_log2.getLogger(__name__).error(
                     "BTCFeatureAugmenter failed in main eval — "
-                    "V6 brains using btc_macro_enhanced_37 will get "
+                    "V6 brains using btc_macro_enhanced_41 will get "
                     "legacy XAU-centric features (slots [12][30][35][36] incorrect).\n%s",
                     _btc_tb2.format_exc(),
                 )
@@ -5930,7 +5930,7 @@ def execute_live_cycle(
             elif "swing" in schema_id or "daily" in schema_id or "btc_macro" in schema_id:
                 # FIX-20260531-021 / FIX-20260610-009: Data-driven assembly via schema registry
                 # btc_macro added 2026-06-10 — the 4th hardcoded schema check that
-                # FIX-022 missed.  BTC brains (btc_macro_enhanced_37) fell through
+                # FIX-022 missed.  BTC brains (btc_macro_enhanced_41) fell through
                 # to the else branch → raw 40-dim feature_vector → dimension mismatch.
                 if daily_feature_vector is not None:
                     prop = None  # pre-initialise for DEGRADE

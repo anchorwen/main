@@ -521,7 +521,7 @@ class MetaSignalFilter:
                         f"feature_space_mismatch: model expects {len(self._feature_names)} "
                         f"features (e.g. {self._feature_names[0]}) but V9 array has no "
                         f"matching prefixes.  Retrain model on V9 features or provide "
-                        f"btc_macro_enhanced_37 features."
+                        f"btc_macro_enhanced_41 features."
                     ),
                 )
         if micro_array is not None:

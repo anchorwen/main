@@ -66,7 +66,7 @@ def assemble_features_by_schema(
         tf_hurst: Timeframe-specific Hurst exponent (for enhanced swing).
         btc_augment: Pre-computed 41-dim BTC feature vector from
             ``BTCFeatureAugmenter.augment()``.  Only used when
-            *schema_name* is ``btc_macro_enhanced_37`` — the augmenter
+            *schema_name* is ``btc_macro_enhanced_41`` — the augmenter
             corrects cross-asset slots that differ between XAU and BTC.
             If None (or for XAU schemas), the legacy assembly path is used.
 
@@ -202,7 +202,7 @@ def _build_swing_vector(
     if canonical == "swing_enhanced_35":
         return fv_35
 
-    if canonical == "btc_macro_enhanced_37":
+    if canonical == "btc_macro_enhanced_41":
         # ── FIX-20260606-133/134: BTC feature alignment (Phase 5b Step B) ─
         # When btc_augment is provided (BTCFeatureAugmenter), use the
         # pre-computed 37-dim vector with corrected cross-asset slots.

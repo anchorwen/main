@@ -48,8 +48,8 @@
     "timeframe": "M5",
     "description": "V9 Institutional Survival model \u2014 40 features across M5/M15/M30/H1"
   },
-  "btc_macro_enhanced_37:1.0.0:BTCUSDc:M5": {
-    "name": "btc_macro_enhanced_37",
+  "btc_macro_enhanced_41:1.0.0:BTCUSDc:M5": {
+    "name": "btc_macro_enhanced_41",
     "version": "1.0.0",
     "fields": [
       "D1_Ret_1",

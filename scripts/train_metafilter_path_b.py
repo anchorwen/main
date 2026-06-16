@@ -70,7 +70,7 @@ def main() -> int:
     print(f"\nOOF AUC: {oof_auc:.3f}")
 
     # Probability distribution
-    print(f"\nOOF p_win distribution:")
+    print("\nOOF p_win distribution:")
     print(f"  min={oof_preds.min():.3f} p25={np.percentile(oof_preds,25):.3f} median={np.median(oof_preds):.3f} p75={np.percentile(oof_preds,75):.3f} max={oof_preds.max():.3f}")
 
     # Percentile-based threshold recommendation
@@ -82,10 +82,10 @@ def main() -> int:
 
     # Train final model on full data
     model.fit(X, y)
-    final_importance = dict(zip(feature_names, model.feature_importances_))
+    final_importance = dict(zip(feature_names, model.feature_importances_, strict=False))
     top_features = sorted(final_importance.items(), key=lambda x: -x[1])[:15]
 
-    print(f"\n=== Feature Importance (top 15) ===")
+    print("\n=== Feature Importance (top 15) ===")
     for name, imp in top_features:
         bar = "█" * int(imp / max(1e-9, top_features[0][1]) * 30)
         print(f"  {name:<30s} {imp:.4f} {bar}")
@@ -109,7 +109,6 @@ def main() -> int:
     print(f"\nModel: {MODEL_PATH}")
 
     # Save LightGBM booster
-    import lightgbm as lgb
     booster_path = str(MODEL_PATH).replace(".json", ".txt")
     model.booster_.save_model(booster_path)
     print(f"Booster: {booster_path}")
