@@ -875,6 +875,43 @@ def run_worker(args: argparse.Namespace) -> int:
     _last_heartbeat_check = 0.0
     _consecutive_hb_failures = 0
 
+    # ── FIX-20260616-099: OFI TickPoller → atomic IPC file ──
+    # Bridge subprocess polls ticks → OFI collector → atomic write to
+    # ofi_snapshot.json.  Live cycle reads this file in Feature Lake.
+    _ofi_path = health_path.parent / "ofi_snapshot.json"
+    if mt5 is not None and args.default_symbol:
+        import threading as _thr2
+
+        from core.features.ofi_collector import OFICollector
+
+        _ofi_collector = OFICollector()
+
+        def _ofi_poller() -> None:
+            _last_msc = 0
+            _sym = str(args.default_symbol)
+            print(f"[bridge] OFI TickPoller started (symbol={_sym}, 1s)", flush=True)
+            _ev = _thr2.Event()
+            while True:
+                try:
+                    _t = mt5.symbol_info_tick(_sym)
+                    if _t is not None:
+                        _msc = int(getattr(_t, "time_msc", 0) or 0)
+                        if _msc > _last_msc:
+                            _last_msc = _msc
+                            _ofi_collector.on_tick(
+                                price=float(getattr(_t, "last", 0) or 0),
+                                bid=float(getattr(_t, "bid", 0) or 0),
+                                ask=float(getattr(_t, "ask", 0) or 0),
+                                volume=float(getattr(_t, "volume", 0) or 0),
+                            )
+                except Exception:
+                    pass
+                _ev.wait(1.0)
+
+        _thr2.Thread(target=_ofi_poller, daemon=True, name="ofi-tick-poller").start()
+
+    _last_ofi_write = 0.0
+
     try:
         while True:
             processed = []
@@ -931,6 +968,19 @@ def run_worker(args: argparse.Namespace) -> int:
                         flush=True,
                     )
                 _last_health_write = _now
+
+                # ── FIX-20260616-099: OFI snapshot → atomic IPC file ──
+                if _ofi_collector is not None:
+                    try:
+                        _ofi_data = _ofi_collector.settle_m5_bar()
+                        if _ofi_data:
+                            _ofi_tmp = _ofi_path.with_suffix(".tmp")
+                            _ofi_tmp.write_text(
+                                json.dumps(_ofi_data, ensure_ascii=False), encoding="utf-8"
+                            )
+                            os.replace(str(_ofi_tmp), str(_ofi_path))
+                    except OSError:
+                        pass  # OFI best-effort
 
             # ── MT5 heartbeat + exponential backoff reconnect ──
             if _now - _last_heartbeat_check > _HEARTBEAT_INTERVAL:

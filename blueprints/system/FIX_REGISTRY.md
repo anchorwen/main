@@ -642,6 +642,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260616-096 | 2026-06-16 | training | IC audit fixes: (Sev1) inject_regime open_recorded_at priority — eliminates future leakage; ADX default 25.0→15.0 neutral. (Sev2) analyze_feature_shift max_samples 5000→30000 (quarter coverage); Hurst min_lag 10→30; build_regime_snapshots hardcoded RSI/MACD documented as degraded source. Regime data rebuilt. | RC-06 |
 | FIX-20260616-097 | 2026-06-16 | features-service | OFI Lite: Tick Rule order flow imbalance from MT5 symbol_info_tick. OFI_M5, OFI_ZScore_20, OFI_Cumulative_1H. Thread-safe, graceful degradation. Wired into market_ingress + Feature Lake. | RC-06 |
 | FIX-20260616-098 | 2026-06-16 | features-service | OFI TickPoller: 1s daemon thread in bridge worker, time_msc dedup, double-settlement guard. 300x higher tick density (1s vs 5min). | RC-06 |
+| FIX-20260616-099 | 2026-06-16 | features-service | OFI IPC Bridge: TickPoller in bridge subprocess writes ofi_snapshot.json via atomic temp+rename every 30s. Feature Lake reads from file (graceful on missing). Removed in-process TickPoller from live_cycle. Zero coupling. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -3083,6 +3084,18 @@ FIX-YYYYMMDD-NNN
 - **Module**: features-service
 - **Files**: scripts/mt5_bridge_worker.py,core/features/ofi_collector.py
 - **Description**: OFI TickPoller: 1s daemon thread in bridge worker, time_msc dedup, double-settlement guard. 300x higher tick density (1s vs 5min).
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260616-099
+- **Date**: 2026-06-16
+- **Author**: cursor-agent
+- **Commit**: c41b0f8
+- **Type**: fix
+- **Module**: features-service
+- **Files**: scripts/mt5_bridge_worker.py,scripts/live_intent_loop.py,core/runtime/market_ingress.py,core/features/feature_router.py
+- **Description**: OFI IPC Bridge: TickPoller in bridge subprocess writes ofi_snapshot.json via atomic temp+rename every 30s. Feature Lake reads from file (graceful on missing). Removed in-process TickPoller from live_cycle. Zero coupling.
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)

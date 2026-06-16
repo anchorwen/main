@@ -102,19 +102,6 @@ def _mid_and_prices(
     bid = float(tick.bid)
     ask = float(tick.ask)
 
-    # ── FIX-20260616-097: OFI Lite tick collection ──
-    try:
-        from core.features.ofi_collector import get_ofi_collector
-        _ofi = get_ofi_collector()
-        _ofi.on_tick(
-            price=float(tick.last) if getattr(tick, 'last', None) else float(bid + ask) / 2,
-            bid=bid,
-            ask=ask,
-            volume=float(getattr(tick, 'volume', 0) or 0),
-        )
-    except Exception:
-        pass  # OFI collection is best-effort — never blocks price fetch
-
     # ── Extract tick timestamp for staleness detection ──
     # MT5 MqlTick.time is Unix seconds (int).  .time_msc is milliseconds.
     # Prefer .time_msc / 1000 for sub-second precision; fall back to .time.

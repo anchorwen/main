@@ -1763,44 +1763,6 @@ def main(argv: list[str] | None = None) -> int:
                 flush=True,
             )
 
-    # ── FIX-20260616-098: OFI TickPoller daemon thread ──
-    # Runs in live_cycle process (shares memory with Feature Lake).
-    # Polls symbol_info_tick every 1s via mt5_worker, deduplicates by
-    # time_msc, feeds OFICollector singleton in-process.
-    if mt5_worker is not None:
-        import threading as _thr
-
-        def _ofi_tick_poller() -> None:
-            _last_msc = 0
-            _symbol = str(args.symbol)
-            print(f"[intent] OFI TickPoller started (symbol={_symbol}, interval=1s)", flush=True)
-            _event = _thr.Event()
-            while True:
-                try:
-                    _tick = mt5_worker.symbol_info_tick(_symbol)
-                    if _tick is not None:
-                        _msc = int(getattr(_tick, "time_msc", 0) or 0)
-                        if _msc > _last_msc:
-                            _last_msc = _msc
-                            try:
-                                from core.features.ofi_collector import get_ofi_collector
-                                _ofi = get_ofi_collector()
-                                _ofi.on_tick(
-                                    price=float(getattr(_tick, "last", 0) or 0),
-                                    bid=float(getattr(_tick, "bid", 0) or 0),
-                                    ask=float(getattr(_tick, "ask", 0) or 0),
-                                    volume=float(getattr(_tick, "volume", 0) or 0),
-                                )
-                            except Exception:
-                                pass
-                except Exception:
-                    pass
-                _event.wait(1.0)
-
-        _poller = _thr.Thread(target=_ofi_tick_poller, daemon=True, name="ofi-tick-poller")
-        _poller.start()
-        print("[intent] OFI TickPoller daemon thread started", flush=True)
-
     # ── Initialize ExitWatchdog (heartbeat-protected exit dispatch) ──
     # FIX-20260613-086: watchdog_config from live YAML for structural triggers
     exit_watchdog: Any = None

@@ -50,6 +50,7 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260616-099 | 2026-06-16 | cursor-agent | c41b0f8 | OFI IPC Bridge: TickPoller in bridge subprocess writes ofi_snapshot.json via atomic temp+rename every 30s. Feature Lake reads from file (graceful on missing). Removed in-process TickPoller from live_cycle. Zero coupling. | contract-violation |
 | FIX-20260616-098 | 2026-06-16 | cursor-agent | e460817 | OFI TickPoller: 1s daemon thread in bridge worker, time_msc dedup, double-settlement guard. 300x higher tick density (1s vs 5min). | contract-violation |
 | FIX-20260616-097 | 2026-06-16 | cursor-agent | a7ae2ad | OFI Lite: Tick Rule order flow imbalance from MT5 symbol_info_tick. OFI_M5, OFI_ZScore_20, OFI_Cumulative_1H. Thread-safe, graceful degradation. Wired into market_ingress + Feature Lake. | contract-violation |
 | FIX-20260616-092 | 2026-06-16 | cursor-agent | e148ceb | Feature Router: dictionary-based lake + contract registry + Fail-Fast dispatch. BTC 41-dim, XAU 35-dim. FeatureMissingError/SchemaNotFoundError circuit-breakers. | contract-violation |
