@@ -263,6 +263,30 @@ def build_parser() -> argparse.ArgumentParser:
         "--min-rr", type=float, default=1.5, help="Minimum reward:risk ratio (default: 1.5)"
     )
 
+    # ── DQAF-20260616-003/P1: Directional balance constraints ────────────
+    p.add_argument(
+        "--min-directional-ev",
+        type=float,
+        default=0.01,
+        help="Minimum EV for EACH direction separately (R-units). "
+        "Rejects configs where LONG or SHORT EV < threshold. "
+        "Set to 0 to disable. (default: 0.01)",
+    )
+    p.add_argument(
+        "--max-directional-skew",
+        type=float,
+        default=3.0,
+        help="Maximum LONG:SHORT EV ratio allowed. "
+        "Rejects configs where max(EV_long, EV_short) / min(EV_long, EV_short) > skew. "
+        "Prevents extreme 5:1 imbalances. (default: 3.0)",
+    )
+    p.add_argument(
+        "--directional-balance-report",
+        type=Path,
+        default=None,
+        help="Output JSON path for directional balance analysis report",
+    )
+
     # Modes
     p.add_argument(
         "--surface-only",
@@ -290,6 +314,119 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     return p
+
+
+# ── DQAF-20260616-003/P1: Directional balance filter ─────────────────────
+
+
+def _compute_directional_balance(
+    args: argparse.Namespace,
+    data: dict[str, Any],
+    combined_surface: Any,  # ProfitabilitySurface
+) -> dict[str, Any]:
+    """Compute directional EV split and filter imbalanced configurations.
+
+    Runs the profitability surface separately for LONG and SHORT, then
+    cross-references each (SL, TP) config to flag those where one direction
+    dominates.  Returns a report dict with per-config analysis.
+    """
+    from core.training.profitability_calibrator import (
+        ProfitabilitySurface,
+        compute_profitability_surface,
+    )
+
+    print("\n[DIR-BAL] Computing directional balance...")
+    print(f"          min-directional-ev={args.min_directional_ev}")
+    print(f"          max-directional-skew={args.max_directional_skew}")
+
+    # Compute separate surfaces for LONG and SHORT
+    surface_long = compute_profitability_surface(
+        data["high"], data["low"], data["close"],
+        horizon_bars=args.horizon, atr_period=args.atr_period,
+        sl_range=[float(x) for x in args.sl_range.split(",")],
+        tp_range=[float(x) for x in args.tp_range.split(",")],
+        entry_stride=args.entry_stride, side="long",
+        symbol="XAUUSDc", timeframe="M5", tick_value=0.01, tick_size=0.001,
+    )
+    surface_short = compute_profitability_surface(
+        data["high"], data["low"], data["close"],
+        horizon_bars=args.horizon, atr_period=args.atr_period,
+        sl_range=[float(x) for x in args.sl_range.split(",")],
+        tp_range=[float(x) for x in args.tp_range.split(",")],
+        entry_stride=args.entry_stride, side="short",
+        symbol="XAUUSDc", timeframe="M5", tick_value=0.01, tick_size=0.001,
+    )
+
+    # Build lookup: (sl, tp) -> EV for each direction
+    ev_long: dict[tuple[float, float], float] = {}
+    for p in surface_long.points:
+        ev_long[(p.sl_atr_mult, p.tp_atr_mult)] = p.expected_pnl_r
+    ev_short: dict[tuple[float, float], float] = {}
+    for p in surface_short.points:
+        ev_short[(p.sl_atr_mult, p.tp_atr_mult)] = p.expected_pnl_r
+
+    # Analyze each combined point
+    balanced: list[dict[str, Any]] = []
+    rejected_weak: list[dict[str, Any]] = []
+    rejected_skew: list[dict[str, Any]] = []
+
+    for p in combined_surface.points:
+        key = (p.sl_atr_mult, p.tp_atr_mult)
+        ev_l = ev_long.get(key, -999.0)
+        ev_s = ev_short.get(key, -999.0)
+        if ev_l <= -998 or ev_s <= -998:
+            continue
+
+        skew = max(abs(ev_l), abs(ev_s)) / max(min(abs(ev_l), abs(ev_s)), 1e-8) if ev_l != 0 and ev_s != 0 else 999.0
+        min_ev = min(ev_l, ev_s)
+        entry = {
+            "sl": p.sl_atr_mult, "tp": p.tp_atr_mult,
+            "ev_combined": p.expected_pnl_r,
+            "ev_long": round(ev_l, 6), "ev_short": round(ev_s, 6),
+            "skew_ratio": round(skew, 2),
+            "min_directional_ev": round(min_ev, 6),
+        }
+
+        if min_ev < args.min_directional_ev:
+            rejected_weak.append(entry)
+        elif skew > args.max_directional_skew:
+            rejected_skew.append(entry)
+        else:
+            balanced.append(entry)
+
+    n_total = len(balanced) + len(rejected_weak) + len(rejected_skew)
+    print(f"          Total configs evaluated: {n_total}")
+    print(f"          PASSED (balanced):       {len(balanced)}")
+    print(f"          REJECTED (weak dir):     {len(rejected_weak)} (min EV < {args.min_directional_ev})")
+    print(f"          REJECTED (skewed):       {len(rejected_skew)} (skew > {args.max_directional_skew})")
+
+    # Build balanced-only surface
+    balanced_keys = {(b["sl"], b["tp"]) for b in balanced}
+    balanced_points = [p for p in combined_surface.points if (p.sl_atr_mult, p.tp_atr_mult) in balanced_keys]
+
+    report = {
+        "total_configs": n_total,
+        "balanced": len(balanced),
+        "rejected_weak_direction": len(rejected_weak),
+        "rejected_skewed": len(rejected_skew),
+        "constraints": {
+            "min_directional_ev": args.min_directional_ev,
+            "max_directional_skew": args.max_directional_skew,
+        },
+        "rejected_details": {
+            "weak_direction": sorted(rejected_weak, key=lambda x: x["min_directional_ev"]),
+            "skewed": sorted(rejected_skew, key=lambda x: -x["skew_ratio"]),
+        },
+        "balanced_configs": sorted(balanced, key=lambda x: -x["ev_combined"]),
+    }
+
+    return {
+        "report": report,
+        "balanced_points": balanced_points,
+        "balanced_keys": balanced_keys,
+        "surface_long": surface_long,
+        "surface_short": surface_short,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -355,6 +492,29 @@ def main(argv: list[str] | None = None) -> int:
         print("         Try widening the TP range or narrowing SL range.")
         if not args.surface_only:
             return 1
+
+    # ── DQAF-20260616-003/P1: Directional balance check ──────────────────
+    _bal_result = None
+    if args.min_directional_ev > 0 and args.sides == "both":
+        _bal_result = _compute_directional_balance(args, data, surface)
+
+        if args.directional_balance_report:
+            args.directional_balance_report.parent.mkdir(parents=True, exist_ok=True)
+            args.directional_balance_report.write_text(
+                json.dumps(_bal_result["report"], indent=2), encoding="utf-8"
+            )
+            print(f"       Balance report saved to {args.directional_balance_report}")
+
+        _n_balanced = len(_bal_result["balanced_points"])
+        if _n_balanced == 0:
+            print("\n[ERROR] All (SL, TP) configurations rejected by directional balance filter!")
+            print("        Try relaxing --min-directional-ev or --max-directional-skew.")
+            return 1
+
+        # Replace surface points with balanced subset for subsequent selection
+        surface.points = _bal_result["balanced_points"]
+        _n_after = len(surface.profitable_configs())
+        print(f"       After directional filter: {_n_after} profitable configs (from {n_profitable})")
 
     # ── Select optimal configuration ─────────────────────────────────────
     if args.force_sl is not None and args.force_tp is not None:
