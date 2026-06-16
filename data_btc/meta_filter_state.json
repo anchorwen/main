@@ -1,1 +1,1 @@
-{"pred_history": [], "pred_buffer": [], "atr_buffer": [], "micro_spread_buffer": []}
+{"pred_history": [[1781580056.880001, 0.19279042112385508]], "pred_buffer": [6.540679186582565], "atr_buffer": [106.62071228027344], "micro_spread_buffer": [], "atr_frozen": false, "atr_frozen_detected_at": ""}

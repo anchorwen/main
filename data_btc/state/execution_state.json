@@ -1,19 +1,17 @@
 {
   "version": 3,
   "schema_version": "execution_state.v3",
-  "saved_at_utc": "2026-06-16T00:49:54.471182",
+  "saved_at_utc": "2026-06-16T03:49:56.011780",
   "budgets": {
     "btc_swing": {
-      "daily_pnl_pct": 0.44,
+      "daily_pnl_pct": 0.0,
       "consecutive_losses": 0,
-      "total_trades_today": 1,
-      "total_wins_today": 1,
+      "total_trades_today": 0,
+      "total_wins_today": 0,
       "paused": false,
       "paused_at": 0.0,
       "last_trade_day": "2026-06-16",
-      "_sl_timestamps": [
-        1781569208.2735868
-      ],
+      "_sl_timestamps": [],
       "_sl_cooldown_until": 0.0,
       "_sl_paused_rest_of_day": false
     },
@@ -31,40 +29,110 @@
     }
   },
   "known_open_tickets": {
-    "3909331190": {
-      "source": "orphan_adopted",
-      "adopted_at": "2026-06-16T00:20:27",
-      "ticket": 3909331190,
-      "direction": "long",
-      "entry_price": 66206.63,
-      "current_sl": 66250.72,
-      "current_tp": 66480.35,
-      "volume": 0.01,
-      "enriched_from_mt5": true
-    },
-    "3909612245": {
-      "position_ticket": 3909612245,
+    "3910998418": {
+      "schema_version": "live_trade_journal.v2",
+      "recorded_at": "2026-06-16T02:44:55.261857",
+      "message_id": "eq_btc_swing_6100bc2e2fca",
+      "target": "exec_bridge",
+      "ack_status": "accepted",
+      "detail": {
+        "retcode": 10009,
+        "order": 3910998418,
+        "request": {
+          "action": 1,
+          "symbol": "BTCUSDc",
+          "volume": 0.01,
+          "type": 0,
+          "price": 65860.36,
+          "deviation": 20,
+          "magic": 90410,
+          "comment": "",
+          "type_time": 0,
+          "type_filling": 1,
+          "sl": 65572.30032,
+          "tp": 66208.8246
+        },
+        "confirmed_sl": 65572.3,
+        "confirmed_tp": 66208.82
+      },
+      "symbol": "BTCUSDc",
       "action": "open",
       "side": "long",
-      "volume": 0.0,
-      "entry_price": 66237.27,
-      "strategy": "btc_swing",
+      "volume": 0.01,
+      "pnl": null,
+      "label": null,
+      "comment": "",
       "magic": 90410,
-      "message_id": "eq_btc_swing_aa9c807436aa",
+      "strategy": "btc_swing",
+      "effective_volume_hint": 0.01,
+      "position_ticket": 3910998418,
+      "execution_payload_schema": "live_mt5_execution_payload.v2",
+      "sl": 65572.30032,
+      "tp": 66208.8246,
+      "outbox_path": "",
+      "archive_path": "",
+      "receipt_path": "",
       "brain_ids": [
         "BTC_Swing_V4"
       ],
-      "brain_votes": [],
-      "entry_consensus": {
-        "consensus_score": 0.74,
-        "direction": "long"
+      "brain_votes": null,
+      "confidence": 0.7376,
+      "p_win": 0.5,
+      "kelly_mult": 1.0474,
+      "entry_context": {
+        "schema_version": "v9_institutional",
+        "vector": [
+          -0.004814771004021168,
+          -0.10687179118394852,
+          108.28713989257812,
+          17.859886169433594,
+          -120.19569396972656,
+          -1.171158790588379,
+          -0.01285866554826498,
+          -1.514482855796814,
+          0.16088509559631348,
+          0.6069721579551697,
+          180.58428955078125,
+          36.36655807495117,
+          -167.65306091308594,
+          1.2778728008270264,
+          -0.17114326357841492,
+          -2.2502036094665527,
+          0.16088509559631348,
+          0.6069721579551697,
+          229.67642211914062,
+          25.0129451751709,
+          -92.85812377929688,
+          -1.1969568729400635,
+          -0.2400667667388916,
+          -1.8326828479766846,
+          -0.7061404585838318,
+          -0.758354902267456,
+          377.0771484375,
+          37.64650344848633,
+          342.201904296875,
+          -0.29277849197387695,
+          0.15854008495807648,
+          -1.0668160915374756,
+          0.027296829968690872,
+          0.282844603061676,
+          0.12738844752311707,
+          0.22057387232780457,
+          0.7306419014930725,
+          0.6124716401100159,
+          0.694096028804779,
+          0.6865507364273071
+        ],
+        "entry_spread": 10.0,
+        "bid": 65852.2,
+        "ask": 65862.2
       }
     }
   },
   "cooldown_registry": {},
   "family_entry_tracker": {
     "swing": {
-      "long": 1781570695.1068804
+      "long": 1781580896.2597418
     }
   },
   "sl_streak_blocks": {},

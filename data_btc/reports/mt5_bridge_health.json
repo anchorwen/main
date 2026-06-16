@@ -1,1 +1,1 @@
-{"last_heartbeat_utc": "2026-06-16T00:52:04.749184", "pid": 4820, "mt5_connected": true, "outbox_pending": 0, "transport": "zmq", "order_endpoint": "tcp://127.0.0.1:5558", "phase3_wal": true, "processed_ids": 47}
+{"last_heartbeat_utc": "2026-06-16T03:54:05.896259", "pid": 21976, "mt5_connected": true, "outbox_pending": 0, "transport": "zmq", "order_endpoint": "tcp://127.0.0.1:5558", "phase3_wal": true, "processed_ids": 2}
