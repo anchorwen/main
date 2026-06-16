@@ -140,9 +140,9 @@ alert_system:
     threshold: 0
 brains:
   registry_entries:
-  # ── FIX-20260616-091: V4 DISABLED — 37-dim model receiving 41-dim input
-  #   (TECH_DEBT-004: tensor alignment shift risk).  Only V12 (41-dim) active.
-  - enabled: false
+  # ── FIX-20260616-095: V4 RE-ENABLED — model verified 41-dim (num_feature=41)
+  #   +$64 across 105 trades.  Router serves btc_macro_enhanced_41 contract.
+  - enabled: true
     path: configs/brains_btc/BTC_Swing_V4.json
   - enabled: true
     path: configs/brains_btc/BTC_Swing_V9_H1_Survival.json

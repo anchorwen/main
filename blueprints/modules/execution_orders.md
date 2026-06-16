@@ -59,6 +59,7 @@ DecisionIntent → ExecutionQueue → dispatch_live_order() → BrokerAdapter
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260616-095 | 2026-06-16 | cursor-agent | 7ad0f32 | V4 re-enabled: model verified 41-dim (num_feature=41 from XGBoost learner_model_param), +4 across 105 trades. Router serves btc_macro_enhanced_41. P1 entry_spread confirmed working — 160/163 opens have entry_spread=10.0 (98% coverage). | contract-violation |
 | FIX-20260615-006 | 2026-06-15 | cursor-agent | — | **XAU/BTC L3 architecture fix (C1/C3/C6/C8)**: StrategyLineConfig.base_dir required; record_brain_votes(base_dir) removes default; MetaFilterGate model_dir removes default; resolve_protection_flag_path prefers base_dir; record_gate_block(base_dir) required. | L3 — base_dir="data" defaults in shared functions |
 | FIX-20260615-011 | 2026-06-15 | cursor-agent | — | **BTC Family Spacing — 同魔术号双多单风控漏洞**: (1) ``_SWING_FAMILY`` 硬编码仅含 XAU 策略 (m15/m30/h1/h4_swing) → BTC 策略从未受家族间距保护 → ``btc_swing_h1`` 10 分钟内连开两笔同向多单 (ticket 3906230145 + 3906380612)。(2) 新增 ``_STRATEGY_FAMILY_GAP_SEC`` 字典 — H1 级别策略 3600s (1 个完整 K 线周期) 间距。``strategy_evaluator.py`` 读取 per-strategy gap 传入 ``check_spacing()``。(3) ``btc_swing`` 和 ``btc_swing_h1`` 加入 ``_SWING_FAMILY``。 | L3 — 架构: ``_SWING_FAMILY`` 硬编码,新品种添加时未同步更新 |
 | FIX-20260615-010-P3 | 2026-06-15 | cursor-agent | — | **Phase 3 — WAL 双写**: Dispatcher file-first→ZMQ best-effort. Bridge 5s slow file poll + message_id dedup. Zero data loss on crash. | L3 — durability |

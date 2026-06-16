@@ -629,6 +629,16 @@ FIX-YYYYMMDD-NNN
 | FIX-20260616-092 | 2026-06-16 | features-service | Feature Router: dictionary-based lake + contract registry + Fail-Fast dispatch. BTC 41-dim, XAU 35-dim. FeatureMissingError/SchemaNotFoundError circuit-breakers. | RC-06 |
 | FIX-20260616-093 | 2026-06-16 | training | MetaFilter V2: cleaned dataset (83 samples, PnL>0 filter, abnormal close filter), max_depth=2, min_data_in_leaf=15 per IC hardening. OOF AUC=0.416 (improved from 0.348). Precision/Recall calibration: no threshold meets 50% recall + 30% win-kill criteria. Shadow mode only. Retrain at 200 clean samples. | RC-06 |
 | FIX-20260616-094 | 2026-06-16 | training | R4 Step B: Regime-aware BTC brain training. 86 samples, 45-dim. Direction balance LONG 41%/SHORT 59% (was 100% LONG). AUC 0.447. Regime label injection successfully de-locked direction bias. | RC-06 |
+| FIX-20260615-009c | 2026-06-15 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260615-010 | 2026-06-15 | execution-orders | cursor-agent | RC-06 |
+| FIX-20260615-010 | 2026-06-15 | protocol-services | cursor-agent | RC-06 |
+| FIX-20260615-010 | 2026-06-15 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260615-010-P2 | 2026-06-15 | execution-orders | cursor-agent | RC-06 |
+| FIX-20260615-010-P2 | 2026-06-15 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260615-010-P3 | 2026-06-15 | execution-orders | cursor-agent | RC-06 |
+| FIX-20260615-010-P3 | 2026-06-15 | protocol-services | cursor-agent | RC-06 |
+| FIX-20260615-010-P3 | 2026-06-15 | runtime-live | cursor-agent | RC-06 |
+| FIX-20260616-095 | 2026-06-16 | execution-orders | V4 re-enabled: model verified 41-dim (num_feature=41 from XGBoost learner_model_param), +4 across 105 trades. Router serves btc_macro_enhanced_41. P1 entry_spread confirmed working — 160/163 opens have entry_spread=10.0 (98% coverage). | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -3022,6 +3032,18 @@ FIX-YYYYMMDD-NNN
 - **Module**: training
 - **Files**: scripts/train_regime_aware_btc.py
 - **Description**: R4 Step B: Regime-aware BTC brain training. 86 samples, 45-dim. Direction balance LONG 41%/SHORT 59% (was 100% LONG). AUC 0.447. Regime label injection successfully de-locked direction bias.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)
+
+### FIX-20260616-095
+- **Date**: 2026-06-16
+- **Author**: cursor-agent
+- **Commit**: 7ad0f32
+- **Type**: fix
+- **Module**: execution-orders
+- **Files**: configs/live_btc.yaml
+- **Description**: V4 re-enabled: model verified 41-dim (num_feature=41 from XGBoost learner_model_param), +4 across 105 trades. Router serves btc_macro_enhanced_41. P1 entry_spread confirmed working — 160/163 opens have entry_spread=10.0 (98% coverage).
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)

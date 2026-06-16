@@ -80,6 +80,8 @@ Trigger (symbol/timeframe) → FeatureService.get_snapshot()
 | FIX-20260530-064 | 2026-05-30 | cursor-agent | — | Strangler Fig #4: _build_meta_feature_vector (121 lines) → core/features/meta_feature_builder.py. live_cycle.py 7100→6665 lines. | RC-08 |
 | FIX-20260606-133 | 2026-06-06 | cursor-agent | — | **BTC feature assembler gap documented (Phase 5b Step A/B)**: Found 5/37 (13.5%) feature slots incorrect in live. Root cause of 8.4x confidence std collapse. | RC-06 |
 | FIX-20260606-134 | 2026-06-06 | cursor-agent | — | **BTCFeatureAugmenter — Phase 5b Step B.2**: New `btc_feature_augmenter.py` with 3 production safeguards. Fixes [12] XAUUSDc_return, [30] AUDJPYc_return. XAU pipeline frozen. | RC-06 |
+| FIX-20260614-015 | 2026-06-14 | cursor-agent | — | **NaN Implicit Truthiness Trap**: Python if value else default catches 0.0 but NOT NaN. 9 division guard sites in microstructure_computer.py allowed NaN through to brain inference. Fix: _safe_div() using math.isfinite() on BOTH numerator AND denominator. 16 stress tests assert zero NaN propagation. ReB: NAN_IMPLICIT_TRUTHINESS_TRAP. | RC-06 |
+| FIX-20260614-B3-LIVE | 2026-06-15 | cursor-agent | — | P0: Live 37->41 feature parity — ONNX shape mismatch prevention. BTCFeatureAugmenter now statefully tracks prev_ou/prev_hurst, computes 4 regime derivatives, outputs 41-dim. Schema extended 37->41. feature_assembler updated. Brain config -> 41 features. | RC-06 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |
