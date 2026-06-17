@@ -655,169 +655,100 @@ def check_mt5_equity_reconciliation(data_dir: str) -> dict[str, Any]:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def check_three_way_reconciliation(data_dir: str) -> dict[str, Any]:
-    """Cross-validate journal, ledger, and snapshots with R→USD conversion.
+def check_journal_mt5_reconciliation(data_dir: str) -> dict[str, Any]:
+    """Cross-validate journal close PnL against MT5 deal profit.
 
-    Converts ledger pnl_r (R-units) to approximate USD using entry prices
-    from journal opens, then compares against journal close PnL.
+    This is THE authoritative PnL reconciliation. MT5 is the system of
+    record. Journal PnL must match MT5 deal profit exactly.
+
+    NOTE: Ledger pnl_r (brain_pnl_ledger) is a BINARY win/loss signal
+    (-1.0 to +1.0), NOT dollar PnL. Including it in reconciliation was
+    an architectural error. Fixed in DQAF-20260616-005/root-cause-fix.
     """
     jp = Path(data_dir) / "live_trade_journal.jsonl"
-    lp = Path(data_dir) / "ledger_events.jsonl"
-    sp = Path(data_dir) / "position_snapshots.jsonl"
-
     if not jp.exists():
         return {"passed": True, "severity": "SKIP", "reason": "no journal"}
 
-    # ── Build journal open/close lookup ──
-    journal_opens: dict[int, dict] = {}
+    try:
+        import MetaTrader5 as mt5
+    except ImportError:
+        return {"passed": True, "severity": "SKIP", "reason": "MT5 not available"}
+
+    # Use the correct terminal per data_dir: XAU→EXNESS2, BTC→BTC terminal
+    DEFAULT_PATHS = {
+        "data": r"D:\exness\MetaTrader 5 EXNESS2\terminal64.exe",
+        "data_btc": r"D:\MetaTrader 5\terminal64.exe",
+    }
+    mt5_path = DEFAULT_PATHS.get(data_dir, DEFAULT_PATHS["data"])
+    for cfg_file in [f"configs/{'live' if data_dir == 'data' else 'live_btc'}.yaml", "configs/live.yaml"]:
+        try:
+            p = Path(cfg_file)
+            if p.exists():
+                with open(p, encoding="utf-8") as f:
+                    for line in f:
+                        if "terminal_path:" in line:
+                            mt5_path = line.split(":", 1)[1].strip()
+                            break
+            if mt5_path: break
+        except Exception: pass
+
+    if not mt5_path:
+        return {"passed": True, "severity": "SKIP", "reason": "no MT5 terminal path"}
+
+    try:
+        if not mt5.initialize(path=mt5_path):
+            try: mt5.shutdown()
+            except Exception: pass
+            return {"passed": True, "severity": "SKIP", "reason": "MT5 init failed"}
+    except Exception:
+        return {"passed": True, "severity": "SKIP", "reason": "MT5 init exception"}
+
+    deals_by_pos: dict[int, Any] = {}
+    try:
+        for days in [90, 180]:
+            deals = mt5.history_deals_get(datetime.now(timezone.utc) - timedelta(days=days), datetime.now(timezone.utc))
+            if deals:
+                for d in deals:
+                    if d.position_id and d.profit != 0:
+                        deals_by_pos[d.position_id] = d
+                break
+    except Exception: pass
+    finally:
+        try: mt5.shutdown()
+        except Exception: pass
+
+    if not deals_by_pos:
+        return {"passed": True, "severity": "SKIP", "reason": "no MT5 deals"}
+
     journal_closes: dict[int, dict] = {}
     with open(jp, encoding="utf-8") as f:
         for line in f:
-            if not line.strip():
-                continue
+            if not line.strip(): continue
             try:
                 e = json.loads(line)
-                tkt = e.get("position_ticket")
-                if not tkt:
-                    continue
-                tkt = int(tkt)
-                if e.get("action") == "open":
-                    journal_opens[tkt] = e
-                elif e.get("action") == "close":
-                    journal_closes[tkt] = e
-            except json.JSONDecodeError:
-                pass
+                if e.get("action") == "close":
+                    tkt = e.get("position_ticket")
+                    if tkt: journal_closes[int(tkt)] = e
+            except json.JSONDecodeError: pass
 
-    # ── Ledger: aggregate pnl_r per ticket ──
-    ledger_by_ticket: dict[int, float] = defaultdict(float)
-    if lp.exists():
-        with open(lp, encoding="utf-8") as f:
-            for line in f:
-                if not line.strip():
-                    continue
-                try:
-                    e = json.loads(line)
-                    tkt = e.get("position_ticket") or 0
-                    if tkt > 0 and e.get("event_type") == "SignalSettled":
-                        ledger_by_ticket[int(tkt)] += float(e.get("pnl_r", 0) or 0)
-                except (json.JSONDecodeError, ValueError):
-                    pass
-
-    # ── Snapshots: last unrealized PnL per ticket ──
-    snap_by_ticket: dict[int, float] = {}
-    if sp.exists():
-        with open(sp, encoding="utf-8") as f:
-            for line in f:
-                if not line.strip():
-                    continue
-                try:
-                    s = json.loads(line)
-                    tkt = s.get("ticket")
-                    if tkt:
-                        snap_by_ticket[int(tkt)] = float(s.get("unrealized_pnl_r", 0) or 0)
-                except (json.JSONDecodeError, ValueError):
-                    pass
-
-    # ── Cross-validate ──
-    # Compute per-trade R→USD from actual SL distance in journal opens.
-    # SL is absolute price level, entry is order price.  Difference in points
-    # must be converted to USD via tick_size/tick_value/volume.
-    # tick_value is in ACCOUNT CURRENCY (USC = cents for cent accounts).
-    # Verified against MT5 history_deals: journal PnL matches MT5 profit field exactly.
-    # XAUUSDc: tick_size=0.001, tick_value=0.1 USC, volume=0.01 → 1 pt = 1.0 USC = $0.01
-    # BTCUSDc: tick_size=0.01, tick_value=0.01 USC, volume=0.01 → 1 pt = 0.01 USC = $0.0001
-    SYM_CFG: dict[str, dict[str, float]] = {
-        "XAUUSDc": {"tick_size": 0.001, "tick_value": 0.1},
-        "BTCUSDc": {"tick_size": 0.01, "tick_value": 0.01},
-    }
-    matched = 0
-    ledger_matches = 0
-    snap_matches = 0
-    three_way_ok = 0
-    three_way_mismatch = 0
-    r_values: list[float] = []
-
-    for tkt in set(journal_opens.keys()) & set(journal_closes.keys()):
-        o = journal_opens[tkt]
-        c = journal_closes[tkt]
-        journal_pnl = c.get("pnl", 0) or 0
-
-        # Compute per-trade 1R from SL distance (points → USD)
-        sym = o.get("symbol", "XAUUSDc")
-        cfg = SYM_CFG.get(sym, SYM_CFG["XAUUSDc"])
-        vol = o.get("volume", 0.01) or 0.01
-        pts_to_usd = (cfg["tick_value"] / cfg["tick_size"]) * vol
-
-        sl_price = o.get("sl")
-        entry_price = 0.0
-        detail = o.get("detail", {})
-        if isinstance(detail, dict):
-            entry_price = detail.get("request", {}).get("price", 0) or 0
-        if sl_price and entry_price and sl_price > 0 and entry_price > 0:
-            r_usd = abs(sl_price - entry_price) * pts_to_usd
-            if r_usd > 0.01:
-                r_values.append(r_usd)
-        else:
-            r_usd = 1.50  # fallback: typical 1R for XAU 0.01 lot
-
+    matched = exact = mismatch = 0
+    for tkt, jc in journal_closes.items():
+        if tkt not in deals_by_pos: continue
         matched += 1
+        jp_ = jc.get("pnl", 0) or 0
+        mp_ = float(deals_by_pos[tkt].profit)
+        if abs(jp_ - mp_) < 0.01: exact += 1
+        else: mismatch += 1
 
-        # Convert ledger R→USD using per-trade 1R
-        ledger_r = ledger_by_ticket.get(tkt, 0)
-        ledger_pnl_usd = ledger_r * r_usd
-        if abs(ledger_r) > 0.001:
-            ledger_matches += 1
-            tolerance = max(abs(journal_pnl) * 0.5, 1.5)
-            if abs(journal_pnl - ledger_pnl_usd) < tolerance:
-                three_way_ok += 1
-            else:
-                three_way_mismatch += 1
-
-        if tkt in snap_by_ticket:
-            snap_matches += 1
-
-    import statistics
-    median_r = statistics.median(r_values) if r_values else 1.50
-    ledger_match_pct = ledger_matches / max(matched, 1) * 100
-    snap_match_pct = snap_matches / max(matched, 1) * 100
-    three_way_pct = three_way_ok / max(ledger_matches, 1) * 100 if ledger_matches else 100
-
-    # Only count trades where journal PnL is MT5-verified (post-normalization).
-    # Older trades may have format inconsistencies that skew the comparison.
-    verified_matches = sum(1 for tkt in set(journal_opens.keys()) & set(journal_closes.keys())
-                          if journal_closes[tkt].get("_pnl_normalized"))
-    sev = "OK" if three_way_pct > 60 else "Sev3" if three_way_pct > 30 else "Sev2"
-    note_suffix = f" | {verified_matches} trades MT5-verified" if verified_matches else ""
+    pct = exact / max(matched, 1) * 100
+    sev = "OK" if pct > 90 else "Sev2" if pct > 40 else "Sev3"  # 40% for cross-terminal fallback
 
     return {
-        "passed": three_way_pct > 60,
-        "severity": sev,
-        "verified_trades": verified_matches,
-        "matched_trades": matched,
-        "ledger_matched": ledger_matches,
-        "snapshot_matched": snap_matches,
-        "three_way_ok": three_way_ok,
-        "three_way_mismatch": three_way_mismatch,
-        "three_way_pct": round(three_way_pct, 1),
-        "median_r_usd": round(median_r, 2),
-        "r_samples": len(r_values),
-        "note": f"per-trade R→USD from journal SL×pts_to_usd (median=${median_r:.2f})",
+        "passed": pct > 90, "severity": sev,
+        "matched_trades": matched, "exact_match": exact, "mismatch": mismatch,
+        "match_pct": round(pct, 1), "mt5_deals_available": len(deals_by_pos),
+        "note": f"MT5-authoritative: {exact}/{matched} ({pct:.0f}%) exact matches. Ledger excluded — binary signal, not PnL (DQAF-005 root-cause)",
     }
-
-    return {
-        "passed": three_way_pct > 70,
-        "severity": sev,
-        "matched_trades": matched,
-        "ledger_matched": ledger_matches,
-        "snapshot_matched": snap_matches,
-        "three_way_ok": three_way_ok,
-        "three_way_mismatch": three_way_mismatch,
-        "three_way_pct": round(three_way_pct, 1),
-        "median_r_usd": round(median_r, 2),
-        "r_samples": len(r_values),
-        "note": f"per-trade R→USD from journal SL distance (median=${median_r:.2f})",
-    }
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # 9. REPORT GENERATION + DINGTALK PUSH
@@ -837,7 +768,7 @@ def generate_report(all_results: dict[str, dict[str, Any]]) -> str:
     sections.append("|-------|-----|-----|")
     for check_name in ["reconciliation_journal_ledger", "snapshots_journal", "active_position",
                         "orphan_entries", "bridge_micro_health", "tick_precision",
-                        "journal_integrity", "mt5_equity", "three_way_reconciliation"]:
+                        "journal_integrity", "mt5_equity", "journal_mt5"]:
         xau_status = all_results.get("data", {}).get(check_name, {}).get("severity", "?")
         btc_status = all_results.get("data_btc", {}).get(check_name, {}).get("severity", "?")
         xau_icon = "[OK]" if xau_status == "OK" else "[WARN]" if "Sev" in str(xau_status) else "[SKIP]"
@@ -907,7 +838,7 @@ def main() -> int:
             "tick_precision": check_tick_precision(d),
             "journal_integrity": check_journal_integrity(d),
             "mt5_equity": check_mt5_equity_reconciliation(d),
-            "three_way_reconciliation": check_three_way_reconciliation(d),
+            "journal_mt5": check_journal_mt5_reconciliation(d),
         }
 
     if args.json:

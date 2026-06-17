@@ -24,6 +24,7 @@ import json
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 
 def main() -> int:
@@ -65,7 +66,7 @@ def main() -> int:
         return 1
 
     # Get all available deals (try last 90 days)
-    deals_by_pos: dict[int, any] = {}
+    deals_by_pos: dict[int, Any] = {}
     for days in [90, 180, 365]:
         try:
             deals = mt5.history_deals_get(datetime.now() - timedelta(days=days), datetime.now())
@@ -104,6 +105,7 @@ def main() -> int:
         mt5_profit = float(deal.profit)
         jnl_pnl = e.get("pnl", 0) or 0
 
+        # MT5 is authoritative. ANY difference gets corrected.
         if abs(jnl_pnl - mt5_profit) < 0.001:
             already_ok += 1
         else:
