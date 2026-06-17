@@ -1733,20 +1733,34 @@ class ActivePositionManager:
         MT5 is the authoritative source for physical state (price, SL, TP, volume).
         Python persists only intent-state that cannot be recovered from MT5.
 
-        FIX-20260601-036: when all positions are gone, DELETE the state file
-        instead of returning early.  A stale file on disk would be re-loaded
-        on next restart and incorrectly restored if the position still exists
-        in MT5 (net_exposure → new trades blocked).
+        FIX-20260601-036: when all positions are gone, persist an EMPTY state
+        instead of deleting the file.  A missing file causes FileNotFoundError
+        in downstream scripts and monitoring dashboards.  An empty state ([])
+        is a valid business state — zero positions is a deliberate condition.
+
+        DQAF-20260616-005: previously DELETE was used to prevent stale-state
+        restoration on restart.  The restart code now checks MT5 net_exposure
+        independently, so an empty file is safe.  This follows the state-machine
+        persistence principle: the file must always exist with valid JSON.
         """
         import json as _json
         from pathlib import Path as _Path
 
         p = _Path(save_path)
         if not self._positions:
-            # No open positions → remove stale state file
+            # Persist empty state — zero positions is a valid business condition
             try:
-                if p.exists():
-                    p.unlink()
+                p.parent.mkdir(parents=True, exist_ok=True)
+                empty_state = {
+                    "version": 3,
+                    "positions": [],
+                    "_primary_ticket": None,
+                    "_entry_consensus_score": 0.0,
+                    "_last_brain_reeval_cycle": 0,
+                    "_recovery_cycle": -1,
+                    "saved_at_utc": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                }
+                p.write_text(_json.dumps(empty_state, indent=2), encoding="utf-8")
             except OSError:
                 pass
             return
