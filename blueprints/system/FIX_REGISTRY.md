@@ -3166,7 +3166,7 @@ FIX-YYYYMMDD-NNN
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
 
-### FIX-20260617-101
+### FIX-20260617-101 — ✅ CLOSED (2026-06-17)
 - **Date**: 2026-06-17
 - **Author**: cursor-agent
 - **Commit**: 36982e3
