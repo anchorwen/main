@@ -180,138 +180,179 @@ class SchedulerService:
                         BrainPromotionEvaluator,
                     )
                     from core.deployment.brain_alert import emit_brain_alert
-                    from core.feedback.brain_pnl_ledger import BrainPnLStore
 
                     _logger = logging.getLogger(__name__)
 
-                    # ── FIX-20260611-020: Governance Manual Whitelist Mode ──
-                    # The PnP ledger (brain_pnl_ledger.json) tracks counterfactual
-                    # PnL — what each brain WOULD have earned if traded.  This is
-                    # BACKTEST/SHADOW data, NOT live trading performance.  The live
-                    # performance is in brain_performance.json.
+                    # ── FIX-20260617-001: Governance Data Source Migration ──
+                    # OLD: BrainPnLStore (brain_pnl_ledger.json) → backtest PnL
+                    #      was injected into governance performance_metrics.
+                    # NEW: brain_performance.json → live execution outcomes
+                    #      (win/loss from actual MT5 fills, window=100).
                     #
-                    # Until brain_performance is confirmed clean of record
-                    # contamination (V6/V7/V8 identical data), ALL automatic
-                    # governance lifecycle transitions are DISABLED.  Brains can
-                    # only be promoted/frozen/retired via manual CLI:
-                    #   python scripts/brain.py freeze <brain_id>
-                    #   python scripts/brain.py promote <brain_id>
-                    #
-                    # FIX-20260614-B0: Record contamination fixed by FIX-20260613-080.
-                    # PnP ledger now reflects live performance. Metrics injection enabled.
+                    # Auto-transition is MANUAL (if True guard below) — decisions
+                    # are computed and logged but NOT executed.  Brain lifecycle
+                    # changes must be done via manual CLI until governance data
+                    # integrity is fully verified.
                     _GOVERNANCE_MANUAL_MODE = False
 
+                    # ── FIX-20260617-001: Replace BrainPnLStore (backtest/shadow)
+                    #    with brain_performance.json (live execution SSOT).
+                    #    BrainPnLStore contains COUNTERFACTUAL PnL — what each
+                    #    brain WOULD have earned if traded.  This is backtest
+                    #    contamination when injected into live governance.
+                    #    brain_performance.json records actual execution outcomes
+                    #    (win/loss from MT5 fills), window_size=100.
                     try:
-                        pnl_path = _Path(str(container.config.base_dir)) / "brain_pnl_ledger.json"
-                        if pnl_path.exists():
-                            pnl_store = BrainPnLStore.load(str(pnl_path))
-                            all_metrics = pnl_store.get_all_metrics()
+                        import json as _json
 
-                            # Bridge: BrainPnLMetrics → evaluator-compatible dict
-                            perf: dict[str, dict] = {}
-                            for bid, m in all_metrics.items():
-                                perf[bid] = {
-                                    "win_rate": m.win_rate,
-                                    "profit_factor": m.profit_factor,
-                                    "signal_count": m.sample_count,
-                                    "consecutive_losses": m.consecutive_losses,
-                                    "recent_win_rate": m.recent_win_rate,
+                        _bp_path = _Path(str(container.config.base_dir)) / "brain_performance.json"
+                        perf: dict[str, dict] = {}
+                        if _bp_path.exists():
+                            _bp_data = _json.loads(_bp_path.read_text(encoding="utf-8"))
+                            _bp_records = _bp_data.get("records", {})
+                            for _bid, _records in _bp_records.items():
+                                if not isinstance(_records, list):
+                                    continue
+                                _wins = sum(
+                                    1 for r in _records
+                                    if isinstance(r, dict) and r.get("execution_outcome") == "win"
+                                )
+                                _losses = sum(
+                                    1 for r in _records
+                                    if isinstance(r, dict) and r.get("execution_outcome") == "loss"
+                                )
+                                _total = _wins + _losses
+                                if _total == 0:
+                                    continue
+                                _wr = _wins / _total
+                                perf[_bid] = {
+                                    "win_rate": round(_wr, 4),
+                                    "profit_factor": (
+                                        round(_wins / max(_losses, 1), 2)
+                                        if _losses > 0 else round(_wins, 2) if _wins > 0 else 0.0
+                                    ),
+                                    "signal_count": _total,
+                                    "consecutive_losses": 0,  # not in brain_performance
+                                    "recent_win_rate": round(_wr, 4),
                                 }
-                                # P0.1: Inject performance_metrics into governance state
-                                # MANUAL MODE: Skip injection — PnP ledger metrics are
-                                # counterfactual (backtest/shadow), not live performance.
-                                # Live data source is brain_performance.json.
-                                if not _GOVERNANCE_MANUAL_MODE:
+                                # Inject LIVE execution metrics into governance
+                                container.governance_service.set_performance_metrics(
+                                    _bid,
+                                    {
+                                        "win_rate": round(_wr, 4),
+                                        "total_trades": _total,
+                                        "wins": _wins,
+                                        "losses": _losses,
+                                        "source": "brain_performance",
+                                        "updated_at": datetime.now(UTC).isoformat(),
+                                    },
+                                )
+
+                            # ── Purge backtest-contaminated metrics for brains NOT
+                            #    in brain_performance (they only have stale backtest data)
+                            _all_states = container.governance_service.get_all_states()
+                            for _bid, _state in _all_states.items():
+                                _pm = _state.get("performance_metrics") or {}
+                                _src = _pm.get("source", "")
+                                if _src != "brain_performance" and _pm.get("total_trades", 0) > 0:
+                                    # Replace stale backtest metrics with empty sentinel
                                     container.governance_service.set_performance_metrics(
-                                        bid,
+                                        _bid,
                                         {
-                                            "win_rate": m.win_rate,
-                                            "profit_factor": m.profit_factor,
-                                            "sharpe_ratio": m.sharpe_ratio,
-                                            "total_trades": m.sample_count,
-                                            "pnl_r": round(m.cumulative_pnl, 2),
+                                            "win_rate": 0.0,
+                                            "total_trades": 0,
+                                            "source": "cleared_backtest",
+                                            "updated_at": datetime.now(UTC).isoformat(),
                                         },
                                     )
-                                else:
                                     _logger.info(
-                                        "[GOV_MANUAL] Skipped PnP→governance injection "
-                                        "for brain=%s (pnl_r=%.2f wr=%.3f samples=%d)",
-                                        bid,
-                                        m.cumulative_pnl,
-                                        m.win_rate,
-                                        m.sample_count,
+                                        "[GOV_CLEAN] Purged backtest metrics for brain=%s "
+                                        "(had %d backtest trades)",
+                                        _bid,
+                                        _pm.get("total_trades", 0),
                                     )
 
-                            # ── FIX-20260611-022: Event stream projection ──
-                            # Compute governance metrics from the immutable event
-                            # stream (source_filter={"live"} only).  This is the
-                            # CORRECT data source — no backtest contamination.
-                            try:
-                                from core.data.projections import project_governance_state
+                            _logger.info(
+                                "[GOV_LIVE] Injected brain_performance metrics: "
+                                "%d brains with live trade data",
+                                len(perf),
+                            )
+                        else:
+                            _logger.warning(
+                                "[GOV_LIVE] brain_performance.json not found at %s",
+                                _bp_path,
+                            )
 
-                                _stream_path = (
-                                    _Path(str(container.config.base_dir)) / "ledger_events.jsonl"
+                        # ── FIX-20260611-022: Event stream projection ──
+                        # Compute governance metrics from the immutable event
+                        # stream (source_filter={"live"} only).  This provides
+                        # cross-reference PnL data to complement brain_performance WR.
+                        try:
+                            from core.data.projections import project_governance_state
+
+                            _stream_path = (
+                                _Path(str(container.config.base_dir)) / "ledger_events.jsonl"
+                            )
+                            _stream_state = project_governance_state(_stream_path)
+                            _stream_brains = {
+                                k: v for k, v in _stream_state.items() if not k.startswith("_")
+                            }
+                            if _stream_brains:
+                                _logger.info(
+                                    "[GOV_MANUAL] Event stream projection: "
+                                    "%d brains with live data",
+                                    len(_stream_brains),
                                 )
-                                _stream_state = project_governance_state(_stream_path)
-                                _stream_brains = {
-                                    k: v for k, v in _stream_state.items() if not k.startswith("_")
-                                }
-                                if _stream_brains:
-                                    _logger.info(
-                                        "[GOV_MANUAL] Event stream projection: "
-                                        "%d brains with live data",
-                                        len(_stream_brains),
+                                for _bid, _sm in sorted(_stream_brains.items()):
+                                    if _sm.get("total_trades", 0) > 0:
+                                        _logger.info(
+                                            "[GOV_MANUAL]   %s: trades=%d wr=%.3f pnl=%.1f",
+                                            _bid,
+                                            _sm["total_trades"],
+                                            _sm["win_rate"],
+                                            _sm["pnl_r"],
+                                        )
+                        except Exception:
+                            _logger.debug(
+                                "[GOV_MANUAL] Event stream projection skipped "
+                                "(stream not available)"
+                            )
+
+                        brain_states = container.governance_service.get_all_states()
+                        evaluator = BrainPromotionEvaluator()
+                        decisions = evaluator.evaluate_all(brain_states, perf)
+
+                        # ── FIX-20260611-020: Manual whitelist mode ──
+                        # Layer 2 (Decision): In manual mode, evaluate but don't
+                        # execute.  Log decisions for human review.
+                        # FIX-20260614-B0: Metrics injection enabled, auto-transition
+                        # stays manual until first cycle metrics are reviewed.
+                        if True:  # was: _GOVERNANCE_MANUAL_MODE
+                            for d in decisions:
+                                if d.action != "hold":
+                                    _logger.warning(
+                                        "[GOV_MANUAL] Would %s brain=%s (%s→%s) "
+                                        "reasons=%s — NOT EXECUTED (manual mode)",
+                                        d.action,
+                                        d.brain_id,
+                                        d.current_status,
+                                        d.target_status,
+                                        d.reasons,
                                     )
-                                    for _bid, _sm in sorted(_stream_brains.items()):
-                                        if _sm.get("total_trades", 0) > 0:
-                                            _logger.info(
-                                                "[GOV_MANUAL]   %s: trades=%d wr=%.3f pnl=%.1f",
-                                                _bid,
-                                                _sm["total_trades"],
-                                                _sm["win_rate"],
-                                                _sm["pnl_r"],
-                                            )
-                            except Exception:
-                                _logger.debug(
-                                    "[GOV_MANUAL] Event stream projection skipped "
-                                    "(stream not available)"
-                                )
-
-                            brain_states = container.governance_service.get_all_states()
-                            evaluator = BrainPromotionEvaluator()
-                            decisions = evaluator.evaluate_all(brain_states, perf)
-
-                            # ── FIX-20260611-020: Manual whitelist mode ──
-                            # Layer 2 (Decision): In manual mode, evaluate but don't
-                            # execute.  Log decisions for human review.
-                            # FIX-20260614-B0: Metrics injection enabled, auto-transition
-                            # stays manual until first cycle metrics are reviewed.
-                            if True:  # was: _GOVERNANCE_MANUAL_MODE
-                                for d in decisions:
-                                    if d.action != "hold":
-                                        _logger.warning(
-                                            "[GOV_MANUAL] Would %s brain=%s (%s→%s) "
-                                            "reasons=%s — NOT EXECUTED (manual mode)",
-                                            d.action,
-                                            d.brain_id,
-                                            d.current_status,
-                                            d.target_status,
-                                            d.reasons,
-                                        )
-                                        # Emit alert so humans see pending decisions
-                                        emit_brain_alert(
-                                            d.brain_id,
-                                            "governance_manual_blocked",
-                                            {
-                                                "action": d.action,
-                                                "current_status": d.current_status,
-                                                "target_status": d.target_status,
-                                                "reasons": d.reasons,
-                                                "metrics": d.metrics_snapshot,
-                                            },
-                                        )
-                            else:
-                                container.governance_rule_engine.execute_transitions(decisions)
+                                    # Emit alert so humans see pending decisions
+                                    emit_brain_alert(
+                                        d.brain_id,
+                                        "governance_manual_blocked",
+                                        {
+                                            "action": d.action,
+                                            "current_status": d.current_status,
+                                            "target_status": d.target_status,
+                                            "reasons": d.reasons,
+                                            "metrics": d.metrics_snapshot,
+                                        },
+                                    )
+                        else:
+                            container.governance_rule_engine.execute_transitions(decisions)
                     except Exception:
                         _logger.exception(
                             "CRITICAL: PnL-based governance evaluation failed — "

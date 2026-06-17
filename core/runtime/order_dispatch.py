@@ -145,12 +145,14 @@ def _build_minimal_control_snapshot() -> Any:
     return _MinimalControlSnapshot(mode_state)
 
 
-def _record_brain_outcomes(proposals, direction, execution_outcome, tracker):
+def _record_brain_outcomes(proposals, direction, execution_outcome, tracker, *, symbol: str = ""):
     """Record each brain's performance based on consensus agreement.
 
     Compatible with both BrainSignal (new — has .direction/.confidence)
     and BrainDecisionProposal (old — has .prediction dict).
     FIX-20260609-002: BrainSignal contract repair.
+    FIX-20260617-002: Added per-brain dimensions (confidence, vote_match, direction)
+    to differentiate records when multiple brains share the same trade outcome.
     """
     for p in proposals:
         # ── FIX-20260609-002: BrainSignal compatibility ──
@@ -169,7 +171,17 @@ def _record_brain_outcomes(proposals, direction, execution_outcome, tracker):
         composite = round(0.55 + p_conf * 0.3, 4) if matched else round(0.25 + p_conf * 0.2, 4)
         tracker.record_outcome(
             p.brain_id,
-            {"composite_score": composite, "execution_outcome": execution_outcome},
+            {
+                "composite_score": composite,
+                "execution_outcome": execution_outcome,
+                "dimensions": {
+                    "brain_confidence": round(p_conf, 4),
+                    "brain_direction": p_dir,
+                    "consensus_direction": direction,
+                    "vote_matched": matched,
+                    "symbol": symbol,
+                },
+            },
         )
 
 

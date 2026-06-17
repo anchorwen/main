@@ -5792,7 +5792,7 @@ def execute_live_cycle(
                             mid_price,
                             daily_feature_vector=daily_feature_vector,
                         )
-                        _record_brain_outcomes(strategy_proposals, dr.direction, "pending", tracker)
+                        _record_brain_outcomes(strategy_proposals, dr.direction, "pending", tracker, symbol=config.symbol)
                     except Exception as _bi_exc:  # noqa: BLE001
                         print(
                             json.dumps(
@@ -6244,7 +6244,7 @@ def execute_live_cycle(
         if config.multi_brain:
             skip_event["mode"] = "multi_brain"
             skip_event.update(consensus_extra)
-            _record_brain_outcomes(proposals, direction, "consensus_skip", tracker)
+            _record_brain_outcomes(proposals, direction, "consensus_skip", tracker, symbol=config.symbol)
         else:
             skip_event["out_risk"] = round(raw_output.get("out_risk", 0.0), 6)
             skip_event["out_vol"] = round(raw_output.get("out_vol", 0.0), 6)
@@ -6256,6 +6256,13 @@ def execute_live_cycle(
                 {
                     "composite_score": round(0.3 + confidence * 0.3, 4),
                     "execution_outcome": "consensus_skip",
+                    "dimensions": {
+                        "brain_confidence": round(confidence, 4),
+                        "brain_direction": direction,
+                        "consensus_direction": direction,
+                        "vote_matched": False,
+                        "symbol": config.symbol,
+                    },
                 },
             )
         print(json.dumps(skip_event, ensure_ascii=False), flush=True)

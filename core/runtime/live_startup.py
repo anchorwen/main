@@ -294,38 +294,54 @@ def check_single_brain_governance(brain_id: str, base_dir: str) -> dict[str, Any
 def inject_performance_metrics(pnl_store: Any, base_dir: str) -> None:
     """Inject per-brain performance metrics into governance state every cycle.
 
-    FIX-20260611-020: GOVERNANCE_MANUAL_MODE guard — PnP ledger metrics are
-    counterfactual (backtest/shadow), not live performance.  Injection is
-    disabled while manual governance whitelist is active.
+    FIX-20260617-001: Replaced BrainPnLStore (backtest/shadow PnL) with
+    brain_performance.json (live execution outcomes from MT5 fills).
     """
-    # ── FIX-20260611-020: Skip injection in manual governance mode ──
-    # The governance_state performance_metrics should come from
-    # brain_performance.json (live tracking), NOT brain_pnl_ledger.json
-    # (counterfactual PnL).  Manual mode prevents backtest data from
-    # poisoning governance decisions.
-    _GOVERNANCE_SKIP_INJECTION = True  # Set False after record contamination fixed
+    # ── FIX-20260617-001: Skip injection — scheduler_service.py handles this ──
+    # The governance performance_metrics are now injected from
+    # brain_performance.json by the governance_scheduler (every 60s).
+    # This live-cycle injection is a duplicate path; keep disabled
+    # until the scheduler path is fully validated in production.
+    _GOVERNANCE_SKIP_INJECTION = True
     if _GOVERNANCE_SKIP_INJECTION:
         return
 
+    import json as _json
     from pathlib import Path as _P
 
     _gov_path = _P(base_dir) / "governance_state.json"
-    if not _gov_path.exists():
+    _bp_path = _P(base_dir) / "brain_performance.json"
+    if not _gov_path.exists() or not _bp_path.exists():
         return
     try:
         from core.governance.governance_service import GovernanceService
 
         gov = GovernanceService.load(str(_gov_path))
-        all_metrics = pnl_store.get_all_metrics()
-        for brain_id, m in all_metrics.items():
+        _bp_data = _json.loads(_bp_path.read_text(encoding="utf-8"))
+        _bp_records = _bp_data.get("records", {})
+        for _bid, _records in _bp_records.items():
+            if not isinstance(_records, list):
+                continue
+            _wins = sum(
+                1 for r in _records
+                if isinstance(r, dict) and r.get("execution_outcome") == "win"
+            )
+            _losses = sum(
+                1 for r in _records
+                if isinstance(r, dict) and r.get("execution_outcome") == "loss"
+            )
+            _total = _wins + _losses
+            if _total == 0:
+                continue
+            _wr = _wins / _total
             gov.set_performance_metrics(
-                brain_id,
+                _bid,
                 {
-                    "win_rate": m.win_rate,
-                    "profit_factor": m.profit_factor,
-                    "sharpe_ratio": m.sharpe_ratio,
-                    "total_trades": m.sample_count,
-                    "pnl_r": round(m.cumulative_pnl, 2),
+                    "win_rate": round(_wr, 4),
+                    "total_trades": _total,
+                    "wins": _wins,
+                    "losses": _losses,
+                    "source": "brain_performance",
                 },
             )
         gov.save(str(_gov_path), lock_timeout=1.0)
