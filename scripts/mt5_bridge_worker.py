@@ -142,6 +142,22 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
     pipeline merges overflow files back into the main journal during
     non-trading hours — zero data loss, zero hot-path blocking.
     """
+    # ── FIX-20260617-101/P0: Entry boundary assertion ──
+    # Reject open entries missing entry_context.vector BEFORE the write lock.
+    # This is a lightweight complement to the Layer 1 Pydantic validator in
+    # JournalAccepted — catches any open entry that bypassed construction.
+    _action = record.get("action")
+    if _action in ("open", None) and "eq_" in str(record.get("message_id", "")):
+        _ctx = record.get("entry_context")
+        if isinstance(_ctx, dict) and not _ctx.get("vector"):
+            import logging as _logging
+            _logging.getLogger("BridgeJournal").error(
+                "REJECTED: open entry missing entry_context.vector — "
+                "ticket=%s message_id=%s. See DLR-001.",
+                record.get("position_ticket"), record.get("message_id"),
+            )
+            return  # Physically block the write — no silent data loss
+
     from core.infrastructure.distributed_lock import FileLock
 
     journal_path.parent.mkdir(parents=True, exist_ok=True)

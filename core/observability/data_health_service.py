@@ -2966,6 +2966,69 @@ class DataHealthService:
             checked_at=_utc_iso(),
         )
 
+    # ── FIX-20260617-101/P1: Entry Context Guard heartbeat ──
+
+    @health_check(
+        tier=Tier.CRITICAL,
+        source="entry_context_guard",
+        description="EntryContextGuard daemon heartbeat freshness",
+    )
+    def check_entry_context_guard_heartbeat(self) -> SourceCheckResult:
+        """Verify the Layer 2 guard daemon is alive and writing heartbeats.
+
+        The guard writes to ``state/heartbeats/entry_context_guard.json``
+        every 5 minutes.  If the heartbeat is older than 15 minutes, the
+        guard may have died silently (M1 violation).
+        """
+        _path = os.path.join(
+            self._base_dir, "state", "heartbeats", "entry_context_guard.json"
+        )
+        if not os.path.exists(_path):
+            # Also check legacy path (pre-P1 migration)
+            _legacy = os.path.join(self._base_dir, "state", "guard_heartbeat.json")
+            if os.path.exists(_legacy):
+                _path = _legacy
+            else:
+                return SourceCheckResult(
+                    source="entry_context_guard", tier=Tier.CRITICAL,
+                    status=SourceStatus.WARN,
+                    primary_code="GUARD_HEARTBEAT_MISSING",
+                    message="EntryContextGuard heartbeat file not found — guard may not be running",
+                    checked_at=_utc_iso(),
+                )
+        try:
+            with open(_path, encoding="utf-8") as _fh:
+                _data = json.load(_fh)
+            _hb = _data.get("last_heartbeat_utc", "")
+            _age = _age_minutes(_hb) if _hb else 999
+        except Exception:
+            return SourceCheckResult(
+                source="entry_context_guard", tier=Tier.CRITICAL,
+                status=SourceStatus.WARN,
+                primary_code="GUARD_HEARTBEAT_UNREADABLE",
+                message="EntryContextGuard heartbeat file exists but is unreadable",
+                checked_at=_utc_iso(),
+            )
+
+        max_age = 15  # minutes (3x the 5-min heartbeat interval)
+        if _age > max_age:
+            return SourceCheckResult(
+                source="entry_context_guard", tier=Tier.CRITICAL,
+                status=SourceStatus.FAIL,
+                primary_code="GUARD_HEARTBEAT_STALE",
+                message=f"EntryContextGuard heartbeat age {_age:.0f}min > {max_age}min limit — guard may be dead",
+                metrics={"heartbeat_age_min": round(_age, 1)},
+                checked_at=_utc_iso(),
+            )
+        return SourceCheckResult(
+            source="entry_context_guard", tier=Tier.CRITICAL,
+            status=SourceStatus.PASS,
+            primary_code="GUARD_HEARTBEAT_OK",
+            message=f"EntryContextGuard heartbeat: {_age:.0f}min old (pid={_data.get('pid', '?')})",
+            metrics={"heartbeat_age_min": round(_age, 1), "pid": _data.get("pid")},
+            checked_at=_utc_iso(),
+        )
+
     def build_alert_context(self, report: HealthReport) -> dict[str, Any]:
         """Convert report to alert context keys for external evaluation.
 

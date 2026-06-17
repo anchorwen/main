@@ -58,7 +58,9 @@ class EntryContextGuard:
         self._scan_interval = scan_interval
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
-        self._heartbeat_path = self._base_dir / "state" / "guard_heartbeat.json"
+        self._heartbeat_path = (
+            self._base_dir / "state" / "heartbeats" / "entry_context_guard.json"
+        )
 
     # ── Public API ───────────────────────────────────────────────────────
 
