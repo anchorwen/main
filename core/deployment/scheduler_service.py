@@ -235,6 +235,11 @@ class SchedulerService:
                                     "consecutive_losses": 0,  # not in brain_performance
                                     "recent_win_rate": round(_wr, 4),
                                 }
+                                # Auto-register brain if not in governance yet
+                                _existing = container.governance_service.get_brain_state(_bid)
+                                if _existing is None:
+                                    container.governance_service.register_brain(_bid, "candidate")
+
                                 # Inject LIVE execution metrics into governance
                                 container.governance_service.set_performance_metrics(
                                     _bid,
@@ -276,6 +281,14 @@ class SchedulerService:
                                 "[GOV_LIVE] Injected brain_performance metrics: "
                                 "%d brains with live trade data",
                                 len(perf),
+                            )
+
+                            # ── Persist governance state to disk ──
+                            _gov_save_path = _Path(str(container.config.base_dir)) / "governance_state.json"
+                            container.governance_service.save(str(_gov_save_path), lock_timeout=1.0)
+                            _logger.info(
+                                "[GOV_LIVE] Governance state saved to %s",
+                                _gov_save_path,
                             )
                         else:
                             _logger.warning(
