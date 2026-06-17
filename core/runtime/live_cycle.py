@@ -4573,7 +4573,7 @@ def execute_live_cycle(
         # The restore MUST happen before pending budget records are fed so
         # those records are ADDED to the restored cumulative state rather
         # than overwritten by it.
-        try:
+        with fail_open_guard("BudgetStateRestore"):
             from core.runtime.execution_state import load_execution_state as _load_exec
 
             _exec_snap = _load_exec(Path(config.base_dir) / "state" / "execution_state.json")
@@ -4588,15 +4588,13 @@ def execute_live_cycle(
 
                             with contextlib.suppress(Exception):
                                 _budget.load_state(_snap)
-        except Exception:  # noqa: BLE001
-            pass  # Non-fatal: budget restore failure → zeroed counters this cycle
 
         # ── Feed pending budget records from reconciliation ──
         if state._pending_budget_records:
             for _rec in state._pending_budget_records:
                 _sname = _rec.get("strategy", "")
                 _strat = strategies.get(_sname)
-                if _strat is not None and _strat.budget is not None:
+                if _strat is not None and getattr(_strat, "budget", None) is not None:
                     with log_and_continue(component="Budget:record_trade"):
                         # FIX-20260615-009g: defensive defaults for breakeven (PnL=0)
                         # edge case — some close paths may omit is_win when PnL=0.
@@ -4611,7 +4609,7 @@ def execute_live_cycle(
             for _rec in state._pending_sl_records:
                 _sname = _rec["strategy"]
                 _strat = strategies.get(_sname)
-                if _strat is not None and _strat.budget is not None:
+                if _strat is not None and getattr(_strat, "budget", None) is not None:
                     with log_and_continue(component="Budget:record_sl"):
                         _result = _strat.budget.record_sl(_rec.get("timestamp"))
                         if _result.get("event") != "sl_recorded":
