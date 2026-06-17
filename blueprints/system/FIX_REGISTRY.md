@@ -650,6 +650,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260616-097 | 2026-06-16 | features-service | OFI Lite: Tick Rule order flow imbalance from MT5 symbol_info_tick. OFI_M5, OFI_ZScore_20, OFI_Cumulative_1H. Thread-safe, graceful degradation. Wired into market_ingress + Feature Lake. | RC-06 |
 | FIX-20260616-098 | 2026-06-16 | features-service | OFI TickPoller: 1s daemon thread in bridge worker, time_msc dedup, double-settlement guard. 300x higher tick density (1s vs 5min). | RC-06 |
 | FIX-20260616-099 | 2026-06-16 | features-service | OFI IPC Bridge: TickPoller in bridge subprocess writes ofi_snapshot.json via atomic temp+rename every 30s. Feature Lake reads from file (graceful on missing). Removed in-process TickPoller from live_cycle. Zero coupling. | RC-06 |
+| FIX-20260617-100 | 2026-06-17 | training | MetaFilter V3: 102 samples (46W/56L), 47-dim (40 V9 + spread + confidence + 5 OFI). OOF AUC=0.422. OU_Theta enters top 5. OFI features not significant (insufficient tick density). Shadow mode. Retrain at 200 clean samples. | RC-06 |
 
 ---
 ## Fix Details by Year
@@ -3151,3 +3152,15 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-07 — missing-validation: 异常吞咽缺乏熔断机制. 主循环 except Exception 可无限次静默失败而不退出 → 状态机在无自检的情况下进入永久降级循环 (ZOMBIE_CYCLE_SILENT_DEGRADE 模式)
 - **Prevention**: (1) 所有 catch-all except 必须配备连续失败计数器 + 硬熔断阈值 ≤10, (2) 断路器路径 MT5 调用必须带 timeout (5-15s), (3) 关键 Phase 边界必须有 timestamp 日志, (4) execution_state 持久化必须自检关键 invariant 并 auto_heal
 - **Dependents Checked**: execution_state.load_execution_state() (compatible with auto-healed fields), live_intent_loop main loop (counter on state object, no new imports), circuit breaker (timeout sentinel handled with skip logic)
+
+### FIX-20260617-100
+- **Date**: 2026-06-17
+- **Author**: cursor-agent
+- **Commit**: f2bbabf
+- **Type**: feat
+- **Module**: training
+- **Files**: scripts/build_metafilter_dataset.py,scripts/train_metafilter_path_b.py
+- **Description**: MetaFilter V3: 102 samples (46W/56L), 47-dim (40 V9 + spread + confidence + 5 OFI). OOF AUC=0.422. OU_Theta enters top 5. OFI features not significant (insufficient tick density). Shadow mode. Retrain at 200 clean samples.
+- **Root Cause**: RC-06 — contract-violation
+- **Prevention**: (to be filled)
+- **Dependents Checked**: (none)

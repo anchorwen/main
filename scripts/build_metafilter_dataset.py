@@ -114,9 +114,32 @@ def main() -> int:
         except Exception:
             continue
 
-        # Brain confidence as 42nd feature
+        # Feature 42: entry_spread (cost of entry)
+        entry_spread = 0.0
+        if isinstance(open_entry.get("entry_context"), dict):
+            entry_spread = float(open_entry["entry_context"].get("entry_spread", 0) or 0)
+        vec.append(entry_spread)
+
+        # Feature 43: brain confidence
         confidence = float(open_entry.get("confidence", 0.5) or 0.5)
         vec.append(confidence)
+
+        # Features 44-48: OFI data from IPC file (if available)
+        import os as _os
+        _ofi_path = "data_btc/reports/ofi_snapshot.json"
+        if _os.path.exists(_ofi_path):
+            try:
+                with open(_ofi_path, encoding="utf-8") as _of:
+                    _ofi_data = json.loads(_of.read())
+                vec.append(float(_ofi_data.get("OFI_M5", 0) or 0))
+                vec.append(float(_ofi_data.get("OFI_ZScore_20", 0) or 0))
+                vec.append(float(_ofi_data.get("OFI_Cumulative_1H", 0) or 0))
+                vec.append(float(_ofi_data.get("OFI_Tick_Count", 0) or 0))
+                vec.append(float(_ofi_data.get("OFI_Total_Volume", 0) or 0))
+            except Exception:
+                vec.extend([0.0, 0.0, 0.0, 0.0, 0.0])  # OFI unavailable
+        else:
+            vec.extend([0.0, 0.0, 0.0, 0.0, 0.0])
 
         # Label
         is_win = 1 if pnl > 0 else 0
