@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -127,7 +126,7 @@ def main() -> int:
     pct_fixed = fixed / max(total, 1) * 100
     pct_ok = already_ok / max(total, 1) * 100
 
-    print(f"\nResults:")
+    print("\nResults:")
     print(f"  Already correct:   {already_ok} ({pct_ok:.0f}%)")
     print(f"  Fixed (normalized): {fixed} ({pct_fixed:.0f}%)")
     print(f"  No MT5 match:      {no_mt5_match}")
@@ -138,7 +137,7 @@ def main() -> int:
         near_100 = sum(1 for r in ratios if 80 < r < 120)
         near_1 = sum(1 for r in ratios if 0.8 < r < 1.2)
         other = len(ratios) - near_100 - near_1
-        print(f"\n  Ratio distribution:")
+        print("\n  Ratio distribution:")
         print(f"    ~1x (same unit, minor drift): {near_1}")
         print(f"    ~100x (USC vs display-dollar): {near_100}")
         print(f"    Other ratios: {other}")
