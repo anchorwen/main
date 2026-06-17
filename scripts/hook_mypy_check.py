@@ -48,6 +48,8 @@ def main() -> int:
     if not full_path.exists() or not file_path.endswith(".py"):
         return 0
 
+    failed = False  # IRON_LAW-13-S1: track failure state
+
     # Run mypy on the file
     try:
         result = subprocess.run(
@@ -79,15 +81,18 @@ def main() -> int:
             if current_errors > prev_errors:
                 new_count = current_errors - prev_errors
                 print(
-                    f"[mypy] WARNING: +{new_count} NEW error(s) in {file_path} (was {prev_errors}, now {current_errors})"
+                    f"[mypy] BLOCKED: +{new_count} NEW error(s) in {file_path} "
+                    f"(was {prev_errors}, now {current_errors})"
                 )
-                print("[mypy] Commit will be BLOCKED by pre-commit hook. Fix before delivery.")
+                print("[mypy] Fix the new type errors before continuing.")
+                failed = True
     except subprocess.TimeoutExpired:
         print(f"[mypy] {file_path}: timed out")
+        failed = True
     except Exception as exc:  # noqa: BLE001
         print(f"[mypy] {file_path}: check failed ({exc})")
 
-    return 0  # Never block on PostToolUse — just report
+    return 1 if failed else 0  # IRON_LAW-13-S1: blocking on new errors
 
 
 if __name__ == "__main__":

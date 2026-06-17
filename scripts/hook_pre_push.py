@@ -24,6 +24,7 @@ Override (emergency only):
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -90,6 +91,59 @@ def check_mypy() -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Check 3: Omega protocol compliance scan
+# ---------------------------------------------------------------------------
+def check_omega() -> bool:
+    """Verify all commits being pushed have Ω-Routing signatures."""
+    print("\n" + "=" * 60)
+    print("[pre-push] Omega compliance scan")
+    print("=" * 60)
+
+    try:
+        result = subprocess.run(
+            ["git", "log", "--format=%B", "@{u}..HEAD"],
+            cwd=REPO_ROOT,
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode != 0:
+            print("[pre-push] Omega: cannot determine commit range (first push?)")
+            return True
+
+        all_commits = result.stdout
+        if not all_commits.strip():
+            print("[pre-push] Omega: no new commits to check")
+            return True
+
+        # Check each commit for omega signature
+        commits = [c.strip() for c in all_commits.split("\n\n-- \n") if c.strip()]
+        missing = 0
+        for i, commit in enumerate(commits):
+            first_line = commit.strip().split("\n")[0] if commit else ""
+            has_sig = bool(re.search(
+                r"\[[OΩ].*Routing:\s*Scene\s+[A-G]",
+                commit, re.IGNORECASE,
+            ))
+            if not has_sig:
+                print(f"[pre-push] Commit {i+1} missing Ω signature: {first_line[:80]}")
+                missing += 1
+
+        if missing > 0:
+            print(f"[pre-push] Omega: {missing} commit(s) missing Ω-Routing signature.")
+            print("[pre-push] Add [Ω-Routing: Scene X → ...] to commit message.")
+            return False
+
+        print(f"[pre-push] Omega: PASSED ({len(commits)} commits valid)")
+        return True
+
+    except subprocess.TimeoutExpired:
+        print("[pre-push] Omega: TIMEOUT (>30s)")
+        return False
+    except Exception as exc:
+        print(f"[pre-push] Omega: INTERNAL ERROR — {exc}")
+        return False
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main() -> int:
@@ -99,6 +153,7 @@ def main() -> int:
     checks = [
         ("ruff", check_ruff),
         ("mypy", check_mypy),
+        ("omega", check_omega),
     ]
 
     failures: list[str] = []

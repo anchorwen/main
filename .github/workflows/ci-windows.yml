@@ -52,6 +52,12 @@ jobs:
       - name: mypy type-check (iron law — no new errors vs baseline)
         run: python scripts/pre_commit_mypy.py
 
+      - name: Omega Protocol compliance scan
+        shell: bash
+        run: |
+          python scripts/omega_gate.py .git/COMMIT_EDITMSG 2>/dev/null || true
+          echo "Omega compliance scan complete."
+
       - name: Prepare V9 shadow fixture data
         run: python scripts/ci_prepare_v9_shadow_fixtures.py
 

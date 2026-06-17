@@ -43,9 +43,11 @@ def main() -> int:
     if not full_path.exists() or not file_path.endswith(".py"):
         return 0
 
-    # Run blueprint pre-check (always exit 0 — advisory only)
-    try:  # noqa: SIM105
-        subprocess.run(
+    # ── IRON_LAW-13-S1: propagate actual exit code ──
+    # Advisory-only for --pre-check mode, but surface failures so Agent
+    # sees the warning immediately after Edit/Write.
+    try:
+        result = subprocess.run(
             [
                 sys.executable,
                 str(ROOT / "scripts" / "check_blueprint_compliance.py"),
@@ -55,10 +57,18 @@ def main() -> int:
             cwd=str(ROOT),
             timeout=15,
         )
+        if result.returncode != 0:
+            print(
+                f"[blueprint] WARNING: consistency check failed for {file_path} "
+                f"(exit {result.returncode})"
+            )
+            print("[blueprint] Review and update blueprints/modules/<module>.md before commit.")
+        return result.returncode
+    except subprocess.TimeoutExpired:
+        print(f"[blueprint] {file_path}: check timed out")
+        return 1
     except Exception:  # noqa: BLE001
-        pass  # Never let a reminder hook break the flow
-
-    return 0
+        return 0  # silent on infrastructure failures
 
 
 if __name__ == "__main__":
