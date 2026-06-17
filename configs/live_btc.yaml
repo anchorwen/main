@@ -150,23 +150,8 @@ brains:
   # ── DQAF-20260615-003: V12 H1 Survival (Route B, 41-dim with delta_OU/Hurst) ──
   - enabled: true
     path: configs/brains_btc/BTC_Swing_V12_H1_Survival.json
-  # ── Retired fleet (archived) ──
-  - enabled: false
-    path: configs/brains_btc/archive/BTC_Swing_V4.json
-  - enabled: false
-    path: configs/brains_btc/archive/BTC_Swing_V5.json
-  - enabled: false
-    path: configs/brains_btc/archive/BTC_Swing_LGB_V1.json
-  - enabled: false
-    path: configs/brains_btc/archive/BTC_Swing_V6_MultiTF_LGB_v2.json
-  - enabled: false
-    path: configs/brains_btc/archive/BTC_Swing_V7_MultiTF_LGB_v1.json
-  - enabled: false
-    path: configs/brains_btc/archive/BTC_Swing_V8_MultiTF_LGB_v1.json
-  - enabled: false
-    path: configs/brains_btc/archive/BTC_Swing_V11_H1_Directional.json
-  - enabled: false
-    path: configs/brains_btc/archive/BTC_Swing_V11_M15_Directional.json
+  # ── DLR-001 config drift fix (2026-06-17): Retired fleet removed from registry.
+  #   Archive brain configs preserved in configs/brains_btc/archive/ for reference.
 capital_allocator:
   base_volume: 0.01
   max_volume: 0.1
