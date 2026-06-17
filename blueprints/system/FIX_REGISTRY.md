@@ -651,6 +651,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260616-098 | 2026-06-16 | features-service | OFI TickPoller: 1s daemon thread in bridge worker, time_msc dedup, double-settlement guard. 300x higher tick density (1s vs 5min). | RC-06 |
 | FIX-20260616-099 | 2026-06-16 | features-service | OFI IPC Bridge: TickPoller in bridge subprocess writes ofi_snapshot.json via atomic temp+rename every 30s. Feature Lake reads from file (graceful on missing). Removed in-process TickPoller from live_cycle. Zero coupling. | RC-06 |
 | FIX-20260617-100 | 2026-06-17 | training | MetaFilter V3: 102 samples (46W/56L), 47-dim (40 V9 + spread + confidence + 5 OFI). OOF AUC=0.422. OU_Theta enters top 5. OFI features not significant (insufficient tick density). Shadow mode. Retrain at 200 clean samples. | RC-06 |
+| FIX-20260617-101 | 2026-06-17 | data-integrity | Institutional Data Integrity Framework: Three-Layer Defense against silent data loss. DLR-001: 34 BTC opens lost. L1 Pydantic write-boundary validator, L2 DataHealthService + daemon guard, L3 cross-symbol consistency audit. 9 files, 0 hot path changes. | RC-06, RC-09 |
 
 ---
 ## Fix Details by Year
@@ -3164,3 +3165,15 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-06 — contract-violation
 - **Prevention**: (to be filled)
 - **Dependents Checked**: (none)
+
+### FIX-20260617-101
+- **Date**: 2026-06-17
+- **Author**: cursor-agent
+- **Commit**: 36982e3
+- **Type**: fix
+- **Module**: data-integrity
+- **Files**: core/contracts/journal_contract.py,core/observability/data_health_service.py,core/observability/data_loss.py,core/observability/entry_context_guard.py,scripts/alert_dispatcher.py,scripts/audit_data_integrity.py,scripts/audit_cross_symbol_consistency.py,scripts/data_pipeline_audit.py,tests/unit/test_entry_context_validation.py
+- **Description**: Institutional Data Integrity Framework. DLR-001: 34 BTC opens permanently lost — entry_context.vector absent for 14 days undetected. Three-Layer Defense: L1 Pydantic field_validator rejects incomplete entries at write boundary, L2 DataHealthService.check_entry_context_completeness + entry_context_guard daemon (5min heartbeat + hourly scan), L3 audit_cross_symbol_consistency.py detects single-symbol failures via BTC vs XAU field parity. Also: orphan signatures 6→10, AlertCard +affected_consumers, removed dead push_dingtalk(). Zero hot path changes.
+- **Root Cause**: RC-06 (contract-violation): JournalAccepted accepted entry_context dicts missing 'vector'. No write-boundary or audit enforcement existed.
+- **Prevention**: L1 write rejection, L2 hourly detection with alert, L3 cross-symbol parity.
+- **Dependents Checked**: live_cycle.py/daily_ops_scheduler.py/strategy_line.py (all untouched)
