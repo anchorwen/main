@@ -6,10 +6,10 @@
   "training_contract": "btc_swing",
   "feature_schema": "btc_macro_enhanced_41",
   "feature_schema_id": "btc_macro_enhanced_41",
-  "model_path": "data_btc/models/btc_37/BTC_Swing_V2_model.json",
+  "model_path": "data_btc/models/btc_swing_v4_41d/xgboost_fold0_s42.json",
   "artifact_path": "data_btc/models/btc_37/BTC_Swing_V2_model.json",
   "model_version": "btc_swing_v4",
-  "artifact_hash": "3d7071d2c1443aaa256990a60962cc65f400c922d5f3eb88edd8ea1aa9270f82",
+  "artifact_hash": "3d7071d2c1443aaa",
   "status": "candidate",
   "vote_weight": 1.0,
   "magic": 90410,
@@ -82,5 +82,6 @@
   "governance": {
     "min_confidence": 0.45,
     "cooldown_cycles": 3
-  }
+  },
+  "last_retrained": "2026-06-17T09:12:36.518370+00:00"
 }

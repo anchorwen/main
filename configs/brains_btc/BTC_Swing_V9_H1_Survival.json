@@ -6,10 +6,10 @@
   "training_contract": "btc_swing",
   "feature_schema": "btc_macro_enhanced_41",
   "feature_schema_id": "btc_macro_enhanced_41",
-  "model_path": "data_btc/models/btc_swing_v9_h1/lightgbm_fold0_s42.txt",
+  "model_path": "data_btc/models/btc_swing_h1_41d/lightgbm_fold0_s42.txt",
   "artifact_path": "data_btc/models/btc_swing_v9_h1/lightgbm_fold0_s42.txt",
   "model_version": "btc_swing_v5",
-  "artifact_hash": "acda8190d6a88eb2a45805bef5936ce6e93540ecc69e113451d0f877fea2860c",
+  "artifact_hash": "bd9253863bfa6e3a",
   "status": "shadow",
   "vote_weight": 0.0,
   "magic": 90411,
@@ -93,5 +93,6 @@
   "governance": {
     "min_confidence": 0.5,
     "cooldown_cycles": 3
-  }
+  },
+  "last_retrained": "2026-06-17T09:12:36.516370+00:00"
 }
