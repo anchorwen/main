@@ -36,7 +36,7 @@ from typing import Any
 
 # ── stdout encoding fix for Windows ──
 if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
 ROOT = Path(__file__).resolve().parent.parent
 NOW = datetime.now(UTC).replace(tzinfo=None)
@@ -53,7 +53,6 @@ for label, candidate in [("XAU", "data"), ("BTC", "data_btc")]:
 # ── File freshness limits (minutes) ──
 FRESH_LIMITS: dict[str, float] = {
     "execution_state.json": 30,
-    "bar_sync_state.json": 30,
     "golden_master.jsonl": 120,
     "feature_store": 30,
     "leaderboard.json": 120,
@@ -64,15 +63,27 @@ FRESH_LIMITS: dict[str, float] = {
     "live_trade_journal.jsonl": 30,
     "position_snapshots.jsonl": 30,
     "alert_audit.jsonl": 60,
-    "exit_watchdog_alerts.jsonl": 120,
     "mt5_bridge_health.json": 5,
     "calibrator_feed_state.json": 120,
+}
+
+# ── Optional components: absence is NOT a warning ──
+#   bar_sync_state.json — only written when --bar-sync is enabled (optional CLI flag)
+#   exit_watchdog_alerts.jsonl — alert files are event-driven; no alerts = healthy
+OPTIONAL_FILES: set[str] = {
+    "state/bar_sync_state.json",
+}
+# ── Alert/event-driven files: staleness checks are meaningless ──
+#   No alerts = system is running correctly. Age indicates health for data feeds,
+#   not for alert logs.  A 30-day-old alert file means 30 days without incidents.
+NO_STALENESS_FILES: set[str] = {
+    "logs/alert_audit.jsonl",
+    "reports/exit_watchdog_alerts.jsonl",
 }
 
 # ── Required data files per symbol ──
 DATA_FILES = [
     "state/execution_state.json",
-    "state/bar_sync_state.json",
     "state/daily_ops_state.json",
     "state/data_health_state.json",
     "golden_master.jsonl",
@@ -166,13 +177,16 @@ def section_1_pipeline(data: dict) -> dict:
                 if key in rel:
                     limit = lim
                     break
-            stale = (age is not None and limit is not None and age > limit)
+            # Skip staleness check for alert/event-driven files
+            _effective_limit = limit if rel not in NO_STALENESS_FILES else None
+            stale = (age is not None and _effective_limit is not None and age > _effective_limit)
             checks.append({
                 "file": rel,
                 "exists": exists,
                 "age_min": round(age, 1) if age else None,
-                "limit_min": limit,
+                "limit_min": _effective_limit,
                 "stale": stale,
+                "optional": rel in OPTIONAL_FILES if not exists else False,
             })
         results[sym] = checks
 
@@ -200,7 +214,8 @@ def _print_section_1(results: dict) -> list[str]:
     print("── 1. DATA PIPELINE INTEGRITY ──")
     for sym in DATA_DIRS:
         checks = results.get(sym, [])
-        missing = [c for c in checks if not c["exists"]]
+        missing = [c for c in checks if not c["exists"] and not c.get("optional")]
+        missing_optional = [c for c in checks if not c["exists"] and c.get("optional")]
         stale = [c for c in checks if c.get("stale")]
         print(f"  {sym}: {sum(1 for c in checks if c['exists'])}/{len(checks)} files exist"
               f" | missing={len(missing)} stale={len(stale)}")
@@ -209,6 +224,8 @@ def _print_section_1(results: dict) -> list[str]:
         for m in missing:
             print(f"    MISSING: {m['file']}")
             flags.append(f"WARN|{sym}|missing_file:{m['file']}")
+        for m in missing_optional:
+            print(f"    OPTIONAL: {m['file']} (component not enabled — not a failure)")
         if stale:
             flags.append(f"WARN|{sym}|{len(stale)}_stale_files")
         if not missing and not stale:
@@ -584,7 +601,7 @@ def section_6_config_alignment(portfolios: dict) -> dict:
         2. brain_id with 'XAU_' prefix appearing in BTC config → contamination
         3. No prefix → scan configs/brains/ vs configs/brains_btc/
     """
-    alignment: dict[str, dict] = {"XAU": {}, "BTC": {}}
+    alignment: dict[str, Any] = {"XAU": {}, "BTC": {}}
 
     # Collect brain_ids from live config YAML registry_entries
     config_brains: dict[str, set[str]] = {"XAU": set(), "BTC": set()}
@@ -606,11 +623,11 @@ def section_6_config_alignment(portfolios: dict) -> dict:
             # Fallback: scan configs/brains*/ directory
             cfg_dir = ROOT / "configs" / ("brains" if sym == "XAU" else "brains_btc")
             if cfg_dir.is_dir():
-                for f in cfg_dir.glob("*.json"):
-                    if "normalization" in f.name or "meta_stage" in f.name:
+                for cfg_file in cfg_dir.glob("*.json"):
+                    if "normalization" in cfg_file.name or "meta_stage" in cfg_file.name:
                         continue
-                    config_brains[sym].add(f.stem)
-                    config_enabled[sym][f.stem] = True
+                    config_brains[sym].add(cfg_file.stem)
+                    config_enabled[sym][cfg_file.stem] = True
 
     # Collect governance brain_ids
     gov_brains: dict[str, set[str]] = {}
