@@ -2184,6 +2184,16 @@ def main(argv: list[str] | None = None) -> int:
                     flush=True,
                 )
 
+        # ── FIX-20260617-101/M2: Entry Context Guard daemon ──
+        # Monitors entry_context.vector completeness (DLR-001).
+        # Runs as independent daemon thread — never blocks the main loop.
+        try:
+            from core.observability.entry_context_guard import start_entry_context_guard
+
+            start_entry_context_guard(Path(args.base_dir), symbol=args.symbol)
+        except Exception:  # noqa: BLE001
+            pass  # Guard failure must never prevent the main loop from starting
+
         while True:
             state.last_heartbeat = time.time()
             if _shutdown_flag[0]:
