@@ -1,0 +1,88 @@
+# Governance / Rules Engine
+
+## Purpose
+Declarative brain lifecycle governance: evaluates brain health signals against 9 built-in rules and automatically transitions brains through the lifecycle state machine (candidate → probation → live → frozen → retired). Separates audit (read) from execution (write): `BrainPromotionEvaluator` reads, `GovernanceRuleEngine.execute_transitions()` writes.
+
+## Key Files
+| File | Role |
+|------|------|
+| `core/governance/governance_rule_engine.py` | `GovernanceRuleEngine` — declarative rule engine with 9 default rules; `GovernanceRule` — single rule (condition_fn + action_fn + priority) |
+| `core/governance/governance_service.py` | `GovernanceService` — thread-safe state machine with valid transition map, persistence (save/load), and feedback signal processing |
+| `core/governance/shadow_tracker.py` | `ShadowTracker` — tracks shadow brain signal statistics for promotion eligibility |
+
+## Data Flow
+```
+BrainPerformanceTracker → brain_summaries (per-brain health metrics)
+                              ↓
+              GovernanceRuleEngine.evaluate(brain_summaries, system_context)
+                              ↓
+              Each rule: condition_fn(ctx) → True? → action_fn(ctx)
+                              ↓
+              All matching rules → _most_severe() picks winning transition
+                              ↓
+              GovernanceService.transition(brain_id, new_status)
+                              ↓
+              Audit log: log_governance_signal() per fired rule
+```
+
+## Lifecycle State Machine
+```
+  shadow ──→ candidate ──→ probation ──→ live ──→ retired
+    │           │              │            │          ↑
+    │           │              │            │          │
+    └───────────┴──────────────┴────────────┴──────────┘
+                    frozen (can re-enter probation)
+```
+
+Valid transitions:
+- shadow → {candidate, probation, frozen, retired}
+- candidate → {live, probation, retired}
+- live → {probation, frozen, retired}
+- probation → {live, frozen, retired}
+- frozen → {probation, retired}
+- retired → {} (terminal)
+
+## Built-in Rules (9 rules, sorted by priority)
+| Priority | Rule | Condition | Action |
+|:--------:|------|-----------|--------|
+| 120 | auto_retire_repeated_frozen | freeze_count ≥ 3 | → retired |
+| 110 | auto_freeze_negative_sr | sharpe < -1.0, ≥50 samples, status=live | → frozen |
+| 100 | auto_freeze_critical | health_signal=critical, ≥10 samples | → frozen |
+| 90 | auto_demote_degraded | health_signal=degraded, ≥15 samples, status=live | → probation |
+| 85 | auto_promote_shadow_to_probation | ≥50 shadow signals, min 5 long/5 short, avg conf≥0.50 | → probation |
+| 80 | auto_demote_probation_to_frozen | status=probation, health degraded/critical, freeze_count<3 | → frozen |
+| 75 | auto_promote_probation_to_live | status=probation, ≥100 samples, healthy/stable, composite≥0.55 | → live |
+| 50 | auto_promote_healthy | health_signal=healthy, composite≥0.75, ≥30 samples | → live |
+| 40 | unfreeze_recovered | status=frozen, health stable/healthy, recommendation≠freeze | → probation |
+
+## Inbound Dependencies
+| Module | What is imported | Why |
+|--------|-----------------|-----|
+| contracts/exceptions | BrainNotFoundError, InvalidTransitionError | Strict transition errors |
+| infrastructure/distributed_lock | FileLock | Cross-process safe state persistence |
+
+## Outbound Dependents
+| Module | What it imports | Why |
+|--------|-----------------|-----|
+| runtime/live_cycle | GovernanceRuleEngine.with_default_rules() | Daily ops governance evaluation |
+| scripts/daily_ops | GovernanceService | Brain lifecycle administration |
+| deployment/brain_lifecycle_manager | GovernanceService | Startup brain registration and validation |
+
+## Known Issues
+- `with_default_rules()` closures capture `gs` (governance_service) from outer scope — if service is replaced without re-creating rules, stale reference persists.
+- `_most_severe()` returns the first rule at max severity; if two rules have equal severity but conflicting transitions, the higher-priority rule wins silently.
+
+## Fix History
+| Fix ID | Date | Summary | Root Cause |
+|--------|------|---------|------------|
+| FIX-20260617-001a | 2026-06-17 | add save() + auto-register to governance pipeline | RC-07 |
+| FIX-20260617-001 | 2026-06-17 | P0 data integrity — governance backtest purge | RC-03 |
+| FIX-20260611-017 | 2026-06-11 | auto_freeze_negative_sr: hard stop-loss for negative Sharpe | RC-07 |
+| FIX-20260529-034 | 2026-05-29 | register_brain() appends transition_log entry for audit trail | RC-07 |
+
+## Cross-Module Contracts
+| Contract | Consumers | Stability |
+|----------|-----------|-----------|
+| `GovernanceService.transition(brain_id, new_status, reason)` | rule_engine, daily_ops | Stable |
+| `GovernanceRuleEngine.evaluate(brain_summaries, system_context)` | live_cycle, daily_ops | Stable |
+| `GovernanceRuleEngine.execute_transitions(report, dry_run)` | deployment | Stable |

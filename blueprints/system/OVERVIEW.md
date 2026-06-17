@@ -59,6 +59,9 @@
 | 21 | features/service | [features_service.md](../modules/features_service.md) | Features | contracts |
 | 22 | runtime/live | [runtime_live.md](../modules/runtime_live.md) | Orchestration | brains, execution, risk, feedback, parliament, features, state |
 | 23 | runtime/state | [runtime_state.md](../modules/runtime_state.md) | Foundation | contracts |
+| 24 | parliament/consensus | [parliament_consensus.md](../modules/parliament_consensus.md) | AI | brains, execution |
+| 25 | governance/rules | [governance_rules.md](../modules/governance_rules.md) | Foundation | contracts, infrastructure |
+| 26 | training/pipeline | [training_pipeline.md](../modules/training_pipeline.md) | AI | brains, metrics, features, contracts |
 
 ## Cross-Cutting Concerns
 
