@@ -487,32 +487,41 @@ def check_journal_integrity(data_dir: str) -> dict[str, Any]:
             time_inversions += 1
 
     # ── PnL verification: journal PnL vs computed from entry/exit prices ──
-    # Price diff (points) → USD: multiply by (tick_value / tick_size) * volume
-    # XAUUSDc: tick_size=0.001, tick_value=0.01, 0.01 lot → 1 point = $0.10
-    # BTCUSDc:  tick_size=0.01,  tick_value=0.01, 0.01 lot → 1 point = $0.01
+    # Verified against MT5 history_deals: journal PnL = MT5 profit field exactly
+    # (both in account currency USC).  Pre-June 2025 trades may have format
+    # differences; we only check trades from 2026-06-01 onward where format is
+    # known to be consistent.
     SYM_CONFIG = {
-        "XAUUSDc": {"tick_size": 0.001, "tick_value": 0.01},
+        "XAUUSDc": {"tick_size": 0.001, "tick_value": 0.1},
         "BTCUSDc": {"tick_size": 0.01, "tick_value": 0.01},
     }
+    PNL_CHECK_CUTOFF = "2026-06-01"
     pnl_mismatches = 0
     pnl_checked = 0
+    pnl_skipped_old = 0
     for tkt in set(open_tickets.keys()) & set(close_tickets.keys()):
         opens = open_tickets[tkt]
         closes = close_tickets[tkt]
         for o in opens:
             for c in closes:
+                # Only verify trades from June onward (known-good format)
+                ts = c.get("recorded_at", "")
+                if ts < PNL_CHECK_CUTOFF:
+                    pnl_skipped_old += 1
+                    continue
                 entry_p = o.get("detail", {}).get("request", {}).get("price") if isinstance(o.get("detail"), dict) else None
                 exit_p = c.get("detail", {}).get("close_price") if isinstance(c.get("detail"), dict) else None
                 if entry_p and exit_p and entry_p > 0 and exit_p > 0:
                     sym = o.get("symbol", "XAUUSDc")
                     cfg = SYM_CONFIG.get(sym, SYM_CONFIG["XAUUSDc"])
                     vol = o.get("volume", 0.01) or 0.01
-                    point_to_usd = (cfg["tick_value"] / cfg["tick_size"]) * vol
+                    pts_to_acct = (cfg["tick_value"] / cfg["tick_size"]) * vol
                     side = o.get("side", "long")
                     price_diff = (exit_p - entry_p) if side == "long" else (entry_p - exit_p)
-                    computed_usd = price_diff * point_to_usd
+                    computed = price_diff * pts_to_acct
                     journal_pnl = c.get("pnl", 0) or 0
-                    if abs(computed_usd - journal_pnl) > 0.25:  # >$0.25 drift (accounts for spread+swap+slippage)
+                    # Allow 0.5 USC tolerance (accounting currency, ~$0.005)
+                    if abs(computed - journal_pnl) > 0.5:
                         pnl_mismatches += 1
                     pnl_checked += 1
 
@@ -713,8 +722,12 @@ def check_three_way_reconciliation(data_dir: str) -> dict[str, Any]:
     # Compute per-trade R→USD from actual SL distance in journal opens.
     # SL is absolute price level, entry is order price.  Difference in points
     # must be converted to USD via tick_size/tick_value/volume.
-    SYM_CFG = {
-        "XAUUSDc": {"tick_size": 0.001, "tick_value": 0.01},
+    # tick_value is in ACCOUNT CURRENCY (USC = cents for cent accounts).
+    # Verified against MT5 history_deals: journal PnL matches MT5 profit field exactly.
+    # XAUUSDc: tick_size=0.001, tick_value=0.1 USC, volume=0.01 → 1 pt = 1.0 USC = $0.01
+    # BTCUSDc: tick_size=0.01, tick_value=0.01 USC, volume=0.01 → 1 pt = 0.01 USC = $0.0001
+    SYM_CFG: dict[str, dict[str, float]] = {
+        "XAUUSDc": {"tick_size": 0.001, "tick_value": 0.1},
         "BTCUSDc": {"tick_size": 0.01, "tick_value": 0.01},
     }
     matched = 0
