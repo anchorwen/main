@@ -782,11 +782,17 @@ def check_three_way_reconciliation(data_dir: str) -> dict[str, Any]:
     snap_match_pct = snap_matches / max(matched, 1) * 100
     three_way_pct = three_way_ok / max(ledger_matches, 1) * 100 if ledger_matches else 100
 
+    # Only count trades where journal PnL is MT5-verified (post-normalization).
+    # Older trades may have format inconsistencies that skew the comparison.
+    verified_matches = sum(1 for tkt in set(journal_opens.keys()) & set(journal_closes.keys())
+                          if journal_closes[tkt].get("_pnl_normalized"))
     sev = "OK" if three_way_pct > 60 else "Sev3" if three_way_pct > 30 else "Sev2"
+    note_suffix = f" | {verified_matches} trades MT5-verified" if verified_matches else ""
 
     return {
         "passed": three_way_pct > 60,
         "severity": sev,
+        "verified_trades": verified_matches,
         "matched_trades": matched,
         "ledger_matched": ledger_matches,
         "snapshot_matched": snap_matches,
