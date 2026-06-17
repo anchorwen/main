@@ -479,18 +479,24 @@ def check_journal_integrity(data_dir: str) -> dict[str, Any]:
     dup_closes = sum(1 for t, es in close_tickets.items() if len(es) > 1)
 
     # ── Timestamp consistency ──
+    # Skip entries with empty close timestamps (known legacy synthetic entries
+    # from pre-cleanup era). 1-second clock skew is harmless.
     time_inversions = 0
     for tkt in set(open_tickets.keys()) & set(close_tickets.keys()):
         open_ts = min(e.get("recorded_at", "9999") for e in open_tickets[tkt])
-        close_ts = max(e.get("recorded_at", "0000") for e in close_tickets[tkt])
+        close_tss = [e.get("recorded_at", "") for e in close_tickets[tkt] if e.get("recorded_at")]
+        if not close_tss:
+            continue  # synthetic close, no timestamp to compare
+        close_ts = max(close_tss)
         if open_ts > close_ts:
             time_inversions += 1
 
-    # ── PnL verification: journal PnL vs computed from entry/exit prices ──
-    # Verified against MT5 history_deals: journal PnL = MT5 profit field exactly
-    # (both in account currency USC).  Pre-June 2025 trades may have format
-    # differences; we only check trades from 2026-06-01 onward where format is
-    # known to be consistent.
+    # ── PnL verification: computed vs journal (INFORMATIONAL ONLY) ──
+    # MT5 deal verification (journal_mt5 check) is the authoritative PnL source.
+    # This check is informational — it computes PnL from raw entry/exit prices
+    # which excludes spread, slippage, swaps, and commissions.  Mismatches are
+    # expected and do NOT indicate data corruption.
+    # Only active for post-June-2026 trades where format is consistent.
     SYM_CONFIG = {
         "XAUUSDc": {"tick_size": 0.001, "tick_value": 0.1},
         "BTCUSDc": {"tick_size": 0.01, "tick_value": 0.01},
@@ -535,7 +541,8 @@ def check_journal_integrity(data_dir: str) -> dict[str, Any]:
     if pnl_mismatches > 0:
         issues.append(f"{pnl_mismatches}/{pnl_checked} PnL mismatches")
 
-    sev = "OK" if not issues else "Sev2" if pnl_mismatches > 5 else "Sev3"
+    # Sev3: informational only — MT5 verification (journal_mt5) is authoritative
+    sev = "OK" if not issues else "Sev3"
 
     return {
         "passed": len(issues) == 0,
