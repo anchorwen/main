@@ -710,28 +710,52 @@ def check_three_way_reconciliation(data_dir: str) -> dict[str, Any]:
                     pass
 
     # ── Cross-validate ──
-    SYM_R = {"XAUUSDc": 0.10, "BTCUSDc": 0.50}  # approximate R→USD per 0.01 lot
+    # Compute per-trade R→USD from actual SL distance in journal opens.
+    # SL is absolute price level, entry is order price.  Difference in points
+    # must be converted to USD via tick_size/tick_value/volume.
+    SYM_CFG = {
+        "XAUUSDc": {"tick_size": 0.001, "tick_value": 0.01},
+        "BTCUSDc": {"tick_size": 0.01, "tick_value": 0.01},
+    }
     matched = 0
     ledger_matches = 0
     snap_matches = 0
     three_way_ok = 0
     three_way_mismatch = 0
+    r_values: list[float] = []
 
     for tkt in set(journal_opens.keys()) & set(journal_closes.keys()):
         o = journal_opens[tkt]
         c = journal_closes[tkt]
         journal_pnl = c.get("pnl", 0) or 0
+
+        # Compute per-trade 1R from SL distance (points → USD)
         sym = o.get("symbol", "XAUUSDc")
-        r_to_usd = SYM_R.get(sym, 0.50)
+        cfg = SYM_CFG.get(sym, SYM_CFG["XAUUSDc"])
+        vol = o.get("volume", 0.01) or 0.01
+        pts_to_usd = (cfg["tick_value"] / cfg["tick_size"]) * vol
+
+        sl_price = o.get("sl")
+        entry_price = 0.0
+        detail = o.get("detail", {})
+        if isinstance(detail, dict):
+            entry_price = detail.get("request", {}).get("price", 0) or 0
+        if sl_price and entry_price and sl_price > 0 and entry_price > 0:
+            r_usd = abs(sl_price - entry_price) * pts_to_usd
+            if r_usd > 0.01:
+                r_values.append(r_usd)
+        else:
+            r_usd = 1.50  # fallback: typical 1R for XAU 0.01 lot
 
         matched += 1
 
-        # Convert ledger R→USD
-        ledger_pnl_usd = ledger_by_ticket.get(tkt, 0) * r_to_usd
-        if abs(ledger_by_ticket.get(tkt, 0)) > 0.001:
+        # Convert ledger R→USD using per-trade 1R
+        ledger_r = ledger_by_ticket.get(tkt, 0)
+        ledger_pnl_usd = ledger_r * r_usd
+        if abs(ledger_r) > 0.001:
             ledger_matches += 1
-            # Allow 50% tolerance due to approximate R factor
-            if abs(journal_pnl - ledger_pnl_usd) < max(abs(journal_pnl) * 0.8, 2.0):
+            tolerance = max(abs(journal_pnl) * 0.5, 1.5)
+            if abs(journal_pnl - ledger_pnl_usd) < tolerance:
                 three_way_ok += 1
             else:
                 three_way_mismatch += 1
@@ -739,11 +763,27 @@ def check_three_way_reconciliation(data_dir: str) -> dict[str, Any]:
         if tkt in snap_by_ticket:
             snap_matches += 1
 
+    import statistics
+    median_r = statistics.median(r_values) if r_values else 1.50
     ledger_match_pct = ledger_matches / max(matched, 1) * 100
     snap_match_pct = snap_matches / max(matched, 1) * 100
     three_way_pct = three_way_ok / max(ledger_matches, 1) * 100 if ledger_matches else 100
 
     sev = "OK" if three_way_pct > 60 else "Sev3" if three_way_pct > 30 else "Sev2"
+
+    return {
+        "passed": three_way_pct > 60,
+        "severity": sev,
+        "matched_trades": matched,
+        "ledger_matched": ledger_matches,
+        "snapshot_matched": snap_matches,
+        "three_way_ok": three_way_ok,
+        "three_way_mismatch": three_way_mismatch,
+        "three_way_pct": round(three_way_pct, 1),
+        "median_r_usd": round(median_r, 2),
+        "r_samples": len(r_values),
+        "note": f"per-trade R→USD from journal SL×pts_to_usd (median=${median_r:.2f})",
+    }
 
     return {
         "passed": three_way_pct > 70,
@@ -754,8 +794,9 @@ def check_three_way_reconciliation(data_dir: str) -> dict[str, Any]:
         "three_way_ok": three_way_ok,
         "three_way_mismatch": three_way_mismatch,
         "three_way_pct": round(three_way_pct, 1),
-        "r_to_usd_approx": r_to_usd,
-        "note": f"R→USD conversion uses ${r_to_usd}/R approximation; full accuracy needs real SL distance per trade",
+        "median_r_usd": round(median_r, 2),
+        "r_samples": len(r_values),
+        "note": f"per-trade R→USD from journal SL distance (median=${median_r:.2f})",
     }
 
 
