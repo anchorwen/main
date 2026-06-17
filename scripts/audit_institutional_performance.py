@@ -505,7 +505,7 @@ def main():
         for issue in issues:
             print(f"      -> {issue}")
         if not issues:
-            print(f"      -> Healthy. Monitor for regime drift.")
+            print("      -> Healthy. Monitor for regime drift.")
 
     # --- XAU Shadow promotion ---
     print()

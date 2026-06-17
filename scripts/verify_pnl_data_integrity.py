@@ -247,7 +247,7 @@ def main():
                 print(f"    [{sev}] {bid}: {disc}")
 
         # Source reliability assessment
-        print(f"\n  --- Source Reliability Assessment ---")
+        print("\n  --- Source Reliability Assessment ---")
         bp_with_data = sum(1 for b in bp.values() if b["total"] > 0)
         gov_with_data = sum(1 for b in gov.values() if b["total"] > 0)
         ss_with_data = sum(1 for b in ss.values() if b["total"] > 0)
@@ -262,7 +262,7 @@ def main():
                 if s["total"] >= 50 and s["be"] > s["total"] * 0.5:
                     orphan_suspects.append((bid, s["total"], s["be"]))
             if orphan_suspects:
-                print(f"\n  !! ORPHAN-CONTAMINATED BRAINS (>50% breakeven, per FIX-20260615-012):")
+                print("\n  !! ORPHAN-CONTAMINATED BRAINS (>50% breakeven, per FIX-20260615-012):")
                 for bid, n, be in orphan_suspects[:10]:
                     print(f"    {bid}: {be}/{n} breakeven ({be/n*100:.0f}%)")
 
@@ -275,7 +275,7 @@ def main():
                 count_groups[count].append(bid)
             contaminated_groups = {c: bids for c, bids in count_groups.items() if len(bids) >= 3}
             if contaminated_groups:
-                print(f"\n  !! POTENTIAL CONTAMINATION (FIX-20260527-002: identical per-trade records):")
+                print("\n  !! POTENTIAL CONTAMINATION (FIX-20260527-002: identical per-trade records):")
                 for count, bids in sorted(contaminated_groups.items()):
                     print(f"    {count} trades shared by: {', '.join(bids[:5])}")
 
