@@ -100,22 +100,30 @@ def check_omega() -> bool:
     print("=" * 60)
 
     try:
+        # Try upstream range first; fall back to last push
         result = subprocess.run(
             ["git", "log", "--format=%B", "@{u}..HEAD"],
             cwd=REPO_ROOT,
             capture_output=True, text=True, timeout=30,
         )
-        if result.returncode != 0:
-            print("[pre-push] Omega: cannot determine commit range (first push?)")
-            return True
+        if result.returncode != 0 or not (result.stdout or "").strip():
+            # Fallback: check only the latest commit
+            result = subprocess.run(
+                ["git", "log", "--format=%B", "-1", "HEAD"],
+                cwd=REPO_ROOT,
+                capture_output=True, text=True, timeout=10,
+            )
 
-        all_commits = result.stdout
+        all_commits = result.stdout or ""
         if not all_commits.strip():
-            print("[pre-push] Omega: no new commits to check")
+            print("[pre-push] Omega: no commits to check — SKIPPED")
             return True
 
-        # Check each commit for omega signature
-        commits = [c.strip() for c in all_commits.split("\n\n-- \n") if c.strip()]
+        # Check each commit for omega signature (split by commit delimiter or use whole)
+        raw = all_commits.strip()
+        commits = [raw] if "\n\n-- \n" not in raw else [
+            c.strip() for c in raw.split("\n\n-- \n") if c.strip()
+        ]
         missing = 0
         for i, commit in enumerate(commits):
             first_line = commit.strip().split("\n")[0] if commit else ""
