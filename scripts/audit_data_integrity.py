@@ -12,7 +12,7 @@ Usage:
   python scripts/audit_data_integrity.py                          # full audit
   python scripts/audit_data_integrity.py --data-dir data          # XAU only
   python scripts/audit_data_integrity.py --data-dir data_btc      # BTC only
-  python scripts/audit_data_integrity.py --push-dingtalk          # push to DingTalk
+  python scripts/audit_data_integrity.py --alert                  # push alert on Sev1/Sev2
   python scripts/audit_data_integrity.py --json                   # JSON output
 """
 
@@ -24,7 +24,6 @@ import json
 import os
 import sys
 import time
-import urllib.request
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -790,29 +789,6 @@ def generate_report(all_results: dict[str, dict[str, Any]]) -> str:
     return "\n".join(sections)
 
 
-def push_dingtalk(markdown: str, webhook_url: str, title: str = "Ω Data Integrity Audit") -> bool:
-    """Push Markdown report to DingTalk via webhook."""
-    payload = json.dumps({
-        "msgtype": "markdown",
-        "markdown": {
-            "title": title,
-            "text": markdown,
-        },
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        webhook_url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-            return result.get("errcode") == 0
-    except Exception:
-        return False
-
-
 # ═══════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════
@@ -822,8 +798,6 @@ def main() -> int:
     p = argparse.ArgumentParser(prog="audit_data_integrity")
     p.add_argument("--data-dir", type=str, default=None,
                    help="Single data dir to audit (default: both data/ and data_btc/)")
-    p.add_argument("--push-dingtalk", action="store_true",
-                   help="Push report to DingTalk webhook")
     p.add_argument("--json", action="store_true",
                    help="Output results as JSON instead of Markdown")
     p.add_argument("--webhook-url", type=str, default=None,

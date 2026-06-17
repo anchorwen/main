@@ -2075,8 +2075,13 @@ class DataHealthService:
         ("alpha_performance.json", "alpha_count", "zero_data"),
         ("conformal_calibrator_state.json", "cold_started", "empty_init"),
         ("calibrator_feed_state.json", "sample_count", "zero_data"),
-        ("brain_performance.json", None, "empty_init"),  # checks if file is empty or has no records
+        ("brain_performance.json", None, "empty_init"),
         ("reports/retraining_signal_prev.json", "total_brains_assessed", "zero_data"),
+        # ── DLR-001: expanded from 6 to 10 (2026-06-17) ──
+        ("live_trade_journal.jsonl", None, "empty_init"),
+        ("position_snapshots.jsonl", None, "empty_init"),
+        ("reports/live_labels.jsonl", None, "empty_init"),
+        ("brain_pnl_ledger.json", None, "empty_init"),
     ]
 
     def _detect_orphan_subsystems(self) -> list[OrphanFinding]:
@@ -2832,6 +2837,132 @@ class DataHealthService:
             primary_code="GOV_EVENTS_OK",
             message=f"Governance event log: {_count} events",
             metrics={"event_count": _count or 0},
+            checked_at=_utc_iso(),
+        )
+
+    # ── DLR-001 (2026-06-17): Entry context completeness ──
+
+    @health_check(
+        tier=Tier.CRITICAL,
+        source="entry_context",
+        description="entry_context.vector presence in journal open entries",
+    )
+    def check_entry_context_completeness(self) -> SourceCheckResult:
+        """Verify every journal open entry has ``entry_context.vector``.
+
+        DLR-001: 34 real BTC opens were permanently lost for training
+        because ``entry_context.vector`` was absent.  This check scans the
+        journal's open entries and reports the completeness rate.
+
+        Current implementation: full scan with a 5000-line safety cap.
+        TODO(perf): switch to incremental scan when journal exceeds 10 MB
+        (currently O(kB) — full scan is < 100ms).
+        """
+        jl_path = os.path.join(self._base_dir, "live_trade_journal.jsonl")
+        if not os.path.exists(jl_path):
+            return SourceCheckResult(
+                source="entry_context", tier=Tier.CRITICAL,
+                status=SourceStatus.MISSING,
+                primary_code="ENTRY_CTX_JOURNAL_MISSING",
+                message="live_trade_journal.jsonl not found",
+                checked_at=_utc_iso(),
+            )
+
+        total_opens = 0
+        missing_ctx = 0
+        missing_vector = 0
+        empty_vector = 0
+        sample_tickets: list[str] = []
+        max_scan = 5000
+
+        try:
+            with open(jl_path, encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    action = entry.get("action")
+                    if action not in ("open", None):
+                        continue
+                    mid = str(entry.get("message_id", ""))
+                    if "eq_" not in mid:
+                        continue  # skip non-strategy entries (manual, system, etc.)
+                    total_opens += 1
+                    if total_opens > max_scan:
+                        break
+
+                    ctx = entry.get("entry_context")
+                    if ctx is None or not isinstance(ctx, dict):
+                        missing_ctx += 1
+                        if len(sample_tickets) < 3:
+                            sample_tickets.append(str(entry.get("position_ticket", "?")))
+                        continue
+
+                    vector = ctx.get("vector")
+                    if vector is None:
+                        missing_vector += 1
+                        if len(sample_tickets) < 3:
+                            sample_tickets.append(str(entry.get("position_ticket", "?")))
+                    elif isinstance(vector, list) and len(vector) == 0:
+                        empty_vector += 1
+                        if len(sample_tickets) < 3:
+                            sample_tickets.append(str(entry.get("position_ticket", "?")))
+        except OSError:
+            return SourceCheckResult(
+                source="entry_context", tier=Tier.CRITICAL,
+                status=SourceStatus.WARN,
+                primary_code="ENTRY_CTX_UNREADABLE",
+                message="live_trade_journal.jsonl exists but could not be read",
+                checked_at=_utc_iso(),
+            )
+
+        if total_opens == 0:
+            return SourceCheckResult(
+                source="entry_context", tier=Tier.CRITICAL,
+                status=SourceStatus.PASS,
+                primary_code="ENTRY_CTX_NO_OPENS",
+                message="No strategy open entries found — nothing to check",
+                checked_at=_utc_iso(),
+            )
+
+        total_missing = missing_ctx + missing_vector + empty_vector
+        completeness = 1.0 - (total_missing / total_opens)
+
+        # Any missing entry_context.vector in recent opens is a FAIL
+        if total_missing > 0:
+            status = SourceStatus.FAIL
+            code = "ENTRY_CTX_VECTOR_MISSING"
+        else:
+            status = SourceStatus.PASS
+            code = "ENTRY_CTX_OK"
+
+        message = (
+            f"Opens scanned: {total_opens}, "
+            f"missing_ctx: {missing_ctx}, "
+            f"missing_vector: {missing_vector}, "
+            f"empty_vector: {empty_vector}, "
+            f"completeness: {completeness:.1%}"
+        )
+        if sample_tickets:
+            message += f" | samples: {sample_tickets}"
+
+        return SourceCheckResult(
+            source="entry_context", tier=Tier.CRITICAL,
+            status=status,
+            primary_code=code,
+            message=message,
+            metrics={
+                "total_opens": total_opens,
+                "missing_ctx": missing_ctx,
+                "missing_vector": missing_vector,
+                "empty_vector": empty_vector,
+                "completeness": round(completeness, 4),
+                "sample_tickets": sample_tickets,
+            },
             checked_at=_utc_iso(),
         )
 

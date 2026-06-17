@@ -96,6 +96,49 @@ class JournalAccepted(BaseModel):
             raise ValueError(f"p_win must be in [0, 1], got: {v}")
         return v
 
+    @field_validator("entry_context")
+    @classmethod
+    def entry_context_must_have_vector(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Reject journal entries missing ``entry_context.vector``.
+
+        DLR-001 (2026-06-17): 34 real BTC opens were permanently lost for
+        training because ``vector`` was absent from ``entry_context``.
+        This validator blocks that class of data loss at the write boundary —
+        no open entry enters the journal without its feature vector.
+
+        .. note::
+
+            ``entry_context=None`` is tolerated for backward compatibility
+            (entries written before this validator was deployed), but a
+            warning is logged.
+        """
+        if v is None:
+            import logging
+            logging.getLogger("JournalContract").warning(
+                "entry_context is None — open entry written without feature context. "
+                "This entry will be unusable for training. "
+                "See DLR-001 in data_loss_register.jsonl."
+            )
+            return v
+        if not isinstance(v, dict):
+            raise ValueError(
+                f"entry_context must be a dict, got {type(v).__name__}"
+            )
+        vector = v.get("vector")
+        if vector is None:
+            raise ValueError(
+                "entry_context.vector is MISSING — this open entry would be "
+                "permanently lost for training. Required by Institutional Data "
+                "SLA Column 2 (Data Stream Contract: live_trade_journal). "
+                "See DLR-001 in data_loss_register.jsonl."
+            )
+        if isinstance(vector, list) and len(vector) == 0:
+            raise ValueError(
+                "entry_context.vector is an EMPTY list — no feature data for training. "
+                "See DLR-001 in data_loss_register.jsonl."
+            )
+        return v
+
     model_config = {"extra": "allow"}  # Forward-compatible: accept unknown fields
 
 

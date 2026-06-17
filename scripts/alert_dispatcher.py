@@ -46,6 +46,7 @@ class AlertCard:
     severity: str  # "Sev1" | "Sev2" | "Sev3" | "OK"
     checks: dict[str, str] = field(default_factory=dict)  # check_name -> severity
     details: dict[str, Any] = field(default_factory=dict)  # extra context
+    affected_consumers: list[str] | None = None  # DLR-001: consumers impacted by this alert
     timestamp: str = field(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None).isoformat())
 
 
