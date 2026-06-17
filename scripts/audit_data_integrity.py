@@ -828,6 +828,10 @@ def main() -> int:
                    help="Output results as JSON instead of Markdown")
     p.add_argument("--webhook-url", type=str, default=None,
                    help="Override DingTalk webhook URL")
+    p.add_argument("--quiet", action="store_true",
+                   help="Suppress stdout output (for scheduled silent monitoring)")
+    p.add_argument("--alert", action="store_true",
+                   help="Push DingTalk alert on Sev1/Sev2 (for scheduled silent monitoring)")
     args = p.parse_args()
 
     data_dirs = [args.data_dir] if args.data_dir else ["data", "data_btc"]
@@ -849,39 +853,47 @@ def main() -> int:
         }
 
     if args.json:
-        print(json.dumps(all_results, indent=2, default=str))
+        if not args.quiet:
+            print(json.dumps(all_results, indent=2, default=str))
         return 0
 
-    # Generate and print Markdown report
+    # Generate report
     report = generate_report(all_results)
-    print(report)
 
-    # Push to DingTalk if requested
-    if args.push_dingtalk:
-        webhook = args.webhook_url
-        if not webhook:
-            # Read from config
-            try:
-                with open("configs/live.yaml", encoding="utf-8") as f:
-                    for line in f:
-                        if "dingtalk_webhook_url:" in line:
-                            webhook = line.split(":", 1)[1].strip()
-                            break
-            except Exception:
-                pass
-        if webhook:
-            ok = push_dingtalk(report, webhook)
-            print(f"\n[DingTalk] Push {'OK' if ok else 'FAILED'}")
-        else:
-            print("\n[DingTalk] No webhook URL configured")
+    # ── Output ──
+    if not args.quiet:
+        print(report)
 
-    # Determine exit code
-    has_sev1 = False
-    for d_results in all_results.values():
-        for check in d_results.values():
-            if check.get("severity") == "Sev1":
-                has_sev1 = True
-    return 1 if has_sev1 else 0
+    # ── Alerting (GAP 4) ──
+    has_sev1_or_sev2 = False
+    alert_checks: dict[str, str] = {}
+    for d_name, d_results in all_results.items():
+        for check_name, check_result in d_results.items():
+            sev = check_result.get("severity", "OK")
+            alert_checks[f"{d_name}/{check_name}"] = sev
+            if sev in ("Sev1", "Sev2"):
+                has_sev1_or_sev2 = True
+
+    if args.alert and has_sev1_or_sev2:
+        try:
+            from scripts.alert_dispatcher import AlertCard, dispatch_alert
+
+            worst = "Sev1" if any(v == "Sev1" for v in alert_checks.values()) else "Sev2"
+            card = AlertCard(
+                source="audit",
+                title=f"Data Integrity: {worst} Warning",
+                severity=worst,
+                checks=alert_checks,
+            )
+            dispatch_alert(card)
+        except Exception:  # noqa: BLE001 — alert failure must not crash audit
+            pass
+
+    # ── Determine exit code ──
+    if has_sev1_or_sev2:
+        has_sev1 = any(v == "Sev1" for v in alert_checks.values())
+        return 1 if has_sev1 else 2
+    return 0
 
 
 if __name__ == "__main__":
