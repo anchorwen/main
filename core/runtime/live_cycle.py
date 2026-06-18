@@ -3425,8 +3425,13 @@ def execute_live_cycle(
             component="PriceFetch:broker",
         ):
             mid_price, _bid, _ask = broker.fetch_prices(config.symbol)
-    elif not config.no_mt5:
-        # _mid_and_prices has internal FTC(CRASH) — let it propagate
+    # ── FIX-20260619-001: L3 fallback — broker→direct MT5 ──
+    # When the broker ZMQ tick channel fails (single point of failure),
+    # fall back to direct MT5 via mt5_worker.  The worker has built-in
+    # reconnect() + CRASH-level FaultTolerantContext — self-healing.
+    # This eliminates the failure mode where broker is disconnected but
+    # MT5 has live prices (observed: 60+ min XAU outage, 2026-06-18).
+    if mid_price is None and not config.no_mt5:
         mid_price, _bid, _ask, _tick_time = _mid_and_prices(mt5_worker, config.symbol)
 
     # ── FIX-20260613-048: Staleness Contract (Iron Law #11 Data Analytics) ──
