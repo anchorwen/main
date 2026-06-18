@@ -18,7 +18,17 @@ _SESSIONS = [
     ("london_ny_overlap", 13, 16, 1.00, 1.00, "full"),  # Peak liquidity
     ("ny", 16, 21, 0.85, 1.10, "reduced"),  # NY afternoon: ok
     ("pre_close", 21, 22, 0.50, 1.50, "caution"),  # Pre-close Friday
-    ("closed", 22, 24, 0.00, 2.00, "off"),  # After close
+    # ── FIX-20260619-003: Spot XAU rollover, NOT CME futures close ──
+    # Previously "closed" with risk_tier="off" — every day 22:00-00:00 UTC
+    # was hard-coded as market closed.  This is CME futures logic incorrectly
+    # applied to spot FX gold.  Spot XAUUSDc trades through this window
+    # (Asian morning) with wider spreads and lower liquidity — "reduced" is
+    # correct: allow position management, block new entries, tighten stops.
+    # Weekend close (Friday 22:00 through Sunday 22:00) is handled separately
+    # by the weekday==4/hour>=22 check in detect_session().
+    # TECH_DEBT-005 (strategic): replace hardcoded _SESSIONS table with
+    # dynamic tick-frequency-based session detection (post-whale extraction).
+    ("daily_rollover", 22, 24, 0.40, 1.50, "reduced"),  # Spot gold rollover (was CME close)
 ]
 
 
