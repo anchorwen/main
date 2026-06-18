@@ -60,6 +60,17 @@ class RuleEngineStrategyWrapper:
     def engine(self) -> StructuralSwingV1:
         return self._engine
 
+    @property
+    def budget(self) -> None:
+        """Rule-based strategies have no budget tracking (no brain PnL ledger).
+
+        FIX-20260619-002: Previously missing — AttributeError crashed the
+        cycle when live_cycle checked _strat.budget is not None.
+        Returning None is correct: budget recording is simply skipped
+        for zero-ML strategies (no brain to track PnL for).
+        """
+        return None
+
     def evaluate(
         self,
         feature_vector: Any = None,
