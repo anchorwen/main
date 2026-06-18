@@ -508,6 +508,67 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     restart_counts: dict[str, int] = {"bridge": 0, "intent": 0}
     last_restart: dict[str, float] = {"bridge": 0.0, "intent": time_module.time()}
 
+    # ── DQAF-20260618-001: Cold-start daily_ops pre-flight ──
+    # If the process starts after the primary window (UTC 22:00–23:00) and
+    # daily_ops hasn't run today, trigger it synchronously BEFORE the intent
+    # loop starts its first cycle.  This closes the COLD_START_DAILY_OPS_GAP
+    # where all three scheduling gates (primary window / 24h fallback /
+    # watchdog max-age) fail to cover "restarted after window, before 24h".
+    _dops_state_path = Path(cfg["base_dir"]) / "state" / "daily_ops_state.json"
+    _now_utc_preflight = datetime.now(UTC)
+    _primary_end = _now_utc_preflight.replace(hour=23, minute=0, second=0, microsecond=0)
+    _past_primary = _now_utc_preflight >= _primary_end
+    if _past_primary and _dops_state_path.exists():
+        try:
+            _dops = json.loads(_dops_state_path.read_text(encoding="utf-8"))
+            _last_ts = float(_dops.get("last_daily_ops_utc", 0))
+            _last_date = (
+                datetime.fromtimestamp(_last_ts, UTC).date() if _last_ts > 0 else None
+            )
+            if _last_date != _now_utc_preflight.date():
+                print(
+                    f"[launcher] Cold-start daily_ops trigger: last={_last_date}, "
+                    f"today={_now_utc_preflight.date()}, past primary window",
+                    flush=True,
+                )
+                log_fh.write(
+                    f"[launcher] Cold-start daily_ops trigger: "
+                    f"last={_last_date}, today={_now_utc_preflight.date()}\n"
+                )
+                log_fh.flush()
+                _mt5_path = cfg.get("mt5_terminal_path", "")
+                _cold_cmd = [
+                    python, "-u",
+                    str(PROJECT_ROOT / "scripts" / "daily_ops.py"),
+                    "--base-dir", str(cfg["base_dir"]),
+                    "--skip-shadow", "--skip-recap",
+                ]
+                if _mt5_path:
+                    _cold_cmd.extend(["--mt5-terminal-path", str(_mt5_path)])
+                _cold_result = subprocess.run(
+                    _cold_cmd,
+                    capture_output=True, text=True, timeout=300,
+                    cwd=str(PROJECT_ROOT), env=subprocess_env,
+                )
+                if _cold_result.returncode == 0:
+                    print("[launcher] Cold-start daily_ops completed", flush=True)
+                    log_fh.write("[launcher] Cold-start daily_ops completed\n")
+                else:
+                    print(
+                        f"[launcher] Cold-start daily_ops FAILED (rc={_cold_result.returncode})",
+                        flush=True,
+                    )
+                    log_fh.write(
+                        f"[launcher] Cold-start daily_ops FAILED (rc={_cold_result.returncode})\n"
+                    )
+                    if _cold_result.stderr:
+                        log_fh.write(_cold_result.stderr[:2000] + "\n")
+                log_fh.flush()
+        except Exception as _cold_exc:  # noqa: BLE001
+            print(f"[launcher] Cold-start daily_ops error: {_cold_exc}", flush=True)
+            log_fh.write(f"[launcher] Cold-start daily_ops error: {_cold_exc}\n")
+            log_fh.flush()
+
     intent_proc = subprocess.Popen(
         intent_cmd,
         stdout=intent_log_fh,
