@@ -320,6 +320,24 @@ def check_reentry_quality(
         return True, "hesitation_reentry_confirmed"
 
     if category == "bleed_stop":
+        # ── FIX-20260618-003: TTL hard unlock for bleed_stop ──
+        # Same pattern as brain_flip (FIX-127/130), hesitation (FIX-001/010),
+        # sl_hit (FIX-20260528-011), and meta_exit (FIX-127).
+        # Without TTL, bleed_stop +0.10 threshold can create a permanent
+        # deadlock when exit_confidence is near the model's output ceiling
+        # (observed: m30_swing 8h drought, 0.77 < 0.81 threshold, no expiry).
+        # After TTL expires only basic signal quality (confidence > 0.50)
+        # is required — the old exit reference is stale and continued
+        # blocking would miss new-regime trading opportunities.
+        _bleed_ttl_s = max(7200, entry_half_life * timeframe_minutes * 2.0 * 60)
+        if elapsed > _bleed_ttl_s:
+            if new_confidence < 0.50:
+                return (
+                    False,
+                    f"bleed_stop_ttl_expired_low_conf_{new_confidence:.3f}",
+                )
+            return True, f"bleed_stop_ttl_expired_{elapsed:.0f}s"
+
         # FIX-20260605-120: per-asset thresholds via config override.
         # XAU defaults: cooldown=180s, confidence_penalty=0.10
         # BTC: cooldown=600s, confidence_penalty=0.15
@@ -343,6 +361,22 @@ def check_reentry_quality(
     # Now: 900s timeout then allow with confidence check.  MIA/manual closes
     # are not necessarily negative signals — we just don't know the reason.
     if category == "unknown_close":
+        # ── FIX-20260618-003: TTL hard unlock for unknown_close ──
+        # Same pattern as brain_flip (FIX-127/130).  Without TTL,
+        # max(exit_confidence, 0.70) can be permanently unreachable for
+        # survival strategies whose models output confidence ~0.50-0.52
+        # (observed: h1_swing 8h+ drought, 0.51 < 0.70 threshold, no expiry).
+        # After TTL expires only basic signal quality (confidence > 0.50)
+        # is required.
+        _unknown_ttl_s = max(7200, entry_half_life * timeframe_minutes * 2.0 * 60)
+        if elapsed > _unknown_ttl_s:
+            if new_confidence < 0.50:
+                return (
+                    False,
+                    f"unknown_close_ttl_expired_low_conf_{new_confidence:.3f}",
+                )
+            return True, f"unknown_close_ttl_expired_{elapsed:.0f}s"
+
         if elapsed < 900:
             return False, f"unknown_close_too_soon_{elapsed:.0f}s_lt_900s"
         _unknown_threshold = min(max(exit_confidence, 0.70), _MAX_THRESHOLD)
