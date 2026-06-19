@@ -40,9 +40,9 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 import numpy as np
+
+from core.runtime.fault_handler import fail_open_guard
 
 logger = logging.getLogger(__name__)
 
