@@ -22,11 +22,11 @@ from typing import Any
 import numpy as np
 
 # ── Extracted sub-modules (Strangler Fig #11-17) ──
+# meta_filter_routing + trend_isolation_gates: kept inline
+# (both import StrategyDecision → circular)
 from core.execution.brain_gates import check_min_valid_brains, extract_entry_z_score
 from core.execution.dynamic_sl_tp import compute_dynamic_sl_tp, compute_sl_tp_levels
-from core.execution.meta_filter_routing import apply_meta_filter_gate
 from core.execution.pwin_chain import adjust_p_win_for_z_strength as _z_strength
-from core.execution.trend_isolation_gates import apply_trend_isolation_gates
 from core.execution.trend_volume_guard import check_minimum_rr, compute_counter_trend_volume_mult
 from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
 from core.runtime.shadow_recorder import record_brain_votes
@@ -1058,6 +1058,9 @@ class StrategyLine:
         # Per-direction models stored on config (set by live_intent_loop).
         _mf_long = getattr(self.config, "meta_filter_long", None)
         _mf_short = getattr(self.config, "meta_filter_short", None)
+        from core.execution.meta_filter_routing import (
+            apply_meta_filter_gate,  # inline: circular import
+        )
         _meta_p_win, _meta_reject = apply_meta_filter_gate(
             name=name,
             direction=direction,
@@ -1107,6 +1110,9 @@ class StrategyLine:
 
         # ── 4aa-4d: Trend isolation gates (Strangler Fig #13: trend_isolation_gates.py) ──
         _ct_vol_mult = 1.0  # default, may be overridden by counter-trend penalise
+        from core.execution.trend_isolation_gates import (
+            apply_trend_isolation_gates,  # inline: circular import
+        )
 
         _trend_reject = apply_trend_isolation_gates(
             name=name,
