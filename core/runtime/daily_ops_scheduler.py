@@ -101,13 +101,10 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
         try:
             gc.collect()
             # Compact local feature store to prevent unbounded JSONL growth
-            try:
+            with fail_open_guard("DailyOps:FeatureStoreCompact"):
                 from core.features.local_feature_store import LocalFeatureStore
-
                 _store = LocalFeatureStore(base_dir=config.base_dir)
                 _store.compact(retention_days=7)
-            except Exception:  # BLE001:REVIEWED
-                pass
             # FIX-20260601-047: prune label files older than 30 days
             try:
                 _labels_dir = Path(config.base_dir) / "labels"
@@ -129,8 +126,8 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
                             ),
                             flush=True,
                         )
-            except Exception:  # BLE001:REVIEWED
-                pass
+            with fail_open_guard("DailyOps:FeatureStoreCompact"):
+                pass  # BLE001
             _cleanup_ms = (time.perf_counter() - _cleanup_started) * 1000.0
             print(
                 json.dumps(
