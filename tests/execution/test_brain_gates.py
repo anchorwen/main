@@ -7,9 +7,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
-
-from core.execution.brain_gates import check_min_valid_brains, count_valid_voters
+from core.execution.brain_gates import (
+    check_min_valid_brains,
+    count_valid_voters,
+    extract_entry_z_score,
+)
 
 
 def _proposal(direction="long", vote_weight=1.0):
@@ -62,3 +64,34 @@ class TestCheckMinValidBrains:
     def test_exact_threshold(self):
         proposals = [_proposal("long"), _proposal("short")]
         assert check_min_valid_brains(proposals, min_valid_brains=2) == 0
+
+
+# ── extract_entry_z_score ─────────────────────────────────────────────────
+
+
+class TestExtractEntryZScore:
+    def test_empty_proposals(self):
+        assert extract_entry_z_score([]) == (0.0, 0.0)
+
+    def test_no_ou_brain(self):
+        p = SimpleNamespace(raw_score=0.0, diagnostics={})
+        assert extract_entry_z_score([p]) == (0.0, 0.0)
+
+    def test_valid_z_score(self):
+        p = SimpleNamespace(raw_score=-2.35, diagnostics={"half_life": 12.0})
+        z, hl = extract_entry_z_score([p])
+        assert z == -2.35
+        assert hl == 12.0
+
+    def test_breaks_on_first_half_life(self):
+        p1 = SimpleNamespace(raw_score=-2.0, diagnostics={"half_life": 10.0})
+        p2 = SimpleNamespace(raw_score=-3.0, diagnostics={"half_life": 20.0})
+        z, hl = extract_entry_z_score([p1, p2])
+        assert z == -2.0  # first proposal's z
+        assert hl == 10.0  # breaks on p1
+
+    def test_handles_missing_raw_score(self):
+        p = SimpleNamespace(raw_score=None, diagnostics={"half_life": 5.0})
+        z, hl = extract_entry_z_score([p])
+        assert z == 0.0
+        assert hl == 5.0

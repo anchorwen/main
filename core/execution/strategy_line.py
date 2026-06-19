@@ -735,20 +735,10 @@ class StrategyLine:
                     )
 
         # ── 3a3. Capture entry_z_score + entry_half_life from OU-style brains ──
-        entry_z_score = 0.0
-        entry_half_life = 0.0
-        for p in proposals:
-            try:
-                z = getattr(p, "raw_score", 0.0)
-                if z is not None and float(z) != 0.0:
-                    entry_z_score = float(z)
-                diag = getattr(p, "diagnostics", {}) or {}
-                hl = diag.get("half_life")
-                if hl is not None and isinstance(hl, int | float) and 0 < float(hl) < float("inf"):
-                    entry_half_life = float(hl)
-                    break
-            except (TypeError, ValueError, AttributeError):
-                pass
+        # Strangler Fig #17: extracted to core/execution/brain_gates.py
+        from core.execution.brain_gates import extract_entry_z_score
+
+        entry_z_score, entry_half_life = extract_entry_z_score(proposals)
 
         # ── 3b. Apply dynamic brain weights from real P&L metrics ──
         if tracker is not None:

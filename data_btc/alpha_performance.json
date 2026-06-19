@@ -1,6 +1,6 @@
 {
   "schema_version": "alpha_performance_store.v1",
-  "alpha_count": 1,
+  "alpha_count": 2,
   "summaries": [
     {
       "schema_version": "alpha_performance_summary.v1",
@@ -9,68 +9,140 @@
       "latest": {
         "schema_version": "alpha_performance_snapshot.v1",
         "alpha_id": "btc_swing",
-        "captured_at": "2026-06-16T00:20:10.519093",
+        "captured_at": "2026-06-18T12:09:56.293923",
         "source": "trade_journal",
         "window": "daily",
         "metrics": {
-          "total_pnl": 1.92,
-          "trade_count": 38,
-          "win_rate": 0.4,
-          "profit_factor": 8.8235,
-          "avg_win": 1.5,
-          "avg_loss": 0.68,
-          "wins": 4,
-          "losses": 6
+          "total_pnl": -10.62,
+          "trade_count": 15,
+          "win_rate": 0.1111,
+          "profit_factor": 0.8844,
+          "avg_win": 1.32,
+          "avg_loss": 1.49,
+          "wins": 1,
+          "losses": 8
         }
       },
       "aggregates": {
         "total_pnl": {
-          "latest": 1.92,
-          "average": 1.92,
-          "min": 1.92,
-          "max": 1.92
+          "latest": -10.62,
+          "average": -10.62,
+          "min": -10.62,
+          "max": -10.62
         },
         "trade_count": {
-          "latest": 38.0,
-          "average": 38.0,
-          "min": 38.0,
-          "max": 38.0
+          "latest": 15.0,
+          "average": 15.0,
+          "min": 15.0,
+          "max": 15.0
         },
         "win_rate": {
-          "latest": 0.4,
-          "average": 0.4,
-          "min": 0.4,
-          "max": 0.4
+          "latest": 0.1111,
+          "average": 0.1111,
+          "min": 0.1111,
+          "max": 0.1111
         },
         "profit_factor": {
-          "latest": 8.8235,
-          "average": 8.8235,
-          "min": 8.8235,
-          "max": 8.8235
+          "latest": 0.8844,
+          "average": 0.8844,
+          "min": 0.8844,
+          "max": 0.8844
         },
         "avg_win": {
-          "latest": 1.5,
-          "average": 1.5,
-          "min": 1.5,
-          "max": 1.5
+          "latest": 1.32,
+          "average": 1.32,
+          "min": 1.32,
+          "max": 1.32
         },
         "avg_loss": {
-          "latest": 0.68,
-          "average": 0.68,
-          "min": 0.68,
-          "max": 0.68
+          "latest": 1.49,
+          "average": 1.49,
+          "min": 1.49,
+          "max": 1.49
         },
         "wins": {
-          "latest": 4.0,
-          "average": 4.0,
-          "min": 4.0,
-          "max": 4.0
+          "latest": 1.0,
+          "average": 1.0,
+          "min": 1.0,
+          "max": 1.0
         },
         "losses": {
-          "latest": 6.0,
-          "average": 6.0,
-          "min": 6.0,
-          "max": 6.0
+          "latest": 8.0,
+          "average": 8.0,
+          "min": 8.0,
+          "max": 8.0
+        }
+      }
+    },
+    {
+      "schema_version": "alpha_performance_summary.v1",
+      "alpha_id": "btc_swing_h1",
+      "snapshot_count": 1,
+      "latest": {
+        "schema_version": "alpha_performance_snapshot.v1",
+        "alpha_id": "btc_swing_h1",
+        "captured_at": "2026-06-18T12:09:56.293923",
+        "source": "trade_journal",
+        "window": "daily",
+        "metrics": {
+          "total_pnl": -0.06,
+          "trade_count": 1,
+          "win_rate": 0.0,
+          "profit_factor": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.06,
+          "wins": 0,
+          "losses": 1
+        }
+      },
+      "aggregates": {
+        "total_pnl": {
+          "latest": -0.06,
+          "average": -0.06,
+          "min": -0.06,
+          "max": -0.06
+        },
+        "trade_count": {
+          "latest": 1.0,
+          "average": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "win_rate": {
+          "latest": 0.0,
+          "average": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "profit_factor": {
+          "latest": 0.0,
+          "average": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "avg_win": {
+          "latest": 0.0,
+          "average": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "avg_loss": {
+          "latest": 0.06,
+          "average": 0.06,
+          "min": 0.06,
+          "max": 0.06
+        },
+        "wins": {
+          "latest": 0.0,
+          "average": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "losses": {
+          "latest": 1.0,
+          "average": 1.0,
+          "min": 1.0,
+          "max": 1.0
         }
       }
     }

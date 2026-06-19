@@ -1,8 +1,8 @@
 {
   "schema_version": "retraining_signal.v1",
-  "generated_at": "2026-06-16T00:20:10",
-  "leaderboard_generated_at": "2026-06-16T00:20:10.408068",
-  "baseline_generated_at": "2026-06-14T15:59:05.257162",
+  "generated_at": "2026-06-18T12:09:56",
+  "leaderboard_generated_at": "2026-06-18T12:09:56.160893",
+  "baseline_generated_at": "2026-06-18T02:14:57.714868",
   "total_brains_assessed": 0,
   "degraded_count": 0,
   "overall_urgency": "ok",
