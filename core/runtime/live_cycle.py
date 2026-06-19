@@ -1280,72 +1280,16 @@ def execute_live_cycle(
                 flush=True,
             )
 
-    # ── Circuit breaker unified auto-reset (DQAF-20260608-003) ──
-    # DQAF-20260608-003 ROOT-CAUSE FIX: the auto-reset previously only cleared
-    # _consecutive_degraded_cycles, but the breaker could be tripped by 6 different
-    # paths using 3 different counters (degraded, stale_cycles, stale_features).
-    # Surviving counters from the non-reset paths would immediately re-trip the
-    # breaker on the same cycle → death spiral.  Now ALL counters are cleared.
-    #
-    # Reset condition: cooldown elapsed AND all 3 trigger conditions clear.
-    # FIX-20260613-090: budget_breached trips are immune to auto-reset.
-    # They persist until cross-day when StrategyBudget._reset_daily() clears
-    # the per-strategy pause.  The circuit breaker is then cleared at the top
-    # of the strategy evaluation section when no strategies are paused.
-    if state._circuit_breaker_tripped and state._circuit_breaker_trip_reason == "budget_breached":
-        # Check if all strategy budgets have recovered (cross-day reset)
-        _any_paused = False
-        for _strat in getattr(state, "_strategies", {}).values():
-            _budget = getattr(_strat, "budget", None)
-            if _budget is not None and _budget.check_pause():
-                _any_paused = True
-                break
-        if not _any_paused:
-            state._circuit_breaker_tripped = False
-            state._circuit_breaker_tripped_at = 0.0
-            state._circuit_breaker_trip_reason = ""
-            state.block_new_entries = False
+    # ── Circuit breaker auto-reset ──
+    # Strangler Fig #31 — extracted to core.runtime.circuit_breaker_reset
+    from core.runtime.circuit_breaker_reset import auto_reset_circuit_breaker
 
-    if state._circuit_breaker_tripped and state._circuit_breaker_trip_reason != "budget_breached":
-        _cooldown_elapsed = (
-            time.time() - state._circuit_breaker_tripped_at
-        ) > config.circuit_breaker_cooldown_seconds
-        # Recomputed after management-only block may have updated heartbeat
-        _bridge_alive = (
-            time.time() - state._last_bridge_ack_time
-        ) <= config.max_bridge_silence_seconds
-        _not_stalled = _cycle_duration <= config.cycle_stall_threshold_seconds
-        _not_degraded = not degraded_wakeup
-        if _cooldown_elapsed and _bridge_alive and _not_stalled and _not_degraded:
-            _prev_reason = state._circuit_breaker_trip_reason
-            print(
-                json.dumps(
-                    {
-                        "event": "circuit_breaker_reset",
-                        "time": _utc_iso(),
-                        "reason": "cooldown_elapsed_all_conditions_clear",
-                        "tripped_duration_seconds": round(
-                            time.time() - state._circuit_breaker_tripped_at, 1
-                        ),
-                        "previous_consecutive_degraded": state._consecutive_degraded_cycles,
-                        "previous_consecutive_stale_cycles": state._consecutive_stale_cycles,
-                        "previous_consecutive_stale_features": state._consecutive_stale_features,
-                        "previous_trip_reason": _prev_reason,
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-            state._circuit_breaker_tripped = False
-            state._circuit_breaker_tripped_at = 0.0
-            state._circuit_breaker_trip_reason = ""
-            # ── DQAF-003 core fix: reset ALL degradation counters ──
-            state._consecutive_degraded_cycles = 0
-            state._consecutive_stale_cycles = 0
-            state._consecutive_stale_features = 0
-    elif not degraded_wakeup and state._consecutive_degraded_cycles > 0:
-        # Breaker NOT tripped but degraded counter > 0 → reset counter on clean cycle
-        state._consecutive_degraded_cycles = 0
+    auto_reset_circuit_breaker(
+        config=config,
+        state=state,
+        degraded_wakeup=degraded_wakeup,
+        cycle_duration=_cycle_duration,
+    )
 
     # ── FIX-20260603-074: On first cycle, reconcile positions closed during
     # downtime BEFORE the restart state bootstrap.  Positions in known_open_tickets
@@ -2412,57 +2356,11 @@ def execute_live_cycle(
                         state,
                     )
             # ── Record exit for reentry guard ──
-            for _entry in _mia_closed:
-                _exit_strategy = _entry.get("strategy", "")
-                _exit_side = _entry.get("side", "")
-                _exit_price = float(_entry.get("detail", {}).get("close_price", 0) or 0)
-                _exit_ts_str = _entry.get("recorded_at", "")
-                _exit_ts = time.time()
-                if _exit_ts_str:
-                    with log_and_continue(component="MIA_Close:parse_timestamp"):
-                        _parsed = datetime.fromisoformat(_exit_ts_str.replace("Z", "+00:00"))
-                        _exit_ts = _parsed.timestamp()
-                _exit_confidence = (
-                    _entry.get("entry_consensus", {}).get("consensus_score", 0.5)
-                    if isinstance(_entry.get("entry_consensus"), dict)
-                    else 0.5
-                )
-                _exit_reason = _entry.get("detail", {}).get("reason", "mia_close")
-                if _exit_strategy and _exit_side in ("long", "short"):
-                    with log_and_continue(component="MIA_Close:reentry_guard"):
-                        from core.execution.reentry_guard import (
-                            ExitRecord,
-                            ensure_reentry_state,
-                        )
+            # Strangler Fig #30 — extracted to core.runtime.reentry_recording
+            from core.runtime.reentry_recording import record_mia_exits_for_reentry
 
-                        _mia_rec = ExitRecord(
-                            timestamp=_exit_ts,
-                            strategy_name=_exit_strategy,
-                            direction=_exit_side,
-                            reason=_exit_reason,
-                            confidence=float(_exit_confidence),
-                            price=_exit_price,
-                            ticket=_entry.get("position_ticket", 0),
-                        )
-                        _rs = ensure_reentry_state(state._reentry_states, _exit_strategy)
-                        _rs.record_exit(_mia_rec)
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "mia_close_reentry_recorded",
-                                    "time": _utc_iso(),
-                                    "ticket": _entry.get("position_ticket"),
-                                    "strategy": _exit_strategy,
-                                    "direction": _exit_side,
-                                    "reason": _exit_reason,
-                                    "close_price": _exit_price,
-                                    "pnl": _entry.get("pnl"),
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-                # ── Notify DingTalk: MIA-detected close ──
+            record_mia_exits_for_reentry(mia_closed=state._pending_mia_closes, state=state)
+
                 _emit_close_notification(
                     _ah=getattr(state, "alert_hub", None),
                     _sym=_entry.get("symbol", config.symbol),
