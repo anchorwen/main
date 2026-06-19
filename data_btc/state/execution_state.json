@@ -1,7 +1,7 @@
 {
   "version": 3,
   "schema_version": "execution_state.v3",
-  "saved_at_utc": "2026-06-19T05:49:54.907197",
+  "saved_at_utc": "2026-06-19T09:52:50.683941Z",
   "budgets": {
     "btc_swing": {
       "daily_pnl_pct": -1.59,
@@ -28,111 +28,11 @@
       "_sl_paused_rest_of_day": false
     }
   },
-  "known_open_tickets": {
-    "3942708819": {
-      "schema_version": "live_trade_journal.v2",
-      "recorded_at": "2026-06-19T04:58:34.367875",
-      "message_id": "eq_btc_swing_0c8e4f235d77",
-      "target": "exec_bridge",
-      "ack_status": "accepted",
-      "detail": {
-        "retcode": 10009,
-        "order": 3942708819,
-        "request": {
-          "action": 1,
-          "symbol": "BTCUSDc",
-          "volume": 0.01,
-          "type": 0,
-          "price": 62382.06,
-          "deviation": 20,
-          "magic": 90410,
-          "comment": "",
-          "type_time": 0,
-          "type_filling": 1,
-          "sl": 62050.53036,
-          "tp": 62776.37955
-        },
-        "confirmed_sl": 62050.53,
-        "confirmed_tp": 62776.38
-      },
-      "symbol": "BTCUSDc",
-      "action": "open",
-      "side": "long",
-      "volume": 0.01,
-      "pnl": null,
-      "label": null,
-      "comment": "",
-      "magic": 90410,
-      "strategy": "btc_swing",
-      "effective_volume_hint": 0.01,
-      "position_ticket": 3942708819,
-      "execution_payload_schema": "live_mt5_execution_payload.v2",
-      "sl": 62050.53036,
-      "tp": 62776.37955,
-      "outbox_path": "",
-      "archive_path": "",
-      "receipt_path": "",
-      "brain_ids": [
-        "BTC_Swing_V4"
-      ],
-      "brain_votes": null,
-      "confidence": 0.7306,
-      "p_win": 0.5,
-      "kelly_mult": 1.0478,
-      "entry_context": {
-        "schema_version": "v9_institutional",
-        "vector": [
-          -0.11934999376535416,
-          -0.7045043110847473,
-          117.32142639160156,
-          40.11350631713867,
-          -107.07975769042969,
-          -0.13567806780338287,
-          -0.06840178370475769,
-          -2.266631603240967,
-          -0.2906295359134674,
-          -0.6645147204399109,
-          210.11143493652344,
-          32.17921447753906,
-          -84.86897277832031,
-          0.44573184847831726,
-          -0.16758401691913605,
-          -2.765091896057129,
-          -0.45895570516586304,
-          -0.895886242389679,
-          234.14642333984375,
-          27.835657119750977,
-          -192.5197296142578,
-          1.1537739038467407,
-          0.10895147919654846,
-          -3.168928623199463,
-          -0.5301216840744019,
-          -0.6536340117454529,
-          450.8571472167969,
-          29.09385108947754,
-          -503.0534973144531,
-          -0.2549184262752533,
-          -0.13393189013004303,
-          -1.227126955986023,
-          0.32340335845947266,
-          0.032935358583927155,
-          0.09254011511802673,
-          0.2590329051017761,
-          0.6518762707710266,
-          0.6936554312705994,
-          0.6342883110046387,
-          0.7187434434890747
-        ],
-        "entry_spread": 10.0,
-        "bid": 62370.13,
-        "ask": 62380.13
-      }
-    }
-  },
+  "known_open_tickets": {},
   "cooldown_registry": {},
   "family_entry_tracker": {
     "swing": {
-      "long": 1781848194.6501393
+      "long": 1781861989.4882672
     }
   },
   "sl_streak_blocks": {},
