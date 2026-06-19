@@ -453,46 +453,34 @@ def _dispatch_modify_trail(
     strategy_name: str = "",
     state: Any = None,
 ) -> None:
-    """Issue a modify_sltp through the existing outbox pipeline."""
-    from core.execution.live_order_sender import dispatch_live_order
+    """Issue a modify_sltp through the outbox pipeline.
 
-    payload: dict[str, Any] = {
-        "action": "modify_sltp",
-        "side": pos.side,
-        "position_ticket": pos.ticket,
-        "sl": new_sl,
-        "tp": new_tp,
-        "comment": reason,
-    }
-    if brain_ids:
-        payload["brain_ids"] = brain_ids
-    # Resolve magic from strategy name for correct journal attribution
-    if strategy_name:
-        with log_and_continue(component="MagicAttribution:trail"):
-            from core.contracts.strategy_magic import STRATEGY_TO_MAGIC
+    Strangler Fig #25 — delegation wrapper.  Implementation extracted to
+    core.runtime.modify_trail_dispatch.
+    """
+    from core.runtime.modify_trail_dispatch import dispatch_modify_trail as _impl
 
-            _strat_magic = STRATEGY_TO_MAGIC.get(strategy_name, 0)
-            if _strat_magic:
-                payload["magic"] = _strat_magic
+    _open_msg_id = ""
     if state is not None:
         _open_entry = state.known_open_tickets.get(pos.ticket, {})
         _open_msg_id = _open_entry.get("message_id", "")
-        if _open_msg_id:
-            payload["open_message_id"] = _open_msg_id
 
-    # ── DQAF-20260616-101/P1.3: BLE001 → fail_open_guard ──
-    with fail_open_guard("TrailSLDispatch"):
-        dispatch_live_order(
-            base_dir=config.base_dir,
-            broker=None,
-            symbol=config.symbol,
-            execution_payload=payload,
-            skip_price_guard=True,
-            ignore_protection_flag=config.ignore_protection_flag,
-            protection_flag_path=config.protection_flag_path,
-            adapter_name=config.adapter_name,
-            extensions={"mt5_terminal_path": config.mt5_terminal_path},
-        )
+    _impl(
+        base_dir=config.base_dir,
+        symbol=config.symbol,
+        adapter_name=config.adapter_name,
+        mt5_terminal_path=config.mt5_terminal_path,
+        ignore_protection_flag=config.ignore_protection_flag,
+        protection_flag_path=config.protection_flag_path,
+        pos_side=pos.side,
+        pos_ticket=pos.ticket,
+        new_sl=new_sl,
+        new_tp=new_tp,
+        open_message_id=_open_msg_id,
+        reason=reason,
+        brain_ids=brain_ids,
+        strategy_name=strategy_name,
+    )
 
 
 def _dispatch_managed_close(
