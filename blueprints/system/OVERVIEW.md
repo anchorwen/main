@@ -1,8 +1,8 @@
 # Blueprint System Overview
 
 > Last regenerated: 2026-06-20
-> FIX count: 53 | Strangler Fig: #26 | fog: 135 | 纯函数: 14 | Mypy: 201→31
-> live_cycle.py: 6,062→4,648 (−23.3%) | management_phase.py: 1,293 (new)
+> FIX count: 58 | Strangler Fig: #26 Phase 1-3 | BLE001: 100% | Mypy scripts: 97→23
+> live_cycle.py: 6,062→4,648 (−23.3%) | management_phase.py: 971 (5 helpers)
 
 ## Architecture Layers
 

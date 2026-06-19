@@ -3272,4 +3272,64 @@ FIX-YYYYMMDD-NNN
 - **Description**: Strangler Fig #26 — extraction of `_execute_management_phase()` (1,454 lines, 24% of live_cycle.py) to standalone module `core/runtime/management_phase.py`. Delegation wrapper (37 lines) retained in live_cycle.py with same signature for backward compatibility. `_emit()` helper unified 22 print(json.dumps()) event-logging sites into single-point logger. `_modify_trail` helper encapsulated open_message_id resolution from state.known_open_tickets. `compute_and_dispatch_trail` import migrated from live_cycle to management_phase. live_cycle.py: 6,062→4,648 (−1,414 lines, −23.3%).
 - **Root Cause**: RC-08 — incomplete-cleanup (monolith growth)
 - **Prevention**: Strangler Fig pattern now established for hot-path functions. New position management code goes in management_phase.py.
+
+### FIX-20260620-067
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: runtime/management_phase
+- **Files**: core/runtime/management_phase.py
+- **Description**: SF #26 Phase 2 — Section 1c alert context (~225 lines) extracted from `execute_management_phase()` to `_build_and_dispatch_alert_context(config, state, pos, pm, pnl_ledger)`. Reads live trade journal for daily PnL with Phase 0 dedup filter, queries PnL ledger for worst-brain metrics with archived-brain exclusion, dispatches to LiveAlertHub.
+- **Root Cause**: RC-08 — incomplete-cleanup (monolith growth)
+- **Prevention**: Alert context is now independently testable and modifiable.
+
+### FIX-20260620-068
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: runtime/management_phase
+- **Files**: core/runtime/management_phase.py
+- **Description**: SF #26 Phase 3 — Section 7 brain ensemble re-evaluation (~400 lines) extracted to `_evaluate_brain_ensemble()`. Handles multi-TF sequence computation, per-brain inference (swing/daily/btc_macro/micro/ou), capital allocation, contract group consensus, H4 trend protection umbrella, bleed stop, OU mean-reversion exit, and brain flip exit. Returns True when position closed, dict with consensus data otherwise. execute_management_phase: ~800→611 lines.
+- **Root Cause**: RC-08 — incomplete-cleanup (monolith growth)
+- **Prevention**: Exit layer logic now independently testable.
+
+### FIX-20260620-069
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: ble001
+- **Files**: core/runtime/live_bootstrap.py, core/runtime/live_cycle.py, core/execution/execution_queue.py, core/execution/exit_watchdog.py, core/execution/managed_close.py, core/execution/micro_strategy.py
+- **Description**: Project B — 14 previously un-reviewed bare `except Exception:` sites annotated `BLE001:REVIEWED (logged, Phase 3b)`. All sites already had structured logging or fallback handling. Hot-path governance coverage raised to 142/142 sites.
+- **Root Cause**: RC-08 — incomplete-cleanup (BLE001 Phase 1-2 blind spot)
+- **Prevention**: grep-zero check in audit confirms 100% coverage. Phase 3b fog migration scoped.
+
+### FIX-20260620-070
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Type**: test
+- **Module**: brains/inference_guard
+- **Files**: tests/brains/test_inference_guard.py (new, 191 lines, 19 tests)
+- **Description**: Project C — Tier 2 zero-coverage breakout. Tests InferenceGuard public API (init validation, successful inference, worker error, timeout, pipe errors, shutdown, properties, crash handling, max restarts exceeded, start failure). Uses mock Pipe/Process to avoid real subprocess dependency.
+- **Root Cause**: RC-12 — missing-feature (no test coverage)
+- **Prevention**: 19 tests cover all public methods and error paths.
+
+### FIX-20260620-071
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: scripts
+- **Files**: scripts/system_health.py, scripts/audit_data_final.py, scripts/audit_data_module.py, scripts/check_import_boundaries.py, scripts/audit_data_health_journal.py, scripts/audit_phase_c_fix5.py, scripts/training/train.py, scripts/verify_pnl_data_integrity.py, scripts/verify_training_serving_parity.py
+- **Description**: Project D — Mypy type error cleanup. Fixed 67 type errors across 9 Sev 4 audit/training scripts. Methods: variable rename (sources→dh_sources), tuple/list cast, Counter annotation, Path.glob str cast, Optional freshness annotation, defaultdict annotation, file handle annotation. Scripts baseline: 97→30 errors (−69%).
+- **Root Cause**: RC-02 — type-confusion (implicit typing in audit scripts)
+- **Prevention**: Baseline reduced. Remaining 30 errors across 14 files are all Sev 4, deferrable.
+
+### FIX-20260620-072
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: ble001
+- **Files**: core/runtime/live_cycle.py, core/execution/barrier_strategy.py, core/execution/managed_close.py, core/execution/micro_strategy.py, core/execution/statarb_strategy.py, core/execution/swing_strategy.py
+- **Description**: Post-audit BLE001补漏 — 6 additional un-annotated bare except sites discovered during institutional verification audit. All annotated `BLE001:REVIEWED`. Full hot-path (core/runtime/ + core/execution/ + scripts/live_intent_loop.py): 142 sites → 100% governance coverage.
+- **Root Cause**: RC-08 — incomplete-cleanup (initial BLE001 scan missed deeply nested strategy files)
+- **Prevention**: Automated audit script now runs as part of verification pipeline.
 - **Dependents Checked**: Single caller at live_cycle.py:3702. Return value discarded — no coupling risk. verify.py --quick: mypy + ruff + import boundaries all PASS.
