@@ -21,7 +21,15 @@ from typing import Any
 
 import numpy as np
 
+# ── Extracted sub-modules (Strangler Fig #11-17) ──
+from core.execution.brain_gates import check_min_valid_brains, extract_entry_z_score
+from core.execution.dynamic_sl_tp import compute_dynamic_sl_tp, compute_sl_tp_levels
+from core.execution.meta_filter_routing import apply_meta_filter_gate
+from core.execution.pwin_chain import adjust_p_win_for_z_strength as _z_strength
+from core.execution.trend_isolation_gates import apply_trend_isolation_gates
+from core.execution.trend_volume_guard import check_minimum_rr, compute_counter_trend_volume_mult
 from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
+from core.runtime.shadow_recorder import record_brain_votes
 
 logger = logging.getLogger(__name__)
 
@@ -735,9 +743,7 @@ class StrategyLine:
                     )
 
         # ── 3a3. Capture entry_z_score + entry_half_life from OU-style brains ──
-        # Strangler Fig #17: extracted to core/execution/brain_gates.py
-        from core.execution.brain_gates import extract_entry_z_score
-
+        # Strangler Fig #17: uses extract_entry_z_score from brain_gates.py
         entry_z_score, entry_half_life = extract_entry_z_score(proposals)
 
         # ── 3b. Apply dynamic brain weights from real P&L metrics ──
@@ -762,9 +768,7 @@ class StrategyLine:
                 weighter.apply_weights(proposals)
 
         # ── 3c. Minimum valid brains gate ──
-        # Strangler Fig #17: extracted to core/execution/brain_gates.py
-        from core.execution.brain_gates import check_min_valid_brains
-
+        # Strangler Fig #17: uses check_min_valid_brains from brain_gates.py
         _valid_voters = check_min_valid_brains(proposals, self.config.min_valid_brains)
         if _valid_voters > 0:
             return StrategyDecision(
@@ -791,7 +795,6 @@ class StrategyLine:
         # gate sees.  Runs for every cycle so individual brain behaviour
         # can be tracked regardless of whether the consensus passes gates.
         try:
-            from core.runtime.shadow_recorder import record_brain_votes
 
             _status_map: dict[str, str] = {
                 str(b.get("brain_id", "")): str(b.get("status", "unknown")) for b in self.brains
@@ -1050,7 +1053,6 @@ class StrategyLine:
             _p_win_source = "cold_explore_neutral"
 
         # ── 4ab. MetaFilter gate (Strangler Fig #12: meta_filter_routing.py) ──
-        from core.execution.meta_filter_routing import apply_meta_filter_gate
 
         # FIX-20260610-007: Direction-specific MetaFilter routing.
         # Per-direction models stored on config (set by live_intent_loop).
@@ -1105,7 +1107,6 @@ class StrategyLine:
 
         # ── 4aa-4d: Trend isolation gates (Strangler Fig #13: trend_isolation_gates.py) ──
         _ct_vol_mult = 1.0  # default, may be overridden by counter-trend penalise
-        from core.execution.trend_isolation_gates import apply_trend_isolation_gates
 
         _trend_reject = apply_trend_isolation_gates(
             name=name,
@@ -1129,7 +1130,6 @@ class StrategyLine:
 
         # ── Counter-trend volume penalty ──
         # Strangler Fig #16: extracted to core/execution/trend_volume_guard.py
-        from core.execution.trend_volume_guard import compute_counter_trend_volume_mult
 
         _ct_vol_mult = compute_counter_trend_volume_mult(
             strategy_name=name,
@@ -1140,7 +1140,6 @@ class StrategyLine:
         )
 
         # ── 5. Dynamic SL/TP ──
-        from core.execution.dynamic_sl_tp import compute_dynamic_sl_tp, compute_sl_tp_levels
 
         # Dynamic ref ATR: use live EWMA atr_mean when available (Phase 4)
         _dynamic_ref_atr = self.config.ref_atr
@@ -1187,7 +1186,6 @@ class StrategyLine:
 
         # ── 5b. Minimum RR guard (skip for shadow — virtual tracking) ──
         # Strangler Fig #16: check_minimum_rr extracted to trend_volume_guard.py
-        from core.execution.trend_volume_guard import check_minimum_rr
 
         tp_dist = abs(levels["take_profit"] - entry_price)
         sl_dist = abs(levels["stop_loss"] - entry_price)
@@ -1303,7 +1301,6 @@ class StrategyLine:
         # but the statistical basis for mean-reversion entry is missing.
         # Continuous sigmoid penalty — no binary cliff, MetaFilter retains the
         # final say for sufficiently confident signals.
-        from core.execution.pwin_chain import adjust_p_win_for_z_strength as _z_strength
 
         _p_win = _z_strength(_p_win, name, entry_z_score)
 
