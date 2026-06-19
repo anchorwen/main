@@ -57,7 +57,7 @@
 | **G. Git Commit** | `#4(自动Pre-commit)` → `#1.1(四维评估写入Commit message)` |
 | **H. 任务收口 / 项目完结** | `#13(自动收口)` → `#7(蓝图更新)` → `#1.1(四维)` → `#4(commit+push)` → `#7.1(收口清单)` |
 
-> **并行激活**: 只要修改的是热路径文件 (`live_cycle`/`strategy_line`/`live_intent`/`execution_queue`)，强制并行激活 **`#10`**。
+> **注**: 热路径文件 BLE001 已清零 (全库 560→0, 2026-06-19)。Iron Law #10 自毁条件达成，已移除。
 
 ## AI 执行契约 (The AI Handshake)
 
@@ -245,7 +245,7 @@ Iterability: ↑/→/↓ (assessment)
 **新增 Ω Gate (FIX-017)**:
 - `scripts/omega_gate.py` 已升级，现在同时检查:
   1. `[Ω-Routing: Scene X → ...]` 签名
-  2. 热路径文件的 `#10` 标记
+  2. BLE001 全库清零状态 (560→0, 2026-06-19)
   3. `.py/.yaml/.json` 修改的 FIX/DQAF ID
   4. 纯机械操作豁免声明
 - Gate 在 `commit-msg` 阶段触发——**即使使用 `--no-verify` 也无法绕过**
@@ -572,37 +572,6 @@ python scripts/register_fix.py --help
 ```
 
 **触发条件**: 仅当本次会话中存在 DQAF 诊断 → 修复 → commit 的完整链路时触发。非诊断性编辑（typo、格式、配置值修改）不受此锁约束。
-
----
-
-### Iron Law #10: 渐进式随改随升 (Incremental Upgrade Doctrine) [TEMPORARY — 自毁条件见下]
-
-**⛔ 自毁条件**: 当以下文件中的 `# noqa: BLE001` 全部清零后，**立即删除本 Iron Law #10**（不得遗留脚手架）。检查命令：`grep -c "noqa: BLE001" core/runtime/live_cycle.py scripts/live_intent_loop.py core/execution/strategy_line.py`
-
-**触发条件**: 修改以下热路径文件中的任意一个时自动触发：
-- `core/runtime/live_cycle.py`
-- `scripts/live_intent_loop.py`
-- `core/execution/strategy_line.py`
-- `core/execution/execution_queue.py`
-
-**核心约束**: 修改上述文件时，必须扫描该文件中是否存在 `# noqa: BLE001` 标记。若存在，须将对应站点的 `try: ... except Exception: pass` 替换为 `with fail_open_guard("ComponentName"): ...`。
-
-**背景**: 2026-06-07 战役将 BLE001 从 566 降至 0，确立了 29 个存量 FAIL_OPEN 站点的"渐进式随改随升"纲领（FIX-148）。`fail_open_guard()` 工具已部署在 `core/runtime/fault_handler.py`（FIX-146）。
-
-**执行规则**:
-- 每次修改上述文件时，至少替换 **1 个** `# noqa: BLE001` 站点
-- 替换后删除对应的 `# noqa: BLE001` 注释
-- 若文件中已无 `# noqa: BLE001`，此铁律自动跳过
-- 不得专门为替换 BLE001 而修改热路径文件（避免无谓风险）
-
-**存量站点分布** (供参考):
-| 文件 | 存量 |
-|------|------|
-| `live_cycle.py` | 34 |
-| `live_intent_loop.py` | 51 |
-| `strategy_line.py` | 9 |
-| **合计** | **94** |
-> **注**: 2026-06-11 FIX-018 切除 legacy dispatch 死代码 (L5752-L6317, 567行), BLE001 105→94 (-11).
 
 ---
 
