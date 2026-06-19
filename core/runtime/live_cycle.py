@@ -304,14 +304,7 @@ class LiveCycleState:
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 
-def _utc_iso() -> str:
-    return (
-        datetime.now(UTC)
-        .replace(tzinfo=None)
-        .replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
+from core.runtime.time_utils import _utc_iso  # consolidated from 18 duplicates
 
 
 def _log_cycle_end(iteration: int) -> None:

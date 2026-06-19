@@ -33,12 +33,7 @@ from core.parliament.contract_groups import (
     MICRO_M15_GROUP,
     STATARB_M15_GROUP,
 )
-
-
-def _utc_iso() -> str:
-    from datetime import UTC, datetime
-
-    return datetime.now(UTC).replace(tzinfo=None).isoformat()
+from core.runtime.time_utils import _utc_iso  # consolidated
 
 
 def _warn_contract_mismatch(

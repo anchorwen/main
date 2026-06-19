@@ -21,14 +21,7 @@ if TYPE_CHECKING:
     from core.runtime.live_cycle import LiveCycleConfig, LiveCycleState
 
 
-def _utc_iso() -> str:
-    return (
-        datetime.now(UTC)
-        .replace(tzinfo=None)
-        .replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
+from core.runtime.time_utils import _utc_iso  # consolidated
 
 
 def _save_daily_ops_state(base_dir: str, ts: float) -> None:

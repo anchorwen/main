@@ -20,11 +20,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-
-def _utc_iso() -> str:
-    from datetime import UTC, datetime
-
-    return datetime.now(UTC).replace(tzinfo=None).isoformat()
+from core.runtime.time_utils import _utc_iso  # consolidated
 
 
 def save_execution_state(

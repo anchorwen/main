@@ -19,11 +19,7 @@ from core.execution.execution_queue import ExecutionQueue
 from core.execution.portfolio_risk import PortfolioRiskController, RiskVerdict
 from core.execution.pre_trade_guards import check_feature_vector, repair_feature_vector
 from core.execution.regime_gate import RegimeGate
-
-
-def _utc_iso() -> str:
-    return datetime.now(UTC).replace(tzinfo=None).isoformat()
-
+from core.runtime.time_utils import _utc_iso  # consolidated
 
 # ── R1 Gate silence protection state (FIX-20260613-083) ──
 # Module-level dict tracks consecutive R1-blocked cycles to prevent

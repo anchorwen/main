@@ -13,12 +13,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-
-def _utc_iso() -> str:
-    """Minimal UTC ISO timestamp — mirror of live_cycle._utc_iso()."""
-    from datetime import UTC, datetime
-
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+from core.runtime.time_utils import _utc_iso
 
 
 def init_feature_services(

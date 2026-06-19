@@ -15,11 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
-
-
-def _utc_iso() -> str:
-    """ISO-8601 UTC timestamp string."""
-    return datetime.now(UTC).replace(tzinfo=None).isoformat()
+from core.runtime.time_utils import _utc_iso  # consolidated
 
 
 def reconcile_closed_positions(

@@ -12,11 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from core.runtime.fault_handler import fail_open_guard
-
-
-def _utc_iso() -> str:
-    """Minimal UTC ISO timestamp — mirror of live_cycle._utc_iso()."""
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+from core.runtime.time_utils import _utc_iso
 
 
 def build_mia_close_entry(
