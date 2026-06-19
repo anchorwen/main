@@ -282,8 +282,10 @@ class PositionCloseAdapter:
         for _attempt in range(3):
             try:
                 deals = mt5_worker.history_deals_get(position=ticket)
-            except Exception:  # BLE001:REVIEWED
-                _time_module.sleep(1.0)
+            except Exception:  # BLE001:FOG_WRAPPED
+            with fail_open_guard("PositionCloseAdapter:DealHistoryGet"):
+                raise
+            _time_module.sleep(1.0)
                 continue
 
             if not deals:
@@ -393,7 +395,9 @@ class PositionCloseAdapter:
             if pm is not None and hasattr(pm, "clear_position"):
                 if event.remaining_volume <= 0:
                     pm.clear_position(event.position_ticket)
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_WRAPPED
+            with fail_open_guard("PositionCloseAdapter:PositionManagerNotify"):
+                raise
             _log.warning("PositionCloseAdapter: position_manager notify failed")
 
     @staticmethod
@@ -415,7 +419,9 @@ class PositionCloseAdapter:
                     getattr(state, "_reentry_states", {}), event.strategy,
                 )
                 _rs.record_exit(_rec)
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_WRAPPED
+            with fail_open_guard("PositionCloseAdapter:ReentryGuardNotify"):
+                raise
             _log.warning("PositionCloseAdapter: reentry_guard notify failed")
 
     @staticmethod
@@ -446,7 +452,9 @@ class PositionCloseAdapter:
                     "PnL Ledger: settled %s signals for ticket=%s",
                     _settled, event.position_ticket,
                 )
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_WRAPPED
+            with fail_open_guard("PositionCloseAdapter:PnLLedgerNotify"):
+                raise
             _log.warning("PositionCloseAdapter: pnl_ledger notify failed")
 
     @staticmethod
@@ -459,7 +467,9 @@ class PositionCloseAdapter:
                     "pnl": event.pnl,
                     "ticket": event.position_ticket,
                 })
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_WRAPPED
+            with fail_open_guard("PositionCloseAdapter:BudgetNotify"):
+                raise
             _log.warning("PositionCloseAdapter: budget notify failed")
 
     # ── Open event recording ────────────────────────────────────────────
@@ -486,7 +496,9 @@ class PositionCloseAdapter:
             from core.ledger.services.journal_cleanup import _append_journal
 
             _append_journal(_path, _entry, lock_dir=_lock_dir)
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_WRAPPED
+            with fail_open_guard("PositionCloseAdapter:OpenJournalWrite"):
+                raise
             _log.exception(
                 "PositionCloseAdapter: open journal write failed for ticket=%s",
                 event.position_ticket,
