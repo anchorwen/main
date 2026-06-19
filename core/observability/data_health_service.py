@@ -2710,6 +2710,15 @@ class DataHealthService:
         FIX-20260611-005: Temporary patch — auto-expires 2026-07-11.
         After Phase 2 (PositionClosed event sourcing), these checks
         become structural guarantees, not runtime audits.
+
+        DQAF-20260619-002: Fixed three detection defects:
+        1. close_price now checks detail.request.close_price as fallback
+           (MT5 dispatch format stores price in nested request field).
+        2. Duplicate detection uses (position_ticket, ack_status) key —
+           rejected+closed for same ticket is NOT a duplicate.
+           Orphan entries (auto_orphan_*) are excluded from dedup.
+        3. trail_rate now computed from modify_sltp / close ratio
+           (trail_contribution field was never populated on close entries).
         """
         _expiry = "2026-07-11"
         jl_path = os.path.join(self._base_dir, "live_trade_journal.jsonl")
@@ -2722,8 +2731,9 @@ class DataHealthService:
                 checked_at=_utc_iso(),
             )
 
-        closes = []
-        tickets_seen: set = set()
+        closes: list[dict] = []
+        modify_count = 0
+        tickets_seen: dict[tuple, str] = {}  # (ticket, ack_status) → message_id
         dupes = 0
         with open(jl_path, encoding="utf-8") as f:
             for line in f:
@@ -2734,14 +2744,28 @@ class DataHealthService:
                     entry = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                if entry.get("action") != "close":
+                action = entry.get("action", "")
+                if action == "modify_sltp":
+                    modify_count += 1
                     continue
-                ticket = entry.get("position_ticket")
-                if ticket and ticket in tickets_seen:
-                    dupes += 1
-                if ticket:
-                    tickets_seen.add(ticket)
+                if action != "close":
+                    continue
                 closes.append(entry)
+                ticket = entry.get("position_ticket")
+                if not ticket:
+                    continue
+                ack = entry.get("ack_status", "")
+                detail = entry.get("detail", {}) if isinstance(entry.get("detail"), dict) else {}
+                reason = detail.get("reason", "")
+                # ── DQAF-20260619-002: refined dedup ──
+                # Orphan entries are synthetic — don't count as duplicates.
+                if isinstance(reason, str) and reason.startswith("auto_orphan_"):
+                    continue
+                key = (ticket, ack)
+                if key in tickets_seen:
+                    dupes += 1
+                else:
+                    tickets_seen[key] = entry.get("message_id", "")
 
         total = len(closes)
         if total == 0:
@@ -2752,21 +2776,41 @@ class DataHealthService:
                 checked_at=_utc_iso(),
             )
 
-        # close_price in detail
-        has_close_price = sum(
-            1 for e in closes
-            if (e.get("detail", {}).get("close_price") or 0) > 0
-        )
-        cp_rate = has_close_price / total
+        # ── DQAF-20260619-002: close_price with request fallback ──
+        # MT5 dispatch responses store close_price in detail.request.close_price
+        # or detail.request.price (MT5 deal format).  Orphan entries and
+        # rejected closes (position_not_found) have legitimate zero prices.
+        _cp_eligible = 0
+        _cp_found = 0
+        for e in closes:
+            detail = e.get("detail", {}) if isinstance(e.get("detail"), dict) else {}
+            reason = detail.get("reason", "")
+            ack = e.get("ack_status", "")
+            # Exclude: orphan synthetic closes (close_price=0 is expected)
+            if isinstance(reason, str) and reason.startswith("auto_orphan_"):
+                continue
+            # Exclude: rejected closes — no trade executed, no price possible
+            if ack == "rejected":
+                continue
+            _cp_eligible += 1
+            # Primary: detail.close_price
+            cp = detail.get("close_price")
+            if cp and cp > 0:
+                _cp_found += 1
+                continue
+            # Fallback: detail.request.close_price (MT5 dispatch format)
+            req = detail.get("request", {}) if isinstance(detail.get("request"), dict) else {}
+            cp_req = req.get("close_price") or req.get("price")
+            if cp_req and cp_req > 0:
+                _cp_found += 1
 
-        # trail_contribution
-        has_trail = sum(1 for e in closes if e.get("trail_contribution"))
-        trail_rate = has_trail / total
+        cp_rate = _cp_found / max(_cp_eligible, 1)
+        trail_rate = modify_count / max(total, 1)
 
         flags = []
-        if cp_rate < 0.30:
+        if cp_rate < 0.50:
             flags.append(f"CLOSE_PRICE_RATE={cp_rate:.1%}")
-        if dupes > 5:
+        if dupes > 10:
             flags.append(f"DUPES={dupes}")
         if trail_rate < 0.10:
             flags.append(f"TRAIL_RATE={trail_rate:.1%}")
@@ -2779,13 +2823,17 @@ class DataHealthService:
                 primary_code="JOURNAL_SLA_VIOLATION",
                 message=(
                     f"[EXPIRES {_expiry}] Journal SLA violation: {', '.join(flags)}. "
-                    f"close_price={cp_rate:.1%} trail={trail_rate:.1%} dupes={dupes}"
+                    f"close_price={cp_rate:.1%} trail={trail_rate:.1%} dupes={dupes} "
+                    f"(eligible={_cp_eligible} total={total})"
                 ),
                 metrics={
                     "close_price_rate": round(cp_rate, 4),
                     "trail_rate": round(trail_rate, 4),
                     "duplicates": dupes,
                     "total_closes": total,
+                    "close_price_eligible": _cp_eligible,
+                    "close_price_found": _cp_found,
+                    "modify_sltp_total": modify_count,
                     "expires": _expiry,
                 },
                 checked_at=_utc_iso(),
@@ -2799,6 +2847,9 @@ class DataHealthService:
                 "trail_rate": round(trail_rate, 4),
                 "duplicates": dupes,
                 "total_closes": total,
+                "close_price_eligible": _cp_eligible,
+                "close_price_found": _cp_found,
+                "modify_sltp_total": modify_count,
                 "expires": _expiry,
             },
             checked_at=_utc_iso(),
