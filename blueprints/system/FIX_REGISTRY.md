@@ -45,6 +45,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260616-101 | 2026-06-16 | runtime-live, fault-handler | **Zombie Cycle Fuse + MT5 Timeout Hardening + Phase Telemetry (DQAF-20260616-002)**: (P0.1) live_intent_loop 主循环 except handler 新增连续失败计数器 `_consecutive_cycle_errors` — ≥5 → `sys.exit(3)` 熔断打破假活循环, 退出前写 alert_audit + watchdog_kill.log. (P0.2) 断路器关仓路径 `positions_get`/`order_send` 加装 `mt5_call_with_timeout` (10s/15s). (P0.3) live_cycle 5 个关键 Phase 加入 `phase_transition` 边界日志. (P1.2) execution_state.save() 加入 state invariant auto_heal: `circuit_breaker_tripped_at` 残留清理 + `trip_reason` 缺失默认值. | DQAF-20260616-002 |
 | FIX-20260616-004 | 2026-06-16 | infrastructure, runtime | **L3 Lock Refresh + Launcher TTL Check (DQAF-20260616-004)**: FileLock 新增 `refresh()` 原子更新时间戳. live_intent_loop 每周期刷新锁. live_launcher 锁清理增加 TTL 过期检测 — 即使 pid 存活但 TTL 超期也自动清理. 消除 hung 进程阻塞重启的系统性漏洞. | RC-06 |
 | FIX-20260619-001 | 2026-06-19 | infrastructure, scripts | **Windows Lock Cleanup Cross-Platform Fix (DQAF-20260619-001)**: (Bug 1) live_launcher 锁清理 `except OSError` 在 Windows 上不捕获 `os.kill(pid,0)` 抛出的 `SystemError` → TTL 检查路径不可达. 修复: → `except (OSError, SystemError)`. (Bug 2) `FileLock.refresh()` 缺少 holder_id 校验 → 锁被强制窃取后旧持有者仍能覆写. 修复: refresh() 在读-改-写前验证 holder_id 匹配. +4 tests. | RC-06 |
+| FIX-20260619-025 | 2026-06-19 | runtime, execution | **BLE001 Phase 2a: hot-path annihilation + Strangler Fig #21-22**: 28 站点审计 → 19 fail_open_guard + 8 BLE001:REVIEWED + 1 structured re-raise. 热路径未标注 bare except: 30→0. fail_open_guard 部署: 84→94. Strangler Fig #21 (apply_timeframe_scaling → timeframe_scaling.py, 38行纯函数) + #22 (validate_strategy_exit_configs → strategy_config_validator.py, 16行纯函数). live_cycle.py: -54行. | RC-07 |
 | FIX-20260619-004 | 2026-06-19 | observability | **L2: Entry Context graduated threshold — zero-tolerance→configurable completeness**: check_entry_context_completeness() 零容忍阈值 (`total_missing>0→FAIL`) 被可配置完整性阈值 (默认95%) + 14天扫描窗口替代。添加 WARN 频段 (threshold*0.8~threshold)。消除不可修复历史数据 (BTC 3条 Jun13, XAU 54条 May24-25) 产生的永久 CRITICAL。同步修复 diagnose_data_health_failures.py 检测逻辑 + encoding + governance key。 | RC-07 |
 | FIX-20260619-003 | 2026-06-19 | observability | **Entry Context Vector Field-Path Fix (DQAF-20260619-002/F3)**: check_entry_context_completeness() 查找 `ctx.vector` → 应为 `ctx.entry_features.vector`（新格式）或 `ctx.vector`（旧格式兼容）。BTC completeness 0%→98.8%, XAU June opens 0%→98.2%. | RC-07 |
 | FIX-20260619-002 | 2026-06-19 | observability | **Journal Health Check False-Positive Fix (DQAF-20260619-002)**: check_journal_completeness() 三个检测缺陷修复: (1) close_price 新增 detail.request.close_price 回退查找 — MT5 dispatch 格式的价格在嵌套字段. (2) 孤儿 (auto_orphan_*) 和拒绝关仓 (ack_status=rejected) 排除出 close_price 分母. (3) 重复检测 key 从 ticket → (ticket, ack_status). (4) trail_rate 从 modify_sltp 计数而非未填充的 trail_contribution 字段. 验证: BTC cp_rate 68.9%→100%, dupes 34→8; XAU cp_rate 22.9%→99.5%, dupes→7. 双品种 JOURNAL_SLA_VIOLATION→JOURNAL_SLA_OK. | RC-07 |
@@ -3199,6 +3200,17 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-07 — missing-validation: 健康检测逻辑未适配 journal 实际数据模型 — (a) MT5 dispatch 格式的 close_price 路径不同于 MIA close 格式, (b) 孤儿/拒绝条目具有合法零值 close_price, (c) trail_contribution 字段在所有 close 路径中均未设置
 - **Prevention**: (1) 健康检测字段查找必须覆盖所有已知的数据路径 (主字段 + 回退字段), (2) 合法零值必须有显式排除列表, (3) 重复检测 key 必须包含状态维度, (4) 新 journal 写入路径必须更新健康检测的字段查找链
 - **Dependents Checked**: data_health_service lightweight/full run (compatible — same SourceCheckResult schema), live_cycle (no imports from data_health)
+
+### FIX-20260619-025
+- **Date**: 2026-06-19
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: runtime, execution
+- **Files**: core/runtime/live_cycle.py, core/runtime/position_close_adapter.py, core/runtime/reconciliation.py, core/runtime/timeframe_scaling.py, core/runtime/strategy_config_validator.py, core/execution/swing_strategy.py, core/execution/barrier_strategy.py, core/execution/pwin_chain.py, core/execution/strategy_decision.py, core/execution/micro_strategy.py, scripts/live_intent_loop.py
+- **Description**: BLE001 Phase 2a hot-path annihilation + Strangler Fig #21-22. (Part 1) 28 bare except 站点逐审计: 19 fail_open_guard() 替换 (position_close_adapter 4, reconciliation 2, swing/barrier 策略 2, pwin_chain 1, live_cycle micro_store 1, live_intent_loop zombie_fuse 1, brain_promotion 1), 8 BLE001:REVIEWED (live_cycle 有意混合模式+复杂try块), 1 BLE001:REVIEWED (micro_strategy HMRE 结构化 re-raise). 热路径未标注 bare except: 30→0. fail_open_guard 部署: 84→94. (Part 2) Strangler Fig #21: apply_timeframe_scaling() (38行纯函数, 零I/O) → core/runtime/timeframe_scaling.py. Strangler Fig #22: validate_strategy_exit_configs() (16行纯函数, 零I/O) → core/runtime/strategy_config_validator.py. live_cycle.py: -54行, 薄委托包装器保留. live_intent_loop.py: 导入更新至新模块.
+- **Root Cause**: RC-07 — missing-validation: 热路径裸 except 吞异常掩盖故障。Phase 1 (FIX-016/017) 消灭了抑制注释但未替换实际代码，Phase 2a 逐站点审计并替换。
+- **Prevention**: (1) fail_open_guard 是裸 except 的最小安全替换, (2) 混合模式 (except内嵌fail_open_guard) 标记 BLE001:REVIEWED 作为过渡, (3) 结构化 re-raise 不适合 fail_open_guard → 标记为已审阅
+- **Dependents Checked**: live_intent_loop (导入更新), daily_ops_scheduler (仅导入类型, 无影响)
 
 ### FIX-20260619-004
 - **Date**: 2026-06-19
