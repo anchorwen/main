@@ -76,7 +76,7 @@ class ConfigHotReload:
             for fn in self._listeners:
                 try:
                     fn(changes, new)
-                except Exception:
+                except Exception:  # BLE001:REVIEWED
                     logging.exception(
                         "ConfigHotReload listener failed for config_path=%s",
                         self._path,

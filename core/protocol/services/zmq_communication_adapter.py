@@ -197,7 +197,7 @@ class ZMQCommunicationAdapter:
                         "zmq_failures": self._circuit_breaker._failure_count,
                     }
                     return result
-                except Exception:
+                except Exception:  # BLE001:REVIEWED
                     logger.error("Fallback adapter also failed", exc_info=True)
             raise
 

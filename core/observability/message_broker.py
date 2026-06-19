@@ -197,7 +197,7 @@ class RedisStreamsBroker(MessageBroker):
             try:
                 h(event_type, payload)
                 delivered += 1
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 logger.exception("Handler failed for %s", event_type)
 
         # Publish to Redis for external consumers
@@ -206,7 +206,7 @@ class RedisStreamsBroker(MessageBroker):
                 msg = Message(event_type=event_type, payload=payload)
                 stream = f"{self._stream_prefix}:{event_type}"
                 self._client.xadd(stream, {"data": json.dumps(msg.to_dict())}, maxlen=10000)
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 logger.exception("Redis publish failed for %s", event_type)
                 if self._fallback:
                     self._fallback.publish(event_type, payload)

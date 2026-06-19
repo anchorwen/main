@@ -107,7 +107,7 @@ class BackgroundDeliveryWorker(threading.Thread):
             try:
                 self._channel.send(enriched)
                 self._delivered += 1
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 logger.exception(
                     "BackgroundDeliveryWorker: channel.send failed for rule=%s",
                     enriched.get("rule_name", "?"),

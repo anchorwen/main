@@ -325,7 +325,7 @@ class SchedulerService:
                                             _sm["win_rate"],
                                             _sm["pnl_r"],
                                         )
-                        except Exception:
+                        except Exception:  # BLE001:REVIEWED
                             _logger.debug(
                                 "[GOV_MANUAL] Event stream projection skipped "
                                 "(stream not available)"
@@ -366,7 +366,7 @@ class SchedulerService:
                                     )
                         else:
                             container.governance_rule_engine.execute_transitions(decisions)
-                    except Exception:
+                    except Exception:  # BLE001:REVIEWED
                         _logger.exception(
                             "CRITICAL: PnL-based governance evaluation failed — "
                             "brain promotion decisions will be skipped this cycle"

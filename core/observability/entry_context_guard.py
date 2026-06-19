@@ -109,7 +109,7 @@ class EntryContextGuard:
                     self._run_full_scan()
                     last_scan = now
 
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 # M1: never let the guard die silently
                 logger.critical(
                     "EntryContextGuard: unhandled exception in main loop:\n%s",
@@ -155,7 +155,7 @@ class EntryContextGuard:
 
             service = DataHealthService(base_dir=str(self._base_dir), symbol=self._symbol)
             result = service.check_entry_context_completeness()
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             logger.error(
                 "EntryContextGuard: DataHealthService scan failed:\n%s",
                 traceback.format_exc(),

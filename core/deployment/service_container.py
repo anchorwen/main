@@ -580,7 +580,7 @@ class ServiceContainer:
                     },
                     actor=TIMELINE_ACTOR_HOT_RELOAD,
                 )
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             logging.exception(
                 "ServiceContainer timeline record failed during hot reload for changes=%s",
                 _changes,

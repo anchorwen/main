@@ -69,7 +69,7 @@ class BrainRunService:
                     "BrainRunService config validation failed for brain_id=%s — brain excluded",
                     brain_id,
                 )
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 logging.exception(
                     "BrainRunService failed to build adapter for brain_id=%s",
                     brain_id,
@@ -159,7 +159,7 @@ class BrainRunService:
             except BrainConfigError:
                 self._failed_brain_ids.add(brain_id)
                 return None
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 logging.exception(
                     "BrainRunService failed to build adapter for brain_id=%s", brain_id
                 )
@@ -170,7 +170,7 @@ class BrainRunService:
 
         try:
             return adapter.run(feature_snapshot, feature_source or {})
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             logging.exception("BrainRunService inference failed for brain_id=%s", brain_id)
             return None
 
@@ -233,7 +233,7 @@ class BrainRunService:
                 {"message": "Brain excluded from inference due to config validation failure"},
             )
             return None
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             logging.exception(
                 "BrainRunService failed to build adapter for brain_id=%s",
                 brain_id,
@@ -259,7 +259,7 @@ class BrainRunService:
 
         try:
             return adapter.run(feature_snapshot, brain_feature_source)
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             logging.exception(
                 "BrainRunService inference failed for brain_id=%s",
                 brain_id,

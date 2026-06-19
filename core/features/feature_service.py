@@ -165,7 +165,7 @@ class FeatureService:
                         )
                         self._last_known_vector = np.asarray(raw, dtype=np.float32).copy()
                         return raw
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 logging.exception(
                     "FeatureService failed reading from local store for symbol=%s",
                     symbol,
@@ -290,7 +290,7 @@ class FeatureService:
                             # FeatureService's V9LiveFeatureComputer doesn't produce
                             # micro fields — writing here created zero-valued records
                             # that raced with the real ones from live_cycle.
-                    except Exception:
+                    except Exception:  # BLE001:REVIEWED
                         logging.exception(
                             (
                                 "FeatureService failed writing computed features"
@@ -301,7 +301,7 @@ class FeatureService:
 
                 model_input = self._adapter.build_model_input(features)
                 return model_input[0]  # (n_features,) 1-D
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 logging.exception(
                     "FeatureService live MT5 feature computation failed for symbol=%s",
                     symbol,

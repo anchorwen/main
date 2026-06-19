@@ -57,7 +57,7 @@ class V9MicroComputer:
         # ── V9 institutional features (always attempted) ──
         try:
             v9_features = self._v9.compute_all()
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             logging.exception("V9MicroComputer: V9 compute failed for %s", self._symbol)
             v9_features = {}
         result.update(v9_features)
@@ -81,7 +81,7 @@ class V9MicroComputer:
                 )
             else:
                 self.last_micro_ok = True
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             logging.exception("V9MicroComputer: micro compute failed for %s", self._symbol)
 
         # Fill micro slots — use 0.0 when unavailable (NaN propagates through

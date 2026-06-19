@@ -215,7 +215,7 @@ class OnlineFeedbackHook:
             brain_entry = getattr(self._adapter, "_brain_entry", None)
             if isinstance(brain_entry, dict):
                 feature_names = brain_entry.get("features")
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             pass
 
         if feature_names:
@@ -376,7 +376,7 @@ class OnlineFeedbackHook:
                     pnl, volume = self._extract_pnl_volume(entry)
                     self._replay.add(feat_arr, label, pnl, volume, trade_id=trade_id)
                     collected += 1
-                except Exception:
+                except Exception:  # BLE001:REVIEWED
                     errors += 1
                     logger.exception("OnlineFeedbackHook: buffer add failed for trade %s", trade_id)
             else:
@@ -395,7 +395,7 @@ class OnlineFeedbackHook:
                         )
                     else:
                         errors += 1
-                except Exception:
+                except Exception:  # BLE001:REVIEWED
                     errors += 1
                     logger.exception("OnlineFeedbackHook: update failed for trade %s", trade_id)
 
@@ -421,7 +421,7 @@ class OnlineFeedbackHook:
                     flushed_count,
                     len(batch),
                 )
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 logger.exception("OnlineFeedbackHook: mini-batch flush failed")
 
         self._last_processed_at = latest_processed

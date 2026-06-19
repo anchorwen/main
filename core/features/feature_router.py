@@ -202,7 +202,7 @@ class FeatureRouter:
                 if isinstance(_ofi_data, dict):
                     for k, v in _ofi_data.items():
                         lake[k] = float(v) if (v is not None and np.isfinite(float(v))) else 0.0
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             pass  # OFI file unavailable — lake just lacks these keys
 
         # Source 9: Caller-provided extras (future-proof injection point)

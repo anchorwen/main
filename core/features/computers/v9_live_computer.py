@@ -273,7 +273,7 @@ class V9LiveFeatureComputer:
                 }
                 for r in rates
             ]
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             logging.exception(
                 "V9LiveComputer failed fetching rates for symbol=%s timeframe=%s count=%s",
                 self._symbol,

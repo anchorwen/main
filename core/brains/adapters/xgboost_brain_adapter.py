@@ -90,7 +90,7 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
                             feature_names[:3],
                             list(feature_source.keys())[:3],
                         )
-                except Exception:
+                except Exception:  # BLE001:REVIEWED
                     pass  # Shadow validation is non-blocking
                 feature_vector = new_vector
             else:

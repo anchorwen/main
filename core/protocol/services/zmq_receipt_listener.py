@@ -107,7 +107,7 @@ class ZMQReceiptListener:
                     logger.debug("ZMQ error in recv loop", exc_info=True)
             except json.JSONDecodeError:
                 logger.warning("Invalid JSON ACK received")
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 logger.error("Unexpected error in ACK recv loop", exc_info=True)
 
     def get_receipt(self, message_id: str, timeout: float = 5.0) -> dict[str, Any] | None:

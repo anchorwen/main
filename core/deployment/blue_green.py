@@ -331,7 +331,7 @@ class BlueGreenManager:
         for hook in self._pre_cutover_hooks:
             try:
                 hook(self._topology)
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 logger.exception("Pre-cutover hook failed")
 
         time.sleep(min(drain_timeout_seconds, 5.0))
@@ -373,7 +373,7 @@ class BlueGreenManager:
         for hook in self._post_cutover_hooks:
             try:
                 hook(self._topology)
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 logger.exception("Post-cutover hook failed")
 
         # Archive the cutover record
@@ -481,7 +481,7 @@ class BlueGreenManager:
             try:
                 data = json.loads(self._state_file.read_text(encoding="utf-8"))
                 return DeploymentTopology.from_dict(data)
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 logger.exception("Failed to load topology, reinitializing")
         return self._init_topology()
 

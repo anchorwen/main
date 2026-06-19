@@ -1812,7 +1812,7 @@ class DataHealthService:
 
         try:
             gov = _json.loads(open(gov_path, encoding="utf-8").read())
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             return CrossCheckResult(
                 check_name="brain_registry_governance_alignment",
                 status=SourceStatus.SKIPPED,
@@ -1857,7 +1857,7 @@ class DataHealthService:
                     entry = _json.loads(open(f, encoding="utf-8").read())
                     if entry.get("schema_version") == "brain_registry_entry.v1":
                         registry_entries[entry["brain_id"]] = entry
-                except Exception:
+                except Exception:  # BLE001:REVIEWED
                     pass
 
         for bid in live_ids:
@@ -1895,7 +1895,7 @@ class DataHealthService:
                         warnings.append(
                             f"LIVE brain {bid}: disabled in {yaml_path}"
                         )
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             pass  # yaml not available — skip this check
 
         if warnings:
@@ -3079,7 +3079,7 @@ class DataHealthService:
                 _data = json.load(_fh)
             _hb = _data.get("last_heartbeat_utc", "")
             _age = _age_minutes(_hb) if _hb else 999
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             return SourceCheckResult(
                 source="entry_context_guard", tier=Tier.CRITICAL,
                 status=SourceStatus.WARN,
