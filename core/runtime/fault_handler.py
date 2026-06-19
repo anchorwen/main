@@ -330,7 +330,7 @@ def fail_open_guard(component: str) -> FaultTolerantContext:
     Usage (governance Phase 2)::
 
         # BEFORE (BLE001 — blind except):
-        with fail_open_guard("Auto:do_something"):
+        with fail_open_guard("FaultHandler:DocExample"):
             do_something()
             pass  # BLE001 — migrated from blind pass
 

@@ -22,6 +22,7 @@ from concurrent.futures import Future
 from typing import Any
 
 from core.protocol.services.resilience import CircuitBreaker
+from core.runtime.fault_handler import fail_open_guard
 
 # ── Module-level singleton ──────────────────────────────────────────
 
@@ -355,7 +356,7 @@ class MT5Worker:
                     self.circuit_breaker.record_failure()
                     # Detect CB transition to OPEN → alert hub
                     if not was_open and self._alert_hub is not None:
-                        with fail_open_guard("Auto:is_open = "):
+                        with fail_open_guard("MT5Worker:CircuitBreakerAlert"):
                             is_open = (
                                 self.circuit_breaker.state.value == "open"
                                 if hasattr(self.circuit_breaker, "state")

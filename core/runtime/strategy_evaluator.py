@@ -19,6 +19,7 @@ from core.execution.execution_queue import ExecutionQueue
 from core.execution.portfolio_risk import PortfolioRiskController, RiskVerdict
 from core.execution.pre_trade_guards import check_feature_vector, repair_feature_vector
 from core.execution.regime_gate import RegimeGate
+from core.runtime.fault_handler import fail_open_guard
 from core.runtime.time_utils import _utc_iso  # consolidated
 
 # ── R1 Gate silence protection state (FIX-20260613-083) ──
@@ -579,7 +580,7 @@ def evaluate_strategy_lines(
         # FIX-20260611-022: Computed upstream from DataHealthService output.
         # NORMAL(100%) → YELLOW(40%) → ORANGE(15%,no new) → RED(0%,close-only).
         if decision.should_trade and gate_mode != "shadow" and degradation_constraints is not None:
-            with fail_open_guard("Auto:_dv, _dt, _dr = apply_degradat"):
+            with fail_open_guard("StrategyEvaluator:DegradationApply"):
                 from core.observability.degradation import apply_degradation_to_decision
 
                 _dv, _dt, _dr = apply_degradation_to_decision(
@@ -631,7 +632,7 @@ def evaluate_strategy_lines(
         )
 
         if not decision.should_trade:
-            with fail_open_guard("Auto:record_gate_block"):
+            with fail_open_guard("StrategyEvaluator:GateAuditRecord"):
                 from core.runtime.gate_audit_recorder import record_gate_block
 
                 record_gate_block(

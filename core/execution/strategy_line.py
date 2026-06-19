@@ -605,7 +605,7 @@ class StrategyLine:
         # for shadow-mode barrier_12bar — without it, threshold calibration
         # (0.75) is flying blind.
         for p in proposals:
-            with fail_open_guard("Auto:_brain_id = str"):
+            with fail_open_guard("StrategyLine:BrainIdResolve"):
                 _brain_id = str(getattr(p, "brain_id", ""))
                 # Match regression brains by training_contract in brain config
                 _b_entry = next((b for b in self.brains if b.get("brain_id") == _brain_id), None)

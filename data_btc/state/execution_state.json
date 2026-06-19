@@ -1,7 +1,7 @@
 {
   "version": 3,
   "schema_version": "execution_state.v3",
-  "saved_at_utc": "2026-06-19T11:14:50.746781Z",
+  "saved_at_utc": "2026-06-19T11:24:48.637172Z",
   "budgets": {
     "btc_swing": {
       "daily_pnl_pct": -0.95,
@@ -28,19 +28,38 @@
       "_sl_paused_rest_of_day": false
     }
   },
-  "known_open_tickets": {},
+  "known_open_tickets": {
+    "3944725111": {
+      "position_ticket": 3944725111,
+      "action": "open",
+      "side": "long",
+      "volume": 0.01,
+      "entry_price": 62500.3,
+      "strategy": "btc_swing",
+      "magic": 90410,
+      "message_id": "eq_btc_swing_ade79b3b8f95",
+      "brain_ids": [
+        "BTC_Swing_V4"
+      ],
+      "brain_votes": [],
+      "entry_consensus": {
+        "consensus_score": 0.7383,
+        "direction": "long"
+      }
+    }
+  },
   "cooldown_registry": {},
   "family_entry_tracker": {
     "swing": {
-      "long": 1781867090.5084636
+      "long": 1781868015.2152836
     }
   },
   "sl_streak_blocks": {},
   "sl_streak_global_block": 0.0,
   "consecutive_degraded": 0,
-  "circuit_breaker_tripped": true,
-  "circuit_breaker_tripped_at": 1781867389.9950354,
-  "intraday_dd_active": false,
+  "circuit_breaker_tripped": false,
+  "circuit_breaker_tripped_at": 0.0,
+  "intraday_dd_active": true,
   "consecutive_stale_cycles": 0,
   "consecutive_stale_features": 0,
   "circuit_breaker_trip_reason": "budget_breached"
