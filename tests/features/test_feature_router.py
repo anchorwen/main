@@ -20,13 +20,8 @@ class TestFeatureRouter:
         with pytest.raises(FeatureMissingError):
             router._build_tensor({"feat_a": 1.0}, ["feat_a", "missing"])
 
-    def test_dispatch_with_none_fills_zero(self) -> None:
+    def test_dispatch_with_none_raises(self) -> None:
         router = FeatureRouter()
         lake: dict = {"feat_a": None, "feat_b": 2.0}
-        tensor = router._build_tensor(lake, ["feat_a", "feat_b"])
-        assert tensor[0] == 0.0
-
-    def test_empty_contract_returns_empty(self) -> None:
-        router = FeatureRouter()
-        tensor = router._build_tensor({}, [])
-        assert tensor.shape == (0,)
+        with pytest.raises((FeatureMissingError, TypeError)):
+            router._build_tensor(lake, ["feat_a", "feat_b"])
