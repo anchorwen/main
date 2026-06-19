@@ -1,7 +1,8 @@
 # Blueprint System Overview
 
-> Last regenerated: 2026-06-19
-> FIX count: 51 | BLE001: Phase 3a 盲点全歼+3b推进中 | Tier 1: 0 | Tier 2: 7 | fog: 135 | 纯函数: 14 | Mypy: 201→31
+> Last regenerated: 2026-06-20
+> FIX count: 53 | Strangler Fig: #26 | fog: 135 | 纯函数: 14 | Mypy: 201→31
+> live_cycle.py: 6,062→4,648 (−23.3%) | management_phase.py: 1,293 (new)
 
 ## Architecture Layers
 

@@ -3251,3 +3251,25 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-06 (contract-violation): JournalAccepted accepted entry_context dicts missing 'vector'. No write-boundary or audit enforcement existed.
 - **Prevention**: L1 write rejection, L2 hourly detection with alert, L3 cross-symbol parity.
 - **Dependents Checked**: live_cycle.py/daily_ops_scheduler.py/strategy_line.py (all untouched)
+
+### FIX-20260620-064
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime/live
+- **Files**: core/runtime/live_cycle.py
+- **Description**: Phase 0 dormant bug fix — `_execute_management_phase` L774 returned `(state, True)` tuple while all other 12 return paths returned `bool`. Caller at line 3702 discards return value → silently harmless since 2026-05. Fixed to `return True` for type consistency before Strangler Fig #26 extraction.
+- **Root Cause**: RC-05 — boundary-error
+- **Prevention**: mypy strict return type checking would have caught this.
+- **Dependents Checked**: Caller verified to discard return value — no behavior change.
+
+### FIX-20260620-065
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Type**: refactor
+- **Module**: runtime/live
+- **Files**: core/runtime/live_cycle.py → core/runtime/management_phase.py (new, 1,293 lines)
+- **Description**: Strangler Fig #26 — extraction of `_execute_management_phase()` (1,454 lines, 24% of live_cycle.py) to standalone module `core/runtime/management_phase.py`. Delegation wrapper (37 lines) retained in live_cycle.py with same signature for backward compatibility. `_emit()` helper unified 22 print(json.dumps()) event-logging sites into single-point logger. `_modify_trail` helper encapsulated open_message_id resolution from state.known_open_tickets. `compute_and_dispatch_trail` import migrated from live_cycle to management_phase. live_cycle.py: 6,062→4,648 (−1,414 lines, −23.3%).
+- **Root Cause**: RC-08 — incomplete-cleanup (monolith growth)
+- **Prevention**: Strangler Fig pattern now established for hot-path functions. New position management code goes in management_phase.py.
+- **Dependents Checked**: Single caller at live_cycle.py:3702. Return value discarded — no coupling risk. verify.py --quick: mypy + ruff + import boundaries all PASS.

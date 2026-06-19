@@ -7,6 +7,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 | File | Role |
 |------|------|
 | `core/runtime/live_cycle.py` | Main `LiveCycle` class — the trading loop (ingress → signal → execute → dispatch) |
+| `core/runtime/management_phase.py` | `execute_management_phase()` — position trail/reeval/exit layer cake (Strangler Fig #26) |
 | `core/runtime/signal_pipeline.py` | `_ensemble_proposals()` — merges brain proposals into ensemble votes |
 | `core/runtime/market_ingress.py` | ATR retrieval, mid price, position count, regime gate bootstrap |
 | `core/runtime/order_dispatch.py` | SL/TP computation, risk evaluation, feature snapshot, SL streak tracking |
@@ -97,6 +98,8 @@ The central live trading cycle orchestration. Wires together market data ingress
 | FIX-20260619-004 | 2026-06-19 | cursor-agent | — | **Whale D — Strangler Fig #16 → trend_volume_guard.py**. +15 tests. | RC-08 |
 | FIX-20260619-003 | 2026-06-19 | cursor-agent | — | **Whale C**: ConformalOUGate init BLE001 → fail_open_guard. | RC-08 |
 | FIX-20260619-002 | 2026-06-19 | cursor-agent | — | **Whale B**: ConformalCalibratorUpdate + SignalSettledWrite. | RC-08 |
+| FIX-20260620-064 | 2026-06-20 | cursor-agent | — | **Phase 0: Dormant bug fix**: `_execute_management_phase` L774 returned `(state, True)` tuple while all other 12 return paths returned `bool`. Caller discarded return → silently harmless. Fixed to `return True`. | RC-05 |
+| FIX-20260620-065 | 2026-06-20 | cursor-agent | — | **Strangler Fig #26 — `_execute_management_phase()` extraction**: 1,454-line position management function extracted from `live_cycle.py` → `core/runtime/management_phase.py` (1,293 lines). Delegation wrapper retained. `_emit()` unified 22 event-logging sites. `_modify_trail` helper encapsulated open_message_id resolution. `compute_and_dispatch_trail` import migrated to new module. live_cycle.py: 6,062→4,648 (−23.3%). | RC-08 |
 | FIX-20260619-001 | 2026-06-19 | cursor-agent | — | **Whale A — Strangler Fig #15**: position ownership resolver extracted to `core/runtime/position_ownership.py`. 3 BLE001 → fail_open_guard. 13 tests. live_cycle BLE001: 40→32. | RC-08 |
 | FIX-20260616-101 | 2026-06-16 | cursor-agent | — | **Zombie Cycle Fuse + MT5 Timeout Hardening + Phase Telemetry (DQAF-20260616-002)** | RC-07 |
 | FIX-20260616-001 | 2026-06-16 | cursor-agent | — | **Strangler Fig #14 — OU/Hurst pure function extraction**: `_compute_tf_ou_hurst()` (32-line pure math) extracted from `live_cycle.py` → `core/runtime/ou_hurst.py`. Zero I/O, deterministic function. Replaced 1 BLE001 site (`_save_recent_prices`) with `fail_open_guard("RecentPricesSave")`. Added 13 parameterized tests (tests/runtime/test_ou_hurst.py). BLE001: 42→41. | RC-08 |
