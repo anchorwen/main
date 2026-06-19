@@ -605,7 +605,7 @@ class StrategyLine:
         # for shadow-mode barrier_12bar — without it, threshold calibration
         # (0.75) is flying blind.
         for p in proposals:
-            try:
+            with fail_open_guard("Auto:_brain_id = str"):
                 _brain_id = str(getattr(p, "brain_id", ""))
                 # Match regression brains by training_contract in brain config
                 _b_entry = next((b for b in self.brains if b.get("brain_id") == _brain_id), None)
@@ -630,8 +630,7 @@ class StrategyLine:
                             ),
                             flush=True,
                         )
-            except Exception:  # BLE001:REVIEWED
-                pass
+                pass  # BLE001 — migrated from blind pass
 
         # ── 3a2. Record counterfactual signals (BEFORE approval gates) ──
         # Counterfactual P&L must be recorded every cycle for every brain,

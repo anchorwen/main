@@ -579,7 +579,7 @@ def evaluate_strategy_lines(
         # FIX-20260611-022: Computed upstream from DataHealthService output.
         # NORMAL(100%) → YELLOW(40%) → ORANGE(15%,no new) → RED(0%,close-only).
         if decision.should_trade and gate_mode != "shadow" and degradation_constraints is not None:
-            try:
+            with fail_open_guard("Auto:_dv, _dt, _dr = apply_degradat"):
                 from core.observability.degradation import apply_degradation_to_decision
 
                 _dv, _dt, _dr = apply_degradation_to_decision(
@@ -605,8 +605,7 @@ def evaluate_strategy_lines(
                             ),
                             flush=True,
                         )
-            except Exception:  # BLE001:REVIEWED
-                pass
+                pass  # BLE001 — migrated from blind pass
 
         # Apply session + health volume multipliers
         if decision.should_trade:
@@ -632,7 +631,7 @@ def evaluate_strategy_lines(
         )
 
         if not decision.should_trade:
-            try:
+            with fail_open_guard("Auto:record_gate_block"):
                 from core.runtime.gate_audit_recorder import record_gate_block
 
                 record_gate_block(
@@ -642,8 +641,7 @@ def evaluate_strategy_lines(
                     gate_diag=getattr(decision, "gate_diag", None) or None,
                     base_dir=base_dir,
                 )
-            except Exception:  # BLE001:REVIEWED
-                pass
+                pass  # BLE001 — migrated from blind pass
             continue
 
         # Portfolio risk check

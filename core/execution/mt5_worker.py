@@ -355,7 +355,7 @@ class MT5Worker:
                     self.circuit_breaker.record_failure()
                     # Detect CB transition to OPEN → alert hub
                     if not was_open and self._alert_hub is not None:
-                        try:
+                        with fail_open_guard("Auto:is_open = "):
                             is_open = (
                                 self.circuit_breaker.state.value == "open"
                                 if hasattr(self.circuit_breaker, "state")
@@ -372,8 +372,7 @@ class MT5Worker:
                                         ),
                                     },
                                 )
-                        except Exception:  # BLE001:REVIEWED
-                            pass
+                            pass  # BLE001 — migrated from blind pass
             finally:
                 self._command_in_flight = None
                 self._stuck_since = None  # clear stuck marker on successful completion
