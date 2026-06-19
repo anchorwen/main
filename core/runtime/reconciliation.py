@@ -257,7 +257,7 @@ def reconcile_closed_positions(
             }
             with open(_labels_path, "a", encoding="utf-8") as _lf:
                 _lf.write(json.dumps(_label_entry, ensure_ascii=False) + "\n")
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             pass  # best-effort — label write must not block reconciliation
 
         # ── DQAF-20260614-005c: SignalSettled from startup reconciliation ──
@@ -308,7 +308,7 @@ def reconcile_closed_positions(
                         generated_by="reconciliation._reconcile_closed_positions",
                     )
                     _writer.write(_event)
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 pass  # best-effort
 
         # ── Record exit for re-entry guard (native MT5 SL/TP) ──

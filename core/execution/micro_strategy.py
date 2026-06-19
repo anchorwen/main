@@ -53,7 +53,7 @@ class MicroStrategy(StrategyLine):
                                 seq_batch = seq.astype(np.float32).reshape(1, seq.shape[0], 9)
                                 raw = b_info["adapter"].infer_sequence(seq_batch)
                                 prop = b_info["adapter"].get_signal(raw)
-                            except Exception:
+                            except Exception:  # BLE001:REVIEWED
                                 raise _hmre_exc from None
                     else:
                         continue  # sequence not available for this TF

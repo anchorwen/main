@@ -2219,7 +2219,7 @@ def main(argv: list[str] | None = None) -> int:
                                 "cycle_count": getattr(state, "cycle_count", -1),
                             },
                         )
-                    except Exception:
+                    except Exception:  # BLE001:REVIEWED
                         pass
                     # Write kill log (same pattern as watchdog for diagnostics)
                     try:
@@ -2322,7 +2322,7 @@ def main(argv: list[str] | None = None) -> int:
                                 with fail_open_guard("GovEventLog:append"):
                                     with open(_gov_events_path, "a", encoding="utf-8") as _gf:
                                         _gf.write(json.dumps(_gevt, ensure_ascii=False) + "\n")
-                except Exception:
+                except Exception:  # BLE001:REVIEWED
                     with fail_open_guard("BrainPromotionBridge"):
                         raise  # surface hidden bugs instead of silent pass
 

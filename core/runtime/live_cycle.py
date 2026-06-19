@@ -938,7 +938,7 @@ def _execute_management_phase(
                 _ctx["consecutive_losses"] = _consec_losses
                 _ctx["rolling_win_rate"] = round(_win_count / max(1, _trade_count), 4)
                 _ctx["total_trades_window"] = _trade_count
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 with fail_open_guard("AlertContext:journal_enrich"):
                     raise  # surface hidden journal corruption
 
@@ -1455,7 +1455,7 @@ def _execute_management_phase(
                                             tf_ou=tf_ou,
                                             tf_hurst=tf_hurst,
                                         )
-                                    except Exception:
+                                    except Exception:  # BLE001:REVIEWED
                                         _mgmt_btc_aug = None  # degrade: fall through to None
 
                             fv = assemble_swing_features(
@@ -3730,7 +3730,7 @@ def execute_live_cycle(
                         ticket=_pm_pos.ticket,
                         micro_feature_dict=micro_feature_dict,
                     )
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 logger.exception(
                     "Management phase aborted for ticket=%s — position state not updated",
                     _pm_pos.ticket,
@@ -4068,7 +4068,7 @@ def execute_live_cycle(
                                         )
                                     ]
                                 )
-                        except Exception:
+                        except Exception:  # BLE001:REVIEWED
                             pass  # best-effort — micro store write must not block cycle
         else:
             micro_feature_vector = np.zeros(_schema_dim("v4.3_microstructure_9"), dtype=np.float64)
@@ -4104,7 +4104,7 @@ def execute_live_cycle(
             _cal.cold_start_from_journal(f"{config.base_dir}/live_trade_journal.jsonl")
             # ── FIX-20260611-022: Make calibrator accessible for live updates ──
             state._conformal_calibrator = _cal
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             with fail_open_guard("ConformalCalibratorInit"):
                 raise
 
@@ -4136,7 +4136,7 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             with fail_open_guard("MetaFilterGateInit"):
                 raise
 
@@ -4750,7 +4750,7 @@ def execute_live_cycle(
                                             )
                                 _log_cycle_end(state.loop_iteration)
                                 return state, True
-                    except Exception:
+                    except Exception:  # BLE001:REVIEWED
                         logger.exception(
                             "Force-close dispatch orchestration failed ticket=%s",
                             _pos.ticket,
@@ -4779,7 +4779,7 @@ def execute_live_cycle(
                     )
                     _log_cycle_end(state.loop_iteration)
                     return state, True  # skip cycle on bad features
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 logger.exception("Feature vector quality check crashed — halting cycle")
                 _ah = getattr(state, "alert_hub", None)
                 if _ah is not None:

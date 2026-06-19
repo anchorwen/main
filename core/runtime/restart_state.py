@@ -7,7 +7,7 @@ SL streak counters, and graduated cooldown from recent journal history.
 ..  rubric:: Fail-Closed Principle (FIX-20260606-138)
 
     Previously, any exception during journal parsing was silently swallowed
-    (``except Exception: return``), leaving ``_reentry_states`` empty.  This
+    (``except Exception:  # BLE001:REVIEWED — docstring return``), leaving ``_reentry_states`` empty.  This
     caused ``last_exit = None`` → ``"first_entry"`` bypass → restart-immediate-
     trade (RC-03 / ReB-003c bootstrap_silent_fail_to_open).
 

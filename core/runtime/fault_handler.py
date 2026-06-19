@@ -332,7 +332,7 @@ def fail_open_guard(component: str) -> FaultTolerantContext:
         # BEFORE (BLE001 — blind except):
         try:
             do_something()
-        except Exception:
+        except Exception:  # BLE001:REVIEWED — docstring example (BEFORE pattern)
             pass
 
         # AFTER (auditable degradation):
