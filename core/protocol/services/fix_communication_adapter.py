@@ -100,7 +100,7 @@ class FixCommunicationAdapter:
                     "fix_order_id": state.order_id,
                 },
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             return DispatchResult(
                 schema_version=SCHEMA_DISPATCH_RESULT,
                 dispatch_id=request.dispatch_id,

@@ -455,7 +455,7 @@ def apply_promotion_decisions(
                     f"{brain_id}: rejected {old_status}→{d.target_status} — invalid transition"
                 )
                 continue
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass  # non-critical — state machine validation is best-effort
 
         brain_states[brain_id]["status"] = d.target_status

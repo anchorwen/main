@@ -118,7 +118,7 @@ class BrainAttributionService:
                     "win_rate": round(wins / total, 4) if total > 0 else 0.0,
                 }
             report.layer_1_counterfactual = cf
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
 
     def _attribute_trades(self, report: AttributionReport) -> None:

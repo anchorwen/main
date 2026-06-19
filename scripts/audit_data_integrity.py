@@ -860,7 +860,7 @@ def main() -> int:
                 checks=alert_checks,
             )
             dispatch_alert(card)
-        except Exception:  # noqa: BLE001 — alert failure must not crash audit
+        except Exception:  # BLE001:REVIEWED — alert failure must not crash audit
             pass
 
     # ── Determine exit code ──

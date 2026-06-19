@@ -76,7 +76,7 @@ def _load_ou_params(artifact_path: str) -> dict[str, float]:
             "max_half_life": float(opt.get("max_half_life", 20)),
             "theta_min": float(opt.get("theta_min", 0.005)),
         }
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         logger.warning("ConformalOUGate: cannot load OU params from %s", artifact_path)
         return {
             "window": 100.0,
@@ -538,7 +538,7 @@ class ConformalOUGate:
                     entry = BrainRegistry.instance().get(brain_id)
                     if entry is not None and entry.contract_group != strategy_name:
                         continue  # brain is for a different strategy line
-                except Exception:  # noqa: BLE001
+                except Exception:  # BLE001:REVIEWED
                     pass  # registry resolve failure is non-blocking
 
             z_score = float(getattr(p, "raw_score", 0.0) or 0.0)

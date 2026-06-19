@@ -70,7 +70,7 @@ def _safe_json_load(path: str) -> dict[str, Any] | None:
             return None
         with open(path, encoding="utf-8") as f:
             return json.load(f)
-    except Exception:  # noqa: BLE001 — Iron Law #1: never crash on bad data
+    except Exception:  # BLE001:REVIEWED — Iron Law #1: never crash on bad data
         return None
 
 
@@ -81,7 +81,7 @@ def _safe_jsonl_count(path: str) -> int | None:
             return None
         with open(path, encoding="utf-8") as f:
             return sum(1 for _ in f)
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         return None
 
 
@@ -134,7 +134,7 @@ def _safe_jsonl_last(path: str, tail_bytes: int = 8192) -> dict[str, Any] | None
                 except json.JSONDecodeError:
                     continue
             return None
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         return None
 
 
@@ -190,7 +190,7 @@ def _safe_jsonl_tail_stats(path: str, max_scan: int = 500) -> dict[str, Any]:
             "retry_count": retry_count,
             "label_distribution": labels,
         }
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         return {}
 
 
@@ -259,7 +259,7 @@ class DataHealthService:
                 continue
             try:
                 result = meta.func(self)
-            except Exception as exc:  # noqa: BLE001 — Iron Law #1
+            except Exception as exc:  # BLE001:REVIEWED — Iron Law #1
                 result = SourceCheckResult(
                     source=meta.source,
                     tier=meta.tier,
@@ -659,7 +659,7 @@ class DataHealthService:
                                     continue
                         if wired_entry:
                             break
-                except Exception:  # noqa: BLE001
+                except Exception:  # BLE001:REVIEWED
                     continue
 
             if wired_entry is not None:
@@ -1481,7 +1481,7 @@ class DataHealthService:
         try:
             with open(ll_path, encoding="utf-8") as f:
                 unlabeled = sum(1 for line in f if '"label": "unlabeled"' in line)
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             unlabeled = 0
 
         if unlabeled > 3:
@@ -1958,9 +1958,9 @@ class DataHealthService:
                             )
                             if _ct and (not latest_ts or _ct > latest_ts):
                                 latest_ts = _ct
-                        except Exception:  # noqa: BLE001
+                        except Exception:  # BLE001:REVIEWED
                             pass
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             return CrossCheckResult(
                 check_name="pnl_ledger_freshness",
                 status=SourceStatus.FAIL,
@@ -1988,7 +1988,7 @@ class DataHealthService:
                     for line in f:
                         if '"action": "close"' in line:
                             journal_closes += 1
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
 
         if age_h > 48:
@@ -2028,7 +2028,7 @@ class DataHealthService:
                             open_count += 1
                         elif '"action": "close"' in line:
                             close_count += 1
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
 
         if open_count == 0:
@@ -2347,7 +2347,7 @@ class DataHealthService:
                 # If we hit max_lines, cursor stays at last processed line
                 # — remaining lines picked up next tick
                 _metrics.last_line_count = _line_no
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass  # best-effort — never crash the audit tick
 
     # ── FIX-20260611-002: Behavioral compliance checks ──
@@ -2399,7 +2399,7 @@ class DataHealthService:
         try:
             _positions = self._position_manager.get_all_positions()
             _current = len(_positions)
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             return SourceCheckResult(
                 source="position_limit", tier=Tier.CRITICAL,
                 status=SourceStatus.PASS, primary_code="POSITION_LIMIT_QUERY_FAILED",
@@ -2420,7 +2420,7 @@ class DataHealthService:
                     if _mp is not None:
                         _max_positions = int(_mp)
                         break
-                except Exception:  # noqa: BLE001
+                except Exception:  # BLE001:REVIEWED
                     pass
 
         if _current > _max_positions:

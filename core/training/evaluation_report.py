@@ -261,7 +261,7 @@ def run_shap_analysis(
             feature_stability_score=stability_score,
         )
 
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # BLE001:REVIEWED
         import sys
 
         print(f"[evaluation_report] SHAP analysis failed: {e}", file=sys.stderr)

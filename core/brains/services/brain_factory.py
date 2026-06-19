@@ -154,7 +154,7 @@ class BrainFactory:
                                 )
                 except BrainConfigError:
                     raise
-                except Exception:  # noqa: BLE001
+                except Exception:  # BLE001:REVIEWED
                     # .meta.json missing or unreadable — not fatal, but log
                     logger.debug(
                         "BrainFactory: could not verify feature order for %s (no .meta.json)",

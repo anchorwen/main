@@ -176,7 +176,7 @@ def main() -> int:
                 print("[Ω] Hot-path files staged:")
                 for f in sorted(hot_path_staged):
                     print(f"[Ω]   {f}")
-                print("[Ω] #10 requires: replace ≥1 `# noqa: BLE001` with `fail_open_guard()`")
+                print("[Ω] #10 requires: replace ≥1 `# BLE001:REVIEWED` with `fail_open_guard()`")
                 print("=" * 60)
                 return 1
             print("[Ω] BLE001 replacement VERIFIED in diff.")

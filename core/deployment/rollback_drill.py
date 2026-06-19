@@ -195,7 +195,7 @@ class RollbackDrillService:
                     PAYLOAD_KEY_FAILED_COUNT: verification.get(PAYLOAD_KEY_FAILED_COUNT, 0)
                 },
             }
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             return {
                 PAYLOAD_KEY_NAME: ROLLBACK_PREREQUISITE_EVIDENCE_MANIFEST_VERIFIED,
                 PAYLOAD_KEY_PASSED: False,

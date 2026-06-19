@@ -1445,7 +1445,7 @@ class ActivePositionManager:
             }
             with open(_path, "a", encoding="utf-8") as _f:
                 _f.write(_json.dumps(_record, ensure_ascii=False, default=str) + "\n")
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass  # telemetry failure must never block trading
 
     @staticmethod

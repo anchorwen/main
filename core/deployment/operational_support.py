@@ -106,7 +106,7 @@ class ConfigValidator:
                     errors.append(
                         {PAYLOAD_KEY_RULE: name, PAYLOAD_KEY_STATUS: HEALTH_CHECK_STATUS_FAILED}
                     )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # BLE001:REVIEWED
                 errors.append(
                     {
                         PAYLOAD_KEY_RULE: name,

@@ -49,7 +49,7 @@ def check_data_health(
                             {"alert_level": report.alert_level,
                              "primary_codes": report.primary_codes},
                         )
-            except Exception:  # noqa: BLE001 — Iron Law #1
+            except Exception:  # BLE001:REVIEWED — Iron Law #1
                 pass
 
         return {
@@ -65,5 +65,5 @@ def check_data_health(
                 if s.status.value in ("warn", "fail", "missing")
             ],
         }
-    except Exception:  # noqa: BLE001 — Iron Law #1: never crash the main loop
+    except Exception:  # BLE001:REVIEWED — Iron Law #1: never crash the main loop
         return {"time": "", "symbol": symbol, "checks": {}, "alerts": ["data_health_service_error"]}

@@ -158,7 +158,7 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
             if self._num_features is not None:
                 self._feature_dimension = self._num_features
             self._backend = "xgboost:json"
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             self._backend = f"stub:{type(exc).__name__}"
             self._booster = None
             emit_brain_alert(

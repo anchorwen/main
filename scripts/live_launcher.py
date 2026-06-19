@@ -156,7 +156,7 @@ def _feedback_loop_runner(
             if log_fh is not None:
                 log_fh.write(msg + "\n")
                 log_fh.flush()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             msg = f"[feedback] ERROR: {exc}"
             print(msg, flush=True)
             if log_fh is not None:
@@ -207,7 +207,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
             print(
                 f"[launcher] Unresolved tickets needing manual review: {tickets[:20]}", flush=True
             )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         print(f"[launcher] WARNING: journal repair/cleanup failed: {exc}", flush=True)
 
     # ── Open log file for this session ──
@@ -416,7 +416,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                 if _stale:
                     _lf.unlink()
                     _echo(f"  Stale lock cleaned: {_lf.name} ({_reason})")
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
 
     _echo(f"  Log: {log_path}")
@@ -442,7 +442,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
             _echo(
                 f"  WARNING: {_orphan_count} other Python processes detected — may cause MT5 contention"
             )
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         pass
 
     # ── FIX-019: Kill stale bridge/intent from previous crashed sessions ──
@@ -470,7 +470,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                             print(f"[launcher] Killed stale bridge PID={_old_pid}", flush=True)
                         except OSError:
                             pass
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         pass
     if _stale_killed:
         _echo(f"  Stale bridge cleaned: {_stale_killed} process(es) terminated")
@@ -564,7 +564,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                     if _cold_result.stderr:
                         log_fh.write(_cold_result.stderr[:2000] + "\n")
                 log_fh.flush()
-        except Exception as _cold_exc:  # noqa: BLE001
+        except Exception as _cold_exc:  # BLE001:REVIEWED
             print(f"[launcher] Cold-start daily_ops error: {_cold_exc}", flush=True)
             log_fh.write(f"[launcher] Cold-start daily_ops error: {_cold_exc}\n")
             log_fh.flush()
@@ -628,7 +628,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                             log_fh.flush()
                     else:
                         stop_event.wait(1.0)
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
 
     bridge_thread = threading.Thread(
@@ -687,7 +687,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         for _fh in [_watchdog_log_fh, bridge_log_fh, intent_log_fh, log_fh]:
             try:  # noqa: SIM105
                 _fh.close()
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
         sys.exit(0)
 
@@ -775,7 +775,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                 intent_proc = new_proc
 
             return new_proc
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             msg3 = f"[launcher] ERROR restarting {name}: {exc}"
             print(msg3, flush=True)
             log_fh.write(msg3 + "\n")
@@ -831,7 +831,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                     ).total_seconds() / 60
                     if hb_age > BRIDGE_STALL_MINUTES:
                         alerts.append(f"BRIDGE_STALL: no heartbeat for {hb_age:.0f}m")
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
 
         # 3. Active position staleness
@@ -846,7 +846,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                     ).total_seconds() / 3600
                     if age_h > 24:
                         alerts.append(f"STALE_ACTIVE_POSITION: position state {age_h:.0f}h old")
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
 
         # 4. Governance staleness
@@ -903,7 +903,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                     print(msg, flush=True)
                     log_fh.write(msg + "\n")
                     log_fh.flush()
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
 
     # ── Main watchdog loop ──
@@ -975,7 +975,7 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     for _fh in [bridge_log_fh, intent_log_fh, log_fh]:
         try:  # noqa: SIM105
             _fh.close()
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
 
     return exit_code[0]

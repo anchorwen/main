@@ -187,7 +187,7 @@ def reconcile_closed_positions(
                 from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
 
                 _resolved_strategy = MAGIC_TO_STRATEGY.get(int(_resolved_magic), "")
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
 
         if close_price is None:
@@ -337,7 +337,7 @@ def reconcile_closed_positions(
                     )
                     _rs = ensure_reentry_state(state._reentry_states, _exit_strategy)
                     _rs.record_exit(_rec)
-                except Exception:  # noqa: BLE001
+                except Exception:  # BLE001:REVIEWED
                     logging.getLogger(__name__).warning(
                         "Reentry guard state recording failed ticket=%s strategy=%s — "
                         "reentry protection is volatile until next persist",

@@ -67,7 +67,7 @@ class OnlineFeedbackHook:
             try:
                 state = json.loads(self._last_processed_path.read_text(encoding="utf-8"))
                 self._last_processed_at = state.get("last_processed_at")
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 self._last_processed_at = None
 
     def _save_state(self) -> None:
@@ -364,7 +364,7 @@ class OnlineFeedbackHook:
                 if p_win is not None:
                     try:  # noqa: SIM105
                         self._calibrator.update(float(p_win), label)
-                    except Exception:  # noqa: BLE001
+                    except Exception:  # BLE001:REVIEWED
                         pass  # non-critical — calibrator update failure must not block feedback
 
             if self._replay is not None:

@@ -239,7 +239,7 @@ class MetaSignalFilter:
             import joblib
 
             self._calibrator = joblib.load(self._calibrator_path)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # BLE001:REVIEWED
             sys.stderr.write(
                 json.dumps(
                     {
@@ -442,7 +442,7 @@ class MetaSignalFilter:
                 threshold=round(effective_threshold, 4),
                 reason=reason,
             )
-        except Exception as _exc:  # noqa: BLE001
+        except Exception as _exc:  # BLE001:REVIEWED
             import logging
 
             _logger = logging.getLogger(__name__)

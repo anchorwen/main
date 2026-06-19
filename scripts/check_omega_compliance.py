@@ -138,10 +138,10 @@ def check_hot_path(files: list[str], diff: str) -> list[Violation]:
     violations: list[Violation] = []
     for f in files:
         if f in HOT_PATH_FILES:
-            # Check if the diff removes any # noqa: BLE001
+            # Check if the diff removes any # BLE001:REVIEWED
             diff_lines = [l for l in diff.splitlines() if f in l]
             ble001_removed = any(
-                "-# noqa: BLE001" in l or "-    # noqa: BLE001" in l
+                "-# BLE001:REVIEWED" in l or "-    # BLE001:REVIEWED" in l
                 for l in diff_lines
             )
             if ble001_removed:

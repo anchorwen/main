@@ -525,7 +525,7 @@ def main() -> int:
         print(f"  Artifacts: {tmpdir}")
         print("\n  All 7 pipeline stages executed successfully.")
 
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         print(f"\n[FAIL] Pipeline error: {exc}")
         import traceback
 

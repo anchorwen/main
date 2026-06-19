@@ -55,7 +55,7 @@ def run_attribution(result: BacktestResult) -> dict[str, Any]:
         bar_returns[1:] = np.diff(equity) / np.maximum(equity[:-1], 1.0)
         attr = decompose_pnl(bar_returns, factor_returns)
         factor_d = attr.to_dict()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # BLE001:REVIEWED
         factor_d = {"error": str(e)}
 
     # Run Brinson on strategy-level decomposition
@@ -90,7 +90,7 @@ def run_attribution(result: BacktestResult) -> dict[str, Any]:
             brinson_d = brinson.to_dict()
         else:
             brinson_d = {"error": "need at least 2 strategies for Brinson"}
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # BLE001:REVIEWED
         brinson_d = {"error": str(e)}
 
     return {
@@ -165,7 +165,7 @@ def main() -> int:
     print(f"Loading {data_path} ...")
     try:
         feed = DataFeed.from_csv(str(data_path))
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # BLE001:REVIEWED
         print(f"ERROR: failed to load data: {e}")
         return 1
 

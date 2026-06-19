@@ -19,7 +19,7 @@ def probe_spread(
     }
     try:
         import MetaTrader5 as mt5
-    except Exception as exc:  # pragma: no cover - optional dependency  # noqa: BLE001
+    except Exception as exc:  # pragma: no cover - optional dependency  # BLE001:REVIEWED
         result["detail"] = f"metaTrader5_import_failed:{exc}"
         return result
 

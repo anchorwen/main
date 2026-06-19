@@ -508,7 +508,7 @@ def build_swing_dataset(
 
             d1_min_lookback = _D1_MIN_LOOK
             print(f"  DailyFeatureComputer initialized: {daily_computer._n} D1 bars")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             print(f"  [WARN] DailyFeatureComputer init failed: {exc}")
 
     # ── Align M5 micro features to target-TF bars ──

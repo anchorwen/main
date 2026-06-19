@@ -99,7 +99,7 @@ class BrainLeaderboard:
                 from core.feedback.brain_quality_engine import BrainQualityEngine
 
                 self._engine = BrainQualityEngine.instance()
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
 
     def rank(

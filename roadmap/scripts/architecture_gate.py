@@ -59,7 +59,7 @@ def _staged_files() -> list[str]:
             timeout=10,
         )
         return [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         return []
 
 
@@ -79,7 +79,7 @@ def _run_doc_generation() -> int:
 
         write_all()
         return 0
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         print(f"[architecture-gate] ERROR: doc generation failed: {exc}", file=sys.stderr)
         return 1
 
@@ -98,7 +98,7 @@ def _stage_docs() -> int:
             print(f"[architecture-gate] WARNING: git add failed: {result.stderr}", file=sys.stderr)
             return 1
         return 0
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         print(f"[architecture-gate] WARNING: git add error: {exc}", file=sys.stderr)
         return 1
 

@@ -58,7 +58,7 @@ def _load_journal(path: Path) -> list[dict[str, Any]]:
                         ),
                         flush=True,
                     )
-                except Exception:  # noqa: BLE001
+                except Exception:  # BLE001:REVIEWED
                     pass
     if parse_errors:
         try:  # noqa: SIM105
@@ -74,7 +74,7 @@ def _load_journal(path: Path) -> list[dict[str, Any]]:
                 ),
                 flush=True,
             )
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
     return entries
 
@@ -121,7 +121,7 @@ def _append_journal(path: Path, entry: dict[str, Any], *, lock_dir: Path | None 
                             return  # Already recorded — skip
                     except json.JSONDecodeError:
                         continue
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass  # Best-effort
 
     if _action == "close" and _ticket is not None:
@@ -140,7 +140,7 @@ def _append_journal(path: Path, entry: dict[str, Any], *, lock_dir: Path | None 
                             return  # Already recorded — skip duplicate
                     except json.JSONDecodeError:
                         continue
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass  # Best-effort — if check fails, write anyway
 
     if lock_dir is not None:
@@ -192,7 +192,7 @@ def _resolve_strategy(entry: dict[str, Any]) -> str:
             from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
 
             return MAGIC_TO_STRATEGY.get(magic, "")
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
     return ""
 
@@ -684,7 +684,7 @@ def compact_journal(
         else:
             _log.debug("Journal compaction: nothing to remove")
 
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         _log.error("Journal compaction failed: %s", exc, exc_info=True)
         # Clean up temp file on failure
         import contextlib

@@ -158,7 +158,7 @@ class BarSyncPoller:
                 )
                 time.sleep(self.fallback_interval)
                 return None
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass  # Session detection is advisory -- never block the main loop
 
         timeout = timeout_seconds if timeout_seconds is not None else self.timeout_seconds
@@ -230,7 +230,7 @@ class BarSyncPoller:
                             try:
                                 self._mt5_worker.reconnect()
                                 self._mt5_available = True
-                            except Exception as _exc:  # noqa: BLE001
+                            except Exception as _exc:  # BLE001:REVIEWED
                                 self._log_event(
                                     "BAR_RECONNECT_FAILED",
                                     {"error": str(_exc)[:200], "path": "worker"},
@@ -238,14 +238,14 @@ class BarSyncPoller:
                         else:
                             try:
                                 mt5.shutdown()
-                            except Exception as _exc:  # noqa: BLE001
+                            except Exception as _exc:  # BLE001:REVIEWED
                                 self._log_event(
                                     "BAR_RECONNECT_FAILED",
                                     {"error": str(_exc)[:200], "path": "shutdown"},
                                 )
                             try:
                                 self._init_mt5()
-                            except Exception as _exc:  # noqa: BLE001
+                            except Exception as _exc:  # BLE001:REVIEWED
                                 self._log_event(
                                     "BAR_RECONNECT_FAILED",
                                     {"error": str(_exc)[:200], "path": "init_mt5"},
@@ -364,7 +364,7 @@ class BarSyncPoller:
                         "_data_incomplete": True,  # FIX-20260601-042: mark placeholder data
                     }
 
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # BLE001:REVIEWED
                 _error_count += 1
                 self._log_event(
                     "MT5_ERROR",
@@ -385,7 +385,7 @@ class BarSyncPoller:
                         try:
                             self._mt5_worker.reconnect()
                             self._mt5_available = True
-                        except Exception as _exc:  # noqa: BLE001
+                        except Exception as _exc:  # BLE001:REVIEWED
                             self._log_event(
                                 "BAR_MT5_ERROR_RECONNECT_FAILED",
                                 {"error": str(_exc)[:200], "path": "worker"},
@@ -395,14 +395,14 @@ class BarSyncPoller:
                             import MetaTrader5 as _mt5_mod
 
                             _mt5_mod.shutdown()
-                        except Exception as _exc:  # noqa: BLE001
+                        except Exception as _exc:  # BLE001:REVIEWED
                             self._log_event(
                                 "BAR_MT5_ERROR_RECONNECT_FAILED",
                                 {"error": str(_exc)[:200], "path": "shutdown"},
                             )
                         try:
                             self._init_mt5()
-                        except Exception as _exc:  # noqa: BLE001
+                        except Exception as _exc:  # BLE001:REVIEWED
                             self._log_event(
                                 "BAR_MT5_ERROR_RECONNECT_FAILED",
                                 {"error": str(_exc)[:200], "path": "init_mt5"},
@@ -436,7 +436,7 @@ class BarSyncPoller:
         if self._mt5_worker is not None:
             try:
                 m1_rates = self._mt5_worker.copy_rates_from_pos(self.symbol, MT5_TIMEFRAME_M1, 0, 6)
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 self._mt5_available = False
                 self._log_event("BAR_SYNTHETIC_FAILED", {"error": "mt5_unreachable"})
                 return None
@@ -447,7 +447,7 @@ class BarSyncPoller:
                     import MetaTrader5 as _mt5_mod
 
                     _mt5 = _mt5_mod
-                except Exception:  # noqa: BLE001
+                except Exception:  # BLE001:REVIEWED
                     self._log_event("BAR_SYNTHETIC_FAILED", {"error": "import_error"})
                     return None
 
@@ -458,7 +458,7 @@ class BarSyncPoller:
                     0,
                     6,  # last 6 × M1 bars cover a full M5 window
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 self._mt5_available = False
                 self._log_event("BAR_SYNTHETIC_FAILED", {"error": "mt5_unreachable"})
                 return None
@@ -591,7 +591,7 @@ class BarSyncPoller:
             self._mt5_available = True
             self._log_event("MT5_INIT_OK", {"symbol": self.symbol})
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             self._log_event("MT5_INIT_EXCEPTION", {"error": str(exc)})
             self._mt5_available = False
 
@@ -653,7 +653,7 @@ class BarSyncPoller:
                     ),
                     flush=True,
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
 
     def _save_state(self) -> None:

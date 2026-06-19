@@ -1,7 +1,7 @@
 {
   "version": 3,
   "schema_version": "execution_state.v3",
-  "saved_at_utc": "2026-06-19T05:34:50.330884",
+  "saved_at_utc": "2026-06-19T05:49:54.907197",
   "budgets": {
     "btc_swing": {
       "daily_pnl_pct": -1.59,
@@ -132,7 +132,7 @@
   "cooldown_registry": {},
   "family_entry_tracker": {
     "swing": {
-      "long": 1781846994.4619153
+      "long": 1781848194.6501393
     }
   },
   "sl_streak_blocks": {},

@@ -664,7 +664,7 @@ def main() -> int:
             dynamo=False,
         )
         print(f"  ONNX exported: {onnx_path} ({onnx_path.stat().st_size / 1024:.1f} KB)")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         print(f"  ONNX export failed: {exc}")
         import torch
 

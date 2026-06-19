@@ -221,7 +221,7 @@ def main():
             "brain_states": gov_svc.get_all_states(),
             "transition_log": gov_svc.get_transition_log(),
         }
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         print(f"[run_promotion] ERROR: failed to load governance state from {gov_path}")
         return 1
 

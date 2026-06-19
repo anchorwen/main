@@ -59,7 +59,7 @@ def build_meta_feature_vector(
         record = feature_store.latest(symbol, "M5", schema_name="v9_institutional_40")
         if record is not None:
             raw_features = dict(record.values) if record.values else {}
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         pass
 
     # ── Step 3: Build 40-dim raw vector in TRAINING feature order ──
@@ -108,7 +108,7 @@ def build_meta_feature_vector(
                     _expected_dim = get_schema_dimension(_meta_schema_id)
                     if len(_names) == _expected_dim:
                         _feature_names = [str(f) for f in _names]
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
 
     if raw_features is None:

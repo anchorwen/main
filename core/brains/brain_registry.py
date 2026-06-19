@@ -65,7 +65,7 @@ class BrainRegistry:
                 continue
             try:
                 raw = json.loads(path.read_text(encoding="utf-8"))
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 continue
             if raw.get("schema_version") != "brain_registry_entry.v1":
                 continue

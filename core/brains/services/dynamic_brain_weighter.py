@@ -60,7 +60,7 @@ class DynamicBrainWeighter:
                 from core.feedback.brain_quality_engine import BrainQualityEngine
 
                 self._engine = BrainQualityEngine.instance()
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
 
     # ── public API ──
@@ -112,7 +112,7 @@ class DynamicBrainWeighter:
             if brain_id in weights:
                 try:  # noqa: SIM105
                     p.dynamic_scale = weights[brain_id]
-                except Exception:  # noqa: BLE001
+                except Exception:  # BLE001:REVIEWED
                     pass  # frozen object
         return proposals
 

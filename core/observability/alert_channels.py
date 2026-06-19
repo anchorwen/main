@@ -57,7 +57,7 @@ class SlackAlertChannel(AlertChannel):
             )
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
                 return 200 <= resp.status < 300
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             return False
 
     def _format(self, alert: dict) -> dict:
@@ -154,7 +154,7 @@ class DingTalkAlertChannel(AlertChannel):
             )
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
                 return 200 <= resp.status < 300
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             return False
 
     def _format(self, alert: dict) -> dict:
@@ -344,6 +344,6 @@ class CompositeAlertChannel(AlertChannel):
             try:
                 if ch.send(alert):
                     any_ok = True
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
         return any_ok

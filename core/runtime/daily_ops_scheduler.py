@@ -39,7 +39,7 @@ def _save_daily_ops_state(base_dir: str, ts: float) -> None:
         state_path = os.path.join(state_dir, "daily_ops_state.json")
         with open(state_path, "w") as f:
             json.dump({"last_daily_ops_utc": ts}, f)
-    except Exception as _exc:  # noqa: BLE001
+    except Exception as _exc:  # BLE001:REVIEWED
         import logging as _logging
 
         _logging.getLogger(__name__).warning(
@@ -113,7 +113,7 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
 
                 _store = LocalFeatureStore(base_dir=config.base_dir)
                 _store.compact(retention_days=7)
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
             # FIX-20260601-047: prune label files older than 30 days
             try:
@@ -136,7 +136,7 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
                             ),
                             flush=True,
                         )
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
             _cleanup_ms = (time.perf_counter() - _cleanup_started) * 1000.0
             print(
@@ -146,7 +146,7 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
                 ),
                 flush=True,
             )
-        except Exception as _cleanup_exc:  # noqa: BLE001
+        except Exception as _cleanup_exc:  # BLE001:REVIEWED
             print(
                 json.dumps(
                     {"event": "resource_cleanup_failed", "error": str(_cleanup_exc)},
@@ -206,7 +206,7 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
                     ),
                     flush=True,
                 )
-        except Exception as _gov_exc:  # noqa: BLE001
+        except Exception as _gov_exc:  # BLE001:REVIEWED
             print(
                 json.dumps(
                     {"event": "daily_governance_error", "time": _utc_iso(), "error": str(_gov_exc)},
@@ -214,7 +214,7 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
                 ),
                 flush=True,
             )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         print(
             json.dumps(
                 {"event": "daily_ops_error", "time": _utc_iso(), "error": str(exc)},

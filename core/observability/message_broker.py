@@ -178,7 +178,7 @@ class RedisStreamsBroker(MessageBroker):
             self._client = _redis.Redis.from_url(self._url, decode_responses=True)
             self._client.ping()
             logger.info("RedisStreamsBroker connected to %s", self._url)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             logger.warning("Redis unavailable (%s), using in-process fallback", exc)
             self._client = None
 
@@ -233,7 +233,7 @@ class RedisStreamsBroker(MessageBroker):
         if self._client:
             try:  # noqa: SIM105
                 self._client.close()
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
             self._client = None
 

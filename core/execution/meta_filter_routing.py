@@ -140,7 +140,7 @@ def apply_meta_filter_gate(
                 flush=True,
             )
             return _meta_p_win, None
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             logger.warning(
                 "MetaFilter statarb routing failed for %s: fallthrough to p_win resolution",
                 name,

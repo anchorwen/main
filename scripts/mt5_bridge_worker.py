@@ -210,7 +210,7 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
                 for line in journal_path.read_text(encoding="utf-8").splitlines():
                     if mid in line:
                         return  # duplicate, skip
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass  # journal dedup is best-effort
         with journal_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
@@ -812,7 +812,7 @@ def _check_mt5_heartbeat(mt5: Any) -> bool:
     try:
         info = mt5.terminal_info()
         return info is not None
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         return False
 
 
@@ -854,7 +854,7 @@ def _reconnect_mt5(mt5_module: Any, terminal_path: str, *, symbol: str = "XAUUSD
                 with log_and_continue(component="Bridge:symbol_select"):
                     mt5_module.symbol_select(symbol, True)
                 return True
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
     return False
 
@@ -878,7 +878,7 @@ def run_worker(args: argparse.Namespace) -> int:
                 print(f"[bridge] MT5 initialized: {terminal_path}", flush=True)
             else:
                 print(f"[bridge] WARN: MT5 init failed: {_mt5.last_error()}", flush=True)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             print(f"[bridge] WARN: MT5 unavailable: {exc}", flush=True)
 
     health_path = (
@@ -949,7 +949,7 @@ def run_worker(args: argparse.Namespace) -> int:
                             mt5=mt5,
                         )
                     )
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:  # BLE001:REVIEWED
                     processed.append(
                         {
                             "message_id": path.stem,
@@ -1336,7 +1336,7 @@ def run_zmq_worker(
                             if len(_processed_ids) > _MAX_PROCESSED_IDS:
                                 # Evict oldest half to bound memory
                                 _processed_ids = set(list(_processed_ids)[-_MAX_PROCESSED_IDS // 2:])
-                        except Exception as exc:  # noqa: BLE001
+                        except Exception as exc:  # BLE001:REVIEWED
                             _zmq_send_ack(
                                 pub, msg_id,
                                 {
@@ -1522,7 +1522,7 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"[zmq_bridge] MT5 initialized: {terminal_path}", flush=True)
                 else:
                     print(f"[zmq_bridge] WARN: MT5 init failed: {_mt5.last_error()}", flush=True)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # BLE001:REVIEWED
                 print(f"[zmq_bridge] WARN: MT5 unavailable: {exc}", flush=True)
 
         health_path = (

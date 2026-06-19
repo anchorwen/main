@@ -335,7 +335,7 @@ class RunbookEngine:
             from core.deployment.operational_support import ConfigValidator
 
             return ConfigValidator().validate(self._container.config)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             return {
                 PAYLOAD_KEY_VALID: False,
                 PAYLOAD_KEY_ERRORS: [str(exc)],
@@ -622,7 +622,7 @@ class RunbookEngine:
                 PAYLOAD_KEY_LABEL: label,
                 PAYLOAD_KEY_RESULT: result,
             }
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             return {
                 PAYLOAD_KEY_STATUS: RUNBOOK_STATUS_FAILED,
                 PAYLOAD_KEY_LABEL: label,

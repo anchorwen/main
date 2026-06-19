@@ -210,7 +210,7 @@ class ReleaseCertificationService:
             }
         try:
             return self._container.evidence_bundle.verify_bundle(manifest)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             return {PAYLOAD_KEY_VERIFIED: False, PAYLOAD_KEY_ERROR: str(exc)}
 
     def _alpha_budget_evidence(self, pipeline: dict, evidence_verification: dict) -> dict:

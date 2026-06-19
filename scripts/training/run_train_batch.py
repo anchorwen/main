@@ -106,7 +106,7 @@ def collect_manifests(batch_dir: Path, lane_filter: str, limit: int) -> list[Pat
                 m = json.loads(p.read_text(encoding="utf-8"))
                 if m.get("lane") == lane_filter:
                     filtered.append(p)
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 # Include files we can't parse; they'll fail later
                 if f".{lane_filter}." in p.name:
                     filtered.append(p)
@@ -162,7 +162,7 @@ def run_one(
         m = json.loads(manifest_path.read_text(encoding="utf-8"))
         record["model_id"] = str(m.get("model_id", ""))
         record["lane"] = str(m.get("lane", ""))
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         pass
 
     if not execute:
@@ -189,7 +189,7 @@ def run_one(
         record["exit_code"] = -1
         record["error"] = f"Timeout after {timeout}s"
         record["stderr_tail"] = str(e)[:3000]
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # BLE001:REVIEWED
         record["exit_code"] = -2
         record["error"] = str(e)[:3000]
     finally:

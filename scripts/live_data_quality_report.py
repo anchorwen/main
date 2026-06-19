@@ -207,7 +207,7 @@ def build_report(
         from scripts.validators.journal_validator import validate_journal_file
 
         journal_schema_check = validate_journal_file(journal_path, date_filter=date_filter)
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         journal_schema_check = {"error": "journal_validator_import_failed"}
 
     receipt_map = _collect_receipt_map(receipt_root, date_filter=date_filter)

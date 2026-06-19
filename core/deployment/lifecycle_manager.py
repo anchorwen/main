@@ -105,7 +105,7 @@ class LifecycleManager:
                         PAYLOAD_KEY_STATUS: HEALTH_CHECK_STATUS_OK,
                     }
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # BLE001:REVIEWED
                 result[PAYLOAD_KEY_PHASES].append(
                     {
                         PAYLOAD_KEY_PHASE: LIFECYCLE_PHASE_HOOK,

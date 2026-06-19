@@ -248,7 +248,7 @@ class StrategyLineAdapter:
                         mid_price=bar.close,
                         current_atr=atr,
                     )
-                except Exception:  # noqa: BLE001
+                except Exception:  # BLE001:REVIEWED
                     continue
                 if not decision.should_trade:
                     continue

@@ -609,7 +609,7 @@ def evaluate_strategy_lines(
                             ),
                             flush=True,
                         )
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
 
         # Apply session + health volume multipliers
@@ -646,7 +646,7 @@ def evaluate_strategy_lines(
                     gate_diag=getattr(decision, "gate_diag", None) or None,
                     base_dir=base_dir,
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
             continue
 

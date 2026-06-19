@@ -126,7 +126,7 @@ class ReleaseGateService:
         validation_mode = resolve_validation_mode(self._container, validation_mode)
         try:
             return self._container.release_readiness.build_report(validation_mode=validation_mode)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             return {
                 PAYLOAD_KEY_READY: False,
                 PAYLOAD_KEY_ERROR: str(exc),
@@ -139,7 +139,7 @@ class ReleaseGateService:
         validation_mode = resolve_validation_mode(self._container, validation_mode)
         try:
             return self._container.runbook_engine.preflight(validation_mode=validation_mode)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             return {
                 PAYLOAD_KEY_PASSED: False,
                 PAYLOAD_KEY_ERROR: str(exc),
@@ -151,7 +151,7 @@ class ReleaseGateService:
     def _safe_slo(self) -> dict:
         try:
             return self._container.slo_service.evaluate()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             return {
                 PAYLOAD_KEY_STATUS: SLO_STATUS_BREACHING,
                 PAYLOAD_KEY_ERROR: str(exc),
@@ -163,7 +163,7 @@ class ReleaseGateService:
             from core.deployment.operational_support import ConfigValidator
 
             return ConfigValidator().validate(self._container.config)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             return {
                 PAYLOAD_KEY_VALID: False,
                 PAYLOAD_KEY_ERRORS: [str(exc)],

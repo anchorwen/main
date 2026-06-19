@@ -89,7 +89,7 @@ class TransformerBrainAdapter(BaseBrainAdapter):
                 self._onnx_model_path = artifact_path
                 self._backend = "onnxruntime:transformer:isolated"
                 return
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 self._guard = None
                 # Fall through to in-process loading
 
@@ -107,7 +107,7 @@ class TransformerBrainAdapter(BaseBrainAdapter):
                 self._num_features = input_shape[2]
             self._onnx_model_path = artifact_path
             self._backend = "onnxruntime:transformer"
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             self._backend = f"stub:{type(exc).__name__}"
             self._session = None
             emit_brain_alert(

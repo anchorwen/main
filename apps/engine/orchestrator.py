@@ -111,7 +111,7 @@ class DecisionCycleOrchestrator:
             decision_span = trace.start_span("runtime_loop")
             result = self._loop.run_decision_cycle(trigger, feature_source)
             trace.end_span(decision_span)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             if self._metrics:
                 self._metrics.inc(CYCLES_ERRORS)
             if self._audit:

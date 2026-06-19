@@ -229,7 +229,7 @@ class FaultTolerantContext:
                         f"degraded_{self.component}",
                         {"error": f"{type(exc_val).__name__}: {str(exc_val)[:200]}"},
                     )
-                except Exception:  # noqa: BLE001
+                except Exception:  # BLE001:REVIEWED
                     pass
             return True  # swallow, caller checks ctx.exception
 
@@ -380,7 +380,7 @@ def mt5_call_with_timeout(
     def _target() -> None:
         try:
             result[0] = fn(*args, **kwargs)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             error[0] = exc
         finally:
             done.set()

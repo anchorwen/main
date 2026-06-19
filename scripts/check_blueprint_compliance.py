@@ -51,7 +51,7 @@ def _run_git(args: list[str], timeout: int = 10) -> subprocess.CompletedProcess:
     except subprocess.TimeoutExpired:
         # Return a dummy result with non-zero rc
         return subprocess.CompletedProcess(args, -1, stdout="", stderr="timeout")
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         return subprocess.CompletedProcess(args, -1, stdout="", stderr="error")
 
 
@@ -373,7 +373,7 @@ def classify_diff(file_path: str, *, cached_only: bool = False) -> str:
         )
         if result.returncode != 0:
             return "substantive"
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         return "substantive"
 
     diff_lines = result.stdout.split("\n")
@@ -533,7 +533,7 @@ def stamp_module(module: str) -> int:
 
                     h = hashlib.sha256(Path(f).read_bytes()).hexdigest()[:16]
                     file_hashes[rel] = h
-                except Exception:  # noqa: BLE001
+                except Exception:  # BLE001:REVIEWED
                     pass
         else:
             p = ROOT / pat

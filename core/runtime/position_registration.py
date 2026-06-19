@@ -109,7 +109,7 @@ def register_dispatched_positions(
                                     brain_votes_from_journal = bv
                                 if ticket is not None:
                                     break
-                        except Exception:  # noqa: BLE001
+                        except Exception:  # BLE001:REVIEWED
                             pass
                     if ticket is not None:
                         break
@@ -137,7 +137,7 @@ def register_dispatched_positions(
                                     ticket = t
                                 if ticket is not None:
                                     break
-                        except Exception:  # noqa: BLE001
+                        except Exception:  # BLE001:REVIEWED
                             pass
                     if ticket is not None:
                         break
@@ -281,11 +281,11 @@ def register_dispatched_positions(
                         spread_points=_lom_spread_pts,
                         atr=current_atr,
                     )
-                except Exception:  # noqa: BLE001
+                except Exception:  # BLE001:REVIEWED
                     pass
 
             registered_count += 1
-        except Exception as _reg_exc:  # noqa: BLE001
+        except Exception as _reg_exc:  # BLE001:REVIEWED
             print(
                 json.dumps(
                     {

@@ -343,7 +343,7 @@ class ContractGroupConsensus:
             total += 1
             try:
                 bid = getattr(p, "brain_id", "unknown")
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 bid = "unknown"
             brain_ids.append(bid)
 
@@ -510,7 +510,7 @@ class ContractGroupConsensus:
         for p in proposals:
             try:
                 bid = getattr(p, "brain_id", "unknown")
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 bid = "unknown"
             all_brain_ids.append(bid)
 

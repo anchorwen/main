@@ -67,7 +67,7 @@ def main() -> int:
     except subprocess.TimeoutExpired:
         print(f"[blueprint] {file_path}: check timed out")
         return 1
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         return 0  # silent on infrastructure failures
 
 

@@ -87,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
         gov_svc = GovernanceService.load(str(gov_path))
         brain_states = gov_svc.get_all_states()
         transition_log = gov_svc.get_transition_log()
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         print(f"[reactivate] ERROR: failed to load governance state from {gov_path}")
         return 1
 

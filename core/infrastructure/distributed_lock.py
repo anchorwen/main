@@ -235,7 +235,7 @@ class FileLock(BaseLock):
             return None
         try:
             return json.loads(self._lock_path.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             return None
 
     def _is_stale(self) -> bool:
@@ -253,7 +253,7 @@ class FileLock(BaseLock):
                     return age > data.get("ttl_seconds", self._ttl)
                 return False
             return True  # holder process dead → stale
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             return True
 
     @staticmethod
@@ -269,7 +269,7 @@ class FileLock(BaseLock):
         try:
             if self._lock_path.exists():
                 self._lock_path.unlink()
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
 
 
@@ -369,7 +369,7 @@ class DirectoryLock(BaseLock):
             return None
         try:
             return json.loads(meta.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             return None
 
     def _is_stale(self) -> bool:
@@ -386,7 +386,7 @@ class DirectoryLock(BaseLock):
                 datetime.now(UTC).replace(tzinfo=None) - acquired.replace(tzinfo=None)
             ).total_seconds()
             return age > data.get("ttl_seconds", self._ttl)
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             return True
 
     def _force_release(self) -> None:
@@ -395,7 +395,7 @@ class DirectoryLock(BaseLock):
         try:
             if self._dir_path.exists():
                 shutil.rmtree(self._dir_path)
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
 
 
@@ -430,7 +430,7 @@ def get_lock(
             lock.acquire()
             lock.release()
             return FileLock(name, lock_dir=lock_dir, ttl_seconds=ttl_seconds)
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             return DirectoryLock(name, lock_dir=lock_dir, ttl_seconds=ttl_seconds)
     raise ValueError(f"Unknown lock backend: {backend}")
 

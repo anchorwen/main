@@ -443,12 +443,12 @@ class BrainLifecycleManager:
             writer.commit()
             report.atomic_success = True
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             report.errors.append(f"retirement_transaction_failed: {exc}")
             try:
                 writer.rollback()
                 report.rollback_triggered = True
-            except Exception as rb_exc:  # noqa: BLE001
+            except Exception as rb_exc:  # BLE001:REVIEWED
                 report.errors.append(f"rollback_failed: {rb_exc}")
 
         return report
@@ -868,7 +868,7 @@ class BrainLifecycleManager:
                     if bid in gov._brain_states:
                         gov._brain_states[bid]["last_transition_at"] = ts
                         gov._brain_states[bid]["transition_count"] = 1
-                except Exception:  # noqa: BLE001
+                except Exception:  # BLE001:REVIEWED
                     pass
                 report.auto_registered.append(f"{bid}:{initial}")
                 logging.warning(
@@ -1042,7 +1042,7 @@ class BrainLifecycleManager:
             ensemble_errors = validate_ensemble_references(bs)
             for err in ensemble_errors:
                 report.hardcoded_path_mismatches.append(f"ensemble: {err}")
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
 
         # ── contract_group validity ──
@@ -1071,7 +1071,7 @@ class BrainLifecycleManager:
                         f"{bid}: schema '{schema_id}' NOT supported by FeatureService. "
                         f"Available: {sorted(available)}"
                     )
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
 
         # ── artifact_hash integrity ──

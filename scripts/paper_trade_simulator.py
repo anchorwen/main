@@ -53,7 +53,7 @@ def load_live_config() -> dict[str, Any] | None:
 
         with open(config_path, encoding="utf-8") as f:
             return yaml.safe_load(f)
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         return None
 
 
@@ -258,7 +258,7 @@ def _estimate_spread(entry_time: datetime, atr: float, mid_price: float) -> tupl
         # Convert naive datetime to UTC if needed
         utc_time = entry_time.replace(tzinfo=UTC) if entry_time.tzinfo is None else entry_time
         return model.estimate(now_utc=utc_time, atr=atr, mid_price=mid_price)
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         return (SPREAD_COST, 0.05)
 
 
@@ -385,7 +385,7 @@ def simulate_trade(
     if exit_time and exit_time != entry_time:
         try:  # noqa: SIM105
             exit_spread, exit_slippage = _estimate_spread(exit_time, atr, exit_price)
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
     exit_friction = exit_spread + exit_slippage
 

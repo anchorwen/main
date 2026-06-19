@@ -62,7 +62,7 @@ class MT5BrokerAdapter:
             acc = self._worker.account_info(timeout=timeout)
             if acc is not None:
                 return float(getattr(acc, "equity", 0))
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
         return None
 

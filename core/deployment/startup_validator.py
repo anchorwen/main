@@ -35,7 +35,7 @@ def validate_per_brain_schema(
     if feature_store is not None:
         try:
             registered_schemas = feature_store._load_schemas()
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             logging.warning("startup_validator: failed to load schemas from feature store")
 
     implemented_schemas = FeatureService.available_schemas()

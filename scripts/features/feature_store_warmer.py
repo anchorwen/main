@@ -250,7 +250,7 @@ def warm_store(
     )
     try:  # noqa: SIM105
         store.register_schema(schema)
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         pass
 
     # Generate time index (M5 bars from CSV start)
@@ -267,7 +267,7 @@ def warm_store(
                 base_time = ts.to_pydatetime()
             else:
                 base_time = ts
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
 
     # Pre-build resampled OHLC for each timeframe
@@ -295,7 +295,7 @@ def warm_store(
     if time_col and time_col in df.columns:
         try:
             timestamps = pd.to_datetime(df[time_col]).to_list()
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             timestamps = [base_time + timedelta(minutes=5 * i) for i in range(n_rows)]
     else:
         timestamps = [base_time + timedelta(minutes=5 * i) for i in range(n_rows)]

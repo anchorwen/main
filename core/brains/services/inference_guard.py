@@ -155,7 +155,7 @@ class InferenceGuard:
                 self._process.pid,
                 self._model_path,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             logger.error(
                 "InferenceGuard failed to start worker for %s: %s",
                 self._model_path,
@@ -203,7 +203,7 @@ class InferenceGuard:
         if self._conn is not None:
             try:  # noqa: SIM105
                 self._conn.close()
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
             self._conn = None
 
@@ -212,11 +212,11 @@ class InferenceGuard:
         if self._conn is not None:
             try:  # noqa: SIM105
                 self._conn.send(None)
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
 
     def __del__(self) -> None:
         try:  # noqa: SIM105
             self.shutdown()
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
