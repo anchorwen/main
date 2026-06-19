@@ -40,6 +40,7 @@ from core.runtime.fault_handler import (
 # ── Strategy line imports ──
 # ── Extracted sub-modules (P2 refactor) ──
 from core.runtime.ou_hurst import compute_tf_ou_hurst
+from core.runtime.position_ownership import resolve_position_owner
 from core.runtime.trail_dispatch import compute_and_dispatch_trail
 
 logger = logging.getLogger(__name__)
@@ -5126,24 +5127,18 @@ def execute_live_cycle(
             and state.position_manager.has_position()
         ):
             for pos in list(state.position_manager.get_all_positions()):
-                # Determine which strategy owns this position (from supporting brains)
-                owner = "barrier_12bar"  # default
-                if pos.supporting_brain_ids:
-                    for bid in pos.supporting_brain_ids:
-                        for bi in brains:
-                            if bi.get("brain_id") == bid:
-                                bt = bi.get("brain_type", "")
-                                if bt in MICRO_M15_GROUP["brain_types"]:
-                                    owner = "micro_m15"
-                                elif bt in MICRO_H1_GROUP["brain_types"]:
-                                    owner = "micro_h1"
-                                elif bt in MICRO_H4_GROUP["brain_types"]:
-                                    owner = "micro_h4"
-                                elif bt in MICRO_GROUP["brain_types"]:
-                                    owner = "micro_3bar"
-                                elif bt in ARB_GROUP["brain_types"]:
-                                    owner = "statarb_dynamic"
-                                break
+                # Strangler Fig #15: ownership resolution extracted to
+                # core/runtime/position_ownership.py
+                owner = resolve_position_owner(
+                    pos.supporting_brain_ids or [],
+                    brains=brains,
+                    micro_m15_types=MICRO_M15_GROUP["brain_types"],
+                    micro_h1_types=MICRO_H1_GROUP["brain_types"],
+                    micro_h4_types=MICRO_H4_GROUP["brain_types"],
+                    micro_3bar_types=MICRO_GROUP["brain_types"],
+                    statarb_types=ARB_GROUP["brain_types"],
+                    default_owner="barrier_12bar",
+                )
                 # Only add to current_positions if not already populated by MT5 query
                 if owner not in current_positions:
                     current_positions[owner] = {
@@ -5221,7 +5216,7 @@ def execute_live_cycle(
                 feature_vector_sample=_fv_sample,
                 data_dir=config.base_dir,
             )
-        except Exception as _gm_exc:  # noqa: BLE001
+        except Exception as _gm_exc:  # Iron Law #10: BLE001→fail_open_guard
             import logging as _gm_log
 
             _gm_log.getLogger(__name__).warning(
@@ -5235,7 +5230,7 @@ def execute_live_cycle(
         # XAU-centric fallback path (which has incorrect cross-asset slots).
         _btc_aug: Any = None
         if config.symbol == "BTCUSDc" and daily_feature_vector is not None:
-            try:
+            with fail_open_guard("BTCFeatureAugment"):
                 _aug = getattr(state, "_btc_augmenter", None)
                 if _aug is None:
                     from core.features.computers.btc_feature_augmenter import (
@@ -5252,36 +5247,24 @@ def execute_live_cycle(
                     tf_ou=tf_ou,
                     tf_hurst=tf_hurst,
                 )
-            except Exception:  # noqa: BLE001
-                import logging as _btc_log2
-                import traceback as _btc_tb2
-
-                _btc_log2.getLogger(__name__).error(
-                    "BTCFeatureAugmenter failed in main eval — "
-                    "V6 brains using btc_macro_enhanced_41 will get "
-                    "legacy XAU-centric features (slots [12][30][35][36] incorrect).\n%s",
-                    _btc_tb2.format_exc(),
-                )
 
         # ── FIX-20260609-011: load governance state for degradation gate ──
         # Read once per cycle so the governance degradation gate sees the
         # latest brain status transitions (daily_ops updates this file).
         _gov_state: dict[str, Any] | None = None
-        try:
+        with fail_open_guard("GovernanceStateLoad"):
             _gov_path = Path(config.base_dir) / "governance_state.json"
             if _gov_path.exists():
                 import json as _json_gov
 
                 _gov_raw = _json_gov.loads(_gov_path.read_text(encoding="utf-8"))
                 _gov_state = _gov_raw.get("brain_states", {})
-        except Exception:  # noqa: BLE001
-            _gov_state = None  # Non-fatal: gate silently skips if unreadable
 
         # ── FIX-20260611-022: Evaluate data-health degradation ──
         # Progressive risk reduction based on data quality.
         # Staleness-based: if key sources haven't updated recently, reduce exposure.
         _degrade_constraints: Any = None
-        try:
+        with fail_open_guard("DataHealthDegradationEval"):
             from core.observability.degradation import (
                 DegradationConstraints,
                 evaluate_staleness,
@@ -5299,8 +5282,6 @@ def execute_live_cycle(
                         _stale_level,
                         reason=f"Data staleness detected (level={_stale_level.name})",
                     )
-        except Exception:  # noqa: BLE001
-            _degrade_constraints = None  # Fail-open: degradation check must not crash
 
         # ── DQAF-20260614-002: Per-cycle calibrator heartbeat ──
         # compute_threshold() updates the adaptive Q10 from rolling history.
