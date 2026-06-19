@@ -3652,57 +3652,12 @@ def execute_live_cycle(
                     else:
                         _qd.decision.volume = _scaled_vol
 
-        # ── FIX-20260606-128: reentry block streak alert ──────────────────
-        # Scans strategy results for reentry-blocked strategies (Cut 3 in
-        # strategy_evaluator).  When a strategy is blocked for ≥ 5
-        # consecutive cycles, fires a warning via alert hub.
-        _strat_results = eval_summary.get("strategy_results", [])
-        _ah_reentry = getattr(state, "alert_hub", None)
-        for _sr in _strat_results:
-            _sname = _sr.get("strategy", "")
-            _reason = _sr.get("reason", "")
-            if not _sr.get("should_trade") and (
-                "brain_flip" in _reason
-                or "meta_exit" in _reason
-                or "sl_" in _reason
-                or "ou_revert" in _reason
-                or "unknown" in _reason
-                or "bleed" in _reason
-                or "momentum" in _reason
-                or "hesitation" in _reason
-            ):
-                _streak_key = f"_reentry_block_streak_{_sname}"
-                _streak = getattr(state, _streak_key, 0) + 1
-                setattr(state, _streak_key, _streak)
-                if _streak >= 5 and _streak % 5 == 0 and _ah_reentry is not None:
-                    _alert = {
-                        "rule_name": "reentry_persistent_block",
-                        "rule_id": f"reentry_block_{_sname}_{int(time.time())}",
-                        "severity": "warning",
-                        "title": f"Reentry Block: {_sname} ({_streak} cycles)",
-                        "text": (
-                            f"## {_sname} 重入守卫持续拦截\n\n"
-                            f"- 连续拦截: **{_streak}** 个周期\n"
-                            f"- 拦截原因: {_reason}\n"
-                            f"- 时间: {_utc_iso()}\n\n"
-                            f"> 请检查退出类型和历史置信度。"
-                        ),
-                        "timestamp_utc": _utc_iso(),
-                        "context": {
-                            "strategy": _sname,
-                            "consecutive_blocks": _streak,
-                            "reason": _reason,
-                        },
-                    }
-                    import contextlib
+        # ── FIX-20260606-128: reentry block streak alert ──
+        # Strangler Fig #28 — extracted to core.runtime.reentry_alert
+        from core.runtime.reentry_alert import check_reentry_block_streaks
 
-                    with contextlib.suppress(Exception):
-                        _ah_reentry._alert_queue.put_nowait(_alert)
-            else:
-                # Reset streak when strategy passes or isn't reentry-blocked
-                _streak_key = f"_reentry_block_streak_{_sname}"
-                if hasattr(state, _streak_key):
-                    setattr(state, _streak_key, 0)
+        check_reentry_block_streaks(eval_summary=eval_summary, state=state)
+
 
         # Flush execution queue → dispatch to MT5
         if exec_queue.queue_size > 0 and not config.no_mt5:
