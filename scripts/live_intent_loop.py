@@ -58,7 +58,8 @@ from core.deployment.path_defaults import (
     DEFAULT_NORM_CONFIG,
 )
 
-# ── Delegated to core.runtime.live_startup (Strangler Fig #9) ──
+# ── Delegated to core.runtime (Strangler Fig #9, #19) ──
+from core.runtime.live_bootstrap import init_feature_services
 from core.runtime.live_startup import (  # noqa: F401 — re-export
     _resolve_consensus_side,
     decide_side_from_anchor,
@@ -684,103 +685,25 @@ def main(argv: list[str] | None = None) -> int:
     if args.disable_onnx:
         brain_entry["enable_onnxruntime"] = False
 
-    # ── Initialize feature services ──
-    feature_adapter: Any = None
-    feature_service: Any = None
-    feature_computer: Any = None
-    feature_schema: Any = None
-    feature_store: Any = None
-    micro_feature_adapter: Any = None
-    micro_feature_computer: Any = None
-    daily_feature_provider: Any = None
-
-    if not args.no_mt5:
-        from core.features.computers.v9_live_computer import V9LiveFeatureComputer
-
-        feature_computer = V9LiveFeatureComputer(mt5, args.symbol, mt5_worker=mt5_worker)
-
-        from core.features.adapters.v9_feature_adapter import V9FeatureAdapter
-
-        feature_adapter = V9FeatureAdapter(
-            rolling_normalizer=rolling_norm,
-            normalization_config=norm_config,
-        )
-
-        # Microstructure 9-feature computer + adapter (for Transformer V4.3 & XGBoost V4.5)
-        from core.features.adapters.microstructure_feature_adapter import (
-            MicrostructureFeatureAdapter,
-        )
-        from core.features.computers.microstructure_computer import (
-            MicrostructureFeatureComputer,
-        )
-
-        micro_feature_computer = MicrostructureFeatureComputer(
-            mt5, args.symbol, mt5_worker=mt5_worker
-        )
-        micro_feature_adapter = MicrostructureFeatureAdapter(
-            scaler_path=None,
-        )
-
-        _store_dir = Path(args.feature_store_dir)
-        if not _store_dir.is_absolute():
-            _store_dir = PROJECT_ROOT / _store_dir
-        from core.features.local_feature_store import LocalFeatureStore
-
-        feature_store = LocalFeatureStore(str(_store_dir))
-        from core.deployment.feature_update_producer import build_v9_schema
-        from core.features.schemas.microstructure_schema import build_microstructure_schema
-
-        feature_schema = build_v9_schema(symbol=args.symbol)
-        feature_store.register_schema(feature_schema)
-        feature_store.register_schema(build_microstructure_schema(symbol=args.symbol))
-
-        from core.features.feature_service import FeatureService
-
-        feature_service = FeatureService(
-            feature_adapter=feature_adapter,
-            feature_computer=feature_computer,
-            default_venue="MT5",
-            feature_store=feature_store,
-            default_symbol=args.symbol,
-            store_schema_name="v9_institutional_40",
-            store_timeframe="M5",
-        )
-
-        # Daily D1 feature provider for swing brain inference
-        try:
-            from core.features.computers.live_daily_provider import LiveDailyFeatureProvider
-
-            daily_feature_provider = LiveDailyFeatureProvider(
-                mt5_module=mt5,
-                mt5_worker=mt5_worker,
-                symbol=args.symbol,
-                d1_csv="data/raw/xauusdc_d1_merged.csv",
-                h4_csv="data/raw/xauusdc_h4_merged.csv",
-            )
-            print(
-                json.dumps(
-                    {
-                        "event": "daily_feature_provider_ready",
-                        "time": _utc_iso(),
-                        "latest_timestamp": daily_feature_provider.latest_timestamp,
-                        "feature_dim": daily_feature_provider.feature_dim,
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-        except Exception as _dfp_exc:  # BLE001:REVIEWED
-            print(
-                json.dumps(
-                    {
-                        "event": "daily_feature_provider_init_failed",
-                        "time": _utc_iso(),
-                        "error": str(_dfp_exc),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
+    # ── Initialize feature services (Strangler Fig #19 → live_bootstrap.py) ──
+    _feat = init_feature_services(
+        mt5=mt5,
+        mt5_worker=mt5_worker,
+        symbol=args.symbol,
+        feature_store_dir=args.feature_store_dir,
+        rolling_norm=rolling_norm,
+        norm_config=norm_config,
+        project_root=PROJECT_ROOT,
+        no_mt5=args.no_mt5,
+    )
+    feature_adapter = _feat["feature_adapter"]
+    feature_service = _feat["feature_service"]
+    feature_computer = _feat["feature_computer"]
+    feature_schema = _feat["feature_schema"]
+    feature_store = _feat["feature_store"]
+    micro_feature_adapter = _feat["micro_feature_adapter"]
+    micro_feature_computer = _feat["micro_feature_computer"]
+    daily_feature_provider = _feat["daily_feature_provider"]
 
     # ── Initialize risk service ──
     risk_service = _init_risk_service()
