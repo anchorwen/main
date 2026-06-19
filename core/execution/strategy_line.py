@@ -772,29 +772,11 @@ class StrategyLine:
                 weighter.apply_weights(proposals)
 
         # ── 3c. Minimum valid brains gate ──
-        # Count brains that produced a non-neutral directional signal AND
-        # have a positive vote_weight.  Brains with vote_weight=0.0 are
-        # contract-muted or governance-silenced — they cannot influence
-        # consensus, so counting them as "valid voters" creates a deadlock
-        # where (muted_brain_count > 0) < min_valid_brains but the muted
-        # brain can never actually vote.
-        # All-neutral proposals pass through to consensus computation
-        # (which will naturally return neutral).
-        _valid_voters = 0
-        for p in proposals:
-            _vw = float(getattr(p, "vote_weight", 1.0) or 1.0)
-            if _vw <= 0.0:
-                continue  # muted brain — cannot vote, don't count
-            # BrainSignal attribute first, fall back to legacy dict
-            _dir = getattr(p, "direction", None)
-            if _dir is None:
-                _pred = getattr(p, "prediction", None) or {}
-                _dir = (
-                    _pred.get("direction_bias", "neutral") if isinstance(_pred, dict) else "neutral"
-                )
-            if _dir != "neutral":
-                _valid_voters += 1
-        if _valid_voters > 0 and _valid_voters < self.config.min_valid_brains:
+        # Strangler Fig #17: extracted to core/execution/brain_gates.py
+        from core.execution.brain_gates import check_min_valid_brains
+
+        _valid_voters = check_min_valid_brains(proposals, self.config.min_valid_brains)
+        if _valid_voters > 0:
             return StrategyDecision(
                 strategy_name=name,
                 magic=self.config.magic,
