@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
