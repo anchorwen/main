@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from core.runtime.fault_handler import fail_open_guard
 
 
 def decide_side_from_anchor(price: float, anchor: float, threshold: float) -> str | None:
@@ -345,7 +346,9 @@ def inject_performance_metrics(pnl_store: Any, base_dir: str) -> None:
                 },
             )
         gov.save(str(_gov_path), lock_timeout=1.0)
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_WRAPPED
+        with fail_open_guard("LiveStartup:MetricsInject"):
+            raise
         import logging as _inj_log
 
         _inj_log.getLogger(__name__).warning(

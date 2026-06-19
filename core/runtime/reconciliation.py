@@ -328,7 +328,9 @@ def reconcile_closed_positions(
                     )
                     _rs = ensure_reentry_state(state._reentry_states, _exit_strategy)
                     _rs.record_exit(_rec)
-                except Exception:  # BLE001:REVIEWED
+                except Exception:  # BLE001:FOG_WRAPPED
+                    with fail_open_guard("Reconciliation:ReentryGuardRecord"):
+                        raise
                     logging.getLogger(__name__).warning(
                         "Reentry guard state recording failed ticket=%s strategy=%s — "
                         "reentry protection is volatile until next persist",

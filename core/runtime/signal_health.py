@@ -18,6 +18,7 @@ import logging
 from collections import deque
 from datetime import UTC, datetime
 from typing import Any
+from core.runtime.fault_handler import fail_open_guard
 
 # ── Feature gate ────────────────────────────────────────────────────────
 
@@ -114,7 +115,9 @@ class FeatureGate:
                     return GateResult(
                         False, "FEATURE_COLD_START", "micro vector is all zeros (fallback)"
                     )
-            except Exception:  # BLE001:REVIEWED
+            except Exception:  # BLE001:FOG_WRAPPED
+                with fail_open_guard("SignalHealth:ColdStartCheck"):
+                    raise
                 logging.getLogger(__name__).warning("Feature vector cold-start check failed")
 
         return GateResult(True, "", "ok")

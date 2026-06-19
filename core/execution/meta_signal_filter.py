@@ -32,6 +32,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from typing import Any
+from core.runtime.fault_handler import fail_open_guard
 
 import numpy as np
 
@@ -442,7 +443,9 @@ class MetaSignalFilter:
                 threshold=round(effective_threshold, 4),
                 reason=reason,
             )
-        except Exception as _exc:  # BLE001:REVIEWED
+        except Exception as _exc:  # BLE001:FOG_WRAPPED
+            with fail_open_guard("MetaSignalFilter:Compute"):
+                raise
             import logging
 
             _logger = logging.getLogger(__name__)

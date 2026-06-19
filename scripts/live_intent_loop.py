@@ -672,7 +672,9 @@ def main(argv: list[str] | None = None) -> int:
     if not args.multi_brain:
         try:
             brain_entry = load_brain_entry(args.brain_entry)
-        except Exception as exc:  # BLE001:REVIEWED
+        except Exception as exc:  # BLE001:FOG_WRAPPED
+            with fail_open_guard("LiveIntentLoop:MT5Shutdown"):
+                raise
             print(json.dumps({"error": "brain_entry_load_failed", "detail": str(exc)}, indent=2))
             if mt5_worker is not None:
                 mt5_worker.stop()

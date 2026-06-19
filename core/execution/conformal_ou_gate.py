@@ -40,6 +40,8 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -76,7 +78,9 @@ def _load_ou_params(artifact_path: str) -> dict[str, float]:
             "max_half_life": float(opt.get("max_half_life", 20)),
             "theta_min": float(opt.get("theta_min", 0.005)),
         }
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_WRAPPED
+        with fail_open_guard("ConformalOUGate:Compute"):
+            raise
         logger.warning("ConformalOUGate: cannot load OU params from %s", artifact_path)
         return {
             "window": 100.0,

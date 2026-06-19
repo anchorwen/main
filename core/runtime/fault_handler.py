@@ -229,7 +229,9 @@ class FaultTolerantContext:
                         f"degraded_{self.component}",
                         {"error": f"{type(exc_val).__name__}: {str(exc_val)[:200]}"},
                     )
-                except Exception:  # BLE001:REVIEWED
+                except Exception:  # BLE001:FOG_WRAPPED
+                    with fail_open_guard("FaultHandler:AlertHubSend"):
+                        raise
                     pass
             return True  # swallow, caller checks ctx.exception
 

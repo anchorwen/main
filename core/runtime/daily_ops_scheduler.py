@@ -33,7 +33,9 @@ def _save_daily_ops_state(base_dir: str, ts: float) -> None:
         state_path = os.path.join(state_dir, "daily_ops_state.json")
         with open(state_path, "w") as f:
             json.dump({"last_daily_ops_utc": ts}, f)
-    except Exception as _exc:  # BLE001:REVIEWED
+    except Exception as _exc:  # BLE001:FOG_WRAPPED
+        with fail_open_guard("DailyOps:SaveState"):
+            raise
         import logging as _logging
 
         _logging.getLogger(__name__).warning(
