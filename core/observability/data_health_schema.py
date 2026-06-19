@@ -198,6 +198,9 @@ DEFAULT_THRESHOLDS: dict[str, float | int] = {
     "brain_output_max_alerts_per_brain": 5,
     "trade_activity_max_silent_cycles": 60,
     "behavioral_max_lines_per_tick": 500,
+    # ── Entry context completeness ──
+    "entry_context_min_completeness": 0.95,
+    "entry_context_scan_window_days": 14,
 }
 
 

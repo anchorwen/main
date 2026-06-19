@@ -2926,6 +2926,10 @@ class DataHealthService:
         sample_tickets: list[str] = []
         max_scan = 5000
 
+        # DQAF-20260619-004: time window for excluding irrecoverable historical entries
+        window_days = self._t("entry_context_scan_window_days")
+        cutoff_minutes = window_days * 24 * 60 if window_days > 0 else None
+
         try:
             with open(jl_path, encoding="utf-8") as fh:
                 for line in fh:
@@ -2942,6 +2946,12 @@ class DataHealthService:
                     mid = str(entry.get("message_id", ""))
                     if "eq_" not in mid:
                         continue  # skip non-strategy entries (manual, system, etc.)
+                    # DQAF-20260619-004: skip entries outside scan window
+                    if cutoff_minutes is not None:
+                        age = _age_minutes(entry.get("recorded_at"))
+                        if age > cutoff_minutes:
+                            continue  # older than window — skip
+                        # age < 0 (unparseable) — still count (fail-safe)
                     total_opens += 1
                     if total_opens > max_scan:
                         break
@@ -2990,10 +3000,17 @@ class DataHealthService:
         total_missing = missing_ctx + missing_vector + empty_vector
         completeness = 1.0 - (total_missing / total_opens)
 
-        # Any missing entry_context.vector in recent opens is a FAIL
-        if total_missing > 0:
+        # DQAF-20260619-004: graduated threshold — zero-tolerance replaced
+        # with configurable completeness + time window (see scan_window_days
+        # filtering above).  WARN band avoids perpetual CRITICAL from
+        # irrecoverable historical gaps while still catching fresh regressions.
+        threshold = self._t("entry_context_min_completeness")
+        if completeness < threshold * 0.8:
             status = SourceStatus.FAIL
             code = "ENTRY_CTX_VECTOR_MISSING"
+        elif completeness < threshold:
+            status = SourceStatus.WARN
+            code = "ENTRY_CTX_COMPLETENESS_LOW"
         else:
             status = SourceStatus.PASS
             code = "ENTRY_CTX_OK"
@@ -3003,8 +3020,11 @@ class DataHealthService:
             f"missing_ctx: {missing_ctx}, "
             f"missing_vector: {missing_vector}, "
             f"empty_vector: {empty_vector}, "
-            f"completeness: {completeness:.1%}"
+            f"completeness: {completeness:.1%}, "
+            f"threshold: {threshold:.0%}"
         )
+        if window_days > 0:
+            message += f" (window: {window_days:.0f}d)"
         if sample_tickets:
             message += f" | samples: {sample_tickets}"
 
