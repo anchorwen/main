@@ -3662,7 +3662,8 @@ def execute_live_cycle(
                 from core.execution.pre_trade_guards import detect_session
 
                 _pre_session = detect_session(
-                    market_type=getattr(config, "market_type", "forex_24_5")
+                    market_type=getattr(config, "market_type", "forex_24_5"),
+                    tick_time=_tick_time,
                 )
                 if _pre_session.get("risk_tier") == "off":
                     _log_cycle_end(state.loop_iteration)

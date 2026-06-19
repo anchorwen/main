@@ -36,6 +36,7 @@ def detect_session(
     now_utc: datetime | None = None,
     *,
     market_type: str = "forex_24_5",
+    tick_time: float = 0.0,
 ) -> dict[str, Any]:
     """Detect current trading session and return risk multipliers.
 
@@ -45,6 +46,19 @@ def detect_session(
       - "forex_24_5" (default): XAUUSDc — weekday trading, weekend off
       - "crypto_24_7": BTCUSDC — always trading, never returns risk_tier="off"
     """
+    # ── TECH_DEBT-005: Dynamic tick probe ────────────────────────────
+    # When tick_time is provided (live trading), use the physical-state
+    # detector instead of the static time-window table.  The probe
+    # measures actual market activity — tick timestamp changes — rather
+    # than guessing from UTC clock.  This handles:
+    #   - Broker-specific holiday schedules (no calendar API needed)
+    #   - Unexpected market closures (technical halts, emergency suspensions)
+    #   - CME 24/7 migration (static weekend rules become obsolete)
+    # Falls back to static table when tick_time=0 (bootstrap/backtest).
+    if tick_time > 0:
+        _detector = _get_dynamic_detector()
+        return _detector.probe(tick_time, market_type=market_type)
+
     if now_utc is None:
         now_utc = datetime.now(UTC).replace(tzinfo=None)
     elif now_utc.tzinfo is not None:
@@ -897,6 +911,21 @@ def strategy_to_family(strategy: str) -> str:
     if strategy in _SWING_FAMILY:
         return "swing"
     return strategy
+
+
+# ── Dynamic session detector singleton ──────────────────────────────────
+
+_DYNAMIC_DETECTOR: Any = None  # SessionDetector | None
+
+
+def _get_dynamic_detector() -> Any:
+    """Return the module-level SessionDetector singleton."""
+    global _DYNAMIC_DETECTOR
+    if _DYNAMIC_DETECTOR is None:
+        from core.execution.session_detector import SessionDetector
+
+        _DYNAMIC_DETECTOR = SessionDetector()
+    return _DYNAMIC_DETECTOR
 
 
 def strategy_timeframe_sec(strategy: str) -> int:
