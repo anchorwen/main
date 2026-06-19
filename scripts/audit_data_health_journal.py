@@ -143,13 +143,13 @@ def audit_trade_journal(data_dir: str = "data_btc") -> dict:
     ]
 
     # ── close_price missing by strategy ──
-    missing_by_strategy = Counter()
+    missing_by_strategy: dict[str, int] = Counter()
     for e in without_price:
         missing_by_strategy[e.get("strategy", "unknown")] += 1
     results["close_price_missing_by_strategy"] = dict(missing_by_strategy.most_common(10))
 
     # ── PnL null by strategy ──
-    pnl_null_by_strategy = Counter()
+    pnl_null_by_strategy: dict[str, int] = Counter()
     for e in pnl_null:
         pnl_null_by_strategy[e.get("strategy", "unknown")] += 1
     results["pnl_null_by_strategy"] = dict(pnl_null_by_strategy.most_common(10))

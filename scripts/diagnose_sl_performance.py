@@ -30,7 +30,7 @@ DATA_DIRS = {"XAU": ROOT / "data", "BTC": ROOT / "data_btc"}
 
 
 def _read_jsonl(path: Path) -> list[dict]:
-    entries = []
+    entries: list[dict] = []
     if not path.exists():
         return entries
     with open(path, encoding="utf-8") as f:
@@ -84,7 +84,7 @@ def analyze_sl(sym: str, base: Path) -> dict:
             sl_stats["trail_advances"].append(tc.get("trail_advances", 0))
 
     # Trail advance distribution
-    ta_dist = defaultdict(int)
+    ta_dist: dict[float, int] = defaultdict(int)
     for ta in sl_stats["trail_advances"]:
         ta_dist[ta] += 1
 

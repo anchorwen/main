@@ -11,7 +11,7 @@ Usage (in live_intent_loop / live_launcher crash handler)::
     from scripts.omega_crash_snapshot import capture_crash_snapshot
     try:
         main_loop()
-    except Exception:
+    except Exception:  # BLE001:REVIEWED
         capture_crash_snapshot("data", "live_intent_loop", sys.exc_info())
         raise
 """
@@ -93,7 +93,7 @@ def capture_crash_snapshot(
                 if len(content) > 4096:
                     content = "...(truncated)\n" + content[-4096:]
                 state_snapshots[name] = json.loads(content) if content.strip().startswith("{") else content[:2000]
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 state_snapshots[name] = "(unreadable)"
     snapshot["state_snapshots"] = state_snapshots
 

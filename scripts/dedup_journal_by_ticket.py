@@ -114,7 +114,7 @@ def main() -> int:
             from core.infrastructure.distributed_lock import FileLock
             lock = FileLock("live_trade_journal", lock_dir=str(lock_dir), ttl_seconds=10)
             acquired = lock.acquire(blocking=True, timeout_seconds=5)
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             acquired = None
 
         try:

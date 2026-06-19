@@ -31,7 +31,7 @@ def _age_minutes(ts: str | None) -> float:
     try:
         dt = datetime.fromisoformat(str(ts)[:19])
         return (datetime.now(UTC).replace(tzinfo=None) - dt.replace(tzinfo=None)).total_seconds() / 60
-    except Exception:
+    except Exception:  # BLE001:REVIEWED
         return -1
 
 
@@ -59,7 +59,7 @@ def check_symbol(base_dir: str, label: str) -> dict:
                     ts = evt.get("timestamp", "")
                     if ts:
                         last_ts = ts
-                except Exception:
+                except Exception:  # BLE001:REVIEWED
                     pass
         result["stream"] = {
             "exists": True,

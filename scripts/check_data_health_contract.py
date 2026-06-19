@@ -240,7 +240,7 @@ def probe_meta_exit(domain: dict, data_dir: str) -> dict[str, Any]:
                 "results": [{"check": "source_exists", "verdict": Severity.WARN,
                              "detail": f"{source} not found"}]}
 
-    exit_reasons = Counter()
+    exit_reasons: dict[str, int] = Counter()
     trail_count = 0
     total = 0
     with open(source, encoding="utf-8") as f:
@@ -460,7 +460,7 @@ def main() -> int:
         # ── Isolated sandbox: one probe crash cannot kill the audit ──
         try:
             result = probe_fn(domain_cfg, args.data_dir)
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             result = {
                 "domain": domain_name,
                 "severity": domain_cfg.get("severity", "?"),

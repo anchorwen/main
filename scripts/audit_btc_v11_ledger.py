@@ -2,6 +2,8 @@
 
 Iron Law #11 compliant: all statistics from script stdout.
 """
+from __future__ import annotations
+
 import json
 from collections import defaultdict
 
@@ -21,7 +23,7 @@ for name, events in [("V11_H1_Directional", v11_h1), ("V11_M15_Directional", v11
     settled = [e for e in events if e.get("event_type") == "SignalSettled"]
 
     total_pnl = sum(e.get("pnl_r", 0) or 0 for e in settled)
-    dirs = defaultdict(int)
+    dirs: list[str] = defaultdict(int)
     for e in recorded:
         dirs[e.get("direction", "?")] += 1
 
@@ -53,7 +55,7 @@ print(f"BTC opens: {len(btc_opens)}")
 print(f"BTC closes: {len(btc_closes)}")
 
 # Direction of real BTC trades
-real_dirs = defaultdict(int)
+real_dirs: list[str] = defaultdict(int)
 for t in btc_opens:
     real_dirs[t.get("side", "?")] += 1
 print(f"BTC real trade directions: L={real_dirs.get('long',0)} S={real_dirs.get('short',0)}")

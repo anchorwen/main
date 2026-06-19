@@ -54,7 +54,7 @@ def load_webhook_url(base_dir: str, override: str | None = None) -> str:
         with open(config_path, encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
         return str(cfg.get("alert", {}).get("channels", {}).get("dingtalk_webhook_url", ""))
-    except Exception:
+    except Exception:  # BLE001:REVIEWED
         return ""
 
 

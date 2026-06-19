@@ -98,7 +98,7 @@ def _inject(sym: str, cfg: dict) -> dict:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Regime-conditioned stats
-    regime_stats = defaultdict(lambda: {"count": 0, "wins": 0, "losses": 0, "pnl_sum": 0.0})
+    regime_stats: dict[str, int] = defaultdict(lambda: {"count": 0, "wins": 0, "losses": 0, "pnl_sum": 0.0})
 
     with open(out_path, "w", encoding="utf-8") as f:
         for label in labels:

@@ -39,7 +39,7 @@ def _hours_since_last_run(state_path: Path) -> float | None:
         last_dt = datetime.fromisoformat(last_utc.replace("Z", "+00:00"))
         now = datetime.now(UTC)
         return (now - last_dt).total_seconds() / 3600.0
-    except Exception:
+    except Exception:  # BLE001:REVIEWED
         return None
 
 

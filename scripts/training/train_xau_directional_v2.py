@@ -76,8 +76,8 @@ def _rsi(close: np.ndarray, period: int = 14) -> float:
     if n < period + 1:
         return 50.0
     deltas = np.diff(close[-period - 1:])
-    gains = np.sum(deltas[deltas > 0])
-    losses = -np.sum(deltas[deltas < 0])
+    gains: list[float] = np.sum(deltas[deltas > 0])
+    losses: list[float] = -np.sum(deltas[deltas < 0])
     if losses == 0:
         return 100.0
     rs = gains / losses
@@ -162,8 +162,8 @@ def _ou_theta(price: np.ndarray) -> float:
     y = log_p[1:]
     x = log_p[:-1]
     mu_x, mu_y = np.mean(x), np.mean(y)
-    num = np.sum((x - mu_x) * (y - mu_y))
-    den = np.sum((x - mu_x) ** 2)
+    num: list[float] = np.sum((x - mu_x) * (y - mu_y))
+    den: list[float] = np.sum((x - mu_x) ** 2)
     if den == 0:
         return 0.0
     rho = num / den
@@ -191,7 +191,7 @@ def _hurst(price: np.ndarray, max_lag: int = 20) -> float:
                 continue
             mean_seg = np.mean(seg)
             cum_dev = np.cumsum(seg - mean_seg)
-            r = np.max(cum_dev) - np.min(cum_dev)
+            r: dict[str, float] = np.max(cum_dev) - np.min(cum_dev)
             s_val = np.std(seg) + 1e-8
             r_sum += r / s_val
         rs_values[j] = r_sum / max(segments, 1)
@@ -346,7 +346,7 @@ def compute_time_decay_weights(
     if len(timestamps) == 0:
         return np.ones(0, dtype=np.float64)
     # Normalize to days since most recent bar
-    max_ts = np.max(timestamps)
+    max_ts: float = np.max(timestamps)
     days_ago = (max_ts - timestamps) / 86400.0
     decay = np.exp(-np.log(2) * days_ago / half_life_days)
     decay = np.clip(decay, 0.05, 1.0)

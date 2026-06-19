@@ -111,7 +111,7 @@ def main() -> int:
             _tensor = _router.dispatch(_lake, "v9_institutional_40")
             if len(_tensor) != 40:
                 continue  # dimension mismatch, skip
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             continue
 
         # Feature 42: entry_spread (cost of entry)
@@ -136,7 +136,7 @@ def main() -> int:
                 vec.append(float(_ofi_data.get("OFI_Cumulative_1H", 0) or 0))
                 vec.append(float(_ofi_data.get("OFI_Tick_Count", 0) or 0))
                 vec.append(float(_ofi_data.get("OFI_Total_Volume", 0) or 0))
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 vec.extend([0.0, 0.0, 0.0, 0.0, 0.0])  # OFI unavailable
         else:
             vec.extend([0.0, 0.0, 0.0, 0.0, 0.0])

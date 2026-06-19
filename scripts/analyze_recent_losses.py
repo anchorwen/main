@@ -242,7 +242,7 @@ def analyze(data_dir: str, last_n: int) -> dict[str, Any]:
     # If there IS a loss streak, show details
     if loss_streak > 0:
         print(f"\n── 当前连续亏损详情 (最近 {loss_streak} 笔) ──")
-        streak_losses = []
+        streak_losses: list[dict] = []
         for t in reversed(all_settled):
             if t["pnl"] is not None and t["pnl"] < 0 and len(streak_losses) < loss_streak:
                 streak_losses.append(t)

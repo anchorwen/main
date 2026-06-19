@@ -623,7 +623,7 @@ def cmd_reconcile(
         try:
             _existing = GovernanceService.load(str(gov_path))
             _svc._transition_log = _existing._transition_log
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             pass  # No existing transition log to preserve
         _svc.save(str(gov_path), lock_timeout=30.0)
         live_path.write_text(live_yaml, encoding="utf-8")

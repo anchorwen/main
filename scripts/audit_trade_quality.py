@@ -126,7 +126,7 @@ def audit_symbol(name: str, data_dir: str, label: str) -> dict:
     print(f"    Labels: {dict(labels.most_common(8))}")
 
     # Exit reasons
-    exit_reasons = Counter()
+    exit_reasons: dict[str, int] = Counter()
     for t in unique_trades:
         reason = str(t.get("exit_reason", t.get("label", "?")))
         exit_reasons[reason[:50]] += 1
@@ -157,7 +157,7 @@ def audit_symbol(name: str, data_dir: str, label: str) -> dict:
     print("\n  ── Q4: Position Snapshots ──")
     if snaps:
         # Group by ticket, get last snapshot each
-        by_ticket = {}
+        by_ticket: dict[int, dict] = {}
         for s in snaps:
             ticket = s.get("ticket", 0)
             if ticket and (ticket not in by_ticket or
@@ -203,7 +203,7 @@ def audit_symbol(name: str, data_dir: str, label: str) -> dict:
     print(f"    Consensus blocked: {len(consensus_blocked)}")
 
     if evals:
-        eval_reasons = Counter()
+        eval_reasons: dict[str, int] = Counter()
         for e in evals:
             for s in e.get("strategies", []):
                 if not s.get("should_trade"):

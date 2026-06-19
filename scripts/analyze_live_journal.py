@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 #!/usr/bin/env python3
 """
 Live Trading Journal Auditor — Iron Law #11 compliant.
@@ -62,8 +64,8 @@ def analyze_journal(data_dir: Path) -> dict:
     records = load_jsonl(journal_path)
 
     # ── Basic counts (raw, before dedup) ──
-    raw_actions = defaultdict(int)
-    raw_ack = defaultdict(int)
+    raw_actions: list[str] = defaultdict(int)
+    raw_ack: list[str] = defaultdict(int)
     for r in records:
         raw_actions[r.get("action", "?")] += 1
         raw_ack[r.get("ack_status", "?")] += 1
@@ -125,7 +127,7 @@ def analyze_journal(data_dir: Path) -> dict:
     )
 
     # ── PnL by exit label ──
-    pnl_by_label = defaultdict(lambda: {"count": 0, "pnl": 0.0, "wins": 0, "losses": 0})
+    pnl_by_label: dict[str, float] = defaultdict(lambda: {"count": 0, "pnl": 0.0, "wins": 0, "losses": 0})
     for r in realized:
         lbl = r["label"]
         pnl_by_label[lbl]["count"] += 1
@@ -137,8 +139,8 @@ def analyze_journal(data_dir: Path) -> dict:
 
     # ── Direction distribution from OPEN events ──
     open_events = [r for r in records if r.get("action") == "open"]
-    trade_directions = defaultdict(int)  # side of the trade (long/short)
-    brain_directions = defaultdict(int)  # direction from brain_predictions
+    trade_directions: list[str] = defaultdict(int)  # side of the trade (long/short)
+    brain_directions: list[str] = defaultdict(int)  # direction from brain_predictions
     brain_detail = []  # per-open brain breakdown
 
     for o in open_events:
@@ -352,7 +354,7 @@ def analyze_position_snapshots(data_dir: Path) -> dict:
 
 def _count_distribution(values: list) -> dict:
     """Return count distribution of a list of values."""
-    dist = defaultdict(int)
+    dist: dict[str, int] = defaultdict(int)
     for v in values:
         dist[v] += 1
     return dict(sorted(dist.items()))

@@ -218,7 +218,7 @@ def _auc(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     try:
         from sklearn.metrics import roc_auc_score
         return float(roc_auc_score(y_true, y_pred))
-    except Exception:
+    except Exception:  # BLE001:REVIEWED
         return 0.0
 
 

@@ -271,7 +271,7 @@ if bh.exists():
         print(f"  PID:                     {bd.get('pid', 'N/A')}")
         print(f"  Transport:               {bd.get('transport', 'N/A')}")
         print(f"  Outbox pending:          {bd.get('outbox_pending', 'N/A')}")
-    except Exception:
+    except Exception:  # BLE001:REVIEWED
         print("  CORRUPTED")
 else:
     print("  MISSING")

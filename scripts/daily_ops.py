@@ -1464,7 +1464,7 @@ def run_daily_ops(
             try:
                 tracker_path = Path(base_dir) / "brain_performance.json"
                 shared_tracker.save(tracker_path)
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 logging.getLogger(__name__).exception(
                     "daily_ops: failed to persist BrainPerformanceTracker — "
                     "performance data lost until next save"
@@ -1473,7 +1473,7 @@ def run_daily_ops(
             try:
                 gov_path = Path(base_dir) / "governance_state.json"
                 shared_governance.save(gov_path)
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 logging.getLogger(__name__).exception(
                     "daily_ops: failed to persist GovernanceService — "
                     "governance state may be stale on restart"

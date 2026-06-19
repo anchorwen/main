@@ -78,7 +78,7 @@ def audit_pnl_ledger(path: str, label: str) -> dict:
     phantom_pct = phantom / max(total_settled, 1) * 100
 
     # Identity leak check: same entry/exit prices across different brains
-    brain_prices = {}
+    brain_prices: dict[str, list] = {}
     identity_leaks = 0
     for bid, entries in settled.items():
         last5_prices = tuple(round(e.get('entry_price',0) or 0, 1) for e in entries[-5:]) if entries else ()
@@ -156,7 +156,7 @@ for symbol, data_dir, csv_label in [("BTC", "data_btc", "BTC"), ("XAU", "data", 
             else:
                 with open(fp, encoding='utf-8') as f:
                     json.load(f)
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             print(f"  ❌ {fname}: CORRUPT JSON")
             all_fresh = False
         if not audit_file(fp, fname, max_age):

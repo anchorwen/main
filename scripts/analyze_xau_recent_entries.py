@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 #!/usr/bin/env python3
 """XAU Recent Entry Quality Audit — Iron Law #11 compliant.
 
@@ -168,7 +170,7 @@ def summarize(trades: list[dict], label: str) -> dict:
     )
 
     # Strategy breakdown
-    by_strategy = defaultdict(lambda: {"count": 0, "wins": 0, "losses": 0, "pnl": 0.0})
+    by_strategy: dict[str, int] = defaultdict(lambda: {"count": 0, "wins": 0, "losses": 0, "pnl": 0.0})
     for t in closed:
         s = t["strategy"] or "unknown"
         by_strategy[s]["count"] += 1
@@ -179,7 +181,7 @@ def summarize(trades: list[dict], label: str) -> dict:
             by_strategy[s]["losses"] += 1
 
     # Exit reason breakdown
-    exit_reason_counter = Counter()
+    exit_reason_counter: dict[str, int] = Counter()
     for t in closed:
         for er in t["exit_reasons"]:
             label = er["label"] or er["reason"] or "unknown"
@@ -195,14 +197,14 @@ def summarize(trades: list[dict], label: str) -> dict:
     p_wins = [t["p_win"] for t in trades if t.get("p_win") is not None]
 
     # Timing: hour of day distribution
-    hour_dist = Counter()
+    hour_dist: dict[int, int] = Counter()
     for t in trades:
         ts = t["open_ts"]
         if ts:
             try:
                 dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
                 hour_dist[dt.hour] += 1
-            except Exception:
+            except Exception:  # BLE001:REVIEWED
                 pass
 
     # Regime at entry
@@ -251,7 +253,7 @@ def summarize(trades: list[dict], label: str) -> dict:
 
 def analyze_brain_predictions(trades: list[dict]) -> dict:
     """Analyze brain prediction quality at entry time."""
-    brain_stats = defaultdict(
+    brain_stats: dict[str, dict] = defaultdict(
         lambda: {
             "count": 0,
             "correct_direction": 0,

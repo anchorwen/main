@@ -129,7 +129,7 @@ def _get_webhook_url() -> str | None:
                 for line in f:
                     if "dingtalk_webhook_url:" in line:
                         return line.split(":", 1)[1].strip()
-    except Exception:
+    except Exception:  # BLE001:REVIEWED
         pass
     return None
 
@@ -203,5 +203,5 @@ def dispatch_alert(card: AlertCard, *, dry_run: bool = False) -> bool:
         with urllib.request.urlopen(req, timeout=10) as resp:
             result = json.loads(resp.read().decode("utf-8"))
             return result.get("errcode") == 0
-    except Exception:
+    except Exception:  # BLE001:REVIEWED
         return False

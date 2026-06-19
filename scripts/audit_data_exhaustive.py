@@ -3,6 +3,8 @@ Exhaustive Data Integrity Audit — "高枕无忧" standard
 ======================================================
 Every data file, every cross-reference, every edge case.
 """
+from __future__ import annotations
+
 import json, os, glob, time
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
@@ -10,7 +12,7 @@ from pathlib import Path
 
 now = time.time()
 TODAY = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-RESULTS = {"PASS": [], "FAIL": [], "WARN": []}
+RESULTS: dict[str, dict] = {"PASS": [], "FAIL": [], "WARN": []}
 
 def verdict(ok, label, detail=""):
     (RESULTS["PASS"] if ok else RESULTS["FAIL"]).append((label, detail))
@@ -102,7 +104,7 @@ DATA_FILES = {
     },
 }
 
-file_status = {}
+file_status: dict[str, str] = {}
 all_exist = True
 for symbol, files in DATA_FILES.items():
     for name, path in files.items():

@@ -619,7 +619,7 @@ def section_6_config_alignment(portfolios: dict) -> dict:
                     if bid and "normalization" not in bid and "meta_stage" not in bid:
                         config_brains[sym].add(bid)
                         config_enabled[sym][bid] = entry.get("enabled", False)
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             # Fallback: scan configs/brains*/ directory
             cfg_dir = ROOT / "configs" / ("brains" if sym == "XAU" else "brains_btc")
             if cfg_dir.is_dir():

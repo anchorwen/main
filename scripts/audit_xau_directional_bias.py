@@ -2,6 +2,8 @@
 
 Iron Law #11 compliant.
 """
+from __future__ import annotations
+
 import json
 from collections import defaultdict
 from datetime import datetime
@@ -19,7 +21,7 @@ print("=" * 70)
 print()
 print("── 1. LIVE TRADE DIRECTION BY STRATEGY ──")
 opens = [t for t in journal if t.get("action") == "open"]
-strategies = defaultdict(lambda: {"long": 0, "short": 0, "magic": None, "total": 0})
+strategies: dict[str, dict] = defaultdict(lambda: {"long": 0, "short": 0, "magic": None, "total": 0})
 for t in opens:
     magic = t.get("magic", 0)
     side = t.get("side", "?")
@@ -44,7 +46,7 @@ for name, d in sorted(strategies.items()):
 # ── 2. Golden master direction vs actual trades ──
 print()
 print("── 2. GOLDEN MASTER: STRATEGY DIRECTION CONSISTENCY ──")
-gm_dirs = defaultdict(lambda: {"long": 0, "short": 0, "neutral": 0, "total": 0})
+gm_dirs: dict[str, list] = defaultdict(lambda: {"long": 0, "short": 0, "neutral": 0, "total": 0})
 for e in gm:
     for r in e.get("summary", {}).get("strategy_results", []):
         sname = r.get("strategy", "?")

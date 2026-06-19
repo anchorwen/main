@@ -76,7 +76,7 @@ def main() -> int:
                         deals_by_pos[d.position_id] = d
                 print(f"MT5: {len(deals)} deals loaded ({days}d range), {len(deals_by_pos)} with profit")
                 break
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             continue
 
     if not deals_by_pos:

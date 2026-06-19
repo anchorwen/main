@@ -4,6 +4,8 @@ Deep Full-Stack Audit — Expanded scope & depth
 Covers: Data, Code, Runtime, Trading Quality, Config, Brain Pipeline,
 MetaFilter, Risk/Budget, Alerts, Bridge
 """
+from __future__ import annotations
+
 import json, os, glob, time, subprocess, sys
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -144,8 +146,8 @@ for name, pattern in [("XAU", "data/logs/intent_*.log"), ("BTC", "data_btc/logs/
     total_cycles = 0
     total_dispatches = 0
     total_promotions = 0
-    error_events = Counter()
-    no_trade_reasons = Counter()
+    error_events: list[dict] = Counter()
+    no_trade_reasons: dict[str, int] = Counter()
     restart_count = 0
 
     for log_path in logs:
@@ -353,7 +355,7 @@ for name, jpath in [("XAU", "data/live_trade_journal.jsonl"), ("BTC", "data_btc/
     journal = load_jsonl(jpath)
     today_entries = [e for e in journal if today in e.get("recorded_at","")]
 
-    rc_dist = Counter()
+    rc_dist: dict[str, int] = Counter()
     for e in today_entries:
         d = e.get("detail",{})
         if isinstance(d, dict):
@@ -387,7 +389,7 @@ for name, apath in [("XAU", "data/logs/alert_audit.jsonl"), ("BTC", "data_btc/lo
                 recent.append(a)
         except: pass
 
-    warn_types = Counter()
+    warn_types: dict[str, int] = Counter()
     critical_count = 0
     for a in recent:
         detail = a.get("detail",{})

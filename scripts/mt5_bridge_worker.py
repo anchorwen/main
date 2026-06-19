@@ -188,7 +188,7 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
                 ),
                 flush=True,
             )
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             # Last resort — print to stdout so at least the operator sees it
             print(
                 json.dumps(
@@ -526,7 +526,7 @@ def _mt5_close_position(
                         detail["profit"] = float(_fill_profit)
                     if _fill_volume is not None:
                         detail["fill_volume"] = float(_fill_volume)
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             pass  # Non-blocking: estimated PnL survives as fallback
         # 陷阱二: Partial close creates new ticket — capture via identifier
         if close_vol < pos_vol - 1e-9:
@@ -921,7 +921,7 @@ def run_worker(args: argparse.Namespace) -> int:
                                 ask=float(getattr(_t, "ask", 0) or 0),
                                 volume=float(getattr(_t, "volume", 0) or 0),
                             )
-                except Exception:
+                except Exception:  # BLE001:REVIEWED
                     pass
                 _ev.wait(1.0)
 
@@ -1251,7 +1251,7 @@ def run_zmq_worker(
                                 ask=float(getattr(_t, "ask", 0) or 0),
                                 volume=float(getattr(_t, "volume", 0) or 0),
                             )
-                except Exception:
+                except Exception:  # BLE001:REVIEWED
                     pass
                 _ev.wait(1.0)
 

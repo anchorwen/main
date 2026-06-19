@@ -163,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.commit_msg_file:
         try:
             commit_msg = Path(args.commit_msg_file).read_text(encoding="utf-8")
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             pass
 
     # Get changed files

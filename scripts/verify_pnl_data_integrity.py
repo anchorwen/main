@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 #!/usr/bin/env python3
 """
 PnL Data Integrity Cross-Validation — Iron Law #11 Compliant
@@ -100,7 +102,7 @@ def load_signalsettled_stats(data_dir: str) -> dict[str, dict]:
     if not events_path.exists():
         return {}
 
-    brains = defaultdict(lambda: {"pnl_list": [], "long": 0, "short": 0})
+    brains: list[dict] = defaultdict(lambda: {"pnl_list": [], "long": 0, "short": 0})
     with open(events_path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()

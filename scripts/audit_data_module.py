@@ -4,6 +4,8 @@ Data Module Full Integrity Audit
 Checks: PnL Ledger, Labels, Trade Journal, Brain Performance,
 Feature Store, Execution State, Governance, Bar Sync, Golden Master
 """
+from __future__ import annotations
+
 import json, os, glob, time
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -101,7 +103,7 @@ for name, jpath, lpath, sym in [
 
     # Extract tickets from journal (successful opens: rc=10009, type=1)
     j_tickets = set()
-    j_rc_dist = Counter()
+    j_rc_dist: dict[str, int] = Counter()
     for entry in journal:
         detail = entry.get("detail", {})
         if isinstance(detail, dict):

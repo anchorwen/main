@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Two-day trade audit: June 10-11, 2026 — XAU + BTC."""
 import json, glob
 from collections import Counter, defaultdict
@@ -17,10 +19,10 @@ for name, jpath in [('XAU', 'data/live_trade_journal.jsonl'), ('BTC', 'data_btc/
     print(f"  {name} Trade Journal — June 10-11")
     print(f"{'='*70}")
 
-    by_date = defaultdict(int)
-    actions = Counter()
-    retcodes = Counter()
-    sides = Counter()
+    by_date: dict[str, list] = defaultdict(int)
+    actions: list[str] = Counter()
+    retcodes: list[str] = Counter()
+    sides: list[str] = Counter()
     real_opens = []
     real_closes = []
     volumes = []
@@ -152,7 +154,7 @@ for name, pattern in [('XAU', 'data/logs/intent_*.log'), ('BTC', 'data_btc/logs/
         shutdowns = []
         errors = []
         dispatches = []
-        no_trade_reasons = Counter()
+        no_trade_reasons: dict[str, int] = Counter()
         last_cycle = None
 
         for line in lines:

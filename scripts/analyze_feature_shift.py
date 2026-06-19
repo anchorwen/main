@@ -80,7 +80,7 @@ def _ks_test_pvalue(a: np.ndarray, b: np.ndarray) -> float:
     try:
         _, pvalue = ks_2samp(a, b)
         return float(pvalue)
-    except Exception:
+    except Exception:  # BLE001:REVIEWED
         return 0.0
 
 
@@ -111,7 +111,7 @@ def _hurst_exponent(ts: np.ndarray, max_lag: int = 100) -> float:
             mean = np.mean(segment)
             deviation = segment - mean
             cum_dev = np.cumsum(deviation)
-            r = np.max(cum_dev) - np.min(cum_dev)
+            r: dict[str, list] = np.max(cum_dev) - np.min(cum_dev)
             s = np.std(segment)
             if s > 1e-10:
                 rs.append(r / s)

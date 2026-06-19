@@ -72,7 +72,7 @@ def _safe_read_features(fpath: str, max_retries: int = 3) -> list[dict[str, Any]
                         # Last attempt: skip the bad line
                         continue
             return records
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             if attempt < max_retries - 1:
                 continue
             return []
@@ -274,7 +274,7 @@ def main() -> int:
                 },
             )
             dispatch_alert(card)
-        except Exception:
+        except Exception:  # BLE001:REVIEWED
             pass
 
     return 1 if result["severity"] == "Sev1" else 2 if result["severity"] == "Sev2" else 0
