@@ -13,6 +13,7 @@ lifecycle.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
+from core.runtime.fault_handler import fail_open_guard
 
 if TYPE_CHECKING:
     from core.execution.mt5_worker import MT5Worker
@@ -58,12 +59,10 @@ class MT5BrokerAdapter:
         Returns None if the worker is unavailable or the query fails.
         Used by live_cycle.py for equity-based risk budgeting.
         """
-        try:
+        with fail_open_guard("MT5BrokerAdapter:AccountEquity"):
             acc = self._worker.account_info(timeout=timeout)
             if acc is not None:
                 return float(getattr(acc, "equity", 0))
-        except Exception:  # BLE001:REVIEWED
-            pass
         return None
 
     def fetch_current_atr(self, symbol: str, period: int = 14, timeout: float = 10.0) -> float:

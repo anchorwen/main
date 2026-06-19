@@ -1802,8 +1802,8 @@ class StrategyLine:
         if self.budget is not None:
             try:  # noqa: SIM105
                 streak_mult = self.budget.get_streak_multiplier()
-            except Exception:  # BLE001:REVIEWED
-                pass
+            with fail_open_guard("StrategyLine:StreakMultiplier"):
+                pass  # BLE001 — streak multiplier is best-effort
         size *= streak_mult
 
         # Save pre-Kelly raw size for diagnostic logging

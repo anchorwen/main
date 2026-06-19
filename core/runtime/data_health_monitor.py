@@ -11,6 +11,7 @@ with a unified, decorator-based, alert-integrated design.
 from __future__ import annotations
 
 from typing import Any
+from core.runtime.fault_handler import fail_open_guard
 
 
 def check_data_health(
@@ -49,8 +50,8 @@ def check_data_health(
                             {"alert_level": report.alert_level,
                              "primary_codes": report.primary_codes},
                         )
-            except Exception:  # BLE001:REVIEWED — Iron Law #1
-                pass
+            with fail_open_guard("DataHealthMonitor:AlertDispatch"):
+                pass  # BLE001 — alert dispatch is best-effort
 
         return {
             "time": report.generated_at,
