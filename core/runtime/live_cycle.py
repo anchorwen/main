@@ -2769,56 +2769,11 @@ def execute_live_cycle(
             ):
                 feature_store.write_records([record])
 
-    # ── Feature freshness check (cycle-level visible alert) ──
-    if not config.no_mt5 and feature_store is not None:
-        with log_and_continue(component="FeatureCheck:freshness"):
-            from core.execution.pre_trade_guards import check_feature_freshness
+    # ── Feature freshness check ──
+    # Strangler Fig #29 — extracted to core.runtime.feature_freshness
+    from core.runtime.feature_freshness import check_feature_freshness
 
-            latest_record = feature_store.latest(config.symbol, "M5")
-            if latest_record is not None:
-                ts = getattr(latest_record, "event_time", None)
-                if ts is not None:
-                    if hasattr(ts, "timestamp"):
-                        if ts.tzinfo is None:
-                            ts = ts.replace(tzinfo=UTC)
-                        ts_unix = ts.timestamp()
-                    else:
-                        ts_unix = float(ts)
-                    freshness = check_feature_freshness(ts_unix, max_age_seconds=300.0)
-                    if not freshness["fresh"]:
-                        state._consecutive_stale_features += 1
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "feature_stale_warning",
-                                    "time": _utc_iso(),
-                                    "age_seconds": freshness.get("age_seconds"),
-                                    "max_age_seconds": freshness["max_age_seconds"],
-                                    "consecutive_stale_features": state._consecutive_stale_features,
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-                        if state._consecutive_stale_features >= 3:
-                            state._circuit_breaker_tripped = True
-                            state._circuit_breaker_tripped_at = time.time()
-                            state._circuit_breaker_trip_reason = "feature_staleness"
-                            print(
-                                json.dumps(
-                                    {
-                                        "event": "circuit_breaker_feature_staleness_trip",
-                                        "time": _utc_iso(),
-                                        "consecutive_stale_features": state._consecutive_stale_features,
-                                        "trip_reason": state._circuit_breaker_trip_reason,
-                                        "action": "management_only_mode",
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                                flush=True,
-                            )
-                    else:
-                        state._consecutive_stale_features = 0
+    check_feature_freshness(config=config, state=state, feature_store=feature_store)
 
     if pos_count >= config.max_positions:
         if state.loop_iteration % 10 == 0:
