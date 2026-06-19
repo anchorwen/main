@@ -19,18 +19,19 @@ class TestV9MicroComputer:
         c._micro = MagicMock()
         return c
 
+    _MICRO = {  # actual MICROSTRUCTURE_9_FEATURES names
+        "tick_return": 0.1, "hl_ratio": 0.5, "co_ratio": 0.3,
+        "avg_spread": 0.02, "OIM": 0.0, "tick_velocity": 5.0,
+        "XAGUSDc_return": 0.0, "EURUSDc_return": 0.0, "USDJPYc_return": 0.0,
+    }
+
     def test_compute_all_v9_success_micro_ok(self) -> None:
         c = self._make()
         c._v9.compute_all.return_value = {"atr": 6.0, "regime": 1.0}
-        c._micro.compute_all.return_value = {
-            "ofi": 0.1, "micro_spread": 0.02, "imbalance": 0.0,
-            "depth_skew": 0.0, "volume_profile": 1.0, "tick_density": 5.0,
-            "vwap_deviation": 0.0, "arrival_cost": 0.0, "realized_spread": 0.0,
-        }
-
+        c._micro.compute_all.return_value = dict(self._MICRO)
         result = c.compute_all()
         assert result["atr"] == 6.0
-        assert result["ofi"] == 0.1
+        assert result["avg_spread"] == 0.02
         assert c.last_micro_ok is True
 
     def test_micro_failure_fills_zeros(self) -> None:
@@ -46,15 +47,10 @@ class TestV9MicroComputer:
     def test_v9_failure_still_returns_micro_fallback(self) -> None:
         c = self._make()
         c._v9.compute_all.side_effect = RuntimeError("v9 failed")
-        c._micro.compute_all.return_value = {
-            "ofi": 0.5, "micro_spread": 0.01, "imbalance": 0.0,
-            "depth_skew": 0.0, "volume_profile": 1.0, "tick_density": 10.0,
-            "vwap_deviation": 0.0, "arrival_cost": 0.0, "realized_spread": 0.0,
-        }
-
+        c._micro.compute_all.return_value = dict(self._MICRO)
         result = c.compute_all()
         assert c.last_micro_ok is True
-        assert result["ofi"] == 0.5
+        assert result["avg_spread"] == 0.02
 
     def test_is_micro_available_reflects_last_state(self) -> None:
         c = self._make()
@@ -66,10 +62,9 @@ class TestV9MicroComputer:
         c = self._make()
         c._v9.compute_all.return_value = {}
         # Only 7 of 9 features present
-        c._micro.compute_all.return_value = {
-            "ofi": 0.1, "micro_spread": 0.02, "imbalance": 0.0,
-            "depth_skew": 0.0, "volume_profile": 1.0, "tick_density": 5.0,
-            "vwap_deviation": 0.0,
-        }
+        partial = dict(self._MICRO)
+        del partial["EURUSDc_return"]
+        del partial["USDJPYc_return"]
+        c._micro.compute_all.return_value = partial
         result = c.compute_all()
         assert c.last_micro_ok is False
