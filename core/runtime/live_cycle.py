@@ -433,7 +433,10 @@ def _check_pre_close(config: LiveCycleConfig, state: LiveCycleState) -> dict[str
 
 
 def cooldown_blocks_fire(now: float, last_fire: float, cooldown_seconds: float) -> bool:
-    return (now - last_fire) < cooldown_seconds
+    """Strangler Fig #24 — delegation wrapper.  Implementation in core.runtime.cooldown."""
+    from core.runtime.cooldown import cooldown_blocks_fire as _impl
+
+    return _impl(now, last_fire, cooldown_seconds)
 
 
 # ── Exit Management Helpers ────────────────────────────────────────────────
