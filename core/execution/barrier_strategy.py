@@ -14,13 +14,13 @@ assembled 35-dim vectors.
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 
 import numpy as np
 
 from core.execution.strategy_line import StrategyLine
 from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+from core.runtime.fault_handler import fail_open_guard
 
 # V9 canonical order → name index (built once at import)
 _V9_NAME_TO_IDX: dict[str, int] = {name: i for i, name in enumerate(V9_INSTITUTIONAL_40_FEATURES)}
@@ -110,13 +110,9 @@ class BarrierStrategy(StrategyLine):
                 prop = adapter.inference(final_fv)
 
                 bid = b_info.get("brain_id", "unknown")
-                try:
+                with fail_open_guard("BarrierStrategy:BrainProposal"):
                     if not getattr(prop, "brain_id", None):
                         prop.brain_id = bid
-                except Exception:
-                    logging.getLogger(__name__).warning(
-                        "Brain proposal build failed brain_id=%s", bid
-                    )
                 proposals.append(prop)
             except Exception as _exc:
                 print(

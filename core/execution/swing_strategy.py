@@ -20,12 +20,12 @@ base class — no more copy-paste between SwingStrategy and BarrierStrategy.
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 
 import numpy as np
 
 from core.execution.strategy_line import StrategyLine
+from core.runtime.fault_handler import fail_open_guard
 
 
 class SwingStrategy(StrategyLine):
@@ -102,13 +102,9 @@ class SwingStrategy(StrategyLine):
                 prop = adapter.inference(fv)
 
                 bid = b_info.get("brain_id", "unknown")
-                try:
+                with fail_open_guard("SwingStrategy:BrainProposal"):
                     if not getattr(prop, "brain_id", None):
                         prop.brain_id = bid
-                except Exception:
-                    logging.getLogger(__name__).warning(
-                        "Brain proposal build failed brain_id=%s", bid
-                    )
                 proposals.append(prop)
             except Exception as _exc:
                 print(

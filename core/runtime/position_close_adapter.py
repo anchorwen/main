@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from core.contracts.position_events import PositionClosed, PositionOpened
+from core.runtime.fault_handler import fail_open_guard
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Strangler Fig: delegation wrappers for live_cycle.py
@@ -100,7 +101,7 @@ def record_position_opened(
 
     Called from live_cycle.py at position_registered_for_mgmt point.
     """
-    try:
+    with fail_open_guard("PositionCloseAdapter:RecordOpen"):
         adapter = PositionCloseAdapter(
             tick_size=0.01 if "XAU" in symbol else 1.0,
         )
@@ -118,8 +119,7 @@ def record_position_opened(
             confidence=confidence,
         )
         return adapter.record_open(evt, journal_path, state=state)
-    except Exception:
-        return False  # best-effort — never block position registration
+    return False  # best-effort — never block position registration
 
 UTC = UTC
 _log = logging.getLogger(__name__)
@@ -177,11 +177,9 @@ class PositionCloseAdapter:
         """
         events: list[PositionClosed] = []
 
-        try:
+        current_positions = []
+        with fail_open_guard("PositionCloseAdapter:PositionsGet"):
             current_positions = mt5_worker.positions_get(symbol=symbol)
-        except Exception:
-            _log.warning("PositionCloseAdapter: positions_get failed for %s", symbol)
-            return events
 
         current_volumes: dict[int, float] = {}
         if current_positions:
@@ -249,12 +247,9 @@ class PositionCloseAdapter:
 
         _path = Path(journal_path)
         _lock_dir = _path.parent / "locks"
-        try:
+        with fail_open_guard("PositionCloseAdapter:JournalWrite"):
             from core.ledger.services.journal_cleanup import _append_journal
-
             _append_journal(_path, _entry, lock_dir=_lock_dir)
-        except Exception:
-            _log.exception("PositionCloseAdapter: journal write failed for ticket=%s", event.position_ticket)
             return False
 
         # ── Notify downstream consumers ──
