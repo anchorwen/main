@@ -45,6 +45,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260616-101 | 2026-06-16 | runtime-live, fault-handler | **Zombie Cycle Fuse + MT5 Timeout Hardening + Phase Telemetry (DQAF-20260616-002)**: (P0.1) live_intent_loop 主循环 except handler 新增连续失败计数器 `_consecutive_cycle_errors` — ≥5 → `sys.exit(3)` 熔断打破假活循环, 退出前写 alert_audit + watchdog_kill.log. (P0.2) 断路器关仓路径 `positions_get`/`order_send` 加装 `mt5_call_with_timeout` (10s/15s). (P0.3) live_cycle 5 个关键 Phase 加入 `phase_transition` 边界日志. (P1.2) execution_state.save() 加入 state invariant auto_heal: `circuit_breaker_tripped_at` 残留清理 + `trip_reason` 缺失默认值. | DQAF-20260616-002 |
 | FIX-20260616-004 | 2026-06-16 | infrastructure, runtime | **L3 Lock Refresh + Launcher TTL Check (DQAF-20260616-004)**: FileLock 新增 `refresh()` 原子更新时间戳. live_intent_loop 每周期刷新锁. live_launcher 锁清理增加 TTL 过期检测 — 即使 pid 存活但 TTL 超期也自动清理. 消除 hung 进程阻塞重启的系统性漏洞. | RC-06 |
 | FIX-20260619-001 | 2026-06-19 | infrastructure, scripts | **Windows Lock Cleanup Cross-Platform Fix (DQAF-20260619-001)**: (Bug 1) live_launcher 锁清理 `except OSError` 在 Windows 上不捕获 `os.kill(pid,0)` 抛出的 `SystemError` → TTL 检查路径不可达. 修复: → `except (OSError, SystemError)`. (Bug 2) `FileLock.refresh()` 缺少 holder_id 校验 → 锁被强制窃取后旧持有者仍能覆写. 修复: refresh() 在读-改-写前验证 holder_id 匹配. +4 tests. | RC-06 |
+| FIX-20260619-003 | 2026-06-19 | observability | **Entry Context Vector Field-Path Fix (DQAF-20260619-002/F3)**: check_entry_context_completeness() 查找 `ctx.vector` → 应为 `ctx.entry_features.vector`（新格式）或 `ctx.vector`（旧格式兼容）。BTC completeness 0%→98.8%, XAU June opens 0%→98.2%. | RC-07 |
 | FIX-20260619-002 | 2026-06-19 | observability | **Journal Health Check False-Positive Fix (DQAF-20260619-002)**: check_journal_completeness() 三个检测缺陷修复: (1) close_price 新增 detail.request.close_price 回退查找 — MT5 dispatch 格式的价格在嵌套字段. (2) 孤儿 (auto_orphan_*) 和拒绝关仓 (ack_status=rejected) 排除出 close_price 分母. (3) 重复检测 key 从 ticket → (ticket, ack_status). (4) trail_rate 从 modify_sltp 计数而非未填充的 trail_contribution 字段. 验证: BTC cp_rate 68.9%→100%, dupes 34→8; XAU cp_rate 22.9%→99.5%, dupes→7. 双品种 JOURNAL_SLA_VIOLATION→JOURNAL_SLA_OK. | RC-07 |
 | FIX-20260616-005 | 2026-06-17 | infrastructure, observability | **Institutional Data Integrity System CLOSED (DQAF-20260616-005)**: Root-cause fix: Ledger pnl_r is binary brain signal (-1..+1), NOT trade PnL — excluded from reconciliation. Architecture: Journal↔MT5 authoritative (XAU 98.8%, BTC 100.0%). (Tools) tombstone_orphans 2,852 cleaned, dedup_journal 161 removed, normalize_journal_pnl 228 MT5-verified corrections. (Fixes) position_manager empty-state, distributed_lock refresh, live_launcher TTL check. 9-dimension audit with DingTalk push. Multi-terminal support (XAU→EXNESS2, BTC→BTC terminal). Data purity: 99%+ achieved. | RC-07 |
 | FIX-20260616-100 | 2026-06-16 | execution-guards, runtime-live | **L3 Architecture Fix — Reentry Guard Strategy-Type Awareness (DQAF-20260616-001)**: 三层修复: (L1/L2) exit_reason.classify() 词汇表补全 + restart_state _reason 用 label 而非 MT5 端原因. (L3) reentry_guard 新增 `is_rule_based` 参数 → rule-based 策略使用时间冷却 (max(120s, 40% bar)) 而非 ML 置信度阈值 → 永久消除 rule-based 策略被 ML 门禁死锁的结构性漏洞. Magic 90501 双侧死锁已确认解除. | RC-07 |
@@ -3175,6 +3176,17 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-06 — contract-violation: `os.kill()` 跨平台异常类型契约不一致（Windows `SystemError` vs Unix `OSError`）。`_pid_exists()` 正确捕获两者，但 `live_launcher.py` 内联代码仅捕获 `OSError`。
 - **Prevention**: (1) 所有 `os.kill(pid, 0)` 调用必须捕获 `(OSError, SystemError)` 双异常类型, (2) 锁刷新操作必须验证 holder_id 所有权, (3) 跨平台系统调用包装应在基础设施层统一而非内联
 - **Dependents Checked**: live_intent_loop.py (lock.refresh() caller — compatible, now correctly notified on stolen lock), live_launcher.py (lock cleanup — now reaches TTL path on Windows)
+
+### FIX-20260619-003
+- **Date**: 2026-06-19
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: observability
+- **Files**: core/observability/data_health_service.py, scripts/diagnose_data_health_failures.py
+- **Description**: Entry Context Vector Field-Path Fix (DQAF-20260619-002/F3). check_entry_context_completeness() 仅查找 `ctx.vector` — 但 vector 在新格式中嵌套于 `ctx.entry_features.vector`（strategy_line.py:1497-1500），旧格式直接在 `ctx.vector`（live_cycle.py Phase 1 快照）。双格式兼容修复：(1) 优先查 `ctx.entry_features.vector`，(2) 回退 `ctx.vector`。验证: BTC opens 246→completeness 0%→98.8% (仅3条历史 ctx=None), XAU June opens 171→168 OK (98.2%). 旧格式判为 tuple（JSON 反序列化后为 list）同时兼容。
+- **Root Cause**: RC-07 — missing-validation: 健康检测字段查找路径未跟随 journal schema 演进。entry_context 从扁平格式 `{schema_version, vector}` 演变为嵌套格式 `{atr, regime, ... entry_features: {vector}}`，检测未更新。
+- **Prevention**: (1) 健康检测字段查找必须覆盖所有已知格式版本, (2) journal schema 变更必须同步更新健康检测的字段查找链, (3) 优先新格式回退旧格式的兼容模式确保过渡期零误报
+- **Dependents Checked**: strategy_line.py (entry_context producer — compatible), live_cycle.py (_entry_features_snapshot producer — compatible)
 
 ### FIX-20260619-002
 - **Date**: 2026-06-19

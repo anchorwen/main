@@ -2953,12 +2953,19 @@ class DataHealthService:
                             sample_tickets.append(str(entry.get("position_ticket", "?")))
                         continue
 
-                    vector = ctx.get("vector")
+                    # DQAF-20260619-002/F3: vector location depends on journal era.
+                    # Old (pre-2026-06-11): ctx.vector directly.
+                    # New (post-strategy_line refactor): ctx.entry_features.vector.
+                    entry_features = ctx.get("entry_features")
+                    if isinstance(entry_features, dict) and entry_features.get("vector"):
+                        vector = entry_features["vector"]
+                    else:
+                        vector = ctx.get("vector")
                     if vector is None:
                         missing_vector += 1
                         if len(sample_tickets) < 3:
                             sample_tickets.append(str(entry.get("position_ticket", "?")))
-                    elif isinstance(vector, list) and len(vector) == 0:
+                    elif isinstance(vector, list | tuple) and len(vector) == 0:
                         empty_vector += 1
                         if len(sample_tickets) < 3:
                             sample_tickets.append(str(entry.get("position_ticket", "?")))
