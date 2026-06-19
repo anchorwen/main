@@ -1,15 +1,15 @@
 {
   "version": 3,
   "schema_version": "execution_state.v3",
-  "saved_at_utc": "2026-06-19T09:52:50.683941Z",
+  "saved_at_utc": "2026-06-19T11:09:50.164074Z",
   "budgets": {
     "btc_swing": {
-      "daily_pnl_pct": -1.59,
-      "consecutive_losses": 4,
-      "total_trades_today": 6,
-      "total_wins_today": 1,
-      "paused": false,
-      "paused_at": 0.0,
+      "daily_pnl_pct": -0.95,
+      "consecutive_losses": 0,
+      "total_trades_today": 7,
+      "total_wins_today": 2,
+      "paused": true,
+      "paused_at": 1781867389.8890119,
       "last_trade_day": "2026-06-19",
       "_sl_timestamps": [],
       "_sl_cooldown_until": 0.0,
@@ -32,16 +32,16 @@
   "cooldown_registry": {},
   "family_entry_tracker": {
     "swing": {
-      "long": 1781861989.4882672
+      "long": 1781867090.5084636
     }
   },
   "sl_streak_blocks": {},
   "sl_streak_global_block": 0.0,
   "consecutive_degraded": 0,
-  "circuit_breaker_tripped": false,
-  "circuit_breaker_tripped_at": 0.0,
+  "circuit_breaker_tripped": true,
+  "circuit_breaker_tripped_at": 1781867389.9950354,
   "intraday_dd_active": false,
   "consecutive_stale_cycles": 0,
   "consecutive_stale_features": 0,
-  "circuit_breaker_trip_reason": ""
+  "circuit_breaker_trip_reason": "budget_breached"
 }

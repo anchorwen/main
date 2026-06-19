@@ -42,7 +42,7 @@ class TestV9MicroComputer:
         result = c.compute_all()
         assert c.last_micro_ok is False
         # Micro slots filled with 0.0
-        assert result.get("ofi") == 0.0
+        assert result.get("avg_spread") == 0.0
 
     def test_v9_failure_still_returns_micro_fallback(self) -> None:
         c = self._make()
