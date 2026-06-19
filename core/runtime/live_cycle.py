@@ -376,16 +376,15 @@ def _run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> 
 def _check_pre_close(config: LiveCycleConfig, state: LiveCycleState) -> dict[str, Any]:
     """Check if we are approaching a market close and return action flags.
 
-    Returns dict with keys: in_pre_close, minutes_to_close, no_new_positions,
-    must_flatten, close_label.  A result of {} means no action needed.
+    Strangler Fig #23 — delegation wrapper.  Pure calendar logic extracted to
+    core.runtime.pre_close_check.  Side effects (position flattening) remain here.
     """
-    from core.market.calendar import evaluate_pre_close, load_calendar
+    from core.runtime.pre_close_check import check_pre_close as _impl
 
-    cal = load_calendar(config.calendar_path)
-    result = evaluate_pre_close(
+    result = _impl(
         now_utc=datetime.now(UTC),
         symbol=config.symbol,
-        config=cal,
+        calendar_path=config.calendar_path,
     )
     if not result.get("in_pre_close"):
         return {}
@@ -412,10 +411,6 @@ def _check_pre_close(config: LiveCycleConfig, state: LiveCycleState) -> dict[str
                 ),
                 flush=True,
             )
-            # FIX-20260610-004: Resolve mid from recent prices for PnL estimation.
-            # Previously passed mid=None → pnl=None → label="close_accepted".
-            # With a real mid, dispatch_managed_close can estimate PnL and the
-            # journal gets a real win/loss/breakeven label.
             _mid = None
             if hasattr(state, "_recent_mid_prices") and state._recent_mid_prices:
                 try:
