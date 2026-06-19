@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from core.runtime.live_cycle import LiveCycleConfig, LiveCycleState
 
 
+from core.runtime.fault_handler import fail_open_guard
 from core.runtime.time_utils import _utc_iso  # consolidated
 
 
