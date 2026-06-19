@@ -1,7 +1,7 @@
 {
   "version": 3,
   "schema_version": "execution_state.v3",
-  "saved_at_utc": "2026-06-19T11:24:48.637172Z",
+  "saved_at_utc": "2026-06-19T11:29:51.478410Z",
   "budgets": {
     "btc_swing": {
       "daily_pnl_pct": -0.95,
@@ -59,7 +59,7 @@
   "consecutive_degraded": 0,
   "circuit_breaker_tripped": false,
   "circuit_breaker_tripped_at": 0.0,
-  "intraday_dd_active": true,
+  "intraday_dd_active": false,
   "consecutive_stale_cycles": 0,
   "consecutive_stale_features": 0,
   "circuit_breaker_trip_reason": "budget_breached"

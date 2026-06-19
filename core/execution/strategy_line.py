@@ -31,7 +31,7 @@ from core.execution.pwin_chain import adjust_p_win_for_z_strength as _z_strength
 from core.execution.strategy_decision import StrategyDecision
 from core.execution.trend_isolation_gates import apply_trend_isolation_gates
 from core.execution.trend_volume_guard import check_minimum_rr, compute_counter_trend_volume_mult
-from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, fail_open_guard
 from core.runtime.shadow_recorder import record_brain_votes
 
 logger = logging.getLogger(__name__)
