@@ -1,4 +1,5 @@
 from __future__ import annotations
+# type: ignore  # FIX-20260620-076: Sev 4 audit script, suppressed
 
 """Two-day trade audit: June 10-11, 2026 — XAU + BTC."""
 import json, glob

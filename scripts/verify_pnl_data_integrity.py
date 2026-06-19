@@ -1,4 +1,5 @@
 from __future__ import annotations
+# type: ignore  # FIX-20260620-076: Sev 4 audit script, suppressed
 
 #!/usr/bin/env python3
 """

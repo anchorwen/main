@@ -174,7 +174,7 @@ def register_dispatched_positions(
                 if bi.get("brain_id") == bid:
                     horizon = bi.get("training_horizon", _DEFAULT_HORIZON)
                     break
-            model_horizons[bid] = horizon
+            model_horizons[str(bid)] = int(horizon)
 
         try:
             _s_cfg = config.strategy_configs.get(dr.strategy_name, {})

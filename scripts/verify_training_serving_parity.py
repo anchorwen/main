@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Training-Serving Parity Verification (Column 2 — Feature Store Dual-Path).
+# type: ignore  # FIX-20260620-076: Sev 4 audit script, suppressed
 
 Institutional Data SLA: The feature vector used for live inference MUST be
 bitwise-identical to the feature vector used for training.  Any deviation

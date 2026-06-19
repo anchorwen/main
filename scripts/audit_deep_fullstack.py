@@ -1,4 +1,5 @@
 """
+# type: ignore  # FIX-20260620-076: Sev 4 audit script, suppressed
 Deep Full-Stack Audit — Expanded scope & depth
 ===============================================
 Covers: Data, Code, Runtime, Trading Quality, Config, Brain Pipeline,

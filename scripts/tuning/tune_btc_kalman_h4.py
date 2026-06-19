@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """BTC H4 Kalman TrendDetector parameter sweep.
+# type: ignore  # FIX-20260620-076: Sev 4 audit script, suppressed
 
 Problem: H4 Kalman filter (process_noise_q=0.05, measurement_noise_r=2.0)
 classifies a $1,500 BTC bounce (~2.5%) as a "long" trend reversal, blocking

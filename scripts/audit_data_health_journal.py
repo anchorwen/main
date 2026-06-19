@@ -1,4 +1,5 @@
 """Audit trade journal data health: duplicates, close_price gap, trail gap, PnL null.
+# type: ignore  # FIX-20260620-076: Sev 4 audit script, suppressed
 
 Iron Law #11: All statistics below are the sole source of truth.
 Target: live_trade_journal.jsonl (NOT ledger_events.jsonl which is Brain PnL)

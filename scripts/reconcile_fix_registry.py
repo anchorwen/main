@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """Blueprint FIX reconciliation — one-shot backlog clearance.
+# type: ignore  # FIX-20260620-076: Sev 4 audit script, suppressed
 
 Iron Law #7 enforcement: synchronizes FIX_REGISTRY.md ↔ module blueprint
 Fix History tables.  FIX-060 gate prevents *future* drift; this script

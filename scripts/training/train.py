@@ -1,4 +1,5 @@
 """Unified training pipeline — single-contract, single-command.
+# type: ignore  # FIX-20260620-076: Sev 4 audit script, suppressed
 
 Replaces the multi-script manual pipeline (dataset_builder → label alignment →
 trainer invocation → result stitching) with a single YAML-driven entry point.

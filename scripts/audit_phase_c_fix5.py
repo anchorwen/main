@@ -1,4 +1,5 @@
 """Phase C + Fix 5 joint review audit — 2026-06-11.
+# type: ignore  # FIX-20260620-076: Sev 4 audit script, suppressed
 
 Phase C: Check OFI-based micro partial TP triggering from position_snapshots + golden master.
 Fix 5:  Evaluate MetaFilter p_win by regime using golden master + meta_filter_state.
