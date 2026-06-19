@@ -75,9 +75,16 @@
 | scripts/training/train.py | contracts/training, training (full) |
 | scripts/training/trainers/* | contracts/training, training |
 
+| execution/exit_watchdog | execution, runtime |
+| execution/managed_close | execution, runtime |
+| execution/position_manager | execution, runtime |
+| execution/trail_stop | execution, runtime |
+
 ## Known Cycles
 
-| Cycle | Files | Risk |
-|-------|-------|------|
-| execution ↔ runtime | execution/strategy_line.py ↔ runtime/shadow_recorder.py | Low — shadow_recorder is write-only |
-| execution ↔ deployment | execution/live_order_sender.py ↔ deployment/service_container.py | Medium — DI container; stable interface |
+| Cycle | Files | Risk | Status |
+|-------|-------|------|--------|
+| execution ↔ runtime | execution/strategy_line.py ↔ runtime/shadow_recorder.py | Low — shadow_recorder is write-only | Open |
+| execution ↔ deployment | execution/live_order_sender.py ↔ deployment/service_container.py | Medium — DI container; stable interface | Open |
+| strategy_line ↔ meta_filter_routing | ~~execution/strategy_line.py ↔ execution/meta_filter_routing.py~~ | ~~Low~~ | **RESOLVED**: Strangler Fig #18 (strategy_decision.py) |
+| strategy_line ↔ trend_isolation_gates | ~~execution/strategy_line.py ↔ execution/trend_isolation_gates.py~~ | ~~Low~~ | **RESOLVED**: Strangler Fig #18 (strategy_decision.py) |

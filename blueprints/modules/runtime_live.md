@@ -76,16 +76,27 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
-| FIX-20260619-011 | 2026-06-19 | cursor-agent | — | **Test 4 — training 专属测试**: TrainResult dataclass + trainer registry. 4 tests. 零测试模块: 1→0. | RC-08 |
-| FIX-20260619-010 | 2026-06-19 | cursor-agent | — | **Test 3 — market 专属测试**: UTC blackout / weekend / pre-close evaluation. 9 tests. 零测试模块: 2→1. | RC-08 |
-| FIX-20260619-009 | 2026-06-19 | cursor-agent | — | **Test 2 — feedback 专属测试**: DecisionScorer fill/timing/accuracy/risk scoring. 21 tests. 零测试模块: 3→2. | RC-08 |
-| FIX-20260619-008 | 2026-06-19 | cursor-agent | — | **Test 1 — protocol 专属测试**: CircuitBreaker + RateLimiter state machines. 18 tests. 零测试模块: 4→3. | RC-08 |
-| FIX-20260619-007 | 2026-06-19 | cursor-agent | — | **Whale H — strategy_line BLE001 9→0**: 9 sites reviewed (4 fallback, 3 logged, 2 pass). 热路径 BLE001: 9→0. | RC-08 |
-| FIX-20260619-006 | 2026-06-19 | cursor-agent | — | **Whale G — live_cycle BLE001 29→0**: 1 BLIND → fail_open_guard, 28 reviewed. live_cycle BLE001: 29→0. 热路径 BLE001: 38→9. | RC-08 |
-| FIX-20260619-005 | 2026-06-19 | cursor-agent | — | **Whale E — live_intent_loop BLE001 全歼灭**: 54 BLE001 → 0. 21 bare except:pass → fail_open_guard, 30 reviewed, 3 manual. | RC-08 |
-| FIX-20260619-004 | 2026-06-19 | cursor-agent | — | **Whale D — Strangler Fig #16**: evaluate() counter-trend volume penalty + minimum RR guard extracted to `core/execution/trend_volume_guard.py`. 2 pure functions, 15 tests. | RC-08 |
-| FIX-20260619-003 | 2026-06-19 | cursor-agent | — | **Whale C**: ConformalOUGate init BLE001 → fail_open_guard. live_cycle BLE001: 30→29. | RC-08 |
-| FIX-20260619-002 | 2026-06-19 | cursor-agent | — | **Whale B**: ConformalCalibratorUpdate + SignalSettledWrite BLE001 → fail_open_guard. live_cycle BLE001: 32→30. | RC-08 |
+| FIX-20260619-022 | 2026-06-19 | cursor-agent | — | **_utc_iso 去重**: 18 dupes → time_utils.py SSOT. 8 importers updated. | RC-08 |
+| FIX-20260619-021 | 2026-06-19 | cursor-agent | — | **Strangler Fig #20 — MIA close helpers → mia_close.py**: 188 lines pure data transform. live_cycle: -188. | RC-08 |
+| FIX-20260619-020 | 2026-06-19 | cursor-agent | — | **Strangler Fig #19 — feature init → live_bootstrap.py**: 96→16 lines. live_intent_loop: -80. | RC-08 |
+| FIX-20260619-019 | 2026-06-19 | cursor-agent | — | **Strangler Fig #18 — StrategyDecision extracted → strategy_decision.py**: 2 circular imports broken. 7 importers redirected. | RC-08 |
+| FIX-20260619-018 | 2026-06-19 | cursor-agent | — | **Iron Law #10 self-destruct**: BLE001 560→0. Hot path 103→0. | RC-08 |
+| FIX-20260619-017 | 2026-06-19 | cursor-agent | — | **全库 BLE001 歼灭**: 320 non-hot-path sites → 0. 108 files. | RC-08 |
+| FIX-20260619-016 | 2026-06-19 | cursor-agent | — | **非热路径 BLE001 batch #1**: 130 sites → 0. 5 files. | RC-08 |
+| FIX-20260619-015 | 2026-06-19 | cursor-agent | — | **Route B: 26 branch coverage tests** + circular import fix. | RC-08 |
+| FIX-20260619-014 | 2026-06-19 | cursor-agent | — | **Inline import cleanup**: 7/9 → module level. | RC-08 |
+| FIX-20260619-013 | 2026-06-19 | cursor-agent | — | **Strangler Fig #17b — extract_entry_z_score**. +5 tests. | RC-08 |
+| FIX-20260619-012 | 2026-06-19 | cursor-agent | — | **Strangler Fig #17 — brain_gates.py**: min valid brains gate. +10 tests. | RC-08 |
+| FIX-20260619-011 | 2026-06-19 | cursor-agent | — | **Test 4 — training 专属测试**: 4 tests. 零测试模块: 0. | RC-08 |
+| FIX-20260619-010 | 2026-06-19 | cursor-agent | — | **Test 3 — market 专属测试**: 9 tests. | RC-08 |
+| FIX-20260619-009 | 2026-06-19 | cursor-agent | — | **Test 2 — feedback 专属测试**: 21 tests. | RC-08 |
+| FIX-20260619-008 | 2026-06-19 | cursor-agent | — | **Test 1 — protocol 专属测试**: 18 tests. | RC-08 |
+| FIX-20260619-007 | 2026-06-19 | cursor-agent | — | **Whale H — strategy_line BLE001 9→0**. | RC-08 |
+| FIX-20260619-006 | 2026-06-19 | cursor-agent | — | **Whale G — live_cycle BLE001 29→0**. | RC-08 |
+| FIX-20260619-005 | 2026-06-19 | cursor-agent | — | **Whale E — live_intent_loop BLE001 54→0**. | RC-08 |
+| FIX-20260619-004 | 2026-06-19 | cursor-agent | — | **Whale D — Strangler Fig #16 → trend_volume_guard.py**. +15 tests. | RC-08 |
+| FIX-20260619-003 | 2026-06-19 | cursor-agent | — | **Whale C**: ConformalOUGate init BLE001 → fail_open_guard. | RC-08 |
+| FIX-20260619-002 | 2026-06-19 | cursor-agent | — | **Whale B**: ConformalCalibratorUpdate + SignalSettledWrite. | RC-08 |
 | FIX-20260619-001 | 2026-06-19 | cursor-agent | — | **Whale A — Strangler Fig #15**: position ownership resolver extracted to `core/runtime/position_ownership.py`. 3 BLE001 → fail_open_guard. 13 tests. live_cycle BLE001: 40→32. | RC-08 |
 | FIX-20260616-101 | 2026-06-16 | cursor-agent | — | **Zombie Cycle Fuse + MT5 Timeout Hardening + Phase Telemetry (DQAF-20260616-002)** | RC-07 |
 | FIX-20260616-001 | 2026-06-16 | cursor-agent | — | **Strangler Fig #14 — OU/Hurst pure function extraction**: `_compute_tf_ou_hurst()` (32-line pure math) extracted from `live_cycle.py` → `core/runtime/ou_hurst.py`. Zero I/O, deterministic function. Replaced 1 BLE001 site (`_save_recent_prices`) with `fail_open_guard("RecentPricesSave")`. Added 13 parameterized tests (tests/runtime/test_ou_hurst.py). BLE001: 42→41. | RC-08 |
