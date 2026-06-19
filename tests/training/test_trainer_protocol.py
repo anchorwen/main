@@ -31,7 +31,7 @@ class TestTrainResult:
         )
         assert r.n_parameters == 0
         assert r.train_samples == 0
-        assert r.val_metrics == {}
+        assert r.val_metrics is None
         assert r.scaler_path is None
         assert r.extra == {}
 
