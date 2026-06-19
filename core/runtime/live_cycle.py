@@ -3202,7 +3202,7 @@ def execute_live_cycle(
                 ),
                 flush=True,
             )
-        except Exception as _exc:  # noqa: BLE001
+        except Exception as _exc:  # Iron Law #10: BLE001→logged (already has json print)
             print(
                 json.dumps(
                     {
@@ -3260,12 +3260,10 @@ def execute_live_cycle(
                     # ── FIX-20260611-022: Feed conformal calibrator ──
                     _calib = getattr(state, "_conformal_calibrator", None)
                     if _calib is not None:
-                        try:
+                        with fail_open_guard("ConformalCalibratorUpdate"):
                             _label_int = 1 if _evt.pnl > 0 else 0
                             for _brain_id in _evt.brain_ids:
                                 _calib.update(0.5, _label_int)
-                        except Exception:  # noqa: BLE001
-                            pass
 
                     # ── DQAF-20260614-005: SignalSettled — real trade PnL ──
                     # Previously, BrainPnLStore used TTL-based bar settlement
@@ -3278,7 +3276,7 @@ def execute_live_cycle(
                     # including breakeven (pnl=0).  Breakeven is informative —
                     # the brain voted but the trade neither won nor lost.
                     if _evt.brain_ids:
-                        try:
+                        with fail_open_guard("SignalSettledWrite"):
                             from core.contracts.events import PnLEvent
                             from core.data.event_writer import EventWriter
 
@@ -3312,8 +3310,6 @@ def execute_live_cycle(
                                     generated_by="live_cycle.reconciliation",
                                 )
                                 _writer.write(_event)
-                        except Exception:
-                            pass  # best-effort — SignalSettled write must not block reconciliation
 
                     # Update portfolio risk
                     if state.portfolio_risk_controller is not None:
