@@ -1594,51 +1594,11 @@ def execute_live_cycle(
                             for _brain_id in _evt.brain_ids:
                                 _calib.update(0.5, _label_int)
 
-                    # ── DQAF-20260614-005: SignalSettled — real trade PnL ──
-                    # Previously, BrainPnLStore used TTL-based bar settlement
-                    # (settle after N bars at mid_price).  That measured price
-                    # movement, not trade outcome.  Now we settle each brain's
-                    # signal against the ACTUAL trade PnL from the close event.
-                    # This is the ground truth — if a brain voted LONG and the
-                    # trade lost money, the brain records a loss.
-                    # Settle ALL closed trades with brain attribution,
-                    # including breakeven (pnl=0).  Breakeven is informative —
-                    # the brain voted but the trade neither won nor lost.
-                    if _evt.brain_ids:
-                        with fail_open_guard("SignalSettledWrite"):
-                            from core.contracts.events import PnLEvent
-                            from core.data.event_writer import EventWriter
+                    # ── SignalSettled — real trade PnL ──
+                    # Strangler Fig #32 — extracted to core.runtime.signal_settlement
+                    from core.runtime.signal_settlement import settle_closed_trade_signals
 
-                            _ledger_path = str(Path(config.base_dir) / "ledger_events.jsonl")
-                            _writer = EventWriter(_ledger_path)
-                            _settled_ts = datetime.now(UTC)
-
-                            # Compute PnL(R) from real trade prices
-                            _entry_price = float(getattr(_evt, "entry_price", 0) or 0)
-                            _close_price = float(getattr(_evt, "close_price", 0) or 0)
-                            _pnl_r = (
-                                (_close_price - _entry_price) / _entry_price
-                                if _entry_price > 0 and _evt.side == "long"
-                                else (_entry_price - _close_price) / _entry_price
-                                if _entry_price > 0
-                                else 0.0
-                            )
-
-                            for _brain_id in _evt.brain_ids:
-                                _event = PnLEvent(
-                                    timestamp=_settled_ts,
-                                    source="live",
-                                    event_type="SignalSettled",
-                                    brain_id=str(_brain_id),
-                                    symbol=_evt.symbol,
-                                    direction=_evt.side,
-                                    entry_price=_entry_price,
-                                    exit_price=_close_price,
-                                    pnl_r=round(_pnl_r, 6),
-                                    position_ticket=_evt.position_ticket,
-                                    generated_by="live_cycle.reconciliation",
-                                )
-                                _writer.write(_event)
+                    settle_closed_trade_signals(evt=_evt, base_dir=config.base_dir)
 
                     # Update portfolio risk
                     if state.portfolio_risk_controller is not None:
