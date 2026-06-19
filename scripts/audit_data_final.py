@@ -84,9 +84,9 @@ def audit_pnl_ledger(path: str, label: str) -> dict:
         last5_prices = tuple(round(e.get('entry_price',0) or 0, 1) for e in entries[-5:]) if entries else ()
         if last5_prices:
             for other_bid, other_prices in brain_prices.items():
-                if last5_prices == other_prices and len(last5_prices) >= 3:
+                if last5_prices == tuple(other_prices) and len(last5_prices) >= 3:
                     identity_leaks += 1
-            brain_prices[bid] = last5_prices
+            brain_prices[bid] = list(last5_prices)
 
     print(f"\n  {label} PnP Ledger: {len(pending)} pending, {total_settled} settled, phantom={phantom_pct:.1f}%")
     check(phantom_pct < 5, f"Phantom records: {phantom}/{total_settled} ({phantom_pct:.1f}%)")

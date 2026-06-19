@@ -130,7 +130,7 @@ for name, jpath, lpath, sym in [
     print(f"    Journal: {len(journal)} entries, {len(j_tickets)} unique open tickets")
     print(f"    Labels:  {len(labels)} entries, {len(l_tickets)} unique tickets")
     print(f"    Unlabeled: {len(unlabeled)} | Extra labels: {len(extra_labels)}")
-    print(f"    Journal rc dist: {dict(j_rc_dist.most_common(5))}")
+    print(f"    Journal rc dist: {dict(j_rc_dist.most_common(5))}")  # type: ignore[attr-defined]
 
     unlabeled_pct = len(unlabeled) / max(len(j_tickets), 1) * 100
     check("Label coverage > 80%", unlabeled_pct < 20, f"{unlabeled_pct:.0f}% unlabeled ({len(unlabeled)}/{len(j_tickets)})")

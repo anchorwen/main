@@ -205,7 +205,7 @@ def check_all() -> list[Violation]:
     all_violations: list[Violation] = []
 
     for rule in RULES:
-        for py_file in PROJECT_ROOT.glob(rule["source_glob"]):
+        for py_file in PROJECT_ROOT.glob(str(rule["source_glob"])):
             if py_file.is_file():
                 all_violations.extend(check_file(py_file, rule))
 

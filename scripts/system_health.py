@@ -98,14 +98,14 @@ def check_symbol(base_dir: str, label: str) -> dict:
     if dh_path.exists():
         try:
             dh = json.loads(dh_path.read_text(encoding="utf-8"))
-            sources = dh.get("sources", {})
-            fails = [k for k, v in sources.items() if v.get("status") == "fail"]
-            warns = [k for k, v in sources.items() if v.get("status") == "warn"]
+            dh_sources: dict = dh.get("sources", {})
+            fails = [k for k, v in dh_sources.items() if v.get("status") == "fail"]
+            warns = [k for k, v in dh_sources.items() if v.get("status") == "warn"]
             overall = dh.get("overall_status", "unknown")
 
             from core.observability.degradation import evaluate_staleness
 
-            stale_level = evaluate_staleness(sources)
+            stale_level = evaluate_staleness(dh_sources)
             result["degradation"] = {
                 "overall": overall,
                 "staleness_level": stale_level.name if stale_level else "NORMAL",
@@ -140,7 +140,7 @@ def check_symbol(base_dir: str, label: str) -> dict:
         "bar_sync_state": base / "bar_sync_state.json",
         "golden_master": base / "golden_master.jsonl",
     }
-    freshness = {}
+    freshness: dict[str, float | None] = {}
     for name, path in key_files.items():
         if path.exists():
             mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
