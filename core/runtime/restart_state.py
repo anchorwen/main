@@ -77,7 +77,9 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
 
     try:
         _content = _jp.read_text(encoding="utf-8")
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_WRAPPED
+        with fail_open_guard("RestartState:JournalRead"):
+            raise
         _logger.error(
             "Bootstrap: failed to read journal at %s.\n%s",
             journal_path,
@@ -116,7 +118,9 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
                 _ts = datetime.fromisoformat(_ts_str.replace("Z", "+00:00")).timestamp()
             else:
                 continue
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_WRAPPED
+            with fail_open_guard("RestartState:TimestampParse"):
+                raise
             _logger.debug(
                 "Bootstrap: unparseable timestamp in journal entry: %.120s",
                 _ts_str,
@@ -171,6 +175,7 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
     _close_entries.sort(key=lambda e: e.get("recorded_at", ""), reverse=True)
 
     from core.contracts.strategy_magic import MAGIC_TO_STRATEGY as _MAGIC_MAP
+        from core.runtime.fault_handler import fail_open_guard
     from core.execution.reentry_guard import ExitRecord, ensure_reentry_state
 
     # ── FIX-20260603-069: build open-index to resolve entry_confidence ──
@@ -316,7 +321,9 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
                     "last_exit_confidence": _rs.last_exit.confidence if _rs.last_exit else None,
                     "last_exit_reason": _rs.last_exit.reason if _rs.last_exit else None,
                 }, ensure_ascii=False, default=str), flush=True)
-            except Exception:  # BLE001:REVIEWED
+            except Exception:  # BLE001:FOG_WRAPPED
+                with fail_open_guard("RestartState:RecordExit"):
+                    raise
                 _logger.warning(
                     "Bootstrap: failed to record exit for strategy=%s ticket=%s.\n%s",
                     _strategy,
