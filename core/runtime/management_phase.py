@@ -138,6 +138,687 @@ def _dispatch_managed_close(
 
 
 
+
+def _build_and_dispatch_alert_context(
+    config: Any,
+    state: Any,
+    pos: Any,
+    pm: Any,
+    pnl_ledger: Any,
+) -> None:
+    """Build alert hub context and dispatch to LiveAlertHub.
+
+    Extracted from execute_management_phase (Strangler Fig #26, Phase 2).
+    Reads the live trade journal for daily PnL, queries the PnL ledger
+    for worst-brain metrics, and dispatches to state.alert_hub.
+    """
+    _ah = getattr(state, "alert_hub", None)
+    if _ah is None:
+        return
+
+    with log_and_continue(component="AlertHub:dispatch"):
+        # Build context from in-memory state only (Guardrail 3)
+        # FIX-20260616-001: error_rate was hardcoded to 0.0 — RULE-001 was
+        # permanently silent.  Derive a composite health score from the
+        # degradation pipeline (already maintained by the circuit breaker).
+        _degraded = getattr(state, "_consecutive_degraded_cycles", 0)
+        _stale = getattr(state, "_consecutive_stale_cycles", 0)
+        _total = max(1, getattr(state, "cycle_count", 0))
+        _ctx_error_rate = round(min(1.0, (_degraded + _stale) / _total), 4)
+        # FIX-20260616-001: frozen_brain_count was hardcoded to 0 — RULE-004
+        # was permanently silent.  Count frozen brains from governance.
+        _ctx_frozen = 0
+        try:
+            _gv_path = Path(config.base_dir) / "governance_state.json"
+            if _gv_path.exists():
+                _gv_raw = json.loads(_gv_path.read_text(encoding="utf-8"))
+                _brain_states = _gv_raw.get("brain_states", {})
+                if isinstance(_brain_states, dict):
+                    _ctx_frozen = sum(
+                        1 for _bs in _brain_states.values()
+                        if isinstance(_bs, dict)
+                        and str(_bs.get("state", _bs.get("status", ""))).lower() == "frozen"
+                    )
+        except Exception:  # BLE001:REVIEWED
+            pass  # Non-critical: frozen check degrades gracefully
+        _ctx_pos_util = 0.0
+        _ctx_bridge_last_ack = time.time() - getattr(
+            state, "_last_bridge_ack_time", time.time()
+        )
+
+        # Position utilization
+        if pm.has_position() if pos is not None else False:
+            _ctx_pos_util = min(
+                1.0,
+                len(getattr(pm, "positions", []) if hasattr(pm, "positions") else [])
+                / max(1, config.max_positions),
+            )
+
+        # Cycle duration
+        _ctx_cycle_duration = time.time() - getattr(
+            state, "_last_cycle_start_time", time.time()
+        )
+
+        _ctx: dict[str, Any] = {
+            "error_rate": _ctx_error_rate,
+            "circuit_state": _ah.circuit_breaker.state.value,
+            "frozen_brain_count": _ctx_frozen,
+            "position_utilization": _ctx_pos_util,
+            "bridge_last_ack_seconds": _ctx_bridge_last_ack,
+            "cycle_duration_seconds": _ctx_cycle_duration,
+        }
+
+        # ── Phase B: PnL fund-safety context injection ──
+        # FIX-20260603-066 P0: compute daily PnL from journal (SSOT),
+        # not from in-memory accumulators that drift on restart.
+        # FIX-20260606-138 Phase 0: filter by ack_status + dedup by
+        # position_ticket to prevent retry/rejected entries from
+        # polluting the rolling window (DQAF-20260606-005).
+        _daily_pnl = 0.0
+        _consec_losses = 0
+        _win_count = 0
+        _trade_count = 0
+        try:
+            from datetime import UTC
+            from datetime import datetime as _dt
+
+            _today = _dt.now(UTC).date()
+            _jp = Path(config.base_dir) / "live_trade_journal.jsonl"
+            if _jp.exists():
+                # Read backwards from end — journal grows, only need today.
+                # Backwards scan + seen_positions ensures we only count
+                # the MOST RECENT (final) close entry per position.
+                _lines = []
+                with open(_jp, encoding="utf-8") as _jf:
+                    _lines = _jf.readlines()
+                _seen_positions: set[int] = set()
+                for _line in reversed(_lines):
+                    _line = _line.strip()
+                    if not _line:
+                        continue
+                    try:
+                        _e = json.loads(_line)
+                    except json.JSONDecodeError:
+                        continue
+                    if _e.get("action") != "close":
+                        continue
+                    # ── Phase 0 filter 1: skip rejected/retry entries ──
+                    _ack = _e.get("ack_status", "")
+                    if _ack not in ("accepted", "closed"):
+                        continue
+                    _ts = _e.get("recorded_at", "")
+                    try:
+                        _d = _dt.fromisoformat(_ts.replace("Z", "+00:00")).date()
+                    except (ValueError, TypeError, OSError):
+                        continue
+                    if _d != _today:
+                        continue
+                    # [FIX-20260615-012] Filter out synthetic orphan closures
+                    # (auto_orphan_rejected/stale/no_ticket) from alert context.
+                    # These have pnl=0, position_ticket=None, and are generated
+                    # by cleanup_orphan_opens() at startup — not real trades.
+                    # Counting them in the rolling win-rate window dilutes the
+                    # true win rate and triggers false circuit-breaker trips.
+                    if str(_e.get("label", "")).startswith("auto_orphan_"):
+                        continue
+                    # ── Phase 0 filter 2: dedup by open position ──
+                    # Prefer detail.request.position (the actual MT5
+                    # position ticket being closed).  Fall back to the
+                    # close order's own position_ticket.
+                    _pos_tkt = _e.get("detail", {}).get("request", {}).get(
+                        "position"
+                    ) or _e.get("position_ticket")
+                    if _pos_tkt is not None:
+                        _pos_tkt = int(_pos_tkt)
+                        if _pos_tkt in _seen_positions:
+                            continue  # already counted a more recent close
+                        _seen_positions.add(_pos_tkt)
+                    _pnl = _e.get("pnl")
+                    if _pnl is None:
+                        continue
+                    _pnl = float(_pnl)
+                    _daily_pnl += _pnl
+                    _trade_count += 1
+                    if _pnl > 0:
+                        _win_count += 1
+                        _consec_losses = 0
+                    elif _pnl < 0:
+                        _consec_losses += 1
+            _ctx["daily_pnl_usd"] = round(_daily_pnl, 2)
+            _ctx["consecutive_losses"] = _consec_losses
+            _ctx["rolling_win_rate"] = round(_win_count / max(1, _trade_count), 4)
+            _ctx["total_trades_window"] = _trade_count
+        except Exception:  # BLE001:REVIEWED
+            with fail_open_guard("AlertContext:journal_enrich"):
+                raise  # surface hidden journal corruption
+
+        if pnl_ledger is not None:
+            with log_and_continue(component="AlertHub:PnL_context"):
+                # FIX-20260613-052: resolved placeholder: "Frankenstein" logic fix.
+                # Previously _worst_pnl and _worst_wr were independently
+                # min()'d across all brains — they could come from two
+                # DIFFERENT brains (e.g. pnl from V4, wr from LGB_V1),
+                # producing a misleading "strategy" metric that describes
+                # no actual brain.  Now: find the single brain with the
+                # worst cumulative_pnl, and use ITS win_rate too.
+                #
+                # FIX-20260615-011: ARCHIVED_BRAIN_ALERT_POLLUTION —
+                # Archived/retired brains with years of counterfactual PnL
+                # permanently dominate the "worst brain" slot, silencing
+                # alerts for active brain degradation.
+                # Filter to only OPERATIONAL brains (state ∈ governance,
+                # excluding terminal states: retired, frozen, archived,
+                # shadow, error).  Reuses the same logic as
+                # DataHealthService.check_governance_state().
+                _TERMINAL_STATES = {"retired", "frozen", "archived", "shadow", "error"}
+
+                def _is_operational(brain_dict: dict) -> bool:
+                    _raw = str(
+                        brain_dict.get("state", brain_dict.get("status", ""))
+                    ).lower()
+                    return _raw not in _TERMINAL_STATES and _raw != ""
+
+                _active_brain_ids: set[str] = set()
+                try:
+                    _gov_path = Path(config.base_dir) / "governance_state.json"
+                    if _gov_path.exists():
+                        _gov_raw = json.loads(
+                            _gov_path.read_text(encoding="utf-8")
+                        )
+                        _brain_states = _gov_raw.get("brain_states", {})
+                        if isinstance(_brain_states, dict):
+                            for _bid, _bs in _brain_states.items():
+                                if isinstance(_bs, dict) and _is_operational(_bs):
+                                    _active_brain_ids.add(_bid)
+                        elif isinstance(_brain_states, list):
+                            for _b in _brain_states:
+                                if isinstance(_b, dict) and _is_operational(_b):
+                                    _bid = _b.get("brain_id", _b.get("id", ""))
+                                    if _bid:
+                                        _active_brain_ids.add(_bid)
+                except Exception:  # BLE001:REVIEWED
+                    # FIX-20260616-001: Architect's Amendment — Fail-Close for metrics.
+                    # If governance is unreadable, we MUST NOT fall back to unfiltered
+                    # data (which includes archived/retired ghost brains from FIX-011).
+                    # Keep _active_brain_ids as empty set → worst-brain computation
+                    # will be skipped (Missing > Corrupted principle).
+                    _active_brain_ids = set()
+
+                _all_m = pnl_ledger.get_all_metrics()
+                # Filter to active brains only when governance provides them.
+                # If _active_brain_ids is empty (governance unreadable), skip
+                # worst-brain computation entirely rather than risking ghost
+                # brain pollution from unfiltered data.
+                if _all_m and _active_brain_ids:
+                    _active_m = {
+                        _bid: _m
+                        for _bid, _m in _all_m.items()
+                        if _bid in _active_brain_ids
+                    }
+                    if _active_m:
+                        _all_m = _active_m
+                    else:
+                        # No active brains have metrics — don't use stale data
+                        _all_m = {}
+                elif _all_m and not _active_brain_ids:
+                    # Governance unavailable — skip worst-brain to avoid pollution
+                    _all_m = {}
+                    # else: no active brains have metrics → use full set
+                    # as fallback (empty metrics would hide genuine issues)
+
+                if _all_m:
+                    _worst_m = min(
+                        _all_m.values(),
+                        key=lambda m: getattr(m, "cumulative_pnl", 0.0),
+                    )
+                    _ctx["strategy_pnl"] = round(getattr(_worst_m, "cumulative_pnl", 0.0), 2)
+                    _ctx["strategy_win_rate"] = round(getattr(_worst_m, "win_rate", 1.0), 4)
+                    _ctx["worst_brain_id"] = getattr(_worst_m, "brain_id", "")
+                else:
+                    _ctx["strategy_pnl"] = 0.0
+                    _ctx["strategy_win_rate"] = 1.0
+                    _ctx["worst_brain_id"] = ""
+
+        _ah.evaluate_and_dispatch(_ctx)
+
+
+
+def _evaluate_brain_ensemble(
+    *,
+    config: Any,
+    state: Any,
+    pm: Any,
+    pos: Any,
+    mid: float,
+    current_atr: float,
+    strategy_name: str,
+    exit_confidence: float,
+    brains: list[dict[str, Any]],
+    micro_feature_computer: Any,
+    micro_feature_adapter: Any,
+    feature_service: Any,
+    daily_feature_provider: Any,
+    dispatch_ctx: Any,
+    exit_watchdog: Any,
+    mt5_worker: Any,
+    flip_enabled: bool = True,
+    zscore_enabled: bool = False,
+) -> Any:
+    """Re-evaluate brain ensemble and apply exit layers.
+
+    Extracted from execute_management_phase (Strangler Fig #26, Phase 3).
+    Returns dict with closed, current_consensus, current_supporting,
+    meta_consensus, meta_supporting.
+    """
+    if config.multi_brain and pm.should_reeval_brains(state.loop_iteration):
+        pm.mark_brains_reevaluated(state.loop_iteration)
+
+        # Re-run all brain inference
+        # Compute fresh multi-TF sequences for position re-evaluation
+        mgmt_sequences: dict[str, np.ndarray] = {}
+        if micro_feature_computer is not None:
+            try:
+                mgmt_sequences = micro_feature_computer.compute_all_sequences(32)
+            except Exception as _seq_exc:  # BLE001:REVIEWED
+                _emit("sequence_compute_error", error=str(_seq_exc))
+
+
+        raw_proposals: list[Any] = []
+        for b_info in brains:
+            schema_id = b_info.get("feature_schema_id", "")
+            btype = b_info.get("brain_type", "")
+            prop = None  # pre-initialise for DEGRADE
+            with FaultTolerantContext(
+                level=FaultLevel.DEGRADE,
+                component="ManagementBrainInference",
+            ):
+                if btype == "ou_params_v6":
+                    fv: Any = np.array([mid], dtype=np.float32)
+                    raw = b_info["adapter"].infer(fv)
+                    prop = b_info["adapter"].get_signal(raw)
+                elif "microstructure" in str(schema_id):
+                    hmre_layer = b_info.get("hmre_layer", "M5")
+                    seq = mgmt_sequences.get(hmre_layer)
+                    if seq is not None and seq.ndim == 2 and seq.shape[0] >= 32:
+                        prop = b_info["adapter"].run(None, seq)
+                    elif micro_feature_computer is not None:
+                        mf = micro_feature_computer.compute_all()
+                        fv = micro_feature_adapter.build_model_input(mf).ravel()
+                        raw = b_info["adapter"].infer(fv)
+                        prop = b_info["adapter"].get_signal(raw)
+                    else:
+                        prop = None
+                elif "swing" in schema_id or "daily" in schema_id or "btc_macro" in schema_id:
+                    # FIX-20260531-021 / FIX-20260610-009: Data-driven assembly via schema registry
+                    # btc_macro added 2026-06-10 — BTC brains fell to else → raw 40-dim.
+                    # FIX-20260615-009d: Use state._btc_augmenter for btc_macro schema
+                    # to eliminate cold-start RuntimeError on cycle 1 with open positions.
+                    if daily_feature_provider is not None:
+                        with FaultTolerantContext(
+                            level=FaultLevel.DEGRADE,
+                            component="ManagementBrainInference:DailyFeature",
+                        ):
+                            fv_24 = daily_feature_provider.get_latest()
+                            tf_ou, tf_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
+                            from core.features.schemas.registry import assemble_swing_features
+
+                            # Compute btc_augment for management-phase inference
+                            _mgmt_btc_aug: Any = None
+                            if "btc_macro" in str(schema_id):
+                                _mgmt_aug = getattr(state, "_btc_augmenter", None)
+                                if _mgmt_aug is not None:
+                                    try:
+                                        _mgmt_btc_aug = _mgmt_aug.augment(
+                                            fv_24,
+                                            None,  # micro features not available in mgmt phase
+                                            btc_price=mid or 0.0,
+                                            tf_ou=tf_ou,
+                                            tf_hurst=tf_hurst,
+                                        )
+                                    except Exception:  # BLE001:REVIEWED
+                                        _mgmt_btc_aug = None  # degrade: fall through to None
+
+                            fv = assemble_swing_features(
+                                schema_id,
+                                daily_features=fv_24,
+                                tf_ou=tf_ou,
+                                tf_hurst=tf_hurst,
+                                btc_augment=_mgmt_btc_aug,
+                            )
+                            raw = b_info["adapter"].infer(fv)
+                            prop = b_info["adapter"].get_signal(raw)
+                    else:
+                        prop = None
+                else:
+                    fv = feature_service.build_feature_vector(
+                        {"symbol": config.symbol, "venue": "MT5"}
+                    )
+                    raw = b_info["adapter"].infer(fv)
+                    prop = b_info["adapter"].get_signal(raw)
+
+            if prop is not None:
+                # BrainSignal always carries brain_id from the adapter.
+                # No stamping needed — frozen objects reject mutation.
+                raw_proposals.append(prop)
+
+        if raw_proposals:
+            try:
+                from core.execution.capital_allocator import resolve_conflicts
+                from core.parliament.contract_groups import (
+                    compute_all_group_signals,
+                )
+
+                # Build (brain_info, proposal) pairs
+                brain_proposal_pairs: list[tuple[dict[str, Any], Any]] = []
+                for i, p in enumerate(raw_proposals):
+                    b_info = brains[i] if i < len(brains) else {}
+                    brain_proposal_pairs.append((b_info, p))
+
+                # Per-group consensus (contract-homogeneous voting)
+                group_signals = compute_all_group_signals(brain_proposal_pairs)
+                allocation = resolve_conflicts(group_signals)
+
+                # ── Layer 2 consensus: strategy-line-filtered ──
+                # Brain flip exit must only use the entry's strategy-line
+                # brains, NOT the global 17-brain consensus.  Global drift
+                # is fed to Meta Exit (Layer 2.5) as a separate factor.
+                _entry_group_signal = group_signals.get(strategy_name) if strategy_name else None
+                _l2_direction: str
+                if _entry_group_signal is not None and _entry_group_signal.direction != "neutral":
+                    _l2_direction = _entry_group_signal.direction
+                    _l2_confidence = _entry_group_signal.confidence
+                    _l2_supporting = _entry_group_signal.brain_ids
+                    _l2_total = _entry_group_signal.total_count
+                elif _entry_group_signal is not None:
+                    # Direction is neutral — the entry brains still exist
+                    # in the group even when votes deadlock.  Use brain_ids
+                    # (all brains) NOT [] so flip calculation in
+                    # evaluate_brain_exit() doesn't misinterpret a neutral
+                    # deadlock as "100% of entry brains flipped".
+                    # Confidence-drop exits remain proportional to group
+                    # confidence.  Same union-mode all-neutral pattern as
+                    # contract_groups.py.
+                    _l2_direction = "neutral"
+                    _l2_confidence = _entry_group_signal.confidence
+                    _l2_supporting = _entry_group_signal.brain_ids
+                    _l2_total = _entry_group_signal.total_count
+                else:
+                    _l2_direction = "neutral"
+                    _l2_confidence = 0.0
+                    _l2_supporting = []
+                    _l2_total = 0
+
+                current_consensus = {
+                    "aggregated_bias": _l2_direction,
+                    "consensus_score": _l2_confidence,
+                    "voter_count": _l2_total,
+                    "majority_ratio": _l2_confidence,
+                    "supporting_brains": _l2_supporting,
+                    "opposing_brains": [],
+                }
+                current_supporting = _l2_supporting
+
+                # ── Global consensus (for Meta Exit cross-strategy drift) ──
+                # Wave C: Hierarchical consensus — positions at larger
+                # timeframes only listen to signals from >= same-TF groups.
+                # An H1 freighter doesn't tack on an M5 lake-breeze shift.
+                _pos_tf_mult = int(
+                    (config.strategy_configs.get(strategy_name, {}) or {}).get("_tf_mult", 1) or 1
+                )
+                _global_direction = allocation.direction if allocation.should_trade else "neutral"
+                _global_supporting: list[str] = []
+                _global_total = 0
+                for _gname, gs in group_signals.items():
+                    if gs is None:
+                        continue
+                    _g_tf_mult = int(
+                        (config.strategy_configs.get(_gname, {}) or {}).get("_tf_mult", 1) or 1
+                    )
+                    if _g_tf_mult < _pos_tf_mult:
+                        continue  # skip smaller-TF groups
+                    _global_total += gs.total_count
+                    if gs.direction == _global_direction:
+                        _global_supporting.extend(gs.brain_ids)
+
+                meta_consensus = {
+                    "aggregated_bias": _global_direction,
+                    "consensus_score": allocation.confidence,
+                    "voter_count": _global_total,
+                    "majority_ratio": allocation.confidence,
+                    "supporting_brains": list(set(_global_supporting)),
+                    "allocation": {
+                        "agreement_level": allocation.agreement_level,
+                        "active_groups": allocation.active_groups,
+                        "dissenting_groups": allocation.dissenting_groups,
+                        "reason": allocation.reason,
+                    },
+                }
+                meta_supporting = list(set(_global_supporting))
+
+                # ── Opt3: Bleed stop (v3.2, hardened v3.3) ──
+                # Exit if N consecutive bars have negative PnL, where N scales
+                # with the strategy's horizon.  barrier_12bar (60 min) → 4 bars,
+                # micro_3bar (15 min) → 3 bars.  min_hold_cycles prevents the
+                # bleed_stop from firing before the position has had reasonable
+                # time to develop (FIX-20260522-027).
+                #
+                # ── FIX-20260613-050: H4 Trend Protection Umbrella ──
+                # When the H4/H1 macro trend still supports the position
+                # direction, M5-level noise exits (brain_flip, confidence_decay,
+                # bleed_stop) are PHYSICALLY BLOCKED.  The position gets room
+                # to breathe — closing on a 5-minute wobble when the 4-hour
+                # trend is still in your favor is a structural error.
+                #
+                # Trend hierarchy: H4 > H1 > M5 (same as entry counter_trend gate).
+                # If H4 agrees with position → full protection.
+                # If H4 neutral but H1 agrees → mild protection.
+                # If both disagree or neutral → no protection (normal M5 exits).
+                _trend_protected = False
+                _trend_mild_protected = False
+                _h4_dir = "neutral"
+                _h1_dir = "neutral"
+                if hasattr(state, "regime_gate") and state.regime_gate is not None:
+                    with fail_open_guard("LiveCycle:TrendDirectionLookup"):
+                        _h4_dir = state.regime_gate.h4_trend_direction
+                        _h1_dir = state.regime_gate.h1_trend_direction
+                        if _h4_dir != "neutral" and _h4_dir == pos.side:
+                            _trend_protected = True  # H4 supports position
+                        elif _h4_dir == "neutral" and _h1_dir == pos.side:
+                            _trend_mild_protected = True  # H1 supports, H4 silent
+
+                # ── FIX-20260607-144: Override trend protection when losing ──
+                # Trailing SL (Chandelier) only tightens in the PROFIT direction.
+                # For a losing position, the SL stays frozen at entry — trend
+                # protection becomes a trap, letting losses grow with no defense.
+                # If unrealized PnL is below -1.0R, override protection:
+                # the H4 "support" is either wrong or lagging.  Let M5 exits work.
+                if _trend_protected or _trend_mild_protected:
+                    _r_check = pm._compute_r_multiple(mid, ticket=pos.ticket) if mid else 0.0
+                    if _r_check < -1.0:
+                        _trend_protected = False
+                        _trend_mild_protected = False
+                        _emit("trend_protection_overridden_loss", ticket=pos.ticket, r=round(_r_check, 3), reason="position_underwater_despite_trend_support")
+
+
+                # Diagnostic: one-shot log when trend protection activates
+                if (_trend_protected or _trend_mild_protected) and getattr(
+                    pos, "cycles_held", 0
+                ) <= 3:
+                    _emit("trend_protection_active", ticket=pos.ticket, side=pos.side, h4_trend=_h4_dir, h1_trend=_h1_dir, protection_level="full" if _trend_protected else "mild", action="blocking_M5_noise_exits")
+
+
+                # FIX-20260525-020: Mean-reversion (statarb/OU) strategies are
+                # EXEMPT from bleed_stop.  They enter at trend extremes — price
+                # continuing 3-5 bars in the same direction is normal "rubber band
+                # stretching," not thesis failure.  Killing during the stretch is
+                # a category error (trend exit applied to mean-reversion position).
+                strategy_name_lower = (strategy_name or "").lower()
+                if "statarb" not in strategy_name_lower and mid is not None and mid > 0:
+                    _strat_cfg = (config.strategy_configs or {}).get(strategy_name, {}) or {}
+                    _horizon = int(
+                        _strat_cfg.get("horizon_cycles", 0) or _strat_cfg.get("horizon", 0) or 0
+                    )
+                    _bleed_bars = max(3, _horizon // 3) if _horizon > 0 else 3
+                    # Option B: trend-aligned → 5 bars tolerance (was 3)
+                    if _trend_protected:
+                        _bleed_bars = max(5, _bleed_bars)
+                    elif _trend_mild_protected:
+                        _bleed_bars = max(4, _bleed_bars)
+                    _min_hold = max(2, _bleed_bars)
+                    # Option A: trend-protected → double min_hold
+                    if _trend_protected:
+                        _min_hold = _min_hold * 2
+                    if getattr(pos, "cycles_held", 0) < _min_hold:
+                        _should_bleed, _bleed_reason = False, ""
+                    else:
+                        _r_now = pm._compute_r_multiple(mid, ticket=pos.ticket)
+                        _should_bleed, _bleed_reason = pm.should_exit_bleed(
+                            pos, _r_now, bleed_bars=_bleed_bars
+                        )
+                    if _should_bleed:
+                        pm.mark_pending_close(pos.ticket, state.loop_iteration)
+                        _dispatched = _dispatch_managed_close(
+                            config,
+                            dispatch_ctx,
+                            pos,
+                            reason=_bleed_reason,
+                            mid=mid,
+                            state=state,
+                            strategy_name=strategy_name,
+                            exit_confidence=exit_confidence,
+                            exit_watchdog=exit_watchdog,
+                            mt5_worker=mt5_worker,
+                        )
+                        _emit("bleed_stop_triggered", ticket=pos.ticket, r_now=round(_r_now, 3), reason=_bleed_reason, bleed_bars=_bleed_bars, cycles_held=getattr(pos, "cycles_held", 0), min_hold_cycles=_min_hold, horizon_cycles=_horizon, dispatched=_dispatched)
+
+                        if _dispatched:
+                            pm.clear_position(ticket=pos.ticket)
+                        return True
+
+                # ── OU mean-reversion exit (ARB brain) ──
+                # Only applies to positions opened by the StatArb strategy
+                # (positions whose supporting brains include the OU brain).
+                # Gated by per-strategy exit.zscore_exit_enabled config.
+                if (
+                    zscore_enabled
+                    and pos.supporting_brain_ids
+                    and any(
+                        bid.startswith("OU_") or bid.lower().startswith("ou_")
+                        for bid in pos.supporting_brain_ids
+                    )
+                ):
+                    for b_info in brains:
+                        if b_info.get("brain_type") == "ou_params_v6":
+                            # ── DQAF-20260616-101/P1.3: BLE001 → log_and_continue ──
+                            with log_and_continue("OUBrainExit"):
+                                raw_ou = b_info["adapter"].infer(np.array([mid], dtype=np.float32))
+                                ou_z = float(raw_ou.get("z_score", 0.0))
+                                should_ou_exit, ou_reason = pm.should_exit_ou_based(
+                                    ou_z, ticket=pos.ticket
+                                )
+                                if should_ou_exit:
+                                    pm.mark_pending_close(pos.ticket, state.loop_iteration)
+                                    _dispatched = _dispatch_managed_close(
+                                        config,
+                                        dispatch_ctx,
+                                        pos,
+                                        reason=ou_reason,
+                                        mid=mid,
+                                        state=state,
+                                        strategy_name=strategy_name,
+                                        exit_confidence=exit_confidence,
+                                        exit_watchdog=exit_watchdog,
+                                        mt5_worker=mt5_worker,
+                                    )
+                                    _emit("ou_exit_triggered", ticket=pos.ticket, z_score=round(ou_z, 3), reason=ou_reason, dispatched=_dispatched)
+
+                                    if _dispatched:
+                                        pm.clear_position(ticket=pos.ticket)
+                                    return True
+                            # (BLE001 replaced with log_and_continue("OUBrainExit") — DQAF-20260616-101/P1.3)
+                            break  # only one OU brain
+
+                should_exit = False
+                exit_reason = ""
+                if flip_enabled:
+                    # ── FIX-20260613-050: Trend Protection — block M5 brain_flip ──
+                    # When H4 trend supports the position, physically block
+                    # brain_flip and confidence_decay exits.  The brain changing
+                    # its mind on a 5-minute bar is NOT a valid exit signal when
+                    # the 4-hour trend is still in your favor.
+                    if _trend_protected:
+                        # Full protection: skip brain_flip/confidence_decay entirely.
+                        # Only Trailing SL and MetaExit (which has its own trend
+                        # awareness) can close the position.
+                        should_exit = False
+                        exit_reason = ""
+                    else:
+                        should_exit, exit_reason = pm.evaluate_brain_exit(
+                            current_consensus,
+                            current_supporting,
+                            mid=mid,
+                            ticket=pos.ticket,
+                            kalman_velocity_bps=getattr(state, "_last_kalman_velocity_bps", None),
+                        )
+                        # Option B: mild protection — require higher confidence
+                        if should_exit and _trend_mild_protected:
+                            _exit_conf = float(current_consensus.get("consensus_score", 0.5))
+                            if "brain_flip" in exit_reason and _exit_conf < 0.80:
+                                should_exit = False
+                                exit_reason = (
+                                    f"brain_flip_shielded_trend_mild_conf_{_exit_conf:.2f}"
+                                )
+                            elif "confidence_decay" in exit_reason:
+                                should_exit = False
+                                exit_reason = "confidence_decay_shielded_trend_mild"
+                # ── Phase C Fix 3: Price-Confirmation Shield ──
+                # When confidence_decay triggers but price action confirms the
+                # trade direction, veto the time-based exit and let Trailing SL
+                # manage the position.
+                if should_exit and "confidence_decay" in exit_reason and mid is not None:
+                    _r_now = pm._compute_r_multiple(mid, ticket=pos.ticket)
+                    _sl_trailing = (pos.side == "short" and pos.current_sl < pos.initial_sl) or (
+                        pos.side == "long" and pos.current_sl > pos.initial_sl
+                    )
+                    if _r_now > 0.5 and _sl_trailing:
+                        should_exit = False
+                        exit_reason = f"confidence_decay_shielded_r{_r_now:.2f}_trailing"
+                if should_exit:
+                    _bf_confidence = float(
+                        current_consensus.get("consensus_score", exit_confidence)
+                    )
+                    pm.mark_pending_close(pos.ticket, state.loop_iteration)
+                    _dispatched = _dispatch_managed_close(
+                        config,
+                        dispatch_ctx,
+                        pos,
+                        reason=exit_reason,
+                        mid=mid,
+                        state=state,
+                        strategy_name=strategy_name,
+                        exit_confidence=_bf_confidence,
+                        exit_watchdog=exit_watchdog,
+                        mt5_worker=mt5_worker,
+                    )
+                    _emit("brain_exit_triggered", ticket=pos.ticket, reason=exit_reason, dispatched=_dispatched)
+
+                    if _dispatched:
+                        pm.clear_position(ticket=pos.ticket)
+                    return True
+            except Exception as exc:  # BLE001:REVIEWED
+                _emit("brain_reeval_error", error=str(exc))
+
+
+    # Not closed — return consensus for downstream layers
+    return {
+        "closed": False,
+        "current_consensus": current_consensus if 'current_consensus' in dir() else {},
+        "current_supporting": current_supporting if 'current_supporting' in dir() else [],
+        "meta_consensus": meta_consensus if 'meta_consensus' in dir() else {},
+        "meta_supporting": meta_supporting if 'meta_supporting' in dir() else [],
+    }
+
+
 def execute_management_phase(
     config: LiveCycleConfig,
     state: LiveCycleState,
@@ -342,233 +1023,9 @@ def execute_management_phase(
                 _emit("health_action_reduce_size", multiplier=_mult, reason=_action.get("reason", ""))
 
 
-    # ── 1c. Alert evaluation (FIX-20260529-040: LiveAlertHub wiring) ──
-    _ah = getattr(state, "alert_hub", None)
-    if _ah is not None:
-        with log_and_continue(component="AlertHub:dispatch"):
-            # Build context from in-memory state only (Guardrail 3)
-            # FIX-20260616-001: error_rate was hardcoded to 0.0 — RULE-001 was
-            # permanently silent.  Derive a composite health score from the
-            # degradation pipeline (already maintained by the circuit breaker).
-            _degraded = getattr(state, "_consecutive_degraded_cycles", 0)
-            _stale = getattr(state, "_consecutive_stale_cycles", 0)
-            _total = max(1, getattr(state, "cycle_count", 0))
-            _ctx_error_rate = round(min(1.0, (_degraded + _stale) / _total), 4)
-            # FIX-20260616-001: frozen_brain_count was hardcoded to 0 — RULE-004
-            # was permanently silent.  Count frozen brains from governance.
-            _ctx_frozen = 0
-            try:
-                _gv_path = Path(config.base_dir) / "governance_state.json"
-                if _gv_path.exists():
-                    _gv_raw = json.loads(_gv_path.read_text(encoding="utf-8"))
-                    _brain_states = _gv_raw.get("brain_states", {})
-                    if isinstance(_brain_states, dict):
-                        _ctx_frozen = sum(
-                            1 for _bs in _brain_states.values()
-                            if isinstance(_bs, dict)
-                            and str(_bs.get("state", _bs.get("status", ""))).lower() == "frozen"
-                        )
-            except Exception:  # BLE001:REVIEWED
-                pass  # Non-critical: frozen check degrades gracefully
-            _ctx_pos_util = 0.0
-            _ctx_bridge_last_ack = time.time() - getattr(
-                state, "_last_bridge_ack_time", time.time()
-            )
+    # ── 1c. Alert evaluation (FIX-20260529-040) ──
+    _build_and_dispatch_alert_context(config, state, pos, pm, pnl_ledger)
 
-            # Position utilization
-            if pm.has_position() if pos is not None else False:
-                _ctx_pos_util = min(
-                    1.0,
-                    len(getattr(pm, "positions", []) if hasattr(pm, "positions") else [])
-                    / max(1, config.max_positions),
-                )
-
-            # Cycle duration
-            _ctx_cycle_duration = time.time() - getattr(
-                state, "_last_cycle_start_time", time.time()
-            )
-
-            _ctx: dict[str, Any] = {
-                "error_rate": _ctx_error_rate,
-                "circuit_state": _ah.circuit_breaker.state.value,
-                "frozen_brain_count": _ctx_frozen,
-                "position_utilization": _ctx_pos_util,
-                "bridge_last_ack_seconds": _ctx_bridge_last_ack,
-                "cycle_duration_seconds": _ctx_cycle_duration,
-            }
-
-            # ── Phase B: PnL fund-safety context injection ──
-            # FIX-20260603-066 P0: compute daily PnL from journal (SSOT),
-            # not from in-memory accumulators that drift on restart.
-            # FIX-20260606-138 Phase 0: filter by ack_status + dedup by
-            # position_ticket to prevent retry/rejected entries from
-            # polluting the rolling window (DQAF-20260606-005).
-            _daily_pnl = 0.0
-            _consec_losses = 0
-            _win_count = 0
-            _trade_count = 0
-            try:
-                from datetime import UTC
-                from datetime import datetime as _dt
-
-                _today = _dt.now(UTC).date()
-                _jp = Path(config.base_dir) / "live_trade_journal.jsonl"
-                if _jp.exists():
-                    # Read backwards from end — journal grows, only need today.
-                    # Backwards scan + seen_positions ensures we only count
-                    # the MOST RECENT (final) close entry per position.
-                    _lines = []
-                    with open(_jp, encoding="utf-8") as _jf:
-                        _lines = _jf.readlines()
-                    _seen_positions: set[int] = set()
-                    for _line in reversed(_lines):
-                        _line = _line.strip()
-                        if not _line:
-                            continue
-                        try:
-                            _e = json.loads(_line)
-                        except json.JSONDecodeError:
-                            continue
-                        if _e.get("action") != "close":
-                            continue
-                        # ── Phase 0 filter 1: skip rejected/retry entries ──
-                        _ack = _e.get("ack_status", "")
-                        if _ack not in ("accepted", "closed"):
-                            continue
-                        _ts = _e.get("recorded_at", "")
-                        try:
-                            _d = _dt.fromisoformat(_ts.replace("Z", "+00:00")).date()
-                        except (ValueError, TypeError, OSError):
-                            continue
-                        if _d != _today:
-                            continue
-                        # [FIX-20260615-012] Filter out synthetic orphan closures
-                        # (auto_orphan_rejected/stale/no_ticket) from alert context.
-                        # These have pnl=0, position_ticket=None, and are generated
-                        # by cleanup_orphan_opens() at startup — not real trades.
-                        # Counting them in the rolling win-rate window dilutes the
-                        # true win rate and triggers false circuit-breaker trips.
-                        if str(_e.get("label", "")).startswith("auto_orphan_"):
-                            continue
-                        # ── Phase 0 filter 2: dedup by open position ──
-                        # Prefer detail.request.position (the actual MT5
-                        # position ticket being closed).  Fall back to the
-                        # close order's own position_ticket.
-                        _pos_tkt = _e.get("detail", {}).get("request", {}).get(
-                            "position"
-                        ) or _e.get("position_ticket")
-                        if _pos_tkt is not None:
-                            _pos_tkt = int(_pos_tkt)
-                            if _pos_tkt in _seen_positions:
-                                continue  # already counted a more recent close
-                            _seen_positions.add(_pos_tkt)
-                        _pnl = _e.get("pnl")
-                        if _pnl is None:
-                            continue
-                        _pnl = float(_pnl)
-                        _daily_pnl += _pnl
-                        _trade_count += 1
-                        if _pnl > 0:
-                            _win_count += 1
-                            _consec_losses = 0
-                        elif _pnl < 0:
-                            _consec_losses += 1
-                _ctx["daily_pnl_usd"] = round(_daily_pnl, 2)
-                _ctx["consecutive_losses"] = _consec_losses
-                _ctx["rolling_win_rate"] = round(_win_count / max(1, _trade_count), 4)
-                _ctx["total_trades_window"] = _trade_count
-            except Exception:  # BLE001:REVIEWED
-                with fail_open_guard("AlertContext:journal_enrich"):
-                    raise  # surface hidden journal corruption
-
-            if pnl_ledger is not None:
-                with log_and_continue(component="AlertHub:PnL_context"):
-                    # FIX-20260613-052: resolved placeholder: "Frankenstein" logic fix.
-                    # Previously _worst_pnl and _worst_wr were independently
-                    # min()'d across all brains — they could come from two
-                    # DIFFERENT brains (e.g. pnl from V4, wr from LGB_V1),
-                    # producing a misleading "strategy" metric that describes
-                    # no actual brain.  Now: find the single brain with the
-                    # worst cumulative_pnl, and use ITS win_rate too.
-                    #
-                    # FIX-20260615-011: ARCHIVED_BRAIN_ALERT_POLLUTION —
-                    # Archived/retired brains with years of counterfactual PnL
-                    # permanently dominate the "worst brain" slot, silencing
-                    # alerts for active brain degradation.
-                    # Filter to only OPERATIONAL brains (state ∈ governance,
-                    # excluding terminal states: retired, frozen, archived,
-                    # shadow, error).  Reuses the same logic as
-                    # DataHealthService.check_governance_state().
-                    _TERMINAL_STATES = {"retired", "frozen", "archived", "shadow", "error"}
-
-                    def _is_operational(brain_dict: dict) -> bool:
-                        _raw = str(
-                            brain_dict.get("state", brain_dict.get("status", ""))
-                        ).lower()
-                        return _raw not in _TERMINAL_STATES and _raw != ""
-
-                    _active_brain_ids: set[str] = set()
-                    try:
-                        _gov_path = Path(config.base_dir) / "governance_state.json"
-                        if _gov_path.exists():
-                            _gov_raw = json.loads(
-                                _gov_path.read_text(encoding="utf-8")
-                            )
-                            _brain_states = _gov_raw.get("brain_states", {})
-                            if isinstance(_brain_states, dict):
-                                for _bid, _bs in _brain_states.items():
-                                    if isinstance(_bs, dict) and _is_operational(_bs):
-                                        _active_brain_ids.add(_bid)
-                            elif isinstance(_brain_states, list):
-                                for _b in _brain_states:
-                                    if isinstance(_b, dict) and _is_operational(_b):
-                                        _bid = _b.get("brain_id", _b.get("id", ""))
-                                        if _bid:
-                                            _active_brain_ids.add(_bid)
-                    except Exception:  # BLE001:REVIEWED
-                        # FIX-20260616-001: Architect's Amendment — Fail-Close for metrics.
-                        # If governance is unreadable, we MUST NOT fall back to unfiltered
-                        # data (which includes archived/retired ghost brains from FIX-011).
-                        # Keep _active_brain_ids as empty set → worst-brain computation
-                        # will be skipped (Missing > Corrupted principle).
-                        _active_brain_ids = set()
-
-                    _all_m = pnl_ledger.get_all_metrics()
-                    # Filter to active brains only when governance provides them.
-                    # If _active_brain_ids is empty (governance unreadable), skip
-                    # worst-brain computation entirely rather than risking ghost
-                    # brain pollution from unfiltered data.
-                    if _all_m and _active_brain_ids:
-                        _active_m = {
-                            _bid: _m
-                            for _bid, _m in _all_m.items()
-                            if _bid in _active_brain_ids
-                        }
-                        if _active_m:
-                            _all_m = _active_m
-                        else:
-                            # No active brains have metrics — don't use stale data
-                            _all_m = {}
-                    elif _all_m and not _active_brain_ids:
-                        # Governance unavailable — skip worst-brain to avoid pollution
-                        _all_m = {}
-                        # else: no active brains have metrics → use full set
-                        # as fallback (empty metrics would hide genuine issues)
-
-                    if _all_m:
-                        _worst_m = min(
-                            _all_m.values(),
-                            key=lambda m: getattr(m, "cumulative_pnl", 0.0),
-                        )
-                        _ctx["strategy_pnl"] = round(getattr(_worst_m, "cumulative_pnl", 0.0), 2)
-                        _ctx["strategy_win_rate"] = round(getattr(_worst_m, "win_rate", 1.0), 4)
-                        _ctx["worst_brain_id"] = getattr(_worst_m, "brain_id", "")
-                    else:
-                        _ctx["strategy_pnl"] = 0.0
-                        _ctx["strategy_win_rate"] = 1.0
-                        _ctx["worst_brain_id"] = ""
-
-            _ah.evaluate_and_dispatch(_ctx)
 
     # ── 2. Update regime detector ──
     regime_info: dict[str, Any] = {}
@@ -835,408 +1292,32 @@ def execute_management_phase(
         return False
 
     # ── 7. Layer 2: Brain ensemble re-evaluation ──
-    current_consensus: dict[str, Any] = {}
-    current_supporting: list[str] = []
-    meta_consensus: dict[str, Any] = {}  # global consensus for Meta Exit (Layer 2.5)
-    meta_supporting: list[str] = []
-    if config.multi_brain and pm.should_reeval_brains(state.loop_iteration):
-        pm.mark_brains_reevaluated(state.loop_iteration)
-
-        # Re-run all brain inference
-        # Compute fresh multi-TF sequences for position re-evaluation
-        mgmt_sequences: dict[str, np.ndarray] = {}
-        if micro_feature_computer is not None:
-            try:
-                mgmt_sequences = micro_feature_computer.compute_all_sequences(32)
-            except Exception as _seq_exc:  # BLE001:REVIEWED
-                _emit("sequence_compute_error", error=str(_seq_exc))
-
-
-        raw_proposals: list[Any] = []
-        for b_info in brains:
-            schema_id = b_info.get("feature_schema_id", "")
-            btype = b_info.get("brain_type", "")
-            prop = None  # pre-initialise for DEGRADE
-            with FaultTolerantContext(
-                level=FaultLevel.DEGRADE,
-                component="ManagementBrainInference",
-            ):
-                if btype == "ou_params_v6":
-                    fv: Any = np.array([mid], dtype=np.float32)
-                    raw = b_info["adapter"].infer(fv)
-                    prop = b_info["adapter"].get_signal(raw)
-                elif "microstructure" in str(schema_id):
-                    hmre_layer = b_info.get("hmre_layer", "M5")
-                    seq = mgmt_sequences.get(hmre_layer)
-                    if seq is not None and seq.ndim == 2 and seq.shape[0] >= 32:
-                        prop = b_info["adapter"].run(None, seq)
-                    elif micro_feature_computer is not None:
-                        mf = micro_feature_computer.compute_all()
-                        fv = micro_feature_adapter.build_model_input(mf).ravel()
-                        raw = b_info["adapter"].infer(fv)
-                        prop = b_info["adapter"].get_signal(raw)
-                    else:
-                        prop = None
-                elif "swing" in schema_id or "daily" in schema_id or "btc_macro" in schema_id:
-                    # FIX-20260531-021 / FIX-20260610-009: Data-driven assembly via schema registry
-                    # btc_macro added 2026-06-10 — BTC brains fell to else → raw 40-dim.
-                    # FIX-20260615-009d: Use state._btc_augmenter for btc_macro schema
-                    # to eliminate cold-start RuntimeError on cycle 1 with open positions.
-                    if daily_feature_provider is not None:
-                        with FaultTolerantContext(
-                            level=FaultLevel.DEGRADE,
-                            component="ManagementBrainInference:DailyFeature",
-                        ):
-                            fv_24 = daily_feature_provider.get_latest()
-                            tf_ou, tf_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
-                            from core.features.schemas.registry import assemble_swing_features
-
-                            # Compute btc_augment for management-phase inference
-                            _mgmt_btc_aug: Any = None
-                            if "btc_macro" in str(schema_id):
-                                _mgmt_aug = getattr(state, "_btc_augmenter", None)
-                                if _mgmt_aug is not None:
-                                    try:
-                                        _mgmt_btc_aug = _mgmt_aug.augment(
-                                            fv_24,
-                                            None,  # micro features not available in mgmt phase
-                                            btc_price=mid or 0.0,
-                                            tf_ou=tf_ou,
-                                            tf_hurst=tf_hurst,
-                                        )
-                                    except Exception:  # BLE001:REVIEWED
-                                        _mgmt_btc_aug = None  # degrade: fall through to None
-
-                            fv = assemble_swing_features(
-                                schema_id,
-                                daily_features=fv_24,
-                                tf_ou=tf_ou,
-                                tf_hurst=tf_hurst,
-                                btc_augment=_mgmt_btc_aug,
-                            )
-                            raw = b_info["adapter"].infer(fv)
-                            prop = b_info["adapter"].get_signal(raw)
-                    else:
-                        prop = None
-                else:
-                    fv = feature_service.build_feature_vector(
-                        {"symbol": config.symbol, "venue": "MT5"}
-                    )
-                    raw = b_info["adapter"].infer(fv)
-                    prop = b_info["adapter"].get_signal(raw)
-
-            if prop is not None:
-                # BrainSignal always carries brain_id from the adapter.
-                # No stamping needed — frozen objects reject mutation.
-                raw_proposals.append(prop)
-
-        if raw_proposals:
-            try:
-                from core.execution.capital_allocator import resolve_conflicts
-                from core.parliament.contract_groups import (
-                    compute_all_group_signals,
-                )
-
-                # Build (brain_info, proposal) pairs
-                brain_proposal_pairs: list[tuple[dict[str, Any], Any]] = []
-                for i, p in enumerate(raw_proposals):
-                    b_info = brains[i] if i < len(brains) else {}
-                    brain_proposal_pairs.append((b_info, p))
-
-                # Per-group consensus (contract-homogeneous voting)
-                group_signals = compute_all_group_signals(brain_proposal_pairs)
-                allocation = resolve_conflicts(group_signals)
-
-                # ── Layer 2 consensus: strategy-line-filtered ──
-                # Brain flip exit must only use the entry's strategy-line
-                # brains, NOT the global 17-brain consensus.  Global drift
-                # is fed to Meta Exit (Layer 2.5) as a separate factor.
-                _entry_group_signal = group_signals.get(_sname) if _sname else None
-                _l2_direction: str
-                if _entry_group_signal is not None and _entry_group_signal.direction != "neutral":
-                    _l2_direction = _entry_group_signal.direction
-                    _l2_confidence = _entry_group_signal.confidence
-                    _l2_supporting = _entry_group_signal.brain_ids
-                    _l2_total = _entry_group_signal.total_count
-                elif _entry_group_signal is not None:
-                    # Direction is neutral — the entry brains still exist
-                    # in the group even when votes deadlock.  Use brain_ids
-                    # (all brains) NOT [] so flip calculation in
-                    # evaluate_brain_exit() doesn't misinterpret a neutral
-                    # deadlock as "100% of entry brains flipped".
-                    # Confidence-drop exits remain proportional to group
-                    # confidence.  Same union-mode all-neutral pattern as
-                    # contract_groups.py.
-                    _l2_direction = "neutral"
-                    _l2_confidence = _entry_group_signal.confidence
-                    _l2_supporting = _entry_group_signal.brain_ids
-                    _l2_total = _entry_group_signal.total_count
-                else:
-                    _l2_direction = "neutral"
-                    _l2_confidence = 0.0
-                    _l2_supporting = []
-                    _l2_total = 0
-
-                current_consensus = {
-                    "aggregated_bias": _l2_direction,
-                    "consensus_score": _l2_confidence,
-                    "voter_count": _l2_total,
-                    "majority_ratio": _l2_confidence,
-                    "supporting_brains": _l2_supporting,
-                    "opposing_brains": [],
-                }
-                current_supporting = _l2_supporting
-
-                # ── Global consensus (for Meta Exit cross-strategy drift) ──
-                # Wave C: Hierarchical consensus — positions at larger
-                # timeframes only listen to signals from >= same-TF groups.
-                # An H1 freighter doesn't tack on an M5 lake-breeze shift.
-                _pos_tf_mult = int(
-                    (config.strategy_configs.get(_sname, {}) or {}).get("_tf_mult", 1) or 1
-                )
-                _global_direction = allocation.direction if allocation.should_trade else "neutral"
-                _global_supporting: list[str] = []
-                _global_total = 0
-                for _gname, gs in group_signals.items():
-                    if gs is None:
-                        continue
-                    _g_tf_mult = int(
-                        (config.strategy_configs.get(_gname, {}) or {}).get("_tf_mult", 1) or 1
-                    )
-                    if _g_tf_mult < _pos_tf_mult:
-                        continue  # skip smaller-TF groups
-                    _global_total += gs.total_count
-                    if gs.direction == _global_direction:
-                        _global_supporting.extend(gs.brain_ids)
-
-                meta_consensus = {
-                    "aggregated_bias": _global_direction,
-                    "consensus_score": allocation.confidence,
-                    "voter_count": _global_total,
-                    "majority_ratio": allocation.confidence,
-                    "supporting_brains": list(set(_global_supporting)),
-                    "allocation": {
-                        "agreement_level": allocation.agreement_level,
-                        "active_groups": allocation.active_groups,
-                        "dissenting_groups": allocation.dissenting_groups,
-                        "reason": allocation.reason,
-                    },
-                }
-                meta_supporting = list(set(_global_supporting))
-
-                # ── Opt3: Bleed stop (v3.2, hardened v3.3) ──
-                # Exit if N consecutive bars have negative PnL, where N scales
-                # with the strategy's horizon.  barrier_12bar (60 min) → 4 bars,
-                # micro_3bar (15 min) → 3 bars.  min_hold_cycles prevents the
-                # bleed_stop from firing before the position has had reasonable
-                # time to develop (FIX-20260522-027).
-                #
-                # ── FIX-20260613-050: H4 Trend Protection Umbrella ──
-                # When the H4/H1 macro trend still supports the position
-                # direction, M5-level noise exits (brain_flip, confidence_decay,
-                # bleed_stop) are PHYSICALLY BLOCKED.  The position gets room
-                # to breathe — closing on a 5-minute wobble when the 4-hour
-                # trend is still in your favor is a structural error.
-                #
-                # Trend hierarchy: H4 > H1 > M5 (same as entry counter_trend gate).
-                # If H4 agrees with position → full protection.
-                # If H4 neutral but H1 agrees → mild protection.
-                # If both disagree or neutral → no protection (normal M5 exits).
-                _trend_protected = False
-                _trend_mild_protected = False
-                _h4_dir = "neutral"
-                _h1_dir = "neutral"
-                if hasattr(state, "regime_gate") and state.regime_gate is not None:
-                    with fail_open_guard("LiveCycle:TrendDirectionLookup"):
-                        _h4_dir = state.regime_gate.h4_trend_direction
-                        _h1_dir = state.regime_gate.h1_trend_direction
-                        if _h4_dir != "neutral" and _h4_dir == pos.side:
-                            _trend_protected = True  # H4 supports position
-                        elif _h4_dir == "neutral" and _h1_dir == pos.side:
-                            _trend_mild_protected = True  # H1 supports, H4 silent
-
-                # ── FIX-20260607-144: Override trend protection when losing ──
-                # Trailing SL (Chandelier) only tightens in the PROFIT direction.
-                # For a losing position, the SL stays frozen at entry — trend
-                # protection becomes a trap, letting losses grow with no defense.
-                # If unrealized PnL is below -1.0R, override protection:
-                # the H4 "support" is either wrong or lagging.  Let M5 exits work.
-                if _trend_protected or _trend_mild_protected:
-                    _r_check = pm._compute_r_multiple(mid, ticket=pos.ticket) if mid else 0.0
-                    if _r_check < -1.0:
-                        _trend_protected = False
-                        _trend_mild_protected = False
-                        _emit("trend_protection_overridden_loss", ticket=pos.ticket, r=round(_r_check, 3), reason="position_underwater_despite_trend_support")
-
-
-                # Diagnostic: one-shot log when trend protection activates
-                if (_trend_protected or _trend_mild_protected) and getattr(
-                    pos, "cycles_held", 0
-                ) <= 3:
-                    _emit("trend_protection_active", ticket=pos.ticket, side=pos.side, h4_trend=_h4_dir, h1_trend=_h1_dir, protection_level="full" if _trend_protected else "mild", action="blocking_M5_noise_exits")
-
-
-                # FIX-20260525-020: Mean-reversion (statarb/OU) strategies are
-                # EXEMPT from bleed_stop.  They enter at trend extremes — price
-                # continuing 3-5 bars in the same direction is normal "rubber band
-                # stretching," not thesis failure.  Killing during the stretch is
-                # a category error (trend exit applied to mean-reversion position).
-                _sname_lower = (_sname or "").lower()
-                if "statarb" not in _sname_lower and mid is not None and mid > 0:
-                    _strat_cfg = (config.strategy_configs or {}).get(_sname, {}) or {}
-                    _horizon = int(
-                        _strat_cfg.get("horizon_cycles", 0) or _strat_cfg.get("horizon", 0) or 0
-                    )
-                    _bleed_bars = max(3, _horizon // 3) if _horizon > 0 else 3
-                    # Option B: trend-aligned → 5 bars tolerance (was 3)
-                    if _trend_protected:
-                        _bleed_bars = max(5, _bleed_bars)
-                    elif _trend_mild_protected:
-                        _bleed_bars = max(4, _bleed_bars)
-                    _min_hold = max(2, _bleed_bars)
-                    # Option A: trend-protected → double min_hold
-                    if _trend_protected:
-                        _min_hold = _min_hold * 2
-                    if getattr(pos, "cycles_held", 0) < _min_hold:
-                        _should_bleed, _bleed_reason = False, ""
-                    else:
-                        _r_now = pm._compute_r_multiple(mid, ticket=pos.ticket)
-                        _should_bleed, _bleed_reason = pm.should_exit_bleed(
-                            pos, _r_now, bleed_bars=_bleed_bars
-                        )
-                    if _should_bleed:
-                        pm.mark_pending_close(pos.ticket, state.loop_iteration)
-                        _dispatched = _dispatch_managed_close(
-                            config,
-                            dispatch_ctx,
-                            pos,
-                            reason=_bleed_reason,
-                            mid=mid,
-                            state=state,
-                            strategy_name=_sname,
-                            exit_confidence=_exit_confidence,
-                            exit_watchdog=state.exit_watchdog,
-                            mt5_worker=mt5_worker,
-                        )
-                        _emit("bleed_stop_triggered", ticket=pos.ticket, r_now=round(_r_now, 3), reason=_bleed_reason, bleed_bars=_bleed_bars, cycles_held=getattr(pos, "cycles_held", 0), min_hold_cycles=_min_hold, horizon_cycles=_horizon, dispatched=_dispatched)
-
-                        if _dispatched:
-                            pm.clear_position(ticket=pos.ticket)
-                        return True
-
-                # ── OU mean-reversion exit (ARB brain) ──
-                # Only applies to positions opened by the StatArb strategy
-                # (positions whose supporting brains include the OU brain).
-                # Gated by per-strategy exit.zscore_exit_enabled config.
-                if (
-                    _zscore_enabled
-                    and pos.supporting_brain_ids
-                    and any(
-                        bid.startswith("OU_") or bid.lower().startswith("ou_")
-                        for bid in pos.supporting_brain_ids
-                    )
-                ):
-                    for b_info in brains:
-                        if b_info.get("brain_type") == "ou_params_v6":
-                            # ── DQAF-20260616-101/P1.3: BLE001 → log_and_continue ──
-                            with log_and_continue("OUBrainExit"):
-                                raw_ou = b_info["adapter"].infer(np.array([mid], dtype=np.float32))
-                                ou_z = float(raw_ou.get("z_score", 0.0))
-                                should_ou_exit, ou_reason = pm.should_exit_ou_based(
-                                    ou_z, ticket=pos.ticket
-                                )
-                                if should_ou_exit:
-                                    pm.mark_pending_close(pos.ticket, state.loop_iteration)
-                                    _dispatched = _dispatch_managed_close(
-                                        config,
-                                        dispatch_ctx,
-                                        pos,
-                                        reason=ou_reason,
-                                        mid=mid,
-                                        state=state,
-                                        strategy_name=_sname,
-                                        exit_confidence=_exit_confidence,
-                                        exit_watchdog=state.exit_watchdog,
-                                        mt5_worker=mt5_worker,
-                                    )
-                                    _emit("ou_exit_triggered", ticket=pos.ticket, z_score=round(ou_z, 3), reason=ou_reason, dispatched=_dispatched)
-
-                                    if _dispatched:
-                                        pm.clear_position(ticket=pos.ticket)
-                                    return True
-                            # (BLE001 replaced with log_and_continue("OUBrainExit") — DQAF-20260616-101/P1.3)
-                            break  # only one OU brain
-
-                should_exit = False
-                exit_reason = ""
-                if _flip_enabled:
-                    # ── FIX-20260613-050: Trend Protection — block M5 brain_flip ──
-                    # When H4 trend supports the position, physically block
-                    # brain_flip and confidence_decay exits.  The brain changing
-                    # its mind on a 5-minute bar is NOT a valid exit signal when
-                    # the 4-hour trend is still in your favor.
-                    if _trend_protected:
-                        # Full protection: skip brain_flip/confidence_decay entirely.
-                        # Only Trailing SL and MetaExit (which has its own trend
-                        # awareness) can close the position.
-                        should_exit = False
-                        exit_reason = ""
-                    else:
-                        should_exit, exit_reason = pm.evaluate_brain_exit(
-                            current_consensus,
-                            current_supporting,
-                            mid=mid,
-                            ticket=pos.ticket,
-                            kalman_velocity_bps=getattr(state, "_last_kalman_velocity_bps", None),
-                        )
-                        # Option B: mild protection — require higher confidence
-                        if should_exit and _trend_mild_protected:
-                            _exit_conf = float(current_consensus.get("consensus_score", 0.5))
-                            if "brain_flip" in exit_reason and _exit_conf < 0.80:
-                                should_exit = False
-                                exit_reason = (
-                                    f"brain_flip_shielded_trend_mild_conf_{_exit_conf:.2f}"
-                                )
-                            elif "confidence_decay" in exit_reason:
-                                should_exit = False
-                                exit_reason = "confidence_decay_shielded_trend_mild"
-                # ── Phase C Fix 3: Price-Confirmation Shield ──
-                # When confidence_decay triggers but price action confirms the
-                # trade direction, veto the time-based exit and let Trailing SL
-                # manage the position.
-                if should_exit and "confidence_decay" in exit_reason and mid is not None:
-                    _r_now = pm._compute_r_multiple(mid, ticket=pos.ticket)
-                    _sl_trailing = (pos.side == "short" and pos.current_sl < pos.initial_sl) or (
-                        pos.side == "long" and pos.current_sl > pos.initial_sl
-                    )
-                    if _r_now > 0.5 and _sl_trailing:
-                        should_exit = False
-                        exit_reason = f"confidence_decay_shielded_r{_r_now:.2f}_trailing"
-                if should_exit:
-                    _bf_confidence = float(
-                        current_consensus.get("consensus_score", _exit_confidence)
-                    )
-                    pm.mark_pending_close(pos.ticket, state.loop_iteration)
-                    _dispatched = _dispatch_managed_close(
-                        config,
-                        dispatch_ctx,
-                        pos,
-                        reason=exit_reason,
-                        mid=mid,
-                        state=state,
-                        strategy_name=_sname,
-                        exit_confidence=_bf_confidence,
-                        exit_watchdog=state.exit_watchdog,
-                        mt5_worker=mt5_worker,
-                    )
-                    _emit("brain_exit_triggered", ticket=pos.ticket, reason=exit_reason, dispatched=_dispatched)
-
-                    if _dispatched:
-                        pm.clear_position(ticket=pos.ticket)
-                    return True
-            except Exception as exc:  # BLE001:REVIEWED
-                _emit("brain_reeval_error", error=str(exc))
-
+    _ensemble_result = _evaluate_brain_ensemble(
+        config=config,
+        state=state,
+        pm=pm,
+        pos=pos,
+        mid=mid if mid is not None else 0.0,
+        current_atr=current_atr,
+        strategy_name=_sname,
+        exit_confidence=_exit_confidence,
+        brains=brains,
+        micro_feature_computer=micro_feature_computer,
+        micro_feature_adapter=micro_feature_adapter,
+        feature_service=feature_service,
+        daily_feature_provider=daily_feature_provider,
+        dispatch_ctx=dispatch_ctx,
+        exit_watchdog=getattr(state, "exit_watchdog", None),
+        mt5_worker=mt5_worker,
+        flip_enabled=_flip_enabled,
+        zscore_enabled=_zscore_enabled,
+    )
+    if _ensemble_result is True:
+        return True
+    current_consensus = _ensemble_result["current_consensus"]
+    current_supporting = _ensemble_result["current_supporting"]
+    meta_consensus = _ensemble_result["meta_consensus"]
+    meta_supporting = _ensemble_result["meta_supporting"]
 
     # ── 7.5 Layer 2.5: Meta-model multi-factor exit ──
     _skip_meta = pm._is_protected_period(ticket=pos.ticket) and not pm._toxicity_veto(
