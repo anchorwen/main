@@ -27,7 +27,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
 ROOT = Path(__file__).resolve().parent.parent
 

@@ -23,7 +23,7 @@ from collections import defaultdict
 from pathlib import Path
 
 if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIRS = {"XAU": ROOT / "data", "BTC": ROOT / "data_btc"}
