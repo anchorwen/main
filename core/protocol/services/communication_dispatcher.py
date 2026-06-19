@@ -195,7 +195,7 @@ class CommunicationDispatcher:
         if self._file_wal_adapter is not None:
             try:
                 wal_result = self._file_wal_adapter.dispatch(request, envelope)
-            except Exception as wal_exc:
+            except Exception as wal_exc:  # BLE001:REVIEWED (Sev 3, Phase 3b)
                 if self._metrics:
                     self._metrics.inc(DISPATCH_FAILED)
                 return DispatchResult(

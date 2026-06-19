@@ -157,7 +157,7 @@ def send_dingtalk(webhook_url: str, title: str, text: str) -> bool:
             else:
                 print(f"DingTalk: error {result.get('errcode')} — {result.get('errmsg', '')}")
             return ok
-    except Exception as exc:
+    except Exception as exc:  # BLE001:REVIEWED (Sev 4, Phase 3b)
         print(f"DingTalk send failed: {exc}")
         return False
 

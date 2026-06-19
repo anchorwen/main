@@ -146,7 +146,7 @@ def check_omega() -> bool:
     except subprocess.TimeoutExpired:
         print("[pre-push] Omega: TIMEOUT (>30s)")
         return False
-    except Exception as exc:
+    except Exception as exc:  # BLE001:REVIEWED (Sev 4, Phase 3b)
         print(f"[pre-push] Omega: INTERNAL ERROR — {exc}")
         return False
 
@@ -172,7 +172,7 @@ def main() -> int:
         except subprocess.TimeoutExpired:
             print(f"[pre-push] {name}: TIMEOUT (>120s)")
             failures.append(name)
-        except Exception as exc:
+        except Exception as exc:  # BLE001:REVIEWED (Sev 4, Phase 3b)
             print(f"[pre-push] {name}: INTERNAL ERROR — {exc}")
             failures.append(name)
 

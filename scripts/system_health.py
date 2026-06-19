@@ -90,7 +90,7 @@ def check_symbol(base_dir: str, label: str) -> dict:
                 for bid, m in active[-3:]
             ],
         }
-    except Exception as e:
+    except Exception as e:  # BLE001:REVIEWED (Sev 4, Phase 3b)
         result["projection"] = {"error": str(e)}
 
     # ── 3. Degradation status ──
@@ -112,7 +112,7 @@ def check_symbol(base_dir: str, label: str) -> dict:
                 "fails": fails[:5],
                 "warns": warns[:5],
             }
-        except Exception as e:
+        except Exception as e:  # BLE001:REVIEWED (Sev 4, Phase 3b)
             result["degradation"] = {"error": str(e)}
 
     # ── 4. Governance status ──
@@ -131,7 +131,7 @@ def check_symbol(base_dir: str, label: str) -> dict:
                 "status_counts": status_counts,
                 "live_brains": live_brains,
             }
-        except Exception as e:
+        except Exception as e:  # BLE001:REVIEWED (Sev 4, Phase 3b)
             result["governance"] = {"error": str(e)}
 
     # ── 5. Data freshness ──

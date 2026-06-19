@@ -177,7 +177,7 @@ def _backfill_from_mt5(
     except ImportError:
         report["reason"] = "MetaTrader5 module not installed"
         return report
-    except Exception as exc:
+    except Exception as exc:  # BLE001:REVIEWED (Sev 4, Phase 3b)
         report["reason"] = f"mt5_init_exception: {exc}"
         return report
 

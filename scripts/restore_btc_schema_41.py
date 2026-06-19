@@ -61,7 +61,7 @@ def check_model_dim(brain_cfg: dict) -> tuple[bool, int]:
         else:
             return False, 0
         return nf == 41, nf
-    except Exception as exc:
+    except Exception as exc:  # BLE001:REVIEWED (Sev 4, Phase 3b)
         print(f"  [ERROR] Failed to read model {artifact_path}: {exc}")
         return False, 0
 

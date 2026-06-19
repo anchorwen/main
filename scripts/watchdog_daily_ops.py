@@ -77,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
                         check=False, timeout=600,
                     )
                     print(f"[watchdog:{args.base_dir}] daily_ops completed")
-                except Exception as exc:
+                except Exception as exc:  # BLE001:REVIEWED (Sev 4, Phase 3b)
                     print(f"[watchdog:{args.base_dir}] daily_ops failed: {exc}")
             else:
                 print(f"{msg} — run: python scripts/daily_ops.py --base-dir {args.base_dir}")

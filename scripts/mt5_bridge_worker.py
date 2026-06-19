@@ -1421,7 +1421,7 @@ def run_zmq_worker(
                                 ),
                                 flush=True,
                             )
-                        except Exception as _f_exc:
+                        except Exception as _f_exc:  # BLE001:REVIEWED (Sev 4, Phase 3b)
                             print(
                                 json.dumps(
                                     {"file_fallback_error": {"message_id": _f_msg_id, "error": str(_f_exc)[:200]}},

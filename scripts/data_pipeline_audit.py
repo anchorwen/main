@@ -190,7 +190,7 @@ if ofi.exists():
         print(f"  OFI_Total_Volume:        {od.get('OFI_Total_Volume', 'N/A')}")
         print(f"  OFI_ZScore_20:           {od.get('OFI_ZScore_20', 'N/A')}")
         print(f"  OFI_Cumulative_1H:       {od.get('OFI_Cumulative_1H', 'N/A')}")
-    except Exception as e:
+    except Exception as e:  # BLE001:REVIEWED (Sev 4, Phase 3b)
         print(f"  Status:                  CORRUPTED ({e})")
 else:
     print("  Status:                  MISSING")

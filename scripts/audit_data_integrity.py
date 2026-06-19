@@ -648,7 +648,7 @@ def check_mt5_equity_reconciliation(data_dir: str) -> dict[str, Any]:
             "pnl_pct_of_balance": round(pnl_ratio, 4),
             "note": "full reconciliation needs daily equity snapshots; this is informational",
         }
-    except Exception as e:
+    except Exception as e:  # BLE001:REVIEWED (Sev 4, Phase 3b)
         try:
             mt5.shutdown()
         except Exception:  # BLE001:REVIEWED

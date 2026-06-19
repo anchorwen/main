@@ -251,7 +251,7 @@ for cpath, label in [("configs/live.yaml","XAU"), ("configs/live_btc.yaml","BTC"
             art = bcfg.get("artifact_path","")
             if art and not os.path.exists(art):
                 issue("P1", "Config", f"{label}: {bcfg.get('brain_id','?')} artifact missing: {art}")
-        except Exception as e:
+        except Exception as e:  # BLE001:REVIEWED (Sev 4, Phase 3b)
             issue("P0", "Config", f"{label}: {path} invalid JSON: {e}")
 
     # Check strategy line brain_type matching

@@ -1086,7 +1086,7 @@ class LiveDashboardHandler(BaseHTTPRequestHandler):
                 self._serve_api_modules()
             else:
                 self._serve_json({"error": "not_found"}, 404)
-        except Exception:
+        except Exception:  # BLE001:REVIEWED (Sev 4, Phase 3b)
             logger.exception("Dashboard request failed: %s", self.path)
             self._serve_json({"error": "internal_error"}, 500)
 

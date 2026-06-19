@@ -54,14 +54,14 @@ def verify(base_dir: str) -> dict:
     # Load old JSON
     try:
         old_store = BrainPnLStore.load(str(old_path))
-    except Exception as e:
+    except Exception as e:  # BLE001:REVIEWED (Sev 4, Phase 3b)
         result["error"] = f"Failed to load old JSON: {e}"
         return result
 
     # Load from event stream
     try:
         new_store = BrainPnLStore.load_from_stream(str(stream_path))
-    except Exception as e:
+    except Exception as e:  # BLE001:REVIEWED (Sev 4, Phase 3b)
         result["error"] = f"Failed to load from event stream: {e}"
         return result
 
