@@ -3668,59 +3668,21 @@ def execute_live_cycle(
                 state._gate_stats.clear()
                 state._gate_stats_cycles = 0
 
-            # ── Cut 2: Record family entries for dispatched positions ──
-            if state._family_entry_tracker is not None:
-                from core.execution.pre_trade_guards import strategy_to_family
+            # ── Dispatch post-processing ──
+            # Strangler Fig #33 — extracted to core.runtime.dispatch_post
+            from core.runtime.dispatch_post import process_dispatch_results
 
-                for dr in dispatch_results:
-                    if dr.dispatched and dr.direction in ("long", "short"):
-                        _fam = strategy_to_family(dr.strategy_name)
-                        if _fam != dr.strategy_name:  # family member
-                            state._family_entry_tracker.record_entry(
-                                family=_fam,
-                                direction=dr.direction,
-                                timestamp=time.time(),
-                            )
-                            print(
-                                json.dumps(
-                                    {
-                                        "event": "family_entry_recorded",
-                                        "time": _utc_iso(),
-                                        "strategy": dr.strategy_name,
-                                        "family": _fam,
-                                        "direction": dr.direction,
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                                flush=True,
-                            )
-
-            # Log brain outcomes for dispatched strategies
-            for dr in dispatch_results:
-                if dr.dispatched and dr.strategy_name in strategies:
-                    strategy = strategies[dr.strategy_name]
-                    try:
-                        strategy_proposals = strategy._run_inference(
-                            feature_vector,
-                            micro_feature_vector,
-                            mid_price,
-                            daily_feature_vector=daily_feature_vector,
-                        )
-                        _record_brain_outcomes(strategy_proposals, dr.direction, "pending", tracker, symbol=config.symbol)
-                    except Exception as _bi_exc:  # BLE001:REVIEWED
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "brain_inference_failed",
-                                    "time": _utc_iso(),
-                                    "strategy": dr.strategy_name,
-                                    "error": f"{type(_bi_exc).__name__}: {str(_bi_exc)[:200]}",
-                                    "level": "DEGRADE",
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
+            process_dispatch_results(
+                dispatch_results=dispatch_results,
+                state=state,
+                strategies=strategies,
+                feature_vector=feature_vector,
+                micro_feature_vector=micro_feature_vector,
+                mid_price=mid_price,
+                daily_feature_vector=daily_feature_vector,
+                tracker=tracker,
+                symbol=config.symbol,
+            )
 
             # ── Register opened positions for dynamic exit management ──
             # Strangler Fig #10: extracted to core/runtime/position_registration.py
