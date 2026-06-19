@@ -1,7 +1,7 @@
 # Blueprint System Overview
 
 > Last regenerated: 2026-06-19
-> FIX count: 39 | BLE001: 全库 100% 治理 | Tier 1 零覆盖: 11→0 | 纯函数模块: 12 | 圈导入: 0 | 零测试模块: 0
+> FIX count: 42 | BLE001: 全库 100% 治理 | Tier 1 零覆盖: 11→0 | Tier 2 零覆盖: 14→9 | 纯函数模块: 13 | 圈导入: 0
 
 ## Architecture Layers
 
