@@ -368,7 +368,7 @@ def main(argv: list[str] | None = None) -> int:
                     from core.runtime.live_cycle import apply_timeframe_scaling
 
                     apply_timeframe_scaling(strategy_configs)
-                except Exception as _ts_exc:  # noqa: BLE001
+                except Exception as _ts_exc:  # BLE001:REVIEWED
                     print(
                         json.dumps(
                             {
@@ -383,7 +383,7 @@ def main(argv: list[str] | None = None) -> int:
 
             # Validate per-strategy exit configs for unknown keys (RC-09 config drift)
             if strategy_configs:
-                try:
+                with fail_open_guard("LiveIntentLoop:ValidateExitConfigs"):
                     from core.runtime.live_cycle import validate_strategy_exit_configs
 
                     exit_warnings = validate_strategy_exit_configs(strategy_configs)
@@ -399,10 +399,8 @@ def main(argv: list[str] | None = None) -> int:
                             ),
                             flush=True,
                         )
-                except Exception:  # noqa: BLE001
-                    pass
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             import sys as _sys
 
             print(
@@ -476,7 +474,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         print(
             json.dumps(
                 {"event": "startup_integrity_error", "error": str(exc)},
@@ -568,7 +566,7 @@ def main(argv: list[str] | None = None) -> int:
     # ── Load configs ──
     try:
         norm_config = load_normalization_config(args.normalization_config)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         print(
             json.dumps({"error": "normalization_config_load_failed", "detail": str(exc)}, indent=2)
         )
@@ -602,7 +600,7 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # BLE001:REVIEWED
                 print(
                     json.dumps(
                         {
@@ -638,7 +636,7 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # BLE001:REVIEWED
                 print(
                     json.dumps(
                         {
@@ -673,7 +671,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.multi_brain:
         try:
             brain_entry = load_brain_entry(args.brain_entry)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             print(json.dumps({"error": "brain_entry_load_failed", "detail": str(exc)}, indent=2))
             if mt5_worker is not None:
                 mt5_worker.stop()
@@ -771,7 +769,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _dfp_exc:  # noqa: BLE001
+        except Exception as _dfp_exc:  # BLE001:REVIEWED
             print(
                 json.dumps(
                     {
@@ -804,7 +802,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             tracker = BrainPerformanceTracker(window_size=100)
     else:
         tracker = BrainPerformanceTracker(window_size=100)
@@ -825,18 +823,14 @@ def main(argv: list[str] | None = None) -> int:
     # Fall back to old JSON load() for backward compat.
     _loaded_from = "none"
     if _stream_path.exists():
-        try:
-            pnl_ledger = BrainPnLStore.load_from_stream(_stream_path, event_writer=_event_writer)
-            _loaded_from = "event_stream"
-        except Exception:  # noqa: BLE001
-            pass
+        with fail_open_guard("LiveIntentLoop:L828"):
+                pnl_ledger = BrainPnLStore.load_from_stream(_stream_path, event_writer=_event_writer)
+                _loaded_from = "event_stream"
 
     if pnl_ledger is None and pnl_ledger_path.exists():
-        try:
-            pnl_ledger = BrainPnLStore.load(pnl_ledger_path, event_writer=_event_writer)
-            _loaded_from = "old_json"
-        except Exception:  # noqa: BLE001
-            pass
+        with fail_open_guard("LiveIntentLoop:L835"):
+                pnl_ledger = BrainPnLStore.load(pnl_ledger_path, event_writer=_event_writer)
+                _loaded_from = "old_json"
 
     if pnl_ledger is None:
         pnl_ledger = BrainPnLStore(window_size=100, event_writer=_event_writer)
@@ -864,21 +858,19 @@ def main(argv: list[str] | None = None) -> int:
     from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
 
     if _journal_path.exists():
-        try:
-            for line in _journal_path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                rec = json.loads(line)
-                if rec.get("action") == "open" and rec.get("ack_status") == "accepted":
-                    ticket = rec.get("position_ticket")
-                    if ticket is not None and isinstance(ticket, int) and ticket > 0:
-                        # Enrich with strategy name for management-phase lookup
-                        _magic = rec.get("detail", {}).get("request", {}).get("magic", 0)
-                        rec["strategy"] = MAGIC_TO_STRATEGY.get(_magic, "")
-                        known_open_tickets[ticket] = rec
-        except Exception:  # noqa: BLE001
-            pass
+        with fail_open_guard("LiveIntentLoop:L861"):
+                for line in _journal_path.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    rec = json.loads(line)
+                    if rec.get("action") == "open" and rec.get("ack_status") == "accepted":
+                        ticket = rec.get("position_ticket")
+                        if ticket is not None and isinstance(ticket, int) and ticket > 0:
+                            # Enrich with strategy name for management-phase lookup
+                            _magic = rec.get("detail", {}).get("request", {}).get("magic", 0)
+                            rec["strategy"] = MAGIC_TO_STRATEGY.get(_magic, "")
+                            known_open_tickets[ticket] = rec
 
     # ── Initialize brain adapter(s) ──
     brains: list[dict[str, Any]] = []
@@ -898,23 +890,21 @@ def main(argv: list[str] | None = None) -> int:
 
         # ── Filter disabled brains (live.yaml brain_registry_entries enabled:false) ──
         _disabled_paths: set[str] = set()
-        try:
-            import yaml as _yaml
+        with fail_open_guard("LiveIntentLoop:L895"):
+                import yaml as _yaml
 
-            _live_cfg_path = (
-                Path(args.config) if args.config else PROJECT_ROOT / "configs" / "live.yaml"
-            )
-            if _live_cfg_path.exists():
-                with open(_live_cfg_path, encoding="utf-8") as _fh:
-                    _live_cfg = _yaml.safe_load(_fh)
-                for _reg_entry in (_live_cfg.get("brains") or {}).get("registry_entries", []) or []:
-                    if not _reg_entry.get("enabled", True):
-                        _rp = Path(_reg_entry["path"])
-                        if not _rp.is_absolute():
-                            _rp = (PROJECT_ROOT / _rp).resolve()
-                        _disabled_paths.add(str(_rp.resolve()))
-        except Exception:  # noqa: BLE001
-            pass
+                _live_cfg_path = (
+                    Path(args.config) if args.config else PROJECT_ROOT / "configs" / "live.yaml"
+                )
+                if _live_cfg_path.exists():
+                    with open(_live_cfg_path, encoding="utf-8") as _fh:
+                        _live_cfg = _yaml.safe_load(_fh)
+                    for _reg_entry in (_live_cfg.get("brains") or {}).get("registry_entries", []) or []:
+                        if not _reg_entry.get("enabled", True):
+                            _rp = Path(_reg_entry["path"])
+                            if not _rp.is_absolute():
+                                _rp = (PROJECT_ROOT / _rp).resolve()
+                            _disabled_paths.add(str(_rp.resolve()))
 
         if _disabled_paths:
             _before = len(entries)
@@ -968,7 +958,7 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
-        except Exception as _vex:  # noqa: BLE001
+        except Exception as _vex:  # BLE001:REVIEWED
             print(
                 json.dumps(
                     {
@@ -1007,7 +997,7 @@ def main(argv: list[str] | None = None) -> int:
                         "normalization_config_path": entry.get("normalization_config_path"),
                     }
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # BLE001:REVIEWED
                 print(
                     json.dumps(
                         {
@@ -1094,7 +1084,7 @@ def main(argv: list[str] | None = None) -> int:
                 model_path=meta_model or "data/models/meta_exit_model.txt",
                 urgency_threshold=getattr(args, "meta_exit_threshold", 0.65),
             )
-        except Exception as _meta_exit_exc:  # noqa: BLE001
+        except Exception as _meta_exit_exc:  # BLE001:REVIEWED
             print(
                 json.dumps(
                     {
@@ -1120,15 +1110,13 @@ def main(argv: list[str] | None = None) -> int:
         # hardcoded to TrailPolicy default (1.0) ignoring YAML (0.3).
         _yaml_trail_activation_atr = args.exit_trail_activation_atr
         if hasattr(args, "config") and args.config:
-            try:
-                import yaml as _yaml_exit
+            with fail_open_guard("LiveIntentLoop:L1123"):
+                    import yaml as _yaml_exit
 
-                with open(args.config, encoding="utf-8") as _fh_exit:
-                    _exit_cfg = _yaml_exit.safe_load(_fh_exit).get("exit_management", {})
-                if isinstance(_exit_cfg, dict) and "trail_activation_atr" in _exit_cfg:
-                    _yaml_trail_activation_atr = float(_exit_cfg["trail_activation_atr"])
-            except Exception:  # noqa: BLE001
-                pass
+                    with open(args.config, encoding="utf-8") as _fh_exit:
+                        _exit_cfg = _yaml_exit.safe_load(_fh_exit).get("exit_management", {})
+                    if isinstance(_exit_cfg, dict) and "trail_activation_atr" in _exit_cfg:
+                        _yaml_trail_activation_atr = float(_exit_cfg["trail_activation_atr"])
 
         position_manager = ActivePositionManager(
             trail_atr_mult=args.exit_trail_atr_mult,
@@ -1152,7 +1140,7 @@ def main(argv: list[str] | None = None) -> int:
         managed_tickets: set[int] = set()
         try:
             restored = position_manager.load_state(_pos_state_path)
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             restored = None
 
         if restored is not None:
@@ -1226,7 +1214,7 @@ def main(argv: list[str] | None = None) -> int:
             # ── Fallback: reconstruct ALL positions from MT5 (basic recovery, no trail state) ──
             try:
                 open_positions = _broker.get_open_positions_detail(args.symbol)
-            except Exception as _recovery_exc:  # noqa: BLE001
+            except Exception as _recovery_exc:  # BLE001:REVIEWED
                 print(
                     json.dumps(
                         {
@@ -1277,16 +1265,14 @@ def main(argv: list[str] | None = None) -> int:
                             line = line.strip()
                             if not line:
                                 continue
-                            try:
-                                rec = json.loads(line)
-                                if (
-                                    rec.get("position_ticket") == ticket
-                                    and rec.get("action") == "open"
-                                ):
-                                    recovered_supporting = rec.get("brain_ids", [])
-                                    break
-                            except Exception:  # noqa: BLE001
-                                pass
+                            with fail_open_guard("LiveIntentLoop:L1272"):
+                                    rec = json.loads(line)
+                                    if (
+                                        rec.get("position_ticket") == ticket
+                                        and rec.get("action") == "open"
+                                    ):
+                                        recovered_supporting = rec.get("brain_ids", [])
+                                        break
 
                     current_high = max(entry_price, float(mp.price_current))
 
@@ -1464,12 +1450,10 @@ def main(argv: list[str] | None = None) -> int:
 
     # ── Initialize GroupCorrelationTracker ──
     correlation_tracker: Any = None
-    try:
-        from core.execution.capital_allocator import GroupCorrelationTracker
+    with fail_open_guard("LiveIntentLoop:L1467"):
+            from core.execution.capital_allocator import GroupCorrelationTracker
 
-        correlation_tracker = GroupCorrelationTracker(ema_alpha=0.05)
-    except Exception:  # noqa: BLE001
-        pass
+            correlation_tracker = GroupCorrelationTracker(ema_alpha=0.05)
 
     # ── Initialize MetaSignalFilter (V3 Stage 2: LGB+MLP + Platt + Conformal) ──
     meta_signal_filter: Any = None
@@ -1578,7 +1562,7 @@ def main(argv: list[str] | None = None) -> int:
                                         f"Model missing {len(_missing)} V9 features: "
                                         f"{sorted(list(_missing))[:5]}..."
                                     )
-                    except Exception:  # noqa: BLE001
+                    except Exception:  # BLE001:REVIEWED
                         pass  # schema file may not exist; skip check
 
                     if not _mf_feature_ok:
@@ -1629,7 +1613,7 @@ def main(argv: list[str] | None = None) -> int:
                         flush=True,
                     )
                     meta_signal_filter = None
-        except Exception as _mf_exc:  # noqa: BLE001
+        except Exception as _mf_exc:  # BLE001:REVIEWED
             print(
                 json.dumps(
                     {"event": "meta_filter_init_error", "time": _utc_iso(), "error": str(_mf_exc)},
@@ -1646,29 +1630,27 @@ def main(argv: list[str] | None = None) -> int:
     for _dir_label, _dir_model in [("long", "lgb_xau_long_v1"), ("short", "lgb_xau_short_v1")]:
         _dir_model_path = str(_base_dir / "models" / f"meta_stage2_{_dir_model}.txt")
         if Path(_dir_model_path).exists():
-            try:
-                _dir_filter = MetaSignalFilter(
-                    model_path=_dir_model_path,
-                    threshold=0.55,
-                    enabled=True,
-                    mode="binary",
-                )
-                if _dir_filter.load():
-                    setattr(config, f"meta_filter_{_dir_label}", _dir_filter)
-                    print(
-                        json.dumps(
-                            {
-                                "event": f"meta_filter_{_dir_label}_loaded",
-                                "time": _utc_iso(),
-                                "model": _dir_model_path,
-                                "features": len(_dir_filter._feature_names),
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
+            with fail_open_guard("LiveIntentLoop:L1639"):
+                    _dir_filter = MetaSignalFilter(
+                        model_path=_dir_model_path,
+                        threshold=0.55,
+                        enabled=True,
+                        mode="binary",
                     )
-            except Exception:  # noqa: BLE001
-                pass
+                    if _dir_filter.load():
+                        setattr(config, f"meta_filter_{_dir_label}", _dir_filter)
+                        print(
+                            json.dumps(
+                                {
+                                    "event": f"meta_filter_{_dir_label}_loaded",
+                                    "time": _utc_iso(),
+                                    "model": _dir_model_path,
+                                    "features": len(_dir_filter._feature_names),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
 
     # ── Initial state ──
     state = LiveCycleState(
@@ -1707,7 +1689,7 @@ def main(argv: list[str] | None = None) -> int:
 
             hot_reload = ConfigHotReload(str(_hot_path))
             hot_reload.load()
-        except Exception as _hot_reload_exc:  # noqa: BLE001
+        except Exception as _hot_reload_exc:  # BLE001:REVIEWED
             print(
                 json.dumps(
                     {
@@ -1750,7 +1732,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _bs_exc:  # noqa: BLE001
+        except Exception as _bs_exc:  # BLE001:REVIEWED
             print(
                 json.dumps(
                     {
@@ -1795,7 +1777,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _ew_exc:  # noqa: BLE001
+        except Exception as _ew_exc:  # BLE001:REVIEWED
             print(
                 json.dumps(
                     {
@@ -1825,7 +1807,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _lm_exc:  # noqa: BLE001
+        except Exception as _lm_exc:  # BLE001:REVIEWED
             print(
                 json.dumps(
                     {
@@ -1889,7 +1871,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _ah_exc:  # noqa: BLE001
+        except Exception as _ah_exc:  # BLE001:REVIEWED
             print(
                 json.dumps(
                     {
@@ -1919,7 +1901,7 @@ def main(argv: list[str] | None = None) -> int:
             msg["traceback"] = "".join(_traceback.format_tb(exc_tb))[-2000:]
         try:
             print(json.dumps(msg, ensure_ascii=False), flush=True)
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             print(f"FATAL: {exc_type}: {exc_value}", flush=True)
         _sys.__excepthook__(exc_type, exc_value, exc_tb)
 
@@ -2006,7 +1988,7 @@ def main(argv: list[str] | None = None) -> int:
                                     ),
                                     flush=True,
                                 )
-                            except Exception as _wsexc:  # noqa: BLE001
+                            except Exception as _wsexc:  # BLE001:REVIEWED
                                 print(
                                     json.dumps(
                                         {
@@ -2040,7 +2022,7 @@ def main(argv: list[str] | None = None) -> int:
                                     ),
                                     flush=True,
                                 )
-                        except Exception as _wsexc:  # noqa: BLE001
+                        except Exception as _wsexc:  # BLE001:REVIEWED
                             print(
                                 json.dumps(
                                     {
@@ -2149,26 +2131,24 @@ def main(argv: list[str] | None = None) -> int:
             _bridge_health_path = Path(args.base_dir) / "reports" / "mt5_bridge_health.json"
             _bridge_ready = False
             for _retry in range(30):  # 30 × 1s = 30s max wait
-                try:
-                    if _bridge_health_path.exists():
-                        _hb = json.loads(_bridge_health_path.read_text(encoding="utf-8"))
-                        if _hb.get("transport") == "zmq" and _hb.get("mt5_connected"):
-                            _bridge_ready = True
-                            print(
-                                json.dumps(
-                                    {
-                                        "event": "bridge_ready",
-                                        "time": _utc_iso(),
-                                        "pid": _hb.get("pid"),
-                                        "transport": "zmq",
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                                flush=True,
-                            )
-                            break
-                except Exception:  # noqa: BLE001
-                    pass
+                with fail_open_guard("LiveIntentLoop:L2142"):
+                        if _bridge_health_path.exists():
+                            _hb = json.loads(_bridge_health_path.read_text(encoding="utf-8"))
+                            if _hb.get("transport") == "zmq" and _hb.get("mt5_connected"):
+                                _bridge_ready = True
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "bridge_ready",
+                                            "time": _utc_iso(),
+                                            "pid": _hb.get("pid"),
+                                            "transport": "zmq",
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
+                                break
                 time.sleep(1.0)
             if not _bridge_ready:
                 print(
@@ -2191,7 +2171,7 @@ def main(argv: list[str] | None = None) -> int:
             from core.observability.entry_context_guard import start_entry_context_guard
 
             start_entry_context_guard(Path(args.base_dir), symbol=args.symbol)
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass  # Guard failure must never prevent the main loop from starting
 
         while True:
@@ -2243,14 +2223,12 @@ def main(argv: list[str] | None = None) -> int:
                 state._consecutive_cycle_errors = 0
                 # Reload tracker if daily_ops enriched it with realized P&L
                 if state._tracker_reload_pending:
-                    try:
-                        tracker = BrainPerformanceTracker.load(tracker_path)
-                        state._tracker_reload_pending = False
-                    except Exception:  # noqa: BLE001
-                        pass
+                    with fail_open_guard("LiveIntentLoop:L2246"):
+                            tracker = BrainPerformanceTracker.load(tracker_path)
+                            state._tracker_reload_pending = False
                 if not should_continue:
                     break
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # BLE001:REVIEWED
                 # ── FIX-20260607-140: Fail-Closed on dispatch pipeline crash ──
                 # ExecutionQueueFatalError means the dispatch pipeline is broken.
                 # Trip the circuit breaker IMMEDIATELY — do NOT continue the
@@ -2426,32 +2404,30 @@ def main(argv: list[str] | None = None) -> int:
                         raise  # surface hidden bugs instead of silent pass
 
             if hot_reload is not None and state.loop_iteration % 30 == 0:
-                try:
-                    changes = hot_reload.check_and_reload()
-                    if changes:
-                        # ── Apply regime_map hot-reload ──
-                        _new_regime_cfg = changes.get("regime_gate", {})
-                        if isinstance(_new_regime_cfg, dict):
-                            _new_regime_map = _new_regime_cfg.get("regime_map")
-                            if isinstance(_new_regime_map, dict) and state.regime_gate is not None:
-                                state.regime_gate.regime_map = _new_regime_map
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "config_hot_reloaded",
-                                    "time": _utc_iso(),
-                                    "changes": list(changes.keys()),
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
-                except Exception:  # noqa: BLE001
-                    pass
+                with fail_open_guard("LiveIntentLoop:L2417"):
+                        changes = hot_reload.check_and_reload()
+                        if changes:
+                            # ── Apply regime_map hot-reload ──
+                            _new_regime_cfg = changes.get("regime_gate", {})
+                            if isinstance(_new_regime_cfg, dict):
+                                _new_regime_map = _new_regime_cfg.get("regime_map")
+                                if isinstance(_new_regime_map, dict) and state.regime_gate is not None:
+                                    state.regime_gate.regime_map = _new_regime_map
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "config_hot_reloaded",
+                                        "time": _utc_iso(),
+                                        "changes": list(changes.keys()),
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
             # ── FIX-20260603-075: persist execution guard state EVERY cycle ──
             _strategies = getattr(state, "_strategies", None)
             if _strategies is not None:
-                try:
+                with fail_open_guard("LiveIntentLoop:PersistExecutionState"):
                     from core.runtime.execution_state import save_execution_state
 
                     _exec_path = Path(args.base_dir) / "state" / "execution_state.json"
@@ -2477,8 +2453,6 @@ def main(argv: list[str] | None = None) -> int:
                         # ── DQAF-20260615-004 ──
                         known_open_tickets=getattr(state, "known_open_tickets", None),
                     )
-                except Exception:  # noqa: BLE001
-                    pass
 
             # ── FIX-20260604-077: persist PnL ledger EVERY cycle ──
             # Same root cause as FIX-075: 60-cycle save interval means recent
@@ -2488,12 +2462,10 @@ def main(argv: list[str] | None = None) -> int:
             # Set _EVENT_STREAM_MODE=False to restore dual-write for debugging.
             _EVENT_STREAM_MODE = True
             if pnl_ledger is not None:
-                try:
-                    if not _EVENT_STREAM_MODE:
-                        pnl_ledger.save(pnl_ledger_path)
-                    _inject_performance_metrics(pnl_ledger, args.base_dir)
-                except Exception:  # noqa: BLE001
-                    pass
+                with fail_open_guard("LiveIntentLoop:L2491"):
+                        if not _EVENT_STREAM_MODE:
+                            pnl_ledger.save(pnl_ledger_path)
+                        _inject_performance_metrics(pnl_ledger, args.base_dir)
 
             # ── FIX-20260604-079: data health monitor ──
             # Runs every 60 cycles.  Checks feature store freshness,
@@ -2501,45 +2473,37 @@ def main(argv: list[str] | None = None) -> int:
             # Alerts via LiveAlertHub when data quality degrades.
             # Bootstrap on first cycle to create state file immediately.
             if state.loop_iteration == 1 or state.loop_iteration % config.state_save_interval == 0:
-                try:
-                    from core.runtime.data_health_monitor import check_data_health
+                with fail_open_guard("LiveIntentLoop:L2488"):
+                        from core.runtime.data_health_monitor import check_data_health
 
-                    _health = check_data_health(
-                        base_dir=args.base_dir,
-                        symbol=config.symbol,
-                        alert_hub=alert_hub,
-                        position_manager=getattr(state, "position_manager", None),
-                    )
-                    if _health.get("alerts") or _health.get("checks", {}).get("training_ready"):
-                        print(
-                            json.dumps(
-                                {"event": "data_health_report", **_health},
-                                ensure_ascii=False,
-                                default=str,
-                            ),
-                            flush=True,
+                        _health = check_data_health(
+                            base_dir=args.base_dir,
+                            symbol=config.symbol,
+                            alert_hub=alert_hub,
+                            position_manager=getattr(state, "position_manager", None),
                         )
-                except Exception:  # noqa: BLE001
-                    pass
+                        if _health.get("alerts") or _health.get("checks", {}).get("training_ready"):
+                            print(
+                                json.dumps(
+                                    {"event": "data_health_report", **_health},
+                                    ensure_ascii=False,
+                                    default=str,
+                                ),
+                                flush=True,
+                            )
 
             if state.loop_iteration % config.state_save_interval == 0:
                 if rolling_norm is not None:
-                    try:
+                    with fail_open_guard("LiveIntentLoop:RollingNormSaveState"):
                         _state_path = Path(args.base_dir) / "rolling_norm_state.json"
                         rolling_norm.save_state(_state_path)
-                    except Exception:  # noqa: BLE001
-                        pass
                 if regime_detector is not None:
-                    try:
+                    with fail_open_guard("LiveIntentLoop:RegimeDetectorSaveState"):
                         _regime_path = Path(args.base_dir) / "regime_detector_state.json"
                         regime_detector.save_state(_regime_path)
-                    except Exception:  # noqa: BLE001
-                        pass
                 if meta_signal_filter is not None:
-                    try:  # noqa: SIM105
+                    with fail_open_guard("LiveIntentLoop:MetaSignalFilterSaveState"):
                         meta_signal_filter.save_state(str(_mf_state_path))
-                    except Exception:  # noqa: BLE001
-                        pass
 
             # ── Wait for next cycle: event-driven bar sync or interval sleep ──
             try:
@@ -2592,7 +2556,7 @@ def main(argv: list[str] | None = None) -> int:
                             time.sleep(args.interval_seconds)
                 else:
                     time.sleep(args.interval_seconds)
-            except Exception as _bar_exc:  # noqa: BLE001
+            except Exception as _bar_exc:  # BLE001:REVIEWED
                 print(
                     json.dumps(
                         {
@@ -2610,7 +2574,7 @@ def main(argv: list[str] | None = None) -> int:
         if _live_lock is not None:
             try:  # noqa: SIM105
                 _live_lock.release()
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED:no-try
                 pass
         # ── Graceful shutdown: persist all state ──
         print(
@@ -2626,41 +2590,35 @@ def main(argv: list[str] | None = None) -> int:
         _old_sigterm = signal.signal(signal.SIGTERM, signal.SIG_IGN)
         try:
             if position_manager is not None and position_manager.has_position():
-                try:
-                    _pos_path = Path(args.base_dir) / "state" / "active_position.json"
-                    position_manager.save_state(str(_pos_path))
-                    print(
-                        json.dumps(
-                            {
-                                "event": "position_state_saved",
-                                "time": _utc_iso(),
-                                "ticket": position_manager.get_position().ticket
-                                if position_manager.get_position()
-                                else 0,
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
-                except Exception:  # noqa: BLE001
-                    pass
+                with fail_open_guard("LiveIntentLoop:L2607"):
+                        _pos_path = Path(args.base_dir) / "state" / "active_position.json"
+                        position_manager.save_state(str(_pos_path))
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "position_state_saved",
+                                    "time": _utc_iso(),
+                                    "ticket": position_manager.get_position().ticket
+                                    if position_manager.get_position()
+                                    else 0,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
 
             if rolling_norm is not None:
-                try:
-                    _state_path = Path(args.base_dir) / "rolling_norm_state.json"
-                    rolling_norm.save_state(_state_path)
-                except Exception:  # noqa: BLE001
-                    pass
+                with fail_open_guard("LiveIntentLoop:L2649"):
+                        _state_path = Path(args.base_dir) / "rolling_norm_state.json"
+                        rolling_norm.save_state(_state_path)
             if regime_detector is not None:
-                try:
-                    _regime_path = Path(args.base_dir) / "regime_detector_state.json"
-                    regime_detector.save_state(_regime_path)
-                except Exception:  # noqa: BLE001
-                    pass
+                with fail_open_guard("LiveIntentLoop:L2655"):
+                        _regime_path = Path(args.base_dir) / "regime_detector_state.json"
+                        regime_detector.save_state(_regime_path)
             try:
                 save_path = Path(args.base_dir) / "brain_performance.json"
                 tracker.save(save_path)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # BLE001:REVIEWED
                 print(
                     json.dumps(
                         {"event": "tracker_save_error", "time": _utc_iso(), "error": str(exc)},
@@ -2683,7 +2641,7 @@ def main(argv: list[str] | None = None) -> int:
                         ),
                         flush=True,
                     )
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:  # BLE001:REVIEWED
                     print(
                         json.dumps(
                             {
@@ -2698,39 +2656,37 @@ def main(argv: list[str] | None = None) -> int:
             if meta_signal_filter is not None:
                 try:  # noqa: SIM105
                     meta_signal_filter.save_state(str(_mf_state_path))
-                except Exception:  # noqa: BLE001
+                except Exception:  # BLE001:REVIEWED:no-try
                     pass
             # ── FIX-20260603-072: persist execution guard state on shutdown ──
             _strategies = getattr(state, "_strategies", None)
             if _strategies is not None:
-                try:
-                    from core.runtime.execution_state import save_execution_state
+                with fail_open_guard("LiveIntentLoop:L2680"):
+                        from core.runtime.execution_state import save_execution_state
 
-                    _exec_path = Path(args.base_dir) / "state" / "execution_state.json"
-                    save_execution_state(
-                        str(_exec_path),
-                        _strategies,
-                        getattr(state, "_cooldown_registry", None),
-                        getattr(state, "_family_entry_tracker", None),
-                        sl_streak_blocks=getattr(state, "sl_streak_blocked_until", {}),
-                        sl_streak_global_block=getattr(state, "sl_streak_blocked_all_until", 0.0),
-                        consecutive_degraded=state._consecutive_degraded_cycles,
-                        circuit_breaker_tripped=state._circuit_breaker_tripped,
-                        circuit_breaker_tripped_at=getattr(
-                            state, "_circuit_breaker_tripped_at", 0.0
-                        ),
-                        intraday_dd_active=state.block_new_entries,
-                        # ── DQAF-20260608-003: full counter persistence ──
-                        consecutive_stale_cycles=state._consecutive_stale_cycles,
-                        consecutive_stale_features=state._consecutive_stale_features,
-                        circuit_breaker_trip_reason=getattr(
-                            state, "_circuit_breaker_trip_reason", ""
-                        ),
-                        # ── DQAF-20260615-004 ──
-                        known_open_tickets=getattr(state, "known_open_tickets", None),
-                    )
-                except Exception:  # noqa: BLE001
-                    pass
+                        _exec_path = Path(args.base_dir) / "state" / "execution_state.json"
+                        save_execution_state(
+                            str(_exec_path),
+                            _strategies,
+                            getattr(state, "_cooldown_registry", None),
+                            getattr(state, "_family_entry_tracker", None),
+                            sl_streak_blocks=getattr(state, "sl_streak_blocked_until", {}),
+                            sl_streak_global_block=getattr(state, "sl_streak_blocked_all_until", 0.0),
+                            consecutive_degraded=state._consecutive_degraded_cycles,
+                            circuit_breaker_tripped=state._circuit_breaker_tripped,
+                            circuit_breaker_tripped_at=getattr(
+                                state, "_circuit_breaker_tripped_at", 0.0
+                            ),
+                            intraday_dd_active=state.block_new_entries,
+                            # ── DQAF-20260608-003: full counter persistence ──
+                            consecutive_stale_cycles=state._consecutive_stale_cycles,
+                            consecutive_stale_features=state._consecutive_stale_features,
+                            circuit_breaker_trip_reason=getattr(
+                                state, "_circuit_breaker_trip_reason", ""
+                            ),
+                            # ── DQAF-20260615-004 ──
+                            known_open_tickets=getattr(state, "known_open_tickets", None),
+                        )
         finally:
             signal.signal(signal.SIGINT, _old_sigint)
             signal.signal(signal.SIGTERM, _old_sigterm)
@@ -2739,7 +2695,7 @@ def main(argv: list[str] | None = None) -> int:
         if alert_hub is not None:
             try:  # noqa: SIM105
                 alert_hub.shutdown()
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED:no-try
                 pass
 
         if mt5_worker is not None:
