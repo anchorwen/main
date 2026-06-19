@@ -58,31 +58,31 @@
     ],
     "BTC_Swing_V4": [
       {
-        "timestamp": "2026-06-19T11:21:17.647258",
-        "composite_score": 0.4414,
-        "execution_outcome": "loss",
+        "timestamp": "2026-06-19T11:36:18.027557",
+        "composite_score": 0.5,
+        "execution_outcome": "breakeven",
         "fill_grade": null,
         "dimensions": {
-          "position_ticket": 3935433554,
+          "position_ticket": 3943828278,
           "symbol": "",
           "side": "",
           "recorded_at": ""
         }
       },
       {
-        "timestamp": "2026-06-19T11:21:17.647258",
-        "composite_score": 0.4327,
-        "execution_outcome": "loss",
+        "timestamp": "2026-06-19T11:36:18.027557",
+        "composite_score": 0.5,
+        "execution_outcome": "breakeven",
         "fill_grade": null,
         "dimensions": {
-          "position_ticket": 3934831488,
+          "position_ticket": 3944033452,
           "symbol": "",
           "side": "",
           "recorded_at": ""
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.4421,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -94,7 +94,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5941,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -106,7 +106,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.6258,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -118,7 +118,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.3552,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -130,7 +130,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.7435,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -142,7 +142,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.4489,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -154,7 +154,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.4489,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -166,7 +166,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.4401,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -178,7 +178,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.4198,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -190,7 +190,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.4064,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -202,7 +202,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.6135,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -214,7 +214,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.351,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -226,7 +226,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5698,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -238,7 +238,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.6131,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -250,7 +250,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5807,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -262,7 +262,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.739,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -274,7 +274,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -286,7 +286,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -298,7 +298,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -310,7 +310,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5629,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -322,7 +322,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.4461,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -334,7 +334,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -346,7 +346,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -358,7 +358,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -370,7 +370,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -382,7 +382,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -394,7 +394,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.4193,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -406,7 +406,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.4252,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -418,7 +418,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.4292,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -430,7 +430,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -442,7 +442,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -454,7 +454,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.4332,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -466,7 +466,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -478,7 +478,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -490,7 +490,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -502,7 +502,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -514,7 +514,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -526,7 +526,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -538,7 +538,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -550,7 +550,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -562,7 +562,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -574,7 +574,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -586,7 +586,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.433,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -598,7 +598,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.4366,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -610,7 +610,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.4287,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -622,7 +622,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.5776,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -634,7 +634,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
+        "timestamp": "2026-06-19T11:41:18.143862",
         "composite_score": 0.4319,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -646,31 +646,31 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
-        "composite_score": 0.4257,
+        "timestamp": "2026-06-19T11:41:18.143862",
+        "composite_score": 0.4414,
         "execution_outcome": "loss",
         "fill_grade": null,
         "dimensions": {
-          "position_ticket": 3914604901,
+          "position_ticket": 3935433554,
           "symbol": "",
           "side": "",
           "recorded_at": ""
         }
       },
       {
-        "timestamp": "2026-06-19T11:26:17.770125",
-        "composite_score": 0.551,
-        "execution_outcome": "win",
+        "timestamp": "2026-06-19T11:41:18.143862",
+        "composite_score": 0.4327,
+        "execution_outcome": "loss",
         "fill_grade": null,
         "dimensions": {
-          "position_ticket": 3904946116,
+          "position_ticket": 3934831488,
           "symbol": "",
           "side": "",
           "recorded_at": ""
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5729,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -682,7 +682,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.3831,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -694,7 +694,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5689,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -706,7 +706,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5588,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -718,7 +718,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.7325,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -730,7 +730,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.698,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -742,7 +742,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.4416,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -754,7 +754,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.4485,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -766,7 +766,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.4493,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -778,7 +778,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.425,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -790,7 +790,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.3625,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -802,7 +802,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.3338,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -814,7 +814,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.3609,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -826,7 +826,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.6384,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -838,7 +838,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.3078,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -850,7 +850,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.4428,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -862,7 +862,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5789,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -874,7 +874,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.4375,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -886,7 +886,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -898,7 +898,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -910,7 +910,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -922,7 +922,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -934,7 +934,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -946,7 +946,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -958,7 +958,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -970,7 +970,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -982,7 +982,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.903336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -994,7 +994,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -1006,7 +1006,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.4413,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -1018,7 +1018,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.4495,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -1030,7 +1030,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -1042,7 +1042,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -1054,7 +1054,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.4495,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -1066,7 +1066,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -1078,7 +1078,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -1090,7 +1090,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -1102,7 +1102,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -1114,7 +1114,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -1126,7 +1126,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -1138,7 +1138,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -1150,7 +1150,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -1162,7 +1162,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -1174,7 +1174,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5587,
         "execution_outcome": "win",
         "fill_grade": null,
@@ -1186,7 +1186,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.5,
         "execution_outcome": "breakeven",
         "fill_grade": null,
@@ -1198,7 +1198,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.4395,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -1210,7 +1210,7 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.4384,
         "execution_outcome": "loss",
         "fill_grade": null,
@@ -1222,36 +1222,36 @@
         }
       },
       {
-        "timestamp": "2026-06-19T11:31:17.904336",
+        "timestamp": "2026-06-19T11:46:18.266433",
+        "composite_score": 0.4257,
+        "execution_outcome": "loss",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3914604901,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-19T11:46:18.266433",
+        "composite_score": 0.551,
+        "execution_outcome": "win",
+        "fill_grade": null,
+        "dimensions": {
+          "position_ticket": 3904946116,
+          "symbol": "",
+          "side": "",
+          "recorded_at": ""
+        }
+      },
+      {
+        "timestamp": "2026-06-19T11:46:18.266433",
         "composite_score": 0.4425,
         "execution_outcome": "loss",
         "fill_grade": null,
         "dimensions": {
           "position_ticket": 3943202473,
-          "symbol": "",
-          "side": "",
-          "recorded_at": ""
-        }
-      },
-      {
-        "timestamp": "2026-06-19T11:31:17.904336",
-        "composite_score": 0.4314,
-        "execution_outcome": "loss",
-        "fill_grade": null,
-        "dimensions": {
-          "position_ticket": 3943757256,
-          "symbol": "",
-          "side": "",
-          "recorded_at": ""
-        }
-      },
-      {
-        "timestamp": "2026-06-19T11:31:17.904336",
-        "composite_score": 0.5,
-        "execution_outcome": "breakeven",
-        "fill_grade": null,
-        "dimensions": {
-          "position_ticket": 3944387852,
           "symbol": "",
           "side": "",
           "recorded_at": ""

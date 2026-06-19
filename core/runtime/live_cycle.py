@@ -3195,7 +3195,7 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:AUDITED — complex nested block, not suitable for fog
             pass
 
     # ── Protection flag check ──
@@ -4802,12 +4802,9 @@ def execute_live_cycle(
         # Runs once after lazy-init above.  Silently passes if no persisted
         # state exists (first run or stale >24h snapshot).
         if state.loop_iteration == 1 and state._cooldown_registry is not None:
-            try:
+            with fail_open_guard("LiveCycle:RestoreExecutionState"):
                 from core.runtime.execution_state import restore_execution_state
-
                 restore_execution_state(state, strategies, data_dir=config.base_dir)
-            except Exception:  # BLE001:REVIEWED
-                pass
 
         # ── FIX-20260613-090: disk fallback for _recent_mid_prices ──
         # MT5 backfill (above) is the primary hydration source.  Disk persistence
