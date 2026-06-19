@@ -4360,18 +4360,9 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except Exception as _oug_exc:  # noqa: BLE001
-            print(
-                json.dumps(
-                    {
-                        "event": "conformal_ou_gate_init_error",
-                        "time": _utc_iso(),
-                        "error": str(_oug_exc),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
+        except Exception as _oug_exc:
+            with fail_open_guard("ConformalOUGateInit"):
+                raise  # Re-raise inside guard for structured traceback logging
 
     # ── Daily D1 features for swing brains ──
     daily_feature_vector: Any = None  # pre-initialised for DEGRADE
