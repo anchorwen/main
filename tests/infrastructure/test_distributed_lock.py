@@ -114,6 +114,58 @@ class TestFileLock:
         assert "Timeout" in result.error or "held" in result.error
         lock1.release()
 
+    def test_refresh_detects_stolen_lock(self, lock_dir):
+        """DQAF-20260619-001: refresh() must detect when another process
+        has stolen the lock (holder_id mismatch) and return False."""
+        lock = FileLock("test_resource", lock_dir=lock_dir, ttl_seconds=10)
+        assert lock.acquire().acquired
+        # Simulate a forced steal: overwrite the lock file with a different
+        # holder_id, as would happen when _is_stale() → _force_release()
+        # → new process acquires.
+        import json as _json
+        import os as _os
+
+        _lock_path = lock._lock_path
+        _stolen_data = _json.dumps(
+            {
+                "name": "test_resource",
+                "holder_id": "stolen_by_other_process",
+                "pid": _os.getpid(),
+                "acquired_at": "2026-06-19T00:00:00",
+                "ttl_seconds": 10,
+            }
+        )
+        _lock_path.write_text(_stolen_data, encoding="utf-8")
+        # refresh() should detect the mismatch and return False
+        assert lock.refresh() is False
+        assert lock.is_held is False
+        # Clean up
+        lock._acquired = True  # manually restore to allow release
+        lock._holder_id = "stolen_by_other_process"
+        lock.release()
+
+    def test_refresh_succeeds_with_matching_holder_id(self, lock_dir):
+        """refresh() should succeed when holder_id matches."""
+        lock = FileLock("test_resource", lock_dir=lock_dir, ttl_seconds=10)
+        assert lock.acquire().acquired
+        assert lock.refresh() is True
+        assert lock.is_held is True
+        lock.release()
+
+    def test_refresh_fails_when_not_acquired(self, lock_dir):
+        """refresh() should return False when lock was never acquired."""
+        lock = FileLock("test_resource", lock_dir=lock_dir, ttl_seconds=10)
+        assert lock.refresh() is False
+
+    def test_refresh_fails_when_lock_file_missing(self, lock_dir):
+        """refresh() should return False and reset _acquired when lock file
+        is deleted externally."""
+        lock = FileLock("test_resource", lock_dir=lock_dir, ttl_seconds=10)
+        assert lock.acquire().acquired
+        lock._lock_path.unlink()
+        assert lock.refresh() is False
+        assert lock.is_held is False
+
 
 # ── DirectoryLock ─────────────────────────────────────────────────────────────
 

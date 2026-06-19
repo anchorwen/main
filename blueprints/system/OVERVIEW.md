@@ -1,7 +1,7 @@
 # Blueprint System Overview
 
 > Last regenerated: 2026-06-19
-> FIX count: 22 | BLE001: 560→0 | 圈导入: 2→0 | 零测试模块: 6→0 | 纯函数模块: 9
+> FIX count: 23 | BLE001: 560→0 | 圈导入: 2→0 | 零测试模块: 6→0 | 纯函数模块: 9
 
 ## Architecture Layers
 

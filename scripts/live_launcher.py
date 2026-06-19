@@ -397,9 +397,12 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                     continue
                 _stale = False
                 # Check 1: PID dead → definitely stale
+                # DQAF-20260619-001: Windows os.kill(pid,0) raises SystemError
+                # (signal 0 unsupported), not OSError.  Catch both so the
+                # TTL check (Check 2 below) is reachable on all platforms.
                 try:
                     os.kill(_pid, 0)
-                except OSError:
+                except (OSError, SystemError):
                     _stale = True
                     _reason = f"pid={_pid} dead"
                 # Check 2: PID alive but TTL expired → hung process

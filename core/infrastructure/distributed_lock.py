@@ -194,11 +194,22 @@ class FileLock(BaseLock):
         DQAF-20260616-004: Without refresh, a healthy long-running process
         appears stale after TTL expiry, and a hung process cannot be
         distinguished from a healthy one.
+
+        DQAF-20260619-001: Verifies the lock file's holder_id matches our
+        own before overwriting.  Without this check, a forced lock steal
+        (via _is_stale()→_force_release()) is invisible to the previous
+        holder — its next refresh() silently overwrites the new holder's
+        data, and both processes believe they own the lock.
         """
         if not self._acquired:
             return False
         try:
             if not self._lock_path.exists():
+                self._acquired = False
+                return False
+            # ── DQAF-20260619-001: Verify we still own this lock ──
+            _current = json.loads(self._lock_path.read_text(encoding="utf-8"))
+            if _current.get("holder_id") != self._holder_id:
                 self._acquired = False
                 return False
             _lock_data = json.dumps(
