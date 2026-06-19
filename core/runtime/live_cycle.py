@@ -39,6 +39,7 @@ from core.runtime.fault_handler import (
 
 # ── Strategy line imports ──
 # ── Extracted sub-modules (P2 refactor) ──
+from core.runtime.mia_close import build_mia_close_entry, enrich_mia_from_deals
 from core.runtime.ou_hurst import compute_tf_ou_hurst
 from core.runtime.position_ownership import resolve_position_owner
 from core.runtime.trail_dispatch import compute_and_dispatch_trail
@@ -2135,198 +2136,19 @@ def _reconcile_closed_positions(
 def _build_mia_close_entry(
     pos: Any, known_entry: dict[str, Any], *, symbol: str = "XAUUSDc"
 ) -> dict[str, Any]:
-    """Build a close journal entry for a position detected MIA in MT5.
+    """Strangler Fig #20: delegation wrapper — implementation in mia_close.py."""
+    return build_mia_close_entry(pos, known_entry, symbol=symbol)
 
-    Called by _execute_management_phase when positions_get returns empty
-    for a tracked ticket.  Uses all available engine-side info since MT5
-    deal history may not be available yet (position just closed).
 
-    symbol is a keyword-only parameter; caller MUST pass config.symbol.
-    The default "XAUUSDc" exists only for backward compatibility.
-    """
-    side = str(getattr(pos, "side", known_entry.get("side", "")))
-    entry_price = float(
-        getattr(pos, "entry_price", None) or known_entry.get("entry_price", 0.0) or 0.0
-    )
-    close_volume = float(
-        getattr(pos, "volume", None)
-        or known_entry.get("volume", 0.0)
-        or known_entry.get("effective_volume_hint", 0.0)
-    )
-    # FIX-20260610-004: When all volume sources return 0 (position state lost
-    # after partial close / MIA), use getattr with 0 default as last resort so
-    # we at least preserve a numeric close_volume.  A volume of 0 still allows
-    # downstream _enrich_mia_from_deals to recover the real volume from MT5
-    # deal data.  Previously close_volume=0.0 blocked PnL computation entirely,
-    # producing pnl=None→label="breakeven".
-    if close_volume <= 0.0:
-        close_volume = float(getattr(pos, "volume", 0) or 0)
-    initial_sl = float(getattr(pos, "initial_sl", None) or known_entry.get("sl", 0.0) or 0.0)
-    initial_tp = float(getattr(pos, "initial_tp", None) or known_entry.get("tp", 0.0) or 0.0)
-    current_sl = float(getattr(pos, "current_sl", initial_sl) or initial_sl)
-    close_time_iso = _utc_iso()
-
-    # Estimate close_price: assume SL hit (most conservative).
-    # _enrich_mia_from_deals() will override with actual deal data.
-    close_price = current_sl
-
-    pnl = None
-    if entry_price > 0 and close_price > 0 and close_volume > 0:
-        if side == "long":
-            pnl = round((close_price - entry_price) * close_volume, 2)
-        elif side == "short":
-            pnl = round((entry_price - close_price) * close_volume, 2)
-
-    _resolved_strategy = known_entry.get("strategy", "")
-    _resolved_magic = known_entry.get("magic") or known_entry.get("detail", {}).get(
-        "request", {}
-    ).get("magic", 0)
-    if not _resolved_strategy and _resolved_magic:
-        with fail_open_guard("MIA_MagicResolution"):
-            from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
-
-            _resolved_strategy = MAGIC_TO_STRATEGY.get(int(_resolved_magic), "")
-
-    return {
-        "schema_version": "live_trade_journal.v2",
-        "recorded_at": close_time_iso,
-        "message_id": f"mia_close_{known_entry.get('message_id', 'unknown')}",
-        "target": "exec_bridge",
-        "ack_status": "closed",
-        "detail": {
-            "reason": "mia_close",
-            "close_price": close_price,
-            "pnl": pnl,
-            "mia_detected_at": close_time_iso,
-            "entry_price": entry_price,  # FIX-20260602-058: for PnL recalculation
-        },
-        "symbol": known_entry.get("symbol") or symbol,
-        "action": "close",
-        "side": side,
-        "volume": close_volume,
-        "entry_price": entry_price,  # FIX-20260602-058: for PnL recalculation
-        "pnl": pnl,
-        "label": "loss"
-        if (pnl is not None and pnl < 0)
-        else ("win" if (pnl is not None and pnl > 0) else "breakeven"),
-        "position_ticket": pos.ticket,
-        "magic": _resolved_magic,
-        "strategy": _resolved_strategy,
-        "sl": initial_sl,
-        "tp": initial_tp,
-        # FIX-20260610-006: structured trail telemetry —
-        # distinguishes "SL hit at original SL" from "SL hit at trailed SL"
-        "trail_contribution": {
-            "initial_sl": initial_sl,
-            "final_sl": current_sl,
-            "trail_advances": getattr(pos, "trail_advances", 0),
-        },
-        "open_message_id": known_entry.get("message_id"),
-        "brain_ids": known_entry.get("brain_ids"),
-    }
+# ── MIA helpers extracted to core/runtime/mia_close.py (Strangler Fig #20) ──
 
 
 def _enrich_mia_from_deals(
     mia_entry: dict[str, Any],
     deals: list[Any],
 ) -> None:
-    """Enrich an MIA close entry with actual MT5 deal history data.
-
-    Overrides the conservative SL-hit estimate in _build_mia_close_entry
-    with actual close_price and close_reason from deal history.
-    """
-    close_price = None
-    close_time = None
-    close_reason: int | None = None
-
-    for deal in deals:
-        deal_reason = getattr(deal, "reason", -1)
-        if deal_reason in (4, 5):  # DEAL_REASON_SL=4, DEAL_REASON_TP=5
-            close_price = getattr(deal, "price", None)
-            close_time = getattr(deal, "time", None)
-            close_reason = deal_reason
-
-    if close_price is None and deals and len(deals) >= 2:
-        exit_deals = [d for d in deals if getattr(d, "entry", -1) == 1]
-        if exit_deals:
-            last_exit = max(exit_deals, key=lambda d: getattr(d, "time", 0))
-            close_price = getattr(last_exit, "price", None)
-            close_time = getattr(last_exit, "time", None)
-        if close_price is None:
-            last_deal = max(deals, key=lambda d: getattr(d, "time", 0))
-            close_price = getattr(last_deal, "price", None)
-            close_time = getattr(last_deal, "time", None)
-
-    if close_price is not None:
-        mia_entry["detail"]["close_price"] = close_price
-        close_reason_str = {4: "sl_hit", 5: "tp_hit"}.get(close_reason or 0, "unknown_close")
-        mia_entry["detail"]["reason"] = close_reason_str
-
-        # Recompute PnL with actual close price
-        side = mia_entry.get("side", "")
-        entry_price = mia_entry.get("detail", {}).get("entry_price") or mia_entry.get(
-            "entry_price", 0
-        )
-        close_volume = mia_entry.get("volume", 0) or 0.0
-
-        # FIX-20260610-004: When close_volume is 0 (position state lost volume
-        # tracking after partial close), try to recover volume from MT5 deal data.
-        # Each exit deal (entry=1) has a volume field — sum them for a real
-        # close_volume.  Previously the truthiness check `if close_volume:` was
-        # falsy for 0/0.0, silently skipping PnL recomputation and leaving
-        # pnl=None→label="breakeven" even when entry_price and close_price are
-        # both known.  Now (1) tries deal-volume recovery, (2) uses explicit
-        # None check so volume=0 still yields pnl=0 rather than pnl=None.
-        if close_volume <= 0.0 and deals:
-            _deal_volume = 0.0
-            for _d in deals:
-                if getattr(_d, "entry", -1) == 1:  # exit deal
-                    _dv = float(getattr(_d, "volume", 0) or 0)
-                    _deal_volume += _dv
-            if _deal_volume > 0:
-                close_volume = _deal_volume
-                mia_entry["volume"] = close_volume  # persist recovered volume
-
-        if isinstance(entry_price, int | float) and entry_price > 0 and close_price > 0:
-            # Use explicit numeric check — close_volume may legitimately be 0
-            # (fully closed by broker at breakeven exactly) and we still want
-            # pnl=0 rather than pnl=None which would degenerate to "breakeven"
-            # in _build_mia_close_entry.
-            if side == "long":
-                mia_entry["pnl"] = round((close_price - entry_price) * float(close_volume), 2)
-            elif side == "short":
-                mia_entry["pnl"] = round((entry_price - close_price) * float(close_volume), 2)
-            # FIX-20260602-058: sync detail.pnl with recomputed PnL
-            if isinstance(mia_entry.get("detail"), dict):
-                mia_entry["detail"]["pnl"] = mia_entry["pnl"]
-        if mia_entry.get("pnl") is not None:
-            pnl = mia_entry["pnl"]
-            if pnl < 0:
-                mia_entry["label"] = "loss"
-            elif pnl > 0:
-                mia_entry["label"] = "win"
-            else:
-                mia_entry["label"] = "breakeven"
-
-        if close_reason == 4:
-            # FIX-20260610-006: distinguish original SL hit from trailed SL hit
-            _tc = mia_entry.get("trail_contribution", {})
-            if isinstance(_tc, dict) and _tc.get("trail_advances", 0) > 0:
-                mia_entry["label"] = "sl_hit_trailed"
-            else:
-                mia_entry["label"] = "sl_hit_first"
-        elif close_reason == 5:
-            mia_entry["label"] = "tp_hit_first"
-
-    if close_time is not None:
-        mia_entry["recorded_at"] = (
-            datetime.fromtimestamp(close_time, tz=UTC).isoformat().replace("+00:00", "Z")
-        )
-
-
-# ── Contract-group consensus helper ──────────────────────────────────────
-
-
+    """Strangler Fig #20: delegation wrapper — implementation in mia_close.py."""
+    enrich_mia_from_deals(mia_entry, deals)
 def _compute_contract_group_consensus(
     raw_proposals: list[Any],
     brains: list[dict[str, Any]],
