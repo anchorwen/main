@@ -1,7 +1,7 @@
 # Blueprint System Overview
 
 > Last regenerated: 2026-06-19
-> FIX count: 46 | BLE001: Phase 3a 热路径盲点 39→0 | Tier 1 零覆盖: 0 | Tier 2 零覆盖: 14→9 | fog: 115 | 纯函数: 13 | 圈导入: 0
+> FIX count: 51 | BLE001: Phase 3a 盲点全歼+3b推进中 | Tier 1: 0 | Tier 2: 7 | fog: 135 | 纯函数: 14 | Mypy: 201→31
 
 ## Architecture Layers
 
