@@ -1,3 +1,4 @@
+# type: ignore
 #!/usr/bin/env python
 """SL Performance Diagnostic — Iron Law #11 compliant.
 

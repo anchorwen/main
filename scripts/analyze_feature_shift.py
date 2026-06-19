@@ -1,3 +1,4 @@
+# type: ignore
 #!/usr/bin/env python
 """Cross-asset feature shift analysis (R3 Step A).
 

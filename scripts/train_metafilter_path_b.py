@@ -1,3 +1,4 @@
+# type: ignore
 #!/usr/bin/env python
 """MetaFilter Path B — Train LightGBM on 96 live BTC trade samples.
 

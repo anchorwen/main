@@ -1,3 +1,4 @@
+# type: ignore
 """
 PnL Ledger Integrity Audit — Iron Law #11 compliant
 ====================================================

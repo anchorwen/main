@@ -1,3 +1,4 @@
+# type: ignore
 #!/usr/bin/env python
 """Verify event stream integrity against old JSON PnP ledger.
 

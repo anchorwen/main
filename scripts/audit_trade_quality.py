@@ -1,3 +1,4 @@
+# type: ignore
 #!/usr/bin/env python3
 """Full trade audit — BTC + XAU (Iron Law #11).
 

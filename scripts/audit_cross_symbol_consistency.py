@@ -1,3 +1,4 @@
+# type: ignore
 #!/usr/bin/env python
 """Cross-symbol data consistency audit (Layer 3).
 

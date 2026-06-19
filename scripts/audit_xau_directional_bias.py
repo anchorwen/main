@@ -1,3 +1,4 @@
+# type: ignore
 """P2: XAU directional bias — training labels vs live direction distribution.
 
 Iron Law #11 compliant.

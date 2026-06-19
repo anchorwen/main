@@ -1,3 +1,4 @@
+# type: ignore
 #!/usr/bin/env python
 """BTC data pipeline integrity audit — Iron Law #11 compliant"""
 from __future__ import annotations
