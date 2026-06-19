@@ -17,11 +17,10 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from core.runtime.fault_handler import fail_open_guard
-
 import numpy as np
 
 from core.execution.strategy_decision import StrategyDecision
+from core.runtime.fault_handler import fail_open_guard
 
 logger = logging.getLogger(__name__)
 
