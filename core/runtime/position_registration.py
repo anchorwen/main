@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from core.execution.trail_stop_engine import TrailPolicy
-from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, fail_open_guard
 
 
 def register_dispatched_positions(
@@ -88,7 +88,7 @@ def register_dispatched_positions(
                         line = line.strip()
                         if not line or intent_id not in line:
                             continue
-                        try:
+                        with fail_open_guard("PositionRegistration:JournalParse"):
                             rec = json.loads(line)
                             # Match either message_id (original) or open_message_id (bridge follow-up)
                             _mid = rec.get("message_id", "")
@@ -109,8 +109,6 @@ def register_dispatched_positions(
                                     brain_votes_from_journal = bv
                                 if ticket is not None:
                                     break
-                        except Exception:  # BLE001:REVIEWED
-                            pass
                     if ticket is not None:
                         break
                 _time_module.sleep(0.5)
@@ -127,7 +125,7 @@ def register_dispatched_positions(
                         line = line.strip()
                         if not line or intent_id not in line:
                             continue
-                        try:
+                        with fail_open_guard("PositionRegistration:JournalParse"):
                             rec = json.loads(line)
                             _mid = rec.get("message_id", "")
                             _omid = rec.get("open_message_id", "")
@@ -137,8 +135,6 @@ def register_dispatched_positions(
                                     ticket = t
                                 if ticket is not None:
                                     break
-                        except Exception:  # BLE001:REVIEWED
-                            pass
                     if ticket is not None:
                         break
                 _time_module.sleep(0.5)
@@ -265,7 +261,7 @@ def register_dispatched_positions(
             )
             # ── Shadow record for limit-order execution quality ──
             if limit_monitor is not None:
-                try:
+                with fail_open_guard("PositionRegistration:LimitMonitor"):
                     _lom_spread_pts = 0.0
                     _lom_b = bid if bid is not None else 0.0
                     _lom_a = ask if ask is not None else 0.0
@@ -281,8 +277,6 @@ def register_dispatched_positions(
                         spread_points=_lom_spread_pts,
                         atr=current_atr,
                     )
-                except Exception:  # BLE001:REVIEWED
-                    pass
 
             registered_count += 1
         except Exception as _reg_exc:  # BLE001:REVIEWED
