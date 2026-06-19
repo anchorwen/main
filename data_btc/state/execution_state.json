@@ -1,15 +1,15 @@
 {
   "version": 3,
   "schema_version": "execution_state.v3",
-  "saved_at_utc": "2026-06-19T11:09:50.164074Z",
+  "saved_at_utc": "2026-06-19T11:14:50.746781Z",
   "budgets": {
     "btc_swing": {
       "daily_pnl_pct": -0.95,
       "consecutive_losses": 0,
       "total_trades_today": 7,
       "total_wins_today": 2,
-      "paused": true,
-      "paused_at": 1781867389.8890119,
+      "paused": false,
+      "paused_at": 0.0,
       "last_trade_day": "2026-06-19",
       "_sl_timestamps": [],
       "_sl_cooldown_until": 0.0,
