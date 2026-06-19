@@ -21,44 +21,20 @@ from typing import Any
 
 import numpy as np
 
-# ── Extracted sub-modules (Strangler Fig #11-17) ──
-# meta_filter_routing + trend_isolation_gates: kept inline
-# (both import StrategyDecision → circular)
+# ── Extracted sub-modules (Strangler Fig #11-18) ──
+# Circular imports RESOLVED: meta_filter_routing + trend_isolation_gates
+# now import StrategyDecision from strategy_decision.py (leaf module).
 from core.execution.brain_gates import check_min_valid_brains, extract_entry_z_score
 from core.execution.dynamic_sl_tp import compute_dynamic_sl_tp, compute_sl_tp_levels
+from core.execution.meta_filter_routing import apply_meta_filter_gate
 from core.execution.pwin_chain import adjust_p_win_for_z_strength as _z_strength
+from core.execution.strategy_decision import StrategyDecision
+from core.execution.trend_isolation_gates import apply_trend_isolation_gates
 from core.execution.trend_volume_guard import check_minimum_rr, compute_counter_trend_volume_mult
 from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
 from core.runtime.shadow_recorder import record_brain_votes
 
 logger = logging.getLogger(__name__)
-
-# ── Cached git commit hash (lazy, once per process lifetime) ──────────────
-_GIT_HASH_CACHE: str | None = None
-
-
-def _get_cached_git_hash() -> str:
-    """Return the current HEAD commit hash, cached for process lifetime."""
-    global _GIT_HASH_CACHE
-    if _GIT_HASH_CACHE is not None:
-        return _GIT_HASH_CACHE
-    try:
-        import subprocess as _sp
-
-        result = _sp.run(
-            ["git", "rev-parse", "--short=8", "HEAD"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0:
-            _GIT_HASH_CACHE = result.stdout.strip()
-        else:
-            _GIT_HASH_CACHE = "unknown"
-    except Exception:
-        _GIT_HASH_CACHE = "unknown"
-    return _GIT_HASH_CACHE
-
 
 # ── Bandit sizing constants (v3.1) ──
 
@@ -203,59 +179,7 @@ def check_z_inflection(
         return True, "neutral_no_check"
 
 
-# ── Strategy decision dataclass ──────────────────────────────────────────
-
-
-@dataclass
-class StrategyDecision:
-    """Output of one strategy line evaluation for one cycle."""
-
-    strategy_name: str
-    magic: int
-    should_trade: bool
-    direction: str  # "long", "short", or "neutral"
-    confidence: float
-    volume: float
-    sl: float
-    tp: float
-    hard_sl: float
-    brain_ids: list[str] = field(default_factory=list)
-    brain_votes: list[dict[str, Any]] = field(default_factory=list)
-    supporting_count: int = 0
-    total_count: int = 0
-    regime_mode: str = "full"  # "full" | "reduced" | "shadow"
-    venue: str = "live"  # "live" | "shadow"
-    reason: str = ""
-    entry_z_score: float = 0.0  # OU z-score at entry (0 = not an OU strategy or unknown)
-    entry_half_life: float = 0.0  # OU half-life at entry (0 = unknown / not OU)
-    entry_context: dict[str, Any] = field(default_factory=dict)
-    p_win: float = 0.5  # P(TP|signal) from MetaFilter or rolling PnL win rate
-    p_win_source: str = "unknown"  # Provenance: "meta_filter" | "rolling_wr" | "cold_explore_neutral" | "brain_confidence" | ...
-    p_win_degraded: bool = (
-        False  # True when p_win is a fallback estimate, not computed from real data
-    )
-    kelly_mult: float = 1.0  # fractional Kelly multiplier (0.0 = EV veto)
-    cold_explore: bool = (
-        False  # forced exploration budget — bypass trailing, collect uncensored labels
-    )
-    gate_diag: dict[str, Any] = field(default_factory=dict)  # gate audit diagnostics
-    # ── P2-2 Audit trail fields (2026-06-13) ──────────────────────────
-    decision_hash: str = ""  # SHA-256 of key decision fields (idempotency + audit)
-    evaluated_at: str = ""  # ISO-8601 UTC timestamp of evaluation
-    code_version: str = ""  # git commit hash of running code
-
-    def __post_init__(self) -> None:
-        """Auto-populate audit fields if not explicitly set."""
-        if not self.evaluated_at:
-            self.evaluated_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-        if not self.code_version:
-            self.code_version = _get_cached_git_hash()
-        # decision_hash computed lazily when first accessed (avoid import cost)
-
-    # entry_context carries passthrough data for the journal:
-    #   {"atr": float, "regime": str, "vol_regime": str, "trend_direction": str,
-    #    "macro_regime": str, "brain_predictions": [dict, ...],
-    #    "feature_vector_summary": dict}
+# StrategyDecision extracted to core/execution/strategy_decision.py (Strangler Fig #18)
 
 
 @dataclass
@@ -1058,9 +982,7 @@ class StrategyLine:
         # Per-direction models stored on config (set by live_intent_loop).
         _mf_long = getattr(self.config, "meta_filter_long", None)
         _mf_short = getattr(self.config, "meta_filter_short", None)
-        from core.execution.meta_filter_routing import (
-            apply_meta_filter_gate,  # inline: circular import
-        )
+        # Strangler Fig #18: now top-level import (circle broken via strategy_decision)
         _meta_p_win, _meta_reject = apply_meta_filter_gate(
             name=name,
             direction=direction,
@@ -1108,11 +1030,8 @@ class StrategyLine:
         if _is_cold_explore:
             _meta_p_win = 0.50  # force neutral for cold explore
 
-        # ── 4aa-4d: Trend isolation gates (Strangler Fig #13: trend_isolation_gates.py) ──
+        # ── 4aa-4d: Trend isolation gates (Strangler Fig #13 → now top-level via #18) ──
         _ct_vol_mult = 1.0  # default, may be overridden by counter-trend penalise
-        from core.execution.trend_isolation_gates import (
-            apply_trend_isolation_gates,  # inline: circular import
-        )
 
         _trend_reject = apply_trend_isolation_gates(
             name=name,

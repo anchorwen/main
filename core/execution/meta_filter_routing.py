@@ -19,7 +19,7 @@ from typing import Any
 
 import numpy as np
 
-from core.execution.strategy_line import StrategyDecision
+from core.execution.strategy_decision import StrategyDecision
 
 logger = logging.getLogger(__name__)
 

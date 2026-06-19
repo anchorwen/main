@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.execution.strategy_line import StrategyDecision
+from core.execution.strategy_decision import StrategyDecision
 
 
 def apply_trend_isolation_gates(

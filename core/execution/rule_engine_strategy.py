@@ -21,7 +21,7 @@ from typing import Any
 
 import numpy as np
 
-from core.execution.strategy_line import StrategyDecision
+from core.execution.strategy_decision import StrategyDecision
 from core.strategies.structural_swing_v1 import StructuralSwingV1
 
 
