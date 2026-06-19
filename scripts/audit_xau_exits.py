@@ -1,3 +1,4 @@
+# type: ignore
 #!/usr/bin/env python3
 """XAU Exit Quality Audit — Iron Law #11.
 

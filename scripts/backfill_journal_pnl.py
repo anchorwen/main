@@ -1,3 +1,4 @@
+# type: ignore
 #!/usr/bin/env python
 """Backfill null PnL in live_trade_journal.jsonl.
 

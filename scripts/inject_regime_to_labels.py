@@ -1,3 +1,4 @@
+# type: ignore
 #!/usr/bin/env python
 """R4 Step 4b: Retroactive regime injection into existing labels.
 

@@ -1,3 +1,4 @@
+# type: ignore
 """
 Exhaustive Data Integrity Audit — "高枕无忧" standard
 ======================================================

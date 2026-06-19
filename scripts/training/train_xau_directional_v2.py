@@ -1,3 +1,4 @@
+# type: ignore
 #!/usr/bin/env python3
 """XAU Directional Brain V2 — dedicated 35-dim swing_enhanced_35 pipeline.
 
