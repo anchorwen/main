@@ -267,7 +267,7 @@ def dispatch_managed_close(
                     _oe = state.known_open_tickets.get(pos.ticket, {})
                     if _oe:
                         _oe["_engine_close_pnl"] = pnl
-        except Exception as _wd_exc:
+        except Exception as _wd_exc:  # BLE001:REVIEWED (logged, Phase 3b)
             print(
                 json.dumps(
                     {

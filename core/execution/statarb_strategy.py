@@ -58,7 +58,7 @@ class StatArbStrategy(StrategyLine):
                     if not getattr(prop, "brain_id", None):
                         prop.brain_id = bid
                 proposals.append(prop)
-            except Exception as _exc:
+            except Exception as _exc:  # BLE001:REVIEWED (logged, Phase 3b)
                 print(
                     json.dumps(
                         {

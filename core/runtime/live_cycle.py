@@ -2746,7 +2746,7 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except Exception as _oug_exc:
+        except Exception as _oug_exc:  # BLE001:REVIEWED (logged, Phase 3b)
             with fail_open_guard("ConformalOUGateInit"):
                 raise  # Re-raise inside guard for structured traceback logging
 
