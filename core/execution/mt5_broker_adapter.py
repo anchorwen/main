@@ -13,6 +13,7 @@ lifecycle.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
+
 from core.runtime.fault_handler import fail_open_guard
 
 if TYPE_CHECKING:

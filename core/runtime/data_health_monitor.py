@@ -11,6 +11,7 @@ with a unified, decorator-based, alert-integrated design.
 from __future__ import annotations
 
 from typing import Any
+
 from core.runtime.fault_handler import fail_open_guard
 
 

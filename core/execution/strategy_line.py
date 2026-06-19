@@ -1800,10 +1800,8 @@ class StrategyLine:
         # ── Graduated streak reduction ──
         streak_mult = 1.0
         if self.budget is not None:
-            try:  # noqa: SIM105
-                streak_mult = self.budget.get_streak_multiplier()
             with fail_open_guard("StrategyLine:StreakMultiplier"):
-                pass  # BLE001 — streak multiplier is best-effort
+                streak_mult = self.budget.get_streak_multiplier()
         size *= streak_mult
 
         # Save pre-Kelly raw size for diagnostic logging
