@@ -20,9 +20,9 @@ for name, jpath in [('XAU', 'data/live_trade_journal.jsonl'), ('BTC', 'data_btc/
     print(f"{'='*70}")
 
     by_date: dict[str, list] = defaultdict(int)
-    actions: list[str] = Counter()
-    retcodes: list[str] = Counter()
-    sides: list[str] = Counter()
+    actions: Counter[str] = Counter()
+    retcodes: Counter[str] = Counter()
+    sides: Counter[str] = Counter()
     real_opens = []
     real_closes = []
     volumes = []

@@ -30,7 +30,7 @@ DATA_DIRS = {"XAU": ROOT / "data", "BTC": ROOT / "data_btc"}
 
 
 def _read_jsonl(path: Path) -> list[dict]:
-    entries: list[dict] = []
+    entries: list[dict[str, object]] = []
     if not path.exists():
         return entries
     with open(path, encoding="utf-8") as f:

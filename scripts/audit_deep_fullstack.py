@@ -146,7 +146,7 @@ for name, pattern in [("XAU", "data/logs/intent_*.log"), ("BTC", "data_btc/logs/
     total_cycles = 0
     total_dispatches = 0
     total_promotions = 0
-    error_events: list[dict] = Counter()
+    error_events: Counter[str] = Counter()
     no_trade_reasons: dict[str, int] = Counter()
     restart_count = 0
 

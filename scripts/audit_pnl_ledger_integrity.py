@@ -53,7 +53,7 @@ def audit_pnl_ledger(name, ledger_path, journal_path):
     for brain_id, records in settled.items():
         if not isinstance(records, list):
             continue
-        seen_sids: set[str] = {}
+        seen_sids: set[str] = set()
         dups = []
         for i, r in enumerate(records):
             sid = r.get('signal_id', '')
@@ -97,12 +97,12 @@ def audit_pnl_ledger(name, ledger_path, journal_path):
 
         if phantoms:
             # Check if phantoms have a fixed pnl_per_unit
-            pnl_values: list[float] = Counter()
+            pnl_values: Counter[str] = Counter()
             for p in phantoms:
                 pnl_values[round(p.get('pnl_per_unit', 0), 2)] += 1
 
             # Check entry price distribution
-            entry_prices: list[float] = Counter()
+            entry_prices: Counter[str] = Counter()
             for p in phantoms:
                 entry_prices[round(p.get('entry_price', 0), 1)] += 1
 
@@ -177,8 +177,8 @@ def audit_pnl_ledger(name, ledger_path, journal_path):
             continue
 
         # Hourly rate
-        hourly: dict[str, dict] = defaultdict(int)
-        daily: dict[str, dict] = defaultdict(int)
+        hourly: dict[str, Counter[str]] = defaultdict(Counter)
+        daily: dict[str, Counter[str]] = defaultdict(Counter)
         for r in records:
             et = r.get('entry_time', '')
             if et:
