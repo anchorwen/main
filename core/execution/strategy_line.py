@@ -1155,27 +1155,17 @@ class StrategyLine:
         if "statarb" in name and entry_z_score != 0.0:
             self._last_entry_z = entry_z_score
 
-        # ── Counter-trend volume penalty (retained inline — modifies _ct_vol_mult) ──
-        if regime_info is not None:
-            _rg_ct = regime_info.get("regime_gate", {}) if isinstance(regime_info, dict) else {}
-            _h1_adx_ct = float(_rg_ct.get("h1_adx") or 0.0)
-            _h1_dir_ct = str(_rg_ct.get("h1_trend_direction") or "neutral")
-            _primary_dir_ct = str(_rg_ct.get("primary_trend") or "neutral")
-            _CT_PENALISE: dict[str, dict[str, float]] = {
-                "statarb_dynamic": {"penalise": 0.30, "h4_penalise": 0.20},
-                "statarb_m15": {"penalise": 0.30, "h4_penalise": 0.20},
-            }
-            _ct_cfg = _CT_PENALISE.get(name)
-            if (
-                _ct_cfg
-                and _h1_adx_ct > 0
-                and direction != "neutral"
-                and _primary_dir_ct != "neutral"
-            ):
-                if direction != _primary_dir_ct:
-                    _pen = _ct_cfg.get("penalise", 0.30)
-                    if _h1_adx_ct >= _pen:
-                        _ct_vol_mult = 0.70
+        # ── Counter-trend volume penalty ──
+        # Strangler Fig #16: extracted to core/execution/trend_volume_guard.py
+        from core.execution.trend_volume_guard import compute_counter_trend_volume_mult
+
+        _ct_vol_mult = compute_counter_trend_volume_mult(
+            strategy_name=name,
+            direction=direction,
+            regime_info=regime_info,
+            default_mult=1.0,
+            penalised_mult=0.70,
+        )
 
         # ── 5. Dynamic SL/TP ──
         from core.execution.dynamic_sl_tp import compute_dynamic_sl_tp, compute_sl_tp_levels
@@ -1224,11 +1214,15 @@ class StrategyLine:
         )
 
         # ── 5b. Minimum RR guard (skip for shadow — virtual tracking) ──
+        # Strangler Fig #16: check_minimum_rr extracted to trend_volume_guard.py
+        from core.execution.trend_volume_guard import check_minimum_rr
+
         tp_dist = abs(levels["take_profit"] - entry_price)
         sl_dist = abs(levels["stop_loss"] - entry_price)
-        if regime_gate_mode != "shadow":
-            _min_rr = self.config.min_rr_ratio if self.config.min_rr_ratio > 0 else 1.2
-            if sl_dist > 0 and tp_dist / sl_dist < _min_rr:
+        _min_rr = self.config.min_rr_ratio if self.config.min_rr_ratio > 0 else 1.2
+        if regime_gate_mode != "shadow" and not check_minimum_rr(
+            entry_price, levels["stop_loss"], levels["take_profit"], min_rr_ratio=_min_rr
+        ):
                 return StrategyDecision(
                     strategy_name=name,
                     magic=self.config.magic,
