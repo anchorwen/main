@@ -86,7 +86,7 @@ def test_save_creates_file(tmp_state_path, mock_strategies, mock_cooldown, mock_
     )
     assert tmp_state_path.exists()
     data = json.loads(tmp_state_path.read_text(encoding="utf-8"))
-    assert data["version"] == 2
+    assert data["version"] == 3  # DQAF-20260615-004: version bumped for known_open_tickets
     assert "saved_at_utc" in data
     assert "barrier_12bar" in data["budgets"]
     assert data["budgets"]["barrier_12bar"]["consecutive_losses"] == 2
@@ -165,7 +165,7 @@ def test_save_load_roundtrip(tmp_state_path, mock_strategies, mock_cooldown, moc
     )
     data = load_execution_state(tmp_state_path)
     assert data is not None
-    assert data["version"] == 2
+    assert data["version"] == 3  # DQAF-20260615-004: version 3
     assert data["budgets"]["barrier_12bar"]["daily_pnl"] == -2.5
     assert data["sl_streak_blocks"]["barrier_12bar"] == 1712345678.0
 
