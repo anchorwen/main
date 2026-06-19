@@ -62,6 +62,18 @@
 | 24 | parliament/consensus | [parliament_consensus.md](../modules/parliament_consensus.md) | AI | brains, execution |
 | 25 | governance/rules | [governance_rules.md](../modules/governance_rules.md) | Foundation | contracts, infrastructure |
 | 26 | training/pipeline | [training_pipeline.md](../modules/training_pipeline.md) | AI | brains, metrics, features, contracts |
+| 27 | brains/validation | [brains_validation.md](../modules/brains_validation.md) | AI | contracts, brains |
+| 28 | training/contracts | [contracts_training.md](../modules/contracts_training.md) | AI | contracts |
+| 29 | training/infrastructure | [training.md](../modules/training.md) | AI | brains, metrics, features, contracts |
+| 30 | execution/watchdog | [execution_exit_watchdog.md](../modules/execution_exit_watchdog.md) | Execution | contracts, protocol |
+| 31 | execution/managed_close | [execution_managed_close.md](../modules/execution_managed_close.md) | Execution | contracts, deployment, protocol |
+| 32 | execution/position_manager | [execution_position_manager.md](../modules/execution_position_manager.md) | Execution | contracts, deployment |
+| 33 | execution/strategy_line | [execution_strategy_line.md](../modules/execution_strategy_line.md) | Execution | contracts, brains |
+| 34 | execution/trail_stop | [execution_trail_stop.md](../modules/execution_trail_stop.md) | Execution | contracts, risk |
+| 35 | market/mtf | [market_mtf.md](../modules/market_mtf.md) | Features | contracts |
+| 36 | infrastructure/data | [data_infrastructure.md](../modules/data_infrastructure.md) | Foundation | — |
+| 37 | infrastructure/monitoring | [monitoring.md](../modules/monitoring.md) | Foundation | infrastructure |
+| 38 | monitor/dashboard | [monitor_dashboard.md](../modules/monitor_dashboard.md) | Apps | contracts, state |
 
 ## Cross-Cutting Concerns
 

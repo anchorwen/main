@@ -57,7 +57,7 @@
 | **G. Git Commit** | `#4(自动Pre-commit)` → `#1.1(四维评估写入Commit message)` |
 | **H. 任务收口 / 项目完结** | `#13(自动收口)` → `#7(蓝图更新)` → `#1.1(四维)` → `#4(commit+push)` → `#7.1(收口清单)` |
 
-> **注**: 热路径文件 BLE001 已清零 (全库 560→0, 2026-06-19)。Iron Law #10 自毁条件达成，已移除。
+> **注**: BLE001 歼灭战 Phase 1 完成 (2026-06-19): 542 处未审阅盲除 → `fail_open_guard()` (5 commits: eb15d2c, 1a347cd, a0fd86a, 9476c9f, 9843452)。当前状态: 502 处 `BLE001:REVIEWED` (已审阅广域捕获, 待 Phase 2 迁移), 117 处未标注裸 except (57 文件, 待 Phase 2 歼灭), 84 处 `fail_open_guard()` 已部署。Iron Law #10 自毁条件 (全库裸 except 清零) **未达成** — 等待 Phase 2。
 
 ## AI 执行契约 (The AI Handshake)
 
@@ -245,7 +245,7 @@ Iterability: ↑/→/↓ (assessment)
 **新增 Ω Gate (FIX-017)**:
 - `scripts/omega_gate.py` 已升级，现在同时检查:
   1. `[Ω-Routing: Scene X → ...]` 签名
-  2. BLE001 全库清零状态 (560→0, 2026-06-19)
+  2. BLE001 Phase 1 完成状态 (542 消灭, 502 REVIEWED, 117 待处理)
   3. `.py/.yaml/.json` 修改的 FIX/DQAF ID
   4. 纯机械操作豁免声明
 - Gate 在 `commit-msg` 阶段触发——**即使使用 `--no-verify` 也无法绕过**
