@@ -1,13 +1,13 @@
 {
   "version": 3,
   "schema_version": "execution_state.v3",
-  "saved_at_utc": "2026-06-19T11:44:49.846470Z",
+  "saved_at_utc": "2026-06-19T14:49:49.880374Z",
   "budgets": {
     "btc_swing": {
-      "daily_pnl_pct": -0.95,
+      "daily_pnl_pct": 3.5,
       "consecutive_losses": 0,
-      "total_trades_today": 7,
-      "total_wins_today": 2,
+      "total_trades_today": 10,
+      "total_wins_today": 3,
       "paused": false,
       "paused_at": 0.0,
       "last_trade_day": "2026-06-19",
@@ -29,29 +29,110 @@
     }
   },
   "known_open_tickets": {
-    "3944725111": {
-      "position_ticket": 3944725111,
+    "3945494919": {
+      "schema_version": "live_trade_journal.v2",
+      "recorded_at": "2026-06-19T13:54:50.479345",
+      "message_id": "eq_btc_swing_31edef9c76a3",
+      "target": "exec_bridge",
+      "ack_status": "accepted",
+      "detail": {
+        "retcode": 10009,
+        "order": 3945494919,
+        "request": {
+          "action": 1,
+          "symbol": "BTCUSDc",
+          "volume": 0.01,
+          "type": 0,
+          "price": 63162.45,
+          "deviation": 20,
+          "magic": 90410,
+          "comment": "",
+          "type_time": 0,
+          "type_filling": 1,
+          "sl": 62642.28895,
+          "tp": 63809.14132
+        },
+        "confirmed_sl": 62642.29,
+        "confirmed_tp": 63809.14
+      },
+      "symbol": "BTCUSDc",
       "action": "open",
       "side": "long",
       "volume": 0.01,
-      "entry_price": 62500.3,
-      "strategy": "btc_swing",
+      "pnl": null,
+      "label": null,
+      "comment": "",
       "magic": 90410,
-      "message_id": "eq_btc_swing_ade79b3b8f95",
+      "strategy": "btc_swing",
+      "effective_volume_hint": 0.01,
+      "position_ticket": 3945494919,
+      "execution_payload_schema": "live_mt5_execution_payload.v2",
+      "sl": 62642.28895,
+      "tp": 63809.14132,
+      "outbox_path": "",
+      "archive_path": "",
+      "receipt_path": "",
       "brain_ids": [
         "BTC_Swing_V4"
       ],
-      "brain_votes": [],
-      "entry_consensus": {
-        "consensus_score": 0.7383,
-        "direction": "long"
+      "brain_votes": null,
+      "confidence": 0.7304,
+      "p_win": 0.5,
+      "kelly_mult": 1.0486,
+      "entry_context": {
+        "schema_version": "v9_institutional",
+        "vector": [
+          -0.013996032066643238,
+          -0.8870728015899658,
+          161.06642150878906,
+          80.3025131225586,
+          156.1151123046875,
+          -1.385022759437561,
+          -0.02441595494747162,
+          1.6152336597442627,
+          0.1927640587091446,
+          0.33980801701545715,
+          210.36785888671875,
+          76.1987075805664,
+          80.13680267333984,
+          2.079878568649292,
+          -0.20064419507980347,
+          2.6792900562286377,
+          0.6717944145202637,
+          0.6238995790481567,
+          284.73785400390625,
+          59.430259704589844,
+          -14.82019329071045,
+          2.466336488723755,
+          -0.10462643206119537,
+          2.891474485397339,
+          0.5966001749038696,
+          0.4842597544193268,
+          374.4471435546875,
+          55.67177963256836,
+          -281.27545166015625,
+          2.5626072883605957,
+          0.18004076182842255,
+          1.8605375289916992,
+          0.07534315437078476,
+          9.99999993922529e-09,
+          0.26787933707237244,
+          0.4273815155029297,
+          0.6584480404853821,
+          0.6641939878463745,
+          0.603990375995636,
+          0.6794469952583313
+        ],
+        "entry_spread": 10.0,
+        "bid": 63157.89,
+        "ask": 63167.89
       }
     }
   },
   "cooldown_registry": {},
   "family_entry_tracker": {
     "swing": {
-      "long": 1781869191.3972597
+      "long": 1781880346.0163846
     }
   },
   "sl_streak_blocks": {},
@@ -62,5 +143,5 @@
   "intraday_dd_active": false,
   "consecutive_stale_cycles": 0,
   "consecutive_stale_features": 0,
-  "circuit_breaker_trip_reason": "budget_breached"
+  "circuit_breaker_trip_reason": ""
 }

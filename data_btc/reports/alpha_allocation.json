@@ -1,6 +1,6 @@
 {
   "schema_version": "alpha_portfolio_allocation.v1",
-  "generated_at": "2026-06-18T12:09:56.294923",
+  "generated_at": "2026-06-19T12:09:58.211651",
   "total_notional": 100000.0,
   "alpha_count": 1,
   "allocatable_count": 1,
@@ -8,20 +8,20 @@
     {
       "alpha_id": "btc_swing",
       "state": "active",
-      "score": 0.16666,
+      "score": 0.56668,
       "target_weight": 1.0,
       "max_notional": 100000.0,
-      "risk_tier": "minimal",
+      "risk_tier": "reduced",
       "reason": "allocatable",
       "metrics": {
-        "total_pnl": -10.62,
-        "trade_count": 15,
-        "win_rate": 0.1111,
-        "profit_factor": 0.8844,
-        "avg_win": 1.32,
-        "avg_loss": 1.49,
-        "wins": 1,
-        "losses": 8
+        "total_pnl": -7.7,
+        "trade_count": 49,
+        "win_rate": 0.2778,
+        "profit_factor": 7.2105,
+        "avg_win": 1.92,
+        "avg_loss": 1.33,
+        "wins": 5,
+        "losses": 13
       }
     }
   ]

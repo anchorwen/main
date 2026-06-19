@@ -39,11 +39,11 @@
       "transition_count": 1,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.402,
-        "profit_factor": 0.75,
-        "sharpe_ratio": -15.33,
-        "total_trades": 2271,
-        "pnl_r": -7104.86
+        "win_rate": 0.4013,
+        "profit_factor": 0.73,
+        "sharpe_ratio": -16.66,
+        "total_trades": 3140,
+        "pnl_r": -10265.76
       }
     }
   },
@@ -925,6 +925,101 @@
       "to_status": "retired",
       "reason": "pnl:critical",
       "timestamp": "2026-06-18T12:09:56.855060"
+    },
+    {
+      "brain_id": "BTC_Swing_LGB_V1",
+      "from": null,
+      "to": "live",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-19T12:09:58.035611",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V1",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-19T12:09:58.035611",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V10",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-19T12:09:58.035611",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V10_M15_Survival",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-19T12:09:58.035611",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V11_H1_Directional",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-19T12:09:58.035611",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V11_M15_Directional",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-19T12:09:58.035611",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V3",
+      "from": null,
+      "to": "live",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-19T12:09:58.036612",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V5",
+      "from": null,
+      "to": "frozen",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-19T12:09:58.036612",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V6_MultiTF_LGB_v2",
+      "from": null,
+      "to": "probation",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-19T12:09:58.036612",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V7_MultiTF_LGB_v1",
+      "from": null,
+      "to": "probation",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-19T12:09:58.036612",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V8_MultiTF_LGB_v1",
+      "from": null,
+      "to": "probation",
+      "reason": "brain_registered",
+      "timestamp": "2026-06-19T12:09:58.036612",
+      "fix_id": "FIX-20260529-034"
+    },
+    {
+      "brain_id": "BTC_Swing_V11_H1_Directional",
+      "from_status": "frozen",
+      "to_status": "retired",
+      "reason": "pnl:critical",
+      "timestamp": "2026-06-19T12:09:58.803784"
     }
   ]
 }

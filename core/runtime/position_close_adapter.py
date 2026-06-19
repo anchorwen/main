@@ -283,9 +283,9 @@ class PositionCloseAdapter:
             try:
                 deals = mt5_worker.history_deals_get(position=ticket)
             except Exception:  # BLE001:FOG_WRAPPED
-            with fail_open_guard("PositionCloseAdapter:DealHistoryGet"):
-                raise
-            _time_module.sleep(1.0)
+                with fail_open_guard("PositionCloseAdapter:DealHistoryGet"):
+                    raise
+                _time_module.sleep(1.0)
                 continue
 
             if not deals:
