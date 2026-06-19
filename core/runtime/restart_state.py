@@ -27,6 +27,8 @@ from datetime import UTC, datetime
 from pathlib import Path as _Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 _logger = _logging.getLogger(__name__)
 
 
@@ -175,7 +177,6 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
     _close_entries.sort(key=lambda e: e.get("recorded_at", ""), reverse=True)
 
     from core.contracts.strategy_magic import MAGIC_TO_STRATEGY as _MAGIC_MAP
-    from core.runtime.fault_handler import fail_open_guard
     from core.execution.reentry_guard import ExitRecord, ensure_reentry_state
 
     # ── FIX-20260603-069: build open-index to resolve entry_confidence ──
