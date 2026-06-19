@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, fail_open_guard
 from core.runtime.time_utils import _utc_iso  # consolidated
 
 
@@ -179,12 +179,9 @@ def reconcile_closed_positions(
         if _resolved_magic is None:
             _resolved_magic = open_entry.get("detail", {}).get("request", {}).get("magic", 0)
         if not _resolved_strategy and _resolved_magic:
-            try:
+            with fail_open_guard("Reconciliation:MagicResolve"):
                 from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
-
                 _resolved_strategy = MAGIC_TO_STRATEGY.get(int(_resolved_magic), "")
-            except Exception:  # BLE001:REVIEWED
-                pass
 
         if close_price is None:
             print(
@@ -267,7 +264,7 @@ def reconcile_closed_positions(
         # this reconciliation path at startup.
         _brain_ids = open_entry.get("brain_ids")
         if _brain_ids and pnl != 0:
-            try:
+            with fail_open_guard("Reconciliation:PnLEventWrite"):
                 from core.contracts.events import PnLEvent
                 from core.data.event_writer import EventWriter
 
@@ -308,8 +305,6 @@ def reconcile_closed_positions(
                         generated_by="reconciliation._reconcile_closed_positions",
                     )
                     _writer.write(_event)
-            except Exception:  # BLE001:REVIEWED
-                pass  # best-effort
 
         # ── Record exit for re-entry guard (native MT5 SL/TP) ──
         if state is not None:
