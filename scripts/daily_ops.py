@@ -61,7 +61,7 @@ def _load_or_create_tracker(base_dir: str) -> Any:
         if tracker_path.exists():
             return BrainPerformanceTracker.load(tracker_path)
         return BrainPerformanceTracker(window_size=100)
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         from core.feedback.brain_performance_tracker import BrainPerformanceTracker
 
         return BrainPerformanceTracker(window_size=100)
@@ -117,7 +117,7 @@ def _load_or_create_governance(base_dir: str, *, brains_dir: Path | None = None)
                         continue
                     try:
                         cfg = _json.loads(cfg_path.read_text(encoding="utf-8"))
-                    except Exception:  # noqa: BLE001
+                    except Exception:  # BLE001:REVIEWED
                         continue
                     if cfg.get("schema_version") != "brain_registry_entry.v1":
                         continue
@@ -129,7 +129,7 @@ def _load_or_create_governance(base_dir: str, *, brains_dir: Path | None = None)
                         )
                         gov.register_brain(bid, initial)
         return gov
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         from core.governance.governance_service import GovernanceService
 
         gov = GovernanceService()
@@ -154,7 +154,7 @@ def _load_or_create_pnl_store(base_dir: str) -> Any:
     if stream_path.exists():
         try:
             return BrainPnLStore.load_from_stream(stream_path)
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             pass
 
     # 2. Fall back to old JSON
@@ -162,7 +162,7 @@ def _load_or_create_pnl_store(base_dir: str) -> Any:
     try:
         if ledger_path.exists():
             return BrainPnLStore.load(ledger_path)
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         pass
 
     # 3. Fresh store
@@ -229,7 +229,7 @@ def _step_label_builder(
             "losses": losses,
             "output": str(out_path) if not dry_run else None,
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         return {"step": "label_builder", "status": "error", "error": str(exc)[:500]}
 
 
@@ -253,7 +253,7 @@ def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
             "consensus": report.get("comparison", {}).get("consensus", "unknown"),
             "agreement": report.get("comparison", {}).get("agreement_score", 0.0),
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         return {"step": "shadow_ensemble", "status": "error", "error": str(exc)[:500]}
 
 
@@ -278,7 +278,7 @@ def _step_feedback_loop(
             "updates_applied": report.get("updates_applied", 0),
             "brains_updated": report.get("brain_ids_updated", []),
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         return {"step": "feedback_loop", "status": "error", "error": str(exc)[:500]}
 
 
@@ -329,7 +329,7 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
                 _mig_entry = json.loads(lines[_old_pos - 1])
                 last_recorded_at = _mig_entry.get("recorded_at", "")
                 last_message_id = _mig_entry.get("message_id", "")
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 pass
         elif _old_pos > len(lines):
             # Compaction pruned lines — the pointer is now beyond EOF.
@@ -345,7 +345,7 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
     for _l in lines:
         try:
             _e = json.loads(_l)
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             continue
         _ts = _e.get("recorded_at", "")
         _mid = _e.get("message_id", "")
@@ -360,7 +360,7 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
         from core.execution.conformal_calibrator import ConformalCalibrator
 
         cal = ConformalCalibrator(state_path=f"{base_dir}/conformal_calibrator_state.json")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # BLE001:REVIEWED
         return {"step": "calibrator_feed", "status": "error", "error": f"init: {e}"}
 
     # Pass 1: build p_win lookup from accepted entries
@@ -368,7 +368,7 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
     for line in new_lines:
         try:
             entry = json.loads(line)
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             continue
         if entry.get("ack_status") != "accepted":
             continue
@@ -384,7 +384,7 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
     for line in new_lines:
         try:
             entry = json.loads(line)
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             continue
         if entry.get("ack_status") != "closed":
             continue
@@ -433,7 +433,7 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             _last_ts = _e.get("recorded_at", _last_ts)
             _last_mid = _e.get("message_id", _last_mid)
             break
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             continue
     with fail_open_guard("CalibratorFeedStateSave"):
         state_path.write_text(
@@ -486,7 +486,7 @@ def _step_paper_trade_simulation(base_dir: str, *, dry_run: bool = False) -> dic
             "win_rate": result.get("win_rate", 0),
             "dry_run": dry_run,
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         return {"step": "paper_trade_simulation", "status": "error", "error": str(exc)[:500]}
 
 
@@ -527,7 +527,7 @@ def _step_governance(
             "flagged": report.get("actions_flagged", []),
             "leaderboard_cross_check": cross_check,
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         return {"step": "governance", "status": "error", "error": str(exc)[:500]}
 
 
@@ -634,7 +634,7 @@ def _step_champion_challenger(
             "eligible": sum(1 for c in report.get("comparisons", []) if c.get("eligible")),
             "details": report.get("promotions", []),
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         return {"step": "champion_challenger", "status": "error", "error": str(exc)[:500]}
 
 
@@ -702,7 +702,7 @@ def _step_retraining_check(
                                     pnl_store=pnl_store,
                                 )
                                 _vote_weights = _dw.get_weights()
-                    except Exception:  # noqa: BLE001
+                    except Exception:  # BLE001:REVIEWED
                         pass  # fall back to equal-weight (handled in rank())
                     rankings = lb.rank(
                         pnl_store.get_all_metrics(),
@@ -733,7 +733,7 @@ def _step_retraining_check(
                             for i, r in enumerate(rankings)
                         ],
                     }
-            except Exception as _pnl_lb_exc:  # noqa: BLE001
+            except Exception as _pnl_lb_exc:  # BLE001:REVIEWED
                 leaderboard["fallback_error"] = str(_pnl_lb_exc)[:200]
 
         result = detect_degradation(leaderboard, baseline)
@@ -783,7 +783,7 @@ def _step_retraining_check(
             "details": result.get("signals", []),
             "auto_execution": execution_result,
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         return {"step": "retraining_check", "status": "error", "error": str(exc)[:500]}
 
 
@@ -875,7 +875,7 @@ def _step_param_optimization(
             "degraded_brains": degraded_ids,
             "would_generate": len(degraded_ids),
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         return {"step": "param_optimization", "status": "error", "error": str(exc)[:500]}
 
 
@@ -952,7 +952,7 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
                     _mig_entry = json.loads(lines[_old_pos - 1])
                     last_recorded_at = _mig_entry.get("recorded_at", "")
                     last_message_id = _mig_entry.get("message_id", "")
-                except Exception:  # noqa: BLE001
+                except Exception:  # BLE001:REVIEWED
                     pass
             elif _old_pos > len(lines):
                 # Compaction pruned lines — force full rescan
@@ -964,7 +964,7 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
         for _l in lines:
             try:
                 _e = json.loads(_l)
-            except Exception:  # noqa: BLE001
+            except Exception:  # BLE001:REVIEWED
                 continue
             _ts = _e.get("recorded_at", "")
             _mid = _e.get("message_id", "")
@@ -1043,7 +1043,7 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
                     _last_ts = _e.get("recorded_at", _last_ts)
                     _last_mid = _e.get("message_id", _last_mid)
                     break
-                except Exception:  # noqa: BLE001
+                except Exception:  # BLE001:REVIEWED
                     continue
             with fail_open_guard("AlphaFeed:save_state"):
                 state_path.write_text(
@@ -1121,7 +1121,7 @@ def _step_alpha_lifecycle(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             "actions_flagged": len(applied) if dry_run else len(applied),
             "details": applied,
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         return {"step": "alpha_lifecycle", "status": "error", "error": str(exc)[:500]}
 
 
@@ -1162,7 +1162,7 @@ def _step_alpha_allocation(base_dir: str, *, dry_run: bool = False) -> dict[str,
             "allocatable_count": allocation.get("allocatable_count", 0),
             "output": str(out_path) if not dry_run else None,
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         return {"step": "alpha_allocation", "status": "error", "error": str(exc)[:500]}
 
 
@@ -1204,7 +1204,7 @@ def _step_feature_store_maintenance(
             "compaction": compaction,
             "stats": stats,
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         return {"step": "feature_store_maintenance", "status": "error", "error": str(exc)[:500]}
 
 
@@ -1258,7 +1258,7 @@ def _step_data_health(
                 "total_sources_checked": len(report.sources),
                 "alert_level": report.alert_level,
             }
-    except Exception as exc:  # noqa: BLE001 — Iron Law #1
+    except Exception as exc:  # BLE001:REVIEWED — Iron Law #1
         return {"step": "data_health", "status": "error", "error": str(exc)[:500]}
 
 
@@ -1280,7 +1280,7 @@ def _step_daily_recap(base_dir: str, *, mt5_terminal_path: str | None = None) ->
             "date_key": report.get("date_key_utc", ""),
             "sections": list(report.keys()),
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         return {"step": "daily_recap", "status": "error", "error": str(exc)[:500]}
 
 
@@ -1392,7 +1392,7 @@ def run_daily_ops(
             else:
                 _rec_steps.append({"step": "ledger_retention", "status": "ok", "entries_pruned": 0})
         steps.extend(_rec_steps)
-    except Exception as _exc:  # noqa: BLE001
+    except Exception as _exc:  # BLE001:REVIEWED
         steps.append({"step": "reconcile", "status": "error", "error": str(_exc)})
 
     # ── FIX-20260607-144: Journal compaction ──────────────────────────
@@ -1409,7 +1409,7 @@ def run_daily_ops(
                 _journal_path, retention_days=30, dry_run=dry_run, lock_dir=_base
             )
             steps.append({"step": "journal_compaction", **_compaction_result})
-    except Exception as _jc_exc:  # noqa: BLE001
+    except Exception as _jc_exc:  # BLE001:REVIEWED
         steps.append({"step": "journal_compaction", "status": "error", "error": str(_jc_exc)[:200]})
 
     if not skip_shadow:

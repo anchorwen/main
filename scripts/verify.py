@@ -58,7 +58,7 @@ def _changed_py_files() -> list[str]:
                     if line.endswith(".py"):
                         files.add(line)
         return sorted(files)
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         return []
 
 
@@ -72,7 +72,7 @@ def _current_commit_hash() -> str:
             timeout=5,
         )
         return result.stdout.strip() if result.returncode == 0 else ""
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         return ""
 
 
@@ -97,7 +97,7 @@ def run_mypy(targets: list[str] | None = None) -> tuple[bool, str]:
         return passed, output
     except subprocess.TimeoutExpired:
         return False, "mypy timed out"
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         return False, str(exc)
 
 
@@ -122,7 +122,7 @@ def run_ruff(targets: list[str] | None = None) -> tuple[bool, str]:
         return passed, output
     except subprocess.TimeoutExpired:
         return False, "ruff timed out"
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         return False, str(exc)
 
 
@@ -145,7 +145,7 @@ def run_pytest() -> tuple[bool, str]:
         return False, "pytest interrupted (Ctrl+C)"
     except subprocess.TimeoutExpired:
         return False, "pytest timed out (300s)"
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # BLE001:REVIEWED
         return False, str(exc)
 
 
@@ -170,7 +170,7 @@ def _compute_file_hash() -> str:
                 st = fp.stat()
                 items.append(f"{f}:{st.st_mtime}:{st.st_size}")
         return str(hash("\n".join(sorted(items))))
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         return ""
 
 
@@ -199,7 +199,7 @@ def check_stamp() -> tuple[bool, str]:
     try:
         with open(STAMP_FILE, encoding="utf-8") as f:
             stamp = json.load(f)
-    except Exception:  # noqa: BLE001
+    except Exception:  # BLE001:REVIEWED
         return False, "Stamp corrupt. Re-run: python scripts/verify.py --full --stamp"
 
     if not stamp.get("passed"):
@@ -336,7 +336,7 @@ def _check_config_consistency() -> tuple[bool, list[str]]:
                 data = json.load(f)
             brain_cache[brain_path_str] = data
             return data
-        except Exception:  # noqa: BLE001
+        except Exception:  # BLE001:REVIEWED
             brain_cache[brain_path_str] = {}
             return None
 
@@ -345,7 +345,7 @@ def _check_config_consistency() -> tuple[bool, list[str]]:
         try:
             with open(config_path, encoding="utf-8") as f:
                 config = yaml.safe_load(f)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             errors.append(f"{config_path.name}: cannot parse YAML — {exc}")
             continue
 
@@ -606,7 +606,7 @@ def main() -> int:
             if result.stderr and result.stderr.strip():
                 print(result.stderr.strip())
             return result.returncode
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             print(f"Blueprint validation error: {exc}")
             return 1
 
@@ -672,7 +672,7 @@ def main() -> int:
                     print(result.stderr.strip())
                 if result.returncode != 0:
                     all_passed = False
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # BLE001:REVIEWED
                 print(f"[FAIL] blueprint compliance check error: {exc}")
                 all_passed = False
 
@@ -692,7 +692,7 @@ def main() -> int:
                     all_passed = False
                 else:
                     print("[PASS] Import boundaries enforced")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # BLE001:REVIEWED
                 print(f"[FAIL] import-linter error: {exc}")
                 all_passed = False
 
@@ -712,7 +712,7 @@ def main() -> int:
                     print(result.stderr.strip())
                 if result.returncode != 0:
                     all_passed = False
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # BLE001:REVIEWED
                 print(f"[FAIL] artifact validation error: {exc}")
                 all_passed = False
 
@@ -767,7 +767,7 @@ def main() -> int:
                 print(result.stderr.strip())
             if result.returncode != 0:
                 all_passed = False
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             print(f"[FAIL] blueprint compliance check error: {exc}")
             all_passed = False
 
@@ -787,7 +787,7 @@ def main() -> int:
                 all_passed = False
             else:
                 print("[PASS] Import boundaries enforced")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             print(f"[FAIL] import-linter error: {exc}")
             all_passed = False
 
@@ -807,7 +807,7 @@ def main() -> int:
                 print(result.stderr.strip())
             if result.returncode != 0:
                 all_passed = False
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # BLE001:REVIEWED
             print(f"[FAIL] artifact validation error: {exc}")
             all_passed = False
 
