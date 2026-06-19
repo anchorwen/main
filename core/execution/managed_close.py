@@ -118,7 +118,7 @@ def dispatch_managed_close(
                         ),
                         flush=True,
                     )
-                except Exception as _cd_exc:
+                except Exception as _cd_exc:  # BLE001:REVIEWED (logged, Phase 3b)
                     print(
                         json.dumps(
                             {
@@ -132,7 +132,7 @@ def dispatch_managed_close(
                         ),
                         flush=True,
                     )
-        except Exception as _ew_exc:
+        except Exception as _ew_exc:  # BLE001:REVIEWED (logged, Phase 3b)
             print(
                 json.dumps(
                     {
@@ -295,7 +295,7 @@ def dispatch_managed_close(
                 extensions={"mt5_terminal_path": ctx.mt5_terminal_path},
             )
             _close_dispatched = True
-        except Exception as exc:
+        except Exception as exc:  # BLE001:REVIEWED (logged, Phase 3b)
             print(
                 json.dumps(
                     {

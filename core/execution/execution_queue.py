@@ -192,7 +192,7 @@ class ExecutionQueue:
                 close_dispatch_fn=close_dispatch_fn,
                 adapter_name=adapter_name,
             )
-        except Exception as _fatal_exc:
+        except Exception as _fatal_exc:  # BLE001:REVIEWED (logged, Phase 3b)
             import logging as _fatal_log
 
             _fatal_log.getLogger(__name__).critical(
@@ -286,7 +286,7 @@ class ExecutionQueue:
                             )
                             self._last_dispatch_time = _time.monotonic()
                             continue
-                except Exception as _pg_exc:
+                except Exception as _pg_exc:  # BLE001:REVIEWED (logged, Phase 3b)
                     logger.error(
                         "price_guard validation exception for strategy=%s: %s",
                         queued.strategy_name,
@@ -374,7 +374,7 @@ class ExecutionQueue:
                                             "new_ticket": _ack_detail["new_ticket"],
                                             "close_volume": _close_vol,
                                         }
-                            except Exception as _ack_exc:
+                            except Exception as _ack_exc:  # BLE001:REVIEWED (logged, Phase 3b)
                                 logger.warning(
                                     "ACK resolve error for intent_id=%s: %s",
                                     _intent_id,
@@ -387,7 +387,7 @@ class ExecutionQueue:
                             # confirmation would open a new position against a still-open
                             # opposing position when the close actually failed.
                             _close_confirmed = bool(_close_result.get("dispatched", False))
-                except Exception as _net_out_exc:
+                except Exception as _net_out_exc:  # BLE001:REVIEWED (logged, Phase 3b)
                     logger.error(
                         "net-out close dispatch failed for strategy=%s ticket=%s: %s",
                         queued.strategy_name,
@@ -444,7 +444,7 @@ class ExecutionQueue:
                     )
                     _dispatched = True
                     break
-                except Exception as exc:
+                except Exception as exc:  # BLE001:REVIEWED (logged, Phase 3b)
                     _last_error = str(exc)
                     if _attempt < _max_attempts - 1:
                         _time.sleep(1.5)

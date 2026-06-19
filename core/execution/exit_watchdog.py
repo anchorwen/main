@@ -296,7 +296,7 @@ class ExitWatchdog:
                                 attempts=attempts,
                                 alerts=alerts,
                             )
-                    except Exception as _l2_exc:
+                    except Exception as _l2_exc:  # BLE001:REVIEWED (logged, Phase 3b)
                         import logging as _lg
 
                         _lg.getLogger(__name__).critical(
@@ -352,7 +352,7 @@ class ExitWatchdog:
             try:
                 result = dispatch_fn(payload)
                 att.dispatch_success = bool(result.get("dispatched", False))
-            except Exception as exc:
+            except Exception as exc:  # BLE001:REVIEWED (logged, Phase 3b)
                 att.error = f"dispatch_exception:{exc}"
                 attempts.append(att)
                 continue
@@ -430,7 +430,7 @@ class ExitWatchdog:
                         attempts=attempts,
                         alerts=alerts,
                     )
-            except Exception as _l2f_exc:
+            except Exception as _l2f_exc:  # BLE001:REVIEWED (logged, Phase 3b)
                 import logging as _lg
 
                 _lg.getLogger(__name__).critical(

@@ -1587,7 +1587,7 @@ def execute_live_cycle(
                 ),
                 flush=True,
             )
-        except Exception as _exc:  # Iron Law #10: BLE001→logged (already has json print)
+        except Exception as _exc:  # BLE001:REVIEWED (logged, Phase 3b)
             print(
                 json.dumps(
                     {

@@ -45,7 +45,7 @@ class MicroStrategy(StrategyLine):
                     if seq is not None:
                         try:
                             prop = b_info["adapter"].run(None, seq)
-                        except Exception as _hmre_exc:
+                        except Exception as _hmre_exc:  # BLE001:REVIEWED (logged, Phase 3b)
                             # Fallback: reshape and use infer_sequence() directly,
                             # bypassing the rolling buffer (infer() expects 9-dim
                             # vectors; passing a flat ravel would corrupt the buffer).
