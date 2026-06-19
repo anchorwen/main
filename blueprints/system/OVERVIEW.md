@@ -1,7 +1,7 @@
 # Blueprint System Overview
 
-> Last regenerated: 2026-05-14
-> Module count: 22
+> Last regenerated: 2026-06-19
+> Module count: 26 | 热路径 BLE001: 0 | 零测试模块: 0
 
 ## Architecture Layers
 
