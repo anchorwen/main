@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+
 from core.runtime.fault_handler import fail_open_guard
 
 

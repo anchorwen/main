@@ -18,6 +18,7 @@ import logging
 from collections import deque
 from datetime import UTC, datetime
 from typing import Any
+
 from core.runtime.fault_handler import fail_open_guard
 
 # ── Feature gate ────────────────────────────────────────────────────────

@@ -32,12 +32,11 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from typing import Any
-from core.runtime.fault_handler import fail_open_guard
 
 import numpy as np
 
 from core.features.schemas.microstructure_schema import MICROSTRUCTURE_9_FEATURES
-from core.runtime.fault_handler import log_and_continue
+from core.runtime.fault_handler import fail_open_guard, log_and_continue
 
 
 @dataclass
