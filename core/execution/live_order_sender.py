@@ -9,6 +9,8 @@ Usage:
 
 from __future__ import annotations
 
+from core.runtime.fault_handler import fail_open_guard
+
 import logging  # noqa: F401 — used at L114 via getLogger()
 import time
 import uuid

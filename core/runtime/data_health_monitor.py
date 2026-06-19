@@ -38,21 +38,17 @@ def check_data_health(
 
         # Feed context through alert system instead of bypassing it
         if alert_hub is not None:
-            try:
+            with fail_open_guard("DataHealthMonitor:AlertDispatch"):
                 ctx = svc.build_alert_context(report)
                 if hasattr(alert_hub, "evaluate_and_dispatch"):
                     alert_hub.evaluate_and_dispatch(ctx)
                 elif hasattr(alert_hub, "send_warning"):
-                    # Old path: keep for transitions
                     if report.alert_level in ("WARNING", "CRITICAL"):
                         alert_hub.send_warning(
                             "data_health_degraded",
                             {"alert_level": report.alert_level,
                              "primary_codes": report.primary_codes},
                         )
-            with fail_open_guard("DataHealthMonitor:AlertDispatch"):
-                pass  # BLE001 — alert dispatch is best-effort
-
         return {
             "time": report.generated_at,
             "symbol": symbol,
