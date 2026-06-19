@@ -2199,7 +2199,7 @@ def main(argv: list[str] | None = None) -> int:
                         f"Last error: {type(exc).__name__}: {exc!s:.500}. "
                         f"Force-exiting to break silent-degrade loop."
                     )
-                    try:
+                    with fail_open_guard("LiveIntentLoop:ZombieFuseAlert"):
                         from core.feedback.live_alert_hub import LiveAlertHub
                         _ah = getattr(state, "_alert_hub", None)
                         if _ah is None:
@@ -2219,8 +2219,6 @@ def main(argv: list[str] | None = None) -> int:
                                 "cycle_count": getattr(state, "cycle_count", -1),
                             },
                         )
-                    except Exception:  # BLE001:REVIEWED
-                        pass
                     # Write kill log (same pattern as watchdog for diagnostics)
                     try:
                         with open("watchdog_kill.log", "a", encoding="utf-8") as _wf:
@@ -2495,10 +2493,8 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         # ── Release distributed lock ──
         if _live_lock is not None:
-            try:  # noqa: SIM105
+            with fail_open_guard("LiveIntentLoop:LiveLockRelease"):
                 _live_lock.release()
-            except Exception:  # BLE001:REVIEWED:no-try
-                pass
         # ── Graceful shutdown: persist all state ──
         print(
             json.dumps({"event": "shutdown_start", "time": _utc_iso()}, ensure_ascii=False),
@@ -2577,10 +2573,8 @@ def main(argv: list[str] | None = None) -> int:
                         flush=True,
                     )
             if meta_signal_filter is not None:
-                try:  # noqa: SIM105
+                with fail_open_guard("LiveIntentLoop:MetaFilterSaveState"):
                     meta_signal_filter.save_state(str(_mf_state_path))
-                except Exception:  # BLE001:REVIEWED:no-try
-                    pass
             # ── FIX-20260603-072: persist execution guard state on shutdown ──
             _strategies = getattr(state, "_strategies", None)
             if _strategies is not None:
@@ -2616,10 +2610,8 @@ def main(argv: list[str] | None = None) -> int:
 
         # ── Shutdown alert hub (护栏6: graceful drain of queued alerts) ──
         if alert_hub is not None:
-            try:  # noqa: SIM105
+            with fail_open_guard("LiveIntentLoop:AlertHubShutdown"):
                 alert_hub.shutdown()
-            except Exception:  # BLE001:REVIEWED:no-try
-                pass
 
         if mt5_worker is not None:
             mt5_worker.stop()
