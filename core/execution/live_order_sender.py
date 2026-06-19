@@ -9,8 +9,6 @@ Usage:
 
 from __future__ import annotations
 
-from core.runtime.fault_handler import fail_open_guard
-
 import logging  # noqa: F401 — used at L114 via getLogger()
 import time
 import uuid
@@ -29,6 +27,7 @@ from core.protocol.live_execution_contract import (
     normalize_action,
 )
 from core.protocol.schema_versions import SCHEMA_COMMUNICATION_ENVELOPE
+from core.runtime.fault_handler import fail_open_guard
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
