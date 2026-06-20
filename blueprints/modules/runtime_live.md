@@ -77,6 +77,7 @@ The central live trading cycle orchestration. Wires together market data ingress
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260620-002 | 2026-06-20 | cursor-agent | — | **DQAF-20260620-002: EXEC_STATE_STALE — remove _strategies guard**: `save_execution_state()` in per-cycle and shutdown paths was gated behind `if _strategies is not None`. But `_strategies` is only set deep inside `execute_live_cycle()` (line 2693) — COLD_START and early gate blocks leave it `None` → save skipped for N cycles → execution_state.json never refreshed → EXEC_STATE_STALE false alert. Changed both sites to `_strategies or {}` (unguarded). Empty dict is safe: `strategies.items()` iterates zero times. | L2 — unnecessary conditional guard: breaker/counter/timestamp fields don't depend on strategies being built |
 | FIX-20260619-022 | 2026-06-19 | cursor-agent | — | **_utc_iso 去重**: 18 dupes → time_utils.py SSOT. 8 importers updated. | RC-08 |
 | FIX-20260619-021 | 2026-06-19 | cursor-agent | — | **Strangler Fig #20 — MIA close helpers → mia_close.py**: 188 lines pure data transform. live_cycle: -188. | RC-08 |
 | FIX-20260619-020 | 2026-06-19 | cursor-agent | — | **Strangler Fig #19 — feature init → live_bootstrap.py**: 96→16 lines. live_intent_loop: -80. | RC-08 |

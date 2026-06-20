@@ -98,13 +98,15 @@ def _append_journal(path: Path, entry: dict[str, Any], *, lock_dir: Path | None 
     # Prevents cross-ticket message_id reuse (execution queue double-flush).
     # If the same intent_id was already written for a DIFFERENT ticket,
     # this is a dispatch-level bug — log CRITICAL and skip.
+    # DQAF-20260620-001: window 500→1000 — bridge+eq double-write can
+    # produce duplicates >500 lines apart during high-frequency trading.
     if _msg_id and _action in ("open", "close"):
         try:
             if path.exists():
                 _tail_lines = []
                 with open(path, encoding="utf-8") as _f:
                     _lines = _f.readlines()
-                    _tail_lines = _lines[-500:]
+                    _tail_lines = _lines[-1000:]
                 for _line in _tail_lines:
                     try:
                         _existing = json.loads(_line)
@@ -125,13 +127,15 @@ def _append_journal(path: Path, entry: dict[str, Any], *, lock_dir: Path | None 
             pass  # Best-effort
 
     if _action == "close" and _ticket is not None:
-        # Tail-read check: scan last ~200 entries for existing close
+        # DQAF-20260620-001: tail-read window 200→500 — same-ticket close
+        # entries can be separated by hundreds of modify_sltp lines during
+        # active management, exceeding the old 200-line scan window.
         try:
             if path.exists():
                 _tail_lines = []
                 with open(path, encoding="utf-8") as _f:
                     _lines = _f.readlines()
-                    _tail_lines = _lines[-200:]
+                    _tail_lines = _lines[-500:]
                 for _line in _tail_lines:
                     try:
                         _existing = json.loads(_line)
@@ -479,7 +483,8 @@ def repair_journal(
                             _fe["magic"] = _bf["magic"]
                         if not _fe.get("strategy") and _bf["strategy"]:
                             _fe["strategy"] = _bf["strategy"]
-                # Remove duplicates (FIX-010)
+                # ── DQAF-20260620-001: two-pass dedup ──────────────────────
+                # Pass 1: message_id dedup (catches same-message retries).
                 _seen: set[str] = set()
                 _deduped: list[dict[str, Any]] = []
                 for _e in _final_entries:
@@ -489,7 +494,39 @@ def repair_journal(
                     if _mid:
                         _seen.add(_mid)
                     _deduped.append(_e)
-                report["duplicates_removed"] += len(_final_entries) - len(_deduped)
+                _deduped_msg_count = len(_final_entries) - len(_deduped)
+
+                # ── Pass 2: position_ticket dedup for close entries ──
+                # FIX-20260612-023 detected but the rewrite path was
+                # only applying message_id dedup — ticket-based duplicates
+                # (same ticket, different message_ids from bridge vs
+                # execution queue) survived every repair attempt.
+                _close_indices: dict[int, list[int]] = {}
+                for _i, _e in enumerate(_deduped):
+                    if _e.get("action") != "close":
+                        continue
+                    _t = _e.get("position_ticket")
+                    if _t and isinstance(_t, int) and _t > 0:
+                        _close_indices.setdefault(_t, []).append(_i)
+
+                _drop_indices: set[int] = set()
+                for _ticket, _group in _close_indices.items():
+                    if len(_group) <= 1:
+                        continue
+                    # Keep best: closed > accepted > rejected, prefer larger abs(PnL)
+                    _ack_map = {"closed": 0, "accepted": 1, "rejected": 2}
+                    _group.sort(key=lambda _i: (
+                        _ack_map.get(_deduped[_i].get("ack_status", ""), 99),
+                        -(1 if (_deduped[_i].get("detail", {}).get("close_price") or 0) > 0 else 0),
+                        -abs(_deduped[_i].get("pnl") or 0),
+                    ))
+                    for _idx in _group[1:]:
+                        _drop_indices.add(_idx)
+
+                if _drop_indices:
+                    _deduped = [_e for _i, _e in enumerate(_deduped) if _i not in _drop_indices]
+
+                report["duplicates_removed"] += _deduped_msg_count + len(_drop_indices)
 
                 # Write to temp file, then atomic swap
                 _temp_path.write_text(

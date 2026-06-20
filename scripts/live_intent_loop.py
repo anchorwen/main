@@ -2348,34 +2348,38 @@ def main(argv: list[str] | None = None) -> int:
                                 flush=True,
                             )
             # ── FIX-20260603-075: persist execution guard state EVERY cycle ──
-            _strategies = getattr(state, "_strategies", None)
-            if _strategies is not None:
-                with fail_open_guard("LiveIntentLoop:PersistExecutionState"):
-                    from core.runtime.execution_state import save_execution_state
+            # DQAF-20260620-002: removed _strategies guard — breaker state,
+            # counter values, and saved_at_utc must be persisted every cycle
+            # even when strategies haven't been built yet (COLD_START, early
+            # gate blocks).  Previously the save was silently skipped for N
+            # cycles → stale execution_state.json → EXEC_STATE_STALE alert.
+            with fail_open_guard("LiveIntentLoop:PersistExecutionState"):
+                from core.runtime.execution_state import save_execution_state
 
-                    _exec_path = Path(args.base_dir) / "state" / "execution_state.json"
-                    save_execution_state(
-                        str(_exec_path),
-                        _strategies,
-                        getattr(state, "_cooldown_registry", None),
-                        getattr(state, "_family_entry_tracker", None),
-                        sl_streak_blocks=getattr(state, "sl_streak_blocked_until", {}),
-                        sl_streak_global_block=getattr(state, "sl_streak_blocked_all_until", 0.0),
-                        consecutive_degraded=state._consecutive_degraded_cycles,
-                        circuit_breaker_tripped=state._circuit_breaker_tripped,
-                        circuit_breaker_tripped_at=getattr(
-                            state, "_circuit_breaker_tripped_at", 0.0
-                        ),
-                        intraday_dd_active=state.block_new_entries,
-                        # ── DQAF-20260608-003: full counter persistence ──
-                        consecutive_stale_cycles=state._consecutive_stale_cycles,
-                        consecutive_stale_features=state._consecutive_stale_features,
-                        circuit_breaker_trip_reason=getattr(
-                            state, "_circuit_breaker_trip_reason", ""
-                        ),
-                        # ── DQAF-20260615-004 ──
-                        known_open_tickets=getattr(state, "known_open_tickets", None),
-                    )
+                _exec_path = Path(args.base_dir) / "state" / "execution_state.json"
+                _strategies = getattr(state, "_strategies", None) or {}
+                save_execution_state(
+                    str(_exec_path),
+                    _strategies,
+                    getattr(state, "_cooldown_registry", None),
+                    getattr(state, "_family_entry_tracker", None),
+                    sl_streak_blocks=getattr(state, "sl_streak_blocked_until", {}),
+                    sl_streak_global_block=getattr(state, "sl_streak_blocked_all_until", 0.0),
+                    consecutive_degraded=state._consecutive_degraded_cycles,
+                    circuit_breaker_tripped=state._circuit_breaker_tripped,
+                    circuit_breaker_tripped_at=getattr(
+                        state, "_circuit_breaker_tripped_at", 0.0
+                    ),
+                    intraday_dd_active=state.block_new_entries,
+                    # ── DQAF-20260608-003: full counter persistence ──
+                    consecutive_stale_cycles=state._consecutive_stale_cycles,
+                    consecutive_stale_features=state._consecutive_stale_features,
+                    circuit_breaker_trip_reason=getattr(
+                        state, "_circuit_breaker_trip_reason", ""
+                    ),
+                    # ── DQAF-20260615-004 ──
+                    known_open_tickets=getattr(state, "known_open_tickets", None),
+                )
 
             # ── FIX-20260604-077: persist PnL ledger EVERY cycle ──
             # Same root cause as FIX-075: 60-cycle save interval means recent
@@ -2578,34 +2582,34 @@ def main(argv: list[str] | None = None) -> int:
                 with fail_open_guard("LiveIntentLoop:MetaFilterSaveState"):
                     meta_signal_filter.save_state(str(_mf_state_path))
             # ── FIX-20260603-072: persist execution guard state on shutdown ──
-            _strategies = getattr(state, "_strategies", None)
-            if _strategies is not None:
-                with fail_open_guard("LiveIntentLoop:L2680"):
-                        from core.runtime.execution_state import save_execution_state
+            # DQAF-20260620-002: removed _strategies guard — same fix as per-cycle save above
+            with fail_open_guard("LiveIntentLoop:L2680"):
+                    from core.runtime.execution_state import save_execution_state
 
-                        _exec_path = Path(args.base_dir) / "state" / "execution_state.json"
-                        save_execution_state(
-                            str(_exec_path),
-                            _strategies,
-                            getattr(state, "_cooldown_registry", None),
-                            getattr(state, "_family_entry_tracker", None),
-                            sl_streak_blocks=getattr(state, "sl_streak_blocked_until", {}),
-                            sl_streak_global_block=getattr(state, "sl_streak_blocked_all_until", 0.0),
-                            consecutive_degraded=state._consecutive_degraded_cycles,
-                            circuit_breaker_tripped=state._circuit_breaker_tripped,
-                            circuit_breaker_tripped_at=getattr(
-                                state, "_circuit_breaker_tripped_at", 0.0
-                            ),
-                            intraday_dd_active=state.block_new_entries,
-                            # ── DQAF-20260608-003: full counter persistence ──
-                            consecutive_stale_cycles=state._consecutive_stale_cycles,
-                            consecutive_stale_features=state._consecutive_stale_features,
-                            circuit_breaker_trip_reason=getattr(
-                                state, "_circuit_breaker_trip_reason", ""
-                            ),
-                            # ── DQAF-20260615-004 ──
-                            known_open_tickets=getattr(state, "known_open_tickets", None),
-                        )
+                    _exec_path = Path(args.base_dir) / "state" / "execution_state.json"
+                    _strategies = getattr(state, "_strategies", None) or {}
+                    save_execution_state(
+                        str(_exec_path),
+                        _strategies,
+                        getattr(state, "_cooldown_registry", None),
+                        getattr(state, "_family_entry_tracker", None),
+                        sl_streak_blocks=getattr(state, "sl_streak_blocked_until", {}),
+                        sl_streak_global_block=getattr(state, "sl_streak_blocked_all_until", 0.0),
+                        consecutive_degraded=state._consecutive_degraded_cycles,
+                        circuit_breaker_tripped=state._circuit_breaker_tripped,
+                        circuit_breaker_tripped_at=getattr(
+                            state, "_circuit_breaker_tripped_at", 0.0
+                        ),
+                        intraday_dd_active=state.block_new_entries,
+                        # ── DQAF-20260608-003: full counter persistence ──
+                        consecutive_stale_cycles=state._consecutive_stale_cycles,
+                        consecutive_stale_features=state._consecutive_stale_features,
+                        circuit_breaker_trip_reason=getattr(
+                            state, "_circuit_breaker_trip_reason", ""
+                        ),
+                        # ── DQAF-20260615-004 ──
+                        known_open_tickets=getattr(state, "known_open_tickets", None),
+                    )
         finally:
             signal.signal(signal.SIGINT, _old_sigint)
             signal.signal(signal.SIGTERM, _old_sigterm)

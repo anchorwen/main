@@ -4,6 +4,30 @@
 
 ## Fix Details
 
+### FIX-20260620-002 — EXEC_STATE_STALE false alert after restart
+
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live
+- **Files**: scripts/live_intent_loop.py
+- **Description**: `save_execution_state()` in per-cycle (FIX-075) and shutdown (FIX-072) paths was gated behind `if _strategies is not None`. But `state._strategies` is only set deep inside `execute_live_cycle()` (live_cycle.py:2693) — COLD_START and early gate blocks leave it None → save skipped for N cycles → `execution_state.json` `saved_at_utc` never refreshed → `check_execution_state()` reports EXEC_STATE_STALE false alert. Changed both sites to `_strategies = getattr(state, "_strategies", None) or {}` (unguarded). Empty dict is safe: `strategies.items()` iterates zero times in `save_execution_state()`. The save now always writes breaker state, counter values, and timestamp regardless of strategy initialization status.
+- **Root Cause**: L2 — unnecessary conditional guard: breaker/counter/timestamp persistence doesn't depend on strategies being built. The guard was copy-pasted from FIX-075 without considering the early-cycle path where `_strategies` is still None.
+- **Risk**: 极低。Empty dict fallback has zero runtime effect on persisted payload beyond updating `saved_at_utc`.
+- **Verification**: Import check PASS. verify.py --quick: mypy PASS, ruff PASS, blueprint PASS.
+
+### FIX-20260620-001 — Journal duplicate repair — two-pass dedup
+
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: protocol-services, ledger
+- **Files**: core/ledger/services/journal_cleanup.py
+- **Description**: (1) `repair_journal()` detected ticket-based duplicates (FIX-20260612-023) but the rewrite path (line 483-491) only applied message_id dedup — entries with different message_ids and same position_ticket survived every repair attempt. Added Pass 2 (position_ticket dedup) to the rewrite path: groups close entries by ticket, keeps best (by ack_status > has_close_price > abs(PnL)), drops rest. BTC: 17 dupes → 0 (412 closes total). XAU: 15 → 0 (4,278 closes total). (2) `_append_journal()` tail-scan windows expanded: message_id check 500→1000 lines, ticket-based check 200→500 lines. Prevents runtime duplicate accumulation when bridge + execution queue both write close entries for the same position.
+- **Root Cause**: L2 — rewrite path incomplete: detection logic (lines 396-417) correctly identified ticket-based duplicates and marked them `_duplicate`, but the rewrite phase re-reads journal from disk (`_final_entries = _load_journal(journal_path)`) — the `_duplicate` markers are lost on re-read. The re-dedup only filtered by message_id, not position_ticket.
+- **Risk**: 低。Dedup keeps the best close entry per ticket (same sorting as FIX-012-023). Legacy journal data preserved.
+- **Verification**: validate_journal_health_fix.py: BTC PASS (dupes=0), XAU PASS (dupes=0). Import check PASS. verify.py --quick: mypy PASS, ruff PASS.
+
 ### FIX-20260613-036 — ZMQ bridge health heartbeat never fires
 
 - **Date**: 2026-06-13
