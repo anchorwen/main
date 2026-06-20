@@ -46,7 +46,8 @@ Phase 7:  StrategyDecision assembly
 | **_counter_trend_action() (FIX-015)** | trend_volume_guard.py | -208 |
 | **Conformal OU Gate block (FIX-016)** | conformal_ou_gate.py (apply_conformal_ou_gate) | -103 |
 | **p_win resolution chain (FIX-017)** | pwin_chain.py (resolve_p_win + PWinResolution) | -108 |
-| **Current file size** | | **1,641 lines** (from 2,037, –19.4%) |
+| **OFI gate + volume finalization (FIX-018)** | ofi_gate.py + StrategyLine._finalize_volume() | -79 |
+| **Current file size** | | **1,650 lines** (from 2,037, –19.0%) |
 
 ## Inbound Dependencies
 | Module | What is imported |
