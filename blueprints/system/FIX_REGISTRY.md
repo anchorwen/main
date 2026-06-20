@@ -32,6 +32,7 @@ FIX-YYYYMMDD-NNN
 
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
+| FIX-20260621-028 | 2026-06-21 | observability, scripts, infra | **Phase 4 Shadow Verify midpoint: 3 fixes** — (028a) Windows scheduled task timeout fix, (028b) alert cooling state atomic persistence, (028c) weekend false-positive suppression in audit | RC-07 (resilience — crash-survival) + RC-06 (data-contamination — market-closed false positives) |
 | FIX-20260621-027 | 2026-06-21 | training, scripts | **Path B + R4 Phase 2: Unified BTC retraining with OFI look-ahead fix**: (1) Removed 5 OFI features from build_metafilter_dataset.py — sourced from single global snapshot with look-ahead bias. (2) Fixed feature_names mismatch (47→42 dim, entry_spread+brain_confidence now tracked). (3) Fixed train_metafilter_path_b.py metadata hyperparams (max_depth=3→2, n_estimators=50→80). (4) Added scale_pos_weight for class-imbalance robustness. (5) Added --data-dir CLI arg to both scripts. (6) Regenerated regime_snapshots (BTC: 6,204→7,095, covers 6/16 gap). (7) MetaFilter V4: 110 samples, 42-dim, OOF AUC=0.435 (V3=0.422, +0.013, no OFI). (8) R4 Phase 2: 116 samples, V12_NoRegime AUC=0.475 > V12_RegimeFull AUC=0.459 — regime features actively harmful for BTC (delta=-0.016). Both models below deployment threshold; shadow mode only. Main bottleneck: exact-minute FS join loses 70% of labels. Next step: V2 PIT ASOF join to recover samples. | RC-06 (data-contamination — look-ahead bias) + RC-12 (insufficient-data) |
 | FIX-20260620-026 | 2026-06-20 | tests | **P1 Test Breakout — 6 execution-layer modules zero→covered (+133 tests)**: market_efficiency (23 tests: Kaufman ER + normalization), ofi_gate (21 tests: OFI toxicity gate all branches), exit_reason (44 tests: 15 enum members + classify() 15+ patterns + shim), session_detector (14 tests: state machine + stall progression), correlation_sizer (14 tests: √N discount + rounding), trend_isolation_gates (17 tests: 4 gates). All pure/state-machine tests, no I/O dependencies. | RC-12 (zero-coverage modules) |
 | FIX-20260620-025 | 2026-06-20 | tests | **Phase 3b+3c+Gap fill: +188 tests, 7 modules**: position_close_adapter (30+), live_alert_hub (26), brain_registration_gate (37), brain_lifecycle_manager (22), microstructure_computer (22), financial_metrics (47), atomic_file_writer (22), regime_direction_gate (16). Zero→covered: live_alert_hub, brain_registration_gate, brain_lifecycle_manager, microstructure_computer, financial_metrics, atomic_file_writer, regime_direction_gate. | RC-12 (zero-coverage modules) |
@@ -3509,3 +3510,29 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-06 (data-contamination — OFI look-ahead bias inflated V3 features) + RC-12 (insufficient-data — 110 samples below statistical significance threshold of 200)
 - **Prevention**: (1) OFI features should never be added to training data without PIT historical snapshots — add pre-commit check in dataset builders. (2) Training script metadata must be auto-generated from actual model params — consider dataclass-based model config to prevent drift. (3) Minimum sample threshold of 200 for MetaFilter deployment is confirmed correct.
 - **Dependents Checked**: meta_filter_adapter.py (requires pickle format — path_b outputs .txt booster), xgboost_brain_adapter.py (unaffected), live_cycle.py (MetaFilter path unchanged, shadow-only), governance_state.json (BTC brain status unchanged, training-only change).
+
+### FIX-20260621-028
+- **Date**: 2026-06-21
+- **Author**: cursor-agent
+- **Type**: fix — Phase 4 Shadow Verify midpoint 3 fixes
+- **Module**: observability (alert_service, live_alert_hub), scripts (audit_data_integrity), infra (Windows scheduled task)
+- **Files**: `core/observability/alert_service.py` (modified: added `AlertRule.last_fired` property), `core/observability/live_alert_hub.py` (modified: added `_save_cooling_state()`, `_load_cooling_state()`, `_cooling_state_path`), `scripts/audit_data_integrity.py` (modified: added `is_market_closed()`, weekend suppression in `check_active_position_state()` and `check_journal_mt5_reconciliation()`)
+- **Summary**: **Phase 4 影子验证中点检查发现 3 个弱点 → 一次性修复。**
+
+  **Fix-028a — Windows 计划任务超时 (0x80070102)**:
+  - 根因: `audit_data_integrity.py --quiet --alert` 在无头模式下通过 Task Scheduler 执行时，stdout/stderr 未重定向导致缓冲区满 → 进程挂死超时
+  - 修复: PowerShell `Set-ScheduledTask` 更新命令为 `cmd.exe /c "python D:\future\scripts\audit_data_integrity.py --quiet --alert >> D:\future\data\logs\cron_audit.log 2>&1"`，设置 `WorkingDirectory = D:\future`
+
+  **Fix-028b — 告警冷却持久化 (crash-survival)**:
+  - 根因: `AlertRule._last_fired` 仅存在于内存。进程重启（死锁恢复/架构更新）→ 冷却计时器清零 → DingTalk 告警风暴
+  - 修复: `AlertRule.last_fired` property 暴露状态；`LiveAlertHub._save_cooling_state()` 在规则触发时原子写入 `data/state/alert_cooling.json`；`LiveAlertHub._load_cooling_state()` 在 __init__ 中恢复（仅恢复未过期的冷却）。原子性通过 `tempfile.mkstemp()` + `os.replace()` 保证。
+  - 设计决策: 仅在规则实际触发时写入（罕见事件），避免主循环每轮的 I/O 开销
+
+  **Fix-028c — 周末停盘误报抑制**:
+  - 根因: `check_active_position_state()` 和 `check_journal_mt5_reconciliation()` 缺乏市场日历感知 → 周末零交易期间将 MT5 数据自然滞后误判为 Sev1/Sev2 数据完整性缺陷
+  - 修复: 添加 `is_market_closed(data_dir)` — XAU 检测周五 22:00 UTC → 周日 22:00 UTC 停盘窗口；BTC 始终返回 False（24/7 交易）。当市场关闭时，将这两个检查的 Sev1/Sev2/Sev3 降级为 OK
+  - 影响: 周六 20:05 验证 — XAU Sev1 active_position → OK ✅，XAU Sev2 journal_mt5 → OK ✅
+
+- **Root Cause**: RC-07 (resilience — insufficient process-restart survivability for alert cooling) + RC-06 (data-contamination — audit false positives during market closure)
+- **Prevention**: (1) All background scheduled tasks must include output redirection in command line. (2) Any in-memory state with TTL semantics should be persisted to disk for crash-survival. (3) Market-closed awareness should be a standard utility available to all audit/health scripts.
+- **Dependents Checked**: `live_cycle.py` (uses LiveAlertHub — `.last_fired` property is additive, no signature change), `live_intent_loop.py` (same LiveAlertHub usage), `audit_data_integrity.py` (self-contained change, no callers affected).
