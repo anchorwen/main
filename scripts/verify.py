@@ -14,6 +14,8 @@ The --mypy-only mode is designed for the Claude Code PostToolUse hook.
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 import sys
 import time
@@ -23,6 +25,16 @@ from core.runtime.fault_handler import fail_open_guard
 
 ROOT = Path(__file__).resolve().parent.parent
 STAMP_FILE = ROOT / ".verify_stamp.json"
+
+# ── DEBT time-bomb scanner exclusions ─────────────────────────────────────
+_DEBT_EXCLUDE_DIRS: frozenset[str] = frozenset({
+    ".venv", ".git", "__pycache__", "node_modules",
+    ".mypy_cache", ".ruff_cache", ".tox", ".egg-info",
+})
+_DEBT_RE = re.compile(
+    r"(?:DEBT|TODO).*?(?:EXPIRE|EXPIRES):\s*(\d{4}-\d{2}-\d{2})",
+    re.IGNORECASE,
+)
 
 # Force UTF-8 on Windows while preserving line buffering.
 # io.TextIOWrapper rewrap defaults to full buffering which would cause
@@ -560,6 +572,77 @@ def _run_golden_master_check() -> int:
         return 0
 
 
+def scan_debt_bombs() -> tuple[bool, list[str]]:
+    """Scan all .py files for expired DEBT annotations.
+
+    Format: ``# DEBT: [FIX-XXX] <desc>. EXPIRE: YYYY-MM-DD``
+    Also accepts: ``# TODO(FIX-XXX, EXPIRE: YYYY-MM-DD): <desc>``
+
+    Uses UTC for date comparison — no timezone drift tolerated in finance.
+    Excludes virtual envs, caches, and other noise directories.
+
+    Returns (ok, list_of_expired_entries).
+    """
+    from datetime import UTC, datetime
+
+    today = datetime.now(UTC).date()
+    expired: list[str] = []
+    total_found = 0
+
+    for dirpath, dirnames, filenames in os.walk(str(ROOT)):
+        # ── Directory whitelist: prune noise ──
+        dirnames[:] = [
+            d for d in dirnames if d not in _DEBT_EXCLUDE_DIRS
+        ]
+
+        for fn in filenames:
+            if not fn.endswith(".py"):
+                continue
+            fpath = os.path.join(dirpath, fn)
+            try:
+                with open(fpath, encoding="utf-8") as fh:
+                    for lineno, line in enumerate(fh, 1):
+                        m = _DEBT_RE.search(line)
+                        if not m:
+                            continue
+                        total_found += 1
+                        expire_str = m.group(1)
+                        try:
+                            expire_date = datetime.strptime(
+                                expire_str, "%Y-%m-%d"
+                            ).date()
+                        except ValueError:
+                            continue  # malformed date — skip
+                        if expire_date < today:
+                            rel = os.path.relpath(fpath, str(ROOT))
+                            desc = line.strip().lstrip("#").strip()
+                            overdue = (today - expire_date).days
+                            expired.append(
+                                f"  {rel}:{lineno}  {desc[:100]} "
+                                f"(OVERDUE {overdue} days)"
+                            )
+            except (OSError, UnicodeDecodeError):
+                continue  # can't read — skip
+
+    if expired:
+        print("=" * 60)
+        print(f"[Ω-DEBT-BOMB] EXPIRED DEBT DETECTED (UTC {today}):")
+        for entry in expired:
+            print(entry)
+        print(
+            f"\nFATAL: {len(expired)} expired DEBT annotation(s). "
+            f"All trading, backtesting, and CI are blocked.\n"
+            f"Resolve each DEBT or update its EXPIRE date "
+            f"with documented justification."
+        )
+        print("=" * 60)
+        return False, expired
+
+    if total_found:
+        print(f"[Ω-DEBT-BOMB] PASSED: {total_found} DEBT annotation(s), none expired (UTC {today}).")
+    return True, []
+
+
 def main() -> int:
     import argparse
 
@@ -629,6 +712,11 @@ def main() -> int:
     all_passed = True
 
     if args.quick:
+        # ── DEBT time-bomb scan (first — before mypy/ruff) ──
+        debt_ok, _ = scan_debt_bombs()
+        if not debt_ok:
+            return 1
+
         changed = _changed_py_files()
         if not changed:
             print("No changed Python files.")
@@ -727,6 +815,11 @@ def main() -> int:
                 print("[PASS] FIX_REGISTRY gate")
 
     elif args.full:
+        # ── DEBT time-bomb scan (first — before mypy/ruff) ──
+        debt_ok, _ = scan_debt_bombs()
+        if not debt_ok:
+            return 1
+
         passed, output = run_mypy()
         if not passed:
             print(f"[FAIL] mypy:\n{output}")

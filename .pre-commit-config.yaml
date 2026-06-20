@@ -107,6 +107,22 @@ repos:
         pass_filenames: false
 
   # ------------------------------------------------------------------
+  # Ω Architecture Gate — Iron Law #12 physical enforcement
+  # Blocks commits when a module has >=3 L1/L2 fixes in 30 days
+  # and the current commit is not L3. Also detects RC recurrence.
+  # DRY-RUN by default. Set ARCH_GATE_MODE=live to activate.
+  # Override: --no-verify with FIX-ARCH-OVERRIDE reason.
+  # ------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: architecture-gate
+        name: "[Ω] Iron Law #12 Architecture Gate"
+        entry: python scripts/hook_architecture_gate.py
+        language: system
+        stages: [commit-msg]
+        pass_filenames: false
+
+  # ------------------------------------------------------------------
   # CI-Mirror Gate — pre-push: mirrors GitHub Actions before allowing push
   # Runs ruff (full codebase) + mypy (baseline) — same as ci-windows.yml.
   # Blocks push if checks fail.  No stash — safe with live processes.

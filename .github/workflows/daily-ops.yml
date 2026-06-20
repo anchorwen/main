@@ -24,6 +24,7 @@ jobs:
     timeout-minutes: 30
     env:
       PYTHONUTF8: "1"
+      TZ: "UTC"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
     steps:

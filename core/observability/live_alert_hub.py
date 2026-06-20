@@ -27,6 +27,8 @@ import json
 import logging
 import os
 import queue
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -52,6 +54,7 @@ from core.protocol.services.resilience import CircuitBreaker
 from core.runtime.fault_handler import fail_open_guard
 
 logger = logging.getLogger(__name__)
+ROOT = Path(__file__).resolve().parents[2]  # d:\future\
 
 # ── Background delivery worker ─────────────────────────────────────────────
 
@@ -402,6 +405,14 @@ class LiveAlertHub:
             if alert.get("severity") == "critical":
                 self._circuit_breaker.trip(reason=alert.get("rule_name", ""))
 
+        # ── Shadow RCA: async LLM root cause analysis for Sev1/Sev2 ──
+        critical_or_error = [
+            a for a in fired
+            if a.get("severity") in ("critical", "error")
+        ]
+        if critical_or_error:
+            self._trigger_shadow_rca(critical_or_error)
+
         # ── Enqueue for async delivery (backpressure: drop if full) ──
         for alert in fired:
             try:
@@ -414,6 +425,33 @@ class LiveAlertHub:
                 self._write_fallback_alert(alert)
 
         return fired
+
+    def _trigger_shadow_rca(self, alerts: list[dict[str, Any]]) -> None:
+        """Fire-and-forget async LLM root cause analysis.
+
+        Spawns shadow_rca.py as a detached subprocess — never blocks the
+        trading loop (Guardrail G1).  Failures are silent (fail-open).
+        """
+        try:
+            payload = json.dumps({
+                "alert": alerts[0],  # analyze the first critical/error alert
+                "file": alerts[0].get("context_snapshot", {}).get("_source_file", ""),
+            }, ensure_ascii=False)
+            subprocess.Popen(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "shadow_rca.py"),
+                    "--stdin",
+                    "--data-dir", str(self._base_dir),
+                ],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                cwd=str(ROOT),
+            ).communicate(input=payload.encode("utf-8"), timeout=0.5)
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("live_alert_hub:_trigger_shadow_rca"):
+                pass  # Shadow RCA is best-effort — never block trading
 
     def _write_fallback_alert(self, alert: dict[str, Any]) -> None:
         """Emergency fallback: write dropped alert directly to audit log.
