@@ -314,7 +314,18 @@ def dispatch_managed_close(
     if _close_dispatched and state is not None and pos.ticket:
         state.known_open_tickets.pop(pos.ticket, None)
         if pnl is not None and strategy_name:
-            _pnl_pct = float(pnl) / 1000.0
+            # FIX-20260620-001: Use account equity instead of hardcoded 1000.
+            # pnl is estimated USD (mid - entry) * volume — must be converted
+            # to percentage for StrategyBudget.record_trade() which expects
+            # decimal fraction (e.g. 0.005 = 0.5% profit).
+            _eq = 1000.0  # fallback
+            try:
+                if mt5_worker is not None:
+                    _acc = mt5_worker.account_info()
+                    _eq = float(getattr(_acc, "equity", 1000.0)) if _acc is not None else 1000.0
+            except Exception:
+                pass  # graceful fallback — keep _eq at 1000.0
+            _pnl_pct = float(pnl) / _eq if _eq > 0 else 0.0
             state._pending_budget_records.append(
                 {
                     "strategy": strategy_name,

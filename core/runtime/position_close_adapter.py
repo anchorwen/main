@@ -253,11 +253,15 @@ class PositionCloseAdapter:
             return False
 
         # ── Notify downstream consumers ──
+        # FIX-20260620-001: _notify_budget REMOVED — the fallback path passed
+        # raw USD as percentage (wrong units, no is_win field).  Budget recording
+        # is handled by the reconciliation loop in live_cycle.py which correctly
+        # converts _evt.pnl / equity → percentage.  The other notify calls
+        # (position_manager, reentry_guard, pnl_ledger) are independent of budget.
         if state is not None:
             self._notify_position_manager(event, state)
             self._notify_reentry_guard(event, state)
             self._notify_pnl_ledger(event, state)
-            self._notify_budget(event, state)
 
         return True
 

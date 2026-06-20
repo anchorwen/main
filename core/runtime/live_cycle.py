@@ -2345,15 +2345,28 @@ def execute_live_cycle(
                 # PnL, consecutive loss counters, and all cumulative circuit
                 # breakers missed every MIA close.  Feed through the same
                 # pending-records pipeline as reconciliation closes.
+                # ── FIX-20260620-001: MIA pnl is raw USD from deal.profit,
+                # NOT a percentage.  Must divide by account equity to match
+                # the reconciliation path (_evt.pnl / _eq).  Previous code
+                # passed raw USD as percentage → $5 loss = -500% daily PnL
+                # → immediate budget_breached false positive.
                 _mia_pnl = _entry.get("pnl")
                 if _mia_pnl is not None and _exit_strategy:
                     _is_win = float(_mia_pnl) > 0
+                    _eq = 1000.0  # fallback equity
+                    try:
+                        if mt5_worker is not None:
+                            _acc = mt5_worker.account_info()
+                            _eq = float(getattr(_acc, "equity", 1000.0)) if _acc is not None else 1000.0
+                    except Exception:
+                        pass  # graceful fallback — keep _eq at 1000.0
+                    _pnl_pct = float(_mia_pnl) / _eq if _eq > 0 else 0.0
                     if not hasattr(state, "_pending_budget_records"):
                         state._pending_budget_records = []
                     state._pending_budget_records.append(
                         {
                             "strategy": _exit_strategy,
-                            "pnl": float(_mia_pnl),
+                            "pnl": _pnl_pct,
                             "is_win": _is_win,
                         }
                     )

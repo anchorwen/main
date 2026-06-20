@@ -32,7 +32,8 @@ FIX-YYYYMMDD-NNN
 
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
-| FIX-20260620-002 | 2026-06-20 | runtime-live | **DQAF-20260620-002: EXEC_STATE_STALE — remove _strategies guard**: `save_execution_state()` was gated behind `if _strategies is not None`. But `_strategies` is only set deep inside `execute_live_cycle()` — COLD_START leaves it None → save skipped for N cycles → execution_state.json never refreshed → EXEC_STATE_STALE false alert. Changed both sites to `_strategies or {}` (unguarded). | L2 — unnecessary conditional guard: breaker/counter/timestamp fields don't depend on strategies being built |
+| FIX-20260620-003 | 2026-06-20 | execution-orders, runtime-live | **PnL Budget accuracy: raw USD→percentage conversion fix**. (1) MIA close path `live_cycle.py`: `_mia_pnl` (raw USD) → `_mia_pnl / equity`. (2) `managed_close.py`: hardcoded `/1000.0` → `/mt5_worker.account_info().equity`. (3) `position_close_adapter.py`: removed broken `_notify_budget` fallback (double-record + raw USD). All three paths now convert USD→percentage correctly with graceful fallback to 1000.0 equity. Fixes budget_breached false positives (m30_swing -$0.27 real vs -24% budget). | L3 — unit mixing: raw USD treated as decimal percentage |
+| FIX-20260620-002 | 2026-06-20 | runtime-live |**DQAF-20260620-002: EXEC_STATE_STALE — remove _strategies guard**: `save_execution_state()` was gated behind `if _strategies is not None`. But `_strategies` is only set deep inside `execute_live_cycle()` — COLD_START leaves it None → save skipped for N cycles → execution_state.json never refreshed → EXEC_STATE_STALE false alert. Changed both sites to `_strategies or {}` (unguarded). | L2 — unnecessary conditional guard: breaker/counter/timestamp fields don't depend on strategies being built |
 | FIX-20260620-001 | 2026-06-20 | protocol-services, ledger | **DQAF-20260620-001: Journal duplicate repair — two-pass dedup**: `repair_journal()` rewrite path was only applying message_id dedup — ticket-based duplicates (same ticket, different message_ids from bridge vs execution queue) survived every repair. Added Pass 2 (position_ticket dedup) to rewrite path. BTC: 17 dupes→0, XAU: 15→0. `_append_journal()` tail-scan windows: message_id 500→1000, ticket 200→500. | L2 — rewrite path incomplete: detection caught ticket-based dupes but removal only applied message_id filter |
 | FIX-20260619-023 | 2026-06-19 | execution-guards | **TECH_DEBT-005 Phase 1: Dynamic tick-based session detection — SessionDetector deployed**. New `core/execution/session_detector.py` — tick-frequency state machine (NORMAL→ROLLOVER→CLOSED→NORMAL). Wired into `detect_session()` via optional `tick_time` parameter. When tick_time provided (live cycles): uses physical-state probe. When omitted (bootstrap/backtest): falls back to static _SESSIONS table. First call site in live_cycle passes `_tick_time` — subsequent calls use cached result. BTC (crypto_24_7) always normal. TECH_DEBT-005 Phase 2: validate 2 weeks, then delete static table. | RC-12 |
 | FIX-20260619-003 | 2026-06-19 | execution-guards | **Tactical: Spot XAU daily rollover — \"off\"→\"reduced\"**: Changed 22:00-00:00 UTC from risk_tier=\"off\" (CME futures close) to \"reduced\" (spot FX rollover). XAU process was skipping 12+ cycles/day with zero golden_master. Weekend (Fri 22:00) unchanged. | RC-06 |
@@ -3253,6 +3254,20 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-06 (contract-violation): JournalAccepted accepted entry_context dicts missing 'vector'. No write-boundary or audit enforcement existed.
 - **Prevention**: L1 write rejection, L2 hourly detection with alert, L3 cross-symbol parity.
 - **Dependents Checked**: live_cycle.py/daily_ops_scheduler.py/strategy_line.py (all untouched)
+
+### FIX-20260620-003
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: execution/orders, runtime/live
+- **Files**: `core/execution/managed_close.py`, `core/runtime/live_cycle.py`, `core/runtime/position_close_adapter.py`
+- **Summary**: **PnL Budget accuracy — Phase 1 (DQAF-20260620-002).** Three bugs fixed:
+  1. **MIA close path** (`live_cycle.py:2348`): `_mia_pnl` (raw USD from MT5 deal.profit) was passed directly to `StrategyBudget.record_trade()` which expects decimal percentage. Single -$5 loss → daily_pnl_pct += -5.0 (-500%) → immediate budget_breached false positive. Now converts via `_mia_pnl / mt5_worker.account_info().equity`.
+  2. **managed_close path** (`managed_close.py:317`): Hardcoded `/1000.0` divisor — wrong for any account != $1000. Now uses `mt5_worker.account_info().equity` with 1000.0 fallback.
+  3. **PositionCloseAdapter double-record** (`position_close_adapter.py:260`): `_notify_budget` fallback was redundant with live_cycle reconciliation loop AND passed raw USD without `is_win` field — corrupting budget when journal write failed. Removed.
+- **Root Cause**: L3 — unit mixing: three code paths passed raw USD PnL values where decimal percentage was expected. `StrategyBudget.record_trade(pnl_pct, is_win)` signature accepts `pnl_pct` as decimal (e.g. 0.005 = 0.5%), but callers passed raw USD (e.g. 5.0 = 500%). This is an architecture defect — no type-level distinction between USD and percentage.
+- **Prevention**: All three paths now follow the same pattern: `pnl / equity` with graceful fallback. Future PnL recording sites should match this pattern. Defense 2: added `FIX-20260620-003` comment markers at each conversion site for auditability.
+- **Dependents Checked**: `StrategyBudget.record_trade()` (unchanged), `circuit_breaker_reset.py` (unchanged), reconciliation loop (unchanged — already correct).
 
 ### FIX-20260620-064
 - **Date**: 2026-06-20
