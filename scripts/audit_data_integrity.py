@@ -33,6 +33,36 @@ from core.runtime.fault_handler import fail_open_guard
 NOW = datetime.now(timezone.utc)
 NOW_ISO = NOW.isoformat()[:19] + "Z"
 
+# ── Weekend closure detection ──────────────────────────────────────────
+# XAU (spot gold) closes Friday 22:00 UTC → Sunday 22:00 UTC.
+# BTC trades 24/7 — no weekend suppression.
+
+
+def is_market_closed(data_dir: str) -> bool:
+    """Return True if the market for *data_dir* is in a weekend closure window.
+
+    XAU (data/) follows the forex weekend calendar.
+    BTC (data_btc/) trades continuously — always returns False.
+    """
+    if "btc" in str(data_dir).lower():
+        return False  # BTC trades 24/7
+
+    now = NOW
+    wd = now.weekday()  # Monday=0, Sunday=6
+    hour = now.hour
+
+    # Friday after 22:00 UTC
+    if wd == 4 and hour >= 22:
+        return True
+    # Saturday all day
+    if wd == 5:
+        return True
+    # Sunday before 22:00 UTC
+    if wd == 6 and hour < 22:
+        return True
+
+    return False
+
 # ── Symbol precision requirements ──────────────────────────────────────
 SYMBOL_PRECISION: dict[str, dict[str, Any]] = {
     "XAUUSDc": {"decimals": 3, "tick_size": 0.001, "tick_value": 0.01},
@@ -226,6 +256,12 @@ def check_active_position_state(data_dir: str) -> dict[str, Any]:
         sev = "Sev1"  # positions exist but file missing = data loss
     else:
         sev = "Sev3"  # file exists but inconsistent
+
+    # Weekend suppression: MT5 has no positions during closure —
+    # stale active_position.json vs empty MT5 ≠ data loss.
+    if sev in ("Sev1", "Sev2", "Sev3") and is_market_closed(data_dir):
+        sev = "OK"
+        consistent = True
 
     return {
         "passed": exists and consistent,
@@ -756,6 +792,11 @@ def check_journal_mt5_reconciliation(data_dir: str) -> dict[str, Any]:
 
     pct = exact / max(matched, 1) * 100
     sev = "OK" if pct > 90 else "Sev2" if pct > 40 else "Sev3"  # 40% for cross-terminal fallback
+
+    # Weekend suppression: MT5 history deals may be stale during closure —
+    # journal entries from pre-weekend close are not yet reflected in MT5.
+    if sev in ("Sev1", "Sev2", "Sev3") and is_market_closed(data_dir):
+        sev = "OK"
 
     return {
         "passed": pct > 90, "severity": sev,

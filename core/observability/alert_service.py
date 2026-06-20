@@ -27,6 +27,16 @@ class AlertRule:
         self.cooldown_seconds = cooldown_seconds
         self._last_fired: float = 0
 
+    @property
+    def last_fired(self) -> float:
+        """Unix timestamp of last time this rule fired (0 if never)."""
+        return self._last_fired
+
+    @last_fired.setter
+    def last_fired(self, value: float) -> None:
+        """Restore cooling state from persisted checkpoint."""
+        self._last_fired = value
+
     def should_fire(self, context: dict) -> bool:
         if not self.condition_fn(context):
             return False

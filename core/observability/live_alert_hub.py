@@ -27,6 +27,7 @@ import json
 import logging
 import os
 import queue
+import tempfile
 import threading
 import time
 from datetime import UTC, datetime
@@ -206,6 +207,7 @@ class LiveAlertHub:
     ) -> None:
         self._symbol = symbol or ""
         self._base_dir = Path(base_dir)
+        self._cooling_state_path = self._base_dir / "state" / "alert_cooling.json"
         # Bounded queue: hard cap at 1000 to prevent OOM during network partition
         self._alert_queue: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1000)
         self._thresholds = {**self._DEFAULT_THRESHOLDS, **(thresholds or {})}
@@ -252,6 +254,7 @@ class LiveAlertHub:
         self._alert_service = AlertService()
         self._alert_service.add_channel(_QueueChannel(self._alert_queue))
         self._register_rules_from_config()
+        self._load_cooling_state()
 
         # ── Stats ──
         self._cycles_evaluated: int = 0
@@ -390,6 +393,10 @@ class LiveAlertHub:
         self._cycles_evaluated += 1
         self._alerts_fired_total += len(fired)
 
+        # ── Persist cooling timestamps for crash survival ──
+        if fired:
+            self._save_cooling_state()
+
         # ── Guardrail 2: CRITICAL → trip circuit breaker ──
         for alert in fired:
             if alert.get("severity") == "critical":
@@ -430,6 +437,87 @@ class LiveAlertHub:
                 )
         except OSError:
             pass
+
+    # ── Cooling state persistence (crash-survival) ─────────────────────
+
+    def _save_cooling_state(self) -> None:
+        """Persist rule cooling timestamps to disk atomically.
+
+        Write to temp file then os.replace() — atomic on both Windows and POSIX.
+        Called after evaluate_and_dispatch() when rules fire.
+        """
+        state: dict[str, float] = {}
+        for rule in self._alert_service._rules:
+            if rule._last_fired > 0:
+                state[rule.name] = rule._last_fired
+
+        if not state:
+            return  # nothing cooled — don't touch disk
+
+        try:
+            state_dir = self._cooling_state_path.parent
+            state_dir.mkdir(parents=True, exist_ok=True)
+            fd, tmp_path = tempfile.mkstemp(
+                suffix=".json", prefix="alert_cooling_", dir=str(state_dir)
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(
+                        {
+                            "updated_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                            "symbol": self._symbol,
+                            "rules": state,
+                        },
+                        f,
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                os.replace(tmp_path, str(self._cooling_state_path))
+            except Exception:
+                # Clean up temp file on write failure
+                with contextlib.suppress(OSError):
+                    os.unlink(tmp_path)
+                raise
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("live_alert_hub:_save_cooling_state"):
+                pass
+
+    def _load_cooling_state(self) -> None:
+        """Restore rule cooling timestamps from disk after process restart.
+
+        Called during __init__ after rules are registered.
+        Missing or corrupted state file is silently skipped.
+        """
+        if not self._cooling_state_path.exists():
+            return
+
+        try:
+            data = json.loads(self._cooling_state_path.read_text(encoding="utf-8"))
+            rules_state = data.get("rules", {}) if isinstance(data, dict) else {}
+        except (json.JSONDecodeError, OSError):
+            return
+
+        if not rules_state:
+            return
+
+        restored = 0
+        cutoff = datetime.now(UTC).replace(tzinfo=None).timestamp()
+        for rule in self._alert_service._rules:
+            ts = rules_state.get(rule.name)
+            if ts is not None and isinstance(ts, int | float):
+                # Only restore if cooldown hasn't fully expired —
+                # a fully-expired cooldown is equivalent to "never fired"
+                if cutoff - ts < rule.cooldown_seconds:
+                    rule._last_fired = float(ts)
+                    restored += 1
+
+        if restored:
+            logger.info(
+                "Restored cooling state for %d/%d rules from %s",
+                restored,
+                len(self._alert_service._rules),
+                self._cooling_state_path,
+            )
 
     # ── Shutdown (graceful drain) ──────────────────────────────────────
 
