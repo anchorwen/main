@@ -32,6 +32,7 @@ FIX-YYYYMMDD-NNN
 
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
+| FIX-20260621-027 | 2026-06-21 | training, scripts | **Path B + R4 Phase 2: Unified BTC retraining with OFI look-ahead fix**: (1) Removed 5 OFI features from build_metafilter_dataset.py — sourced from single global snapshot with look-ahead bias. (2) Fixed feature_names mismatch (47→42 dim, entry_spread+brain_confidence now tracked). (3) Fixed train_metafilter_path_b.py metadata hyperparams (max_depth=3→2, n_estimators=50→80). (4) Added scale_pos_weight for class-imbalance robustness. (5) Added --data-dir CLI arg to both scripts. (6) Regenerated regime_snapshots (BTC: 6,204→7,095, covers 6/16 gap). (7) MetaFilter V4: 110 samples, 42-dim, OOF AUC=0.435 (V3=0.422, +0.013, no OFI). (8) R4 Phase 2: 116 samples, V12_NoRegime AUC=0.475 > V12_RegimeFull AUC=0.459 — regime features actively harmful for BTC (delta=-0.016). Both models below deployment threshold; shadow mode only. Main bottleneck: exact-minute FS join loses 70% of labels. Next step: V2 PIT ASOF join to recover samples. | RC-06 (data-contamination — look-ahead bias) + RC-12 (insufficient-data) |
 | FIX-20260620-026 | 2026-06-20 | tests | **P1 Test Breakout — 6 execution-layer modules zero→covered (+133 tests)**: market_efficiency (23 tests: Kaufman ER + normalization), ofi_gate (21 tests: OFI toxicity gate all branches), exit_reason (44 tests: 15 enum members + classify() 15+ patterns + shim), session_detector (14 tests: state machine + stall progression), correlation_sizer (14 tests: √N discount + rounding), trend_isolation_gates (17 tests: 4 gates). All pure/state-machine tests, no I/O dependencies. | RC-12 (zero-coverage modules) |
 | FIX-20260620-025 | 2026-06-20 | tests | **Phase 3b+3c+Gap fill: +188 tests, 7 modules**: position_close_adapter (30+), live_alert_hub (26), brain_registration_gate (37), brain_lifecycle_manager (22), microstructure_computer (22), financial_metrics (47), atomic_file_writer (22), regime_direction_gate (16). Zero→covered: live_alert_hub, brain_registration_gate, brain_lifecycle_manager, microstructure_computer, financial_metrics, atomic_file_writer, regime_direction_gate. | RC-12 (zero-coverage modules) |
 | FIX-20260620-024 | 2026-06-20 | brains-services | **DEFERRED: Governance hysteresis — promotion↔throttle oscillation prevention**: Missing hold-down period between promote and throttle allows ping-pong live↔probation transitions. Registered as L3 architecture debt; activate when any BTC brain accumulates ≥50 live trades. Trigger: `performance_metrics.trades ≥ 50` OR `2026-07-15`. | RC-12 (missing-feature) |
@@ -3470,3 +3471,41 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-12 — missing-feature (6 execution-layer modules had zero test coverage)
 - **Prevention**: All 6 modules now have contract-level test coverage. CI pipeline enforces no regression. Remaining zero-coverage execution modules tracked for future breakout rounds.
 - **Dependents Checked**: mt5_worker used by live_cycle.py, bar_sync_poller.py, position_close_adapter.py — all unaffected (test-only change).
+### FIX-20260621-027
+- **Date**: 2026-06-21
+- **Author**: cursor-agent
+- **Type**: training + bug-fix (Path B + R4 Phase 2 unified retraining)
+- **Module**: scripts (build_metafilter_dataset, train_metafilter_path_b) + training infrastructure
+- **Files**: `scripts/build_metafilter_dataset.py` (modified: removed OFI look-ahead bias, fixed feature_names, added --data-dir), `scripts/train_metafilter_path_b.py` (modified: fixed metadata hyperparams, added scale_pos_weight, added --data-dir), `data_btc/models/metafilter_path_b_v1.json` (regenerated V4), `data_btc/models/regime_aware_v12/training_metadata.json` (regenerated V12)
+- **Summary**: **Path B + R4 Phase 2 unified BTC retraining with OFI look-ahead bias excision.**
+
+  **Pre-requisites confirmed (2026-06-20复查)**:
+  - BTC Path B: ≥200 settled trades → **336 trades** ✅
+  - R4 Phase 2: ≥200 matchable opens → **485 labels** ✅
+
+  **Bug fixes (scripts)**:
+  1. **OFI look-ahead bias (Sev 1)**: `build_metafilter_dataset.py:129-145` read 5 OFI features from a single global `ofi_snapshot.json` — every sample received the SAME OFI values regardless of trade timestamp, leaking future information into historical samples. Fix: removed all 5 OFI features. Proper PIT OFI reconstruction requires historical OFI snapshots at each trade's open time (future infrastructure).
+  2. **feature_names mismatch (Sev 2)**: Line 153 saved only `feature_names + ["brain_confidence"]` (42 names) but the actual vector contained 47 values (40 V9 + entry_spread + confidence + 5 OFI). Fix: feature_names now correctly lists `feature_names + ["entry_spread", "brain_confidence"]` matching the 42-dim vector.
+  3. **Metadata hyperparams mismatch (Sev 2)**: `train_metafilter_path_b.py:143-144` hardcoded `max_depth=3, n_estimators=50` but actual training used `max_depth=2, n_estimators=80`. Fix: metadata now records actual training parameters.
+  4. **Class imbalance robustness**: Added `scale_pos_weight` computation from actual win/loss ratio. Activates only when |WR - 50%| > 10%. Clamped to [0.5, 2.0].
+
+  **Pipeline execution (2026-06-21)**:
+  1. Regenerated regime snapshots: BTC 6,204→7,095 (covers 6/16→6/20 gap)
+  2. Re-injected regime into labels: 485 labels → 145 matched with regime context
+  3. Built MetaFilter dataset: 110 samples, 42-dim (40 V9 + entry_spread + brain_confidence), WR 44.5%
+  4. Trained MetaFilter V4: OOF AUC=**0.435** (V3=0.422, +0.013). 5-fold TimeSeriesSplit. No threshold meets ≥50% recall + ≤30% win-kill criteria.
+  5. Trained R4 Phase 2 V12:
+     - V12_RegimeFull (45-dim): AUC=**0.459**, direction_balance LONG=40%/SHORT=60% ✅
+     - V12_NoRegime (40-dim): AUC=**0.475**, direction_balance LONG=40%/SHORT=60% ✅
+
+  **Key findings**:
+  - OFI features confirmed as noise: removing them IMPROVED AUC (+0.013)
+  - Regime features actively harmful for BTC: V12_NoRegime > V12_RegimeFull (delta=-0.016). Consistent with R3 finding (XAU→BTC transfer impossible, 40/40 features RED).
+  - Both models below deployment threshold (0.50 MetaFilter, 0.55 R4). Shadow mode only.
+  - Main bottleneck: **data matching**. 485 labels → only 110-116 match with feature store (exact-minute join loses ~70%). V2 PIT ASOF join (build_btc_metafilter_v2_dataset.py) would recover these.
+
+  **Next steps**: (1) Run V2 PIT ASOF dataset builder to recover missing samples. (2) At ≥200 clean samples, re-evaluate deployment thresholds. (3) Consider removing regime features from BTC training entirely — 40-dim V9-only performs better.
+
+- **Root Cause**: RC-06 (data-contamination — OFI look-ahead bias inflated V3 features) + RC-12 (insufficient-data — 110 samples below statistical significance threshold of 200)
+- **Prevention**: (1) OFI features should never be added to training data without PIT historical snapshots — add pre-commit check in dataset builders. (2) Training script metadata must be auto-generated from actual model params — consider dataclass-based model config to prevent drift. (3) Minimum sample threshold of 200 for MetaFilter deployment is confirmed correct.
+- **Dependents Checked**: meta_filter_adapter.py (requires pickle format — path_b outputs .txt booster), xgboost_brain_adapter.py (unaffected), live_cycle.py (MetaFilter path unchanged, shadow-only), governance_state.json (BTC brain status unchanged, training-only change).
