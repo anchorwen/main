@@ -2321,6 +2321,11 @@ def execute_live_cycle(
 
             record_mia_exits_for_reentry(mia_closed=state._pending_mia_closes, state=state)
 
+            # ── DingTalk notification + ghost position cleanup ──
+            for _entry in state._pending_mia_closes:
+                _exit_strategy = _entry.get("strategy", "")
+                _exit_side = _entry.get("side", "")
+                _exit_price = float(_entry.get("detail", {}).get("close_price", 0) or 0)
                 _emit_close_notification(
                     _ah=getattr(state, "alert_hub", None),
                     _sym=_entry.get("symbol", config.symbol),
@@ -2329,26 +2334,12 @@ def execute_live_cycle(
                     _price=_exit_price,
                     _pnl=_entry.get("pnl"),
                 )
-                # ── FIX-20260610-002: Clean up ghost position (F1) ─────────
-                # MIA-detected closes were recorded in the journal and reentry
-                # guard, but the ActivePositionManager was NEVER told to remove
-                # the position.  Result: ghost position blocks new entries
-                # (max_positions gate) until process restart.
+                # ── FIX-20260610-002: Clean up ghost position ──
                 _mia_ticket = _entry.get("position_ticket")
                 if _mia_ticket and state.position_manager is not None:
                     with log_and_continue(component="MIA_Close:clear_position"):
                         state.position_manager.clear_position(int(_mia_ticket))
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "mia_position_cleared",
-                                    "time": _utc_iso(),
-                                    "ticket": _mia_ticket,
-                                },
-                                ensure_ascii=False,
-                            ),
-                            flush=True,
-                        )
+                        _emit("mia_position_cleared", ticket=_mia_ticket)
                 # ── FIX-20260610-002: Record budget for MIA close (F3) ──────
                 # Budget was never updated for MIA-detected closes — daily
                 # PnL, consecutive loss counters, and all cumulative circuit

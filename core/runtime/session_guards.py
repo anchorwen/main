@@ -139,7 +139,7 @@ def run_session_guards(
                                     )
                 if dd_result.get("blocked"):
                     return True, session_info  # skip cycle — drawdown kill active
-            except Exception as _dd_setup_exc:
+            except Exception as _dd_setup_exc:  # BLE001:REVIEWED (degrade, Phase 3b)
                 # DEGRADE — intraday DD check setup failed, continue without it
                 _emit("intraday_drawdown_kill_error", error=str(_dd_setup_exc))
 
@@ -159,7 +159,7 @@ def run_session_guards(
                 _log_cycle_end(state.loop_iteration)
                 return True, {}  # skip cycle — circuit breaker open (no session_info)
 
-    except Exception as _session_exc:
+    except Exception as _session_exc:  # BLE001:REVIEWED (fail-open, Phase 3b)
         _emit("session_guard_error", error=str(_session_exc))
         # Fail-open on session detection failure — let the cycle continue
         pass
