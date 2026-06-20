@@ -32,6 +32,7 @@ FIX-YYYYMMDD-NNN
 
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
+| FIX-20260620-026 | 2026-06-20 | tests | **P1 Test Breakout — 6 execution-layer modules zero→covered (+133 tests)**: market_efficiency (23 tests: Kaufman ER + normalization), ofi_gate (21 tests: OFI toxicity gate all branches), exit_reason (44 tests: 15 enum members + classify() 15+ patterns + shim), session_detector (14 tests: state machine + stall progression), correlation_sizer (14 tests: √N discount + rounding), trend_isolation_gates (17 tests: 4 gates). All pure/state-machine tests, no I/O dependencies. | RC-12 (zero-coverage modules) |
 | FIX-20260620-025 | 2026-06-20 | tests | **Phase 3b+3c+Gap fill: +188 tests, 7 modules**: position_close_adapter (30+), live_alert_hub (26), brain_registration_gate (37), brain_lifecycle_manager (22), microstructure_computer (22), financial_metrics (47), atomic_file_writer (22), regime_direction_gate (16). Zero→covered: live_alert_hub, brain_registration_gate, brain_lifecycle_manager, microstructure_computer, financial_metrics, atomic_file_writer, regime_direction_gate. | RC-12 (zero-coverage modules) |
 | FIX-20260620-024 | 2026-06-20 | brains-services | **DEFERRED: Governance hysteresis — promotion↔throttle oscillation prevention**: Missing hold-down period between promote and throttle allows ping-pong live↔probation transitions. Registered as L3 architecture debt; activate when any BTC brain accumulates ≥50 live trades. Trigger: `performance_metrics.trades ≥ 50` OR `2026-07-15`. | RC-12 (missing-feature) |
 | FIX-20260620-023 | 2026-06-20 | runtime-close-adapter, ledger-journal | **L2+L3: Duplicate close recording root cause + TOCTOU race**: (L2) `position_close_adapter.py:253` `return False` after successful journal write inverted control flow → ticket stayed in `known_open_tickets` → re-detected next cycle → 2-5 duplicate close entries per ticket. (L3) `journal_cleanup.py` dedup scan ran outside FileLock → TOCTOU race → concurrent _append_journal calls both passed dedup → both wrote. Data: BTC 15 excess entries removed, XAU 22 removed (15 cross-contamination + 7 genuine dupes). | RC-02 (boundary-error) + RC-03 (race-condition) |
@@ -3451,4 +3452,21 @@ FIX-YYYYMMDD-NNN
   - `daily_computer`: 27 pure function tests. All feature computation paths verified.
 - **Root Cause**: RC-12 — missing-feature (3 hot-path modules had zero or critically low test coverage)
 - **Prevention**: All 3 modules now ≥14% coverage. CI pipeline enforces no regression.
+
+### FIX-20260620-026
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Type**: test (P1 coverage breakout)
+- **Module**: tests/execution (6 modules)
+- **Files**: `tests/execution/test_market_efficiency.py` (new, 172 lines, 23 tests), `tests/execution/test_ofi_gate.py` (new, 202 lines, 21 tests), `tests/execution/test_exit_reason.py` (new, 220 lines, 44 tests), `tests/execution/test_session_detector.py` (new, 221 lines, 14 tests), `tests/execution/test_correlation_sizer.py` (new, 155 lines, 14 tests), `tests/execution/test_trend_isolation_gates.py` (new, 221 lines, 17 tests)
+- **Summary**: **P1 Test Breakout — 6 execution-layer modules from zero to covered (+133 tests).**
+  - `market_efficiency` (23 tests): `compute_kaufman_er` (16 tests — basic/edge/numpy) + `check_market_normalized` (7 tests — vol/ER/toxic thresholds).
+  - `ofi_gate` (21 tests): `apply_ofi_toxicity_gate` — pass-through (non-statarb, None features, missing OFI key), block (short OFI>2, long OFI<-2, boundary exactly±2), direction safety (long not blocked by high OFI, short not blocked by low), result propagation.
+  - `exit_reason` (44 tests): `ExitReason` enum (15 members, str inheritance, cooldown_tier coverage), category properties (model/risk/structural, mutual exclusivity), `classify()` (26 tests — null defense, P0 exact-match labels, P3 operational/orphan labels, 15+ pattern branches, case insensitivity, precedence), `_classify_exit_reason` shim (3 tests).
+  - `session_detector` (14 tests): crypto_24_7 (always normal), tick_time=0 (cache/default), live tick, stall progression (brief→normal, TICK_STALL→rollover, CLOSED_STALL→closed), reopen hysteresis (direct state manipulation), reset() (state + cache behavior).
+  - `correlation_sizer` (14 tests): `apply_sqrt_n_discount` — trivial (empty/single/mixed), √N math (√2/√3), should_trade=False exclusion, NaN/Inf guard, min_lot enforcement (5x tiny→dropped), lot_step rounding, ClusterResult audit records.
+  - `trend_isolation_gates` (17 tests): pass-through (non-statarb, None regime, neutral), Gate 4aa (counter-trend block, direction match, weak trend, MTF consensus), Gate 4b (H1/H4 divergence, agreement, H4 neutral, non-swing skip), Gate 4c (ADX block at 0.55 threshold, below-threshold pass), Gate 4d (zero z-score, non-statarb skip).
+  - Cumulative: 3,839→3,972 tests (+133). All tests are pure-function or deterministic state-machine — zero I/O, zero MT5 dependency.
+- **Root Cause**: RC-12 — missing-feature (6 execution-layer modules had zero test coverage)
+- **Prevention**: All 6 modules now have contract-level test coverage. CI pipeline enforces no regression. Remaining zero-coverage execution modules tracked for future breakout rounds.
 - **Dependents Checked**: mt5_worker used by live_cycle.py, bar_sync_poller.py, position_close_adapter.py — all unaffected (test-only change).
