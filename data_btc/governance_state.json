@@ -18,10 +18,10 @@
     },
     "BTC_Swing_V4": {
       "brain_id": "BTC_Swing_V4",
-      "status": "candidate",
+      "status": "probation",
       "registered_at": "2026-06-14T15:40:08.073129",
-      "last_transition_at": "2026-06-14T15:40:08.073129+00:00",
-      "transition_count": 1,
+      "last_transition_at": "2026-06-20T12:00:00.000000+00:00",
+      "transition_count": 2,
       "freeze_count": 0,
       "performance_metrics": {
         "win_rate": 0.0,
@@ -29,7 +29,13 @@
         "sharpe_ratio": 0.0,
         "total_trades": 0,
         "pnl_r": 0
-      }
+      },
+      "override_reason": "manual_activation:deadlock_break;test_WR=0.385;test_PF=1.91;100_perf_records;0_settled_trades",
+      "override_expires_after_trades": 50,
+      "override_expires_at": "2026-06-27T00:00:00Z",
+      "override_max_probation_dd": -5.0,
+      "override_applied_at": "2026-06-20T12:00:00.000000+00:00",
+      "override_fix_id": "FIX-20260620-012"
     },
     "BTC_Swing_V12_H1_Survival": {
       "brain_id": "BTC_Swing_V12_H1_Survival",
@@ -1020,6 +1026,14 @@
       "to_status": "retired",
       "reason": "pnl:critical",
       "timestamp": "2026-06-19T12:09:58.803784"
+    },
+    {
+      "brain_id": "BTC_Swing_V4",
+      "from_status": "candidate",
+      "to_status": "probation",
+      "reason": "manual_activation:3D_expiry_contract;deadlock_break;test_WR=0.385;test_PF=1.91;expires_at=2026-06-27;max_dd=-5.0;max_trades=50",
+      "timestamp": "2026-06-20T12:00:00.000000+00:00",
+      "fix_id": "FIX-20260620-012"
     }
   ]
 }

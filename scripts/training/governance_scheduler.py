@@ -129,6 +129,78 @@ def _compute_pnl_based_status(
     return "probation", "warning"
 
 
+def _enforce_3d_override_expiry(
+    governance: GovernanceService,
+    pnl_store: BrainPnLStore | None = None,
+) -> list[dict[str, Any]]:
+    """Check 3D override expiry for all brains with manual activation overrides.
+
+    FIX-20260620-013: 3D Expiry Contract enforcement.
+    ANY dimension triggered → force rollback to candidate.
+
+    Dimensions:
+      1. override_expires_after_trades: trade count threshold (needs PnL ledger)
+      2. override_expires_at: absolute time cap (no data dependency)
+      3. override_max_probation_dd: cumulative PnL drawdown floor (needs PnL ledger)
+
+    Returns list of rollback records for logging.
+    """
+    rollbacks: list[dict[str, Any]] = []
+    all_states = governance.get_all_states()
+
+    for brain_id, state in all_states.items():
+        # Sentinel: only process brains with a 3D override contract
+        if state.get("override_fix_id") is None:
+            continue
+
+        triggered: str | None = None
+
+        # ── Dimension 2: Time expiry (checked first — no data dependency) ──
+        expires_at = state.get("override_expires_at")
+        if expires_at:
+            now = _utc_now_iso()
+            if now >= expires_at:
+                triggered = f"3D:time_expired({now}>={expires_at})"
+
+        # ── Dimension 3: Drawdown circuit breaker (needs PnL ledger) ──
+        if not triggered and pnl_store is not None:
+            max_dd = state.get("override_max_probation_dd")
+            if max_dd is not None:
+                metrics = pnl_store.get_metrics(brain_id)
+                if metrics is not None and metrics.sample_count > 0:
+                    if metrics.cumulative_pnl < max_dd:
+                        triggered = (
+                            f"3D:drawdown_breach(cum_pnl={metrics.cumulative_pnl:.2f}"
+                            f"<{max_dd})"
+                        )
+
+        # ── Dimension 1: Trade count expiry (needs PnL ledger) ──
+        if not triggered and pnl_store is not None:
+            expires_trades = state.get("override_expires_after_trades")
+            if expires_trades is not None:
+                metrics = pnl_store.get_metrics(brain_id)
+                if metrics is not None and metrics.sample_count >= expires_trades:
+                    triggered = (
+                        f"3D:trades_reached({metrics.sample_count}>={expires_trades})"
+                    )
+
+        if triggered:
+            result = governance.transition(brain_id, "candidate", reason=triggered)
+            rollbacks.append(
+                {
+                    "brain_id": brain_id,
+                    "trigger": triggered,
+                    "result": result,
+                }
+            )
+            print(
+                f"[3D_ENFORCE] {brain_id}: {triggered} → rolled back to candidate",
+                flush=True,
+            )
+
+    return rollbacks
+
+
 def run_governance_cycle(
     tracker: BrainPerformanceTracker,
     governance: GovernanceService,
@@ -157,6 +229,19 @@ def run_governance_cycle(
     # ── Safety valve: max 1 retirement per cycle ──
     max_retirements = 1
     retirement_count = 0
+
+    # ── FIX-20260620-013: 3D override expiry enforcement (Phase 1 mandatory) ──
+    three_d_rollbacks = _enforce_3d_override_expiry(governance, pnl_store=pnl_store)
+    if three_d_rollbacks:
+        for rb in three_d_rollbacks:
+            applied.append(
+                {
+                    "brain_id": rb["brain_id"],
+                    "action": "3d_override_rollback",
+                    "trigger": rb["trigger"],
+                    "result": rb["result"],
+                }
+            )
 
     # ── PnL-first path ──
     if pnl_store is not None:
