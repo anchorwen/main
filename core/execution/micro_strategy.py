@@ -45,16 +45,18 @@ class MicroStrategy(StrategyLine):
                     if seq is not None:
                         try:
                             prop = b_info["adapter"].run(None, seq)
-                        except Exception as _hmre_exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
-                            # Fallback: reshape and use infer_sequence() directly,
-                            # bypassing the rolling buffer (infer() expects 9-dim
-                            # vectors; passing a flat ravel would corrupt the buffer).
-                            try:
-                                seq_batch = seq.astype(np.float32).reshape(1, seq.shape[0], 9)
-                                raw = b_info["adapter"].infer_sequence(seq_batch)
-                                prop = b_info["adapter"].get_signal(raw)
-                            except Exception:  # BLE001:FOG_DEFERRED
-                                raise _hmre_exc from None
+                        except Exception as _hmre_exc:  # BLE001:FOG (logged, Phase 3b)
+                            with fail_open_guard("micro_strategy:_run_inference"):
+                                # Fallback: reshape and use infer_sequence() directly,
+                                # bypassing the rolling buffer (infer() expects 9-dim
+                                # vectors; passing a flat ravel would corrupt the buffer).
+                                try:
+                                    seq_batch = seq.astype(np.float32).reshape(1, seq.shape[0], 9)
+                                    raw = b_info["adapter"].infer_sequence(seq_batch)
+                                    prop = b_info["adapter"].get_signal(raw)
+                                except Exception:  # BLE001:FOG
+                                    with fail_open_guard("micro_strategy:_run_inference"):
+                                        raise _hmre_exc from None
                     else:
                         continue  # sequence not available for this TF
                 else:
@@ -65,21 +67,22 @@ class MicroStrategy(StrategyLine):
                     if not getattr(prop, "brain_id", None):
                         prop.brain_id = bid
                 proposals.append(prop)
-            except Exception as _exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
-                print(
-                    json.dumps(
-                        {
-                            "event": "brain_inference_error",
-                            "brain_id": b_info.get("brain_id", "unknown"),
-                            "brain_type": b_info.get("brain_type", "unknown"),
-                            "strategy": self.config.name,
-                            "error": str(_exc),
-                            "feature_shape": str(micro_feature_vector.shape)
-                            if hasattr(micro_feature_vector, "shape")
-                            else "unknown",
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+            except Exception as _exc:  # BLE001:FOG (logged, Phase 3b)
+                with fail_open_guard("micro_strategy:_run_inference"):
+                    print(
+                        json.dumps(
+                            {
+                                "event": "brain_inference_error",
+                                "brain_id": b_info.get("brain_id", "unknown"),
+                                "brain_type": b_info.get("brain_type", "unknown"),
+                                "strategy": self.config.name,
+                                "error": str(_exc),
+                                "feature_shape": str(micro_feature_vector.shape)
+                                if hasattr(micro_feature_vector, "shape")
+                                else "unknown",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
         return proposals

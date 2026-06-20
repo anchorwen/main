@@ -279,22 +279,22 @@ def register_dispatched_positions(
                     )
 
             registered_count += 1
-        except Exception as _reg_exc:  # BLE001:FOG_DEFERRED
-            print(
-                json.dumps(
-                    {
-                        "event": "position_register_failed",
-                        "time": _utc_iso(),
-                        "strategy": dr.strategy_name,
-                        "ticket": ticket,
-                        "error": str(_reg_exc)[:200],
-                        "level": "DEGRADE",
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-
+        except Exception as _reg_exc:  # BLE001:FOG
+            with fail_open_guard("position_registration:register_dispatched_positions"):
+                print(
+                    json.dumps(
+                        {
+                            "event": "position_register_failed",
+                            "time": _utc_iso(),
+                            "strategy": dr.strategy_name,
+                            "ticket": ticket,
+                            "error": str(_reg_exc)[:200],
+                            "level": "DEGRADE",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
     return {
         "registered_count": registered_count,
         "position_state_path": getattr(config, "position_state_path", None),

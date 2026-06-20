@@ -63,5 +63,6 @@ def check_data_health(
                 if s.status.value in ("warn", "fail", "missing")
             ],
         }
-    except Exception:  # BLE001:FOG_DEFERRED — Iron Law #1: never crash the main loop
-        return {"time": "", "symbol": symbol, "checks": {}, "alerts": ["data_health_service_error"]}
+    except Exception:  # BLE001:FOG — Iron Law #1: never crash the main loop
+        with fail_open_guard("data_health_monitor:check_data_health"):
+            return {"time": "", "symbol": symbol, "checks": {}, "alerts": ["data_health_service_error"]}

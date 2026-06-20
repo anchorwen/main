@@ -12,6 +12,7 @@ import logging
 from typing import Any
 
 from core.brains.brain_registry import BrainRegistry
+from core.runtime.fault_handler import fail_open_guard
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +67,9 @@ def record_counterfactual_signals(
                     entry_spread=_live_spread,
                     entry_slippage=0.10,
                 )
-            except Exception:  # BLE001:FOG_DEFERRED
-                logger.warning("PnL ledger signal recording failed (multi-strategy)")
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("pnl_recording:record_counterfactual_signals"):
+                    logger.warning("PnL ledger signal recording failed (multi-strategy)")
     elif proposal is not None:
         try:
             _single_brain_id2: str = str(
@@ -84,5 +86,6 @@ def record_counterfactual_signals(
                 entry_spread=_live_spread,
                 entry_slippage=0.10,
             )
-        except Exception:  # BLE001:FOG_DEFERRED
-            logger.warning("PnL ledger signal recording failed (legacy)")
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("pnl_recording:record_counterfactual_signals"):
+                logger.warning("PnL ledger signal recording failed (legacy)")

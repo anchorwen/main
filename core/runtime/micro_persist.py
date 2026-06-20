@@ -10,6 +10,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 
 def persist_micro_features(
     config: Any,
@@ -73,5 +75,6 @@ def persist_micro_features(
                     )
                 ]
             )
-    except Exception:  # BLE001:FOG_DEFERRED
-        pass  # best-effort — micro store write must not block cycle
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("micro_persist:persist_micro_features"):
+            pass  # best-effort — micro store write must not block cycle

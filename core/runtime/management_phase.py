@@ -179,8 +179,9 @@ def _build_and_dispatch_alert_context(
                         if isinstance(_bs, dict)
                         and str(_bs.get("state", _bs.get("status", ""))).lower() == "frozen"
                     )
-        except Exception:  # BLE001:FOG_DEFERRED
-            pass  # Non-critical: frozen check degrades gracefully
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("management_phase:_build_and_dispatch_alert_context"):
+                pass  # Non-critical: frozen check degrades gracefully
         _ctx_pos_util = 0.0
         _ctx_bridge_last_ack = time.time() - getattr(
             state, "_last_bridge_ack_time", time.time()
@@ -288,10 +289,10 @@ def _build_and_dispatch_alert_context(
             _ctx["consecutive_losses"] = _consec_losses
             _ctx["rolling_win_rate"] = round(_win_count / max(1, _trade_count), 4)
             _ctx["total_trades_window"] = _trade_count
-        except Exception:  # BLE001:FOG_DEFERRED
-            with fail_open_guard("AlertContext:journal_enrich"):
-                raise  # surface hidden journal corruption
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("management_phase:_build_and_dispatch_alert_context"):
+                with fail_open_guard("AlertContext:journal_enrich"):
+                    raise  # surface hidden journal corruption
         if pnl_ledger is not None:
             with log_and_continue(component="AlertHub:PnL_context"):
                 # FIX-20260613-052: resolved placeholder: "Frankenstein" logic fix.
@@ -336,14 +337,14 @@ def _build_and_dispatch_alert_context(
                                     _bid = _b.get("brain_id", _b.get("id", ""))
                                     if _bid:
                                         _active_brain_ids.add(_bid)
-                except Exception:  # BLE001:FOG_DEFERRED
-                    # FIX-20260616-001: Architect's Amendment — Fail-Close for metrics.
-                    # If governance is unreadable, we MUST NOT fall back to unfiltered
-                    # data (which includes archived/retired ghost brains from FIX-011).
-                    # Keep _active_brain_ids as empty set → worst-brain computation
-                    # will be skipped (Missing > Corrupted principle).
-                    _active_brain_ids = set()
-
+                except Exception:  # BLE001:FOG
+                    with fail_open_guard("management_phase:_is_operational"):
+                        # FIX-20260616-001: Architect's Amendment — Fail-Close for metrics.
+                        # If governance is unreadable, we MUST NOT fall back to unfiltered
+                        # data (which includes archived/retired ghost brains from FIX-011).
+                        # Keep _active_brain_ids as empty set → worst-brain computation
+                        # will be skipped (Missing > Corrupted principle).
+                        _active_brain_ids = set()
                 _all_m = pnl_ledger.get_all_metrics()
                 # Filter to active brains only when governance provides them.
                 # If _active_brain_ids is empty (governance unreadable), skip
@@ -419,10 +420,9 @@ def _evaluate_brain_ensemble(
         if micro_feature_computer is not None:
             try:
                 mgmt_sequences = micro_feature_computer.compute_all_sequences(32)
-            except Exception as _seq_exc:  # BLE001:FOG_DEFERRED
-                _emit("sequence_compute_error", error=str(_seq_exc))
-
-
+            except Exception as _seq_exc:  # BLE001:FOG
+                with fail_open_guard("management_phase:_evaluate_brain_ensemble"):
+                    _emit("sequence_compute_error", error=str(_seq_exc))
         raw_proposals: list[Any] = []
         for b_info in brains:
             schema_id = b_info.get("feature_schema_id", "")
@@ -475,9 +475,9 @@ def _evaluate_brain_ensemble(
                                             tf_ou=tf_ou,
                                             tf_hurst=tf_hurst,
                                         )
-                                    except Exception:  # BLE001:FOG_DEFERRED
-                                        _mgmt_btc_aug = None  # degrade: fall through to None
-
+                                    except Exception:  # BLE001:FOG
+                                        with fail_open_guard("management_phase:_evaluate_brain_ensemble"):
+                                            _mgmt_btc_aug = None  # degrade: fall through to None
                             fv = assemble_swing_features(
                                 schema_id,
                                 daily_features=fv_24,
@@ -805,10 +805,9 @@ def _evaluate_brain_ensemble(
                     if _dispatched:
                         pm.clear_position(ticket=pos.ticket)
                     return True
-            except Exception as exc:  # BLE001:FOG_DEFERRED
-                _emit("brain_reeval_error", error=str(exc))
-
-
+            except Exception as exc:  # BLE001:FOG
+                with fail_open_guard("management_phase:_evaluate_brain_ensemble"):
+                    _emit("brain_reeval_error", error=str(exc))
     # Not closed — return consensus for downstream layers
     return {
         "closed": False,
@@ -1121,8 +1120,9 @@ def execute_management_phase(
                     _strat_magic = STRATEGY_TO_MAGIC.get(_sname, 0)
                     if _strat_magic:
                         _close_payload["magic"] = _strat_magic
-                except Exception:  # BLE001:FOG_DEFERRED
-                    logger.warning("Magic resolution failed for partial close — using default")
+                except Exception:  # BLE001:FOG
+                    with fail_open_guard("management_phase:execute_management_phase"):
+                        logger.warning("Magic resolution failed for partial close — using default")
             _open_entry = state.known_open_tickets.get(pos.ticket, {})
             _open_msg_id = _open_entry.get("message_id", "")
             if _open_msg_id:
@@ -1182,10 +1182,9 @@ def execute_management_phase(
                         extensions={"mt5_terminal_path": config.mt5_terminal_path},
                     )
                     _ptp_dispatched = True
-            except Exception as _ptp_exc:  # BLE001:FOG_DEFERRED
-                _emit("partial_tp_dispatch_error", ticket=pos.ticket, error=str(_ptp_exc))
-
-
+            except Exception as _ptp_exc:  # BLE001:FOG
+                with fail_open_guard("management_phase:_ptp_dispatch_fn"):
+                    _emit("partial_tp_dispatch_error", ticket=pos.ticket, error=str(_ptp_exc))
             if not _ptp_dispatched:
                 # Leave position manager state unchanged — retry next cycle
                 pass
@@ -1363,10 +1362,9 @@ def execute_management_phase(
                 # ExitFeatureSnapshot-level features are available for retraining.
                 _emit("meta_exit_shadow_telemetry", ticket=pos.ticket, exit_urgency=round(evaluation.exit_urgency, 3), p_win=evaluation.p_win, exit_reason=evaluation.exit_reason, factor_breakdown=evaluation.factor_breakdown, action="BLOCKED — telemetry only, close NOT dispatched")
 
-        except Exception as exc:  # BLE001:FOG_DEFERRED
-            _emit("meta_exit_error", error=str(exc))
-
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("management_phase:_ptp_dispatch_fn"):
+                _emit("meta_exit_error", error=str(exc))
     # ── 7.8 Layer 2.8: Hesitation exit (no breakeven within N cycles) ──
     _skip_hesitation = pm._is_protected_period(ticket=pos.ticket) and not pm._toxicity_veto(
         mid if mid is not None else 0.0, ticket=pos.ticket

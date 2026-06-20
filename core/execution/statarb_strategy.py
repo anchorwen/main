@@ -58,18 +58,19 @@ class StatArbStrategy(StrategyLine):
                     if not getattr(prop, "brain_id", None):
                         prop.brain_id = bid
                 proposals.append(prop)
-            except Exception as _exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
-                print(
-                    json.dumps(
-                        {
-                            "event": "brain_inference_error",
-                            "brain_id": b_info.get("brain_id", "unknown"),
-                            "brain_type": b_info.get("brain_type", "unknown"),
-                            "strategy": "statarb_dynamic",
-                            "error": str(_exc),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+            except Exception as _exc:  # BLE001:FOG (logged, Phase 3b)
+                with fail_open_guard("statarb_strategy:_run_inference"):
+                    print(
+                        json.dumps(
+                            {
+                                "event": "brain_inference_error",
+                                "brain_id": b_info.get("brain_id", "unknown"),
+                                "brain_type": b_info.get("brain_type", "unknown"),
+                                "strategy": "statarb_dynamic",
+                                "error": str(_exc),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
         return proposals

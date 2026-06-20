@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
 from core.runtime.time_utils import _utc_iso
 
 
@@ -121,17 +122,17 @@ def init_feature_services(
             ),
             flush=True,
         )
-    except Exception as _dfp_exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
-        print(
-            json.dumps(
-                {
-                    "event": "daily_feature_provider_init_failed",
-                    "time": _utc_iso(),
-                    "error": str(_dfp_exc),
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
-
+    except Exception as _dfp_exc:  # BLE001:FOG (logged, Phase 3b)
+        with fail_open_guard("live_bootstrap:init_feature_services"):
+            print(
+                json.dumps(
+                    {
+                        "event": "daily_feature_provider_init_failed",
+                        "time": _utc_iso(),
+                        "error": str(_dfp_exc),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
     return result

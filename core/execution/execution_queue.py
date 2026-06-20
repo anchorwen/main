@@ -192,19 +192,19 @@ class ExecutionQueue:
                 close_dispatch_fn=close_dispatch_fn,
                 adapter_name=adapter_name,
             )
-        except Exception as _fatal_exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
-            import logging as _fatal_log
+        except Exception as _fatal_exc:  # BLE001:FOG (logged, Phase 3b)
+            with fail_open_guard("execution_queue:flush"):
+                import logging as _fatal_log
 
-            _fatal_log.getLogger(__name__).critical(
-                "FATAL: ExecutionQueue flush() crashed — dispatch pipeline broken. "
-                "Circuit breaker MUST be tripped by caller. Error: %s",
-                _fatal_exc,
-                exc_info=True,
-            )
-            raise ExecutionQueueFatalError(
-                f"Dispatch pipeline fatal error: {_fatal_exc}"
-            ) from _fatal_exc
-
+                _fatal_log.getLogger(__name__).critical(
+                    "FATAL: ExecutionQueue flush() crashed — dispatch pipeline broken. "
+                    "Circuit breaker MUST be tripped by caller. Error: %s",
+                    _fatal_exc,
+                    exc_info=True,
+                )
+                raise ExecutionQueueFatalError(
+                    f"Dispatch pipeline fatal error: {_fatal_exc}"
+                ) from _fatal_exc
     def _flush_unsafe(
         self,
         dispatch_fn,
@@ -286,24 +286,24 @@ class ExecutionQueue:
                             )
                             self._last_dispatch_time = _time.monotonic()
                             continue
-                except Exception as _pg_exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
-                    logger.error(
-                        "price_guard validation exception for strategy=%s: %s",
-                        queued.strategy_name,
-                        _pg_exc,
-                    )
-                    results.append(
-                        DispatchResult(
-                            strategy_name=queued.strategy_name,
-                            magic=decision.magic,
-                            dispatched=False,
-                            direction=decision.direction,
-                            reason=f"price_guard_exception:{_pg_exc}",
+                except Exception as _pg_exc:  # BLE001:FOG (logged, Phase 3b)
+                    with fail_open_guard("execution_queue:_flush_unsafe"):
+                        logger.error(
+                            "price_guard validation exception for strategy=%s: %s",
+                            queued.strategy_name,
+                            _pg_exc,
                         )
-                    )
-                    self._last_dispatch_time = _time.monotonic()
-                    continue
-
+                        results.append(
+                            DispatchResult(
+                                strategy_name=queued.strategy_name,
+                                magic=decision.magic,
+                                dispatched=False,
+                                direction=decision.direction,
+                                reason=f"price_guard_exception:{_pg_exc}",
+                            )
+                        )
+                        self._last_dispatch_time = _time.monotonic()
+                        continue
             # If NET_OUT or REDUCED, handle opposing position first
             _net_out_ticket_update: dict[str, Any] | None = None
             _close_result: dict[str, Any] | None = None  # FIX-138-Phase3: init before branch
@@ -374,12 +374,13 @@ class ExecutionQueue:
                                             "new_ticket": _ack_detail["new_ticket"],
                                             "close_volume": _close_vol,
                                         }
-                            except Exception as _ack_exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
-                                logger.warning(
-                                    "ACK resolve error for intent_id=%s: %s",
-                                    _intent_id,
-                                    _ack_exc,
-                                )
+                            except Exception as _ack_exc:  # BLE001:FOG (logged, Phase 3b)
+                                with fail_open_guard("execution_queue:_flush_unsafe"):
+                                    logger.warning(
+                                        "ACK resolve error for intent_id=%s: %s",
+                                        _intent_id,
+                                        _ack_exc,
+                                    )
                         else:
                             # When intent_id is empty, honour the dispatched flag from the
                             # close result.  Net-out closes routed through ExitWatchdog
@@ -387,14 +388,14 @@ class ExecutionQueue:
                             # confirmation would open a new position against a still-open
                             # opposing position when the close actually failed.
                             _close_confirmed = bool(_close_result.get("dispatched", False))
-                except Exception as _net_out_exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
-                    logger.error(
-                        "net-out close dispatch failed for strategy=%s ticket=%s: %s",
-                        queued.strategy_name,
-                        risk.net_out_ticket if hasattr(risk, "net_out_ticket") else "unknown",
-                        _net_out_exc,
-                    )
-
+                except Exception as _net_out_exc:  # BLE001:FOG (logged, Phase 3b)
+                    with fail_open_guard("execution_queue:_flush_unsafe"):
+                        logger.error(
+                            "net-out close dispatch failed for strategy=%s ticket=%s: %s",
+                            queued.strategy_name,
+                            risk.net_out_ticket if hasattr(risk, "net_out_ticket") else "unknown",
+                            _net_out_exc,
+                        )
                 if not _close_confirmed:
                     results.append(
                         DispatchResult(
@@ -444,11 +445,11 @@ class ExecutionQueue:
                     )
                     _dispatched = True
                     break
-                except Exception as exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
-                    _last_error = str(exc)
-                    if _attempt < _max_attempts - 1:
-                        _time.sleep(1.5)
-
+                except Exception as exc:  # BLE001:FOG (logged, Phase 3b)
+                    with fail_open_guard("execution_queue:_flush_unsafe"):
+                        _last_error = str(exc)
+                        if _attempt < _max_attempts - 1:
+                            _time.sleep(1.5)
             if _dispatched:
                 _close_pnl: float | None = None
                 if _close_result is not None:

@@ -359,6 +359,8 @@ def fail_open_guard(component: str) -> FaultTolerantContext:
 
 import threading as _threading_mt5
 
+from core.runtime.fault_handler import fail_open_guard
+
 _MT5_TIMEOUT_SENTINEL = object()
 
 
@@ -381,8 +383,9 @@ def mt5_call_with_timeout(
     def _target() -> None:
         try:
             result[0] = fn(*args, **kwargs)
-        except Exception as exc:  # BLE001:FOG_DEFERRED
-            error[0] = exc
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("fault_handler:_target"):
+                error[0] = exc
         finally:
             done.set()
 

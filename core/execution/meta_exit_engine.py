@@ -24,6 +24,8 @@ import json
 import os
 from dataclasses import dataclass, field
 
+from core.runtime.fault_handler import fail_open_guard
+
 # ── Feature snapshot for one evaluation cycle ──
 
 
@@ -185,9 +187,9 @@ class MetaExitEngine:
 
             self._model = lgb.Booster(model_file=self.model_path)
             return True
-        except Exception:  # BLE001:FOG_DEFERRED
-            return False
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("meta_exit_engine:load_model"):
+                return False
     # ── Heuristic scoring ──
 
     def _heuristic_evaluate(self, snap: ExitFeatureSnapshot) -> ExitEvaluation:
@@ -390,9 +392,9 @@ class MetaExitEngine:
                 factor_breakdown={"p_win": round(p_win, 4)},
                 p_win=round(p_win, 4),
             )
-        except Exception:  # BLE001:FOG_DEFERRED
-            return self._heuristic_evaluate(snap)
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("meta_exit_engine:_ml_evaluate"):
+                return self._heuristic_evaluate(snap)
     def _build_feature_vector(self, snap: ExitFeatureSnapshot) -> list[float]:
         """Build feature vector matching training schema.
 

@@ -347,9 +347,9 @@ class StrategyLine:
             if not math.isfinite(theta_hat):
                 return 0.0
             return max(0.0, min(10.0, float(theta_hat)))
-        except Exception:  # BLE001:FOG_DEFERRED
-            return 0.0
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("strategy_line:_compute_tf_ou_theta"):
+                return 0.0
     def _compute_tf_hurst(self, max_lag: int = 20) -> float:
         """Estimate Hurst exponent from recent close buffer (R/S method)."""
         buf = list(self._tf_close_buffer)
@@ -389,9 +389,9 @@ class StrategyLine:
             if not math.isfinite(slope):
                 return 0.5
             return max(0.1, min(1.0, float(slope)))
-        except Exception:  # BLE001:FOG_DEFERRED
-            return 0.5
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("strategy_line:_compute_tf_hurst"):
+                return 0.5
     # ── Subclass overrides ──────────────────────────────────────────────
 
     def _run_inference(
@@ -569,21 +569,21 @@ class StrategyLine:
                 daily_feature_vector,
                 btc_augment,  # FIX-20260613-052: resolved placeholder
             )
-        except Exception:  # BLE001:FOG_DEFERRED
-            return StrategyDecision(
-                strategy_name=name,
-                magic=self.config.magic,
-                should_trade=False,
-                direction="neutral",
-                confidence=0.0,
-                volume=0.0,
-                sl=0.0,
-                tp=0.0,
-                hard_sl=0.0,
-                regime_mode=regime_gate_mode,
-                reason="inference_error",
-            )
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("strategy_line:evaluate"):
+                return StrategyDecision(
+                    strategy_name=name,
+                    magic=self.config.magic,
+                    should_trade=False,
+                    direction="neutral",
+                    confidence=0.0,
+                    volume=0.0,
+                    sl=0.0,
+                    tp=0.0,
+                    hard_sl=0.0,
+                    regime_mode=regime_gate_mode,
+                    reason="inference_error",
+                )
         if not proposals:
             return StrategyDecision(
                 strategy_name=name,
@@ -655,16 +655,16 @@ class StrategyLine:
                         entry_spread=_entry_spread,
                         entry_slippage=0.10,
                     )
-                except Exception as _rec_exc:  # BLE001:FOG_DEFERRED
-                    import logging as _lg
+                except Exception as _rec_exc:  # BLE001:FOG
+                    with fail_open_guard("strategy_line:evaluate"):
+                        import logging as _lg
 
-                    _lg.getLogger(__name__).debug(
-                        "PnL record_signal failed for brain=%s: %s",
-                        getattr(p, "brain_id", "?"),
-                        _rec_exc,
-                        exc_info=True,
-                    )
-
+                        _lg.getLogger(__name__).debug(
+                            "PnL record_signal failed for brain=%s: %s",
+                            getattr(p, "brain_id", "?"),
+                            _rec_exc,
+                            exc_info=True,
+                        )
         # ── 3a3. Capture entry_z_score + entry_half_life from OU-style brains ──
         # Strangler Fig #17: uses extract_entry_z_score from brain_gates.py
         entry_z_score, entry_half_life = extract_entry_z_score(proposals)
@@ -731,12 +731,12 @@ class StrategyLine:
                 base_dir=self.config.base_dir,
                 brain_status_map=_status_map,
             )
-        except Exception:  # BLE001:FOG_DEFERRED
-            logger.warning(
-                "Brain vote recording failed strategy=%s — audit trail incomplete",
-                name,
-            )
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("strategy_line:evaluate"):
+                logger.warning(
+                    "Brain vote recording failed strategy=%s — audit trail incomplete",
+                    name,
+                )
         parliament_passed = (
             direction != "neutral" and confidence >= self.config.confidence_threshold
         )
@@ -881,31 +881,32 @@ class StrategyLine:
                             reason=ou_result["reason"],
                             gate_diag=_gd,
                         )
-                except Exception:  # BLE001:FOG_DEFERRED
-                    import logging
+                except Exception:  # BLE001:FOG
+                    with fail_open_guard("strategy_line:evaluate"):
+                        import logging
 
-                    _sl_logger = logging.getLogger(__name__)
-                    _sl_logger.warning(
-                        "OU gate evaluation failed for strategy=%s — BLOCKING trade",
-                        name,
-                        exc_info=True,
-                    )
-                    return StrategyDecision(
-                        strategy_name=name,
-                        magic=self.config.magic,
-                        should_trade=False,
-                        direction=direction,
-                        confidence=confidence,
-                        volume=0.0,
-                        sl=0.0,
-                        tp=0.0,
-                        hard_sl=0.0,
-                        brain_ids=brain_ids,
-                        supporting_count=support_count,
-                        total_count=total_count,
-                        regime_mode=regime_gate_mode,
-                        reason="ou_gate_exception_blocked",
-                    )
+                        _sl_logger = logging.getLogger(__name__)
+                        _sl_logger.warning(
+                            "OU gate evaluation failed for strategy=%s — BLOCKING trade",
+                            name,
+                            exc_info=True,
+                        )
+                        return StrategyDecision(
+                            strategy_name=name,
+                            magic=self.config.magic,
+                            should_trade=False,
+                            direction=direction,
+                            confidence=confidence,
+                            volume=0.0,
+                            sl=0.0,
+                            tp=0.0,
+                            hard_sl=0.0,
+                            brain_ids=brain_ids,
+                            supporting_count=support_count,
+                            total_count=total_count,
+                            regime_mode=regime_gate_mode,
+                            reason="ou_gate_exception_blocked",
+                        )
             elif (
                 meta_filter_gate is not None
                 and meta_filter_gate.is_loaded
@@ -933,32 +934,32 @@ class StrategyLine:
                             regime_mode=regime_gate_mode,
                             reason=mf_result["reason"],
                         )
-                except Exception:  # BLE001:FOG_DEFERRED
-                    import logging
+                except Exception:  # BLE001:FOG
+                    with fail_open_guard("strategy_line:evaluate"):
+                        import logging
 
-                    _sl_logger = logging.getLogger(__name__)
-                    _sl_logger.warning(
-                        "Meta-filter gate evaluation failed for strategy=%s — BLOCKING trade",
-                        name,
-                        exc_info=True,
-                    )
-                    return StrategyDecision(
-                        strategy_name=name,
-                        magic=self.config.magic,
-                        should_trade=False,
-                        direction=direction,
-                        confidence=confidence,
-                        volume=0.0,
-                        sl=0.0,
-                        tp=0.0,
-                        hard_sl=0.0,
-                        brain_ids=brain_ids,
-                        supporting_count=support_count,
-                        total_count=total_count,
-                        regime_mode=regime_gate_mode,
-                        reason="meta_filter_gate_exception_blocked",
-                    )
-
+                        _sl_logger = logging.getLogger(__name__)
+                        _sl_logger.warning(
+                            "Meta-filter gate evaluation failed for strategy=%s — BLOCKING trade",
+                            name,
+                            exc_info=True,
+                        )
+                        return StrategyDecision(
+                            strategy_name=name,
+                            magic=self.config.magic,
+                            should_trade=False,
+                            direction=direction,
+                            confidence=confidence,
+                            volume=0.0,
+                            sl=0.0,
+                            tp=0.0,
+                            hard_sl=0.0,
+                            brain_ids=brain_ids,
+                            supporting_count=support_count,
+                            total_count=total_count,
+                            regime_mode=regime_gate_mode,
+                            reason="meta_filter_gate_exception_blocked",
+                        )
         # ── FIX-20260610-007-C: Cold explore bypasses MetaFilter ──
         # When MetaFilter is in learning phase (COLD calibrator, few samples),
         # bounded-volume explore trades bypass the filter to collect PIT data.

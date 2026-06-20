@@ -82,10 +82,9 @@ def bootstrap_regime_detector(
                 detector._var = sample_var - detector._eps
 
         return detector.is_warmed_up
-    except Exception:  # BLE001:FOG_DEFERRED
-        return False
-
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("live_startup:bootstrap_regime_detector"):
+            return False
 def load_normalization_config(path: str, *, project_root: Path | None = None) -> dict[str, Any]:
     """Load normalization config from JSON, resolving relative paths."""
     p = Path(path)
@@ -163,10 +162,10 @@ def apply_governance_filter(
 
         gov = GovernanceService.load(gov_path)
         report["governance_loaded"] = True
-    except Exception as exc:  # BLE001:FOG_DEFERRED
-        report["reason"] = f"governance_load_failed: {exc}"
-        return entries, report
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("live_startup:apply_governance_filter"):
+            report["reason"] = f"governance_load_failed: {exc}"
+            return entries, report
     filtered: list[dict[str, Any]] = []
     for entry in entries:
         brain_id = entry.get("brain_id", "unknown")
@@ -267,9 +266,9 @@ def check_single_brain_governance(brain_id: str, base_dir: str) -> dict[str, Any
         from core.governance.governance_service import GovernanceService
 
         gov = GovernanceService.load(gov_path)
-    except Exception as exc:  # BLE001:FOG_DEFERRED
-        return {"blocked": False, "warning": False, "reason": f"governance_load_failed: {exc}"}
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("live_startup:check_single_brain_governance"):
+            return {"blocked": False, "warning": False, "reason": f"governance_load_failed: {exc}"}
     state = gov.get_brain_state(brain_id)
     if state is None:
         return {"blocked": False, "warning": False, "reason": "not_registered"}

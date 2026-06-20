@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from core.runtime.fault_handler import fail_open_guard
+
 if TYPE_CHECKING:
     from core.execution.position_manager import ActivePosition
 
@@ -309,5 +311,6 @@ class TrailStopEngine:
             avg_sharpe = float(np.mean(sharpe_values))
             scale = 1.0 + 0.25 * float(np.tanh(avg_sharpe * 1.2))
             return float(np.clip(scale, 1.0, 1.5))
-        except Exception:  # BLE001:FOG_DEFERRED
-            return 1.0
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("trail_stop_engine:_compute_brain_specific_trail_scale"):
+                return 1.0

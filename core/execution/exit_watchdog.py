@@ -296,20 +296,21 @@ class ExitWatchdog:
                                 attempts=attempts,
                                 alerts=alerts,
                             )
-                    except Exception as _l2_exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
-                        import logging as _lg
+                    except Exception as _l2_exc:  # BLE001:FOG (logged, Phase 3b)
+                        with fail_open_guard("exit_watchdog:execute_exit"):
+                            import logging as _lg
 
-                        _lg.getLogger(__name__).critical(
-                            "L2 forced liquidation FAILED: ticket=%s reason=%s error=%s",
-                            position_ticket,
-                            reason,
-                            _l2_exc,
-                            exc_info=True,
-                        )
-                        alerts.append(
-                            f"CRITICAL: l2_forced_close_failed ticket={position_ticket} "
-                            f"error={type(_l2_exc).__name__}"
-                        )
+                            _lg.getLogger(__name__).critical(
+                                "L2 forced liquidation FAILED: ticket=%s reason=%s error=%s",
+                                position_ticket,
+                                reason,
+                                _l2_exc,
+                                exc_info=True,
+                            )
+                            alerts.append(
+                                f"CRITICAL: l2_forced_close_failed ticket={position_ticket} "
+                                f"error={type(_l2_exc).__name__}"
+                            )
                 alert = (
                     f"CRITICAL: exit_watchdog_timeout ticket={position_ticket} "
                     f"reason={reason} elapsed={elapsed:.1f}s attempts={attempt_n - 1}"
@@ -352,11 +353,11 @@ class ExitWatchdog:
             try:
                 result = dispatch_fn(payload)
                 att.dispatch_success = bool(result.get("dispatched", False))
-            except Exception as exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
-                att.error = f"dispatch_exception:{exc}"
-                attempts.append(att)
-                continue
-
+            except Exception as exc:  # BLE001:FOG (logged, Phase 3b)
+                with fail_open_guard("exit_watchdog:execute_exit"):
+                    att.error = f"dispatch_exception:{exc}"
+                    attempts.append(att)
+                    continue
             if not att.dispatch_success:
                 att.error = f"dispatch_rejected:{result.get('reason', 'unknown')}"
                 attempts.append(att)
@@ -430,20 +431,21 @@ class ExitWatchdog:
                         attempts=attempts,
                         alerts=alerts,
                     )
-            except Exception as _l2f_exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
-                import logging as _lg
+            except Exception as _l2f_exc:  # BLE001:FOG (logged, Phase 3b)
+                with fail_open_guard("exit_watchdog:execute_exit"):
+                    import logging as _lg
 
-                _lg.getLogger(__name__).critical(
-                    "ESCALATED L2 forced liquidation FAILED: ticket=%s reason=%s error=%s",
-                    position_ticket,
-                    reason,
-                    _l2f_exc,
-                    exc_info=True,
-                )
-                alerts.append(
-                    f"EMERGENCY: l2_exhausted_close_failed ticket={position_ticket} "
-                    f"error={type(_l2f_exc).__name__}"
-                )
+                    _lg.getLogger(__name__).critical(
+                        "ESCALATED L2 forced liquidation FAILED: ticket=%s reason=%s error=%s",
+                        position_ticket,
+                        reason,
+                        _l2f_exc,
+                        exc_info=True,
+                    )
+                    alerts.append(
+                        f"EMERGENCY: l2_exhausted_close_failed ticket={position_ticket} "
+                        f"error={type(_l2f_exc).__name__}"
+                    )
         alert = (
             f"ESCALATED: exit_watchdog_exhausted ticket={position_ticket} "
             f"reason={reason} attempts={self.max_retries} elapsed={elapsed:.1f}s"

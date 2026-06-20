@@ -286,9 +286,9 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
                 _ts = datetime.fromisoformat(_ts_str.replace("Z", "+00:00")).timestamp()
             else:
                 continue
-        except Exception:  # BLE001:FOG_DEFERRED
-            continue
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("restart_state:bootstrap_restart_state"):
+                continue
         # ── Resolve entry_confidence from matching open ──
         _entry_confidence = 0.5
         _open_match = _open_index.get(int(_ticket)) if _ticket else None

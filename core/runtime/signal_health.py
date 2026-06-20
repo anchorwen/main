@@ -98,9 +98,9 @@ class FeatureGate:
                         "FEATURE_ZERO_VECTOR",
                         f"{zero_count}/{total} zero features (≥30 non-zero required)",
                     )
-            except Exception:  # BLE001:FOG_DEFERRED
-                return GateResult(False, "FEATURE_ZERO_VECTOR", "feature vector validation failed")
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("signal_health:check"):
+                    return GateResult(False, "FEATURE_ZERO_VECTOR", "feature vector validation failed")
         # ── Market data sanity ──
         if atr <= 0:
             return GateResult(False, "FEATURE_STALE", "ATR <= 0")
@@ -250,11 +250,11 @@ class SignalHealthMonitor:
                 if r.get("warning", False):
                     results["warnings"] += 1
                     results["healthy"] = False
-            except Exception as exc:  # BLE001:FOG_DEFERRED
-                results["checks"][name] = {"warning": True, "reason": f"check_error: {exc}"}
-                results["warnings"] += 1
-                results["healthy"] = False
-
+            except Exception as exc:  # BLE001:FOG
+                with fail_open_guard("signal_health:check_all"):
+                    results["checks"][name] = {"warning": True, "reason": f"check_error: {exc}"}
+                    results["warnings"] += 1
+                    results["healthy"] = False
         # Derive actions from warnings
         results["actions"] = self._derive_actions(results["checks"])
         return results

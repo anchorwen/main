@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from core.runtime.fault_handler import FaultLevel, FaultTolerantContext
+from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, fail_open_guard
 from core.runtime.time_utils import _utc_iso
 
 
@@ -132,17 +132,18 @@ def run_session_guards(
                                         reason="intraday_drawdown",
                                         dispatched=_dd_result.get("dispatched", False),
                                     )
-                                except Exception as _dd_exc:  # BLE001:FOG_DEFERRED
-                                    _emit(
-                                        "force_close_error",
-                                        error=str(_dd_exc),
-                                    )
+                                except Exception as _dd_exc:  # BLE001:FOG
+                                    with fail_open_guard("session_guards:run_session_guards"):
+                                        _emit(
+                                            "force_close_error",
+                                            error=str(_dd_exc),
+                                        )
                 if dd_result.get("blocked"):
                     return True, session_info  # skip cycle — drawdown kill active
-            except Exception as _dd_setup_exc:  # BLE001:FOG_DEFERRED (degrade, Phase 3b)
-                # DEGRADE — intraday DD check setup failed, continue without it
-                _emit("intraday_drawdown_kill_error", error=str(_dd_setup_exc))
-
+            except Exception as _dd_setup_exc:  # BLE001:FOG (degrade, Phase 3b)
+                with fail_open_guard("session_guards:run_session_guards"):
+                    # DEGRADE — intraday DD check setup failed, continue without it
+                    _emit("intraday_drawdown_kill_error", error=str(_dd_setup_exc))
         # ── Feature freshness check ──
         if not state._feature_buffers_warm:
             _log_cycle_end(state.loop_iteration)
@@ -159,9 +160,9 @@ def run_session_guards(
                 _log_cycle_end(state.loop_iteration)
                 return True, {}  # skip cycle — circuit breaker open (no session_info)
 
-    except Exception as _session_exc:  # BLE001:FOG_DEFERRED (fail-open, Phase 3b)
-        _emit("session_guard_error", error=str(_session_exc))
-        # Fail-open on session detection failure — let the cycle continue
-        pass
-
+    except Exception as _session_exc:  # BLE001:FOG (fail-open, Phase 3b)
+        with fail_open_guard("session_guards:run_session_guards"):
+            _emit("session_guard_error", error=str(_session_exc))
+            # Fail-open on session detection failure — let the cycle continue
+            pass
     return False, session_info

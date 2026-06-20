@@ -254,9 +254,9 @@ def reconcile_closed_positions(
             }
             with open(_labels_path, "a", encoding="utf-8") as _lf:
                 _lf.write(json.dumps(_label_entry, ensure_ascii=False) + "\n")
-        except Exception:  # BLE001:FOG_DEFERRED
-            pass  # best-effort — label write must not block reconciliation
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("reconciliation:reconcile_closed_positions"):
+                pass  # best-effort — label write must not block reconciliation
         # ── DQAF-20260614-005c: SignalSettled from startup reconciliation ──
         # This path handles ALL real closes (the reconcile_mt5_close_events
         # path in live_cycle.py uses PositionCloseAdapter and rarely fires).

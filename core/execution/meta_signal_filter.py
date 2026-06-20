@@ -239,19 +239,19 @@ class MetaSignalFilter:
             import joblib
 
             self._calibrator = joblib.load(self._calibrator_path)
-        except Exception as e:  # BLE001:FOG_DEFERRED
-            sys.stderr.write(
-                json.dumps(
-                    {
-                        "event": "calibrator_load_error",
-                        "path": self._calibrator_path,
-                        "error": str(e),
-                    }
+        except Exception as e:  # BLE001:FOG
+            with fail_open_guard("meta_signal_filter:_load_calibrator"):
+                sys.stderr.write(
+                    json.dumps(
+                        {
+                            "event": "calibrator_load_error",
+                            "path": self._calibrator_path,
+                            "error": str(e),
+                        }
+                    )
+                    + "\n"
                 )
-                + "\n"
-            )
-            self._calibrator = None
-
+                self._calibrator = None
     def _load_mlp_model(self) -> None:
         """Load the optional MLP ensemble model for probability averaging."""
         if not self.mlp_model_path or not os.path.exists(self.mlp_model_path):

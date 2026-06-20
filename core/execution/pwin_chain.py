@@ -26,6 +26,8 @@ import math
 import statistics
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 logger = logging.getLogger(__name__)
 
 # ── resolve_p_win_from_brains ──────────────────────────────────────────────
@@ -71,12 +73,11 @@ def resolve_p_win_from_brains(
             continue
         try:
             m = pnl_store.get_metrics(str(brain_id), window=100)
-        except Exception:  # BLE001:FOG_DEFERRED
-            from core.runtime.fault_handler import fail_open_guard
-
-            with fail_open_guard("PWinMetricsResolver"):
-                raise
-            continue
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("pwin_chain:resolve_p_win_from_brains"):
+                with fail_open_guard("PWinMetricsResolver"):
+                    raise
+                continue
         if m is None:
             continue
         sc = getattr(m, "sample_count", 0)

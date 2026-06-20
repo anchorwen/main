@@ -10,6 +10,7 @@ import json
 import time as _time
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
 from core.runtime.order_dispatch import _record_brain_outcomes
 from core.runtime.time_utils import _utc_iso
 
@@ -80,10 +81,11 @@ def process_dispatch_results(
                     strategy_proposals, dr.direction, "pending", tracker,
                     symbol=symbol,
                 )
-            except Exception as _bi_exc:  # BLE001:FOG_DEFERRED
-                _emit(
-                    "brain_inference_failed",
-                    strategy=dr.strategy_name,
-                    error=f"{type(_bi_exc).__name__}: {str(_bi_exc)[:200]}",
-                    level="DEGRADE",
-                )
+            except Exception as _bi_exc:  # BLE001:FOG
+                with fail_open_guard("dispatch_post:process_dispatch_results"):
+                    _emit(
+                        "brain_inference_failed",
+                        strategy=dr.strategy_name,
+                        error=f"{type(_bi_exc).__name__}: {str(_bi_exc)[:200]}",
+                        level="DEGRADE",
+                    )

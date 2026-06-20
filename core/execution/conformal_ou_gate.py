@@ -542,9 +542,9 @@ class ConformalOUGate:
                     entry = BrainRegistry.instance().get(brain_id)
                     if entry is not None and entry.contract_group != strategy_name:
                         continue  # brain is for a different strategy line
-                except Exception:  # BLE001:FOG_DEFERRED
-                    pass  # registry resolve failure is non-blocking
-
+                except Exception:  # BLE001:FOG
+                    with fail_open_guard("conformal_ou_gate:_extract_ou_diagnostics"):
+                        pass  # registry resolve failure is non-blocking
             z_score = float(getattr(p, "raw_score", 0.0) or 0.0)
             theta = float(diag.get("theta", 0.0))
             half_life = float(diag.get("half_life", float("inf")))
