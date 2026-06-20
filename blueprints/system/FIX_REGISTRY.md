@@ -33,7 +33,8 @@ FIX-YYYYMMDD-NNN
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
 | FIX-20260621-028 | 2026-06-21 | observability, scripts, infra | **Phase 4 Shadow Verify midpoint: 3 fixes** — (028a) Windows scheduled task timeout fix, (028b) alert cooling state atomic persistence, (028c) weekend false-positive suppression in audit | RC-07 (resilience — crash-survival) + RC-06 (data-contamination — market-closed false positives) |
-| FIX-20260621-027 | 2026-06-21 | training, scripts | **Path B + R4 Phase 2: Unified BTC retraining with OFI look-ahead fix**: (1) Removed 5 OFI features from build_metafilter_dataset.py — sourced from single global snapshot with look-ahead bias. (2) Fixed feature_names mismatch (47→42 dim, entry_spread+brain_confidence now tracked). (3) Fixed train_metafilter_path_b.py metadata hyperparams (max_depth=3→2, n_estimators=50→80). (4) Added scale_pos_weight for class-imbalance robustness. (5) Added --data-dir CLI arg to both scripts. (6) Regenerated regime_snapshots (BTC: 6,204→7,095, covers 6/16 gap). (7) MetaFilter V4: 110 samples, 42-dim, OOF AUC=0.435 (V3=0.422, +0.013, no OFI). (8) R4 Phase 2: 116 samples, V12_NoRegime AUC=0.475 > V12_RegimeFull AUC=0.459 — regime features actively harmful for BTC (delta=-0.016). Both models below deployment threshold; shadow mode only. Main bottleneck: exact-minute FS join loses 70% of labels. Next step: V2 PIT ASOF join to recover samples. | RC-06 (data-contamination — look-ahead bias) + RC-12 (insufficient-data) |
+| FIX-20260621-028 | 2026-06-21 | training, scripts | **Data plumbing fix: ASOF join + tolerance + pickle output**: (1) Added --feature-contract (default v9_institutional_40) to V2 builder — micro features skipped (10% coverage, 90% zero-dilution). (2) Added --max-lookback-minutes (default 15) — ASOF tolerance rejects stale features (gap > 15min). Without this, 6h-old features from engine outage silently contaminate training. (3) Changed V2 trainer CV: StratifiedKFold(shuffle) → TimeSeriesSplit (no temporal leakage). (4) Added scale_pos_weight (activate when |WR-50%|>10%, clamp [0.5,2.0]). (5) Added pickle + feature_names.json output for MetaFilterAdapter compatibility. (6) Pipeline: 245 trades → 141 matched (57.6% match rate, vs V1 23%), 104 stale-filtered (42% prevented contamination). 40-dim V9 only. WR=19.9% (PnL>$3.75 strict). 28 wins insufficient for 5-fold CV → Fold 5 NaN. Model shadow-only. Bottleneck shifted: matching is now adequate but positive examples too few for robust CV. Next: relax PnL threshold or wait for more trades. | RC-06 (stale-feature contamination) + RC-12 (insufficient-data) |
+| FIX-20260621-027 | 2026-06-21 | training, scripts | **Path B + R4 Phase 2: Unified BTC retraining with OFI look-ahead fix**
 | FIX-20260620-026 | 2026-06-20 | tests | **P1 Test Breakout — 6 execution-layer modules zero→covered (+133 tests)**: market_efficiency (23 tests: Kaufman ER + normalization), ofi_gate (21 tests: OFI toxicity gate all branches), exit_reason (44 tests: 15 enum members + classify() 15+ patterns + shim), session_detector (14 tests: state machine + stall progression), correlation_sizer (14 tests: √N discount + rounding), trend_isolation_gates (17 tests: 4 gates). All pure/state-machine tests, no I/O dependencies. | RC-12 (zero-coverage modules) |
 | FIX-20260620-025 | 2026-06-20 | tests | **Phase 3b+3c+Gap fill: +188 tests, 7 modules**: position_close_adapter (30+), live_alert_hub (26), brain_registration_gate (37), brain_lifecycle_manager (22), microstructure_computer (22), financial_metrics (47), atomic_file_writer (22), regime_direction_gate (16). Zero→covered: live_alert_hub, brain_registration_gate, brain_lifecycle_manager, microstructure_computer, financial_metrics, atomic_file_writer, regime_direction_gate. | RC-12 (zero-coverage modules) |
 | FIX-20260620-024 | 2026-06-20 | brains-services | **DEFERRED: Governance hysteresis — promotion↔throttle oscillation prevention**: Missing hold-down period between promote and throttle allows ping-pong live↔probation transitions. Registered as L3 architecture debt; activate when any BTC brain accumulates ≥50 live trades. Trigger: `performance_metrics.trades ≥ 50` OR `2026-07-15`. | RC-12 (missing-feature) |
@@ -3536,3 +3537,40 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-07 (resilience — insufficient process-restart survivability for alert cooling) + RC-06 (data-contamination — audit false positives during market closure)
 - **Prevention**: (1) All background scheduled tasks must include output redirection in command line. (2) Any in-memory state with TTL semantics should be persisted to disk for crash-survival. (3) Market-closed awareness should be a standard utility available to all audit/health scripts.
 - **Dependents Checked**: `live_cycle.py` (uses LiveAlertHub — `.last_fired` property is additive, no signature change), `live_intent_loop.py` (same LiveAlertHub usage), `audit_data_integrity.py` (self-contained change, no callers affected).
+
+### FIX-20260621-028
+- **Date**: 2026-06-21
+- **Author**: cursor-agent
+- **Type**: training + data-infrastructure (data plumbing fix)
+- **Module**: scripts (build_btc_metafilter_v2_dataset, train_btc_metafilter_v2) + training infrastructure
+- **Files**: `scripts/build_btc_metafilter_v2_dataset.py` (modified: --feature-contract, --max-lookback-minutes, 40-dim V9 default, ASOF tolerance, schema SSOT import), `scripts/train_btc_metafilter_v2.py` (modified: TimeSeriesSplit CV, scale_pos_weight, pickle+pkl output, feature_names.json, --output-dir), `data_btc/training/meta_features_btc_v2.npz` (regenerated: 141 samples, 40-dim), `data_btc/models/meta_filter_v5/` (new: pickle + LightGBM + feature_names.json + metadata)
+- **Summary**: **Data plumbing fix — ASOF join with tolerance prevents stale-feature contamination.**
+
+  **Strategic context**: FIX-027 revealed 77% data loss from exact-minute matching. The V2 builder (PIT ASOF join) existed but lacked (a) tolerance against stale features and (b) proper contract-driven dimension control. Per user directive: pause feature engineering, fix data plumbing first.
+
+  **Changes (V2 builder)**:
+  1. `--feature-contract` (default `v9_institutional_40`): 40-dim V9 only — micro features skipped (10% coverage → 90% zeros dilute signal). 47-dim contract path retained for future use.
+  2. `--max-lookback-minutes` (default 15): After binary search finds best feature with `event_time <= open_dt`, check `(open_dt - event_time) <= max_lookback`. If gap exceeds tolerance, drop the trade — stale features from engine outage would silently contaminate labels. 104/245 trades (42%) filtered by this check, proving it catches real contamination.
+  3. Schema SSOT import: `V9_INSTITUTIONAL_40_FEATURES` from `core.features.schemas.v9_institutional_schema` replaces fragile contract-file loading.
+  4. Direction balance + gap_seconds diagnostic in output metadata.
+
+  **Changes (V2 trainer)**:
+  1. CV: `StratifiedKFold(shuffle=True)` → `TimeSeriesSplit` — financial time series have strong serial correlation; random shuffling leaks future into past (per institutional review directive).
+  2. `scale_pos_weight`: computed from actual class ratio, activates when |WR-50%|>10%, clamped [0.5, 2.0].
+  3. Pickle output: model saved as `meta_filter_lightgbm.pkl` (sklearn-compatible) for `MetaFilterAdapter.load()`.
+  4. `feature_names.json`: separate file for adapter's `FeatureParityError` check.
+  5. `--output-dir`: directs output to `data_btc/models/meta_filter_v5/`.
+
+  **Pipeline results (2026-06-21)**:
+  - 245 trades → 141 matched (57.6%, vs V1 23%), 104 stale-filtered (42%), 0 no-prior-feature, 0 not-yet-known
+  - 40-dim V9, WR=19.9% (28 wins, PnL>$3.75 threshold), scale_pos_weight=2.00
+  - 5-Fold TimeSeriesSplit CV: Fold 1-4 AUC=0.41/0.54/0.53/0.62, Fold 5 AUC=NaN (0 wins in validation fold)
+  - Model saved (pickle + .txt + feature_names.json) but shadow-only — 28 positive examples insufficient for reliable 5-fold CV
+
+  **Key insight**: ASOF tolerance is working correctly. 42% of trades had features older than 15 minutes — these would have been silently included in V1/V4 datasets as contaminated labels. The tolerance mechanism is now a permanent part of the data pipeline.
+
+  **Bottleneck shift**: Matching rate improved from 23% → 57.6%. The new bottleneck is positive example count (28 wins). Options: (a) relax PnL threshold multiplier from 1.5→1.0, (b) wait for more BTC trades, (c) use regression labels (PnL directly) instead of binary classification.
+
+- **Root Cause**: RC-06 (data-contamination — stale features from engine downtime silently matched to trades) + RC-12 (insufficient-data — 28 positive examples below 5-fold CV minimum of ~50)
+- **Prevention**: (1) ASOF tolerance check is now mandatory in all dataset builders — add pre-commit validation. (2) TimeSeriesSplit is the only allowed CV for financial time series — add lint rule. (3) Minimum positive-example count of 50 for 5-fold CV — add gate in trainer.
+- **Dependents Checked**: MetaFilterAdapter (now compatible via pickle), live_cycle.py (MetaFilter path unchanged, shadow-only), governance_state.json (BTC brain status unchanged).

@@ -10,8 +10,22 @@ MLOps Iron Law #2 (Label Engineering with Damping):
   y=1 only when PnL > spread_cost * 1.5.  Breakeven and micro-loss
   trades are labeled y=0 — the model learns to avoid friction noise.
 
+MLOps Iron Law #3 (ASOF Tolerance — Stale Feature Rejection):
+  If the best ASOF-matched feature is older than max_lookback_minutes,
+  the trade is DROPPED.  Without this, a feature engine outage at 08:00
+  would silently attach 6-hour-old features to a 14:00 trade — producing
+  garbage training labels whose market context is unknowably stale.
+
+FIX-20260621-028: Added --feature-contract (default v9_institutional_40),
+  --max-lookback-minutes (default 15), removed micro-feature merge for
+  40-dim contract (micro coverage is only 10% — mostly zeros that dilute
+  signal), and added ASOF tolerance check between binary search and
+  Column 3 knowledge-time filter.
+
 Usage:
   python scripts/build_btc_metafilter_v2_dataset.py --data-dir data_btc
+  python scripts/build_btc_metafilter_v2_dataset.py --data-dir data_btc --feature-contract v9_institutional_40
+  python scripts/build_btc_metafilter_v2_dataset.py --data-dir data_btc --max-lookback-minutes 30
 """
 
 from __future__ import annotations
@@ -30,8 +44,15 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--data-dir", default="data_btc", help="Data directory")
     p.add_argument("--symbol", default="BTCUSDc", help="Trading symbol")
     p.add_argument("--output", default=None, help="Output NPZ path")
-    p.add_argument("--spread-cost-usd", type=float, default=2.50, help="Estimated round-trip spread+slippage cost in USD")
-    p.add_argument("--pnl-threshold-mult", type=float, default=1.5, help="Damping multiplier on spread cost for y=1")
+    p.add_argument("--spread-cost-usd", type=float, default=2.50,
+                   help="Estimated round-trip spread+slippage cost in USD")
+    p.add_argument("--pnl-threshold-mult", type=float, default=1.5,
+                   help="Damping multiplier on spread cost for y=1")
+    p.add_argument("--feature-contract", default="v9_institutional_40",
+                   help="Feature contract name (default: v9_institutional_40 for 40-dim V9)")
+    p.add_argument("--max-lookback-minutes", type=int, default=15,
+                   help="Max minutes between trade open and matched feature (default: 15). "
+                        "Trades with older features are dropped to avoid stale-data contamination.")
     return p.parse_args()
 
 
@@ -126,13 +147,20 @@ def load_journal_opens(data_dir: str) -> list[dict[str, Any]]:
     return trades
 
 
-def load_feature_store(data_dir: str, symbol: str = "BTCUSDc") -> list[dict[str, Any]]:
-    """Load and merge v9_institutional_40 + v4.3_microstructure_9 records.
+def load_feature_store(
+    data_dir: str,
+    symbol: str = "BTCUSDc",
+    feature_contract: str = "v9_institutional_40",
+) -> list[dict[str, Any]]:
+    """Load feature store records for the given contract.
 
-    DQAF-20260614-004: Previously only v9_40 was loaded, producing 40-dim
-    datasets.  Now we merge both schemas at matching event_time to produce
-    the 46 base features (40 v9 + 6 micro).  The 47th feature (ou_z_entry)
-    is joined from the journal open entry during ASOF join.
+    FIX-20260621-028: When contract is v9_institutional_40, only load v9
+    records — skip micro-feature merge.  Micro features (v4.3_microstructure_9)
+    have only ~10% coverage in the feature store, so 90% of values would be
+    0.0 filler that dilutes the 40 real V9 features.
+
+    When contract is the full 47-dim variant, merge v9 + micro at matching
+    timestamps (legacy behavior, retained for backwards compatibility).
     """
     fs_path = os.path.join(
         data_dir, "feature_store", "records",
@@ -142,9 +170,8 @@ def load_feature_store(data_dir: str, symbol: str = "BTCUSDc") -> list[dict[str,
         print(f"ERROR: {fs_path} not found")
         return []
 
-    # ── Load and separate by schema ──
-    v9_records: dict[str, dict[str, Any]] = {}    # event_time → record
-    micro_records: dict[str, dict[str, Any]] = {}  # event_time → record
+    v9_records: dict[str, dict[str, Any]] = {}
+    micro_records: dict[str, dict[str, Any]] = {}
     raw_count = 0
     with open(fs_path, encoding="utf-8") as f:
         for line in f:
@@ -163,7 +190,24 @@ def load_feature_store(data_dir: str, symbol: str = "BTCUSDc") -> list[dict[str,
             elif schema == "v4.3_microstructure_9":
                 micro_records[et] = rec
 
-    # ── Merge v9 + micro at matching timestamps ──
+    # ── FIX-20260621-028: 40-dim contract → skip micro merge ──
+    if feature_contract == "v9_institutional_40":
+        merged = []
+        for et, v9_rec in sorted(v9_records.items()):
+            v9_vals = v9_rec.get("values", {})
+            if not isinstance(v9_vals, dict) or len(v9_vals) < 40:
+                continue
+            _ingested = v9_rec.get("ingested_at", "")
+            merged.append({
+                "event_time": et,
+                "ingested_at": _ingested,
+                "values": dict(v9_vals),
+            })
+        print(f"Feature store: {raw_count} raw records → {len(v9_records)} v9 "
+              f"(40-dim contract, micro skipped)")
+        return merged
+
+    # ── 47-dim contract: merge v9 + micro at matching timestamps ──
     MICRO_FIELDS = ["tick_return", "hl_ratio", "co_ratio", "avg_spread", "OIM", "tick_velocity"]
     merged = []
     merged_count = 0
@@ -172,7 +216,6 @@ def load_feature_store(data_dir: str, symbol: str = "BTCUSDc") -> list[dict[str,
         if not isinstance(v9_vals, dict) or len(v9_vals) < 40:
             continue
         merged_vals = dict(v9_vals)
-        # Merge micro features if available at the same timestamp
         micro_rec = micro_records.get(et)
         if micro_rec is not None:
             micro_vals = micro_rec.get("values", {})
@@ -180,17 +223,10 @@ def load_feature_store(data_dir: str, symbol: str = "BTCUSDc") -> list[dict[str,
                 for mf in MICRO_FIELDS:
                     merged_vals[mf] = float(micro_vals.get(mf, 0.0))
                 merged_count += 1
-        # Also add micro fields as 0.0 if not present (pre-micro-storage data)
         for mf in MICRO_FIELDS:
             if mf not in merged_vals:
                 merged_vals[mf] = 0.0
-        # ── Column 3: Capture ingested_at for knowledge-time filtering ──
-        # ingested_at is the system knowledge time — when this feature
-        # record was actually written to the store.  Using it in ASOF join
-        # prevents look-ahead bias (reading features that weren't yet known
-        # at trade entry time).
         _ingested = v9_rec.get("ingested_at", "")
-
         merged.append({
             "event_time": et,
             "ingested_at": _ingested,
@@ -203,61 +239,60 @@ def load_feature_store(data_dir: str, symbol: str = "BTCUSDc") -> list[dict[str,
     return merged
 
 
-def load_contract_feature_names(data_dir: str) -> list[str]:
-    """Load the 47-dim feature name list from the training pipeline contract (SSOT)."""
+def load_contract_feature_names(data_dir: str, feature_contract: str = "v9_institutional_40") -> list[str]:
+    """Load feature names for the given contract.
+
+    FIX-20260621-028: For v9_institutional_40, load directly from schema
+    registry.  For 47-dim contracts, load from the training pipeline contract.
+    """
+    if feature_contract == "v9_institutional_40":
+        return _load_v9_feature_names_from_registry()
+
+    # Legacy: load from 47-dim contract
     contract_path = os.path.join("configs", "contracts", "training_pipeline_btc_metafilter_v3.json")
     if not os.path.exists(contract_path):
         print("WARNING: contract not found, falling back to v9 feature names")
-        # Fallback to old behavior
-        return _load_v9_feature_names_from_schemas(data_dir)
+        return _load_v9_feature_names_from_registry()
     with open(contract_path, encoding="utf-8") as f:
         contract = json.load(f)
     feature_names = contract.get("model_target", {}).get("feature_names_ssot", [])
-    if len(feature_names) == 47:
-        print(f"Contract features: {len(feature_names)} dim (from training_pipeline_btc_metafilter_v3.json)")
-        return list(feature_names)
-    print(f"WARNING: contract has {len(feature_names)} features, expected 47")
+    print(f"Contract features: {len(feature_names)} dim (from training_pipeline_btc_metafilter_v3.json)")
     return list(feature_names)
 
 
-def _load_v9_feature_names_from_schemas(data_dir: str, symbol: str = "BTCUSDc") -> list[str]:
-    """Fallback: load v9 feature names from schemas.json (legacy path)."""
-    fs_schema_path = os.path.join(data_dir, "feature_store", "schemas.json")
-    if not os.path.exists(fs_schema_path):
-        return []
-    with open(fs_schema_path, encoding="utf-8") as f:
-        schemas = json.load(f)
-    for sc in schemas.values():
-        if isinstance(sc, dict) and "v9_institutional" in sc.get("name", "") and symbol in sc.get("symbol", ""):
-            return sc.get("fields", [])[:40]
-    return []
+def _load_v9_feature_names_from_registry() -> list[str]:
+    """Load canonical v9_institutional_40 feature names from schema SSOT."""
+    from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES
+    names = list(V9_INSTITUTIONAL_40_FEATURES)[:40]
+    if len(names) == 40:
+        print(f"Schema SSOT: {len(names)} features (v9_institutional_40)")
+        return names
+    print("WARNING: schema returned < 40 features, dataset may be incomplete")
+    return names
 
 
 def asof_join(
     trades: list[dict[str, Any]],
     features: list[dict[str, Any]],
     contract_feature_names: list[str],
+    max_lookback_seconds: int = 900,
 ) -> tuple[np.ndarray, np.ndarray, list[dict[str, Any]]]:
-    """PIT ASOF join with knowledge-time filtering (Column 3 — Bitemporal).
+    """PIT ASOF join with tolerance + knowledge-time filtering.
 
     MLOps Iron Law #1: backward-looking join only.  Never use future data.
+
+    MLOps Iron Law #3 (FIX-20260621-028): ASOF tolerance.
+      After binary search finds the best feature with event_time <= open_dt,
+      check that the gap (open_dt - event_time) <= max_lookback_seconds.
+      Without this check, a feature engine outage at 08:00 would silently
+      match 6-hour-old features to a 14:00 trade — producing garbage labels.
 
     Column 3 — Knowledge-Time Filtering (Look-Ahead Bias Elimination):
       For each trade at time T, we can only use features whose:
         (a) event_time  <= T  (the feature describes a state at or before T)
         (b) ingested_at <= T  (the system KNEW about this feature at time T)
-
-      Without condition (b), a feature record that arrived late (e.g. due to
-      network delay) could be read by the ASOF join even though the live
-      system at time T did not yet have access to it.  This is the most
-      insidious form of look-ahead bias — the model learns from data that
-      was physically unavailable at decision time.
-
-    DQAF-20260614-004: Feature vector now includes ou_z_entry from the trade's
-    open entry (the 47th feature), appended after the 46 merged store features.
     """
     # ── Parse feature timestamps (event_time + ingested_at) ──
-    # Each entry: (event_dt, ingested_dt_or_None, feature_index)
     feat_entries: list[tuple[datetime, datetime | None, int]] = []
     for i, f in enumerate(features):
         et = f.get("event_time", "")
@@ -290,6 +325,7 @@ def asof_join(
     skipped_future = 0
     skipped_missing = 0
     skipped_not_known = 0
+    skipped_stale = 0
 
     for trade in trades:
         open_ts = trade["open_time"]
@@ -319,24 +355,23 @@ def asof_join(
             skipped_future += 1
             continue
 
+        # ── FIX-20260621-028: ASOF tolerance — reject stale features ──
+        _best_event_dt = feat_entries[best_idx][0]
+        _gap_seconds = (open_dt - _best_event_dt).total_seconds()
+        if _gap_seconds > max_lookback_seconds:
+            skipped_stale += 1
+            continue
+
         # ── Column 3: Knowledge-time filter ──
-        # Walk backward from best_idx to find the most recent feature that
-        # was actually KNOWN at trade time.  This eliminates look-ahead bias
-        # from late-arriving feature records.
         usable_idx = -1
         for candidate_idx in range(best_idx, -1, -1):
             _event_dt, _ingested_dt, _feat_i = feat_entries[candidate_idx]
             if _ingested_dt is None:
-                # No ingested_at — record predates this fix.
-                # Accept it (backward-compatible with pre-Column-3 data).
                 usable_idx = candidate_idx
                 break
             if _ingested_dt <= open_dt:
-                # Feature was known at trade time — use it.
                 usable_idx = candidate_idx
                 break
-            # Feature arrived after trade time — not known, skip it,
-            # continue walking backward.
 
         if usable_idx < 0:
             skipped_not_known += 1
@@ -349,7 +384,7 @@ def asof_join(
             skipped_missing += 1
             continue
 
-        # Extract features in CONTRACT order (first 46 from store, 47th = ou_z_entry)
+        # Extract features in CONTRACT order
         feat_vec = []
         for fn in contract_feature_names:
             if fn == "ou_z_entry":
@@ -367,6 +402,7 @@ def asof_join(
             "ticket": trade["ticket"],
             "open_time": open_ts,
             "feature_time": feat.get("event_time", ""),
+            "gap_seconds": round(_gap_seconds, 1),
             "pnl": trade["pnl"],
             "side": trade["side"],
             "entry_price": trade["entry_price"],
@@ -378,7 +414,8 @@ def asof_join(
         matched += 1
 
     print(f"ASOF join: {matched} matched, {skipped_future} no prior feature, "
-          f"{skipped_not_known} not-yet-known at trade time, "
+          f"{skipped_stale} stale (gap > {max_lookback_seconds//60}min), "
+          f"{skipped_not_known} not-yet-known, "
           f"{skipped_missing} missing data")
     if matched == 0:
         return np.array([]), np.array([]), []
@@ -409,29 +446,46 @@ def apply_labels(
 def main() -> None:
     args = parse_args()
     data_dir = args.data_dir
+    feature_contract = args.feature_contract
+    max_lookback_seconds = args.max_lookback_minutes * 60
+
+    print("=" * 60)
+    print("  BTC MetaFilter V2 — PIT Dataset Builder")
+    print(f"  Contract: {feature_contract}")
+    print(f"  ASOF tolerance: {args.max_lookback_minutes} min")
+    print("=" * 60)
 
     symbol = args.symbol
     trades = load_journal_opens(data_dir)
     if not trades:
         return
 
-    features = load_feature_store(data_dir, symbol)
+    features = load_feature_store(data_dir, symbol, feature_contract=feature_contract)
     if not features:
         return
 
-    # DQAF-20260614-004: Use contract feature names (47-dim SSOT)
-    # instead of ad-hoc v9 feature name extraction.
-    contract_names = load_contract_feature_names(data_dir)
+    contract_names = load_contract_feature_names(data_dir, feature_contract=feature_contract)
     if not contract_names:
         print("ERROR: no feature names available — cannot build dataset")
         return
     print(f"Target features: {len(contract_names)} dim")
 
-    X, y_pnl, meta = asof_join(trades, features, contract_names)
+    X, y_pnl, meta = asof_join(
+        trades, features, contract_names,
+        max_lookback_seconds=max_lookback_seconds,
+    )
     if len(X) == 0:
+        print("ERROR: no samples after ASOF join — cannot build dataset")
         return
 
     y = apply_labels(y_pnl, args.spread_cost_usd, args.pnl_threshold_mult)
+
+    # ── Direction balance check ──
+    n_long = sum(1 for m in meta if m["side"] == "long")
+    n_short = sum(1 for m in meta if m["side"] == "short")
+    if len(meta) > 0:
+        print(f"Direction balance: LONG={n_long} ({n_long/len(meta)*100:.0f}%), "
+              f"SHORT={n_short} ({n_short/len(meta)*100:.0f}%)")
 
     # ── Save ──
     sym_tag = symbol.lower().replace("usdc", "").replace("usd", "")
@@ -451,21 +505,24 @@ def main() -> None:
     print(f"\nDataset saved: {output}")
     print(f"  X shape: {X.shape}")
     print(f"  y distribution: {dict(zip(*np.unique(y, return_counts=True), strict=False))}")
-    print(f"  Features: {contract_names[:5]}... ({len(contract_names)} total)")
 
     # ── Dimension contract verification ──
-    if X.shape[1] != 47:
-        print(f"  [CONTRACT VIOLATION] Dataset has {X.shape[1]} dim, contract requires 47!")
+    expected_dim = 40 if feature_contract == "v9_institutional_40" else 47
+    if X.shape[1] != expected_dim:
+        print(f"  [CONTRACT VIOLATION] Dataset has {X.shape[1]} dim, contract requires {expected_dim}!")
     else:
-        print("  [CONTRACT OK] Dataset dimension matches model (47 dim)")
+        print(f"  [CONTRACT OK] Dataset dimension matches contract ({expected_dim} dim)")
 
     # Print PnL distribution for diagnostics
     pnl_sorted = sorted(y_pnl)
     print(f"\nPnL distribution: min={pnl_sorted[0]:+.2f}, "
           f"median={pnl_sorted[len(pnl_sorted)//2]:+.2f}, max={pnl_sorted[-1]:+.2f}")
     print(f"  Wins above threshold: {int((y_pnl > args.spread_cost_usd * args.pnl_threshold_mult).sum())}")
-    print(f"  Breakeven zone (0 to threshold): {int(((y_pnl > 0) & (y_pnl <= args.spread_cost_usd * args.pnl_threshold_mult)).sum())}")
+    print(f"  Breakeven zone (0 to threshold): "
+          f"{int(((y_pnl > 0) & (y_pnl <= args.spread_cost_usd * args.pnl_threshold_mult)).sum())}")
     print(f"  Losses: {int((y_pnl <= 0).sum())}")
+
+    print("\n[DONE] All statistics above are the sole source of truth.")
 
 
 if __name__ == "__main__":
