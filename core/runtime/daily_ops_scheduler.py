@@ -146,65 +146,96 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
                 flush=True,
             )
 
-        # Re-run governance after daily_ops refreshes PnL data
-        try:
-            from core.feedback.brain_performance_tracker import BrainPerformanceTracker
-            from core.feedback.brain_pnl_ledger import BrainPnLStore
-            from core.governance.governance_service import GovernanceService
-            from scripts.training.governance_scheduler import run_governance_cycle
+        # ── P12: Session-aware governance gate ──
+        # Suppress governance transitions during market-closed periods
+        # (weekend for forex_24_5) to prevent stale-metric false positives
+        # from triggering erroneous freeze/demote decisions.
+        # BTC (crypto_24_7) always evaluates — no weekend shutdown.
+        _market_type = getattr(config, "market_type", "forex_24_5")
+        _skip_governance = False
+        if _market_type != "crypto_24_7":
+            try:
+                from core.execution.pre_trade_guards import detect_session
 
-            _pnl_path = os.path.join(config.base_dir, "brain_pnl_ledger.json")
-            _gov_path = os.path.join(config.base_dir, "governance_state.json")
-
-            _pnl_store = BrainPnLStore.load(_pnl_path) if os.path.exists(_pnl_path) else None
-            _governance = (
-                GovernanceService.load(_gov_path)
-                if os.path.exists(_gov_path)
-                else GovernanceService()
-            )
-
-            if _pnl_store is not None:
-                _tracker = BrainPerformanceTracker(window_size=100)
-                _gov_report = run_governance_cycle(
-                    _tracker, _governance, dry_run=False, pnl_store=_pnl_store
-                )
-                _governance.save(_gov_path, lock_timeout=1.0)
-
-                _applied = len(_gov_report.get("actions_applied", []))
-                _flagged = len(_gov_report.get("actions_flagged", []))
-                if _applied or _flagged:
+                _gov_session = detect_session(market_type=_market_type)
+                if _gov_session.get("risk_tier") == "off":
+                    _skip_governance = True
                     print(
                         json.dumps(
                             {
-                                "event": "daily_governance_cycle",
+                                "event": "daily_governance_skip",
+                                "reason": "market_closed_weekend",
+                                "risk_tier": "off",
+                                "market_type": _market_type,
                                 "time": _utc_iso(),
-                                "actions_applied": _applied,
-                                "actions_flagged": _flagged,
                             },
                             ensure_ascii=False,
                         ),
                         flush=True,
                     )
-            else:
+            except Exception:  # BLE001:REVIEWED (fail-open — session check failure should not block daily_ops)
+                pass  # graceful fallback — run governance anyway
+
+        if not _skip_governance:
+            # Re-run governance after daily_ops refreshes PnL data
+            try:
+                from core.feedback.brain_performance_tracker import BrainPerformanceTracker
+                from core.feedback.brain_pnl_ledger import BrainPnLStore
+                from core.governance.governance_service import GovernanceService
+                from scripts.training.governance_scheduler import run_governance_cycle
+
+                _pnl_path = os.path.join(config.base_dir, "brain_pnl_ledger.json")
+                _gov_path = os.path.join(config.base_dir, "governance_state.json")
+
+                _pnl_store = BrainPnLStore.load(_pnl_path) if os.path.exists(_pnl_path) else None
+                _governance = (
+                    GovernanceService.load(_gov_path)
+                    if os.path.exists(_gov_path)
+                    else GovernanceService()
+                )
+
+                if _pnl_store is not None:
+                    _tracker = BrainPerformanceTracker(window_size=100)
+                    _gov_report = run_governance_cycle(
+                        _tracker, _governance, dry_run=False, pnl_store=_pnl_store
+                    )
+                    _governance.save(_gov_path, lock_timeout=1.0)
+
+                    _applied = len(_gov_report.get("actions_applied", []))
+                    _flagged = len(_gov_report.get("actions_flagged", []))
+                    if _applied or _flagged:
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "daily_governance_cycle",
+                                    "time": _utc_iso(),
+                                    "actions_applied": _applied,
+                                    "actions_flagged": _flagged,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                else:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "daily_governance_skip",
+                                "reason": "no_pnl_ledger",
+                                "time": _utc_iso(),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+            except Exception as _gov_exc:  # BLE001:REVIEWED
                 print(
                     json.dumps(
-                        {
-                            "event": "daily_governance_skip",
-                            "reason": "no_pnl_ledger",
-                            "time": _utc_iso(),
-                        },
+                        {"event": "daily_governance_error", "time": _utc_iso(), "error": str(_gov_exc)},
                         ensure_ascii=False,
                     ),
                     flush=True,
                 )
-        except Exception as _gov_exc:  # BLE001:REVIEWED
-            print(
-                json.dumps(
-                    {"event": "daily_governance_error", "time": _utc_iso(), "error": str(_gov_exc)},
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
     except Exception as exc:  # BLE001:REVIEWED
         print(
             json.dumps(

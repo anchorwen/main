@@ -145,6 +145,24 @@ class SchedulerService:
         if container.governance_rule_engine and container.brain_tracker:
 
             def governance_eval():
+                # ── P12: Session-aware governance gate ──
+                # Suppress governance transitions during market-closed periods.
+                _market_type = getattr(container.config, "market_type", "forex_24_5")
+                if _market_type != "crypto_24_7":
+                    try:
+                        from core.execution.pre_trade_guards import detect_session
+                        _gov_session = detect_session(market_type=_market_type)
+                        if _gov_session.get("risk_tier") == "off":
+                            import logging
+                            _logger = logging.getLogger(__name__)
+                            _logger.info(
+                                "Governance eval skipped: market closed (market_type=%s, risk_tier=off)",
+                                _market_type,
+                            )
+                            return
+                    except Exception:  # BLE001:REVIEWED (fail-open)
+                        pass  # graceful fallback — run governance anyway
+
                 summaries = container.brain_tracker.get_all_summaries()
                 summary_map = {s[PAYLOAD_KEY_BRAIN_ID]: s for s in summaries}
 
