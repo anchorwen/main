@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 import math
 import statistics
+from dataclasses import dataclass
 from typing import Any
 
 from core.runtime.fault_handler import fail_open_guard
@@ -219,3 +220,171 @@ def adjust_p_win_for_z_strength(
     # penalty_factor ∈ (0, penalty_max]
     penalty_factor = penalty_max / (1.0 + math.exp(steepness * (abs_z - z_threshold)))
     return p_win * (1.0 - penalty_factor)
+
+
+# ── PWinResolution — p_win resolution chain result ────────────────────────────
+# FIX-20260620-017: Extracted from strategy_line.evaluate() lines 1067-1181.
+
+
+@dataclass
+class PWinResolution:
+    """Result of the 7-step p_win resolution chain.
+
+    Encapsulates all state mutations produced by the p_win backoff chain:
+    cold_explore → meta_filter → rolling_wr → brain_confidence →
+    meta_filter_absent → ucb_elastic_floor → regime/z adjustments →
+    degraded detection.
+    """
+
+    p_win: float
+    p_win_source: str
+    p_win_degraded: bool
+    meta_filter_absent: bool
+    meta_absent_floor: float
+
+
+def resolve_p_win(
+    *,
+    is_cold_explore: bool,
+    meta_p_win: float | None,
+    pnl_store: Any | None,
+    brains: list[Any],
+    direction: str,
+    confidence: float,
+    strategy_name: str,
+    meta_filter: Any | None,
+    min_p_win: float,
+    regime_info: dict[str, Any] | None,
+    entry_z_score: float,
+) -> PWinResolution:
+    """Run the 7-step p_win resolution chain for Tier 2 Kelly sizing.
+
+    Resolution order (first available source wins):
+      1. Cold explore → 0.50 (bounded-volume data collection)
+      2. MetaFilter → Platt-calibrated P(TP|signal)
+      3. Rolling WR → median win rate from PnL store (≥10 settled trades)
+      4. Brain confidence → monotonic fallback (0.40 + confidence × 0.20)
+      5. MetaFilter absent → elevated floor (max(min_p_win, 0.50)), disables UCB
+      6. UCB elastic floor → confidence-based lift for rolling_wr
+      7. Regime + Z-strength adjustments → trend/weak-Z penalties
+
+    Returns a :class:`PWinResolution` with the final p_win, its source,
+    degradation flag, and MetaFilter-absent state for downstream gate logic.
+
+    Args:
+        is_cold_explore: True when MetaFilter hasn't produced p_win yet and
+            confidence ≥ 0.35.  Forces p_win=0.50 for bounded exploration.
+        meta_p_win: Platt-calibrated P(TP|signal) from MetaFilter (or None).
+        pnl_store: BrainPnLStore for rolling WR resolution (or None).
+        brains: List of brain info dicts with ``brain_id``.
+        direction: ``"long"`` / ``"short"`` / ``"neutral"``.
+        confidence: Consensus confidence [0.0, 1.0].
+        strategy_name: Strategy line name (e.g. ``"statarb_dynamic"``).
+        meta_filter: MetaSignalFilter instance (or None).
+        min_p_win: ``config.min_p_win`` — hard floor for position sizing.
+        regime_info: Regime gate output dict (or None).
+        entry_z_score: OU Z-score at entry (or 0.0).
+
+    Returns:
+        PWinResolution with all resolved fields.
+    """
+    p_win: float = 0.5
+    p_win_source: str = "neutral_default"
+    meta_filter_absent: bool = False
+    meta_absent_floor: float = 0.50
+
+    # ── Step 1: Cold explore → forced neutral for data collection ──
+    if is_cold_explore:
+        # FIX-20260610-007-C: Cold explore bypasses all p_win resolution.
+        # Force p_win=0.50 (Kelly mult=1.0) for bounded-volume data collection.
+        p_win = 0.50
+        p_win_source = "cold_explore_neutral"
+    elif meta_p_win is not None:
+        # ── Step 2: MetaFilter — Platt-calibrated P(TP|signal) ──
+        p_win = meta_p_win
+        p_win_source = "meta_filter"
+    elif pnl_store is not None:
+        # ── Step 3: Rolling WR from PnL ledger ──
+        p_win = resolve_p_win_from_brains(brains, pnl_store, direction)
+        p_win_source = "rolling_wr"
+
+    # ── Step 4: Brain confidence → p_win monotonic fallback ──
+    # FIX-20260531-015: Tier-3 fallback when MetaFilter unavailable AND
+    # PnLStore has < 10 trades → resolve_p_win_from_brains returns 0.40.
+    # Override with brain confidence mapping to break chicken-and-egg deadlock.
+    # confidence ∈ [0.35, 1.0] → p_win ∈ [0.47, 0.60] — bounded.
+    _is_fail_closed = p_win_source == "neutral_default" or (
+        p_win_source == "rolling_wr" and p_win <= 0.40
+    )
+    if _is_fail_closed:
+        _conf = max(0.0, min(1.0, confidence))
+        p_win = 0.40 + _conf * 0.20
+        p_win_source = "brain_confidence"
+
+    # ── Step 5: MetaFilter absent — hard floor defense ──
+    # FIX-20260609-002-UPDATE: When MetaFilter is unavailable (model file
+    # missing, cross-symbol blind spot), p_win falls back to rolling_wr —
+    # an uncalibrated historical average.  Without Platt calibration, the
+    # elastic UCB floor and COLD exploration are untrustworthy.
+    # Defense: enforce elevated floor (coin-flip minimum) + disable elastic UCB.
+    if meta_filter is None and p_win_source in ("rolling_wr", "neutral_default"):
+        meta_filter_absent = True
+        # Log warning — silent degradation is the real enemy
+        _lg = logging.getLogger(__name__)
+        _lg.warning(
+            "[STRATEGY_DEGRADE] %s running WITHOUT MetaFilter! "
+            "p_win=%.3f from %s. MetaFilter model file may be missing or "
+            "strategy not routed. Falling back to hard floor defense.",
+            strategy_name,
+            p_win,
+            p_win_source,
+        )
+        meta_absent_floor = max(min_p_win, 0.50)
+        p_win_source = "rolling_wr_no_metafilter"
+
+    # ── Step 6: UCB elastic floor ──
+    # FIX-20260606-139: Only active when MetaFilter is available.
+    # When rolling_wr is between 0.40 and min_p_win, lift it with a
+    # confidence-based bonus to avoid unnecessarily blocking trades.
+    if not meta_filter_absent:
+        _elastic_trigger = (
+            p_win_source == "rolling_wr" and 0.40 < p_win < min_p_win
+        )
+        if _elastic_trigger:
+            _conf = max(0.0, min(1.0, confidence))
+            _elastic_p_win = min_p_win - 0.05 + _conf * 0.10
+            p_win = max(p_win, _elastic_p_win)
+            p_win_source = "ucb_elastic_floor"
+
+    # ── Step 7a: Regime adjustment for OU strategies ──
+    # FIX-20260526-030: In trending regimes, high |z_score| is momentum
+    # ignition, not mean reversion.  Discount p_win to prevent Kelly from
+    # sizing into anti-informative high-confidence OU signals.
+    p_win = adjust_p_win_for_regime(
+        p_win, strategy_name, regime_info, entry_z_score, direction
+    )
+
+    # ── Step 7b: Weak-Z penalty for OU strategies ──
+    # DQAF-20260608-003: When |z| < 1.0, the OU reversion force is absent.
+    # Continuous sigmoid penalty — no binary cliff.
+    p_win = adjust_p_win_for_z_strength(p_win, strategy_name, entry_z_score)
+
+    # ── Degraded detection ──
+    # DQAF-20260612-004: Track whether p_win is backed by real statistical
+    # evidence or is a fallback estimate.
+    # REAL: meta_filter, cold_explore_neutral (intentional), rolling_wr > 0.40
+    # DEGRADED: neutral_default, brain_confidence, rolling_wr ≤ 0.40
+    p_win_degraded = p_win_source in (
+        "neutral_default",
+        "brain_confidence",
+    ) or (
+        p_win_source in ("rolling_wr", "rolling_wr_no_metafilter") and p_win <= 0.40
+    )
+
+    return PWinResolution(
+        p_win=round(p_win, 4),
+        p_win_source=p_win_source,
+        p_win_degraded=p_win_degraded,
+        meta_filter_absent=meta_filter_absent,
+        meta_absent_floor=meta_absent_floor,
+    )

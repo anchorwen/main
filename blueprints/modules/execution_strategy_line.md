@@ -45,7 +45,8 @@ Phase 7:  StrategyDecision assembly
 | **_make_decision() factory (FIX-014)** | strategy_line.py (private method) | Centralized strategy_name/magic |
 | **_counter_trend_action() (FIX-015)** | trend_volume_guard.py | -208 |
 | **Conformal OU Gate block (FIX-016)** | conformal_ou_gate.py (apply_conformal_ou_gate) | -103 |
-| **Current file size** | | **1,749 lines** (from 2,037, –14.1%) |
+| **p_win resolution chain (FIX-017)** | pwin_chain.py (resolve_p_win + PWinResolution) | -108 |
+| **Current file size** | | **1,641 lines** (from 2,037, –19.4%) |
 
 ## Inbound Dependencies
 | Module | What is imported |
