@@ -2440,67 +2440,12 @@ def execute_live_cycle(
                 micro_feature_vector = micro_feature_adapter.build_model_input(
                     micro_features
                 ).ravel()
-                # ── DQAF-20260614-004: Persist micro features to store ──
-                # FeatureService only stores v9_institutional_40.  Micro
-                # features are needed for MetaFilter training (47-dim).
-                # Write them here directly from the live cycle.
-                # Filter to only the 9 registered schema fields —
-                # MicrostructureFeatureComputer may return extras like OFI.
-                if micro_features:
-                    # DQAF-20260614-011b: Skip write if all micro values are zero.
-                    # compute_all() may return zeros when MT5 tick data isn't ready
-                    # yet (first call in cycle).  The second call (~10ms later in
-                    # management phase) returns real values.  Writing zeros would
-                    # create a co-timestamp-matched dead record.
-                    from core.features.schemas.microstructure_schema import (
-                        MICROSTRUCTURE_9_FEATURES,
-                    )
+                # ── Persist micro features ──
+                # Strangler Fig #34 — extracted to core.runtime.micro_persist
+                from core.runtime.micro_persist import persist_micro_features
 
-                    _all_zero = all(
-                        abs(float(micro_features.get(fn, 0.0))) < 1e-15
-                        for fn in MICROSTRUCTURE_9_FEATURES
-                    )
-                    if not _all_zero:
-                        try:
-                            from core.features.local_feature_store import LocalFeatureStore
-                            from core.features.store_contracts import FeatureRecord
+                persist_micro_features(config=config, micro_features=micro_features)
 
-                            _micro_store = LocalFeatureStore(config.feature_store_dir)
-                            _micro_version = _micro_store.resolve_version(
-                                schema_name="v4.3_microstructure_9",
-                                symbol=config.symbol,
-                                timeframe="M5",
-                            )
-                            if _micro_version is not None:
-                                # DQAF-20260614-011: Use the SAME event_time as the v9
-                                # record just written by FeatureService.
-                                _now = datetime.now(UTC).replace(tzinfo=None)
-                                _latest_v9 = _micro_store.latest(
-                                    config.symbol, "M5", schema_name="v9_institutional_40"
-                                )
-                                if _latest_v9 is not None and _latest_v9.event_time is not None:
-                                    _now = _latest_v9.event_time
-                                _micro_values = {
-                                    fn: float(micro_features.get(fn, 0.0))
-                                    for fn in MICROSTRUCTURE_9_FEATURES
-                                }
-                                _micro_store.write_records(
-                                    [
-                                        FeatureRecord(
-                                            schema_name="v4.3_microstructure_9",
-                                            schema_version=_micro_version,
-                                            symbol=config.symbol,
-                                            timeframe="M5",
-                                            event_time=_now,
-                                            values=_micro_values,
-                                            source="mt5_live",
-                                            ingested_at=_now,
-                                        )
-                                    ]
-                                )
-                        except Exception:  # BLE001:REVIEWED
-                            pass  # best-effort — micro store write must not block cycle
-        else:
             micro_feature_vector = np.zeros(_schema_dim("v4.3_microstructure_9"), dtype=np.float64)
 
     # ── Build entry_context for journal (Phase 1: 40-dim feature snapshot) ──
@@ -3580,66 +3525,13 @@ def execute_live_cycle(
                 # state.cycle_count 由外层 live_intent_loop.py 统一递增，
                 # 避免重复递增导致状态保存间隔/对账触发/冷却计时偏移。
 
-                # ── FIX-20260602-059: real-time trade notification ──
-                # FIX-138-Phase3: pass PnL + dedup per position_ticket to
-                # prevent retry storms from flooding DingTalk (DQAF-006).
-                _notified_tickets: set[int] = set()
-                for dr in dispatch_results:
-                    if not dr.dispatched:
-                        continue
-                    _ah = getattr(state, "alert_hub", None)
-                    if _ah is None:
-                        continue
+                # ── Real-time trade notification ──
+                # Strangler Fig #35 — extracted to core.runtime.trade_notify
+                from core.runtime.trade_notify import notify_dispatched_trades
 
-                    _action = "open" if dr.reason != "net_out_close" else "close"
-                    _tkt = (
-                        dr.net_out_ticket_update.get("old_ticket", 0)
-                        if dr.net_out_ticket_update
-                        else 0
-                    )
-                    # Dedup: only one close notification per ticket per cycle
-                    if _action == "close" and _tkt:
-                        if _tkt in _notified_tickets:
-                            continue
-                        _notified_tickets.add(_tkt)
-                    if _action == "close":
-                        # Single-point-of-exit: unified close notification
-                        _emit_close_notification(
-                            _ah=_ah,
-                            _sym=config.symbol,
-                            _side=dr.direction,
-                            _vol=dr.volume,
-                            _price=dr.price if hasattr(dr, "price") else None,
-                            _pnl=dr.pnl,
-                        )
-                    else:
-                        # Open notification — fire-and-forget
-                        import contextlib
-
-                        with contextlib.suppress(Exception):
-                            _ah.notify_trade(
-                                action="open",
-                                symbol=config.symbol,
-                                side=dr.direction,
-                                volume=dr.volume,
-                                price=dr.price if hasattr(dr, "price") else None,
-                                pnl=dr.pnl,
-                            )
-
-            for dr in dispatch_results:
-                print(
-                    json.dumps(
-                        {
-                            "event": "strategy_dispatched" if dr.dispatched else "strategy_skipped",
-                            "time": _utc_iso(),
-                            "strategy": dr.strategy_name,
-                            "magic": dr.magic,
-                            "dispatched": dr.dispatched,
-                            "reason": dr.reason,
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
+                notify_dispatched_trades(
+                    dispatch_results=dispatch_results, state=state, symbol=config.symbol,
+                    emit_close_notification_fn=_emit_close_notification,
                 )
 
             # ── FIX-20260603-067 P2: gate telemetry per dispatch result ──
@@ -3992,60 +3884,14 @@ def execute_live_cycle(
             direction = getattr(proposal, "direction", "neutral")
             confidence = getattr(proposal, "confidence", 0.0)
 
-    # ── Record counterfactual signals for P&L tracking ──
-    # Per-proposal try/except prevents one misbehaving brain from
-    # silently dropping P&L records for all other brains.
-    #
-    # FIX-20260611-003: When multi_strategy_enabled=True, Phase 10 runs
-    # brain inference EVERY cycle but NEVER dispatches (FIX-010).  The
-    # PnL recording below created phantom records at ~500/hr — flooding
-    # the ledger with entry=exit=mid_price entries that diluted rolling_wr,
-    # cascading into FIX-011-001's rolling_wr_fallback killing all swing
-    # trades.  Gate PnL recording same as dispatch: skip when the main
-    # eval path is authoritative.
-    if (
-        pnl_ledger is not None
-        and mid_price is not None
-        and mid_price > 0
-        and not config.multi_strategy_enabled  # ← FIX-20260611-003
-    ):
-        _live_spread = float(_ask - _bid) if (_bid and _ask and _ask > _bid) else 0.0
-        if config.multi_brain:
-            _registry = BrainRegistry.instance()
-            for p in raw_proposals:
-                try:
-                    _brain_id_str: str = str(getattr(p, "brain_id", "unknown"))
-                    _horizon = _registry.get_training_horizon(_brain_id_str)
-                    pnl_ledger.record_signal(
-                        brain_id=_brain_id_str,
-                        symbol=config.symbol,
-                        direction=getattr(p, "direction", "neutral"),
-                        entry_price=mid_price,
-                        confidence=getattr(p, "confidence", 0.5),
-                        expected_horizon=_horizon,
-                        entry_spread=_live_spread,
-                        entry_slippage=0.10,
-                    )
-                except Exception:  # BLE001:REVIEWED
-                    logger.warning("PnL ledger signal recording failed (multi-strategy)")
-        elif proposal is not None:
-            try:
-                _single_brain_id2: str = str(
-                    getattr(proposal, "brain_id", config.brain_entry.get("brain_id", "unknown"))
-                )
-                _horizon = BrainRegistry.instance().get_training_horizon(_single_brain_id2)
-                pnl_ledger.record_signal(
-                    brain_id=_single_brain_id2,
-                    symbol=config.symbol,
-                    direction=getattr(proposal, "direction", "neutral"),
-                    entry_price=mid_price,
-                    confidence=getattr(proposal, "confidence", 0.5),
-                    expected_horizon=_horizon,
-                    entry_spread=_live_spread,
-                    entry_slippage=0.10,
-                )
-            except Exception:  # BLE001:REVIEWED
-                logger.warning("PnL ledger signal recording failed (legacy)")
+    # ── Record counterfactual signals ──
+    # Strangler Fig #36 — extracted to core.runtime.pnl_recording
+    from core.runtime.pnl_recording import record_counterfactual_signals
+
+    record_counterfactual_signals(
+        config=config, pnl_ledger=pnl_ledger, raw_proposals=raw_proposals,
+        proposal=proposal, mid_price=mid_price, bid=_bid, ask=_ask,
+    )
 
     # ── Regime-aware direction bias (legacy path) ──
     # Uses H1 trend from RegimeGate when available, falls back to
