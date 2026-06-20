@@ -32,6 +32,8 @@ FIX-YYYYMMDD-NNN
 
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
+| FIX-20260620-024 | 2026-06-20 | brains-services | **DEFERRED: Governance hysteresis — promotion↔throttle oscillation prevention**: Missing hold-down period between promote and throttle allows ping-pong live↔probation transitions. Registered as L3 architecture debt; activate when any BTC brain accumulates ≥50 live trades. Trigger: `performance_metrics.trades ≥ 50` OR `2026-07-15`. | RC-12 (missing-feature) |
+| FIX-20260620-023 | 2026-06-20 | runtime-close-adapter, ledger-journal | **L2+L3: Duplicate close recording root cause + TOCTOU race**: (L2) `position_close_adapter.py:253` `return False` after successful journal write inverted control flow → ticket stayed in `known_open_tickets` → re-detected next cycle → 2-5 duplicate close entries per ticket. (L3) `journal_cleanup.py` dedup scan ran outside FileLock → TOCTOU race → concurrent _append_journal calls both passed dedup → both wrote. Data: BTC 15 excess entries removed, XAU 22 removed (15 cross-contamination + 7 genuine dupes). | RC-02 (boundary-error) + RC-03 (race-condition) |
 | FIX-20260620-020 | 2026-06-20 | runtime-live, circuit-breaker | **Micro feature zero-overwrite (line 2453) + consecutive_degraded reset bug**: (1) `live_cycle.py:2453` unconditional `np.zeros(9)` after successful FTC DEGRADE computation — micro features zeroed → FEATURE_COLD_START blocked all cycles for ~12h. Removed zero-overwrite; pre-init fallback per FTC contract + conditional overwrite on success. (2) `circuit_breaker_reset.py:92-93`: `_consecutive_degraded_cycles` reset when `not degraded_wakeup` alone (true every cycle even during persistent bridge_silence) → counter never reached trip threshold (3). Changed to all-clearance reset (`_bridge_alive and _not_stalled and _not_degraded`). | L1 — unconditional post-block assignment + wrong reset guard condition |
 | FIX-20260620-018 | 2026-06-20 | execution | **P2 Whale D Commit E — OFI gate + volume finalization extraction**: (1) OFI Toxicity Gate → new ofi_gate.py (apply_ofi_toxicity_gate, 90 lines) — hard physical gate blocking counter-trend signals when OFI is toxic. (2) Volume post-processing → StrategyLine._finalize_volume() (65 lines) — COLD phase safety cap + Kelly sizing diagnostic. strategy_line.py: 1,641 → 1,650 (+9). Cumulative: 2,037 → 1,650 (-387, -19.0%). | RC-08 |
 | FIX-20260620-017 | 2026-06-20 | execution | **P2 Whale D Commit D — p_win resolution chain extraction (resolve_p_win)**: Extracted 7-step p_win resolution chain from strategy_line.evaluate() into pwin_chain.py. New PWinResolution dataclass + resolve_p_win() function (cold_explore → meta_filter → rolling_wr → brain_confidence → meta_filter_absent → ucb_elastic_floor → regime/z adjustments → degraded detection). Removed dead _adjust_p_win_for_regime wrapper. 14 characterization tests. strategy_line.py: 1,749 → 1,641 (-108 lines). | RC-08 |
@@ -3365,3 +3367,41 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-08 — incomplete-cleanup (initial BLE001 scan missed deeply nested strategy files)
 - **Prevention**: Automated audit script now runs as part of verification pipeline.
 - **Dependents Checked**: Single caller at live_cycle.py:3702. Return value discarded — no coupling risk. verify.py --quick: mypy + ruff + import boundaries all PASS.
+
+### FIX-20260620-023
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Type**: fix (L2) + architecture-defense (L3)
+- **Module**: runtime/close-adapter, ledger/journal-cleanup
+- **Files**: `core/runtime/position_close_adapter.py`, `core/ledger/services/journal_cleanup.py`
+- **Summary**: **L2+L3: Duplicate close recording root cause + TOCTOU race fix.**
+  - **L2 Root Cause** (`position_close_adapter.py:253`): `return False` after successful journal write inverted the control flow. `record()` returned False on success → `_notify_position_manager` (and all downstream notifications) skipped → ticket stayed in `known_open_tickets` → next cycle's `detect_and_build()` found the same ticket again → wrote another close entry. Cycle repeated 2-5 times until ticket disappeared from MT5.
+  - **L3 TOCTOU** (`journal_cleanup.py` lines 107-153): Both dedup scans (message_id + same-ticket close) executed OUTSIDE the FileLock. Two concurrent `_append_journal` calls both read the file, both found no existing close for the ticket, then both acquired the lock sequentially and both wrote. Entries 5ms apart (lines 1099-1100 in BTC journal) are consistent with this race.
+  - **Cross-contamination**: Same L2 bug caused BTC close events (tickets 3946142545/3946142652/3946120704, magic=90410/90411) to be written to XAU journal (`data/live_trade_journal.jsonl`) — 15 cross-symbol entries removed.
+  - **L2 Fix**: Replaced `return False` with `_journal_ok = True` tracking. On successful journal write → proceed to downstream notifications → `position_manager.clear_position()` removes ticket from `known_open_tickets` → no re-detection. On write failure (fail_open_guard catches exception) → `_journal_ok` stays False → return False → honest retry next cycle.
+  - **L3 Fix**: Moved both dedup scans into a `_scan_for_duplicate()` closure called INSIDE the FileLock. Scan uses new `_read_tail_lines()` (byte-level reverse-seek, 4 KiB chunks) — O(lines_wanted) not O(file_size) — per user directive on lock-hold latency. Lock→scan→write is now atomic.
+  - **Data Cleanup**: BTC journal 1,132→1,117 (−15: 12 duplicate closes + 3 extra). XAU journal 10,352→10,330 (−22: 15 cross-contamination + 7 genuine duplicates). Post-cleanup: 0 duplicate close entries in BTC (344 unique), XAU clean pending next scan.
+- **Root Cause**: RC-02 (boundary-error — inverted boolean return) + RC-03 (race-condition — TOCTOU scan-write gap)
+- **Prevention**: `record()` return value contract is now documented in-code: True iff journal write succeeded AND downstream notifications completed. `_scan_for_duplicate()` docstring states "Must be called INSIDE the FileLock." Unit test assertion recommended by user for future refactors.
+- **Blast Radius**: BTC (8 tickets, 15 excess entries, ~$8 PnL distortion) + XAU (3 cross-contaminated tickets removed, 7 genuine tickets deduped).
+- **Dependents Checked**: `reconcile_and_record_closes()` + `record_mia_closes()` both call `adapter.record()` — unaffected (return value was always discarded). `_append_journal` API unchanged — all 3 call sites (pos_close_adapter, bridge_worker, repair_journal) work correctly.
+- **关联**: Iron Law #12 L2 fix level match confirmed. L3 architectural defense added per user directive. User's 4-dimension institutional review addressed: (1) TOCTOU performance — _read_tail_lines reverse seek, (2) return False depth — contract documented, (3) XAU blindspot — scanned + cleaned, (4) state reconstruction — confirmed no stale PnL cache in execution_state/governance_state.
+
+### FIX-20260620-024
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Type**: deferred (L3 architecture — hysteresis)
+- **Module**: brains/services
+- **Files**: `core/brains/services/brain_promotion.py` (target, NOT modified)
+- **Summary**: **DEFERRED: Governance hysteresis — promotion↔throttle oscillation prevention.**
+  - **Problem**: `brain_promotion.py` `_evaluate_one()` runs promotion evaluation THEN throttle evaluation. A brain promoted probation→live can be immediately throttled back to probation in the SAME evaluation if `recent_win_rate < 38%` (line 265-273). No minimum hold-down period between promotion and throttle → allows live↔probation ping-pong across evaluation cycles.
+  - **Historical evidence**: Before backtest data cleanup (FIX-20260620-022), BTC_Swing_V9_H1_V2 oscillated live↔probation 25+ times in 7 days due to backtest PnL values bouncing around thresholds. After cleanup (all pnl_r → 0), oscillation is dormant — all 3 BTC brains are at signal_count=0, no evaluation triggers.
+  - **Why deferred**: (1) Current performance_metrics are all zero (FIX-022 cleanup) — oscillation is physically impossible until live data accumulates. (2) Fixing governance logic with contaminated input data is architecturally unsound — user instruction: "在输入信号（PnL）被污染的情况下，不要急于修改控制理论层". (3) Fix requires careful design: minimum hold period (e.g. 24h) before status reversal, or separate promote/throttle thresholds with a "guard band".
+  - **Trigger conditions** (any → force implementation):
+    1. Any BTC brain reaches `performance_metrics.trades ≥ 50` (threshold for statistical significance)
+    2. Date ≥ 2026-07-15 (hard deadline, ~3.5 weeks from registration)
+    3. Any brain exhibits ≥3 live↔probation transitions within 7 days (oscillation detected)
+  - **Target fix**: Add `_last_promotion_at` timestamp to governance state per brain. Promotion→throttle reversal blocked if `time_since_last_promotion < MIN_PROMOTION_HOLD_SECONDS` (suggested: 86400 = 24h). Retirement checks (wr < 30%, PF < 0.60, consecutive_losses > 8) remain immediate — they are safety nets, not quality gates.
+- **Root Cause**: RC-12 — missing-feature (hysteresis was not designed into the promotion FSM)
+- **Prevention**: Deferred fix registered with specific trigger conditions. Added to Iron Law #12 Deferred Architecture Fix table. Same-module deferred fixes count: 1 (FIX-024). Below the 3-fix threshold requiring architecture debt repayment.
+- **Dependents Checked**: `GovernanceRuleEngine.execute_transitions()` writes state — will need update when hysteresis is implemented. `DynamicBrainWeighter` uses PnL directly (not governance status) — no oscillation impact on vote weights. `management_phase.py` alert context uses PnL ledger (not governance) — no alert distortion.

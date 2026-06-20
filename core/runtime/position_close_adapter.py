@@ -247,10 +247,26 @@ class PositionCloseAdapter:
 
         _path = Path(journal_path)
         _lock_dir = _path.parent / "locks"
+
+        # FIX-20260620-023: Contract — record() returns True iff Journal write
+        # succeeded AND downstream notifications completed.  Previously the
+        # method returned False after a successful write (line 253), which:
+        #   1. Skipped _notify_position_manager → ticket stayed in known_open_tickets
+        #   2. Caused the adapter to re-detect the same close next cycle
+        #   3. Produced 2-5 duplicate close entries per affected ticket
+        #   4. Cross-contaminated XAU journal via bridge-side writes
+        # The fix: journal write outcome tracks _journal_ok; if fail_open_guard
+        # catches an exception, _journal_ok stays False and we return False
+        # (retry next cycle).  On success we proceed to notify downstream.
+        _journal_ok = False
         with fail_open_guard("PositionCloseAdapter:JournalWrite"):
             from core.ledger.services.journal_cleanup import _append_journal
+
             _append_journal(_path, _entry, lock_dir=_lock_dir)
-            return False
+            _journal_ok = True
+
+        if not _journal_ok:
+            return False  # Journal write failed — do not notify downstream
 
         # ── Notify downstream consumers ──
         # FIX-20260620-001: _notify_budget REMOVED — the fallback path passed

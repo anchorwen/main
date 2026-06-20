@@ -83,91 +83,140 @@ def _load_journal(path: Path) -> list[dict[str, Any]]:
     return entries
 
 
-def _append_journal(path: Path, entry: dict[str, Any], *, lock_dir: Path | None = None) -> None:
-    """Append one JSON line to the journal with optional advisory lock.
+def _read_tail_lines(path: Path, n: int = 1000) -> list[str]:
+    """Read last N lines using reverse seek — O(lines_wanted), not O(file_size).
+
+    Avoids loading the entire journal file into memory (critical for XAU where
+    journal can exceed 8 MB / 10k lines).  Reads in 4 KiB chunks from EOF
+    backwards until N+1 newlines are found.
+
+    FIX-20260620-023: extracted from _append_journal to enable lock→scan→write
+    atomicity without paying the cost of readlines() on every call.
+    """
+    try:
+        with open(path, "rb") as _f:
+            _f.seek(0, 2)  # EOF
+            _size = _f.tell()
+            if _size == 0:
+                return []
+            _buf = b""
+            _chunk_sz = 4096
+            while _buf.count(b"\n") <= n and _size > 0:
+                _read_sz = min(_chunk_sz, _size)
+                _size -= _read_sz
+                _f.seek(_size)
+                _chunk = _f.read(_read_sz)
+                _buf = _chunk + _buf
+            _raw_lines = _buf.split(b"\n")
+            # Last N+1 to account for possible partial leading line, skip empty
+            return [
+                _l.decode("utf-8", errors="replace")
+                for _l in _raw_lines[-n - 1 :]
+                if _l
+            ]
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("journal_cleanup:_read_tail_lines"):
+            pass
+        return []  # Best-effort — if read fails, write anyway
+
+
+def _append_journal(
+    path: Path, entry: dict[str, Any], *, lock_dir: Path | None = None
+) -> None:
+    """Append one JSON line to the journal with advisory lock and dedup.
 
     FIX-20260601-043: lock_dir enables FileLock serialisation with the MT5
     bridge worker and live_cycle reconciliation paths.
 
-    FIX-20260611-005: Dedup close entries by position_ticket — if a close
-    entry for the same ticket already exists, skip this write.  Prevents
-    the 76x duplicate bug (ticket=3807506009 in BTC) where management phase
-    re-writes the same close on every cycle.
+    FIX-20260611-005: dedup close entries by position_ticket.
+
+    FIX-20260620-023 (Ω L3): dedup scans moved INSIDE FileLock to close the
+    TOCTOU race that caused 2-5 duplicate close entries per affected ticket.
+    Previously both scans ran outside the lock → two concurrent _append_journal
+    calls could both pass dedup, both acquire the lock sequentially, and both
+    write.  Now: lock → scan → write is atomic.  For performance (user's
+    directive), the scan uses _read_tail_lines (byte-level reverse seek)
+    instead of readlines() to avoid loading the full file.
     """
     _action = entry.get("action", "")
     _ticket = entry.get("position_ticket")
     _msg_id = entry.get("message_id", "")
 
-    # ── FIX-20260611-017: intent_id-based dedup ──
-    # Prevents cross-ticket message_id reuse (execution queue double-flush).
-    # If the same intent_id was already written for a DIFFERENT ticket,
-    # this is a dispatch-level bug — log CRITICAL and skip.
-    # DQAF-20260620-001: window 500→1000 — bridge+eq double-write can
-    # produce duplicates >500 lines apart during high-frequency trading.
-    if _msg_id and _action in ("open", "close"):
-        try:
-            if path.exists():
-                _tail_lines = []
-                with open(path, encoding="utf-8") as _f:
-                    _lines = _f.readlines()
-                    _tail_lines = _lines[-1000:]
-                for _line in _tail_lines:
-                    try:
-                        _existing = json.loads(_line)
-                        if _existing.get("message_id") == _msg_id:
-                            _existing_ticket = _existing.get("position_ticket")
-                            if _existing_ticket and _existing_ticket != _ticket:
-                                import logging as _dedup_log
-                                _dedup_log.getLogger(__name__).warning(
-                                    "[CRITICAL] Journal dedup: message_id=%s reused "
-                                    "across tickets %s vs %s — skipping duplicate write. "
-                                    "This indicates an execution queue double-flush bug.",
-                                    _msg_id, _existing_ticket, _ticket,
-                                )
-                            return  # Already recorded — skip
-                    except json.JSONDecodeError:
-                        continue
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("journal_cleanup:_append_journal"):
-                pass  # Best-effort
-    if _action == "close" and _ticket is not None:
-        # DQAF-20260620-001: tail-read window 200→500 — same-ticket close
-        # entries can be separated by hundreds of modify_sltp lines during
-        # active management, exceeding the old 200-line scan window.
-        try:
-            if path.exists():
-                _tail_lines = []
-                with open(path, encoding="utf-8") as _f:
-                    _lines = _f.readlines()
-                    _tail_lines = _lines[-500:]
-                for _line in _tail_lines:
-                    try:
-                        _existing = json.loads(_line)
-                        if (_existing.get("action") == "close"
-                                and _existing.get("position_ticket") == _ticket):
-                            return  # Already recorded — skip duplicate
-                    except json.JSONDecodeError:
-                        continue
-        except Exception:  # BLE001:FOG
-            with fail_open_guard("journal_cleanup:_append_journal"):
-                pass  # Best-effort — if check fails, write anyway
+    # ── Inline helpers ──────────────────────────────────────────────────
+
+    def _scan_for_duplicate() -> bool:
+        """Return True if a duplicate was found → skip this write.
+
+        Must be called INSIDE the FileLock to prevent TOCTOU.
+        Scans last 1000 lines (covers DQAF-20260620-001 extended window).
+        """
+        if not path.exists():
+            return False
+
+        _tail_lines = _read_tail_lines(path, n=1000)
+
+        for _line in _tail_lines:
+            try:
+                _existing = json.loads(_line)
+            except json.JSONDecodeError:
+                continue
+
+            # ── Message-ID dedup (FIX-20260611-017) ──
+            # Cross-ticket message_id reuse = execution-queue double-flush bug.
+            if _msg_id and _action in ("open", "close"):
+                if _existing.get("message_id") == _msg_id:
+                    _existing_ticket = _existing.get("position_ticket", 0) or 0
+                    if _existing_ticket and _existing_ticket != (_ticket or 0):
+                        import logging as _dedup_log
+
+                        _dedup_log.getLogger(__name__).warning(
+                            "[CRITICAL] Journal dedup: message_id=%s reused "
+                            "across tickets %s vs %s — skipping duplicate write. "
+                            "This indicates an execution queue double-flush bug.",
+                            _msg_id,
+                            _existing_ticket,
+                            _ticket,
+                        )
+                    return True  # Already recorded — skip
+
+            # ── Same-ticket close dedup (FIX-20260611-005) ──
+            if _action == "close" and _ticket is not None:
+                if (
+                    _existing.get("action") == "close"
+                    and _existing.get("position_ticket") == _ticket
+                ):
+                    return True  # Already recorded — skip duplicate
+
+        return False
+
+    def _do_write() -> None:
+        with open(path, "a", encoding="utf-8") as _f:
+            _f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    # ── Lock → scan → write (atomic) ────────────────────────────────────
     if lock_dir is not None:
         from core.infrastructure.distributed_lock import FileLock
-        _lock = FileLock("live_trade_journal", lock_dir=str(lock_dir), ttl_seconds=10)
+
+        _lock = FileLock(
+            "live_trade_journal", lock_dir=str(lock_dir), ttl_seconds=10
+        )
         _acquired = _lock.acquire(blocking=True, timeout_seconds=5)
         if _acquired.acquired:
             try:
-                with open(path, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                if not _scan_for_duplicate():
+                    _do_write()
             finally:
                 _lock.release()
         else:
-            # Lock denied — write anyway (best-effort, journal is advisory)
-            with open(path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            # Lock denied — scan+write anyway (best-effort, journal is advisory).
+            # TOCTOU risk is reduced here because lock contention implies fewer
+            # concurrent writers.  Primary defense is the position_close_adapter
+            # fix (FIX-023 L2) which prevents re-detection of already-recorded closes.
+            if not _scan_for_duplicate():
+                _do_write()
     else:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        if not _scan_for_duplicate():
+            _do_write()
 
 
 def _resolve_magic(entry: dict[str, Any]) -> int:
