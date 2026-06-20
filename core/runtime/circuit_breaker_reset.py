@@ -61,15 +61,17 @@ def auto_reset_circuit_breaker(
             state._circuit_breaker_trip_reason = ""
             state.block_new_entries = False
 
+    # ── Compute clearance signals once (shared by tripped + untripped branches) ──
+    _bridge_alive = (
+        _time.time() - state._last_bridge_ack_time
+    ) <= config.max_bridge_silence_seconds
+    _not_stalled = cycle_duration <= config.cycle_stall_threshold_seconds
+    _not_degraded = not degraded_wakeup
+
     if state._circuit_breaker_tripped and state._circuit_breaker_trip_reason != "budget_breached":
         _cooldown_elapsed = (
             _time.time() - state._circuit_breaker_tripped_at
         ) > config.circuit_breaker_cooldown_seconds
-        _bridge_alive = (
-            _time.time() - state._last_bridge_ack_time
-        ) <= config.max_bridge_silence_seconds
-        _not_stalled = cycle_duration <= config.cycle_stall_threshold_seconds
-        _not_degraded = not degraded_wakeup
         if _cooldown_elapsed and _bridge_alive and _not_stalled and _not_degraded:
             _prev_reason = state._circuit_breaker_trip_reason
             _emit(
@@ -89,5 +91,13 @@ def auto_reset_circuit_breaker(
             state._consecutive_degraded_cycles = 0
             state._consecutive_stale_cycles = 0
             state._consecutive_stale_features = 0
-    elif not degraded_wakeup and state._consecutive_degraded_cycles > 0:
+    elif (
+        _bridge_alive
+        and _not_stalled
+        and _not_degraded
+        and state._consecutive_degraded_cycles > 0
+    ):
+        # FIX-20260620-020: previously reset on ``not degraded_wakeup`` alone,
+        # which was true every cycle even while bridge_silence persisted.
+        # Now reset only when all degradation sources have cleared.
         state._consecutive_degraded_cycles = 0

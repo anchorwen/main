@@ -4,6 +4,20 @@
 
 ## Fix Details
 
+### FIX-20260620-020 — Micro feature zero-overwrite (line 2453) + consecutive_degraded reset bug
+
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Type**: fix
+- **Module**: runtime-live, circuit-breaker
+- **Files**: `core/runtime/live_cycle.py`, `core/runtime/circuit_breaker_reset.py`
+- **Description**: Two bugs discovered during DQAF-20260620-001 (BTC 12h+ no-trade diagnosis).
+  (1) `live_cycle.py:2453`: After the FaultTolerantContext DEGRADE block successfully computed micro features, an unconditional `micro_feature_vector = np.zeros(9)` on the following line overwrote the correct result. This caused FEATURE_COLD_START to block every cycle because `FeatureGate.check()` received an all-zero micro vector. Per FTC contract (fault_handler.py:139-158), variables must be pre-initialised before the with block; the zero-overwrite violated this by resetting the variable after every successful computation. Fix: removed the unconditional zero-overwrite; pre-init with zeros (fallback), conditional overwrite only when `build_model_input()` returns non-None.
+  (2) `circuit_breaker_reset.py:92-93`: The non-tripped branch reset `_consecutive_degraded_cycles` when `not degraded_wakeup` alone was true. But `degraded_wakeup` is a one-time launcher signal, while bridge_silence persists across cycles. Every cycle: auto_reset() resets counter to 0 → bridge_silence check increments to 1 → counter never reaches 3 trip threshold. Fix: changed reset condition to `_bridge_alive and _not_stalled and _not_degraded` — only reset when all degradation sources have cleared. Also extracted `_bridge_alive`, `_not_stalled`, `_not_degraded` computations before the if/elif block for sharing.
+- **Root Cause**: L1 — (1) unconditional post-block variable assignment that violated the FTC DEGRADE contract pattern; (2) wrong reset guard condition using a one-time signal instead of persistent clearance checks.
+- **Risk**: Low. (1) Micro feature computation was already broken — fix restores correct behavior by following FTC's documented pre-init pattern. (2) Counter reset logic now mirrors the tripped-branch reset conditions.
+- **Verification**: verify.py --quick — ruff PASS, mypy PASS (no new errors), blueprint PASS, import PASS, artifact PASS, FIX_REGISTRY PASS. Pre-existing test file issues (test_mt5_worker.py, test_position_close_adapter.py) unrelated.
+
 ### FIX-20260620-011 — BLE001 Phase 3e: FOG_DEFERRED→FOG final migration complete
 
 - **Date**: 2026-06-20

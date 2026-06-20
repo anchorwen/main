@@ -2433,24 +2433,31 @@ def execute_live_cycle(
                 component="FeatureCompute:micro_sequences",
             ):
                 micro_sequences = micro_feature_computer.compute_all_sequences(32)
+            # ── Pre-initialise with fallback value (FTC DEGRADE contract):
+            #     If build_model_input() raises inside the with block, Python
+            #     variable-scope semantics prevent rebinding — the pre-init
+            #     value survives.  FIX-20260620-020 removes the unconditional
+            #     zero-overwrite that was silently killing micro features on
+            #     every successful computation.
             micro_feature_dict = {}
-            micro_feature_vector = np.zeros(_schema_dim("v4.3_microstructure_9"), dtype=np.float64)
+            micro_feature_vector = np.zeros(
+                _schema_dim("v4.3_microstructure_9"), dtype=np.float64
+            )
             with FaultTolerantContext(
                 level=FaultLevel.DEGRADE,
                 component="FeatureCompute:micro_features",
             ):
                 micro_features = micro_feature_computer.compute_all()
-                micro_feature_dict = micro_features
-                micro_feature_vector = micro_feature_adapter.build_model_input(
-                    micro_features
-                ).ravel()
+                if micro_features is not None:
+                    micro_feature_dict = micro_features
+                    _computed = micro_feature_adapter.build_model_input(micro_features)
+                    if _computed is not None:
+                        micro_feature_vector = _computed.ravel()
                 # ── Persist micro features ──
                 # Strangler Fig #34 — extracted to core.runtime.micro_persist
                 from core.runtime.micro_persist import persist_micro_features
 
                 persist_micro_features(config=config, micro_features=micro_features)
-
-            micro_feature_vector = np.zeros(_schema_dim("v4.3_microstructure_9"), dtype=np.float64)
 
     # ── Build entry_context for journal (Phase 1: 40-dim feature snapshot) ──
     # Guardrail 1: schema versioning — V9 vs future V10 prevents feature drift
