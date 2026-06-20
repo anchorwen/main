@@ -6,7 +6,6 @@ and re-indents the body by +4 spaces.
 Strategy: process files one at a time, verify syntax after each batch.
 """
 import re
-import sys
 from pathlib import Path
 
 
