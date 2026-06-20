@@ -4,6 +4,19 @@
 
 ## Fix Details
 
+### FIX-20260620-011 — BLE001 Phase 3e: FOG_DEFERRED→FOG final migration complete
+
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Commit**: b7d64d1
+- **Type**: fix
+- **Module**: ble001, runtime-live
+- **Files**: 56 files — 54 cold/warm-path Python files with BLE001:FOG_DEFERRED sites + migration script + tooling fixes.
+- **Description**: Phase 3e migration script processed all 101 BLE001:FOG_DEFERRED sites across 54 files that lacked core imports (skipped by Phase 3d). Each except body wrapped in `with fail_open_guard("ContextName"):` and `from core.runtime.fault_handler import fail_open_guard` added to imports. Key innovation over Phase 3d: inline-body detection — handles `except Exception: pass  # BLE001:FOG_DEFERRED` pattern by extracting the inline body from the except line, placing it inside the fog wrapper, and cleaning the except line. Post-migration state: 607+ FOG (global), 13 FOG_DEFERRED remaining (all in ble001_phase3* migration scripts — dev tools excluded by name filter). Production code: 0 FOG_DEFERRED, 0 UNREVIEWED, 0 REVIEWED. Tooling fixes: MODULE_SOURCE_MAP +4 entries for ble001 migration scripts; verify.py None-guard for subprocess UnicodeDecodeError crash. BLE001 Phase 3a→3e chain complete — all bare except sites now either FOG-wrapped or in dev tools.
+- **Root Cause**: RC-07 — Phase 3d's `has_core_imports()` gate correctly identified files without `from core.` imports and marked them FOG_DEFERRED. Phase 3e removed this gate: all 54 files are part of the same project and can safely import from `core.runtime.fault_handler`. The remaining 13 FOG_DEFERRED in ble001 migration scripts are intentionally excluded (dev tools, not production code).
+- **Risk**: Low. All 101 sites passed Python `compile()` before write. Ruff --fix cleaned 31 I001 import-sorting issues. verify.py --quick: ruff PASS, mypy PASS (4 pre-existing errors in audit_deep_fullstack.py unrelated). Pre-push CI-equivalent gates all PASSED.
+- **Verification**: verify.py --quick — ruff PASS, mypy PASS (pre-existing errors only), blueprint PASS (cross-cutting mechanical op), import PASS, artifact PASS, FIX_REGISTRY PASS.
+
 ### FIX-20260620-010 — BLE001 Phase 3d: cold/warm-path REVIEWED→FOG migration complete
 
 - **Date**: 2026-06-20
