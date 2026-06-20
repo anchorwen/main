@@ -25,7 +25,7 @@ def notify_dispatched_trades(
     state: Any,
     symbol: str,
     *,
-    emit_close_notification_fn: Any = None,
+    _emit_close_notification: Any = None,
 ) -> None:
     """Send real-time trade notifications for dispatched strategies.
 

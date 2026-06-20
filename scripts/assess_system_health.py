@@ -4,15 +4,17 @@ Iron Law #11 compliant — all statistics from script stdout.
 
 Evaluates 8 dimensions against A-grade targets.
 """
-import json, os, re, subprocess, sys
-from pathlib import Path
+import json
+import os
+import re
 from collections import Counter
 from datetime import datetime
+from pathlib import Path
 
 print("=" * 70)
 print("Omega Institutional System Architecture & Module Health Assessment")
 print(f"Date: {datetime.now().isoformat()}")
-print(f"Weekend status: XAU CLOSED, BTC 24h TRADING")
+print("Weekend status: XAU CLOSED, BTC 24h TRADING")
 print("=" * 70)
 
 # ── Dimension 1: Code Architecture ──
@@ -24,7 +26,7 @@ for f in core_py:
     try:
         lines = len(f.read_text(encoding='utf-8').splitlines())
         sizes.append((str(f), lines))
-    except:
+    except Exception:  # noqa: E722 (audit script, fail-safe read)
         pass
 sizes.sort(key=lambda x: -x[1])
 
@@ -101,7 +103,7 @@ print("\n## D4: Exception Governance (BLE001)\n")
 ble001_stats = {'REVIEWED': 0, 'FOG': 0, 'AUDITED': 0, 'UNREVIEWED': 0}
 all_py = []
 for d in ['core', 'scripts', 'apps']:
-    for root, dirs, files in os.walk(d):
+    for root, _dirs, files in os.walk(d):
         for f in files:
             if f.endswith('.py'):
                 all_py.append(os.path.join(root, f))
@@ -121,7 +123,7 @@ for fp in all_py:
                     ble001_stats['AUDITED'] += 1
                 else:
                     ble001_stats['UNREVIEWED'] += 1
-    except:
+    except Exception:  # noqa: E722 (audit script)
         pass
 
 print(f"  Total bare excepts (core + scripts + apps): {total_excepts}")
@@ -171,7 +173,7 @@ for symbol, data_dir in [('XAU', 'data'), ('BTC', 'data_btc')]:
         gv = json.loads(gv_path.read_text(encoding='utf-8'))
         brains = gv.get('brain_states', {})
         states = Counter()
-        for bid, bs in brains.items():
+        for _bid, bs in brains.items():
             if isinstance(bs, dict):
                 states[bs.get('status', 'unknown')] += 1
         print(f"    Governance: {dict(states)}")
@@ -194,7 +196,7 @@ for symbol, data_dir in [('XAU', 'data'), ('BTC', 'data_btc')]:
                     snap = json.loads(s)
                     if snap.get('state') == 'open':
                         open_pos += 1
-                except:
+                except Exception:  # noqa: E722 (audit script)
                     pass
         print(f"    Open positions: {open_pos}")
 
@@ -210,7 +212,7 @@ for symbol, data_dir in [('XAU', 'data'), ('BTC', 'data_btc')]:
                     ts = str(alert.get('timestamp', ''))
                     if ('Sev 1' in sev or 'Sev 2' in sev) and '2026-06-20' in ts:
                         sev1_sev2 += 1
-                except:
+                except Exception:  # noqa: E722 (audit script)
                     pass
         print(f"    Today Sev 1/2 alerts: {sev1_sev2}")
     print()

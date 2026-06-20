@@ -3,7 +3,8 @@ FIX-20260620-075: BLE001 scripts/ + apps/ annotation
 Annotate 18 unreviewed bare excepts as BLE001:REVIEWED (Sev 4, Phase 3b).
 All sites already have structured logging or fallback handling.
 """
-import os, re
+import os
+import re
 from pathlib import Path
 
 sites = [
@@ -48,12 +49,12 @@ for fp, linenos in by_file.items():
 # Verify
 remaining = 0
 for d in ['scripts', 'apps']:
-    for root, dirs, files in os.walk(d):
+    for root, _dirs, files in os.walk(d):
         for f in files:
             if f.endswith('.py') and 'test_' not in f:
                 fp = os.path.join(root, f)
                 content = Path(fp).read_text(encoding='utf-8')
-                for i, line in enumerate(content.splitlines()):
+                for _i, line in enumerate(content.splitlines()):
                     if re.match(r'\s*except\s+Exception', line):
                         if not any(x in line for x in ['BLE001', 'fail_open_guard', 'log_and_continue']):
                             remaining += 1

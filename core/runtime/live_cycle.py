@@ -18,7 +18,6 @@ from typing import Any
 
 import numpy as np
 
-from core.brains.brain_registry import BrainRegistry
 from core.execution.execution_queue import ExecutionQueue
 from core.execution.portfolio_risk import PortfolioRiskController
 from core.execution.regime_gate import RegimeGate
@@ -2339,7 +2338,8 @@ def execute_live_cycle(
                 if _mia_ticket and state.position_manager is not None:
                     with log_and_continue(component="MIA_Close:clear_position"):
                         state.position_manager.clear_position(int(_mia_ticket))
-                        _emit("mia_position_cleared", ticket=_mia_ticket)
+                        # SF #26 FIX: _emit extracted to management_phase.py — inline here
+                        print(json.dumps({"event": "mia_position_cleared", "time": _utc_iso(), "ticket": _mia_ticket}, ensure_ascii=False), flush=True)
                 # ── FIX-20260610-002: Record budget for MIA close (F3) ──────
                 # Budget was never updated for MIA-detected closes — daily
                 # PnL, consecutive loss counters, and all cumulative circuit
@@ -3522,7 +3522,7 @@ def execute_live_cycle(
 
                 notify_dispatched_trades(
                     dispatch_results=dispatch_results, state=state, symbol=config.symbol,
-                    emit_close_notification_fn=_emit_close_notification,
+                    _emit_close_notification=_emit_close_notification,
                 )
 
             # ── FIX-20260603-067 P2: gate telemetry per dispatch result ──
