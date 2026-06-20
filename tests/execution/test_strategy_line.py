@@ -8,8 +8,8 @@ from core.execution.strategy_line import (
     StrategyDecision,
     StrategyLine,
     StrategyLineConfig,
-    _counter_trend_action,
 )
+from core.execution.trend_volume_guard import _counter_trend_action
 from tests.execution.conftest import make_proposal
 
 
@@ -419,6 +419,43 @@ class TestCounterTrendAction:
         assert result["action"] == "penalise"  # 0.50 >= 0.35 penalise, < 0.60 block
         assert result["confidence_mult"] == 0.65
         assert result["vol_mult"] == 0.70
+
+    def test_btc_swing_blocks_at_extreme_trend(self):
+        """FIX-20260610-001: btc_swing block at H1 >= 0.85."""
+        result = _counter_trend_action("btc_swing", 0.90)
+        assert result["action"] == "block"
+
+    def test_btc_swing_penalises_at_moderate_trend(self):
+        result = _counter_trend_action("btc_swing", 0.60)
+        assert result["action"] == "penalise"
+        assert result["confidence_mult"] == 0.65
+        assert result["vol_mult"] == 0.75
+
+    def test_btc_swing_allows_at_low_trend(self):
+        """btc_swing penalise threshold is 0.55 — below this allows."""
+        result = _counter_trend_action("btc_swing", 0.30)
+        assert result["action"] == "allow"
+
+    def test_h4_block_checked_before_h1(self):
+        """H4 gate has priority — H4 block fires even when H1 is low."""
+        result = _counter_trend_action("barrier_12bar", 0.05, h4_trend_strength=0.30)
+        assert result["action"] == "block"
+        assert result["confidence_mult"] == 0.50  # h4_conf_mult
+
+    def test_h4_penalise_when_h1_allow(self):
+        """H4 penalise applies when H1 alone would allow."""
+        result = _counter_trend_action("statarb_dynamic", 0.10, h4_trend_strength=0.25)
+        assert result["action"] == "penalise"
+        assert result["confidence_mult"] == 0.65  # h4_conf_mult
+
+    def test_m15_swing_blocks_at_high_trend(self):
+        result = _counter_trend_action("m15_swing", 0.75)
+        assert result["action"] == "block"
+
+    def test_m15_swing_allows_at_moderate_trend(self):
+        """m15_swing block=0.70, so 0.50 allows (below penalise=0.25 threshold)."""
+        result = _counter_trend_action("m15_swing", 0.15)
+        assert result["action"] == "allow"
 
 
 # ── Consensus computation ─────────────────────────────────────────────────

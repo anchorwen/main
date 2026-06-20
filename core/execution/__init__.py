@@ -40,7 +40,6 @@ from core.execution.strategy_decision import StrategyDecision
 from core.execution.strategy_line import (
     StrategyLine,
     StrategyLineConfig,
-    _counter_trend_action,
 )
 
 # ── Strategy layer (Phase 1) ────────────────────────────────────────────
@@ -51,6 +50,7 @@ from core.execution.strategy_type import (
     STRATEGY_NAME_TO_MAGIC,
     StrategyType,
 )
+from core.execution.trend_volume_guard import _counter_trend_action
 
 __all__ = [
     # FIX / gateway layer
