@@ -35,7 +35,11 @@ from core.observability.data_health_schema import (
     SourceCheckResult,
     SourceStatus,
     Tier,
+    fresh_health_state,
     get_checks,
+)
+from core.observability.data_health_schema import (
+    build_alert_context as _build_alert_context,
 )
 from core.observability.health_checks import HealthCheckMethods
 
@@ -155,8 +159,36 @@ class DataHealthService(HealthCheckMethods):
         return report
 
     # ══════════════════════════════════════════════════════════════════════
-    # CRITICAL-TIER CHECKS
+    # State persistence
     # ══════════════════════════════════════════════════════════════════════
+
+    def _state_path(self) -> str:
+        return os.path.join(self._base_dir, "state", "data_health_state.json")
+
+    def load_health_state(self) -> dict[str, Any]:
+        """Load persisted health state — graceful degradation on corruption.
+
+        Iron Law for Monitoring #2: corrupt file → silent return to fresh state.
+        """
+        path = self._state_path()
+        try:
+            if not os.path.exists(path):
+                return fresh_health_state(self._symbol)
+            with open(path, encoding="utf-8") as f:
+                state = json.load(f)
+            # Validate minimum schema
+            if not isinstance(state, dict) or "schema_version" not in state:
+                return fresh_health_state(self._symbol)
+            # Ensure v2 structure exists
+            if "sources" not in state:
+                state["sources"] = {}
+            if "legacy" not in state:
+                state["legacy"] = {"last_close_count": 0, "checked_at": ""}
+            state["symbol"] = self._symbol
+            return state
+        except (json.JSONDecodeError, FileNotFoundError, OSError, TypeError, ValueError):
+            return fresh_health_state(self._symbol)
+
     def save_health_state(self, report: HealthReport) -> None:
         """Persist health state snapshot with atomic write.
 
@@ -270,5 +302,14 @@ class DataHealthService(HealthCheckMethods):
     # ══════════════════════════════════════════════════════════════════════
     # ALERT CONTEXT (for external dispatcher — Iron Law #3)
     # ══════════════════════════════════════════════════════════════════════
+
+    def build_alert_context(self, report: HealthReport) -> dict[str, Any]:
+        """Convert report to alert context keys for external evaluation.
+
+        This method produces data only — the caller (daily_ops / live_intent_loop)
+        passes the dict to AlertService.evaluate().  DataHealthService itself
+        never calls alert_hub or sends notifications (Iron Law #3).
+        """
+        return _build_alert_context(report)
 
     # ── FIX-20260611-002: Behavioral compliance — incremental log scanner ──
