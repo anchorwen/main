@@ -2358,7 +2358,7 @@ def execute_live_cycle(
                         if mt5_worker is not None:
                             _acc = mt5_worker.account_info()
                             _eq = float(getattr(_acc, "equity", 1000.0)) if _acc is not None else 1000.0
-                    except Exception:
+                    except Exception:  # BLE001:REVIEWED (Sev 4, Phase 3b — MT5 account_info fallback)
                         pass  # graceful fallback — keep _eq at 1000.0
                     _pnl_pct = float(_mia_pnl) / _eq if _eq > 0 else 0.0
                     if not hasattr(state, "_pending_budget_records"):
