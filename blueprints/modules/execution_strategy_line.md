@@ -42,6 +42,9 @@ Phase 7:  StrategyDecision assembly
 | MetaFilter gate routing | meta_filter_routing.py | -172 |
 | Trend isolation gates | trend_isolation_gates.py | -384 |
 | PWin chain | pwin_chain.py | -50+ |
+| **_make_decision() factory (FIX-014)** | strategy_line.py (private method) | Centralized strategy_name/magic |
+| **_counter_trend_action() (FIX-015)** | trend_volume_guard.py | -208 |
+| **Current file size** | | **1,852 lines** (from 2,037, –9.1%) |
 
 ## Inbound Dependencies
 | Module | What is imported |
