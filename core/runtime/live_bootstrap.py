@@ -121,7 +121,7 @@ def init_feature_services(
             ),
             flush=True,
         )
-    except Exception as _dfp_exc:  # BLE001:REVIEWED (logged, Phase 3b)
+    except Exception as _dfp_exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
         print(
             json.dumps(
                 {

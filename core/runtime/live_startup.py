@@ -82,7 +82,7 @@ def bootstrap_regime_detector(
                 detector._var = sample_var - detector._eps
 
         return detector.is_warmed_up
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_DEFERRED
         return False
 
 
@@ -163,7 +163,7 @@ def apply_governance_filter(
 
         gov = GovernanceService.load(gov_path)
         report["governance_loaded"] = True
-    except Exception as exc:  # BLE001:REVIEWED
+    except Exception as exc:  # BLE001:FOG_DEFERRED
         report["reason"] = f"governance_load_failed: {exc}"
         return entries, report
 
@@ -267,7 +267,7 @@ def check_single_brain_governance(brain_id: str, base_dir: str) -> dict[str, Any
         from core.governance.governance_service import GovernanceService
 
         gov = GovernanceService.load(gov_path)
-    except Exception as exc:  # BLE001:REVIEWED
+    except Exception as exc:  # BLE001:FOG_DEFERRED
         return {"blocked": False, "warning": False, "reason": f"governance_load_failed: {exc}"}
 
     state = gov.get_brain_state(brain_id)

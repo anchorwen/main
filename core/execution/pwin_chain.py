@@ -71,7 +71,7 @@ def resolve_p_win_from_brains(
             continue
         try:
             m = pnl_store.get_metrics(str(brain_id), window=100)
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             from core.runtime.fault_handler import fail_open_guard
 
             with fail_open_guard("PWinMetricsResolver"):

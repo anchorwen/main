@@ -80,7 +80,7 @@ def process_dispatch_results(
                     strategy_proposals, dr.direction, "pending", tracker,
                     symbol=symbol,
                 )
-            except Exception as _bi_exc:  # BLE001:REVIEWED
+            except Exception as _bi_exc:  # BLE001:FOG_DEFERRED
                 _emit(
                     "brain_inference_failed",
                     strategy=dr.strategy_name,

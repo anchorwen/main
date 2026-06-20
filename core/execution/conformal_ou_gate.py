@@ -542,7 +542,7 @@ class ConformalOUGate:
                     entry = BrainRegistry.instance().get(brain_id)
                     if entry is not None and entry.contract_group != strategy_name:
                         continue  # brain is for a different strategy line
-                except Exception:  # BLE001:REVIEWED
+                except Exception:  # BLE001:FOG_DEFERRED
                     pass  # registry resolve failure is non-blocking
 
             z_score = float(getattr(p, "raw_score", 0.0) or 0.0)

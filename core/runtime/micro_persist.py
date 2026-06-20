@@ -73,5 +73,5 @@ def persist_micro_features(
                     )
                 ]
             )
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_DEFERRED
         pass  # best-effort — micro store write must not block cycle

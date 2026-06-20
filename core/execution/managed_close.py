@@ -118,7 +118,7 @@ def dispatch_managed_close(
                         ),
                         flush=True,
                     )
-                except Exception as _cd_exc:  # BLE001:REVIEWED (logged, Phase 3b)
+                except Exception as _cd_exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
                     print(
                         json.dumps(
                             {
@@ -132,7 +132,7 @@ def dispatch_managed_close(
                         ),
                         flush=True,
                     )
-        except Exception as _ew_exc:  # BLE001:REVIEWED (logged, Phase 3b)
+        except Exception as _ew_exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
             print(
                 json.dumps(
                     {
@@ -267,7 +267,7 @@ def dispatch_managed_close(
                     _oe = state.known_open_tickets.get(pos.ticket, {})
                     if _oe:
                         _oe["_engine_close_pnl"] = pnl
-        except Exception as _wd_exc:  # BLE001:REVIEWED (logged, Phase 3b)
+        except Exception as _wd_exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
             print(
                 json.dumps(
                     {
@@ -295,7 +295,7 @@ def dispatch_managed_close(
                 extensions={"mt5_terminal_path": ctx.mt5_terminal_path},
             )
             _close_dispatched = True
-        except Exception as exc:  # BLE001:REVIEWED (logged, Phase 3b)
+        except Exception as exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
             print(
                 json.dumps(
                     {
@@ -323,7 +323,7 @@ def dispatch_managed_close(
                 if mt5_worker is not None:
                     _acc = mt5_worker.account_info()
                     _eq = float(getattr(_acc, "equity", 1000.0)) if _acc is not None else 1000.0
-            except Exception:  # BLE001:REVIEWED (Sev 4, Phase 3b — MT5 account_info fallback)
+            except Exception:  # BLE001:FOG_DEFERRED (Sev 4, Phase 3b — MT5 account_info fallback)
                 pass  # graceful fallback — keep _eq at 1000.0
             _pnl_pct = float(pnl) / _eq if _eq > 0 else 0.0
             state._pending_budget_records.append(

@@ -279,7 +279,7 @@ def register_dispatched_positions(
                     )
 
             registered_count += 1
-        except Exception as _reg_exc:  # BLE001:REVIEWED
+        except Exception as _reg_exc:  # BLE001:FOG_DEFERRED
             print(
                 json.dumps(
                     {

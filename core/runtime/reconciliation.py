@@ -254,7 +254,7 @@ def reconcile_closed_positions(
             }
             with open(_labels_path, "a", encoding="utf-8") as _lf:
                 _lf.write(json.dumps(_label_entry, ensure_ascii=False) + "\n")
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             pass  # best-effort — label write must not block reconciliation
 
         # ── DQAF-20260614-005c: SignalSettled from startup reconciliation ──

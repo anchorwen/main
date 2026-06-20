@@ -286,7 +286,7 @@ def bootstrap_restart_state(state: Any, journal_path: str, config: Any) -> None:
                 _ts = datetime.fromisoformat(_ts_str.replace("Z", "+00:00")).timestamp()
             else:
                 continue
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             continue
 
         # ── Resolve entry_confidence from matching open ──

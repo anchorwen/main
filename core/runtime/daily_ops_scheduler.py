@@ -137,7 +137,7 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
                 ),
                 flush=True,
             )
-        except Exception as _cleanup_exc:  # BLE001:REVIEWED
+        except Exception as _cleanup_exc:  # BLE001:FOG_DEFERRED
             print(
                 json.dumps(
                     {"event": "resource_cleanup_failed", "error": str(_cleanup_exc)},
@@ -173,7 +173,7 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
                         ),
                         flush=True,
                     )
-            except Exception:  # BLE001:REVIEWED (fail-open — session check failure should not block daily_ops)
+            except Exception:  # BLE001:FOG_DEFERRED (fail-open — session check failure should not block daily_ops)
                 pass  # graceful fallback — run governance anyway
 
         if not _skip_governance:
@@ -228,7 +228,7 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
                         ),
                         flush=True,
                     )
-            except Exception as _gov_exc:  # BLE001:REVIEWED
+            except Exception as _gov_exc:  # BLE001:FOG_DEFERRED
                 print(
                     json.dumps(
                         {"event": "daily_governance_error", "time": _utc_iso(), "error": str(_gov_exc)},
@@ -236,7 +236,7 @@ def run_scheduled_daily_ops(config: LiveCycleConfig, state: LiveCycleState) -> N
                     ),
                     flush=True,
                 )
-    except Exception as exc:  # BLE001:REVIEWED
+    except Exception as exc:  # BLE001:FOG_DEFERRED
         print(
             json.dumps(
                 {"event": "daily_ops_error", "time": _utc_iso(), "error": str(exc)},

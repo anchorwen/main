@@ -239,7 +239,7 @@ class MetaSignalFilter:
             import joblib
 
             self._calibrator = joblib.load(self._calibrator_path)
-        except Exception as e:  # BLE001:REVIEWED
+        except Exception as e:  # BLE001:FOG_DEFERRED
             sys.stderr.write(
                 json.dumps(
                     {

@@ -381,7 +381,7 @@ def mt5_call_with_timeout(
     def _target() -> None:
         try:
             result[0] = fn(*args, **kwargs)
-        except Exception as exc:  # BLE001:REVIEWED
+        except Exception as exc:  # BLE001:FOG_DEFERRED
             error[0] = exc
         finally:
             done.set()

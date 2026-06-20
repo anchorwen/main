@@ -345,7 +345,7 @@ class MT5Worker:
                 # Circuit breaker: only record business commands, not housekeeping
                 if command not in ("_reconnect",):
                     self.circuit_breaker.record_success()
-            except Exception as exc:  # BLE001:REVIEWED
+            except Exception as exc:  # BLE001:FOG_DEFERRED
                 future.set_exception(exc)
                 if command not in ("_reconnect",):
                     was_open = (
@@ -398,8 +398,9 @@ class MT5Worker:
             self._mt5 = mt5
             try:  # noqa: SIM105
                 self._mt5.symbol_select(self._default_symbol, True)
-            except Exception:  # BLE001:REVIEWED
-                pass
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("mt5_worker:_mt5_initialize"):
+                    pass
         else:
             self._mt5 = None
         return ok

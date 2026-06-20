@@ -98,7 +98,7 @@ class FeatureGate:
                         "FEATURE_ZERO_VECTOR",
                         f"{zero_count}/{total} zero features (≥30 non-zero required)",
                     )
-            except Exception:  # BLE001:REVIEWED
+            except Exception:  # BLE001:FOG_DEFERRED
                 return GateResult(False, "FEATURE_ZERO_VECTOR", "feature vector validation failed")
 
         # ── Market data sanity ──
@@ -250,7 +250,7 @@ class SignalHealthMonitor:
                 if r.get("warning", False):
                     results["warnings"] += 1
                     results["healthy"] = False
-            except Exception as exc:  # BLE001:REVIEWED
+            except Exception as exc:  # BLE001:FOG_DEFERRED
                 results["checks"][name] = {"warning": True, "reason": f"check_error: {exc}"}
                 results["warnings"] += 1
                 results["healthy"] = False

@@ -40,7 +40,7 @@ def _get_cached_git_hash() -> str:
             _GIT_HASH_CACHE = result.stdout.strip()
         else:
             _GIT_HASH_CACHE = "unknown"
-    except Exception:  # BLE001:REVIEWED — subprocess best-effort metadata
+    except Exception:  # BLE001:FOG_DEFERRED — subprocess best-effort metadata
         _GIT_HASH_CACHE = "unknown"
     return _GIT_HASH_CACHE
 

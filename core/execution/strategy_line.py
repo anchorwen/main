@@ -347,7 +347,7 @@ class StrategyLine:
             if not math.isfinite(theta_hat):
                 return 0.0
             return max(0.0, min(10.0, float(theta_hat)))
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             return 0.0
 
     def _compute_tf_hurst(self, max_lag: int = 20) -> float:
@@ -389,7 +389,7 @@ class StrategyLine:
             if not math.isfinite(slope):
                 return 0.5
             return max(0.1, min(1.0, float(slope)))
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             return 0.5
 
     # ── Subclass overrides ──────────────────────────────────────────────
@@ -569,7 +569,7 @@ class StrategyLine:
                 daily_feature_vector,
                 btc_augment,  # FIX-20260613-052: resolved placeholder
             )
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             return StrategyDecision(
                 strategy_name=name,
                 magic=self.config.magic,
@@ -655,7 +655,7 @@ class StrategyLine:
                         entry_spread=_entry_spread,
                         entry_slippage=0.10,
                     )
-                except Exception as _rec_exc:  # BLE001:REVIEWED
+                except Exception as _rec_exc:  # BLE001:FOG_DEFERRED
                     import logging as _lg
 
                     _lg.getLogger(__name__).debug(
@@ -731,7 +731,7 @@ class StrategyLine:
                 base_dir=self.config.base_dir,
                 brain_status_map=_status_map,
             )
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             logger.warning(
                 "Brain vote recording failed strategy=%s — audit trail incomplete",
                 name,
@@ -881,7 +881,7 @@ class StrategyLine:
                             reason=ou_result["reason"],
                             gate_diag=_gd,
                         )
-                except Exception:  # BLE001:REVIEWED
+                except Exception:  # BLE001:FOG_DEFERRED
                     import logging
 
                     _sl_logger = logging.getLogger(__name__)
@@ -933,7 +933,7 @@ class StrategyLine:
                             regime_mode=regime_gate_mode,
                             reason=mf_result["reason"],
                         )
-                except Exception:  # BLE001:REVIEWED
+                except Exception:  # BLE001:FOG_DEFERRED
                     import logging
 
                     _sl_logger = logging.getLogger(__name__)

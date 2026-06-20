@@ -302,6 +302,7 @@ class LiveCycleState:
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 
+from core.runtime.fault_handler import fail_open_guard
 from core.runtime.time_utils import _utc_iso  # consolidated from 18 duplicates
 
 
@@ -549,9 +550,7 @@ def _execute_management_phase(
     mt5_worker: Any,
     broker: Any,
     brains: list[dict[str, Any]],
-    parliament: Any,
     regime_detector: Any,
-    tracker: Any,
     feature_service: Any,
     micro_feature_computer: Any,
     micro_feature_adapter: Any,
@@ -1530,7 +1529,7 @@ def execute_live_cycle(
                 ),
                 flush=True,
             )
-        except Exception as _exc:  # BLE001:REVIEWED (logged, Phase 3b)
+        except Exception as _exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
             print(
                 json.dumps(
                     {
@@ -2194,9 +2193,7 @@ def execute_live_cycle(
                         mt5_worker=mt5_worker,
                         broker=broker,
                         brains=brains,
-                        parliament=parliament,
                         regime_detector=regime_detector,
-                        tracker=tracker,
                         feature_service=feature_service,
                         micro_feature_computer=micro_feature_computer,
                         micro_feature_adapter=micro_feature_adapter,
@@ -2205,7 +2202,7 @@ def execute_live_cycle(
                         ticket=_pm_pos.ticket,
                         micro_feature_dict=micro_feature_dict,
                     )
-            except Exception:  # BLE001:REVIEWED
+            except Exception:  # BLE001:FOG_DEFERRED
                 logger.exception(
                     "Management phase aborted for ticket=%s — position state not updated",
                     _pm_pos.ticket,
@@ -2293,7 +2290,7 @@ def execute_live_cycle(
                             )
                             if _pt and _pt.isdigit():
                                 _existing_close_tickets.add(int(_pt))
-                except Exception:  # BLE001:REVIEWED
+                except Exception:  # BLE001:FOG_DEFERRED
                     pass  # Non-blocking — skip dedup on read error
                 _mia_closed = [
                     e
@@ -2358,7 +2355,7 @@ def execute_live_cycle(
                         if mt5_worker is not None:
                             _acc = mt5_worker.account_info()
                             _eq = float(getattr(_acc, "equity", 1000.0)) if _acc is not None else 1000.0
-                    except Exception:  # BLE001:REVIEWED (Sev 4, Phase 3b — MT5 account_info fallback)
+                    except Exception:  # BLE001:FOG_DEFERRED (Sev 4, Phase 3b — MT5 account_info fallback)
                         pass  # graceful fallback — keep _eq at 1000.0
                     _pnl_pct = float(_mia_pnl) / _eq if _eq > 0 else 0.0
                     if not hasattr(state, "_pending_budget_records"):
@@ -2483,7 +2480,7 @@ def execute_live_cycle(
             _cal.cold_start_from_journal(f"{config.base_dir}/live_trade_journal.jsonl")
             # ── FIX-20260611-022: Make calibrator accessible for live updates ──
             state._conformal_calibrator = _cal
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             with fail_open_guard("ConformalCalibratorInit"):
                 raise
 
@@ -2515,7 +2512,7 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             with fail_open_guard("MetaFilterGateInit"):
                 raise
 
@@ -2553,7 +2550,7 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-        except Exception as _oug_exc:  # BLE001:REVIEWED (logged, Phase 3b)
+        except Exception as _oug_exc:  # BLE001:FOG_DEFERRED (logged, Phase 3b)
             with fail_open_guard("ConformalOUGateInit"):
                 raise  # Re-raise inside guard for structured traceback logging
 
@@ -2615,7 +2612,7 @@ def execute_live_cycle(
                 state._recent_atr_values.append(current_atr)
                 if len(state._recent_atr_values) > 50:
                     state._recent_atr_values.pop(0)
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             logger.warning("Regime detector update failed — using stale regime values")
 
     # ── Feature gate: block garbage-in before it becomes garbage-out ──
@@ -2663,7 +2660,7 @@ def execute_live_cycle(
     try:
         if broker is not None:
             _account_equity = broker.get_account_equity()
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_DEFERRED
         logger.warning("Broker equity fetch failed — falling back to MT5 direct query")
     if _account_equity is None and mt5_worker is not None:
         with FaultTolerantContext(
@@ -2820,7 +2817,7 @@ def execute_live_cycle(
                         _phys_ou, _phys_hurst = _compute_tf_ou_hurst(state._recent_mid_prices)
                         regime_info["ou_theta_m5"] = float(_phys_ou)
                         regime_info["hurst_m5"] = float(_phys_hurst)
-                    except Exception:  # BLE001:REVIEWED
+                    except Exception:  # BLE001:FOG_DEFERRED
                         pass  # fail-safe: gate falls back to ADX-only logic
                 trend_direction = regime_gate_result.get("primary_trend", "neutral")
                 trend_strength = regime_gate_result.get("h1_trend_strength", 0.0)
@@ -2858,7 +2855,7 @@ def execute_live_cycle(
                     ),
                     flush=True,
                 )
-            except Exception as _rg_exc:  # BLE001:REVIEWED
+            except Exception as _rg_exc:  # BLE001:FOG_DEFERRED
                 state._regime_gate_stale_counter += 1
                 _stale_n = state._regime_gate_stale_counter
                 if _stale_n > 12:  # 1 hour at M5 — fail-closed
@@ -2964,9 +2961,9 @@ def execute_live_cycle(
                                 flush=True,
                             )
                     # else: stale >5min — skip, fall through to cold warm-up
-            except Exception:  # BLE001:REVIEWED
-                pass
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("live_cycle:_emit_close_notification"):
+                    pass
         # Portfolio risk controller (persist for VaR/correlation tracking) + execution queue
         if state.portfolio_risk_controller is None:
             state.portfolio_risk_controller = PortfolioRiskController(
@@ -3304,7 +3301,7 @@ def execute_live_cycle(
                     queued=eval_summary.get("queued", 0),
                     data_dir=config.base_dir,
                 )
-            except Exception as _gm_exc:  # BLE001:REVIEWED
+            except Exception as _gm_exc:  # BLE001:FOG_DEFERRED
                 import logging as _gm_log
 
                 _gm_log.getLogger(__name__).warning(
@@ -3717,7 +3714,7 @@ def execute_live_cycle(
                                                 ),
                                                 flush=True,
                                             )
-                                        except Exception as _fc_exc:  # BLE001:REVIEWED
+                                        except Exception as _fc_exc:  # BLE001:FOG_DEFERRED
                                             print(
                                                 json.dumps(
                                                     {
@@ -3745,16 +3742,16 @@ def execute_live_cycle(
                                     ),
                                     flush=True,
                                 )
-                    except Exception:  # BLE001:REVIEWED
+                    except Exception:  # BLE001:FOG_DEFERRED
                         logger.warning("Intraday drawdown recovery check failed")
 
                 _fv = check_feature_vector(feature_vector)
                 if not _fv.get("passed"):
                     _log_cycle_end(state.loop_iteration)
                     return state, not config.once
-            except Exception:  # BLE001:REVIEWED
-                pass
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("live_cycle:_net_out_close_dispatch_fn"):
+                    pass
         raw_proposals = []
         for b_info in brains:
             schema_id = b_info.get("feature_schema_id", "")
@@ -3775,7 +3772,7 @@ def execute_live_cycle(
                 if seq is not None and seq.ndim == 2 and seq.shape[0] >= 32:
                     try:
                         prop = b_info["adapter"].run(None, seq)
-                    except Exception:  # BLE001:REVIEWED
+                    except Exception:  # BLE001:FOG_DEFERRED
                         # Fallback: bypass run() pipeline.
                         # Transformer adapters: use infer_sequence() to avoid rolling-buffer corruption.
                         # XGBoost adapters: use infer() with flat ravel (model expects 288-dim).
@@ -3788,7 +3785,7 @@ def execute_live_cycle(
                             else:
                                 raw = b_info["adapter"].infer(seq.ravel().astype(np.float64))
                             prop = b_info["adapter"].get_signal(raw)
-                        except Exception:  # BLE001:REVIEWED
+                        except Exception:  # BLE001:FOG_DEFERRED
                             prop = None
                 else:
                     prop = None
@@ -3826,7 +3823,7 @@ def execute_live_cycle(
                                     tf_ou=tf_ou,
                                     tf_hurst=tf_hurst,
                                 )
-                            except Exception:  # BLE001:REVIEWED
+                            except Exception:  # BLE001:FOG_DEFERRED
                                 import logging as _btc_log
                                 import traceback as _btc_tb
 
@@ -3950,7 +3947,7 @@ def execute_live_cycle(
             import numpy as np
 
             _rolling_p80 = float(np.percentile(state._recent_consensus_scores, 80))
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             _rolling_p80 = 0.0
     _effective_threshold = (
         max(config.confidence_threshold, _rolling_p80)

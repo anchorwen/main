@@ -185,7 +185,7 @@ class MetaExitEngine:
 
             self._model = lgb.Booster(model_file=self.model_path)
             return True
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             return False
 
     # ── Heuristic scoring ──
@@ -390,7 +390,7 @@ class MetaExitEngine:
                 factor_breakdown={"p_win": round(p_win, 4)},
                 p_win=round(p_win, 4),
             )
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             return self._heuristic_evaluate(snap)
 
     def _build_feature_vector(self, snap: ExitFeatureSnapshot) -> list[float]:

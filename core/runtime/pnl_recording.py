@@ -66,7 +66,7 @@ def record_counterfactual_signals(
                     entry_spread=_live_spread,
                     entry_slippage=0.10,
                 )
-            except Exception:  # BLE001:REVIEWED
+            except Exception:  # BLE001:FOG_DEFERRED
                 logger.warning("PnL ledger signal recording failed (multi-strategy)")
     elif proposal is not None:
         try:
@@ -84,5 +84,5 @@ def record_counterfactual_signals(
                 entry_spread=_live_spread,
                 entry_slippage=0.10,
             )
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             logger.warning("PnL ledger signal recording failed (legacy)")
