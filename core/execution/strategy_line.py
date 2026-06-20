@@ -25,6 +25,7 @@ import numpy as np
 # Circular imports RESOLVED: meta_filter_routing + trend_isolation_gates
 # now import StrategyDecision from strategy_decision.py (leaf module).
 from core.execution.brain_gates import check_min_valid_brains, extract_entry_z_score
+from core.execution.conformal_ou_gate import apply_conformal_ou_gate
 from core.execution.dynamic_sl_tp import compute_dynamic_sl_tp, compute_sl_tp_levels
 from core.execution.meta_filter_routing import apply_meta_filter_gate
 from core.execution.pwin_chain import adjust_p_win_for_z_strength as _z_strength
@@ -866,135 +867,31 @@ class StrategyLine:
                 )
 
         # ── Track 3d: Conformal OU Gate (OU physics-based signal quality) ──
+        # FIX-20260620-016: Extracted to conformal_ou_gate.apply_conformal_ou_gate()
         # For OU strategies (statarb_dynamic M5, statarb_m15 M15), the
         # ConformalOUGate replaces the generic 47-dim LightGBM MetaFilterGate
-        # with OU-specific physics features: Z-Depth, Z-Velocity, Half-life
-        # quality, Theta strength, and ADX trend penalty.
+        # with OU-specific physics features.
         # Falls back to MetaFilterGate if ConformalOUGate is not available.
-        # barrier_12bar is EXEMPT — Track 4d MetaSignalFilter handles it.
         if name in ("statarb_dynamic", "statarb_m15"):
-            if conformal_ou_gate is not None and conformal_ou_gate.is_loaded:
-                try:
-                    adx_approx = 15.0 + trend_strength * 40.0
-                    ou_result = conformal_ou_gate.filter(
-                        strategy_name=name,
-                        proposals=proposals,
-                        adx_value=adx_approx,
-                    )
-                    # Capture for downstream volume override (COLD phase exploration safety)
-                    self._last_ou_result = ou_result
-                    if not ou_result["passed"] and not ou_result.get("force_min_volume"):
-                        # FIX-20260527-006: COLD phase exploration bypass.
-                        # When force_min_volume=True (ConformalOU calibrator < 50 samples),
-                        # the gate rejection is overridden — fall through to downstream
-                        # COLD exploration logic (p_win=0.50, 0.01 lot cap).
-                        # Only reject when the gate says no AND there is no exploration mandate.
-                        _gd: dict[str, Any] = {}
-                        _feat = ou_result.get("features", {})
-                        if _feat:
-                            _gd = {
-                                "gate": "conformal_ou",
-                                "composite_score": ou_result.get("score"),
-                                "threshold": ou_result.get("threshold"),
-                                "z_score": _feat.get("z_score"),
-                                "z_entry": _feat.get("z_entry"),
-                                "z_depth_q": _feat.get("z_depth_q"),
-                                "half_life": _feat.get("half_life"),
-                                "hl_q": _feat.get("hl_q"),
-                                "theta": _feat.get("theta"),
-                                "theta_q": _feat.get("theta_q"),
-                                "adx": _feat.get("adx"),
-                                "adx_q": _feat.get("adx_q"),
-                                "vel_q": _feat.get("vel_q"),
-                            }
-                        return self._make_decision(
-                            should_trade=False,
-                            direction=direction,
-                            confidence=confidence,
-                            volume=0.0,
-                            sl=0.0,
-                            tp=0.0,
-                            hard_sl=0.0,
-                            brain_ids=brain_ids,
-                            supporting_count=support_count,
-                            total_count=total_count,
-                            regime_mode=regime_gate_mode,
-                            reason=ou_result["reason"],
-                            gate_diag=_gd
-                        )
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("strategy_line:evaluate"):
-                        import logging
-
-                        _sl_logger = logging.getLogger(__name__)
-                        _sl_logger.warning(
-                            "OU gate evaluation failed for strategy=%s — BLOCKING trade",
-                            name,
-                            exc_info=True,
-                        )
-                        return self._make_decision(
-                            should_trade=False,
-                            direction=direction,
-                            confidence=confidence,
-                            volume=0.0,
-                            sl=0.0,
-                            tp=0.0,
-                            hard_sl=0.0,
-                            brain_ids=brain_ids,
-                            supporting_count=support_count,
-                            total_count=total_count,
-                            regime_mode=regime_gate_mode,
-                            reason="ou_gate_exception_blocked"
-                        )
-            elif (
-                meta_filter_gate is not None
-                and meta_filter_gate.is_loaded
-                and feature_vector is not None
-            ):
-                try:
-                    mf_result = meta_filter_gate.filter(
-                        feature_vector=feature_vector,
-                        micro_features=micro_feature_dict or {},
-                    )
-                    if not mf_result["passed"]:
-                        return self._make_decision(
-                            should_trade=False,
-                            direction=direction,
-                            confidence=confidence,
-                            volume=0.0,
-                            sl=0.0,
-                            tp=0.0,
-                            hard_sl=0.0,
-                            brain_ids=brain_ids,
-                            supporting_count=support_count,
-                            total_count=total_count,
-                            regime_mode=regime_gate_mode,
-                            reason=mf_result["reason"]
-                        )
-                except Exception:  # BLE001:FOG
-                    with fail_open_guard("strategy_line:evaluate"):
-                        import logging
-
-                        _sl_logger = logging.getLogger(__name__)
-                        _sl_logger.warning(
-                            "Meta-filter gate evaluation failed for strategy=%s — BLOCKING trade",
-                            name,
-                            exc_info=True,
-                        )
-                        return self._make_decision(
-                            should_trade=False,
-                            direction=direction,
-                            confidence=confidence,
-                            volume=0.0,
-                            sl=0.0,
-                            tp=0.0,
-                            hard_sl=0.0,
-                            brain_ids=brain_ids,
-                            supporting_count=support_count,
-                            total_count=total_count,
-                            regime_mode=regime_gate_mode,
-                            reason="meta_filter_gate_exception_blocked"
-                        )
+            _ou_blocked, _ou_result = apply_conformal_ou_gate(
+                strategy_name=name,
+                conformal_ou_gate=conformal_ou_gate,
+                meta_filter_gate=meta_filter_gate,
+                proposals=proposals,
+                trend_strength=trend_strength,
+                feature_vector=feature_vector,
+                micro_feature_dict=micro_feature_dict,
+                direction=direction,
+                confidence=confidence,
+                brain_ids=brain_ids,
+                support_count=support_count,
+                total_count=total_count,
+                regime_gate_mode=regime_gate_mode,
+                make_decision=self._make_decision,
+            )
+            self._last_ou_result = _ou_result
+            if _ou_blocked is not None:
+                return _ou_blocked
         # ── FIX-20260610-007-C: Cold explore bypasses MetaFilter ──
         # When MetaFilter is in learning phase (COLD calibrator, few samples),
         # bounded-volume explore trades bypass the filter to collect PIT data.
