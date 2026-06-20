@@ -5,11 +5,11 @@ Backs up governance_state.json before modification.
 """
 import json
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 gov_path = Path('data/governance_state.json')
-backup_path = Path(f'data/governance_state_backup_20260620_0730.json')
+backup_path = Path('data/governance_state_backup_20260620_0730.json')
 
 # Backup
 shutil.copy(gov_path, backup_path)
@@ -26,7 +26,7 @@ old_status = bs['status']
 assert old_status == 'probation', f"Expected probation, got {old_status}"
 
 bs['status'] = 'live'
-bs['last_transition_at'] = datetime.now(timezone.utc).isoformat()
+bs['last_transition_at'] = datetime.now(UTC).isoformat()
 bs['transition_count'] = bs.get('transition_count', 0) + 1
 bs['vote_weight'] = 1.0
 
