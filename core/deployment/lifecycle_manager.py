@@ -30,6 +30,7 @@ from core.contracts.domain_keys import (
 )
 from core.deployment.state_persistence import StatePersistence
 from core.observability.metric_names import LIFECYCLE_STARTUPS
+from core.runtime.fault_handler import fail_open_guard
 
 
 class LifecycleManager:
@@ -105,15 +106,15 @@ class LifecycleManager:
                         PAYLOAD_KEY_STATUS: HEALTH_CHECK_STATUS_OK,
                     }
                 )
-            except Exception as exc:  # BLE001:REVIEWED
-                result[PAYLOAD_KEY_PHASES].append(
-                    {
-                        PAYLOAD_KEY_PHASE: LIFECYCLE_PHASE_HOOK,
-                        PAYLOAD_KEY_STATUS: LIFECYCLE_PHASE_STATUS_ERROR,
-                        PAYLOAD_KEY_ERROR: str(exc),
-                    }
-                )
-
+            except Exception as exc:  # BLE001:FOG
+                with fail_open_guard("lifecycle_manager:shutdown"):
+                    result[PAYLOAD_KEY_PHASES].append(
+                        {
+                            PAYLOAD_KEY_PHASE: LIFECYCLE_PHASE_HOOK,
+                            PAYLOAD_KEY_STATUS: LIFECYCLE_PHASE_STATUS_ERROR,
+                            PAYLOAD_KEY_ERROR: str(exc),
+                        }
+                    )
         if save_state and self._persistence:
             label = state_label or datetime.now(UTC).replace(tzinfo=None).strftime("%Y%m%d_%H%M%S")
             save_result = self._persistence.save_all(self._container, label=label)

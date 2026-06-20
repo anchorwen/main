@@ -20,6 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from core.brains.services.brain_promotion import BrainPromotionEvaluator
+from core.runtime.fault_handler import fail_open_guard
 
 
 def compute_performance_from_ledger(
@@ -221,10 +222,10 @@ def main():
             "brain_states": gov_svc.get_all_states(),
             "transition_log": gov_svc.get_transition_log(),
         }
-    except Exception:  # BLE001:REVIEWED
-        print(f"[run_promotion] ERROR: failed to load governance state from {gov_path}")
-        return 1
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("run_promotion:main"):
+            print(f"[run_promotion] ERROR: failed to load governance state from {gov_path}")
+            return 1
     # Ensure all brains from P&L are in governance state
     settled_brain_ids = list(pnl_ledger.get("settled", {}).keys())
     added = ensure_governance_registration(gov_state, settled_brain_ids)

@@ -102,7 +102,7 @@ def main():
         for sym in symbols:
             try:
                 download_ohlc(sym, tf_str, args.output_dir, args.max_bars)
-            except Exception as e:  # BLE001:REVIEWED
+            except Exception as e:  # BLE001:FOG_DEFERRED
                 print(f"[MT5] FAILED: {sym} {tf_str}: {e}")
 
     mt5.shutdown()

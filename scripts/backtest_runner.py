@@ -24,6 +24,7 @@ from core.backtest.data_feed import DataFeed
 from core.backtest.engine import BacktestEngine, BacktestResult
 from core.backtest.metrics import compute_backtest_metrics
 from core.backtest.strategy_adapter import rule_based_strategies
+from core.runtime.fault_handler import fail_open_guard
 
 # ── Attribution (using core modules) ────────────────────────────────────────
 
@@ -55,9 +56,9 @@ def run_attribution(result: BacktestResult) -> dict[str, Any]:
         bar_returns[1:] = np.diff(equity) / np.maximum(equity[:-1], 1.0)
         attr = decompose_pnl(bar_returns, factor_returns)
         factor_d = attr.to_dict()
-    except Exception as e:  # BLE001:REVIEWED
-        factor_d = {"error": str(e)}
-
+    except Exception as e:  # BLE001:FOG
+        with fail_open_guard("backtest_runner:run_attribution"):
+            factor_d = {"error": str(e)}
     # Run Brinson on strategy-level decomposition
     try:
         from core.metrics.brinson_attribution import brinson_decompose
@@ -90,9 +91,9 @@ def run_attribution(result: BacktestResult) -> dict[str, Any]:
             brinson_d = brinson.to_dict()
         else:
             brinson_d = {"error": "need at least 2 strategies for Brinson"}
-    except Exception as e:  # BLE001:REVIEWED
-        brinson_d = {"error": str(e)}
-
+    except Exception as e:  # BLE001:FOG
+        with fail_open_guard("backtest_runner:run_attribution"):
+            brinson_d = {"error": str(e)}
     return {
         "factor_attribution": factor_d,
         "brinson": brinson_d,
@@ -165,10 +166,10 @@ def main() -> int:
     print(f"Loading {data_path} ...")
     try:
         feed = DataFeed.from_csv(str(data_path))
-    except Exception as e:  # BLE001:REVIEWED
-        print(f"ERROR: failed to load data: {e}")
-        return 1
-
+    except Exception as e:  # BLE001:FOG
+        with fail_open_guard("backtest_runner:main"):
+            print(f"ERROR: failed to load data: {e}")
+            return 1
     print(f"  {len(feed.bars)} bars loaded")
     if feed.bars:
         print(f"  Range: {feed.bars[0].timestamp} → {feed.bars[-1].timestamp}")

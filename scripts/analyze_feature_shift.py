@@ -81,7 +81,7 @@ def _ks_test_pvalue(a: np.ndarray, b: np.ndarray) -> float:
     try:
         _, pvalue = ks_2samp(a, b)
         return float(pvalue)
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_DEFERRED
         return 0.0
 
 

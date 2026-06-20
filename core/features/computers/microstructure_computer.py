@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from core.runtime.fault_handler import fail_open_guard
+
 if TYPE_CHECKING:
     from core.execution.mt5_worker import MT5Worker
 
@@ -258,8 +260,9 @@ class MicrostructureFeatureComputer:
                     raw[sym] = np.array([float(r[4]) for r in rates], dtype=np.float64)
                 else:
                     raw[sym] = np.array([0.0], dtype=np.float64)
-            except Exception:  # BLE001:REVIEWED
-                raw[sym] = np.array([0.0], dtype=np.float64)
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("microstructure_computer:_compute_cross_raw"):
+                    raw[sym] = np.array([0.0], dtype=np.float64)
         return raw
 
     def _resample_and_build_sequence(
@@ -354,9 +357,9 @@ class MicrostructureFeatureComputer:
     def _fetch_m5_rates(self, count: int):
         try:
             return self._copy_rates(self._symbol, MT5_TIMEFRAME_M5, 0, count)
-        except Exception:  # BLE001:REVIEWED
-            return None
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("microstructure_computer:_fetch_m5_rates"):
+                return None
     def _fetch_tf_rates(self, count: int, tf_str: str):
         """Fetch rates directly at a given timeframe (not resampled)."""
         try:
@@ -364,9 +367,9 @@ class MicrostructureFeatureComputer:
             if tf is None:
                 return None
             return self._copy_rates(self._symbol, tf, 0, count)
-        except Exception:  # BLE001:REVIEWED
-            return None
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("microstructure_computer:_fetch_tf_rates"):
+                return None
     def _bar_to_features(
         self,
         bar: dict[str, float],
@@ -431,9 +434,9 @@ class MicrostructureFeatureComputer:
                 )
             else:
                 ticks = self._mt5.copy_ticks_from(self._symbol, from_date, 5000, MT5_COPY_TICKS_ALL)
-        except Exception:  # BLE001:REVIEWED
-            ticks = None
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("microstructure_computer:_compute_tick_features"):
+                ticks = None
         if ticks is None or len(ticks) < 2:
             result.update({"avg_spread": 0.0, "OIM": 0.0, "tick_velocity": 0.0})
             return
@@ -478,9 +481,9 @@ class MicrostructureFeatureComputer:
             _ofi_mean = float(np.mean(self._ofi_buffer)) if self._ofi_buffer else 0.0
             _ofi_std = float(np.std(self._ofi_buffer)) if len(self._ofi_buffer) > 1 else 1e-8
             result["OFI"] = float((_ofi_raw - _ofi_mean) / _ofi_std) if _ofi_std > 1e-8 else 0.0
-        except Exception:  # BLE001:REVIEWED
-            result["OFI"] = 0.0
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("microstructure_computer:_compute_tick_features"):
+                result["OFI"] = 0.0
     def _compute_tick_features_dict(
         self, *, reference_time: datetime | None = None
     ) -> dict[str, float]:
@@ -492,9 +495,10 @@ class MicrostructureFeatureComputer:
         for sym, name in zip(CROSS_SYMBOLS, CROSS_FEATURE_NAMES, strict=False):
             try:
                 rates = self._copy_rates(sym, MT5_TIMEFRAME_M5, 0, 2)
-            except Exception:  # BLE001:REVIEWED
-                result[name] = 0.0
-                continue
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("microstructure_computer:_compute_cross_features"):
+                    result[name] = 0.0
+                    continue
             if rates is not None and len(rates) >= 2:
                 c0 = float(rates[-2][4])
                 c1 = float(rates[-1][4])
@@ -509,9 +513,10 @@ class MicrostructureFeatureComputer:
         for sym, name in zip(CROSS_SYMBOLS, CROSS_FEATURE_NAMES, strict=False):
             try:
                 rates = self._copy_rates(sym, MT5_TIMEFRAME_M5, 0, m5_needed)
-            except Exception:  # BLE001:REVIEWED
-                cross[name] = [0.0] * n_bars
-                continue
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("microstructure_computer:_compute_cross_sequence"):
+                    cross[name] = [0.0] * n_bars
+                    continue
             if rates is None or len(rates) < ratio + 1:
                 cross[name] = [0.0] * n_bars
                 continue

@@ -26,6 +26,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 SCHEMA_VERSION = "feature_store_maintenance.v1"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -90,16 +92,16 @@ def run_incremental_update(
             "started_at": result.started_at.isoformat(),
             "finished_at": result.finished_at.isoformat(),
         }
-    except Exception as exc:  # BLE001:REVIEWED
-        return {"step": "incremental_update", "status": "error", "error": str(exc)[:500]}
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("feature_store_maintenance:run_incremental_update"):
+            return {"step": "incremental_update", "status": "error", "error": str(exc)[:500]}
     finally:
         if computer is not None and hasattr(computer, "_mt5"):
             try:  # noqa: SIM105
                 computer._mt5.shutdown()
-            except Exception:  # BLE001:REVIEWED
-                pass
-
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("feature_store_maintenance:run_incremental_update"):
+                    pass
 def run_compaction(
     store_dir: str,
     *,
@@ -127,10 +129,9 @@ def run_compaction(
             "trimmed_by_retention": total_trimmed,
             "per_partition": results,
         }
-    except Exception as exc:  # BLE001:REVIEWED
-        return {"step": "compaction", "status": "error", "error": str(exc)[:500]}
-
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("feature_store_maintenance:run_compaction"):
+            return {"step": "compaction", "status": "error", "error": str(exc)[:500]}
 def run_stats(store_dir: str) -> dict[str, Any]:
     """Collect feature store statistics."""
     from core.features.local_feature_store import LocalFeatureStore
@@ -151,10 +152,9 @@ def run_stats(store_dir: str) -> dict[str, Any]:
             "partitions": partitions,
             "per_partition": stats,
         }
-    except Exception as exc:  # BLE001:REVIEWED
-        return {"step": "stats", "status": "error", "error": str(exc)[:500]}
-
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("feature_store_maintenance:run_stats"):
+            return {"step": "stats", "status": "error", "error": str(exc)[:500]}
 def run_full_maintenance(
     base_dir: str = "data",
     *,

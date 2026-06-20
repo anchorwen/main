@@ -30,6 +30,7 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
+from core.runtime.fault_handler import fail_open_guard
 
 
 def _load_journal(path: Path) -> list[dict[str, Any]]:
@@ -177,10 +178,10 @@ def _backfill_from_mt5(
     except ImportError:
         report["reason"] = "MetaTrader5 module not installed"
         return report
-    except Exception as exc:  # BLE001:REVIEWED (Sev 4, Phase 3b)
-        report["reason"] = f"mt5_init_exception: {exc}"
-        return report
-
+    except Exception as exc:  # BLE001:FOG (Sev 4, Phase 3b)
+        with fail_open_guard("backfill_journal_pnl:_backfill_from_mt5"):
+            report["reason"] = f"mt5_init_exception: {exc}"
+            return report
     try:
         for e in entries:
             if e.get("action") != "close":

@@ -12,6 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from core.brains.services.brain_factory import BrainFactory
+from core.runtime.fault_handler import fail_open_guard
 
 
 def main():
@@ -69,9 +70,9 @@ def main():
             result["direction"] = prop.prediction.get("direction_bias", "?")
             result["confidence"] = round(prop.prediction.get("confidence", 0.0), 4)
 
-        except Exception as exc:  # BLE001:REVIEWED
-            result["error"] = f"{type(exc).__name__}: {exc!s}"[:150]
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("verify_all_brains:main"):
+                result["error"] = f"{type(exc).__name__}: {exc!s}"[:150]
         results.append(result)
         status_icon = "OK" if result["infer_ok"] else "FAIL"
         direction = result.get("direction", "?")

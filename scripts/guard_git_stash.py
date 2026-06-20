@@ -79,7 +79,7 @@ def main() -> int:
         try:
             if check_file_locked(fpath):
                 locked.append(fpath)
-        except Exception:  # BLE001:REVIEWED — diagnostic tool, never crash
+        except Exception:  # BLE001:FOG_DEFERRED — diagnostic tool, never crash
             pass
 
     if not locked:

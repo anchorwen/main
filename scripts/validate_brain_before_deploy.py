@@ -26,6 +26,8 @@ from typing import Any
 
 import numpy as np
 
+from core.runtime.fault_handler import fail_open_guard
+
 # ── Test data loading ────────────────────────────────────────────────────────
 
 
@@ -72,8 +74,9 @@ def _load_brain_entry(config_path: str) -> dict[str, Any] | None:
             entry = json.load(f)
         if entry.get("schema_version") == "brain_registry_entry.v1":
             return entry
-    except Exception as exc:  # BLE001:REVIEWED
-        print(f"[ERROR] Failed to load {config_path}: {exc}")
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("validate_brain_before_deploy:_load_brain_entry"):
+            print(f"[ERROR] Failed to load {config_path}: {exc}")
     return None
 
 
@@ -84,11 +87,10 @@ def _build_adapter(entry: dict[str, Any]):
     factory = BrainFactory()
     try:
         return factory.build(entry)
-    except Exception as exc:  # BLE001:REVIEWED
-        print(f"[ERROR] BrainFactory.build() failed: {exc}")
-        return None
-
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("validate_brain_before_deploy:_build_adapter"):
+            print(f"[ERROR] BrainFactory.build() failed: {exc}")
+            return None
 # ── Signal extraction ────────────────────────────────────────────────────────
 
 
@@ -225,10 +227,11 @@ def validate_brain(
             proposal = adapter.inference(zero_vec)
             d, c = _get_direction_and_confidence(proposal)
             results.append({"direction": d, "confidence": c})
-        except Exception as exc:  # BLE001:REVIEWED
-            report["passed"] = False
-            report["checks"]["inference"] = {"passed": False, "detail": str(exc)[:100]}
-            return report
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("validate_brain_before_deploy:validate_brain"):
+                report["passed"] = False
+                report["checks"]["inference"] = {"passed": False, "detail": str(exc)[:100]}
+                return report
     else:
         for _i, record in enumerate(feature_records[:n_vectors]):
             try:
@@ -239,9 +242,9 @@ def validate_brain(
                     proposal = adapter.inference(np.zeros(40, dtype=np.float32))
                 d, c = _get_direction_and_confidence(proposal)
                 results.append({"direction": d, "confidence": c})
-            except Exception:  # BLE001:REVIEWED
-                results.append({"direction": "neutral", "confidence": 0.0})
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("validate_brain_before_deploy:validate_brain"):
+                    results.append({"direction": "neutral", "confidence": 0.0})
     directions = [r["direction"] for r in results]
     confidences = [r["confidence"] for r in results]
 

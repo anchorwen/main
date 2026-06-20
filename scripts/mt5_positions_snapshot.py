@@ -39,7 +39,7 @@ def build_snapshot(*, mt5_terminal_path: str | None, symbol: str | None) -> dict
     }
     try:
         import MetaTrader5 as mt5
-    except Exception as exc:  # pragma: no cover  # BLE001:REVIEWED
+    except Exception as exc:  # pragma: no cover  # BLE001:FOG_DEFERRED
         payload["error"] = f"metaTrader5_import_failed:{exc}"
         return payload
 

@@ -25,6 +25,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 logger = logging.getLogger(__name__)
 
 
@@ -331,9 +333,9 @@ class BlueGreenManager:
         for hook in self._pre_cutover_hooks:
             try:
                 hook(self._topology)
-            except Exception:  # BLE001:REVIEWED
-                logger.exception("Pre-cutover hook failed")
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("blue_green:promote"):
+                    logger.exception("Pre-cutover hook failed")
         time.sleep(min(drain_timeout_seconds, 5.0))
 
         # Step 3: Switch
@@ -373,9 +375,9 @@ class BlueGreenManager:
         for hook in self._post_cutover_hooks:
             try:
                 hook(self._topology)
-            except Exception:  # BLE001:REVIEWED
-                logger.exception("Post-cutover hook failed")
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("blue_green:promote"):
+                    logger.exception("Post-cutover hook failed")
         # Archive the cutover record
         self._archive_cutover(previous_color, standby.color, success=True)
 
@@ -481,8 +483,9 @@ class BlueGreenManager:
             try:
                 data = json.loads(self._state_file.read_text(encoding="utf-8"))
                 return DeploymentTopology.from_dict(data)
-            except Exception:  # BLE001:REVIEWED
-                logger.exception("Failed to load topology, reinitializing")
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("blue_green:_load_or_init"):
+                    logger.exception("Failed to load topology, reinitializing")
         return self._init_topology()
 
     def _init_topology(self) -> DeploymentTopology:
@@ -521,6 +524,7 @@ class BlueGreenManager:
         for f in files[:limit]:
             try:  # noqa: SIM105
                 records.append(json.loads(f.read_text(encoding="utf-8")))
-            except Exception:  # BLE001:REVIEWED
-                pass
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("blue_green:cutover_history"):
+                    pass
         return records

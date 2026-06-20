@@ -19,6 +19,8 @@ import json
 import sys
 from pathlib import Path
 
+from core.runtime.fault_handler import fail_open_guard
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 REGISTRY_PATH = PROJECT_ROOT / "core" / "features" / "schemas" / "registry.py"
@@ -61,11 +63,10 @@ def check_model_dim(brain_cfg: dict) -> tuple[bool, int]:
         else:
             return False, 0
         return nf == 41, nf
-    except Exception as exc:  # BLE001:REVIEWED (Sev 4, Phase 3b)
-        print(f"  [ERROR] Failed to read model {artifact_path}: {exc}")
-        return False, 0
-
-
+    except Exception as exc:  # BLE001:FOG (Sev 4, Phase 3b)
+        with fail_open_guard("restore_btc_schema_41:check_model_dim"):
+            print(f"  [ERROR] Failed to read model {artifact_path}: {exc}")
+            return False, 0
 def update_registry() -> None:
     """Update SCHEMA_DIMENSIONS: btc_macro_enhanced_37 37→41."""
     content = REGISTRY_PATH.read_text(encoding="utf-8")

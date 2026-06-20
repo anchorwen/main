@@ -34,7 +34,7 @@ def main(data_dir: str) -> int:
         try:
             with open(summary_path) as f:
                 d = json.load(f)
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             continue
         cv = d.get("cv_summary", {})
         if not cv:
@@ -68,7 +68,7 @@ def main(data_dir: str) -> int:
             try:
                 with open(cfg_file, encoding="utf-8") as f:
                     d = json.load(f)
-            except Exception:  # BLE001:REVIEWED
+            except Exception:  # BLE001:FOG_DEFERRED
                 config_status[bid] = {"status": "CORRUPT", "path": str(cfg_file)}
                 continue
             bt = d.get("brain_type", "?")

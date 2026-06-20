@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from core.deployment.path_defaults import BRAINS_DIR, LIVE_YAML_PATH, RETIRED_BRAINS_DIR
+from core.runtime.fault_handler import fail_open_guard
 
 
 def _utc_now_iso() -> str:
@@ -443,14 +444,15 @@ class BrainLifecycleManager:
             writer.commit()
             report.atomic_success = True
 
-        except Exception as exc:  # BLE001:REVIEWED
-            report.errors.append(f"retirement_transaction_failed: {exc}")
-            try:
-                writer.rollback()
-                report.rollback_triggered = True
-            except Exception as rb_exc:  # BLE001:REVIEWED
-                report.errors.append(f"rollback_failed: {rb_exc}")
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("brain_lifecycle_manager:retire_brain"):
+                report.errors.append(f"retirement_transaction_failed: {exc}")
+                try:
+                    writer.rollback()
+                    report.rollback_triggered = True
+                except Exception as rb_exc:  # BLE001:FOG
+                    with fail_open_guard("brain_lifecycle_manager:retire_brain"):
+                        report.errors.append(f"rollback_failed: {rb_exc}")
         return report
 
     # ── PnL cold storage ────────────────────────────────────────────────
@@ -868,8 +870,9 @@ class BrainLifecycleManager:
                     if bid in gov._brain_states:
                         gov._brain_states[bid]["last_transition_at"] = ts
                         gov._brain_states[bid]["transition_count"] = 1
-                except Exception:  # BLE001:REVIEWED
-                    pass
+                except Exception:  # BLE001:FOG
+                    with fail_open_guard("brain_lifecycle_manager:verify_startup_integrity"):
+                        pass
                 report.auto_registered.append(f"{bid}:{initial}")
                 logging.warning(
                     "BrainLifecycleManager: auto-registered '%s' in governance as '%s'",
@@ -1042,9 +1045,9 @@ class BrainLifecycleManager:
             ensemble_errors = validate_ensemble_references(bs)
             for err in ensemble_errors:
                 report.hardcoded_path_mismatches.append(f"ensemble: {err}")
-        except Exception:  # BLE001:REVIEWED
-            pass
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("brain_lifecycle_manager:verify_startup_integrity"):
+                pass
         # ── contract_group validity ──
         known_cgs: set[str] = set()
         if self._live_yaml_path.exists():
@@ -1071,9 +1074,9 @@ class BrainLifecycleManager:
                         f"{bid}: schema '{schema_id}' NOT supported by FeatureService. "
                         f"Available: {sorted(available)}"
                     )
-        except Exception:  # BLE001:REVIEWED
-            pass
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("brain_lifecycle_manager:verify_startup_integrity"):
+                pass
         # ── artifact_hash integrity ──
         import hashlib
 

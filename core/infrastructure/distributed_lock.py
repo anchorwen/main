@@ -34,6 +34,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 logger = logging.getLogger(__name__)
 
 
@@ -246,9 +248,9 @@ class FileLock(BaseLock):
             return None
         try:
             return json.loads(self._lock_path.read_text(encoding="utf-8"))
-        except Exception:  # BLE001:REVIEWED
-            return None
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("distributed_lock:holder_info"):
+                return None
     def _is_stale(self) -> bool:
         try:
             data = json.loads(self._lock_path.read_text(encoding="utf-8"))
@@ -264,9 +266,9 @@ class FileLock(BaseLock):
                     return age > data.get("ttl_seconds", self._ttl)
                 return False
             return True  # holder process dead → stale
-        except Exception:  # BLE001:REVIEWED
-            return True
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("distributed_lock:_is_stale"):
+                return True
     @staticmethod
     def _pid_exists(pid: int) -> bool:
         try:
@@ -280,10 +282,9 @@ class FileLock(BaseLock):
         try:
             if self._lock_path.exists():
                 self._lock_path.unlink()
-        except Exception:  # BLE001:REVIEWED
-            pass
-
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("distributed_lock:_force_release"):
+                pass
 # ── Directory-based lock (NFS-safe, no fcntl) ─────────────────────────────────
 
 
@@ -380,9 +381,9 @@ class DirectoryLock(BaseLock):
             return None
         try:
             return json.loads(meta.read_text(encoding="utf-8"))
-        except Exception:  # BLE001:REVIEWED
-            return None
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("distributed_lock:holder_info"):
+                return None
     def _is_stale(self) -> bool:
         meta = self._dir_path / "metadata.json"
         if not meta.exists():
@@ -397,19 +398,18 @@ class DirectoryLock(BaseLock):
                 datetime.now(UTC).replace(tzinfo=None) - acquired.replace(tzinfo=None)
             ).total_seconds()
             return age > data.get("ttl_seconds", self._ttl)
-        except Exception:  # BLE001:REVIEWED
-            return True
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("distributed_lock:_is_stale"):
+                return True
     def _force_release(self) -> None:
         import shutil
 
         try:
             if self._dir_path.exists():
                 shutil.rmtree(self._dir_path)
-        except Exception:  # BLE001:REVIEWED
-            pass
-
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("distributed_lock:_force_release"):
+                pass
 # ── Lock factory ──────────────────────────────────────────────────────────────
 
 
@@ -441,8 +441,9 @@ def get_lock(
             lock.acquire()
             lock.release()
             return FileLock(name, lock_dir=lock_dir, ttl_seconds=ttl_seconds)
-        except Exception:  # BLE001:REVIEWED
-            return DirectoryLock(name, lock_dir=lock_dir, ttl_seconds=ttl_seconds)
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("distributed_lock:get_lock"):
+                return DirectoryLock(name, lock_dir=lock_dir, ttl_seconds=ttl_seconds)
     raise ValueError(f"Unknown lock backend: {backend}")
 
 

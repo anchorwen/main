@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from core.runtime.fault_handler import log_and_continue
+from core.runtime.fault_handler import fail_open_guard, log_and_continue
 from core.schemas.trading_contracts import ConsensusResult, DegradedResult, Direction
 
 # ── Contract group definitions ────────────────────────────────────────────
@@ -343,8 +343,9 @@ class ContractGroupConsensus:
             total += 1
             try:
                 bid = getattr(p, "brain_id", "unknown")
-            except Exception:  # BLE001:REVIEWED
-                bid = "unknown"
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("contract_groups:_compute_weighted"):
+                    bid = "unknown"
             brain_ids.append(bid)
 
             # Check for degraded signal
@@ -510,8 +511,9 @@ class ContractGroupConsensus:
         for p in proposals:
             try:
                 bid = getattr(p, "brain_id", "unknown")
-            except Exception:  # BLE001:REVIEWED
-                bid = "unknown"
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("contract_groups:_compute_union"):
+                    bid = "unknown"
             all_brain_ids.append(bid)
 
             # Check for degraded signal

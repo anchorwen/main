@@ -351,7 +351,7 @@ def _run_step(cmd: list[str]) -> dict[str, Any]:
         }
     except subprocess.TimeoutExpired:
         return {"step": Path(cmd[1]).stem if len(cmd) > 1 else "unknown", "status": "timeout"}
-    except Exception as exc:  # BLE001:REVIEWED
+    except Exception as exc:  # BLE001:FOG_DEFERRED
         return {
             "step": Path(cmd[1]).stem if len(cmd) > 1 else "unknown",
             "status": "error",

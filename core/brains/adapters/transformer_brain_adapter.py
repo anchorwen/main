@@ -17,6 +17,7 @@ import numpy as np
 
 from core.brains.adapters.base_adapter import BaseBrainAdapter
 from core.deployment.brain_alert import emit_brain_alert
+from core.runtime.fault_handler import fail_open_guard
 
 logger = logging.getLogger(__name__)
 
@@ -89,10 +90,10 @@ class TransformerBrainAdapter(BaseBrainAdapter):
                 self._onnx_model_path = artifact_path
                 self._backend = "onnxruntime:transformer:isolated"
                 return
-            except Exception:  # BLE001:REVIEWED
-                self._guard = None
-                # Fall through to in-process loading
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("transformer_brain_adapter:load"):
+                    self._guard = None
+                    # Fall through to in-process loading
         try:
             import onnxruntime as ort
 
@@ -107,15 +108,15 @@ class TransformerBrainAdapter(BaseBrainAdapter):
                 self._num_features = input_shape[2]
             self._onnx_model_path = artifact_path
             self._backend = "onnxruntime:transformer"
-        except Exception as exc:  # BLE001:REVIEWED
-            self._backend = f"stub:{type(exc).__name__}"
-            self._session = None
-            emit_brain_alert(
-                self._brain_entry.get("brain_id", "unknown"),
-                "model_load_failed",
-                {"artifact": artifact_path, "error": f"{type(exc).__name__}: {exc}"},
-            )
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("transformer_brain_adapter:load"):
+                self._backend = f"stub:{type(exc).__name__}"
+                self._session = None
+                emit_brain_alert(
+                    self._brain_entry.get("brain_id", "unknown"),
+                    "model_load_failed",
+                    {"artifact": artifact_path, "error": f"{type(exc).__name__}: {exc}"},
+                )
     def run(self, snapshot, feature_source=None) -> BrainSignal:
         """Override to handle dict (single bar) or (n_bars, 9) pre-built sequence.
 

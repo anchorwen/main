@@ -25,6 +25,8 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 
 @dataclass
 class BrainRanking:
@@ -99,9 +101,9 @@ class BrainLeaderboard:
                 from core.feedback.brain_quality_engine import BrainQualityEngine
 
                 self._engine = BrainQualityEngine.instance()
-            except Exception:  # BLE001:REVIEWED
-                pass
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("brain_leaderboard:__init__"):
+                    pass
     def rank(
         self,
         metrics_map: dict[str, Any],

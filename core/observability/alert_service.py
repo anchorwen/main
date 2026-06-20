@@ -205,7 +205,7 @@ class AlertService:
                 for ch in channels:
                     try:
                         ch.send(alert)
-                    except Exception:  # BLE001:REVIEWED
+                    except Exception:  # BLE001:FOG_DEFERRED
                         logging.exception("AlertService failed sending alert to channel=%s", ch)
                 fired.append(alert)
 

@@ -20,6 +20,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 SCHEMA_VERSION = "live_data_quality_report.v1"
 
 
@@ -207,9 +209,9 @@ def build_report(
         from scripts.validators.journal_validator import validate_journal_file
 
         journal_schema_check = validate_journal_file(journal_path, date_filter=date_filter)
-    except Exception:  # BLE001:REVIEWED
-        journal_schema_check = {"error": "journal_validator_import_failed"}
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("live_data_quality_report:build_report"):
+            journal_schema_check = {"error": "journal_validator_import_failed"}
     receipt_map = _collect_receipt_map(receipt_root, date_filter=date_filter)
     archive_map = _collect_archive_map(archive_root, date_filter=date_filter)
     outbox_map = _collect_outbox_map(outbox_root)

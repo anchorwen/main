@@ -89,7 +89,7 @@ def main() -> int:
     except subprocess.TimeoutExpired:
         print(f"[mypy] {file_path}: timed out")
         failed = True
-    except Exception as exc:  # BLE001:REVIEWED
+    except Exception as exc:  # BLE001:FOG_DEFERRED
         print(f"[mypy] {file_path}: check failed ({exc})")
 
     return 1 if failed else 0  # IRON_LAW-13-S1: blocking on new errors

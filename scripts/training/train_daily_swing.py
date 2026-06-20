@@ -617,7 +617,7 @@ def main():
                 model, metrics = train_xgboost(dataset, seed=args.seed, verbosity=args.verbose)
                 save_model_xgboost(model, metrics, args.output_dir, contract_id)
                 all_metrics["models"]["xgboost"] = metrics
-            except Exception as exc:  # BLE001:REVIEWED
+            except Exception as exc:  # BLE001:FOG_DEFERRED
                 print(f"[xgboost] Training failed: {exc}")
                 all_metrics["models"]["xgboost"] = {"error": str(exc)}
 
@@ -626,7 +626,7 @@ def main():
                 model, metrics = train_lightgbm(dataset, seed=args.seed, verbosity=args.verbose)
                 save_model_lightgbm(model, metrics, args.output_dir, contract_id)
                 all_metrics["models"]["lightgbm"] = metrics
-            except Exception as exc:  # BLE001:REVIEWED
+            except Exception as exc:  # BLE001:FOG_DEFERRED
                 print(f"[lightgbm] Training failed: {exc}")
                 all_metrics["models"]["lightgbm"] = {"error": str(exc)}
 

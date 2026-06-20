@@ -53,7 +53,7 @@ def _get_git_user() -> str:
             timeout=5,
         )
         return result.stdout.strip() or "unknown"
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_DEFERRED
         return "unknown"
 
 
@@ -67,7 +67,7 @@ def _get_git_commit() -> str:
             timeout=5,
         )
         return result.stdout.strip() or "unknown"
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_DEFERRED
         return "unknown"
 
 

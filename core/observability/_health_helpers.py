@@ -36,7 +36,7 @@ def _safe_json_load(path: str) -> dict[str, Any] | None:
             return None
         with open(path, encoding="utf-8") as f:
             return json.load(f)
-    except Exception:  # BLE001:REVIEWED — Iron Law #1: never crash on bad data
+    except Exception:  # BLE001:FOG_DEFERRED — Iron Law #1: never crash on bad data
         return None
 
 
@@ -47,7 +47,7 @@ def _safe_jsonl_count(path: str) -> int | None:
             return None
         with open(path, encoding="utf-8") as f:
             return sum(1 for _ in f)
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_DEFERRED
         return None
 
 
@@ -90,7 +90,7 @@ def _safe_jsonl_last(path: str, tail_bytes: int = 8192) -> dict[str, Any] | None
                 except json.JSONDecodeError:
                     continue
             return None
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_DEFERRED
         return None
 
 
@@ -141,5 +141,5 @@ def _safe_jsonl_tail_stats(path: str, max_scan: int = 500) -> dict[str, Any]:
             "retry_count": retry_count,
             "label_distribution": labels,
         }
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_DEFERRED
         return {}

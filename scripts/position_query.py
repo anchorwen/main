@@ -45,7 +45,7 @@ def run(symbol: str | None = None, terminal_path: str | None = None) -> dict[str
 
     try:
         import MetaTrader5 as mt5
-    except Exception as exc:  # BLE001:REVIEWED
+    except Exception as exc:  # BLE001:FOG_DEFERRED
         result["error"] = f"MetaTrader5 import failed: {exc}"
         return result
 

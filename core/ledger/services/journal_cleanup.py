@@ -21,6 +21,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 
 def _utc_now_iso() -> str:
     return (
@@ -58,8 +60,9 @@ def _load_journal(path: Path) -> list[dict[str, Any]]:
                         ),
                         flush=True,
                     )
-                except Exception:  # BLE001:REVIEWED
-                    pass
+                except Exception:  # BLE001:FOG
+                    with fail_open_guard("journal_cleanup:_load_journal"):
+                        pass
     if parse_errors:
         try:  # noqa: SIM105
             print(
@@ -74,8 +77,9 @@ def _load_journal(path: Path) -> list[dict[str, Any]]:
                 ),
                 flush=True,
             )
-        except Exception:  # BLE001:REVIEWED
-            pass
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("journal_cleanup:_load_journal"):
+                pass
     return entries
 
 
@@ -123,9 +127,9 @@ def _append_journal(path: Path, entry: dict[str, Any], *, lock_dir: Path | None 
                             return  # Already recorded — skip
                     except json.JSONDecodeError:
                         continue
-        except Exception:  # BLE001:REVIEWED
-            pass  # Best-effort
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("journal_cleanup:_append_journal"):
+                pass  # Best-effort
     if _action == "close" and _ticket is not None:
         # DQAF-20260620-001: tail-read window 200→500 — same-ticket close
         # entries can be separated by hundreds of modify_sltp lines during
@@ -144,9 +148,9 @@ def _append_journal(path: Path, entry: dict[str, Any], *, lock_dir: Path | None 
                             return  # Already recorded — skip duplicate
                     except json.JSONDecodeError:
                         continue
-        except Exception:  # BLE001:REVIEWED
-            pass  # Best-effort — if check fails, write anyway
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("journal_cleanup:_append_journal"):
+                pass  # Best-effort — if check fails, write anyway
     if lock_dir is not None:
         from core.infrastructure.distributed_lock import FileLock
         _lock = FileLock("live_trade_journal", lock_dir=str(lock_dir), ttl_seconds=10)
@@ -196,8 +200,9 @@ def _resolve_strategy(entry: dict[str, Any]) -> str:
             from core.contracts.strategy_magic import MAGIC_TO_STRATEGY
 
             return MAGIC_TO_STRATEGY.get(magic, "")
-        except Exception:  # BLE001:REVIEWED
-            pass
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("journal_cleanup:_resolve_strategy"):
+                pass
     return ""
 
 
@@ -721,15 +726,15 @@ def compact_journal(
         else:
             _log.debug("Journal compaction: nothing to remove")
 
-    except Exception as exc:  # BLE001:REVIEWED
-        _log.error("Journal compaction failed: %s", exc, exc_info=True)
-        # Clean up temp file on failure
-        import contextlib
-        with contextlib.suppress(OSError):
-            if temp_path.exists():
-                temp_path.unlink()
-        return {"status": "error", "error": str(exc)[:200]}
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("journal_cleanup:compact_journal"):
+            _log.error("Journal compaction failed: %s", exc, exc_info=True)
+            # Clean up temp file on failure
+            import contextlib
+            with contextlib.suppress(OSError):
+                if temp_path.exists():
+                    temp_path.unlink()
+            return {"status": "error", "error": str(exc)[:200]}
     finally:
         if _lock_acquired and _lock is not None:
             _lock.release()

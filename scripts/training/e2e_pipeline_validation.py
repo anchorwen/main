@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from core.runtime.fault_handler import fail_open_guard
 
 THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = THIS_DIR.parent.parent
@@ -525,13 +526,13 @@ def main() -> int:
         print(f"  Artifacts: {tmpdir}")
         print("\n  All 7 pipeline stages executed successfully.")
 
-    except Exception as exc:  # BLE001:REVIEWED
-        print(f"\n[FAIL] Pipeline error: {exc}")
-        import traceback
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("e2e_pipeline_validation:main"):
+            print(f"\n[FAIL] Pipeline error: {exc}")
+            import traceback
 
-        traceback.print_exc()
-        return 1
-
+            traceback.print_exc()
+            return 1
     return 0
 
 

@@ -7,6 +7,7 @@ from core.contracts.domain_keys import (
 )
 from core.deployment.schema_versions import SCHEMA_ENGINE_CONFIG_EVIDENCE
 from core.observability.metric_names import ENGINE_CONFIG_RELOAD_TOTAL
+from core.runtime.fault_handler import fail_open_guard
 
 
 class SystemFacade:
@@ -175,9 +176,9 @@ class SystemSelfTest:
         try:
             fn()
             return {"name": name, "status": "pass"}
-        except Exception as exc:  # BLE001:REVIEWED
-            return {"name": name, "status": "fail", "error": str(exc)}
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("system_facade:_check"):
+                return {"name": name, "status": "fail", "error": str(exc)}
     def _test_health(self):
         r = self._c.health_check.liveness()
         assert r["status"] == "alive", f"liveness: {r}"

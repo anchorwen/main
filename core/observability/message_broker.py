@@ -28,6 +28,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from core.observability.event_bus import EventBus
+from core.runtime.fault_handler import fail_open_guard
 
 logger = logging.getLogger(__name__)
 
@@ -178,10 +179,10 @@ class RedisStreamsBroker(MessageBroker):
             self._client = _redis.Redis.from_url(self._url, decode_responses=True)
             self._client.ping()
             logger.info("RedisStreamsBroker connected to %s", self._url)
-        except Exception as exc:  # BLE001:REVIEWED
-            logger.warning("Redis unavailable (%s), using in-process fallback", exc)
-            self._client = None
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("message_broker:_connect"):
+                logger.warning("Redis unavailable (%s), using in-process fallback", exc)
+                self._client = None
     @property
     def backend_name(self) -> str:
         return "redis" if self._client else "inprocess(fallback)"
@@ -197,19 +198,20 @@ class RedisStreamsBroker(MessageBroker):
             try:
                 h(event_type, payload)
                 delivered += 1
-            except Exception:  # BLE001:REVIEWED
-                logger.exception("Handler failed for %s", event_type)
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("message_broker:publish"):
+                    logger.exception("Handler failed for %s", event_type)
         # Publish to Redis for external consumers
         if self._client:
             try:
                 msg = Message(event_type=event_type, payload=payload)
                 stream = f"{self._stream_prefix}:{event_type}"
                 self._client.xadd(stream, {"data": json.dumps(msg.to_dict())}, maxlen=10000)
-            except Exception:  # BLE001:REVIEWED
-                logger.exception("Redis publish failed for %s", event_type)
-                if self._fallback:
-                    self._fallback.publish(event_type, payload)
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("message_broker:publish"):
+                    logger.exception("Redis publish failed for %s", event_type)
+                    if self._fallback:
+                        self._fallback.publish(event_type, payload)
         elif self._fallback:
             self._fallback.publish(event_type, payload)
 
@@ -233,8 +235,9 @@ class RedisStreamsBroker(MessageBroker):
         if self._client:
             try:  # noqa: SIM105
                 self._client.close()
-            except Exception:  # BLE001:REVIEWED
-                pass
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("message_broker:close"):
+                    pass
             self._client = None
 
 

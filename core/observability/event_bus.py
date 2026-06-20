@@ -43,7 +43,7 @@ class EventBus:
             try:
                 handler(event_type, payload)
                 delivered += 1
-            except Exception:  # BLE001:REVIEWED
+            except Exception:  # BLE001:FOG_DEFERRED
                 logging.exception("EventBus handler failed for event_type=%s", event_type)
         return delivered
 

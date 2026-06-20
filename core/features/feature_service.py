@@ -30,6 +30,7 @@ _IMPLEMENTED_SCHEMAS: set[str] = {
 
 from core.features.schemas.registry import get_schema_dimension as _schema_dimension
 from core.features.schemas.registry import get_schema_feature_names as _schema_feature_names
+from core.runtime.fault_handler import fail_open_guard
 
 
 class FeatureService:
@@ -144,14 +145,15 @@ class FeatureService:
                                     freshness["max_age_seconds"],
                                 )
                                 _stale = True
-                        except Exception:  # BLE001:REVIEWED
-                            logging.warning(
-                                "FeatureService freshness check failed for %s — "
-                                "forcing live recompute to avoid stale cache",
-                                symbol,
-                                exc_info=True,
-                            )
-                            _stale = True
+                        except Exception:  # BLE001:FOG
+                            with fail_open_guard("feature_service:build_feature_vector"):
+                                logging.warning(
+                                    "FeatureService freshness check failed for %s — "
+                                    "forcing live recompute to avoid stale cache",
+                                    symbol,
+                                    exc_info=True,
+                                )
+                                _stale = True
                     if not _stale:
                         if self._adapter is not None:
                             vec = self._adapter.build_model_input(record.values)[0]
@@ -165,12 +167,12 @@ class FeatureService:
                         )
                         self._last_known_vector = np.asarray(raw, dtype=np.float32).copy()
                         return raw
-            except Exception:  # BLE001:REVIEWED
-                logging.exception(
-                    "FeatureService failed reading from local store for symbol=%s",
-                    symbol,
-                )
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("feature_service:build_feature_vector"):
+                    logging.exception(
+                        "FeatureService failed reading from local store for symbol=%s",
+                        symbol,
+                    )
         # ── Tier 2: Live MT5 computer + adapter (timeout-guarded) ──
         if self._computer is not None and self._adapter is not None:
             import threading
@@ -181,9 +183,9 @@ class FeatureService:
             def _run_compute() -> None:
                 try:
                     _compute_result[0] = self._computer.compute_all()
-                except Exception as exc:  # BLE001:REVIEWED
-                    _compute_error[0] = exc
-
+                except Exception as exc:  # BLE001:FOG
+                    with fail_open_guard("feature_service:_run_compute"):
+                        _compute_error[0] = exc
             _t = threading.Thread(target=_run_compute, daemon=True)
             _t0 = time.monotonic()
             _t.start()
@@ -290,23 +292,23 @@ class FeatureService:
                             # FeatureService's V9LiveFeatureComputer doesn't produce
                             # micro fields — writing here created zero-valued records
                             # that raced with the real ones from live_cycle.
-                    except Exception:  # BLE001:REVIEWED
-                        logging.exception(
-                            (
-                                "FeatureService failed writing computed features"
-                                " to store for symbol=%s"
-                            ),
-                            symbol,
-                        )
-
+                    except Exception:  # BLE001:FOG
+                        with fail_open_guard("feature_service:_run_compute"):
+                            logging.exception(
+                                (
+                                    "FeatureService failed writing computed features"
+                                    " to store for symbol=%s"
+                                ),
+                                symbol,
+                            )
                 model_input = self._adapter.build_model_input(features)
                 return model_input[0]  # (n_features,) 1-D
-            except Exception:  # BLE001:REVIEWED
-                logging.exception(
-                    "FeatureService live MT5 feature computation failed for symbol=%s",
-                    symbol,
-                )
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("feature_service:_run_compute"):
+                    logging.exception(
+                        "FeatureService live MT5 feature computation failed for symbol=%s",
+                        symbol,
+                    )
         # ── Tier 3: Zero-vector stub ──
         logging.warning(
             "FeatureService returned ZERO feature vector for symbol=%s — "
@@ -322,8 +324,9 @@ class FeatureService:
                 "zero_feature_vector_fallback",
                 {"symbol": symbol, "n_features": n_features, "tier": 3},
             )
-        except Exception:  # BLE001:REVIEWED
-            pass
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("feature_service:_run_compute"):
+                pass
         return np.zeros(n_features, dtype=np.float32)
 
 

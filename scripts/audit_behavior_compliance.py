@@ -271,7 +271,7 @@ def audit_max_positions_code() -> dict:
                 for i, line in enumerate(f, 1):
                     if "max_positions" in line:
                         refs.append(f"{py_file}:{i}: {line.rstrip()}")
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             pass
     for py_file in sorted(root.glob("scripts/**/*.py")):
         try:
@@ -279,7 +279,7 @@ def audit_max_positions_code() -> dict:
                 for i, line in enumerate(f, 1):
                     if "max_positions" in line:
                         refs.append(f"{py_file}:{i}: {line.rstrip()}")
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             pass
 
     # Find Phase 10 dispatch path

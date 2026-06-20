@@ -15,6 +15,7 @@ import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from core.runtime.fault_handler import fail_open_guard
 
 _project_root = Path(__file__).resolve().parents[1]
 if str(_project_root) not in sys.path:
@@ -31,10 +32,9 @@ def _age_minutes(ts: str | None) -> float:
     try:
         dt = datetime.fromisoformat(str(ts)[:19])
         return (datetime.now(UTC).replace(tzinfo=None) - dt.replace(tzinfo=None)).total_seconds() / 60
-    except Exception:  # BLE001:REVIEWED
-        return -1
-
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("system_health:_age_minutes"):
+            return -1
 def check_symbol(base_dir: str, label: str) -> dict:
     """Run all health checks for one symbol."""
     base = Path(base_dir)
@@ -59,8 +59,9 @@ def check_symbol(base_dir: str, label: str) -> dict:
                     ts = evt.get("timestamp", "")
                     if ts:
                         last_ts = ts
-                except Exception:  # BLE001:REVIEWED
-                    pass
+                except Exception:  # BLE001:FOG
+                    with fail_open_guard("system_health:check_symbol"):
+                        pass
         result["stream"] = {
             "exists": True,
             "total_events": lines,
@@ -90,9 +91,9 @@ def check_symbol(base_dir: str, label: str) -> dict:
                 for bid, m in active[-3:]
             ],
         }
-    except Exception as e:  # BLE001:REVIEWED (Sev 4, Phase 3b)
-        result["projection"] = {"error": str(e)}
-
+    except Exception as e:  # BLE001:FOG (Sev 4, Phase 3b)
+        with fail_open_guard("system_health:check_symbol"):
+            result["projection"] = {"error": str(e)}
     # ── 3. Degradation status ──
     dh_path = base / "state" / "data_health_state.json"
     if dh_path.exists():
@@ -112,9 +113,9 @@ def check_symbol(base_dir: str, label: str) -> dict:
                 "fails": fails[:5],
                 "warns": warns[:5],
             }
-        except Exception as e:  # BLE001:REVIEWED (Sev 4, Phase 3b)
-            result["degradation"] = {"error": str(e)}
-
+        except Exception as e:  # BLE001:FOG (Sev 4, Phase 3b)
+            with fail_open_guard("system_health:check_symbol"):
+                result["degradation"] = {"error": str(e)}
     # ── 4. Governance status ──
     gov_path = base / "governance_state.json"
     if gov_path.exists():
@@ -131,9 +132,9 @@ def check_symbol(base_dir: str, label: str) -> dict:
                 "status_counts": status_counts,
                 "live_brains": live_brains,
             }
-        except Exception as e:  # BLE001:REVIEWED (Sev 4, Phase 3b)
-            result["governance"] = {"error": str(e)}
-
+        except Exception as e:  # BLE001:FOG (Sev 4, Phase 3b)
+            with fail_open_guard("system_health:check_symbol"):
+                result["governance"] = {"error": str(e)}
     # ── 5. Data freshness ──
     key_files = {
         "execution_state": base / "state" / "execution_state.json",

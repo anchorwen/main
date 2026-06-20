@@ -28,6 +28,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from core.runtime.fault_handler import fail_open_guard
 
 THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = THIS_DIR.parent.parent
@@ -128,8 +129,9 @@ def run_evaluation(
             "brain_states": gov_svc.get_all_states(),
             "transition_log": gov_svc.get_transition_log(),
         }
-    except Exception:  # BLE001:REVIEWED
-        gov = {}
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("brain_promotion_runner:run_evaluation"):
+            gov = {}
     brain_states = gov.get("brain_states", {})
 
     evaluator = BrainPromotionEvaluator()

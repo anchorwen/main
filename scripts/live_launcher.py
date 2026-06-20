@@ -25,6 +25,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO
 
+from core.runtime.fault_handler import fail_open_guard
+
 THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = THIS_DIR.parent
 
@@ -156,13 +158,13 @@ def _feedback_loop_runner(
             if log_fh is not None:
                 log_fh.write(msg + "\n")
                 log_fh.flush()
-        except Exception as exc:  # BLE001:REVIEWED
-            msg = f"[feedback] ERROR: {exc}"
-            print(msg, flush=True)
-            if log_fh is not None:
-                log_fh.write(msg + "\n")
-                log_fh.flush()
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("live_launcher:_feedback_loop_runner"):
+                msg = f"[feedback] ERROR: {exc}"
+                print(msg, flush=True)
+                if log_fh is not None:
+                    log_fh.write(msg + "\n")
+                    log_fh.flush()
         # Sleep in small increments so we can respond to stop_event quickly
         remaining = interval_seconds
         while remaining > 0 and not stop_event.is_set():
@@ -207,9 +209,9 @@ def launch(config_path: str = "configs/live.yaml") -> int:
             print(
                 f"[launcher] Unresolved tickets needing manual review: {tickets[:20]}", flush=True
             )
-    except Exception as exc:  # BLE001:REVIEWED
-        print(f"[launcher] WARNING: journal repair/cleanup failed: {exc}", flush=True)
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("live_launcher:launch"):
+            print(f"[launcher] WARNING: journal repair/cleanup failed: {exc}", flush=True)
     # ── Open log file for this session ──
     log_path = logs_dir / f"live_launcher_{_utc_compact()}.log"
     log_fh = open(log_path, "a", encoding="utf-8")
@@ -419,9 +421,9 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                 if _stale:
                     _lf.unlink()
                     _echo(f"  Stale lock cleaned: {_lf.name} ({_reason})")
-            except Exception:  # BLE001:REVIEWED
-                pass
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("live_launcher:_echo"):
+                    pass
     _echo(f"  Log: {log_path}")
     _echo("=" * 60)
     _echo("")
@@ -445,9 +447,9 @@ def launch(config_path: str = "configs/live.yaml") -> int:
             _echo(
                 f"  WARNING: {_orphan_count} other Python processes detected — may cause MT5 contention"
             )
-    except Exception:  # BLE001:REVIEWED
-        pass
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("live_launcher:_echo"):
+            pass
     # ── FIX-019: Kill stale bridge/intent from previous crashed sessions ──
     # Without this, an old bridge surviving a launcher crash will poll the
     # same outbox directory alongside the new bridge → duplicate MT5 orders.
@@ -473,8 +475,9 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                             print(f"[launcher] Killed stale bridge PID={_old_pid}", flush=True)
                         except OSError:
                             pass
-    except Exception:  # BLE001:REVIEWED
-        pass
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("live_launcher:_echo"):
+            pass
     if _stale_killed:
         _echo(f"  Stale bridge cleaned: {_stale_killed} process(es) terminated")
         time_module.sleep(1.0)  # let OS reclaim the PID
@@ -567,11 +570,11 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                     if _cold_result.stderr:
                         log_fh.write(_cold_result.stderr[:2000] + "\n")
                 log_fh.flush()
-        except Exception as _cold_exc:  # BLE001:REVIEWED
-            print(f"[launcher] Cold-start daily_ops error: {_cold_exc}", flush=True)
-            log_fh.write(f"[launcher] Cold-start daily_ops error: {_cold_exc}\n")
-            log_fh.flush()
-
+        except Exception as _cold_exc:  # BLE001:FOG
+            with fail_open_guard("live_launcher:_echo"):
+                print(f"[launcher] Cold-start daily_ops error: {_cold_exc}", flush=True)
+                log_fh.write(f"[launcher] Cold-start daily_ops error: {_cold_exc}\n")
+                log_fh.flush()
     intent_proc = subprocess.Popen(
         intent_cmd,
         stdout=intent_log_fh,
@@ -631,9 +634,9 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                             log_fh.flush()
                     else:
                         stop_event.wait(1.0)
-        except Exception:  # BLE001:REVIEWED
-            pass
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("live_launcher:_file_watcher"):
+                pass
     bridge_thread = threading.Thread(
         target=_file_watcher,
         args=(bridge_log_path, "bridge", stop_event, log_fh),
@@ -690,8 +693,9 @@ def launch(config_path: str = "configs/live.yaml") -> int:
         for _fh in [_watchdog_log_fh, bridge_log_fh, intent_log_fh, log_fh]:
             try:  # noqa: SIM105
                 _fh.close()
-            except Exception:  # BLE001:REVIEWED
-                pass
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("live_launcher:_on_signal"):
+                    pass
         sys.exit(0)
 
     signal.signal(signal.SIGINT, _on_signal)
@@ -778,13 +782,13 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                 intent_proc = new_proc
 
             return new_proc
-        except Exception as exc:  # BLE001:REVIEWED
-            msg3 = f"[launcher] ERROR restarting {name}: {exc}"
-            print(msg3, flush=True)
-            log_fh.write(msg3 + "\n")
-            log_fh.flush()
-            return None
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("live_launcher:_restart_process"):
+                msg3 = f"[launcher] ERROR restarting {name}: {exc}"
+                print(msg3, flush=True)
+                log_fh.write(msg3 + "\n")
+                log_fh.flush()
+                return None
     # ── Stall detection helpers ──
     decisions_dir = PROJECT_ROOT / cfg["base_dir"] / "decisions"
     trade_journal_path = PROJECT_ROOT / cfg["base_dir"] / "live_trade_journal.jsonl"
@@ -834,9 +838,9 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                     ).total_seconds() / 60
                     if hb_age > BRIDGE_STALL_MINUTES:
                         alerts.append(f"BRIDGE_STALL: no heartbeat for {hb_age:.0f}m")
-            except Exception:  # BLE001:REVIEWED
-                pass
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("live_launcher:_check_stall"):
+                    pass
         # 3. Active position staleness
         if active_position_path.exists():
             try:
@@ -849,9 +853,9 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                     ).total_seconds() / 3600
                     if age_h > 24:
                         alerts.append(f"STALE_ACTIVE_POSITION: position state {age_h:.0f}h old")
-            except Exception:  # BLE001:REVIEWED
-                pass
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("live_launcher:_check_stall"):
+                    pass
         # 4. Governance staleness
         _gov_age_h = (
             (now - governance_path.stat().st_mtime) / 3600 if governance_path.exists() else 0
@@ -906,9 +910,9 @@ def launch(config_path: str = "configs/live.yaml") -> int:
                     print(msg, flush=True)
                     log_fh.write(msg + "\n")
                     log_fh.flush()
-        except Exception:  # BLE001:REVIEWED
-            pass
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("live_launcher:_handle_stall_alerts"):
+                pass
     # ── Main watchdog loop ──
     try:
         while not stop_event.is_set():
@@ -978,9 +982,9 @@ def launch(config_path: str = "configs/live.yaml") -> int:
     for _fh in [bridge_log_fh, intent_log_fh, log_fh]:
         try:  # noqa: SIM105
             _fh.close()
-        except Exception:  # BLE001:REVIEWED
-            pass
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("live_launcher:_handle_stall_alerts"):
+                pass
     return exit_code[0]
 
 

@@ -15,6 +15,7 @@ import urllib.request
 
 from core.observability.alert_service import AlertChannel
 from core.observability.localization import RuleRegistry
+from core.runtime.fault_handler import fail_open_guard
 
 _SLACK_WEBHOOK_ENV = "QUANTOS_SLACK_WEBHOOK_URL"
 
@@ -57,9 +58,9 @@ class SlackAlertChannel(AlertChannel):
             )
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
                 return 200 <= resp.status < 300
-        except Exception:  # BLE001:REVIEWED
-            return False
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("alert_channels:send"):
+                return False
     def _format(self, alert: dict) -> dict:
         severity = alert.get("severity", "warning")
         color = self.SEVERITY_COLORS.get(severity, "#94a3b8")
@@ -154,9 +155,9 @@ class DingTalkAlertChannel(AlertChannel):
             )
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
                 return 200 <= resp.status < 300
-        except Exception:  # BLE001:REVIEWED
-            return False
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("alert_channels:send"):
+                return False
     def _format(self, alert: dict) -> dict:
         severity = alert.get("severity", "warning")
         prefix = RuleRegistry.severity_prefix(severity)
@@ -344,6 +345,7 @@ class CompositeAlertChannel(AlertChannel):
             try:
                 if ch.send(alert):
                     any_ok = True
-            except Exception:  # BLE001:REVIEWED
-                pass
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("alert_channels:send"):
+                    pass
         return any_ok

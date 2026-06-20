@@ -79,6 +79,7 @@ from core.contracts.domain_keys import (
 )
 from core.deployment.schema_versions import SCHEMA_RELEASE_READINESS, SCHEMA_ROLLBACK_DRILL
 from core.deployment.validation_mode import resolve_validation_mode
+from core.runtime.fault_handler import fail_open_guard
 
 
 class RollbackDrillService:
@@ -195,13 +196,13 @@ class RollbackDrillService:
                     PAYLOAD_KEY_FAILED_COUNT: verification.get(PAYLOAD_KEY_FAILED_COUNT, 0)
                 },
             }
-        except Exception as exc:  # BLE001:REVIEWED
-            return {
-                PAYLOAD_KEY_NAME: ROLLBACK_PREREQUISITE_EVIDENCE_MANIFEST_VERIFIED,
-                PAYLOAD_KEY_PASSED: False,
-                PAYLOAD_KEY_DETAIL: {PAYLOAD_KEY_ERROR: str(exc)},
-            }
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("rollback_drill:_verify_evidence"):
+                return {
+                    PAYLOAD_KEY_NAME: ROLLBACK_PREREQUISITE_EVIDENCE_MANIFEST_VERIFIED,
+                    PAYLOAD_KEY_PASSED: False,
+                    PAYLOAD_KEY_DETAIL: {PAYLOAD_KEY_ERROR: str(exc)},
+                }
     def _build_steps(self, version: str, reason: str) -> list[dict]:
         return [
             {

@@ -200,7 +200,7 @@ def check_source_blueprint_freshness() -> list[str]:
                     changed_all.add(line)
                     if line.endswith(".py") and not line.startswith("tests/"):
                         changed_py.add(line)
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             pass
 
     if not changed_py:

@@ -24,6 +24,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 logger = logging.getLogger(__name__)
 
 
@@ -455,9 +457,9 @@ def apply_promotion_decisions(
                     f"{brain_id}: rejected {old_status}→{d.target_status} — invalid transition"
                 )
                 continue
-        except Exception:  # BLE001:REVIEWED
-            pass  # non-critical — state machine validation is best-effort
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("brain_promotion:apply_promotion_decisions"):
+                pass  # non-critical — state machine validation is best-effort
         brain_states[brain_id]["status"] = d.target_status
         brain_states[brain_id]["last_transition_at"] = d.evaluated_at
         brain_states[brain_id]["transition_count"] = (

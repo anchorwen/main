@@ -78,6 +78,7 @@ from core.deployment.schema_versions import (
     SCHEMA_RELEASE_CERTIFICATE,
     SCHEMA_RELEASE_CERTIFICATE_VERIFICATION,
 )
+from core.runtime.fault_handler import fail_open_guard
 
 
 class ReleaseCertificationService:
@@ -210,9 +211,9 @@ class ReleaseCertificationService:
             }
         try:
             return self._container.evidence_bundle.verify_bundle(manifest)
-        except Exception as exc:  # BLE001:REVIEWED
-            return {PAYLOAD_KEY_VERIFIED: False, PAYLOAD_KEY_ERROR: str(exc)}
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("release_certification:_verify_evidence_manifest"):
+                return {PAYLOAD_KEY_VERIFIED: False, PAYLOAD_KEY_ERROR: str(exc)}
     def _alpha_budget_evidence(self, pipeline: dict, evidence_verification: dict) -> dict:
         manifest_path = pipeline.get(RELEASE_PIPELINE_KEY_ARTIFACTS, {}).get(
             ARTIFACT_EVIDENCE_MANIFEST

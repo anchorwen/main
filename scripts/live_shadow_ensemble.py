@@ -21,6 +21,8 @@ from typing import Any
 
 import numpy as np
 
+from core.runtime.fault_handler import fail_open_guard
+
 THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = THIS_DIR.parent
 DEFAULT_BRAINS_DIR = PROJECT_ROOT / "configs" / "brains"
@@ -81,15 +83,14 @@ def _build_brain(entry: dict[str, Any]) -> tuple[Any | None, str | None]:
         factory = BrainFactory()
         adapter = factory.build(entry)
         return adapter, None
-    except Exception as exc:  # BLE001:REVIEWED
-        err_msg = f"{type(exc).__name__}: {exc}"
-        print(
-            f"[shadow_ensemble] build_failed brain_id={bid} error={err_msg}",
-            flush=True,
-        )
-        return None, err_msg
-
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("live_shadow_ensemble:_build_brain"):
+            err_msg = f"{type(exc).__name__}: {exc}"
+            print(
+                f"[shadow_ensemble] build_failed brain_id={bid} error={err_msg}",
+                flush=True,
+            )
+            return None, err_msg
 def _run_single_brain(
     adapter: Any,
     brain_id: str,
@@ -116,23 +117,22 @@ def _run_single_brain(
             if hasattr(adapter, "describe")
             else "unknown",
         }
-    except Exception as exc:  # BLE001:REVIEWED
-        elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
-        err_str = str(exc)[:500]
-        print(
-            f"[shadow_ensemble] infer_error brain_id={brain_id} "
-            f"brain_type={brain_type} error={err_str}",
-            flush=True,
-        )
-        return {
-            "brain_id": brain_id,
-            "brain_type": brain_type,
-            "status": "error",
-            "runtime_ms": elapsed_ms,
-            "error": err_str,
-        }
-
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("live_shadow_ensemble:_run_single_brain"):
+            elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
+            err_str = str(exc)[:500]
+            print(
+                f"[shadow_ensemble] infer_error brain_id={brain_id} "
+                f"brain_type={brain_type} error={err_str}",
+                flush=True,
+            )
+            return {
+                "brain_id": brain_id,
+                "brain_type": brain_type,
+                "status": "error",
+                "runtime_ms": elapsed_ms,
+                "error": err_str,
+            }
 def _compare_directions(results: list[dict[str, Any]]) -> dict[str, Any]:
     """Compare direction consensus across brains."""
     ok_results = [r for r in results if r["status"] == "ok"]
@@ -210,8 +210,9 @@ def _resolve_feature_vector(
                     dtype=np.float64,
                 )
                 return vec, str(_dim)
-        except Exception:  # BLE001:REVIEWED
-            pass
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("live_shadow_ensemble:_resolve_feature_vector"):
+                pass
     return np.zeros(feature_dim, dtype=np.float64), "stub"
 
 
@@ -236,8 +237,9 @@ def _resolve_micro_feature_vector(
                 )
                 vec = adapter.build_model_input(record.values).ravel()
                 return vec, "store"
-        except Exception:  # BLE001:REVIEWED
-            pass
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("live_shadow_ensemble:_resolve_micro_feature_vector"):
+                pass
     return np.zeros(9, dtype=np.float64), "stub"
 
 
@@ -335,8 +337,9 @@ def build_report(
                 symbol=symbol,
                 store=store,
             )
-        except Exception as exc:  # BLE001:REVIEWED
-            shadow_write_result = {"written": False, "error": str(exc)[:500]}
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("live_shadow_ensemble:build_report"):
+                shadow_write_result = {"written": False, "error": str(exc)[:500]}
     report["shadow_decisions_written"] = shadow_write_result
 
     return report

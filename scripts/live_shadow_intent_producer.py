@@ -18,6 +18,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 SCHEMA_VERSION = "shadow_intent.v1"
 
 
@@ -97,31 +99,31 @@ def _run_shadow_inference(
         from core.features.live_feature_source import (
             snapshot_features,
         )
-    except Exception:  # BLE001:REVIEWED
-        # Fallback: return abstain if live feature extraction unavailable
-        return {
-            "action": "abstain",
-            "symbol": symbol,
-            "side": "none",
-            "confidence": 0.0,
-            "risk_allowed": True,
-            "scenario": "feature_source_unavailable",
-            "model": model_path,
-        }
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("live_shadow_intent_producer:_run_shadow_inference"):
+            # Fallback: return abstain if live feature extraction unavailable
+            return {
+                "action": "abstain",
+                "symbol": symbol,
+                "side": "none",
+                "confidence": 0.0,
+                "risk_allowed": True,
+                "scenario": "feature_source_unavailable",
+                "model": model_path,
+            }
     try:
         features = snapshot_features(symbol=symbol, feature_source_path=feature_source_path)
-    except Exception:  # BLE001:REVIEWED
-        return {
-            "action": "abstain",
-            "symbol": symbol,
-            "side": "none",
-            "confidence": 0.0,
-            "risk_allowed": True,
-            "scenario": "feature_snapshot_failed",
-            "model": model_path,
-        }
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("live_shadow_intent_producer:_run_shadow_inference"):
+            return {
+                "action": "abstain",
+                "symbol": symbol,
+                "side": "none",
+                "confidence": 0.0,
+                "risk_allowed": True,
+                "scenario": "feature_snapshot_failed",
+                "model": model_path,
+            }
     # Placeholder: apply model
     # In production: import joblib, load model, call predict(features)
     return {

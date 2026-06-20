@@ -22,6 +22,7 @@ import json
 import os
 from collections import Counter
 from pathlib import Path
+from core.runtime.fault_handler import fail_open_guard
 
 
 def _parse_args() -> argparse.Namespace:
@@ -114,9 +115,9 @@ def main() -> int:
             from core.infrastructure.distributed_lock import FileLock
             lock = FileLock("live_trade_journal", lock_dir=str(lock_dir), ttl_seconds=10)
             acquired = lock.acquire(blocking=True, timeout_seconds=5)
-        except Exception:  # BLE001:REVIEWED
-            acquired = None
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("dedup_journal_by_ticket:main"):
+                acquired = None
         try:
             # ── Remove marked entries ──
             remove_set = set(to_remove)

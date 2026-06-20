@@ -32,6 +32,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 logger = logging.getLogger(__name__)
 
 
@@ -283,9 +285,9 @@ class AuditTrail:
                     results.append(entry)
                     if len(results) >= limit:
                         break
-            except Exception:  # BLE001:REVIEWED
-                pass
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("permission_audit:query"):
+                    pass
         return results
 
     def denied_operations(self, since: str = "", limit: int = 50) -> list[dict[str, Any]]:

@@ -30,6 +30,7 @@ import numpy as np
 import pandas as pd
 
 from core.features.computers.daily_computer import DailyFeatureComputer
+from core.runtime.fault_handler import fail_open_guard
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -508,9 +509,9 @@ def build_swing_dataset(
 
             d1_min_lookback = _D1_MIN_LOOK
             print(f"  DailyFeatureComputer initialized: {daily_computer._n} D1 bars")
-        except Exception as exc:  # BLE001:REVIEWED
-            print(f"  [WARN] DailyFeatureComputer init failed: {exc}")
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("build_swing_enhanced_dataset:build_swing_dataset"):
+                print(f"  [WARN] DailyFeatureComputer init failed: {exc}")
     # ── Align M5 micro features to target-TF bars ──
     # For each target-TF bar, find the aggregated micro features
     # Map TF bar timestamps to nearest M5 indices

@@ -39,7 +39,7 @@ def _hours_since_last_run(state_path: Path) -> float | None:
         last_dt = datetime.fromisoformat(last_utc.replace("Z", "+00:00"))
         now = datetime.now(UTC)
         return (now - last_dt).total_seconds() / 3600.0
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_DEFERRED
         return None
 
 
@@ -77,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
                         check=False, timeout=600,
                     )
                     print(f"[watchdog:{args.base_dir}] daily_ops completed")
-                except Exception as exc:  # BLE001:REVIEWED (Sev 4, Phase 3b)
+                except Exception as exc:  # BLE001:FOG_DEFERRED (Sev 4, Phase 3b)
                     print(f"[watchdog:{args.base_dir}] daily_ops failed: {exc}")
             else:
                 print(f"{msg} — run: python scripts/daily_ops.py --base-dir {args.base_dir}")

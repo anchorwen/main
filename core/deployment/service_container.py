@@ -71,6 +71,7 @@ from core.risk.risk_policies import (
     ModePolicy,
     PositionLimitPolicy,
 )
+from core.runtime.fault_handler import fail_open_guard
 from core.state.schema_versions import SCHEMA_SYSTEM_MODE_STATE
 from core.state.services.control_snapshot_service import ControlSnapshotService
 from core.state.stores.override_store import OverrideStore
@@ -428,10 +429,11 @@ class ServiceContainer:
                     self.brain_registry.register(brain_data)
                 elif isinstance(entry, dict) and "brain_id" in entry:
                     self.brain_registry.register(entry)
-            except Exception:  # BLE001:REVIEWED
-                logging.getLogger(__name__).warning(
-                    "Failed to auto-register brain entry: %s", entry, exc_info=True
-                )
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("service_container:_build_decision_pipeline"):
+                    logging.getLogger(__name__).warning(
+                        "Failed to auto-register brain entry: %s", entry, exc_info=True
+                    )
         self.control_snapshot_service = ControlSnapshotService(
             mode_store=mode_store,
             override_store=override_store,
@@ -580,12 +582,12 @@ class ServiceContainer:
                     },
                     actor=TIMELINE_ACTOR_HOT_RELOAD,
                 )
-        except Exception:  # BLE001:REVIEWED
-            logging.exception(
-                "ServiceContainer timeline record failed during hot reload for changes=%s",
-                _changes,
-            )
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("service_container:_on_engine_config_changed"):
+                logging.exception(
+                    "ServiceContainer timeline record failed during hot reload for changes=%s",
+                    _changes,
+                )
     def _build_release_readiness(self) -> None:
         self.release_readiness = ReleaseReadinessService(self)
 

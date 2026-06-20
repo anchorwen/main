@@ -39,6 +39,7 @@ from core.features.schemas.registry import (
     get_schema_dimension,
     get_schema_feature_names,
 )
+from core.runtime.fault_handler import fail_open_guard
 
 # Load all feature name lists from the SSOT registry
 SCHEMA_CONTRACTS: dict[str, list[str]] = {}
@@ -202,9 +203,9 @@ class FeatureRouter:
                 if isinstance(_ofi_data, dict):
                     for k, v in _ofi_data.items():
                         lake[k] = float(v) if (v is not None and np.isfinite(float(v))) else 0.0
-        except Exception:  # BLE001:REVIEWED
-            pass  # OFI file unavailable — lake just lacks these keys
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("feature_router:build_lake"):
+                pass  # OFI file unavailable — lake just lacks these keys
         # Source 9: Caller-provided extras (future-proof injection point)
         if extra_features:
             for k, v in extra_features.items():

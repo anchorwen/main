@@ -5,6 +5,7 @@ from core.deployment.environment_config import EnvironmentConfig
 from core.deployment.replay_isolation import ReplayEnvironment
 from core.deployment.service_container import ServiceContainer
 from core.feedback.performance_analytics import PerformanceAnalytics
+from core.runtime.fault_handler import fail_open_guard
 
 
 class BacktestRunner:
@@ -87,9 +88,9 @@ class BacktestRunner:
 
                 decisions.append(decision_info)
 
-            except Exception as exc:  # BLE001:REVIEWED
-                errors.append({"index": i, "error": str(exc)})
-
+            except Exception as exc:  # BLE001:FOG
+                with fail_open_guard("backtest_runner:run"):
+                    errors.append({"index": i, "error": str(exc)})
         replay.deactivate()
 
         analytics_result = self._analytics.analyze(trades)

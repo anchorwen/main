@@ -19,6 +19,8 @@ import sys
 import time
 from pathlib import Path
 
+from core.runtime.fault_handler import fail_open_guard
+
 ROOT = Path(__file__).resolve().parent.parent
 STAMP_FILE = ROOT / ".verify_stamp.json"
 
@@ -58,10 +60,9 @@ def _changed_py_files() -> list[str]:
                     if line.endswith(".py"):
                         files.add(line)
         return sorted(files)
-    except Exception:  # BLE001:REVIEWED
-        return []
-
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("verify:_changed_py_files"):
+            return []
 def _current_commit_hash() -> str:
     try:
         result = subprocess.run(
@@ -72,10 +73,9 @@ def _current_commit_hash() -> str:
             timeout=5,
         )
         return result.stdout.strip() if result.returncode == 0 else ""
-    except Exception:  # BLE001:REVIEWED
-        return ""
-
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("verify:_current_commit_hash"):
+            return ""
 def run_mypy(targets: list[str] | None = None) -> tuple[bool, str]:
     """Run mypy on specified targets. Returns (passed, output)."""
     if targets is None:
@@ -97,10 +97,9 @@ def run_mypy(targets: list[str] | None = None) -> tuple[bool, str]:
         return passed, output
     except subprocess.TimeoutExpired:
         return False, "mypy timed out"
-    except Exception as exc:  # BLE001:REVIEWED
-        return False, str(exc)
-
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("verify:run_mypy"):
+            return False, str(exc)
 def run_ruff(targets: list[str] | None = None) -> tuple[bool, str]:
     """Run ruff check. Returns (passed, output)."""
     if targets is None:
@@ -122,10 +121,9 @@ def run_ruff(targets: list[str] | None = None) -> tuple[bool, str]:
         return passed, output
     except subprocess.TimeoutExpired:
         return False, "ruff timed out"
-    except Exception as exc:  # BLE001:REVIEWED
-        return False, str(exc)
-
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("verify:run_ruff"):
+            return False, str(exc)
 def run_pytest() -> tuple[bool, str]:
     """Run full test suite. Returns (passed, output summary).
 
@@ -145,10 +143,9 @@ def run_pytest() -> tuple[bool, str]:
         return False, "pytest interrupted (Ctrl+C)"
     except subprocess.TimeoutExpired:
         return False, "pytest timed out (300s)"
-    except Exception as exc:  # BLE001:REVIEWED
-        return False, str(exc)
-
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("verify:run_pytest"):
+            return False, str(exc)
 def _compute_file_hash() -> str:
     """Simple hash of tracked .py file sizes+mtimes for change detection."""
     try:
@@ -170,10 +167,9 @@ def _compute_file_hash() -> str:
                 st = fp.stat()
                 items.append(f"{f}:{st.st_mtime}:{st.st_size}")
         return str(hash("\n".join(sorted(items))))
-    except Exception:  # BLE001:REVIEWED
-        return ""
-
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("verify:_compute_file_hash"):
+            return ""
 def update_stamp(passed: bool, details: str) -> str:
     """Write verification stamp. Returns status message."""
     stamp = {
@@ -199,9 +195,9 @@ def check_stamp() -> tuple[bool, str]:
     try:
         with open(STAMP_FILE, encoding="utf-8") as f:
             stamp = json.load(f)
-    except Exception:  # BLE001:REVIEWED
-        return False, "Stamp corrupt. Re-run: python scripts/verify.py --full --stamp"
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("verify:check_stamp"):
+            return False, "Stamp corrupt. Re-run: python scripts/verify.py --full --stamp"
     if not stamp.get("passed"):
         return False, "Last verification FAILED. Fix errors and re-run with --stamp."
     if stamp.get("file_hash") != _compute_file_hash():
@@ -336,19 +332,19 @@ def _check_config_consistency() -> tuple[bool, list[str]]:
                 data = json.load(f)
             brain_cache[brain_path_str] = data
             return data
-        except Exception:  # BLE001:REVIEWED
-            brain_cache[brain_path_str] = {}
-            return None
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("verify:_load_brain"):
+                brain_cache[brain_path_str] = {}
+                return None
     for config_path in live_configs:
         asset = _asset_from_path(config_path)
         try:
             with open(config_path, encoding="utf-8") as f:
                 config = yaml.safe_load(f)
-        except Exception as exc:  # BLE001:REVIEWED
-            errors.append(f"{config_path.name}: cannot parse YAML — {exc}")
-            continue
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("verify:_load_brain"):
+                errors.append(f"{config_path.name}: cannot parse YAML — {exc}")
+                continue
         brains_section = config.get("brains", {})
         registry = brains_section.get("registry_entries", [])
         if not registry:
@@ -606,10 +602,10 @@ def main() -> int:
             if result.stderr and result.stderr.strip():
                 print(result.stderr.strip())
             return result.returncode
-        except Exception as exc:  # BLE001:REVIEWED
-            print(f"Blueprint validation error: {exc}")
-            return 1
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("verify:main"):
+                print(f"Blueprint validation error: {exc}")
+                return 1
     # --golden-master: replay-validation of recorded cycles
     if args.golden_master:
         return _run_golden_master_check()
@@ -672,10 +668,10 @@ def main() -> int:
                     print(result.stderr.strip())
                 if result.returncode != 0:
                     all_passed = False
-            except Exception as exc:  # BLE001:REVIEWED
-                print(f"[FAIL] blueprint compliance check error: {exc}")
-                all_passed = False
-
+            except Exception as exc:  # BLE001:FOG
+                with fail_open_guard("verify:main"):
+                    print(f"[FAIL] blueprint compliance check error: {exc}")
+                    all_passed = False
             print(">>> import boundaries (Iron Law #3)...")
             try:
                 result = subprocess.run(
@@ -692,10 +688,10 @@ def main() -> int:
                     all_passed = False
                 else:
                     print("[PASS] Import boundaries enforced")
-            except Exception as exc:  # BLE001:REVIEWED
-                print(f"[FAIL] import-linter error: {exc}")
-                all_passed = False
-
+            except Exception as exc:  # BLE001:FOG
+                with fail_open_guard("verify:main"):
+                    print(f"[FAIL] import-linter error: {exc}")
+                    all_passed = False
             print(">>> artifact parameter contract...")
             try:
                 result = subprocess.run(
@@ -712,10 +708,10 @@ def main() -> int:
                     print(result.stderr.strip())
                 if result.returncode != 0:
                     all_passed = False
-            except Exception as exc:  # BLE001:REVIEWED
-                print(f"[FAIL] artifact validation error: {exc}")
-                all_passed = False
-
+            except Exception as exc:  # BLE001:FOG
+                with fail_open_guard("verify:main"):
+                    print(f"[FAIL] artifact validation error: {exc}")
+                    all_passed = False
             print(">>> config consistency (FIX-20260610-002)...")
             cfg_ok, cfg_errs = _check_config_consistency()
             if not cfg_ok:
@@ -767,10 +763,10 @@ def main() -> int:
                 print(result.stderr.strip())
             if result.returncode != 0:
                 all_passed = False
-        except Exception as exc:  # BLE001:REVIEWED
-            print(f"[FAIL] blueprint compliance check error: {exc}")
-            all_passed = False
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("verify:main"):
+                print(f"[FAIL] blueprint compliance check error: {exc}")
+                all_passed = False
         print(">>> import boundaries (Iron Law #3)...")
         try:
             result = subprocess.run(
@@ -787,10 +783,10 @@ def main() -> int:
                 all_passed = False
             else:
                 print("[PASS] Import boundaries enforced")
-        except Exception as exc:  # BLE001:REVIEWED
-            print(f"[FAIL] import-linter error: {exc}")
-            all_passed = False
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("verify:main"):
+                print(f"[FAIL] import-linter error: {exc}")
+                all_passed = False
         print(">>> artifact parameter contract...")
         try:
             result = subprocess.run(
@@ -807,10 +803,10 @@ def main() -> int:
                 print(result.stderr.strip())
             if result.returncode != 0:
                 all_passed = False
-        except Exception as exc:  # BLE001:REVIEWED
-            print(f"[FAIL] artifact validation error: {exc}")
-            all_passed = False
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("verify:main"):
+                print(f"[FAIL] artifact validation error: {exc}")
+                all_passed = False
         print(">>> config consistency (FIX-20260610-002)...")
         cfg_ok, cfg_errs = _check_config_consistency()
         if not cfg_ok:

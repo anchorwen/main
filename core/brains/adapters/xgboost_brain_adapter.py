@@ -16,6 +16,7 @@ import numpy as np
 
 from core.brains.adapters.base_adapter import BaseBrainAdapter
 from core.deployment.brain_alert import emit_brain_alert
+from core.runtime.fault_handler import fail_open_guard
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +91,9 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
                             feature_names[:3],
                             list(feature_source.keys())[:3],
                         )
-                except Exception:  # BLE001:REVIEWED
-                    pass  # Shadow validation is non-blocking
+                except Exception:  # BLE001:FOG
+                    with fail_open_guard("xgboost_brain_adapter:run"):
+                        pass  # Shadow validation is non-blocking
                 feature_vector = new_vector
             else:
                 # Legacy fallback: dict-order-dependent (fragile).
@@ -158,15 +160,15 @@ class XGBoostBrainAdapter(BaseBrainAdapter):
             if self._num_features is not None:
                 self._feature_dimension = self._num_features
             self._backend = "xgboost:json"
-        except Exception as exc:  # BLE001:REVIEWED
-            self._backend = f"stub:{type(exc).__name__}"
-            self._booster = None
-            emit_brain_alert(
-                self._brain_entry.get("brain_id", "unknown"),
-                "model_load_failed",
-                {"artifact": artifact_path, "error": f"{type(exc).__name__}: {exc}"},
-            )
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("xgboost_brain_adapter:load"):
+                self._backend = f"stub:{type(exc).__name__}"
+                self._booster = None
+                emit_brain_alert(
+                    self._brain_entry.get("brain_id", "unknown"),
+                    "model_load_failed",
+                    {"artifact": artifact_path, "error": f"{type(exc).__name__}: {exc}"},
+                )
     def infer(self, feature_vector: np.ndarray) -> dict[str, Any]:
         """Run XGBoost inference on a 1-D feature vector.
 

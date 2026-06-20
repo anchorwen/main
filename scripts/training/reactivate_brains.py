@@ -18,6 +18,7 @@ from typing import Any
 from core.feedback.brain_pnl_ledger import BrainPnLMetrics, BrainPnLStore
 from core.feedback.brain_quality_engine import BrainQualityEngine
 from core.training.utils import utc_now_iso as _utc_now_iso  # noqa: F401
+from core.runtime.fault_handler import fail_open_guard
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -87,10 +88,10 @@ def main(argv: list[str] | None = None) -> int:
         gov_svc = GovernanceService.load(str(gov_path))
         brain_states = gov_svc.get_all_states()
         transition_log = gov_svc.get_transition_log()
-    except Exception:  # BLE001:REVIEWED
-        print(f"[reactivate] ERROR: failed to load governance state from {gov_path}")
-        return 1
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("reactivate_brains:main"):
+            print(f"[reactivate] ERROR: failed to load governance state from {gov_path}")
+            return 1
     # ── Assess all brains ─────────────────────────────────────────────
     engine = BrainQualityEngine()
     report: dict[str, Any] = {

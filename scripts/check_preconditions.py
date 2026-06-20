@@ -182,7 +182,7 @@ def check_entry_spread() -> tuple[float, str]:
                     total += 1
                     if es > 0:
                         nonzero += 1
-            except Exception:  # BLE001:REVIEWED
+            except Exception:  # BLE001:FOG_DEFERRED
                 pass
     ratio = nonzero / total if total > 0 else 0.0
     all_time_ratio = all_time_nonzero / all_time_total if all_time_total > 0 else 0.0
@@ -202,7 +202,7 @@ def check_calibrator_xau() -> tuple[int, str]:
         hist = d.get("history", [])
         cs = d.get("cold_started", False)
         return len(hist), f"{len(hist)} samples (cold_started={cs})"
-    except Exception as e:  # BLE001:REVIEWED
+    except Exception as e:  # BLE001:FOG_DEFERRED
         return 0, f"error reading state: {e}"
 
 
@@ -232,7 +232,7 @@ def check_legacy_count() -> tuple[int, str]:
                 if any(kw in line for kw in ("DEPRECATED", "LEGACY", "Strangler Fig")):
                     if "test" not in str(py_file).lower():
                         count += 1
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             pass
     return count, f"{count} DEPRECATED/LEGACY/Strangler sites in core/"
 
@@ -303,7 +303,7 @@ def check_btc_trading() -> tuple[bool, str]:
                 r = json.loads(line.strip())
                 if r.get("action") == "open" and r.get("recorded_at", "") >= cutoff:
                     live_opens += 1
-            except Exception:  # BLE001:REVIEWED
+            except Exception:  # BLE001:FOG_DEFERRED
                 pass
     trading = live_opens > 0
     return (
@@ -354,7 +354,7 @@ def run_check(task_id: str) -> dict[str, object]:
                     "met": met,
                 }
             )
-        except Exception as e:  # BLE001:REVIEWED
+        except Exception as e:  # BLE001:FOG_DEFERRED
             results.append({"name": pc["name"], "value": None, "detail": str(e), "met": False})
     return {
         "task_id": task_id,

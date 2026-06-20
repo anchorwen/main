@@ -48,6 +48,7 @@ from core.observability.alert_service import (
     build_rules_from_config,
 )
 from core.protocol.services.resilience import CircuitBreaker
+from core.runtime.fault_handler import fail_open_guard
 
 logger = logging.getLogger(__name__)
 
@@ -107,11 +108,12 @@ class BackgroundDeliveryWorker(threading.Thread):
             try:
                 self._channel.send(enriched)
                 self._delivered += 1
-            except Exception:  # BLE001:REVIEWED
-                logger.exception(
-                    "BackgroundDeliveryWorker: channel.send failed for rule=%s",
-                    enriched.get("rule_name", "?"),
-                )
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("live_alert_hub:run"):
+                    logger.exception(
+                        "BackgroundDeliveryWorker: channel.send failed for rule=%s",
+                        enriched.get("rule_name", "?"),
+                    )
             self._queue.task_done()
 
     def _dedup_or_pass(self, alert: dict[str, Any]) -> dict[str, Any] | None:

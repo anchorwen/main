@@ -1,4 +1,5 @@
 from core.observability.metric_names import BATCH_ERRORS, BATCH_TOTAL_TRIGGERS
+from core.runtime.fault_handler import fail_open_guard
 
 
 class BatchProcessor:
@@ -30,12 +31,12 @@ class BatchProcessor:
                         "status": "completed",
                     }
                 )
-            except Exception as exc:  # BLE001:REVIEWED
-                errors.append({"index": i, "trigger": trigger, "error": str(exc)})
-                results.append(
-                    {"index": i, "trigger": trigger, "status": "error", "error": str(exc)}
-                )
-
+            except Exception as exc:  # BLE001:FOG
+                with fail_open_guard("batch_processor:run_batch"):
+                    errors.append({"index": i, "trigger": trigger, "error": str(exc)})
+                    results.append(
+                        {"index": i, "trigger": trigger, "status": "error", "error": str(exc)}
+                    )
         if self._metrics:
             self._metrics.inc(BATCH_TOTAL_TRIGGERS, len(triggers))
             self._metrics.inc(BATCH_ERRORS, len(errors))
@@ -65,9 +66,9 @@ class BatchProcessor:
             try:
                 r = self._orchestrator.process_execution_event(**event)
                 results.append({"index": i, "status": "processed", **r})
-            except Exception as exc:  # BLE001:REVIEWED
-                errors.append({"index": i, "error": str(exc), "event": event})
-
+            except Exception as exc:  # BLE001:FOG
+                with fail_open_guard("batch_processor:process_venue_events_batch"):
+                    errors.append({"index": i, "error": str(exc), "event": event})
         return {
             "total": len(events),
             "processed": len(events) - len(errors),

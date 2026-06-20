@@ -15,6 +15,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 
 def _utc_now_iso() -> str:
     return (
@@ -86,9 +88,9 @@ def _run_policy_eval(base_dir: Path, symbol: str) -> dict[str, Any]:
     try:
         from scripts.live_dispatch_policy import build_parser as policy_parser
         from scripts.live_dispatch_policy import load_gate_policy_config, run_policy
-    except Exception:  # BLE001:REVIEWED
-        return {"error": "import_failed"}
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("live_auto_healthcheck:_run_policy_eval"):
+            return {"error": "import_failed"}
     try:
         flag = str(base_dir / "live_dispatch_block.flag")
         p_args = policy_parser().parse_args(
@@ -97,10 +99,9 @@ def _run_policy_eval(base_dir: Path, symbol: str) -> dict[str, Any]:
         config = load_gate_policy_config(None)
         _code, result = run_policy(p_args, gate_config=config)
         return result
-    except Exception as exc:  # BLE001:REVIEWED
-        return {"error": str(exc)}
-
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("live_auto_healthcheck:_run_policy_eval"):
+            return {"error": str(exc)}
 def _bridge_supervisor_status(base_dir: Path) -> dict[str, Any]:
     """Check if bridge supervisor log was written recently (< 5 minutes ago)."""
     log_path = base_dir / "reports" / "ops_logs" / "bridge_supervisor.log"

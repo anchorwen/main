@@ -460,7 +460,7 @@ def main() -> int:
         # ── Isolated sandbox: one probe crash cannot kill the audit ──
         try:
             result = probe_fn(domain_cfg, args.data_dir)
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             result = {
                 "domain": domain_name,
                 "severity": domain_cfg.get("severity", "?"),
@@ -527,7 +527,7 @@ def main() -> int:
                 json.dump(lock_data, f, indent=2)
             circuit_locked = True
             print(f"\n{_red('[CIRCUIT BREAKER]')} training_readiness.json LOCKED — no new positions until FATAL domains are resolved.")
-        except Exception as exc:  # BLE001:REVIEWED (Sev 4, Phase 3b)
+        except Exception as exc:  # BLE001:FOG_DEFERRED (Sev 4, Phase 3b)
             print(f"\n{_red('[ERROR]')} Failed to write circuit breaker lock: {exc}")
 
     # ── Structured DingTalk card ──

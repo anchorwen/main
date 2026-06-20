@@ -51,6 +51,7 @@ from core.contracts.domain_keys import (  # noqa: E402
     PAYLOAD_KEY_SYMBOL,
 )
 from core.features.schemas.v9_institutional_schema import V9_INSTITUTIONAL_40_FEATURES  # noqa: E402
+from core.runtime.fault_handler import fail_open_guard
 
 
 class FeatureInputError(ValueError):
@@ -1505,17 +1506,16 @@ class ShadowSessionManager:
             )
             completed["event"] = f"{self._stream_plan.event_name_prefix}.completed"
             yield build_session_event(session_id, completed["event"], completed)
-        except Exception as exc:  # BLE001:REVIEWED
-            yield build_session_event(
-                session_id,
-                f"{self._stream_plan.event_name_prefix}.error",
-                {
-                    "message": str(exc),
-                    "error_type": exc.__class__.__name__,
-                },
-            )
-
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("main_v9_shadow:stream_run"):
+                yield build_session_event(
+                    session_id,
+                    f"{self._stream_plan.event_name_prefix}.error",
+                    {
+                        "message": str(exc),
+                        "error_type": exc.__class__.__name__,
+                    },
+                )
 def render_sse_event(
     payloads: list[dict],
     plan: StreamEnvelopePlan | None = None,

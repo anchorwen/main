@@ -59,7 +59,7 @@ def _read_auto_recovery_state(state_path: Path) -> int:
     """Return consecutive zero-block passes from state file, or 0."""
     try:
         return int(state_path.read_text(encoding="utf-8").strip())
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_DEFERRED
         return 0
 
 

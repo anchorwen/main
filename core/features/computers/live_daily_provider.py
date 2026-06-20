@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from core.features.computers.daily_computer import DailyFeatureComputer
+from core.runtime.fault_handler import fail_open_guard
 
 if TYPE_CHECKING:
     from core.execution.mt5_worker import MT5Worker
@@ -89,8 +90,9 @@ class LiveDailyFeatureProvider:
             if rates is not None and len(rates) > 0:
                 latest = int(rates[-1]["time"])
                 return latest > self._last_bar_time
-        except Exception:  # BLE001:REVIEWED
-            pass
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("live_daily_provider:_is_new_bar_available"):
+                pass
         return False
 
     def _refresh(self) -> None:
@@ -107,9 +109,9 @@ class LiveDailyFeatureProvider:
                 dts = self._computer._d1_datetimes
                 if dts and idx < len(dts):
                     self._last_bar_time = int(dts[idx].timestamp())
-        except Exception:  # BLE001:REVIEWED
-            pass
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("live_daily_provider:_refresh"):
+                pass
     def _sync_csv(self) -> None:
         """Fetch new D1 bars from MT5 and append to CSV."""
         try:
@@ -197,19 +199,19 @@ class LiveDailyFeatureProvider:
                 ),
                 flush=True,
             )
-        except Exception as exc:  # BLE001:REVIEWED
-            print(
-                json.dumps(
-                    {
-                        "event": "d1_csv_sync_error",
-                        "time": datetime.now(UTC).isoformat(),
-                        "error": str(exc),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("live_daily_provider:_sync_csv"):
+                print(
+                    json.dumps(
+                        {
+                            "event": "d1_csv_sync_error",
+                            "time": datetime.now(UTC).isoformat(),
+                            "error": str(exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
     def _build_computer(self) -> None:
         """Build a fresh DailyFeatureComputer from the current CSV."""
         if not self._d1_csv.exists():
@@ -221,5 +223,6 @@ class LiveDailyFeatureProvider:
             if self._cross_assets:
                 kwargs["cross_assets"] = self._cross_assets
             self._computer = DailyFeatureComputer(**kwargs)
-        except Exception:  # BLE001:REVIEWED
-            self._computer = None
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("live_daily_provider:_build_computer"):
+                self._computer = None

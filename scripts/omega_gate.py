@@ -180,7 +180,7 @@ def main() -> int:
                 print("=" * 60)
                 return 1
             print("[Ω] BLE001 replacement VERIFIED in diff.")
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             pass  # non-blocking: diff parsing failure shouldn't block commit
 
     # ── Check 4: FIX/DQAF ID required for .py/.yaml/.json changes ──

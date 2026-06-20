@@ -338,13 +338,13 @@ def check_bridge_micro_health(data_dir: str) -> dict[str, Any]:
                                     break
                             except ValueError:
                                 continue
-                    except Exception:  # BLE001:REVIEWED
+                    except Exception:  # BLE001:FOG_DEFERRED
                         pass
             if latencies:
                 latencies.sort()
                 p99_latency = latencies[int(len(latencies) * 0.99)]
             log_entries = len(lines)
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             pass
 
     sev = "OK" if connected and outbox == 0 and age_s < 30 else (
@@ -427,7 +427,7 @@ def check_tick_precision(data_dir: str) -> dict[str, Any]:
                                 "remainder": round(remainder, 10),
                             })
                     checked += 1
-            except Exception:  # BLE001:REVIEWED
+            except Exception:  # BLE001:FOG_DEFERRED
                 pass
 
     sev = "OK" if not violations else "Sev2" if len(violations) < 10 else "Sev1"
@@ -577,7 +577,7 @@ def check_mt5_equity_reconciliation(data_dir: str) -> dict[str, Any]:
                     if "terminal_path:" in line:
                         mt5_path = line.split(":", 1)[1].strip()
                         break
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_DEFERRED
         pass
 
     # Also check live.yaml for XAU default
@@ -590,7 +590,7 @@ def check_mt5_equity_reconciliation(data_dir: str) -> dict[str, Any]:
                         if "terminal_path:" in line:
                             mt5_path = line.split(":", 1)[1].strip()
                             break
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             pass
 
     if not mt5_path:
@@ -599,7 +599,7 @@ def check_mt5_equity_reconciliation(data_dir: str) -> dict[str, Any]:
     try:
         if not mt5.initialize(path=mt5_path):
             return {"passed": True, "severity": "SKIP", "reason": f"MT5 init failed: {mt5.last_error()}"}
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_DEFERRED
         return {"passed": True, "severity": "SKIP", "reason": "MT5 init exception"}
 
     try:
@@ -648,10 +648,10 @@ def check_mt5_equity_reconciliation(data_dir: str) -> dict[str, Any]:
             "pnl_pct_of_balance": round(pnl_ratio, 4),
             "note": "full reconciliation needs daily equity snapshots; this is informational",
         }
-    except Exception as e:  # BLE001:REVIEWED (Sev 4, Phase 3b)
+    except Exception as e:  # BLE001:FOG_DEFERRED (Sev 4, Phase 3b)
         try:
             mt5.shutdown()
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             pass
         return {"passed": True, "severity": "SKIP", "reason": f"MT5 error: {e}"}
 
@@ -696,7 +696,7 @@ def check_journal_mt5_reconciliation(data_dir: str) -> dict[str, Any]:
                             mt5_path = line.split(":", 1)[1].strip()
                             break
             if mt5_path: break
-        except Exception: pass  # BLE001:REVIEWED
+        except Exception: pass  # BLE001:FOG_DEFERRED
 
     if not mt5_path:
         return {"passed": True, "severity": "SKIP", "reason": "no MT5 terminal path"}
@@ -704,9 +704,9 @@ def check_journal_mt5_reconciliation(data_dir: str) -> dict[str, Any]:
     try:
         if not mt5.initialize(path=mt5_path):
             try: mt5.shutdown()
-            except Exception: pass  # BLE001:REVIEWED
+            except Exception: pass  # BLE001:FOG_DEFERRED
             return {"passed": True, "severity": "SKIP", "reason": "MT5 init failed"}
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_DEFERRED
         return {"passed": True, "severity": "SKIP", "reason": "MT5 init exception"}
 
     deals_by_pos: dict[int, Any] = {}
@@ -718,10 +718,10 @@ def check_journal_mt5_reconciliation(data_dir: str) -> dict[str, Any]:
                     if d.position_id and d.profit != 0:
                         deals_by_pos[d.position_id] = d
                 break
-    except Exception: pass  # BLE001:REVIEWED
+    except Exception: pass  # BLE001:FOG_DEFERRED
     finally:
         try: mt5.shutdown()
-        except Exception: pass  # BLE001:REVIEWED
+        except Exception: pass  # BLE001:FOG_DEFERRED
 
     if not deals_by_pos:
         return {"passed": True, "severity": "SKIP", "reason": "no MT5 deals"}
@@ -860,7 +860,7 @@ def main() -> int:
                 checks=alert_checks,
             )
             dispatch_alert(card)
-        except Exception:  # BLE001:REVIEWED — alert failure must not crash audit
+        except Exception:  # BLE001:FOG_DEFERRED — alert failure must not crash audit
             pass
 
     # ── Determine exit code ──

@@ -13,6 +13,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 logger = logging.getLogger(__name__)
 
 _MLFLOW_AVAILABLE = False
@@ -120,10 +122,10 @@ def log_training_run(
             )
         else:
             result["status"] = f"backend_{backend}_not_available"
-    except Exception as exc:  # BLE001:REVIEWED
-        logger.warning("mlflow_bridge: %s logging failed for %s: %s", backend, run_name, exc)
-        result["status"] = f"error: {exc}"
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("mlflow_bridge:log_training_run"):
+            logger.warning("mlflow_bridge: %s logging failed for %s: %s", backend, run_name, exc)
+            result["status"] = f"error: {exc}"
     return result
 
 
@@ -135,10 +137,9 @@ def log_metric(key: str, value: float, *, step: int = 0) -> None:
 
             if mlflow.active_run():
                 mlflow.log_metric(key, value, step=step)
-    except Exception:  # BLE001:REVIEWED
-        pass
-
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("mlflow_bridge:log_metric"):
+            pass
 def is_available() -> dict[str, bool]:
     """Return which backends are available in the current environment."""
     return {"mlflow": _MLFLOW_AVAILABLE, "wandb": _WANDB_AVAILABLE}

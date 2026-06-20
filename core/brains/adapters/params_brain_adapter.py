@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from core.brains.adapters.base_adapter import BaseBrainAdapter
+from core.runtime.fault_handler import fail_open_guard
 
 if TYPE_CHECKING:
     from core.schemas.trading_contracts import BrainSignal, Direction
@@ -75,9 +76,9 @@ class ParamsBrainAdapter(BaseBrainAdapter):
             self._max_half_life = float(opt.get("max_half_life", 20))
             self._theta_min = float(opt.get("theta_min", 0.005))
             self._backend = "params:ou"
-        except Exception as exc:  # BLE001:REVIEWED
-            self._backend = f"stub:{type(exc).__name__}"
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("params_brain_adapter:load"):
+                self._backend = f"stub:{type(exc).__name__}"
     def infer(self, feature_vector: np.ndarray) -> dict[str, Any]:
         """Compute OU process statistics from the current price and rolling buffer.
 

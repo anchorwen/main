@@ -12,6 +12,7 @@ from core.observability.metric_names import (
     venue_events_metric,
 )
 from core.observability.tracing import TracingContext, clear_current_context, set_current_context
+from core.runtime.fault_handler import fail_open_guard
 
 
 @dataclass
@@ -111,28 +112,28 @@ class DecisionCycleOrchestrator:
             decision_span = trace.start_span("runtime_loop")
             result = self._loop.run_decision_cycle(trigger, feature_source)
             trace.end_span(decision_span)
-        except Exception as exc:  # BLE001:REVIEWED
-            if self._metrics:
-                self._metrics.inc(CYCLES_ERRORS)
-            if self._audit:
-                self._audit.log(
-                    event_type="cycle_error",
-                    severity="error",
-                    actor="orchestrator",
-                    detail={"error": str(exc)},
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("orchestrator:_finish"):
+                if self._metrics:
+                    self._metrics.inc(CYCLES_ERRORS)
+                if self._audit:
+                    self._audit.log(
+                        event_type="cycle_error",
+                        severity="error",
+                        actor="orchestrator",
+                        detail={"error": str(exc)},
+                    )
+                if self._circuit_breaker:
+                    self._circuit_breaker.record_failure()
+                root.set_error(str(exc))
+                return _finish(
+                    CycleOutcome(
+                        cycle_id=cycle_id,
+                        trigger=trigger,
+                        decision_result=None,
+                        audit_entries=[{"event_type": "cycle_error", "error": str(exc)}],
+                    )
                 )
-            if self._circuit_breaker:
-                self._circuit_breaker.record_failure()
-            root.set_error(str(exc))
-            return _finish(
-                CycleOutcome(
-                    cycle_id=cycle_id,
-                    trigger=trigger,
-                    decision_result=None,
-                    audit_entries=[{"event_type": "cycle_error", "error": str(exc)}],
-                )
-            )
-
         if self._metrics:
             self._metrics.inc(CYCLES_TOTAL)
             if result.verdict.is_allowed():

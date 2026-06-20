@@ -24,7 +24,7 @@ def main():
         try:
             with open(f) as fh:
                 d = json.load(fh)
-        except Exception as e:  # BLE001:REVIEWED
+        except Exception as e:  # BLE001:FOG_DEFERRED
             print(f"{f.name}: ERROR {e}")
             continue
 

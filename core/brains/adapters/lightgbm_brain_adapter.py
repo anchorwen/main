@@ -17,6 +17,7 @@ import numpy as np
 
 from core.brains.adapters.base_adapter import BaseBrainAdapter
 from core.deployment.brain_alert import emit_brain_alert
+from core.runtime.fault_handler import fail_open_guard
 
 if TYPE_CHECKING:
     from core.schemas.trading_contracts import BrainSignal
@@ -53,15 +54,15 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
             self._booster = booster
             self._num_features = booster.num_feature()
             self._backend = "lightgbm:txt"
-        except Exception as exc:  # BLE001:REVIEWED
-            self._backend = f"stub:{type(exc).__name__}"
-            self._booster = None
-            emit_brain_alert(
-                self._brain_entry.get("brain_id", "unknown"),
-                "model_load_failed",
-                {"artifact": artifact_path, "error": f"{type(exc).__name__}: {exc}"},
-            )
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("lightgbm_brain_adapter:load"):
+                self._backend = f"stub:{type(exc).__name__}"
+                self._booster = None
+                emit_brain_alert(
+                    self._brain_entry.get("brain_id", "unknown"),
+                    "model_load_failed",
+                    {"artifact": artifact_path, "error": f"{type(exc).__name__}: {exc}"},
+                )
     def run(self, snapshot, feature_source: dict | None = None) -> BrainSignal:
         """Metadata-driven feature extraction with three defense lines.
 
@@ -108,9 +109,9 @@ class LightGBMBrainAdapter(BaseBrainAdapter):
         if self._feature_adapter is not None:
             try:  # noqa: SIM105
                 raw_vector = self._feature_adapter.normalize(raw_vector)
-            except Exception:  # BLE001:REVIEWED
-                pass  # best-effort; dim mismatch caught by line 3
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("lightgbm_brain_adapter:run"):
+                    pass  # best-effort; dim mismatch caught by line 3
         # ── Defense Line 3: Dimension assertion ──
         if self._num_features and len(raw_vector) != self._num_features:
             emit_brain_alert(

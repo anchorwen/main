@@ -156,7 +156,7 @@ for symbol, data_dir, csv_label in [("BTC", "data_btc", "BTC"), ("XAU", "data", 
             else:
                 with open(fp, encoding='utf-8') as f:
                     json.load(f)
-        except Exception:  # BLE001:REVIEWED
+        except Exception:  # BLE001:FOG_DEFERRED
             print(f"  ❌ {fname}: CORRUPT JSON")
             all_fresh = False
         if not audit_file(fp, fname, max_age):

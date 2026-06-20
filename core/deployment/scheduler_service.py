@@ -28,6 +28,7 @@ from core.observability.metric_names import (
     CYCLES_THROTTLED,
     CYCLES_TOTAL,
 )
+from core.runtime.fault_handler import fail_open_guard
 
 
 class ScheduledTask:
@@ -127,16 +128,16 @@ class SchedulerService:
             task.last_run = datetime.now(UTC).replace(tzinfo=None)
             task.last_error = None
             return {PAYLOAD_KEY_TASK: task.name, PAYLOAD_KEY_STATUS: HEALTH_CHECK_STATUS_OK}
-        except Exception as exc:  # BLE001:REVIEWED
-            task.error_count += 1
-            task.last_run = datetime.now(UTC).replace(tzinfo=None)
-            task.last_error = str(exc)
-            return {
-                PAYLOAD_KEY_TASK: task.name,
-                PAYLOAD_KEY_STATUS: LIFECYCLE_PHASE_STATUS_ERROR,
-                PAYLOAD_KEY_ERROR: str(exc),
-            }
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("scheduler_service:_execute_task"):
+                task.error_count += 1
+                task.last_run = datetime.now(UTC).replace(tzinfo=None)
+                task.last_error = str(exc)
+                return {
+                    PAYLOAD_KEY_TASK: task.name,
+                    PAYLOAD_KEY_STATUS: LIFECYCLE_PHASE_STATUS_ERROR,
+                    PAYLOAD_KEY_ERROR: str(exc),
+                }
     @classmethod
     def for_container(cls, container, persistence=None, alert_service=None):
         """Build a scheduler with standard periodic tasks for a ServiceContainer."""
@@ -160,9 +161,9 @@ class SchedulerService:
                                 _market_type,
                             )
                             return
-                    except Exception:  # BLE001:REVIEWED (fail-open)
-                        pass  # graceful fallback — run governance anyway
-
+                    except Exception:  # BLE001:FOG (fail-open)
+                        with fail_open_guard("scheduler_service:governance_eval"):
+                            pass  # graceful fallback — run governance anyway
                 summaries = container.brain_tracker.get_all_summaries()
                 summary_map = {s[PAYLOAD_KEY_BRAIN_ID]: s for s in summaries}
 
@@ -183,9 +184,9 @@ class SchedulerService:
                             tracker = ShadowTracker(base_dir=str(container.config.base_dir))
                             shadow_map = build_shadow_summary(tracker, candidate_ids)
                             summary_map.update(shadow_map)
-                    except Exception:  # BLE001:REVIEWED
-                        pass  # Shadow tracking is non-critical
-
+                    except Exception:  # BLE001:FOG
+                        with fail_open_guard("scheduler_service:governance_eval"):
+                            pass  # Shadow tracking is non-critical
                 if summary_map:
                     container.governance_rule_engine.evaluate(summary_map)
 
@@ -343,12 +344,12 @@ class SchedulerService:
                                             _sm["win_rate"],
                                             _sm["pnl_r"],
                                         )
-                        except Exception:  # BLE001:REVIEWED
-                            _logger.debug(
-                                "[GOV_MANUAL] Event stream projection skipped "
-                                "(stream not available)"
-                            )
-
+                        except Exception:  # BLE001:FOG
+                            with fail_open_guard("scheduler_service:governance_eval"):
+                                _logger.debug(
+                                    "[GOV_MANUAL] Event stream projection skipped "
+                                    "(stream not available)"
+                                )
                         brain_states = container.governance_service.get_all_states()
                         evaluator = BrainPromotionEvaluator()
                         decisions = evaluator.evaluate_all(brain_states, perf)
@@ -384,17 +385,17 @@ class SchedulerService:
                                     )
                         else:
                             container.governance_rule_engine.execute_transitions(decisions)
-                    except Exception:  # BLE001:REVIEWED
-                        _logger.exception(
-                            "CRITICAL: PnL-based governance evaluation failed — "
-                            "brain promotion decisions will be skipped this cycle"
-                        )
-                        emit_brain_alert(
-                            "__system__",
-                            "pnl_pipeline_failure",
-                            {"error": "PnL governance evaluation raised exception"},
-                        )
-
+                    except Exception:  # BLE001:FOG
+                        with fail_open_guard("scheduler_service:governance_eval"):
+                            _logger.exception(
+                                "CRITICAL: PnL-based governance evaluation failed — "
+                                "brain promotion decisions will be skipped this cycle"
+                            )
+                            emit_brain_alert(
+                                "__system__",
+                                "pnl_pipeline_failure",
+                                {"error": "PnL governance evaluation raised exception"},
+                            )
             svc.add_task("governance_evaluation", governance_eval, interval_seconds=60)
 
         if persistence:
@@ -454,9 +455,9 @@ class SchedulerService:
                         if tracker_path.exists():
                             fresh = type(container.brain_tracker).load(tracker_path)
                             container.brain_tracker._records = fresh._records
-                    except Exception:  # BLE001:REVIEWED
-                        pass
-
+                    except Exception:  # BLE001:FOG
+                        with fail_open_guard("scheduler_service:daily_ops"):
+                            pass
             svc.add_task("daily_ops", daily_ops, interval_seconds=86400)
 
         # ── Feature store periodic update ──

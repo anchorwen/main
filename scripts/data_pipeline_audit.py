@@ -190,7 +190,7 @@ if ofi.exists():
         print(f"  OFI_Total_Volume:        {od.get('OFI_Total_Volume', 'N/A')}")
         print(f"  OFI_ZScore_20:           {od.get('OFI_ZScore_20', 'N/A')}")
         print(f"  OFI_Cumulative_1H:       {od.get('OFI_Cumulative_1H', 'N/A')}")
-    except Exception as e:  # BLE001:REVIEWED (Sev 4, Phase 3b)
+    except Exception as e:  # BLE001:FOG_DEFERRED (Sev 4, Phase 3b)
         print(f"  Status:                  CORRUPTED ({e})")
 else:
     print("  Status:                  MISSING")
@@ -272,7 +272,7 @@ if bh.exists():
         print(f"  PID:                     {bd.get('pid', 'N/A')}")
         print(f"  Transport:               {bd.get('transport', 'N/A')}")
         print(f"  Outbox pending:          {bd.get('outbox_pending', 'N/A')}")
-    except Exception:  # BLE001:REVIEWED
+    except Exception:  # BLE001:FOG_DEFERRED
         print("  CORRUPTED")
 else:
     print("  MISSING")

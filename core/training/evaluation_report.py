@@ -261,7 +261,7 @@ def run_shap_analysis(
             feature_stability_score=stability_score,
         )
 
-    except Exception as e:  # BLE001:REVIEWED
+    except Exception as e:  # BLE001:FOG_DEFERRED
         import sys
 
         print(f"[evaluation_report] SHAP analysis failed: {e}", file=sys.stderr)

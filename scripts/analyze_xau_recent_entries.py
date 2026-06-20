@@ -205,7 +205,7 @@ def summarize(trades: list[dict], label: str) -> dict:
             try:
                 dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
                 hour_dist[dt.hour] += 1
-            except Exception:  # BLE001:REVIEWED
+            except Exception:  # BLE001:FOG_DEFERRED
                 pass
 
     # Regime at entry

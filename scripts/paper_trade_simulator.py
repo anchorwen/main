@@ -20,6 +20,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 DATA_DIR = PROJECT_ROOT / "data"
@@ -53,10 +55,9 @@ def load_live_config() -> dict[str, Any] | None:
 
         with open(config_path, encoding="utf-8") as f:
             return yaml.safe_load(f)
-    except Exception:  # BLE001:REVIEWED
-        return None
-
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("paper_trade_simulator:load_live_config"):
+            return None
 def build_strategy_param_map(
     config: dict[str, Any] | None,
 ) -> dict[str, dict[str, Any]]:
@@ -258,10 +259,9 @@ def _estimate_spread(entry_time: datetime, atr: float, mid_price: float) -> tupl
         # Convert naive datetime to UTC if needed
         utc_time = entry_time.replace(tzinfo=UTC) if entry_time.tzinfo is None else entry_time
         return model.estimate(now_utc=utc_time, atr=atr, mid_price=mid_price)
-    except Exception:  # BLE001:REVIEWED
-        return (SPREAD_COST, 0.05)
-
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("paper_trade_simulator:_estimate_spread"):
+            return (SPREAD_COST, 0.05)
 def simulate_trade(
     decision: dict,
     bars: list[dict],
@@ -385,8 +385,9 @@ def simulate_trade(
     if exit_time and exit_time != entry_time:
         try:  # noqa: SIM105
             exit_spread, exit_slippage = _estimate_spread(exit_time, atr, exit_price)
-        except Exception:  # BLE001:REVIEWED
-            pass
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("paper_trade_simulator:simulate_trade"):
+                pass
     exit_friction = exit_spread + exit_slippage
 
     # Compute PnL (entry at ask, exit at bid — spread + slippage cost included)

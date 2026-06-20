@@ -116,6 +116,7 @@ from core.observability.metric_names import (
     CYCLES_ERRORS,
     CYCLES_THROTTLED,
 )
+from core.runtime.fault_handler import fail_open_guard
 
 
 class RunbookEngine:
@@ -335,13 +336,13 @@ class RunbookEngine:
             from core.deployment.operational_support import ConfigValidator
 
             return ConfigValidator().validate(self._container.config)
-        except Exception as exc:  # BLE001:REVIEWED
-            return {
-                PAYLOAD_KEY_VALID: False,
-                PAYLOAD_KEY_ERRORS: [str(exc)],
-                PAYLOAD_KEY_WARNINGS: [],
-            }
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("runbook_engine:_validate_config"):
+                return {
+                    PAYLOAD_KEY_VALID: False,
+                    PAYLOAD_KEY_ERRORS: [str(exc)],
+                    PAYLOAD_KEY_WARNINGS: [],
+                }
     def _build_health(self) -> dict:
         from core.deployment.health_check import HealthCheckService
 
@@ -622,13 +623,13 @@ class RunbookEngine:
                 PAYLOAD_KEY_LABEL: label,
                 PAYLOAD_KEY_RESULT: result,
             }
-        except Exception as exc:  # BLE001:REVIEWED
-            return {
-                PAYLOAD_KEY_STATUS: RUNBOOK_STATUS_FAILED,
-                PAYLOAD_KEY_LABEL: label,
-                PAYLOAD_KEY_ERROR: str(exc),
-            }
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("runbook_engine:_save_state"):
+                return {
+                    PAYLOAD_KEY_STATUS: RUNBOOK_STATUS_FAILED,
+                    PAYLOAD_KEY_LABEL: label,
+                    PAYLOAD_KEY_ERROR: str(exc),
+                }
     def _check(self, name: str, passed: bool, detail: dict | None = None) -> dict:
         return {
             PAYLOAD_KEY_NAME: name,

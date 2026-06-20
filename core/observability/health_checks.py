@@ -30,6 +30,7 @@ from core.observability.data_health_schema import (
     Tier,
     health_check,
 )
+from core.runtime.fault_handler import fail_open_guard
 
 
 class HealthCheckMethods:
@@ -390,9 +391,9 @@ class HealthCheckMethods:
                                     continue
                         if wired_entry:
                             break
-                except Exception:  # BLE001:REVIEWED
-                    continue
-
+                except Exception:  # BLE001:FOG
+                    with fail_open_guard("health_checks:check_meta_filter_state"):
+                        continue
             if wired_entry is not None:
                 lgb_loaded = wired_entry.get("lgb_loaded", False)
                 calibrator = wired_entry.get("calibrator_loaded", False)
@@ -1225,9 +1226,9 @@ class HealthCheckMethods:
         try:
             with open(ll_path, encoding="utf-8") as f:
                 unlabeled = sum(1 for line in f if '"label": "unlabeled"' in line)
-        except Exception:  # BLE001:REVIEWED
-            unlabeled = 0
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("health_checks:check_live_labels"):
+                unlabeled = 0
         if unlabeled > 3:
             status = SourceStatus.WARN
             code = "LIVE_LABELS_UNLABELED"
@@ -1563,15 +1564,15 @@ class HealthCheckMethods:
 
         try:
             gov = _json.loads(open(gov_path, encoding="utf-8").read())
-        except Exception:  # BLE001:REVIEWED
-            return CrossCheckResult(
-                check_name="brain_registry_governance_alignment",
-                status=SourceStatus.SKIPPED,
-                primary_code="BR_GOV_ALIGN_SKIPPED",
-                message="governance_state.json unreadable",
-                checked_at=_utc_iso(),
-            )
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("health_checks:_check_brain_registry_governance_alignment"):
+                return CrossCheckResult(
+                    check_name="brain_registry_governance_alignment",
+                    status=SourceStatus.SKIPPED,
+                    primary_code="BR_GOV_ALIGN_SKIPPED",
+                    message="governance_state.json unreadable",
+                    checked_at=_utc_iso(),
+                )
         brain_states = gov.get("brain_states", {})
         if not brain_states:
             return CrossCheckResult(
@@ -1608,9 +1609,9 @@ class HealthCheckMethods:
                     entry = _json.loads(open(f, encoding="utf-8").read())
                     if entry.get("schema_version") == "brain_registry_entry.v1":
                         registry_entries[entry["brain_id"]] = entry
-                except Exception:  # BLE001:REVIEWED
-                    pass
-
+                except Exception:  # BLE001:FOG
+                    with fail_open_guard("health_checks:_check_brain_registry_governance_alignment"):
+                        pass
         for bid in live_ids:
             if bid not in registry_entries:
                 warnings.append(
@@ -1646,9 +1647,9 @@ class HealthCheckMethods:
                         warnings.append(
                             f"LIVE brain {bid}: disabled in {yaml_path}"
                         )
-        except Exception:  # BLE001:REVIEWED
-            pass  # yaml not available — skip this check
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("health_checks:_check_brain_registry_governance_alignment"):
+                pass  # yaml not available — skip this check
         if warnings:
             return CrossCheckResult(
                 check_name="brain_registry_governance_alignment",
@@ -1710,17 +1711,18 @@ class HealthCheckMethods:
                             )
                             if _ct and (not latest_ts or _ct > latest_ts):
                                 latest_ts = _ct
-                        except Exception:  # BLE001:REVIEWED
-                            pass
-        except Exception:  # BLE001:REVIEWED
-            return CrossCheckResult(
-                check_name="pnl_ledger_freshness",
-                status=SourceStatus.FAIL,
-                primary_code="CROSS_PNL_LEDGER_CORRUPT",
-                message="ledger_events.jsonl unreadable",
-                checked_at=_utc_iso(),
-            )
-
+                        except Exception:  # BLE001:FOG
+                            with fail_open_guard("health_checks:_check_journal_vs_pnl_ledger"):
+                                pass
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("health_checks:_check_journal_vs_pnl_ledger"):
+                return CrossCheckResult(
+                    check_name="pnl_ledger_freshness",
+                    status=SourceStatus.FAIL,
+                    primary_code="CROSS_PNL_LEDGER_CORRUPT",
+                    message="ledger_events.jsonl unreadable",
+                    checked_at=_utc_iso(),
+                )
         if total_settled == 0:
             return CrossCheckResult(
                 check_name="pnl_ledger_freshness",
@@ -1740,9 +1742,9 @@ class HealthCheckMethods:
                     for line in f:
                         if '"action": "close"' in line:
                             journal_closes += 1
-        except Exception:  # BLE001:REVIEWED
-            pass
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("health_checks:_check_journal_vs_pnl_ledger"):
+                pass
         if age_h > 48:
             status = SourceStatus.FAIL
             code = "CROSS_PNL_LEDGER_STALE"
@@ -1781,9 +1783,9 @@ class HealthCheckMethods:
                             open_count += 1
                         elif '"action": "close"' in line:
                             close_count += 1
-        except Exception:  # BLE001:REVIEWED
-            pass
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("health_checks:_check_open_vs_close_convergence"):
+                pass
         if open_count == 0:
             return CrossCheckResult(
                 check_name="open_vs_close_convergence",
@@ -1959,9 +1961,9 @@ class HealthCheckMethods:
                 # If we hit max_lines, cursor stays at last processed line
                 # — remaining lines picked up next tick
                 _metrics.last_line_count = _line_no
-        except Exception:  # BLE001:REVIEWED
-            pass  # best-effort — never crash the audit tick
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("health_checks:_hydrate_behavioral_metrics"):
+                pass  # best-effort — never crash the audit tick
     # ── FIX-20260611-002: Behavioral compliance checks ──
 
 
@@ -2013,14 +2015,14 @@ class HealthCheckMethods:
         try:
             _positions = self._position_manager.get_all_positions()
             _current = len(_positions)
-        except Exception:  # BLE001:REVIEWED
-            return SourceCheckResult(
-                source="position_limit", tier=Tier.CRITICAL,
-                status=SourceStatus.PASS, primary_code="POSITION_LIMIT_QUERY_FAILED",
-                message="Failed to query position_manager — assuming safe",
-                checked_at=_utc_iso(),
-            )
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("health_checks:check_position_limit"):
+                return SourceCheckResult(
+                    source="position_limit", tier=Tier.CRITICAL,
+                    status=SourceStatus.PASS, primary_code="POSITION_LIMIT_QUERY_FAILED",
+                    message="Failed to query position_manager — assuming safe",
+                    checked_at=_utc_iso(),
+                )
         # ── Read max_positions from config ──
         _cfg_path = os.path.join(self._base_dir, "..", "configs")
         for _yaml_name in ("live_btc.yaml", "live.yaml"):
@@ -2034,9 +2036,9 @@ class HealthCheckMethods:
                     if _mp is not None:
                         _max_positions = int(_mp)
                         break
-                except Exception:  # BLE001:REVIEWED
-                    pass
-
+                except Exception:  # BLE001:FOG
+                    with fail_open_guard("health_checks:check_position_limit"):
+                        pass
         if _current > _max_positions:
             self._position_exceeded_streak += 1
             _consecutive_needed = int(self._t("position_limit_consecutive_alerts"))
@@ -2700,15 +2702,15 @@ class HealthCheckMethods:
                 _data = json.load(_fh)
             _hb = _data.get("last_heartbeat_utc", "")
             _age = _age_minutes(_hb) if _hb else 999
-        except Exception:  # BLE001:REVIEWED
-            return SourceCheckResult(
-                source="entry_context_guard", tier=Tier.CRITICAL,
-                status=SourceStatus.WARN,
-                primary_code="GUARD_HEARTBEAT_UNREADABLE",
-                message="EntryContextGuard heartbeat file exists but is unreadable",
-                checked_at=_utc_iso(),
-            )
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("health_checks:check_entry_context_guard_heartbeat"):
+                return SourceCheckResult(
+                    source="entry_context_guard", tier=Tier.CRITICAL,
+                    status=SourceStatus.WARN,
+                    primary_code="GUARD_HEARTBEAT_UNREADABLE",
+                    message="EntryContextGuard heartbeat file exists but is unreadable",
+                    checked_at=_utc_iso(),
+                )
         max_age = 15  # minutes (3x the 5-min heartbeat interval)
         if _age > max_age:
             return SourceCheckResult(

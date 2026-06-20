@@ -27,6 +27,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Data Health DingTalk Alert Adapter")
@@ -54,10 +56,9 @@ def load_webhook_url(base_dir: str, override: str | None = None) -> str:
         with open(config_path, encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
         return str(cfg.get("alert", {}).get("channels", {}).get("dingtalk_webhook_url", ""))
-    except Exception:  # BLE001:REVIEWED
-        return ""
-
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("send_data_health_alert:load_webhook_url"):
+            return ""
 def _emoji(status: str) -> str:
     return {"pass": "🟢", "warn": "🟡", "fail": "🔴", "missing": "⚫", "skipped": "⚪"}.get(status, "❓")
 
@@ -157,11 +158,10 @@ def send_dingtalk(webhook_url: str, title: str, text: str) -> bool:
             else:
                 print(f"DingTalk: error {result.get('errcode')} — {result.get('errmsg', '')}")
             return ok
-    except Exception as exc:  # BLE001:REVIEWED (Sev 4, Phase 3b)
-        print(f"DingTalk send failed: {exc}")
-        return False
-
-
+    except Exception as exc:  # BLE001:FOG (Sev 4, Phase 3b)
+        with fail_open_guard("send_data_health_alert:send_dingtalk"):
+            print(f"DingTalk send failed: {exc}")
+            return False
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 

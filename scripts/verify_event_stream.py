@@ -23,6 +23,7 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from core.feedback.brain_pnl_ledger import BrainPnLStore
+from core.runtime.fault_handler import fail_open_guard
 
 
 def verify(base_dir: str) -> dict:
@@ -54,17 +55,17 @@ def verify(base_dir: str) -> dict:
     # Load old JSON
     try:
         old_store = BrainPnLStore.load(str(old_path))
-    except Exception as e:  # BLE001:REVIEWED (Sev 4, Phase 3b)
-        result["error"] = f"Failed to load old JSON: {e}"
-        return result
-
+    except Exception as e:  # BLE001:FOG (Sev 4, Phase 3b)
+        with fail_open_guard("verify_event_stream:verify"):
+            result["error"] = f"Failed to load old JSON: {e}"
+            return result
     # Load from event stream
     try:
         new_store = BrainPnLStore.load_from_stream(str(stream_path))
-    except Exception as e:  # BLE001:REVIEWED (Sev 4, Phase 3b)
-        result["error"] = f"Failed to load from event stream: {e}"
-        return result
-
+    except Exception as e:  # BLE001:FOG (Sev 4, Phase 3b)
+        with fail_open_guard("verify_event_stream:verify"):
+            result["error"] = f"Failed to load from event stream: {e}"
+            return result
     old_metrics = old_store.get_all_metrics()
     new_metrics = new_store.get_all_metrics()
 

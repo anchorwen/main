@@ -369,19 +369,19 @@ def main(argv: list[str] | None = None) -> int:
                     from core.runtime.live_cycle import apply_timeframe_scaling
 
                     apply_timeframe_scaling(strategy_configs)
-                except Exception as _ts_exc:  # BLE001:REVIEWED
-                    print(
-                        json.dumps(
-                            {
-                                "event": "timeframe_scaling_error",
-                                "time": _utc_iso(),
-                                "error": str(_ts_exc),
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
-
+                except Exception as _ts_exc:  # BLE001:FOG
+                    with fail_open_guard("live_intent_loop:main"):
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "timeframe_scaling_error",
+                                    "time": _utc_iso(),
+                                    "error": str(_ts_exc),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
             # Validate per-strategy exit configs for unknown keys (RC-09 config drift)
             if strategy_configs:
                 with fail_open_guard("LiveIntentLoop:ValidateExitConfigs"):
@@ -401,18 +401,18 @@ def main(argv: list[str] | None = None) -> int:
                             flush=True,
                         )
 
-        except Exception as exc:  # BLE001:REVIEWED
-            import sys as _sys
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("live_intent_loop:main"):
+                import sys as _sys
 
-            print(
-                json.dumps(
-                    {"event": "strategy_configs_load_fatal", "error": str(exc)},
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-            _sys.exit(1)
-
+                print(
+                    json.dumps(
+                        {"event": "strategy_configs_load_fatal", "error": str(exc)},
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+                _sys.exit(1)
     # ── Startup integrity check ──
     try:
         from core.deployment.brain_lifecycle_manager import BrainLifecycleManager
@@ -475,15 +475,15 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-    except Exception as exc:  # BLE001:REVIEWED
-        print(
-            json.dumps(
-                {"event": "startup_integrity_error", "error": str(exc)},
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("live_intent_loop:main"):
+            print(
+                json.dumps(
+                    {"event": "startup_integrity_error", "error": str(exc)},
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
     _position_state_path = str(Path(args.base_dir) / "state" / "active_position.json")
     config = LiveCycleConfig(
         symbol=args.symbol,
@@ -567,14 +567,14 @@ def main(argv: list[str] | None = None) -> int:
     # ── Load configs ──
     try:
         norm_config = load_normalization_config(args.normalization_config)
-    except Exception as exc:  # BLE001:REVIEWED
-        print(
-            json.dumps({"error": "normalization_config_load_failed", "detail": str(exc)}, indent=2)
-        )
-        if mt5_worker is not None:
-            mt5_worker.stop()
-        return 2
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("live_intent_loop:main"):
+            print(
+                json.dumps({"error": "normalization_config_load_failed", "detail": str(exc)}, indent=2)
+            )
+            if mt5_worker is not None:
+                mt5_worker.stop()
+            return 2
     # ── Initialize rolling normalizer ──
     rolling_norm: Any = None
     normalize_enabled = norm_config.get("normalize", True)
@@ -601,19 +601,19 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
-            except Exception as exc:  # BLE001:REVIEWED
-                print(
-                    json.dumps(
-                        {
-                            "event": "rolling_norm_state_load_error",
-                            "time": _utc_iso(),
-                            "error": str(exc),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-
+            except Exception as exc:  # BLE001:FOG
+                with fail_open_guard("live_intent_loop:main"):
+                    print(
+                        json.dumps(
+                            {
+                                "event": "rolling_norm_state_load_error",
+                                "time": _utc_iso(),
+                                "error": str(exc),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
     # ── Initialize regime detector ──
     regime_detector: Any = None
     if not args.no_mt5:
@@ -637,19 +637,19 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
-            except Exception as exc:  # BLE001:REVIEWED
-                print(
-                    json.dumps(
-                        {
-                            "event": "regime_detector_state_load_error",
-                            "time": _utc_iso(),
-                            "error": str(exc),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-
+            except Exception as exc:  # BLE001:FOG
+                with fail_open_guard("live_intent_loop:main"):
+                    print(
+                        json.dumps(
+                            {
+                                "event": "regime_detector_state_load_error",
+                                "time": _utc_iso(),
+                                "error": str(exc),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
         needs_bootstrap = not regime_detector.is_warmed_up or regime_detector.atr_mean < 0.1
         if needs_bootstrap:
             bootstrapped = _bootstrap_regime_detector(mt5_worker, args.symbol, regime_detector)
@@ -727,8 +727,9 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception:  # BLE001:REVIEWED
-            tracker = BrainPerformanceTracker(window_size=100)
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("live_intent_loop:main"):
+                tracker = BrainPerformanceTracker(window_size=100)
     else:
         tracker = BrainPerformanceTracker(window_size=100)
 
@@ -883,19 +884,19 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     flush=True,
                 )
-        except Exception as _vex:  # BLE001:REVIEWED
-            print(
-                json.dumps(
-                    {
-                        "event": "schema_validation_error",
-                        "time": _utc_iso(),
-                        "error": str(_vex),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-
+        except Exception as _vex:  # BLE001:FOG
+            with fail_open_guard("live_intent_loop:main"):
+                print(
+                    json.dumps(
+                        {
+                            "event": "schema_validation_error",
+                            "time": _utc_iso(),
+                            "error": str(_vex),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
         entries, gov_report = _apply_governance_filter(entries, args.base_dir)
 
         from core.brains.services.brain_factory import BrainFactory
@@ -922,18 +923,19 @@ def main(argv: list[str] | None = None) -> int:
                         "normalization_config_path": entry.get("normalization_config_path"),
                     }
                 )
-            except Exception as exc:  # BLE001:REVIEWED
-                print(
-                    json.dumps(
-                        {
-                            "event": "brain_build_skip",
-                            "brain_id": entry.get("brain_id", "unknown"),
-                            "error": str(exc),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+            except Exception as exc:  # BLE001:FOG
+                with fail_open_guard("live_intent_loop:main"):
+                    print(
+                        json.dumps(
+                            {
+                                "event": "brain_build_skip",
+                                "brain_id": entry.get("brain_id", "unknown"),
+                                "error": str(exc),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
         if not brains:
             print(json.dumps({"error": "no_brains_loaded", "dir": args.brains_dir}, indent=2))
             if mt5_worker is not None:
@@ -1009,20 +1011,20 @@ def main(argv: list[str] | None = None) -> int:
                 model_path=meta_model or "data/models/meta_exit_model.txt",
                 urgency_threshold=getattr(args, "meta_exit_threshold", 0.65),
             )
-        except Exception as _meta_exit_exc:  # BLE001:REVIEWED
-            print(
-                json.dumps(
-                    {
-                        "event": "meta_exit_engine_load_failed",
-                        "time": _utc_iso(),
-                        "error": str(_meta_exit_exc),
-                        "action": "continuing_without_meta_exit",
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-
+        except Exception as _meta_exit_exc:  # BLE001:FOG
+            with fail_open_guard("live_intent_loop:main"):
+                print(
+                    json.dumps(
+                        {
+                            "event": "meta_exit_engine_load_failed",
+                            "time": _utc_iso(),
+                            "error": str(_meta_exit_exc),
+                            "action": "continuing_without_meta_exit",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
     # ── Initialize ActivePositionManager with restart recovery ──
     position_manager: Any = None
     _pos_state_path = Path(args.base_dir) / "state" / "active_position.json"
@@ -1065,9 +1067,9 @@ def main(argv: list[str] | None = None) -> int:
         managed_tickets: set[int] = set()
         try:
             restored = position_manager.load_state(_pos_state_path)
-        except Exception:  # BLE001:REVIEWED
-            restored = None
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("live_intent_loop:main"):
+                restored = None
         if restored is not None:
             # Verify ALL restored positions still exist on MT5.
             # For v3 SSOT positions, backfill physical-state fields from MT5 ground truth.
@@ -1139,20 +1141,20 @@ def main(argv: list[str] | None = None) -> int:
             # ── Fallback: reconstruct ALL positions from MT5 (basic recovery, no trail state) ──
             try:
                 open_positions = _broker.get_open_positions_detail(args.symbol)
-            except Exception as _recovery_exc:  # BLE001:REVIEWED
-                print(
-                    json.dumps(
-                        {
-                            "event": "position_recovery_error",
-                            "time": _utc_iso(),
-                            "error": str(_recovery_exc),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-                open_positions = None
-
+            except Exception as _recovery_exc:  # BLE001:FOG
+                with fail_open_guard("live_intent_loop:main"):
+                    print(
+                        json.dumps(
+                            {
+                                "event": "position_recovery_error",
+                                "time": _utc_iso(),
+                                "error": str(_recovery_exc),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                    open_positions = None
             if open_positions:
                 recovery_atr = (
                     _broker.fetch_current_atr(args.symbol) if _broker is not None else 2.31
@@ -1487,9 +1489,9 @@ def main(argv: list[str] | None = None) -> int:
                                         f"Model missing {len(_missing)} V9 features: "
                                         f"{sorted(list(_missing))[:5]}..."
                                     )
-                    except Exception:  # BLE001:REVIEWED
-                        pass  # schema file may not exist; skip check
-
+                    except Exception:  # BLE001:FOG
+                        with fail_open_guard("live_intent_loop:main"):
+                            pass  # schema file may not exist; skip check
                     if not _mf_feature_ok:
                         print(
                             json.dumps(
@@ -1538,15 +1540,15 @@ def main(argv: list[str] | None = None) -> int:
                         flush=True,
                     )
                     meta_signal_filter = None
-        except Exception as _mf_exc:  # BLE001:REVIEWED
-            print(
-                json.dumps(
-                    {"event": "meta_filter_init_error", "time": _utc_iso(), "error": str(_mf_exc)},
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-
+        except Exception as _mf_exc:  # BLE001:FOG
+            with fail_open_guard("live_intent_loop:main"):
+                print(
+                    json.dumps(
+                        {"event": "meta_filter_init_error", "time": _utc_iso(), "error": str(_mf_exc)},
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
     # ── FIX-20260610-007: Direction-specific MetaFilter models ──
     # XAU directional asymmetry: SHORT cascades vs LONG grinds.
     # Separate models capture different feature importance patterns.
@@ -1614,20 +1616,20 @@ def main(argv: list[str] | None = None) -> int:
 
             hot_reload = ConfigHotReload(str(_hot_path))
             hot_reload.load()
-        except Exception as _hot_reload_exc:  # BLE001:REVIEWED
-            print(
-                json.dumps(
-                    {
-                        "event": "config_hot_reload_failed",
-                        "time": _utc_iso(),
-                        "error": str(_hot_reload_exc),
-                        "action": "continuing_without_hot_reload",
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-
+        except Exception as _hot_reload_exc:  # BLE001:FOG
+            with fail_open_guard("live_intent_loop:main"):
+                print(
+                    json.dumps(
+                        {
+                            "event": "config_hot_reload_failed",
+                            "time": _utc_iso(),
+                            "error": str(_hot_reload_exc),
+                            "action": "continuing_without_hot_reload",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
     # ── Initialize BarSyncPoller (event-driven M5 bar detection) ──
     bar_sync: Any = None
     if args.bar_sync and not args.no_mt5 and mt5_worker is not None:
@@ -1657,19 +1659,19 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _bs_exc:  # BLE001:REVIEWED
-            print(
-                json.dumps(
-                    {
-                        "event": "bar_sync_init_failed",
-                        "time": _utc_iso(),
-                        "error": str(_bs_exc),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-
+        except Exception as _bs_exc:  # BLE001:FOG
+            with fail_open_guard("live_intent_loop:main"):
+                print(
+                    json.dumps(
+                        {
+                            "event": "bar_sync_init_failed",
+                            "time": _utc_iso(),
+                            "error": str(_bs_exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
     # ── Initialize ExitWatchdog (heartbeat-protected exit dispatch) ──
     # FIX-20260613-086: watchdog_config from live YAML for structural triggers
     exit_watchdog: Any = None
@@ -1702,19 +1704,19 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _ew_exc:  # BLE001:REVIEWED
-            print(
-                json.dumps(
-                    {
-                        "event": "exit_watchdog_init_failed",
-                        "time": _utc_iso(),
-                        "error": str(_ew_exc),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-
+        except Exception as _ew_exc:  # BLE001:FOG
+            with fail_open_guard("live_intent_loop:main"):
+                print(
+                    json.dumps(
+                        {
+                            "event": "exit_watchdog_init_failed",
+                            "time": _utc_iso(),
+                            "error": str(_ew_exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
     # ── Initialize LimitOrderMonitor (spread-aware limit order tracking) ──
     limit_monitor: Any = None
     if args.use_limit_orders:
@@ -1732,19 +1734,19 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _lm_exc:  # BLE001:REVIEWED
-            print(
-                json.dumps(
-                    {
-                        "event": "limit_monitor_init_failed",
-                        "time": _utc_iso(),
-                        "error": str(_lm_exc),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-
+        except Exception as _lm_exc:  # BLE001:FOG
+            with fail_open_guard("live_intent_loop:main"):
+                print(
+                    json.dumps(
+                        {
+                            "event": "limit_monitor_init_failed",
+                            "time": _utc_iso(),
+                            "error": str(_lm_exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
     # ── Initialize LiveAlertHub (unified alerting: rules → circuit breaker → Slack/DingTalk/Log) ──
     alert_hub: Any = None
     if args.alert:
@@ -1796,19 +1798,19 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 flush=True,
             )
-        except Exception as _ah_exc:  # BLE001:REVIEWED
-            print(
-                json.dumps(
-                    {
-                        "event": "alert_hub_init_failed",
-                        "time": _utc_iso(),
-                        "error": str(_ah_exc),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-
+        except Exception as _ah_exc:  # BLE001:FOG
+            with fail_open_guard("live_intent_loop:main"):
+                print(
+                    json.dumps(
+                        {
+                            "event": "alert_hub_init_failed",
+                            "time": _utc_iso(),
+                            "error": str(_ah_exc),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
     # ── Global crash hook: capture ALL exits including C-level crashes ──
     import sys as _sys
     import traceback as _traceback
@@ -1826,8 +1828,9 @@ def main(argv: list[str] | None = None) -> int:
             msg["traceback"] = "".join(_traceback.format_tb(exc_tb))[-2000:]
         try:
             print(json.dumps(msg, ensure_ascii=False), flush=True)
-        except Exception:  # BLE001:REVIEWED
-            print(f"FATAL: {exc_type}: {exc_value}", flush=True)
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("live_intent_loop:_global_excepthook"):
+                print(f"FATAL: {exc_type}: {exc_value}", flush=True)
         _sys.__excepthook__(exc_type, exc_value, exc_tb)
 
     _sys.excepthook = _global_excepthook
@@ -1913,20 +1916,21 @@ def main(argv: list[str] | None = None) -> int:
                                     ),
                                     flush=True,
                                 )
-                            except Exception as _wsexc:  # BLE001:REVIEWED
-                                print(
-                                    json.dumps(
-                                        {
-                                            "event": "warm_start_background_error",
-                                            "time": _utc_iso(),
-                                            "brain_id": b_info["brain_id"],
-                                            "brain_type": btype,
-                                            "error": str(_wsexc),
-                                        },
-                                        ensure_ascii=False,
-                                    ),
-                                    flush=True,
-                                )
+                            except Exception as _wsexc:  # BLE001:FOG
+                                with fail_open_guard("live_intent_loop:_background_warm_start"):
+                                    print(
+                                        json.dumps(
+                                            {
+                                                "event": "warm_start_background_error",
+                                                "time": _utc_iso(),
+                                                "brain_id": b_info["brain_id"],
+                                                "brain_type": btype,
+                                                "error": str(_wsexc),
+                                            },
+                                            ensure_ascii=False,
+                                        ),
+                                        flush=True,
+                                    )
                     elif btype == "transformer_v4.3":
                         try:
                             if (
@@ -1947,21 +1951,21 @@ def main(argv: list[str] | None = None) -> int:
                                     ),
                                     flush=True,
                                 )
-                        except Exception as _wsexc:  # BLE001:REVIEWED
-                            print(
-                                json.dumps(
-                                    {
-                                        "event": "warm_start_background_error",
-                                        "time": _utc_iso(),
-                                        "brain_id": b_info["brain_id"],
-                                        "brain_type": btype,
-                                        "error": str(_wsexc),
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                                flush=True,
-                            )
-
+                        except Exception as _wsexc:  # BLE001:FOG
+                            with fail_open_guard("live_intent_loop:_background_warm_start"):
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "warm_start_background_error",
+                                            "time": _utc_iso(),
+                                            "brain_id": b_info["brain_id"],
+                                            "brain_type": btype,
+                                            "error": str(_wsexc),
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
             _warm_start_thread = _threading.Thread(
                 target=_background_warm_start, daemon=True, name="warm-start"
             )
@@ -2096,9 +2100,9 @@ def main(argv: list[str] | None = None) -> int:
             from core.observability.entry_context_guard import start_entry_context_guard
 
             start_entry_context_guard(Path(args.base_dir), symbol=args.symbol)
-        except Exception:  # BLE001:REVIEWED
-            pass  # Guard failure must never prevent the main loop from starting
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("live_intent_loop:_watchdog_loop"):
+                pass  # Guard failure must never prevent the main loop from starting
         while True:
             state.last_heartbeat = time.time()
             if _shutdown_flag[0]:
@@ -2153,89 +2157,89 @@ def main(argv: list[str] | None = None) -> int:
                             state._tracker_reload_pending = False
                 if not should_continue:
                     break
-            except Exception as exc:  # BLE001:REVIEWED
-                # ── FIX-20260607-140: Fail-Closed on dispatch pipeline crash ──
-                # ExecutionQueueFatalError means the dispatch pipeline is broken.
-                # Trip the circuit breaker IMMEDIATELY — do NOT continue the
-                # cycle without a functioning dispatch path (Fail-Open→Fail-Closed).
-                if isinstance(
-                    exc,
-                    __import__(
-                        "core.execution.execution_queue", fromlist=["ExecutionQueueFatalError"]
-                    ).ExecutionQueueFatalError,
-                ):
-                    state._circuit_breaker_tripped = True
-                    state._circuit_breaker_tripped_at = time.time()
-                    state.block_new_entries = True
+            except Exception as exc:  # BLE001:FOG
+                with fail_open_guard("live_intent_loop:_watchdog_loop"):
+                    # ── FIX-20260607-140: Fail-Closed on dispatch pipeline crash ──
+                    # ExecutionQueueFatalError means the dispatch pipeline is broken.
+                    # Trip the circuit breaker IMMEDIATELY — do NOT continue the
+                    # cycle without a functioning dispatch path (Fail-Open→Fail-Closed).
+                    if isinstance(
+                        exc,
+                        __import__(
+                            "core.execution.execution_queue", fromlist=["ExecutionQueueFatalError"]
+                        ).ExecutionQueueFatalError,
+                    ):
+                        state._circuit_breaker_tripped = True
+                        state._circuit_breaker_tripped_at = time.time()
+                        state.block_new_entries = True
 
-                # ── DQAF-20260616-002/P0.1: Consecutive cycle error fuse ──────
-                # A single swallowed exception can corrupt the state machine and
-                # cause all subsequent cycles to silently skip the trading path
-                # (zombie state — heartbeat alive, no trades).  This fuse counts
-                # consecutive failing cycles and force-kills the process after 5,
-                # letting the launcher restart with a clean state.
-                # Persisted on state so it survives across loop iterations.
-                _consec = getattr(state, "_consecutive_cycle_errors", 0) + 1
-                state._consecutive_cycle_errors = _consec
-                _tb = traceback.format_exc()
-                print(
-                    json.dumps(
-                        {
-                            "event": "cycle_error",
-                            "time": _utc_iso(),
-                            "error": str(exc),
-                            "error_type": type(exc).__name__,
-                            "traceback": _tb,
-                            "circuit_breaker_tripped": state._circuit_breaker_tripped,
-                            "consecutive_cycle_errors": _consec,
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-                if _consec >= 5:
-                    # ── Fuse blown: log final traceback to alert_audit ──
-                    _fuse_msg = (
-                        f"[DQAF-20260616-002] ZOMBIE_CYCLE_FUSE_BLOWN: "
-                        f"{_consec} consecutive cycle failures. "
-                        f"Last error: {type(exc).__name__}: {exc!s:.500}. "
-                        f"Force-exiting to break silent-degrade loop."
-                    )
-                    with fail_open_guard("LiveIntentLoop:ZombieFuseAlert"):
-                        from core.feedback.live_alert_hub import LiveAlertHub
-                        _ah = getattr(state, "_alert_hub", None)
-                        if _ah is None:
-                            _ah = LiveAlertHub(
-                                log_dir=f"{config.base_dir}/logs",
-                                ding_webhook_url=getattr(config, "ding_webhook_url", ""),
-                            )
-                        _ah.fire(
-                            "zombie_cycle_fuse_blown",
-                            severity="critical",
-                            title="[DQAF-002] 连续循环异常熔断触发",
-                            detail={
-                                "consecutive_errors": _consec,
-                                "last_error_type": type(exc).__name__,
-                                "last_error": str(exc)[:500],
-                                "last_traceback": _tb[:2000],
-                                "cycle_count": getattr(state, "cycle_count", -1),
+                    # ── DQAF-20260616-002/P0.1: Consecutive cycle error fuse ──────
+                    # A single swallowed exception can corrupt the state machine and
+                    # cause all subsequent cycles to silently skip the trading path
+                    # (zombie state — heartbeat alive, no trades).  This fuse counts
+                    # consecutive failing cycles and force-kills the process after 5,
+                    # letting the launcher restart with a clean state.
+                    # Persisted on state so it survives across loop iterations.
+                    _consec = getattr(state, "_consecutive_cycle_errors", 0) + 1
+                    state._consecutive_cycle_errors = _consec
+                    _tb = traceback.format_exc()
+                    print(
+                        json.dumps(
+                            {
+                                "event": "cycle_error",
+                                "time": _utc_iso(),
+                                "error": str(exc),
+                                "error_type": type(exc).__name__,
+                                "traceback": _tb,
+                                "circuit_breaker_tripped": state._circuit_breaker_tripped,
+                                "consecutive_cycle_errors": _consec,
                             },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                    if _consec >= 5:
+                        # ── Fuse blown: log final traceback to alert_audit ──
+                        _fuse_msg = (
+                            f"[DQAF-20260616-002] ZOMBIE_CYCLE_FUSE_BLOWN: "
+                            f"{_consec} consecutive cycle failures. "
+                            f"Last error: {type(exc).__name__}: {exc!s:.500}. "
+                            f"Force-exiting to break silent-degrade loop."
                         )
-                    # Write kill log (same pattern as watchdog for diagnostics)
-                    try:
-                        with open("watchdog_kill.log", "a", encoding="utf-8") as _wf:
-                            _wf.write(
-                                f"[{_utc_iso()}] ZOMBIE_CYCLE_FUSE PID={_os_module.getpid()}. "
-                                f"consecutive_errors={_consec}. "
-                                f"last_error={type(exc).__name__}: {exc!s:.300}\n"
-                                f"traceback_head={_tb[:1000]}\n"
+                        with fail_open_guard("LiveIntentLoop:ZombieFuseAlert"):
+                            from core.feedback.live_alert_hub import LiveAlertHub
+                            _ah = getattr(state, "_alert_hub", None)
+                            if _ah is None:
+                                _ah = LiveAlertHub(
+                                    log_dir=f"{config.base_dir}/logs",
+                                    ding_webhook_url=getattr(config, "ding_webhook_url", ""),
+                                )
+                            _ah.fire(
+                                "zombie_cycle_fuse_blown",
+                                severity="critical",
+                                title="[DQAF-002] 连续循环异常熔断触发",
+                                detail={
+                                    "consecutive_errors": _consec,
+                                    "last_error_type": type(exc).__name__,
+                                    "last_error": str(exc)[:500],
+                                    "last_traceback": _tb[:2000],
+                                    "cycle_count": getattr(state, "cycle_count", -1),
+                                },
                             )
-                    except OSError:
-                        pass
-                    _os_module._exit(3)  # exit code 3 = zombie cycle fuse (distinct from watchdog=1)
-                if args.once:
-                    break
-
+                        # Write kill log (same pattern as watchdog for diagnostics)
+                        try:
+                            with open("watchdog_kill.log", "a", encoding="utf-8") as _wf:
+                                _wf.write(
+                                    f"[{_utc_iso()}] ZOMBIE_CYCLE_FUSE PID={_os_module.getpid()}. "
+                                    f"consecutive_errors={_consec}. "
+                                    f"last_error={type(exc).__name__}: {exc!s:.300}\n"
+                                    f"traceback_head={_tb[:1000]}\n"
+                                )
+                        except OSError:
+                            pass
+                        _os_module._exit(3)  # exit code 3 = zombie cycle fuse (distinct from watchdog=1)
+                    if args.once:
+                        break
             # ── Persist state every ~1 hour + check config hot-reload ──
             state.cycle_count += 1
 
@@ -2322,10 +2326,10 @@ def main(argv: list[str] | None = None) -> int:
                                 with fail_open_guard("GovEventLog:append"):
                                     with open(_gov_events_path, "a", encoding="utf-8") as _gf:
                                         _gf.write(json.dumps(_gevt, ensure_ascii=False) + "\n")
-                except Exception:  # BLE001:REVIEWED
-                    with fail_open_guard("BrainPromotionBridge"):
-                        raise  # surface hidden bugs instead of silent pass
-
+                except Exception:  # BLE001:FOG
+                    with fail_open_guard("live_intent_loop:_watchdog_loop"):
+                        with fail_open_guard("BrainPromotionBridge"):
+                            raise  # surface hidden bugs instead of silent pass
             if hot_reload is not None and state.loop_iteration % 30 == 0:
                 with fail_open_guard("LiveIntentLoop:L2417"):
                         changes = hot_reload.check_and_reload()
@@ -2483,19 +2487,20 @@ def main(argv: list[str] | None = None) -> int:
                             time.sleep(args.interval_seconds)
                 else:
                     time.sleep(args.interval_seconds)
-            except Exception as _bar_exc:  # BLE001:REVIEWED
-                print(
-                    json.dumps(
-                        {
-                            "event": "bar_sync_crash",
-                            "time": _utc_iso(),
-                            "error": str(_bar_exc),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
-                time.sleep(args.interval_seconds)
+            except Exception as _bar_exc:  # BLE001:FOG
+                with fail_open_guard("live_intent_loop:_watchdog_loop"):
+                    print(
+                        json.dumps(
+                            {
+                                "event": "bar_sync_crash",
+                                "time": _utc_iso(),
+                                "error": str(_bar_exc),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                    time.sleep(args.interval_seconds)
     finally:
         # ── Release distributed lock ──
         if _live_lock is not None:
@@ -2543,14 +2548,15 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 save_path = Path(args.base_dir) / "brain_performance.json"
                 tracker.save(save_path)
-            except Exception as exc:  # BLE001:REVIEWED
-                print(
-                    json.dumps(
-                        {"event": "tracker_save_error", "time": _utc_iso(), "error": str(exc)},
-                        ensure_ascii=False,
-                    ),
-                    flush=True,
-                )
+            except Exception as exc:  # BLE001:FOG
+                with fail_open_guard("live_intent_loop:_watchdog_loop"):
+                    print(
+                        json.dumps(
+                            {"event": "tracker_save_error", "time": _utc_iso(), "error": str(exc)},
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
             if pnl_ledger is not None:
                 try:
                     if not _EVENT_STREAM_MODE:
@@ -2566,18 +2572,19 @@ def main(argv: list[str] | None = None) -> int:
                         ),
                         flush=True,
                     )
-                except Exception as exc:  # BLE001:REVIEWED
-                    print(
-                        json.dumps(
-                            {
-                                "event": "pnl_ledger_save_error",
-                                "time": _utc_iso(),
-                                "error": str(exc),
-                            },
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
-                    )
+                except Exception as exc:  # BLE001:FOG
+                    with fail_open_guard("live_intent_loop:_watchdog_loop"):
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "pnl_ledger_save_error",
+                                    "time": _utc_iso(),
+                                    "error": str(exc),
+                                },
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
             if meta_signal_filter is not None:
                 with fail_open_guard("LiveIntentLoop:MetaFilterSaveState"):
                     meta_signal_filter.save_state(str(_mf_state_path))

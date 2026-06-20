@@ -25,6 +25,8 @@ from typing import Any
 
 import zmq
 
+from core.runtime.fault_handler import fail_open_guard
+
 logger = logging.getLogger(__name__)
 
 
@@ -107,9 +109,9 @@ class ZMQReceiptListener:
                     logger.debug("ZMQ error in recv loop", exc_info=True)
             except json.JSONDecodeError:
                 logger.warning("Invalid JSON ACK received")
-            except Exception:  # BLE001:REVIEWED
-                logger.error("Unexpected error in ACK recv loop", exc_info=True)
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("zmq_receipt_listener:_recv_loop"):
+                    logger.error("Unexpected error in ACK recv loop", exc_info=True)
     def get_receipt(self, message_id: str, timeout: float = 5.0) -> dict[str, Any] | None:
         """Wait for a receipt matching *message_id*.
 
