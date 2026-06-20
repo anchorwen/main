@@ -4,6 +4,19 @@
 
 ## Fix Details
 
+### FIX-20260620-010 — BLE001 Phase 3d: cold/warm-path REVIEWED→FOG migration complete
+
+- **Date**: 2026-06-20
+- **Author**: cursor-agent
+- **Commit**: 92fe6a5
+- **Type**: fix
+- **Module**: ble001
+- **Files**: 148 files — core/protocol/ (zmq_receipt_listener.py, zmq_publisher.py, ...), core/observability/ (data_health_schema.py, alert_service.py, ...), core/infrastructure/ (file_lock.py, ...), core/features/ (feature_router.py, ofi_collector.py, ...), core/ledger/ (journal_cleanup.py, ...), core/feedback/ (brain_pnl_store.py, performance_tracker.py, ...), core/deployment/ (live_config_loader.py, ...), core/brains/ (onnx_worker.py, ...), scripts/ (training/, utils/, ...), apps/ (monitor/, ...). Excludes hot paths (core/runtime/, core/execution/ — already done in Phase 3b/3c).
+- **Description**: Phase 3d cold-path migration script processed all 353 BLE001:REVIEWED sites across 148 non-hot-path Python files. Each except body wrapped in `with fail_open_guard("ContextName"):` with proper re-indentation (+4 spaces). Context name auto-derived from enclosing function/class or `module:lineno` fallback. Built-in `compile()` syntax verification before writing. Key features: (1) Multi-name import detection — handles `from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, fail_open_guard`. (2) Multi-line parenthesized import safety — tracks paren depth to avoid inserting inside parentheses blocks. (3) Files without core imports → annotation changed to `BLE001:FOG_DEFERRED` (106 sites, deferred to Phase 3e). (4) Deferred-only files now written to disk (bug fix from mid-script iteration). Post-migration state: 505 FOG (global), 106 FOG_DEFERRED, 0 UNREVIEWED, 0 REVIEWED (actual). 3 F821 fixes: `sur_trainer.py` (import was inside f-string template, not module level), `zmq_receipt_listener.py` (import order — usage before function-local import). ruff --fix cleaned 56 minor issues across all modified files. Iron Law #10: 全库裸 except 清零达成.
+- **Root Cause**: RC-07 — BLE001 Phase 3a (hot-path blind pass), 3b (hot-path pass-only), 3c (hot-path FOG_DEFERRED) completed hot paths. Phase 3d extended the same `fail_open_guard()` wrapping to the remaining 353 REVIEWED sites in warm/cold paths. The 106 FOG_DEFERRED sites (files lacking any `from core.` import) cannot safely import `fail_open_guard` and require per-file architecture assessment (Phase 3e).
+- **Risk**: Low. All 353 sites passed Python `compile()` before write. verify.py --quick: mypy PASS, ruff PASS, blueprint PASS. Pre-push CI-equivalent gates all PASSED.
+- **Verification**: verify.py --quick PASS (ruff + mypy + blueprint + import + artifact + FIX_REGISTRY). Pre-push gates: ruff core/apps/scripts/ PASS, mypy baseline check PASS.
+
 ### FIX-20260620-002 — EXEC_STATE_STALE false alert after restart
 
 - **Date**: 2026-06-20
