@@ -28,6 +28,7 @@ from core.execution.brain_gates import check_min_valid_brains, extract_entry_z_s
 from core.execution.conformal_ou_gate import apply_conformal_ou_gate
 from core.execution.dynamic_sl_tp import compute_dynamic_sl_tp, compute_sl_tp_levels
 from core.execution.meta_filter_routing import apply_meta_filter_gate
+from core.execution.ofi_gate import apply_ofi_toxicity_gate
 from core.execution.pwin_chain import resolve_p_win
 from core.execution.strategy_decision import StrategyDecision
 from core.execution.trend_isolation_gates import apply_trend_isolation_gates
@@ -811,44 +812,20 @@ class StrategyLine:
                 return meta_decision
 
         # ── Track 3c: OFI Toxicity Gate ──
-        # Hard physical gate: when Order Flow Imbalance is extremely one-sided,
-        # physically block counter-trend mean-reversion signals. Mean-reversion
-        # against toxic order flow must surrender — the liquidity vacuum crushes
-        # any reversal attempt.
-        # OFI is NOT an ML feature — it's a standalone risk signal computed in
-        # MicrostructureFeatureComputer._compute_tick_features().
-        if name in ("statarb_dynamic", "statarb_m15") and micro_feature_dict:
-            _ofi_z = micro_feature_dict.get("OFI", 0.0)
-            if direction == "short" and _ofi_z > 2.0:
-                return self._make_decision(
-                    should_trade=False,
-                    direction=direction,
-                    confidence=confidence,
-                    volume=0.0,
-                    sl=0.0,
-                    tp=0.0,
-                    hard_sl=0.0,
-                    brain_ids=brain_ids,
-                    supporting_count=support_count,
-                    total_count=total_count,
-                    regime_mode=regime_gate_mode,
-                    reason=f"ofi_toxicity_blocked_short:OFI_Z={_ofi_z:.2f}_gt_2.0"
-                )
-            if direction == "long" and _ofi_z < -2.0:
-                return self._make_decision(
-                    should_trade=False,
-                    direction=direction,
-                    confidence=confidence,
-                    volume=0.0,
-                    sl=0.0,
-                    tp=0.0,
-                    hard_sl=0.0,
-                    brain_ids=brain_ids,
-                    supporting_count=support_count,
-                    total_count=total_count,
-                    regime_mode=regime_gate_mode,
-                    reason=f"ofi_toxicity_blocked_long:OFI_Z={_ofi_z:.2f}_lt_-2.0"
-                )
+        # FIX-20260620-018: Extracted to ofi_gate.apply_ofi_toxicity_gate()
+        _ofi_blocked = apply_ofi_toxicity_gate(
+            strategy_name=name,
+            micro_feature_dict=micro_feature_dict,
+            direction=direction,
+            confidence=confidence,
+            brain_ids=brain_ids,
+            support_count=support_count,
+            total_count=total_count,
+            regime_gate_mode=regime_gate_mode,
+            make_decision=self._make_decision,
+        )
+        if _ofi_blocked is not None:
+            return _ofi_blocked
 
         # ── Track 3d: Conformal OU Gate (OU physics-based signal quality) ──
         # FIX-20260620-016: Extracted to conformal_ou_gate.apply_conformal_ou_gate()
@@ -1232,47 +1209,16 @@ class StrategyLine:
         _ticks2 = math.floor(volume / self.config.lot_step + 0.5)
         volume = max(self.config.lot_step, round(_ticks2 * self.config.lot_step, 2))
 
-        # ── Layer 3 COLD phase exploration safety ──
-        # When the ConformalOUGate is in COLD phase (calibrator samples < 50),
-        # force-caps volume at min lot (0.01) regardless of Kelly/position sizer
-        # output.  This bounds exploration risk while the calibrator accumulates
-        # (p_win, label) samples to break the chicken-and-egg deadlock.
-        _ou_gate = getattr(self, "_last_ou_result", None)
-        if _ou_gate is not None and _ou_gate.get("force_min_volume"):
-            _pre_override = volume
-            volume = 0.01
-            import logging as _logging
-
-            _logging.getLogger(__name__).info(
-                "COLD phase volume override: %s → 0.01 (samples=%s, phase=%s)",
-                _pre_override,
-                _ou_gate.get("warmup_phase", "?"),
-            )
-
-        # Diagnostic: three-way volume distinction (raw vs stepped)
-        _pre_kelly_raw = getattr(self, "_last_pre_kelly_size", volume)
-        _raw_target = _pre_kelly_raw * _kelly_mult
-        import json as _json
-
-        print(
-            _json.dumps(
-                {
-                    "event": "kelly_sizing",
-                    "time": datetime.now(UTC).isoformat().replace("+00:00", "Z") + "Z",
-                    "strategy": name,
-                    "p_win": round(_p_win, 4),
-                    "p_win_source": _p_win_source,
-                    "rr_ratio": round(_rr_ratio, 4),
-                    "kelly_mult": round(_kelly_mult, 4),
-                    "sizing_label": kelly_result.sizing_label,
-                    "base_volume": round(_pre_kelly_raw, 4),
-                    "raw_target_volume": round(_raw_target, 4),
-                    "final_stepped_volume": volume,
-                    "cold_explore": _is_cold_explore,
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
+        # ── Volume finalization (COLD safety + Kelly diagnostic) ──
+        volume = self._finalize_volume(
+            volume=volume,
+            strategy_name=name,
+            p_win=_p_win,
+            p_win_source=_p_win_source,
+            rr_ratio=_rr_ratio,
+            kelly_mult=_kelly_mult,
+            sizing_label=kelly_result.sizing_label,
+            is_cold_explore=_is_cold_explore,
         )
 
         # ── Build entry context for journal ──
@@ -1639,3 +1585,66 @@ class StrategyLine:
         _lot_step = self.config.lot_step
         _ticks = math.floor(size / _lot_step + 0.5)
         return max(_lot_step, min(self.config.max_volume, round(_ticks * _lot_step, 2)))
+
+    def _finalize_volume(
+        self,
+        *,
+        volume: float,
+        strategy_name: str,
+        p_win: float,
+        p_win_source: str,
+        rr_ratio: float,
+        kelly_mult: float,
+        sizing_label: str,
+        is_cold_explore: bool = False,
+    ) -> float:
+        """Apply COLD phase safety cap and emit Kelly sizing diagnostic.
+
+        FIX-20260620-018: Extracted from evaluate() volume post-processing block.
+
+        Returns the finalized volume after COLD override and diagnostic output.
+        """
+        # ── Layer 3 COLD phase exploration safety ──
+        # When the ConformalOUGate is in COLD phase (calibrator samples < 50),
+        # force-caps volume at min lot (0.01) regardless of Kelly/position sizer
+        # output.  This bounds exploration risk while the calibrator accumulates
+        # (p_win, label) samples to break the chicken-and-egg deadlock.
+        _ou_gate = getattr(self, "_last_ou_result", None)
+        if _ou_gate is not None and _ou_gate.get("force_min_volume"):
+            _pre_override = volume
+            volume = 0.01
+            import logging as _logging
+
+            _logging.getLogger(__name__).info(
+                "COLD phase volume override: %s → 0.01 (samples=%s, phase=%s)",
+                _pre_override,
+                _ou_gate.get("warmup_phase", "?"),
+            )
+
+        # Diagnostic: three-way volume distinction (raw vs stepped)
+        _pre_kelly_raw = getattr(self, "_last_pre_kelly_size", volume)
+        _raw_target = _pre_kelly_raw * kelly_mult
+        import json as _json
+
+        print(
+            _json.dumps(
+                {
+                    "event": "kelly_sizing",
+                    "time": datetime.now(UTC).isoformat().replace("+00:00", "Z") + "Z",
+                    "strategy": strategy_name,
+                    "p_win": round(p_win, 4),
+                    "p_win_source": p_win_source,
+                    "rr_ratio": round(rr_ratio, 4),
+                    "kelly_mult": round(kelly_mult, 4),
+                    "sizing_label": sizing_label,
+                    "base_volume": round(_pre_kelly_raw, 4),
+                    "raw_target_volume": round(_raw_target, 4),
+                    "final_stepped_volume": volume,
+                    "cold_explore": is_cold_explore,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+
+        return volume
