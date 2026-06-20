@@ -17,6 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from core.runtime.fault_handler import fail_open_guard
+
 ROOT = Path(__file__).resolve().parent.parent
 BASELINE_PATH = ROOT / "mypy_baseline.json"
 
@@ -52,10 +54,9 @@ def staged_py_files() -> list[str]:
             for line in result.stdout.strip().split("\n")
             if line.strip().endswith(".py")
         ]
-    except Exception:  # BLE001:FOG_DEFERRED
-        return []
-
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("pre_commit_mypy:staged_py_files"):
+            return []
 def run_mypy(filepath: str) -> tuple[int, str]:
     """Run mypy on a single file. Returns (error_count, output)."""
     try:
@@ -77,10 +78,9 @@ def run_mypy(filepath: str) -> tuple[int, str]:
         return -1, "mypy timed out"
     except FileNotFoundError:
         return -1, "mypy not installed — run: pip install mypy"
-    except Exception as exc:  # BLE001:FOG_DEFERRED
-        return -1, str(exc)
-
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("pre_commit_mypy:run_mypy"):
+            return -1, str(exc)
 def main() -> int:
     if "--update-baseline" in sys.argv:
         # Rebuild baseline from ALL tracked files

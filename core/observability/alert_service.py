@@ -6,6 +6,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 logger = logging.getLogger(__name__)
 
 
@@ -205,8 +207,9 @@ class AlertService:
                 for ch in channels:
                     try:
                         ch.send(alert)
-                    except Exception:  # BLE001:FOG_DEFERRED
-                        logging.exception("AlertService failed sending alert to channel=%s", ch)
+                    except Exception:  # BLE001:FOG
+                        with fail_open_guard("alert_service:evaluate"):
+                            logging.exception("AlertService failed sending alert to channel=%s", ch)
                 fired.append(alert)
 
         with self._lock:

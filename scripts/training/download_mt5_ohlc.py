@@ -15,6 +15,7 @@ from pathlib import Path
 
 import MetaTrader5 as mt5
 import pandas as pd
+from core.runtime.fault_handler import fail_open_guard
 
 SYMBOLS = ["XAUUSDc", "BTCUSDc", "EURUSDc", "USDJPYc", "XAGUSDc", "AUDJPYc"]
 
@@ -102,9 +103,9 @@ def main():
         for sym in symbols:
             try:
                 download_ohlc(sym, tf_str, args.output_dir, args.max_bars)
-            except Exception as e:  # BLE001:FOG_DEFERRED
-                print(f"[MT5] FAILED: {sym} {tf_str}: {e}")
-
+            except Exception as e:  # BLE001:FOG
+                with fail_open_guard("download_mt5_ohlc:main"):
+                    print(f"[MT5] FAILED: {sym} {tf_str}: {e}")
     mt5.shutdown()
     print("[MT5] Done.")
     return 0

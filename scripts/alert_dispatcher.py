@@ -31,6 +31,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 # ── Cooling state (persisted to disk for cross-invocation memory) ──
 COOLING_FILE = Path(__file__).resolve().parent.parent / "data" / "state" / "alert_cooling.json"
 COOLING_WINDOW = 3  # consecutive alerts before escalation
@@ -129,8 +131,9 @@ def _get_webhook_url() -> str | None:
                 for line in f:
                     if "dingtalk_webhook_url:" in line:
                         return line.split(":", 1)[1].strip()
-    except Exception:  # BLE001:FOG_DEFERRED
-        pass
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("alert_dispatcher:_get_webhook_url"):
+            pass
     return None
 
 
@@ -203,5 +206,6 @@ def dispatch_alert(card: AlertCard, *, dry_run: bool = False) -> bool:
         with urllib.request.urlopen(req, timeout=10) as resp:
             result = json.loads(resp.read().decode("utf-8"))
             return result.get("errcode") == 0
-    except Exception:  # BLE001:FOG_DEFERRED
-        return False
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("alert_dispatcher:dispatch_alert"):
+            return False

@@ -7,6 +7,8 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from core.runtime.fault_handler import fail_open_guard
+
 ROOT = Path(__file__).resolve().parent.parent
 NOW = datetime.now(UTC)
 CUTOFF_24H = NOW - timedelta(hours=24)
@@ -190,8 +192,9 @@ if ofi.exists():
         print(f"  OFI_Total_Volume:        {od.get('OFI_Total_Volume', 'N/A')}")
         print(f"  OFI_ZScore_20:           {od.get('OFI_ZScore_20', 'N/A')}")
         print(f"  OFI_Cumulative_1H:       {od.get('OFI_Cumulative_1H', 'N/A')}")
-    except Exception as e:  # BLE001:FOG_DEFERRED (Sev 4, Phase 3b)
-        print(f"  Status:                  CORRUPTED ({e})")
+    except Exception as e:  # BLE001:FOG (Sev 4, Phase 3b)
+        with fail_open_guard("data_pipeline_audit:L193"):
+            print(f"  Status:                  CORRUPTED ({e})")
 else:
     print("  Status:                  MISSING")
 
@@ -272,8 +275,9 @@ if bh.exists():
         print(f"  PID:                     {bd.get('pid', 'N/A')}")
         print(f"  Transport:               {bd.get('transport', 'N/A')}")
         print(f"  Outbox pending:          {bd.get('outbox_pending', 'N/A')}")
-    except Exception:  # BLE001:FOG_DEFERRED
-        print("  CORRUPTED")
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("data_pipeline_audit:L275"):
+            print("  CORRUPTED")
 else:
     print("  MISSING")
 

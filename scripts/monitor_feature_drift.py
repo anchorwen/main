@@ -28,6 +28,8 @@ from typing import Any
 
 import numpy as np
 
+from core.runtime.fault_handler import fail_open_guard
+
 # ── Constants ──
 DEFAULT_WINDOW = 1000  # bars for rolling window
 MIN_WINDOW = 500  # below this, alert confidence is insufficient
@@ -72,10 +74,11 @@ def _safe_read_features(fpath: str, max_retries: int = 3) -> list[dict[str, Any]
                         # Last attempt: skip the bad line
                         continue
             return records
-        except Exception:  # BLE001:FOG_DEFERRED
-            if attempt < max_retries - 1:
-                continue
-            return []
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("monitor_feature_drift:_safe_read_features"):
+                if attempt < max_retries - 1:
+                    continue
+                return []
     return []
 
 
@@ -274,9 +277,9 @@ def main() -> int:
                 },
             )
             dispatch_alert(card)
-        except Exception:  # BLE001:FOG_DEFERRED
-            pass
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("monitor_feature_drift:main"):
+                pass
     return 1 if result["severity"] == "Sev1" else 2 if result["severity"] == "Sev2" else 0
 
 

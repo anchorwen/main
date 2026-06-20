@@ -24,6 +24,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from core.runtime.fault_handler import fail_open_guard
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
@@ -81,10 +82,9 @@ def _ks_test_pvalue(a: np.ndarray, b: np.ndarray) -> float:
     try:
         _, pvalue = ks_2samp(a, b)
         return float(pvalue)
-    except Exception:  # BLE001:FOG_DEFERRED
-        return 0.0
-
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("analyze_feature_shift:_ks_test_pvalue"):
+            return 0.0
 def _wasserstein(a: np.ndarray, b: np.ndarray) -> float:
     """1D Wasserstein distance (Earth Mover's Distance)."""
     a_sorted = np.sort(a)

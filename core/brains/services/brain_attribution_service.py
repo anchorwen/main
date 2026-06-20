@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 
 @dataclass
 class BrainAttribution:
@@ -118,9 +120,9 @@ class BrainAttributionService:
                     "win_rate": round(wins / total, 4) if total > 0 else 0.0,
                 }
             report.layer_1_counterfactual = cf
-        except Exception:  # BLE001:FOG_DEFERRED
-            pass
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("brain_attribution_service:_load_counterfactual"):
+                pass
     def _attribute_trades(self, report: AttributionReport) -> None:
         if not self._journal_path.exists():
             return

@@ -25,6 +25,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from core.runtime.fault_handler import fail_open_guard
 
 ROOT = Path(__file__).resolve().parent.parent
 MODULES_DIR = ROOT / "blueprints" / "modules"
@@ -51,10 +52,9 @@ def _run_git(args: list[str], timeout: int = 10) -> subprocess.CompletedProcess:
     except subprocess.TimeoutExpired:
         # Return a dummy result with non-zero rc
         return subprocess.CompletedProcess(args, -1, stdout="", stderr="timeout")
-    except Exception:  # BLE001:FOG_DEFERRED
-        return subprocess.CompletedProcess(args, -1, stdout="", stderr="error")
-
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("check_blueprint_compliance:_run_git"):
+            return subprocess.CompletedProcess(args, -1, stdout="", stderr="error")
 # ── Module → source directory/file mapping ──
 # Each value is a list of directory prefixes or specific file paths.
 # Directories end with "/" and match any file under that tree.
@@ -274,6 +274,10 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "apps/engine/main_v9_shadow.py",
         "apps/engine/v9_shadow_sse.py",
         "scripts/position_query.py",
+        "scripts/ble001_phase3e_deferred_fog_wrap.py",
+        "scripts/ble001_phase3d_coldpath_fog_wrap.py",
+        "scripts/ble001_phase3c_fog_wrap.py",
+        "scripts/ble001_phase3b_migrate_hotpath.py",
     ],
     "runtime_state": ["core/state/"],
     "training": [
@@ -373,9 +377,9 @@ def classify_diff(file_path: str, *, cached_only: bool = False) -> str:
         )
         if result.returncode != 0:
             return "substantive"
-    except Exception:  # BLE001:FOG_DEFERRED
-        return "substantive"
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("check_blueprint_compliance:classify_diff"):
+            return "substantive"
     diff_lines = result.stdout.split("\n")
     changed_lines: list[str] = []
     for line in diff_lines:
@@ -533,8 +537,9 @@ def stamp_module(module: str) -> int:
 
                     h = hashlib.sha256(Path(f).read_bytes()).hexdigest()[:16]
                     file_hashes[rel] = h
-                except Exception:  # BLE001:FOG_DEFERRED
-                    pass
+                except Exception:  # BLE001:FOG
+                    with fail_open_guard("check_blueprint_compliance:stamp_module"):
+                        pass
         else:
             p = ROOT / pat
             if p.exists():

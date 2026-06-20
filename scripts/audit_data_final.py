@@ -8,6 +8,7 @@ import json, os, sys, time
 from collections import Counter, defaultdict
 from pathlib import Path
 from datetime import datetime, timezone
+from core.runtime.fault_handler import fail_open_guard
 
 UTC = timezone.utc
 ROOT = Path(__file__).resolve().parent.parent
@@ -156,9 +157,10 @@ for symbol, data_dir, csv_label in [("BTC", "data_btc", "BTC"), ("XAU", "data", 
             else:
                 with open(fp, encoding='utf-8') as f:
                     json.load(f)
-        except Exception:  # BLE001:FOG_DEFERRED
-            print(f"  ❌ {fname}: CORRUPT JSON")
-            all_fresh = False
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("audit_data_final:audit_file"):
+                print(f"  ❌ {fname}: CORRUPT JSON")
+                all_fresh = False
         if not audit_file(fp, fname, max_age):
             all_fresh = False
     check(all_fresh, "All state files fresh and valid")

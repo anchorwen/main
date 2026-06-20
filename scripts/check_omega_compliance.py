@@ -26,6 +26,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import NamedTuple
+from core.runtime.fault_handler import fail_open_guard
 
 # ── Constants ──
 
@@ -163,9 +164,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.commit_msg_file:
         try:
             commit_msg = Path(args.commit_msg_file).read_text(encoding="utf-8")
-        except Exception:  # BLE001:FOG_DEFERRED
-            pass
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("check_omega_compliance:main"):
+                pass
     # Get changed files
     staged = get_staged_files()
     covered = [f for f in staged if is_covered_file(f)]

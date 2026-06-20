@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from core.runtime.fault_handler import fail_open_guard
 
 AVAILABLE_MODELS = ["xgboost", "lightgbm", "all"]
 
@@ -617,19 +618,19 @@ def main():
                 model, metrics = train_xgboost(dataset, seed=args.seed, verbosity=args.verbose)
                 save_model_xgboost(model, metrics, args.output_dir, contract_id)
                 all_metrics["models"]["xgboost"] = metrics
-            except Exception as exc:  # BLE001:FOG_DEFERRED
-                print(f"[xgboost] Training failed: {exc}")
-                all_metrics["models"]["xgboost"] = {"error": str(exc)}
-
+            except Exception as exc:  # BLE001:FOG
+                with fail_open_guard("train_daily_swing:main"):
+                    print(f"[xgboost] Training failed: {exc}")
+                    all_metrics["models"]["xgboost"] = {"error": str(exc)}
         elif model_type == "lightgbm":
             try:
                 model, metrics = train_lightgbm(dataset, seed=args.seed, verbosity=args.verbose)
                 save_model_lightgbm(model, metrics, args.output_dir, contract_id)
                 all_metrics["models"]["lightgbm"] = metrics
-            except Exception as exc:  # BLE001:FOG_DEFERRED
-                print(f"[lightgbm] Training failed: {exc}")
-                all_metrics["models"]["lightgbm"] = {"error": str(exc)}
-
+            except Exception as exc:  # BLE001:FOG
+                with fail_open_guard("train_daily_swing:main"):
+                    print(f"[lightgbm] Training failed: {exc}")
+                    all_metrics["models"]["lightgbm"] = {"error": str(exc)}
     summary_path = args.output_dir / f"training_summary_{contract_id}.json"
     args.output_dir.mkdir(parents=True, exist_ok=True)
     with open(summary_path, "w", encoding="utf-8") as f:

@@ -265,7 +265,7 @@ def _check_registry_gate() -> tuple[bool, list[str]]:
             ["git", "log", "-1", "--format=%B"],
             capture_output=True, text=True, cwd=str(ROOT), timeout=5,
         )
-        if log.returncode == 0:
+        if log.returncode == 0 and log.stdout:
             msg = log.stdout
             if "[TRIVIAL]" in msg or "[NO-FIX-REQUIRED]" in msg:
                 return True, []

@@ -23,6 +23,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from core.runtime.fault_handler import fail_open_guard
+
 ROOT = Path(__file__).resolve().parent.parent
 MODULES_DIR = ROOT / "blueprints" / "modules"
 FIX_REGISTRY = ROOT / "blueprints" / "system" / "FIX_REGISTRY.md"
@@ -53,10 +55,9 @@ def _get_git_user() -> str:
             timeout=5,
         )
         return result.stdout.strip() or "unknown"
-    except Exception:  # BLE001:FOG_DEFERRED
-        return "unknown"
-
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("register_fix:_get_git_user"):
+            return "unknown"
 def _get_git_commit() -> str:
     try:
         result = subprocess.run(
@@ -67,10 +68,9 @@ def _get_git_commit() -> str:
             timeout=5,
         )
         return result.stdout.strip() or "unknown"
-    except Exception:  # BLE001:FOG_DEFERRED
-        return "unknown"
-
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("register_fix:_get_git_commit"):
+            return "unknown"
 def _next_fix_id(date_str: str) -> str:
     """Find the next available NNN for today's date."""
     existing = []

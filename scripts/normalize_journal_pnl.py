@@ -26,6 +26,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 
 def main() -> int:
     p = argparse.ArgumentParser(prog="normalize_journal_pnl")
@@ -76,9 +78,9 @@ def main() -> int:
                         deals_by_pos[d.position_id] = d
                 print(f"MT5: {len(deals)} deals loaded ({days}d range), {len(deals_by_pos)} with profit")
                 break
-        except Exception:  # BLE001:FOG_DEFERRED
-            continue
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("normalize_journal_pnl:main"):
+                continue
     if not deals_by_pos:
         print("[WARN] No MT5 deals found — nothing to normalize")
         mt5.shutdown()

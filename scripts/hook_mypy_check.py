@@ -22,6 +22,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from core.runtime.fault_handler import fail_open_guard
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -89,9 +91,9 @@ def main() -> int:
     except subprocess.TimeoutExpired:
         print(f"[mypy] {file_path}: timed out")
         failed = True
-    except Exception as exc:  # BLE001:FOG_DEFERRED
-        print(f"[mypy] {file_path}: check failed ({exc})")
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("hook_mypy_check:main"):
+            print(f"[mypy] {file_path}: check failed ({exc})")
     return 1 if failed else 0  # IRON_LAW-13-S1: blocking on new errors
 
 

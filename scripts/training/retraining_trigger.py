@@ -31,6 +31,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from core.runtime.fault_handler import fail_open_guard
 
 SCHEMA_VERSION = "retraining_signal.v1"
 
@@ -351,14 +352,13 @@ def _run_step(cmd: list[str]) -> dict[str, Any]:
         }
     except subprocess.TimeoutExpired:
         return {"step": Path(cmd[1]).stem if len(cmd) > 1 else "unknown", "status": "timeout"}
-    except Exception as exc:  # BLE001:FOG_DEFERRED
-        return {
-            "step": Path(cmd[1]).stem if len(cmd) > 1 else "unknown",
-            "status": "error",
-            "error": str(exc),
-        }
-
-
+    except Exception as exc:  # BLE001:FOG
+        with fail_open_guard("retraining_trigger:_run_step"):
+            return {
+                "step": Path(cmd[1]).stem if len(cmd) > 1 else "unknown",
+                "status": "error",
+                "error": str(exc),
+            }
 def _find_latest_manifest(manifests_dir: Path, lane: str) -> Path | None:
     """Find the most recent manifest for a given lane."""
     if not manifests_dir.is_dir():

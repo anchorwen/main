@@ -30,6 +30,7 @@ from pathlib import Path
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
+from core.runtime.fault_handler import fail_open_guard
 
 
 def _parse_args() -> argparse.Namespace:
@@ -129,8 +130,9 @@ def main() -> None:
             print(
                 f"LR Blender: coef={results['lr_blender_coef']}, intercept={results['lr_blender_intercept']}, logloss={blender_loss:.6f}"
             )
-        except Exception:  # BLE001:FOG_DEFERRED
-            pass
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("optimize_ensemble_weights:main"):
+                pass
     elif len(lgb_probs) == len(y_true):
         results["optimal_w_lgb"] = 1.0
         results["optimal_w_mlp"] = 0.0

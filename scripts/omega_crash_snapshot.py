@@ -11,9 +11,10 @@ Usage (in live_intent_loop / live_launcher crash handler)::
     from scripts.omega_crash_snapshot import capture_crash_snapshot
     try:
         main_loop()
-    except Exception:  # BLE001:FOG_DEFERRED
-        capture_crash_snapshot("data", "live_intent_loop", sys.exc_info())
-        raise
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("omega_crash_snapshot:L14"):
+            capture_crash_snapshot("data", "live_intent_loop", sys.exc_info())
+            raise
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ import traceback
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from core.runtime.fault_handler import fail_open_guard
 
 
 def _utc_iso() -> str:
@@ -93,8 +96,9 @@ def capture_crash_snapshot(
                 if len(content) > 4096:
                     content = "...(truncated)\n" + content[-4096:]
                 state_snapshots[name] = json.loads(content) if content.strip().startswith("{") else content[:2000]
-            except Exception:  # BLE001:FOG_DEFERRED
-                state_snapshots[name] = "(unreadable)"
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("omega_crash_snapshot:capture_crash_snapshot"):
+                    state_snapshots[name] = "(unreadable)"
     snapshot["state_snapshots"] = state_snapshots
 
     # ── Extra context ──

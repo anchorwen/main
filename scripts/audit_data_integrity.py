@@ -28,6 +28,7 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
+from core.runtime.fault_handler import fail_open_guard
 
 NOW = datetime.now(timezone.utc)
 NOW_ISO = NOW.isoformat()[:19] + "Z"
@@ -338,15 +339,16 @@ def check_bridge_micro_health(data_dir: str) -> dict[str, Any]:
                                     break
                             except ValueError:
                                 continue
-                    except Exception:  # BLE001:FOG_DEFERRED
-                        pass
+                    except Exception:  # BLE001:FOG
+                        with fail_open_guard("audit_data_integrity:check_bridge_micro_health"):
+                            pass
             if latencies:
                 latencies.sort()
                 p99_latency = latencies[int(len(latencies) * 0.99)]
             log_entries = len(lines)
-        except Exception:  # BLE001:FOG_DEFERRED
-            pass
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("audit_data_integrity:check_bridge_micro_health"):
+                pass
     sev = "OK" if connected and outbox == 0 and age_s < 30 else (
         "Sev2" if age_s > 60 or outbox > 10 else "Sev1" if not connected else "Sev3"
     )
@@ -427,9 +429,9 @@ def check_tick_precision(data_dir: str) -> dict[str, Any]:
                                 "remainder": round(remainder, 10),
                             })
                     checked += 1
-            except Exception:  # BLE001:FOG_DEFERRED
-                pass
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("audit_data_integrity:check_tick_precision"):
+                    pass
     sev = "OK" if not violations else "Sev2" if len(violations) < 10 else "Sev1"
     return {
         "passed": len(violations) == 0,
@@ -577,9 +579,9 @@ def check_mt5_equity_reconciliation(data_dir: str) -> dict[str, Any]:
                     if "terminal_path:" in line:
                         mt5_path = line.split(":", 1)[1].strip()
                         break
-    except Exception:  # BLE001:FOG_DEFERRED
-        pass
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("audit_data_integrity:check_mt5_equity_reconciliation"):
+            pass
     # Also check live.yaml for XAU default
     if not mt5_path:
         try:
@@ -590,18 +592,18 @@ def check_mt5_equity_reconciliation(data_dir: str) -> dict[str, Any]:
                         if "terminal_path:" in line:
                             mt5_path = line.split(":", 1)[1].strip()
                             break
-        except Exception:  # BLE001:FOG_DEFERRED
-            pass
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("audit_data_integrity:check_mt5_equity_reconciliation"):
+                pass
     if not mt5_path:
         return {"passed": True, "severity": "SKIP", "reason": "no MT5 terminal path in config"}
 
     try:
         if not mt5.initialize(path=mt5_path):
             return {"passed": True, "severity": "SKIP", "reason": f"MT5 init failed: {mt5.last_error()}"}
-    except Exception:  # BLE001:FOG_DEFERRED
-        return {"passed": True, "severity": "SKIP", "reason": "MT5 init exception"}
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("audit_data_integrity:check_mt5_equity_reconciliation"):
+            return {"passed": True, "severity": "SKIP", "reason": "MT5 init exception"}
     try:
         info = mt5.account_info()
         if not info:
@@ -648,14 +650,14 @@ def check_mt5_equity_reconciliation(data_dir: str) -> dict[str, Any]:
             "pnl_pct_of_balance": round(pnl_ratio, 4),
             "note": "full reconciliation needs daily equity snapshots; this is informational",
         }
-    except Exception as e:  # BLE001:FOG_DEFERRED (Sev 4, Phase 3b)
-        try:
-            mt5.shutdown()
-        except Exception:  # BLE001:FOG_DEFERRED
-            pass
-        return {"passed": True, "severity": "SKIP", "reason": f"MT5 error: {e}"}
-
-
+    except Exception as e:  # BLE001:FOG (Sev 4, Phase 3b)
+        with fail_open_guard("audit_data_integrity:check_mt5_equity_reconciliation"):
+            try:
+                mt5.shutdown()
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("audit_data_integrity:check_mt5_equity_reconciliation"):
+                    pass
+            return {"passed": True, "severity": "SKIP", "reason": f"MT5 error: {e}"}
 # ═══════════════════════════════════════════════════════════════════════
 # 8. THREE-WAY RECONCILIATION (Journal ↔ Ledger ↔ Snapshots)
 # ═══════════════════════════════════════════════════════════════════════
@@ -696,19 +698,22 @@ def check_journal_mt5_reconciliation(data_dir: str) -> dict[str, Any]:
                             mt5_path = line.split(":", 1)[1].strip()
                             break
             if mt5_path: break
-        except Exception: pass  # BLE001:FOG_DEFERRED
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("audit_data_integrity:check_journal_mt5_reconciliation"):
+                pass
     if not mt5_path:
         return {"passed": True, "severity": "SKIP", "reason": "no MT5 terminal path"}
 
     try:
         if not mt5.initialize(path=mt5_path):
             try: mt5.shutdown()
-            except Exception: pass  # BLE001:FOG_DEFERRED
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("audit_data_integrity:check_journal_mt5_reconciliation"):
+                    pass
             return {"passed": True, "severity": "SKIP", "reason": "MT5 init failed"}
-    except Exception:  # BLE001:FOG_DEFERRED
-        return {"passed": True, "severity": "SKIP", "reason": "MT5 init exception"}
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("audit_data_integrity:check_journal_mt5_reconciliation"):
+            return {"passed": True, "severity": "SKIP", "reason": "MT5 init exception"}
     deals_by_pos: dict[int, Any] = {}
     try:
         for days in [90, 180]:
@@ -718,11 +723,14 @@ def check_journal_mt5_reconciliation(data_dir: str) -> dict[str, Any]:
                     if d.position_id and d.profit != 0:
                         deals_by_pos[d.position_id] = d
                 break
-    except Exception: pass  # BLE001:FOG_DEFERRED
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("audit_data_integrity:check_journal_mt5_reconciliation"):
+            pass
     finally:
         try: mt5.shutdown()
-        except Exception: pass  # BLE001:FOG_DEFERRED
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("audit_data_integrity:check_journal_mt5_reconciliation"):
+                pass
     if not deals_by_pos:
         return {"passed": True, "severity": "SKIP", "reason": "no MT5 deals"}
 
@@ -860,9 +868,9 @@ def main() -> int:
                 checks=alert_checks,
             )
             dispatch_alert(card)
-        except Exception:  # BLE001:FOG_DEFERRED — alert failure must not crash audit
-            pass
-
+        except Exception:  # BLE001:FOG — alert failure must not crash audit
+            with fail_open_guard("audit_data_integrity:main"):
+                pass
     # ── Determine exit code ──
     if has_sev1_or_sev2:
         has_sev1 = any(v == "Sev1" for v in alert_checks.values())

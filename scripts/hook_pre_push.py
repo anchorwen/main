@@ -29,6 +29,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from core.runtime.fault_handler import fail_open_guard
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # ---------------------------------------------------------------------------
@@ -146,11 +148,10 @@ def check_omega() -> bool:
     except subprocess.TimeoutExpired:
         print("[pre-push] Omega: TIMEOUT (>30s)")
         return False
-    except Exception as exc:  # BLE001:FOG_DEFERRED (Sev 4, Phase 3b)
-        print(f"[pre-push] Omega: INTERNAL ERROR — {exc}")
-        return False
-
-
+    except Exception as exc:  # BLE001:FOG (Sev 4, Phase 3b)
+        with fail_open_guard("hook_pre_push:check_omega"):
+            print(f"[pre-push] Omega: INTERNAL ERROR — {exc}")
+            return False
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -172,10 +173,10 @@ def main() -> int:
         except subprocess.TimeoutExpired:
             print(f"[pre-push] {name}: TIMEOUT (>120s)")
             failures.append(name)
-        except Exception as exc:  # BLE001:FOG_DEFERRED (Sev 4, Phase 3b)
-            print(f"[pre-push] {name}: INTERNAL ERROR — {exc}")
-            failures.append(name)
-
+        except Exception as exc:  # BLE001:FOG (Sev 4, Phase 3b)
+            with fail_open_guard("hook_pre_push:main"):
+                print(f"[pre-push] {name}: INTERNAL ERROR — {exc}")
+                failures.append(name)
     if failures:
         print(f"\n[pre-push] BLOCKED — {len(failures)} check(s) failed: {', '.join(failures)}")
         print("[pre-push] Fix the errors above locally, then re-commit and push.")

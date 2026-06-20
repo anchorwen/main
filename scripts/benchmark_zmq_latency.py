@@ -19,6 +19,8 @@ import threading
 import time
 from pathlib import Path
 
+from core.runtime.fault_handler import fail_open_guard
+
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="benchmark_zmq_latency")
@@ -160,10 +162,10 @@ def main(argv: list[str] | None = None) -> int:
             f"ZMQ  PUSH/PULL+PUB/SUB  P50={zmq_result['p50_us']:.0f}us  "
             f"P99={zmq_result['p99_us']:.0f}us  mean={zmq_result['mean_us']:.0f}us"
         )
-    except Exception as exc:  # BLE001:FOG_DEFERRED (Sev 4, Phase 3b)
-        print(f"ZMQ  SKIP: {exc}")
-        zmq_result = None
-
+    except Exception as exc:  # BLE001:FOG (Sev 4, Phase 3b)
+        with fail_open_guard("benchmark_zmq_latency:main"):
+            print(f"ZMQ  SKIP: {exc}")
+            zmq_result = None
     # File (simulated best-case — real production adds 1s polling)
     file_result = bench_file(max(10, args.rounds // 10))  # fewer rounds (slow)
     print(

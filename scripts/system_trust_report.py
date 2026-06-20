@@ -33,6 +33,7 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from core.runtime.fault_handler import fail_open_guard
 
 # ── stdout encoding fix for Windows ──
 if sys.platform == "win32":
@@ -619,16 +620,16 @@ def section_6_config_alignment(portfolios: dict) -> dict:
                     if bid and "normalization" not in bid and "meta_stage" not in bid:
                         config_brains[sym].add(bid)
                         config_enabled[sym][bid] = entry.get("enabled", False)
-        except Exception:  # BLE001:FOG_DEFERRED
-            # Fallback: scan configs/brains*/ directory
-            cfg_dir = ROOT / "configs" / ("brains" if sym == "XAU" else "brains_btc")
-            if cfg_dir.is_dir():
-                for cfg_file in cfg_dir.glob("*.json"):
-                    if "normalization" in cfg_file.name or "meta_stage" in cfg_file.name:
-                        continue
-                    config_brains[sym].add(cfg_file.stem)
-                    config_enabled[sym][cfg_file.stem] = True
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("system_trust_report:section_6_config_alignment"):
+                # Fallback: scan configs/brains*/ directory
+                cfg_dir = ROOT / "configs" / ("brains" if sym == "XAU" else "brains_btc")
+                if cfg_dir.is_dir():
+                    for cfg_file in cfg_dir.glob("*.json"):
+                        if "normalization" in cfg_file.name or "meta_stage" in cfg_file.name:
+                            continue
+                        config_brains[sym].add(cfg_file.stem)
+                        config_enabled[sym][cfg_file.stem] = True
     # Collect governance brain_ids
     gov_brains: dict[str, set[str]] = {}
     for sym in DATA_DIRS:

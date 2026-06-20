@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 
 def probe_spread(
     *, terminal_path: str | None, symbol: str, max_spread_points: float
@@ -19,10 +21,10 @@ def probe_spread(
     }
     try:
         import MetaTrader5 as mt5
-    except Exception as exc:  # pragma: no cover - optional dependency  # BLE001:FOG_DEFERRED
-        result["detail"] = f"metaTrader5_import_failed:{exc}"
-        return result
-
+    except Exception as exc:  # pragma: no cover - optional dependency  # BLE001:FOG
+        with fail_open_guard("mt5_spread_probe:probe_spread"):
+            result["detail"] = f"metaTrader5_import_failed:{exc}"
+            return result
     kwargs: dict[str, Any] = {}
     if terminal_path:
         p = Path(terminal_path)

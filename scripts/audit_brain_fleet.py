@@ -17,6 +17,7 @@ import os
 import sys
 from collections import defaultdict
 from pathlib import Path
+from core.runtime.fault_handler import fail_open_guard
 
 
 def main(data_dir: str) -> int:
@@ -34,8 +35,9 @@ def main(data_dir: str) -> int:
         try:
             with open(summary_path) as f:
                 d = json.load(f)
-        except Exception:  # BLE001:FOG_DEFERRED
-            continue
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("audit_brain_fleet:main"):
+                continue
         cv = d.get("cv_summary", {})
         if not cv:
             continue
@@ -68,9 +70,10 @@ def main(data_dir: str) -> int:
             try:
                 with open(cfg_file, encoding="utf-8") as f:
                     d = json.load(f)
-            except Exception:  # BLE001:FOG_DEFERRED
-                config_status[bid] = {"status": "CORRUPT", "path": str(cfg_file)}
-                continue
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("audit_brain_fleet:main"):
+                    config_status[bid] = {"status": "CORRUPT", "path": str(cfg_file)}
+                    continue
             bt = d.get("brain_type", "?")
             tf = d.get("timeframe", "?")
             mp = d.get("model_path", "")

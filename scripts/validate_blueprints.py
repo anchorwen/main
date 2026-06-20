@@ -19,6 +19,8 @@ import re
 import sys
 from pathlib import Path
 
+from core.runtime.fault_handler import fail_open_guard
+
 ROOT = Path(__file__).resolve().parent.parent
 MODULES_DIR = ROOT / "blueprints" / "modules"
 SYSTEM_DIR = ROOT / "blueprints" / "system"
@@ -200,9 +202,9 @@ def check_source_blueprint_freshness() -> list[str]:
                     changed_all.add(line)
                     if line.endswith(".py") and not line.startswith("tests/"):
                         changed_py.add(line)
-        except Exception:  # BLE001:FOG_DEFERRED
-            pass
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("validate_blueprints:check_source_blueprint_freshness"):
+                pass
     if not changed_py:
         return errors
 

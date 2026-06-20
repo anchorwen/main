@@ -27,6 +27,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from core.runtime.fault_handler import fail_open_guard
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -282,9 +284,9 @@ def filter_text_log_tail(path: Path, max_bytes: int) -> tuple[str, int, int, boo
 
     try:
         text = raw.decode("utf-8", errors="replace")
-    except Exception:  # BLE001:FOG_DEFERRED
-        text = str(raw)
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("dqaf_collect:filter_text_log_tail"):
+            text = str(raw)
     # Try to find a clean line boundary start
     first_newline = text.find("\n")
     if first_newline > 0 and first_newline < 200:

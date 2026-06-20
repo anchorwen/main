@@ -32,6 +32,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from core.runtime.fault_handler import fail_open_guard
 
 
 def utc_now() -> datetime:
@@ -107,8 +108,9 @@ def get_training_pids() -> list[dict[str, Any]]:
                         "commandline": parts[1].strip() if len(parts) == 3 else "",
                     }
                 )
-    except Exception:  # BLE001:FOG_DEFERRED
-        pass
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("monitor_training:get_training_pids"):
+            pass
     return results
 
 
@@ -151,8 +153,9 @@ def scan_result_files(manifests_dir: Path) -> tuple[int, int, list[dict]]:
                 ok += 1
             else:
                 fail += 1
-        except Exception:  # BLE001:FOG_DEFERRED
-            pass
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("monitor_training:scan_result_files"):
+                pass
     return ok, fail, details
 
 
@@ -182,18 +185,18 @@ def read_training_log_tail(batch_dir: Path, n_lines: int = 15) -> str:
         text = log_path.read_text(encoding="utf-8", errors="replace")
         lines = [l.strip() for l in text.splitlines() if l.strip()]
         return "\n".join(lines[-n_lines:]) if lines else "(log empty)"
-    except Exception as e:  # BLE001:FOG_DEFERRED
-        return f"(read error: {e})"
-
-
+    except Exception as e:  # BLE001:FOG
+        with fail_open_guard("monitor_training:read_training_log_tail"):
+            return f"(read error: {e})"
 def read_monitor_state(batch_dir: Path) -> dict[str, Any]:
     """Read monitor state file (JSON with last-OK timestamp and count)."""
     state_path = batch_dir / "monitor_state.json"
     if state_path.exists():
         try:
             return json.loads(state_path.read_text(encoding="utf-8"))
-        except Exception:  # BLE001:FOG_DEFERRED
-            pass
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("monitor_training:read_monitor_state"):
+                pass
     return {"last_ok_count": 0, "last_ok_time": None, "stuck_alerts": 0}
 
 

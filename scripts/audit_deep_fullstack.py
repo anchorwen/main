@@ -230,6 +230,7 @@ for name, lpath, sym in [
 section("5. CONFIGURATION INTEGRITY")
 
 import yaml
+from core.runtime.fault_handler import fail_open_guard
 for cpath, label in [("configs/live.yaml","XAU"), ("configs/live_btc.yaml","BTC")]:
     with open(cpath, encoding='utf-8') as f:
         cfg = yaml.safe_load(f)
@@ -252,9 +253,9 @@ for cpath, label in [("configs/live.yaml","XAU"), ("configs/live_btc.yaml","BTC"
             art = bcfg.get("artifact_path","")
             if art and not os.path.exists(art):
                 issue("P1", "Config", f"{label}: {bcfg.get('brain_id','?')} artifact missing: {art}")
-        except Exception as e:  # BLE001:FOG_DEFERRED (Sev 4, Phase 3b)
-            issue("P0", "Config", f"{label}: {path} invalid JSON: {e}")
-
+        except Exception as e:  # BLE001:FOG (Sev 4, Phase 3b)
+            with fail_open_guard("audit_deep_fullstack:section"):
+                issue("P0", "Config", f"{label}: {path} invalid JSON: {e}")
     # Check strategy line brain_type matching
     enabled_btypes = set()
     for entry in cfg.get("brains",{}).get("registry_entries",[]):

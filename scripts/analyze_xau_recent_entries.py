@@ -22,6 +22,7 @@ from argparse import ArgumentParser
 from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from core.runtime.fault_handler import fail_open_guard
 
 
 def load_journal(data_dir: str) -> list[dict]:
@@ -205,9 +206,9 @@ def summarize(trades: list[dict], label: str) -> dict:
             try:
                 dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
                 hour_dist[dt.hour] += 1
-            except Exception:  # BLE001:FOG_DEFERRED
-                pass
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("analyze_xau_recent_entries:summarize"):
+                    pass
     # Regime at entry
     regime_dist = Counter(t.get("regime", "unknown") for t in trades)
 

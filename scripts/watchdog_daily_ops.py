@@ -22,6 +22,8 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from core.runtime.fault_handler import fail_open_guard
+
 
 def _utc_iso() -> str:
     return datetime.now(UTC).replace(tzinfo=None).isoformat()
@@ -39,10 +41,9 @@ def _hours_since_last_run(state_path: Path) -> float | None:
         last_dt = datetime.fromisoformat(last_utc.replace("Z", "+00:00"))
         now = datetime.now(UTC)
         return (now - last_dt).total_seconds() / 3600.0
-    except Exception:  # BLE001:FOG_DEFERRED
-        return None
-
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("watchdog_daily_ops:_hours_since_last_run"):
+            return None
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="daily_ops watchdog")
     parser.add_argument("--base-dir", default="data_btc")
@@ -77,8 +78,9 @@ def main(argv: list[str] | None = None) -> int:
                         check=False, timeout=600,
                     )
                     print(f"[watchdog:{args.base_dir}] daily_ops completed")
-                except Exception as exc:  # BLE001:FOG_DEFERRED (Sev 4, Phase 3b)
-                    print(f"[watchdog:{args.base_dir}] daily_ops failed: {exc}")
+                except Exception as exc:  # BLE001:FOG (Sev 4, Phase 3b)
+                    with fail_open_guard("watchdog_daily_ops:main"):
+                        print(f"[watchdog:{args.base_dir}] daily_ops failed: {exc}")
             else:
                 print(f"{msg} — run: python scripts/daily_ops.py --base-dir {args.base_dir}")
         else:

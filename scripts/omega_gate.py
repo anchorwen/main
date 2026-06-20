@@ -25,6 +25,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from core.runtime.fault_handler import fail_open_guard
+
 ROOT = Path(__file__).resolve().parents[1]
 
 # ── Hot-path files (require #10 in signature) ──
@@ -180,9 +182,9 @@ def main() -> int:
                 print("=" * 60)
                 return 1
             print("[Ω] BLE001 replacement VERIFIED in diff.")
-        except Exception:  # BLE001:FOG_DEFERRED
-            pass  # non-blocking: diff parsing failure shouldn't block commit
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("omega_gate:main"):
+                pass  # non-blocking: diff parsing failure shouldn't block commit
     # ── Check 4: FIX/DQAF ID required for .py/.yaml/.json changes ──
     # Iron Law #0: every non-exempt change to covered files must carry a docket ID.
     covered_staged = {

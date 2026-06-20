@@ -23,6 +23,7 @@ import sys
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from core.runtime.fault_handler import fail_open_guard
 
 UTC = timezone.utc
 
@@ -271,17 +272,18 @@ def audit_max_positions_code() -> dict:
                 for i, line in enumerate(f, 1):
                     if "max_positions" in line:
                         refs.append(f"{py_file}:{i}: {line.rstrip()}")
-        except Exception:  # BLE001:FOG_DEFERRED
-            pass
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("audit_behavior_compliance:audit_max_positions_code"):
+                pass
     for py_file in sorted(root.glob("scripts/**/*.py")):
         try:
             with open(py_file, encoding="utf-8") as f:
                 for i, line in enumerate(f, 1):
                     if "max_positions" in line:
                         refs.append(f"{py_file}:{i}: {line.rstrip()}")
-        except Exception:  # BLE001:FOG_DEFERRED
-            pass
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("audit_behavior_compliance:audit_max_positions_code"):
+                pass
     # Find Phase 10 dispatch path
     phase10_lines = []
     with open(root / "core" / "runtime" / "live_cycle.py", encoding="utf-8") as f:

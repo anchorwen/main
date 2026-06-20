@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from core.runtime.fault_handler import fail_open_guard
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
@@ -218,9 +219,8 @@ def _auc(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     try:
         from sklearn.metrics import roc_auc_score
         return float(roc_auc_score(y_true, y_pred))
-    except Exception:  # BLE001:FOG_DEFERRED
-        return 0.0
-
-
+    except Exception:  # BLE001:FOG
+        with fail_open_guard("train_regime_aware_btc:_auc"):
+            return 0.0
 if __name__ == "__main__":
     raise SystemExit(main())

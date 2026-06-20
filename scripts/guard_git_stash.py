@@ -17,6 +17,8 @@ import os
 import sys
 from pathlib import Path
 
+from core.runtime.fault_handler import fail_open_guard
+
 # Directories containing runtime files that may be locked by live processes
 RUNTIME_DIRS: list[str] = [
     "data_btc",
@@ -79,9 +81,9 @@ def main() -> int:
         try:
             if check_file_locked(fpath):
                 locked.append(fpath)
-        except Exception:  # BLE001:FOG_DEFERRED — diagnostic tool, never crash
-            pass
-
+        except Exception:  # BLE001:FOG — diagnostic tool, never crash
+            with fail_open_guard("guard_git_stash:main"):
+                pass
     if not locked:
         # Try a quick write test to catch files that bypass the lock check
         for fpath in lockable[:5]:  # Sample check

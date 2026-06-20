@@ -21,6 +21,8 @@ from typing import Any
 
 import numpy as np
 
+from core.runtime.fault_handler import fail_open_guard
+
 from .onnx_worker import run_worker
 
 logger = logging.getLogger(__name__)
@@ -155,15 +157,15 @@ class InferenceGuard:
                 self._process.pid,
                 self._model_path,
             )
-        except Exception as exc:  # BLE001:FOG_DEFERRED
-            logger.error(
-                "InferenceGuard failed to start worker for %s: %s",
-                self._model_path,
-                exc,
-            )
-            self._running = False
-            self._conn = None
-
+        except Exception as exc:  # BLE001:FOG
+            with fail_open_guard("inference_guard:_start"):
+                logger.error(
+                    "InferenceGuard failed to start worker for %s: %s",
+                    self._model_path,
+                    exc,
+                )
+                self._running = False
+                self._conn = None
     def _handle_crash(self) -> None:
         """Called when the worker is unresponsive or pipe is broken."""
         self._crash_count += 1
@@ -203,8 +205,9 @@ class InferenceGuard:
         if self._conn is not None:
             try:  # noqa: SIM105
                 self._conn.close()
-            except Exception:  # BLE001:FOG_DEFERRED
-                pass
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("inference_guard:_cleanup"):
+                    pass
             self._conn = None
 
     def _send_sentinel(self) -> None:
@@ -212,11 +215,12 @@ class InferenceGuard:
         if self._conn is not None:
             try:  # noqa: SIM105
                 self._conn.send(None)
-            except Exception:  # BLE001:FOG_DEFERRED
-                pass
-
+            except Exception:  # BLE001:FOG
+                with fail_open_guard("inference_guard:_send_sentinel"):
+                    pass
     def __del__(self) -> None:
         try:  # noqa: SIM105
             self.shutdown()
-        except Exception:  # BLE001:FOG_DEFERRED
-            pass
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("inference_guard:__del__"):
+                pass

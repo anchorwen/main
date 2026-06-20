@@ -25,6 +25,7 @@ from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from core.runtime.fault_handler import fail_open_guard
 
 
 # ── Severity ──────────────────────────────────────────────────────────
@@ -460,15 +461,15 @@ def main() -> int:
         # ── Isolated sandbox: one probe crash cannot kill the audit ──
         try:
             result = probe_fn(domain_cfg, args.data_dir)
-        except Exception:  # BLE001:FOG_DEFERRED
-            result = {
-                "domain": domain_name,
-                "severity": domain_cfg.get("severity", "?"),
-                "verdict": Severity.EVALUATION_FAILED,
-                "results": [{"check": "probe_crashed", "verdict": Severity.EVALUATION_FAILED,
-                             "detail": traceback.format_exc()[:500]}],
-            }
-
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("check_data_health_contract:main"):
+                result = {
+                    "domain": domain_name,
+                    "severity": domain_cfg.get("severity", "?"),
+                    "verdict": Severity.EVALUATION_FAILED,
+                    "results": [{"check": "probe_crashed", "verdict": Severity.EVALUATION_FAILED,
+                                 "detail": traceback.format_exc()[:500]}],
+                }
         # Inject blast radius from contract
         result["blast_radius"] = domain_cfg.get("blast_radius", "")
         probes.append(result)
@@ -527,9 +528,9 @@ def main() -> int:
                 json.dump(lock_data, f, indent=2)
             circuit_locked = True
             print(f"\n{_red('[CIRCUIT BREAKER]')} training_readiness.json LOCKED — no new positions until FATAL domains are resolved.")
-        except Exception as exc:  # BLE001:FOG_DEFERRED (Sev 4, Phase 3b)
-            print(f"\n{_red('[ERROR]')} Failed to write circuit breaker lock: {exc}")
-
+        except Exception as exc:  # BLE001:FOG (Sev 4, Phase 3b)
+            with fail_open_guard("check_data_health_contract:main"):
+                print(f"\n{_red('[ERROR]')} Failed to write circuit breaker lock: {exc}")
     # ── Structured DingTalk card ──
     report = {
         "contract_id": contract["contract_id"],
