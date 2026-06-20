@@ -354,7 +354,7 @@ strategy_lines:
       flip_threshold: 0.5
       hesitation_cycles: 12
       time_exit_cycles: 72
-      trail_activation_atr: 0.3
+      trail_activation_atr: 0.5   # FIX-20260620-004: 0.3→0.5 — reduce premature trail activation, lower breakeven rate
       trail_atr_mult: 2.0
       trail_enabled: true
     magic: 90410

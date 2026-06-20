@@ -27,6 +27,24 @@
 
 ---
 
+### CCT-20260620-002
+- **Docket ID**: DQAF-20260620-002
+- **日期**: 2026-06-20
+- **置信度**: confirmed (3 源确认: code audit + git history + cross-file trace)
+- **因果链**:
+  - [Layer 1 — 症状]: XAU budget_breached 误触发 — 单笔 -$5 亏损被计为 -500% 日 PnL，导致熔断器错误断开。budget.daily_pnl_pct 累积值远超 -3% 限制，但实际 USD 亏损仅 ~$5。断路器误触发后系统停止交易。
+  - [Layer 2 — 中间异常]: 三条独立代码路径将 raw USD 值传递给 `StrategyBudget.record_trade(pnl_pct, is_win)`，该参数期望的是 decimal fraction (如 0.005 = 0.5%) 而非 USD 绝对值。(A) `live_cycle.py:2348-2358` MIA close 路径 — `_mia_pnl` 为 raw USD，直接传入 record_trade；(B) `managed_close.py:317` — `_pnl_pct = float(pnl) / 1000.0` 硬编码 divisor；(C) `position_close_adapter.py:255-260` — `_notify_budget` 回退路径未经 USD→pct 转换。唯一正确的路径是 `live_cycle.py:1617` reconciliation — `_pnl_pct = _evt.pnl / _eq`。
+  - [Layer 3 — 根因]: RC-06 (contract-violation) — `pnl_pct` 参数名的语义契约仅存在于变量名中，未经类型系统强制执行。`float` 类型接受任何数值，USD 与 percentage 在类型层面不可区分。这是 L3 架构缺陷: 量纲安全依赖人工审查而非编译器闸门。同类模式已出现于 DQAF-20260615-011 (pnl_r ↔ pnl_per_unit 量纲混乱) 和 DQAF-20260607-007 (策略盈亏 USD vs R-multiple 标签错位)。
+- **证据引用**:
+  - Source 1: `core/execution/strategy_budget.py:record_trade()` — pnl_pct 参数 docstring 明确期望 decimal fraction
+  - Source 2: `core/runtime/live_cycle.py:2348-2358` (pre-fix) — MIA 路径 raw USD 直接传入
+  - Source 3: `core/execution/managed_close.py:317` (pre-fix) — 硬编码 `/1000.0` divisor
+  - Source 4: `core/runtime/position_close_adapter.py:255-260` (pre-fix) — `_notify_budget` 回退路径未转换
+  - Source 5: `core/runtime/live_cycle.py:1617` — reconciliation 路径正确转换 (正面控制)
+- **是否被推翻**: 否 — AR 反向假设 (budget 计算正确, 实际亏损确实超限) 被 journal 逐笔去重统计推翻: 实际 PnL ≈ -$5, 远低于 -$30 daily limit
+- **关联 ReB Pattern**: ReB-20260620-002 (PNL_UNIT_MIXING)
+- **关联 FIX**: FIX-20260620-003
+
 ### CCT-20260615-012
 - **Docket ID**: DQAF-20260615-012
 - **日期**: 2026-06-15

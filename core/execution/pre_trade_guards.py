@@ -824,8 +824,16 @@ class CooldownRegistry:
 # where a single large candle triggers all timeframes simultaneously.
 _SWING_FAMILY = frozenset({
     "m15_swing", "m30_swing", "h1_swing", "h4_swing",    # XAU
-    "btc_swing", "btc_swing_h1",                          # BTC (DQAF-20260615-011)
+    "btc_swing",                                           # BTC (M5 — same-family with XAU swing for echo-trade prevention)
 })
+# ── FIX-20260620-004: btc_swing_h1 REMOVED from _SWING_FAMILY ──────────
+# btc_swing (M5, XGBoost) enters every ~15min and perpetually resets the
+# family clock, blocking btc_swing_h1 (H1, LightGBM) from ever entering
+# (H1 needs 3600s gap per _STRATEGY_FAMILY_GAP_SEC).  Since M5 entries
+# are more frequent than 3600s, btc_swing_h1 is mathematically deadlocked.
+# Different brain architectures (XGBoost vs LightGBM) + different timeframes
+# (M5 vs H1) = genuinely different signals, not echo trades.  Exemption
+# makes btc_swing_h1 a standalone family (blocked only by its own entries).
 _SWING_FAMILY_MIN_TF_SEC = 900  # M15 = 15 min — the shortest bar in the family
 
 # ── DQAF-20260615-011: Per-strategy gap override ────────────────────────────

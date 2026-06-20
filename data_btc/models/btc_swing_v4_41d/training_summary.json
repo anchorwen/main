@@ -3,15 +3,15 @@
   "data_dir": "data_btc/training/btc_swing_v4_41d",
   "cv_summary": {
     "xgboost": {
-      "mean_val_wr": 0.491419467187353,
-      "std_val_wr": 0.019274575500622365,
-      "mean_val_acc": 0.4965307892454467,
+      "mean_val_wr": 0.4913555401347399,
+      "std_val_wr": 0.01955838830857051,
+      "mean_val_acc": 0.49632841861809773,
       "folds": 5
     },
     "lightgbm": {
-      "mean_val_wr": 0.49551805367848856,
-      "std_val_wr": 0.013750854217877263,
-      "mean_val_acc": 0.501243133853715,
+      "mean_val_wr": 0.4945678884117249,
+      "std_val_wr": 0.015169371099737438,
+      "mean_val_acc": 0.5004914715235618,
       "folds": 5
     }
   },
@@ -27,5 +27,5 @@
       "num_leaves": 31
     }
   },
-  "trained_at": "2026-06-15T06:39:14.070940+00:00"
+  "trained_at": "2026-06-20T01:46:22.641348+00:00"
 }

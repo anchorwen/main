@@ -20,6 +20,18 @@
 
 ---
 
+### ReB-20260620-002
+- **Pattern Signature**: `PNL_UNIT_MIXING` (PnL 量纲混合 — USD vs Decimal Percentage)
+- **描述**: `StrategyBudget.record_trade(pnl_pct: float, is_win: bool)` 的 `pnl_pct` 参数期望 decimal fraction (0.005 = 0.5% profit)，但多个调用点传入 raw USD 值 (-5.0 = -500% daily PnL)。`float` 类型在编译期不可区分 USD 与 percentage——量纲契约仅存在于变量名中。三条错误路径 + 一条正确路径表明: 没有类型级保护时，多调用点必然出现量纲漂移。本模式与 DQAF-20260615-011 (pnl_r ↔ pnl_per_unit 量纲混乱) 和 DQAF-20260607-007 (USD vs R-multiple 标签错位) 同属量纲安全缺失的家族缺陷。
+- **关联 FIX IDs**: FIX-20260620-003
+- **关联 Docket IDs**: DQAF-20260620-002
+- **预防策略**:
+  1. **类型级量纲标记 (P3 北极星)**: 引入 `USD(float)` / `Percentage(float)` / `RMultiple(float)` 的 NewType 封装，使 mypy 在编译期捕获跨量纲赋值
+  2. **当前务实的闸门**: `StrategyBudget.record_trade()` 入口添加运行时断言 `abs(pnl_pct) <= 1.0` (合理的 percentage 范围)，超出则 WARNING + 裁剪
+  3. **所有 `_notify_budget` / `record_trade` 调用点必须显式声明量纲转换**: 代码注释标注 `# USD → pct: pnl / equity`
+  4. **Code review 规则**: 任何向 `record_trade` 传参的新调用点，必须验证 `pnl / equity` 转换是否存在
+- **检测方法**: `grep -rn "record_trade\|_notify_budget\|_pending_budget_records" core/` — 逐一验证每个调用点的 pnl 参数是否经过 `/ equity` 转换
+
 ### ReB-20260615-012
 - **Pattern Signature**: `ORPHAN_ENTRY_ALERT_POLLUTION`
 - **描述**: 启动管道生成的合成 orphan close 条目 (label=`auto_orphan_*`, pnl=0, position_ticket=None) 涌入告警上下文的滚动窗口计算。由于无 ticket 绕过去重、pnl=0 计为亏损，真实胜率被稀释至灾难级 (0.91%)。修复: 告警上下文构建器中按 label 过滤 `auto_orphan_` 前缀——纯展示层修复，0 行动及实盘逻辑。
