@@ -415,6 +415,67 @@ class StrategyLine:
         """
         raise NotImplementedError
 
+    # Decision factory (FIX-20260620-014)
+    # _make_decision() replaces 19 verbose StrategyDecision(...) calls.
+    # All parameters are explicit (no **kwargs) for mypy type safety.
+
+    def _make_decision(
+        self,
+        *,
+        should_trade: bool = False,
+        direction: str = "neutral",
+        confidence: float = 0.0,
+        volume: float = 0.0,
+        sl: float = 0.0,
+        tp: float = 0.0,
+        hard_sl: float = 0.0,
+        reason: str = "",
+        brain_ids: list[str] | None = None,
+        brain_votes: list[dict[str, Any]] | None = None,
+        supporting_count: int = 0,
+        total_count: int = 0,
+        regime_mode: str = "full",
+        venue: str = "live",
+        entry_z_score: float = 0.0,
+        entry_half_life: float = 0.0,
+        entry_context: dict[str, Any] | None = None,
+        p_win: float = 0.5,
+        p_win_source: str = "unknown",
+        p_win_degraded: bool = False,
+        kelly_mult: float = 1.0,
+        cold_explore: bool = False,
+        gate_diag: dict[str, Any] | None = None,
+    ) -> StrategyDecision:
+        """Create a StrategyDecision with config-derived name/magic defaults."""
+        return StrategyDecision(
+            strategy_name=self.config.name,
+            magic=self.config.magic,
+            should_trade=should_trade,
+            direction=direction,
+            confidence=confidence,
+            volume=volume,
+            sl=sl,
+            tp=tp,
+            hard_sl=hard_sl,
+            reason=reason,
+            brain_ids=brain_ids if brain_ids is not None else [],
+            brain_votes=brain_votes if brain_votes is not None else [],
+            supporting_count=supporting_count,
+            total_count=total_count,
+            regime_mode=regime_mode,
+            venue=venue,
+            entry_z_score=entry_z_score,
+            entry_half_life=entry_half_life,
+            entry_context=entry_context if entry_context is not None else {},
+            p_win=p_win,
+            p_win_source=p_win_source,
+            p_win_degraded=p_win_degraded,
+            kelly_mult=kelly_mult,
+            cold_explore=cold_explore,
+            gate_diag=gate_diag if gate_diag is not None else {},
+        )
+
+
     # ── Main evaluation ─────────────────────────────────────────────────
     #
     # STRANGLER FIG TRIGGER (FIX-079): This function is 1293 lines with 8 logical phases:
@@ -481,9 +542,7 @@ class StrategyLine:
 
         # ── 1. Regime gate ──
         if regime_gate_mode == "off":
-            return StrategyDecision(
-                strategy_name=name,
-                magic=self.config.magic,
+            return self._make_decision(
                 should_trade=False,
                 direction="neutral",
                 confidence=0.0,
@@ -493,7 +552,7 @@ class StrategyLine:
                 hard_sl=0.0,
                 regime_mode="off",
                 venue="live",
-                reason="regime_gate_off",
+                reason="regime_gate_off"
             )
 
         # ── 1b. OU high-volatility gate (FIX-20260604-082) ──
@@ -505,9 +564,7 @@ class StrategyLine:
             _rg = regime_info.get("regime_gate", {}) if isinstance(regime_info, dict) else {}
             _detected_regime = str(regime_info.get("regime", ""))
             if _detected_regime == "high":
-                return StrategyDecision(
-                    strategy_name=name,
-                    magic=self.config.magic,
+                return self._make_decision(
                     should_trade=False,
                     direction="neutral",
                     confidence=0.0,
@@ -517,7 +574,7 @@ class StrategyLine:
                     hard_sl=0.0,
                     regime_mode="high_vol_blocked",
                     venue="live",
-                    reason=f"ou_high_vol_blocked:{_detected_regime}",
+                    reason=f"ou_high_vol_blocked:{_detected_regime}"
                 )
 
         # ── 1c. Spread gate (FIX-20260529-038) ──
@@ -528,9 +585,7 @@ class StrategyLine:
             _tick = self.config.tick_size if self.config.tick_size > 0 else 0.01
             _current_spread = (ask - bid) / _tick
             if _current_spread > self.config.max_spread_points:
-                return StrategyDecision(
-                    strategy_name=name,
-                    magic=self.config.magic,
+                return self._make_decision(
                     should_trade=False,
                     direction="neutral",
                     confidence=0.0,
@@ -540,14 +595,12 @@ class StrategyLine:
                     hard_sl=0.0,
                     regime_mode="spread_gate_blocked",
                     venue="live",
-                    reason=f"spread_gate:{_current_spread:.1f}pts > {self.config.max_spread_points:.1f}pts",
+                    reason=f"spread_gate:{_current_spread:.1f}pts > {self.config.max_spread_points:.1f}pts"
                 )
 
         # ── 2. Budget check ──
         if self.budget is not None and self.budget.check_pause():
-            return StrategyDecision(
-                strategy_name=name,
-                magic=self.config.magic,
+            return self._make_decision(
                 should_trade=False,
                 direction="neutral",
                 confidence=0.0,
@@ -556,7 +609,7 @@ class StrategyLine:
                 tp=0.0,
                 hard_sl=0.0,
                 regime_mode=regime_gate_mode,
-                reason="budget_paused",
+                reason="budget_paused"
             )
 
         # ── 3. Run brain inference ──
@@ -571,9 +624,7 @@ class StrategyLine:
             )
         except Exception:  # BLE001:FOG
             with fail_open_guard("strategy_line:evaluate"):
-                return StrategyDecision(
-                    strategy_name=name,
-                    magic=self.config.magic,
+                return self._make_decision(
                     should_trade=False,
                     direction="neutral",
                     confidence=0.0,
@@ -582,12 +633,10 @@ class StrategyLine:
                     tp=0.0,
                     hard_sl=0.0,
                     regime_mode=regime_gate_mode,
-                    reason="inference_error",
+                    reason="inference_error"
                 )
         if not proposals:
-            return StrategyDecision(
-                strategy_name=name,
-                magic=self.config.magic,
+            return self._make_decision(
                 should_trade=False,
                 direction="neutral",
                 confidence=0.0,
@@ -596,7 +645,7 @@ class StrategyLine:
                 tp=0.0,
                 hard_sl=0.0,
                 regime_mode=regime_gate_mode,
-                reason="no_proposals",
+                reason="no_proposals"
             )
 
         # ── 3a1. Huber BPS trapline (BEFORE any gate or consensus) ──
@@ -694,9 +743,7 @@ class StrategyLine:
         # Strangler Fig #17: uses check_min_valid_brains from brain_gates.py
         _valid_voters = check_min_valid_brains(proposals, self.config.min_valid_brains)
         if _valid_voters > 0:
-            return StrategyDecision(
-                strategy_name=name,
-                magic=self.config.magic,
+            return self._make_decision(
                 should_trade=False,
                 direction="neutral",
                 confidence=0.0,
@@ -705,7 +752,7 @@ class StrategyLine:
                 tp=0.0,
                 hard_sl=0.0,
                 regime_mode=regime_gate_mode,
-                reason=f"insufficient_voters_{_valid_voters}_lt_{self.config.min_valid_brains}",
+                reason=f"insufficient_voters_{_valid_voters}_lt_{self.config.min_valid_brains}"
             )
 
         # ── 4. Group consensus ──
@@ -788,9 +835,7 @@ class StrategyLine:
         if name in ("statarb_dynamic", "statarb_m15") and micro_feature_dict:
             _ofi_z = micro_feature_dict.get("OFI", 0.0)
             if direction == "short" and _ofi_z > 2.0:
-                return StrategyDecision(
-                    strategy_name=name,
-                    magic=self.config.magic,
+                return self._make_decision(
                     should_trade=False,
                     direction=direction,
                     confidence=confidence,
@@ -802,12 +847,10 @@ class StrategyLine:
                     supporting_count=support_count,
                     total_count=total_count,
                     regime_mode=regime_gate_mode,
-                    reason=f"ofi_toxicity_blocked_short:OFI_Z={_ofi_z:.2f}_gt_2.0",
+                    reason=f"ofi_toxicity_blocked_short:OFI_Z={_ofi_z:.2f}_gt_2.0"
                 )
             if direction == "long" and _ofi_z < -2.0:
-                return StrategyDecision(
-                    strategy_name=name,
-                    magic=self.config.magic,
+                return self._make_decision(
                     should_trade=False,
                     direction=direction,
                     confidence=confidence,
@@ -819,7 +862,7 @@ class StrategyLine:
                     supporting_count=support_count,
                     total_count=total_count,
                     regime_mode=regime_gate_mode,
-                    reason=f"ofi_toxicity_blocked_long:OFI_Z={_ofi_z:.2f}_lt_-2.0",
+                    reason=f"ofi_toxicity_blocked_long:OFI_Z={_ofi_z:.2f}_lt_-2.0"
                 )
 
         # ── Track 3d: Conformal OU Gate (OU physics-based signal quality) ──
@@ -864,9 +907,7 @@ class StrategyLine:
                                 "adx_q": _feat.get("adx_q"),
                                 "vel_q": _feat.get("vel_q"),
                             }
-                        return StrategyDecision(
-                            strategy_name=name,
-                            magic=self.config.magic,
+                        return self._make_decision(
                             should_trade=False,
                             direction=direction,
                             confidence=confidence,
@@ -879,7 +920,7 @@ class StrategyLine:
                             total_count=total_count,
                             regime_mode=regime_gate_mode,
                             reason=ou_result["reason"],
-                            gate_diag=_gd,
+                            gate_diag=_gd
                         )
                 except Exception:  # BLE001:FOG
                     with fail_open_guard("strategy_line:evaluate"):
@@ -891,9 +932,7 @@ class StrategyLine:
                             name,
                             exc_info=True,
                         )
-                        return StrategyDecision(
-                            strategy_name=name,
-                            magic=self.config.magic,
+                        return self._make_decision(
                             should_trade=False,
                             direction=direction,
                             confidence=confidence,
@@ -905,7 +944,7 @@ class StrategyLine:
                             supporting_count=support_count,
                             total_count=total_count,
                             regime_mode=regime_gate_mode,
-                            reason="ou_gate_exception_blocked",
+                            reason="ou_gate_exception_blocked"
                         )
             elif (
                 meta_filter_gate is not None
@@ -918,9 +957,7 @@ class StrategyLine:
                         micro_features=micro_feature_dict or {},
                     )
                     if not mf_result["passed"]:
-                        return StrategyDecision(
-                            strategy_name=name,
-                            magic=self.config.magic,
+                        return self._make_decision(
                             should_trade=False,
                             direction=direction,
                             confidence=confidence,
@@ -932,7 +969,7 @@ class StrategyLine:
                             supporting_count=support_count,
                             total_count=total_count,
                             regime_mode=regime_gate_mode,
-                            reason=mf_result["reason"],
+                            reason=mf_result["reason"]
                         )
                 except Exception:  # BLE001:FOG
                     with fail_open_guard("strategy_line:evaluate"):
@@ -944,9 +981,7 @@ class StrategyLine:
                             name,
                             exc_info=True,
                         )
-                        return StrategyDecision(
-                            strategy_name=name,
-                            magic=self.config.magic,
+                        return self._make_decision(
                             should_trade=False,
                             direction=direction,
                             confidence=confidence,
@@ -958,7 +993,7 @@ class StrategyLine:
                             supporting_count=support_count,
                             total_count=total_count,
                             regime_mode=regime_gate_mode,
-                            reason="meta_filter_gate_exception_blocked",
+                            reason="meta_filter_gate_exception_blocked"
                         )
         # ── FIX-20260610-007-C: Cold explore bypasses MetaFilter ──
         # When MetaFilter is in learning phase (COLD calibrator, few samples),
@@ -1085,9 +1120,7 @@ class StrategyLine:
 
         entry_price = mid_price or 0.0
         if entry_price <= 0:
-            return StrategyDecision(
-                strategy_name=name,
-                magic=self.config.magic,
+            return self._make_decision(
                 should_trade=False,
                 direction=direction,
                 confidence=confidence,
@@ -1099,7 +1132,7 @@ class StrategyLine:
                 supporting_count=support_count,
                 total_count=total_count,
                 regime_mode=regime_gate_mode,
-                reason="invalid_entry_price",
+                reason="invalid_entry_price"
             )
         levels = compute_sl_tp_levels(
             direction,
@@ -1118,9 +1151,7 @@ class StrategyLine:
         if regime_gate_mode != "shadow" and not check_minimum_rr(
             entry_price, levels["stop_loss"], levels["take_profit"], min_rr_ratio=_min_rr
         ):
-                return StrategyDecision(
-                    strategy_name=name,
-                    magic=self.config.magic,
+                return self._make_decision(
                     should_trade=False,
                     direction=direction,
                     confidence=confidence,
@@ -1133,7 +1164,7 @@ class StrategyLine:
                     total_count=total_count,
                     regime_mode=regime_gate_mode,
                     venue="live",
-                    reason="rr_below_minimum",
+                    reason="rr_below_minimum"
                 )
 
         # ── 6. Volume ──
@@ -1281,9 +1312,7 @@ class StrategyLine:
             _breakeven_p_win = sl_dist / (tp_dist + sl_dist)
             _effective_min_p_win = max(self.config.min_p_win, _breakeven_p_win)
         if _effective_min_p_win > 0 and _p_win < _effective_min_p_win and not _is_cold_explore:
-            return StrategyDecision(
-                strategy_name=name,
-                magic=self.config.magic,
+            return self._make_decision(
                 should_trade=False,
                 direction=direction,
                 confidence=round(confidence, 4),
@@ -1300,7 +1329,7 @@ class StrategyLine:
                 entry_z_score=entry_z_score,
                 entry_half_life=entry_half_life,
                 p_win=_p_win,
-                kelly_mult=0.0,
+                kelly_mult=0.0
             )
 
         # RR ratio from SL/TP levels (already computed in step 5)
@@ -1331,9 +1360,7 @@ class StrategyLine:
         _rr_breakeven = 1.0 / (1.0 + _rr_ratio) if _rr_ratio > 0 else 0.5
         if kelly_result.fractional_mult == 0.0 and not _is_low_rr:
             # Hard EV veto — negative expected value trade
-            return StrategyDecision(
-                strategy_name=name,
-                magic=self.config.magic,
+            return self._make_decision(
                 should_trade=False,
                 direction="neutral",
                 confidence=round(confidence, 4),
@@ -1350,7 +1377,7 @@ class StrategyLine:
                 entry_z_score=entry_z_score,
                 entry_half_life=entry_half_life,
                 p_win=_p_win,
-                kelly_mult=0.0,
+                kelly_mult=0.0
             )
         # ── FIX-20260609-002b: low-RR fail-safe floor ──
         # For low-RR strategies where Kelly veto is normally skipped
@@ -1362,9 +1389,7 @@ class StrategyLine:
         # hard p_win gate pattern at line 1395.  Without this, MetaFilter-
         # absent strategies with low RR are permanently blocked.
         if _is_low_rr and _p_win < _rr_breakeven and not _is_cold_explore:
-            return StrategyDecision(
-                strategy_name=name,
-                magic=self.config.magic,
+            return self._make_decision(
                 should_trade=False,
                 direction="neutral",
                 confidence=round(confidence, 4),
@@ -1381,7 +1406,7 @@ class StrategyLine:
                 entry_z_score=entry_z_score,
                 entry_half_life=entry_half_life,
                 p_win=_p_win,
-                kelly_mult=0.0,
+                kelly_mult=0.0
             )
         _kelly_mult = kelly_result.fractional_mult
 
@@ -1521,9 +1546,7 @@ class StrategyLine:
         _volume = 0.0 if regime_gate_mode == "shadow" else volume
         _should_trade = regime_gate_mode != "shadow"  # shadow: full eval, no real order
 
-        return StrategyDecision(
-            strategy_name=name,
-            magic=self.config.magic,
+        return self._make_decision(
             should_trade=_should_trade,
             direction=direction,
             confidence=round(confidence, 4),
@@ -1544,7 +1567,7 @@ class StrategyLine:
             p_win_source=_p_win_source,
             p_win_degraded=_p_win_degraded,
             kelly_mult=kelly_result.fractional_mult,
-            cold_explore=_is_cold_explore,
+            cold_explore=_is_cold_explore
         )
 
     # ── Consensus computation ───────────────────────────────────────────
