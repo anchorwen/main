@@ -26,5 +26,28 @@
     ],
     "python.autoComplete.extraPaths": [
         "d:\\future"
-    ]
+    ],
+    "files.watcherExclude": {
+        "**/data/**": true,
+        "**/data_btc/**": true,
+        "**/data_btc_backup_*/**": true,
+        "**/.git/**": true,
+        "**/__pycache__/**": true,
+        "**/.mypy_cache/**": true,
+        "**/.ruff_cache/**": true,
+        "**/.pytest_cache/**": true,
+        "**/.venv/**": true,
+        "**/*.egg-info/**": true,
+        "**/.claude/**": true,
+        "**/tmp/**": true,
+        "**/locks/**": true,
+        "**/*.jsonl": true,
+        "**/*.pkl": true
+    },
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/.mypy_cache": true,
+        "**/.ruff_cache": true,
+        "**/.pytest_cache": true
+    }
 }
