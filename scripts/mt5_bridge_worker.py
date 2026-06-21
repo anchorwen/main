@@ -90,6 +90,76 @@ def _list_pending(outbox_dir: Path) -> list[Path]:
     return sorted(outbox_dir.rglob("*.mt5.json"))
 
 
+# ── DQAF-20260621-034 Phase 1: Persisted WAL processed-ID watermark ──
+# Replaces the in-memory _processed_ids set (lost on Bridge restart) with
+# an append-only JSONL file so dedup survives crashes.  File is capped at
+# ~5000 lines via periodic truncation in the main loop.
+
+_WAL_PROCESSED_MAX_LINES = 5000
+_WAL_PROCESSED_TRUNCATE_KEEP = 2000
+
+
+def _load_processed_ids(path: Path) -> set[str]:
+    """Load persisted message IDs from an append-only JSONL file.
+
+    Returns an empty set if the file is missing, unreadable, or contains
+    only malformed lines — in-memory dedup still works for the session.
+    """
+    ids: set[str] = set()
+    if not path.exists():
+        return ids
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+                mid = rec.get("msg_id", "")
+                if mid:
+                    ids.add(mid)
+            except (json.JSONDecodeError, KeyError):
+                continue
+    except OSError:
+        pass
+    return ids
+
+
+def _persist_processed_id(path: Path, msg_id: str) -> None:
+    """Append a single processed message ID to the WAL watermark file.
+
+    Best-effort: if the write fails the in-memory set still holds the ID
+    for the current session.
+    """
+    try:
+        rec = json.dumps(
+            {"msg_id": msg_id, "processed_at": _utc_now()}, ensure_ascii=False
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(rec + "\n")
+    except OSError:
+        pass
+
+
+def _truncate_processed_wal(path: Path, keep_last: int = _WAL_PROCESSED_TRUNCATE_KEEP) -> None:
+    """Truncate the WAL watermark file, keeping only the most recent entries.
+
+    Called periodically so the file doesn't grow unbounded.  The in-memory
+    set is the authoritative dedup source; the file is a durability fallback.
+    """
+    if not path.exists():
+        return
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+        if len(lines) <= _WAL_PROCESSED_MAX_LINES:
+            return
+        kept = [ln for ln in lines[-keep_last:] if ln.strip()]
+        path.write_text("\n".join(kept) + ("\n" if kept else ""), encoding="utf-8")
+    except OSError:
+        pass
+
+
 def _load_message(path: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
@@ -111,6 +181,65 @@ def _safe_move(src: Path, dst: Path) -> bool:
         return False
     except OSError:
         return False
+
+
+# ── DQAF-20260621-034 Phase 3: Overflow merge ───────────────────────
+# Periodically drains journal_overflow_*.jsonl sidecar files into the
+# main journal.  Called every 60 s from the Bridge main loop so overflow
+# entries are merged in near-real-time instead of waiting for daily_ops.
+
+
+def _merge_overflow_files(journal_path: Path) -> int:
+    """Merge all ``journal_overflow_*.jsonl`` files into the main journal.
+
+    Reads each overflow file line-by-line, appends to the main journal
+    (no lock needed — only the Bridge writes to its own overflow files),
+    then removes the overflow file.  Returns the number of entries merged.
+    """
+    import glob as _glob
+
+    _overflow_pattern = str(journal_path.parent / "journal_overflow_*.jsonl")
+    _overflow_files = sorted(_glob.glob(_overflow_pattern))
+    if not _overflow_files:
+        return 0
+
+    _merged = 0
+    for _of_path in _overflow_files:
+        _of = Path(_of_path)
+        try:
+            _lines = _of.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        if not _lines:
+            try:
+                _of.unlink()
+            except OSError:
+                pass
+            continue
+        try:
+            with journal_path.open("a", encoding="utf-8") as _main:
+                for _line in _lines:
+                    if _line.strip():
+                        _main.write(_line.strip() + "\n")
+                        _merged += 1
+            _of.unlink()
+        except OSError:
+            pass  # retry on next tick
+    if _merged:
+        print(
+            json.dumps(
+                {
+                    "event": "journal_overflow_merged",
+                    "time": _utc_now(),
+                    "merged_entries": _merged,
+                    "overflow_files": len(_overflow_files),
+                    "recovery_source": "DQAF-20260621-034/Phase3",
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+    return _merged
 
 
 def _build_receipt_payload(
@@ -141,16 +270,13 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
     reconciliation, and any other journal producer, eliminating the
     read-then-write race that caused duplicate entries and corruption.
 
-    Phase 2 (DQAF-20260615-010/Phase2): If the lock cannot be acquired after
-    a single retry, the entry is written to a per-process overflow file
-    (``journal_overflow_{pid}.jsonl``).  The ``daily_ops`` reconciliation
-    pipeline merges overflow files back into the main journal during
-    non-trading hours — zero data loss, zero hot-path blocking.
+    DQAF-20260621-034 Phase 3: Exponential-backoff retry (100/200/400 ms)
+    instead of long-blocking lock acquisition.  If all 4 attempts fail the
+    entry is written to a per-process overflow file.  A 60-second merge tick
+    in the Bridge main loop periodically drains the overflow into the main
+    journal — zero data loss, zero hot-path blocking.
     """
     # ── FIX-20260617-101/P0: Entry boundary assertion ──
-    # Reject open entries missing entry_context.vector BEFORE the write lock.
-    # This is a lightweight complement to the Layer 1 Pydantic validator in
-    # JournalAccepted — catches any open entry that bypassed construction.
     _action = record.get("action")
     if _action in ("open", None) and "eq_" in str(record.get("message_id", "")):
         _ctx = record.get("entry_context")
@@ -161,7 +287,7 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
                 "ticket=%s message_id=%s. See DLR-001.",
                 record.get("position_ticket"), record.get("message_id"),
             )
-            return  # Physically block the write — no silent data loss
+            return
 
     from core.infrastructure.distributed_lock import FileLock
 
@@ -169,13 +295,17 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
     lock = FileLock(
         "live_trade_journal", lock_dir=str(journal_path.parent / "locks"), ttl_seconds=10
     )
-    # One retry with a shorter timeout — most lock contention is transient
-    for attempt in (1, 2):
-        acquired = lock.acquire(blocking=True, timeout_seconds=3 if attempt == 1 else 2)
-        if acquired.acquired:
+    # ── DQAF-20260621-034 Phase 3: exponential backoff [0, 100, 200, 400] ms ──
+    _acquired = False
+    for _attempt, _backoff_s in enumerate((0, 0.1, 0.2, 0.4)):
+        if _attempt > 0:
+            time.sleep(_backoff_s)
+        result = lock.acquire(blocking=False)
+        if result.acquired:
+            _acquired = True
             break
-    else:
-        # ── Phase 2: Overflow sidecar — never silently drop a journal entry ──
+    if not _acquired:
+        # ── Overflow sidecar — never silently drop a journal entry ──
         overflow_path = journal_path.parent / f"journal_overflow_{os.getpid()}.jsonl"
         try:
             with overflow_path.open("a", encoding="utf-8") as _of:
@@ -186,8 +316,8 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
                         "event": "journal_overflow_written",
                         "message_id": record.get("message_id", ""),
                         "overflow_path": str(overflow_path),
-                        "lock_error": acquired.error if hasattr(acquired, 'error') else "timeout",
-                        "action": "daily_ops will merge during next reconciliation",
+                        "retry_attempts": 4,
+                        "action": "bridge_merge_tick will drain within 60s",
                     },
                     ensure_ascii=False,
                 ),
@@ -195,7 +325,6 @@ def _append_journal(journal_path: Path, record: dict[str, Any]) -> None:
             )
         except Exception:  # BLE001:FOG
             with fail_open_guard("mt5_bridge_worker:_append_journal"):
-                # Last resort — print to stdout so at least the operator sees it
                 print(
                     json.dumps(
                         {
@@ -451,6 +580,60 @@ def _mt5_close_position(
 
     positions = mt5.positions_get(ticket=ticket)
     if not positions:
+        # ── DQAF-20260621-034 Phase 2: Idempotent state verification ──
+        # Position not in MT5 live portfolio.  Two possibilities:
+        #   a) Crash AFTER close execution but BEFORE journal write
+        #      → recover fill details from deal history (ghost-close repair)
+        #   b) Genuinely invalid ticket → reject
+        # Query deal history to disambiguate.  If exit deals exist the
+        # position was already closed — recover fill without re-executing,
+        # preventing both MIA and "position not found" noise.
+        try:
+            deals = mt5.history_deals_get(position=ticket)
+        except Exception:
+            deals = None
+        if deals:
+            exit_deals = [d for d in deals if getattr(d, "entry", -1) == 1]
+            if exit_deals:
+                last_exit = max(exit_deals, key=lambda d: getattr(d, "time", 0))
+                _rec_price = getattr(last_exit, "price", None)
+                _rec_profit = getattr(last_exit, "profit", None)
+                _rec_volume = getattr(last_exit, "volume", None)
+                _rec_reason = getattr(last_exit, "reason", -1)
+                _rec_pos_id = getattr(last_exit, "position_id", ticket)
+                print(
+                    json.dumps(
+                        {
+                            "event": "close_position_already_closed_recovered",
+                            "time": _utc_now(),
+                            "ticket": ticket,
+                            "close_price": float(_rec_price) if _rec_price else None,
+                            "profit": float(_rec_profit) if _rec_profit else None,
+                            "deal_reason": (
+                                int(_rec_reason)
+                                if _rec_reason is not None and int(_rec_reason) >= 0
+                                else -1
+                            ),
+                            "recovery_source": "DQAF-20260621-034/Phase2",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+                return "closed", {
+                    "reason": "position_already_closed_recovered",
+                    "ticket": ticket,
+                    "close_price": float(_rec_price) if _rec_price is not None else None,
+                    "profit": float(_rec_profit) if _rec_profit is not None else None,
+                    "fill_volume": float(_rec_volume) if _rec_volume is not None else None,
+                    "deal_reason": (
+                        int(_rec_reason)
+                        if _rec_reason is not None and int(_rec_reason) >= 0
+                        else -1
+                    ),
+                    "position_identifier": _rec_pos_id,
+                    "recovery_source": "DQAF-20260621-034/Phase2",
+                }
         return "rejected", {"reason": "position_not_found", "ticket": ticket}
 
     pos = positions[0]
@@ -911,6 +1094,7 @@ def run_worker(args: argparse.Namespace) -> int:
     health_path.parent.mkdir(parents=True, exist_ok=True)
     _last_health_write = 0.0
     _last_heartbeat_check = 0.0
+    _last_overflow_merge = 0.0
     _consecutive_hb_failures = 0
 
     # ── FIX-20260616-099: OFI TickPoller → atomic IPC file ──
@@ -984,8 +1168,13 @@ def run_worker(args: argparse.Namespace) -> int:
             if processed:
                 print(json.dumps({"processed": processed}, ensure_ascii=False, default=str))
 
-            # ── Periodic health heartbeat ──
+            # ── DQAF-20260621-034 Phase 3: Overflow merge tick ─────────
             _now = time.time()
+            if _now - _last_overflow_merge > 60:
+                _merge_overflow_files(journal_path)
+                _last_overflow_merge = _now
+
+            # ── Periodic health heartbeat ──
             if _now - _last_health_write > 30:
                 _hb = {
                     "last_heartbeat_utc": datetime.now(UTC).replace(tzinfo=None).isoformat(),
@@ -1238,13 +1427,20 @@ def run_zmq_worker(
     _last_health_write = 0.0
     _last_heartbeat_check = 0.0
     _last_file_poll = 0.0
+    _last_wal_truncate = 0.0
+    _last_overflow_merge = 0.0
     _consecutive_hb_failures = 0
-    # ── Phase 3: message_id dedup — prevents double-execution ──
-    # When the dispatcher dual-writes (file→ZMQ), the same order may arrive
-    # via both channels.  This set tracks processed message_ids so the file
-    # poll skips orders already handled via ZMQ.  Capped at 500 entries.
-    _processed_ids: set[str] = set()
-    _MAX_PROCESSED_IDS = 500
+    # ── DQAF-20260621-034 Phase 1: Persisted dedup watermark ──────────
+    # Replaces the old in-memory-only set (lost on restart → ghost replays).
+    # Loaded from an append-only JSONL file so dedup survives Bridge crashes.
+    # The file is truncated periodically to bound disk usage.
+    _wal_processed_path = outbox_dir.parent / "bridge_processed_wal.jsonl"
+    _processed_ids: set[str] = _load_processed_ids(_wal_processed_path)
+    if _processed_ids:
+        print(
+            f"[zmq_bridge] Loaded {len(_processed_ids)} processed IDs from {_wal_processed_path}",
+            flush=True,
+        )
 
     # Write initial health heartbeat immediately so monitoring can confirm ZMQ mode
     _write_zmq_health(health_path, mt5, order_endpoint)
@@ -1357,11 +1553,9 @@ def run_zmq_worker(
                                 ),
                                 flush=True,
                             )
-                            # ── Phase 3: Track processed ID for file-poll dedup ──
+                            # ── DQAF-20260621-034 Phase 1: Persist + track processed ID ──
                             _processed_ids.add(msg_id)
-                            if len(_processed_ids) > _MAX_PROCESSED_IDS:
-                                # Evict oldest half to bound memory
-                                _processed_ids = set(list(_processed_ids)[-_MAX_PROCESSED_IDS // 2:])
+                            _persist_processed_id(_wal_processed_path, msg_id)
                         except Exception as exc:  # BLE001:FOG
                             with fail_open_guard("mt5_bridge_worker:_ofi_poller_zmq"):
                                 _zmq_send_ack(
@@ -1440,6 +1634,7 @@ def run_zmq_worker(
                                 mt5=mt5,
                             )
                             _processed_ids.add(_f_msg_id)
+                            _persist_processed_id(_wal_processed_path, _f_msg_id)
                             print(
                                 json.dumps(
                                     {"file_fallback_processed": {"message_id": _f_msg_id, "path": str(_path)}},
@@ -1456,6 +1651,16 @@ def run_zmq_worker(
                                     ),
                                     flush=True,
                                 )
+            # ── DQAF-20260621-034 Phase 1: Periodic WAL truncation ─────
+            if _now - _last_wal_truncate > 600:  # every 10 minutes
+                _truncate_processed_wal(_wal_processed_path)
+                _last_wal_truncate = _now
+
+            # ── DQAF-20260621-034 Phase 3: Overflow merge tick ─────────
+            if _now - _last_overflow_merge > 60:  # every 60 seconds
+                _merge_overflow_files(journal_path)
+                _last_overflow_merge = _now
+
             # ── Periodic health heartbeat ──
             if _now - _last_health_write > 30:
                 _hb = {
@@ -1467,6 +1672,7 @@ def run_zmq_worker(
                     "order_endpoint": order_endpoint,
                     "phase3_wal": True,
                     "processed_ids": len(_processed_ids),
+                    "wal_processed_path": str(_wal_processed_path),
                 }
                 try:
                     health_path.write_text(json.dumps(_hb, ensure_ascii=False), encoding="utf-8")

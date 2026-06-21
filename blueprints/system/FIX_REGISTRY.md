@@ -707,13 +707,15 @@ FIX-YYYYMMDD-NNN
 | FIX-20260621-037 | 2026-06-21 | execution, runtime, contracts | **DQAF-034 HOTFIX: STATE_INITIALIZATION_DEADLOCK 三刀斩断。** V3 恢复 sync_position_from_mt5() 从 MT5 直读 SL + snapshot 守卫 force_init 替代 SKIP + fallback_unmanaged 兜底空白策略。Δ PnL 挽回潜力 +282R。 | RC-08, RC-09 |
 | FIX-20260621-038 | 2026-06-21 | execution | **DQAF-034 Addendum — V3 strategy 恢复 + entry_price 不可变锁。** (追加刀#1) V3 save/restore 补全 strategy_name 等 4 字段 — 仓位不再丢失策略归属。(追加刀#2) ActivePosition.entry_price 加装 __setattr__ 不可变锁 — 开仓价是全部风险计量原点，变异=保本/移动止损基准错乱。live_intent V3 恢复改用 _recover_entry_price()。 | RC-06, RC-02 |
 | FIX-20260621-039 | 2026-06-21 | execution, runtime | **DQAF-034 L3 Architecture Convergence — 消除 per-cycle SL sync 冗余。** live_intent_loop recovery 已无条件同步 SL(L1164-1166)，management_phase per-cycle sync_position_from_mt5() 是永不触发的死代码安全网。替换为 CRITICAL 告警 — recovery 失败必须可见，不得静默掩盖。sync_position_from_mt5() 保留为实用方法(非热路径)。 | RC-08 (incomplete-cleanup — dead safety net masking recovery failures) |
+| FIX-20260621-040 | 2026-06-21 | execution-orders, observability | **DQAF-033 P0 Addendum — close_accepted detail.reason fix.** mt5_bridge_worker.py: comment→detail.reason 复制 + managed_close.py: 空 reason 守卫。双端修复 51 笔 close_accepted 的 detail.reason 盲区。 | RC-07 (missing-validation) |
+| FIX-20260621-041 | 2026-06-21 | execution-orders | **DQAF-034 MIA Root Cause Fix — Bridge Idempotent WAL Gateway (3-Phase).** P1: 持久化 Processed IDs (bridge_processed_wal.jsonl)。P2: _mt5_close_position 状态验证网关。P3: _append_journal 退避重试 + 60s overflow 自愈合并。消除 47 笔 MIA 根因。 | RC-04 (race-condition) |
 
 ---
 ## Fix Details by Year
 
 | Year | File | Count |
 |------|------|-------|
-| 2026 | [FIX_REGISTRY_2026.md](FIX_REGISTRY_2026.md) | 108 |
+| 2026 | [FIX_REGISTRY_2026.md](FIX_REGISTRY_2026.md) | 110 |
 
 > New fix entries should be added to the relevant year file.
 > Keep the Fix Index table above updated with every fix.
@@ -3789,3 +3791,68 @@ FIX-YYYYMMDD-NNN
 - **Prevention**: (1) recovery 失败现在触发 CRITICAL 告警而非静默修补; (2) 热补丁投入时即标记 Deferred Architecture Fix → 触发条件达成后自动提醒架构收敛
 - **ReB Pattern**: `DEAD_SAFETY_NET_MASKING_RECOVERY_FAILURE` — 冗余安全网掩盖上游恢复失败, 使系统在降级状态静默运行
 - **Dependents Checked**: `live_intent_loop.py` (recovery — SL sync already unconditional, no change), `trail_dispatch.py` (force_init_snapshot — continues to protect edge case, no change), `position_registration.py` (fresh positions — current_sl=initial_sl always >0, unaffected)
+
+### FIX-20260621-040
+- **Date**: 2026-06-21
+- **Author**: cursor-agent (IC Approved: DQAF-033 P0 Addendum)
+- **Type**: fix (close_accepted detail.reason blind spot)
+- **Module**: execution-orders, observability
+- **Files**:
+  - `core/execution/managed_close.py` (P0 reason enforcement: empty reason → "managed_close:reason_missing" + WARNING event)
+  - `scripts/mt5_bridge_worker.py` (bridge-side: `_comment` → `detail["reason"]` copy for close actions)
+- **Summary**: **DQAF-033 P0 Addendum — close_accepted detail.reason fix.**
+
+  DQAF-033 MIA bridge audit discovered 51 close_accepted journal entries with `comment` populated
+  (e.g. "exit_watchdog:brain_flip_extreme_100pct") but `detail.reason` universally empty.  Root cause:
+  (1) senders could pass `reason=""` to `dispatch_managed_close`, (2) the Bridge copied comment to
+  `journal_record["comment"]` but never propagated it to `detail["reason"]`.
+
+  **Fix**: Two-end remedy — (A) `managed_close.py`: guard defaults empty reason to a diagnostic label
+  so every close is attributable; (B) `mt5_bridge_worker.py`: copies `_comment` into `detail["reason"]`
+  for close actions so downstream consumers (reconciliation, audit, analytics) can read exit reasons
+  without parsing the comment field.
+
+- **Root Cause**: RC-07 (missing-validation — reason field was never validated as non-empty at either end of the pipeline)
+- **Prevention**: Sender-side guard + receiver-side propagation = defense in depth.  Any future caller that passes empty reason will emit a WARNING event visible in monitoring.
+- **ReB Pattern**: `DUAL_END_FIELD_PROPAGATION` — when a field flows through a sender→bridge→journal pipeline, validate at the sender AND propagate at the bridge.  Single-end fixes leave the other end as a silent data-loss vector.
+
+### FIX-20260621-041
+- **Date**: 2026-06-21
+- **Author**: cursor-agent (IC Approved: DQAF-20260621-034 MIA Root Cause)
+- **Type**: fix (MIA root cause — Bridge Idempotent WAL Gateway)
+- **Module**: execution-orders
+- **Files**:
+  - `scripts/mt5_bridge_worker.py` (235+ insertions, 29- deletions across 3 phases)
+- **Summary**: **DQAF-034 MIA Root Cause Fix — Bridge Idempotent WAL Gateway (3-Phase).**
+
+  DQAF-033 P1 identified 47 MIA (Missing In Action) trades — positions closed in MT5 with zero journal
+  record.  DQAF-034 root cause investigation traced this to a transactional gap: `_send_to_mt5()`
+  irreversibly closes the position BEFORE `_append_journal()` records it.  Any crash, lock contention,
+  or I/O failure in this window produces a permanent MIA.  Three-phase fix:
+
+  **Phase 1 (P2): Persisted Processed-ID Watermark.**  Replaced in-memory `_processed_ids` set (lost on
+  Bridge restart → ghost replays) with append-only JSONL file `bridge_processed_wal.jsonl`.  Loaded on
+  startup, persisted after each processed message, truncated every 10 minutes (keep last 2000 of 5000).
+  Added `_load_processed_ids()`, `_persist_processed_id()`, `_truncate_processed_wal()` helpers.
+
+  **Phase 2 (P1): Idempotent State Verification Gateway.**  Injected state verification into
+  `_mt5_close_position()` at the existing `positions_get()` call site.  When position is not found:
+  query `history_deals_get()` to check if it was already closed.  If exit deals exist → return
+  `("closed", recovered_detail)` with fill price/profit/volume/deal_reason instead of
+  `("rejected", "position_not_found")`.  This recovers ghost closes from prior Bridge sessions,
+  preventing both MIA and duplicate-close errors.  Covers ZMQ main path AND WAL file-fallback path
+  with a single change.
+
+  **Phase 3 (P3): Resilient Sync Journal I/O.**  (a) `_append_journal()`: replaced 2-attempt blocking
+  lock acquisition (up to 5s total) with 4-attempt non-blocking exponential backoff [0, 100, 200, 400]ms
+  (max 700ms total).  (b) Added `_merge_overflow_files()` — drains `journal_overflow_*.jsonl` sidecar
+  files into the main journal.  (c) 60-second merge tick in both ZMQ and file-based Bridge main loops,
+  eliminating the daily_ops dependency for overflow recovery.
+
+  47 historical MIA are permanently unattributable (MT5 DEAL_REASON_CLIENT carries no comment field).
+  Tagged `ORPHANED_BY_BRIDGE_CRASH` — no further recovery effort.
+
+- **Root Cause**: RC-04 (race-condition — crash window between irreversible MT5 execution and best-effort journal write; in-memory dedup lost on restart; no state verification before replay)
+- **Prevention**: (1) State verification before any close execution — MT5 is the ground-truth oracle; (2) Persisted dedup watermark survives restarts; (3) Exponential backoff + near-real-time overflow merge makes journal writes resilient without blocking the hot path; (4) The recovered `"closed"` status flows through existing journal/label pipelines without special-casing.
+- **ReB Pattern**: `IDEMPOTENT_STATE_VERIFICATION_GATEWAY` — before any irreversible external I/O, query the external system's current state.  If the desired state already exists, recover the outcome from history instead of re-executing.  Crash window = state verification gap; close it with the external system as oracle.
+- **Dependents Checked**: `_send_to_mt5()` (route dispatch — `"closed"` status handled by existing `_derive_label` → falls through to `"close_accepted"`), `process_one()` (file-mode — journal record written for all ack_status values), `_write_zmq_journal_entry()` (ZMQ-mode — same), `reconciliation.py` (MIA detection — Phase 2 recovery writes journal BEFORE reconciliation runs, preventing MIA), `position_close_adapter.py` (unaffected — consumes journal entries regardless of source).  Zero API changes.  Zero new dependencies.
