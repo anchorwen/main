@@ -1,6 +1,6 @@
 # MODULE INVENTORY — 模块清单与完成度
 
-> **自动生成**: 2026-06-21T17:15:04Z
+> **自动生成**: 2026-06-21T17:49:04Z
 > **扫描模块数**: 648
 > **图例**: ✅ active | 🧪 stub | 📄 config | ⬜ empty
 
@@ -681,7 +681,7 @@
 | `commander_guardrails_arch.py` | ✅ active | — | 7 | 303 | — | |
 | `coverage_baseline.py` | ✅ active | — | 9 | 388 | — | |
 | `daily_cost_report.py` | ✅ active | — | 4 | 175 | — | |
-| `daily_ops.py` | ✅ active | — | 30 | 1784 | — | |
+| `daily_ops.py` | ✅ active | — | 30 | 1892 | — | |
 | `data_pipeline_audit.py` | 📄 config | — | 0 | 319 | — | |
 | `dedup_journal.py` | ✅ active | — | 1 | 102 | — | |
 | `dedup_journal_by_ticket.py` | ✅ active | — | 3 | 162 | — | |
@@ -819,7 +819,7 @@
 | 模块 | 状态 | 类 | 函数 | 行数 | 测试 | 说明 |
 |------|------|----|------|------|------|------|
 | `batch_train_skeleton.py` | ✅ active | — | 2 | 105 | — | |
-| `brain_leaderboard.py` | ✅ active | — | 8 | 260 | — | |
+| `brain_leaderboard.py` | ✅ active | — | 8 | 304 | — | |
 | `brain_promotion_runner.py` | ✅ active | — | 6 | 204 | — | |
 | `build_calibrated_dataset.py` | ✅ active | — | 19 | 773 | — | |
 | `build_live_labeled_dataset.py` | ✅ active | — | 4 | 236 | — | |

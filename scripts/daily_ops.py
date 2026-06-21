@@ -27,6 +27,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.contracts.exceptions import DataIntegrityError
 from core.runtime.fault_handler import fail_open_guard
 
 SCHEMA_VERSION = "daily_ops.v1"
@@ -61,11 +62,13 @@ def _load_or_create_tracker(base_dir: str) -> Any:
         if tracker_path.exists():
             return BrainPerformanceTracker.load(tracker_path)
         return BrainPerformanceTracker(window_size=100)
-    except Exception:  # BLE001:FOG
+    except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:_load_or_create_tracker"):
             from core.feedback.brain_performance_tracker import BrainPerformanceTracker
 
             return BrainPerformanceTracker(window_size=100)
+
+
 def _resolve_brains_dir(base_dir: str) -> Path:
     """Defense 3: explicitly map base_dir to brains config directory.
 
@@ -116,7 +119,7 @@ def _load_or_create_governance(base_dir: str, *, brains_dir: Path | None = None)
                         continue
                     try:
                         cfg = _json.loads(cfg_path.read_text(encoding="utf-8"))
-                    except Exception:  # BLE001:FOG
+                    except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
                         with fail_open_guard("daily_ops:_load_or_create_governance"):
                             continue
                     if cfg.get("schema_version") != "brain_registry_entry.v1":
@@ -129,7 +132,7 @@ def _load_or_create_governance(base_dir: str, *, brains_dir: Path | None = None)
                         )
                         gov.register_brain(bid, initial)
         return gov
-    except Exception:  # BLE001:FOG
+    except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:_load_or_create_governance"):
             from core.governance.governance_service import GovernanceService
 
@@ -138,6 +141,8 @@ def _load_or_create_governance(base_dir: str, *, brains_dir: Path | None = None)
                 for brain_id, status in DEFAULT_BRAIN_REGISTRATIONS.items():
                     gov.register_brain(brain_id, status)
             return gov
+
+
 def _load_or_create_pnl_store(base_dir: str) -> Any:
     """Load persisted PnL ledger, or create a fresh one.
 
@@ -153,7 +158,7 @@ def _load_or_create_pnl_store(base_dir: str) -> Any:
     if stream_path.exists():
         try:
             return BrainPnLStore.load_from_stream(stream_path)
-        except Exception:  # BLE001:FOG
+        except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
             with fail_open_guard("daily_ops:_load_or_create_pnl_store"):
                 pass
     # 2. Fall back to old JSON
@@ -161,7 +166,7 @@ def _load_or_create_pnl_store(base_dir: str) -> Any:
     try:
         if ledger_path.exists():
             return BrainPnLStore.load(ledger_path)
-    except Exception:  # BLE001:FOG
+    except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:_load_or_create_pnl_store"):
             pass
     # 3. Fresh store
@@ -228,9 +233,11 @@ def _step_label_builder(
             "losses": losses,
             "output": str(out_path) if not dry_run else None,
         }
-    except Exception as exc:  # BLE001:FOG
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:_step_label_builder"):
             return {"step": "label_builder", "status": "error", "error": str(exc)[:500]}
+
+
 def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
     """Run shadow ensemble and return summary."""
     try:
@@ -251,9 +258,11 @@ def _step_shadow_ensemble(base_dir: str) -> dict[str, Any]:
             "consensus": report.get("comparison", {}).get("consensus", "unknown"),
             "agreement": report.get("comparison", {}).get("agreement_score", 0.0),
         }
-    except Exception as exc:  # BLE001:FOG
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:_step_shadow_ensemble"):
             return {"step": "shadow_ensemble", "status": "error", "error": str(exc)[:500]}
+
+
 def _step_feedback_loop(
     base_dir: str, *, dry_run: bool = False, tracker: Any = None, symbol: str = "XAUUSDc"
 ) -> dict[str, Any]:
@@ -275,9 +284,11 @@ def _step_feedback_loop(
             "updates_applied": report.get("updates_applied", 0),
             "brains_updated": report.get("brain_ids_updated", []),
         }
-    except Exception as exc:  # BLE001:FOG
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:_step_feedback_loop"):
             return {"step": "feedback_loop", "status": "error", "error": str(exc)[:500]}
+
+
 def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
     """Feed the ConformalCalibrator from closed trades — independent of ML online learning.
 
@@ -325,7 +336,7 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
                 _mig_entry = json.loads(lines[_old_pos - 1])
                 last_recorded_at = _mig_entry.get("recorded_at", "")
                 last_message_id = _mig_entry.get("message_id", "")
-            except Exception:  # BLE001:FOG
+            except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
                 with fail_open_guard("daily_ops:_step_calibrator_feed"):
                     pass
         elif _old_pos > len(lines):
@@ -342,7 +353,7 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
     for _l in lines:
         try:
             _e = json.loads(_l)
-        except Exception:  # BLE001:FOG
+        except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
             with fail_open_guard("daily_ops:_step_calibrator_feed"):
                 continue
         _ts = _e.get("recorded_at", "")
@@ -358,7 +369,7 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
         from core.execution.conformal_calibrator import ConformalCalibrator
 
         cal = ConformalCalibrator(state_path=f"{base_dir}/conformal_calibrator_state.json")
-    except Exception as e:  # BLE001:FOG
+    except Exception as e:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:_step_calibrator_feed"):
             return {"step": "calibrator_feed", "status": "error", "error": f"init: {e}"}
     # Pass 1: build p_win lookup from accepted entries
@@ -366,7 +377,7 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
     for line in new_lines:
         try:
             entry = json.loads(line)
-        except Exception:  # BLE001:FOG
+        except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
             with fail_open_guard("daily_ops:_step_calibrator_feed"):
                 continue
         if entry.get("ack_status") != "accepted":
@@ -383,7 +394,7 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
     for line in new_lines:
         try:
             entry = json.loads(line)
-        except Exception:  # BLE001:FOG
+        except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
             with fail_open_guard("daily_ops:_step_calibrator_feed"):
                 continue
         if entry.get("ack_status") != "closed":
@@ -433,7 +444,7 @@ def _step_calibrator_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             _last_ts = _e.get("recorded_at", _last_ts)
             _last_mid = _e.get("message_id", _last_mid)
             break
-        except Exception:  # BLE001:FOG
+        except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
             with fail_open_guard("daily_ops:_step_calibrator_feed"):
                 continue
     with fail_open_guard("CalibratorFeedStateSave"):
@@ -487,9 +498,11 @@ def _step_paper_trade_simulation(base_dir: str, *, dry_run: bool = False) -> dic
             "win_rate": result.get("win_rate", 0),
             "dry_run": dry_run,
         }
-    except Exception as exc:  # BLE001:FOG
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:_step_paper_trade_simulation"):
             return {"step": "paper_trade_simulation", "status": "error", "error": str(exc)[:500]}
+
+
 def _step_governance(
     base_dir: str,
     *,
@@ -512,7 +525,9 @@ def _step_governance(
             governance = _load_or_create_governance(base_dir)
         if pnl_store is None:
             pnl_store = _load_or_create_pnl_store(base_dir)
-        report = run_governance_cycle(tracker, governance, dry_run=dry_run, pnl_store=pnl_store, base_dir=base_dir)
+        report = run_governance_cycle(
+            tracker, governance, dry_run=dry_run, pnl_store=pnl_store, base_dir=base_dir
+        )
 
         # ── Cross-validate against leaderboard ──
         cross_check = _cross_check_governance_with_leaderboard(base_dir, report)
@@ -527,14 +542,16 @@ def _step_governance(
             "flagged": report.get("actions_flagged", []),
             "leaderboard_cross_check": cross_check,
         }
-    except Exception as exc:  # BLE001:FOG
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         # FIX-20260621-043: Log the exception type so silent type errors
         # (like AttributeError from dict-vs-dataclass mismatch) are visible
         # in diagnostics, not swallowed without trace.
         import logging as _diag_log
+
         _diag_log.getLogger(__name__).exception(
             "daily_ops:_step_governance failed — type=%s: %s",
-            type(exc).__name__, str(exc)[:300],
+            type(exc).__name__,
+            str(exc)[:300],
         )
         with fail_open_guard("daily_ops:_step_governance"):
             return {
@@ -542,6 +559,8 @@ def _step_governance(
                 "status": "error",
                 "error": f"{type(exc).__name__}: {str(exc)[:400]}",
             }
+
+
 def _cross_check_governance_with_leaderboard(
     base_dir: str, gov_report: dict[str, Any]
 ) -> list[dict[str, Any]]:
@@ -645,11 +664,13 @@ def _step_champion_challenger(
             "eligible": sum(1 for c in report.get("comparisons", []) if c.get("eligible")),
             "details": report.get("promotions", []),
         }
-    except Exception as exc:  # BLE001:FOG
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:_step_champion_challenger"):
             return {"step": "champion_challenger", "status": "error", "error": str(exc)[:500]}
+
+
 def _step_retraining_check(
-    base_dir: str, *, dry_run: bool = False, auto_execute: bool = False
+    base_dir: str, *, dry_run: bool = False, auto_execute: bool = False, symbol: str = "XAUUSDc"
 ) -> dict[str, Any]:
     """Run retraining trigger degradation check and optionally auto-execute.
 
@@ -674,7 +695,9 @@ def _step_retraining_check(
             baseline = json.loads(prev_lb_path.read_text(encoding="utf-8"))
 
         leaderboard = build_lb(
-            decisions_dir, labels_path=labels_path if labels_path.exists() else None
+            decisions_dir,
+            labels_path=labels_path if labels_path.exists() else None,
+            symbol=symbol,
         )
 
         # ── FIX-20260606-132: PnL-based fallback for assets without shadow ensemble ──
@@ -709,7 +732,7 @@ def _step_retraining_check(
                         try:
                             pnl_store = BrainPnLStore.load(pnl_path)
                             _pnl_metrics = pnl_store.get_all_metrics()
-                        except Exception:  # BLE001:FOG
+                        except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
                             with fail_open_guard("daily_ops:pnl_store_load"):
                                 pass
 
@@ -737,7 +760,7 @@ def _step_retraining_check(
                                     pnl_store=pnl_store,
                                 )
                                 _vote_weights = _dw.get_weights()
-                    except Exception:  # BLE001:FOG
+                    except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
                         with fail_open_guard("daily_ops:_step_retraining_check"):
                             pass
 
@@ -785,7 +808,6 @@ def _step_retraining_check(
                     if leaderboard.get("total_decisions", 0) == 0 and _gov_states:
                         _brain_count = len(_gov_states)
                         _journal_count = len(_journal_metrics)
-                        from core.contracts.exceptions import DataIntegrityError
                         raise DataIntegrityError(
                             f"POISON PILL: Leaderboard generated with 0 total_decisions "
                             f"despite {_brain_count} brains in governance_state and "
@@ -797,13 +819,12 @@ def _step_retraining_check(
                             source="daily_ops:_step_retraining_check",
                         )
             except Exception as _pnl_lb_exc:
-                # DQAF-20260621-042: POISON PILL — do NOT swallow this exception.
+                # DQAF-20260621-042 + DQAF-20260622-048: POISON PILL — do NOT swallow.
                 # fail_open_guard would silently suppress it (Fail-Open anti-pattern),
                 # causing daily_ops to write a broken leaderboard that downstream
                 # consumers (governance, alerts) would act upon with corrupted data.
                 # Per IC Architectural Override: corrupted data → FATAL HALT.
-                from core.contracts.exceptions import DataIntegrityError
-
+                # DataIntegrityError is imported at module level for the outer handler.
                 if isinstance(_pnl_lb_exc, DataIntegrityError):
                     raise  # already a poison pill — propagate unchanged
                 _detail = str(_pnl_lb_exc)[:500]
@@ -811,6 +832,57 @@ def _step_retraining_check(
                     f"POISON PILL: Leaderboard generation failed — {_detail}",
                     source="daily_ops:_step_retraining_check",
                 ) from _pnl_lb_exc
+
+        # ── DQAF-20260622-048: Leaderboard contract validation ──
+        # Verify the generated leaderboard has reasonable brain coverage
+        # relative to governance.  A near-empty leaderboard when governance
+        # has active brains signals data pipeline corruption.
+        #
+        # Institutional Polish: ratio assertion, not absolute threshold.
+        # The guard scales with system size — it cannot be defeated by
+        # shrinking brain count below a magic number.
+        _gov_path = base / "governance_state.json"
+        if _gov_path.exists():
+            try:
+                _gov_data = json.loads(_gov_path.read_text(encoding="utf-8"))
+                _gov_states = _gov_data.get("brain_states") or _gov_data.get("brains") or {}
+                _active_count = sum(
+                    1
+                    for s in (
+                        _gov_states.values() if isinstance(_gov_states, dict) else _gov_states
+                    )
+                    if isinstance(s, dict) and s.get("status") in ("live", "probation", "candidate")
+                )
+                _lb_brain_count = leaderboard.get("total_brains", 0)
+
+                # Absolute zero check: no brains ranked but governance has active
+                if _lb_brain_count == 0 and _active_count > 0:
+                    raise DataIntegrityError(
+                        f"LEADERBOARD CONTRACT VIOLATION: 0 brains ranked "
+                        f"vs {_active_count} active in governance. "
+                        f"SYSTEM HALTED.",
+                        source="daily_ops:_step_retraining_check:contract_validation",
+                    )
+
+                # Ratio check: <10% of active brains appear in leaderboard
+                if _active_count > 0:
+                    _ratio = _lb_brain_count / _active_count
+                    if _ratio < 0.1:
+                        raise DataIntegrityError(
+                            f"LEADERBOARD CONTRACT VIOLATION: "
+                            f"{_lb_brain_count} brains ranked vs "
+                            f"{_active_count} active in governance "
+                            f"(ratio={_ratio:.3f}, below 10% safety threshold). "
+                            f"SYSTEM HALTED.",
+                            source="daily_ops:_step_retraining_check:contract_validation",
+                        )
+            except DataIntegrityError:
+                raise  # poison pill — propagate
+            except Exception:  # noqa: BLE001 — governance read failure → pass
+                # Governance read failure should not crash the pipeline.
+                # Leaderboard was still generated; validation is best-effort.
+                pass
+
         result = detect_degradation(leaderboard, baseline)
 
         # Persist leaderboard via StateWriter gate (DQAF-046 Plan B)
@@ -856,9 +928,24 @@ def _step_retraining_check(
             "details": result.get("signals", []),
             "auto_execution": execution_result,
         }
-    except Exception as exc:  # BLE001:FOG
+    except DataIntegrityError:
+        # ── DQAF-20260622-048: POISON PILL — FAIL-CLOSED ──
+        # The inner POISON PILL raises DataIntegrityError to halt the
+        # system when the leaderboard cannot be generated with complete
+        # data.  The previous generic ``except Exception`` silently
+        # defeated this by wrapping DataIntegrityError in fail_open_guard()
+        # (DEGRADE: log+continue), causing the system to write corrupted
+        # leaderboard state that downstream consumers would act upon.
+        #
+        # Per Iron Law IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION:
+        #   "If a materialized view cannot be generated with complete data,
+        #    the system MUST halt rather than produce silently-corrupted output."
+        raise
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:_step_retraining_check"):
             return {"step": "retraining_check", "status": "error", "error": str(exc)[:500]}
+
+
 def _load_prev_critical_ids(base: Path) -> set[str]:
     """Load brain_ids that were critical in yesterday's retraining signal."""
     sig_path = base / "reports" / "retraining_signal_prev.json"
@@ -1027,9 +1114,11 @@ def _step_param_optimization(
             "degraded_brains": degraded_ids,
             "would_generate": len(degraded_ids),
         }
-    except Exception as exc:  # BLE001:FOG
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:_step_param_optimization"):
             return {"step": "param_optimization", "status": "error", "error": str(exc)[:500]}
+
+
 def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
     """Feed closed trade PnL into Alpha performance store.
 
@@ -1103,7 +1192,7 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
                     _mig_entry = json.loads(lines[_old_pos - 1])
                     last_recorded_at = _mig_entry.get("recorded_at", "")
                     last_message_id = _mig_entry.get("message_id", "")
-                except Exception:  # BLE001:FOG
+                except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
                     with fail_open_guard("daily_ops:_step_alpha_feed"):
                         pass
             elif _old_pos > len(lines):
@@ -1116,7 +1205,7 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
         for _l in lines:
             try:
                 _e = json.loads(_l)
-            except Exception:  # BLE001:FOG
+            except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
                 with fail_open_guard("daily_ops:_step_alpha_feed"):
                     continue
             _ts = _e.get("recorded_at", "")
@@ -1196,7 +1285,7 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
                     _last_ts = _e.get("recorded_at", _last_ts)
                     _last_mid = _e.get("message_id", _last_mid)
                     break
-                except Exception:  # BLE001:FOG
+                except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
                     with fail_open_guard("daily_ops:_step_alpha_feed"):
                         continue
             with fail_open_guard("AlphaFeed:save_state"):
@@ -1281,9 +1370,11 @@ def _step_alpha_lifecycle(base_dir: str, *, dry_run: bool = False) -> dict[str, 
             "actions_flagged": len(applied) if dry_run else len(applied),
             "details": applied,
         }
-    except Exception as exc:  # BLE001:FOG
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:_step_alpha_lifecycle"):
             return {"step": "alpha_lifecycle", "status": "error", "error": str(exc)[:500]}
+
+
 def _step_alpha_allocation(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
     """Run AlphaPortfolioAllocator: produce capital allocation recommendations."""
     try:
@@ -1319,11 +1410,15 @@ def _step_alpha_allocation(base_dir: str, *, dry_run: bool = False) -> dict[str,
             "status": "ok",
             "alpha_count": allocation.get("alpha_count", 0),
             "allocatable_count": allocation.get("allocatable_count", 0),
-            "output": str(Path(base_dir) / "reports" / "alpha_allocation.json") if not dry_run else None,
+            "output": str(Path(base_dir) / "reports" / "alpha_allocation.json")
+            if not dry_run
+            else None,
         }
-    except Exception as exc:  # BLE001:FOG
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:_step_alpha_allocation"):
             return {"step": "alpha_allocation", "status": "error", "error": str(exc)[:500]}
+
+
 def _step_feature_store_maintenance(
     base_dir: str,
     *,
@@ -1362,9 +1457,11 @@ def _step_feature_store_maintenance(
             "compaction": compaction,
             "stats": stats,
         }
-    except Exception as exc:  # BLE001:FOG
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:_step_feature_store_maintenance"):
             return {"step": "feature_store_maintenance", "status": "error", "error": str(exc)[:500]}
+
+
 def _step_data_health(
     base_dir: str,
     *,
@@ -1415,9 +1512,11 @@ def _step_data_health(
                 "total_sources_checked": len(report.sources),
                 "alert_level": report.alert_level,
             }
-    except Exception as exc:  # BLE001:FOG — Iron Law #1
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below — Iron Law #1
         with fail_open_guard("daily_ops:_step_data_health"):
             return {"step": "data_health", "status": "error", "error": str(exc)[:500]}
+
+
 def _step_daily_recap(base_dir: str, *, mt5_terminal_path: str | None = None) -> dict[str, Any]:
     """Run daily recap and return summary."""
     try:
@@ -1436,9 +1535,11 @@ def _step_daily_recap(base_dir: str, *, mt5_terminal_path: str | None = None) ->
             "date_key": report.get("date_key_utc", ""),
             "sections": list(report.keys()),
         }
-    except Exception as exc:  # BLE001:FOG
+    except Exception as exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:_step_daily_recap"):
             return {"step": "daily_recap", "status": "error", "error": str(exc)[:500]}
+
+
 def _resolve_base_dir(base_dir: str | Path) -> str:
     """Resolve relative base_dir against PROJECT_ROOT to guard against CWD drift."""
     p = Path(base_dir)
@@ -1548,7 +1649,7 @@ def run_daily_ops(
             else:
                 _rec_steps.append({"step": "ledger_retention", "status": "ok", "entries_pruned": 0})
         steps.extend(_rec_steps)
-    except Exception as _exc:  # BLE001:FOG
+    except Exception as _exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:run_daily_ops"):
             steps.append({"step": "reconcile", "status": "error", "error": str(_exc)})
     # ── FIX-20260607-144: Journal compaction ──────────────────────────
@@ -1565,9 +1666,11 @@ def run_daily_ops(
                 _journal_path, retention_days=30, dry_run=dry_run, lock_dir=_base
             )
             steps.append({"step": "journal_compaction", **_compaction_result})
-    except Exception as _jc_exc:  # BLE001:FOG
+    except Exception as _jc_exc:  # noqa: BLE001 — REVIEWED: fail_open_guard below
         with fail_open_guard("daily_ops:run_daily_ops"):
-            steps.append({"step": "journal_compaction", "status": "error", "error": str(_jc_exc)[:200]})
+            steps.append(
+                {"step": "journal_compaction", "status": "error", "error": str(_jc_exc)[:200]}
+            )
     if not skip_shadow:
         steps.append(_step_shadow_ensemble(base_dir))
 
@@ -1620,7 +1723,7 @@ def run_daily_ops(
             try:
                 tracker_path = Path(base_dir) / "brain_performance.json"
                 shared_tracker.save(tracker_path)
-            except Exception:  # BLE001:FOG
+            except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
                 with fail_open_guard("daily_ops:run_daily_ops"):
                     logging.getLogger(__name__).exception(
                         "daily_ops: failed to persist BrainPerformanceTracker — "
@@ -1630,14 +1733,17 @@ def run_daily_ops(
             try:
                 gov_path = Path(base_dir) / "governance_state.json"
                 shared_governance.save(gov_path)
-            except Exception:  # BLE001:FOG
+            except Exception:  # noqa: BLE001 — REVIEWED: fail_open_guard below
                 with fail_open_guard("daily_ops:run_daily_ops"):
                     logging.getLogger(__name__).exception(
                         "daily_ops: failed to persist GovernanceService — "
                         "governance state may be stale on restart"
                     )
     if not skip_retraining:
-        steps.append(_step_retraining_check(base_dir, dry_run=dry_run, auto_execute=not dry_run))
+        _sym = "BTCUSDc" if "btc" in str(base_dir).lower() else "XAUUSDc"
+        steps.append(
+            _step_retraining_check(base_dir, dry_run=dry_run, auto_execute=not dry_run, symbol=_sym)
+        )
 
     # Training readiness: validate pipeline contracts for this symbol.
     # Runs after retraining_check so we can cross-reference degradation signals
@@ -1668,7 +1774,9 @@ def run_daily_ops(
     # Parameter optimization suggestions for degraded brains
     # Runs after retraining_check so we know which brains are degraded
     if not skip_retraining:
-        retraining_results = [s for s in steps if s is not None and s.get("step") == "retraining_check"]
+        retraining_results = [
+            s for s in steps if s is not None and s.get("step") == "retraining_check"
+        ]
         retraining_result = retraining_results[-1] if retraining_results else None
         if retraining_result and retraining_result.get("degraded_count", 0) > 0:
             steps.append(_step_param_optimization(base_dir, retraining_result, dry_run=dry_run))

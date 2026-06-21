@@ -17,6 +17,7 @@
 
 | Docket ID | 日期 | 严重等级 | 症状简述 | IC 裁决 | 关联 FIX |
 |-----------|------|---------|---------|--------|----------|
+| DQAF-20260622-048 | 2026-06-22 | Sev 2 | XAU Leaderboard 95.7% 决策记录不可见 (glob XAUUSD vs XAUUSDc 不匹配) + POISON PILL 被外层 except Exception 架构性击败. ReB: SYMBOL_AWARE_DECISION_FILE_NAMING. | **CLOSED** — Dual fix: symbol-aware glob + POISON PILL enforcement + ratio-based contract validation. | FIX-20260622-048 |
 | DQAF-20260621-044 | 2026-06-21 | Sev 2 | BTC ConformalCalibrator p_win 塌缩为 0.5 (诊断正确, 修复不完整). ReB: COLD_EXPLORE_PREEMPTIVE_OVERRIDE. | **CLOSED → SUPERSEDED by DQAF-20260621-044-bis** — 原始修复仅覆盖 MetaFilter PASS 分支 (_meta_p_win is not None), 遗漏 REJECT 分支 (96.3%). | FIX-20260621-044 → FIX-20260621-044-bis |
 | DQAF-20260621-044-bis | 2026-06-21 | Sev 2 | DQAF-044 修复不完整: 重启后 p_win 仍 100%=0.5. 根因: _is_cold_explore 清除条件仅覆盖 MetaFilter PASS, REJECT 时 _meta_p_win=None 导致修复不触发. IC 否决 Tier 1 补丁, 强制 Tier 2 (TEMPORAL_STATE_DECOUPLING: 状态后置推导) + Tier 3 (journal p_win_source 可信锚). | **APPROVED → CLOSED** — FIX-20260621-044-bis: 以 MetaFilter 实际返回值推导 _is_cold_explore (不再先设后清). 毒流代谢期 ~50 trades. ReB: TEMPORAL_STATE_DECOUPLING (BooleanStateDesync 升格). | FIX-20260621-044-bis |
 | DQAF-20260610-001 | 2026-06-10 | Sev 2 | BTC 移动止损修改前后对比: 0%胜率伪影→数据证伪→亏损来自改前旧仓位(trail卡死)，改后trail激活(+768pts)保本防守。根因非trail而是微生命周期+全long逆势+遥测盲区。 | **APPROVED → CLOSED** — IC Mandate: 冻结trail参数(衰减曲线已验证正确)，立即修复MIA管道PnL缺失(close_accepted/breakeven无PnL)。ReB: TRAIL_TELEMETRY_BLINDSPOT + MICRO_LIFESPAN_COUNTER_TREND | FIX-20260610-004, FIX-20260610-006, FIX-20260610-007 |

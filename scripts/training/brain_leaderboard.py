@@ -13,10 +13,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "brain_leaderboard.v1"
 
@@ -31,26 +34,60 @@ def _utc_now_iso() -> str:
     )
 
 
-def load_decisions(decisions_dir: Path, *, date_filter: str | None = None) -> list[dict[str, Any]]:
-    """Load decision records from partitioned JSONL files."""
+def load_decisions(
+    decisions_dir: Path,
+    *,
+    date_filter: str | None = None,
+    symbol: str | None = None,
+) -> list[dict[str, Any]]:
+    """Load decision records from partitioned JSONL files.
+
+    By default matches the canonical MT5 contract symbol ``XAUUSDc`` and
+    legacy files (``XAUUSD`` without ``c`` suffix).  Pass ``symbol="BTCUSDc"``
+    for BTC data.
+
+    DQAF-20260622-048: The previous hardcoded glob ``XAUUSD.decisions.jsonl``
+    (without 'c') silently ignored 95.7% of decision files (45/47),
+    causing the leaderboard to show only 1 brain instead of 68.
+    """
     records: list[dict[str, Any]] = []
     if not decisions_dir.is_dir():
         return records
 
-    pattern = (
-        f"{date_filter}/XAUUSD.decisions.jsonl" if date_filter else "**/XAUUSD.decisions.jsonl"
-    )
-    for path in sorted(decisions_dir.glob(pattern)):
-        for line in path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if rec.get("schema_version") == "decision_record.v1":
-                records.append(rec)
+    if symbol is None:
+        symbol = "XAUUSDc"
+
+    # Canonical pattern first, then legacy (without MT5 contract suffix 'c')
+    patterns: list[str] = []
+    prefix = f"{date_filter}/" if date_filter else "**/"
+    patterns.append(f"{prefix}{symbol}.decisions.jsonl")
+
+    if symbol.endswith("c"):
+        legacy_symbol = symbol[:-1]  # "XAUUSDc" → "XAUUSD"
+        legacy_pattern = f"{prefix}{legacy_symbol}.decisions.jsonl"
+        patterns.append(legacy_pattern)
+        # Institutional Polish: explicit protest against non-canonical data
+        logger.warning(
+            "DEBT: Loading legacy non-canonical decision files via pattern %s",
+            legacy_pattern,
+        )
+
+    seen_paths: set[Path] = set()
+    for pattern in patterns:
+        for path in sorted(decisions_dir.glob(pattern)):
+            if path in seen_paths:
+                continue  # protect against overlap when date_filter is used
+            seen_paths.add(path)
+            for line in path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if rec.get("schema_version") == "decision_record.v1":
+                    records.append(rec)
     return records
 
 
@@ -189,8 +226,9 @@ def build_report(
     *,
     date_filter: str | None = None,
     labels_path: Path | None = None,
+    symbol: str | None = None,
 ) -> dict[str, Any]:
-    decisions = load_decisions(decisions_dir, date_filter=date_filter)
+    decisions = load_decisions(decisions_dir, date_filter=date_filter, symbol=symbol)
     labels = load_labels(labels_path) if labels_path else []
 
     if not decisions:
@@ -232,6 +270,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to training_labels.jsonl for trade outcome linking",
     )
     p.add_argument("--output", default=None, help="Write leaderboard JSON to file")
+    p.add_argument(
+        "--symbol",
+        default="XAUUSDc",
+        help="Trading symbol (XAUUSDc or BTCUSDc) for decision file matching",
+    )
     return p
 
 
@@ -241,6 +284,7 @@ def main(argv: list[str] | None = None) -> int:
         args.decisions_dir,
         date_filter=args.date,
         labels_path=args.labels,
+        symbol=args.symbol,
     )
     text = json.dumps(report, indent=2, ensure_ascii=False, default=str)
     print(text)
