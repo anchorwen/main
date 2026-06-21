@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from core.feedback.brain_performance_tracker import BrainPerformanceTracker
+from core.runtime.fault_handler import fail_open_guard
 from core.feedback.brain_pnl_ledger import BrainPnLMetrics, BrainPnLStore
 from core.governance.governance_service import GovernanceService
 
@@ -208,6 +209,7 @@ def run_governance_cycle(
     dry_run: bool = False,
     pnl_store: BrainPnLStore | None = None,
     quality_engine: Any = None,
+    base_dir: str = "data_btc",
 ) -> dict[str, Any]:
     """Read PnL metrics (primary) or tracker summaries (fallback) and apply governance.
 
@@ -219,6 +221,7 @@ def run_governance_cycle(
         quality_engine: Optional BrainQualityEngine — single source of truth for
                         quality assessment. When provided, overrides legacy
                         _compute_pnl_based_status().
+        base_dir: Data directory for live trade journal (default: data_btc).
 
     Returns:
         Report dict with actions applied and flagged.
@@ -246,6 +249,24 @@ def run_governance_cycle(
     # ── PnL-first path ──
     if pnl_store is not None:
         all_metrics = pnl_store.get_all_metrics()
+        # FIX-20260621-032: Augment PnL store metrics with live journal data.
+        # Shadow-only brains (no live trades) keep PnL store metrics.
+        # Live-trading brains get journal-based pnl_r injected.
+        try:
+            from core.feedback.live_journal_metrics import compute_journal_brain_metrics
+
+            _journal_metrics = compute_journal_brain_metrics(base_dir)
+            for _bid, _jm in _journal_metrics.items():
+                if _bid in all_metrics:
+                    # Replace PnL store metrics with journal-based for
+                    # brains that have actual live trades
+                    if _jm.get("sample_count", 0) > 0:
+                        all_metrics[_bid] = _jm
+                else:
+                    all_metrics[_bid] = _jm
+        except Exception:  # BLE001:FOG
+            with fail_open_guard("governance_scheduler:journal_metrics"):
+                pass
         if all_metrics:
             for brain_id, metrics in sorted(all_metrics.items()):
                 # Skip already-retired brains — no further governance actions apply

@@ -18,24 +18,39 @@
     },
     "BTC_Swing_V4": {
       "brain_id": "BTC_Swing_V4",
-      "status": "probation",
+      "status": "live",
       "registered_at": "2026-06-14T15:40:08.073129",
-      "last_transition_at": "2026-06-20T12:00:00.000000+00:00",
-      "transition_count": 2,
+      "last_transition_at": "2026-06-21T11:00:00.000000+00:00",
+      "transition_count": 3,
       "freeze_count": 0,
       "performance_metrics": {
-        "win_rate": 0.0,
-        "profit_factor": 0.0,
-        "sharpe_ratio": 0.0,
-        "total_trades": 0,
-        "pnl_r": 0
+        "win_rate": 0.399,
+        "profit_factor": 1.38,
+        "sharpe_ratio": 1.23,
+        "total_trades": 172,
+        "pnl_r": 92.1
       },
-      "override_reason": "manual_activation:deadlock_break;test_WR=0.385;test_PF=1.91;100_perf_records;0_settled_trades",
-      "override_expires_after_trades": 50,
-      "override_expires_at": "2026-06-27T00:00:00Z",
-      "override_max_probation_dd": -5.0,
-      "override_applied_at": "2026-06-20T12:00:00.000000+00:00",
-      "override_fix_id": "FIX-20260620-012"
+      "promotion_reason": "live_audit_20260621: 172 trades +92.1R WR=39.9% — top profit engine (83% of system PnL)",
+      "promotion_authority": "IC_MANDATE",
+      "promotion_fix_id": "FIX-20260621-032"
+    },
+    "BTC_Swing_V10_M15_Survival": {
+      "brain_id": "BTC_Swing_V10_M15_Survival",
+      "status": "retired",
+      "registered_at": "2026-06-10T03:45:16.735324",
+      "last_transition_at": "2026-06-21T11:00:00.000000+00:00",
+      "transition_count": 1,
+      "freeze_count": 0,
+      "performance_metrics": {
+        "win_rate": 0.303,
+        "profit_factor": 0.37,
+        "sharpe_ratio": -1.11,
+        "total_trades": 35,
+        "pnl_r": -16.4
+      },
+      "retirement_reason": "live_audit_20260621: -16.4R across 35 trades, toxic to every coalition it joins. All 5 coalitions with V10_M15 are net negative.",
+      "retirement_authority": "IC_MANDATE",
+      "retirement_fix_id": "FIX-20260621-032"
     },
     "BTC_Swing_V12_H1_Survival": {
       "brain_id": "BTC_Swing_V12_H1_Survival",
@@ -54,6 +69,22 @@
     }
   },
   "transition_log": [
+    {
+      "brain_id": "BTC_Swing_V10_M15_Survival",
+      "from": "frozen",
+      "to": "retired",
+      "reason": "IC_MANDATE: live_audit_20260621: -16.4R across 35 trades, toxic to every coalition",
+      "timestamp": "2026-06-21T11:00:00.000000+00:00",
+      "fix_id": "FIX-20260621-032"
+    },
+    {
+      "brain_id": "BTC_Swing_V4",
+      "from": "probation",
+      "to": "live",
+      "reason": "IC_MANDATE: live_audit_20260621: 172 trades +92.1R WR=39.9% — top profit engine",
+      "timestamp": "2026-06-21T11:00:00.000000+00:00",
+      "fix_id": "FIX-20260621-032"
+    },
     {
       "brain_id": "Barrier_V9_12B_V1",
       "from": null,

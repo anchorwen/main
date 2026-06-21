@@ -512,7 +512,7 @@ def _step_governance(
             governance = _load_or_create_governance(base_dir)
         if pnl_store is None:
             pnl_store = _load_or_create_pnl_store(base_dir)
-        report = run_governance_cycle(tracker, governance, dry_run=dry_run, pnl_store=pnl_store)
+        report = run_governance_cycle(tracker, governance, dry_run=dry_run, pnl_store=pnl_store, base_dir=base_dir)
 
         # ── Cross-validate against leaderboard ──
         cross_check = _cross_check_governance_with_leaderboard(base_dir, report)
@@ -675,16 +675,41 @@ def _step_retraining_check(
             try:
                 from core.brains.services.brain_leaderboard import BrainLeaderboard
                 from core.feedback.brain_pnl_ledger import BrainPnLStore
+                from core.feedback.live_journal_metrics import compute_journal_brain_metrics
                 from core.governance.governance_service import GovernanceService
 
                 pnl_path = base / "brain_pnl_ledger.json"
                 gov_path = base / "governance_state.json"
-                if pnl_path.exists() and gov_path.exists():
-                    pnl_store = BrainPnLStore.load(pnl_path)
+                if gov_path.exists():
                     governance = GovernanceService.load(gov_path)
                     lb = BrainLeaderboard()
+
+                    # FIX-20260621-032: Use journal-based PnL metrics (live execution pnl_r)
+                    # instead of BrainPnLStore (shadow signal pnl_per_unit).
+                    # The journal is the sole source of truth for live-trading brain performance.
+                    _journal_metrics = compute_journal_brain_metrics(base)
+
+                    # Load PnL store as secondary source (for shadow-only brains
+                    # that have no journal trades yet)
+                    _pnl_metrics: dict[str, Any] = {}
+                    pnl_store = None
+                    if pnl_path.exists():
+                        try:
+                            pnl_store = BrainPnLStore.load(pnl_path)
+                            _pnl_metrics = pnl_store.get_all_metrics()
+                        except Exception:  # BLE001:FOG
+                            with fail_open_guard("daily_ops:pnl_store_load"):
+                                pass
+
+                    # Merge: journal metrics take priority. Shadow-only brains
+                    # (no journal trades) fall back to PnL store metrics.
+                    _merged_metrics: dict[str, Any] = {}
+                    for bid, m in _pnl_metrics.items():
+                        _merged_metrics[bid] = m
+                    for bid, m in _journal_metrics.items():
+                        _merged_metrics[bid] = m  # journal overwrites PnL store
+
                     # FIX-20260610-007: pass vote_weights from DynamicBrainWeighter
-                    # so leaderboard reflects actual PnL-based quality weights.
                     _vote_weights: dict[str, float] = {}
                     try:
                         from core.brains.brain_registry import load_brain_registry
@@ -702,9 +727,10 @@ def _step_retraining_check(
                                 _vote_weights = _dw.get_weights()
                     except Exception:  # BLE001:FOG
                         with fail_open_guard("daily_ops:_step_retraining_check"):
-                            pass  # fall back to equal-weight (handled in rank())
+                            pass
+
                     rankings = lb.rank(
-                        pnl_store.get_all_metrics(),
+                        list(_merged_metrics.values()),
                         governance_states=governance.get_all_states(),
                         vote_weights=_vote_weights,
                     )

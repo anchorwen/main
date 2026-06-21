@@ -617,3 +617,62 @@
 - **Fix**: 三步同步 + Cut 4 SSOT 重构 → FIX-20260612-006
 - **关联 ReB**: ReB-20260612-007 (TRIPLE_BOOKKEEPING_RESIDUAL), ReB-20260612-008 (GOVERNANCE_BRAIN_SOURCE_MISMATCH)
 - **关联 FIX**: FIX-20260612-006
+
+---
+
+### CCT-20260621-033
+- **Docket ID**: DQAF-20260621-033
+- **日期**: 2026-06-21
+- **严重等级**: Sev 2 — 实盘质量下降，Alpha 蒸发
+- **置信度**: hypothesis (双源确认: journal statistics + label taxonomy audit, 待 MT5 bridge 日志溯源确认根因)
+- **因果链**:
+  - [Layer 1 — 症状]: 259 笔已平仓交易中，96 笔(37.1%)标签为 `breakeven` + 4 笔 `unknown_close` 的 breakeven → 合计 100 笔(38.6%)从未到达 TP 或 SL 即被外部关闭。这些仓位平均 +0.6R/笔，合计 +61.1R，均因外部原因终止。若这些仓位能正常走完生命周期到达 TP (+6.3R avg)，潜在蒸发 Alpha 约 +530R。
+    - Source 1: `scripts/analyze_live_brain_performance.py` stdout — Section C (Exit Reason Breakdown)
+    - Source 2: `data_btc/live_trade_journal.jsonl` — 96 笔 `label=breakeven, ack=closed, reason=mt5_deal_reason_3`
+  - [Layer 2 — 中间异常 A — MT5 外部关闭]: 96 笔 breakeven 中有 96 笔的 `detail.reason` = `mt5_deal_reason_3`。MT5 Deal Reason 3 = `DEAL_REASON_CLIENT`（客户端主动平仓），但系统日志中无对应的主动平仓指令。可能的解释: (a) MT5 Bridge 连接中断后 MT5 侧自动平仓；(b) 另一 MT5 终端实例同时连接同一账户产生平仓指令；(c) 经纪商后台强制平仓。另有 4 笔 `reason=unknown_close`。
+    - Source 3: `core/runtime/reconciliation.py` — MIA/unknown_close 处理路径
+    - Source 4: `blueprints/system/MIA_GHOST_POSITION_PIPELINE.md` — MIA 管道设计文档
+  - [Layer 2 — 中间异常 B — 孤儿清扫器误杀]: `auto_orphan_rejected`(19笔) + `auto_orphan_stale`(12笔) = 31 笔被孤儿检测系统标记并关闭。这些仓位可能在 MT5 上仍然存活，但系统侧的状态机失去了与 MT5 的同步。
+  - [Layer 3 — 根因假设]: **RC-04 (race-condition) + RC-08 (incomplete-cleanup)** — (A) MT5 Bridge 与主循环之间存在订单状态同步延迟，导致系统认为仓位已丢失(MIA)而发起 orphan 清扫；(B) `mt5_deal_reason_3` 的大量出现暗示存在第二个 MT5 连接或经纪商侧干预；(C) 历史 DQAF-20260610-001 已识别 MIA 管道 PnL 缺失问题但未解决根因——外部关闭的发生频率(37.1%)表明这不是偶发事件而是系统性同步故障。
+- **证据引用**:
+  - Source 1 (Journal Statistics): `data_btc/reports/live_brain_audit_20260621.md` — Section 3 (出场原因分析)
+  - Source 2 (Label Taxonomy): `data_btc/live_trade_journal.jsonl` — 412 close events, 96 breakeven+mt5_deal_reason_3
+  - Source 3 (Code Path): `core/runtime/reconciliation.py` + `core/runtime/live_cycle.py` MIA handling
+  - Source 4 (Historical): DQAF-20260610-001 — MIA 管道 PnL 缺失, DQAF-20260609-001 — MIA/孤儿仓位放大
+- **待验证假设** (下周基建悬赏):
+  - H1: `mt5_deal_reason_3` 是否来自第二 MT5 终端实例？→ 检查 MT5 终端日志
+  - H2: Orphan Sweeper 的时间窗口是否过短？→ 检查 `PENDING_CLOSE_MAX_CYCLES` 与 MT5 Bridge 延迟的关系
+  - H3: MIA 检测的 `_mia_grace_cycles` 是否足够覆盖网络抖动？→ 审计 `live_cycle.py` MIA 触发逻辑
+- **是否被推翻**: 否 (待 root-cause traceback)
+- **关联 ReB Pattern**: `EXTERNAL_CLOSE_FLOOD_37PCT` (待注册)
+- **关联 FIX**: — (DQAF 立案，修复待下周)
+
+---
+
+### CCT-20260621-034
+- **Docket ID**: DQAF-20260621-034
+- **日期**: 2026-06-21
+- **严重等级**: Sev 2 — 出场质量退化，Trailing SL 功能大面积失效
+- **置信度**: hypothesis (双源确认: snapshot count statistics + per-trade SL migration audit, 待代码级竞态审计确认根因)
+- **因果链**:
+  - [Layer 1 — 症状]: 259 笔已平仓交易中，131 笔(50.6%)仅有 0-1 次 position_snapshots → Trailing SL 从未激活。这些仓位的 PnL 分布: 0-1 snapshots → avg=0.0R, winrate=0.0%。对比: 11+ snapshots → avg=+1.4R, winrate=45.7%。Trail 激活的仓位显著优于未激活仓位。
+    - Source 1: `scripts/analyze_live_brain_performance.py` stdout — Section I (Trailing SL Behavior)
+    - Source 2: `data_btc/position_snapshots.jsonl` — 1858 snapshots, per-ticket count distribution
+  - [Layer 2 — 中间异常 A — 监听器挂载竞态]: `position_snapshots` 依赖 `ActivePositionManager` 注册 position listener。如果开仓事件(open accepted)与 snapshot 采集之间存在竞态——ticket 尚未在 position_manager 中注册时 snapshot 采集已触发 → 该周期快照缺失。连续多周期累积 → 整个仓位的 trailing SL 永久不激活。
+    - Source 3: `core/execution/position_manager.py` — `register_position()` 调用时机
+    - Source 4: `core/runtime/live_cycle.py` — snapshot 采集在主循环 Phase 中的位置
+  - [Layer 2 — 中间异常 B — 微生命周期仓位]: 部分仓位持仓时间极短(4-6 bar M5 = 20-30分钟)，在 snapshot 采集周期(每 M5 bar)到来之前已经平仓 → 0 snapshots。但这些仓位平均 PnL=0R —— 它们可能是 breakeven/MIA 快速关闭(关联 DQAF-20260621-033)。
+  - [Layer 3 — 根因假设]: **RC-04 (race-condition) + RC-05 (boundary-error)** — (A) Position registration 与 snapshot collection 之间缺少显式的 happens-before 保证；(B) Trail 激活条件 (`trail_activation_atr`) 在极端短持仓中永远来不及满足；(C) 关联 DQAF-20260610-001 发现 `trail` label 从未出现——trail 激活后的标签分类也损坏了。
+- **证据引用**:
+  - Source 1 (Snapshot Audit): `data_btc/reports/live_brain_audit_20260621.md` — Section 7 (Trailing SL 行为分析)
+  - Source 2 (Code Audit Target): `core/execution/trail_stop_engine.py` — trail activation logic
+  - Source 3 (Code Audit Target): `core/runtime/live_cycle.py` — snapshot collection phase + position registration phase ordering
+  - Source 4 (Code Audit Target): `core/execution/position_manager.py` — `register_position()` + listener attachment
+  - Source 5 (Historical): DQAF-20260610-001 — `trail` label count=0 遥测盲区
+- **待验证假设** (下周锁/时序审计):
+  - H1: Snapshot collection phase 是否在 position registration phase 之前执行？→ 检查 `live_cycle.py` phase ordering
+  - H2: `register_position()` 是否同步注册 snapshot listener？→ 检查 `position_manager.py` listener attachment
+  - H3: 0-snapshot 仓位是否全部为微生命周期(< 5 bar)？→ 交叉验证 snapshot count vs bars_held
+- **是否被推翻**: 否 (待代码级竞态审计)
+- **关联 ReB Pattern**: `TRAIL_SNAPSHOT_RACE_50PCT_SILENT` (待注册)
+- **关联 FIX**: — (DQAF 立案，修复待下周)
