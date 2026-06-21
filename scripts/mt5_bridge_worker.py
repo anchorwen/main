@@ -759,6 +759,13 @@ def process_one(
     vol_disp = msg_payload.get("volume", msg_payload.get("lots"))
     _comment = msg_payload.get("comment", "")
     _label = _derive_label(action, msg_payload, detail)
+    # ── DQAF-033 P0: Inject close_reason into detail so audit dashboards
+    # can attribute every close.  The comment already flows from
+    # dispatch_managed_close(reason=...) → payload["comment"].  This
+    # copies it into detail.reason for downstream consumers (journal
+    # queries, audit scripts, MIA forensics).
+    if action == "close" and _comment and isinstance(detail, dict) and "reason" not in detail:
+        detail = {**detail, "reason": _comment}
     _magic = order_magic
     _strategy = ""
     with log_and_continue(component="Bridge:magic_resolve"):
