@@ -32,6 +32,7 @@ FIX-YYYYMMDD-NNN
 
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
+| FIX-20260621-031 | 2026-06-21 | deployment-lifecycle, scripts | **Market-session-aware stale file checks**: system_trust_report.py now calls detect_session() per symbol. When risk_tier="off" (weekend/market-closed), stale file checks are bypassed with [BYPASSED: MARKET_OFF] marker instead of false-positive WARN. BTC (24/7) serves as control group — confirms pipeline health while XAU weekend stales are correctly suppressed. Same class as FIX-028c (audit weekend false-positives). | RC-06 (data-contamination — naive probe without business-hours calendar) |
 | FIX-20260621-029 | 2026-06-21 | governance, brains-services | **Minimum Live Sample Gate (N=50) — 终结 live↔probation 死循环**: 统一数据源为 brain_performance.json，低于50条实盘执行记录的脑旁路所有升/降级决策。消除 governance_state.json 全时PnL vs brain_performance.json 滚窗的双轨数据源冲突。Supersedes FIX-024 (deferred hysteresis). | RC-12 (insufficient-data — small-sample noise) + RC-03 (dual-source — split SSOT) |
 | FIX-20260621-028 | 2026-06-21 | observability, scripts, infra | **Phase 4 Shadow Verify midpoint: 3 fixes** — (028a) Windows scheduled task timeout fix, (028b) alert cooling state atomic persistence, (028c) weekend false-positive suppression in audit | RC-07 (resilience — crash-survival) + RC-06 (data-contamination — market-closed false positives) |
 | FIX-20260621-028 | 2026-06-21 | training, scripts | **Data plumbing fix: ASOF join + tolerance + pickle output**: (1) Added --feature-contract (default v9_institutional_40) to V2 builder — micro features skipped (10% coverage, 90% zero-dilution). (2) Added --max-lookback-minutes (default 15) — ASOF tolerance rejects stale features (gap > 15min). Without this, 6h-old features from engine outage silently contaminate training. (3) Changed V2 trainer CV: StratifiedKFold(shuffle) → TimeSeriesSplit (no temporal leakage). (4) Added scale_pos_weight (activate when |WR-50%|>10%, clamp [0.5,2.0]). (5) Added pickle + feature_names.json output for MetaFilterAdapter compatibility. (6) Pipeline: 245 trades → 141 matched (57.6% match rate, vs V1 23%), 104 stale-filtered (42% prevented contamination). 40-dim V9 only. WR=19.9% (PnL>$3.75 strict). 28 wins insufficient for 5-fold CV → Fold 5 NaN. Model shadow-only. Bottleneck shifted: matching is now adequate but positive examples too few for robust CV. Next: relax PnL threshold or wait for more trades. | RC-06 (stale-feature contamination) + RC-12 (insufficient-data) |
@@ -3593,6 +3594,22 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-06 (data-contamination — stale features from engine downtime silently matched to trades) + RC-12 (insufficient-data — 28 positive examples below 5-fold CV minimum of ~50)
 - **Prevention**: (1) ASOF tolerance check is now mandatory in all dataset builders — add pre-commit validation. (2) TimeSeriesSplit is the only allowed CV for financial time series — add lint rule. (3) Minimum positive-example count of 50 for 5-fold CV — add gate in trainer.
 - **Dependents Checked**: MetaFilterAdapter (now compatible via pickle), live_cycle.py (MetaFilter path unchanged, shadow-only), governance_state.json (BTC brain status unchanged).
+
+### FIX-20260621-031
+- **Date**: 2026-06-21
+- **Author**: cursor-agent
+- **Type**: fix (L2 logic — naive-probe false-positive)
+- **Module**: deployment-lifecycle
+- **Files**: `scripts/system_trust_report.py` (modified: +40 lines), `scripts/check_blueprint_compliance.py` (modified: +1 line MODULE_SOURCE_MAP)
+- **Summary**: **Market-session-aware stale file checks — 消灭周末幽灵 WARN。**
+  - **Problem**: `system_trust_report.py` checked file freshness against fixed thresholds (30-120min) with no awareness of market sessions. On weekends, XAU (forex_24_5) files naturally stop being written — golden_master 1644min stale, position_snapshots 1966min stale. The probe flagged these as `WARN|XAU|2_stale_files`, creating false-positive alerts that erode trust in the monitoring system.
+  - **Evidence**: BTC (crypto_24_7, 0 stale files) served as the control group — identical infrastructure, different market type. This proved the pipeline was healthy while XAU stales were weekend artifacts.
+  - **Fix**: (1) Import `detect_session()` from `core.execution.pre_trade_guards`. (2) Added `SYMBOL_MARKET_TYPE` mapping (XAU→forex_24_5, BTC→crypto_24_7). (3) In `section_1_pipeline()`, detect session per symbol before staleness checks. When `risk_tier == "off"`, override `stale=False` and store `would_be_stale=True`. (4) In `_print_section_1()`, display `[BYPASSED: MARKET_OFF]` with would-be-stale file list instead of `STALE`/`WARN`. (5) Registered `system_trust_report.py` in MODULE_SOURCE_MAP.
+  - **Effect**: Weekend WARN count dropped from 5 to 4. XAU pipeline now shows `[BYPASSED: MARKET_OFF] 2 files would flag stale in trading hours` instead of false WARN. On Monday when XAU opens, `risk_tier != "off"` → staleness checks resume normally.
+  - **Same class as**: FIX-20260621-028c (weekend false-positive suppression in audit/shadow verify scripts).
+- **Root Cause**: RC-06 — naive-probe (no business-hours calendar awareness in staleness check)
+- **Prevention**: `SYMBOL_MARKET_TYPE` is centralized — new symbols automatically get session-aware staleness. `fail_open_guard()` wraps `detect_session()` — if session detection fails, defaults to `market_off=False` (false-positive is safer than false-negative for pipeline health).
+- **Dependents Checked**: `section_1_pipeline()` return type changed (dict → tuple) — call site at line 866 updated. `_print_section_1()` signature changed to accept `symbol_market_off` parameter — only caller updated. No other consumers of these functions.
 
 ### FIX-20260621-030
 - **Date**: 2026-06-21

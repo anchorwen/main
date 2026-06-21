@@ -50,6 +50,7 @@ startup → LifecycleManager.initialize()
 
 ## Fix History
 | Fix ID | Date | Author | Commit | Summary | Root Cause |
+| FIX-20260621-031 | 2026-06-21 | cursor-agent | — | **Market-session-aware stale file checks**: system_trust_report.py now calls detect_session() per symbol (XAU→forex_24_5, BTC→crypto_24_7). When risk_tier="off" (weekend), stale file checks bypassed with [BYPASSED: MARKET_OFF] marker. BTC (24/7, 0 stale) serves as control group. MODULE_SOURCE_MAP updated. | RC-06 |
 | FIX-20260615-006 | 2026-06-15 | cursor-agent | — | **MODULE_SOURCE_MAP: feature_assembler.py + rolling_normalizer.py 注册到 features_service** | L3 — 遗漏注册 |
 | FIX-20260613-078 | 2026-06-13 | cursor-agent | 0699235 | STR Section 6b: candidate signal diversity detection. Flags brain pairs with >90% directional agreement using ledger_events SignalSettled data. Detected V11_H1≡V11_M15 (100% short) + XAU Brain_Trend cloning. | missing-validation |
 | FIX-20260613-073 | 2026-06-13 | cursor-agent | 5a01fec | SL Performance Diagnostic: Iron Law #11 script. Revealed 97% BTC SL exits have zero trail advancement — SL hit before trail activates. TP exits net +61 positive. | missing-validation |

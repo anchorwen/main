@@ -201,6 +201,7 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "scripts/hook_mypy_check.py",
         "scripts/brain.py",
         "scripts/training/register_brain.py",
+        "scripts/system_trust_report.py",
     ],
     "features_rolling": [
         "core/features/rolling_normalizer.py",

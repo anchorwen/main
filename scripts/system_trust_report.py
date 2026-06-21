@@ -33,6 +33,7 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from core.execution.pre_trade_guards import detect_session
 from core.runtime.fault_handler import fail_open_guard
 
 # ── stdout encoding fix for Windows ──
@@ -50,6 +51,16 @@ for label, candidate in [("XAU", "data"), ("BTC", "data_btc")]:
     p = ROOT / candidate
     if p.is_dir():
         DATA_DIRS[label] = p
+
+# ── Market type per symbol (for session-aware freshness) ──
+# FIX-20260621-030: Stale-file checks are meaningless when the market is closed.
+# detect_session() returns risk_tier="off" for forex_24_5 on weekends; crypto_24_7
+# never returns "off".  BTC serves as the control group — 0 stale files in 24/7
+# confirms the pipeline is healthy while XAU stale files are weekend artifacts.
+SYMBOL_MARKET_TYPE: dict[str, str] = {
+    "XAU": "forex_24_5",
+    "BTC": "crypto_24_7",
+}
 
 # ── File freshness limits (minutes) ──
 FRESH_LIMITS: dict[str, float] = {
@@ -163,11 +174,30 @@ def _load_all_data() -> dict:
 # Section 1: Data Pipeline Integrity
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def section_1_pipeline(data: dict) -> dict:
-    """Check file existence and freshness for all symbols."""
+def section_1_pipeline(data: dict) -> tuple[dict[str, list[dict]], dict[str, bool]]:
+    """Check file existence and freshness for all symbols.
+
+    FIX-20260621-030: Market-session-aware staleness.  When the market is
+    closed (risk_tier="off"), stale-file checks are bypassed — files not
+    being written is expected behavior, not a pipeline fault.  BTC (24/7)
+    serves as the control group: if BTC has 0 stale files while XAU has N,
+    the XAU stales are weekend artifacts, not infrastructure issues.
+    """
     results: dict[str, list[dict]] = {}
+    # Per-symbol market session (computed once per section)
+    symbol_market_off: dict[str, bool] = {}
+    for sym in DATA_DIRS:
+        try:
+            _mt = SYMBOL_MARKET_TYPE.get(sym, "forex_24_5")
+            _session = detect_session(market_type=_mt)
+            symbol_market_off[sym] = _session.get("risk_tier") == "off"
+        except Exception:  # BLE001:FOG — non-critical; assume market open
+            with fail_open_guard("system_trust_report:session_detect"):
+                symbol_market_off[sym] = False
+
     for sym in DATA_DIRS:
         base = DATA_DIRS[sym]
+        _market_off = symbol_market_off.get(sym, False)
         checks = []
         for rel in DATA_FILES:
             path = base / rel
@@ -180,13 +210,17 @@ def section_1_pipeline(data: dict) -> dict:
                     break
             # Skip staleness check for alert/event-driven files
             _effective_limit = limit if rel not in NO_STALENESS_FILES else None
-            stale = (age is not None and _effective_limit is not None and age > _effective_limit)
+            _raw_stale = (age is not None and _effective_limit is not None and age > _effective_limit)
+            # FIX-20260621-030: Bypass stale checks when market is closed
+            stale = _raw_stale if not _market_off else False
             checks.append({
                 "file": rel,
                 "exists": exists,
                 "age_min": round(age, 1) if age else None,
                 "limit_min": _effective_limit,
                 "stale": stale,
+                "market_off": _market_off,
+                "would_be_stale": _raw_stale if _market_off else False,
                 "optional": rel in OPTIONAL_FILES if not exists else False,
             })
         results[sym] = checks
@@ -195,39 +229,58 @@ def section_1_pipeline(data: dict) -> dict:
     sym_feature_map = {"XAU": "symbol=XAUUSDc/timeframe=M5", "BTC": "symbol=BTCUSDc/timeframe=M5"}
     for sym in DATA_DIRS:
         base = DATA_DIRS[sym]
+        _market_off = symbol_market_off.get(sym, False)
         tf_dir_name = sym_feature_map.get(sym, "")
         if tf_dir_name:
             fs_path = base / "feature_store" / "records" / tf_dir_name / "features.jsonl"
             fs_age = _age_minutes(fs_path)
             limit = FRESH_LIMITS["feature_store"]
+            _raw_stale = fs_age > limit
             results[sym].append({
                 "file": f"feature_store/{tf_dir_name}",
                 "exists": fs_path.exists(),
                 "age_min": round(fs_age, 1),
                 "limit_min": limit,
-                "stale": fs_age > limit,
+                "stale": _raw_stale if not _market_off else False,
+                "market_off": _market_off,
+                "would_be_stale": _raw_stale if _market_off else False,
             })
-    return results
+    return results, symbol_market_off
 
 
-def _print_section_1(results: dict) -> list[str]:
+def _print_section_1(results: dict, symbol_market_off: dict[str, bool]) -> list[str]:
     flags: list[str] = []
     print("── 1. DATA PIPELINE INTEGRITY ──")
     for sym in DATA_DIRS:
         checks = results.get(sym, [])
+        _market_off = symbol_market_off.get(sym, False)
         missing = [c for c in checks if not c["exists"] and not c.get("optional")]
         missing_optional = [c for c in checks if not c["exists"] and c.get("optional")]
         stale = [c for c in checks if c.get("stale")]
-        print(f"  {sym}: {sum(1 for c in checks if c['exists'])}/{len(checks)} files exist"
-              f" | missing={len(missing)} stale={len(stale)}")
-        for s in stale[:5]:
-            print(f"    STALE: {s['file']} — {s['age_min']:.0f}min (limit={s['limit_min']}min)")
+        would_be_stale = [c for c in checks if c.get("would_be_stale")]
+
+        if _market_off and would_be_stale:
+            # Market closed — stale files are expected, bypass the check
+            print(f"  {sym}: {sum(1 for c in checks if c['exists'])}/{len(checks)} files exist"
+                  f" | missing={len(missing)}"
+                  f" | [BYPASSED: MARKET_OFF] {len(would_be_stale)} files would flag stale in trading hours")
+            for w in would_be_stale[:3]:
+                print(f"    [BYPASSED] {w['file']} — {w['age_min']:.0f}min"
+                      f" (limit={w['limit_min']}min, market closed)")
+        else:
+            print(f"  {sym}: {sum(1 for c in checks if c['exists'])}/{len(checks)} files exist"
+                  f" | missing={len(missing)} stale={len(stale)}")
+            for s in stale[:5]:
+                print(f"    STALE: {s['file']} — {s['age_min']:.0f}min (limit={s['limit_min']}min)")
+
         for m in missing:
             print(f"    MISSING: {m['file']}")
             flags.append(f"WARN|{sym}|missing_file:{m['file']}")
         for m in missing_optional:
             print(f"    OPTIONAL: {m['file']} (component not enabled — not a failure)")
-        if stale:
+        # FIX-20260621-030: Only flag stale files when market is open.
+        # Market-closed stales are expected behavior (no trading → no data writes).
+        if stale and not _market_off:
             flags.append(f"WARN|{sym}|{len(stale)}_stale_files")
         if not missing and not stale:
             flags.append(f"OK|{sym}|all_files_fresh")
@@ -807,8 +860,8 @@ def main() -> int:
     all_flags: list[str] = []
 
     # Section 1: Pipeline
-    s1 = section_1_pipeline(data)
-    all_flags.extend(_print_section_1(s1))
+    s1, s1_market_off = section_1_pipeline(data)
+    all_flags.extend(_print_section_1(s1, s1_market_off))
 
     # Section 2: Brain Portfolio
     portfolios = section_2_brain_portfolio(data)
