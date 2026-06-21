@@ -128,6 +128,19 @@ _log = logging.getLogger(__name__)
 DEAL_REASON_SL = 4
 DEAL_REASON_TP = 5
 
+# DQAF-20260621-033: unified MT5 deal reason taxonomy (aligned with
+# reconciliation.py:205-218).  Shared across all close-detection paths.
+_DEAL_REASON_MAP = {
+    0: "client_close",
+    1: "mobile_close",
+    2: "web_close",
+    3: "signal_close",
+    4: "sl_hit",
+    5: "tp_hit",
+    6: "stop_out",
+    7: "risk_out",
+}
+
 # ── XAU tick_size = 0.01, BTC = 1.0.  0.5 * tick_size is the minimum
 # detectable volume change.  We use a generous default.
 DEFAULT_TICK_SIZE = 0.01  # XAU gold — override per symbol
@@ -388,7 +401,7 @@ class PositionCloseAdapter:
                 original_volume=_original_vol,
                 pnl=_deal_profit,
                 label=_label,
-                exit_reason=f"mt5_deal_reason_{_deal_reason}",
+                exit_reason=_DEAL_REASON_MAP.get(_deal_reason, f"unknown_{_deal_reason}"),
                 close_time=_close_time,
                 source="mt5_deal",
                 brain_ids=_brain_ids,

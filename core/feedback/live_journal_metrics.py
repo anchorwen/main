@@ -103,7 +103,7 @@ def compute_journal_brain_metrics(data_dir: str | Path) -> dict[str, dict[str, A
         lambda: defaultdict(int)
     )
 
-    for ticket, td in trades.items():
+    for _ticket, td in trades.items():
         open_rec = td["open"]
         pnl = td["close_pnl"]
         if open_rec is None or pnl is None:

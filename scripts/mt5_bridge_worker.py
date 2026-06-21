@@ -533,6 +533,11 @@ def _mt5_close_position(
                         detail["profit"] = float(_fill_profit)
                     if _fill_volume is not None:
                         detail["fill_volume"] = float(_fill_volume)
+                    # DQAF-20260621-033: capture MT5 deal reason for
+                    # downstream audit and reconciliation alignment.
+                    _deal_reason = getattr(last_exit, "reason", -1)
+                    if _deal_reason is not None and int(_deal_reason) >= 0:
+                        detail["deal_reason"] = int(_deal_reason)
         except Exception:  # BLE001:FOG
             with fail_open_guard("mt5_bridge_worker:_mt5_close_position"):
                 pass  # Non-blocking: estimated PnL survives as fallback
