@@ -64,5 +64,8 @@ data/state/data_health_state.json
 data/state/execution_state.json
 data/state/daily_ops_state.json
 
+data_btc/governance_state.json
+data/governance_state.json
+
 data_btc/live_trade_journal.jsonl
 data/live_trade_journal.jsonl

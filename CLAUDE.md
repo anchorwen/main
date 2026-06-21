@@ -2,6 +2,37 @@
 
 ---
 
+# 🏛️ SYSTEM ARCHITECTURE & AI GUARDRAILS (CRITICAL — 架构物理定律, 超越所有铁律)
+
+## 1. DATA SOURCE OF TRUTH (架构第一原理)
+
+Our system strictly follows the **`IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION`** architecture (Event Sourcing).
+
+- **The Ledger (不可变真理源):** `ledger_events.jsonl`, `live_trade_journal.jsonl`, `position_snapshots.jsonl`, `golden_master.jsonl` — append-only journals are the **ONLY** Source of Truth. They are immutable physical records of what happened.
+- **The Views (临时投影):** All `.json` state files (`leaderboard.json`, `governance_state.json`, `data_health_state.json`, `execution_state.json`, `daily_ops_state.json`, `alpha_allocation.json`, `mt5_bridge_health.json`, `retraining_signal_prev.json`, `training_readiness.json`) are **EPHEMERAL VIEWS** — dynamically generated projections computed by `daily_ops.py` from the immutable ledger.
+
+## 2. AGENT BEHAVIORAL RESTRICTIONS (AI 代理绝对禁区)
+
+These restrictions are **physical laws**, not guidelines. Violating any of them is a Sev 1 architectural violation:
+
+- 🔴 **NEVER** edit, patch, or manually construct state `.json` files directly. They are projections, not sources.
+- 🔴 **NEVER** write a script that "fixes" a corrupted JSON state file in-place. The fix is in the **GENERATOR CODE**.
+- 🔴 **NEVER** `git add` or commit any ephemeral state `.json` file. They are `.gitignore`'d.
+- 🔴 **NEVER** use `dict.get(key, default)` to silently paper over a missing required field — raise `DataIntegrityError` instead.
+
+**Correct repair protocol**: If a state file contains incorrect data, the bug is in the **GENERATOR CODE** (e.g., `live_journal_metrics.py`, `brain_leaderboard.py`, `daily_ops.py`). Fix the generation/mapping logic, then allow the system to rebuild the JSON from the immutable ledger on the next cycle.
+
+## 3. CROSS-REFERENCE WITH IRON LAWS
+
+| 架构原则 | 对应铁律 | 关系 |
+|---------|---------|------|
+| Ledger as SSOT | Iron Law #9 (DQAF 证据锚定), Iron Law #12 (L3 架构修复) | 架构原则是铁律的物理基础 |
+| State files are views | Iron Law #0 (编辑前安检: 修改 JSON 需 DQAF) | 架构原则解释 WHY JSON 不可直接改 |
+| Poison Pill (Fail-Closed) | Iron Law #1.1 (四维闸门 — Stability) | DataIntegrityError 是 Stability 维度的物理实现 |
+| Generator-code-only repair | Iron Law #8 (STOP→MAP→PLAN) | 强制诊断流向: 症状→生成器根因, 不治输出 |
+
+---
+
 # ⚙️ 铁律执行协议 (Iron Law Ω — The Omega Protocol)
 
 **【总纲】** 本代码库无视自由裁量权。任何操作前，必须先匹配场景，再按规定顺序激活并执行铁律。跳过激活链中任一步骤 = 严重违规。
