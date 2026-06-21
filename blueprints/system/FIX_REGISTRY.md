@@ -3652,3 +3652,25 @@ FIX-YYYYMMDD-NNN
   3. **Deferred Architecture Fix**: replace full-file scan in `_load_settled_keys()` with in-memory singleton cache (survives within process lifetime) or SQLite index when ledger exceeds 50MB. Trigger: `ledger_events.jsonl > 50MB` OR `2026-08-01`.
   4. **Deferred Architecture Fix**: downstream dashboard consumers (`live_trading_dashboard.py`, `live_dashboard.py`, `audit_*.py`) load full JSONL into memory → migrate to streaming/chunked parsing. Trigger: dashboard render time > 2s OR `2026-08-01`.
 - **Dependents Checked**: `live_cycle.py` (zero changes — calls `settle_closed_trade_signals()` unchanged), `daily_ops.py` (reads ledger for PnL aggregation, unaffected), `health_checks.py` (reads ledger, benefits from smaller file), `live_trading_dashboard.py` (performance panel reads `brain_pnl_ledger.json`, indirectly benefits from cleaner data), `audit_institutional_performance.py` (reads ledger directly — file size reduced 89%).
+
+### FIX-20260621-035
+- **Date**: 2026-06-21
+- **Author**: cursor-agent (IC Approved: DQAF-20260621-033 调查深化)
+- **Type**: fix (Sev 2 — observability + execution: deal_reason blind-spot)
+- **Module**: execution-orders, runtime
+- **Files**:
+  - `scripts/mt5_bridge_worker.py` (modified: `_mt5_close_position()` detail 新增 `deal_reason` 字段 — 从 MT5 deal history 捕获原始 reason code)
+  - `core/runtime/position_close_adapter.py` (modified: `exit_reason` 改用 `_DEAL_REASON_MAP.get()` 替代裸格式串 `f"mt5_deal_reason_{_deal_reason}"`，新增 8-entry MAP 常量)
+- **Summary**: **DQAF-033 热补丁: deal_reason 溯源 + 两路径 MAP 统一。**
+
+  **Symptom**: 99/150 (66%) 的仓位关闭发生在系统 managed_close 之外，均被归类为 `mt5_deal_reason_3`（MT5 DEAL_REASON_SIGNAL）。`close_accepted`（系统主动）和 `mt5_deal_reason_3`（外部检测）形成零交集——时序分析证实 0 对 matched pairs（±5s 容差），H1（double-journaling）被彻底证伪。
+
+  **Code defects fixed**:
+  1. `_mt5_close_position()`: bridge worker 的 managed_close 路径未捕获 MT5 deal reason → 所有 close_accepted 记录的 detail 均无 deal_reason 字段
+  2. `position_close_adapter.py:391`: 裸写 `f"mt5_deal_reason_{_deal_reason}"` 与 `reconciliation.py` 的 `_DEAL_REASON_MAP` 命名不统一
+
+  **Fix**: 两路径统一使用 `_DEAL_REASON_MAP`（0-7 完整映射），bridge worker 在 deal history 查询时同步捕获 reason code。0 行路由/资金逻辑变更。
+
+- **Root Cause**: RC-08 (incomplete-cleanup — observability gap: deal reason taxonomy fragmented across 3 code paths)
+- **Prevention**: 部署后 24h 内系统将获得全量 deal_reason 溯源能力。后续需统一 `position_identifier` 作为对账主键。
+- **Dependents Checked**: `reconciliation.py` (already has MAP — no change needed), `live_cycle.py` (calls PCA via `reconcile_and_record_closes()` — unchanged), `analyze_dqaf033_*.py` (diagnostic scripts — benefit from cleaner data)

@@ -620,32 +620,17 @@
 
 ---
 
-### CCT-20260621-033
+### CCT-20260621-033 (UPDATED 2026-06-21 — P0 Investigation Complete)
 - **Docket ID**: DQAF-20260621-033
 - **日期**: 2026-06-21
-- **严重等级**: Sev 2 — 实盘质量下降，Alpha 蒸发
-- **置信度**: hypothesis (双源确认: journal statistics + label taxonomy audit, 待 MT5 bridge 日志溯源确认根因)
-- **因果链**:
-  - [Layer 1 — 症状]: 259 笔已平仓交易中，96 笔(37.1%)标签为 `breakeven` + 4 笔 `unknown_close` 的 breakeven → 合计 100 笔(38.6%)从未到达 TP 或 SL 即被外部关闭。这些仓位平均 +0.6R/笔，合计 +61.1R，均因外部原因终止。若这些仓位能正常走完生命周期到达 TP (+6.3R avg)，潜在蒸发 Alpha 约 +530R。
-    - Source 1: `scripts/analyze_live_brain_performance.py` stdout — Section C (Exit Reason Breakdown)
-    - Source 2: `data_btc/live_trade_journal.jsonl` — 96 笔 `label=breakeven, ack=closed, reason=mt5_deal_reason_3`
-  - [Layer 2 — 中间异常 A — MT5 外部关闭]: 96 笔 breakeven 中有 96 笔的 `detail.reason` = `mt5_deal_reason_3`。MT5 Deal Reason 3 = `DEAL_REASON_CLIENT`（客户端主动平仓），但系统日志中无对应的主动平仓指令。可能的解释: (a) MT5 Bridge 连接中断后 MT5 侧自动平仓；(b) 另一 MT5 终端实例同时连接同一账户产生平仓指令；(c) 经纪商后台强制平仓。另有 4 笔 `reason=unknown_close`。
-    - Source 3: `core/runtime/reconciliation.py` — MIA/unknown_close 处理路径
-    - Source 4: `blueprints/system/MIA_GHOST_POSITION_PIPELINE.md` — MIA 管道设计文档
-  - [Layer 2 — 中间异常 B — 孤儿清扫器误杀]: `auto_orphan_rejected`(19笔) + `auto_orphan_stale`(12笔) = 31 笔被孤儿检测系统标记并关闭。这些仓位可能在 MT5 上仍然存活，但系统侧的状态机失去了与 MT5 的同步。
-  - [Layer 3 — 根因假设]: **RC-04 (race-condition) + RC-08 (incomplete-cleanup)** — (A) MT5 Bridge 与主循环之间存在订单状态同步延迟，导致系统认为仓位已丢失(MIA)而发起 orphan 清扫；(B) `mt5_deal_reason_3` 的大量出现暗示存在第二个 MT5 连接或经纪商侧干预；(C) 历史 DQAF-20260610-001 已识别 MIA 管道 PnL 缺失问题但未解决根因——外部关闭的发生频率(37.1%)表明这不是偶发事件而是系统性同步故障。
-- **证据引用**:
-  - Source 1 (Journal Statistics): `data_btc/reports/live_brain_audit_20260621.md` — Section 3 (出场原因分析)
-  - Source 2 (Label Taxonomy): `data_btc/live_trade_journal.jsonl` — 412 close events, 96 breakeven+mt5_deal_reason_3
-  - Source 3 (Code Path): `core/runtime/reconciliation.py` + `core/runtime/live_cycle.py` MIA handling
-  - Source 4 (Historical): DQAF-20260610-001 — MIA 管道 PnL 缺失, DQAF-20260609-001 — MIA/孤儿仓位放大
-- **待验证假设** (下周基建悬赏):
-  - H1: `mt5_deal_reason_3` 是否来自第二 MT5 终端实例？→ 检查 MT5 终端日志
-  - H2: Orphan Sweeper 的时间窗口是否过短？→ 检查 `PENDING_CLOSE_MAX_CYCLES` 与 MT5 Bridge 延迟的关系
-  - H3: MIA 检测的 `_mia_grace_cycles` 是否足够覆盖网络抖动？→ 审计 `live_cycle.py` MIA 触发逻辑
-- **是否被推翻**: 否 (待 root-cause traceback)
-- **关联 ReB Pattern**: `EXTERNAL_CLOSE_FLOOD_37PCT` (待注册)
-- **关联 FIX**: — (DQAF 立案，修复待下周)
+- **严重等级**: Sev 2 — 66%仓位在系统控制外平仓
+- **置信度**: **confirmed** — H1 (double-journaling) FALSIFIED by temporal analysis. H2 (broker/external close) confirmed at 100%.
+- **因果链 (已确认)**:
+  - [Layer 1 — 症状]: 99/150 (66%) 仓位关闭不由系统 managed_close 触发。`close_accepted`(51笔) 和 `mt5_deal_reason_3`(99笔) 形成零交集（时序 asof merge ±5s: 0 matched pairs in `scripts/analyze_dqaf033_temporal_coupling.py`）。
+  - [Layer 2 — 中间异常]: MT5 DEAL_REASON_SIGNAL (3) = Python API 自动化交易归类。99 笔: 91% LONG (逆势), 93% 0.01 lot, 中位持仓 40min, 24h 均匀分布。全部有 SL/TP 设置, 66/99 有 modify_sltp trail。V4 受冲击最重 (66笔), 但 MIA 交易 PnL (+26.68R) > 非 MIA (+6.50R)。
+  - [Layer 3 — 根因]: **RC-08 (observability gap) + RC-04 (taxonomy drift)** — (A) bridge worker 不捕获 deal_reason, PCA 使用裸格式串, 两路径命名不一致；(B) 两条路径覆盖互斥仓位集合, 66% 出场失去可控性溯源；(C) 均未使用 `position_identifier` 作为对账主键。
+- **P0 热补丁 (FIX-20260621-035)**: `mt5_bridge_worker.py` detail 新增 `deal_reason` + `position_close_adapter.py` `_DEAL_REASON_MAP.get()`
+- **P1 待执行**: 两路径统一注入 `position_identifier` + 从 MT5 终端导出原始账单核对 99 笔 MIA 的 Comment 字段
 
 ---
 
