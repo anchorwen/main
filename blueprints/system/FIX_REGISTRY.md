@@ -705,6 +705,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260617-101 | 2026-06-17 | data-integrity | Institutional Data Integrity Framework: Three-Layer Defense against silent data loss. DLR-001: 34 BTC opens lost. L1 Pydantic write-boundary validator, L2 DataHealthService + daemon guard, L3 cross-symbol consistency audit. 9 files, 0 hot path changes. | RC-06, RC-09 |
 | FIX-20260621-036 | 2026-06-21 | contracts, runtime, execution-orders | **DQAF-033 P1: position_identifier 注入两路径对账主键。** PositionClosed 新增 position_identifier 字段，PCA 从 MT5 deal.position_id 捕获，bridge worker detail + journal record 同步注入。0 行路由/资金逻辑变更。 | RC-08 |
 | FIX-20260621-037 | 2026-06-21 | execution, runtime, contracts | **DQAF-034 HOTFIX: STATE_INITIALIZATION_DEADLOCK 三刀斩断。** V3 恢复 sync_position_from_mt5() 从 MT5 直读 SL + snapshot 守卫 force_init 替代 SKIP + fallback_unmanaged 兜底空白策略。Δ PnL 挽回潜力 +282R。 | RC-08, RC-09 |
+| FIX-20260621-038 | 2026-06-21 | execution | **DQAF-034 Addendum — V3 strategy 恢复 + entry_price 不可变锁。** (追加刀#1) V3 save/restore 补全 strategy_name 等 4 字段 — 仓位不再丢失策略归属。(追加刀#2) ActivePosition.entry_price 加装 __setattr__ 不可变锁 — 开仓价是全部风险计量原点，变异=保本/移动止损基准错乱。live_intent V3 恢复改用 _recover_entry_price()。 | RC-06, RC-02 |
 
 ---
 ## Fix Details by Year
@@ -3731,3 +3732,32 @@ FIX-YYYYMMDD-NNN
 - **Prevention**: V3 恢复仓位在首次管理周期自动从 MT5 同步 SL; 所有仓位 (含 fallback) 至少获得宽幅 trail 覆盖; 快照守卫不再抛弃 SL 未初始化的仓位。
 - **ReB Pattern**: `STATE_INITIALIZATION_DEADLOCK` — 状态机冷启动默认值 (0.0) 与下游监控激活门槛 (>0) 形成逻辑互斥
 - **Dependents Checked**: `live_cycle.py` (management phase call site unchanged — sync happens inside), `restart_state.py` (V3 restore path unchanged — sync happens post-restore in management phase), `trail_stop_engine.py` (no change — sync provides real SL before engine runs)
+
+### FIX-20260621-038
+- **Date**: 2026-06-21
+- **Author**: cursor-agent (IC Approved: DQAF-20260621-034 Addendum — 紧急追加修复授权)
+- **Type**: fix (Sev 1-潜在 — 策略归属丢失 + 开仓价漂移可致出场风控崩溃)
+- **Module**: execution
+- **Files**:
+  - `core/execution/position_manager.py` (ActivePosition: 新增 `__post_init__`/`__setattr__`/`_recover_entry_price()` 不可变锁; V3 save: 补全 strategy_name/supporting_brain_ids/entry_consensus/model_horizons 四个意图字段; `_build_position_v3`: 恢复上述字段)
+  - `scripts/live_intent_loop.py` (V3 恢复路径: `rt.entry_price = mp.price_open` → `rt._recover_entry_price(mp.price_open)`, entry_price 非零时跳过覆盖)
+- **Summary**: **DQAF-034 追加两刀: V3 strategy 恢复 + entry_price 不可变锁.**
+
+  **实盘验证发现**: FIX-037 部署后, 重启实盘日志审计发现两个真空缺口:
+  1. **策略空间坍塌**: V3 save 不存 `strategy_name` → 冷启动仓位 strategy="" → 脱离原大脑追踪轨域 → trail_policy 回退到全局空配置 → 出场策略降级
+  2. **开仓价漂移 (Phantom Baseline Risk)**: 实盘快照捕捉到 entry_price 从 64456.0→64445.31→64456.0 的循环漂移. 64445.31 恰等于 highest_high. 开仓价是所有风险计量的绝对原点——漂移=保本触发失效+移动止损基准错乱→高频过早被动扫损
+
+  **根因链**:
+  1. V3 save (line 1824-1833) 仅持久化 6 字段 (ticket/cycles_held/breakeven/partial_tp/entry_atr/entry_price) — strategy_name/supporting_brain_ids/entry_consensus/model_horizons 四个意图字段全数遗漏
+  2. `_build_position_v3` 恢复时无 strategy 字段 → ActivePosition.strategy_name=""(default)
+  3. ActivePosition 是可变 @dataclass — entry_price 无后构建保护 → 任何代码路径可无痕覆写
+
+  **修复**:
+  1. **V3 序列化补全**: save 新增 strategy_name/supporting_brain_ids/entry_consensus/model_horizons → `_build_position_v3` 恢复时注入
+  2. **entry_price 不可变锁**: `__post_init__` 冻结 `_frozen` → `__setattr__` 拦截 entry_price 写入 → `_recover_entry_price()` 仅允许 0.0→MT5 单向恢复
+  3. **live_intent_loop 适配**: 拆分 side/entry_price 恢复逻辑 — entry_price 仅在 0.0 时通过受控门径恢复, 非零时信任序列化值
+
+- **Root Cause**: RC-06 (contract-violation — V3 序列化缺失策略归属和意图字段) + RC-02 (type-confusion — 可变 @dataclass 导致关键字段无保护可覆写)
+- **Prevention**: (1) entry_price 后构建写入物理阻断 — 任何直接赋值 `pos.entry_price = X` 触发 AttributeError; (2) V3 恢复仓位完整继承策略归属 — fallback_unmanaged 仅对新注册仓位生效, V3 恢复仓位从序列化状态直接获得 strategy; (3) strategy_name/supporting_brain_ids/entry_consensus/model_horizons 跨越冷启动持久化
+- **ReB Pattern**: `SERIALIZATION_ATTRIBUTION_GAP` — 序列化格式与内存模型字段不对称导致冷启动后策略标识丢失; `MUTABLE_RISK_ORIGIN` — 可变风险基准 (entry_price) 缺少物理级写入保护
+- **Dependents Checked**: `management_phase.py` (reads `pos.entry_price` and `pos.strategy_name` — no change), `trail_dispatch.py` (reads `pos.entry_price` — no change), `position_registration.py` (constructs new ActivePosition — `_frozen` guards post-init, unaffected), `trail_stop_engine.py` (reads `pos.entry_price`/`pos.highest_high` — no change)

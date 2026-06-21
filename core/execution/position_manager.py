@@ -123,6 +123,45 @@ class ActivePosition:
     # v3 SSOT: consensus hash from persisted intent-state for reconciliation
     _v3_consensus_hash: str = ""
 
+    # Immutability guard — entry_price is the absolute baseline for all risk
+    # calculations (breakeven, trail activation, PnL).  Any post-construction
+    # mutation corrupts the risk origin and causes phantom breakeven/trail
+    # decisions (DQAF-20260621-034 IC Addendum).
+    _frozen: bool = field(default=False, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        """Lock immutable fields after dataclass construction."""
+        object.__setattr__(self, "_frozen", True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Block writes to ``entry_price`` after construction.
+
+        The ONE exception is V3 cold-start recovery where entry_price starts as
+        0.0 and must be backfilled from MT5 — use ``_recover_entry_price()``.
+        """
+        if name == "entry_price" and getattr(self, "_frozen", False):
+            raise AttributeError(
+                f"entry_price is immutable after construction "
+                f"(current={self.entry_price}, attempted={value}). "
+                f"Use _recover_entry_price() ONLY for V3 cold-start recovery."
+            )
+        object.__setattr__(self, name, value)
+
+    def _recover_entry_price(self, value: float) -> None:
+        """One-time V3 cold-start recovery: set entry_price from MT5 ground truth.
+
+        ONLY permitted when the current entry_price is 0.0 (uninitialized V3
+        intent-state restore).  Once a non-zero value is established, any
+        further attempt is a hard error — entry_price is the absolute risk
+        origin and must never drift (DQAF-20260621-034 IC Addendum).
+        """
+        if self.entry_price > 0:
+            raise ValueError(
+                f"Cannot overwrite existing entry_price={self.entry_price} "
+                f"with {value}. entry_price is immutable once set."
+            )
+        object.__setattr__(self, "entry_price", float(value))
+
 
 # ── Manager ────────────────────────────────────────────────────────────────
 
@@ -1779,7 +1818,7 @@ class ActivePositionManager:
         return h.hexdigest()[:16]
 
     def save_state(self, save_path: str | Path) -> None:
-        """Persist intent-state only (v3 SSOT — 4 fields per position).
+        """Persist intent-state only (v3 SSOT — strategy attribution + entry).
 
         MT5 is the authoritative source for physical state (price, SL, TP, volume).
         Python persists only intent-state that cannot be recovered from MT5.
@@ -1829,6 +1868,14 @@ class ActivePositionManager:
                         "partial_tp_done": pos.partial_tp_triggered,
                         "entry_atr": pos.entry_atr,  # FIX-018: persist for R-multiple calc across restarts
                         "entry_price": pos.entry_price,  # FIX-018: needed for PnL estimation
+                        # DQAF-20260621-034 Addendum: strategy-attribution intent
+                        # fields — cannot be recovered from MT5, must survive
+                        # cold-start to prevent policy degradation and exit
+                        # disconnection (IC Mandate 刀 #3 追加修复).
+                        "strategy_name": pos.strategy_name or "",
+                        "supporting_brain_ids": getattr(pos, "supporting_brain_ids", []) or [],
+                        "entry_consensus": getattr(pos, "entry_consensus", {}) or {},
+                        "model_horizons": getattr(pos, "model_horizons", {}) or {},
                         "brain_consensus_hash": self._compute_consensus_hash(pos),
                     }
                 )
@@ -1932,11 +1979,13 @@ class ActivePositionManager:
         def _build_position_v3(d: dict[str, Any]) -> ActivePosition | None:
             """Minimal reconstruction from v3 intent-state.
 
-            Only 4 intent fields + ticket are persisted. Physical state
-            (entry_price, volume, SL, TP, side) must be synced from MT5
-            by the caller (live_intent_loop.py recovery path).
+            Intent fields (strategy attribution + entry_price + entry_atr) are
+            persisted.  Physical state (volume, SL, TP, side, highest/lowest)
+            must be synced from MT5 by the caller (live_intent_loop.py recovery
+            path and management_phase.py per-cycle sync).
             """
             ticket = int(d["ticket"])
+            _strategy_from_state = str(d.get("strategy_name", ""))
             pos = ActivePosition(
                 ticket=ticket,
                 side="unknown",  # filled by MT5 recovery
@@ -1955,6 +2004,19 @@ class ActivePositionManager:
                 cycles_held=int(d.get("cycles_held", 0)),
                 breakeven_triggered=bool(d.get("breakeven_triggered", False)),
                 partial_tp_triggered=bool(d.get("partial_tp_done", False)),
+                # DQAF-20260621-034 Addendum: strategy-attribution intent fields
+                # restored from V3 state.  Without these, V3-recovered positions
+                # lose strategy identity → fallback_unmanaged never applies →
+                # exit policies degrade to empty-config defaults (IC Mandate 刀 #3).
+                strategy_name=_strategy_from_state,
+                supporting_brain_ids=[
+                    str(x) for x in d.get("supporting_brain_ids", [])
+                ],
+                entry_consensus=dict(d.get("entry_consensus", {}) or {}),
+                model_horizons={
+                    str(k): int(v)
+                    for k, v in (d.get("model_horizons", {}) or {}).items()
+                },
             )
             # Stash v3 fields for downstream reconciliation
             pos._v3_consensus_hash = str(d.get("brain_consensus_hash", ""))

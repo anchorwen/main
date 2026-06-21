@@ -635,28 +635,21 @@
 
 ---
 
-### CCT-20260621-034
+### CCT-20260621-034 (UPDATED 2026-06-21 — FIX-037 + FIX-038 Deployed)
 - **Docket ID**: DQAF-20260621-034
 - **日期**: 2026-06-21
 - **严重等级**: Sev 2 — 出场质量退化，Trailing SL 功能大面积失效
-- **置信度**: confirmed (Iron Law #11 脚本数据 + 代码审计 + V3 恢复路径硬编码证实三层根因)
+- **置信度**: confirmed (Iron Law #11 脚本数据 + 代码审计 + V3 恢复路径硬编码证实三层根因 + 实盘部署后审计追加两刀)
 - **因果链**:
-  - [Layer 1 — 症状]: 259 笔已平仓交易中，131 笔(50.6%)仅有 0-1 次 position_snapshots → Trailing SL 从未激活。这些仓位的 PnL 分布: 0-1 snapshots → avg=0.0R, winrate=0.0%。对比: 11+ snapshots → avg=+1.4R, winrate=45.7%。Trail 激活的仓位显著优于未激活仓位。
-    - Source 1: `scripts/analyze_live_brain_performance.py` stdout — Section I (Trailing SL Behavior)
-    - Source 2: `data_btc/position_snapshots.jsonl` — 1858 snapshots, per-ticket count distribution
-  - [Layer 2 — 中间异常 A — 监听器挂载竞态]: `position_snapshots` 依赖 `ActivePositionManager` 注册 position listener。如果开仓事件(open accepted)与 snapshot 采集之间存在竞态——ticket 尚未在 position_manager 中注册时 snapshot 采集已触发 → 该周期快照缺失。连续多周期累积 → 整个仓位的 trailing SL 永久不激活。
-    - Source 3: `core/execution/position_manager.py` — `register_position()` 调用时机
-    - Source 4: `core/runtime/live_cycle.py` — snapshot 采集在主循环 Phase 中的位置
-  - [Layer 2 — 中间异常 B — 微生命周期仓位]: 部分仓位持仓时间极短(4-6 bar M5 = 20-30分钟)，在 snapshot 采集周期(每 M5 bar)到来之前已经平仓 → 0 snapshots。但这些仓位平均 PnL=0R —— 它们可能是 breakeven/MIA 快速关闭(关联 DQAF-20260621-033)。
-  - [Layer 3 — 根因假设]: **RC-04 (race-condition) + RC-05 (boundary-error)** — (A) Position registration 与 snapshot collection 之间缺少显式的 happens-before 保证；(B) Trail 激活条件 (`trail_activation_atr`) 在极端短持仓中永远来不及满足；(C) 关联 DQAF-20260610-001 发现 `trail` label 从未出现——trail 激活后的标签分类也损坏了。
-- **证据引用**:
-  - Source 1 (Snapshot Audit): `data_btc/reports/live_brain_audit_20260621.md` — Section 7 (Trailing SL 行为分析)
-  - Source 2 (Code Audit Target): `core/execution/trail_stop_engine.py` — trail activation logic
-  - Source 3 (Code Audit Target): `core/runtime/live_cycle.py` — snapshot collection phase + position registration phase ordering
-  - Source 4 (Code Audit Target): `core/execution/position_manager.py` — `register_position()` + listener attachment
-  - Source 5 (Historical): DQAF-20260610-001 — `trail` label count=0 遥测盲区
-- **待验证假设** (下周锁/时序审计):
-  - H1: Snapshot collection phase 是否在 position registration phase 之前执行？→ 检查 `live_cycle.py` phase ordering
+  - [Layer 1 — 症状]: 48.7% 仓位零快照, trail 从未激活。Δ PnL = +282R (ACTIVE vs INACTIVE)
+  - [Layer 2 — 中间异常 A]: V3 恢复 `current_sl=0.0` → snapshot 守卫 `_current_sl <= 0 → SKIP` → 相互死锁
+  - [Layer 2 — 中间异常 B (FIX-038 追加发现)]: V3 恢复不设 strategy_name → 仓位脱离策略归属 → trail_policy 降级。entry_price 漂移 (64445.31↔64456.0) → 风险原点移动 → 保本/移动止损基准错乱
+  - [Layer 3 — 根因]: RC-08 (V3 restore+snapshot guard mutual deadlock) + RC-06 (V3 序列化缺失策略归属字段) + RC-02 (可变 @dataclass entry_price 无保护)
+- **Fix Summary**:
+  - **FIX-037** (三刀): sync_position_from_mt5() + force_init_snapshot + fallback_unmanaged
+  - **FIX-038** (追加两刀): V3 strategy 字段序列化补全 + entry_price 不可变锁 (_recover_entry_price 受控门径)
+- **关联 ReB**: STATE_INITIALIZATION_DEADLOCK, SERIALIZATION_ATTRIBUTION_GAP, MUTABLE_RISK_ORIGIN
+- **关联 FIX**: FIX-20260621-037, FIX-20260621-038
   - H2: `register_position()` 是否同步注册 snapshot listener？→ 检查 `position_manager.py` listener attachment
   - H3: 0-snapshot 仓位是否全部为微生命周期(< 5 bar)？→ 交叉验证 snapshot count vs bars_held
 - **是否被推翻**: 部分 — H1/H2 (竞态) 证伪: snapshot 在 management phase 内部执行, 与 registration 存在 happens-before。真正根因是 **STATE_INITIALIZATION_DEADLOCK**: (A) V3 恢复 `current_sl=0.0` 硬编码 → snapshot 守卫拒绝写入, (B) 31 仓位注册流水线断裂 (空白 strategy)

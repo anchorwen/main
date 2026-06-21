@@ -1149,8 +1149,15 @@ def main(argv: list[str] | None = None) -> int:
                     managed_tickets.add(_rt_ticket)
                     # Backfill physical-state from MT5 (v3 has side="unknown", entry=0.0)
                     if rt.side == "unknown" or rt.entry_price == 0.0:
-                        rt.side = "long" if mp.type == 0 else "short"
-                        rt.entry_price = float(mp.price_open)
+                        if rt.side == "unknown":
+                            rt.side = "long" if mp.type == 0 else "short"
+                        # DQAF-20260621-034 Addendum: entry_price is immutable
+                        # after construction.  Only backfill when 0.0 (old V3
+                        # save without FIX-018).  Non-zero persisted values are
+                        # trusted — MT5 price_open is the ground truth used at
+                        # registration time and should match exactly.
+                        if rt.entry_price == 0.0:
+                            rt._recover_entry_price(float(mp.price_open))
                         rt.volume = float(mp.volume)
                         rt.initial_sl = float(mp.sl) if mp.sl > 0 else float(mp.price_open)
                         rt.initial_tp = float(mp.tp) if mp.tp > 0 else 0.0
