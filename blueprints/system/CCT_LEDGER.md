@@ -639,7 +639,7 @@
 - **Docket ID**: DQAF-20260621-034
 - **日期**: 2026-06-21
 - **严重等级**: Sev 2 — 出场质量退化，Trailing SL 功能大面积失效
-- **置信度**: hypothesis (双源确认: snapshot count statistics + per-trade SL migration audit, 待代码级竞态审计确认根因)
+- **置信度**: confirmed (Iron Law #11 脚本数据 + 代码审计 + V3 恢复路径硬编码证实三层根因)
 - **因果链**:
   - [Layer 1 — 症状]: 259 笔已平仓交易中，131 笔(50.6%)仅有 0-1 次 position_snapshots → Trailing SL 从未激活。这些仓位的 PnL 分布: 0-1 snapshots → avg=0.0R, winrate=0.0%。对比: 11+ snapshots → avg=+1.4R, winrate=45.7%。Trail 激活的仓位显著优于未激活仓位。
     - Source 1: `scripts/analyze_live_brain_performance.py` stdout — Section I (Trailing SL Behavior)
@@ -659,6 +659,8 @@
   - H1: Snapshot collection phase 是否在 position registration phase 之前执行？→ 检查 `live_cycle.py` phase ordering
   - H2: `register_position()` 是否同步注册 snapshot listener？→ 检查 `position_manager.py` listener attachment
   - H3: 0-snapshot 仓位是否全部为微生命周期(< 5 bar)？→ 交叉验证 snapshot count vs bars_held
-- **是否被推翻**: 否 (待代码级竞态审计)
-- **关联 ReB Pattern**: `TRAIL_SNAPSHOT_RACE_50PCT_SILENT` (待注册)
-- **关联 FIX**: — (DQAF 立案，修复待下周)
+- **是否被推翻**: 部分 — H1/H2 (竞态) 证伪: snapshot 在 management phase 内部执行, 与 registration 存在 happens-before。真正根因是 **STATE_INITIALIZATION_DEADLOCK**: (A) V3 恢复 `current_sl=0.0` 硬编码 → snapshot 守卫拒绝写入, (B) 31 仓位注册流水线断裂 (空白 strategy)
+- **IC 裁决**: APPROVED WITH HOTFIX MANDATE — 三刀斩断 (FIX-20260621-037)
+- **关联 ReB Pattern**: `STATE_INITIALIZATION_DEADLOCK` — 状态机冷启动默认值 (0.0) 与下游激活门槛 (>0) 形成逻辑互斥
+- **关联 FIX**: FIX-20260621-037 (deployed)
+- **部署后验证**: 下次系统重启后, 所有 V3 恢复仓位应在首个管理周期从 MT5 同步真实 SL, snapshot 不再抛弃 SL 未初始化仓位

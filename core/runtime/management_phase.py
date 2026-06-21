@@ -1065,6 +1065,20 @@ def execute_management_phase(
         m5_spread_points=_m5_spread,
     )
 
+    # ── DQAF-20260621-034: V3 cold-start recovery — sync SL from MT5 ──
+    # V3 intent-state sets current_sl=0.0 (physical state not persisted).
+    # Without live MT5 sync, the snapshot guard in trail_dispatch discards
+    # the position → trail never activates → STATE_INITIALIZATION_DEADLOCK.
+    if getattr(pos, "current_sl", 0) <= 0 and mt5_worker is not None:
+        _synced = pm.sync_position_from_mt5(pos.ticket, mt5_worker)
+        if _synced:
+            _emit(
+                "v3_sl_synced_from_mt5",
+                ticket=pos.ticket,
+                current_sl=getattr(pos, "current_sl", 0),
+                side=getattr(pos, "side", "?"),
+            )
+
     # ── 4-5.2: Trail SL, breakeven, trail TP ──
     # Strangler Fig #11: extracted to core/runtime/trail_dispatch.py
     _trail_result = compute_and_dispatch_trail(

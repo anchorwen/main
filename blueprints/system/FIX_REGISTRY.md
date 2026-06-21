@@ -704,6 +704,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260617-100 | 2026-06-17 | training | MetaFilter V3: 102 samples (46W/56L), 47-dim (40 V9 + spread + confidence + 5 OFI). OOF AUC=0.422. OU_Theta enters top 5. OFI features not significant (insufficient tick density). Shadow mode. Retrain at 200 clean samples. | RC-06 |
 | FIX-20260617-101 | 2026-06-17 | data-integrity | Institutional Data Integrity Framework: Three-Layer Defense against silent data loss. DLR-001: 34 BTC opens lost. L1 Pydantic write-boundary validator, L2 DataHealthService + daemon guard, L3 cross-symbol consistency audit. 9 files, 0 hot path changes. | RC-06, RC-09 |
 | FIX-20260621-036 | 2026-06-21 | contracts, runtime, execution-orders | **DQAF-033 P1: position_identifier 注入两路径对账主键。** PositionClosed 新增 position_identifier 字段，PCA 从 MT5 deal.position_id 捕获，bridge worker detail + journal record 同步注入。0 行路由/资金逻辑变更。 | RC-08 |
+| FIX-20260621-037 | 2026-06-21 | execution, runtime, contracts | **DQAF-034 HOTFIX: STATE_INITIALIZATION_DEADLOCK 三刀斩断。** V3 恢复 sync_position_from_mt5() 从 MT5 直读 SL + snapshot 守卫 force_init 替代 SKIP + fallback_unmanaged 兜底空白策略。Δ PnL 挽回潜力 +282R。 | RC-08, RC-09 |
 
 ---
 ## Fix Details by Year
@@ -3701,3 +3702,32 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-08 (incomplete-cleanup — observability gap: neither close path captured MT5's immutable position identifier)
 - **Prevention**: 两路径 journal 输出均已包含 `position_identifier`。部署后可执行 `(position_identifier, deal_id)` 跨路径去重对账，消除 ticket 变化导致的假阳性 MIA。
 - **Dependents Checked**: `reconciliation.py` (reads journal, benefits from new field — zero code change), `live_cycle.py` (call sites unchanged), `mia_close.py` (reads journal, unaffected), `analyze_dqaf033_*.py` (diagnostic scripts — new field enriches future analysis)
+
+### FIX-20260621-037
+- **Date**: 2026-06-21
+- **Author**: cursor-agent (IC Approved: DQAF-20260621-034 HOTFIX MANDATE)
+- **Type**: fix (Sev 2 — trail vacuum: STATE_INITIALIZATION_DEADLOCK)
+- **Module**: execution, runtime, contracts
+- **Files**:
+  - `core/execution/position_manager.py` (new: `sync_position_from_mt5()` method — queries MT5 for live SL/TP/side/volume after V3 cold-start)
+  - `core/runtime/management_phase.py` (modified: pre-trail sync call — if `current_sl <= 0`, calls `pm.sync_position_from_mt5()` before trail dispatch)
+  - `core/runtime/trail_dispatch.py` (modified: snapshot guard refactored — `_current_sl <= 0` no longer SKIPs; writes `force_init_snapshot` with `sl_uninitialized` flag)
+  - `core/runtime/position_registration.py` (modified: `fallback_unmanaged` strategy + wide TrailPolicy for blank-strategy positions)
+- **Summary**: **DQAF-034 热补丁: STATE_INITIALIZATION_DEADLOCK 三刀斩断.**
+
+  **Symptom**: 48.7% (129/265) BTC 仓位零快照 → trail 从未激活 → Δ PnL = +282R (ACTIVE +190.66R vs INACTIVE -91.86R)。V3 恢复路径硬编码 `current_sl=0.0` 与 snapshot 守卫 `_current_sl <= 0 → SKIP` 形成相互死锁，被恢复仓位永久隔离在管理域外。
+
+  **Root cause chain**:
+  1. `position_manager.py:1897`: `_build_position_v3()` 硬编码 `current_sl=0.0` — V3 intent-state 只持久化 4 字段, 物理状态（SL/TP/side/volume）必须从 MT5 恢复但调用方从未执行同步
+  2. `trail_dispatch.py:148`: `_current_sl <= 0 → SKIP` 绝对数值拦截 — 将 SL 未初始化的仓位抛弃而非拉入追踪生命周期
+  3. 31 个 strategy 字段为空的仓位 — 注册流水线无兜底, 成为"无主"头寸
+
+  **Fix (three surgical cuts)**:
+  1. **`sync_position_from_mt5()`**: 新增方法, 从 MT5 `positions_get()` 直读真实 SL/TP/side/volume。XAU 3 位小数对齐。管理阶段入口自动调用。
+  2. **snapshot 守卫重构**: `_entry_price <= 0` 仍然硬跳过, 但 `_current_sl <= 0` 改为写 `force_init_snapshot` (标记 `sl_uninitialized: true`), 将仓位拉入追踪生命周期。
+  3. **`fallback_unmanaged` 兜底**: 空白 strategy → `"fallback_unmanaged"` + 宽幅 TrailPolicy (trail_atr_mult=3.0, breakeven=1.5ATR), 消除"无主"头寸。
+
+- **Root Cause**: RC-08 (observability gap — V3 restore+snapshot guard mutual deadlock) + RC-09 (data-integrity — registration pipeline no-fallback for blank-strategy positions)
+- **Prevention**: V3 恢复仓位在首次管理周期自动从 MT5 同步 SL; 所有仓位 (含 fallback) 至少获得宽幅 trail 覆盖; 快照守卫不再抛弃 SL 未初始化的仓位。
+- **ReB Pattern**: `STATE_INITIALIZATION_DEADLOCK` — 状态机冷启动默认值 (0.0) 与下游监控激活门槛 (>0) 形成逻辑互斥
+- **Dependents Checked**: `live_cycle.py` (management phase call site unchanged — sync happens inside), `restart_state.py` (V3 restore path unchanged — sync happens post-restore in management phase), `trail_stop_engine.py` (no change — sync provides real SL before engine runs)

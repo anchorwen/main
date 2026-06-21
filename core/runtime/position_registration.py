@@ -186,6 +186,12 @@ def register_dispatched_positions(
                 else 0.0
             )
             _ptp_ratio = _tp_cfg.get("partial_tp_ratio", 0.5)
+            # ── DQAF-20260621-034: fallback_unmanaged ──
+            # Positions that fail to resolve a strategy (blank strategy_name)
+            # are assigned a wide-trail fallback policy.  The system must not
+            # have "ownerless" positions — every open ticket gets trail coverage.
+            _strategy_name = dr.strategy_name or "fallback_unmanaged"
+            _is_fallback = _strategy_name == "fallback_unmanaged"
             position_manager.register_position(
                 ticket=ticket,
                 side=decision.direction,
@@ -205,13 +211,13 @@ def register_dispatched_positions(
                 partial_tp_ratio=_ptp_ratio,
                 ofi_partial_tp_threshold=_tp_cfg.get("ofi_partial_tp_threshold", 0.0),
                 ofi_partial_tp_r_mult=_tp_cfg.get("ofi_partial_tp_r_mult", 0.5),
-                strategy_name=dr.strategy_name,
+                strategy_name=_strategy_name,
                 trail_policy=TrailPolicy(
-                    trail_atr_mult=_exit_cfg.get("trail_atr_mult", 2.0),
-                    trail_atr_mult_low=_exit_cfg.get("trail_atr_mult_low", 1.5),
-                    trail_atr_mult_high=_exit_cfg.get("trail_atr_mult_high", 3.0),
+                    trail_atr_mult=_exit_cfg.get("trail_atr_mult", 3.0 if _is_fallback else 2.0),
+                    trail_atr_mult_low=_exit_cfg.get("trail_atr_mult_low", 2.0 if _is_fallback else 1.5),
+                    trail_atr_mult_high=_exit_cfg.get("trail_atr_mult_high", 4.0 if _is_fallback else 3.0),
                     breakeven_threshold_atr=_exit_cfg.get(
-                        "breakeven_threshold_atr", 1.0
+                        "breakeven_threshold_atr", 1.5 if _is_fallback else 1.0
                     ),
                     trail_activation_atr=_exit_cfg.get(
                         "trail_activation_atr",
@@ -227,7 +233,7 @@ def register_dispatched_positions(
                 "side": decision.direction,
                 "volume": decision.volume,
                 "entry_price": entry_price,
-                "strategy": dr.strategy_name,
+                "strategy": _strategy_name,
                 "magic": decision.magic,
                 "message_id": intent_id,
                 "brain_ids": decision.brain_ids,

@@ -144,18 +144,22 @@ def compute_and_dispatch_trail(
         _side = getattr(pos, "side", "?")
         _strategy = getattr(pos, "strategy_name", "?")
 
-        # Write-time assertion: skip snapshot if core fields are missing
-        if _entry_price <= 0 or _current_sl <= 0:
+        # ── DQAF-20260621-034: state-machine-aware snapshot guard ──
+        # _entry_price <= 0  → hard skip (irrecoverable — no anchor price)
+        # _current_sl  <= 0  → force_init_snapshot (V3 cold-start SL sync
+        #                       may have failed; write first sighting to pull
+        #                       the position into trail lifecycle anyway)
+        if _entry_price <= 0:
             import logging as _snap_log
 
             _snap_log.getLogger(__name__).warning(
                 "[DATA_ASSERT] Position snapshot SKIPPED: ticket=%s "
-                "entry_price=%s sl=%s — core fields missing or zero",
+                "entry_price=%s — entry price missing or zero",
                 pos.ticket,
                 _entry_price,
-                _current_sl,
             )
         else:
+            _sl_uninitialized = _current_sl <= 0
             _snap = json.dumps(
                 {
                     "ticket": pos.ticket,
@@ -171,6 +175,7 @@ def compute_and_dispatch_trail(
                     "trailing_sl_distance": _trail_dist,
                     "current_atr": round(current_atr, 4),
                     "entry_atr": round(pos.entry_atr, 4),
+                    **({} if not _sl_uninitialized else {"sl_uninitialized": True}),
                 },
                 ensure_ascii=False,
             )

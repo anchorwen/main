@@ -533,6 +533,56 @@ class ActivePositionManager:
             self._primary_ticket = ticket
         return pos
 
+    # ── DQAF-20260621-034: V3 cold-start recovery — sync SL/TP from MT5 ──
+
+    def sync_position_from_mt5(self, ticket: int, mt5_worker: Any) -> bool:
+        """Sync position SL/TP/side/volume from MT5 after V3 cold-start recovery.
+
+        V3 intent-state (``_build_position_v3``) only persists 4 fields + ticket.
+        Physical state (SL, TP, side, volume) must be restored from MT5 gateway
+        before the position enters trail management.
+
+        Called during management phase when ``current_sl <= 0`` is detected,
+        and optionally after ``restore_state()`` if an MT5 connection is available.
+
+        Returns True if sync succeeded (SL now > 0).
+        """
+        if mt5_worker is None:
+            return False
+        try:
+            positions = mt5_worker.positions_get(ticket=ticket)
+            if not positions:
+                return False
+            _mt5_pos = positions[0]
+            _sl = float(getattr(_mt5_pos, "sl", 0) or 0)
+            _tp = float(getattr(_mt5_pos, "tp", 0) or 0)
+            _type = int(getattr(_mt5_pos, "type", -1))
+            _side = "long" if _type == 0 else ("short" if _type == 1 else "unknown")
+            _vol = float(getattr(_mt5_pos, "volume", 0) or 0)
+
+            # ── DQAF-034: XAU tick_size=0.01 → 3dp; BTC tick_size=1.0 → 1dp ──
+            _sl = round(_sl, 3)
+            _tp = round(_tp, 3)
+
+            if ticket in self._positions:
+                p = self._positions[ticket]
+                if p.current_sl <= 0 and _sl > 0:
+                    p.current_sl = _sl
+                    if p.initial_sl <= 0:
+                        p.initial_sl = _sl
+                if p.current_tp <= 0 and _tp > 0:
+                    p.current_tp = _tp
+                    if p.initial_tp <= 0:
+                        p.initial_tp = _tp
+                if p.side == "unknown" and _side != "unknown":
+                    p.side = _side
+                if p.volume <= 0 and _vol > 0:
+                    p.volume = _vol
+                return True
+        except Exception:
+            pass
+        return False
+
     def update_prices(
         self,
         mid: float,
