@@ -895,6 +895,15 @@ class StrategyLine:
             meta_filter_long=_mf_long,
             meta_filter_short=_mf_short,
         )
+        # ── FIX-20260621-044 (DQAF-044): Clear cold_explore when MetaFilter succeeds ──
+        # _is_cold_explore was set True before MetaFilter ran (because _meta_p_win
+        # started as None).  If MetaFilter subsequently produced a valid p_win,
+        # the cold-explore rationale no longer holds — the model IS producing
+        # predictions.  Without this teardown, line 924 unconditionally overrides
+        # the real MetaFilter output with 0.50, collapsing the calibrator's entire
+        # p_win distribution to a constant.  (COLD_EXPLORE_PREEMPTIVE_OVERRIDE)
+        if _meta_p_win is not None:
+            _is_cold_explore = False
         if _meta_reject is not None and not _is_cold_explore:
             # ── FIX-20260611-001: Swing MetaFilter routing excision ──
             # Swing strategies routed through Conformal OU gate get a garbage
