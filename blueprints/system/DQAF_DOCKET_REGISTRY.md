@@ -40,6 +40,8 @@
 | DQAF-20260621-033 | 2026-06-21 | Sev 2 | **66%仓位在系统控制外平仓 (99/150): mt5_deal_reason_3=DEAL_REASON_SIGNAL** — 时序分析证伪 double-journaling (0/99 matched pairs ±5s)。H2(经纪商自动化平仓)解释度 100%。P0热补丁 FIX-035 (deal_reason溯源+MAP统一) + P1 FIX-036 (position_identifier 两路径注入对账主键) 已部署。 | **APPROVED → P0+P1 DEPLOYED** — IC Mandate 签发, FIX-035 + FIX-036 deployed. P2 (经纪商账单导出) 待执行 | FIX-20260621-035, FIX-20260621-036 |
 | DQAF-20260621-034 | 2026-06-21 | Sev 2 | **Trailing SL 48.7%仓位零快照 + 46.3%有快照trail未移动 = STATE_INITIALIZATION_DEADLOCK** → FIX-037 三刀热补丁 + FIX-038 两刀架构修复 + FIX-039 L3 架构收敛 (消除冗余 per-cycle sync)。全链路: 止血→序列化补全→不可变锁→架构收敛。 | **APPROVED → CLOSED** — FIX-037/038/039 deployed, 架构债清偿 | FIX-20260621-037, FIX-20260621-038, FIX-20260621-039 |
 
+| DQAF-20260621-042 | 2026-06-21 | Sev 1 (复合) | **机构级实盘数据方向全面普查 — 10项发现对账确认8项坐实。** Leaderboard崩溃(Sev 1), Journal vs Labels 38%缺口(Sev 2), 治理含3140笔回测数据(Sev 2), 校准器p_win退化至0.5(Sev 2), brain_perf维度为空(Sev 3), Alpha数据不一致(Sev 2), 健康报告自相矛盾(Sev 2), golden_master未排序(Sev 3), 修复被实盘进程覆盖(Sev 1新发现)。根因: IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION 架构反模式。 | **APPROVED WITH ARCHITECTURAL OVERRIDE → P0 DEPLOYED** — IC签发IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION ReB模式。P0: live_journal_metrics补全+毒丸阻断+Schema强校验已Commit。P1: 统一标签出口+回测清理脚本 待执行。P2: git rm --cached隔离运行时状态 待协调。 | FIX-20260621-042 |
+
 ## 裁决状态说明
 
 - `AWAITING_IC` — 已提交 [DQAF_REPORT]，等待人类 IC 审批

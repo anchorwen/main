@@ -33,6 +33,7 @@ FIX-YYYYMMDD-NNN
 | Fix ID | Date | Module | Summary | Root Cause |
 |--------|------|--------|---------|------------|
 | FIX-20260621-032 | 2026-06-21 | governance, metrics, scripts | **Leaderboard度量衡修复 + V4擢升/V10_M15退役**: 全量实盘审计(analyze_live_brain_performance.py)发现Leaderboard将pnl_per_unit(账户货币)误标为pnl_r(风险单位)→V6/V7/V8显示-1146R实为+10.3R。修复: (1) daily_ops.py+governance_scheduler.py上游改用live_journal_metrics.py(基于实盘journal的pnl_r),废弃BrainPnLStore.pnl_per_unit, (2) BTC_Swing_V4 probation→live(172笔+92.1R), (3) BTC_Swing_V10_M15_Survival frozen→retired(-16.4R,全联盟有毒)。新模块core/feedback/live_journal_metrics.py。 | RC-06 (contract-violation: pnl_per_unit≠pnl_r field label mismatch) + RC-03 (dual-source: journal vs ledger split SSOT) |
+| **FIX-20260621-042** | 2026-06-21 | data, observability, feedback | **DQAF-042 机构级实盘数据方向普查 — P0 毒丸阻断 + IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION**: 4路并行审计代理+70 commits逐条对账+12蓝图交叉引用→10项发现对账确认8项坐实。根因: 系统陷入"人工修复→自动化覆写"死循环(leaderboard手动修正被daily_ops覆盖)。修复: (1) live_journal_metrics.py补全pnl_r/trade_count字段, (2) BrainLeaderboard.rank()入参Schema强校验+DataIntegrityError毒丸, (3) daily_ops.py毒丸阻断(total_decisions==0→Fatal Halt), (4) exceptions.py新建DataIntegrityError Fail-Closed异常, (5) .gitignore明确IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION原则, (6) purge_backtest_from_governance.py清理V12_H1的3140笔回测数据。ReB: IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION。 | RC-07 (missing-validation: rank()入参无校验→静默损坏) + RC-03 (state-leak: backtest数据残存governance) + RC-06 (contract-violation: list传入rank()期望dict) |
 | FIX-20260621-031 | 2026-06-21 | deployment-lifecycle, scripts | **Market-session-aware stale file checks**: system_trust_report.py now calls detect_session() per symbol. When risk_tier="off" (weekend/market-closed), stale file checks are bypassed with [BYPASSED: MARKET_OFF] marker instead of false-positive WARN. BTC (24/7) serves as control group — confirms pipeline health while XAU weekend stales are correctly suppressed. Same class as FIX-028c (audit weekend false-positives). | RC-06 (data-contamination — naive probe without business-hours calendar) |
 | FIX-20260621-029 | 2026-06-21 | governance, brains-services | **Minimum Live Sample Gate (N=50) — 终结 live↔probation 死循环**: 统一数据源为 brain_performance.json，低于50条实盘执行记录的脑旁路所有升/降级决策。消除 governance_state.json 全时PnL vs brain_performance.json 滚窗的双轨数据源冲突。Supersedes FIX-024 (deferred hysteresis). | RC-12 (insufficient-data — small-sample noise) + RC-03 (dual-source — split SSOT) |
 | FIX-20260621-028 | 2026-06-21 | observability, scripts, infra | **Phase 4 Shadow Verify midpoint: 3 fixes** — (028a) Windows scheduled task timeout fix, (028b) alert cooling state atomic persistence, (028c) weekend false-positive suppression in audit | RC-07 (resilience — crash-survival) + RC-06 (data-contamination — market-closed false positives) |
@@ -3850,6 +3851,66 @@ FIX-YYYYMMDD-NNN
   eliminating the daily_ops dependency for overflow recovery.
 
   47 historical MIA are permanently unattributable (MT5 DEAL_REASON_CLIENT carries no comment field).
+
+### FIX-20260621-042
+- **Date**: 2026-06-21
+- **Author**: cursor-agent (IC Approved with Architectural Override: DQAF-20260621-042)
+- **Type**: fix (institutional data direction audit — P0 Poison Pill + IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION)
+- **Module**: data, observability, feedback, governance
+- **Files**:
+  - `core/feedback/live_journal_metrics.py` (+4: added pnl_r + trade_count field aliases, renamed rec→recommendation for mypy)
+  - `core/brains/services/brain_leaderboard.py` (+79: `_validate_metrics()` schema enforcement + `_normalize_metrics_map()` defensive input)
+  - `core/contracts/exceptions.py` (+23: `DataIntegrityError` — Fail-Closed poison pill exception)
+  - `scripts/daily_ops.py` (+46/-8: fixed `rank()` call `list(values)`→dict, poison pill validation, removed silent `except Exception` swallow)
+  - `.gitignore` (+25: ephemeral projection isolation patterns)
+  - `scripts/purge_backtest_from_governance.py` (new: backtest contamination detection + journal-based correction)
+- **Summary**: **DQAF-20260621-042 Institutional Data Direction Audit.**
+
+  4-way parallel audit agents + 70-commit cross-reference + 12-blueprint verification → 10 findings,
+  8 confirmed after reconciliation (1 false alarm, 1 downgraded).
+
+  **Core Root Cause (L3 Architecture)**:
+  The system was caught in a "manual fix → automated overwrite" deadlock. `leaderboard.json` and
+  `governance_state.json` were treated as databases, inducing manual JSON edits committed to Git.
+  In reality, only the append-only Journal (`ledger_events.jsonl`, `live_trade_journal.jsonl`) is
+  the Source of Truth. State files are ephemeral projections recomputed by `daily_ops` from the
+  journal. When the generator code (`compute_journal_brain_metrics`) was incomplete (missing
+  `pnl_r`, `trade_count`), `daily_ops` faithfully projected corrupted views and overwrote any
+  manual corrections.
+
+  **IC Architectural Override**:
+  ReB Pattern: `IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION`.
+  1. NEVER manually edit state files — if a view is corrupted, fix the generator code.
+  2. Git must not track runtime-generated state files — only logic, never runtime state.
+  3. If daily_ops cannot generate complete state → POISON PILL: raise `DataIntegrityError`,
+     halt the process. Fail-Closed: better to stop trading than act on corrupted governance data.
+
+  **P0 Fixes Delivered**:
+  1. `live_journal_metrics.py`: Added `pnl_r` (alias for `cumulative_pnl`) and `trade_count`
+     (alias for `sample_count`) — dual naming convention for downstream consumers.
+  2. `brain_leaderboard.py`: `_validate_metrics()` enforces required fields before ranking.
+     `_normalize_metrics_map()` accepts both `dict` and `list` inputs (defensive). Missing
+     fields → `DataIntegrityError` (POISON PILL).
+  3. `daily_ops.py`: Fixed `rank()` call (was passing `list(values)` instead of `dict`).
+     After leaderboard generation: if `total_decisions==0` despite governance data →
+     `DataIntegrityError`. Removed silent `except Exception` that swallowed crashes and
+     wrote `fallback_error` to broken leaderboard.
+  4. `exceptions.py`: `DataIntegrityError(DomainError)` — carries `source` for diagnosis.
+  5. `.gitignore`: Documented the ephemeral projection principle with specific patterns.
+  6. `purge_backtest_from_governance.py`: Detects physically impossible trade counts
+     (e.g., 3140 trades in 22 days) and replaces with journal-derived live metrics.
+
+  **Verification**: mypy PASS, ruff PASS, 14 brains ranked with 564 total_decisions.
+  `BTC_Swing_V12_H1_Survival` corrected from 3140 backtest trades (-10265R) to 38 live
+  journal trades (+25.2R, Sharpe 1.45).
+
+  **Deferred to Next Commit**:
+  - P1-A: Unified label export `finalize_trade_label()` (close all exit paths)
+  - P2: `git rm --cached` for ephemeral state files (requires live process coordination)
+
+  **ReB Pattern**: `IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION` — state files MUST be
+  regenerable from the journal SSOT. Manual edits to state files are forbidden.
+  Corrupted projection → fix the generator, never the output.
   Tagged `ORPHANED_BY_BRIDGE_CRASH` — no further recovery effort.
 
 - **Root Cause**: RC-04 (race-condition — crash window between irreversible MT5 execution and best-effort journal write; in-memory dedup lost on restart; no state verification before replay)
