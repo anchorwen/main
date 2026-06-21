@@ -205,12 +205,21 @@ def test_dict_to_pnl_metrics_handles_missing_fields():
     assert result.profit_factor == 0.0  # default
 
 
-def test_governance_cycle_with_pnl_store_no_dict_crash():
+def test_governance_cycle_with_pnl_store_no_dict_crash(tmp_path: Path):
     """Full governance cycle with PnL store must not crash on type mismatch.
 
     Simulates what happens when pnl_store returns BrainPnLMetrics.
     The journal augmentation path is tested indirectly — this test
     verifies the non-journal path still works after FIX-043 changes.
+
+    FIX-20260621-044x-2: Test was environment-dependent — passed locally
+    when data_btc/ had real journal data but failed in CI (0 brains assessed).
+    Root cause:
+      1. settle_all() without force_all=True skips signals with TTL > 0
+         (record_signal sets TTL=expected_horizon=1, never decremented).
+      2. base_dir defaulted to "data_btc" — real trade journal data leaked
+         into all_metrics, masking the TTL settlement bug.
+    Fix: use force_all=True + isolated tmp_path base_dir.
     """
     from scripts.training.governance_scheduler import run_governance_cycle
 
@@ -229,10 +238,16 @@ def test_governance_cycle_with_pnl_store_no_dict_crash():
         entry_price=4700.0,
         confidence=0.6,
     )
-    store.settle_all(close_price=4720.0)
+    # force_all=True: TTL is 1 (set by record_signal), and settle_all()
+    # skips signals with ttl > 0 by default. We need immediate settlement.
+    store.settle_all(close_price=4720.0, force_all=True)
 
+    # Use isolated tmp_path to prevent real journal data leakage
+    # (default base_dir="data_btc" would inject live brain metrics on dev machines)
     # This must NOT raise AttributeError
-    report = run_governance_cycle(tracker, gov, dry_run=True, pnl_store=store)
+    report = run_governance_cycle(
+        tracker, gov, dry_run=True, pnl_store=store, base_dir=str(tmp_path),
+    )
     assert report["brains_assessed"] >= 1
 
 
