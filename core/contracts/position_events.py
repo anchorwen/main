@@ -35,6 +35,7 @@ class PositionClosed:
 
     # ── Exit metadata ──
     label: str  # canonical: sl_hit_first, tp_hit_first, win, loss, breakeven, etc.
+    position_identifier: int = 0  # DQAF-033: MT5 immutable anchor — POSITION_IDENTIFIER
     exit_reason: str = ""  # raw reason string from deal / engine
     close_time: str = ""  # ISO UTC
     source: str = ""  # "mt5_deal" | "engine_close"
@@ -72,6 +73,7 @@ class PositionClosed:
             "pnl": self.pnl,
             "label": self.label,
             "position_ticket": self.position_ticket,
+            "position_identifier": self.position_identifier or self.position_ticket,
             "magic": self.magic,
             "strategy": self.strategy,
             "sl": self.sl,

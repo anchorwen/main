@@ -504,6 +504,7 @@ def _mt5_close_position(
             "retcode": retcode,
             "order": getattr(result, "order", None),
             "request": request,
+            "position_identifier": pos_identifier,
         }
         # ── FIX-20260612-004 + FIX-20260613-077: Deal history for actual fill PnL ──
         # After a successful close, query MT5 deal history to capture the
@@ -787,6 +788,7 @@ def process_one(
         "strategy": _strategy,
         "effective_volume_hint": effective_volume(msg_payload, default_volume=default_volume),
         "position_ticket": position_ticket,
+        "position_identifier": detail.get("position_identifier", position_ticket) if isinstance(detail, dict) else position_ticket,
         "execution_payload_schema": msg_payload.get("execution_payload_schema"),
         "sl": msg_payload.get("sl", msg_payload.get("stop_loss")),
         "tp": msg_payload.get("tp", msg_payload.get("take_profit")),
@@ -1161,6 +1163,7 @@ def _write_zmq_journal_entry(
         "strategy": _strategy,
         "effective_volume_hint": effective_volume(msg_payload, default_volume=default_volume),
         "position_ticket": position_ticket,
+        "position_identifier": detail.get("position_identifier", position_ticket) if isinstance(detail, dict) else position_ticket,
         "execution_payload_schema": msg_payload.get("execution_payload_schema"),
         "sl": msg_payload.get("sl", msg_payload.get("stop_loss")),
         "tp": msg_payload.get("tp", msg_payload.get("take_profit")),

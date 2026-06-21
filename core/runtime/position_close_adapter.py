@@ -343,6 +343,7 @@ class PositionCloseAdapter:
             _deal_profit = float(getattr(_deal, "profit", 0) or 0)
             _deal_reason = getattr(_deal, "reason", -1)
             _deal_time = getattr(_deal, "time", 0)
+            _position_identifier = int(getattr(_deal, "position_id", 0) or 0)
 
             if _close_price <= 0:
                 _log.error(
@@ -390,6 +391,7 @@ class PositionCloseAdapter:
 
             return PositionClosed(
                 position_ticket=ticket,
+                position_identifier=_position_identifier or ticket,
                 symbol=symbol,
                 side=_side,
                 strategy=_strategy,

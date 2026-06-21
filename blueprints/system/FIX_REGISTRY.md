@@ -703,6 +703,7 @@ FIX-YYYYMMDD-NNN
 | FIX-20260616-099 | 2026-06-16 | features-service | OFI IPC Bridge: TickPoller in bridge subprocess writes ofi_snapshot.json via atomic temp+rename every 30s. Feature Lake reads from file (graceful on missing). Removed in-process TickPoller from live_cycle. Zero coupling. | RC-06 |
 | FIX-20260617-100 | 2026-06-17 | training | MetaFilter V3: 102 samples (46W/56L), 47-dim (40 V9 + spread + confidence + 5 OFI). OOF AUC=0.422. OU_Theta enters top 5. OFI features not significant (insufficient tick density). Shadow mode. Retrain at 200 clean samples. | RC-06 |
 | FIX-20260617-101 | 2026-06-17 | data-integrity | Institutional Data Integrity Framework: Three-Layer Defense against silent data loss. DLR-001: 34 BTC opens lost. L1 Pydantic write-boundary validator, L2 DataHealthService + daemon guard, L3 cross-symbol consistency audit. 9 files, 0 hot path changes. | RC-06, RC-09 |
+| FIX-20260621-036 | 2026-06-21 | contracts, runtime, execution-orders | **DQAF-033 P1: position_identifier 注入两路径对账主键。** PositionClosed 新增 position_identifier 字段，PCA 从 MT5 deal.position_id 捕获，bridge worker detail + journal record 同步注入。0 行路由/资金逻辑变更。 | RC-08 |
 
 ---
 ## Fix Details by Year
@@ -3674,3 +3675,29 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-08 (incomplete-cleanup — observability gap: deal reason taxonomy fragmented across 3 code paths)
 - **Prevention**: 部署后 24h 内系统将获得全量 deal_reason 溯源能力。后续需统一 `position_identifier` 作为对账主键。
 - **Dependents Checked**: `reconciliation.py` (already has MAP — no change needed), `live_cycle.py` (calls PCA via `reconcile_and_record_closes()` — unchanged), `analyze_dqaf033_*.py` (diagnostic scripts — benefit from cleaner data)
+
+### FIX-20260621-036
+- **Date**: 2026-06-21
+- **Author**: cursor-agent (DQAF-20260621-033 P1)
+- **Type**: fix (Sev 2 — observability: position_identifier blind-spot)
+- **Module**: contracts, runtime, execution-orders
+- **Files**:
+  - `core/contracts/position_events.py` (modified: `PositionClosed` 新增 `position_identifier: int = 0` 字段 + `to_journal_entry()` 输出)
+  - `core/runtime/position_close_adapter.py` (modified: `_build_close_event()` 从 MT5 deal 捕获 `position_id` → 传入 `PositionClosed`)
+  - `scripts/mt5_bridge_worker.py` (modified: `_mt5_close_position()` detail 新增 `position_identifier` + `process_one()` journal record + `_write_zmq_journal_entry()` ZMQ path 同步注入)
+- **Summary**: **DQAF-033 P1: position_identifier 注入两路径对账主键。**
+
+  **Context**: DQAF-033 调查确认两条 close 检测路径（bridge managed_close + PCA volume-delta）均未捕获 MT5 的 `POSITION_IDENTIFIER`（不可变锚点）。`position_ticket` 在 DEAL 和 ORDER 之间会变化，导致跨路径对账无法使用 ticket 作为可靠主键。
+
+  **Fix**:
+  1. `PositionClosed` 合约新增 `position_identifier` 字段（int, default=0 → journal 输出时 fallback 至 position_ticket）
+  2. PCA `_build_close_event()`: 从 MT5 deal history 的 `deal.position_id` 捕获
+  3. Bridge `_mt5_close_position()`: detail dict 注入 `position_identifier`（已有 `pos_identifier`，仅未写入 detail）
+  4. Bridge `process_one()` + `_write_zmq_journal_entry()`: journal record 顶层注入 `position_identifier`
+  5. 全链路 fallback: `position_identifier or position_ticket` — 确保历史数据兼容
+
+  **Lines changed**: ~15 additions across 3 files. 0 routing/fund logic changes.
+
+- **Root Cause**: RC-08 (incomplete-cleanup — observability gap: neither close path captured MT5's immutable position identifier)
+- **Prevention**: 两路径 journal 输出均已包含 `position_identifier`。部署后可执行 `(position_identifier, deal_id)` 跨路径去重对账，消除 ticket 变化导致的假阳性 MIA。
+- **Dependents Checked**: `reconciliation.py` (reads journal, benefits from new field — zero code change), `live_cycle.py` (call sites unchanged), `mia_close.py` (reads journal, unaffected), `analyze_dqaf033_*.py` (diagnostic scripts — new field enriches future analysis)

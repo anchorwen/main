@@ -630,7 +630,8 @@
   - [Layer 2 — 中间异常]: MT5 DEAL_REASON_SIGNAL (3) = Python API 自动化交易归类。99 笔: 91% LONG (逆势), 93% 0.01 lot, 中位持仓 40min, 24h 均匀分布。全部有 SL/TP 设置, 66/99 有 modify_sltp trail。V4 受冲击最重 (66笔), 但 MIA 交易 PnL (+26.68R) > 非 MIA (+6.50R)。
   - [Layer 3 — 根因]: **RC-08 (observability gap) + RC-04 (taxonomy drift)** — (A) bridge worker 不捕获 deal_reason, PCA 使用裸格式串, 两路径命名不一致；(B) 两条路径覆盖互斥仓位集合, 66% 出场失去可控性溯源；(C) 均未使用 `position_identifier` 作为对账主键。
 - **P0 热补丁 (FIX-20260621-035)**: `mt5_bridge_worker.py` detail 新增 `deal_reason` + `position_close_adapter.py` `_DEAL_REASON_MAP.get()`
-- **P1 待执行**: 两路径统一注入 `position_identifier` + 从 MT5 终端导出原始账单核对 99 笔 MIA 的 Comment 字段
+- **P1 已完成 (FIX-20260621-036)**: ✅ `PositionClosed` 合约新增 `position_identifier` 字段, PCA 从 `deal.position_id` 捕获, bridge detail + journal record 两路径注入
+- **P2 待执行**: 从 MT5 终端导出原始账单核对 99 笔 MIA 的 Comment 字段
 
 ---
 
