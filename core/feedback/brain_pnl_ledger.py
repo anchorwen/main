@@ -417,28 +417,41 @@ class BrainPnLStore:
         self._update_accumulators(outcome, brain_id)
 
         # ── FIX-20260611-021: Event Sourcing — dual-write to event stream ──
+        # ── DQAF-20260621-030: Idempotency guard ──
+        # Check in-memory _settled before writing to event stream.  Each
+        # (brain_id, position_ticket) pair should produce exactly one
+        # SignalSettled event.  If a duplicate is detected (e.g. replay on
+        # restart), skip the event write — the outcome is already in _settled.
         if self._event_writer is not None:
             try:
-                from core.contracts.events import PnLEvent
+                _ticket = entry.get("position_ticket")
+                _already_settled = False
+                if _ticket is not None and brain_id in self._settled:
+                    _already_settled = any(
+                        s.get("position_ticket") == _ticket
+                        for s in self._settled[brain_id]
+                    )
+                if not _already_settled:
+                    from core.contracts.events import PnLEvent
 
-                _settled_at = (
-                    outcome.get("close_time") or datetime.now(UTC).replace(tzinfo=None).isoformat()
-                )
-                _event = PnLEvent(
-                    timestamp=datetime.now(UTC),
-                    source=self._event_source,
-                    event_type="SignalSettled",
-                    brain_id=brain_id,
-                    symbol=entry.get("symbol", ""),
-                    direction=direction,
-                    entry_price=entry_price,
-                    exit_price=close_price,
-                    pnl_r=round(pnl_per_unit / (entry_price * 0.01) if entry_price > 0 else 0.0, 4),
-                    confidence=float(entry.get("confidence", 0.5)),
-                    position_ticket=entry.get("position_ticket"),
-                    generated_by="brain_pnl_ledger._settle",
-                )
-                _ = self._event_writer.write(_event)
+                    _settled_at = (
+                        outcome.get("close_time") or datetime.now(UTC).replace(tzinfo=None).isoformat()
+                    )
+                    _event = PnLEvent(
+                        timestamp=datetime.now(UTC),
+                        source=self._event_source,
+                        event_type="SignalSettled",
+                        brain_id=brain_id,
+                        symbol=entry.get("symbol", ""),
+                        direction=direction,
+                        entry_price=entry_price,
+                        exit_price=close_price,
+                        pnl_r=round(pnl_per_unit / (entry_price * 0.01) if entry_price > 0 else 0.0, 4),
+                        confidence=float(entry.get("confidence", 0.5)),
+                        position_ticket=entry.get("position_ticket"),
+                        generated_by="brain_pnl_ledger._settle",
+                    )
+                    _ = self._event_writer.write(_event)
             except (OSError, ValueError, TypeError):
                 pass  # EventWriter failure must never break the hot path
 

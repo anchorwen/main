@@ -34,6 +34,7 @@ FIX-YYYYMMDD-NNN
 |--------|------|--------|---------|------------|
 | FIX-20260621-028 | 2026-06-21 | observability, scripts, infra | **Phase 4 Shadow Verify midpoint: 3 fixes** — (028a) Windows scheduled task timeout fix, (028b) alert cooling state atomic persistence, (028c) weekend false-positive suppression in audit | RC-07 (resilience — crash-survival) + RC-06 (data-contamination — market-closed false positives) |
 | FIX-20260621-028 | 2026-06-21 | training, scripts | **Data plumbing fix: ASOF join + tolerance + pickle output**: (1) Added --feature-contract (default v9_institutional_40) to V2 builder — micro features skipped (10% coverage, 90% zero-dilution). (2) Added --max-lookback-minutes (default 15) — ASOF tolerance rejects stale features (gap > 15min). Without this, 6h-old features from engine outage silently contaminate training. (3) Changed V2 trainer CV: StratifiedKFold(shuffle) → TimeSeriesSplit (no temporal leakage). (4) Added scale_pos_weight (activate when |WR-50%|>10%, clamp [0.5,2.0]). (5) Added pickle + feature_names.json output for MetaFilterAdapter compatibility. (6) Pipeline: 245 trades → 141 matched (57.6% match rate, vs V1 23%), 104 stale-filtered (42% prevented contamination). 40-dim V9 only. WR=19.9% (PnL>$3.75 strict). 28 wins insufficient for 5-fold CV → Fold 5 NaN. Model shadow-only. Bottleneck shifted: matching is now adequate but positive examples too few for robust CV. Next: relax PnL threshold or wait for more trades. | RC-06 (stale-feature contamination) + RC-12 (insufficient-data) |
+| FIX-20260621-030 | 2026-06-21 | reconciliation, signal_settlement, brain_pnl_ledger | **SignalSettled unbounded re-settlement bloat — idempotency gate**: ledger_events.jsonl bloated to 25MB (72k lines, 65k SignalSettled, 99.2% duplicates). Root cause: three independent settlement paths (startup reconciliation, per-cycle reconciliation, brain_pnl_ledger._settle) wrote SignalSettled events with no dedup check. `_reconcile_closed_positions` re-settled ALL historical closed positions on every system restart — 141× duplicates per (ticket, brain_id) pair over 6 days. Fix: (1) `_load_settled_keys()` helper scans existing ledger for (position_ticket, brain_id) pairs before write, (2) Idempotency guard in all 3 paths, (3) One-shot cleanup script `clean_ledger_bloat.py`. Deferred: downstream I/O streaming (file read on every check → future index). | RC-08 (incomplete-cleanup — no idempotency key) |
 | FIX-20260621-027 | 2026-06-21 | training, scripts | **Path B + R4 Phase 2: Unified BTC retraining with OFI look-ahead fix**
 | FIX-20260620-026 | 2026-06-20 | tests | **P1 Test Breakout — 6 execution-layer modules zero→covered (+133 tests)**: market_efficiency (23 tests: Kaufman ER + normalization), ofi_gate (21 tests: OFI toxicity gate all branches), exit_reason (44 tests: 15 enum members + classify() 15+ patterns + shim), session_detector (14 tests: state machine + stall progression), correlation_sizer (14 tests: √N discount + rounding), trend_isolation_gates (17 tests: 4 gates). All pure/state-machine tests, no I/O dependencies. | RC-12 (zero-coverage modules) |
 | FIX-20260620-025 | 2026-06-20 | tests | **Phase 3b+3c+Gap fill: +188 tests, 7 modules**: position_close_adapter (30+), live_alert_hub (26), brain_registration_gate (37), brain_lifecycle_manager (22), microstructure_computer (22), financial_metrics (47), atomic_file_writer (22), regime_direction_gate (16). Zero→covered: live_alert_hub, brain_registration_gate, brain_lifecycle_manager, microstructure_computer, financial_metrics, atomic_file_writer, regime_direction_gate. | RC-12 (zero-coverage modules) |
@@ -3574,3 +3575,43 @@ FIX-YYYYMMDD-NNN
 - **Root Cause**: RC-06 (data-contamination — stale features from engine downtime silently matched to trades) + RC-12 (insufficient-data — 28 positive examples below 5-fold CV minimum of ~50)
 - **Prevention**: (1) ASOF tolerance check is now mandatory in all dataset builders — add pre-commit validation. (2) TimeSeriesSplit is the only allowed CV for financial time series — add lint rule. (3) Minimum positive-example count of 50 for 5-fold CV — add gate in trainer.
 - **Dependents Checked**: MetaFilterAdapter (now compatible via pickle), live_cycle.py (MetaFilter path unchanged, shadow-only), governance_state.json (BTC brain status unchanged).
+
+### FIX-20260621-030
+- **Date**: 2026-06-21
+- **Author**: cursor-agent (IC Approved: DQAF-20260621-030)
+- **Type**: data-quality + idempotency (Sev 2 — SignalSettled unbounded re-settlement bloat)
+- **Module**: reconciliation, signal_settlement, brain_pnl_ledger
+- **Files**:
+  - `core/runtime/reconciliation.py` (modified: `_load_settled_keys()` helper + idempotency guard in `_reconcile_closed_positions` path)
+  - `core/runtime/signal_settlement.py` (modified: idempotency guard in `settle_closed_trade_signals()`, imports `_load_settled_keys` from reconciliation)
+  - `core/feedback/brain_pnl_ledger.py` (modified: in-memory idempotency check in `_settle()` — checks `self._settled[brain_id]` before event stream write)
+  - `scripts/clean_ledger_bloat.py` (new: one-shot dedup script for emergency cleanup)
+- **Summary**: **SignalSettled unbounded re-settlement bloat — idempotency gate installed.**
+
+  **Symptom**: `ledger_events.jsonl` bloated to 25MB (72,127 lines, 65,099 SignalSettled events) over 10 days. Analysis window (dashboard/analytics panel) became unresponsive — downstream consumers loading the full file for PnL aggregation experienced multi-second I/O stalls.
+
+  **Root cause chain**:
+  1. Three independent code paths write `SignalSettled` events: (a) startup reconciliation (`reconciliation.py:260-307`), (b) per-cycle reconciliation (`signal_settlement.py`, called from `live_cycle.py:1599`), (c) `brain_pnl_ledger._settle()` dual-write.
+  2. None of the three paths checked whether a `(position_ticket, brain_id)` pair had already been settled.
+  3. Path (a) — the dominant bloat source (59,233/65,099 events, 91%) — ran on every `loop_iteration == 1` (system restart), processing *all* historically-closed positions instead of just newly-closed ones. Each restart generated ~3,500 duplicate SignalSettled events (253 tickets × 14 brains).
+  4. `known_open_tickets` persisted in `execution_state.json` (DQAF-20260615-004) but NOT restored on restart — the journal replay repopulated it with all historical entries, causing the startup reconciliation to re-detect the same closed positions every restart.
+
+  **Data impact**:
+  - 65,099 SignalSettled → 540 unique (99.2% duplicates). Expected: 253 tickets × 14 brains (max 3,542).
+  - 7,028 SignalRecorded → 6,882 unique (2.1% duplicates, minor).
+  - Cleanup: 25MB → 2.7MB (-89.2%), 72,127 lines → 7,422 (-89.7%).
+
+  **Fix design (Iron Law #12 compliance — L3 architecture-aware fix)**:
+  1. **`_load_settled_keys(ledger_path)`** in `reconciliation.py`: scans existing ledger for `(position_ticket, brain_id)` pairs. Returns `set[tuple[int, str]]`. Called once per reconciliation cycle. At current file size (2.7MB) this is fast; deferred architecture fix registered for large-file streaming.
+  2. **Startup reconciliation gate** (`reconciliation.py:260-340`): before the `for _bid in _brain_ids` loop, loads settled keys. Each candidate `(ticket, _bid)` checked against the set → `continue` if duplicate.
+  3. **Per-cycle reconciliation gate** (`signal_settlement.py`): same pattern, imports `_load_settled_keys` from `reconciliation` (same `core.runtime` package, no cross-layer coupling).
+  4. **BrainPnLStore gate** (`brain_pnl_ledger.py:_settle`): in-memory check — scans `self._settled[brain_id]` for matching `position_ticket`. No file I/O on hot path.
+  5. **No coupling to `live_cycle.py`**: all changes confined to already-extracted modules (Strangler Figs #32, reconciliation). `live_cycle.py` call sites unchanged.
+
+- **Root Cause**: RC-08 (incomplete-cleanup — no idempotency key on event stream writes). Contributing: `execution_state.json` persistence saves `known_open_tickets` but `restore_execution_state()` does not restore it → journal replay repopulates with stale entries → reconciliation re-detects already-closed positions.
+- **Prevention**:
+  1. SignalSettled idempotency key `(position_ticket, brain_id)` now enforced at all 3 write paths.
+  2. `clean_ledger_bloat.py` available for periodic integrity checks (`--dry-run` mode for monitoring).
+  3. **Deferred Architecture Fix**: replace full-file scan in `_load_settled_keys()` with in-memory singleton cache (survives within process lifetime) or SQLite index when ledger exceeds 50MB. Trigger: `ledger_events.jsonl > 50MB` OR `2026-08-01`.
+  4. **Deferred Architecture Fix**: downstream dashboard consumers (`live_trading_dashboard.py`, `live_dashboard.py`, `audit_*.py`) load full JSONL into memory → migrate to streaming/chunked parsing. Trigger: dashboard render time > 2s OR `2026-08-01`.
+- **Dependents Checked**: `live_cycle.py` (zero changes — calls `settle_closed_trade_signals()` unchanged), `daily_ops.py` (reads ledger for PnL aggregation, unaffected), `health_checks.py` (reads ledger, benefits from smaller file), `live_trading_dashboard.py` (performance panel reads `brain_pnl_ledger.json`, indirectly benefits from cleaner data), `audit_institutional_performance.py` (reads ledger directly — file size reduced 89%).

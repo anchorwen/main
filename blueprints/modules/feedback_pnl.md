@@ -49,6 +49,7 @@ cycle N+H:   settle_all(mid_price)  → only ttl=0 settled at horizon bar
 | FIX-20260519-010 | 2026-05-19 | cursor-agent | — | Track 1+2: Horizon-matched counterfactual PnL + MFE/MAE profiling. record_signal() accepts expected_horizon→TTL, update_pending() tracks MFE/MAE per cycle, settle_all() only settles ttl=0. _settle() computes MFE/MAE R-multiples from tracked prices. | RC-06 |
 | FIX-20260517-013 | 2026-05-17 | cursor-agent | — | shadow_pnl_loop.py: added slippage=0.10 to settle_all() and record_signal() calls. Previously slippage defaulted to 0.0, undercounting shadow PnL friction by 0.10 USD/side. | contract-violation |
 | FIX-20260603-065 | 2026-06-03 | cursor-agent | — | **PnL ledger state hydration**: `BrainPnLStore.load()` now calls `_hydrate_accumulators()` to rebuild in-memory counters from settled disk data. Memory ← disk sync after restart. | RC-03 |
+| FIX-20260621-030 | 2026-06-21 | cursor-agent | — | **Idempotency guard in _settle()**: in-memory check against `self._settled[brain_id]` before dual-write to event stream. Prevents duplicate SignalSettled on BrainPnLStore restart/replay. No file I/O on hot path. | RC-08 |
 
 ## Cross-Module Contracts
 | Contract | Consumers | Stability |

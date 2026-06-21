@@ -18,6 +18,50 @@ from core.runtime.fault_handler import FaultLevel, FaultTolerantContext, fail_op
 from core.runtime.time_utils import _utc_iso  # consolidated
 
 
+def _load_settled_keys(ledger_path: str) -> set[tuple[int, str]]:
+    """Scan ledger_events.jsonl for existing (position_ticket, brain_id) pairs.
+
+    DQAF-20260621-030: Idempotency gate — prevents duplicate SignalSettled
+    events on system restart.  Returns a set of (ticket, brain_id) tuples
+    that have already been settled.
+
+    Perf note: reads the full file.  At 2.7MB / ~7k lines this is fast.
+    If the ledger grows beyond ~50MB, consider an in-memory cache that
+    survives within the process lifetime (loop_iteration > 1 bypasses the
+    startup reconciliation path entirely, so this function is called at most
+    once per system start).
+    """
+    import json as _json
+
+    _keys: set[tuple[int, str]] = set()
+    _path = Path(ledger_path) if not isinstance(ledger_path, Path) else ledger_path
+    if not _path.exists():
+        return _keys
+    try:
+        for _line in _path.read_text(encoding="utf-8").splitlines():
+            _line = _line.strip()
+            if not _line or "SignalSettled" not in _line:
+                continue
+            try:
+                _rec = _json.loads(_line)
+                _ticket = _rec.get("position_ticket", 0)
+                if not isinstance(_ticket, int):
+                    try:
+                        _ticket = int(_ticket)
+                    except (TypeError, ValueError):
+                        _ticket = 0
+                _bid = str(_rec.get("brain_id", ""))
+                if _bid:
+                    _keys.add((_ticket, _bid))
+            except (_json.JSONDecodeError, KeyError):
+                continue
+    except OSError:
+        logging.getLogger(__name__).warning(
+                "Failed to read ledger for idempotency check: %s", _path
+            )
+    return _keys
+
+
 def reconcile_closed_positions(
     mt5_worker: Any,
     symbol: str,
@@ -262,6 +306,14 @@ def reconcile_closed_positions(
         # path in live_cycle.py uses PositionCloseAdapter and rarely fires).
         # Without this, SignalSettled stays 0 forever — all closes go through
         # this reconciliation path at startup.
+        #
+        # ── DQAF-20260621-030: Idempotency Gate ──
+        # FIX: Before writing any SignalSettled, scan the existing ledger for
+        # already-settled (position_ticket, brain_id) pairs.  Without this gate,
+        # every system restart re-settles ALL historically-closed positions,
+        # causing unbounded ledger bloat (25MB → 2.7MB after cleanup).
+        # Idempotency key: (position_ticket, brain_id) — a brain's signal can
+        # only be settled once against a given position.
         _brain_ids = open_entry.get("brain_ids")
         if _brain_ids and pnl != 0:
             with fail_open_guard("Reconciliation:PnLEventWrite"):
@@ -271,6 +323,8 @@ def reconcile_closed_positions(
                 _ledger_path = str(
                     Path(journal_path).parent / "ledger_events.jsonl"
                 )
+                # ── DQAF-20260621-030: Load already-settled keys ──
+                _already_settled = _load_settled_keys(_ledger_path)
                 _writer = EventWriter(_ledger_path)
                 _settled_ts = datetime.now(UTC)
                 # entry_price may be at: top level, detail.entry_price,
@@ -290,7 +344,13 @@ def reconcile_closed_positions(
                     if _entry_price > 0
                     else 0.0
                 )
+                _skipped = 0
                 for _bid in _brain_ids:
+                    # ── DQAF-20260621-030: Idempotency guard ──
+                    _dedup_key = (ticket, str(_bid))
+                    if _dedup_key in _already_settled:
+                        _skipped += 1
+                        continue
                     _event = PnLEvent(
                         timestamp=_settled_ts,
                         source="live",
@@ -305,6 +365,13 @@ def reconcile_closed_positions(
                         generated_by="reconciliation._reconcile_closed_positions",
                     )
                     _writer.write(_event)
+                    _already_settled.add(_dedup_key)
+                if _skipped > 0:
+                    logging.getLogger(__name__).debug(
+                        "[IDEMPOTENCY] reconciliation: skipped %d/%d already-settled "
+                        "signals for ticket=%s",
+                        _skipped, len(_brain_ids), ticket,
+                    )
 
         # ── Record exit for re-entry guard (native MT5 SL/TP) ──
         if state is not None:
