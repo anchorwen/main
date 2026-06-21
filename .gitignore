@@ -67,5 +67,19 @@ data/state/daily_ops_state.json
 data_btc/governance_state.json
 data/governance_state.json
 
+# Additional runtime state projections (DQAF-042 follow-up)
+data_btc/bar_sync_state.json
+data_btc/brain_performance.json
+data_btc/alpha_feed_state.json
+data_btc/alpha_performance.json
+data_btc/calibrator_feed_state.json
+data_btc/conformal_calibrator_state.json
+data/bar_sync_state.json
+data/brain_performance.json
+data/alpha_feed_state.json
+data/alpha_performance.json
+data/calibrator_feed_state.json
+data/conformal_calibrator_state.json
+
 data_btc/live_trade_journal.jsonl
 data/live_trade_journal.jsonl
