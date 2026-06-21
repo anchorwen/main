@@ -88,6 +88,8 @@ MODULE_SOURCE_MAP: dict[str, list[str]] = {
         "core/execution/dynamic_sl_tp.py",
         "core/execution/kelly_sizer.py",
         "core/execution/pwin_chain.py",
+        "core/alpha/contracts.py",
+        "core/alpha/registry.py",
         "core/alpha/ou_optimizer.py",
         "core/alpha/performance_store.py",
         "core/execution/pwin_chain.py",

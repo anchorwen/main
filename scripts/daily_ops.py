@@ -1314,6 +1314,161 @@ def _step_alpha_feed(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
         }
 
 
+# ── DQAF-20260622-049: Nomination thresholds (aligned with governance_scheduler.py) ──
+NOMINATION_MIN_TRADES = 50  # MIN_TRADES_FOR_LIVE
+NOMINATION_MIN_WIN_RATE = 0.45  # WR_PROBATION_THRESHOLD
+NOMINATION_MIN_SHARPE = 0.30  # MIN_SHARPE (audit_institutional_performance.py)
+NOMINATION_ELIGIBLE_STATUSES = {"live", "probation"}
+
+
+def _step_alpha_registration(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
+    """Nominate qualifying brains from leaderboard into alpha_registry.
+
+    DQAF-20260622-049: Builds the missing bridge between the Brain
+    Governance pipeline (leaderboard.json) and the Alpha pipeline
+    (alpha_registry.json).  Reads the leaderboard, identifies brains
+    meeting institutional nomination thresholds, and registers them
+    as alpha CANDIDATE records.
+
+    Institutional constraint (投委会):
+      - **Nominate only**: initial state is ALWAYS ``candidate``.
+      - **Never activate**: the ``_step_alpha_lifecycle`` owns all
+        state transitions — this bridge only nominates.
+      - **Idempotent**: re-running does not duplicate registrations.
+    """
+    try:
+        from core.alpha.contracts import AlphaLifecycleState, AlphaRecord
+        from core.alpha.registry import AlphaRegistry
+
+        base = Path(base_dir)
+        lb_path = base / "reports" / "leaderboard.json"
+        registry_path = base / "alpha_registry.json"
+
+        # ── Load leaderboard ──
+        if not lb_path.exists():
+            return {
+                "step": "alpha_registration",
+                "status": "skipped",
+                "reason": "no_leaderboard",
+            }
+
+        lb_data = json.loads(lb_path.read_text(encoding="utf-8"))
+        brains = lb_data.get("leaderboard") or lb_data.get("brains") or []
+
+        if not brains:
+            return {
+                "step": "alpha_registration",
+                "status": "skipped",
+                "reason": "empty_leaderboard",
+            }
+
+        # ── Load registry ──
+        registry = AlphaRegistry()
+        if registry_path.exists():
+            registry = AlphaRegistry.load(registry_path)
+
+        existing_ids = {r.alpha_id for r in registry.list_records()}
+
+        # ── Load governance as secondary data source ──
+        # Decision-based leaderboard (brain_leaderboard.v1) has signal_count
+        # and trade_performance.win_rate but NOT sharpe_ratio or governance_status.
+        # The PnL-based fallback (pnl_leaderboard.v1) has all fields top-level.
+        # Merge governance_state.json to fill gaps for decision-based entries.
+        gov_data: dict[str, dict[str, Any]] = {}
+        gov_path = base / "governance_state.json"
+        if gov_path.exists():
+            try:
+                gov_raw = json.loads(gov_path.read_text(encoding="utf-8"))
+                gov_data = gov_raw.get("brain_states") or gov_raw.get("brains") or {}
+            except Exception:  # noqa: BLE001 — best-effort secondary source
+                pass
+
+        nominated: list[str] = []
+        skipped: list[str] = []
+
+        for brain in brains:
+            brain_id = brain.get("brain_id", "")
+            if not brain_id:
+                continue
+
+            # alpha_id = brain_id (per DQAF-049 Phase 3 design)
+            alpha_id = brain_id
+            if alpha_id in existing_ids:
+                continue  # already registered — idempotent
+
+            # ── Nomination criteria — multi-source field resolution ──
+            # trade_count: PnL-based uses "trade_count", decision-based uses "signal_count"
+            trade_count = brain.get("trade_count") or brain.get("signal_count") or 0
+
+            # win_rate: PnL-based has top-level "win_rate", decision-based nests in "trade_performance"
+            tp = brain.get("trade_performance") or {}
+            win_rate = brain.get("win_rate") or tp.get("win_rate") or 0.0
+
+            # sharpe_ratio: PnL-based has top-level; decision-based needs governance
+            sharpe = brain.get("sharpe_ratio") or brain.get("sharpe") or 0.0
+            if sharpe == 0.0:
+                gs = gov_data.get(brain_id) or (
+                    gov_data.get(brain_id, {}) if isinstance(gov_data, dict) else {}
+                )
+                pm = gs.get("performance_metrics") or {}
+                sharpe = pm.get("sharpe_ratio") or 0.0
+
+            # governance_status: PnL-based has "governance_status"; decision-based needs governance
+            gov_status = brain.get("governance_status") or brain.get("status") or ""
+            if not gov_status:
+                gs = gov_data.get(brain_id) or {}
+                gov_status = gs.get("status") or ""
+
+            if trade_count < NOMINATION_MIN_TRADES:
+                skipped.append(f"{brain_id}:trades={trade_count}<{NOMINATION_MIN_TRADES}")
+                continue
+            if win_rate < NOMINATION_MIN_WIN_RATE:
+                skipped.append(f"{brain_id}:wr={win_rate:.3f}<{NOMINATION_MIN_WIN_RATE}")
+                continue
+            if sharpe < NOMINATION_MIN_SHARPE:
+                skipped.append(f"{brain_id}:sharpe={sharpe:.3f}<{NOMINATION_MIN_SHARPE}")
+                continue
+            if gov_status not in NOMINATION_ELIGIBLE_STATUSES:
+                skipped.append(f"{brain_id}:status={gov_status}")
+                continue
+
+            # ── Nominate as CANDIDATE only (Institutional Mandate) ──
+            record = AlphaRecord(
+                alpha_id=alpha_id,
+                name=brain_id,
+                version="1.0.0",
+                state=AlphaLifecycleState.CANDIDATE,
+                strategy_id=alpha_id,
+            )
+            registry.register(record)
+            nominated.append(alpha_id)
+
+        # ── Persist via StateWriter gate ──
+        if nominated and not dry_run:
+            registry.save(registry_path)
+
+        return {
+            "step": "alpha_registration",
+            "status": "ok",
+            "nominated": len(nominated),
+            "nominated_ids": nominated,
+            "skipped_count": len(skipped),
+            "skipped_reasons": skipped[:10],  # top 10 for diagnostics
+            "existing_count": len(existing_ids),
+            "total_after": len(existing_ids) + len(nominated),
+        }
+
+    except DataIntegrityError:
+        raise  # POISON PILL — propagate
+    except Exception as exc:  # noqa: BLE001 — reviewed
+        with fail_open_guard("daily_ops:_step_alpha_registration"):
+            return {
+                "step": "alpha_registration",
+                "status": "error",
+                "error": str(exc)[:500],
+            }
+
+
 def _step_alpha_lifecycle(base_dir: str, *, dry_run: bool = False) -> dict[str, Any]:
     """Run alpha lifecycle evaluation: promotion gate on all registered alphas."""
     try:
@@ -1760,6 +1915,7 @@ def run_daily_ops(
 
     if not skip_alpha:
         steps.append(_step_alpha_feed(base_dir, dry_run=dry_run))
+        steps.append(_step_alpha_registration(base_dir, dry_run=dry_run))
         steps.append(_step_alpha_lifecycle(base_dir, dry_run=dry_run))
     if not skip_alpha_allocation:
         steps.append(_step_alpha_allocation(base_dir, dry_run=dry_run))

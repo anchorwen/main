@@ -24,7 +24,7 @@ class AlphaRecord:
     state: AlphaLifecycleState | str = AlphaLifecycleState.CANDIDATE
     strategy_id: str | None = None
     strategy_class: str | None = None  # FIX-016: e.g. "swing", "statarb"
-    assets: list[str] | None = None    # FIX-016: e.g. ["BTCUSDc"]
+    assets: list[str] | None = None  # FIX-016: e.g. ["BTCUSDc"]
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
     tags: tuple[str, ...] = ()
@@ -47,12 +47,15 @@ class AlphaRecord:
         return self.state.value if isinstance(self.state, AlphaLifecycleState) else self.state
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict. DQAF-20260622-049: added strategy_class + assets."""
         return {
             "alpha_id": self.alpha_id,
             "name": self.name,
             "version": self.version,
             "state": self.state_value,
             "strategy_id": self.strategy_id,
+            "strategy_class": self.strategy_class,
+            "assets": self.assets,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "tags": list(self.tags),

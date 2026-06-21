@@ -78,9 +78,12 @@ class AlphaRegistry:
                 version=rec_data.get("version", "0.0.0"),
                 state=rec_data.get("state", "candidate"),
                 strategy_id=rec_data.get("strategy_id"),
+                strategy_class=rec_data.get("strategy_class"),
+                assets=rec_data.get("assets"),
                 tags=tuple(rec_data.get("tags", [])),
                 metadata=rec_data.get("metadata", {}),
                 performance=rec_data.get("performance", {}),
+                risk_profile=rec_data.get("risk_profile", {}),
             )
             registry._records[record.alpha_id] = record
         return registry

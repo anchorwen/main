@@ -478,6 +478,12 @@ def build_parser() -> argparse.ArgumentParser:
     alpha.add_argument("--version", default="1.0")
     alpha.add_argument("--strategy-id", default=None)
     alpha.add_argument(
+        "--strategy-class", default=None, help="Strategy class (e.g. swing, barrier) — DQAF-049"
+    )
+    alpha.add_argument(
+        "--assets", nargs="*", default=None, help="Target assets (e.g. XAUUSDc BTCUSDc) — DQAF-049"
+    )
+    alpha.add_argument(
         "--state", default="candidate", choices=[state.value for state in AlphaLifecycleState]
     )
     alpha.add_argument(
@@ -1235,6 +1241,8 @@ def cmd_alpha(args) -> int:
             version=args.version,
             state=args.state,
             strategy_id=args.strategy_id or args.alpha_id,
+            strategy_class=args.strategy_class,  # DQAF-049
+            assets=args.assets,  # DQAF-049
         )
         registry.register(record)
         _save_alpha_registry(registry_path, registry)
@@ -1408,6 +1416,8 @@ def _load_alpha_registry(path: Path) -> AlphaRegistry:
                 version=item["version"],
                 state=item.get("state", "candidate"),
                 strategy_id=item.get("strategy_id"),
+                strategy_class=item.get("strategy_class"),  # DQAF-049
+                assets=item.get("assets"),  # DQAF-049
                 tags=tuple(item.get("tags", [])),
                 metadata=item.get("metadata", {}),
                 performance=item.get("performance", {}),
@@ -1418,8 +1428,15 @@ def _load_alpha_registry(path: Path) -> AlphaRegistry:
 
 
 def _save_alpha_registry(path: Path, registry: AlphaRegistry) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(registry.to_dict(), indent=2, default=str), encoding="utf-8")
+    """Save alpha registry through the StateWriter gate (DQAF-049 Sev 1 fix).
+
+    DQAF-20260622-049: The previous implementation used raw json.dumps()
+    + write_text(), bypassing the StateWriter 4-gate pipeline (required
+    fields, schema validation, cross-symbol guard, atomic write).  This
+    was the last remaining write path that circumvented the State
+    Governance Protocol (Plan B).  Closed per Institutional Mandate.
+    """
+    registry.save(path)
 
 
 def _load_alpha_performance(path: Path) -> AlphaPerformanceStore:
