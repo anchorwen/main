@@ -3862,7 +3862,9 @@ FIX-YYYYMMDD-NNN
   - `core/brains/services/brain_leaderboard.py` (+79: `_validate_metrics()` schema enforcement + `_normalize_metrics_map()` defensive input)
   - `core/contracts/exceptions.py` (+23: `DataIntegrityError` — Fail-Closed poison pill exception)
   - `scripts/daily_ops.py` (+46/-8: fixed `rank()` call `list(values)`→dict, poison pill validation, removed silent `except Exception` swallow)
-  - `.gitignore` (+25: ephemeral projection isolation patterns)
+  - `.gitignore` (+39: ephemeral projection isolation patterns for 12 state files across data_btc/ + data/)
+  - `CLAUDE.md` (+31: 🏛️ SYSTEM ARCHITECTURE & AI GUARDRAILS — 4 RED prohibitions + SSOT principle at file top)
+  - `tests/test_state_reconstruction.py` (new: 26 contract tests — Journal→Metrics→Leaderboard + poison pill + normalizer)
   - `scripts/purge_backtest_from_governance.py` (new: backtest contamination detection + journal-based correction)
 - **Summary**: **DQAF-20260621-042 Institutional Data Direction Audit.**
 
@@ -3902,11 +3904,24 @@ FIX-YYYYMMDD-NNN
 
   **Verification**: mypy PASS, ruff PASS, 14 brains ranked with 564 total_decisions.
   `BTC_Swing_V12_H1_Survival` corrected from 3140 backtest trades (-10265R) to 38 live
-  journal trades (+25.2R, Sharpe 1.45).
+  journal trades (+25.2R, Sharpe 1.45).  **26/26 contract tests PASSED** — the permanent
+  regression guard against leaderboard collapse recurrence.
 
-  **Deferred to Next Commit**:
+  **Three Defense Lines (All Delivered)**:
+  - Defense Line 1 (物理隔离): `git rm --cached` 12 ephemeral state files + `.gitignore` isolation.
+    Files removed from Git index, retained on disk for live process. `bar_sync_state.json`,
+    `brain_performance.json`, `leaderboard.json`, `governance_state.json`, etc. — all untracked.
+  - Defense Line 2 (契约测试): `test_state_reconstruction.py` — 26 tests covering journal→metrics
+    pipeline, metrics→leaderboard pipeline, poison pill validation, metrics normalizer,
+    and full end-to-end integration. Mock journal in isolated sandbox verifies deterministic
+    reconstruction from ledger SSOT.
+  - Defense Line 4 (AI 护栏): `CLAUDE.md` top section — 4 RED prohibitions (NEVER edit state
+    JSON, NEVER git-add state files, NEVER dict.get() paper-over, ONLY fix generator code).
+    Cross-reference table linking architecture principles to Iron Laws.
+
+  **Remaining (Post-DQAF-042)**:
   - P1-A: Unified label export `finalize_trade_label()` (close all exit paths)
-  - P2: `git rm --cached` for ephemeral state files (requires live process coordination)
+  - P1-B: Execute `purge_backtest_from_governance.py` on live data (script ready, dry-run verified)
 
   **ReB Pattern**: `IMMUTABLE_LEDGER_AND_EPHEMERAL_PROJECTION` — state files MUST be
   regenerable from the journal SSOT. Manual edits to state files are forbidden.
